@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-02"
+last_verified: "2026-06-09"
 depends_on:
   - ../harness_architecture/index.md
   - ../rust_contracts/index.md
@@ -73,23 +73,28 @@ cargo test --test policy_contracts
 - **MCP stdio 服务**：`framework_goal_drive`、`framework_rfv_loop`、`trace_runtime` 等 stdio 协议。
 - **Browser MCP**：`router-rs browser mcp-stdio` 子命令。
 
-### 2.2 源码结构
+### 2.2 源码结构（九板块架构）
 
 ```
-core/router-rs/src/
-  main.rs              # CLI 入口，插入 "host" 子命令前缀
-  lib.rs               # 模块声明，re-export antigravity-core 的类型
-  cli/                 # clap CLI 定义与分发
-  hosts/
-    codex_hooks/       # Codex CLI hook 处理
-    cursor_hooks/      # Cursor hook 处理（handlers.rs + handlers_parts/）
-    claude_code_hooks.rs    # Claude Code hook 处理
-    mcp_stdio_harness.rs  # MCP stdio harness（Antigravity / Opencode）
-  route/               # 路由引擎（records.rs、routing.rs、scoring.rs、signals.rs）
-  framework_runtime/   # 框架运行时视图
-  runtime_registry/    # 宿主 registry 磁盘 loader
-  browser_mcp/         # Browser MCP 服务
-  utils/               # 路径守卫、原子写、task ledger flock 锁
+core/
+  core-state/            # B0 子 crate: 状态管理（goal/rfv/evidence/task_pointers）
+  core-policy/           # B0 子 crate: Hook 策略与门控引擎
+  core-math/             # B0 子 crate: 形式化工具链（feature-gated）
+  framework-kernel/      # B0 根 crate: Telemetry/Tokenizer traits
+  routing-engine/        # B1: 路由引擎（模糊匹配 + 配置 watch）
+  router-rs/             # 中央 hub: 框架运行时 + 宿主投射 + CLI + 浏览器 MCP
+    src/
+      main.rs            # CLI 入口
+      lib.rs             # 模块声明，re-export 子 crate
+      cli/               # clap CLI 定义与分发
+      hosts/             # 多宿主实现（claude/codex/cursor/antigravity/opencode）
+      route/             # 路由编排（scoring/signals/records）
+      framework_runtime/ # 框架运行时（orchestration/trace/stdio）
+      session_supervisor/ # 长运行会话管理
+      browser_mcp/       # Browser MCP 服务
+  codegraph-rs/          # B10: 代码图谱（独立 MCP binary）
+  evolution-rs/          # B11: 自进化引擎（独立 binary）
+  autoresearch-rs/       # B8: 自主调研（独立 binary）
 ```
 
 ### 2.3 CLI 入口
@@ -123,9 +128,9 @@ core/router-rs/src/
 
 **出站裁剪**：Cursor hook 的 `additional_context` 按 UTF-8 字节预算截断（默认 8192），优先保留 `REVIEW_GATE` 等硬短码行。
 
-## 3. `core/antigravity`：状态管理层
+## 3. `core/core-state`：状态管理层
 
-`antigravity-core` 是一个纯库 crate，被 `router-rs` 依赖，提供：
+`core-state` 是一个纯库 crate，被 `router-rs` 和 `core-policy` 依赖，提供：
 
 | 模块 | 文件 | 职责 |
 |------|------|------|

@@ -11,7 +11,7 @@ plate: B0
 
 | 子 crate | 路径 | 说明 |
 |----------|------|------|
-| core-state | `core/antigravity/`（package 名 `core-state`） | 任务状态、ledger 锁、观察载荷 |
+| core-state | `core/core-state/`（package 名 `core-state`） | 任务状态、ledger 锁、观察载荷 |
 | core-policy | `core/core-policy/` | hook_policy、review_gate registry、MCP 安全 |
 | core-math | `core/core-math/` | 形式化 / 数学验证（feature `math-verify`） |
 | framework-kernel | `core/framework-kernel/` | 轻量共享 trait / 类型 |

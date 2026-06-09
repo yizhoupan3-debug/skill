@@ -397,7 +397,7 @@
       "session_supervisor_driver": "unsupported",
       "session_supervisor_status": {
         "supported": false,
-        "rationale": "Cursor host does not expose external tmux session management or auto-resume. session_supervisor.rs::build_driver_command rejects non-codex drivers with `unknown_driver`. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process."
+        "rationale": "Cursor host does not expose external process supervision or auto-resume. session_supervisor currently supports codex and claude-code drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process."
       },
       "resume_command_examples": [
         "在 Cursor 中继续当前会话",
@@ -483,7 +483,7 @@
       "session_supervisor_driver": "unsupported",
       "session_supervisor_status": {
         "supported": false,
-        "rationale": "Opencode host does not expose external tmux session management or auto-resume. Long-running goals on Opencode must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process."
+        "rationale": "Opencode host does not expose external process supervision or auto-resume. Long-running goals on Opencode must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process."
       },
       "resume_command_examples": [
         "Continue in the same Opencode session"
@@ -621,7 +621,6 @@
         "external_session_supervisor",
         "rate_limit_auto_resume",
         "host_resume_entrypoint",
-        "host_tmux_worker_management",
         "framework_alias_entrypoints"
       ],
       "managed_mcp_server_ids": [

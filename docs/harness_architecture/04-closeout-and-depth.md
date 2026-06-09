@@ -16,7 +16,7 @@ depends_on:
 - closeout 真相来自证据、diff、产物和明确 blocker，而不是"我完成了"的叙述。
 - `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 未设置且非 CI 时，允许本地软门禁；CI 或显式开启时走硬门禁。
 - `DepthCompliance`、`GOAL_STATE`、`RFV_LOOP_STATE` 的更细语义由 `router-rs` 和对应 schema 负责；本文件只定义它们属于 L2/L3 正式控制面，而不是聊天补丁。
-- **`depth_compliance` advisory rollup**：真源 `core/antigravity/src/task_state.rs` 的 `depth_compliance_aggregate`；`ROUTER_RS_DEPTH_COMPLIANCE_HINT` 为 **遗留 env / 单测**，**无** SessionStart 或其它 hook 注入。
+- **`depth_compliance` advisory rollup**：真源 `core/core-state/src/task_state.rs` 的 `depth_compliance_aggregate`；`ROUTER_RS_DEPTH_COMPLIANCE_HINT` 为 **遗留 env / 单测**，**无** SessionStart 或其它 hook 注入。
 
 ### 深度调研：三轨对齐（无自动合并）
 

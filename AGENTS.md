@@ -52,6 +52,7 @@
 
 - 真源：`artifacts/current/<task_id>/`（见 [`docs/harness_architecture/02-data-flows.md`](docs/harness_architecture/02-data-flows.md)）；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
 - Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
+- **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。详见 roadmap v5 §4.9。
 - 历史 env 名见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)。
 
 ## Task Intake

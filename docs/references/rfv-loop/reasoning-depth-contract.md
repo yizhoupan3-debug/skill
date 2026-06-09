@@ -69,7 +69,7 @@ depends_on:
 
 ### Depth score formula（参考）
 
-`depth_score` 是 `0..=3` 的整数值，由 `core/antigravity/src/task_state.rs` → `depth_compliance_aggregate` 计算：
+`depth_score` 是 `0..=3` 的整数值，由 `core/core-state/src/task_state.rs` → `depth_compliance_aggregate` 计算：
 
 - **第 1 分**：≥1 轮 RFV `verify_result == "PASS"`
 - **第 2 分**：`EVIDENCE_INDEX` 至少一条成功行（`success==true` 或 `exit_code==0`）
