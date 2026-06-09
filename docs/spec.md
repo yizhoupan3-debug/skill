@@ -333,7 +333,7 @@ spawned → running → draining → completed
 | claude-code | `mcpServers` | `local`/`stdio` | `.claude/settings.json` |
 | cursor | `mcp_servers` | `stdio` | `.cursor/mcp.json` |
 | opencode | `mcp` | 无 type 字段 | `opencode.json` |
-| antigravity-app | `mcp` | `stdio` | `.gemini/settings.json` |
+| antigravity | `mcp` | `stdio` | `.gemini/settings.json` |
 
 **§3.5 Schema Drift 三道闸**：写盘前 validate → 写盘后 readback → manifest 路径存在性
 
@@ -345,7 +345,7 @@ spawned → running → draining → completed
 | cursor | hooks.json + .mdc | `host_integration/projection` |
 | codex | AGENTS.md + AGENTS_CODEX.md | `policy_embed.rs` |
 | opencode | opencode.json 投影 | `host_integration/projection` |
-| antigravity-app | .gemini/settings.json | `host_integration/projection` |
+| antigravity | .gemini/settings.json | `host_integration/projection` |
 
 ---
 
@@ -449,7 +449,7 @@ pub trait HostHook {
 **功能**：Worker 生命周期管理（launch/resume/terminate/mark_blocked/resume_due）。
 
 - 驱动：codex/cursor/claude/antigravity（`driver.rs`）
-- tmux 运行时函数（待 Roadmap v5 Phase 1.2 移除）
+- 原生进程驱动（P8 de-tmux 已接线 router-rs `session_supervisor/`；`runtime-core` 副本待删）
 - 速率限制检测：正则模式匹配
 - 入口：`handle_session_supervisor_operation()`
 
