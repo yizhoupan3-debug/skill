@@ -43,7 +43,7 @@
 
 ## 4. 错误处理（Error Handling）
 
-**来源**：`core/framework-core/src/error.rs` + `core/router-rs/src/framework_error.rs`
+**来源**：`core/core-state/src/`（error 类型）+ `core/router-rs/src/framework_error.rs`
 
 ### 分层规则
 
@@ -80,7 +80,7 @@
 ### 基本要求
 
 - `cargo test --workspace --no-fail-fast` → 全绿
-- `cargo clippy -p framework-core -- -D warnings` → 0 warnings
+- `cargo clippy -p core-state -- -D warnings` → 0 warnings
 - `cargo clippy -p router-rs -- -D warnings` → 0 warnings（预存 MSRV/clippy 问题除外）
 
 ### 断言模式

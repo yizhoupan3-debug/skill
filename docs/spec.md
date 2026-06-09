@@ -763,7 +763,7 @@ pub trait HostHook {
 | Crate | LOC | #[test] | 评级 |
 |-------|-----|---------|------|
 | router-rs | 95K | ~1,577 | B+ |
-| framework-core | 10K | ~161 | B |
+| B0 core crates（core-state 等） | ~10K 合计 | ~161 | B |
 | codegraph-rs | 2.3K | 0 | **F** |
 | evolution-rs | 851 | 2 | D |
 | autoresearch-rs | 6K | 8 | D |

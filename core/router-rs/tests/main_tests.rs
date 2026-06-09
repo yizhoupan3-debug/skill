@@ -4498,7 +4498,7 @@ fn live_execute_infer_deep_from_reason_literature_review_phrase() {
     payload.dry_run = false;
     payload.prompt_preview = None;
     payload.task = "summarize the migration path".to_string();
-    payload.selected_skill = "research-workbench".to_string();
+    payload.selected_skill = "research-execution".to_string();
     payload.reasons = vec!["lane: literature review".to_string()];
 
     let prompt = build_live_execute_prompt(&payload);
@@ -4512,7 +4512,7 @@ fn live_execute_infer_deep_from_reason_depth_research_zh_only() {
     payload.dry_run = false;
     payload.prompt_preview = None;
     payload.task = "summarize the migration path".to_string();
-    payload.selected_skill = "research-workbench".to_string();
+    payload.selected_skill = "research-execution".to_string();
     payload.reasons = vec!["用户要求：深度研究".to_string()];
 
     let prompt = build_live_execute_prompt(&payload);

@@ -9,7 +9,7 @@ depends_on:
 
 # 数理推理强度 harness（STEM）
 
-> **status: done** — 语义层（witness / 双轨 / RFV lane）仍为契约真源；**Rust 运行时 checker**（`framework_math_verify`，roadmap v4 phase 5b N1–N4）已在 `core/framework-core/src/math_verify/` 全部落地（36 测试全绿），GOAL depth advisory rollup 已接线（N6），见 **§H**。RFV 多轮 loop 在 `my-light` profile 下仍很少使用；§D–G 编排语义以 aspirational 为主。
+> **status: done** — 语义层（witness / 双轨 / RFV lane）仍为契约真源；**Rust 运行时 checker**（`framework_math_verify`，roadmap v4 phase 5b N1–N4）已迁 **B0 `core/core-math/`**（`formal_toolchain`；历史路径 `core/framework-core/src/math_verify/` 已退役），GOAL depth advisory rollup 已接线（N6），见 **§H**。RFV 多轮 loop 在 `my-light` profile 下仍很少使用；§D–G 编排语义以 aspirational 为主。
 
 **语义层真源**：与 [推理深度契约](reasoning-depth-contract.md) 同层（L5）；**运行时**仍只认 **L1 可执行验证 + L2 证据落盘**，不把自然语言「像证明/像建模」当作通过标准。
 
@@ -54,13 +54,13 @@ Harness **只认 checker 输出**（exit code + 约定 stdout/stderr），不认
 
 ### B.1 Rust 统一入口（`framework_math_verify`）
 
-stdio 命令 **`framework_math_verify`**（`router-rs` runtime_ops；实现 `core/framework-core/src/math_verify/`）提供与 §A–C 对齐的可编程 checker，schema `framework-math-verify-v1`：
+stdio 命令 **`framework_math_verify`**（`router-rs` runtime_ops；实现 `core/core-math/`）提供与 §A–C 对齐的可编程 checker，schema `framework-math-verify-v1`：
 
 | `operation` | 模块 | 说明 |
 |-------------|------|------|
 | `status` | — | 报告各 backend 可用性（`dimension_checker` 纯 Rust；SymPy/Z3 子进程） |
 | `dimension_check` | N2 | `lhs` / `rhs` 量纲向量对照（§F 量纲 witness） |
-| `formal_verify` | N1 + N3 | `backend`: `sympy` \| `z3`；`request`: [`FormalVerifyRequest`](../../../core/framework-core/src/math_verify/formal.rs) |
+| `formal_verify` | N1 + N3 | `backend`: `sympy` \| `z3`；`request`: `FormalVerifyRequest`（见 `core/core-math/`） |
 | `step_verify` | N4 | `request`: 编号步骤链 + 可选逐步 `formal_check`（§C 依赖图） |
 
 **`FormalVerifyRequest.kind`**：
@@ -86,7 +86,7 @@ stdio 命令 **`framework_math_verify`**（`router-rs` runtime_ops；实现 `cor
   "request": { "kind": "simplify_to_zero", "expression": "sin(x)**2 + cos(x)**2 - 1", "variable": "x" } }
 ```
 
-示例（Z3 矛盾 unsat + 步骤链）见 `core/framework-core/src/math_verify/` 内测试 fixture。
+示例（Z3 矛盾 unsat + 步骤链）见 `core/core-math/` 内测试 fixture。
 
 **证据落盘两条路径**（与 [`spec.md`](../../spec.md) 一致）：宿主 **`PostTool`** 在启发式命中时自动追加一行到 `EVIDENCE_INDEX`（`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE` 未关、连续性就绪）；**`framework hook-evidence-append`** 供长尾命令显式记账（非 `cursor_*` 来源时仍走同一验证启发式，含 SymPy / Z3 / Lean / Coq 等 **窄子串**，见 `router-rs` `framework_runtime`）。数理脚本请避免仅写裸 `python` 作为唯一可识别串。`framework_math_verify`  stdout 结果可另写入 `GOAL_STATE.math_verify_formal_results` 供 depth advisory rollup。
 
