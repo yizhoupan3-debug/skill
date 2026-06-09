@@ -1,0 +1,25 @@
+[package]
+name = "host-projection"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "host_projection"
+path = "src/lib.rs"
+
+[dependencies]
+router-rs = { path = "../router-rs" }
+core-state = { path = "../core-state" }
+core-policy = { path = "../core-policy" }
+framework-kernel = { path = "../framework-kernel" }
+chrono = { version = "0.4", features = ["clock", "std", "serde"] }
+clap = { version = "4.5", features = ["derive"] }
+fs2 = "0.4"
+libc = "0.2"
+regex = "1.11"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.11"
+urlencoding = "2.1"
+which = "8"

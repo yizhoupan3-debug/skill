@@ -193,6 +193,7 @@ pub struct CursorContinuityFrame {
 }
 
 /// beforeSubmit / Stop 入口：一次构建指针视图 + hydration 目标对。
+/// Pointer 机制已移除：当 pointer 为空时，回退到 diagnostics scan 查找 GOAL_STATE。
 pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFrame {
     let pointers = read_task_pointers(repo_root);
     let pointer_view = resolve_task_view_with_pointers(repo_root, None, pointers.clone());
@@ -202,7 +203,11 @@ pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFram
         &pointers.focus_task_id,
     )
     .ok()
-    .flatten();
+    .flatten()
+    .or_else(|| {
+        // Pointer 机制已移除：回退到 diagnostics scan
+        crate::state_manager::read_goal_state_for_diagnostics_scan(repo_root).ok().flatten()
+    });
     CursorContinuityFrame {
         pointer_view,
         hydration_goal,
