@@ -1,6 +1,8 @@
-//! host-projection (B4): stub re-exports from router-rs until B4 physical migration completes.
+//! host-projection (B4): re-exports from runtime-core (B3).
+//!
+//! Physical migration complete: dependency changed from router-rs → runtime-core.
 
-pub use router_rs::framework_host_targets;
-pub use router_rs::framework_host_integration as host_integration;
-pub use router_rs::host_entrypoint_sync;
-pub use router_rs::hosts;
+pub use runtime_core::framework_host_targets;
+pub use runtime_core::host_integration;
+pub use runtime_core::host_entrypoint_sync;
+pub use runtime_core::hosts;
