@@ -16,6 +16,13 @@ source: local
 trigger_hints:
   - /planx
   - planx
+allowed_tools:
+  - mcp__mcp-codegraph__codegraph_search
+  - mcp__mcp-codegraph__codegraph_callers
+  - mcp__mcp-codegraph__codegraph_callees
+  - mcp__mcp-codegraph__codegraph_impact
+  - mcp__mcp-codegraph__codegraph_node
+  - mcp__mcp-codegraph__codegraph_status
 metadata:
   version: "0.1.0"
   platforms: [supported]
@@ -108,6 +115,19 @@ Topology fields (schema id **`my-wave-state-v1`**; field manifest [`configs/fram
 ## Optional review
 
 At most **one** read-only reviewer on `ROADMAP.md` → compact `lane-notes/` only (no mandatory RFV).
+
+## CodeGraph 场景
+
+只读；用于 wave/lane 拆分与影响面评估（doc-only，不写索引）。
+
+| 场景 | 工具 | 何时 |
+|------|------|------|
+| 索引就绪 | `codegraph_status` | 计划前确认图谱非空、文件数合理；MCP 启动时会自动 incremental sync |
+| 符号定位 | `codegraph_search` / `codegraph_node` | 拆 scope 前解析 FQN、确认 owner 模块 |
+| 调用链 | `codegraph_callers` / `codegraph_callees` | 评估改动是否会波及其他 lane |
+| 影响半径 | `codegraph_impact` | 高风险 refactor 前写入 ROADMAP 验证项 |
+
+详见 [`docs/operations/b10-codegraph.md`](../../docs/operations/b10-codegraph.md)。
 
 ## Next
 

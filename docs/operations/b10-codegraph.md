@@ -25,7 +25,7 @@ cargo test -p codegraph-rs
 
 宿主 MCP 注册：`host-integration install` 写入 `mcp-codegraph`；键路径见 `RUNTIME_REGISTRY.json` → `mcp_servers.mcp-codegraph`。
 
-Skill 集成（CG-5）：`planx` / `implementx` / `verifyx` / `code-review-deep` 的 `allowed_tools` 与 `SKILL_MANIFEST.json` `allowedTools` 均含六工具 `mcp__mcp-codegraph__*`；各 SKILL.md 有场景化路由提示。
+Skill 集成（CG-5）：`planx` / `implementx` / `verifyx` / `code-review-deep` 的 `allowed_tools` 与 `SKILL_MANIFEST.json` `allowedTools` 均含六工具 `mcp__mcp-codegraph__*`；各 SKILL.md **CodeGraph 场景** 节见 `skills/{planx,implementx,verifyx,code-review-deep}/SKILL.md`。
 
 ## 排障
 
@@ -34,7 +34,7 @@ Skill 集成（CG-5）：`planx` / `implementx` / `verifyx` / `code-review-deep`
 | MCP 工具不可用 | 确认 `--features codegraph` 构建；重装 host projection |
 | 索引空 / stale | 跑 sync + watcher；查 DB schema v1→v2 迁移日志 |
 | 性能问题 | W4：rayon 并行 parse + prepared stmt（见 roadmap CG-4） |
-| 测试失败 | `cargo test -p codegraph-rs`（当前基线 24 passed） |
+| 测试失败 | `cargo test -p codegraph-rs`（当前基线 25 passed） |
 
 ## 相关路径
 

@@ -163,10 +163,11 @@ rust_tools/ (9 crates, 16K LOC)
 
 ### 3.2 codegraph-rs — 代码知识图谱
 
-**功能**：基于 tree-sitter 的代码图谱构建与查询，支持 Rust/TypeScript/JavaScript/Python/Go。
+**功能**：基于 tree-sitter 的代码图谱构建与查询，支持 Rust/TypeScript/JavaScript/Python/Go。入口：`core/codegraph-rs/src/lib.rs`；增量同步与 watcher：`graph/sync.rs`；MCP 薄壳分发：`core/router-rs/src/codegraph_mcp/mod.rs`。
 
 | 模块 | 功能 | 核心 API |
 |------|------|----------|
+| `lib.rs` | crate 入口、`CodeGraphIndex` | `open`, `incremental_sync` |
 | `types.rs` | 数据模型 | `Node`(13 种 NodeKind), `Edge`(6 种 EdgeKind), `ImpactReport` |
 | `parser/` | 多语言符号/边提取 | `extract_from_file(path, language)` |
 | `db/schema.rs` | SQLite schema（files + nodes + edges + FTS5） | `ensure_schema(conn)` |
@@ -174,7 +175,9 @@ rust_tools/ (9 crates, 16K LOC)
 | `db/edge_ops.rs` | 边 CRUD + 图遍历 | `find_callers()`, `transitive_callers()`（递归 CTE） |
 | `db/fts_ops.rs` | FTS5 全文搜索 | `search_symbols(query, kind, language)` |
 | `graph/build.rs` | 全量索引构建 | `build_full_index(repo_root, conn)`（两遍插入 + 跨文件边解析） |
+| `graph/sync.rs` | 增量 sync + filesystem watcher | `incremental_sync`, `spawn_watcher` |
 | `graph/mod.rs` | 图查询 API | `impact_radius(symbol, max_depth)` |
+| `mcp/mod.rs` | 六工具 MCP schema + dispatch | `codegraph_search`, `codegraph_callers`, … |
 
 **CLI**: `index [--force]`, `status`, `query`, `callers`, `callees`, `impact`
 
@@ -766,7 +769,7 @@ pub trait HostHook {
 |-------|-----|---------|------|
 | router-rs | 95K | ~1,577 | B+ |
 | B0 core crates（core-state 等） | ~10K 合计 | ~161 | B |
-| codegraph-rs | 2.3K | 0 | **F** |
+| codegraph-rs | 2.3K | 25 | C |
 | evolution-rs | 851 | 2 | D |
 | autoresearch-rs | 6K | 8 | D |
 | rust_tools (9) | 16K | ~102 | C |

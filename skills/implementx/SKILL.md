@@ -15,6 +15,13 @@ user-invocable: true
 trigger_hints:
   - /implementx
   - implementx
+allowed_tools:
+  - mcp__mcp-codegraph__codegraph_search
+  - mcp__mcp-codegraph__codegraph_callers
+  - mcp__mcp-codegraph__codegraph_callees
+  - mcp__mcp-codegraph__codegraph_impact
+  - mcp__mcp-codegraph__codegraph_node
+  - mcp__mcp-codegraph__codegraph_status
 metadata:
   version: "0.2.0"
   platforms: [supported]
@@ -288,6 +295,19 @@ printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start
 ## 调试门控（Debug Gate）
 根因未确认时，参考 `skills/systematic-debugging/SKILL.md` 的诊断协议。
 不要在假设未验证的情况下跳到实现。
+
+## CodeGraph 场景
+
+Coordinator **只读**；subagent handoff 可引用图谱结论，但不替代 lane 内 Read/Grep。
+
+| 场景 | 工具 | 何时 |
+|------|------|------|
+| 索引就绪 | `codegraph_status` | 每 wave 调度前；stale 时在 lane prompt 注明「先 sync/重建索引」 |
+| 符号定位 | `codegraph_search` / `codegraph_node` | 校验 `scope_paths` 是否覆盖真实 symbol owner |
+| 调用链 | `codegraph_callers` / `codegraph_callees` | 并行 lane 拆分时确认 disjoint 与依赖方向 |
+| 影响半径 | `codegraph_impact` | 改公共 API 前评估需同步的 lane 或 verify 命令 |
+
+MCP 进程启动时自动 incremental sync；勿在 implement lane 内手改索引 DB。
 
 ---
 
