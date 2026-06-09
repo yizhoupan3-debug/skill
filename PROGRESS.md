@@ -23,7 +23,7 @@
 |------|-----------|---------|------|
 | **B5 浏览器 MCP** | `core/browser-mcp` | `router-rs/src/browser_mcp/` | 🔧 拆分中 |
 | **B4 宿主投射** | `core/host-projection` | `router-rs/src/hosts/` + `host_integration/` | 🔧 拆分中 |
-| **B3 运行时核心** | `core/runtime-core` | `router-rs/src/framework_runtime/` + `session_supervisor/` | 🔧 拆分中 |
+| **B3 运行时核心** | `core/runtime-core` | `router-rs/src/framework_runtime/` | 🔧 拆分中 |
 | **B7 CLI 薄壳** | `core/router-rs-cli` | `router-rs/src/cli/` + `main.rs` | 🔧 拆分中 |
 
 ### Cargo DAG 目标
@@ -57,7 +57,7 @@ B0  → {core-state, core-policy, core-math, framework-kernel}
 | **P0 测试 / smoke** | ✅ done | `mcp_safety` / `hook_policy_contract` / `atomic_write` / `bash_guard` / `router_self` / `rfv_state` / `task_pointers`（含 router 边界）/ `trace_runtime` compaction（11×）/ `codegraph` B1 语义 + graph MCP roundtrip | `codegraph` feature 下 catalog 对照 smoke（可选）；`--lib` 偶发 cursor_hooks 并行 temp 环境 flake |
 | **P10 smoke（§6.4）** | ✅ done · **gap 0** | Batch H 跨宿主 / workflow / isolation / shutdown smoke 全批；`subagent_real_process_spawn_terminate_smoke`（`ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE=1`）；`workflow_state_isolation_smoke`；`subagent_resource_leak_detection` | — |
 | **P7 CLI 薄壳 / B3 下沉** | ✅ done | B7 薄壳预算；`live_execute` / `stdio_op_registry` / `stdio_dispatch` / `json_payload` / `trace_transport` / **`trace_attach` / `trace_stream_io`** 已迁 B3；`runtime_ops.inc` **117L** | — |
-| **P8 de-tmux** | ✅ slice | router-rs native `session_supervisor` 已接线；`runtime-core` 副本待删 | 删 `runtime-core` 重复模块 |
+| **P8 de-tmux** | ✅ done | 生产 native；`runtime-core` 副本已删 | — |
 | **P4 host-projection** | ✅ done | `/team` fail-closed；`host_provider_routing_aliases` | — |
 | **P4 handlers 拆分** | ✅ done · **gap 0** | `handlers/review_gate.rs`（1345L）、`outbound.rs`（150L）、`stop.rs`（314L）；`handlers.rs` **1172L**；孤儿 `handlers_review_gate.inc.rs` 已删 | — |
 | **CG W1–W4** | ✅ done | crate + 六工具 MCP + sync/watcher + rayon/prepared stmt/schema v2 | — |
@@ -82,7 +82,7 @@ B0  → {core-state, core-policy, core-math, framework-kernel}
 | `router-rs --lib` | **1007 passed**, 0 failed, 14 ignored | 全绿 |
 | `router-rs smoke_workspace_dag_compliance` | **7 passed** | 新增 DAG 合规测试 |
 | `router-rs smoke_codegraph` | **7 passed** | feature `codegraph` |
-| `runtime-core` | **180 passed**, 0 failed | 从 router-rs 迁移的模块 |
+| `runtime-core` | **~100 passed**, 0 failed | session_supervisor 已迁回 router-rs |
 | `codegraph-rs` | **25 passed** | 含 W3/W4/e2e minimal |
 | `routing-engine` | **20 passed** | |
 | `evolution-rs` | **9 passed** | 含 `prediction_outcome` 解析 |
@@ -119,7 +119,7 @@ B0  → {core-state, core-policy, core-math, framework-kernel}
 
 ## 已确认落地（跨轨摘要）
 
-HostProvider 骨架 · Telemetry MPSC · PreToolUse Fallback · routing 热更新 · evolution_observer + idle 触发 · codegraph 六工具 + sync/watcher + **五宿主 stdio E2E** · session_supervisor · **tmux 0 残留** · P7 `runtime_ops.inc` 117L · P10 gap 0 · P0 smoke 收口 · CG-5 skill 集成 · **P4 handlers gap 0** · **EV-6 PredictionOutcome journal**
+HostProvider 骨架 · Telemetry MPSC · PreToolUse Fallback · routing 热更新 · evolution_observer + idle 触发 · codegraph 六工具 + sync/watcher + **五宿主 stdio E2E** · session_supervisor（生产 native；runtime-core 副本已删）· P7 `runtime_ops.inc` 117L · P10 gap 0 · P0 smoke 收口 · CG-5 skill 集成 · **P4 handlers gap 0** · **EV-6 PredictionOutcome journal**
 
 ## 宿主真源
 

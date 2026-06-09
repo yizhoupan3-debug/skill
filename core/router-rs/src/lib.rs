@@ -95,6 +95,7 @@ mod formal_toolchain {
 }
 
 pub mod web_fetch_guard;
+pub mod mcp_pre_guard;
 
 #[cfg(test)]
 mod mcp_stdio_test_support;
