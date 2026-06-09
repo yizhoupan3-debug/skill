@@ -171,7 +171,7 @@ pub(crate) fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<s
 /// Validates URLs for `browser_open` - blocks non-http(s) schemes (`file://`,
 /// `data:`, `javascript:`, etc.) and reuses the web_fetch SSRF guards
 /// (private IPs, metadata endpoints, blocked host suffixes).
-pub(crate) fn validate_browser_open_url(url: &str) -> Result<(), String> {
+pub fn validate_browser_open_url(url: &str) -> Result<(), String> {
     let trimmed = url.trim();
     let parsed = reqwest::Url::parse(trimmed)
         .map_err(|_| format!("browser_open invalid URL: {url}"))?;

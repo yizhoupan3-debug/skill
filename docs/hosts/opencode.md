@@ -18,7 +18,7 @@ depends_on:
 
 ## 能力边界与 Harness 入口
 
-- **任务推进**: `/implementx` + `framework_goal_drive` stdio
+- **任务推进**: `/implementx` + MCP `goal_state_manage` / `framework_goal_drive` stdio
 - **任务状态**: `artifacts/current/<task_id>/GOAL_STATE.json`
 - **门控模式**: 无 shell hook；review 清门 **Claude canonical**；MCP `closeout_gate` / `goal_state_manage` 上 review 缺口为 **ADVISORY**（**不**硬拦 Stop）；closeout 硬门禁与 review 分层（非 my-light）
 

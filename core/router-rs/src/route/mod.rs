@@ -14,8 +14,8 @@ mod gate_hints;
 mod metadata_tests;
 mod nl_route_adjustments;
 mod policy;
-mod records;
-mod routing;
+pub mod records;
+pub mod routing;
 #[cfg(test)]
 mod search_regression_tests;
 mod scoring;
@@ -34,14 +34,17 @@ pub(crate) use nl_route_adjustments::nl_route_signal_registry_names_json;
 pub(crate) use policy::{build_route_diff_report, build_route_policy, build_route_resolution};
 #[cfg(test)]
 pub(crate) use records::load_records_cached_for_stdio_with_default_runtime_path;
+// Public re-exports for browser-mcp crate
+pub use routing::{build_search_results_payload, filter_record_indices_for_host, search_skills_subset};
+pub use records::load_records_cached_for_stdio;
+// Crate-internal re-exports
 pub(crate) use records::{
     invalidate_records_cache, load_inline_records,
-    load_records, load_records_cached_for_stdio, load_records_from_manifest,
+    load_records, load_records_from_manifest,
 };
 pub(crate) use routing::{
-    build_route_snapshot, build_search_results_payload, filter_record_indices_for_host,
-    filter_records_for_host, literal_framework_alias_decision, route_task, search_skills,
-    search_skills_subset, should_accept_manifest_fallback, should_retry_with_manifest,
+    build_route_snapshot, filter_records_for_host, literal_framework_alias_decision, route_task,
+    search_skills, should_accept_manifest_fallback, should_retry_with_manifest,
 };
 pub(crate) use signals::{
     has_github_pr_context, has_parallel_review_candidate_context, has_paper_context,

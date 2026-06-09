@@ -28,7 +28,7 @@ Env 与 flock：见 [`../harness_architecture/02-data-flows.md`](../harness_arch
 
 | 现象 | 处理 |
 |------|------|
-| Stop 后任务未完成 | `/implementx` + `framework_goal_drive` stdio（非 hook `GOAL_CONTINUE`） |
+| Stop 后任务未完成 | `/implementx` + `goal_state_manage` MCP / `framework_goal_drive` stdio（非 hook `GOAL_CONTINUE`） |
 | `TASK_STATE_AGGREGATE_SYNC_FAILED` | 分文件权威；跑 `task-state-aggregate-sync` 修复投影 |
 | subagent 泄漏 / spawn 错误 | `session_supervisor` mark_blocked；smoke：`subagent_spawn_error_shutdown`；真进程：`subagent_spawn_real_process_smoke`（`ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE=1`） |
 | workflow phase 串线 | `workflow_state_isolation` 契约；核对 agent `phase:` 标签 |

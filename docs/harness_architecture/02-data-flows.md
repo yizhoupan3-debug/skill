@@ -19,7 +19,7 @@ depends_on:
 - **`ROUTER_RS_OPERATOR_INJECT` 总闸**：闸关时 Codex 无 `additionalContext`、Cursor `additional_context` 为空；闸开时仅允许 **轻量** 动态信息：Cursor **`Repo:`** 单行（[`handle_session_start`](../../core/router-rs/src/hosts/cursor_hooks/handlers_parts/handlers_session.inc.rs)）；Codex `SessionStart source:`。**无** digest、**无** SessionStart 指针 hint（分裂观测用 `framework task-state-resolve` / `framework doctor`）。
 - **禁止**：repo onboarding、Quick Reference、Build & test、Key paths、Tool cost hierarchy 等静态说明；禁止恢复 hook 驱动的 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`。
 - 出站仍按 UTF-8 **字节**预算截断（Cursor `...[~trunc]`；Codex `...`）。
-- 宏目标 / RFV 多轮：仅 **`framework_goal_drive` / `framework_rfv_loop` stdio** 与 `artifacts/current/<task_id>/` 手动画板；见 [`AGENTS_OPERATOR_SURFACE.md`](../references/AGENTS_OPERATOR_SURFACE.md)。
+- 宏目标 / RFV 多轮：MCP `goal_state_manage`（Claude Desktop / Antigravity / OpenCode）或 `framework_goal_drive` stdio（CLI / Cursor / Codex）/ `framework_rfv_loop` stdio 与 `artifacts/current/<task_id>/` 手动画板；见 [`AGENTS_OPERATOR_SURFACE.md`](../references/AGENTS_OPERATOR_SURFACE.md)。
 
 ### 2.2 Skill routing
 

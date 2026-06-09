@@ -208,9 +208,9 @@ pub(crate) struct TraceStreamReplayCursorPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct TraceStreamReplayResponsePayload {
-    pub(crate) schema_version: String,
-    pub(crate) authority: String,
+pub struct TraceStreamReplayResponsePayload {
+    pub schema_version: String,
+    pub authority: String,
     pub(crate) path: String,
     pub(crate) source_kind: String,
     pub(crate) event_count: usize,

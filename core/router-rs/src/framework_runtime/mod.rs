@@ -16,7 +16,7 @@ pub(crate) mod evolution_observer;
 mod constants;
 mod framework_doctor;
 mod orchestration_controller;
-pub(crate) mod route_manifest_fallback;
+pub mod route_manifest_fallback;
 pub(crate) mod router_command_dispatch;
 mod sandbox_control;
 mod json_io;
@@ -25,8 +25,8 @@ pub(crate) mod live_execute;
 mod json_value;
 pub(crate) mod stdio_dispatch;
 pub(crate) mod stdio_op_registry;
-pub(crate) mod trace_attach;
-pub(crate) mod trace_stream_io;
+pub mod trace_attach;
+pub mod trace_stream_io;
 pub(crate) mod trace_transport;
 mod pre_tool_use_guard;
 mod prompt_compression;
@@ -81,6 +81,7 @@ pub(crate) use orchestration_controller::{
     build_runtime_observability_metric_catalog_payload,
     runtime_observability_dashboard_schema,
 };
+pub use route_manifest_fallback::route_task_with_manifest_fallback;
 pub(crate) use route_manifest_fallback::{
     manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
     route_task_with_manifest_fallback,
@@ -89,13 +90,15 @@ pub(crate) use sandbox_control::build_sandbox_control_response;
 pub use crate::stdio_payload_types::*;
 pub(crate) use stdio_dispatch::{dispatch_stdio_json_request, dispatch_stdio_json_request_payload};
 pub(crate) use stdio_op_registry::{classify_stdio_op, StdioOpDomain};
+// Public re-exports for browser-mcp crate
+pub use trace_attach::attach_runtime_event_transport;
+pub use trace_stream_io::{inspect_trace_stream, replay_trace_stream};
+// Crate-internal re-exports
 pub(crate) use trace_attach::{
-    attach_runtime_event_transport, cleanup_attached_runtime_event_transport,
-    subscribe_attached_runtime_events,
+    cleanup_attached_runtime_event_transport, subscribe_attached_runtime_events,
 };
 pub(crate) use trace_stream_io::{
-    inspect_trace_stream, replay_trace_stream, sha256_hex, write_trace_compaction_delta,
-    write_trace_metadata,
+    sha256_hex, write_trace_compaction_delta, write_trace_metadata,
 };
 #[cfg(test)]
 pub(crate) use stdio_op_registry::{

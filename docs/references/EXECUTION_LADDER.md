@@ -33,7 +33,7 @@ depends_on:
 ## 执行循环
 
 - 默认 goal-style：plan → implement → verify → repair → closeout（纯 review 除外）。
-- `/implementx`：goal 契约 + `GOAL_STATE.json` + 一口气跑完 `WAVE_STATE`；续跑仅 `framework_goal_drive` stdio + `artifacts/current/<task_id>/` 手动画板（**无** Stop/SessionStart 的 `GOAL_CONTINUE` / digest hook 注入）。Codex 见 [`docs/hosts/codex.md`](../hosts/codex.md)。
+- `/implementx`：goal 契约 + `GOAL_STATE.json` + 一口气跑完 `WAVE_STATE`；续跑用 MCP `goal_state_manage`（Claude Desktop / Antigravity / OpenCode）或 `framework_goal_drive` stdio（CLI / Cursor / Codex）+ `artifacts/current/<task_id>/` 手动画板（**无** Stop/SessionStart 的 `GOAL_CONTINUE` / digest hook 注入）。Codex 见 [`docs/hosts/codex.md`](../hosts/codex.md)。
 
 ## Review 与 My implement 同轮混写（Cursor）
 

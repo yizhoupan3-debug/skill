@@ -45,7 +45,7 @@
 ## Skill Routing
 
 - **默认生命周期**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（`implementx` 一口气跑完 `WAVE_STATE` 全部 wave；主线程只调度）。见 [`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`MIGRATION.md`](MIGRATION.md)。
-- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light` 由 **My 入口斜杠**或磁盘 `GOAL_STATE.lifecycle_profile` 触发；`framework_goal_drive` stdio）。Hook review：**Claude Code canonical** 清门（`independent_reviewer_seen` 或 override）；**全宿主** Stop 上 `REVIEW_GATE` **advisory-only**（不硬拦 Stop；见 [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1）。`my-light` 另 **suppress** review nudge 与 spawn-first（亦含 pre-execution `/discussx|/planx` 与磁盘 profile；hook 层全 suppress，skill 层 findings-only 仍适用）。
+- **执行区**：`/implementx`、`/verifyx` + `GOAL_STATE.json`（`lifecycle_profile: my-light` 由 **My 入口斜杠**或磁盘 `GOAL_STATE.lifecycle_profile` 触发；`framework_goal_drive` stdio / `goal_state_manage` MCP）。Hook review：**Claude Code canonical** 清门（`independent_reviewer_seen` 或 override）；**全宿主** Stop 上 `REVIEW_GATE` **advisory-only**（不硬拦 Stop；见 [`docs/host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1）。`my-light` 另 **suppress** review nudge 与 spawn-first（亦含 pre-execution `/discussx|/planx` 与磁盘 profile；hook 层全 suppress，skill 层 findings-only 仍适用）。
 - 勿用 slug 猜路径；勿预读整个 `skills/`。
 
 ## Continuity artifacts（手动画板 only）
@@ -83,7 +83,7 @@
 
 ## Goal drive
 
-- `/implementx`、`/verifyx` + `framework_goal_drive` stdio → `artifacts/current/<task_id>/GOAL_STATE.json`；**无** hook 续跑注入；env 与手动画板见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)、[`docs/harness_architecture/index.md`](docs/harness_architecture/index.md)。
+- `/implementx`、`/verifyx` + MCP `goal_state_manage`（Claude Desktop / Antigravity / OpenCode）或 `framework_goal_drive` stdio（CLI / Cursor / Codex）→ `artifacts/current/<task_id>/GOAL_STATE.json`；**无** hook 续跑注入；env 与手动画板见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)、[`docs/harness_architecture/index.md`](docs/harness_architecture/index.md)。
 - 执行 wave / 验证：[`skills/implementx/SKILL.md`](skills/implementx/SKILL.md)、[`skills/verifyx/SKILL.md`](skills/verifyx/SKILL.md)（verify 后 purge `artifacts/current/<task_id>/`，见 verifyx § Post-verify task-dir purge）。
 
 ## Manuscript / LaTeX file writes

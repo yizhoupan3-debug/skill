@@ -11,7 +11,7 @@ depends_on:
 
 ## 连续性退出（2026-05：仅 stdio + 手动画板）
 
-**续跑与 digest 不再经 hook 注入。** Stop / SessionStart **不**产出 `GOAL_CONTINUE`、`RFV_LOOP_CONTINUE`、`framework_runtime::continuity_digest` 或 `SESSION_SUMMARY` / `NEXT_ACTIONS` 续跑指针；操作员用 **`framework_goal_drive` / `framework_rfv_loop` stdio** 与 **`artifacts/current/<task_id>/`** 手动画板（`GOAL_STATE.json`、`RFV_LOOP_STATE.json`、`EVIDENCE_INDEX` 等）。
+**续跑与 digest 不再经 hook 注入。** Stop / SessionStart **不**产出 `GOAL_CONTINUE`、`RFV_LOOP_CONTINUE`、`framework_runtime::continuity_digest` 或 `SESSION_SUMMARY` / `NEXT_ACTIONS` 续跑指针；操作员用 MCP `goal_state_manage`（Claude Desktop / Antigravity / OpenCode）或 `framework_goal_drive` stdio（CLI / Cursor / Codex）/ `framework_rfv_loop` stdio 与 **`artifacts/current/<task_id>/`** 手动画板（`GOAL_STATE.json`、`RFV_LOOP_STATE.json`、`EVIDENCE_INDEX` 等）。
 
 | 变量 | 作用 |
 |------|------|
@@ -23,10 +23,10 @@ depends_on:
 | `ROUTER_RS_OPERATOR_INJECT=0` | 关闭 SessionStart advisory 等（**不含**已移除的 goal/RFV 续跑行） |
 | `ROUTER_RS_CURSOR_HOOK_SILENT=1` | 压制非必要 hook 文案（硬阻塞仍可见） |
 
-## Goal / RFV（stdio + 手动画板）
+## Goal / RFV（MCP + stdio + 手动画板）
 
 - **权威磁盘**：`artifacts/current/<task_id>/GOAL_STATE.json`、`RFV_LOOP_STATE.json`。
-- **显式控制面**：`framework_goal_drive`、`framework_rfv_loop`（stdio-json）；My 执行区用 `/implementx`、`/verifyx` 驱动，**非**宿主 Stop 自动续跑。
+- **显式控制面**：MCP `goal_state_manage`（Claude Desktop / Antigravity / OpenCode）或 `framework_goal_drive` stdio（CLI / Cursor / Codex）；`framework_rfv_loop`（stdio-json）；My 执行区用 `/implementx`、`/verifyx` 驱动，**非**宿主 Stop 自动续跑。
 - SessionStart：**仅** `Repo:` 单行（Cursor）；预算见 `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` / `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS`。
 
 ## 跨宿主 Review gate（canonical env）

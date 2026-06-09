@@ -21,7 +21,7 @@ depends_on:
 | **AG_FOLLOWUP** | Stop 事件上的 Goal 契约续跑提示；`router-rs AG_FOLLOWUP missing_parts=…` 表示 goal 阶段仍缺片段 |
 | **goal_drive** | 宏目标驱动模式——通过 `framework_goal_drive` stdio 或 MCP `goal_state_manage` 驱动 `/implementx`→`/verifyx` 连续执行 |
 | **goal_state_manage** | MCP 工具，管理 `GOAL_STATE.json` 的 start / checkpoint / pause / resume / complete / clear / block 操作 |
-| **GOAL_CONTINUE** | 已废弃的 hook 注入续跑令牌；2026-05 起宏目标续跑改用 `framework_goal_drive` stdio + 手动画板 |
+| **GOAL_CONTINUE** | 已废弃的 hook 注入续跑令牌；2026-05 起宏目标续跑改用 MCP `goal_state_manage` / `framework_goal_drive` stdio + 手动画板 |
 | **RFV loop** | Review → Fix → Verify 迭代循环；状态写于 `RFV_LOOP_STATE.json`，每轮 round 由 `rfv_loop_manage` 追加 |
 | **evidence_index** | 工具执行后的证据索引（`EVIDENCE_INDEX`），PostToolUse 自动追加；`record_evidence` MCP 可手动写入 |
 | **spawn-first** | 审稿策略：首轮工具调用前先 spawn 可数 reviewer 子代理，减少 Stop 时 `REVIEW_GATE` nag |
@@ -152,7 +152,7 @@ which pdf ooxml ppt
 
 ## 混用时的实际武装顺序（Cursor Stop）
 
-- **Stop 优先级**（实现 [`handlers.rs`](../core/router-rs/src/hosts/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 **`framework_goal_drive` stdio** + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
+- **Stop 优先级**（实现 [`handlers.rs`](../core/router-rs/src/hosts/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 MCP `goal_state_manage` / `framework_goal_drive` stdio + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
 - **主线程深度 review（wave-2）**：清门 **Claude canonical**——`independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override；`phase` / pending multiset **仅遥测与 advisory nudge**，非独立清门条件（**不**以 `phase≥3` 或 pending settle 单独清门）。细则见下节链接。
 - **同一条用户消息里同时写深度 review 与 My 执行区入口**（`/implementx`、`/verifyx`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。**My 默认（`my-light`）**：同轮 review + `/implementx|/verifyx` **不**注入拆分提示（静默 disarm，见 [`docs/hosts/cursor.md`](hosts/cursor.md) beforeSubmit 表）。**非 my-light**（例如磁盘 `GOAL_STATE.lifecycle_profile` 非 `my-light` 且本轮无 My 斜杠、但 hook-state 已 `goal_required`）：会注入一行 **`router-rs：本轮提交同时包含…`** 拆分提示，避免误以为 review 门控失效。若你本意是「先深度审稿再开连续执行」，请拆成两轮。
 - **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 My implement / goal drive 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。

@@ -511,6 +511,7 @@ dependencies = [
  "chrono",
  "reqwest",
  "router-rs",
+ "routing-engine",
  "rusqlite",
  "serde",
  "serde_json",

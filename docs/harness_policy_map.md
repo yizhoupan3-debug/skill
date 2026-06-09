@@ -29,7 +29,7 @@ depends_on:
 | Subagent / My 执行区 / 拒因 token | [Execution Ladder](../AGENTS.md#execution-ladder) |
 | Review 默认与 skill 路由 | 同上节 + [Skill Routing](../AGENTS.md#skill-routing) |
 | Closeout / 证据 | [Closeout](../AGENTS.md#closeout) |
-| 连续性手动画板 | [打开 `AGENTS.md`](../AGENTS.md)，页内搜索 `## Continuity artifacts（手动画板 only）`（避免各渲染器中文锚点不一致）；续跑仅 `framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/` |
+| 连续性手动画板 | [打开 `AGENTS.md`](../AGENTS.md)，页内搜索 `## Continuity artifacts（手动画板 only）`（避免各渲染器中文锚点不一致）；续跑用 MCP `goal_state_manage` / `framework_goal_drive` stdio + `framework_rfv_loop` stdio + `artifacts/current/<task_id>/` |
 | 改哪里才生效（权威分层表） | [打开 `AGENTS.md`](../AGENTS.md)，页内搜索 `## 权威分层（改哪里才生效）`（同上） |
 
 ## `ROUTER_RS_*` 与 hook 行为

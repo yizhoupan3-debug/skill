@@ -222,4 +222,4 @@ Codex `PostToolUse` 直连 [`try_append_post_tool_shell_evidence`](../core/route
 | **L4** | 调用 `router-rs` 子命令、固定超时、环境透传 | 长段策略 prose、复制 L3 门控、手写 `EVIDENCE_INDEX` 规则 |
 | **L5** | SKILL 契约、`verify_commands`、拒因枚举、编排叙事 | 第二套连续性目录、或与 L2 schema 冲突的并行真源 |
 
-L3 负责 review/closeout/`AG_FOLLOWUP` 门控、PostTool 采样、gate 状态；宏目标续跑仅 **`framework_goal_drive` / `framework_rfv_loop` stdio** 与 `artifacts/current/<task_id>/` 手动画板（**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`，2026-05）。
+L3 负责 review/closeout/`AG_FOLLOWUP` 门控、PostTool 采样、gate 状态；宏目标续跑用 MCP `goal_state_manage`（Claude Desktop / Antigravity / OpenCode）或 `framework_goal_drive` stdio（CLI / Cursor / Codex）/ `framework_rfv_loop` stdio 与 `artifacts/current/<task_id>/` 手动画板（**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`，2026-05）。
