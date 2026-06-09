@@ -1088,7 +1088,7 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
 
 /// Host-agnostic hot-route skills must list every closed-set host id; Codex-installer-only skills are exempt.
 const HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS: &[&str] =
-    &["plugin-creator", "skill-installer", "openai-docs", "tao-ci"];
+    &["plugin-creator", "skill-installer", "openai-docs"];
 
 #[test]
 fn hot_runtime_skill_records_cover_all_supported_hosts() {

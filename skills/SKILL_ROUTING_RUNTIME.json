@@ -1039,40 +1039,6 @@
       null
     ],
     [
-      "tao-ci",
-      "L3",
-      "owner",
-      "none",
-      "P2",
-      "Draft tailored professor outreach emails from applicant profile and professor workbook data.",
-      "n/a",
-      [
-        "套磁",
-        "教授套磁",
-        "cold email 教授",
-        "research outreach 教授",
-        "导师联系",
-        "套磁信",
-        "professor inquiry",
-        "summer research",
-        "PhD inquiry",
-        "学术联系",
-        "tao-ci"
-      ],
-      "local",
-      10,
-      "skills/tao-ci/SKILL.md",
-      "skill",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "WebFetch"
-      ],
-      null
-    ],
-    [
       "tikz-paper-figure",
       "L3",
       "owner",
