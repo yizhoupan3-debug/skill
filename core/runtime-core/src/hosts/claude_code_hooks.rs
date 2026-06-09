@@ -1,0 +1,2487 @@
+//! L4 transport for `host_id=claude-code`; review/closeout policy in `core-policy`.
+//! Claude Code（Anthropic CLI）hooks：`router-rs claude hook --event=… --repo-root …`。
+//! 历史版本接口快照：`git show 89ece4c^:core/router-rs/src/claude_hooks.rs`（事件：`pre-tool-use`、`user-prompt-submit`、`post-tool-use`、`stop`；CLI 亦接受 `PreToolUse` 等 PascalCase 别名，与 Codex hook 拼写对齐）。
+//!
+//! **误接 Cursor hook stdin**：仅在 stdin JSON 呈现结构化 Cursor envelope（顶层非空 `cursor_version` 字符串 + `workspace_roots` 数组 + 非空 `hook_event_name` 或 `hookEventName`）时整条静默；
+//! 不用路径子串扫描，以免合法 Claude 载荷（例如编辑 `.cursor/` 下文件）被误判为 Cursor 而旁路门禁。
+//! stdin 体量上限 4 MiB，与 Codex hook 读取路径对齐，防失控输入撑爆 hook 进程内存。
+use crate::hook_common::{
+    has_override, is_narrow_review_prompt, is_review_prompt, normalize_subagent_type,
+    normalize_tool_name, saw_reject_reason,
+};
+use crate::review_gate_engine::{
+    fork_context_from_values, review_independent_reviewer_evidence,
+};
+use core_policy::{HookReviewDiskCore, HookReviewGateFields};
+use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
+use std::cell::Cell;
+use std::collections::HashSet;
+use std::fmt::Write as FmtWrite;
+use std::fs;
+use std::io::{self, Read, Write};
+use std::path::{Component, Path, PathBuf};
+#[cfg(not(unix))]
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
+
+const CLAUDE_HOOK_STATE_UNREADABLE: &str =
+    "router-rs CLAUDE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
+
+/// 与 Claude Code 共享 hook JSON 协议；通过 thread-local 切换 `.claude` 等宿主差异。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StdioAgentHookHost {
+    ClaudeCode,
+}
+
+impl StdioAgentHookHost {
+    fn state_dir(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => ".claude",
+        }
+    }
+
+    fn hook_state_unreadable(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => CLAUDE_HOOK_STATE_UNREADABLE,
+        }
+    }
+
+    fn review_gate_disable_env(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
+        }
+    }
+
+    fn session_namespace_env(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => "ROUTER_RS_CLAUDE_SESSION_NAMESPACE",
+        }
+    }
+
+    fn log_label(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => "claude",
+        }
+    }
+
+    fn settings_guarded_paths(self) -> &'static [&'static str] {
+        match self {
+            Self::ClaudeCode => SETTINGS_GUARDED_PATHS_CLAUDE,
+        }
+    }
+
+    fn generated_entrypoint_paths(self) -> &'static [&'static str] {
+        match self {
+            Self::ClaudeCode => GENERATED_ENTRYPOINT_PATHS_CLAUDE,
+        }
+    }
+
+    fn user_config_dir_leaf(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => ".claude",
+        }
+    }
+
+    fn review_gate_incomplete_stop_reason(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => "router-rs CLAUDE_REVIEW_GATE incomplete: run an observed independent reviewer lane with explicit fork_context=false before closing this review turn.",
+
+        }
+    }
+
+    fn validate_settings_stop_reason(self) -> &'static str {
+        match self {
+            Self::ClaudeCode => "Validate Claude hook/settings JSON before ending this turn.",
+        }
+    }
+}
+
+thread_local! {
+    static ACTIVE_STDIO_AGENT_HOOK_HOST: Cell<StdioAgentHookHost> =
+        const { Cell::new(StdioAgentHookHost::ClaudeCode) };
+}
+
+fn active_stdio_agent_hook_host() -> StdioAgentHookHost {
+    ACTIVE_STDIO_AGENT_HOOK_HOST.with(|c| c.get())
+}
+
+fn with_stdio_agent_hook_host<R>(host: StdioAgentHookHost, f: impl FnOnce() -> R) -> R {
+    struct Restore(StdioAgentHookHost);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ACTIVE_STDIO_AGENT_HOOK_HOST.with(|c| c.set(self.0));
+        }
+    }
+    let previous = ACTIVE_STDIO_AGENT_HOOK_HOST.with(|c| c.replace(host));
+    let _restore = Restore(previous);
+    f()
+}
+
+fn hook_state_base(repo_root: &Path) -> PathBuf {
+    repo_root
+        .join(active_stdio_agent_hook_host().state_dir())
+        .join("hook-state")
+}
+
+/// Lexically normalize `.` / `..` segments (no filesystem access). Prefix/Root handling matches
+/// `PathBuf` push semantics so repo-root joins stay absolute on POSIX.
+fn normalize_path_lexical(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for comp in path.components() {
+        match comp {
+            Component::Prefix(_) | Component::RootDir => {
+                out.push(comp);
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if out.file_name().is_some() {
+                    out.pop();
+                } else {
+                    out.push("..");
+                }
+            }
+            Component::Normal(c) => out.push(c),
+        }
+    }
+    out
+}
+
+/// Collapse `.` / `..` in a path string interpreted **relative to repo root**. Extra `..` at the
+/// virtual root are ignored so `a/../../AGENTS.md` resolves like `AGENTS.md`, never above `repo_root`.
+fn compact_repo_relative_segments(rel_raw: &str) -> Option<PathBuf> {
+    let mut out = PathBuf::new();
+    for comp in Path::new(rel_raw).components() {
+        match comp {
+            Component::CurDir => {}
+            Component::Normal(s) => out.push(s),
+            Component::ParentDir => {
+                if out.file_name().is_some() {
+                    out.pop();
+                }
+            }
+            Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    Some(out)
+}
+
+/// Repo-relative forward-slash path when `raw` resolves under `repo_root`. Host-private paths pass
+/// through unchanged. Escaped or unresolvable paths return `None` (guards do not apply).
+fn repo_relative_slash_path(repo_root: &Path, raw: &str) -> Option<String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    if is_host_private_path(raw) {
+        return Some(raw.replace('\\', "/"));
+    }
+    let candidate = PathBuf::from(raw);
+    let repo_lex = normalize_path_lexical(repo_root);
+
+    if candidate.is_absolute() {
+        if let (Ok(canon_file), Ok(canon_repo)) =
+            (candidate.canonicalize(), repo_root.canonicalize())
+        {
+            if let Ok(rel) = canon_file.strip_prefix(&canon_repo) {
+                return Some(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+        let abs_lex = normalize_path_lexical(&candidate);
+        if let Ok(rel) = abs_lex.strip_prefix(&repo_lex) {
+            return Some(rel.to_string_lossy().replace('\\', "/"));
+        }
+        return Some(abs_lex.to_string_lossy().replace('\\', "/"));
+    }
+
+    let rel_only = compact_repo_relative_segments(raw)?;
+    let joined = normalize_path_lexical(&repo_root.join(&rel_only));
+    if let Ok(rel) = joined.strip_prefix(&repo_lex) {
+        return Some(rel.to_string_lossy().replace('\\', "/"));
+    }
+    Some(joined.to_string_lossy().replace('\\', "/"))
+}
+
+const FRAMEWORK_CHANGED_CONTEXT: &str =
+    "Framework routing/runtime files changed; run the targeted Rust contract tests before finishing.";
+const SETTINGS_CHANGED_CONTEXT: &str =
+    "Hook/settings files changed; validate JSON and run the agent hook contract tests before finishing.";
+/// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` 或 legacy `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE`。
+fn agent_review_gate_disabled() -> bool {
+    core_policy::env_flags::router_rs_review_gate_disabled_for_host("claude-code")
+}
+
+/// Env disable **or** `my-light` profile (advisory-only mode).
+fn claude_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
+    if agent_review_gate_disabled() {
+        return true;
+    }
+    crate::hook_common::review_gate_hard_block_disabled(Some(repo_root), text)
+}
+
+fn claude_user_prompt_text(payload: &Value) -> String {
+    payload
+        .get("prompt")
+        .or_else(|| payload.get("user_prompt"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+fn claude_stop_signal_text(payload: &Value) -> String {
+    claude_closeout_completion_text(payload)
+}
+
+fn claude_closeout_completion_text(payload: &Value) -> String {
+    let prompt = claude_user_prompt_text(payload);
+    let response = payload
+        .get("response")
+        .or_else(|| payload.get("assistant_response"))
+        .or_else(|| payload.get("last_assistant_message"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if response.trim().is_empty() {
+        prompt
+    } else {
+        format!("{prompt}\n{response}")
+    }
+}
+
+fn claude_review_gate_incomplete_stop_reason(fields: &HookReviewGateFields) -> Option<String> {
+    core_policy::hook_review_stop_advisory_needed(fields, "CLAUDE_REVIEW_GATE")
+}
+
+fn should_sync_review_gate_on_user_prompt(repo_root: &Path, prompt: &str) -> bool {
+    crate::hook_common::my_light_profile_active(Some(repo_root), prompt)
+        || crate::hook_common::is_framework_goal_entry_prompt(prompt)
+        || crate::hook_common::is_my_pre_execution_entry_prompt(prompt)
+        || is_narrow_review_prompt(prompt)
+        || is_review_prompt(prompt)
+        || has_override(prompt)
+}
+
+fn apply_claude_review_gate_user_prompt(
+    repo_root: &Path,
+    payload: &Value,
+    prompt: &str,
+) -> Result<ReviewGateState, String> {
+    let path = review_state_path(repo_root, payload);
+    let my_light = crate::hook_common::my_light_profile_active(Some(repo_root), prompt);
+    let narrow = is_narrow_review_prompt(prompt);
+    let goal_drive = crate::hook_common::is_framework_goal_entry_prompt(prompt);
+    let review_arms = is_review_prompt(prompt) && !goal_drive;
+    let override_now = has_override(prompt);
+    with_claude_review_state_lock(&path, || {
+        let mut state = match load_review_gate_disk(repo_root, payload) {
+            AgentDiskState::Unreadable => {
+                eprintln!(
+                    "[router-rs] {} review_gate state unreadable: {}",
+                    active_stdio_agent_hook_host().log_label(),
+                    path.display()
+                );
+                return Err("review_gate_unreadable".to_string());
+            }
+            AgentDiskState::Absent => ReviewGateState::default(),
+            AgentDiskState::Ok(s) => s,
+        };
+        if my_light || goal_drive {
+            state.review_required = false;
+            state.independent_reviewer_seen = false;
+        } else if narrow {
+            state.review_required = false;
+            state.independent_reviewer_seen = false;
+        } else {
+            if review_arms && !override_now {
+                state.independent_reviewer_seen = false;
+            }
+            state.review_required = state.review_required || review_arms;
+        }
+        state.review_override = state.review_override || override_now;
+        write_review_state_unlocked(&path, &state)?;
+        Ok(state)
+    })
+}
+
+/// PreToolUse deny: framework-managed artifacts — generated catalogs/routing data and skill metadata.
+const FRAMEWORK_GUARDED_PREFIXES: &[&str] = &[
+    "configs/framework/",
+    "skills/SKILL_PLUGIN_CATALOG.json",
+    "skills/SKILL_ROUTING_METADATA.json",
+    "skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json",
+    "skills/SKILL_HEALTH_MANIFEST.json",
+    "skills/SKILL_APPROVAL_POLICY.json",
+    "skills/SKILL_ROUTING_INDEX.md",
+    "skills/SKILL_TIERS.json",
+];
+/// PostToolUse提醒 + Stop门禁: framework source code (overlap with GUARDED is intentional defense-in-depth when skip guard is set).
+const FRAMEWORK_SOURCE_PREFIXES: &[&str] = &[
+    "core/router-rs/",
+    "configs/framework/",
+];
+
+const SETTINGS_GUARDED_PATHS_CLAUDE: &[&str] =
+    &[".claude/settings.json", ".claude/settings.local.json"];
+const GENERATED_ENTRYPOINT_PATHS_CLAUDE: &[&str] = &[".claude/CLAUDE.md"];
+/// Cross-host generated surfaces: active in other hosts, Claude should not directly modify.
+const CROSS_HOST_SURFACES: &[&str] = &[".codex/hooks.json"];
+/// Truly retired surfaces: defense-in-depth against accidental restoration.
+const RETIRED_SURFACES: &[&str] = &[
+    ".agents",
+    "plugins/skill-framework-native/.mcp.json",
+];
+/// Pre-89ece4c the stdio agent hook accepted kebab-case commands only; CLI adds PascalCase aliases
+/// aligned with Codex hook spelling (`PreToolUse`, `Stop`, …)。
+pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String> {
+    crate::kernel_bootstrap::ensure_kernel_bootstrap();
+    let canonical = canonical_stdio_agent_hook_command(command)?;
+    let telemetry_event = canonical.to_string();
+    crate::hook_timing::mark_hook_start();
+    let _registry_guard = crate::runtime_registry::HookRegistryRepoGuard::new(repo_root);
+    let result = with_stdio_agent_hook_host(StdioAgentHookHost::ClaudeCode, || {
+        let payload = read_stdin_payload()?;
+        Ok(dispatch_stdio_agent_hook_payload(
+            canonical, repo_root, &payload,
+        ))
+    });
+    match &result {
+        Ok(output) => crate::telemetry_emit::emit_hook_fired(
+            &telemetry_event,
+            crate::telemetry_emit::hook_action_from_output(output),
+        ),
+        Err(_) => crate::telemetry_emit::emit_hook_fired(&telemetry_event, "error"),
+    }
+    crate::hook_timing::emit_hook_timing_line(&telemetry_event);
+    result
+}
+
+fn dispatch_stdio_agent_hook_payload(canonical: &str, repo_root: &Path, payload: &Value) -> Value {
+    crate::kernel_bootstrap::ensure_kernel_bootstrap();
+    if payload_looks_like_cursor_hook_stdin(payload) {
+        return silent_success();
+    }
+    let response = match canonical {
+        "pre-tool-use" => run_pre_tool_use(repo_root, payload),
+        "user-prompt-submit" => run_user_prompt_submit(repo_root, payload),
+        "post-tool-use" => run_post_tool_use(repo_root, payload),
+        "stop" => run_stop(repo_root, payload),
+        // Defensive default: host should only dispatch canonical commands from `canonical_stdio_agent_hook_command`.
+        _ => Some(silent_success()),
+    };
+    response.unwrap_or_else(silent_success)
+}
+
+fn canonical_stdio_agent_hook_command(command: &str) -> Result<&'static str, String> {
+    match command.trim() {
+        "pre-tool-use" | "PreToolUse" => Ok("pre-tool-use"),
+        "user-prompt-submit" | "UserPromptSubmit" => Ok("user-prompt-submit"),
+        "post-tool-use" | "PostToolUse" => Ok("post-tool-use"),
+        "stop" | "Stop" => Ok("stop"),
+        _ => Err(format!("Unsupported stdio agent hook command: {command}")),
+    }
+}
+
+/// Cross-host hook contract matrix: dispatch lifecycle hooks without stdin (test-only).
+#[cfg(any(test, feature = "test-support"))]
+pub fn dispatch_claude_hook_payload_for_test(
+    canonical_event: &str,
+    repo_root: &Path,
+    payload: &Value,
+) -> Value {
+    crate::kernel_bootstrap::ensure_kernel_bootstrap();
+    with_stdio_agent_hook_host(StdioAgentHookHost::ClaudeCode, || {
+        dispatch_stdio_agent_hook_payload(canonical_event, repo_root, payload)
+    })
+}
+
+/// `router-rs claude hook --event=… --repo-root …` — stdin JSON → Claude Code hook response JSON (line-delimited).
+pub fn run_claude_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<(), String> {
+    let repo_root = crate::framework_runtime::resolve_repo_root_arg(cli_repo_root)?;
+    let mut output = run_claude_hook(event, &repo_root)?;
+    crate::router_rs_observation::attach_router_rs_observation(
+        &mut output,
+        crate::router_rs_observation::HookObservationHost::ClaudeCode,
+    );
+    let serialized = serde_json::to_string(&output).map_err(|e| e.to_string())?;
+    let mut stdout = std::io::stdout();
+    stdout
+        .write_all(format!("{serialized}\n").as_bytes())
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn parse_stdio_agent_hook_stdin_trimmed(trimmed: &str) -> Result<Value, String> {
+    if trimmed.is_empty() {
+        return Ok(json!({}));
+    }
+    serde_json::from_str::<Value>(trimmed).map_err(|err| format!("stdin_json_invalid: {err}"))
+}
+
+/// 与 Codex hook `read_codex_stdin_limited` 同款上限与 UTF-8 错误归一。
+fn read_stdio_agent_stdin_limited<R: Read>(reader: &mut R) -> Result<String, String> {
+    const LIMIT: u64 = 4 * 1024 * 1024;
+    let mut input = String::new();
+    let mut limited = reader.take(LIMIT);
+    limited.read_to_string(&mut input).map_err(|err| {
+        let msg = err.to_string();
+        let lower = msg.to_ascii_lowercase();
+        if matches!(err.kind(), std::io::ErrorKind::InvalidData)
+            || lower.contains("utf-8")
+            || lower.contains("utf8")
+            || lower.contains("utf")
+        {
+            return "stdin_invalid_utf8".to_string();
+        }
+        msg
+    })?;
+    if limited.limit() == 0 {
+        let inner = limited.into_inner();
+        let mut probe = [0u8; 1];
+        if inner.read(&mut probe).map_err(|err| err.to_string())? > 0 {
+            return Err("stdin payload exceeds 4 MiB limit".to_string());
+        }
+    }
+    Ok(input)
+}
+
+fn read_stdin_payload() -> Result<Value, String> {
+    let mut stdin = io::stdin();
+    let input = read_stdio_agent_stdin_limited(&mut stdin)?;
+    parse_stdio_agent_hook_stdin_trimmed(input.trim())
+}
+
+fn silent_success() -> Value {
+    json!({ "suppressOutput": true })
+}
+
+/// Cursor hook stdin 误接到 stdio agent hook 时的结构化识别（顶层字段）。
+///
+/// 刻意不使用嵌套字符串中的 `/.cursor/` 匹配，否则合法 stdio agent 工具载荷可能被整条静默。
+/// 另要求 `hook_event_name` / `hookEventName`，降低仅凭顶造 `cursor_version`+`workspace_roots` 整条静默的面。
+fn payload_looks_like_cursor_hook_stdin(payload: &Value) -> bool {
+    let Value::Object(map) = payload else {
+        return false;
+    };
+    let Some(Value::String(cv)) = map.get("cursor_version") else {
+        return false;
+    };
+    if cv.trim().is_empty() {
+        return false;
+    }
+    if !matches!(map.get("workspace_roots"), Some(Value::Array(_))) {
+        return false;
+    }
+    let hook_ok = [map.get("hook_event_name"), map.get("hookEventName")]
+        .into_iter()
+        .flatten()
+        .any(|v| v.as_str().is_some_and(|s| !s.trim().is_empty()));
+    hook_ok
+}
+
+fn deny_pre_tool_use(reason: String) -> Option<Value> {
+    Some(json!({
+        "suppressOutput": true,
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": reason,
+        },
+    }))
+}
+
+fn add_context(event: &str, context: &str) -> Option<Value> {
+    Some(json!({
+        "suppressOutput": true,
+        "hookSpecificOutput": {
+            "hookEventName": event,
+            "additionalContext": context,
+        },
+    }))
+}
+
+fn block_stop(reason: &str) -> Option<Value> {
+    Some(json!({
+        "continue": false,
+        "stopReason": reason,
+        "decision": "block",
+        "reason": reason,
+        "suppressOutput": true,
+    }))
+}
+
+fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
+    if crate::router_env_flags::router_rs_skip_pre_tool_use_guard() {
+        return None;
+    }
+    let mut warn_contexts: Vec<String> = Vec::new();
+    for path in payload_relative_paths(repo_root, payload) {
+        if is_cross_host_or_retired_surface(&path) {
+            return deny_pre_tool_use(format!(
+                "Blocked direct mutation of cross-host or retired surface {path}; use the Rust host-entrypoint sync path instead."
+            ));
+        }
+        if is_generated_entrypoint(&path) {
+            return deny_pre_tool_use(format!(
+                "Blocked direct mutation of generated host entrypoint {path}; use the Rust host-entrypoint sync path instead."
+            ));
+        }
+        if is_framework_guarded_path(&path) {
+            return deny_pre_tool_use(format!(
+                "Blocked direct mutation of framework routing/runtime file {path}; use the Rust host-entrypoint sync or routing path instead."
+            ));
+        }
+        if is_host_private_path(&path) {
+            return deny_pre_tool_use(format!(
+                "Blocked direct mutation of host-private agent state {path}; project policy must live in repo settings or Rust runtime code."
+            ));
+        }
+        // Warn hints for files that can be edited but need care
+        if is_settings_path(&path) {
+            warn_contexts.push(format!(
+                "Modifying {path} — ensure JSON validity before finishing (jq . or python -m json.tool)."
+            ));
+        } else if path == "AGENTS_CLAUDE.md" {
+            warn_contexts.push(format!(
+                "Modifying {path} — this is a cross-host strategy document; ensure consistency across all hosts."
+            ));
+        } else if path == "skills/SKILL_ROUTING_RUNTIME.json" || path == "skills/SKILL_MANIFEST.json" {
+            warn_contexts.push(format!(
+                "Modifying {path} — framework routing core data source; run `framework skills refresh --validate` after changes."
+            ));
+        }
+    }
+    if !warn_contexts.is_empty() {
+        return Some(json!({
+            "suppressOutput": true,
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "additionalContext": warn_contexts.join("\n"),
+            },
+        }));
+    }
+    None
+}
+
+fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
+    let prompt = claude_user_prompt_text(payload);
+    let review_sync = if !agent_review_gate_disabled()
+        && should_sync_review_gate_on_user_prompt(repo_root, &prompt)
+    {
+        Some(apply_claude_review_gate_user_prompt(repo_root, payload, &prompt))
+    } else {
+        None
+    };
+    if let Some(Err(_)) = review_sync {
+        let path = review_state_path(repo_root, payload);
+        return add_context(
+            "UserPromptSubmit",
+            &format!(
+                "{} (path {}). Repair JSON or permissions before continuing.",
+                active_stdio_agent_hook_host().hook_state_unreadable(),
+                path.display()
+            ),
+        );
+    }
+    if crate::hook_common::is_my_pre_execution_entry_prompt(&prompt) {
+        return add_context(
+            "UserPromptSubmit",
+            crate::hook_common::MY_PRE_EXECUTION_HOOK_NUDGE,
+        );
+    }
+    if crate::hook_common::is_framework_goal_entry_prompt(&prompt) {
+        return add_context(
+            "UserPromptSubmit",
+            crate::hook_common::my_goal_drive_hook_nudge_for_prompt(&prompt),
+        );
+    }
+    let mut contexts: Vec<String> = Vec::new();
+    if let Some(Ok(state)) = review_sync {
+        if state.review_required
+            && !state.review_override
+            && crate::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &prompt)
+        {
+            contexts.push(crate::runtime_registry::review_spawn_first_nudge_line(
+                Some(repo_root),
+                "claude-code",
+            ));
+        }
+    }
+    crate::paper_adversarial_hook::maybe_append_paper_adversarial_context(
+        repo_root,
+        &prompt,
+        &mut contexts,
+        crate::paper_prose_hook::PaperProseHookHost::Claude,
+    );
+    crate::paper_prose_hook::maybe_append_paper_prose_context(
+        repo_root,
+        &prompt,
+        &mut contexts,
+        crate::paper_prose_hook::PaperProseHookHost::Claude,
+    );
+    if contexts.is_empty() {
+        return None;
+    }
+    add_context("UserPromptSubmit", &contexts.join("\n"))
+}
+
+fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
+    let tool_name = payload
+        .get("tool_name")
+        .or(payload.get("tool"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    crate::telemetry_emit::emit_tool_call(
+        &tool_name,
+        crate::framework_runtime::extract_post_tool_duration_ms(payload).unwrap_or(0),
+        crate::framework_runtime::post_tool_call_succeeded(payload),
+    );
+    record_reviewer_evidence(repo_root, payload);
+    let paths = payload_relative_paths(repo_root, payload);
+    let touched_settings = paths.iter().any(|path| is_settings_path(path));
+    let touched_framework = paths.iter().any(|path| is_framework_source_path(path));
+    let settings_validated =
+        payload_is_successful_bash(payload) && payload_runs_settings_validation(payload);
+    let framework_tested =
+        payload_is_successful_bash(payload) && payload_runs_framework_tests(payload);
+    if touched_settings || touched_framework || settings_validated || framework_tested {
+        persist_touch_state(
+            repo_root,
+            payload,
+            touched_settings,
+            touched_framework,
+            settings_validated,
+            framework_tested,
+        );
+    }
+    match (touched_settings, touched_framework) {
+        (true, true) => add_context(
+            "PostToolUse",
+            &format!("{SETTINGS_CHANGED_CONTEXT}\n{FRAMEWORK_CHANGED_CONTEXT}"),
+        ),
+        (true, false) => add_context("PostToolUse", SETTINGS_CHANGED_CONTEXT),
+        (false, true) => add_context("PostToolUse", FRAMEWORK_CHANGED_CONTEXT),
+        (false, false) => None,
+    }
+}
+
+fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
+    if let Some(msg) = crate::framework_runtime::closeout_stop_followup_for_completion_text(
+        repo_root,
+        &claude_closeout_completion_text(payload),
+    ) {
+        return block_stop(&msg);
+    }
+
+    let review_load = load_review_gate_disk(repo_root, payload);
+    let touch_load = load_touch_state_disk(repo_root, payload);
+    if matches!(review_load, AgentDiskState::Unreadable) {
+        eprintln!(
+            "[router-rs] {} review_gate state unreadable on Stop: {}",
+            active_stdio_agent_hook_host().log_label(),
+            review_state_path(repo_root, payload).display()
+        );
+        return block_stop(active_stdio_agent_hook_host().hook_state_unreadable());
+    }
+    if matches!(touch_load, AgentDiskState::Unreadable) {
+        eprintln!(
+            "[router-rs] {} hook_state unreadable on Stop: {}",
+            active_stdio_agent_hook_host().log_label(),
+            touch_state_path(repo_root, payload).display()
+        );
+        return block_stop(active_stdio_agent_hook_host().hook_state_unreadable());
+    }
+
+    let stop_signal = claude_stop_signal_text(payload);
+    let prompt = claude_user_prompt_text(payload);
+    let reject_now = saw_reject_reason(&stop_signal, &prompt);
+
+    let mut review_state = match review_load {
+        AgentDiskState::Absent => ReviewGateState::default(),
+        AgentDiskState::Ok(s) => s,
+        AgentDiskState::Unreadable => {
+            return block_stop(active_stdio_agent_hook_host().hook_state_unreadable());
+        }
+    };
+    if reject_now {
+        review_state.reject_reason_seen = true;
+        let path = review_state_path(repo_root, payload);
+        let _ = write_review_state_unlocked(&path, &review_state);
+    }
+    if !claude_review_gate_suppressed(repo_root, &prompt) {
+        if let Some(reason) = claude_review_gate_incomplete_stop_reason(&review_state.gate_fields())
+        {
+            return add_context("Stop", &reason);
+        }
+    }
+    let state = match touch_load {
+        AgentDiskState::Absent => TouchState::default(),
+        AgentDiskState::Ok(s) => s,
+        AgentDiskState::Unreadable => {
+            return block_stop(active_stdio_agent_hook_host().hook_state_unreadable());
+        }
+    };
+    if state.settings && !state.settings_validated {
+        return block_stop(active_stdio_agent_hook_host().validate_settings_stop_reason());
+    }
+    if state.framework && !state.framework_tested {
+        return block_stop("Run targeted Rust contract tests for framework routing/runtime changes before ending this turn.");
+    }
+    clear_review_state(repo_root, payload);
+    clear_touch_state(repo_root, payload);
+    None
+}
+
+#[derive(Default)]
+struct TouchState {
+    settings: bool,
+    framework: bool,
+    settings_validated: bool,
+    framework_tested: bool,
+}
+
+type ReviewGateState = HookReviewDiskCore;
+
+fn try_extract_session_string(payload: &Value) -> Option<String> {
+    let map = payload.as_object()?;
+    try_session_ids_from_object(map)
+}
+
+fn try_session_ids_from_object(map: &Map<String, Value>) -> Option<String> {
+    for key in [
+        "session_id",
+        "conversation_id",
+        "thread_id",
+        "chat_id",
+        "transcript_path",
+        "conversationId",
+        "threadId",
+        "sessionId",
+    ] {
+        if let Some(value) = map.get(key).and_then(Value::as_str) {
+            let t = value.trim();
+            if !t.is_empty() {
+                return Some(t.to_string());
+            }
+        }
+    }
+    if let Some(meta) = map.get("metadata").and_then(Value::as_object) {
+        for key in ["sessionId", "conversationId", "chatId", "threadId"] {
+            if let Some(value) = meta.get(key).and_then(Value::as_str) {
+                let t = value.trim();
+                if !t.is_empty() {
+                    return Some(t.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+fn first_nonempty_payload_str(payload: &Value, keys: &[&str]) -> String {
+    let Some(map) = payload.as_object() else {
+        return String::new();
+    };
+    for key in keys {
+        if let Some(s) = map.get(*key).and_then(Value::as_str) {
+            let t = s.trim();
+            if !t.is_empty() {
+                return t.to_string();
+            }
+        }
+    }
+    String::new()
+}
+
+fn repo_fallback_token(repo_root: &Path) -> String {
+    let resolved = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+    let label = active_stdio_agent_hook_host().log_label();
+    format!(
+        "{label}-repo::{}",
+        resolved.to_string_lossy().replace('\\', "/")
+    )
+}
+
+fn short_hash(input: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    let digest = hasher.finalize();
+    hex_lower(&digest[..16])
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = FmtWrite::write_fmt(&mut s, format_args!("{:02x}", byte));
+    }
+    s
+}
+
+/// 与 Cursor `session_key` 同类：**显式会话串** → **宿主 `ROUTER_RS_*_SESSION_NAMESPACE`** → **`cwd` 类字段** → **repo 稳定 token**。
+/// 同仓多会话在无 id 时仍可能共用状态文件；需并行分流时与 Cursor 一样设 namespace。
+fn session_key(repo_root: &Path, payload: &Value) -> String {
+    if let Some(raw) = try_extract_session_string(payload) {
+        return short_hash(&raw);
+    }
+    if let Ok(ns) = std::env::var(active_stdio_agent_hook_host().session_namespace_env()) {
+        let t = ns.trim();
+        if !t.is_empty() {
+            return short_hash(&format!("env::{t}"));
+        }
+    }
+    const CWD_KEYS: &[&str] = &[
+        "cwd",
+        "workspaceFolder",
+        "workspace_folder",
+        "workspaceRoot",
+        "workspace_root",
+        "root",
+    ];
+    let cwd = first_nonempty_payload_str(payload, CWD_KEYS);
+    if !cwd.is_empty() {
+        return short_hash(&format!("cwd::{cwd}"));
+    }
+    short_hash(&repo_fallback_token(repo_root))
+}
+
+fn review_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
+    hook_state_base(repo_root).join(core_policy::hook_review_subagent_state_basename(
+        &session_key(repo_root, payload),
+    ))
+}
+
+/// `.claude/hook-state/review_gate_<key>.json` (pre–phase-3 canonical).
+fn legacy_review_gate_hook_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
+    hook_state_base(repo_root).join(core_policy::hook_review_gate_legacy_state_basename(
+        &session_key(repo_root, payload),
+    ))
+}
+
+/// `.claude/review_gate_<key>.json` (flat legacy).
+fn legacy_review_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
+    repo_root.join(".claude").join(
+        core_policy::hook_review_gate_legacy_state_basename(&session_key(repo_root, payload)),
+    )
+}
+
+fn read_review_gate_file(path: &Path) -> AgentDiskState<ReviewGateState> {
+    if !path.is_file() {
+        return AgentDiskState::Absent;
+    }
+    let raw = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(_) => return AgentDiskState::Unreadable,
+    };
+    if raw.trim().is_empty() {
+        return AgentDiskState::Unreadable;
+    }
+    let value: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return AgentDiskState::Unreadable,
+    };
+    AgentDiskState::Ok(core_policy::migrate_hook_review_disk_core(&value))
+}
+
+/// Serialize Claude review_gate JSON under `<state>.lock` (ADR P1-5; mirrors Codex hook-state flock).
+#[cfg(unix)]
+struct ClaudeReviewStateLock {
+    file: std::fs::File,
+}
+
+#[cfg(unix)]
+impl Drop for ClaudeReviewStateLock {
+    fn drop(&mut self) {
+        let fd = self.file.as_raw_fd();
+        unsafe {
+            let _ = libc::flock(fd, libc::LOCK_UN);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+struct ClaudeReviewStateLock {
+    path: PathBuf,
+}
+
+#[cfg(not(unix))]
+impl Drop for ClaudeReviewStateLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+#[cfg(unix)]
+fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewStateLock, String> {
+    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
+    if let Some(parent) = lock_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("claude_state_dir_create_failed: {e}"))?;
+    }
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&lock_path)
+        .map_err(|e| format!("claude_state_lock_open_failed: {e}"))?;
+    let fd = file.as_raw_fd();
+    let rc = unsafe { libc::flock(fd, libc::LOCK_EX) };
+    if rc != 0 {
+        return Err(format!(
+            "claude_state_lock_flock_failed: {}",
+            io::Error::last_os_error()
+        ));
+    }
+    Ok(ClaudeReviewStateLock { file })
+}
+
+#[cfg(not(unix))]
+fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewStateLock, String> {
+    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
+    if let Some(parent) = lock_path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("claude_state_dir_create_failed: {e}"))?;
+    }
+    let started = SystemTime::now();
+    loop {
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)
+        {
+            Ok(mut file) => {
+                let now_ms = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_millis() as u64)
+                    .unwrap_or(0);
+                let stamp = format!("pid={} ts={now_ms}\n", std::process::id());
+                file.write_all(stamp.as_bytes())
+                    .map_err(|e| format!("claude_state_lock_write_failed: {e}"))?;
+                file.sync_all()
+                    .map_err(|e| format!("claude_state_lock_sync_failed: {e}"))?;
+                return Ok(ClaudeReviewStateLock { path: lock_path });
+            }
+            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+                if started.elapsed().unwrap_or(Duration::ZERO) > Duration::from_secs(20) {
+                    // Attempt stale lock cleanup before giving up
+                    if let Ok(meta) = fs::metadata(&lock_path) {
+                        if let Ok(modified) = meta.modified() {
+                            if modified.elapsed().unwrap_or(Duration::ZERO) > Duration::from_secs(60) {
+                                let _ = fs::remove_file(&lock_path);
+                                continue;
+                            }
+                        }
+                    }
+                    return Err("claude_state_lock_timeout".to_string());
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(err) => return Err(format!("claude_state_lock_open_failed: {err}")),
+        }
+    }
+}
+
+fn with_claude_review_state_lock<T, F>(state_path: &Path, f: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String>,
+{
+    let _guard = acquire_claude_review_state_lock(state_path)?;
+    f()
+}
+
+#[derive(Debug, Clone)]
+enum AgentDiskState<T> {
+    Absent,
+    Ok(T),
+    Unreadable,
+}
+
+fn migrate_claude_review_gate_state_to_canonical(
+    canonical_path: &Path,
+    state: &ReviewGateState,
+) -> AgentDiskState<ReviewGateState> {
+    if let Err(err) =
+        with_claude_review_state_lock(canonical_path, || write_review_state_unlocked(canonical_path, state))
+    {
+        eprintln!(
+            "[router-rs] claude review_gate legacy migrate failed (using in-memory state): {err}"
+        );
+    }
+    AgentDiskState::Ok(state.clone())
+}
+
+fn load_review_gate_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<ReviewGateState> {
+    let path = review_state_path(repo_root, payload);
+    match read_review_gate_file(&path) {
+        AgentDiskState::Ok(state) => return AgentDiskState::Ok(state),
+        AgentDiskState::Unreadable => return AgentDiskState::Unreadable,
+        AgentDiskState::Absent => {}
+    }
+    for legacy_path in [
+        legacy_review_gate_hook_state_path(repo_root, payload),
+        legacy_review_state_path(repo_root, payload),
+    ] {
+        match read_review_gate_file(&legacy_path) {
+            AgentDiskState::Ok(state) => {
+                return migrate_claude_review_gate_state_to_canonical(&path, &state);
+            }
+            AgentDiskState::Unreadable => return AgentDiskState::Unreadable,
+            AgentDiskState::Absent => {}
+        }
+    }
+    AgentDiskState::Absent
+}
+
+fn load_touch_state_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<TouchState> {
+    let path = touch_state_path(repo_root, payload);
+    if !path.is_file() {
+        return AgentDiskState::Absent;
+    }
+    let raw = match fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(_) => return AgentDiskState::Unreadable,
+    };
+    if raw.trim().is_empty() {
+        return AgentDiskState::Unreadable;
+    }
+    let payload_val: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return AgentDiskState::Unreadable,
+    };
+    AgentDiskState::Ok(TouchState {
+        settings: payload_val
+            .get("settings")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        framework: payload_val
+            .get("framework")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        settings_validated: payload_val
+            .get("settings_validated")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+        framework_tested: payload_val
+            .get("framework_tested")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
+    })
+}
+
+fn write_review_state_unlocked(path: &Path, state: &ReviewGateState) -> Result<(), String> {
+    let mut to_write = state.clone();
+    to_write.bump_version_for_save();
+    let value = serde_json::to_value(&to_write).map_err(|e| e.to_string())?;
+    let body = format!("{value}\n");
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::write(path, &body).map_err(|e| e.to_string())
+}
+
+fn clear_review_state(repo_root: &Path, payload: &Value) {
+    let _ = fs::remove_file(review_state_path(repo_root, payload));
+    let _ = fs::remove_file(legacy_review_gate_hook_state_path(repo_root, payload));
+    let _ = fs::remove_file(legacy_review_state_path(repo_root, payload));
+}
+
+fn agent_tool_input(payload: &Value) -> Value {
+    payload
+        .as_object()
+        .and_then(crate::hook_common::tool_input_value_from_map)
+        .unwrap_or_else(|| json!({}))
+}
+
+fn reviewer_lane(tool_input: &Value, payload: &Value) -> bool {
+    let subagent_type = normalize_subagent_type(
+        tool_input
+            .get("subagent_type")
+            .or_else(|| tool_input.get("agent_type"))
+            .or_else(|| tool_input.get("type"))
+            .or_else(|| payload.get("subagent_type"))
+            .or_else(|| payload.get("agent_type"))
+            .and_then(Value::as_str),
+    );
+    !subagent_type.is_empty()
+        && crate::runtime_registry::is_reviewer_lane_from_registry(&subagent_type, None)
+}
+
+fn subagent_tool(payload: &Value) -> bool {
+    let name = normalize_tool_name(
+        payload
+            .get("tool_name")
+            .or_else(|| payload.get("tool"))
+            .or_else(|| payload.get("name"))
+            .and_then(Value::as_str),
+    );
+    tool_name_implies_subagent(&name)
+}
+
+fn tool_name_implies_subagent(normalized: &str) -> bool {
+    if matches!(
+        normalized,
+        "task"
+            | "functions.task"
+            | "functions.subagent"
+            | "functions.spawn_agent"
+            | "subagent"
+            | "spawn_agent"
+    ) {
+        return true;
+    }
+    if normalized.ends_with("_subagent")
+        || normalized.ends_with("_spawn_agent")
+        || normalized.ends_with(".subagent")
+        || normalized.ends_with(".spawn_agent")
+    {
+        return true;
+    }
+    normalized
+        .split('.')
+        .any(|seg| seg == "subagent" || seg == "spawn_agent")
+}
+
+fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
+    let path = review_state_path(repo_root, payload);
+    let tool_input = agent_tool_input(payload);
+    let fork = fork_context_from_values(&tool_input, Some(payload));
+    if let Err(err) = with_claude_review_state_lock(&path, || {
+        let mut state = match load_review_gate_disk(repo_root, payload) {
+            AgentDiskState::Unreadable => {
+                eprintln!(
+                    "[router-rs] {} review_gate state unreadable on PostToolUse: {}",
+                    active_stdio_agent_hook_host().log_label(),
+                    path.display()
+                );
+                return Err("review_gate_unreadable".to_string());
+            }
+            AgentDiskState::Absent => ReviewGateState::default(),
+            AgentDiskState::Ok(s) => s,
+        };
+        if !state.review_required || state.review_override {
+            return Ok(());
+        }
+        if !payload_is_successful_tool(payload) {
+            return Ok(());
+        }
+        if subagent_tool(payload)
+            && review_independent_reviewer_evidence(reviewer_lane(&tool_input, payload), fork)
+        {
+            state.independent_reviewer_seen = true;
+            write_review_state_unlocked(&path, &state)?;
+        }
+        Ok(())
+    }) {
+        if err != "review_gate_unreadable" {
+            eprintln!(
+                "[router-rs] {} review_gate evidence record failed: {err}",
+                active_stdio_agent_hook_host().log_label()
+            );
+        }
+    }
+}
+
+fn legacy_touch_state_path(repo_root: &Path) -> PathBuf {
+    hook_state_base(repo_root).join("hook_state.json")
+}
+
+fn touch_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
+    hook_state_base(repo_root).join(format!(
+        "hook_state_{}.json",
+        session_key(repo_root, payload)
+    ))
+}
+
+fn persist_touch_state(
+    repo_root: &Path,
+    session_payload: &Value,
+    settings: bool,
+    framework: bool,
+    settings_validated: bool,
+    framework_tested: bool,
+) {
+    let path = touch_state_path(repo_root, session_payload);
+    let lock_path = path.clone();
+    if let Err(err) = with_claude_review_state_lock(&lock_path, || {
+        let current = match load_touch_state_disk(repo_root, session_payload) {
+            AgentDiskState::Unreadable => {
+                eprintln!(
+                    "[router-rs] {} hook_state unreadable; skip merge (path {}): repair JSON or remove file",
+                    active_stdio_agent_hook_host().log_label(),
+                    path.display()
+                );
+                return Err("hook_state_unreadable".to_string());
+            }
+            AgentDiskState::Absent => TouchState::default(),
+            AgentDiskState::Ok(s) => s,
+        };
+        let state_payload = json!({
+            "settings": current.settings || settings,
+            "framework": current.framework || framework,
+            "settings_validated": current.settings_validated || settings_validated,
+            "framework_tested": current.framework_tested || framework_tested,
+        });
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let _ = fs::remove_file(legacy_touch_state_path(repo_root));
+        fs::write(&path, format!("{state_payload}\n")).map_err(|e| e.to_string())?;
+        Ok(())
+    }) {
+        if err != "hook_state_unreadable" {
+            eprintln!(
+                "[router-rs] {} hook state write failed (hook_state): {err}",
+                active_stdio_agent_hook_host().log_label()
+            );
+        }
+    }
+}
+
+fn clear_touch_state(repo_root: &Path, payload: &Value) {
+    let _ = fs::remove_file(touch_state_path(repo_root, payload));
+    let _ = fs::remove_file(legacy_touch_state_path(repo_root));
+}
+
+fn payload_relative_paths(repo_root: &Path, payload: &Value) -> Vec<String> {
+    let mut paths = HashSet::new();
+    collect_payload_paths(payload, &mut paths);
+    paths
+        .into_iter()
+        .filter_map(|path| repo_relative_slash_path(repo_root, &path))
+        .collect()
+}
+
+fn collect_payload_paths(value: &Value, paths: &mut HashSet<String>) {
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                if is_path_key(key) {
+                    collect_path_value(child, paths);
+                }
+                collect_payload_paths(child, paths);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect_payload_paths(item, paths);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn collect_path_value(value: &Value, paths: &mut HashSet<String>) {
+    match value {
+        Value::String(text) => {
+            let normalized = text.replace('\\', "/");
+            if !normalized.is_empty() {
+                paths.insert(normalized);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                collect_path_value(item, paths);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn is_path_key(key: &str) -> bool {
+    matches!(
+        key,
+        "file_path"
+            | "changed_path"
+            | "path"
+            | "config_path"
+            | "target_path"
+            | "changed_files"
+            | "file_paths"
+            | "paths"
+    )
+}
+
+fn bash_command(payload: &Value) -> Option<&str> {
+    payload
+        .get("tool_input")
+        .and_then(Value::as_object)
+        .and_then(|tool_input| tool_input.get("command"))
+        .or_else(|| payload.get("command"))
+        .and_then(Value::as_str)
+}
+
+fn is_cross_host_or_retired_surface(path: &str) -> bool {
+    CROSS_HOST_SURFACES
+        .iter()
+        .chain(RETIRED_SURFACES.iter())
+        .any(|surface| path == *surface || path.starts_with(&format!("{surface}/")))
+}
+
+fn is_framework_source_path(path: &str) -> bool {
+    FRAMEWORK_SOURCE_PREFIXES
+        .iter()
+        .any(|prefix| path == *prefix || path.starts_with(prefix))
+}
+
+fn is_generated_entrypoint(path: &str) -> bool {
+    active_stdio_agent_hook_host()
+        .generated_entrypoint_paths()
+        .contains(&path)
+}
+
+fn is_repo_claude_hook_state_file(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    if normalized.starts_with(".claude/hook-state/") {
+        return true;
+    }
+    let file_name = normalized.rsplit('/').next().unwrap_or(&normalized);
+    if !file_name.ends_with(".json") {
+        return false;
+    }
+    file_name.starts_with("review-subagent-")
+        || file_name.starts_with("review_gate_")
+        || file_name.starts_with("hook_state_")
+}
+
+fn is_host_private_path(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    if normalized.starts_with(".claude/") && is_repo_claude_hook_state_file(&normalized) {
+        return true;
+    }
+    let leaf = active_stdio_agent_hook_host().user_config_dir_leaf();
+    let tilde_prefix = format!("~/{}/", leaf.trim_start_matches('/'));
+    if normalized.starts_with(&tilde_prefix) {
+        return true;
+    }
+    if let Some(home) = std::env::var_os("HOME") {
+        let prefix = PathBuf::from(home)
+            .join(leaf)
+            .to_string_lossy()
+            .replace('\\', "/")
+            + "/";
+        if normalized.starts_with(&prefix) {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_settings_path(path: &str) -> bool {
+    active_stdio_agent_hook_host()
+        .settings_guarded_paths()
+        .contains(&path)
+}
+
+fn is_framework_guarded_path(path: &str) -> bool {
+    FRAMEWORK_GUARDED_PREFIXES
+        .iter()
+        .any(|prefix| path == *prefix || path.starts_with(prefix))
+}
+
+fn payload_is_successful_bash(payload: &Value) -> bool {
+    if payload.get("tool_name").and_then(Value::as_str) != Some("Bash") {
+        return false;
+    }
+    payload_is_successful_tool(payload)
+}
+
+fn payload_is_successful_tool(payload: &Value) -> bool {
+    if payload
+        .get("is_error")
+        .and_then(Value::as_bool)
+        .is_some_and(|v| v)
+    {
+        return false;
+    }
+    if payload.get("error").is_some_and(|v| !v.is_null()) {
+        return false;
+    }
+    match payload_exit_code(payload) {
+        Some(0) => true,
+        Some(_) => false,
+        None => true,
+    }
+}
+
+fn payload_exit_code(payload: &Value) -> Option<i64> {
+    find_numeric_key(payload, &["exit_code", "exitCode", "status"])
+}
+
+fn find_numeric_key(value: &Value, keys: &[&str]) -> Option<i64> {
+    match value {
+        Value::Object(map) => {
+            for key in keys {
+                if let Some(number) = map.get(*key).and_then(Value::as_i64) {
+                    return Some(number);
+                }
+            }
+            map.values().find_map(|child| find_numeric_key(child, keys))
+        }
+        Value::Array(items) => items.iter().find_map(|child| find_numeric_key(child, keys)),
+        _ => None,
+    }
+}
+
+fn payload_runs_settings_validation(payload: &Value) -> bool {
+    let Some(command) = bash_command(payload) else {
+        return false;
+    };
+    let lowered = command.to_ascii_lowercase();
+    (lowered.contains("jq") || lowered.contains("python") || lowered.contains("node"))
+        && active_stdio_agent_hook_host()
+            .settings_guarded_paths()
+            .iter()
+            .any(|p| lowered.contains(&p.to_ascii_lowercase()))
+}
+
+fn payload_runs_framework_tests(payload: &Value) -> bool {
+    let Some(command) = bash_command(payload) else {
+        return false;
+    };
+    let lowered = command.to_ascii_lowercase();
+    if !lowered.contains("cargo test") {
+        return false;
+    }
+    [
+        "--manifest-path core/router-rs/cargo.toml",
+        "core/router-rs/cargo.toml",
+        "router-rs",
+        "--test policy_contracts",
+        "--test documentation_contracts",
+        "--test host_integration",
+    ]
+    .iter()
+    .any(|hint| lowered.contains(hint))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn silent_for_safe_read_only_bash() {
+        let payload = json!({
+            "tool_name": "Bash",
+            "tool_input": { "command": "git status --short" }
+        });
+        assert!(run_pre_tool_use(Path::new("/repo"), &payload).is_none());
+    }
+
+    #[test]
+    fn claude_stdin_limited_rejects_over_size() {
+        let large = vec![b'a'; 5 * 1024 * 1024];
+        let mut cursor = std::io::Cursor::new(large);
+        let err = read_stdio_agent_stdin_limited(&mut cursor).unwrap_err();
+        assert!(err.contains("4 MiB"), "unexpected err: [{err}]");
+    }
+
+    #[test]
+    fn claude_stdin_limited_rejects_invalid_utf8() {
+        let mut cursor = std::io::Cursor::new(vec![0xff, 0xfe, 0xfd]);
+        let err = read_stdio_agent_stdin_limited(&mut cursor).unwrap_err();
+        assert_eq!(err, "stdin_invalid_utf8");
+    }
+
+    #[test]
+    fn subagent_tool_accepts_dotted_subagent_segment() {
+        let p = json!({"tool_name": "lane.subagent.run"});
+        assert!(subagent_tool(&p));
+    }
+
+    #[test]
+    fn subagent_tool_rejects_subagent_as_plain_substring() {
+        let p = json!({"tool_name": "not_really_subagent_helpers"});
+        assert!(!subagent_tool(&p));
+    }
+
+    #[test]
+    fn stop_blocks_when_no_exit_code_present() {
+        let repo = unique_test_repo("stop-text-framework");
+        let payload = json!({ "session_id": "s-text", "transcript": "cargo test passed" });
+        persist_touch_state(&repo, &payload, false, true, false, false);
+
+        let output = run_stop(&repo, &payload).unwrap();
+
+        assert_eq!(output["continue"], false);
+        assert_eq!(output["stopReason"], "Run targeted Rust contract tests for framework routing/runtime changes before ending this turn.");
+        assert_eq!(output["decision"], "block");
+        clear_touch_state(&repo, &payload);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn successful_framework_test_allows_stop() {
+        let repo = unique_test_repo("framework-tested");
+        let session = json!({ "session_id": "s-framework-ok" });
+        persist_touch_state(&repo, &session, false, true, false, false);
+        let payload = json!({
+            "session_id": "s-framework-ok",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "cargo test --manifest-path core/router-rs/Cargo.toml claude_code_hooks"
+            },
+            "exit_code": 0
+        });
+
+        assert!(run_post_tool_use(&repo, &payload).is_none());
+        assert!(run_stop(&repo, &session).is_none());
+        assert!(!touch_state_path(&repo, &session).exists());
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn failed_framework_test_keeps_stop_blocked() {
+        let repo = unique_test_repo("framework-test-failed");
+        let session = json!({ "session_id": "s-framework-fail" });
+        persist_touch_state(&repo, &session, false, true, false, false);
+        let payload = json!({
+            "session_id": "s-framework-fail",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "cargo test --manifest-path core/router-rs/Cargo.toml claude_code_hooks"
+            },
+            "exit_code": 101
+        });
+
+        assert!(run_post_tool_use(&repo, &payload).is_none());
+        let output = run_stop(&repo, &session).unwrap();
+
+        assert_eq!(output["continue"], false);
+        assert_eq!(output["stopReason"], "Run targeted Rust contract tests for framework routing/runtime changes before ending this turn.");
+        assert_eq!(output["decision"], "block");
+        clear_touch_state(&repo, &session);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn non_automation_prompt_is_silent() {
+        let repo = unique_test_repo("non-automation-prompt");
+        let payload = json!({ "prompt": "fix the failing test in main.rs" });
+        assert!(run_user_prompt_submit(&repo, &payload).is_none());
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn claude_review_state_lock_file_created_on_write() {
+        let repo = unique_test_repo("claude-flock");
+        let payload = json!({ "session_id": "flock-s1", "prompt": "深度 review" });
+        let _ = run_user_prompt_submit(&repo, &payload);
+        let path = review_state_path(&repo, &payload);
+        assert!(path.is_file());
+        assert!(
+            PathBuf::from(format!("{}.lock", path.display())).is_file(),
+            "flock sidecar should exist after locked write"
+        );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    fn assert_stop_review_gate_advisory(stop: &Value) {
+        assert_ne!(
+            stop.get("decision").and_then(Value::as_str),
+            Some("block"),
+            "review gate must not hard-block Stop: {stop:?}"
+        );
+        let ctx = stop["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("");
+        assert!(
+            ctx.contains("CLAUDE_REVIEW_GATE"),
+            "expected advisory Stop context: {stop:?}"
+        );
+    }
+
+    #[test]
+    fn review_prompt_advises_stop_until_independent_reviewer_seen() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("review-gate-block");
+        let payload = json!({ "session_id": "s-review", "prompt": "深度 review 这个 PR" });
+        let context = run_user_prompt_submit(&repo, &payload).expect("review context");
+        assert!(context["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap_or("")
+            .contains("fork_context=false"));
+        let stop = run_stop(&repo, &json!({ "session_id": "s-review" })).expect("stop advisory");
+        assert_stop_review_gate_advisory(&stop);
+        let _ = fs::remove_dir_all(repo);
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+    }
+
+    #[test]
+    fn review_gate_requires_explicit_false_fork() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("review-gate-shared-fork");
+        let prompt = json!({ "session_id": "s-shared", "prompt": "深度 review 这个 PR" });
+        let _ = run_user_prompt_submit(&repo, &prompt);
+        let shared = json!({
+            "session_id": "s-shared",
+            "tool_name": "functions.spawn_agent",
+            "tool_input": {"agent_type": "general-purpose", "fork_context": true}
+        });
+        assert!(run_post_tool_use(&repo, &shared).is_none());
+        let stop = run_stop(&repo, &json!({ "session_id": "s-shared" })).expect("stop advisory");
+        assert_stop_review_gate_advisory(&stop);
+        let _ = fs::remove_dir_all(repo);
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+    }
+
+    #[test]
+    fn review_gate_allows_matching_independent_reviewer() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("review-gate-pass");
+        let prompt = json!({ "session_id": "s-pass", "prompt": "深度 review 这个 PR" });
+        let _ = run_user_prompt_submit(&repo, &prompt);
+        let reviewer = json!({
+            "session_id": "s-pass",
+            "tool_name": "functions.spawn_agent",
+            "tool_input": {"agent_type": "general-purpose", "fork_context": false}
+        });
+        assert!(run_post_tool_use(&repo, &reviewer).is_none());
+        assert!(run_stop(&repo, &json!({ "session_id": "s-pass" })).is_none());
+        let _ = fs::remove_dir_all(repo);
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+    }
+
+    #[test]
+    fn review_gate_accepts_review_lane_with_fork_false() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("review-gate-review-lane");
+        let prompt = json!({ "session_id": "s-review-lane", "prompt": "深度 review 这个 PR" });
+        let _ = run_user_prompt_submit(&repo, &prompt);
+        let reviewer = json!({
+            "session_id": "s-review-lane",
+            "tool_name": "functions.spawn_agent",
+            "tool_input": {"subagent_type": "review", "fork_context": false}
+        });
+        assert!(run_post_tool_use(&repo, &reviewer).is_none());
+        assert!(
+            run_stop(&repo, &json!({ "session_id": "s-review-lane" })).is_none(),
+            "Claude reviewer_lanes includes review; independent evidence should clear gate"
+        );
+        let _ = fs::remove_dir_all(repo);
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+    }
+
+    #[test]
+    fn review_gate_rejects_explore_even_with_fork_false() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("review-gate-explore-reject");
+        let prompt = json!({ "session_id": "s-explore", "prompt": "深度 review 这个 PR" });
+        let _ = run_user_prompt_submit(&repo, &prompt);
+        let explorer = json!({
+            "session_id": "s-explore",
+            "tool_name": "functions.spawn_agent",
+            "tool_input": {"agent_type": "explorer", "fork_context": false}
+        });
+        assert!(run_post_tool_use(&repo, &explorer).is_none());
+        let stop = run_stop(&repo, &json!({ "session_id": "s-explore" })).expect("stop advisory");
+        assert_stop_review_gate_advisory(&stop);
+        let _ = fs::remove_dir_all(repo);
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+    }
+
+    #[test]
+    fn review_gate_skipped_when_disable_env_set() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", "1");
+        let repo = unique_test_repo("review-gate-disabled-env");
+        let payload = json!({ "session_id": "s-off", "prompt": "深度 review 这个 PR" });
+        assert!(
+            run_user_prompt_submit(&repo, &payload).is_none(),
+            "disable env must suppress UserPromptSubmit review nag"
+        );
+        let stop = run_stop(&repo, &json!({ "session_id": "s-off" }));
+        assert!(
+            stop.is_none(),
+            "disable env must allow Stop without independent reviewer evidence; got {stop:?}"
+        );
+        match prev {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn review_gate_still_advises_when_disable_env_is_noncanonical_token() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", "maybe");
+        let repo = unique_test_repo("review-gate-disable-garbage");
+        let payload = json!({ "session_id": "s-garbage", "prompt": "深度 review 这个 PR" });
+        let _ = run_user_prompt_submit(&repo, &payload).expect("review nag");
+        let stop = run_stop(&repo, &json!({ "session_id": "s-garbage" })).expect("stop advisory");
+        assert_stop_review_gate_advisory(&stop);
+        match prev {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn parse_stdio_agent_hook_stdin_trimmed_accepts_empty_and_valid_json() {
+        assert_eq!(
+            super::parse_stdio_agent_hook_stdin_trimmed("").unwrap(),
+            json!({})
+        );
+        assert_eq!(
+            super::parse_stdio_agent_hook_stdin_trimmed(r#"{"session_id":"x"}"#).unwrap(),
+            json!({"session_id":"x"})
+        );
+    }
+
+    #[test]
+    fn parse_stdio_agent_hook_stdin_trimmed_rejects_invalid_json() {
+        let err = super::parse_stdio_agent_hook_stdin_trimmed("not json").unwrap_err();
+        assert!(
+            err.starts_with("stdin_json_invalid:"),
+            "unexpected err: {err}"
+        );
+    }
+
+    #[test]
+    fn session_key_metadata_session_id_matches_flat() {
+        let repo = unique_test_repo("claude-meta-session");
+        let flat = json!({"session_id": "sid-meta", "prompt": "x"});
+        let nested = json!({"metadata": {"sessionId": "sid-meta"}, "prompt": "x"});
+        assert_eq!(session_key(&repo, &flat), session_key(&repo, &nested));
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn session_key_namespace_splits_same_repo_empty_payload() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_ns = std::env::var_os("ROUTER_RS_CLAUDE_SESSION_NAMESPACE");
+        let repo = unique_test_repo("claude-ns");
+        std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", "lane-a");
+        let a = session_key(&repo, &json!({}));
+        std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", "lane-b");
+        let b = session_key(&repo, &json!({}));
+        match prev_ns {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE"),
+        }
+        assert_ne!(a, b, "namespace must split state for empty payload");
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn session_key_repo_fallback_stable_without_id() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_ns = std::env::var_os("ROUTER_RS_CLAUDE_SESSION_NAMESPACE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE");
+        let repo = unique_test_repo("claude-repo-fb");
+        let k1 = session_key(&repo, &json!({}));
+        let k2 = session_key(&repo, &json!({}));
+        match prev_ns {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE"),
+        }
+        assert_eq!(k1, k2);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn pre_tool_use_denies_repo_review_subagent_hook_state_path() {
+        let repo = unique_test_repo("deny-review-gate-pretool");
+        let session = json!({ "session_id": "s-deny-rg" });
+        let sk = session_key(&repo, &session);
+        let payload = json!({
+            "tool_name": "Write",
+            "file_path": format!(".claude/hook-state/review-subagent-{sk}.json")
+        });
+        let out = run_pre_tool_use(&repo, &payload).expect("deny");
+        assert_eq!(out["hookSpecificOutput"]["permissionDecision"], "deny");
+        let reason = out["hookSpecificOutput"]["permissionDecisionReason"]
+            .as_str()
+            .unwrap_or("");
+        assert!(
+            reason.contains("host-private"),
+            "unexpected reason: {reason}"
+        );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn pre_tool_use_denies_legacy_review_gate_hook_state_path() {
+        let repo = unique_test_repo("deny-legacy-hook-state-rg");
+        let session = json!({ "session_id": "s-legacy-hook-rg" });
+        let sk = session_key(&repo, &session);
+        let payload = json!({
+            "tool_name": "Write",
+            "file_path": format!(".claude/hook-state/review_gate_{sk}.json")
+        });
+        let out = run_pre_tool_use(&repo, &payload).expect("deny");
+        assert_eq!(out["hookSpecificOutput"]["permissionDecision"], "deny");
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn pre_tool_use_denies_legacy_flat_review_gate_path() {
+        let repo = unique_test_repo("deny-legacy-review-gate");
+        let sk = session_key(&repo, &json!({ "session_id": "s-legacy-rg" }));
+        let payload = json!({
+            "tool_name": "Edit",
+            "file_path": format!(".claude/review_gate_{sk}.json")
+        });
+        let out = run_pre_tool_use(&repo, &payload).expect("deny");
+        assert_eq!(out["hookSpecificOutput"]["permissionDecision"], "deny");
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn load_review_gate_migrates_legacy_flat_file_to_hook_state() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let prev_canon = std::env::var_os("ROUTER_RS_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("legacy-review-gate-migrate");
+        let sid = "s-legacy-load";
+        let session = json!({ "session_id": sid });
+        let sk = session_key(&repo, &session);
+        let legacy = repo.join(format!(".claude/review_gate_{sk}.json"));
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(
+            &legacy,
+            r#"{"review_required":true,"review_override":false,"independent_reviewer_seen":false}"#,
+        )
+        .unwrap();
+        let loaded = match load_review_gate_disk(&repo, &session) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected legacy load, got {other:?}"),
+        };
+        assert!(loaded.review_required);
+        assert!(!loaded.independent_reviewer_seen);
+        let new_path = review_state_path(&repo, &session);
+        assert!(
+            new_path.is_file(),
+            "legacy load must migrate to hook-state: {}",
+            new_path.display()
+        );
+        let out = run_stop(&repo, &json!({ "session_id": sid, "prompt": "继续" }))
+            .expect("armed legacy state must still advise Stop until reviewer contract met");
+        assert_stop_review_gate_advisory(&out);
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        match prev_canon {
+            Some(v) => std::env::set_var("ROUTER_RS_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn review_state_path_lives_under_hook_state_dir() {
+        let repo = unique_test_repo("hook-state-dir");
+        let session = json!({ "session_id": "s-path" });
+        let path = review_state_path(&repo, &session);
+        assert!(
+            path.to_string_lossy().contains("/.claude/hook-state/review-subagent-"),
+            "unexpected path: {}",
+            path.display()
+        );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn load_review_gate_migrates_legacy_hook_state_review_gate_file() {
+        let repo = unique_test_repo("legacy-hook-state-review-gate");
+        let sid = "s-legacy-hook-state";
+        let session = json!({ "session_id": sid });
+        let sk = session_key(&repo, &session);
+        let legacy = repo.join(format!(".claude/hook-state/review_gate_{sk}.json"));
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(
+            &legacy,
+            r#"{"review_required":true,"review_override":false,"independent_reviewer_seen":false}"#,
+        )
+        .unwrap();
+        let loaded = match load_review_gate_disk(&repo, &session) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected legacy hook-state load, got {other:?}"),
+        };
+        assert!(loaded.review_required);
+        let new_path = review_state_path(&repo, &session);
+        assert!(
+            new_path.is_file(),
+            "legacy hook-state review_gate must migrate to review-subagent: {}",
+            new_path.display()
+        );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn pre_tool_use_warns_lexical_traversal_to_framework_data_source() {
+        let repo = unique_test_repo("lexical-fw-path");
+        fs::create_dir_all(repo.join("nest")).unwrap();
+        assert_eq!(
+            super::repo_relative_slash_path(&repo, "nest/../../skills/SKILL_ROUTING_RUNTIME.json")
+                .as_deref(),
+            Some("skills/SKILL_ROUTING_RUNTIME.json")
+        );
+        let payload = json!({
+            "tool_name": "Write",
+            "file_path": "nest/../../skills/SKILL_ROUTING_RUNTIME.json"
+        });
+        // SKILL_ROUTING_RUNTIME.json is now warn-only (not deny)
+        let out = run_pre_tool_use(&repo, &payload).expect("warn");
+        assert_eq!(out["hookSpecificOutput"]["hookEventName"], "PreToolUse");
+        let ctx = out["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
+        assert!(ctx.contains("SKILL_ROUTING_RUNTIME.json"), "warn should mention the file");
+        assert_eq!(out["suppressOutput"], true, "warn should suppress output");
+        assert!(
+            out.get("decision").is_none(),
+            "warn should have no permissionDecision"
+        );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn pre_tool_use_allows_lexical_traversal_to_agents_md() {
+        let repo = unique_test_repo("lexical-entrypoint");
+        fs::write(repo.join("AGENTS.md"), b"x").unwrap();
+        let payload = json!({
+            "tool_name": "Edit",
+            "file_path": "a/../../AGENTS.md"
+        });
+        // AGENTS.md is not in GENERATED_ENTRYPOINT_PATHS_CLAUDE and intentionally
+        // has no PreToolUse warn — it is a cross-host shared document (not a Claude-specific
+        // generated entrypoint), so direct editing is normal and a warn would be noise.
+        let out = run_pre_tool_use(&repo, &payload);
+        assert!(out.is_none(), "AGENTS.md should not be denied");
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn stop_blocks_when_review_gate_state_corrupt() {
+        let repo = unique_test_repo("corrupt-review-gate");
+        let session = json!({ "session_id": "s-corrupt-rg" });
+        let path = review_state_path(&repo, &session);
+        fs::write(&path, "{not json").unwrap();
+        let out = run_stop(&repo, &session).expect("block");
+        assert_eq!(out["decision"], "block");
+        let reason = out["stopReason"].as_str().unwrap();
+        assert!(
+            reason.contains(CLAUDE_HOOK_STATE_UNREADABLE),
+            "unexpected: {reason}"
+        );
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn stop_blocks_when_touch_state_corrupt() {
+        let repo = unique_test_repo("corrupt-touch");
+        let session = json!({ "session_id": "s-corrupt-touch" });
+        let path = touch_state_path(&repo, &session);
+        fs::write(&path, "{not json").unwrap();
+        let out = run_stop(&repo, &session).expect("block");
+        assert_eq!(out["decision"], "block");
+        assert!(out["stopReason"]
+            .as_str()
+            .unwrap()
+            .contains(CLAUDE_HOOK_STATE_UNREADABLE));
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn user_prompt_submit_returns_context_when_review_gate_corrupt() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("corrupt-review-ups");
+        let session = json!({ "session_id": "s-corrupt-ups", "prompt": "深度 review 这个 PR" });
+        let path = review_state_path(&repo, &session);
+        fs::write(&path, "{not json").unwrap();
+        let out = run_user_prompt_submit(&repo, &session).expect("context");
+        assert!(out["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap()
+            .contains(CLAUDE_HOOK_STATE_UNREADABLE));
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn user_prompt_submit_implementx_returns_unreadable_when_review_gate_corrupt() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("corrupt-review-implementx");
+        let session = json!({ "session_id": "s-corrupt-impl", "prompt": "/implementx" });
+        let path = review_state_path(&repo, &session);
+        fs::write(&path, "{not json").unwrap();
+        let out = run_user_prompt_submit(&repo, &session).expect("context");
+        let ctx = out["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap();
+        assert!(
+            ctx.contains(CLAUDE_HOOK_STATE_UNREADABLE),
+            "corrupt hook-state must surface unreadable; got {ctx:?}"
+        );
+        assert!(
+            !ctx.contains("ALL waves"),
+            "must not mask corrupt state with implement nudge; got {ctx:?}"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn user_prompt_submit_discussx_returns_unreadable_when_review_gate_corrupt() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("corrupt-review-discussx");
+        let session = json!({ "session_id": "s-corrupt-discuss", "prompt": "/discussx" });
+        let path = review_state_path(&repo, &session);
+        fs::write(&path, "{not json").unwrap();
+        let out = run_user_prompt_submit(&repo, &session).expect("context");
+        let ctx = out["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap();
+        assert!(
+            ctx.contains(CLAUDE_HOOK_STATE_UNREADABLE),
+            "corrupt hook-state must surface unreadable before pre-exec nudge; got {ctx:?}"
+        );
+        assert!(
+            !ctx.contains("READ-ONLY"),
+            "must not mask corrupt state with pre-exec nudge; got {ctx:?}"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_file(&path);
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn user_prompt_submit_review_and_implementx_suppresses_review_arming() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("claude-dual-review-implementx");
+        let sid = "s-claude-dual";
+        let prompt = "请全面review这个仓库 /implementx 修复刚发现的问题";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": prompt }),
+        );
+        let state = match load_review_gate_disk(&repo, &json!({ "session_id": sid })) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected state, got {other:?}"),
+        };
+        assert!(
+            !state.review_required,
+            "goal drive must suppress review arming on Claude UPS; got {state:?}"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn canonical_command_rejects_unknown_event() {
+        let err = canonical_stdio_agent_hook_command("unknown-event").unwrap_err();
+        assert!(
+            err.contains("Unsupported stdio agent hook command"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn successful_settings_validation_allows_stop() {
+        let repo = unique_test_repo("settings-validated");
+        let session = json!({ "session_id": "s-settings-ok" });
+        persist_touch_state(&repo, &session, true, false, false, false);
+        let payload = json!({
+            "session_id": "s-settings-ok",
+            "tool_name": "Bash",
+            "tool_input": { "command": "jq empty .claude/settings.json" },
+            "exit_code": 0
+        });
+
+        assert!(run_post_tool_use(&repo, &payload).is_none());
+        assert!(run_stop(&repo, &session).is_none());
+        assert!(!touch_state_path(&repo, &session).exists());
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn root_contract_tests_count_as_framework_validation() {
+        let repo = unique_test_repo("framework-root-contracts");
+        let session = json!({ "session_id": "s-root-contracts" });
+        persist_touch_state(&repo, &session, false, true, false, false);
+        let payload = json!({
+            "session_id": "s-root-contracts",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "cargo test --test policy_contracts --test documentation_contracts"
+            },
+            "exit_code": 0
+        });
+
+        assert!(run_post_tool_use(&repo, &payload).is_none());
+        assert!(run_stop(&repo, &session).is_none());
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn legacy_repo_scoped_touch_state_does_not_block_new_session() {
+        let repo = unique_test_repo("legacy-touch-state");
+        let legacy = legacy_touch_state_path(&repo);
+        fs::write(
+            &legacy,
+            "{\"framework\":true,\"framework_tested\":false,\"settings\":false,\"settings_validated\":false}\n",
+        )
+        .unwrap();
+
+        assert!(run_stop(&repo, &json!({ "session_id": "fresh-session" })).is_none());
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn cursor_payload_sent_to_claude_hook_is_ignored() {
+        let repo = unique_test_repo("cursor-payload-isolation");
+        let payload = json!({
+            "session_id": "cursor-session",
+            "hook_event_name": "postToolUse",
+            "cursor_version": "3.3.30",
+            "workspace_roots": [repo.to_string_lossy()],
+            "transcript_path": "/Users/joe/.cursor/projects/example/session.json",
+            "tool_name": "Bash",
+            "tool_input": {
+                "command": "apply_patch core/router-rs/src/claude_code_hooks.rs"
+            },
+            "file_path": "core/router-rs/src/claude_code_hooks.rs",
+            "exit_code": 0
+        });
+
+        let output = dispatch_stdio_agent_hook_payload("post-tool-use", &repo, &payload);
+
+        assert_eq!(output, silent_success());
+        assert!(!legacy_touch_state_path(&repo).exists());
+        assert!(!touch_state_path(&repo, &payload).exists());
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn cursor_stop_payload_sent_to_claude_hook_does_not_block() {
+        let repo = unique_test_repo("cursor-stop-isolation");
+        persist_touch_state(
+            &repo,
+            &json!({ "session_id": "cursor-session" }),
+            false,
+            true,
+            false,
+            false,
+        );
+        let payload = json!({
+            "session_id": "cursor-session",
+            "hook_event_name": "stop",
+            "cursor_version": "3.3.30",
+            "workspace_roots": [repo.to_string_lossy()]
+        });
+
+        let output = dispatch_stdio_agent_hook_payload("stop", &repo, &payload);
+
+        assert_eq!(output, silent_success());
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn partial_cursor_envelope_without_hook_event_runs_claude_pre_tool() {
+        let repo = unique_test_repo("forge-cursor-envelope-partial");
+        let payload = json!({
+            "session_id": "forge",
+            "cursor_version": "9.9.9",
+            "workspace_roots": [repo.to_string_lossy()],
+            "tool_name": "Edit",
+            "file_path": "configs/framework/RUNTIME_REGISTRY.json"
+        });
+        // Partial envelope without hook_event_name is not a valid Cursor envelope,
+        // so it routes through Claude pre-tool-use path guard.
+        let output = dispatch_stdio_agent_hook_payload("pre-tool-use", &repo, &payload);
+        assert!(
+            output.get("hookSpecificOutput").is_some(),
+            "must not silent_success on partial envelope; got {output:?}"
+        );
+        assert!(
+            output["hookSpecificOutput"]["permissionDecision"]
+                .as_str()
+                .unwrap_or("")
+                .contains("deny"),
+            "expected deny decision; got {output:?}"
+        );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn claude_payload_with_nested_cursor_path_is_not_silenced_as_cursor_stdin() {
+        let repo = unique_test_repo("claude-cursor-path-not-envelope");
+        let cursor_plan = repo.join(".cursor").join("plans").join("feature.plan.md");
+        fs::create_dir_all(cursor_plan.parent().unwrap()).unwrap();
+        let payload = json!({
+            "session_id": "claude-session",
+            "tool_name": "Edit",
+            "file_path": "configs/framework/RUNTIME_REGISTRY.json",
+            "context": cursor_plan.to_string_lossy(),
+        });
+        let output = dispatch_stdio_agent_hook_payload("pre-tool-use", &repo, &payload);
+        assert!(
+            output.get("hookSpecificOutput").is_some(),
+            "expected PreToolUse decision payload, not bare silent_success; got {output:?}"
+        );
+        assert_eq!(
+            output["hookSpecificOutput"]["permissionDecision"],
+            json!("deny")
+        );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn cursor_version_without_workspace_roots_is_not_envelope() {
+        let repo = unique_test_repo("cursor-version-only-not-envelope");
+        let payload = json!({
+            "session_id": "mixed",
+            "cursor_version": "3.3.30",
+            "tool_name": "Edit",
+            "file_path": "configs/framework/RUNTIME_REGISTRY.json",
+        });
+        let output = dispatch_stdio_agent_hook_payload("pre-tool-use", &repo, &payload);
+        assert!(
+            output.get("hookSpecificOutput").is_some(),
+            "expected PreToolUse decision for framework guarded path; got {output:?}"
+        );
+        assert!(
+            output["hookSpecificOutput"]["permissionDecision"]
+                .as_str()
+                .unwrap_or("")
+                .contains("deny"),
+            "expected deny decision; got {output:?}"
+        );
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn my_light_implementx_stop_suppresses_review_gate_when_review_armed() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("my-light-stop");
+        let sid = "s-my-light";
+        let armed = json!({ "session_id": sid, "prompt": "全面review" });
+        let _ = run_user_prompt_submit(&repo, &armed);
+        let stop = json!({ "session_id": sid, "prompt": "/implementx finish" });
+        assert!(
+            run_stop(&repo, &stop).is_none(),
+            "my-light must suppress CLAUDE_REVIEW_GATE on Stop"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn my_light_user_prompt_clears_sticky_review_required() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("my-light-clear");
+        let sid = "s-clear";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "深度 review 这个 PR" }),
+        );
+        let armed = match load_review_gate_disk(&repo, &json!({ "session_id": sid })) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected armed state, got {other:?}"),
+        };
+        assert!(armed.review_required);
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "/implementx run waves" }),
+        );
+        let cleared = match load_review_gate_disk(&repo, &json!({ "session_id": sid })) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected cleared state, got {other:?}"),
+        };
+        assert!(
+            !cleared.review_required,
+            "my-light UPS must clear sticky review_required"
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn second_review_prompt_in_same_session_requires_fresh_reviewer_evidence() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("rearm-review");
+        let sid = "s-rearm";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "深度 review 这个 PR" }),
+        );
+        let reviewer = json!({
+            "session_id": sid,
+            "tool_name": "functions.spawn_agent",
+            "tool_input": {"agent_type": "general-purpose", "fork_context": false}
+        });
+        assert!(run_post_tool_use(&repo, &reviewer).is_none());
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "Please do another code review of this change." }),
+        );
+        let stop = run_stop(&repo, &json!({ "session_id": sid })).expect("stop advisory");
+        assert_stop_review_gate_advisory(&stop);
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn narrow_path_review_disarms_sticky_deep_arm() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("narrow-disarm");
+        let sid = "s-narrow";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "深度 review 整个路由系统" }),
+        );
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "review ./README.md" }),
+        );
+        let cleared = match load_review_gate_disk(&repo, &json!({ "session_id": sid })) {
+            AgentDiskState::Ok(s) => s,
+            other => panic!("expected state, got {other:?}"),
+        };
+        assert!(!cleared.review_required);
+        assert!(
+            run_stop(&repo, &json!({ "session_id": sid, "prompt": "review ./README.md" })).is_none()
+        );
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn failed_subagent_post_tool_does_not_record_reviewer_evidence() {
+        let _env = crate::test_env_sync::process_env_lock();
+        let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        let repo = unique_test_repo("failed-subagent");
+        let sid = "s-fail";
+        let _ = run_user_prompt_submit(
+            &repo,
+            &json!({ "session_id": sid, "prompt": "深度 review 这个 PR" }),
+        );
+        let failed = json!({
+            "session_id": sid,
+            "tool_name": "functions.spawn_agent",
+            "exit_code": 1,
+            "tool_input": {"agent_type": "general-purpose", "fork_context": false}
+        });
+        assert!(run_post_tool_use(&repo, &failed).is_none());
+        let stop = run_stop(&repo, &json!({ "session_id": sid })).expect("stop advisory");
+        assert_stop_review_gate_advisory(&stop);
+        match prev_disable {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+        }
+        let _ = fs::remove_dir_all(repo);
+    }
+
+    #[test]
+    fn user_prompt_submit_injects_paper_prose_by_default() {
+        let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
+        let prior = std::env::var_os("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
+        std::env::remove_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
+        let repo = unique_test_repo("prose-ups");
+        let payload = json!({
+            "prompt": "polish this abstract for clarity",
+            "session_id": "claude-prose-1"
+        });
+        let out = run_user_prompt_submit(&repo, &payload);
+        let ctx = out
+            .as_ref()
+            .and_then(|v| v["hookSpecificOutput"]["additionalContext"].as_str())
+            .unwrap_or_default();
+        assert!(
+            ctx.contains("PAPER_PROSE_QUALITY_HOOK"),
+            "expected prose hook: {ctx}"
+        );
+        let _ = fs::remove_dir_all(&repo);
+        match prior {
+            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK", v),
+            None => std::env::remove_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK"),
+        }
+    }
+
+    fn unique_test_repo(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "router-rs-claude-hooks-{name}-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(path.join(".claude").join("hook-state")).unwrap();
+        path
+    }
+}

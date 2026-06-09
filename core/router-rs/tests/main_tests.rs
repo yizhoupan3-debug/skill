@@ -4,18 +4,19 @@ use crate::integration_test_prelude::*;
 
 use serde_json::{json, Map, Value};
 
-use crate::cli::args::*;
-use crate::cli::runtime_ops::LiveExecuteResult;
 use crate::route::RouteDecision;
 use crate::route::{
     evaluate_routing_cases, load_records_cached_for_stdio_with_default_runtime_path,
     load_records_from_manifest, load_routing_eval_cases, read_json, value_to_string,
     ROUTE_POLICY_SCHEMA_VERSION,
 };
+use std::collections::HashSet;
+use std::fs;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::thread::{sleep, spawn};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn fixture_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/routing_route_fixtures.json")

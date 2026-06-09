@@ -924,7 +924,7 @@ mod tests {
 
     #[test]
     fn promote_focus_to_active_when_active_lacks_goal() {
-        // Single-conversation mode: read_task_pointers returns None, so promotion is a no-op.
+        // When active has no GOAL_STATE but focus does, promotion rewrites active_task.json.
         let tmp = unique_repo("promote-focus");
         let active_tid = "t-no-goal";
         let focus_tid = "t-has-goal";
@@ -938,9 +938,9 @@ mod tests {
             r#"{"goal":"g","status":"planned","drive_until_done":false,"non_goals":["n"],"done_when":["a","b"],"validation_commands":["c"]}"#,
         )
         .unwrap();
-        assert!(!maybe_promote_focus_to_active_pointer(&tmp));
-        // In single-conversation mode, resolve with explicit override to the focus task.
-        let v = resolve_task_view(&tmp, Some(focus_tid));
+        assert!(maybe_promote_focus_to_active_pointer(&tmp));
+        // After promotion, resolve_task_view loads the focus task's goal via the rewritten pointer.
+        let v = resolve_task_view(&tmp, None);
         assert_eq!(v.task_id.as_deref(), Some(focus_tid));
         assert!(v.goal_state.is_some());
         let _ = fs::remove_dir_all(&tmp);
@@ -948,9 +948,8 @@ mod tests {
 
     #[test]
     fn active_missing_goal_focus_has_goal_emits_continuity_note() {
-        // Single-conversation mode: pointers are always None, so the pointer-based
-        // mismatch note is never emitted. This test now verifies that passing an
-        // explicit override to the focus task loads its goal correctly.
+        // With explicit override to the focus task, the pointer-based mismatch note
+        // is not emitted (no active/focus pointer comparison occurs).
         let tmp = unique_repo("af-focus");
         let active_tid = "t-no-goal";
         let focus_tid = "t-has-goal";
@@ -978,16 +977,16 @@ mod tests {
         )
         .unwrap();
 
-        // Pass explicit override to the focus task (pointer fallback no longer works).
+        // Explicit override to the focus task loads its goal directly.
         let v = resolve_task_view(&tmp, Some(focus_tid));
         assert_eq!(v.task_id.as_deref(), Some(focus_tid));
         assert!(v.goal_state.is_some());
-        // In single-conversation mode, pointers are None, so the mismatch note is not emitted.
+        // Explicit override bypasses pointer-based mismatch detection.
         assert!(
             !v.resolution_notes.iter().any(|n| {
                 n.starts_with(super::RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL)
             }),
-            "pointer-based mismatch note must not be emitted when pointers are None: {:?}",
+            "pointer-based mismatch note must not be emitted with explicit override: {:?}",
             v.resolution_notes
         );
         let _ = fs::remove_dir_all(&tmp);

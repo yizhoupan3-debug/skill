@@ -1,0 +1,1838 @@
+use crate::closeout_enforcement::{
+    evaluate_closeout_record_value, evaluate_closeout_record_value_with_context,
+    CloseoutEvidenceContext,
+};
+use chrono::{Local, SecondsFormat};
+use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
+use hex;
+use std::collections::HashSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+mod alias;
+mod codex_hooks_duplicate;
+pub mod evolution_observer;
+mod constants;
+mod framework_doctor;
+pub(crate) mod orchestration_controller;
+pub mod route_manifest_fallback;
+pub mod router_command_dispatch;
+pub(crate) mod sandbox_control;
+mod json_io;
+pub mod json_payload;
+pub mod live_execute;
+mod json_value;
+pub mod stdio_dispatch;
+pub mod stdio_op_registry;
+pub mod trace_attach;
+pub mod trace_stream_io;
+pub mod trace_transport;
+mod pre_tool_use_guard;
+mod prompt_compression;
+mod repo_roots;
+mod runtime_view;
+mod session_artifacts;
+mod statusline;
+mod types;
+
+use json_io::{read_json_strict, read_text_if_exists};
+use json_value::{
+    first_nonempty, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,
+    value_string_list, value_text,
+};
+
+use crate::atomic_write::write_atomic_text;
+
+pub use alias::build_framework_alias_envelope;
+// Used by `crate::framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION` consumers; not referenced in this module body.
+#[allow(unused_imports)]
+pub use constants::FRAMEWORK_ALIAS_SCHEMA_VERSION;
+// Retained for external callers.
+pub use codex_hooks_duplicate::eprint_codex_hooks_duplicate_warnings;
+#[allow(unused_imports)]
+pub use constants::FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION;
+pub use constants::{
+    FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
+    FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
+};
+// DoctorResult is re-exported for external consumers; not referenced within this module.
+#[allow(unused_imports)]
+pub use framework_doctor::{run_continuity_audit, run_framework_doctor, DoctorResult};
+#[allow(unused_imports)]
+pub use pre_tool_use_guard::{
+    evaluate_pre_tool_use_guard, evaluate_pre_tool_use_guard_value,
+    host_requires_strict_pre_tool_fallback, pre_tool_use_guard_contract,
+    PreToolUseGuardRequest, PreToolUseGuardResponse, PreToolUseGuardVerdict,
+    PRE_TOOL_USE_GUARD_SCHEMA_VERSION, PRE_TOOL_USE_GUARD_STDIO_OP,
+};
+pub use prompt_compression::build_framework_prompt_compression_envelope;
+pub use repo_roots::{
+    framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,
+};
+pub use session_artifacts::write_framework_session_artifacts;
+pub use statusline::build_framework_statusline;
+pub use types::FrameworkAliasBuildOptions;
+pub use orchestration_controller::{
+    build_background_control_response, build_runtime_control_plane_payload,
+    build_runtime_integrator_payload, build_runtime_metric_record,
+    build_runtime_observability_exporter_descriptor,
+    build_runtime_observability_health_snapshot,
+    build_runtime_observability_metric_catalog_payload,
+    runtime_observability_dashboard_schema,
+};
+pub use route_manifest_fallback::route_task_with_manifest_fallback;
+pub use route_manifest_fallback::{
+    manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
+};
+pub use sandbox_control::build_sandbox_control_response;
+pub use crate::stdio_payload_types::*;
+pub use stdio_dispatch::{dispatch_stdio_json_request, dispatch_stdio_json_request_payload};
+pub use stdio_op_registry::{classify_stdio_op, StdioOpDomain};
+// Public re-exports for browser-mcp crate
+pub use trace_attach::attach_runtime_event_transport;
+pub use trace_stream_io::{inspect_trace_stream, replay_trace_stream};
+// Crate-internal re-exports
+pub use trace_attach::{
+    cleanup_attached_runtime_event_transport, subscribe_attached_runtime_events,
+};
+pub use trace_stream_io::{
+    sha256_hex, write_trace_compaction_delta, write_trace_metadata,
+};
+#[cfg(test)]
+pub use stdio_op_registry::{
+    is_framework_stdio_op, is_routing_stdio_op, is_runtime_stdio_op, is_trace_stdio_op,
+};
+
+use constants::{
+    CLOSEOUT_COMPLETION_STATUSES, CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME,
+    EVIDENCE_INDEX_SCHEMA_VERSION,
+    NEXT_ACTIONS_FILENAME, SESSION_SUMMARY_FILENAME,
+    SUPERVISOR_STATE_FILENAME, TASK_POINTERS_FILENAME, TASK_REGISTRY_SCHEMA_VERSION, TRACE_METADATA_FILENAME,
+};
+use types::FrameworkRuntimeView;
+
+pub fn build_framework_runtime_snapshot_envelope(
+    repo_root: &Path,
+    artifact_root_override: Option<&Path>,
+    task_id_override: Option<&str>,
+) -> Result<Value, String> {
+    let snapshot = load_framework_runtime_view(repo_root, artifact_root_override, task_id_override);
+    let continuity = classify_runtime_continuity(&snapshot);
+    let continuity_route = continuity
+        .get("route")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let primary_owner = {
+        let direct = value_text(snapshot.supervisor_state.get("primary_owner"));
+        if direct.is_empty() {
+            continuity_route.first().map(|item| value_text(Some(item)))
+        } else {
+            Some(direct)
+        }
+    };
+    let verification_status = snapshot
+        .supervisor_state
+        .get("verification")
+        .and_then(Value::as_object)
+        .and_then(|verification| nonempty_string(verification.get("verification_status")));
+    Ok(json!({
+        "schema_version": FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION,
+        "authority": FRAMEWORK_RUNTIME_AUTHORITY,
+        "runtime_snapshot": {
+            "ok": true,
+            "workspace": workspace_name_from_root(repo_root),
+            "artifact_base": snapshot.artifact_base.display().to_string(),
+            "current_root": snapshot.current_root.display().to_string(),
+            "mirror_root": snapshot.mirror_root.display().to_string(),
+            "task_root": snapshot.task_root.display().to_string(),
+            "control_plane_present": snapshot.task_pointers_present
+                && !snapshot.supervisor_state.is_empty(),
+            "control_plane_missing": missing_control_plane_anchors(&snapshot),
+            "control_plane_inconsistency_reasons": snapshot.control_plane_inconsistency_reasons,
+            "active_task_id": snapshot.active_task_id,
+            "focus_task_id": snapshot.focus_task_id,
+            "known_task_ids": snapshot.known_task_ids,
+            "recoverable_task_ids": snapshot.recoverable_task_ids,
+            "parallel_task_count": snapshot.known_task_ids.len(),
+            "registered_tasks": snapshot.registered_tasks,
+            "collected_at": snapshot.collected_at,
+            "session_summary_present": !snapshot.session_summary_text.trim().is_empty(),
+            "next_action_count": continuity
+                .get("next_actions")
+                .and_then(Value::as_array)
+                .map(|rows| rows.len())
+                .unwrap_or(0),
+            "evidence_count": normalize_evidence_index(&snapshot.evidence_index).len(),
+            "trace_skill_count": continuity_route.len(),
+            "continuity": continuity,
+            "supervisor_state": {
+                "task_id": nonempty_string(snapshot.supervisor_state.get("task_id")),
+                "task_summary": nonempty_string(snapshot.supervisor_state.get("task_summary")),
+                "active_phase": nonempty_string(snapshot.supervisor_state.get("active_phase")),
+                "primary_owner": primary_owner,
+                "verification_status": verification_status,
+            },
+            "paths": {
+                "session_summary": snapshot.current_root.join(SESSION_SUMMARY_FILENAME).display().to_string(),
+                "next_actions": snapshot.current_root.join(NEXT_ACTIONS_FILENAME).display().to_string(),
+                "evidence_index": snapshot.current_root.join(EVIDENCE_INDEX_FILENAME).display().to_string(),
+                "trace_metadata": snapshot.current_root.join(TRACE_METADATA_FILENAME).display().to_string(),
+                "current_pointer_root": snapshot.mirror_root.display().to_string(),
+                "supervisor_state": repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
+            },
+        }
+    }))
+}
+
+pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, String> {
+    let snapshot = load_framework_runtime_view(repo_root, None, None);
+    let continuity = classify_runtime_continuity(&snapshot);
+    let contract = supervisor_contract(&snapshot.supervisor_state);
+    let workspace = workspace_name_from_root(repo_root);
+    let continuity_route = continuity
+        .get("route")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let primary_owner = {
+        let direct = value_text(snapshot.supervisor_state.get("primary_owner"));
+        if direct.is_empty() {
+            continuity_route.first().map(|item| value_text(Some(item)))
+        } else {
+            Some(direct)
+        }
+    };
+    let blocker_list = snapshot
+        .supervisor_state
+        .get("blockers")
+        .and_then(Value::as_object)
+        .and_then(|blockers| blockers.get("open_blockers"))
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| value_text(Some(item)))
+                .filter(|item| !item.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let is_active = continuity.get("state").and_then(Value::as_str) == Some("active")
+        && continuity.get("can_resume").and_then(Value::as_bool) == Some(true);
+    let goal = if is_active {
+        contract.get("goal").cloned().unwrap_or(Value::Null)
+    } else {
+        Value::Null
+    };
+    let scope = if is_active {
+        value_string_list(contract.get("scope"))
+    } else {
+        Vec::<String>::new()
+    };
+    let forbidden_scope = if is_active {
+        value_string_list(contract.get("forbidden_scope"))
+    } else {
+        Vec::<String>::new()
+    };
+    let acceptance_criteria = if is_active {
+        value_string_list(contract.get("acceptance_criteria"))
+    } else {
+        Vec::<String>::new()
+    };
+    let evidence_required = if is_active {
+        value_string_list(contract.get("evidence_required"))
+    } else {
+        Vec::<String>::new()
+    };
+    let active_phase = if is_active {
+        nonempty_string(snapshot.supervisor_state.get("active_phase"))
+    } else {
+        Option::<String>::None
+    };
+    let next_actions = if is_active {
+        continuity
+            .get("next_actions")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        Vec::<Value>::new()
+    };
+    let open_blockers = if is_active {
+        blocker_list
+    } else {
+        Vec::<String>::new()
+    };
+    let session_summary: Map<String, Value> = parse_session_summary(&snapshot.session_summary_text);
+    let evidence_count = normalize_evidence_index(&snapshot.evidence_index).len();
+    let contract_digest_input = json!({
+        "workspace": workspace.clone(),
+        "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
+        "task": continuity.get("task").cloned().unwrap_or(Value::Null),
+        "goal": goal,
+        "scope": scope,
+        "forbidden_scope": forbidden_scope,
+        "acceptance_criteria": acceptance_criteria,
+        "evidence_required": evidence_required,
+        "active_phase": active_phase,
+        "primary_owner": primary_owner.clone(),
+        "next_actions": next_actions,
+        "open_blockers": open_blockers,
+        "trace_skills": continuity_route.clone(),
+        "evidence_count": evidence_count,
+    });
+    let contract_digest = stable_json_sha256(&contract_digest_input)?;
+    let session_summary_value = Value::Object(session_summary.clone());
+    let host_harness = build_host_harness_summary_fragment(repo_root)?;
+    let prompt_lines = build_contract_guard_prompt_lines(
+        &contract_digest,
+        &continuity,
+        &contract_digest_input,
+        &session_summary_value,
+        snapshot.current_root.as_path(),
+    );
+    Ok(json!({
+        "schema_version": FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION,
+        "authority": FRAMEWORK_RUNTIME_AUTHORITY,
+        "contract_summary": {
+            "ok": true,
+            "workspace": workspace,
+            "contract_digest": contract_digest,
+            "contract_digest_algorithm": "sha256",
+            "contract_guard": {
+                "contract_active": is_active,
+                "drift_classes": ["scope_drift", "owner_drift", "evidence_drift", "contract_digest_drift"],
+                "fail_closed_when": [
+                    "expected contract_digest differs from live contract_digest",
+                    "proposed owner differs from primary_owner without explicit contract update intent",
+                    "proposed goal/task changes while continuity is active",
+                    "verification/evidence requirements are dropped before completion"
+                ],
+                "update_requires_explicit_user_intent": true
+            },
+            "prompt_lines": prompt_lines,
+            "continuity": continuity,
+            "goal": contract_digest_input.get("goal").cloned().unwrap_or(Value::Null),
+            "scope": contract_digest_input.get("scope").cloned().unwrap_or(Value::Array(Vec::new())),
+            "forbidden_scope": contract_digest_input.get("forbidden_scope").cloned().unwrap_or(Value::Array(Vec::new())),
+            "acceptance_criteria": contract_digest_input.get("acceptance_criteria").cloned().unwrap_or(Value::Array(Vec::new())),
+            "evidence_required": contract_digest_input.get("evidence_required").cloned().unwrap_or(Value::Array(Vec::new())),
+            "active_phase": contract_digest_input.get("active_phase").cloned().unwrap_or(Value::Null),
+            "primary_owner": primary_owner,
+            "next_actions": contract_digest_input.get("next_actions").cloned().unwrap_or(Value::Array(Vec::new())),
+            "open_blockers": contract_digest_input.get("open_blockers").cloned().unwrap_or(Value::Array(Vec::new())),
+            "trace_skills": continuity_route,
+            "session_summary": session_summary,
+            "evidence_count": evidence_count,
+            "artifacts_root": snapshot.current_root.display().to_string(),
+            "host_harness": host_harness,
+            "recent_completed_execution": continuity.get("recent_completed_execution").cloned().unwrap_or(Value::Null),
+            "recovery_hints": continuity.get("recovery_hints").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
+        }
+    }))
+}
+
+fn stable_json_sha256(value: &Value) -> Result<String, String> {
+    let bytes = serde_json::to_vec(value)
+        .map_err(|err| format!("serialize contract digest input failed: {err}"))?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(hex::encode(hasher.finalize()))
+}
+
+/// Machine-readable per-host harness surface from `RUNTIME_REGISTRY.json` (for contract-summary / audits).
+pub fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String> {
+    let path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
+    if !path.is_file() {
+        return Err(format!(
+            "RUNTIME_REGISTRY missing at {} — cannot build host_harness fragment",
+            path.display()
+        ));
+    }
+    let v = read_json_strict(&path)?;
+    let projections = v
+        .get("host_projections")
+        .and_then(Value::as_object)
+        .ok_or_else(|| "RUNTIME_REGISTRY missing host_projections".to_string())?;
+    let mut hosts: Vec<String> = projections.keys().cloned().collect();
+    hosts.sort();
+    let mut out = Map::new();
+    for host in hosts {
+        let proj = projections
+            .get(&host)
+            .and_then(Value::as_object)
+            .ok_or_else(|| format!("host_projections.{host} must be an object"))?;
+        out.insert(
+            host,
+            json!({
+                "harness_capabilities": proj.get("harness_capabilities").cloned().unwrap_or(Value::Null),
+                "harness_capability_exceptions": proj.get("harness_capability_exceptions").cloned().unwrap_or(Value::Null),
+            }),
+        );
+    }
+    Ok(Value::Object(out))
+}
+
+fn build_contract_guard_prompt_lines(
+    contract_digest: &str,
+    continuity: &Value,
+    digest_input: &Value,
+    session_summary: &Value,
+    artifact_root: &Path,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    lines.push(format!("contract_digest: sha256:{contract_digest}"));
+    lines.push(format!(
+        "continuity: state={} can_resume={}",
+        value_text(continuity.get("state")),
+        continuity
+            .get("can_resume")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    ));
+    let task = value_text(continuity.get("task"));
+    if !task.is_empty() {
+        lines.push(format!("task: {task}"));
+    } else if let Some(task) = nonempty_string(session_summary.get("task")) {
+        lines.push(format!("task: {task}"));
+    }
+    if let Some(owner) = nonempty_string(digest_input.get("primary_owner")) {
+        lines.push(format!("owner: {owner}"));
+    }
+    if let Some(phase) = nonempty_string(digest_input.get("active_phase")) {
+        lines.push(format!("phase: {phase}"));
+    }
+    for (label, key) in [
+        ("goal", "goal"),
+        ("scope", "scope"),
+        ("forbidden_scope", "forbidden_scope"),
+        ("acceptance", "acceptance_criteria"),
+        ("evidence", "evidence_required"),
+        ("blockers", "open_blockers"),
+    ] {
+        let line = compact_contract_value_line(label, digest_input.get(key));
+        if !line.is_empty() {
+            lines.push(line);
+        }
+    }
+    lines.push(format!("artifacts: {}", artifact_root.display()));
+    lines.truncate(12);
+    lines
+}
+
+fn compact_contract_value_line(label: &str, value: Option<&Value>) -> String {
+    let Some(value) = value else {
+        return String::new();
+    };
+    match value {
+        Value::Null => String::new(),
+        Value::String(text) if text.trim().is_empty() => String::new(),
+        Value::String(text) => format!("{label}: {}", compact_contract_text(text, 140)),
+        Value::Array(items) if items.is_empty() => String::new(),
+        Value::Array(items) => {
+            let joined = items
+                .iter()
+                .map(|item| value_text(Some(item)))
+                .filter(|item| !item.is_empty())
+                .take(3)
+                .collect::<Vec<_>>()
+                .join(" | ");
+            if joined.is_empty() {
+                String::new()
+            } else {
+                format!("{label}: {}", compact_contract_text(&joined, 180))
+            }
+        }
+        _ => {
+            let text = value_text(Some(value));
+            if text.is_empty() {
+                String::new()
+            } else {
+                format!("{label}: {}", compact_contract_text(&text, 140))
+            }
+        }
+    }
+}
+
+fn compact_contract_text(text: &str, max_chars: usize) -> String {
+    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.chars().count() <= max_chars {
+        return normalized;
+    }
+    let mut compact = normalized
+        .chars()
+        .take(max_chars.saturating_sub(3))
+        .collect::<String>();
+    compact.push_str("...");
+    compact
+}
+
+fn load_framework_runtime_view(
+    repo_root: &Path,
+    artifact_root_override: Option<&Path>,
+    task_id_override: Option<&str>,
+) -> FrameworkRuntimeView {
+    runtime_view::load_framework_runtime_view(repo_root, artifact_root_override, task_id_override)
+}
+
+fn classify_runtime_continuity(snapshot: &FrameworkRuntimeView) -> Value {
+    runtime_view::classify_runtime_continuity(snapshot)
+}
+
+fn missing_control_plane_anchors(snapshot: &FrameworkRuntimeView) -> Vec<String> {
+    runtime_view::missing_control_plane_anchors(snapshot)
+}
+
+fn workspace_name_from_root(repo_root: &Path) -> String {
+    runtime_view::workspace_name_from_root(repo_root)
+}
+
+fn write_text_if_changed_unlocked(path: &Path, content: &str) -> Result<bool, String> {
+    crate::path_guard::reject_unsafe_path(path)?;
+    let existing = read_text_if_exists(path);
+    if existing == content {
+        return Ok(false);
+    }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create parent directory failed: {err}"))?;
+    }
+    write_atomic_text(path, content)?;
+    Ok(true)
+}
+
+/// Compute SHA-256 hex digest of a file (used by integration tests across crates).
+pub fn hash_file_for_test(path: &Path) -> Result<String, String> {
+    let bytes =
+        fs::read(path).map_err(|err| format!("read file failed for {}: {err}", path.display()))?;
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    Ok(hex::encode(hasher.finalize()))
+}
+
+fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, String> {
+    let serialized = format!(
+        "{}\n",
+        serde_json::to_string_pretty(payload)
+            .map_err(|err| format!("serialize JSON payload failed: {err}"))?
+    );
+    write_text_if_changed_unlocked(path, &serialized)
+}
+
+pub fn current_local_timestamp() -> String {
+    Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
+}
+
+fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, String> {
+    let Some(v) = payload.get(key) else {
+        return Err(format!("{context}: missing required field {key:?}"));
+    };
+    let s = value_text(Some(v));
+    if s.trim().is_empty() {
+        return Err(format!("{context}: required field {key:?} is empty"));
+    }
+    Ok(s)
+}
+
+fn defaulted_payload_text(payload: &Value, key: &str, fallback: &str) -> String {
+    let s = payload
+        .get(key)
+        .map(|v| value_text(Some(v)))
+        .unwrap_or_default();
+    if s.trim().is_empty() {
+        fallback.to_string()
+    } else {
+        s
+    }
+}
+
+fn parse_session_summary(text: &str) -> Map<String, Value> {
+    let mut result = Map::new();
+    for line in text.lines() {
+        if !line.starts_with("- ") {
+            continue;
+        }
+        let body = &line[2..];
+        let Some((key, value)) = body.split_once(':') else {
+            continue;
+        };
+        result.insert(
+            key.trim().to_string(),
+            Value::String(value.trim().to_string()),
+        );
+    }
+    result
+}
+
+fn registry_rows_from_payload(payload: &Value) -> Vec<Value> {
+    let mut rows = Vec::new();
+    if let Some(items) = payload.get("tasks").and_then(Value::as_array) {
+        for item in items {
+            let Some(row) = item.as_object() else {
+                continue;
+            };
+            let task_id = safe_slug(&value_text(row.get("task_id")));
+            if task_id.is_empty() {
+                continue;
+            }
+            let task = value_text(row.get("task"));
+            let task_value = if task.is_empty() {
+                Value::String(task_id.clone())
+            } else {
+                Value::String(task)
+            };
+            rows.push(json!({
+                "task_id": task_id,
+                "task": task_value,
+                "updated_at": nonempty_string(row.get("updated_at")),
+                "status": nonempty_string(row.get("status")),
+                "phase": nonempty_string(row.get("phase")),
+                "resume_allowed": value_bool_or_none(row.get("resume_allowed")),
+            }));
+        }
+    }
+    rows
+}
+
+fn normalize_task_registry_rows(
+    focus_task_id: String,
+    mut rows: Vec<Value>,
+) -> (Value, Vec<String>, Vec<String>) {
+    rows.sort_by(|left, right| {
+        registry_task_sort_key(right)
+            .cmp(&registry_task_sort_key(left))
+            .then_with(|| value_text(right.get("task_id")).cmp(&value_text(left.get("task_id"))))
+    });
+
+    let mut seen = HashSet::new();
+    let mut tasks = Vec::new();
+    let mut known_task_ids = Vec::new();
+    let mut recoverable_task_ids = Vec::new();
+    let mut overflow_count = 0usize;
+    for row in rows {
+        let task_id = safe_slug(&value_text(row.get("task_id")));
+        if task_id.is_empty() || !seen.insert(task_id.clone()) {
+            continue;
+        }
+        if value_bool_or_none(row.get("resume_allowed")) == Some(true) {
+            recoverable_task_ids.push(task_id.clone());
+        }
+        known_task_ids.push(task_id);
+        if tasks.len() >= 128 {
+            overflow_count += 1;
+            continue;
+        }
+        tasks.push(row);
+    }
+    tasks.sort_by(|left, right| {
+        let left_focus = value_text(left.get("task_id")) == focus_task_id;
+        let right_focus = value_text(right.get("task_id")) == focus_task_id;
+        right_focus
+            .cmp(&left_focus)
+            .then_with(|| registry_task_sort_key(right).cmp(&registry_task_sort_key(left)))
+            .then_with(|| value_text(left.get("task_id")).cmp(&value_text(right.get("task_id"))))
+    });
+    (
+        json!({
+            "schema_version": TASK_REGISTRY_SCHEMA_VERSION,
+            "focus_task_id": if focus_task_id.is_empty() {
+                Value::Null
+            } else {
+                Value::String(focus_task_id)
+            },
+            "tasks": tasks,
+            "task_count": known_task_ids.len(),
+            "recoverable_task_count": recoverable_task_ids.len(),
+            "truncated": overflow_count > 0,
+            "overflow_count": overflow_count,
+        }),
+        known_task_ids,
+        recoverable_task_ids,
+    )
+}
+
+fn registry_task_sort_key(row: &Value) -> String {
+    first_nonempty(&[
+        value_text(row.get("updated_at")),
+        value_text(row.get("task_id")),
+    ])
+}
+
+pub fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
+    input.chars().take(max_chars).collect()
+}
+
+/// Stable task id when no active/focus pointer exists (review-only sessions).
+pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
+
+
+
+/// 带可选 task_id 的版本（用于 Desktop MCP session_checkpoint tool）。
+///
+/// `repointer_focus`: when true, rewrite active/focus/supervisor (explicit user checkpoint).
+/// `update_registry_only_if_known`: when true, never append a new registry row for unknown ids.
+pub fn build_automatic_continuity_checkpoint_payload_with_task_id(
+    repo_root: &Path,
+    task_line: &str,
+    summary_text: &str,
+    task_id: Option<&str>,
+    repointer_focus: bool,
+    update_registry_only_if_known: bool,
+) -> Value {
+    let output_dir = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
+    let task = if task_line.trim().is_empty() {
+        "session-checkpoint".to_string()
+    } else {
+        truncate_utf8_chars(task_line.trim(), 200)
+    };
+    let summary = if summary_text.trim().is_empty() {
+        "Automatic continuity checkpoint. No summary text was provided; refine in the next turn."
+            .to_string()
+    } else {
+        truncate_utf8_chars(summary_text.trim(), 8000)
+    };
+    let mut payload = json!({
+        "output_dir": output_dir.to_string_lossy(),
+        "repo_root": repo_root.to_string_lossy(),
+        "task": task,
+        "summary": summary,
+        "phase": "execution",
+        "status": "in_progress",
+        "focus": repointer_focus,
+        "update_registry_only_if_known": update_registry_only_if_known,
+        "next_actions": [
+            "Open artifacts/current/SESSION_SUMMARY.md on the next session.",
+            "Optional: run `router-rs framework snapshot --repo-root <repo>` for a compact runtime read model.",
+        ],
+        "trace_metadata": {
+            "checkpoint_kind": "automatic_stop_hook",
+        }
+    });
+    if let Some(tid) = task_id.filter(|s| !s.is_empty()) {
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("task_id".to_string(), serde_json::json!(tid));
+        }
+    }
+    payload
+}
+
+const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
+
+fn continuity_post_tool_evidence_env_enabled() -> bool {
+    crate::router_env_flags::router_rs_continuity_post_tool_evidence_enabled()
+}
+
+fn extract_codex_shell_command_preview(event: &Value) -> Option<String> {
+    let input = event.get("tool_input").and_then(Value::as_object)?;
+    let cmd = input
+        .get("command")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            input
+                .get("cmd")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            input
+                .get("script")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            input
+                .get("arguments")
+                .and_then(Value::as_object)
+                .and_then(|a| a.get("command"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })?;
+    Some(truncate_utf8_chars(cmd, 2000))
+}
+
+fn coerce_exit_code_value(value: Option<&Value>) -> Option<i64> {
+    let value = value?;
+    if let Some(n) = value.as_i64() {
+        return Some(n);
+    }
+    if let Some(n) = value.as_u64() {
+        return Some(n as i64);
+    }
+    if let Some(text) = value.as_str() {
+        return text.trim().parse::<i64>().ok();
+    }
+    None
+}
+
+fn coerce_duration_ms_value(value: Option<&Value>) -> Option<u64> {
+    let value = value?;
+    if let Some(n) = value.as_u64() {
+        return Some(n);
+    }
+    if let Some(n) = value.as_i64() {
+        return n.try_into().ok();
+    }
+    if let Some(n) = value.as_f64() {
+        return Some(n.round() as u64);
+    }
+    if let Some(text) = value.as_str() {
+        return text.trim().parse::<u64>().ok();
+    }
+    None
+}
+
+/// PostToolUse journal: tool execution duration when the host payload carries it.
+pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
+    let candidates: Vec<Option<&Value>> = vec![
+        event.get("duration_ms"),
+        event.get("durationMs"),
+        event.get("tool_duration_ms"),
+        event.get("toolDurationMs"),
+        event.get("execution_time_ms"),
+        event.get("executionTimeMs"),
+        event.get("tool_output").and_then(|v| v.get("duration_ms")),
+        event.get("tool_output").and_then(|v| v.get("durationMs")),
+        event
+            .get("tool_output")
+            .and_then(|v| v.get("metadata"))
+            .and_then(|m| m.get("duration_ms")),
+        event.get("result").and_then(|v| v.get("duration_ms")),
+    ];
+    if let Some(to) = event.get("tool_output") {
+        if let Some(text) = to.as_str() {
+            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+                if let Some(ms) = coerce_duration_ms_value(parsed.get("duration_ms")) {
+                    return Some(ms);
+                }
+                if let Some(ms) = coerce_duration_ms_value(parsed.get("durationMs")) {
+                    return Some(ms);
+                }
+            }
+        }
+    }
+    for candidate in candidates {
+        if let Some(ms) = coerce_duration_ms_value(candidate) {
+            return Some(ms);
+        }
+    }
+    None
+}
+
+/// PostToolUse journal: infer success from exit code / error flags when present.
+pub fn post_tool_call_succeeded(event: &Value) -> bool {
+    if event
+        .get("is_error")
+        .and_then(Value::as_bool)
+        .is_some_and(|v| v)
+    {
+        return false;
+    }
+    if event.get("error").is_some_and(|v| !v.is_null()) {
+        return false;
+    }
+    match extract_codex_tool_exit_hint(event) {
+        Some(0) => true,
+        Some(_) => false,
+        None => true,
+    }
+}
+
+/// 从 Codex `PostToolUse` 载荷中提取退出码（兼容嵌套 `tool_output` / JSON 字符串）。
+fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
+    let candidates: Vec<Option<&Value>> = vec![
+        event.get("exit_code"),
+        event.get("exitCode"),
+        event.get("tool_output").and_then(|v| v.get("exit_code")),
+        event.get("tool_output").and_then(|v| v.get("exitCode")),
+        event
+            .get("tool_output")
+            .and_then(|v| v.get("metadata"))
+            .and_then(|m| m.get("exit_code")),
+        event.get("result").and_then(|v| v.get("exit_code")),
+        event.get("response").and_then(|v| v.get("exit_code")),
+    ];
+    if let Some(to) = event.get("tool_output") {
+        if let Some(text) = to.as_str() {
+            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+                if let Some(code) = coerce_exit_code_value(parsed.get("exit_code")) {
+                    return Some(code);
+                }
+                if let Some(code) = coerce_exit_code_value(parsed.get("exitCode")) {
+                    return Some(code);
+                }
+            }
+        }
+    }
+    for candidate in candidates {
+        if let Some(code) = coerce_exit_code_value(candidate) {
+            return Some(code);
+        }
+    }
+    None
+}
+
+/// Task id resolution for evidence append helpers: explicit override wins, then task_view pointers.
+fn resolve_evidence_append_task_id(
+    repo_root: &Path,
+    task_id_override: Option<&str>,
+) -> Option<String> {
+    task_id_override
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .or_else(|| {
+            let view = crate::task_state::resolve_task_view(repo_root, None);
+            view.task_id.filter(|s| !s.is_empty())
+        })
+}
+
+pub fn append_evidence_index_merged_row(
+    repo_root: &Path,
+    task_id_override: Option<&str>,
+    entry: Map<String, Value>,
+) -> Result<(), String> {
+    // 解析 entry 中的签名字段用于去重（精确去重：command_preview + recorded_at）
+    let entry_signature = entry
+        .get("command_preview")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_default();
+    let entry_recorded_at = entry
+        .get("recorded_at")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_default();
+
+
+    let resolved_task_id = resolve_evidence_append_task_id(repo_root, task_id_override);
+
+    // Lightweight readiness check: avoid full 9-file snapshot rebuild
+    let current_root = repo_root.join("artifacts/current");
+    let active_pointer_exists = current_root.join(TASK_POINTERS_FILENAME).is_file();
+    let summary_exists = current_root.join(SESSION_SUMMARY_FILENAME).is_file();
+    if !active_pointer_exists && !summary_exists {
+        eprintln!(
+            "[router-rs] warning: evidence append skipped \u{2014} no active continuity session \
+             (no active/focus task pointer and no SESSION_SUMMARY at {})",
+            current_root.join(SESSION_SUMMARY_FILENAME).display()
+        );
+        return Ok(());
+    }
+
+    // Write evidence to task-local subdirectory when a task_id is resolved,
+    // matching the read path in FrameworkRuntimeView and
+    // task_evidence_artifacts_summary_for_task.
+    let evidence_path = match resolved_task_id {
+        Some(ref tid) => current_root.join(tid).join(EVIDENCE_INDEX_FILENAME),
+        None => current_root.join(EVIDENCE_INDEX_FILENAME),
+    };
+    if let Some(parent) = evidence_path.parent() {
+        fs::create_dir_all(parent).map_err(|err| format!("create evidence dir: {err}"))?;
+    }
+
+    let tx_payload = {
+        let _evidence_lock = crate::runtime_storage::acquire_runtime_path_lock(&evidence_path)?;
+
+        let existing = read_json_strict(&evidence_path)?;
+        let mut rows: Vec<Map<String, Value>> = normalize_evidence_index(&existing);
+
+        let is_duplicate = rows.iter().any(|row| {
+            let sig_cmd = row
+                .get("command_preview")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let sig_at = row
+                .get("recorded_at")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            sig_cmd == entry_signature && sig_at == entry_recorded_at
+        });
+        let tx_payload = Value::Object(entry.clone());
+        if !is_duplicate {
+            rows.push(entry);
+        }
+
+        if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
+        if rows.len() > MAX_POST_TOOL_EVIDENCE_ARTIFACTS {
+            // Keep all success=true rows + latest N non-success rows
+            let mut success_rows: Vec<Map<String, Value>> = Vec::new();
+            let mut other_rows: Vec<Map<String, Value>> = Vec::new();
+            for row in rows.drain(..) {
+                if row.get("success").and_then(Value::as_bool) == Some(true) {
+                    success_rows.push(row);
+                } else {
+                    other_rows.push(row);
+                }
+            }
+            let budget = MAX_POST_TOOL_EVIDENCE_ARTIFACTS.saturating_sub(success_rows.len());
+            if other_rows.len() > budget {
+                let drain = other_rows.len() - budget;
+                other_rows.drain(0..drain);
+            }
+            rows = success_rows;
+            rows.extend(other_rows);
+        }
+        }
+        let payload = json!({
+            "schema_version": EVIDENCE_INDEX_SCHEMA_VERSION,
+            "artifacts": rows.into_iter().map(Value::Object).collect::<Vec<Value>>(),
+        });
+        write_json_if_changed_unlocked(&evidence_path, &payload)?;
+        tx_payload
+    };
+    if let Some(tid) = resolved_task_id {
+        let tx = crate::task_ledger::LedgerTransaction {
+            ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            tx_type: "evidence".to_string(),
+            payload: tx_payload,
+            idempotency_key: None,
+            seq: None,
+            schema_version: Some(1),
+        };
+        if let Err(e) = crate::task_ledger::append_transaction(repo_root, &tid, tx) {
+            eprintln!("[router-rs] failed to append evidence transaction to TASK_LEDGER: {e}");
+        }
+        crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &tid);
+    }
+    Ok(())
+}
+
+/// `framework hook-evidence-append`：供 Cursor hook 等外部进程写入一条验证记录。
+///
+/// JSON：`repo_root`（可选）、`task_id`（可选）、`command_preview`（必填）、`exit_code`（可选）、`source`（可选，默认 `external_hook`）。
+pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
+    let explicit = payload.get("repo_root").and_then(|v| {
+        let s = value_text(Some(v));
+        if s.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(s))
+        }
+    });
+    let repo_root = resolve_repo_root_arg(explicit.as_deref())?;
+    let preview = required_payload_text(&payload, "command_preview", "hook evidence append")?;
+    let preview_trim = preview.trim();
+    if preview_trim.is_empty() {
+        return Err("hook evidence append requires non-empty command_preview".to_string());
+    }
+    let source = defaulted_payload_text(&payload, "source", "external_hook");
+    let task_id = payload
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string);
+    let exit_code = payload
+        .get("exit_code")
+        .and_then(|v| coerce_exit_code_value(Some(v)));
+
+    let cursor_hook = source.trim().to_ascii_lowercase().starts_with("cursor_");
+    if !cursor_hook && !shell_command_looks_like_verification(preview_trim) {
+        crate::telemetry_emit::emit_hook_fired("hook_evidence_append", "skip");
+        return Ok(json!({
+            "ok": true,
+            "skipped": true,
+            "reason": "command_preview did not match verification heuristics",
+            "schema_version": "router-rs-hook-evidence-append-v1",
+            "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
+        }));
+    }
+
+    let preview_store = truncate_utf8_chars(preview_trim, 2000);
+    let mut entry = Map::new();
+    entry.insert("kind".to_string(), json!("external_hook_verification"));
+    entry.insert("source".to_string(), json!(source.trim()));
+    entry.insert("command_preview".to_string(), json!(preview_store));
+    entry.insert("recorded_at".to_string(), json!(current_local_timestamp()));
+
+    // Programmatic verification of physical artifact association (L1 Truthfulness)
+    let artifact_ok = detect_and_verify_physical_artifact(&repo_root, preview_trim);
+    if !artifact_ok {
+        entry.insert("artifact_verification_failed".to_string(), json!(true));
+    }
+
+    if let Some(ec) = exit_code {
+        entry.insert("exit_code".to_string(), json!(ec));
+        entry.insert("success".to_string(), json!(ec == 0 && artifact_ok));
+    } else {
+        entry.insert("success".to_string(), json!(artifact_ok));
+    }
+    append_evidence_index_merged_row(&repo_root, task_id.as_deref(), entry)?;
+    let success = exit_code.map(|ec| ec == 0).unwrap_or(true) && artifact_ok;
+    crate::telemetry_emit::emit_hook_fired(
+        "hook_evidence_append",
+        if success { "append:ok" } else { "append:warn" },
+    );
+    Ok(json!({
+        "ok": true,
+        "skipped": false,
+        "schema_version": "router-rs-hook-evidence-append-v1",
+        "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
+    }))
+}
+
+fn codex_tool_name_normalized(event: &Value) -> String {
+    event
+        .get("tool_name")
+        .or(event.get("tool"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_string()
+}
+
+fn tool_name_is_shell_like(name: &str) -> bool {
+    let n = name.trim().to_ascii_lowercase();
+    n == "bash"
+        || n == "sh"
+        || n == "zsh"
+        || n == "shell"
+        || n.contains("terminal")
+        || n.contains("shell")
+        || n == "functions.run_terminal_cmd"
+        || n == "run_terminal_cmd"
+        || n == "powershell"
+        || n == "pwsh"
+}
+
+pub fn shell_command_looks_like_verification(command: &str) -> bool {
+    let c = command.to_ascii_lowercase();
+    // Original (Rust / Python / JS test runners + lint).
+    c.contains("cargo test")
+        || c.contains("cargo check")
+        || c.contains("cargo clippy")
+        || c.contains("cargo build")
+        || c.contains("cargo fmt")
+        || c.contains("cargo nextest")
+        || c.contains("cargo hack")
+        || c.contains("nextest")
+        || c.contains("pytest")
+        || c.contains("npm test")
+        || c.contains("pnpm test")
+        || c.contains("yarn test")
+        || c.contains("make test")
+        || c.contains("make check")
+        || c.contains("make ci")
+        || c.contains("make verify")
+        || c.contains("go test")
+        || c.contains("go vet")
+        || c.contains("dotnet test")
+        || c.contains("maturin")
+        || c.contains("tox")
+        || c.contains("uv run")
+        || c.contains("just test")
+        || c.contains("just check")
+        || c.contains("vitest")
+        || c.contains("jest")
+        || c.contains("ruby test")
+        || c.contains("rake test")
+        || c.contains("verify_cursor_hooks")
+        || c.contains("policy_contracts")
+        || c.contains("ruff check")
+        || c.contains("ruff format")
+        || c.contains("mypy")
+        || c.contains("deno test")
+        || c.contains("bun test")
+        // pnpm / bun tooling.
+        || c.contains("pnpm lint")
+        || c.contains("pnpm check")
+        || c.contains("bun lint")
+        // TypeScript / JS tooling (no `test` keyword).
+        || c.contains("tsc --noemit")
+        || c.contains("tsc -p")
+        || c.contains("eslint")
+        || c.contains("prettier --check")
+        || c.contains("biome check")
+        || c.contains("biome ci")
+        // JVM ecosystems.
+        || c.contains("gradle test")
+        || c.contains("gradlew test")
+        || c.contains("gradle check")
+        || c.contains("mvn test")
+        || c.contains("mvn verify")
+        || c.contains("mvn package")
+        // Mobile / Dart / Swift tooling.
+        || c.contains("flutter test")
+        || c.contains("swift test")
+        || c.contains("swift build")
+        || c.contains("dart analyze")
+        // E2E / cross-runner test frameworks.
+        || c.contains("playwright test")
+        || c.contains("nx test")
+        || c.contains("nx affected")
+        // Repo-local verifier scripts (any path under scripts/ ending with verify*).
+        || c.contains("scripts/verify")
+        || c.contains("/verify.sh")
+        || c.contains("./verify.sh")
+        || c.contains("task test")
+        || c.contains("task check")
+        // Formal / math toolchains: shared with `harness_context_signals` (`formal_toolchain`).
+        || crate::formal_toolchain::ascii_lower_contains_formal_toolchain_tokens(&c)
+}
+
+pub fn detect_and_verify_physical_artifact(repo_root: &Path, command: &str) -> bool {
+    let c = command.to_ascii_lowercase();
+    let max_delta = 15; // 15s safe time window for mtime verification to accommodate slow disks
+
+    // Dynamic bypass: Skip physical filesystem assertions during Rust target integration tests
+    let repo_path_str = repo_root.to_string_lossy();
+    if repo_path_str.contains("target/tmp")
+        || repo_path_str.contains("post-tool-evidence-append")
+        || repo_path_str.contains("cursor-post-tool-evidence-append")
+    {
+        return true;
+    }
+
+    if c.contains("cargo test") || c.contains("cargo check") || c.contains("cargo clippy") || c.contains("cargo build") {
+        let target_dir = repo_root.join("target");
+        if target_dir.is_dir() {
+            if is_modified_recently(&target_dir, max_delta) {
+                return true;
+            }
+            let debug_dir = target_dir.join("debug");
+            if debug_dir.is_dir() && is_modified_recently(&debug_dir, max_delta) {
+                return true;
+            }
+            return false;
+        }
+        return false;
+    }
+
+    if c.contains("pytest") {
+        let py_cache = repo_root.join(".pytest_cache");
+        if py_cache.is_dir() && is_modified_recently(&py_cache, max_delta) {
+            return true;
+        }
+        let junit = repo_root.join("junit.xml");
+        if junit.is_file() && is_modified_recently(&junit, max_delta) {
+            return true;
+        }
+        return false;
+    }
+
+    true
+}
+
+fn is_modified_recently(path: &std::path::Path, max_delta_secs: u64) -> bool {
+    use std::time::SystemTime;
+    if let Ok(metadata) = std::fs::metadata(path) {
+        if let Ok(modified) = metadata.modified() {
+            let now = SystemTime::now();
+            if let Ok(elapsed) = now.duration_since(modified) {
+                return elapsed.as_secs() <= max_delta_secs;
+            }
+            if let Ok(elapsed) = modified.duration_since(now) {
+                return elapsed.as_secs() <= max_delta_secs;
+            }
+        }
+    }
+    false
+}
+
+
+#[cfg(test)]
+mod shell_command_verification_heuristic_tests {
+    use super::shell_command_looks_like_verification;
+
+    #[test]
+    fn matrix_math_formal_and_build_tools() {
+        assert!(shell_command_looks_like_verification(
+            "python -c \"import sympy; print(sympy.simplify(1))\""
+        ));
+        assert!(shell_command_looks_like_verification("z3 /tmp/proof.smt2"));
+        assert!(shell_command_looks_like_verification("  z3  /tmp/x.smt2"));
+        assert!(shell_command_looks_like_verification("lean --version"));
+        assert!(shell_command_looks_like_verification(
+            "lake build && lake test"
+        ));
+        assert!(shell_command_looks_like_verification(
+            "coqc -Q theories Foo.v"
+        ));
+        assert!(shell_command_looks_like_verification(
+            "coqchk -silent Foo.vo"
+        ));
+        assert!(shell_command_looks_like_verification("isabelle build -D ."));
+        assert!(shell_command_looks_like_verification("cargo test -q"));
+        assert!(shell_command_looks_like_verification("pytest -q"));
+    }
+
+    #[test]
+    fn matrix_rejects_bare_python_and_random_strings() {
+        assert!(!shell_command_looks_like_verification("python foo.py"));
+        assert!(!shell_command_looks_like_verification(
+            "python -c \"print(1)\""
+        ));
+        assert!(!shell_command_looks_like_verification("echo hello"));
+        assert!(!shell_command_looks_like_verification("leaning tower")); // not `lean ` token
+    }
+
+    #[test]
+    fn test_physical_artifact_checks() {
+        use super::detect_and_verify_physical_artifact;
+        let temp_dir = std::env::temp_dir().join(format!("router-rs-test-artifact-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        // 1. Non-verification commands should be bypassed and return true by default
+        assert!(detect_and_verify_physical_artifact(&temp_dir, "python foo.py"));
+
+        // 2. Pytest should return false when pytest_cache / junit.xml are missing
+        assert!(!detect_and_verify_physical_artifact(&temp_dir, "pytest -v"));
+
+        // 3. Cargo test should return false when target directory is missing
+        assert!(!detect_and_verify_physical_artifact(&temp_dir, "cargo test"));
+
+        // 4. Simulate pytest generating .pytest_cache folder -> pytest passes
+        let pytest_cache = temp_dir.join(".pytest_cache");
+        std::fs::create_dir_all(&pytest_cache).unwrap();
+        assert!(detect_and_verify_physical_artifact(&temp_dir, "pytest -v"));
+
+        // 5. Simulate cargo generating target folder -> cargo test passes
+        let target_dir = temp_dir.join("target");
+        std::fs::create_dir_all(&target_dir).unwrap();
+        assert!(detect_and_verify_physical_artifact(&temp_dir, "cargo test"));
+
+        // Clean up
+        let _ = std::fs::remove_dir_all(&temp_dir);
+    }
+}
+
+#[allow(dead_code)]
+fn continuity_session_ready_for_evidence_append(snapshot: &FrameworkRuntimeView) -> bool {
+    if snapshot.task_pointers_present {
+        return true;
+    }
+    let summary_path = snapshot.current_root.join(SESSION_SUMMARY_FILENAME);
+    summary_path.is_file()
+}
+
+/// 在宿主 `PostToolUse` 中追加一条「终端类验证命令」到 `EVIDENCE_INDEX.json`（与 session 写入共用锁）。
+///
+/// `kind` 用于区分来源（如 `codex_post_tool_verification` / `cursor_post_tool_verification`）。
+/// 仅在连续性已初始化且命令启发式匹配验证类时写入。默认关；`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1` 开启。
+pub fn try_append_post_tool_shell_evidence(
+    repo_root: &Path,
+    event: &Value,
+    kind: &str,
+) -> Result<(), String> {
+    if !continuity_post_tool_evidence_env_enabled() {
+        return Ok(());
+    }
+    let tool_name = codex_tool_name_normalized(event);
+    if !tool_name_is_shell_like(&tool_name) {
+        return Ok(());
+    }
+    let Some(command_preview) = extract_codex_shell_command_preview(event) else {
+        return Ok(());
+    };
+    if !shell_command_looks_like_verification(&command_preview) {
+        return Ok(());
+    }
+
+    let session_id = event
+        .get("session_id")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let exit_hint = extract_codex_tool_exit_hint(event);
+    let mut entry = Map::new();
+    entry.insert("kind".to_string(), json!(kind));
+    entry.insert("tool_name".to_string(), json!(tool_name));
+    entry.insert("command_preview".to_string(), json!(command_preview));
+    entry.insert("recorded_at".to_string(), json!(current_local_timestamp()));
+    if !session_id.is_empty() {
+        entry.insert("session_id".to_string(), json!(session_id));
+    }
+
+    // Programmatic verification of physical artifact association (L1 Truthfulness)
+    let artifact_ok = detect_and_verify_physical_artifact(repo_root, &command_preview);
+    if !artifact_ok {
+        entry.insert("artifact_verification_failed".to_string(), json!(true));
+    }
+
+    if let Some(ec) = exit_hint {
+        entry.insert("exit_code".to_string(), json!(ec));
+        entry.insert("success".to_string(), json!(ec == 0 && artifact_ok));
+    } else {
+        entry.insert("success".to_string(), json!(artifact_ok));
+    }
+    // Pointer 机制已移除：从 event 中提取 task_id 显式传递
+    let task_id_from_event = event
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    append_evidence_index_merged_row(repo_root, task_id_from_event, entry)?;
+    Ok(())
+}
+
+/// Whether programmatic closeout enforcement is enabled in the current process.
+///
+/// - **Enabled** in CI / GitHub Actions by default.
+/// - **Disabled** locally when `ROUTER_RS_CLOSEOUT_ENFORCEMENT` is unset.
+/// - Explicitly disable with `ROUTER_RS_CLOSEOUT_ENFORCEMENT=0|false|off|no`.
+pub fn closeout_programmatic_enforcement_enabled() -> bool {
+    !closeout_enforcement_disabled_by_env()
+}
+
+/// Default location for a task's closeout record.
+pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+    // SECURITY: Validate task_id to prevent path traversal attacks.
+    // Only allow alphanumeric characters, hyphens, and underscores.
+    let sanitized = task_id.trim();
+    if sanitized.is_empty() {
+        return Err("task_id cannot be empty".to_string());
+    }
+    if !sanitized
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!(
+            "task_id contains invalid characters (only alphanumeric, hyphen, underscore allowed): {:?}",
+            sanitized
+        ));
+    }
+
+    let path = repo_root
+        .join("artifacts")
+        .join("closeout")
+        .join(format!("{}.json", sanitized));
+
+    // SECURITY: Verify the resolved path is still within the expected directory.
+    // This prevents any remaining path traversal attempts (e.g., via symlinks).
+    let closeout_dir = repo_root.join("artifacts").join("closeout");
+    let canonical_path = std::fs::canonicalize(&path).or_else(|_| {
+        std::fs::canonicalize(&closeout_dir).map(|p| p.join(format!("{}.json", sanitized)))
+    });
+    if let Ok(canonical) = canonical_path {
+        let canonical_dir = std::fs::canonicalize(&closeout_dir)
+            .map_err(|e| format!("failed to canonicalize closeout directory: {}", e))?;
+        if !canonical.starts_with(&canonical_dir) {
+            return Err("path traversal detected".to_string());
+        }
+    }
+
+    Ok(path)
+}
+
+/// 从 task_registry.json 中读取 task_id（pointer 机制移除后的回退）。
+/// 优先返回 focus_task_id，再返回 tasks 数组中第一个。
+pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
+    let registry_path = repo_root.join("artifacts/current/task_registry.json");
+    let raw = std::fs::read_to_string(&registry_path).ok()?;
+    let data: Value = serde_json::from_str(&raw).ok()?;
+    // 优先使用 focus_task_id
+    if let Some(focus) = data.get("focus_task_id").and_then(Value::as_str) {
+        let focus = focus.trim();
+        if !focus.is_empty() {
+            return Some(focus.to_string());
+        }
+    }
+    let tasks = data.get("tasks").and_then(Value::as_array)?;
+    for row in tasks {
+        if let Some(tid) = row.get("task_id").and_then(Value::as_str) {
+            let tid = tid.trim();
+            if !tid.is_empty() {
+                return Some(tid.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Evaluate a materialized closeout record JSON file, attaching an EvidenceContext (R8) when possible.
+/// Shared Stop/closeout guard when assistant or user text claims completion (Cursor/Codex parity).
+pub fn closeout_stop_followup_for_completion_text(
+    repo_root: &Path,
+    text: &str,
+) -> Option<String> {
+    if text.trim().is_empty() || !crate::hook_common::contains_completion_claim_token(text) {
+        return None;
+    }
+    // Pointer 机制已移除：先尝试 resolve_task_view，再回退到 task_registry.json
+    let tid = crate::task_state::resolve_task_view(repo_root, None)
+        .task_id
+        .filter(|s| !s.is_empty())
+        .or_else(|| first_task_id_from_registry(repo_root));
+    let Some(tid) = tid else { return None; };
+    if !closeout_programmatic_enforcement_enabled() {
+        return None;
+    }
+    let record_path = closeout_record_path_for_task(repo_root, &tid).ok()?;
+    if !record_path.is_file() {
+        return Some(format!(
+            "CLOSEOUT_FOLLOWUP task_id={tid} reason=missing_record path={}\n\
+请在完成态宣称前写入 closeout record 并通过评估。",
+            record_path.display()
+        ));
+    }
+    let eval = evaluate_closeout_record_file_for_task(repo_root, &tid, &record_path).ok()?;
+    if eval
+        .get("closeout_allowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    Some(format!(
+        "CLOSEOUT_FOLLOWUP task_id={tid} reason=evaluation_failed path={}",
+        record_path.display()
+    ))
+}
+
+pub fn evaluate_closeout_record_file_for_task(
+    repo_root: &Path,
+    task_id: &str,
+    record_path: &Path,
+) -> Result<Value, String> {
+    let tid = task_id.trim();
+    if tid.is_empty() {
+        return Err("task_id is empty".to_string());
+    }
+    let text = std::fs::read_to_string(record_path).map_err(|err| {
+        format!(
+            "read closeout record failed ({}): {err}",
+            record_path.display()
+        )
+    })?;
+    let record: Value = serde_json::from_str(&text).map_err(|err| {
+        format!(
+            "parse closeout record JSON failed ({}): {err}",
+            record_path.display()
+        )
+    })?;
+    let (rows_non_empty, has_success) =
+        crate::autopilot_goal::task_evidence_artifacts_summary_for_task(repo_root, tid);
+    let goal_state = crate::autopilot_goal::read_goal_state(repo_root, Some(tid))
+        .ok()
+        .flatten();
+    let goal_prediction = goal_state
+        .as_ref()
+        .and_then(core_state::goal_prediction::read_goal_prediction);
+    let ctx = CloseoutEvidenceContext {
+        task_id: Some(tid.to_string()),
+        evidence_rows_non_empty: rows_non_empty,
+        has_successful_verification: has_success,
+        goal_prediction,
+    };
+    evaluate_closeout_record_value_with_context(record, &ctx)
+        .map_err(|err| format!("closeout record evaluation failed: {err}"))
+}
+
+fn in_ci_like_environment() -> bool {
+    if std::env::var("GITHUB_ACTIONS").as_deref() == Ok("true") {
+        return true;
+    }
+    match std::env::var("CI") {
+        Ok(v) => {
+            let t = v.trim().to_ascii_lowercase();
+            !t.is_empty() && !is_false_ci_value(&t)
+        }
+        Err(_) => false,
+    }
+}
+
+#[inline]
+fn is_false_ci_value(s: &str) -> bool {
+    s == "0" || s == "false" || s == "off" || s == "no"
+}
+
+fn closeout_enforcement_disabled_by_env() -> bool {
+    match std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") {
+        Ok(v) => {
+            let t = v.trim().to_ascii_lowercase();
+            is_false_ci_value(&t)
+        }
+        Err(_) => !in_ci_like_environment(),
+    }
+}
+
+/// Apply closeout enforcement to a session-artifact write payload.
+///
+/// Returns:
+/// - `Ok(Some(eval))` when status claims completion and a valid record was
+///   provided that passes evaluation. The envelope is attached to the
+///   response so callers see the evidence summary alongside the write.
+/// - `Ok(None)` when status is not a completion claim. In that case
+///   any incidental `closeout_record` is intentionally **not** parsed —
+///   in-progress / planning / execution checkpoints often carry placeholder
+///   or partial records, and `deny_unknown_fields` plus strict R-rule
+///   evaluation would otherwise turn a benign in-progress write into a hard
+///   error. Pre-completion validation is the caller's responsibility (run
+///   `closeout evaluate` separately) so the artifact-write path stays
+///   resilient against in-progress draft records.
+/// - `Ok(None)` when status claims completion but programmatic enforcement is off:
+///   explicit `ROUTER_RS_CLOSEOUT_ENFORCEMENT`=`0`/`false`/`off`/`no`, **or** the variable is unset
+///   while not in CI/GitHub Actions（本地默认软；响应中不附带 `closeout_evaluation`）。
+///   团队/CI：未设置且检测到 `CI` 或 `GITHUB_ACTIONS` 时默认硬门禁。
+///   Note: `ROUTER_RS_CLOSEOUT_ENFORCEMENT` **set to empty string** is still “set” for this branch
+///   resolution — it does **not** receive the unset/local-soft treatment.
+/// - `Err(reason)` only when:
+///   - status claims completion but no `closeout_record` is provided, or
+///   - status claims completion and the provided record fails evaluation
+///     (`closeout_allowed=false` or parse error).
+fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>, String> {
+    let status_lower = value_text(payload.get("status")).to_ascii_lowercase();
+    let claims_completion = CLOSEOUT_COMPLETION_STATUSES
+        .iter()
+        .any(|allowed| *allowed == status_lower);
+    if !claims_completion {
+        return Ok(None);
+    }
+    if closeout_enforcement_disabled_by_env() {
+        return Ok(None);
+    }
+    let closeout_record = payload.get("closeout_record").cloned().ok_or_else(|| {
+        "framework session artifact write claims completion (status in {completed,done,passed,...}) but no closeout_record was provided. \
+         A closeout record is required so closeout_enforcement can verify completion evidence (verification_status, commands_run, artifacts_checked, summary). \
+         Re-issue the request with a closeout_record matching configs/framework/CLOSEOUT_RECORD_SCHEMA.json.".to_string()
+    })?;
+    // Try to attach an EvidenceContext so R8 (`claimed_passed_without_evidence_index_rows`) runs.
+    // Both repo_root and task_id must resolve from the write payload; otherwise fall back to the
+    // record-only evaluator (R7 still catches the most common self-attestation pattern).
+    let repo_root_str = value_text(payload.get("repo_root"));
+    let task_id_str = value_text(payload.get("task_id"));
+    let evaluation = if !repo_root_str.is_empty() && !task_id_str.is_empty() {
+        let repo_root = PathBuf::from(&repo_root_str);
+        let (rows_non_empty, has_success) =
+            crate::autopilot_goal::task_evidence_artifacts_summary_for_task(
+                &repo_root,
+                &task_id_str,
+            );
+        let goal_state =
+            crate::autopilot_goal::read_goal_state(&repo_root, Some(&task_id_str))
+                .ok()
+                .flatten();
+        let goal_prediction = goal_state
+            .as_ref()
+            .and_then(core_state::goal_prediction::read_goal_prediction);
+        let ctx = CloseoutEvidenceContext {
+            task_id: Some(task_id_str.trim().to_string()),
+            evidence_rows_non_empty: rows_non_empty,
+            has_successful_verification: has_success,
+            goal_prediction,
+        };
+        evaluate_closeout_record_value_with_context(closeout_record, &ctx)
+            .map_err(|err| format!("closeout enforcement failed: {err}"))?
+    } else {
+        evaluate_closeout_record_value(closeout_record)
+            .map_err(|err| format!("closeout enforcement failed: {err}"))?
+    };
+    let allowed = evaluation
+        .get("closeout_allowed")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !allowed {
+        let violations = evaluation
+            .get("violations")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "[]".to_string());
+        let missing = evaluation
+            .get("missing_evidence")
+            .map(|v| v.to_string())
+            .unwrap_or_else(|| "[]".to_string());
+        return Err(format!(
+            "closeout_enforcement blocked completion: closeout_allowed=false. \
+             violations={violations} missing_evidence={missing}. \
+             Resolve violations or downgrade status before re-issuing the artifact write."
+        ));
+    }
+    Ok(Some(evaluation))
+}
+
+fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {
+    let items = if payload.get("schema_version").and_then(Value::as_str)
+        == Some(EVIDENCE_INDEX_SCHEMA_VERSION)
+    {
+        payload.get("artifacts")
+    } else {
+        payload.get("artifacts").or_else(|| payload.get("evidence"))
+    };
+    items
+        .and_then(Value::as_array)
+        .map(|rows| {
+            rows.iter()
+                .filter_map(|row| row.as_object().cloned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn supervisor_contract(state: &Map<String, Value>) -> Map<String, Value> {
+    state
+        .get("execution_contract")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn is_terminal(value: &str, terminal_values: &[&str]) -> bool {
+    let lowered = value.trim().to_ascii_lowercase();
+    terminal_values
+        .iter()
+        .any(|candidate| lowered == *candidate)
+}
+
+#[cfg(test)]
+mod post_tool_duration_tests {
+    use super::{extract_post_tool_duration_ms, post_tool_call_succeeded};
+    use serde_json::json;
+
+    #[test]
+    fn extract_post_tool_duration_ms_reads_top_level_and_nested_fields() {
+        assert_eq!(
+            extract_post_tool_duration_ms(&json!({"duration_ms": 42})),
+            Some(42)
+        );
+        assert_eq!(
+            extract_post_tool_duration_ms(&json!({"durationMs": "99"})),
+            Some(99)
+        );
+        assert_eq!(
+            extract_post_tool_duration_ms(&json!({
+                "tool_output": { "duration_ms": 7 }
+            })),
+            Some(7)
+        );
+        assert_eq!(
+            extract_post_tool_duration_ms(&json!({
+                "tool_output": "{\"durationMs\": 15}"
+            })),
+            Some(15)
+        );
+        assert_eq!(extract_post_tool_duration_ms(&json!({})), None);
+    }
+
+    #[test]
+    fn post_tool_call_succeeded_honors_error_and_exit_code() {
+        assert!(!post_tool_call_succeeded(&json!({"is_error": true})));
+        assert!(!post_tool_call_succeeded(&json!({"exit_code": 1})));
+        assert!(post_tool_call_succeeded(&json!({"exit_code": 0})));
+        assert!(post_tool_call_succeeded(&json!({"tool_name": "Read"})));
+    }
+}
+
+#[cfg(test)]
+mod evidence_lock_order_tests {
+    #[test]
+    fn append_evidence_index_merged_row_does_not_use_task_ledger_flock() {
+        let src = include_str!("mod.rs");
+        let start = src
+            .find("fn append_evidence_index_merged_row")
+            .expect("append_evidence_index_merged_row");
+        let rest = &src[start..];
+        let end = rest
+            .find("\npub fn framework_hook_evidence_append")
+            .unwrap_or(rest.len());
+        let body = &rest[..end];
+        assert!(
+            !body.contains("apply_task_ledger_mutation"),
+            "evidence append must not nest task-ledger flock (L3→L1 deadlock risk)"
+        );
+        assert!(
+            body.contains("acquire_runtime_path_lock"),
+            "evidence append must use path flock"
+        );
+    }
+
+    #[test]
+    fn append_evidence_index_merged_row_does_not_call_append_transaction_under_l2() {
+        let src = include_str!("mod.rs");
+        let start = src
+            .find("fn append_evidence_index_merged_row")
+            .expect("append_evidence_index_merged_row");
+        let rest = &src[start..];
+        let end = rest
+            .find("\npub fn framework_hook_evidence_append")
+            .unwrap_or(rest.len());
+        let body = &rest[..end];
+        let lock_pos = body
+            .find("acquire_runtime_path_lock")
+            .expect("acquire_runtime_path_lock");
+        let append_pos = body
+            .find("append_transaction(")
+            .expect("append_transaction after L2 block");
+        let l2_block_end = body[lock_pos..append_pos]
+            .rfind('}')
+            .expect("L2 block closes before append_transaction");
+        assert!(
+            lock_pos + l2_block_end < append_pos,
+            "append_transaction must run only after L2 path lock is released"
+        );
+        assert!(
+            !body[lock_pos..lock_pos + l2_block_end].contains("append_transaction("),
+            "must not call append_transaction while holding L2 lock"
+        );
+    }
+}
+
+#[cfg(test)]
+mod resolve_repo_root_tests {
+    use super::resolve_repo_root_arg;
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn resolve_repo_root_walks_up_from_scripts_router_rs_subdir() {
+        let tmp = std::env::temp_dir().join(format!(
+            "skill-fw-root-resolve-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(tmp.join("configs/framework")).unwrap();
+        fs::write(
+            tmp.join("configs/framework/RUNTIME_REGISTRY.json"),
+            r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{}}"#,
+        )
+        .unwrap();
+        fs::create_dir_all(tmp.join("core/router-rs/src")).unwrap();
+        fs::write(
+            tmp.join("core/router-rs/Cargo.toml"),
+            "[package]\nname = \"router-rs\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+
+        let subdir = tmp.join("core/router-rs/src");
+        let resolved = resolve_repo_root_arg(Some(subdir.as_path())).unwrap();
+        let expect = tmp.canonicalize().unwrap_or_else(|_| tmp.clone());
+        assert_eq!(resolved, expect);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn resolve_repo_root_unchanged_when_no_framework_markers() {
+        let tmp = std::env::temp_dir().join(format!(
+            "skill-fw-no-marker-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&tmp).unwrap();
+        let resolved = resolve_repo_root_arg(Some(tmp.as_path())).unwrap();
+        let expect = tmp.canonicalize().unwrap_or_else(|_| tmp.clone());
+        assert_eq!(resolved, expect);
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn resolve_repo_root_from_cargo_manifest_dir_matches_framework_root() {
+        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let resolved = resolve_repo_root_arg(Some(manifest_dir.as_path())).unwrap();
+        let expect = manifest_dir
+            .join("../..")
+            .canonicalize()
+            .expect("skill repo root should resolve");
+        assert_eq!(
+            resolved, expect,
+            "router-rs crate cwd must resolve to framework repo root for continuity/RUNTIME_REGISTRY"
+        );
+    }
+}

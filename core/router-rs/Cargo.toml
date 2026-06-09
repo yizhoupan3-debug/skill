@@ -3,7 +3,6 @@ name = "router-rs"
 version = "0.1.0"
 edition = "2021"
 autotests = false
-build = "build.rs"
 
 [lib]
 name = "router_rs"
@@ -15,7 +14,7 @@ framework-kernel = { path = "../framework-kernel" }
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 core-math = { path = "../core-math" }
 routing-engine = { path = "../routing-engine" }
-runtime-core = { path = "../runtime-core" }
+runtime-core = { path = "../runtime-core", features = ["test-support"] }
 libc = "0.2"
 chrono.workspace = true
 clap = { version = "4.5.38", features = ["derive"] }
@@ -46,9 +45,6 @@ host-opencode = []
 host-antigravity = []
 host-codex = []
 codegraph = ["dep:codegraph-rs"]
-
-[build-dependencies]
-serde_json = "1.0.140"
 
 [dev-dependencies]
 serial_test = "3"

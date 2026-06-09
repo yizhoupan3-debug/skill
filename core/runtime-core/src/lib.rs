@@ -1,9 +1,106 @@
+#![recursion_limit = "256"]
+#![allow(unused_variables, unused_mut)]
+
 //! runtime-core: extracted runtime modules from router-rs.
 //!
-//! Contains runtime_storage, background_state, trace_runtime, and runtime_envelope_ids.
-//! Session supervisor lives in router-rs (native process driver).
+//! Single source of truth for framework_runtime, session_supervisor, and supporting modules.
 
+// ── original four ──
 pub mod background_state;
 pub mod runtime_envelope_ids;
 pub mod runtime_storage;
 pub mod trace_runtime;
+
+// ── migrated modules (B3) ──
+pub mod framework_runtime;
+pub mod session_supervisor;
+pub mod closeout_enforcement;
+pub mod execution_contract;
+pub mod framework_profile;
+pub mod rfv_loop;
+pub mod schema_drift;
+
+// ── proxy / re-export modules ──
+pub mod autopilot_goal;
+pub mod atomic_write;
+pub mod formal_toolchain;
+pub mod goal_prediction;
+pub mod kernel_bootstrap;
+pub mod path_guard;
+pub mod task_state;
+pub mod task_state_aggregate;
+pub mod task_ledger;
+pub mod step_ledger;
+pub mod task_write_lock;
+
+// ── migrated supporting modules ──
+pub mod browser_mcp;
+pub mod cli;
+pub mod types;
+pub mod eval_route;
+pub mod framework_host_targets;
+pub mod framework_maint;
+pub mod framework_skills;
+pub mod harness_context_signals;
+pub mod harness_contract;
+pub mod hook_event_routing;
+pub mod hook_outbound_protect;
+pub mod hook_timing;
+pub mod host_entrypoint_sync;
+pub mod host_integration;
+pub mod hosts;
+pub mod mcp_pre_guard;
+pub mod paper_adversarial_hook;
+pub mod paper_prose_hook;
+pub mod review_gate;
+pub mod route;
+pub mod router_self;
+pub mod runtime_registry;
+pub mod session_call_tracker;
+pub mod ship_readiness;
+pub mod skill_repo;
+pub mod stdio_payload_types;
+pub mod stdio_transport;
+pub mod task_command;
+pub mod telemetry_emit;
+pub mod web_fetch_guard;
+#[cfg(test)]
+pub mod test_env_sync;
+pub mod mcp_stdio_test_support;
+pub mod integration_test_prelude;
+
+// ── modules with transitive deps ──
+pub mod harness_operator_nudges;
+pub mod hook_observation_rules;
+pub mod router_env_flags;
+pub mod router_rs_observation;
+
+// ── path-qualified module ──
+#[path = "utils/hook_posttool_normalize.rs"]
+pub mod hook_posttool_normalize;
+
+// ── re-exports from core-policy ──
+pub use core_policy::hook_common;
+pub use core_policy::hook_policy;
+pub use core_policy::lane_normalize;
+pub use core_policy::review_gate_engine;
+pub use core_policy::review_output_lint;
+pub use core_policy::review_routing_signals;
+
+// ── crate-level re-exports for `crate::X` path compat ──
+pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;
+
+// ── host submodule re-exports (for `crate::X` path compat) ──
+pub use hosts::cursor_hooks;
+pub use hosts::codex_hooks;
+pub use hosts::claude_code_hooks;
+pub use hosts::mcp_stdio_harness;
+
+// ── test helpers ──
+#[cfg(test)]
+pub fn touch_test_kernel_bootstrap() {
+    kernel_bootstrap::ensure_kernel_bootstrap();
+}
+
+#[cfg(not(test))]
+pub fn touch_test_kernel_bootstrap() {}

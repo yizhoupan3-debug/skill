@@ -108,18 +108,26 @@ mod tests {
 
     #[test]
     fn write_atomic_text_creates_final_without_tmp_sidecar() {
-        let path = temp_json_path("text");
-        let _ = std::fs::remove_file(&path);
+        // Use an isolated directory so leftover .tmp files from other processes don't interfere.
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("core-state-atomic-isolated-{suffix}"));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("text.json");
         write_atomic_text(&path, "hello").expect("write");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello");
-        let parent = path.parent().expect("parent");
-        let leftovers: Vec<_> = std::fs::read_dir(parent)
+        let leftovers: Vec<_> = fs::read_dir(&dir)
             .unwrap()
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().and_then(|s| s.to_str()) == Some("tmp"))
+            .filter(|e| {
+                e.path() != path
+                    && e.path().extension().and_then(|s| s.to_str()) == Some("tmp")
+            })
             .collect();
-        assert!(leftovers.is_empty(), "tmp sidecar should be removed");
-        let _ = std::fs::remove_file(&path);
+        assert!(leftovers.is_empty(), "tmp sidecar should be removed: {leftovers:?}");
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

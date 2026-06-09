@@ -8,7 +8,7 @@ name = "host_projection"
 path = "src/lib.rs"
 
 [dependencies]
-router-rs = { path = "../router-rs" }
+runtime-core = { path = "../runtime-core" }
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }

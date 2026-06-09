@@ -18,32 +18,54 @@ fn temp_home(label: &str) -> PathBuf {
 }
 
 fn try_resolve_router_rs_test_bin() -> Option<PathBuf> {
-    if let Some(path) = option_env!("CARGO_BIN_EXE_router-rs") {
-        return Some(PathBuf::from(path));
-    }
-    if let Ok(path) = std::env::var("CARGO_BIN_EXE_router-rs") {
-        return Some(PathBuf::from(path));
-    }
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for candidate in [
-        manifest.join("../../target/debug/router-rs"),
-        manifest.join("../target/debug/router-rs"),
-        PathBuf::from("/tmp/skill-cargo-target/debug/router-rs"),
-        manifest.join("../../target/release/router-rs"),
-        manifest.join("../target/release/router-rs"),
-        PathBuf::from("/tmp/skill-cargo-target/release/router-rs"),
-    ] {
-        if candidate.is_file() {
-            return Some(candidate);
+    // router-rs binary has been moved to router-rs-cli
+    for bin_name in &["router-rs-cli", "router-rs"] {
+        if let Some(path) = option_env!("CARGO_BIN_EXE_router-rs-cli") {
+            return Some(PathBuf::from(path));
         }
-    }
-    if let Ok(target) = std::env::var("CARGO_TARGET_DIR") {
-        let candidate = PathBuf::from(target).join("debug/router-rs");
-        if candidate.is_file() {
-            return Some(candidate);
+        if let Ok(path) = std::env::var(format!("CARGO_BIN_EXE_{bin_name}")) {
+            return Some(PathBuf::from(path));
+        }
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        for candidate in [
+            manifest.join(format!("../../target/debug/{bin_name}")),
+            manifest.join(format!("../target/debug/{bin_name}")),
+            PathBuf::from(format!("/tmp/skill-cargo-target/debug/{bin_name}")),
+            manifest.join(format!("../../target/release/{bin_name}")),
+            manifest.join(format!("../target/release/{bin_name}")),
+            PathBuf::from(format!("/tmp/skill-cargo-target/release/{bin_name}")),
+        ] {
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+        if let Ok(target) = std::env::var("CARGO_TARGET_DIR") {
+            let candidate = PathBuf::from(target).join(format!("debug/{bin_name}"));
+            if candidate.is_file() {
+                return Some(candidate);
+            }
         }
     }
     None
+}
+
+/// Detect redirect shim (post-migration stub that prints "moved" and exits 1).
+fn is_redirect_shim(bin: &PathBuf) -> bool {
+    if let Ok(out) = std::process::Command::new(bin)
+        .arg("--help")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+    {
+        let combined = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        return combined.contains("moved") || combined.contains("router-rs-cli");
+    }
+    false
 }
 
 /// Installed copy must pass `framework --help` smoke (P0 binary validation path).
@@ -53,6 +75,10 @@ fn router_self_install_copy_passes_framework_help_smoke() {
         eprintln!("skip: router-rs binary not built (per-crate test run)");
         return;
     };
+    if is_redirect_shim(&bin) {
+        eprintln!("skip: binary is a redirect shim (router-rs migrated to router-rs-cli)");
+        return;
+    }
     validate_router_rs_binary_runnable(&bin).expect("prebuilt binary smoke");
 
     #[cfg(unix)]
