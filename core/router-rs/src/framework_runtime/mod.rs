@@ -84,7 +84,6 @@ pub(crate) use orchestration_controller::{
 pub use route_manifest_fallback::route_task_with_manifest_fallback;
 pub(crate) use route_manifest_fallback::{
     manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
-    route_task_with_manifest_fallback,
 };
 pub(crate) use sandbox_control::build_sandbox_control_response;
 pub use crate::stdio_payload_types::*;

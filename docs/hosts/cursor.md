@@ -23,8 +23,8 @@ depends_on:
 在 Cursor 环境下，Harness 和任务管理的核心入口与工作区定义如下：
 
 - **Harness 核心入口**：
-  - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
-  - **任务状态治理**：`framework_goal_drive` stdio（及 MCP `goal_state_manage`）写 `GOAL_STATE.json`；Cursor **Stop** hook 用同一 `resolve_cursor_continuity_frame` / hydration 指针选 task，**不**单独扫 orphan。
+  - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `goal_state_manage` MCP / `framework_goal_drive` stdio 推进宏任务。
+  - **任务状态治理**：`goal_state_manage` MCP / `framework_goal_drive` stdio 写 `GOAL_STATE.json`；Cursor **Stop** hook 用同一 `resolve_cursor_continuity_frame` / hydration 指针选 task，**不**单独扫 orphan。
 - **工作区及状态产物**：
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。

@@ -78,7 +78,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
 2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`（见 [`skills/planx/SKILL.md`](../../skills/planx/SKILL.md)），明确 minimal delta 与 verification plan，并报用户审批。
-3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
+3. **`/implementx`**：执行阶段。进入执行区时，需配合 `goal_state_manage` MCP / `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
    - **执行 Profile 调优**：默认 `lifecycle_profile: my-light`（suppress Stop 上 review **advisory** nudge 与 spawn-first；findings-only 仍可用）。Review gate 清门语义为本宿主 **canonical**，见 [`host_adapter_contract.md`](../host_adapter_contract.md) §0.1。
 4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。
 

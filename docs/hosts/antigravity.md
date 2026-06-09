@@ -42,7 +42,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 - 默认 My 链：`/discussx` → `/planx` → `/implementx` → `/verifyx`
 - 显式辅助命令（五宿主同路径）：`/deepinterview`、`/gitx`、`/update`
-- 连续性：`artifacts/current/<task_id>/` + MCP `goal_state_manage`
+- 连续性：`artifacts/current/<task_id>/` + `goal_state_manage` MCP / `framework_goal_drive` stdio
 
 ## 退役宿主（勿再写入 registry）
 
