@@ -37,7 +37,11 @@ risk: low
 source: local
 allowed_tools:
   - shell
+  - rust
   - python
+runtime_requirements:
+  commands:
+    - pdf
 approval_required_tools:
   - file overwrite
 filesystem_scope:
@@ -83,6 +87,11 @@ In that case:
 - The task is specifically a visual screenshot/UI review rather than PDF artifact work → use `$visual-review`
 - The user only wants plain-text summarization of text they already pasted into chat
 - The file is not actually a PDF
+
+## Rust batch path
+
+- Batch catalog: `pdf-batch/catalog.json` under `${SKILL_FRAMEWORK_ROOT}` artifacts.
+- 禁止在 skill 正文默认写 `cargo run` 作为操作员主路径；已安装 `pdf_tool_rs` 二进制优先。
 
 ## Shared artifact protocol
 

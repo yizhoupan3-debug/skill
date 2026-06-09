@@ -1,8 +1,6 @@
-//! host-projection: 宿主集成层（hosts, host_integration, host_entrypoint_sync, framework_host_targets）。
-//!
-//! 从 router-rs 抽取，临时依赖 router-rs 获取共享模块。
+//! host-projection (B4): stub re-exports from router-rs until B4 physical migration completes.
 
-pub mod hosts;
-pub mod host_integration;
-pub mod host_entrypoint_sync;
-pub mod framework_host_targets;
+pub use router_rs::framework_host_targets;
+pub use router_rs::framework_host_integration as host_integration;
+pub use router_rs::host_entrypoint_sync;
+pub use router_rs::hosts;

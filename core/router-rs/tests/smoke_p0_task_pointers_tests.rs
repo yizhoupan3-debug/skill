@@ -38,14 +38,12 @@ fn task_pointers_read_sync_smoke() {
     )
     .expect("sync");
 
-    let pointers = read_task_pointers(&repo);
-    // read_task_pointers is a stub returning None in single-conversation mode;
-    // verify actual file contents via read_task_pointer_pair instead.
-    assert!(pointers.active_task_id.is_none());
-    assert!(pointers.focus_task_id.is_none());
     let (active, focus) = read_task_pointer_pair(&repo);
     assert_eq!(active.as_deref(), Some("ptr-read"));
     assert_eq!(focus.as_deref(), Some("ptr-read"));
+    let pointers = read_task_pointers(&repo);
+    assert_eq!(pointers.active_task_id.as_deref(), Some("ptr-read"));
+    assert_eq!(pointers.focus_task_id.as_deref(), Some("ptr-read"));
     assert_eq!(read_primary_task_id(&repo).as_deref(), Some("ptr-read"));
 
     let snapshot =
@@ -174,14 +172,12 @@ fn task_pointers_set_focus_false_router_snapshot_smoke() {
     )
     .expect("sync without focus");
 
-    let pointers = read_task_pointers(&repo);
-    // read_task_pointers is a stub returning None in single-conversation mode;
-    // verify actual file contents via read_task_pointer_pair instead.
-    assert!(pointers.active_task_id.is_none());
-    assert!(pointers.focus_task_id.is_none());
     let (active, focus) = read_task_pointer_pair(&repo);
     assert_eq!(active.as_deref(), Some("ptr-active-only"));
     assert!(focus.is_none());
+    let pointers = read_task_pointers(&repo);
+    assert_eq!(pointers.active_task_id.as_deref(), Some("ptr-active-only"));
+    assert!(pointers.focus_task_id.is_none());
 
     let snapshot =
         build_framework_runtime_snapshot_envelope(&repo, None, None).expect("snapshot");

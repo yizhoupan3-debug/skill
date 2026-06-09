@@ -238,11 +238,10 @@ pub struct TaskPointers {
 }
 
 /// `active_task.json` / `focus_task.json` 一次成对读取（比两次独立 open 的半态窗口更小）。
-/// 单对话模式：不再从文件读取 pointer，返回 None。
-pub fn read_task_pointers(_repo_root: &Path) -> TaskPointers {
+pub fn read_task_pointers(repo_root: &Path) -> TaskPointers {
     TaskPointers {
-        active_task_id: None,
-        focus_task_id: None,
+        active_task_id: crate::state_manager::read_active_task_id(repo_root),
+        focus_task_id: crate::state_manager::read_focus_task_id(repo_root),
     }
 }
 
@@ -1598,31 +1597,26 @@ mod tests {
     }
 
     #[test]
-    fn read_task_pointers_stub_returns_none() {
-        // Single-conversation mode: stub always returns None regardless of disk state.
-        let tmp = unique_repo("pointers-stub");
+    fn read_task_pointers_reads_legacy_pointer_files() {
+        let tmp = unique_repo("pointers-legacy");
         let active_dir = tmp.join("artifacts/current");
         fs::create_dir_all(&active_dir).unwrap();
-        // Write an active_task.json that the stub should IGNORE.
         fs::write(
             active_dir.join("active_task.json"),
-            r#"{"task_id":"should-not-be-read"}"#,
+            r#"{"task_id":"active-from-disk"}"#,
         )
         .unwrap();
         fs::write(
             active_dir.join("focus_task.json"),
-            r#"{"task_id":"also-ignored"}"#,
+            r#"{"task_id":"focus-from-disk"}"#,
         )
         .unwrap();
         let pointers = read_task_pointers(&tmp);
-        assert!(
-            pointers.active_task_id.is_none(),
-            "stub must return None for active_task_id"
+        assert_eq!(
+            pointers.active_task_id.as_deref(),
+            Some("active-from-disk")
         );
-        assert!(
-            pointers.focus_task_id.is_none(),
-            "stub must return None for focus_task_id"
-        );
+        assert_eq!(pointers.focus_task_id.as_deref(), Some("focus-from-disk"));
         let _ = fs::remove_dir_all(&tmp);
     }
 

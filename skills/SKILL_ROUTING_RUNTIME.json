@@ -100,6 +100,10 @@
         "address comments",
         "PR review summary",
         "pull request summary",
+        "reviewer feedback digest",
+        "changed-file digest",
+        "changed files summary",
+        "PR triage",
         "PR comments",
         "review comments",
         "PR 评论回复",
@@ -138,11 +142,18 @@
         "github actions",
         "CI 失败排查",
         "CI 修复",
+        "修复 CI",
+        "CI 里",
+        "模板编译失败",
         "workflow 失败",
         "fix build",
         "green ci",
         "ci broken",
-        "编译失败"
+        "编译失败",
+        "pull request summary CI failure",
+        "github actions pull request summary failing checks",
+        "failing checks",
+        "PR summary CI"
       ],
       "project",
       [
@@ -683,6 +694,27 @@
       "local",
       "skills/research-execution",
       "skills/research-execution/SKILL.md",
+      "skill",
+      null,
+      null
+    ],
+    [
+      "deep-research",
+      "L2",
+      "user",
+      "approve",
+      "P2",
+      "Deep research harness — fan-out web searches, fetch sources, verify claims, synthesize cited report.",
+      "preferred",
+      [
+        "深度调研",
+        "deep research",
+        "全面研究",
+        "deep-research"
+      ],
+      "local",
+      "skills/deep-research",
+      "skills/deep-research/SKILL.md",
       "skill",
       null,
       null

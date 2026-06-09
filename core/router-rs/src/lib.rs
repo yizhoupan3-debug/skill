@@ -15,7 +15,7 @@ pub use runtime_core::runtime_storage;
 pub mod session_supervisor;
 pub use runtime_core::trace_runtime;
 
-mod browser_mcp;
+pub mod browser_mcp;
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
 #[cfg(feature = "codegraph")]
@@ -32,7 +32,7 @@ mod hook_event_routing;
 mod eval_route;
 mod execution_contract;
 mod kernel_bootstrap;
-mod framework_host_targets;
+pub mod framework_host_targets;
 mod framework_maint;
 mod framework_profile;
 pub mod framework_runtime;
@@ -48,7 +48,7 @@ pub use core_policy::hook_policy;
 #[path = "utils/hook_posttool_normalize.rs"]
 mod hook_posttool_normalize;
 mod hook_timing;
-mod host_entrypoint_sync;
+pub mod host_entrypoint_sync;
 mod host_integration;
 pub mod framework_host_integration {
     //! Install/sync CLI surface (`framework host-integration`); historical module name `host_integration`.

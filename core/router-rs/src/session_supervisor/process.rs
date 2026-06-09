@@ -65,6 +65,9 @@ pub fn process_is_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;
     }
+    if reap_child_if_exited(pid) {
+        return false;
+    }
     // SAFETY: signal 0 is a POSIX existence check that delivers no signal.
     unsafe {
         let rc = libc::kill(pid as libc::pid_t, 0);
@@ -91,15 +94,29 @@ pub fn terminate_process(pid: u32) -> Result<(), String> {
     }
     #[cfg(unix)]
     {
-        send_signal(pid, libc::SIGTERM)?;
+        send_signal_to_pgrp(pid, libc::SIGTERM)?;
         for _ in 0..50 {
+            if reap_child_if_exited(pid) {
+                return Ok(());
+            }
             if !process_is_alive(pid) {
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
         }
         if process_is_alive(pid) {
-            send_signal(pid, libc::SIGKILL)?;
+            send_signal_to_pgrp(pid, libc::SIGKILL)?;
+            for _ in 0..50 {
+                if reap_child_if_exited(pid) {
+                    return Ok(());
+                }
+                if !process_is_alive(pid) {
+                    return Ok(());
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+            // Last resort: block until the child is reaped so kill(0) won't see a zombie.
+            let _ = wait_for_child(pid, true);
         }
         Ok(())
     }
@@ -124,9 +141,17 @@ pub fn reconcile_process_state(worker: &mut WorkerSessionRecord) {
 }
 
 #[cfg(unix)]
-fn send_signal(pid: u32, signal: i32) -> Result<(), String> {
-    // SAFETY: pid is stored from a prior successful spawn in this supervisor.
-    let rc = unsafe { libc::kill(pid as libc::pid_t, signal) };
+fn send_signal_to_pgrp(pid: u32, signal: i32) -> Result<(), String> {
+    // setsid() in launch_process makes the worker a session leader; prefer pgid kill
+    // so shell-spawned children (e.g. smoke-shell's sleep loop) are terminated too.
+    let pgid = unsafe { libc::getpgid(pid as libc::pid_t) };
+    let target = if pgid > 0 {
+        -(pgid as libc::pid_t)
+    } else {
+        pid as libc::pid_t
+    };
+    // SAFETY: pid/pgid come from a prior successful spawn in this supervisor.
+    let rc = unsafe { libc::kill(target, signal) };
     if rc == 0 {
         return Ok(());
     }
@@ -134,5 +159,33 @@ fn send_signal(pid: u32, signal: i32) -> Result<(), String> {
     if err.raw_os_error() == Some(libc::ESRCH) {
         return Ok(());
     }
-    Err(format!("kill(pid={pid}, signal={signal}) failed: {err}"))
+    Err(format!("kill(target={target}, signal={signal}) failed: {err}"))
+}
+
+/// Reap a child that has exited (including zombie). Returns true when the pid is gone.
+#[cfg(unix)]
+fn reap_child_if_exited(pid: u32) -> bool {
+    wait_for_child(pid, false)
+}
+
+#[cfg(unix)]
+fn wait_for_child(pid: u32, block: bool) -> bool {
+    let mut status: i32 = 0;
+    let flags = if block { 0 } else { libc::WNOHANG };
+    loop {
+        // SAFETY: pid is from a prior spawn where this process remains the parent until reaped.
+        let waited = unsafe { libc::waitpid(pid as libc::pid_t, &mut status, flags) };
+        if waited > 0 {
+            return true;
+        }
+        if waited == 0 {
+            return false;
+        }
+        let err = io::Error::last_os_error();
+        match err.raw_os_error() {
+            Some(libc::ESRCH) | Some(libc::ECHILD) => return true,
+            Some(libc::EINTR) => continue,
+            _ => return false,
+        }
+    }
 }

@@ -310,7 +310,7 @@ spawned → running → draining → completed
 | `opencode` | `opencode` | `opencode-cli` |
 | `antigravity` | `antigravity` | `mcp-stdio` |
 
-> **退役 id**（`claude-desktop`、`codex-cli`、`codex-app`、`antigravity-app`、`antigravity-cli` 等）不在闭集内；仅保留 stub 重定向页，见 [`MIGRATION.md`](../MIGRATION.md) 与 [`docs/hosts/`](hosts/) 下 `status: retired` 页（如 [`antigravity-app.md`](hosts/antigravity-app.md)、[`claude-desktop.md`](hosts/claude-desktop.md)）。
+> **退役 id** 不在闭集内；仅保留 stub 重定向页，见 [`MIGRATION.md`](../MIGRATION.md) 与 [`docs/hosts/`](hosts/) 下 `status: retired` 页。
 
 ### 6.2 Hook 事件矩阵
 
@@ -563,7 +563,7 @@ pub trait HostHook {
 
 - `evaluate_closeout_record_value()` — 评估 closeout 记录
 - `summary_claims_completion()` — 摘要是否声称完成
-- **my-light**: advisory；**非 my-light**: 硬拦
+- **my-light**: advisory；**非 my-light**: closeout fail-closed
 - `closeout_gate` — 门控定义及拦截逻辑，用于验证是否满足 closeout 状态
 - `closeout_record_write` — 写入 closeout 记录与断言结果
 
@@ -591,8 +591,8 @@ pub trait HostHook {
 
 | Profile | REVIEW_GATE | AG_FOLLOWUP | closeout |
 |---------|:-----------:|:-----------:|:--------:|
-| my-light | advisory | advisory | advisory |
-| full | 硬拦 | 硬拦 | 硬拦 |
+| my-light | advisory（suppress nudge） | advisory | advisory |
+| full | advisory（nudge） | advisory | fail-closed |
 
 ---
 

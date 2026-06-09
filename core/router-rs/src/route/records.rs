@@ -28,6 +28,7 @@ pub(crate) fn load_records(
                 if manifest.exists() {
                     let meta = load_manifest_route_meta(manifest)?;
                     apply_manifest_route_meta(&mut records, &meta);
+                    apply_manifest_host_platforms(&mut records, manifest)?;
                 }
             }
             return Ok(records);
@@ -104,6 +105,7 @@ fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes
         host_platforms: indexes
             .host_platforms
             .and_then(|idx| row.get(idx))
+            .filter(|value| value.is_array())
             .map(value_to_string_list)
             .unwrap_or_default(),
         record_kind: indexes
@@ -150,6 +152,49 @@ fn apply_manifest_route_meta(
             apply_route_metadata_patch(record, patch);
         }
     });
+}
+
+fn apply_manifest_host_platforms(
+    records: &mut [SkillRecord],
+    manifest_path: &Path,
+) -> Result<(), String> {
+    let payload = read_json(manifest_path)?;
+    let rows = payload
+        .get("skills")
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("manifest missing skills rows: {}", manifest_path.display()))?;
+    let keys = payload
+        .get("keys")
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("manifest missing keys: {}", manifest_path.display()))?;
+    let key_index = keys
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, key)| key.as_str().map(|raw| (raw.to_string(), idx)))
+        .collect::<HashMap<_, _>>();
+    let idx_slug = *key_index
+        .get("slug")
+        .ok_or_else(|| format!("manifest missing slug key: {}", manifest_path.display()))?;
+    let Some(idx_hosts) = key_index.get("host_platforms") else {
+        return Ok(());
+    };
+    let mut hosts_by_slug = HashMap::new();
+    for row in rows.iter().filter_map(Value::as_array) {
+        if row.len() <= idx_slug.max(*idx_hosts) {
+            continue;
+        }
+        let slug = value_to_string(&row[idx_slug]);
+        let hosts = value_to_string_list(&row[*idx_hosts]);
+        if !hosts.is_empty() {
+            hosts_by_slug.insert(slug, hosts);
+        }
+    }
+    for record in records.iter_mut() {
+        if let Some(hosts) = hosts_by_slug.get(&record.slug) {
+            record.host_platforms = hosts.clone();
+        }
+    }
+    Ok(())
 }
 
 fn apply_route_metadata_patch(record: &mut SkillRecord, patch: &RouteMetadataPatch) {
@@ -540,7 +585,10 @@ pub(crate) fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>,
     );
     let indexes = RecordRowIndexes {
         skill_path: index.get("skill_path").copied(),
-        host_platforms: index.get("host_platforms").copied(),
+        host_platforms: index
+            .get("host_platforms")
+            .or_else(|| index.get("source_position"))
+            .copied(),
         record_kind: index.get("kind").copied(),
         ..indexes
     };

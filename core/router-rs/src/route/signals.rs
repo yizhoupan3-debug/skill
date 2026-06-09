@@ -850,6 +850,9 @@ pub(crate) fn has_ci_failure_context(query_text: &str, query_token_list: &[Strin
         "ci failure",
         "ci failing",
         "fix ci",
+        "修复 ci",
+        "ci 修复",
+        "模板编译失败",
     ]
     .iter()
     .any(|marker| {

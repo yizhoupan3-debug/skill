@@ -1182,3 +1182,202 @@ fn fresh_worker_not_reaped() {
 
     assert_eq!(workers[0].status, "running", "recent worker should NOT be reaped");
 }
+
+// ── Error-path operations (ported from runtime-core) ─────────────────────
+
+#[test]
+fn inspect_unknown_worker_returns_error() {
+    let state_path = temp_state_path("session-supervisor-inspect-unknown");
+    let _ = handle_session_supervisor_operation(json!({
+        "operation": "list",
+        "state_path": state_path,
+        "now": "2026-06-06T10:00:00Z",
+    }));
+    let err = handle_session_supervisor_operation(json!({
+        "operation": "inspect",
+        "state_path": state_path,
+        "worker_id": "does-not-exist",
+        "now": "2026-06-06T10:00:00Z",
+    }))
+    .expect_err("should reject unknown worker_id");
+    assert!(
+        err.contains("Unknown supervisor worker_id"),
+        "error: {err}"
+    );
+    let _ = fs::remove_file(state_path);
+}
+
+#[test]
+fn terminate_unknown_worker_returns_error() {
+    let state_path = temp_state_path("session-supervisor-term-unknown");
+    let _ = handle_session_supervisor_operation(json!({
+        "operation": "list",
+        "state_path": state_path,
+        "now": "2026-06-06T10:00:00Z",
+    }));
+    let err = handle_session_supervisor_operation(json!({
+        "operation": "terminate",
+        "state_path": state_path,
+        "worker_id": "ghost-worker",
+        "now": "2026-06-06T10:00:00Z",
+    }))
+    .expect_err("should reject unknown worker_id");
+    assert!(
+        err.contains("Unknown supervisor worker_id"),
+        "error: {err}"
+    );
+    let _ = fs::remove_file(state_path);
+}
+
+#[test]
+fn mark_blocked_unknown_worker_returns_error() {
+    let state_path = temp_state_path("session-supervisor-mark-unknown");
+    let _ = handle_session_supervisor_operation(json!({
+        "operation": "list",
+        "state_path": state_path,
+        "now": "2026-06-06T10:00:00Z",
+    }));
+    let err = handle_session_supervisor_operation(json!({
+        "operation": "mark_blocked",
+        "state_path": state_path,
+        "worker_id": "missing-worker",
+        "evidence_text": "429 Too Many Requests",
+        "now": "2026-06-06T10:00:00Z",
+    }))
+    .expect_err("should reject unknown worker_id");
+    assert!(
+        err.contains("Unknown supervisor worker_id"),
+        "error: {err}"
+    );
+    let _ = fs::remove_file(state_path);
+}
+
+#[test]
+fn launch_unsupported_host_returns_error() {
+    let state_path = temp_state_path("session-supervisor-launch-unsupported");
+    let err = handle_session_supervisor_operation(json!({
+        "operation": "launch",
+        "state_path": state_path,
+        "host": "unsupported-ai",
+        "cwd": "/tmp/project",
+        "dry_run": true,
+        "now": "2026-06-06T10:00:00Z",
+    }))
+    .expect_err("should reject unsupported host");
+    assert!(err.contains("Unsupported"), "error: {err}");
+    let _ = fs::remove_file(state_path);
+}
+
+#[test]
+fn launch_missing_host_returns_error() {
+    let state_path = temp_state_path("session-supervisor-launch-no-host");
+    let err = handle_session_supervisor_operation(json!({
+        "operation": "launch",
+        "state_path": state_path,
+        "cwd": "/tmp/project",
+        "dry_run": true,
+        "now": "2026-06-06T10:00:00Z",
+    }))
+    .expect_err("should reject missing host");
+    assert!(err.contains("host"), "error: {err}");
+    let _ = fs::remove_file(state_path);
+}
+
+#[test]
+fn launch_missing_cwd_returns_error() {
+    let state_path = temp_state_path("session-supervisor-launch-no-cwd");
+    let err = handle_session_supervisor_operation(json!({
+        "operation": "launch",
+        "state_path": state_path,
+        "host": "codex",
+        "dry_run": true,
+        "now": "2026-06-06T10:00:00Z",
+    }))
+    .expect_err("should reject missing cwd");
+    assert!(err.contains("cwd"), "error: {err}");
+    let _ = fs::remove_file(state_path);
+}
+
+#[test]
+fn resume_due_skips_worker_not_yet_due() {
+    let state_path = temp_state_path("session-supervisor-resume-not-due");
+    let now = "2026-06-06T10:00:00Z";
+    let launch = handle_session_supervisor_operation(json!({
+        "operation": "launch",
+        "state_path": state_path,
+        "host": "codex",
+        "cwd": "/tmp/project",
+        "worker_id": "not-due-worker",
+        "dry_run": true,
+        "now": now,
+    }))
+    .expect("launch");
+    let worker_id = launch["worker"]["worker_id"].as_str().unwrap();
+
+    handle_session_supervisor_operation(json!({
+        "operation": "mark_blocked",
+        "state_path": state_path,
+        "worker_id": worker_id,
+        "blocked_reason": "rate_limit",
+        "backoff_seconds": 600,
+        "now": now,
+    }))
+    .expect("mark blocked");
+
+    let result = handle_session_supervisor_operation(json!({
+        "operation": "resume_due",
+        "state_path": state_path,
+        "dry_run": true,
+        "now": now,
+    }))
+    .expect("resume_due");
+
+    let resumed = result["resumed_workers"].as_array().unwrap();
+    assert_eq!(
+        resumed.len(),
+        0,
+        "should not resume before backoff expires"
+    );
+
+    let _ = fs::remove_file(state_path);
+}
+
+#[test]
+fn legacy_store_json_with_tmux_fields_loads() {
+    use super::runtime::load_store;
+
+    let state_path = temp_state_path("session-supervisor-legacy-tmux");
+    let legacy_json = r#"{
+        "schema_version": "router-rs-session-supervisor-store-v1",
+        "version": 1,
+        "workers": [{
+            "worker_id": "legacy-worker",
+            "host": "codex",
+            "driver_id": "codex_driver",
+            "cwd": "/tmp/project",
+            "status": "queued",
+            "tmux_session": "legacy-session",
+            "tmux_pane": "0",
+            "native_tmux_requested": false,
+            "retry_policy": {},
+            "launch_command": {
+                "driver_id": "codex_driver",
+                "binary": "codex",
+                "args": [],
+                "shell_command": "codex",
+                "supports_resume": true
+            },
+            "created_at": "2026-06-06T10:00:00Z",
+            "updated_at": "2026-06-06T10:00:00Z",
+            "metadata": {},
+            "events": []
+        }]
+    }"#;
+    fs::write(&state_path, legacy_json).expect("write legacy store");
+
+    let store = load_store(&state_path).expect("load legacy store with tmux fields");
+    assert_eq!(store.workers.len(), 1);
+    assert_eq!(store.workers[0].worker_id, "legacy-worker");
+
+    let _ = fs::remove_file(state_path);
+}

@@ -204,7 +204,8 @@ mod tests {
 
     #[test]
     fn accepts_public_https_url_shape() {
-        assert!(validate_web_fetch_url("https://example.com/").is_ok());
+        // Use a literal public IP: some dev DNS proxies map example.com to RFC 2544 ranges.
+        assert!(validate_web_fetch_url("https://8.8.8.8/").is_ok());
     }
 
     #[test]
@@ -310,8 +311,8 @@ mod tests {
 
     #[test]
     fn browser_open_accepts_public_url() {
-        assert!(validate_browser_open_url("https://example.com/").is_ok());
-        assert!(validate_browser_open_url("http://github.com/").is_ok());
+        assert!(validate_browser_open_url("https://8.8.8.8/").is_ok());
+        assert!(validate_browser_open_url("http://93.184.216.34/").is_ok());
     }
 
     // --- Additional coverage tests ---

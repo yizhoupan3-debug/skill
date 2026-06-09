@@ -141,7 +141,7 @@ const ANTIGRAVITY_CLI_STRINGS: HostStrings = HostStrings {
     hook_state_salt_env: "ROUTER_RS_ANTIGRAVITY_CLI_HOOK_STATE_SALT",
     hook_state_unreadable_tag: "ANTIGRAVITY_CLI_HOOK_STATE_UNREADABLE",
     lifecycle_label: "Antigravity CLI",
-    spawn_first_host_id: "antigravity-cli",
+    spawn_first_host_id: "antigravity",
     paper_prose_hook_env: "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK",
     paper_adversarial_hook_env: "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK",
 };

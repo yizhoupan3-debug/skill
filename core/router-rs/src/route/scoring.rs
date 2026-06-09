@@ -83,15 +83,19 @@ pub(crate) fn score_route_candidate<'a>(
         }
     }
     if framework_alias_requires_explicit_call(record) && !explicit_framework_alias {
-        return RouteCandidate {
-            record,
-            score: 0.0,
-            reasons: vec![
-                "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
-                    .to_string(),
-            ],
-            matched_token_count: 0,
-        };
+        let ci_gate_nl_routing = record.slug == "gh-fix-ci"
+            && should_route_to_gh_fix_ci(query_text, query_token_list);
+        if !ci_gate_nl_routing {
+            return RouteCandidate {
+                record,
+                score: 0.0,
+                reasons: vec![
+                    "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
+                        .to_string(),
+                ],
+                matched_token_count: 0,
+            };
+        }
     }
     if let Some(done) = super::nl_route_adjustments::apply_nl_post_framework_alias_rules(
         record,

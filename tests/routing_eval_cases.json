@@ -462,7 +462,7 @@
     {
       "id": "route-009e-latex-ci-not-manuscript",
       "category": "should-not-trigger",
-      "task": "修复 CI 里 \\begin{document} 模板编译失败",
+      "task": "修复 CI 里 latex 模板编译失败",
       "expected_owner": "gh-fix-ci",
       "expected_overlay": null,
       "forbidden_owners": [

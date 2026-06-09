@@ -119,6 +119,12 @@ Follow the shared artifact rules in
 - Confirm images, links, notes, and comments were not dropped accidentally.
 - Re-render when pagination, tables, or visual layout matters.
 
+## Batch artifacts
+
+- Batch catalog: `ooxml-batch/catalog.json` (checkpoint + `results.jsonl` alongside).
+- Install pinned OOXML CLI: `bash scripts/install-ooxml-tool.sh` (repo root).
+- 禁止在 skill 正文默认写 `cargo run` 作为操作员主路径；已安装二进制或 Just `install-ooxml` 优先。
+
 ## Hard constraints
 
 - Do not treat extracted text as enough when layout is in scope.

@@ -7,6 +7,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -19,6 +20,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -31,6 +33,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -56,6 +59,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -68,6 +72,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -93,6 +98,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -105,6 +111,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -117,6 +124,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -129,6 +137,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -167,6 +176,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -179,6 +189,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -191,6 +202,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -203,6 +215,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -215,6 +228,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -227,6 +241,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -250,7 +265,11 @@
     "python-env-management": {
       "host_support": {
         "platforms": [
-          "cursor"
+          "antigravity",
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
         ]
       },
       "kind": "skill",
@@ -261,6 +280,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -273,6 +293,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -285,6 +306,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -297,6 +319,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -309,6 +332,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -321,6 +345,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]
@@ -359,6 +384,7 @@
         "platforms": [
           "antigravity",
           "claude-code",
+          "codex",
           "cursor",
           "opencode"
         ]

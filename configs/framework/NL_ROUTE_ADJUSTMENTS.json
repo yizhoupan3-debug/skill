@@ -4,6 +4,18 @@
   "pre_framework_alias_rules": [
     {
       "when": {
+        "signal": "should_route_to_gh_fix_ci"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: PR summary mixed with CI failure routes to gh-fix-ci."
+      },
+      "record": {
+        "slug": "gh-address-comments"
+      }
+    },
+    {
+      "when": {
         "not": {
           "signal": "should_route_to_gh_fix_ci"
         }
@@ -344,6 +356,116 @@
         "type": "boost",
         "delta": 48.0,
         "reason": "GitHub CI gate boost applied: CI or failing-check workflow wording detected."
+      },
+      "record": {
+        "slug": "gh-fix-ci"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_github_pr_context"
+          },
+          {
+            "signal": "has_ci_failure_context"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 60.0,
+        "reason": "GitHub CI gate boost applied: PR summary mixed with CI failure wording."
+      },
+      "record": {
+        "slug": "gh-fix-ci"
+      }
+    },
+    {
+      "when": {
+        "signal": "should_route_to_gh_fix_ci"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: professor-outreach slug must not hijack GitHub CI gate queries via the `ci` name token."
+      },
+      "record": {
+        "slug": "tao-ci"
+      }
+    },
+    {
+      "when": {
+        "signal": "should_route_to_gh_fix_ci"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: GitHub CI gate owns failing-check triage before generic debugging lanes."
+      },
+      "record": {
+        "slug": "systematic-debugging"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "should_route_to_gh_fix_ci"
+          },
+          {
+            "not": {
+              "signal": "has_sentry_context"
+            }
+          }
+        ]
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: GitHub CI gate owns failing-check triage unless explicit production-error/Sentry context."
+      },
+      "record": {
+        "slug": "sentry"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_ci_failure_context"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: documentation lanes must not beat GitHub CI gate on failing-check triage."
+      },
+      "record": {
+        "slug": "doc"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "ablation"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 60.0,
+        "reason": "Research-execution boost applied: experiment ablation design wording detected."
+      },
+      "record": {
+        "slug": "research-execution"
+      }
+    },
+    {
+      "when": {
+        "all": [
+          {
+            "signal": "has_ci_failure_context"
+          },
+          {
+            "query_contains": "编译"
+          }
+        ]
+      },
+      "action": {
+        "type": "boost",
+        "delta": 60.0,
+        "reason": "GitHub CI gate boost applied: CI compile/build failure triage detected."
       },
       "record": {
         "slug": "gh-fix-ci"

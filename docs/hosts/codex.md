@@ -27,7 +27,7 @@ depends_on:
   - 核心状态与任务物化存放在 `artifacts/current/<task_id>/` 目录下。
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
-  - **非 my-light** 时，`UserPromptSubmit` 可注入 `spawn_first_nudge` 触发审稿引导；**`lifecycle_profile: my-light`**（默认 My 链）下 **不**注入 spawn-first，Stop 上 **`REVIEW_GATE` 硬拦关闭**，仍可用 findings-only review。深度 Review 规范见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
+  - **非 my-light** 时，`UserPromptSubmit` 可注入 `spawn_first_nudge` 触发审稿引导；**`lifecycle_profile: my-light`**（默认 My 链）下 **不**注入 spawn-first，Stop 上 **`REVIEW_GATE` advisory nudge 关闭**，仍可用 findings-only review。深度 Review 规范见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)。
   - 通过 `Stop` 钩子处理 `REVIEW_GATE` 阶段判断与收尾验证。
 
 ## Fail-open / Fail-closed 设计意图
@@ -41,7 +41,7 @@ Codex CLI 采用 **fail-closed** 策略：hook 二进制缺失时，各生命周
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks/mod.rs`](../../core/router-rs/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭硬拦 |
+| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks/mod.rs`](../../core/router-rs/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭 review nudge |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CODEX_PAPER_PROSE_HOOK`）；`ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 | **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
@@ -78,7 +78,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
 2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`，明确 minimal delta 与 verification plan，并报用户审批。
 3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
-   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`（关闭 Stop 上 `REVIEW_GATE` 硬拦与 UPS spawn-first nudge；findings-only review 仍可用）。
+   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`（suppress Stop 上 `REVIEW_GATE` advisory nudge 与 UPS spawn-first nudge；findings-only review 仍可用）。
 4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。
 
 ## Python 环境治理 (Python Environment)

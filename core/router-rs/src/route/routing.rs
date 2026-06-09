@@ -10,7 +10,7 @@ use super::scoring::{
     score_bucket, score_route_candidate,
 };
 use super::scoring_config::scoring_weights;
-use super::signals::{build_route_context, is_overlay_record};
+use super::signals::{build_route_context, is_overlay_record, should_route_to_gh_fix_ci};
 use super::text::{common_route_stop_tokens, normalize_text, tokenize_route_text};
 use super::types::{
     MatchRow, RouteContextPayload, RouteDecision, RouteDecisionSnapshotPayload, SearchMatchPayload,
@@ -624,8 +624,19 @@ fn fuzzy_rescue_primary_record<'a>(
     records: &'a [SkillRecord],
     query: &str,
 ) -> Option<(&'a SkillRecord, f64)> {
+    let normalized = normalize_text(query);
+    let tokens = tokenize_route_text(query);
+    let ci_gate = should_route_to_gh_fix_ci(&normalized, &tokens);
     fuzzy_rescue_best_match(
-        records.iter().filter(|record| !is_overlay_record(record)),
+        records.iter().filter(|record| {
+            if is_overlay_record(record) {
+                return false;
+            }
+            if ci_gate && record.slug == "gh-address-comments" {
+                return false;
+            }
+            true
+        }),
         query,
     )
 }

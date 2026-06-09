@@ -92,6 +92,12 @@ For PDF audits, preserve at least:
   - inspect the latest images
 - If render review is blocked by missing dependencies, say so clearly and note the remaining risk.
 
+### 4. Rust batch (`pdf_tool_rs`)
+
+- Batch driver writes `pdf-batch/catalog.json`, `results.jsonl`, and `checkpoint.json`.
+- `--skip-scanned` skips image-only PDFs after a shallow `content_class` probe (`skip_scanned` warning in results).
+- Throughput bench: `PDF_BENCH=1 cargo bench -p pdf_tool_rs --bench batch_bench` (no-op without `PDF_BENCH`).
+
 ## Dependencies
 
 Prefer `uv` when installing Python dependencies.

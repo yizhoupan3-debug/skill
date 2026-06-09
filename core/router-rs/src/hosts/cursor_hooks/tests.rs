@@ -5108,6 +5108,7 @@ fn post_tool_use_subagent_sets_phase() {
 #[test]
 fn goal_stop_followup_is_short_code_only() {
     let _my_light = MyLightOverrideGuard::force_non_my_light();
+    use std::env;
     let repo = fresh_repo();
     let cwd = repo.display().to_string();
     fs::create_dir_all(repo.join("artifacts/current/t-s17")).expect("mkdir");
@@ -5133,6 +5134,8 @@ fn goal_stop_followup_is_short_code_only() {
         "drive_until_done": true,
     }))
     .expect("goal start");
+    let prev_close_style = env::var_os("ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE");
+    env::set_var("ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE", "0");
     let hook_ev = |session: &str, prompt: &str| {
         json!({ "session_id": session, "cwd": cwd, "prompt": prompt })
     };
@@ -5174,6 +5177,10 @@ fn goal_stop_followup_is_short_code_only() {
             !second_msg.contains("Autopilot goal mode:"),
             "Stop must not dump full goal contract prose; second_msg={second_msg:?}"
         );
+    }
+    match prev_close_style {
+        Some(v) => env::set_var("ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE", v),
+        None => env::remove_var("ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE"),
     }
 }
 

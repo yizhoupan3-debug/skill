@@ -14,7 +14,7 @@ related_incidents:
 
 > **目的**：防止 projection 生成的配置键名/路径与宿主真实 schema 不一致。
 >
-> 2026-06-04 发现 opencode/cursor/antigravity-app 三宿主同款 bug：projection adapter 从一个宿主抄到另一个时 key 名未按目标宿主真实 schema 改。**本文仅保留闭集矩阵与自检机制；详细 bug 清单与修复 PR 顺序见源码 `projection.rs` 及 git history。**
+> 2026-06-04 发现 opencode/cursor/antigravity 三宿主同款 bug：projection adapter 从一个宿主抄到另一个时 key 名未按目标宿主真实 schema 改。**本文仅保留闭集矩阵与自检机制；详细 bug 清单与修复 PR 顺序见源码 `projection.rs` 及 git history。**
 
 ## 闭集 MCP Key 矩阵（新增宿主须先填这一行）
 
@@ -26,7 +26,7 @@ related_incidents:
 | `codex` | `~/.codex/config.toml` | `[mcp_servers]` (TOML snake) | 隐式 | `command` | `mcp_servers.router-rs-framework` |
 | `cursor` | `~/.cursor/mcp.json` | `mcpServers` (camel) | `"stdio"` | `command` | `mcpServers.browser-mcp` |
 | `opencode` | `~/.config/opencode/opencode.json` | `mcp` (**无 Servers**) | `"local"` | `command: string[]` | `mcp.router-rs-framework` |
-| `antigravity-app` | `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | `"stdio"` | `command` | `mcpServers.router-rs-framework` |
+| `antigravity` | `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | `"stdio"` | `command` | `mcpServers.router-rs-framework` |
 
 **三个易踩坑**：① TOML snake_case vs JSON camelCase；② opencode 是唯一不带 `Servers` 后缀的；③ opencode 唯一用 `"local"` 而非 `"stdio"`。
 

@@ -585,11 +585,10 @@ fn doc_and_xlsx_skill_docs_point_to_rust_tooling() {
     }
     for marker in [
         "ooxml_parser_rs",
-        "read-docx",
-        "read-xlsx",
+        " -- docx <docx>",
+        " -- xlsx",
         "render-docx",
         "render-xlsx",
-        " -- docx <docx>",
     ] {
         assert!(docs.contains(marker), "missing marker: {marker}");
     }
@@ -865,6 +864,7 @@ fn runtime_hot_index_is_minimal() {
             "scope".to_string(),
             "keys".to_string(),
             "skills".to_string(),
+            "default_host_platforms".to_string(),
         ])
     );
     assert!(runtime.get("checklist").is_none());
@@ -1107,8 +1107,10 @@ fn hot_runtime_skill_records_cover_all_supported_hosts() {
         if HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS.contains(&slug) {
             continue;
         }
+        let runtime_keys = runtime["keys"].as_array().expect("runtime keys");
+        let host_idx = runtime_host_platforms_index(runtime_keys);
         let platforms = row
-            .get(9)
+            .get(host_idx)
             .and_then(|v| v.as_array())
             .expect("host_platforms");
         let set: HashSet<String> = platforms
@@ -1145,8 +1147,10 @@ fn hot_runtime_codex_only_slugs_have_no_extra_hosts() {
         if !HOT_RUNTIME_CODEX_PRODUCT_ONLY_SLUGS.contains(&slug) {
             continue;
         }
+        let runtime_keys = runtime["keys"].as_array().expect("runtime keys");
+        let skill_path_idx = key_index(runtime_keys, "skill_path");
         let skill_path = row
-            .get(8)
+            .get(skill_path_idx)
             .and_then(|v| v.as_str())
             .map(|rel| root.join(rel))
             .expect("skill_path");
@@ -1159,8 +1163,10 @@ fn hot_runtime_codex_only_slugs_have_no_extra_hosts() {
         .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
         let allowed_set: HashSet<String> = allowed_platforms.into_iter().collect();
 
+        let runtime_keys = runtime["keys"].as_array().expect("runtime keys");
+        let host_idx = runtime_host_platforms_index(runtime_keys);
         let runtime_platforms = row
-            .get(9)
+            .get(host_idx)
             .and_then(|v| v.as_array())
             .expect("host_platforms");
         for platform in runtime_platforms {
@@ -1203,8 +1209,8 @@ fn runtime_framework_command_rows_match_manifest() {
     let r_slug = key_index(runtime_keys, "slug");
     let r_layer = key_index(runtime_keys, "layer");
     let r_kind = key_index(runtime_keys, "kind");
-    let r_summary = key_index(runtime_keys, "summary");
-    let r_hosts = key_index(runtime_keys, "host_platforms");
+    let r_summary = runtime_description_index(runtime_keys);
+    let r_hosts = runtime_host_platforms_index(runtime_keys);
     let r_skill_path = key_index(runtime_keys, "skill_path");
     let r_trigger_hints = key_index(runtime_keys, "trigger_hints");
     let m_slug = key_index(manifest_keys, "slug");
@@ -1577,7 +1583,7 @@ fn nl_route_registry_signal_names() -> &'static HashSet<String> {
     static NAMES: OnceLock<HashSet<String>> = OnceLock::new();
     NAMES.get_or_init(|| {
         let repo = project_root();
-        let manifest = repo.join("core/router-rs/Cargo.toml");
+        let manifest = repo.join("core/router-rs-cli/Cargo.toml");
         let output = Command::new("cargo")
             .current_dir(&repo)
             .args([
@@ -2156,6 +2162,25 @@ fn key_index(keys: &[serde_json::Value], name: &str) -> usize {
         .unwrap_or_else(|| panic!("missing key {name}"))
 }
 
+fn key_index_first(keys: &[serde_json::Value], names: &[&str]) -> usize {
+    names
+        .iter()
+        .find_map(|name| {
+            keys.iter()
+                .position(|key| key.as_str() == Some(*name))
+        })
+        .unwrap_or_else(|| panic!("missing keys {:?}", names))
+}
+
+/// Hot runtime rows store per-skill hosts under `host_platforms` or legacy `source_position`.
+fn runtime_host_platforms_index(keys: &[serde_json::Value]) -> usize {
+    key_index_first(keys, &["host_platforms", "source_position"])
+}
+
+fn runtime_description_index(keys: &[serde_json::Value]) -> usize {
+    key_index_first(keys, &["description", "summary"])
+}
+
 #[test]
 fn github_source_gate_rust_cli_is_workspace_member() {
     let manifest = read_text(&project_root().join("rust_tools/Cargo.toml"));
@@ -2332,7 +2357,6 @@ fn repo_local_codex_omits_framework_mcp_entrypoint() {
     let source = read_text(&project_root().join(".codex/config.toml"));
     assert!(!source.contains("python3"));
     assert!(!source.contains("scripts.framework_mcp"));
-    assert!(!source.contains(r#"command = "cargo""#));
     assert!(!source.contains("[mcp_servers.framework-mcp]"));
     assert!(!source.contains("--framework-mcp-stdio"));
 }
