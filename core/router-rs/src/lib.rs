@@ -12,7 +12,7 @@ pub mod goal_drive {
 pub use runtime_core::background_state;
 pub use runtime_core::runtime_envelope_ids;
 pub use runtime_core::runtime_storage;
-pub use runtime_core::session_supervisor;
+pub mod session_supervisor;
 pub use runtime_core::trace_runtime;
 
 mod browser_mcp;
