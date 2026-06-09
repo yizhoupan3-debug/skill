@@ -2,6 +2,7 @@
 name = "runtime-core"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 [lib]
 name = "runtime_core"
@@ -9,14 +10,46 @@ path = "src/lib.rs"
 
 [dependencies]
 core-state = { path = "../core-state" }
-core-policy = { path = "../core-policy" }
+core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
+core-math = { path = "../core-math" }
 framework-kernel = { path = "../framework-kernel" }
 routing-engine = { path = "../routing-engine" }
 chrono = { version = "0.4", features = ["clock", "std", "serde"] }
+clap = { version = "4.5.38", features = ["derive"] }
 fs2 = "0.4"
 hex = "0.4"
+libc = "0.2"
+rayon = "1.10.0"
 regex = "1.11"
+reqwest = { version = "0.12.15", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.11"
+tungstenite = "0.24.0"
+which = "8.0.0"
+
+[build-dependencies]
+serde_json = "1.0"
+
+[features]
+default = [
+    "host-cursor",
+    "host-claude-code",
+    "host-opencode",
+    "host-antigravity",
+    "host-codex",
+]
+host-cursor = []
+host-claude-code = []
+host-opencode = []
+host-antigravity = []
+host-codex = []
+# Expose test helpers for downstream crate integration tests
+test-support = []
+# Codegraph MCP integration (gate for codegraph_mcp module in router-rs)
+codegraph = []
+
+[dev-dependencies]
+serial_test = "3"
+ctor = "0.2"
