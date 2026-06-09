@@ -27,6 +27,8 @@ pub struct EvolutionSection {
 pub struct ThresholdSection {
     #[serde(default = "default_jaccard_near_match")]
     pub jaccard_near_match: f32,
+    #[serde(default = "default_low_confidence_threshold")]
+    pub low_confidence_threshold: f32,
     #[serde(default = "default_healthy_score")]
     pub healthy_score: f32,
     #[serde(default = "default_stable_score")]
@@ -83,6 +85,7 @@ impl Default for ThresholdSection {
     fn default() -> Self {
         Self {
             jaccard_near_match: default_jaccard_near_match(),
+            low_confidence_threshold: default_low_confidence_threshold(),
             healthy_score: default_healthy_score(),
             stable_score: default_stable_score(),
             default_static_score: default_default_static_score(),
@@ -120,6 +123,9 @@ fn default_min_candidate_frequency() -> i32 {
 }
 fn default_jaccard_near_match() -> f32 {
     0.25
+}
+fn default_low_confidence_threshold() -> f32 {
+    0.45
 }
 fn default_healthy_score() -> f32 {
     85.0
@@ -185,6 +191,7 @@ mod tests {
         assert_eq!(cfg.evolution.audit_window_days, 30);
         assert_eq!(cfg.evolution.min_candidate_frequency, 2);
         assert_eq!(cfg.thresholds.jaccard_near_match, 0.25);
+        assert_eq!(cfg.thresholds.low_confidence_threshold, 0.45);
         assert_eq!(cfg.thresholds.healthy_score, 85.0);
         assert_eq!(cfg.thresholds.stable_score, 60.0);
         assert_eq!(cfg.weights.dynamic_blend, 0.6);

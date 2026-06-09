@@ -1,5 +1,5 @@
 use crate::config::EvolutionConfig;
-use crate::telemetry_journal::{load_telemetry_journal, TelemetryEvent};
+use crate::telemetry_journal::{event_within_window, load_telemetry_journal, TelemetryEvent};
 use anyhow::Context;
 use chrono::{Duration, Utc};
 use serde_json::json;
@@ -25,9 +25,15 @@ pub fn run_analyze(
     let mut rfv_round_total = 0usize;
     let mut rfv_verdict_by_bucket: HashMap<String, usize> = HashMap::new();
     let mut skill_usage: HashMap<String, usize> = HashMap::new();
+    let mut prediction_outcome_total = 0usize;
+    let mut prediction_outcome_matched = 0usize;
+    let mut prediction_outcome_mismatched = 0usize;
 
-    for event in &journal_data.events {
-        match event {
+    for stamped in &journal_data.events {
+        if !event_within_window(stamped.ts.as_deref(), cutoff) {
+            continue;
+        }
+        match &stamped.event {
             TelemetryEvent::RouteDecision {
                 skill,
                 confidence,
@@ -38,7 +44,7 @@ pub fn run_analyze(
                 if *reroute {
                     reroute_count += 1;
                 }
-                if *confidence < cfg.thresholds.jaccard_near_match {
+                if *confidence < cfg.thresholds.low_confidence_threshold {
                     low_confidence += 1;
                 }
                 *skill_usage.entry(skill.clone()).or_insert(0) += 1;
@@ -59,7 +65,14 @@ pub fn run_analyze(
                 *rfv_verdict_by_bucket.entry(bucket).or_insert(0) += 1;
             }
             TelemetryEvent::DevExempt { .. } => {}
-            TelemetryEvent::PredictionOutcome { .. } => {}
+            TelemetryEvent::PredictionOutcome { matched, .. } => {
+                prediction_outcome_total += 1;
+                if *matched {
+                    prediction_outcome_matched += 1;
+                } else {
+                    prediction_outcome_mismatched += 1;
+                }
+            }
         }
     }
 
@@ -77,8 +90,12 @@ pub fn run_analyze(
         "rfv_round_total": rfv_round_total,
         "rfv_verdict_by_bucket": rfv_verdict_by_bucket,
         "skill_usage": skill_usage,
+        "prediction_outcome_total": prediction_outcome_total,
+        "prediction_outcome_matched": prediction_outcome_matched,
+        "prediction_outcome_mismatched": prediction_outcome_mismatched,
         "thresholds": {
             "jaccard_near_match": cfg.thresholds.jaccard_near_match,
+            "low_confidence_threshold": cfg.thresholds.low_confidence_threshold,
             "healthy_score": cfg.thresholds.healthy_score,
         },
     });
@@ -145,6 +162,67 @@ mod tests {
         assert!(raw.contains("\"rfv_round_total\": 2"));
         assert!(raw.contains("\"pass\": 1"));
         assert!(raw.contains("\"fail\": 1"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn analyze_filters_events_outside_window_by_ts() {
+        let dir = std::env::temp_dir().join(format!(
+            "evo-analyze-window-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let journal = dir.join("events.jsonl");
+        let out = dir.join("evolution");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut f = std::fs::File::create(&journal).unwrap();
+        writeln!(
+            f,
+            r#"{{"ts":"2020-01-01T00:00:00Z","kind":"route_decision","task":"old","skill":"pdf","confidence":0.9,"reroute":false}}"#
+        )
+        .unwrap();
+        writeln!(
+            f,
+            r#"{{"ts":"{}","kind":"route_decision","task":"recent","skill":"pdf","confidence":0.9,"reroute":false}}"#,
+            Utc::now().to_rfc3339()
+        )
+        .unwrap();
+        let path = run_analyze(&journal, &out, 30, &EvolutionConfig::default()).unwrap();
+        let raw = std::fs::read_to_string(path).unwrap();
+        assert!(raw.contains("\"route_decisions\": 1"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn analyze_counts_prediction_outcomes() {
+        let dir = std::env::temp_dir().join(format!(
+            "evo-analyze-pred-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let journal = dir.join("events.jsonl");
+        let out = dir.join("evolution");
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut f = std::fs::File::create(&journal).unwrap();
+        writeln!(
+            f,
+            r#"{{"kind":"prediction_outcome","task_id":"t-1","matched":true,"predicted_verification_status":"passed","predicted_hypothesis":null,"actual_verification_status":"passed","checks_summary":"ok","checks":[]}}"#
+        )
+        .unwrap();
+        writeln!(
+            f,
+            r#"{{"kind":"prediction_outcome","task_id":"t-2","matched":false,"predicted_verification_status":"passed","predicted_hypothesis":null,"actual_verification_status":"failed","checks_summary":"mismatch","checks":[]}}"#
+        )
+        .unwrap();
+        let path = run_analyze(&journal, &out, 30, &EvolutionConfig::default()).unwrap();
+        let raw = std::fs::read_to_string(path).unwrap();
+        assert!(raw.contains("\"prediction_outcome_total\": 2"));
+        assert!(raw.contains("\"prediction_outcome_matched\": 1"));
+        assert!(raw.contains("\"prediction_outcome_mismatched\": 1"));
         let _ = std::fs::remove_dir_all(dir);
     }
 

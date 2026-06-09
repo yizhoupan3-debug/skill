@@ -7,6 +7,7 @@ min_candidate_frequency = 2
 
 [thresholds]
 jaccard_near_match = 0.25
+low_confidence_threshold = 0.45
 healthy_score = 85.0
 stable_score = 60.0
 default_static_score = 85.0

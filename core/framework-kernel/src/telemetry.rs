@@ -1,4 +1,5 @@
 //! MPSC telemetry pipeline: workers enqueue, Log Aggregator serializes disk writes.
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -138,14 +139,25 @@ impl LogAggregator {
     }
 }
 
+#[derive(Serialize)]
+struct JournalLine<'a> {
+    ts: String,
+    #[serde(flatten)]
+    event: &'a TelemetryEvent,
+}
+
 fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result<(), String> {
     if buffer.is_empty() {
         return Ok(());
     }
     let mut lines = String::new();
     for event in buffer.drain(..) {
-        let line = serde_json::to_string(&event).map_err(|e| e.to_string())?;
-        lines.push_str(&line);
+        let line = JournalLine {
+            ts: Utc::now().to_rfc3339(),
+            event: &event,
+        };
+        let serialized = serde_json::to_string(&line).map_err(|e| e.to_string())?;
+        lines.push_str(&serialized);
         lines.push('\n');
     }
     {
@@ -298,6 +310,11 @@ mod tests {
         let raw = fs::read_to_string(&journal).unwrap();
         assert!(raw.contains("\"hook_fired\""));
         assert!(raw.contains("pre_tool"));
+        assert!(
+            raw.lines()
+                .any(|line| line.contains("\"ts\"") && line.contains("T")),
+            "expected RFC3339 ts on flushed journal lines"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }

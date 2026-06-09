@@ -1,12 +1,11 @@
 use chrono::{DateTime, Duration, Utc};
 use clap::{Parser, Subcommand};
 use evolution_rs::{
-    default_config_path, default_evolution_output_dir, default_telemetry_journal_path, load_config,
-    run_analyze, run_health_score, EvolutionConfig,
+    default_config_path, default_evolution_output_dir, default_telemetry_journal_path,
+    load_audit_journal_entries, load_config, run_analyze, run_health_score, AuditJournalEntry,
+    EvolutionConfig,
 };
 use fs2::FileExt;
-use memmap2::Mmap;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -14,55 +13,6 @@ use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct JournalEntry {
-    #[serde(rename = "t")]
-    ts: String,
-    #[serde(rename = "tk")]
-    task: String,
-    #[serde(rename = "i")]
-    init: String,
-    #[serde(rename = "f")]
-    final_skill: String,
-    #[serde(rename = "c", default)]
-    conf: f32,
-    #[serde(rename = "d", default)]
-    diff: i32,
-    #[serde(rename = "r", default)]
-    reroute: bool,
-    #[serde(rename = "s", default)]
-    struggle: i32,
-    #[serde(rename = "re", default)]
-    reason: String,
-    #[serde(rename = "ft", default)]
-    failed_trigger: String,
-    #[serde(rename = "n", default)]
-    notes: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct LegacyEntry {
-    ts: String,
-    task: String,
-    init: String,
-    #[serde(rename = "final")]
-    final_skill: String,
-    #[serde(default)]
-    conf: f32,
-    #[serde(default)]
-    diff: i32,
-    #[serde(default)]
-    reroute: bool,
-    #[serde(default)]
-    struggle: i32,
-    #[serde(default)]
-    reason: String,
-    #[serde(default)]
-    failed_trigger: String,
-    #[serde(default)]
-    notes: String,
-}
 
 #[derive(Parser)]
 #[command(name = "evolution-rs")]
@@ -174,50 +124,8 @@ fn stem(word: &str) -> String {
     s
 }
 
-fn load_entries_parallel(path: &PathBuf) -> anyhow::Result<Vec<JournalEntry>> {
-    let file = match File::open(path) {
-        Ok(file) => file,
-        Err(err) if err.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(err) => return Err(err.into()),
-    };
-    let mmap = unsafe { Mmap::map(&file)? };
-
-    // R21/R24: Split by newlines and process in parallel
-    let entries: Vec<JournalEntry> = mmap
-        .as_parallel_slice()
-        .par_split(|&b| b == b'\n')
-        .filter_map(|line_bytes| {
-            if line_bytes.is_empty() {
-                return None;
-            }
-            let line = std::str::from_utf8(line_bytes).ok()?.trim();
-            if line.is_empty() {
-                return None;
-            }
-
-            if let Ok(e) = serde_json::from_str::<JournalEntry>(line) {
-                Some(e)
-            } else if let Ok(l) = serde_json::from_str::<LegacyEntry>(line) {
-                Some(JournalEntry {
-                    ts: l.ts,
-                    task: l.task,
-                    init: l.init,
-                    final_skill: l.final_skill,
-                    conf: l.conf,
-                    diff: l.diff,
-                    reroute: l.reroute,
-                    struggle: l.struggle,
-                    reason: l.reason,
-                    failed_trigger: l.failed_trigger,
-                    notes: l.notes,
-                })
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    Ok(entries)
+fn load_entries_parallel(path: &PathBuf) -> anyhow::Result<Vec<AuditJournalEntry>> {
+    load_audit_journal_entries(path)
 }
 
 #[cfg(test)]
@@ -245,7 +153,7 @@ mod tests {
     }
 }
 
-fn entry_is_recent(entry: &JournalEntry, cutoff: DateTime<Utc>) -> bool {
+fn entry_is_recent(entry: &AuditJournalEntry, cutoff: DateTime<Utc>) -> bool {
     DateTime::parse_from_rfc3339(&entry.ts)
         .map(|ts| ts.with_timezone(&Utc) >= cutoff)
         .unwrap_or(true)

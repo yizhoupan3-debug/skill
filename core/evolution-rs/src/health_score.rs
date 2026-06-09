@@ -15,12 +15,12 @@ pub fn run_health_score(
     let journal_data = load_telemetry_journal(journal)?;
     let mut skill_stats: HashMap<String, (u32, u32)> = HashMap::new();
 
-    for event in &journal_data.events {
+    for stamped in &journal_data.events {
         if let TelemetryEvent::RouteDecision {
             skill,
             reroute,
             ..
-        } = event
+        } = &stamped.event
         {
             if skill.is_empty() || skill == "none" || skill == "general" {
                 continue;
