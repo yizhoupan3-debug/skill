@@ -9,7 +9,7 @@ plate: B3
 
 运行时编排：`framework_runtime`（stdio op registry/dispatch、`live_execute`）、任务物化、`session_supervisor` 原生进程管理（P8 去 tmux）、`framework_goal_drive` / task-state 解析。
 
-主实现仍在 `core/router-rs/src/framework_runtime/`，逻辑上属 B3 板块。
+主实现已迁移至 `core/runtime-core/src/framework_runtime/`，`router-rs` 通过 re-export 保持路径兼容，逻辑上属 B3 板块。
 
 ## 启动 / 配置
 
@@ -36,8 +36,8 @@ Env 与 flock：见 [`../harness_architecture/02-data-flows.md`](../harness_arch
 
 ## 相关路径
 
-- `core/router-rs/src/framework_runtime/`
-- `core/router-rs/src/session_supervisor/`
+- `core/runtime-core/src/framework_runtime/`
+- `core/runtime-core/src/session_supervisor/`
 - `artifacts/current/<task_id>/`
 - `docs/task_state_unified_resolve.md`
 - `docs/runtime_unified_spec.md`

@@ -10,7 +10,7 @@ depends_on:
 
 > **status: aspirational** — RFV 多轮 loop 在 `my-light` profile 下很少使用；本文件描述的结构化 external_research 流程为计划中的深度调研模式，当前大部分任务未触发此路径。
 
-**Rust 校验真源**：`core/router-rs/src/rfv_loop/`。`append_round` 在传入 **`external_research`** 且为 **JSON 对象**（非 `null`）时：**先** `validate_external_research_structured`（字段存在、非空字符串等基线）；**若** 当前任务 `RFV_LOOP_STATE.external_research_strict == true`（`start` 默认写入；磁盘缺键或非布尔则视为 `false` 以兼容旧账本），**再** `validate_external_research_strict`（可追溯来源、矛盾扫描体量、检索轨迹长度、`unknowns` 键等）。任一阶段失败 → **`Err`，不写盘**。机读草稿 schema：`configs/framework/RFV_EXTERNAL_RESEARCH.schema.json`（字段说明含 strict 期望；**数值下限以 Rust 为准**，避免 schema 与执行双真源）。
+**Rust 校验真源**：`core/runtime-core/src/rfv_loop/`。`append_round` 在传入 **`external_research`** 且为 **JSON 对象**（非 `null`）时：**先** `validate_external_research_structured`（字段存在、非空字符串等基线）；**若** 当前任务 `RFV_LOOP_STATE.external_research_strict == true`（`start` 默认写入；磁盘缺键或非布尔则视为 `false` 以兼容旧账本），**再** `validate_external_research_strict`（可追溯来源、矛盾扫描体量、检索轨迹长度、`unknowns` 键等）。任一阶段失败 → **`Err`，不写盘**。机读草稿 schema：`configs/framework/RFV_EXTERNAL_RESEARCH.schema.json`（字段说明含 strict 期望；**数值下限以 Rust 为准**，避免 schema 与执行双真源）。
 
 **Runbook**：外研有两种叙述形态——**compact**（由 supervisor 在 `external_research_summary` 压缩 prose）与 **structured**（本页的 JSON 负载，便于审计与 rollup）。结构化块**不负责**顶替 **verifier**：**PASS/FAIL** 仍以 **`verify_commands` 执行记录**、`EVIDENCE_INDEX`（及 `verify_result`）为准；定量复算同属「可执行验证」精神与 `lane-templates` 中的 `replay_command`。与 **STEM** **`adversarial_findings` / `falsification_tests`** 正交——后者管数理推翻面，本节管可追溯外研/API 形状。
 
@@ -29,6 +29,6 @@ depends_on:
 
 **操作员提示（2026-05 连续性退出）**：**无** hook `RFV_LOOP_CONTINUE` / digest。外研缺口时 supervisor 用 `framework_rfv_loop` stdio + 本文 / `RFV_EXTERNAL_RESEARCH.schema.json`；`HARNESS_OPERATOR_NUDGES.json` 仅为文案真源。深度合规 rollup：`task_state` 的 **`rfv_external_deep_structured_round_count`**（有对象即计数）与 **`rfv_external_strict_ok_round_count`**（仅当任务 `external_research_strict` 为真且该轮 blob 通过 strict 校验时递增）。**账本式外研路径**与 Execute `research_mode=deep`/Plan `plan_profile` 的职责分工（不自动合并）分层见 [`docs/spec.md`](../../spec.md#12-closeout-与生命周期) — **Closeout 与生命周期**。
 
-**与 `RUNTIME_REGISTRY.json` 的关系**：Execute **deep** 叙事**不**挂在 registry 的 `framework_commands` 块（退役的 autopilot 命令已删除）；`router-rs` 的 Execute live 塑形**不**在运行时读取 registry 中的 research 字段，真源为 [`core/router-rs/src/cli/runtime_ops/body.rs`](../../../core/router-rs/src/cli/runtime_ops/body.rs) 中 `build_live_execute_prompt` 的内嵌英文条款。改 deep 叙事时请同步该文件（`tests/policy_contracts.rs` 中有防漂移断言）。
+**与 `RUNTIME_REGISTRY.json` 的关系**：Execute **deep** 叙事**不**挂在 registry 的 `framework_commands` 块（退役的 autopilot 命令已删除）；`router-rs` 的 Execute live 塑形**不**在运行时读取 registry 中的 research 字段，真源为 [`core/runtime-core/src/cli/runtime_ops/body.rs`](../../../core/runtime-core/src/cli/runtime_ops/body.rs) 中 `build_live_execute_prompt` 的内嵌英文条款。改 deep 叙事时请同步该文件（`tests/policy_contracts.rs` 中有防漂移断言）。
 
 **See also**: [lane-templates.md](lane-templates.md)（External research 深度模式）、[spec.md](../../spec.md#12-reasoning-depth-contract)、[spec.md](../../spec.md)。

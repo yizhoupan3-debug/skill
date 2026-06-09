@@ -43,7 +43,7 @@
 
 ## 4. 错误处理（Error Handling）
 
-**来源**：`core/core-state/src/`（error 类型）+ `core/router-rs/src/framework_error.rs`
+**来源**：`core/core-state/src/`（error 类型）+ `core/runtime-core/src/framework_error.rs`
 
 ### 分层规则
 

@@ -359,8 +359,8 @@ spawned → running → draining → completed
 | # | 文件 | 操作 |
 |---|------|------|
 | 1 | `configs/framework/RUNTIME_REGISTRY.json` | 注册宿主 id + 元数据 |
-| 2 | `core/router-rs/src/hosts/<host>_hook_host.rs` | 实现 `HostHook` trait |
-| 3 | `core/router-rs/src/hosts/<host>_hooks/` | 事件 handler 目录 |
+| 2 | `core/runtime-core/src/hosts/<host>_hook_host.rs` | 实现 `HostHook` trait |
+| 3 | `core/runtime-core/src/hosts/<host>_hooks/` | 事件 handler 目录 |
 
 ### 7.2 HostHook trait
 

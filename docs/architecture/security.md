@@ -46,7 +46,7 @@ depends_on:
 - `git reset --hard`
 - `git push --force`
 
-**实现位置**：`core/core-policy/src/hook_policy.rs`（`dangerous_mcp_tool_reason`）；`tools/call` 接线：`core/router-rs/src/mcp_pre_guard.rs` → `browser_mcp` / `mcp_stdio_harness`。
+**实现位置**：`core/core-policy/src/hook_policy.rs`（`dangerous_mcp_tool_reason`）；`tools/call` 接线：`core/runtime-core/src/mcp_pre_guard.rs` → `browser_mcp` / `mcp_stdio_harness`。
 
 ## 1. 测试层次
 

@@ -13,9 +13,9 @@ depends_on:
 ### 当前真源
 
 - Routing authority is Rust.
-- **Hook observation gate 分类**真源为 [`configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json`](../../configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json)（`schema_version`: **`router-rs-hook-observation-rules-v1`**）；由 `core/router-rs/src/hook_observation_rules.rs` **`include_str!`** 编译期嵌入 `router-rs`，驱动 `router_rs_observation` 对 `followup_message` / `additional_context` 的匹配顺序与 `router-rs <token>` → `gate.code` 映射。仅改工作区 JSON 不重建二进制则 hook 行为不变。
-- **路由启发式切片（第一批）**真源为 [`configs/framework/ROUTING_SIGNAL_MARKERS.json`](../../configs/framework/ROUTING_SIGNAL_MARKERS.json)（`schema_version`: **`routing-signal-markers-v1`**）；`core/router-rs/src/route/signals.rs` 以 **`include_str!`** 嵌入，供给 **`is_meta_routing_task`**、`build_route_context` 使用的 completion / supervisor marker 字符串表。契约去重见根 `tests/policy_contracts.rs` **`routing_signal_markers_json_unique_nonempty_lists`**。
-- **NL 热路由 per-record suppress/boost** 真源为 [`configs/framework/NL_ROUTE_ADJUSTMENTS.json`](../../configs/framework/NL_ROUTE_ADJUSTMENTS.json)（`schema_version`: **`nl-route-adjustments-v1`**）；由 `core/router-rs/src/route/nl_route_adjustments.rs` **`include_str!`** 嵌入，在 `score_route_candidate` 中与 `ROUTING_SIGNAL_MARKERS` 分层使用（前者：按 skill 记录的条件动作；后者：跨查询短语 marker）。
+- **Hook observation gate 分类**真源为 [`configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json`](../../configs/framework/ROUTER_RS_HOOK_OBSERVATION_RULES.json)（`schema_version`: **`router-rs-hook-observation-rules-v1`**）；由 `core/runtime-core/src/hook_observation_rules.rs` **`include_str!`** 编译期嵌入 `router-rs`，驱动 `router_rs_observation` 对 `followup_message` / `additional_context` 的匹配顺序与 `router-rs <token>` → `gate.code` 映射。仅改工作区 JSON 不重建二进制则 hook 行为不变。
+- **路由启发式切片（第一批）**真源为 [`configs/framework/ROUTING_SIGNAL_MARKERS.json`](../../configs/framework/ROUTING_SIGNAL_MARKERS.json)（`schema_version`: **`routing-signal-markers-v1`**）；`core/runtime-core/src/route/signals.rs` 以 **`include_str!`** 嵌入，供给 **`is_meta_routing_task`**、`build_route_context` 使用的 completion / supervisor marker 字符串表。契约去重见根 `tests/policy_contracts.rs` **`routing_signal_markers_json_unique_nonempty_lists`**。
+- **NL 热路由 per-record suppress/boost** 真源为 [`configs/framework/NL_ROUTE_ADJUSTMENTS.json`](../../configs/framework/NL_ROUTE_ADJUSTMENTS.json)（`schema_version`: **`nl-route-adjustments-v1`**）；由 `core/runtime-core/src/route/nl_route_adjustments.rs` **`include_str!`** 嵌入，在 `score_route_candidate` 中与 `ROUTING_SIGNAL_MARKERS` 分层使用（前者：按 skill 记录的条件动作；后者：跨查询短语 marker）。
 - **`skills/SKILL_PLUGIN_CATALOG.json`** 中 `skills.<slug>.host_support.platforms` 由 **`router-rs framework skills refresh`** 从各 **`skills/<slug>/SKILL.md`** 的 `platforms` / `metadata.platforms` 生成并归一到闭集宿主 id；**不要**手改 JSON 作为宿主列表真源。契约测试：`tests/policy_contracts.rs` 的 **`runtime_host_support_platforms_are_registry_closed_and_match_skill_md`**。
 - Live execution and dry-run preview use Rust stdio.
 - Runtime control plane publishes Rust-owned authority for `router`, `state`, `trace`, storage, and `background`.
@@ -48,8 +48,8 @@ depends_on:
 
 - **Non-Unix**: Hook helpers that depend on POSIX process semantics (for example lock staleness or `kill(pid, 0)`) use conservative defaults under `cfg(not(unix))` so builds stay green; behavior may differ from Linux/macOS until those paths are specialized.
 - **`libc` and `unsafe`**: Codex/Cursor hooks use narrow `unsafe` blocks for `flock`, `kill`, and related syscalls. Call sites are responsible for invariants; errors surface as structured hook outcomes, not panics, except where tests explicitly exercise failure injection.
-- **`ROUTER_RS_*` flags**: Parsing, default-on/default-off policy, and naming for environment toggles should stay in [`core/router-rs/src/router_env_flags.rs`](../../core/router-rs/src/router_env_flags.rs) so new flags do not sprawl across the crate.
-- **Browser MCP**: Browser MCP stdio in this repo is the Rust implementation (`core/router-rs/src/browser_mcp/` and CLI wiring). The TypeScript package `tools/browser-mcp/` has been retired; Rust is the sole product path.
+- **`ROUTER_RS_*` flags**: Parsing, default-on/default-off policy, and naming for environment toggles should stay in [`core/runtime-core/src/router_env_flags.rs`](../../core/runtime-core/src/router_env_flags.rs) so new flags do not sprawl across the crate.
+- **Browser MCP**: Browser MCP stdio in this repo is the Rust implementation (`core/runtime-core/src/browser_mcp/` and CLI wiring). The TypeScript package `tools/browser-mcp/` has been retired; Rust is the sole product path.
 
 ## External Benchmark
 

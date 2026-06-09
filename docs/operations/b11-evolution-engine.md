@@ -42,5 +42,5 @@ Hook 细粒度：`ROUTER_RS_HOOK_TIMING=1` → `HookFired` + timing 字段进 jo
 - `core/evolution-rs/`
 - `configs/evolution/evolution.toml`
 - `artifacts/telemetry/`（events.jsonl 等，以 runtime 为准）
-- `core/router-rs/src/session_supervisor/evolution_idle.rs`
+- `core/runtime-core/src/session_supervisor/evolution_idle.rs`
 - `artifacts/current/roadmap-v5-exec/lane-notes/phase-ev7-*.json`

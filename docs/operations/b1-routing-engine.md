@@ -33,6 +33,6 @@ plate: B1
 ## 相关路径
 
 - `core/routing-engine/`
-- `core/router-rs/src/route/`
+- `core/runtime-core/src/route/`
 - `skills/SKILL_ROUTING_RUNTIME.json`
 - `docs/rust_contracts/index.md`（`route` stdio 所有权）

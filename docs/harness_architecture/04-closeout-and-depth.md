@@ -22,7 +22,7 @@ depends_on:
 
 宿主里「说要深度调研」并不等于自动落盘 RFV 外研账本；三件事分工如下（仅指针，不重述全文）：
 
-- **Execute 内核**：`research_mode`/live prompt 塑形（[`runtime_ops.inc`](../../core/router-rs/src/cli/runtime_ops.inc) 的 `infer_research_mode` / `build_live_execute_prompt`）— 只管当次执行的回复结构提示，不起账本。
+- **Execute 内核**：`research_mode`/live prompt 塑形（[`runtime_ops.inc`](../../core/runtime-core/src/cli/runtime_ops.inc) 的 `infer_research_mode` / `build_live_execute_prompt`）— 只管当次执行的回复结构提示，不起账本。
 - **Plan 闸门**：`plan_profile: research` 与 Cursor 规则见 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md)、[`.cursor/rules/cursor-plan-output.mdc`](../../.cursor/rules/cursor-plan-output.mdc) — 约束计划形态，不经 hook 程序化强制 RFV。
 - **账本与外研**：可审计多轮 + 结构化 `external_research` 走 **`framework_rfv_loop`** / `RFV_LOOP_STATE.json`，见 [`docs/rfv_loop_harness.md`](../rfv_loop_harness.md)、[`references/rfv-loop/external-research-harness.md`](../references/rfv-loop/external-research-harness.md) 与 [`references/rfv-loop/reasoning-depth-contract.md`](../references/rfv-loop/reasoning-depth-contract.md)。
 

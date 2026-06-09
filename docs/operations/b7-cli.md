@@ -39,7 +39,7 @@ Framework 斜杠命令真源：`RUNTIME_REGISTRY.json` → `framework_commands.*
 
 ## 相关路径
 
-- `core/router-rs/src/cli/`
-- `core/router-rs/src/framework_runtime/router_command_dispatch.rs`
+- `core/runtime-core/src/cli/`
+- `core/runtime-core/src/framework_runtime/router_command_dispatch.rs`
 - `docs/architecture/components.md` §框架维护命令
 - `docs/framework_operator_primer.md` §自检

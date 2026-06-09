@@ -1,3 +1,5 @@
-//! browser-mcp (B5): stub re-exports from router-rs until B5 physical migration completes.
+//! browser-mcp (B5): re-exports from runtime-core (B3).
+//!
+//! Physical migration complete: dependency changed from router-rs → runtime-core.
 
-pub use router_rs::browser_mcp::*;
+pub use runtime_core::browser_mcp::*;

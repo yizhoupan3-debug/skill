@@ -34,7 +34,7 @@ L3 行为因宿主而异，详见各宿主手册（[Cursor](hosts/cursor.md) · 
 
 **Cursor L3 stale recovery**（`acquire_state_lock` 重试路径）：**仅当 holder PID 已死**时 `remove_file` lock 路径；`age_ms > 30s` 且 PID 仍存活时**只重试、不删路径**（避免双 inode 双 flock）。孤儿 lock 文件（无持有者）靠 `try_lock_exclusive` 直接成功。**7d age sweep**（`sweep_stale_hook_state_by_age`）：`.lock` **仅**在 holder PID 已死（或 lock 缺失/不可读）时可删；存活 holder 即使 `age>30s` 也不 unlink；关联 json 仍按 mtime/`updated_at` 判 7d 陈旧。**SessionEnd 清扫顺序**：当前 `session_key` state（持锁删除）→ `sweep_hook_state_tmp_orphans` → `SESSION_CALL_TRACKER.tmp` → **`sweep_stale_hook_state_by_age`**（默认 7d）→ 可选 `LEGACY_FULL_SWEEP` 全目录。锁不可用则 stderr `session_end_state_delete_skipped=lock_unavailable` 且保留 state 文件。
 
-Do not share one lock file between Cursor and Codex. See [`task_write_lock.rs`](../core/core-state/src/utils/task_write_lock.rs) and [`hosts/codex_hooks/mod.rs`](../core/router-rs/src/hosts/codex_hooks/mod.rs).
+Do not share one lock file between Cursor and Codex. See [`task_write_lock.rs`](../core/core-state/src/utils/task_write_lock.rs) and [`hosts/codex_hooks/mod.rs`](../core/runtime-core/src/hosts/codex_hooks/mod.rs).
 
 ## Env
 

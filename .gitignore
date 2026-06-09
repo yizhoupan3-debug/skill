@@ -136,3 +136,14 @@ core/router-rs/.claude/
 
 # Cursor hook backups
 .cursor/hooks.json.orig
+
+# Runtime-core runtime artifacts (generated at runtime)
+core/runtime-core/artifacts/
+
+# Temp test files in repo root
+/test.py
+/test_output.txt
+/test_terminate
+/test_terminate.rs
+/test_tx.rs
+/test_wait.rs

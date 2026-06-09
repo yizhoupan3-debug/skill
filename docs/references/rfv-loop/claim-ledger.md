@@ -10,7 +10,7 @@ depends_on:
 
 > **status: aspirational** — Claim Ledger 是 RFV 多轮 loop 中结构化 claim 管理的扩展机制；当前 `my-light` profile 下大部分任务未触发此路径。
 
-**Schema 真源**：`configs/framework/CLAIM_LEDGER_SCHEMA.json`（draft-07，`$id: https://local/framework/claim-ledger-v1`）。Rust 校验与生命周期管理待 `core/router-rs/src/rfv_loop/` 集成。
+**Schema 真源**：`configs/framework/CLAIM_LEDGER_SCHEMA.json`（draft-07，`$id: https://local/framework/claim-ledger-v1`）。Rust 校验与生命周期管理待 `core/runtime-core/src/rfv_loop/` 集成。
 
 ## 1. Claim 生命周期
 

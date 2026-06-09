@@ -12,10 +12,10 @@ depends_on:
 | 主题 | Canonical（裁判） | 只读派生 / 宿主差异 |
 |------|-------------------|---------------------|
 | 跨宿主语言、执行梯子、review 清门叙事、Git 边界、Knowledge hygiene | 仓库根 [`AGENTS.md`](../AGENTS.md)（对应章节见下表） | Cursor alwaysApply [`.cursor/rules/*.mdc`](../.cursor/rules/) **只写宿主硬差异**；须含指向 [`harness_policy_map.md`](harness_policy_map.md)、[`AGENTS.md`](../AGENTS.md)、[`harness_architecture.md`](harness_architecture/index.md) 的 markdown 链接。**CI**（[`tests/policy_cursor_rules_links.rs`](../tests/policy_cursor_rules_links.rs)）**仅**校验：`alwaysApply: true` 且首段 frontmatter 可被该测试解析闭合的 `.mdc`；目录内其它 `.mdc` 不在此项内。CI 还约定：链接须形如 `](url)` 且 `url` 满足相对指针形（`../`、`./`、`docs/`、或路径段中的 `/docs/`）；枚举规则文件时 `read_dir` **只扫 `.cursor/rules/` 一层**（不递归子目录）；**正文不要写独占行 `alwaysApply:`**（避免「opening `---` 后缺闭合 `---`」的畸形分支误判）。 |
-| 五层模型、证据流、续跑/门控、`ROUTER_RS_*` 语义与默认值 | [`harness_architecture/`](harness_architecture/index.md)（尤其 **[§5 开关面](harness_architecture/03-hook-and-switches.md#5-开关面)**） | [`router_env_flags.rs`](../core/router-rs/src/router_env_flags.rs) 仅提供 **helper 子集** + 注释索引；散落 `std::env::var` 仍以 harness §5 为准 |
+| 五层模型、证据流、续跑/门控、`ROUTER_RS_*` 语义与默认值 | [`harness_architecture/`](harness_architecture/index.md)（尤其 **[§5 开关面](harness_architecture/03-hook-and-switches.md#5-开关面)**） | [`router_env_flags.rs`](../core/runtime-core/src/router_env_flags.rs) 仅提供 **helper 子集** + 注释索引；散落 `std::env::var` 仍以 harness §5 为准 |
 | Skill 命中路径与 trigger | [`skills/SKILL_ROUTING_RUNTIME.json`](../skills/SKILL_ROUTING_RUNTIME.json) 的 `skill_path` | 各 `skills/**/SKILL.md` **不得**顶替 `AGENTS.md` 的总协议；命中后只读该 skill，不把 skill 全文当「第二 AGENTS」 |
 | 验证命令成功/失败（机读） | [`artifacts/current/<task_id>/EVIDENCE_INDEX.json`](../artifacts/current/) | 聊天复述、Plan todo 勾选**不能**单独充当 ship 证据；`GOAL_STATE` + `EVIDENCE_INDEX` 为 Cursor Stop `AG_FOLLOWUP` 磁盘真源（`ship_readiness.rs`）；「验证通过」等词**不**再触发 closeout 与 goal verify 双拦 |
-| Cursor Stop 门控编排 | [`ship_readiness.rs`](../core/router-rs/src/ship_readiness.rs) + [`handlers_stop.inc.rs`](../core/router-rs/src/hosts/cursor_hooks/handlers_parts/handlers_stop.inc.rs) | 每轮 Stop **最多一条** hard `followup_message`：closeout → REVIEW_GATE → AG_FOLLOWUP（`primary_fix=`）；`my-light` 仅 closeout + 软提示 |
+| Cursor Stop 门控编排 | [`ship_readiness.rs`](../core/runtime-core/src/ship_readiness.rs) + [`handlers_stop.inc.rs`](../core/runtime-core/src/hosts/cursor_hooks/handlers_parts/handlers_stop.inc.rs) | 每轮 Stop **最多一条** hard `followup_message`：closeout → REVIEW_GATE → AG_FOLLOWUP（`primary_fix=`）；`my-light` 仅 closeout + 软提示 |
 | 深度 review 产出形状（compact envelope、lane） | [`skills/code-review-deep/SKILL.md`](../skills/code-review-deep/SKILL.md) | `AGENTS.md` Execution Ladder 只指向该 skill，不复制 lens 表 |
 | Cursor 子代理模型继承 | [`.cursor/rules/subagent-model-inherit.mdc`](../.cursor/rules/subagent-model-inherit.mdc) + registry `subagent_model_inherit_nudge` | [`docs/hosts/cursor.md`](hosts/cursor.md)；`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` 见 harness §5 |
 | Cursor Plan / CreatePlan 契约 | [`skills/plan-mode/SKILL.md`](../skills/plan-mode/SKILL.md) | [`.cursor/rules/cursor-plan-output.mdc`](../.cursor/rules/cursor-plan-output.mdc) 保留 CreatePlan 硬自检条（宿主工具差异） |
@@ -35,7 +35,7 @@ depends_on:
 ## `ROUTER_RS_*` 与 hook 行为
 
 - **语义与默认**：只认 [`harness_architecture/03-hook-and-switches.md §5`](harness_architecture/03-hook-and-switches.md#5-开关面) 表格及该节正文脚注（含「`_CHARS` 实为字节」等命名债说明）。
-- **实现入口**：行为在 `router-rs` 各模块；环境变量读取入口索引见 [`router_env_flags.rs`](../core/router-rs/src/router_env_flags.rs) 模块头注释。
+- **实现入口**：行为在 `router-rs` 各模块；环境变量读取入口索引见 [`router_env_flags.rs`](../core/runtime-core/src/router_env_flags.rs) 模块头注释。
 
 ## Skills 边界（防「第二 AGENTS」）
 

@@ -34,7 +34,7 @@ cargo run --manifest-path core/autoresearch-rs/Cargo.toml -- --help
 
 ## 相关路径
 
-- `core/router-rs/src/rfv_loop.rs`
+- `core/runtime-core/src/rfv_loop.rs`
 - `core/autoresearch-rs/`
 - `docs/rfv_loop_harness.md`
 - `docs/references/rfv-loop/`

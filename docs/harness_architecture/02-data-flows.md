@@ -16,14 +16,14 @@ depends_on:
 ### 2.1 SessionStart（2026-05 连续性拔除后）
 
 - Codex / Cursor SessionStart **不**注入连续性 digest、`GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` 或 `depth_compliance` / `depth_compliance_refresh_hint` 段落（2026-05 hook 路径已拔除；`depth_compliance_aggregate` 与 `depth_compliance_refresh_hint` 仍供 **stdio / `task-state-resolve` / 遗留 env 单测**，**不**注入 SessionStart）。
-- **`ROUTER_RS_OPERATOR_INJECT` 总闸**：闸关时 Codex 无 `additionalContext`、Cursor `additional_context` 为空；闸开时仅允许 **轻量** 动态信息：Cursor **`Repo:`** 单行（[`handle_session_start`](../../core/router-rs/src/hosts/cursor_hooks/handlers_parts/handlers_session.inc.rs)）；Codex `SessionStart source:`。**无** digest、**无** SessionStart 指针 hint（分裂观测用 `framework task-state-resolve` / `framework doctor`）。
+- **`ROUTER_RS_OPERATOR_INJECT` 总闸**：闸关时 Codex 无 `additionalContext`、Cursor `additional_context` 为空；闸开时仅允许 **轻量** 动态信息：Cursor **`Repo:`** 单行（[`handle_session_start`](../../core/runtime-core/src/hosts/cursor_hooks/handlers_parts/handlers_session.inc.rs)）；Codex `SessionStart source:`。**无** digest、**无** SessionStart 指针 hint（分裂观测用 `framework task-state-resolve` / `framework doctor`）。
 - **禁止**：repo onboarding、Quick Reference、Build & test、Key paths、Tool cost hierarchy 等静态说明；禁止恢复 hook 驱动的 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`。
 - 出站仍按 UTF-8 **字节**预算截断（Cursor `...[~trunc]`；Codex `...`）。
 - 宏目标 / RFV 多轮：MCP `goal_state_manage`（Claude Desktop / Antigravity / OpenCode）或 `framework_goal_drive` stdio（CLI / Cursor / Codex）/ `framework_rfv_loop` stdio 与 `artifacts/current/<task_id>/` 手动画板；见 [`AGENTS_OPERATOR_SURFACE.md`](../references/AGENTS_OPERATOR_SURFACE.md)。
 
 ### 2.2 Skill routing
 
-- `skills/SKILL_ROUTING_RUNTIME.json` 是唯一**热路由**真源；运行时由 `core/router-rs/src/route/records.rs` 机读。
+- `skills/SKILL_ROUTING_RUNTIME.json` 是唯一**热路由**真源；运行时由 `core/runtime-core/src/route/records.rs` 机读。
 - 热 runtime 只保留：`version`、`schema_version`、`scope`、`keys`、`skills`。
 - 任何 plugin、projection、routing explain、兼容迁移叙事都不进热 runtime。
 - 冷真源 = **编译器 / 契约 / CI 消费集**，并非 hook 热路径读物：
@@ -39,7 +39,7 @@ depends_on:
 | [`configs/framework/host_projection_narrative.json`](../../configs/framework/host_projection_narrative.json) | 各宿主 framework 投影内的 **My lifecycle 默认链** 与 **review findings-only** 英文段落；`framework host-integration install` 渲染时读取。叙事政策仍以 [`AGENTS.md`](../../AGENTS.md) 为跨宿主真源，本 JSON 仅为安装产物文案真源。 |
 | [`configs/framework/GENERATED_ARTIFACTS.json`](../../configs/framework/GENERATED_ARTIFACTS.json) | 声明须纳入版本库的生成物路径、generator 命令与 `compare` 模式（`byte-for-byte` / `normalized-text`）。 |
 
-**`generated-artifacts-status` 两种模式**（[`host_integration/mod.rs`](../../core/router-rs/src/host_integration/mod.rs)）：
+**`generated-artifacts-status` 两种模式**（[`host_integration/mod.rs`](../../core/runtime-core/src/host_integration/mod.rs)）：
 
 | 模式 | 触发 | 行为 |
 |------|------|------|
@@ -109,8 +109,8 @@ failure_class / evidence_ref / context_bytes` 等复盘字段。它不替代
 
 **2026-05**：hook **不**再投影 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`；续跑仅 stdio + 手动画板（见 §2.1）。
 
-**可读模型**：当 `active_task.json` 指向的任务缺少可读 `GOAL_STATE.json`，但 `focus_task.json` 指向另一任务且该任务盘上存在合法 GOAL 时，[`resolve_task_view`](../../core/core-state/src/task_state.rs) 会在 `resolution_notes` 写入短码 `continuity:active_goal_missing_focus_has_goal`（仅观测；[`read_goal_state_for_hydration`](../../core/router-rs/src/autopilot_goal.rs) 仍不回退 focus）。`framework task-state-resolve` 可透出该行提示。
+**可读模型**：当 `active_task.json` 指向的任务缺少可读 `GOAL_STATE.json`，但 `focus_task.json` 指向另一任务且该任务盘上存在合法 GOAL 时，[`resolve_task_view`](../../core/core-state/src/task_state.rs) 会在 `resolution_notes` 写入短码 `continuity:active_goal_missing_focus_has_goal`（仅观测；[`read_goal_state_for_hydration`](../../core/runtime-core/src/autopilot_goal.rs) 仍不回退 focus）。`framework task-state-resolve` 可透出该行提示。
 
 **Stop 自动 checkpoint（已删除，2026-05）**：Cursor/Codex hook **不再**在 Stop 写盘。显式 checkpoint 仅用 Desktop MCP `session_checkpoint` 或 `framework_session_artifact_write` stdio。
 
-**L1 运行时视图与读模型**：[`load_framework_runtime_view`](../../core/router-rs/src/framework_runtime/runtime_view.rs) 的 `active_task_id` 选择与 [`resolve_task_view`](../../core/core-state/src/task_state.rs) 一致（`override > active > focus > supervisor`），见 [`task_state_unified_resolve.md`](../task_state_unified_resolve.md)。
+**L1 运行时视图与读模型**：[`load_framework_runtime_view`](../../core/runtime-core/src/framework_runtime/runtime_view.rs) 的 `active_task_id` 选择与 [`resolve_task_view`](../../core/core-state/src/task_state.rs) 一致（`override > active > focus > supervisor`），见 [`task_state_unified_resolve.md`](../task_state_unified_resolve.md)。
