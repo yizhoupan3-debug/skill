@@ -18,15 +18,18 @@ framework-kernel = { path = "../framework-kernel" }
 routing-engine = { path = "../routing-engine" }
 chrono = { version = "0.4", features = ["clock", "std", "serde"] }
 clap = { version = "4.5", features = ["derive"] }
+fs2 = "0.4"
 libc = "0.2"
+regex = "1.11"
+reqwest = { version = "0.12", features = ["blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sha2 = "0.10"
-reqwest = { version = "0.12", features = ["blocking"] }
+sha2 = "0.11"
 which = "8"
 
 [build-dependencies]
 serde_json = "1.0"
 
 [dev-dependencies]
+core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 serial_test = "3"
