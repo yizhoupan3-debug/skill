@@ -658,7 +658,7 @@ pub fn has_parallel_review_candidate_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    let markers = crate::review_routing_signals::parallel_review_candidate_markers();
+    let markers = crate::hooks::parallel_review_candidate_markers();
     let review_requested = markers.review_markers.iter().any(|marker| {
         // Avoid treating "revision" / "revisions" as a standalone "review" hit.
         if marker.as_str() == "review" {

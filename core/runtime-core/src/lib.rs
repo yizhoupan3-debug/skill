@@ -97,6 +97,34 @@ pub use hosts::codex_hooks;
 pub use hosts::claude_code_hooks;
 pub use hosts::mcp_stdio_harness;
 
+// ── routing-engine hook registration ──
+use std::sync::OnceLock;
+static ROUTING_HOOKS_INIT: OnceLock<()> = OnceLock::new();
+
+/// Register routing-engine hooks with runtime-core implementations.
+/// Safe to call multiple times; only the first call takes effect.
+pub fn register_routing_hooks() {
+    ROUTING_HOOKS_INIT.get_or_init(|| {
+        routing_engine::hooks::register_hooks(
+            core_policy::hook_common::is_review_prompt,
+            hosts::host_provider::host_provider_routing_aliases,
+            touch_test_kernel_bootstrap,
+            kernel_bootstrap::ensure_kernel_bootstrap,
+            skill_repo::discover_skill_policy_repo_root,
+            skill_repo::skill_routing_runtime_json,
+            || {
+                let m = core_policy::review_routing_signals::parallel_review_candidate_markers();
+                routing_engine::hooks::ParallelReviewMarkers {
+                    review_markers: m.review_markers,
+                    breadth_markers: m.breadth_markers,
+                    scope_markers: m.scope_markers,
+                }
+            },
+        )
+        .expect("routing hooks registration failed");
+    });
+}
+
 // ── test helpers ──
 #[cfg(test)]
 pub fn touch_test_kernel_bootstrap() {

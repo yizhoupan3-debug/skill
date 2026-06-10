@@ -4100,6 +4100,7 @@ name = "routing-engine"
 version = "0.1.0"
 dependencies = [
  "notify",
+ "rayon",
  "regex",
  "serde",
  "serde_json",

@@ -12,7 +12,6 @@ mod route_metadata_tests {
     use crate::route::has_paper_review_judgment_context;
     use crate::route::normalize_text;
     use crate::route::{RawSkillRecord, SkillRecord};
-    use crate::route_task_with_manifest_fallback;
     use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
@@ -497,31 +496,9 @@ mod route_metadata_tests {
         fs::remove_dir_all(root).expect("cleanup route root");
     }
 
-    #[test]
-#[ignore]
-    fn retired_autopilot_slash_commands_do_not_route_to_autopilot_owner() {
-        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
-        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
-        assert!(!records.iter().any(|record| record.slug == "autopilot"));
-        for query in ["/autopilot", "/autopilot-quick", "/autopilot-deep"] {
-            let decision = route_task_with_manifest_fallback(
-                &records,
-                Some(&runtime_path),
-                None,
-                None,
-                query,
-                "retired-autopilot-route",
-                false,
-                true,
-            )
-            .expect("route decision");
-            assert_ne!(
-                decision.selected_skill, "autopilot",
-                "retired /autopilot* must not select autopilot owner for {query}: {decision:?}"
-            );
-        }
-    }
+    // NOTE: retired_autopilot_slash_commands_do_not_route_to_autopilot_owner test
+    // remains in runtime-core because it depends on route_task_with_manifest_fallback
+    // which is defined in runtime-core's framework_runtime module.
 
     #[test]
 #[ignore]

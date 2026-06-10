@@ -221,8 +221,8 @@ fn apply_route_metadata_patch(record: &mut SkillRecord, patch: &RouteMetadataPat
 }
 
 fn default_runtime_path() -> Option<PathBuf> {
-    if let Some(root) = crate::skill_repo::discover_skill_policy_repo_root() {
-        let path = crate::skill_repo::skill_routing_runtime_json(&root);
+    if let Some(root) = crate::hooks::discover_skill_repo_root() {
+        let path = crate::hooks::skill_routing_runtime_json(&root);
         if path.is_file() {
             return Some(path);
         }

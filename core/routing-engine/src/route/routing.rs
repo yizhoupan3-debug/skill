@@ -230,7 +230,7 @@ pub fn filter_record_indices_for_host(
         return Ok((0..records.len()).collect());
     };
     let host_id = host_id.to_ascii_lowercase();
-    let aliases = crate::hosts::host_provider_routing_aliases(&host_id);
+    let aliases = crate::hooks::host_provider_routing_aliases(&host_id);
     let original_len = records.len();
     let mut saw_host = false;
     let mut indices = Vec::new();
@@ -285,8 +285,8 @@ pub fn route_task(
     allow_overlay: bool,
     first_turn: bool,
 ) -> Result<RouteDecision, String> {
-    crate::touch_test_kernel_bootstrap();
-    crate::kernel_bootstrap::ensure_kernel_bootstrap();
+    crate::hooks::touch_kernel_bootstrap();
+    crate::hooks::ensure_kernel_bootstrap();
     if records.is_empty() {
         return Err("No skill records available for route decision.".to_string());
     }

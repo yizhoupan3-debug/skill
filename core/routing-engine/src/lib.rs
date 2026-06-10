@@ -1,8 +1,11 @@
-//! B1 routing engine leaf modules: types, text normalization, fuzzy match, scoring weights.
+//! B1 routing engine: leaf modules, hook registry, and route orchestration.
 //!
-//! Orchestration (`route::routing`, signals, records) remains in `router-rs` until later phases.
+//! This crate provides skill routing (search, score, decide) with zero internal
+//! path dependencies. Runtime-core injects host-specific behavior via `hooks::register_hooks`.
 
 pub mod fuzzy;
+pub mod hooks;
+pub mod route;
 pub mod runtime_watch;
 pub mod scoring_config;
 pub mod text;
