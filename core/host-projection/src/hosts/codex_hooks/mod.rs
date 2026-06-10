@@ -2375,6 +2375,7 @@ fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use serde_json::json;
     use std::fs;
     use std::path::Path;
@@ -2978,6 +2979,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn user_prompt_submit_injects_paper_prose_hook_by_default() {
             let _g = env_lock();
             let prior_hook = std::env::var_os("ROUTER_RS_CODEX_PAPER_PROSE_HOOK");
@@ -3068,6 +3070,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn additional_context_is_deduped_and_capped() {
             let duplicate = "Codex live state: one".to_string();
             let long_line = "x".repeat(codex_additional_context_max_bytes());
@@ -3351,6 +3354,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn additional_context_truncates_on_newline_preference_under_small_budget() {
             // codex_additional_context_max_bytes clamps to [256, 8192]; use the
             // floor so the assertions exercise the real budget rather than a
@@ -3391,6 +3395,7 @@ mod tests {
         /// `additional_context_truncates_on_newline_preference_under_small_budget`
         /// (single blob + newline preference inside one segment).
         #[test]
+        #[serial]
         fn codex_compact_contexts_preserves_join_order_under_small_budget() {
             std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
             std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
@@ -4427,6 +4432,7 @@ mod tests {
         }
 
         #[test]
+        #[serial]
         fn stop_completion_claim_blocks_with_closeout_followup_when_strict() {
             let _g = env_lock();
             let prev = std::env::var_os("ROUTER_RS_CLOSEOUT_ENFORCEMENT");

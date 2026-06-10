@@ -70,6 +70,7 @@ include!("handlers.rs");
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::sync::Once;
 
     static TEST_DEPS_ONCE: Once = Once::new();

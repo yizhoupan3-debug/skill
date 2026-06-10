@@ -1458,6 +1458,7 @@ fn payload_runs_framework_tests(payload: &Value) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn silent_for_safe_read_only_bash() {
@@ -2449,6 +2450,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn user_prompt_submit_injects_paper_prose_by_default() {
         let _g = crate::hosts::test_shim::harness_nudges_env_test_lock();
         let prior = std::env::var_os("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
