@@ -529,11 +529,14 @@ fn verify_antigravity_projection_scope(
         ));
     }
     let mcp_text = fs::read_to_string(&mcp).map_err(|e| e.to_string())?;
-    if !mcp_text.contains("router-rs-framework") {
-        return Err(format!(
-            "verify_antigravity_projection: mcp.json must register router-rs-framework in scope {}",
-            scope
-        ));
+    let required_mcps = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
+    for mcp_id in &required_mcps {
+        if !mcp_text.contains(mcp_id) {
+            return Err(format!(
+                "verify_antigravity_projection: mcp.json must register {} in scope {}",
+                mcp_id, scope
+            ));
+        }
     }
     let md_text = fs::read_to_string(&framework_md).map_err(|e| e.to_string())?;
     if !md_text.contains("antigravity") {
@@ -622,11 +625,14 @@ fn verify_opencode_projection_scope(
     }
 
     let config_text = fs::read_to_string(&config).map_err(|e| e.to_string())?;
-    if !config_text.contains("router-rs-framework") {
-        return Err(format!(
-            "verify_opencode_projection: opencode.json must register router-rs-framework in scope {}",
-            scope
-        ));
+    let required_mcps = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
+    for mcp_id in &required_mcps {
+        if !config_text.contains(mcp_id) {
+            return Err(format!(
+                "verify_opencode_projection: opencode.json must register {} in scope {}",
+                mcp_id, scope
+            ));
+        }
     }
 
     Ok(())
@@ -680,6 +686,14 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         return Err(
             "verify_codex_hooks: .codex/config.toml must not use deprecated codex_hooks".into(),
         );
+    }
+    let required_mcps = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
+    for mcp_id in &required_mcps {
+        if !config.contains(mcp_id) {
+            return Err(format!(
+                "verify_codex_hooks: .codex/config.toml must register MCP server {mcp_id}"
+            ));
+        }
     }
 
     let hooks_text =

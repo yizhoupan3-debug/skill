@@ -50,7 +50,6 @@ fn jaccard_similarity(a: &HashSet<String>, b: &HashSet<String>) -> f64 {
 ///
 /// Both inputs are normalized (lowercased, whitespace-collapsed) before
 /// trigram extraction. Returns a Jaccard similarity in [0.0, 1.0].
-#[allow(dead_code)]
 pub fn trigram_similarity(a: &str, b: &str) -> f64 {
     let norm_a = normalize_text(a);
     let norm_b = normalize_text(b);

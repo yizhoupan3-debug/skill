@@ -234,14 +234,14 @@ impl Drop for SubagentModelInheritNudgeForceOnEnvGuard {
     }
 }
 
-/// 单测临时设置 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`，Drop 时还原。
+/// 单测临时设置 `ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES`（canonical），Drop 时还原。
 struct ReviewGateStopMaxNudgesEnvGuard {
     prev: Option<std::ffi::OsString>,
 }
 
 impl ReviewGateStopMaxNudgesEnvGuard {
     fn set(value: &str) -> Self {
-        let key = "ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES";
+        let key = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
         let prev = env::var_os(key);
         env::set_var(key, value);
         Self { prev }
@@ -250,7 +250,7 @@ impl ReviewGateStopMaxNudgesEnvGuard {
 
 impl Drop for ReviewGateStopMaxNudgesEnvGuard {
     fn drop(&mut self) {
-        let key = "ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES";
+        let key = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
         match self.prev.take() {
             Some(v) => env::set_var(key, v),
             None => env::remove_var(key),

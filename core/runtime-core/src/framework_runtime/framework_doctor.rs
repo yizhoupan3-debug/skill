@@ -72,7 +72,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
         crate::review_gate_engine::CursorReviewGateMode::Strict => "strict",
     };
     println!(
-        "ROUTER_RS_CURSOR_REVIEW_GATE_MODE: {review_mode} (env ROUTER_RS_CURSOR_REVIEW_GATE_MODE)"
+        "ROUTER_RS_REVIEW_GATE_MODE: {review_mode} (env ROUTER_RS_REVIEW_GATE_MODE, legacy ROUTER_RS_CURSOR_REVIEW_GATE_MODE)"
     );
     for (label, path) in &checks {
         let status = if path.is_file() {

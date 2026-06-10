@@ -107,6 +107,7 @@ pub fn evaluate_goal_readiness_from_disk(
     }
 }
 
+#[cfg(test)]
 pub fn goal_is_satisfied_flags(contract: bool, progress: bool, verification: bool) -> bool {
     contract && progress && verification
 }

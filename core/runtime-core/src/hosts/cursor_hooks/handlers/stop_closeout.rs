@@ -4,13 +4,20 @@
 
 /// Stop 收尾：在**无**硬 `followup_message` 时每轮稳定注入一条软提示，避免仅依赖规则时「有时有续跑段落、有时什么也没有」。
 ///
-/// 可用 `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE=0|false|off|no` 关闭（默认开启）。
+/// Canonical `ROUTER_RS_SESSION_CLOSE_STYLE_NUDGE`; legacy `ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE` still honored.
+/// `=0|false|off|no` 关闭（默认开启）。
 const SESSION_CLOSE_STYLE_LINE_PREFIX: &str = "SESSION_CLOSE_STYLE";
 
 fn session_close_style_stop_nudge_enabled_by_env() -> bool {
-    match std::env::var("ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE") {
-        Err(_) => true,
-        Ok(raw) => {
+    let canonical_key = "ROUTER_RS_SESSION_CLOSE_STYLE_NUDGE";
+    let legacy_key = "ROUTER_RS_CURSOR_SESSION_CLOSE_STYLE_NUDGE";
+    let raw = std::env::var(canonical_key)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| std::env::var(legacy_key).ok().filter(|s| !s.trim().is_empty()));
+    match raw {
+        None => true,
+        Some(raw) => {
             let t = raw.trim().to_ascii_lowercase();
             !matches!(t.as_str(), "" | "0" | "false" | "off" | "no")
         }

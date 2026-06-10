@@ -79,9 +79,11 @@ if __name__ == "__main__":
 
 ### Rust 实现
 
-参考本仓库两个 Rust MCP server：
-- `router-rs-framework`：stdio 模式，框架路由工具集
+参考本仓库四个 Rust MCP server（跨五宿主统一注册）：
+- `router-rs-framework`：stdio 模式，框架路由 / goal / closeout 工具集
 - `browser-mcp`：stdio 模式，带 session supervisor 的浏览器自动化
+- `mcp-codegraph`：stdio 模式，代码知识图谱（search/callers/callees/impact）
+- `paperplain`：stdio 模式，学术论文元数据检索（`npx -y paperplain-mcp`）
 
 Rust MCP server 通常基于 `rmcp` crate 或自行实现 JSON-RPC over stdio。
 
@@ -205,7 +207,9 @@ Server 可通过 `ctx.info()` / `ctx.warning()` / `ctx.error()` 发送日志到 
 ## 当前仓库参考
 
 - **router-rs-framework**：`core/router-rs/` — Rust stdio MCP server，提供框架路由、goal 管理、closeout 等工具
-- **browser-mcp**：`core/router-rs/src/browser_mcp/` — Rust stdio MCP（`router-rs-framework`），浏览器自动化，带 session supervisor 和 background job 管理
+- **browser-mcp**：`core/router-rs/src/browser_mcp/` — Rust stdio MCP（`router-rs browser mcp-stdio`），浏览器自动化，带 session supervisor 和 background job 管理
+- **mcp-codegraph**：`core/` 独立 crate `codegraph-rs` — Rust stdio MCP，代码知识图谱（search/callers/callees/impact/node/status）
+- **paperplain**：`npx -y paperplain-mcp` — Node stdio MCP，学术论文元数据检索（paper_metadata/paper_search）
 
 ## Exit Criteria
 

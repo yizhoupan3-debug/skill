@@ -22,7 +22,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
   framework host-integration install --to <host_id> --repo-root "$PWD"
 ```
 
-Registry 中 MCP 投影键：见 `RUNTIME_REGISTRY.json` → `mcp_servers` 各宿主映射（**勿**在本页维护宿主表）。
+Registry 中 MCP 投影键：见 `RUNTIME_REGISTRY.json` → `managed_mcp_servers.browser-mcp` 及各宿主 `managed_mcp_server_ids`。
 
 P8 后 **无 tmux** 依赖；`session_supervisor` 管理 attach 生命周期。
 
@@ -40,4 +40,4 @@ P8 后 **无 tmux** 依赖；`session_supervisor` 管理 attach 生命周期。
 - `core/runtime-core/src/browser_mcp/`
 - `core/runtime-core/src/web_fetch_guard.rs`
 - `docs/operations/security.md` §SSRF
-- `RUNTIME_REGISTRY.json` → `mcp_servers.browser-mcp` 各宿主键
+- `RUNTIME_REGISTRY.json` → `managed_mcp_servers.browser-mcp`（跨五宿主统一声明）

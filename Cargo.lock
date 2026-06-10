@@ -4111,6 +4111,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
+ "codegraph-rs",
  "core-math",
  "core-policy",
  "core-state",

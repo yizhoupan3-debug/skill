@@ -13,7 +13,7 @@ depends_on:
 
 ## 能力
 
-- **MCP**：`router-rs-framework` → `router-rs antigravity agent`
+- **MCP**：`router-rs-framework` · `browser-mcp` · `mcp-codegraph` · `paperplain`（via `.gemini/mcp.json`；**无 shell hook**）
 - **Planning Mode** + 物化 `ROADMAP.md` / `WAVE_STATE.json`
 - **无 shell hook 表**；门控经 MCP `goal_state_manage` / `closeout_gate`
 - **Review**：物理 `review-lanes/*.md`；非 Cursor multiset

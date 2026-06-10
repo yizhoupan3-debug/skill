@@ -14,9 +14,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 fn pick_router_rs_under_target_dir(base: &Path) -> Option<PathBuf> {
-    [base.join("debug/router-rs"), base.join("release/router-rs")]
-        .into_iter()
-        .find(|candidate| candidate.is_file())
+    [
+        base.join("debug/router-rs-cli"),
+        base.join("release/router-rs-cli"),
+        base.join("debug/router-rs"),
+        base.join("release/router-rs"),
+    ]
+    .into_iter()
+    .find(|candidate| candidate.is_file() && !is_redirect_shim(candidate))
 }
 
 /// Align with `host_integration::cargo_router_rs_executable`: same `cargo metadata` target dir
@@ -152,7 +157,7 @@ pub fn write_text(path: &Path, content: &str) {
 pub fn seed_framework_markers(root: &Path) {
     write_text(
         &root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version": "framework-runtime-registry-v1", "framework_core": {"authority": "rust", "source": "framework-root-native", "host_policy": "closed-set-explicit-projections"}, "host_targets": {"policy": "shared-rust-core-explicit-host-projections", "supported": ["codex", "claude-code", "antigravity", "cursor", "opencode"], "shared_system_source": "skills", "metadata": {"codex": {"install_tool": "codex", "projection_status": "implemented", "installable": true, "host_entrypoints": "AGENTS_CODEX.md"}, "cursor": {"install_tool": "cursor", "projection_status": "implemented", "installable": true, "host_entrypoints": ["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"]}, "claude-code": {"install_tool": "claude", "projection_status": "implemented", "installable": true, "host_entrypoints": ["AGENTS_CLAUDE.md", ".claude/rules/framework.md", ".claude/settings.json"]}, "antigravity": {"install_tool": "antigravity", "projection_status": "implemented", "installable": true, "host_entrypoints": ["AGENTS_ANTIGRAVITY.md", ".gemini/antigravity/rules/framework.md"]}, "opencode": {"install_tool": "opencode", "projection_status": "implemented", "installable": true, "host_entrypoints": ".opencode/opencode.json"}}}, "host_projections": {"codex": {"profile_id": "codex_profile", "host_id": "codex", "transport": "native-codex", "session_supervisor_driver": "codex_driver", "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract", "closeout_evidence_hooks", "review_gate_router_observation"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "batch_execution", "cron_execution", "ci_runner", "non_interactive_entrypoint", "external_session_supervisor", "rate_limit_auto_resume", "host_resume_entrypoint", "framework_alias_entrypoints"]}, "cursor": {"profile_id": "cursor_profile", "host_id": "cursor", "transport": "cursor-agent", "session_supervisor_driver": "unsupported", "session_supervisor_status": {"supported": false, "rationale": "Cursor host does not expose external process supervision or auto-resume."}, "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract", "closeout_evidence_hooks", "review_gate_router_observation"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "interactive_agent_chat", "host_resume_entrypoint", "framework_alias_entrypoints"]}, "claude-code": {"profile_id": "claude_code_profile", "host_id": "claude-code", "transport": "anthropic-claude-code", "session_supervisor_driver": "unsupported", "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract", "closeout_evidence_hooks", "review_gate_router_observation"], "capabilities": ["artifact_contract", "workspace_bootstrap", "interactive_agent_chat", "framework_alias_entrypoints", "hard_gate_hooks"]}, "opencode": {"profile_id": "opencode_profile", "host_id": "opencode", "transport": "opencode-cli", "session_supervisor_driver": "unsupported", "session_supervisor_status": {"supported": false, "rationale": "Opencode host does not expose external process supervision or auto-resume."}, "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "interactive_agent_chat", "framework_alias_entrypoints"]}, "antigravity": {"profile_id": "antigravity_profile", "host_id": "antigravity", "transport": "mcp-stdio", "session_supervisor_driver": "unsupported", "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "interactive_agent_chat", "framework_alias_entrypoints"]}}}"#,
+        r#"{"schema_version": "framework-runtime-registry-v1", "framework_core": {"authority": "rust", "source": "framework-root-native", "host_policy": "closed-set-explicit-projections"}, "host_targets": {"policy": "shared-rust-core-explicit-host-projections", "supported": ["codex", "claude-code", "antigravity", "cursor", "opencode"], "shared_system_source": "skills", "metadata": {"codex": {"install_tool": "codex", "projection_status": "implemented", "installable": true, "host_entrypoints": "AGENTS_CODEX.md"}, "cursor": {"install_tool": "cursor", "projection_status": "implemented", "installable": true, "host_entrypoints": ["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"]}, "claude-code": {"install_tool": "claude", "projection_status": "implemented", "installable": true, "host_entrypoints": ["AGENTS_CLAUDE.md", ".claude/rules/framework.md", ".claude/settings.json"]}, "antigravity": {"install_tool": "antigravity", "projection_status": "implemented", "installable": true, "host_entrypoints": ["AGENTS_ANTIGRAVITY.md", ".gemini/antigravity/rules/framework.md"]}, "opencode": {"install_tool": "opencode", "projection_status": "implemented", "installable": true, "host_entrypoints": ".opencode/opencode.json"}}, "host_providers": {"cursor": {"cargo_feature": "host-cursor", "provider_module": "cursor_provider", "provider_type": "CursorHostProvider", "hooks_module": "cursor_hooks", "cli_hook_subcommand": "hook", "dispatch_fn": "dispatch_cursor_command"}, "claude-code": {"cargo_feature": "host-claude-code", "provider_module": "claude_provider", "provider_type": "ClaudeHostProvider", "hooks_module": "claude_code_hooks", "cli_hook_subcommand": "hook", "dispatch_fn": "dispatch_claude_command"}, "opencode": {"cargo_feature": "host-opencode", "provider_module": "opencode_provider", "provider_type": "OpencodeHostProvider", "hooks_module": "opencode_agent", "cli_agent_subcommand": "agent", "dispatch_fn": "dispatch_opencode_command"}, "antigravity": {"cargo_feature": "host-antigravity", "provider_module": "antigravity_provider", "provider_type": "AntigravityHostProvider", "cli_agent_subcommand": "agent", "dispatch_fn": "dispatch_antigravity_command"}, "codex": {"cargo_feature": "host-codex", "provider_module": "codex_provider", "provider_type": "CodexHostProvider", "hooks_module": "codex_hooks", "cli_hook_subcommand": "hook", "dispatch_fn": "dispatch_codex_command"}}}, "host_projections": {"codex": {"profile_id": "codex_profile", "host_id": "codex", "transport": "native-codex", "session_supervisor_driver": "codex_driver", "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract", "closeout_evidence_hooks", "review_gate_router_observation"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "batch_execution", "cron_execution", "ci_runner", "non_interactive_entrypoint", "external_session_supervisor", "rate_limit_auto_resume", "host_resume_entrypoint", "framework_alias_entrypoints"]}, "cursor": {"profile_id": "cursor_profile", "host_id": "cursor", "transport": "cursor-agent", "session_supervisor_driver": "unsupported", "session_supervisor_status": {"supported": false, "rationale": "Cursor host does not expose external process supervision or auto-resume."}, "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract", "closeout_evidence_hooks", "review_gate_router_observation"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "interactive_agent_chat", "host_resume_entrypoint", "framework_alias_entrypoints"]}, "claude-code": {"profile_id": "claude_code_profile", "host_id": "claude-code", "transport": "anthropic-claude-code", "session_supervisor_driver": "unsupported", "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract", "closeout_evidence_hooks", "review_gate_router_observation"], "capabilities": ["artifact_contract", "workspace_bootstrap", "interactive_agent_chat", "framework_alias_entrypoints", "hard_gate_hooks"]}, "opencode": {"profile_id": "opencode_profile", "host_id": "opencode", "transport": "opencode-cli", "session_supervisor_driver": "unsupported", "session_supervisor_status": {"supported": false, "rationale": "Opencode host does not expose external process supervision or auto-resume."}, "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "interactive_agent_chat", "framework_alias_entrypoints"]}, "antigravity": {"profile_id": "antigravity_profile", "host_id": "antigravity", "transport": "mcp-stdio", "session_supervisor_driver": "unsupported", "harness_capabilities": ["hot_runtime_routing", "l2_continuity_contract"], "capabilities": ["artifact_contract", "mcp_servers", "workspace_bootstrap", "interactive_agent_chat", "framework_alias_entrypoints"]}}}"#,
     );
     write_text(
         &root.join("configs/framework/host_projection_narrative.json"),
@@ -314,6 +319,20 @@ fn cargo_target_dir_from_config(root: &Path) -> Option<PathBuf> {
     None
 }
 
+fn is_redirect_shim(candidate: &Path) -> bool {
+    let Ok(out) = std::process::Command::new(candidate)
+        .arg("--help")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+    else {
+        return false;
+    };
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    stderr.contains("binary moved to router-rs-cli")
+}
+
 fn resolve_router_rs_binary() -> Option<PathBuf> {
     let root = project_root();
     // Session-local `CARGO_TARGET_DIR`: pick under that tree first when the binary exists (matches
@@ -332,19 +351,28 @@ fn resolve_router_rs_binary() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs").map(PathBuf::from) {
+    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs-cli").map(PathBuf::from) {
         if path.is_file() {
             return Some(path);
         }
     }
+    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs").map(PathBuf::from) {
+        if path.is_file() && !is_redirect_shim(&path) {
+            return Some(path);
+        }
+    }
     [
-        root.join("core/router-rs/target/debug/router-rs"),
-        root.join("core/router-rs/target/release/router-rs"),
+        root.join("target/debug/router-rs-cli"),
+        root.join("target/release/router-rs-cli"),
+        root.join("core/router-rs/target/debug/router-rs-cli"),
+        root.join("core/router-rs/target/release/router-rs-cli"),
         root.join("target/debug/router-rs"),
         root.join("target/release/router-rs"),
+        root.join("core/router-rs/target/debug/router-rs"),
+        root.join("core/router-rs/target/release/router-rs"),
     ]
     .into_iter()
-    .find(|candidate| candidate.is_file())
+    .find(|candidate| candidate.is_file() && !is_redirect_shim(candidate))
 }
 
 pub fn router_rs_json(args: &[&str]) -> Value {

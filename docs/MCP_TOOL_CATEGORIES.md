@@ -238,10 +238,10 @@ CCD 会话辅助、学术检索和定时任务管理。
 
 | 文件 | 内容 | 适用宿主 |
 |------|------|----------|
-| `.mcp.json` | `paperplain`（npx paperplain-mcp）—— 唯一项目级 MCP server | 全宿主（闭集五宿主） |
-| `~/.codex/config.toml` + `.codex/hooks.json` | `[features] hooks = true`；hook 绑定 PreToolUse / UserPromptSubmit / PostToolUse / Stop | **Codex**（`codex`） |
+| `.mcp.json` | `router-rs-framework`、`browser-mcp`、`paperplain`、`mcp-codegraph` — 项目级 MCP server（gitignored；`host-integration install` 合并） | **Claude Code**（`claude-code`）；Codex 通过 `.codex/config.toml` |
+| `~/.codex/config.toml` + `.codex/hooks.json` | `[features] hooks = true`；`[mcp_servers.*]` 托管 `router-rs-framework`、`browser-mcp`、`mcp-codegraph`、`paperplain`；hook 绑定 PreToolUse / UserPromptSubmit / PostToolUse / Stop | **Codex**（`codex`） |
 | `.claude/settings.json` | hooks（PreToolUse / PostToolUse / Stop / UserPromptSubmit）+ Bash/WebFetch 权限白名单 + 沙箱策略 | **Claude Code**（`claude-code`） |
 | `.claude/settings.local.json` | 本地 cargo 权限扩展 | Claude Code |
-| `~/.cursor/mcp.json`（user） | 托管 `browser-mcp`、`router-rs-framework`（见 `framework host-integration install --to cursor --scope user`） | **Cursor**（`cursor`） |
-| `.gemini/mcp.json` | `router-rs-framework`（MCP stdio；无 shell hook） | **Antigravity**（`antigravity`） |
-| `.opencode/opencode.json` | `mcpServers.router-rs-framework`（MCP stdio；无 shell hook） | **OpenCode**（`opencode`） |
+| `~/.cursor/mcp.json`（user） | 托管 `router-rs-framework`、`browser-mcp`、`mcp-codegraph`、`paperplain`（见 `framework host-integration install --to cursor --scope user`） | **Cursor**（`cursor`） |
+| `.gemini/mcp.json` | `router-rs-framework`、`browser-mcp`、`mcp-codegraph`、`paperplain`（MCP stdio；无 shell hook） | **Antigravity**（`antigravity`） |
+| `.opencode/opencode.json` | `mcpServers.router-rs-framework`、`browser-mcp`、`mcp-codegraph`、`paperplain`（MCP stdio；无 shell hook） | **OpenCode**（`opencode`） |

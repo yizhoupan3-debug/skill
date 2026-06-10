@@ -797,7 +797,7 @@ pub fn review_stop_followup_soft_line(
     full_line_cap: u32,
 ) -> String {
     format!(
-        "router-rs REVIEW_GATE incomplete mode=soft_nag full_line_cap={full_line_cap} phase={} stop_nudge_count={} see=.cursor/hook-state rg_clear|ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1|ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES=0(strict)|detail=additional_context",
+        "router-rs REVIEW_GATE incomplete mode=soft_nag full_line_cap={full_line_cap} phase={} stop_nudge_count={} see=.cursor/hook-state rg_clear|ROUTER_RS_REVIEW_GATE_DISABLE=1|ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES=0(strict)|detail=additional_context",
         state.phase, state.review_followup_count
     )
 }
@@ -872,7 +872,7 @@ fn maybe_autopilot_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Opti
     state.pre_goal_review_satisfied = true;
     state.pre_goal_nag_count = 0;
     clear_review_gate_escalation_counters(state);
-    Some("router-rs：pre-goal 提示已达上限，已自动放行以便继续执行（需要严格不自动放行请设 `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES=0`）。仍可在用户消息单独一行写 `small_task` 主动清门。")
+    Some("router-rs：pre-goal 提示已达上限，已自动放行以便继续执行（需要严格不自动放行请设 `ROUTER_RS_AUTOPILOT_PRE_GOAL_MAX_NUDGES=0`）。仍可在用户消息单独一行写 `small_task` 主动清门。")
 }
 
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` or legacy `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE`.
@@ -950,7 +950,7 @@ fn subagent_limit_denial(active: u32, limit: u32) -> Value {
     json!({
         "permission": "deny",
         "user_message": format!(
-            "router-rs：当前会话已有 {active} 个 subagent 仍标记为打开（上限 {limit}，等于 `max_concurrent_subagents_limit` 契约）。请先等已有 subagent 结束/关闭，或确认它们已 stale 后清理会话状态；如需临时关闭限流，设置 ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS=0。"
+            "router-rs：当前会话已有 {active} 个 subagent 仍标记为打开（上限 {limit}，等于 `max_concurrent_subagents_limit` 契约）。请先等已有 subagent 结束/关闭，或确认它们已 stale 后清理会话状态；如需临时关闭限流，设置 ROUTER_RS_MAX_OPEN_SUBAGENTS=0。"
         )
     })
 }
@@ -959,7 +959,7 @@ fn review_pending_cycle_cap_denial(cap: usize) -> Value {
     json!({
         "permission": "deny",
         "user_message": format!(
-            "router-rs：review 子代理 pending 已达上限 {cap}（ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX）。请先等待已有 review subagentStop 核销 pending，或 Stop 后按 REVIEW_GATE 指引清门（rg_clear / 完成深度 lane）。"
+            "router-rs：review 子代理 pending 已达上限 {cap}（ROUTER_RS_REVIEW_PENDING_CYCLE_MAX）。请先等待已有 review subagentStop 核销 pending，或 Stop 后按 REVIEW_GATE 指引清门（rg_clear / 完成深度 lane）。"
         )
     })
 }
@@ -984,7 +984,7 @@ fn clear_review_gate_escalation_counters(state: &mut ReviewGateState) {
 /// when my-light disarms review, goal drive suppresses review, or a fresh deep-review cycle starts.
 ///
 /// When `preserve_session_guards` is true (fresh deep-review re-arm), retain pending-cap refusal
-/// so `ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX` cannot be bypassed via UPS. Open-subagent count
+/// so `ROUTER_RS_REVIEW_PENDING_CYCLE_MAX` cannot be bypassed via UPS. Open-subagent count
 /// always resets on re-arm (P1-16: stale count without matching subagentStop).
 fn reset_review_cycle_progress(state: &mut ReviewGateState, preserve_session_guards: bool) {
     state.phase = 0;
@@ -1013,7 +1013,7 @@ const CURSOR_REVIEW_MY_SAME_ROUND_NUDGE: &str = "router-rs：本轮提交同时�
 /// **不再**因盘上残留 GOAL 而武装 `goal_required`。
 /// **beforeSubmit** 传 `false`。
 ///
-/// **`pre_goal_review_satisfied`（磁盘旁路）**：在 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` 开启时
+/// **`pre_goal_review_satisfied`（磁盘旁路）**：在 `ROUTER_RS_PRE_GOAL_STRICT_DISK` 开启时
 /// **不**因仅存在磁盘 GOAL 而置真（beforeSubmit 与 Stop 均适用）；其余 goal 字段的 hydrate
 /// （contract/progress/verify 等）仍执行。
 fn hydrate_goal_gate_from_disk(

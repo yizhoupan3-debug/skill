@@ -1975,6 +1975,10 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
             if let Some(dud) = arguments.get("drive_until_done").and_then(Value::as_bool) {
                 payload["drive_until_done"] = json!(dud);
             }
+            // v6 session-scoped goal: pass through optional session_id
+            if let Some(sid) = arguments.get("session_id").and_then(Value::as_str) {
+                payload["session_id"] = json!(sid);
+            }
         }
         "checkpoint" => {
             let note = arguments

@@ -22,13 +22,13 @@ related_incidents:
 
 | host_id | 实际配置文件（user scope） | MCP 顶层 key | transport | 必填字段 | `managed_key_paths` |
 |---------|---------------------------|-------------|-----------|----------|-------------------|
-| `claude-code` | (无 MCP) | — | — | — | — |
-| `codex` | `~/.codex/config.toml` | `[mcp_servers]` (TOML snake) | 隐式 | `command` | `mcp_servers.router-rs-framework` |
-| `cursor` | `~/.cursor/mcp.json` | `mcpServers` (camel) | `"stdio"` | `command` | `mcpServers.browser-mcp` |
-| `opencode` | `~/.config/opencode/opencode.json` | `mcp` (**无 Servers**) | `"local"` | `command: string[]` | `mcp.router-rs-framework` |
-| `antigravity` | `~/.gemini/antigravity/mcp_config.json` | `mcpServers` | `"stdio"` | `command` | `mcpServers.router-rs-framework` |
+| `claude-code` | 项目 `.mcp.json` | `mcpServers` (camel) | `"stdio"` | `command` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
+| `codex` | `.codex/config.toml` | `[mcp_servers]` (TOML snake) | 隐式 | `command` | `mcp_servers.router-rs-framework` · `mcp_servers.browser-mcp` · `mcp_servers.mcp-codegraph` · `mcp_servers.paperplain` |
+| `cursor` | `~/.cursor/mcp.json` | `mcp_servers` (**snake_case JSON**) | `"stdio"` | `command` | `mcp_servers.router-rs-framework` · `mcp_servers.browser-mcp` · `mcp_servers.mcp-codegraph` · `mcp_servers.paperplain` |
+| `opencode` | `~/.config/opencode/opencode.json` | `mcpServers` (camel) | `"local"` | `command: string[]` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
+| `antigravity` | `~/.gemini/antigravity/mcp.json` | `mcpServers` | `"stdio"` | `command` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
 
-**三个易踩坑**：① TOML snake_case vs JSON camelCase；② opencode 是唯一不带 `Servers` 后缀的；③ opencode 唯一用 `"local"` 而非 `"stdio"`。
+**三个易踩坑**：① TOML snake_case vs JSON camelCase；② Cursor 用 `mcp_servers`（snake），其余 JSON 宿主用 `mcpServers`（camel）；③ opencode 唯一用 `"local"` 而非 `"stdio"`。
 
 ## 自检机制（写盘前/后强制校验）
 

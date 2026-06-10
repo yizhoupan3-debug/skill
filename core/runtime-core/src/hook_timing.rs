@@ -99,7 +99,7 @@ mod tests {
                 &format!("--repo-root={}", repo.display()),
             ])
             .env("ROUTER_RS_HOOK_TIMING", "1")
-            .env("ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE", "1")
+            .env("ROUTER_RS_REVIEW_GATE_DISABLE", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

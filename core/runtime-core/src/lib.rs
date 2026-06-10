@@ -24,7 +24,6 @@ pub mod schema_drift;
 pub mod autopilot_goal;
 pub mod atomic_write;
 pub mod formal_toolchain;
-pub mod goal_prediction;
 pub mod kernel_bootstrap;
 pub mod path_guard;
 pub mod task_state;
@@ -35,6 +34,8 @@ pub mod task_write_lock;
 
 // ── migrated supporting modules ──
 pub mod browser_mcp;
+#[cfg(feature = "codegraph")]
+pub mod codegraph_mcp;
 pub mod cli;
 pub mod types;
 pub mod eval_route;
@@ -79,13 +80,13 @@ pub mod router_rs_observation;
 #[path = "utils/hook_posttool_normalize.rs"]
 pub mod hook_posttool_normalize;
 
-// ── re-exports from core-policy ──
-pub use core_policy::hook_common;
-pub use core_policy::hook_policy;
-pub use core_policy::lane_normalize;
-pub use core_policy::review_gate_engine;
-pub use core_policy::review_output_lint;
-pub use core_policy::review_routing_signals;
+// ── re-exports from core-policy (crate-internal only) ──
+pub(crate) use core_policy::hook_common;
+pub(crate) use core_policy::hook_policy;
+pub(crate) use core_policy::lane_normalize;
+pub(crate) use core_policy::review_gate_engine;
+pub(crate) use core_policy::review_output_lint;
+pub(crate) use core_policy::review_routing_signals;
 
 // ── crate-level re-exports for `crate::X` path compat ──
 pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;

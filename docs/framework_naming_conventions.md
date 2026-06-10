@@ -41,15 +41,16 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 
 | host_id | MCP 配置文件 | **顶层 key（字面量）** | transport 字面量 | `managed_key_paths` 字面量 |
 |---------|--------------|------------------------|------------------|----------------------------|
-| `cursor` | `~/.cursor/mcp.json` | `mcpServers`（**camel**，**不是** `mcp_servers`） | `"stdio"` | `mcpServers.browser-mcp` |
-| `codex` | `~/.codex/config.toml` | `mcp_servers`（**snake**，**TOML 表**） | 无 `type`（`command` 隐式） | `mcp_servers.router-rs-framework` |
-| `opencode` | `~/.config/opencode/opencode.json` | `mcp`（**唯一不带 `Servers` 后缀**） | `"local"` | `mcp.router-rs-framework` |
-| `antigravity` | 项目 `.gemini/mcp.json`；用户 `~/.gemini/antigravity/mcp.json` | `mcpServers` | `"stdio"` | `mcpServers.router-rs-framework` |
+| `cursor` | `~/.cursor/mcp.json` | `mcp_servers`（**snake**，**不是** `mcpServers`） | `"stdio"` | `mcp_servers.router-rs-framework` · `mcp_servers.browser-mcp` · `mcp_servers.mcp-codegraph` · `mcp_servers.paperplain` |
+| `claude-code` | 项目 `.mcp.json` | `mcpServers`（**camel**） | `"stdio"` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
+| `codex` | 项目 `.codex/config.toml` | `mcp_servers`（**snake**，**TOML 表**） | 无 `type`（`command` 隐式） | `mcp_servers.router-rs-framework` · `mcp_servers.browser-mcp` · `mcp_servers.mcp-codegraph` · `mcp_servers.paperplain` |
+| `opencode` | `~/.config/opencode/opencode.json` | `mcpServers`（**camel**） | `"local"` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
+| `antigravity` | 项目 `.gemini/mcp.json`；用户 `~/.gemini/antigravity/mcp.json` | `mcpServers` | `"stdio"` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
 
 **三个最常踩的坑**：
 
-1. **snake_case vs camelCase**：TOML (codex) 用 `mcp_servers`；JSON (cursor / claude / antigravity) 用 `mcpServers`。
-2. **是否带 `Servers` 后缀**：opencode **唯一**用 `mcp`，**无** `Servers`。
+1. **snake_case vs camelCase**：TOML (codex) 和 Cursor JSON 用 `mcp_servers`；JSON (claude-code / opencode / antigravity) 用 `mcpServers`。
+2. **Cursor 是 snake_case JSON**：Cursor 用 `mcp_servers` 而非 `mcpServers`，与其他 JSON 宿主不同。
 3. **transport 字段**：opencode 用 `"local"`；其余 host 用 `"stdio"`（或隐式）。
 
 **改动任何 host projection 前必读** [`maintenance/host-projection-schema-validity.md`](maintenance/host-projection-schema-validity.md) §3.5 自检机制。

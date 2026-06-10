@@ -29,7 +29,6 @@ hex = "0.4"
 tungstenite = "0.24.0"
 fs2 = "0.4"
 which = "8.0.0"
-codegraph-rs = { path = "../codegraph-rs", optional = true }
 
 [features]
 default = [
@@ -44,12 +43,13 @@ host-claude-code = []
 host-opencode = []
 host-antigravity = []
 host-codex = []
-codegraph = ["dep:codegraph-rs"]
+codegraph = ["runtime-core/codegraph"]
 
 [dev-dependencies]
 serial_test = "3"
 ctor = "0.2"
 criterion = { version = "0.5", features = ["html_reports"] }
+codegraph-rs = { path = "../codegraph-rs" }
 
 [[bench]]
 name = "search_bench"

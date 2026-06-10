@@ -233,8 +233,8 @@ fn cursor_subagent_type_pair(tool_input: &Value, event: &Value) -> (String, Stri
     )
 }
 
-/// My implement pre-goal（`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`）：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
-/// `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` 应急开启时退化为「任一带名 lane/agent 字段」以免应急路径过严。
+/// My implement pre-goal（`ROUTER_RS_AUTOPILOT_PRE_GOAL_ENABLED`）：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
+/// `ROUTER_RS_REVIEW_GATE_DISABLE` 应急开启时退化为「任一带名 lane/agent 字段」以免应急路径过严。
 fn pre_goal_subagent_kind_ok(sub_type: &str, agent_type: &str) -> bool {
     if cursor_review_gate_disabled_by_env() {
         return !sub_type.is_empty() || !agent_type.is_empty();

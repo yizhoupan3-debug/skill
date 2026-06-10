@@ -28,6 +28,7 @@ serde_json = "1.0"
 sha2 = "0.11"
 tungstenite = "0.24.0"
 which = "8.0.0"
+codegraph-rs = { path = "../codegraph-rs", optional = true }
 
 [build-dependencies]
 serde_json = "1.0"
@@ -47,8 +48,8 @@ host-antigravity = []
 host-codex = []
 # Expose test helpers for downstream crate integration tests
 test-support = []
-# Codegraph MCP integration (gate for codegraph_mcp module in router-rs)
-codegraph = []
+# Codegraph MCP integration (module lives in runtime-core; router-rs re-exports)
+codegraph = ["dep:codegraph-rs"]
 
 [dev-dependencies]
 serial_test = "3"

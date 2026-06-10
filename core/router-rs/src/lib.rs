@@ -225,7 +225,7 @@ pub use runtime_core::integration_test_prelude;
 
 // ── router-rs-only modules (NOT in runtime-core) ──
 #[cfg(feature = "codegraph")]
-pub mod codegraph_mcp;
+pub use runtime_core::codegraph_mcp;
 #[cfg(feature = "codegraph")]
 pub mod mcp_common;
 pub mod types;

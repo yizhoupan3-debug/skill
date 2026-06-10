@@ -15,18 +15,10 @@ pub fn run_codegraph_mcp_stdio_loop(repo_root: Option<&Path>) -> Result<(), Stri
 #[cfg(test)]
 mod tests {
     use super::tool_definitions;
-    use crate::mcp_common::codegraph;
 
     #[test]
     fn exposes_codegraph_tool_catalog() {
         let tools = tool_definitions();
         assert_eq!(tools.len(), 6);
-    }
-
-    #[test]
-    fn mcp_common_reexports_dispatch_surface() {
-        let tools = codegraph::tool_definitions();
-        assert_eq!(tools.len(), 6);
-        assert!(tools[0].get("name").is_some());
     }
 }

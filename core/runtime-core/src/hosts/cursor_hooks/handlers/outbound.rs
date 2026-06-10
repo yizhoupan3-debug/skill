@@ -1,5 +1,5 @@
 // Cursor hook outbound context truncation + silent/output policy (P4 handlers split).
-/// When `ROUTER_RS_CURSOR_HOOK_SILENT=1`: drop advisory `additional_context`; keep hard
+/// When `ROUTER_RS_HOOK_SILENT=1` (legacy `ROUTER_RS_CURSOR_HOOK_SILENT`): drop advisory `additional_context`; keep hard
 /// `followup_message` lines that start with the `router-rs ` leader prefix.
 pub fn apply_cursor_hook_silent_policy(output: &mut Value) {
     if !crate::router_env_flags::router_rs_cursor_hook_silent_enabled() {

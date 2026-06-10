@@ -395,7 +395,9 @@ pub fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<
         return None;
     }
     let raw = fs::read_to_string(&path).ok()?;
-    let value: Value = serde_json::from_str(&raw).ok()?;
+    let mut value: Value = serde_json::from_str(&raw).ok()?;
+    // v6 session-scoped goal: annotate staleness
+    annotate_goal_staleness(&mut value);
     let tid_out = task_id
         .trim()
         .replace('\\', "/")
@@ -593,6 +595,87 @@ fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
+/// Resolve a session_id for goal state binding.
+///
+/// Priority:
+/// 1. Explicit `session_id` from the payload
+/// 2. Environment variables: `CLAUDE_SESSION_ID`, `CURSOR_SESSION_ID`, `OPENCODE_SESSION_ID`
+/// 3. Auto-generated pseudo-UUID from SystemTime nanos
+fn resolve_session_id(payload: &Value) -> String {
+    // 1. Explicit from payload
+    if let Some(sid) = payload
+        .get("session_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return sid.to_string();
+    }
+    // 2. Environment variables
+    for env_key in &["CLAUDE_SESSION_ID", "CURSOR_SESSION_ID", "OPENCODE_SESSION_ID"] {
+        if let Ok(sid) = std::env::var(env_key) {
+            let trimmed = sid.trim().to_string();
+            if !trimmed.is_empty() {
+                return trimmed;
+            }
+        }
+    }
+    // 3. Auto-generate from SystemTime nanos
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("auto-{nanos}")
+}
+
+/// Check if a GOAL_STATE's session_id matches the current session.
+/// If the GOAL_STATE has a `session_id` field and it does not match the current
+/// environment session (from env vars or absent), annotate with `stale=true`.
+///
+/// Goals without `session_id` (legacy) are treated as still valid (backward compat).
+fn annotate_goal_staleness(goal: &mut Value) {
+    let goal_session_id = match goal.get("session_id").and_then(Value::as_str) {
+        Some(s) => s.trim(),
+        None => {
+            // Legacy goal without session_id — not stale (backward compat)
+            return;
+        }
+    };
+    if goal_session_id.is_empty() {
+        return;
+    }
+    // Get current session_id from env (do NOT auto-generate; absence means we can't compare)
+    let current_session_id = current_env_session_id();
+    match current_session_id {
+        Some(ref current) if current != goal_session_id => {
+            if let Some(obj) = goal.as_object_mut() {
+                obj.insert("stale".to_string(), json!(true));
+                obj.insert(
+                    "stale_reason".to_string(),
+                    json!("session_id mismatch: goal belongs to a different session"),
+                );
+            }
+        }
+        _ => {
+            // Same session or can't determine current session — not stale
+        }
+    }
+}
+
+/// Read current session_id from environment variables (without auto-generating).
+/// Returns None if no env var is set.
+fn current_env_session_id() -> Option<String> {
+    for env_key in &["CLAUDE_SESSION_ID", "CURSOR_SESSION_ID", "OPENCODE_SESSION_ID"] {
+        if let Ok(sid) = std::env::var(env_key) {
+            let trimmed = sid.trim().to_string();
+            if !trimmed.is_empty() {
+                return Some(trimmed);
+            }
+        }
+    }
+    None
+}
+
 fn base_goal_object(
     goal: String,
     non_goals: Vec<Value>,
@@ -601,6 +684,7 @@ fn base_goal_object(
     drive_until_done: bool,
     requires_completion_evidence: bool,
     current_horizon: Option<String>,
+    session_id: String,
 ) -> Map<String, Value> {
     let mut m = Map::new();
     m.insert(
@@ -614,6 +698,7 @@ fn base_goal_object(
     );
     m.insert("status".to_string(), json!("running"));
     m.insert("goal".to_string(), json!(goal));
+    m.insert("session_id".to_string(), json!(session_id));
     m.insert("non_goals".to_string(), Value::Array(non_goals));
     m.insert("done_when".to_string(), Value::Array(done_when));
     m.insert(
@@ -825,6 +910,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 }
             }
 
+            let session_id = resolve_session_id(&payload);
             let mut obj = base_goal_object(
                 goal.to_string(),
                 non_goals,
@@ -836,6 +922,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                     .get("current_horizon")
                     .and_then(Value::as_str)
                     .map(|s| s.to_string()),
+                session_id,
             );
             if let Some(extra) = payload.get("metadata").cloned() {
                 obj.insert("metadata".to_string(), extra);
@@ -969,6 +1056,11 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 None,
             )?;
             neutralize_task_pointers_for_task(&repo_root, &task_id)?;
+            // Auto-delete GOAL_STATE.json after successful completion (v6 session-scoped goal)
+            let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
+            if goal_path.is_file() {
+                let _ = fs::remove_file(&goal_path);
+            }
             Ok(out)
         }
         "block" => {
@@ -1721,11 +1813,9 @@ mod tests {
             "task_id": "nogate",
         }))
         .expect("complete without evidence");
-        let st = read_goal_state(&repo, Some("nogate"))
-            .expect("read")
-            .expect("state");
-        assert_eq!(st["status"], json!("completed"));
-        assert_eq!(st[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(false));
+        // v6: complete auto-deletes GOAL_STATE.json
+        let goal_path = goal_state_path_for_task(&repo, "nogate").expect("goal path");
+        assert!(!goal_path.is_file(), "GOAL_STATE should be deleted after complete");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1868,10 +1958,9 @@ mod tests {
             "task_id": "gok",
         }))
         .expect("complete ok");
-        let st = read_goal_state(&repo, Some("gok"))
-            .expect("read")
-            .expect("state");
-        assert_eq!(st["status"], json!("completed"));
+        // v6: complete auto-deletes GOAL_STATE.json
+        let goal_path = goal_state_path_for_task(&repo, "gok").expect("goal path");
+        assert!(!goal_path.is_file(), "GOAL_STATE should be deleted after complete");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1946,6 +2035,195 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// v6 session-scoped: start writes session_id, complete deletes GOAL_STATE.json
+    #[test]
+    fn goal_session_scoped_start_writes_session_id_and_complete_deletes() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-session-goal-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
+        let rr = repo.display().to_string();
+
+        let out = framework_goal_drive(json!({
+            "repo_root": rr,
+            "operation": "start",
+            "task_id": "sess-task",
+            "goal": "test session binding",
+            "session_id": "test-session-abc",
+            "non_goals": ["unrelated"],
+            "done_when": ["done1", "done2"],
+            "validation_commands": ["echo ok"],
+            "drive_until_done": true,
+        }))
+        .expect("start");
+        assert_eq!(out["ok"], json!(true));
+
+        // Verify session_id is written
+        let st = read_goal_state(&repo, Some("sess-task"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["session_id"], json!("test-session-abc"));
+
+        // Write evidence for completion gate
+        fs::write(
+            repo.join("artifacts/current/sess-task/EVIDENCE_INDEX.json"),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[{"command_preview":"echo ok","exit_code":0}]}"#,
+        )
+        .expect("evidence");
+
+        // Complete and verify GOAL_STATE.json is deleted
+        framework_goal_drive(json!({
+            "repo_root": rr,
+            "operation": "complete",
+            "task_id": "sess-task",
+        }))
+        .expect("complete");
+        let goal_path = goal_state_path_for_task(&repo, "sess-task").expect("goal path");
+        assert!(!goal_path.is_file(), "GOAL_STATE.json should be deleted after complete");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// v6 session-scoped: stale detection when session_id mismatches
+    #[test]
+    fn goal_read_annotates_stale_when_session_id_mismatches() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-stale-goal-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/stale-task")).expect("mkdir");
+
+        // Write a goal with a different session_id than the current env
+        let goal_path = goal_state_path_for_task(&repo, "stale-task").expect("path");
+        let goal_json = json!({
+            "schema_version": GOAL_STATE_SCHEMA_VERSION,
+            "status": "running",
+            "goal": "old session goal",
+            "session_id": "old-session-xyz",
+            "drive_until_done": true,
+            "non_goals": [],
+            "done_when": [],
+            "validation_commands": [],
+            "checkpoints": [],
+            "blocker": null,
+            "updated_at": now_iso(),
+        });
+        write_atomic_json(&goal_path, &goal_json).expect("write goal");
+
+        // Set a different current session via env var
+        std::env::set_var("CLAUDE_SESSION_ID", "new-session-456");
+
+        let st = read_goal_state(&repo, Some("stale-task"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["stale"], json!(true));
+        assert!(st["stale_reason"].as_str().unwrap().contains("session_id mismatch"));
+
+        // Clean up env var
+        std::env::remove_var("CLAUDE_SESSION_ID");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// v6 session-scoped: same session_id is NOT stale
+    #[test]
+    fn goal_read_not_stale_when_session_id_matches() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-not-stale-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/match-task")).expect("mkdir");
+
+        std::env::set_var("CLAUDE_SESSION_ID", "my-session-789");
+
+        let rr = repo.display().to_string();
+        framework_goal_drive(json!({
+            "repo_root": rr,
+            "operation": "start",
+            "task_id": "match-task",
+            "goal": "current session goal",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["echo ok"],
+            "drive_until_done": true,
+        }))
+        .expect("start");
+
+        let st = read_goal_state(&repo, Some("match-task"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["session_id"], json!("my-session-789"));
+        // Should NOT be stale since session matches
+        assert!(st.get("stale").is_none());
+
+        std::env::remove_var("CLAUDE_SESSION_ID");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// v6 session-scoped: legacy goals without session_id are NOT stale (backward compat)
+    #[test]
+    fn goal_read_legacy_without_session_id_not_stale() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-legacy-goal-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/legacy-task")).expect("mkdir");
+
+        let goal_path = goal_state_path_for_task(&repo, "legacy-task").expect("path");
+        // Write a legacy goal without session_id
+        let goal_json = json!({
+            "schema_version": GOAL_STATE_SCHEMA_VERSION,
+            "status": "running",
+            "goal": "legacy goal",
+            "drive_until_done": true,
+            "non_goals": [],
+            "done_when": [],
+            "validation_commands": [],
+            "checkpoints": [],
+            "blocker": null,
+            "updated_at": now_iso(),
+        });
+        write_atomic_json(&goal_path, &goal_json).expect("write goal");
+
+        std::env::set_var("CLAUDE_SESSION_ID", "any-session");
+
+        let st = read_goal_state(&repo, Some("legacy-task"))
+            .expect("read")
+            .expect("state");
+        // Legacy goal should NOT be marked stale
+        assert!(st.get("stale").is_none());
+
+        std::env::remove_var("CLAUDE_SESSION_ID");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// v6: stale goals do NOT request continuation
+    #[test]
+    fn stale_goal_does_not_request_continuation() {
+        let mut goal = json!({
+            "drive_until_done": true,
+            "status": "running",
+            "stale": true,
+            "stale_reason": "session_id mismatch",
+        });
+        assert!(
+            !goal_state_requests_continuation(&goal),
+            "stale goal should not request continuation"
+        );
+        // Without stale flag, should request continuation
+        goal.as_object_mut().unwrap().remove("stale");
+        goal.as_object_mut().unwrap().remove("stale_reason");
+        assert!(goal_state_requests_continuation(&goal));
     }
 }
 
@@ -2049,14 +2327,21 @@ pub fn read_goal_state(
         return Ok(None);
     }
     let raw = fs::read_to_string(&path).map_err(|err| format!("read GOAL_STATE: {err}"))?;
-    let value: Value =
+    let mut value: Value =
         serde_json::from_str(&raw).map_err(|err| format!("parse GOAL_STATE: {err}"))?;
+    // v6 session-scoped goal: check session_id staleness
+    annotate_goal_staleness(&mut value);
     Ok(Some(value))
 }
 
 
 /// `GOAL_STATE` 是否处于「宏控制应续跑」态（`drive_until_done` + `status=running`）。
+/// Stale goals (session_id mismatch) do NOT request continuation.
 pub fn goal_state_requests_continuation(state: &Value) -> bool {
+    // Stale goals from a different session should not drive continuation
+    if state.get("stale").and_then(Value::as_bool) == Some(true) {
+        return false;
+    }
     let drive = state
         .get("drive_until_done")
         .and_then(Value::as_bool)

@@ -5,7 +5,7 @@
 ## Transport 要点
 
 - **安装**：`framework host-integration install --to antigravity --repo-root "$PWD"`（canonical id `antigravity`；`antigravity-app` deprecated）。
-- **MCP**：`router-rs-framework` via `.gemini/mcp.json`；**无 shell hook**。
+- **MCP**：`router-rs-framework` · `browser-mcp` · `mcp-codegraph` · `paperplain` via `.gemini/mcp.json`；**无 shell hook**。
 - **Review**：清门 **Claude canonical**；`review-lanes/*.md` + skill spawn-first；Stop review **advisory-only**（MCP `ADVISORY`）。
 - **Closeout**：非 my-light 且 closeout 未满足时 MCP `goal_state_manage complete` / `closeout_gate` 可 hard-block（与 review 分层）。
 - **连续性**：`framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/`。

@@ -1,36 +1,10 @@
 #:schema https://developers.openai.com/codex/config-schema.json
 
-# Repo-local Codex overlay for this repository.
-# Keep only repository-scoped settings here.
-# Machine-wide defaults belong in ~/.codex/config.toml.
+# Repo-local Codex overlay — dev-exempt only (v6 Phase 0).
+# MCP/model/memories moved to ~/.codex/config.toml.
 
 approval_policy = "never"
 sandbox_mode = "workspace-write"
+
 [sandbox_workspace_write]
-# Restrict writable roots to the repository directory.
-# Prevents agent from writing outside the workspace.
 writable_roots = ["."]
-
-[features]
-hooks = true
-memories = false
-
-[memories]
-use_memories = false
-generate_memories = false
-
-model = "gpt-5.5"
-model_reasoning_effort = "high"
-# openai_base_url = "http://127.0.0.1:8317/v1"
-
-# managed_by: skill-framework · mcp_servers.paperplain
-[mcp_servers.paperplain]
-command = "npx"
-args = ["-y", "paperplain-mcp"]
-enabled = true
-
-# managed_by: skill-framework · mcp_servers.mcp-codegraph
-[mcp_servers.mcp-codegraph]
-command = "cargo"
-args = ["run", "--release", "--quiet", "-p", "codegraph-rs", "--bin", "mcp-codegraph", "--manifest-path", "/Users/joe/Developer/skill/Cargo.toml", "--", "--repo-root", "/Users/joe/Developer/skill"]
-enabled = true
