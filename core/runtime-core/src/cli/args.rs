@@ -231,6 +231,21 @@ pub enum FrameworkCommand {
         #[command(subcommand)]
         command: SkillsSubcommand,
     },
+    /// §5.4: Generate scaffold files for a new host integration.
+    Scaffold(ScaffoldCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ScaffoldCommand {
+    /// Host ID to scaffold (e.g., "windsurf", "aider")
+    #[arg(long = "host-id")]
+    pub host_id: String,
+    /// Framework root (defaults to cwd)
+    #[arg(long = "framework-root")]
+    pub framework_root: Option<PathBuf>,
+    /// Dry run: print what would be generated without writing files
+    #[arg(long, default_value = "false")]
+    pub dry_run: bool,
 }
 
 #[derive(Subcommand, Debug, Clone)]

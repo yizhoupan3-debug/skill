@@ -14,3 +14,6 @@ serde_json = "1.0.140"
 serde_yml = "=0.0.12"  # serde_yaml 0.9 已归档; serde_yml 0.0.12 是最后完整实现版本, 精确锁定避免升级到 0.0.13(deprecated shim)
 uuid = { version = "1.16.0", features = ["v4"] }
 
+[dev-dependencies]
+tempfile = "3"
+
