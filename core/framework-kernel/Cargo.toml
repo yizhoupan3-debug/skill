@@ -5,5 +5,8 @@ edition = "2021"
 
 [dependencies]
 chrono.workspace = true
+clap.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2.workspace = true
+which.workspace = true

@@ -7,19 +7,22 @@ edition = "2021"
 name = "host_projection"
 path = "src/lib.rs"
 
+[features]
+default = []
+test-support = []
+
 [dependencies]
-runtime-core = { path = "../runtime-core" }
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
 chrono = { version = "0.4", features = ["clock", "std", "serde"] }
 clap = { version = "4.5", features = ["derive"] }
-fs2 = "0.4"
-libc = "0.2"
-regex = "1.11"
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-sha2 = "0.11"
-urlencoding = "2.1"
 which = "8"
+
+[build-dependencies]
+serde_json = "1.0"
+
+[dev-dependencies]
+serial_test = "3"

@@ -1,4 +1,8 @@
 //! B0 root: shared traits for dependency inversion and telemetry pipeline.
+pub mod framework_host_targets;
+pub mod repo_roots;
+pub mod router_self;
+pub mod runtime_registry;
 pub mod telemetry;
 pub mod tokenizer;
 
