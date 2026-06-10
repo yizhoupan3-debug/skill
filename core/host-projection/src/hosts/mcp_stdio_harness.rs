@@ -272,9 +272,12 @@ pub fn run_mcp_stdio<R: BufRead, W: Write>(
             e
         );
     }
+    // v6: 生成连接级 session_id，用于 goal state session 隔离。
+    // 每次 MCP stdio 连接 = 一个天然 session 边界。
+    let connection_session_id = generate_connection_session_id(host_id);
     let mut transport_mode = None;
     while let Some(message) = read_mcp_message(&mut input, &mut transport_mode)? {
-        if let Some(response) = handle_mcp_request(&message, repo_root, host_id) {
+        if let Some(response) = handle_mcp_request(&message, repo_root, host_id, &connection_session_id) {
             write_mcp_response(
                 &mut output,
                 transport_mode.unwrap_or(McpTransportMode::NewlineDelimited),
@@ -393,7 +396,17 @@ fn write_mcp_response<W: Write>(
     Ok(())
 }
 
-pub fn handle_mcp_request(message: &str, repo_root: &Path, host_id: &str) -> Option<Value> {
+/// 生成连接级 session_id：`{host_id}-{nanos}`。
+/// 每次 MCP stdio 连接调用一次，同一连接内所有 goal 操作共享此 ID。
+fn generate_connection_session_id(host_id: &str) -> String {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{host_id}-{nanos}")
+}
+
+pub fn handle_mcp_request(message: &str, repo_root: &Path, host_id: &str, connection_session_id: &str) -> Option<Value> {
     let request: Value = match serde_json::from_str(message) {
         Ok(v) => v,
         Err(err) => {
@@ -418,7 +431,7 @@ pub fn handle_mcp_request(message: &str, repo_root: &Path, host_id: &str) -> Opt
         "notifications/initialized" => None,
         "notifications/cancelled" => None, // Per JSON-RPC spec, notifications should not receive responses
         "tools/list" => Some(handle_tools_list(id)),
-        "tools/call" => Some(handle_tools_call(id, &request, repo_root, host_id)),
+        "tools/call" => Some(handle_tools_call(id, &request, repo_root, host_id, connection_session_id)),
         "prompts/list" => Some(handle_prompts_list(id)),
         "prompts/get" => Some(handle_prompts_get(id, &request, repo_root, host_id)),
         "resources/list" => Some(handle_resources_list(id, repo_root)),
@@ -796,7 +809,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
     })
 }
 
-fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_id: &str) -> Value {
+fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_id: &str, connection_session_id: &str) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
     let tool_name = params.get("name").and_then(Value::as_str).unwrap_or("");
@@ -849,8 +862,8 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
         "session_checkpoint" => tool_session_checkpoint(arguments, repo_root),
         "closeout_gate" => tool_closeout_gate(arguments, repo_root, host_id),
         "rfv_loop_status" => tool_rfv_loop_status(arguments, repo_root),
-        "rfv_loop_manage" => tool_rfv_loop_manage(arguments, repo_root),
-        "goal_state_manage" => tool_goal_state_manage(arguments, repo_root),
+        "rfv_loop_manage" => tool_rfv_loop_manage(arguments, repo_root, connection_session_id),
+        "goal_state_manage" => tool_goal_state_manage(arguments, repo_root, connection_session_id),
         "goal_state_read" => tool_goal_state_read(arguments, repo_root),
         "closeout_record_write" => tool_closeout_record_write(arguments, repo_root, host_id),
         "web_fetch" => tool_web_fetch(arguments),
@@ -1859,7 +1872,7 @@ fn parse_rfv_round_argument(value: Option<&Value>) -> Result<u64, String> {
     Err("append_round requires 'round' argument (integer)".to_string())
 }
 
-fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path, connection_session_id: &str) -> Result<String, String> {
     let operation = arguments
         .get("operation")
         .and_then(Value::as_str)
@@ -1894,6 +1907,13 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path) -> Result<String, S
             {
                 payload["allow_external_research"] = json!(er);
             }
+            // v6 session-scoped: inject connection_session_id if not explicit
+            let session_id = arguments
+                .get("session_id")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or(connection_session_id);
+            payload["session_id"] = json!(session_id);
         }
         "append_round" => {
             let round = parse_rfv_round_argument(arguments.get("round"))?;
@@ -1941,7 +1961,7 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path) -> Result<String, S
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
-fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_session_id: &str) -> Result<String, String> {
     let operation = arguments
         .get("operation")
         .and_then(Value::as_str)
@@ -1980,10 +2000,13 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path) -> Result<String,
             if let Some(dud) = arguments.get("drive_until_done").and_then(Value::as_bool) {
                 payload["drive_until_done"] = json!(dud);
             }
-            // v6 session-scoped goal: pass through optional session_id
-            if let Some(sid) = arguments.get("session_id").and_then(Value::as_str) {
-                payload["session_id"] = json!(sid);
-            }
+            // v6 session-scoped goal: pass through optional session_id, or inject connection-level
+            let session_id = arguments
+                .get("session_id")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or(connection_session_id);
+            payload["session_id"] = json!(session_id);
         }
         "checkpoint" => {
             let note = arguments
@@ -2038,7 +2061,7 @@ pub fn tool_goal_state_manage_test_helper(
     let mut args_with_op = arguments.clone();
     args_with_op["operation"] = json!(operation);
 
-    let result = tool_goal_state_manage(&args_with_op, &path);
+    let result = tool_goal_state_manage(&args_with_op, &path, "test-session-auto");
     let _ = std::fs::remove_dir_all(&path);
     result
 }
@@ -2062,7 +2085,7 @@ pub fn tool_rfv_loop_manage_test_helper(
     let mut args_with_op = arguments.clone();
     args_with_op["operation"] = json!(operation);
 
-    let result = tool_rfv_loop_manage(&args_with_op, &path);
+    let result = tool_rfv_loop_manage(&args_with_op, &path, "test-session-auto");
     let _ = std::fs::remove_dir_all(&path);
     result
 }
@@ -2166,6 +2189,7 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":9,"method":"ping"}"#,
             &unique_test_repo("retired-host"),
             "claude-desktop",
+            "test-session",
         )
         .expect("error response");
         assert_eq!(response["error"]["code"], -32600);
@@ -2181,6 +2205,7 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
             &unique_test_repo("ping"),
             "opencode",
+            "test-session",
         )
         .unwrap();
         assert_eq!(response["jsonrpc"], "2.0");
@@ -2194,6 +2219,7 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":2,"method":"nonexistent"}"#,
             &unique_test_repo("unknown-method"),
             "opencode",
+            "test-session",
         )
         .unwrap();
         assert_eq!(response["error"]["code"], -32601);

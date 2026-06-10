@@ -78,11 +78,74 @@ pub struct CloseoutRecord {
     pub notes: Option<String>,
 }
 
+/// Classify a rule name as "hard" (must fix before complete) or "soft" (advisory).
+/// Returns `"hard"` by default for unknown rules (fail-safe).
+pub fn closeout_rule_category(rule: &str) -> &'static str {
+    match rule {
+        // hard: structural/schema errors that make the record unreliable
+        "schema_version_mismatch"
+        | "task_id_missing"
+        | "summary_missing"
+        | "verification_status_missing"
+        | "verification_status_invalid"
+        | "task_id_context_mismatch"
+        | "parse_error"
+        | "invalid_command_evidence" => "hard",
+        // soft: advisory — evidence/consistency warnings
+        "claimed_done_without_evidence"
+        | "changed_files_without_command_or_risk"
+        | "verification_passed_with_failed_command"
+        | "verification_passed_with_missing_artifact"
+        | "not_run_without_blockers_or_risks"
+        | "claimed_done_with_failed_verification"
+        | "claimed_passed_without_evidence"
+        | "claimed_passed_without_evidence_index_rows" => "soft",
+        // Prediction verification rules are always advisory (warn-level).
+        "prediction_verification_status_mismatch"
+        | "prediction_hypothesis_not_reflected"
+        | "prediction_verification_status_match"
+        | "prediction_hypothesis_reflected" => "soft",
+        // Unknown rule: fail-safe to hard.
+        _ => "hard",
+    }
+}
+
+/// When `my-light` is active, downgrade all hard violations to soft.
+/// Returns the modified violations and whether any hard blockers remain.
+pub fn downgrade_violations_for_profile(
+    violations: &mut [CloseoutViolation],
+    lifecycle_profile: &str,
+) -> bool {
+    if lifecycle_profile == "my-light" {
+        for v in violations.iter_mut() {
+            v.category = "soft".to_string();
+        }
+        false
+    } else {
+        violations.iter().any(|v| v.category == "hard")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CloseoutViolation {
     pub rule: String,
     pub severity: String,
+    pub category: String,
     pub detail: String,
+}
+
+impl CloseoutViolation {
+    /// Create a violation with `category` automatically derived from the rule name.
+    pub fn new(rule: impl Into<String>, severity: impl Into<String>, detail: impl Into<String>) -> Self {
+        let rule = rule.into();
+        let category = closeout_rule_category(&rule).to_string();
+        Self {
+            rule,
+            severity: severity.into(),
+            category,
+            detail: detail.into(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -99,6 +162,7 @@ pub struct CloseoutEnforcementResponse {
     pub authority: String,
     pub task_id: String,
     pub closeout_allowed: bool,
+    pub can_proceed: bool,
     pub claimed_completion: bool,
     pub violations: Vec<CloseoutViolation>,
     pub missing_evidence: Vec<String>,
@@ -122,6 +186,7 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
                 .unwrap_or("")
                 .to_string(),
             closeout_allowed: false,
+            can_proceed: false,
             claimed_completion: false,
             violations: Vec::new(),
             missing_evidence: Vec::new(),
@@ -149,6 +214,7 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
                     .unwrap_or("")
                     .to_string(),
                 closeout_allowed: false,
+                can_proceed: false,
                 claimed_completion: false,
                 violations: Vec::new(),
                 missing_evidence: Vec::new(),
@@ -156,11 +222,9 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
                 prediction_verification: Vec::new(),
             };
             append_closeout_violations(&mut response, raw_shape_violations);
-            response.violations.push(CloseoutViolation {
-                rule: "parse_error".to_string(),
-                severity: "block".to_string(),
-                detail: format!("parse closeout record failed: {err}"),
-            });
+            response
+                .violations
+                .push(CloseoutViolation::new("parse_error", "block", format!("parse closeout record failed: {err}")));
             serde_json::to_value(response)
                 .map_err(|err| format!("serialize closeout response: {err}"))
         }
@@ -175,32 +239,32 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     if record.schema_version.trim().is_empty()
         || record.schema_version != CLOSEOUT_RECORD_SCHEMA_VERSION
     {
-        violations.push(CloseoutViolation {
-            rule: "schema_version_mismatch".to_string(),
-            severity: "block".to_string(),
-            detail: format!(
+        violations.push(CloseoutViolation::new(
+            "schema_version_mismatch",
+            "block",
+            format!(
                 "expected schema_version={CLOSEOUT_RECORD_SCHEMA_VERSION}, got {:?}",
                 record.schema_version
             ),
-        });
+        ));
     }
 
     if record.task_id.trim().is_empty() {
-        violations.push(CloseoutViolation {
-            rule: "task_id_missing".to_string(),
-            severity: "block".to_string(),
-            detail: "task_id must be non-empty".to_string(),
-        });
+        violations.push(CloseoutViolation::new(
+            "task_id_missing",
+            "block",
+            "task_id must be non-empty",
+        ));
         missing.push("task_id".to_string());
     }
 
     let summary_trimmed = record.summary.trim();
     if summary_trimmed.is_empty() {
-        violations.push(CloseoutViolation {
-            rule: "summary_missing".to_string(),
-            severity: "block".to_string(),
-            detail: "summary must be non-empty".to_string(),
-        });
+        violations.push(CloseoutViolation::new(
+            "summary_missing",
+            "block",
+            "summary must be non-empty",
+        ));
         missing.push("summary".to_string());
     }
 
@@ -209,21 +273,21 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     let status_lower = record.verification_status.trim().to_ascii_lowercase();
     let status_recognized = ALLOWED_VERIFICATION_STATUSES.contains(&status_lower.as_str());
     if !status_lower.is_empty() && !status_recognized {
-        violations.push(CloseoutViolation {
-            rule: "verification_status_invalid".to_string(),
-            severity: "block".to_string(),
-            detail: format!(
+        violations.push(CloseoutViolation::new(
+            "verification_status_invalid",
+            "block",
+            format!(
                 "verification_status must be one of {:?}, got {:?}",
                 ALLOWED_VERIFICATION_STATUSES, record.verification_status
             ),
-        });
+        ));
     }
     if status_lower.is_empty() {
-        violations.push(CloseoutViolation {
-            rule: "verification_status_missing".to_string(),
-            severity: "block".to_string(),
-            detail: "verification_status must be one of passed|failed|partial|not_run".to_string(),
-        });
+        violations.push(CloseoutViolation::new(
+            "verification_status_missing",
+            "block",
+            "verification_status must be one of passed|failed|partial|not_run",
+        ));
         missing.push("verification_status".to_string());
     }
 
@@ -233,39 +297,39 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         && record.risks.is_empty()
         && record.blockers.is_empty()
     {
-        violations.push(CloseoutViolation {
-            rule: "claimed_done_without_evidence".to_string(),
-            severity: "block".to_string(),
-            detail: "summary claims completion but verification_status=not_run with no risks or blockers".to_string(),
-        });
+        violations.push(CloseoutViolation::new(
+            "claimed_done_without_evidence",
+            "block",
+            "summary claims completion but verification_status=not_run with no risks or blockers",
+        ));
         missing.push("validation_command_or_risk_acknowledgement".to_string());
     }
 
     // R2: changed files but no commands_run and no risks recorded.
     if !record.changed_files.is_empty() && record.commands_run.is_empty() && record.risks.is_empty()
     {
-        violations.push(CloseoutViolation {
-            rule: "changed_files_without_command_or_risk".to_string(),
-            severity: "block".to_string(),
-            detail: format!(
+        violations.push(CloseoutViolation::new(
+            "changed_files_without_command_or_risk",
+            "block",
+            format!(
                 "{} changed file(s) recorded but no commands_run and no risks declared",
                 record.changed_files.len()
             ),
-        });
+        ));
         missing.push("validation_command".to_string());
     }
 
     // R3: verification_status=passed but a command failed.
     if status_lower == "passed" {
         if let Some(failed) = record.commands_run.iter().find(|c| c.exit_code != 0) {
-            violations.push(CloseoutViolation {
-                rule: "verification_passed_with_failed_command".to_string(),
-                severity: "block".to_string(),
-                detail: format!(
+            violations.push(CloseoutViolation::new(
+                "verification_passed_with_failed_command",
+                "block",
+                format!(
                     "verification_status=passed but command exited {}: {}",
                     failed.exit_code, failed.command
                 ),
-            });
+            ));
         }
     }
 
@@ -275,28 +339,28 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         .iter()
         .find(|c| c.command.trim().is_empty())
     {
-        violations.push(CloseoutViolation {
-            rule: "invalid_command_evidence".to_string(),
-            severity: "block".to_string(),
-            detail: format!(
+        violations.push(CloseoutViolation::new(
+            "invalid_command_evidence",
+            "block",
+            format!(
                 "commands_run contains a row without a non-empty command; exit_code={}",
                 invalid.exit_code
             ),
-        });
+        ));
         missing.push("command".to_string());
     }
 
     // R4: verification_status=passed but artifact missing.
     if status_lower == "passed" {
         if let Some(missing_artifact) = record.artifacts_checked.iter().find(|a| !a.exists) {
-            violations.push(CloseoutViolation {
-                rule: "verification_passed_with_missing_artifact".to_string(),
-                severity: "block".to_string(),
-                detail: format!(
+            violations.push(CloseoutViolation::new(
+                "verification_passed_with_missing_artifact",
+                "block",
+                format!(
                     "verification_status=passed but artifact does not exist: {}",
                     missing_artifact.path
                 ),
-            });
+            ));
         }
     }
 
@@ -307,12 +371,11 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
             .iter()
             .any(|v| v.rule == "claimed_done_without_evidence");
         if !already_covered {
-            violations.push(CloseoutViolation {
-                rule: "not_run_without_blockers_or_risks".to_string(),
-                severity: "block".to_string(),
-                detail: "verification_status=not_run requires at least one blocker or risk"
-                    .to_string(),
-            });
+            violations.push(CloseoutViolation::new(
+                "not_run_without_blockers_or_risks",
+                "block",
+                "verification_status=not_run requires at least one blocker or risk",
+            ));
             missing.push("blocker_or_risk".to_string());
         }
     }
@@ -323,11 +386,11 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         && record.risks.is_empty()
         && record.blockers.is_empty()
     {
-        violations.push(CloseoutViolation {
-            rule: "claimed_done_with_failed_verification".to_string(),
-            severity: "block".to_string(),
-            detail: "summary claims completion but verification_status=failed without recorded risks or blockers".to_string(),
-        });
+        violations.push(CloseoutViolation::new(
+            "claimed_done_with_failed_verification",
+            "block",
+            "summary claims completion but verification_status=failed without recorded risks or blockers",
+        ));
     }
 
     // TODO(R9-tech-debt): task-scoped depth / `GOAL_STATE.completion_gates` alignment
@@ -352,21 +415,23 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         && record.risks.is_empty()
         && record.blockers.is_empty()
     {
-        violations.push(CloseoutViolation {
-            rule: "claimed_passed_without_evidence".to_string(),
-            severity: "block".to_string(),
-            detail: "verification_status=passed but commands_run/artifacts_checked/risks/blockers all empty — supply at least one command, artifact check, risk, or blocker to back the claim".to_string(),
-        });
+        violations.push(CloseoutViolation::new(
+            "claimed_passed_without_evidence",
+            "block",
+            "verification_status=passed but commands_run/artifacts_checked/risks/blockers all empty — supply at least one command, artifact check, risk, or blocker to back the claim",
+        ));
         missing.push("evidence_or_acknowledgement".to_string());
     }
 
     let blocking = violations.iter().any(|v| v.severity == "block");
+    let has_hard_blocker = violations.iter().any(|v| v.category == "hard");
 
     CloseoutEnforcementResponse {
         schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
         authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
         task_id: record.task_id.clone(),
         closeout_allowed: !blocking,
+        can_proceed: !has_hard_blocker,
         claimed_completion,
         violations,
         missing_evidence: missing,
@@ -402,6 +467,28 @@ pub fn closeout_enforcement_contract() -> Value {
             "prediction_hypothesis_not_reflected",
             "parse_error"
         ],
+        "rule_categories": {
+            "hard": [
+                "schema_version_mismatch",
+                "task_id_missing",
+                "summary_missing",
+                "verification_status_missing",
+                "verification_status_invalid",
+                "task_id_context_mismatch",
+                "parse_error",
+                "invalid_command_evidence"
+            ],
+            "soft": [
+                "claimed_done_without_evidence",
+                "changed_files_without_command_or_risk",
+                "verification_passed_with_failed_command",
+                "verification_passed_with_missing_artifact",
+                "not_run_without_blockers_or_risks",
+                "claimed_done_with_failed_verification",
+                "claimed_passed_without_evidence",
+                "claimed_passed_without_evidence_index_rows"
+            ]
+        },
         "prediction_verification_rules": [
             "prediction_verification_status_match",
             "prediction_verification_status_mismatch",
@@ -443,14 +530,14 @@ pub fn evaluate_closeout_record_with_context(
         .filter(|s| !s.is_empty())
     {
         if record.task_id.trim() != expected {
-            response.violations.push(CloseoutViolation {
-                rule: "task_id_context_mismatch".to_string(),
-                severity: "block".to_string(),
-                detail: format!(
+            response.violations.push(CloseoutViolation::new(
+                "task_id_context_mismatch",
+                "block",
+                format!(
                     "closeout record task_id {:?} does not match evaluation context {:?}",
                     record.task_id, expected
                 ),
-            });
+            ));
             response
                 .missing_evidence
                 .push("matching_task_id".to_string());
@@ -466,11 +553,11 @@ pub fn evaluate_closeout_record_with_context(
             .iter()
             .any(|v| v.rule == "claimed_passed_without_evidence")
     {
-        response.violations.push(CloseoutViolation {
-            rule: "claimed_passed_without_evidence_index_rows".to_string(),
-            severity: "block".to_string(),
-            detail: "verification_status=passed and commands_run is empty, and EVIDENCE_INDEX.json has no successful rows — record at least one verifier command (or run a verifier so PostTool hooks append to EVIDENCE_INDEX)".to_string(),
-        });
+        response.violations.push(CloseoutViolation::new(
+            "claimed_passed_without_evidence_index_rows",
+            "block",
+            "verification_status=passed and commands_run is empty, and EVIDENCE_INDEX.json has no successful rows — record at least one verifier command (or run a verifier so PostTool hooks append to EVIDENCE_INDEX)",
+        ));
         response
             .missing_evidence
             .push("evidence_index_successful_row".to_string());
@@ -484,6 +571,10 @@ pub fn evaluate_closeout_record_with_context(
             &record.summary,
         );
     }
+
+    // Recompute can_proceed after all violations are collected.
+    let has_hard_blocker = response.violations.iter().any(|v| v.category == "hard");
+    response.can_proceed = !has_hard_blocker;
 
     response
 }
@@ -501,11 +592,11 @@ fn append_prediction_verification(
     );
     for check in &checks {
         if check.severity == "warn" {
-            response.violations.push(CloseoutViolation {
-                rule: check.rule.clone(),
-                severity: check.severity.clone(),
-                detail: check.detail.clone(),
-            });
+            response.violations.push(CloseoutViolation::new(
+                &check.rule,
+                &check.severity,
+                &check.detail,
+            ));
         }
         response.prediction_verification.push(PredictionVerificationReport {
             matched: check.matched,
@@ -542,6 +633,7 @@ pub fn evaluate_closeout_record_value_with_context(
                 .unwrap_or("")
                 .to_string(),
             closeout_allowed: false,
+            can_proceed: false,
             claimed_completion: false,
             violations: Vec::new(),
             missing_evidence: Vec::new(),
@@ -569,6 +661,7 @@ pub fn evaluate_closeout_record_value_with_context(
                     .unwrap_or("")
                     .to_string(),
                 closeout_allowed: false,
+                can_proceed: false,
                 claimed_completion: false,
                 violations: Vec::new(),
                 missing_evidence: Vec::new(),
@@ -576,11 +669,9 @@ pub fn evaluate_closeout_record_value_with_context(
                 prediction_verification: Vec::new(),
             };
             append_closeout_violations(&mut response, raw_shape_violations);
-            response.violations.push(CloseoutViolation {
-                rule: "parse_error".to_string(),
-                severity: "block".to_string(),
-                detail: format!("parse closeout record failed: {err}"),
-            });
+            response
+                .violations
+                .push(CloseoutViolation::new("parse_error", "block", format!("parse closeout record failed: {err}")));
             serde_json::to_value(response)
                 .map_err(|err| format!("serialize closeout response: {err}"))
         }
@@ -599,11 +690,11 @@ fn raw_closeout_record_shape_violations(
         .unwrap_or("")
         .is_empty()
     {
-        violations.push(CloseoutViolation {
-            rule: "schema_version_mismatch".to_string(),
-            severity: "block".to_string(),
-            detail: format!("expected schema_version={CLOSEOUT_RECORD_SCHEMA_VERSION}, got missing or empty value"),
-        });
+        violations.push(CloseoutViolation::new(
+            "schema_version_mismatch",
+            "block",
+            format!("expected schema_version={CLOSEOUT_RECORD_SCHEMA_VERSION}, got missing or empty value"),
+        ));
     }
     if let Some(expected) = expected_task_id.map(str::trim).filter(|s| !s.is_empty()) {
         let actual = payload
@@ -612,11 +703,11 @@ fn raw_closeout_record_shape_violations(
             .map(str::trim)
             .unwrap_or("");
         if actual != expected {
-            violations.push(CloseoutViolation {
-                rule: "task_id_context_mismatch".to_string(),
-                severity: "block".to_string(),
-                detail: format!("closeout record task_id {actual:?} does not match evaluation context {expected:?}"),
-            });
+            violations.push(CloseoutViolation::new(
+                "task_id_context_mismatch",
+                "block",
+                format!("closeout record task_id {actual:?} does not match evaluation context {expected:?}"),
+            ));
         }
     }
     if let Some(commands) = payload.get("commands_run").and_then(Value::as_array) {
@@ -628,13 +719,13 @@ fn raw_closeout_record_shape_violations(
                 .unwrap_or("");
             let has_exit_code = command.get("exit_code").and_then(Value::as_i64).is_some();
             if command_text.is_empty() || !has_exit_code {
-                violations.push(CloseoutViolation {
-                    rule: "invalid_command_evidence".to_string(),
-                    severity: "block".to_string(),
-                    detail: format!(
+                violations.push(CloseoutViolation::new(
+                    "invalid_command_evidence",
+                    "block",
+                    format!(
                         "commands_run[{idx}] must include non-empty command and integer exit_code"
                     ),
-                });
+                ));
             }
         }
     }

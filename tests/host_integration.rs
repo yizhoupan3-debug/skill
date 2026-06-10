@@ -758,7 +758,8 @@ fn project_scope_all_does_not_install_claude_projection() {
 }
 
 #[test]
-fn codex_project_install_writes_research_mcp_surfaces() {
+fn codex_project_install_does_not_write_project_mcp_surfaces() {
+    // §1.1: MCP 配置统一到 user-level，install 不再写 project-level .mcp.json / .codex/config.toml
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     let home = tmp.path().join("home");
@@ -780,24 +781,10 @@ fn codex_project_install_writes_research_mcp_surfaces() {
     assert_eq!(install["success"], true);
     assert_eq!(install["results"]["codex"]["status"], "installed");
 
-    let project_mcp = read_json(&repo_root.join(".mcp.json"));
-    assert_eq!(
-        project_mcp["mcpServers"]["paperplain"]["command"],
-        json!("npx")
-    );
-    assert_eq!(
-        project_mcp["mcpServers"]["paperplain"]["args"],
-        json!(["-y", "paperplain-mcp"])
-    );
-
-    let codex_toml = read_text(&repo_root.join(".codex/config.toml"));
+    // §1.1: project-level MCP configs no longer written by install
     assert!(
-        codex_toml.contains("[mcp_servers.paperplain]"),
-        "expected paperplain MCP section in .codex/config.toml"
-    );
-    assert!(
-        codex_toml.contains("paperplain-mcp"),
-        "expected paperplain-mcp args in .codex/config.toml"
+        !repo_root.join(".mcp.json").exists(),
+        "§1.1: install must not write project-level .mcp.json"
     );
 }
 
@@ -972,10 +959,10 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
         mcp_payload["mcp_servers"]["paperplain"]["args"],
         json!(["-y", "paperplain-mcp"])
     );
-    let project_mcp = common::read_json(&project_root.join(".mcp.json"));
-    assert_eq!(
-        project_mcp["mcpServers"]["paperplain"]["command"],
-        json!("npx")
+    // §1.1: project-level .mcp.json no longer written by install
+    assert!(
+        !project_root.join(".mcp.json").exists(),
+        "§1.1: install must not write project-level .mcp.json"
     );
 
     let remove = router_rs_json(&[

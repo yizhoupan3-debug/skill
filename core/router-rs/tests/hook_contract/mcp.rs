@@ -25,6 +25,7 @@ fn call_review_gate_prompt(repo: &PathBuf, host: &str) -> String {
         r#"{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"review_gate"}}"#,
         repo,
         host,
+        "test-session",
     )
     .expect("prompts/get review_gate");
     response["result"]["messages"][0]["content"]["text"]

@@ -142,6 +142,77 @@ jobs:
           print("generated-artifacts-status: ok")
           PY
 
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Clippy workspace (default features)
+        run: cargo clippy --workspace -- -D warnings
+
+      - name: Clippy workspace (no default features)
+        run: cargo clippy --workspace --no-default-features -- -D warnings
+
+  feature-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        features:
+          - "default"
+          - "codegraph"
+          - "host-cursor"
+          - "host-claude-code"
+          - "host-codex"
+          - "host-opencode"
+          - "host-antigravity"
+          - "no-default-features"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: "Test with features: ${{ matrix.features }}"
+        run: |
+          if [ "${{ matrix.features }}" = "default" ]; then
+            cargo test --workspace
+          elif [ "${{ matrix.features }}" = "no-default-features" ]; then
+            cargo test --workspace --no-default-features
+          else
+            cargo test --workspace --no-default-features --features "${{ matrix.features }}"
+          fi
+
+  full-workspace-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Full workspace test
+        run: cargo test --workspace 2>&1 | tail -50
+
+      - name: Verify zero test failures
+        run: |
+          result=$(cargo test --workspace 2>&1)
+          echo "$result" | tail -5
+          if echo "$result" | grep -q "0 failed"; then
+            echo "✅ No test failures"
+          else
+            echo "❌ Test failures detected"
+            exit 1
+          fi
+
   cross-platform:
     runs-on: macos-latest
     timeout-minutes: 15

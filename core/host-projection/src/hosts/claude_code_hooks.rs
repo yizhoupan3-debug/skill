@@ -1226,6 +1226,10 @@ fn persist_touch_state(
         }
         let _ = fs::remove_file(legacy_touch_state_path(repo_root));
         fs::write(&path, format!("{state_payload}\n")).map_err(|e| e.to_string())?;
+        // §1.3: hook-state 写入后概率性清理过期文件
+        if let Some(hook_state_dir) = path.parent() {
+            crate::hooks::sweep_stale_hook_state_files(hook_state_dir);
+        }
         Ok(())
     }) {
         if err != "hook_state_unreadable" {

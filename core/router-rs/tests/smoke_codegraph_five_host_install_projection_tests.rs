@@ -108,26 +108,12 @@ mod five_host_install_projection {
                 assert_mcp_servers_codegraph(&read_json(&path), host_id);
             }
             "claude-code" => {
-                let path = roots.project_root.join(".mcp.json");
-                assert!(path.is_file(), "claude project .mcp.json must exist");
-                assert_mcp_servers_camel_codegraph(&read_json(&path), host_id);
+                // §1.1: MCP 配置统一到 user-level，不再写 project .mcp.json。
+                // claude-code 的 MCP 由 .claude/mcp.json (user-level) 管理。
             }
             "codex" => {
-                let mcp_path = roots.project_root.join(".mcp.json");
-                assert!(mcp_path.is_file(), "codex project .mcp.json must exist");
-                assert_mcp_servers_camel_codegraph(&read_json(&mcp_path), host_id);
-
-                let toml_path = roots.project_root.join(".codex/config.toml");
-                let toml = fs::read_to_string(&toml_path)
-                    .unwrap_or_else(|err| panic!("codex config.toml: {err}"));
-                assert!(
-                    toml.contains("[mcp_servers.mcp-codegraph]"),
-                    "codex .codex/config.toml must define mcp_servers.mcp-codegraph"
-                );
-                assert!(
-                    toml.contains("--repo-root"),
-                    "codex mcp-codegraph section must pass --repo-root"
-                );
+                // §1.1: MCP 配置统一到 user-level，不再写 project .mcp.json。
+                // codex config.toml 仍由 codex install 路径单独写入（非 research_mcp 路径）。
             }
             "opencode" => {
                 let path = roots.project_root.join(".opencode/opencode.json");

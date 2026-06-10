@@ -1004,6 +1004,10 @@ fn save_session_terminal_ledger(repo_root: &Path, event: &Value, ledger: &Sessio
     if let Ok(text) = serde_json::to_string_pretty(&ledger) {
         let _ = core_state::utils::atomic_write::write_atomic_text(&path, &text);
     }
+    // §1.3: session end 时清理过期 hook-state 文件
+    if let Some(hook_state_dir) = path.parent() {
+        crate::hooks::sweep_stale_hook_state_files(hook_state_dir);
+    }
 }
 
 /// **`ROUTER_RS_CURSOR_TERMINAL_KILL_MODE`**：默认 `scoped`（仅杀掉本会话账本 `owned_pids` 内的活跃 terminal）。

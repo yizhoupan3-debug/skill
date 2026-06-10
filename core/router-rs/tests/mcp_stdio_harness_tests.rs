@@ -69,6 +69,7 @@ mod desktop_mcp_tests {
             &req.to_string(),
             &test_repo_dir(),
             "antigravity",
+            "test-session",
         )
         .expect("web_fetch response");
         let text = response_text(&response);
@@ -93,6 +94,7 @@ mod desktop_mcp_tests {
             &req.to_string(),
             &test_repo_dir(),
             "antigravity",
+            "test-session",
         )
         .expect("pre-guard response");
         let text = response_text(&response);
@@ -121,6 +123,7 @@ mod desktop_mcp_tests {
             &req.to_string(),
             &test_repo_dir(),
             "antigravity",
+            "test-session",
         )
         .expect("web_fetch response");
         assert_eq!(response["result"]["isError"], true);
@@ -151,6 +154,7 @@ mod desktop_mcp_tests {
             &req.to_string(),
             &test_repo_dir(),
             "antigravity",
+            "test-session",
         )
         .expect("web_fetch response");
         let text = response_text(&response);
@@ -175,6 +179,7 @@ mod desktop_mcp_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("skill_route response");
         let out = response["result"]["content"][0]["text"].as_str().unwrap();
@@ -209,6 +214,7 @@ mod desktop_mcp_tests {
             r#"{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"framework://session_summary"}}"#,
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("resources/read");
         let text = response["result"]["contents"][0]["text"]
@@ -229,6 +235,7 @@ mod desktop_mcp_tests {
             r#"{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"review_gate"}}"#,
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("prompts/get response");
         let text = response["result"]["messages"][0]["content"]["text"]
@@ -256,6 +263,7 @@ mod desktop_mcp_tests {
             r#"{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"framework_routing"}}"#,
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("prompts/get response");
         let text = response["result"]["messages"][0]["content"]["text"]
@@ -863,7 +871,7 @@ mod json_parse_error_tests {
         let path = unique_test_repo_dir();
         mcp_stdio_test_support::seed_minimal_current_task_layout(&path);
 
-        let response = crate::mcp_stdio_harness::handle_mcp_request("not valid json {", &path, "antigravity");
+        let response = crate::mcp_stdio_harness::handle_mcp_request("not valid json {", &path, "antigravity", "test-session");
 
         // Should return an error response
         assert!(
@@ -886,7 +894,7 @@ mod json_parse_error_tests {
 
         // Missing method field
         let response =
-            crate::mcp_stdio_harness::handle_mcp_request(r#"{"jsonrpc":"2.0","id":1}"#, &path, "antigravity");
+            crate::mcp_stdio_harness::handle_mcp_request(r#"{"jsonrpc":"2.0","id":1}"#, &path, "antigravity", "test-session");
 
         assert!(response.is_some());
         let resp = response.unwrap();
@@ -929,6 +937,7 @@ mod antigravity_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         ).expect("should get response");
 
         // Advisory mode: NOT an error, just reports findings
@@ -960,6 +969,7 @@ mod antigravity_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         ).expect("should get response");
 
         // Advisory mode: no hard block, but task_id validation still applies
@@ -1021,6 +1031,7 @@ mod antigravity_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         ).expect("should get response");
 
         // Should be Ok content (isError is not present or false)
@@ -1086,6 +1097,7 @@ mod antigravity_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         ).expect("should get response");
 
         // Advisory mode: complete is NOT hard-blocked even with review goal.
@@ -1153,6 +1165,7 @@ mod antigravity_hard_blocking_tests {
             &req_gate.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         ).expect("should get response");
         assert!(!response_gate["result"]["isError"].as_bool().unwrap_or(false));
         let content_gate = response_gate["result"]["content"][0]["text"].as_str().unwrap();
@@ -1176,6 +1189,7 @@ mod antigravity_hard_blocking_tests {
             &req_complete.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         ).expect("should get response");
 
         // 应当无 error
@@ -1212,6 +1226,7 @@ mod antigravity_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("response");
         assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
@@ -1254,6 +1269,7 @@ mod antigravity_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("response");
         assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
@@ -1296,6 +1312,7 @@ mod claude_desktop_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("response");
         assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
@@ -1333,6 +1350,7 @@ mod claude_desktop_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("response");
         assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
@@ -1356,6 +1374,7 @@ mod claude_desktop_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("response");
         let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
@@ -1414,6 +1433,7 @@ mod claude_desktop_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("response");
         // Advisory mode: NOT hard-blocked even with review goal and no reviewer evidence
@@ -1445,6 +1465,7 @@ mod claude_desktop_hard_blocking_tests {
             &req.to_string(),
             &repo,
             "antigravity",
+            "test-session",
         )
         .expect("response");
         assert!(!response["result"]["isError"].as_bool().unwrap_or(false));

@@ -182,6 +182,57 @@ pub fn router_rs_cursor_hook_state_stale_sweep_days() -> u64 {
     parse_env_u64("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS").unwrap_or(7)
 }
 
+/// §1.3: 自动清理 hook-state 目录中超过 [stale_sweep_days] 天的旧文件。
+/// 在 hook-state 写入时调用，概率性触发（1/10）以避免每次写入都扫描目录。
+/// 返回清理的文件数。
+pub fn sweep_stale_hook_state_files(hook_state_dir: &Path) -> usize {
+    // 概率性触发：1/10 的写入会触发清理
+    {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let mut hasher = DefaultHasher::new();
+        nanos.hash(&mut hasher);
+        if hasher.finish() % 10 != 0 {
+            return 0;
+        }
+    }
+
+    let days = router_rs_cursor_hook_state_stale_sweep_days();
+    let cutoff = std::time::Duration::from_secs(days * 86400);
+    let now = std::time::SystemTime::now();
+    let mut cleaned = 0;
+
+    let entries = match std::fs::read_dir(hook_state_dir) {
+        Ok(e) => e,
+        Err(_) => return 0,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let modified = match entry.metadata().and_then(|m| m.modified()) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        if now.duration_since(modified).unwrap_or_default() > cutoff {
+            if std::fs::remove_file(&path).is_ok() {
+                cleaned += 1;
+            }
+        }
+    }
+
+    if cleaned > 0 {
+        eprintln!("[router-rs] hook-state sweep: removed {cleaned} stale file(s) from {}", hook_state_dir.display());
+    }
+    cleaned
+}
+
 pub fn router_rs_cursor_sessionstart_context_max_bytes() -> usize {
     parse_env_usize("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_BYTES").unwrap_or(64 * 1024)
 }
