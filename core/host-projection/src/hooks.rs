@@ -6,7 +6,7 @@
 
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock, RwLock};
+use std::sync::{Mutex, OnceLock};
 
 // ────────────────────────────────────────────────────────────────
 // Mirror types (avoid dependency on runtime-core definitions)
@@ -186,124 +186,98 @@ fn parse_env_u64(var: &str) -> Option<u64> {
 }
 
 // ────────────────────────────────────────────────────────────────
-// hook_timing: function-pointer proxies
+// hook_timing: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnMarkHookStart = fn();
-type FnAddLockWaitMs = fn(u64);
-type FnAddCargoCheckMs = fn(u64);
-type FnEmitHookTimingLine = fn(&str);
-
-static FN_MARK_HOOK_START: RwLock<Option<FnMarkHookStart>> = RwLock::new(None);
-static FN_ADD_LOCK_WAIT_MS: RwLock<Option<FnAddLockWaitMs>> = RwLock::new(None);
-static FN_ADD_CARGO_CHECK_MS: RwLock<Option<FnAddCargoCheckMs>> = RwLock::new(None);
-static FN_EMIT_HOOK_TIMING_LINE: RwLock<Option<FnEmitHookTimingLine>> = RwLock::new(None);
+static MARK_HOOK_START: OnceLock<fn()> = OnceLock::new();
+static ADD_LOCK_WAIT_MS: OnceLock<fn(u64)> = OnceLock::new();
+static ADD_CARGO_CHECK_MS: OnceLock<fn(u64)> = OnceLock::new();
+static EMIT_HOOK_TIMING_LINE: OnceLock<fn(&str)> = OnceLock::new();
 
 pub fn register_hook_timing(
-    mark_start: FnMarkHookStart,
-    add_lock_wait: FnAddLockWaitMs,
-    add_cargo: FnAddCargoCheckMs,
-    emit_line: FnEmitHookTimingLine,
+    mark_start: fn(),
+    add_lock_wait: fn(u64),
+    add_cargo: fn(u64),
+    emit_line: fn(&str),
 ) {
-    *FN_MARK_HOOK_START.write().unwrap() = Some(mark_start);
-    *FN_ADD_LOCK_WAIT_MS.write().unwrap() = Some(add_lock_wait);
-    *FN_ADD_CARGO_CHECK_MS.write().unwrap() = Some(add_cargo);
-    *FN_EMIT_HOOK_TIMING_LINE.write().unwrap() = Some(emit_line);
+    MARK_HOOK_START.set(mark_start).ok();
+    ADD_LOCK_WAIT_MS.set(add_lock_wait).ok();
+    ADD_CARGO_CHECK_MS.set(add_cargo).ok();
+    EMIT_HOOK_TIMING_LINE.set(emit_line).ok();
 }
 
 pub fn mark_hook_start() {
-    if let Some(f) = *FN_MARK_HOOK_START.read().unwrap() {
-        f();
-    }
+    MARK_HOOK_START.get().map(|f| f());
 }
 
 pub fn add_lock_wait_ms(ms: u64) {
-    if let Some(f) = *FN_ADD_LOCK_WAIT_MS.read().unwrap() {
-        f(ms);
-    }
+    ADD_LOCK_WAIT_MS.get().map(|f| f(ms));
 }
 
 pub fn add_cargo_check_ms(ms: u64) {
-    if let Some(f) = *FN_ADD_CARGO_CHECK_MS.read().unwrap() {
-        f(ms);
-    }
+    ADD_CARGO_CHECK_MS.get().map(|f| f(ms));
 }
 
 pub fn emit_hook_timing_line(event: &str) {
-    if let Some(f) = *FN_EMIT_HOOK_TIMING_LINE.read().unwrap() {
-        f(event);
-    }
+    EMIT_HOOK_TIMING_LINE.get().map(|f| f(event));
 }
 
 // ────────────────────────────────────────────────────────────────
-// telemetry_emit: function-pointer proxies
+// telemetry_emit: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnEmitHookFired = fn(&str, &str);
-type FnEmitToolCall = fn(&str, u64, bool);
-type FnHookActionFromOptionalOutput = fn(Option<&Value>) -> &'static str;
-
-static FN_EMIT_HOOK_FIRED: RwLock<Option<FnEmitHookFired>> = RwLock::new(None);
-static FN_EMIT_TOOL_CALL: RwLock<Option<FnEmitToolCall>> = RwLock::new(None);
-static FN_HOOK_ACTION_FROM_OPTIONAL_OUTPUT: RwLock<Option<FnHookActionFromOptionalOutput>> =
-    RwLock::new(None);
+static EMIT_HOOK_FIRED: OnceLock<fn(&str, &str)> = OnceLock::new();
+static EMIT_TOOL_CALL: OnceLock<fn(&str, u64, bool)> = OnceLock::new();
+static HOOK_ACTION_FROM_OPTIONAL_OUTPUT: OnceLock<fn(Option<&Value>) -> &'static str> = OnceLock::new();
 
 pub fn register_telemetry(
-    emit_hook_fired: FnEmitHookFired,
-    emit_tool_call: FnEmitToolCall,
-    hook_action: FnHookActionFromOptionalOutput,
+    emit_hook_fired: fn(&str, &str),
+    emit_tool_call: fn(&str, u64, bool),
+    hook_action: fn(Option<&Value>) -> &'static str,
 ) {
-    *FN_EMIT_HOOK_FIRED.write().unwrap() = Some(emit_hook_fired);
-    *FN_EMIT_TOOL_CALL.write().unwrap() = Some(emit_tool_call);
-    *FN_HOOK_ACTION_FROM_OPTIONAL_OUTPUT.write().unwrap() = Some(hook_action);
+    EMIT_HOOK_FIRED.set(emit_hook_fired).ok();
+    EMIT_TOOL_CALL.set(emit_tool_call).ok();
+    HOOK_ACTION_FROM_OPTIONAL_OUTPUT.set(hook_action).ok();
 }
 
 pub fn emit_hook_fired(hook_name: &str, action: &str) {
-    if let Some(f) = *FN_EMIT_HOOK_FIRED.read().unwrap() {
-        f(hook_name, action);
-    }
+    EMIT_HOOK_FIRED.get().map(|f| f(hook_name, action));
 }
 
 pub fn emit_tool_call(tool: &str, duration_ms: u64, success: bool) {
-    if let Some(f) = *FN_EMIT_TOOL_CALL.read().unwrap() {
-        f(tool, duration_ms, success);
-    }
+    EMIT_TOOL_CALL.get().map(|f| f(tool, duration_ms, success));
 }
 
 pub fn hook_action_from_optional_output(output: Option<&Value>) -> &'static str {
-    if let Some(f) = *FN_HOOK_ACTION_FROM_OPTIONAL_OUTPUT.read().unwrap() {
-        return f(output);
-    }
-    "unknown"
+    HOOK_ACTION_FROM_OPTIONAL_OUTPUT
+        .get()
+        .map(|f| f(output))
+        .unwrap_or("unknown")
 }
 
 // ────────────────────────────────────────────────────────────────
-// session_call_tracker: function-pointer proxies
+// session_call_tracker: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnInitTracker = fn(&Path) -> Result<(), String>;
-type FnRecordToolCall = fn(&Path, &str, Option<&Value>) -> Result<(), String>;
-type FnReadTrackerState = fn(&Path) -> Result<Value, String>;
-
-static FN_INIT_TRACKER: RwLock<Option<FnInitTracker>> = RwLock::new(None);
-static FN_RECORD_TOOL_CALL: RwLock<Option<FnRecordToolCall>> = RwLock::new(None);
-static FN_READ_TRACKER_STATE: RwLock<Option<FnReadTrackerState>> = RwLock::new(None);
+static INIT_TRACKER: OnceLock<fn(&Path) -> Result<(), String>> = OnceLock::new();
+static RECORD_TOOL_CALL: OnceLock<fn(&Path, &str, Option<&Value>) -> Result<(), String>> = OnceLock::new();
+static READ_TRACKER_STATE: OnceLock<fn(&Path) -> Result<Value, String>> = OnceLock::new();
 
 pub fn register_session_call_tracker(
-    init: FnInitTracker,
-    record: FnRecordToolCall,
-    read_state: FnReadTrackerState,
+    init: fn(&Path) -> Result<(), String>,
+    record: fn(&Path, &str, Option<&Value>) -> Result<(), String>,
+    read_state: fn(&Path) -> Result<Value, String>,
 ) {
-    *FN_INIT_TRACKER.write().unwrap() = Some(init);
-    *FN_RECORD_TOOL_CALL.write().unwrap() = Some(record);
-    *FN_READ_TRACKER_STATE.write().unwrap() = Some(read_state);
+    INIT_TRACKER.set(init).ok();
+    RECORD_TOOL_CALL.set(record).ok();
+    READ_TRACKER_STATE.set(read_state).ok();
 }
 
 pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
-    if let Some(f) = *FN_INIT_TRACKER.read().unwrap() {
-        return f(repo_root);
-    }
-    Ok(())
+    INIT_TRACKER
+        .get()
+        .map(|f| f(repo_root))
+        .unwrap_or(Ok(()))
 }
 
 pub fn record_tool_call(
@@ -311,78 +285,63 @@ pub fn record_tool_call(
     tool_name: &str,
     cache_stats: Option<&Value>,
 ) -> Result<(), String> {
-    if let Some(f) = *FN_RECORD_TOOL_CALL.read().unwrap() {
-        return f(repo_root, tool_name, cache_stats);
-    }
-    Ok(())
+    RECORD_TOOL_CALL
+        .get()
+        .map(|f| f(repo_root, tool_name, cache_stats))
+        .unwrap_or(Ok(()))
 }
 
 pub fn read_tracker_state(repo_root: &Path) -> Result<Value, String> {
-    if let Some(f) = *FN_READ_TRACKER_STATE.read().unwrap() {
-        return f(repo_root);
-    }
-    Ok(serde_json::json!({}))
+    READ_TRACKER_STATE
+        .get()
+        .map(|f| f(repo_root))
+        .unwrap_or(Ok(serde_json::json!({})))
 }
 
 // ────────────────────────────────────────────────────────────────
-// framework_runtime: function-pointer proxies
+// framework_runtime: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnBuildFrameworkContractSummaryEnvelope = fn(&Path) -> Result<Value, String>;
-type FnTryAppendPostToolShellEvidence = fn(&Path, &Value, &str) -> Result<(), String>;
-type FnCloseoutProgrammaticEnforcementEnabled = fn() -> bool;
-type FnCloseoutRecordPathForTask = fn(&Path, &str) -> Result<PathBuf, String>;
-type FnEvaluateCloseoutRecordFileForTask = fn(&Path, &str, &Path) -> Result<Value, String>;
-type FnFirstTaskIdFromRegistry = fn(&Path) -> Option<String>;
-type FnFrameworkHookEvidenceAppend = fn(Value) -> Result<Value, String>;
-type FnExtractPostToolDurationMs = fn(&Value) -> Option<u64>;
-type FnPostToolCallSucceeded = fn(&Value) -> bool;
-type FnCloseoutStopFollowupForCompletionText = fn(&Path, &str) -> Option<String>;
-
-static FN_BUILD_FRAMEWORK_CONTRACT: RwLock<Option<FnBuildFrameworkContractSummaryEnvelope>> =
-    RwLock::new(None);
-static FN_TRY_APPEND_POST_TOOL_SHELL: RwLock<Option<FnTryAppendPostToolShellEvidence>> =
-    RwLock::new(None);
-static FN_CLOSEOUT_ENFORCEMENT: RwLock<Option<FnCloseoutProgrammaticEnforcementEnabled>> =
-    RwLock::new(None);
-static FN_CLOSEOUT_RECORD_PATH: RwLock<Option<FnCloseoutRecordPathForTask>> = RwLock::new(None);
-static FN_EVALUATE_CLOSEOUT: RwLock<Option<FnEvaluateCloseoutRecordFileForTask>> = RwLock::new(None);
-static FN_FIRST_TASK_ID: RwLock<Option<FnFirstTaskIdFromRegistry>> = RwLock::new(None);
-static FN_EVIDENCE_APPEND: RwLock<Option<FnFrameworkHookEvidenceAppend>> = RwLock::new(None);
-static FN_EXTRACT_DURATION: RwLock<Option<FnExtractPostToolDurationMs>> = RwLock::new(None);
-static FN_POST_TOOL_SUCCEEDED: RwLock<Option<FnPostToolCallSucceeded>> = RwLock::new(None);
-static FN_CLOSEOUT_STOP_FOLLOWUP: RwLock<Option<FnCloseoutStopFollowupForCompletionText>> =
-    RwLock::new(None);
+static BUILD_FRAMEWORK_CONTRACT: OnceLock<fn(&Path) -> Result<Value, String>> = OnceLock::new();
+static TRY_APPEND_POST_TOOL_SHELL: OnceLock<fn(&Path, &Value, &str) -> Result<(), String>> = OnceLock::new();
+static CLOSEOUT_ENFORCEMENT: OnceLock<fn() -> bool> = OnceLock::new();
+static CLOSEOUT_RECORD_PATH: OnceLock<fn(&Path, &str) -> Result<PathBuf, String>> = OnceLock::new();
+static EVALUATE_CLOSEOUT: OnceLock<fn(&Path, &str, &Path) -> Result<Value, String>> = OnceLock::new();
+static FIRST_TASK_ID: OnceLock<fn(&Path) -> Option<String>> = OnceLock::new();
+static EVIDENCE_APPEND: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
+static EXTRACT_DURATION: OnceLock<fn(&Value) -> Option<u64>> = OnceLock::new();
+static POST_TOOL_SUCCEEDED: OnceLock<fn(&Value) -> bool> = OnceLock::new();
+static CLOSEOUT_STOP_FOLLOWUP: OnceLock<fn(&Path, &str) -> Option<String>> = OnceLock::new();
 
 pub fn register_framework_runtime(
-    build_contract: FnBuildFrameworkContractSummaryEnvelope,
-    append_shell: FnTryAppendPostToolShellEvidence,
-    enforcement: FnCloseoutProgrammaticEnforcementEnabled,
-    record_path: FnCloseoutRecordPathForTask,
-    eval_closeout: FnEvaluateCloseoutRecordFileForTask,
-    first_task: FnFirstTaskIdFromRegistry,
-    evidence_append: FnFrameworkHookEvidenceAppend,
-    extract_duration: FnExtractPostToolDurationMs,
-    post_tool_ok: FnPostToolCallSucceeded,
-    closeout_followup: FnCloseoutStopFollowupForCompletionText,
+    build_contract: fn(&Path) -> Result<Value, String>,
+    append_shell: fn(&Path, &Value, &str) -> Result<(), String>,
+    enforcement: fn() -> bool,
+    record_path: fn(&Path, &str) -> Result<PathBuf, String>,
+    eval_closeout: fn(&Path, &str, &Path) -> Result<Value, String>,
+    first_task: fn(&Path) -> Option<String>,
+    evidence_append: fn(Value) -> Result<Value, String>,
+    extract_duration: fn(&Value) -> Option<u64>,
+    post_tool_ok: fn(&Value) -> bool,
+    closeout_followup: fn(&Path, &str) -> Option<String>,
 ) {
-    *FN_BUILD_FRAMEWORK_CONTRACT.write().unwrap() = Some(build_contract);
-    *FN_TRY_APPEND_POST_TOOL_SHELL.write().unwrap() = Some(append_shell);
-    *FN_CLOSEOUT_ENFORCEMENT.write().unwrap() = Some(enforcement);
-    *FN_CLOSEOUT_RECORD_PATH.write().unwrap() = Some(record_path);
-    *FN_EVALUATE_CLOSEOUT.write().unwrap() = Some(eval_closeout);
-    *FN_FIRST_TASK_ID.write().unwrap() = Some(first_task);
-    *FN_EVIDENCE_APPEND.write().unwrap() = Some(evidence_append);
-    *FN_EXTRACT_DURATION.write().unwrap() = Some(extract_duration);
-    *FN_POST_TOOL_SUCCEEDED.write().unwrap() = Some(post_tool_ok);
-    *FN_CLOSEOUT_STOP_FOLLOWUP.write().unwrap() = Some(closeout_followup);
+    BUILD_FRAMEWORK_CONTRACT.set(build_contract).ok();
+    TRY_APPEND_POST_TOOL_SHELL.set(append_shell).ok();
+    CLOSEOUT_ENFORCEMENT.set(enforcement).ok();
+    CLOSEOUT_RECORD_PATH.set(record_path).ok();
+    EVALUATE_CLOSEOUT.set(eval_closeout).ok();
+    FIRST_TASK_ID.set(first_task).ok();
+    EVIDENCE_APPEND.set(evidence_append).ok();
+    EXTRACT_DURATION.set(extract_duration).ok();
+    POST_TOOL_SUCCEEDED.set(post_tool_ok).ok();
+    CLOSEOUT_STOP_FOLLOWUP.set(closeout_followup).ok();
 }
 
 pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, String> {
-    if let Some(f) = *FN_BUILD_FRAMEWORK_CONTRACT.read().unwrap() {
-        return f(repo_root);
-    }
-    Err("framework_runtime not registered".into())
+    BUILD_FRAMEWORK_CONTRACT
+        .get()
+        .map(|f| f(repo_root))
+        .unwrap_or_else(|| Err("framework_runtime not registered".into()))
 }
 
 pub fn try_append_post_tool_shell_evidence(
@@ -390,24 +349,21 @@ pub fn try_append_post_tool_shell_evidence(
     event: &Value,
     kind: &str,
 ) -> Result<(), String> {
-    if let Some(f) = *FN_TRY_APPEND_POST_TOOL_SHELL.read().unwrap() {
-        return f(repo_root, event, kind);
-    }
-    Ok(())
+    TRY_APPEND_POST_TOOL_SHELL
+        .get()
+        .map(|f| f(repo_root, event, kind))
+        .unwrap_or(Ok(()))
 }
 
 pub fn closeout_programmatic_enforcement_enabled() -> bool {
-    if let Some(f) = *FN_CLOSEOUT_ENFORCEMENT.read().unwrap() {
-        return f();
-    }
-    false
+    CLOSEOUT_ENFORCEMENT.get().map(|f| f()).unwrap_or(false)
 }
 
 pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
-    if let Some(f) = *FN_CLOSEOUT_RECORD_PATH.read().unwrap() {
-        return f(repo_root, task_id);
-    }
-    Err("framework_runtime not registered".into())
+    CLOSEOUT_RECORD_PATH
+        .get()
+        .map(|f| f(repo_root, task_id))
+        .unwrap_or_else(|| Err("framework_runtime not registered".into()))
 }
 
 pub fn evaluate_closeout_record_file_for_task(
@@ -415,103 +371,78 @@ pub fn evaluate_closeout_record_file_for_task(
     task_id: &str,
     record_path: &Path,
 ) -> Result<Value, String> {
-    if let Some(f) = *FN_EVALUATE_CLOSEOUT.read().unwrap() {
-        return f(repo_root, task_id, record_path);
-    }
-    Err("framework_runtime not registered".into())
+    EVALUATE_CLOSEOUT
+        .get()
+        .map(|f| f(repo_root, task_id, record_path))
+        .unwrap_or_else(|| Err("framework_runtime not registered".into()))
 }
 
 pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
-    if let Some(f) = *FN_FIRST_TASK_ID.read().unwrap() {
-        return f(repo_root);
-    }
-    None
+    FIRST_TASK_ID.get().map(|f| f(repo_root)).unwrap_or(None)
 }
 
 pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
-    if let Some(f) = *FN_EVIDENCE_APPEND.read().unwrap() {
-        return f(payload);
-    }
-    Err("framework_runtime not registered".into())
+    EVIDENCE_APPEND
+        .get()
+        .map(|f| f(payload))
+        .unwrap_or_else(|| Err("framework_runtime not registered".into()))
 }
 
 pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
-    if let Some(f) = *FN_EXTRACT_DURATION.read().unwrap() {
-        return f(event);
-    }
-    None
+    EXTRACT_DURATION.get().map(|f| f(event)).unwrap_or(None)
 }
 
 pub fn post_tool_call_succeeded(event: &Value) -> bool {
-    if let Some(f) = *FN_POST_TOOL_SUCCEEDED.read().unwrap() {
-        return f(event);
-    }
-    true
+    POST_TOOL_SUCCEEDED.get().map(|f| f(event)).unwrap_or(true)
 }
 
 pub fn closeout_stop_followup_for_completion_text(
     repo_root: &Path,
     text: &str,
 ) -> Option<String> {
-    if let Some(f) = *FN_CLOSEOUT_STOP_FOLLOWUP.read().unwrap() {
-        return f(repo_root, text);
-    }
-    None
+    CLOSEOUT_STOP_FOLLOWUP.get().map(|f| f(repo_root, text)).unwrap_or(None)
 }
 
 // ────────────────────────────────────────────────────────────────
-// router_rs_observation: function-pointer proxies
+// router_rs_observation: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnAttachRouterRsObservation = fn(&mut Value, HookObservationHost);
-type FnStripRouterRsObservation = fn(&mut Value);
-
-static FN_ATTACH_OBSERVATION: RwLock<Option<FnAttachRouterRsObservation>> = RwLock::new(None);
-static FN_STRIP_OBSERVATION: RwLock<Option<FnStripRouterRsObservation>> = RwLock::new(None);
+static ATTACH_OBSERVATION: OnceLock<fn(&mut Value, HookObservationHost)> = OnceLock::new();
+static STRIP_OBSERVATION: OnceLock<fn(&mut Value)> = OnceLock::new();
 
 pub fn register_router_rs_observation(
-    attach: FnAttachRouterRsObservation,
-    strip: FnStripRouterRsObservation,
+    attach: fn(&mut Value, HookObservationHost),
+    strip: fn(&mut Value),
 ) {
-    *FN_ATTACH_OBSERVATION.write().unwrap() = Some(attach);
-    *FN_STRIP_OBSERVATION.write().unwrap() = Some(strip);
+    ATTACH_OBSERVATION.set(attach).ok();
+    STRIP_OBSERVATION.set(strip).ok();
 }
 
 pub fn attach_router_rs_observation(output: &mut Value, host: HookObservationHost) {
-    if let Some(f) = *FN_ATTACH_OBSERVATION.read().unwrap() {
-        f(output, host);
-    }
+    ATTACH_OBSERVATION.get().map(|f| f(output, host));
 }
 
 pub fn strip_router_rs_observation(output: &mut Value) {
-    if let Some(f) = *FN_STRIP_OBSERVATION.read().unwrap() {
-        f(output);
-    }
+    STRIP_OBSERVATION.get().map(|f| f(output));
 }
 
 // ────────────────────────────────────────────────────────────────
-// hook_outbound_protect: function-pointer proxies
+// hook_outbound_protect: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnHookOutboundLineProtected = fn(&str) -> bool;
-type FnTruncateOutboundLines = fn(&str, usize, &str) -> String;
-
-static FN_OUTBOUND_PROTECTED: RwLock<Option<FnHookOutboundLineProtected>> = RwLock::new(None);
-static FN_TRUNCATE_OUTBOUND: RwLock<Option<FnTruncateOutboundLines>> = RwLock::new(None);
+static OUTBOUND_PROTECTED: OnceLock<fn(&str) -> bool> = OnceLock::new();
+static TRUNCATE_OUTBOUND: OnceLock<fn(&str, usize, &str) -> String> = OnceLock::new();
 
 pub fn register_hook_outbound_protect(
-    is_protected: FnHookOutboundLineProtected,
-    truncate: FnTruncateOutboundLines,
+    is_protected: fn(&str) -> bool,
+    truncate: fn(&str, usize, &str) -> String,
 ) {
-    *FN_OUTBOUND_PROTECTED.write().unwrap() = Some(is_protected);
-    *FN_TRUNCATE_OUTBOUND.write().unwrap() = Some(truncate);
+    OUTBOUND_PROTECTED.set(is_protected).ok();
+    TRUNCATE_OUTBOUND.set(truncate).ok();
 }
 
 pub fn hook_outbound_line_is_framework_protected(line: &str) -> bool {
-    if let Some(f) = *FN_OUTBOUND_PROTECTED.read().unwrap() {
-        return f(line);
-    }
-    false
+    OUTBOUND_PROTECTED.get().map(|f| f(line)).unwrap_or(false)
 }
 
 pub fn truncate_hook_outbound_lines_preserving(
@@ -519,47 +450,42 @@ pub fn truncate_hook_outbound_lines_preserving(
     max_bytes: usize,
     suffix: &str,
 ) -> String {
-    if let Some(f) = *FN_TRUNCATE_OUTBOUND.read().unwrap() {
-        return f(combined, max_bytes, suffix);
-    }
-    combined.to_string()
+    TRUNCATE_OUTBOUND
+        .get()
+        .map(|f| f(combined, max_bytes, suffix))
+        .unwrap_or_else(|| combined.to_string())
 }
 
 // ────────────────────────────────────────────────────────────────
-// hook_posttool_normalize: function-pointer proxy
+// hook_posttool_normalize: function-pointer proxy (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnSyntheticPostToolEvidenceShape = fn(&Value) -> Value;
+static SYNTHETIC_POST_TOOL: OnceLock<fn(&Value) -> Value> = OnceLock::new();
 
-static FN_SYNTHETIC_POST_TOOL: RwLock<Option<FnSyntheticPostToolEvidenceShape>> = RwLock::new(None);
-
-pub fn register_hook_posttool_normalize(f: FnSyntheticPostToolEvidenceShape) {
-    *FN_SYNTHETIC_POST_TOOL.write().unwrap() = Some(f);
+pub fn register_hook_posttool_normalize(f: fn(&Value) -> Value) {
+    SYNTHETIC_POST_TOOL.set(f).ok();
 }
 
 pub fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
-    if let Some(f) = *FN_SYNTHETIC_POST_TOOL.read().unwrap() {
-        return f(event);
-    }
-    serde_json::json!({})
+    SYNTHETIC_POST_TOOL
+        .get()
+        .map(|f| f(event))
+        .unwrap_or_else(|| serde_json::json!({}))
 }
 
 // ────────────────────────────────────────────────────────────────
-// ship_readiness: function-pointer proxies
+// ship_readiness: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnEvaluateGoalReadiness = fn(&Path, &Value, &str) -> GoalReadiness;
-type FnGoalStopFollowupLine = fn(bool, bool, bool, u32) -> String;
-
-static FN_EVAL_GOAL_READINESS: RwLock<Option<FnEvaluateGoalReadiness>> = RwLock::new(None);
-static FN_GOAL_STOP_FOLLOWUP: RwLock<Option<FnGoalStopFollowupLine>> = RwLock::new(None);
+static EVAL_GOAL_READINESS: OnceLock<fn(&Path, &Value, &str) -> GoalReadiness> = OnceLock::new();
+static GOAL_STOP_FOLLOWUP: OnceLock<fn(bool, bool, bool, u32) -> String> = OnceLock::new();
 
 pub fn register_ship_readiness(
-    evaluate: FnEvaluateGoalReadiness,
-    followup: FnGoalStopFollowupLine,
+    evaluate: fn(&Path, &Value, &str) -> GoalReadiness,
+    followup: fn(bool, bool, bool, u32) -> String,
 ) {
-    *FN_EVAL_GOAL_READINESS.write().unwrap() = Some(evaluate);
-    *FN_GOAL_STOP_FOLLOWUP.write().unwrap() = Some(followup);
+    EVAL_GOAL_READINESS.set(evaluate).ok();
+    GOAL_STOP_FOLLOWUP.set(followup).ok();
 }
 
 pub fn evaluate_goal_readiness_from_disk(
@@ -567,10 +493,10 @@ pub fn evaluate_goal_readiness_from_disk(
     goal: &Value,
     task_id: &str,
 ) -> GoalReadiness {
-    if let Some(f) = *FN_EVAL_GOAL_READINESS.read().unwrap() {
-        return f(repo_root, goal, task_id);
-    }
-    GoalReadiness::default()
+    EVAL_GOAL_READINESS
+        .get()
+        .map(|f| f(repo_root, goal, task_id))
+        .unwrap_or_default()
 }
 
 pub fn goal_stop_followup_line(
@@ -579,34 +505,31 @@ pub fn goal_stop_followup_line(
     verification: bool,
     goal_followup_count: u32,
 ) -> String {
-    if let Some(f) = *FN_GOAL_STOP_FOLLOWUP.read().unwrap() {
-        return f(contract, progress, verification, goal_followup_count);
-    }
-    String::new()
+    GOAL_STOP_FOLLOWUP
+        .get()
+        .map(|f| f(contract, progress, verification, goal_followup_count))
+        .unwrap_or_default()
 }
 
 // ────────────────────────────────────────────────────────────────
-// paper hooks: function-pointer proxies
+// paper hooks: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnMaybeAppendPaperContext = fn(&Path, &str, &mut Vec<String>, PaperProseHookHost);
-type FnMaybeMergePaperBeforeSubmit = fn(&Path, &mut Value, &str, bool);
-
-static FN_APPEND_PROSE: RwLock<Option<FnMaybeAppendPaperContext>> = RwLock::new(None);
-static FN_MERGE_PROSE: RwLock<Option<FnMaybeMergePaperBeforeSubmit>> = RwLock::new(None);
-static FN_APPEND_ADVERSARIAL: RwLock<Option<FnMaybeAppendPaperContext>> = RwLock::new(None);
-static FN_MERGE_ADVERSARIAL: RwLock<Option<FnMaybeMergePaperBeforeSubmit>> = RwLock::new(None);
+static APPEND_PROSE: OnceLock<fn(&Path, &str, &mut Vec<String>, PaperProseHookHost)> = OnceLock::new();
+static MERGE_PROSE: OnceLock<fn(&Path, &mut Value, &str, bool)> = OnceLock::new();
+static APPEND_ADVERSARIAL: OnceLock<fn(&Path, &str, &mut Vec<String>, PaperProseHookHost)> = OnceLock::new();
+static MERGE_ADVERSARIAL: OnceLock<fn(&Path, &mut Value, &str, bool)> = OnceLock::new();
 
 pub fn register_paper_hooks(
-    append_prose: FnMaybeAppendPaperContext,
-    merge_prose: FnMaybeMergePaperBeforeSubmit,
-    append_adversarial: FnMaybeAppendPaperContext,
-    merge_adversarial: FnMaybeMergePaperBeforeSubmit,
+    append_prose: fn(&Path, &str, &mut Vec<String>, PaperProseHookHost),
+    merge_prose: fn(&Path, &mut Value, &str, bool),
+    append_adversarial: fn(&Path, &str, &mut Vec<String>, PaperProseHookHost),
+    merge_adversarial: fn(&Path, &mut Value, &str, bool),
 ) {
-    *FN_APPEND_PROSE.write().unwrap() = Some(append_prose);
-    *FN_MERGE_PROSE.write().unwrap() = Some(merge_prose);
-    *FN_APPEND_ADVERSARIAL.write().unwrap() = Some(append_adversarial);
-    *FN_MERGE_ADVERSARIAL.write().unwrap() = Some(merge_adversarial);
+    APPEND_PROSE.set(append_prose).ok();
+    MERGE_PROSE.set(merge_prose).ok();
+    APPEND_ADVERSARIAL.set(append_adversarial).ok();
+    MERGE_ADVERSARIAL.set(merge_adversarial).ok();
 }
 
 pub fn maybe_append_paper_prose_context(
@@ -615,9 +538,7 @@ pub fn maybe_append_paper_prose_context(
     contexts: &mut Vec<String>,
     host: PaperProseHookHost,
 ) {
-    if let Some(f) = *FN_APPEND_PROSE.read().unwrap() {
-        f(repo_root, prompt_text, contexts, host);
-    }
+    APPEND_PROSE.get().map(|f| f(repo_root, prompt_text, contexts, host));
 }
 
 pub fn maybe_merge_paper_prose_before_submit(
@@ -626,9 +547,7 @@ pub fn maybe_merge_paper_prose_before_submit(
     prompt_text: &str,
     use_followup_message: bool,
 ) {
-    if let Some(f) = *FN_MERGE_PROSE.read().unwrap() {
-        f(repo_root, output, prompt_text, use_followup_message);
-    }
+    MERGE_PROSE.get().map(|f| f(repo_root, output, prompt_text, use_followup_message));
 }
 
 pub fn maybe_append_paper_adversarial_context(
@@ -637,9 +556,7 @@ pub fn maybe_append_paper_adversarial_context(
     contexts: &mut Vec<String>,
     host: PaperProseHookHost,
 ) {
-    if let Some(f) = *FN_APPEND_ADVERSARIAL.read().unwrap() {
-        f(repo_root, prompt_text, contexts, host);
-    }
+    APPEND_ADVERSARIAL.get().map(|f| f(repo_root, prompt_text, contexts, host));
 }
 
 pub fn maybe_merge_paper_adversarial_before_submit(
@@ -648,27 +565,21 @@ pub fn maybe_merge_paper_adversarial_before_submit(
     prompt_text: &str,
     use_followup_message: bool,
 ) {
-    if let Some(f) = *FN_MERGE_ADVERSARIAL.read().unwrap() {
-        f(repo_root, output, prompt_text, use_followup_message);
-    }
+    MERGE_ADVERSARIAL.get().map(|f| f(repo_root, output, prompt_text, use_followup_message));
 }
 
 // ────────────────────────────────────────────────────────────────
-// kernel_bootstrap: function-pointer proxy
+// kernel_bootstrap: function-pointer proxy (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-type FnEnsureKernelBootstrap = fn();
+static ENSURE_KERNEL: OnceLock<fn()> = OnceLock::new();
 
-static FN_ENSURE_KERNEL: RwLock<Option<FnEnsureKernelBootstrap>> = RwLock::new(None);
-
-pub fn register_kernel_bootstrap(f: FnEnsureKernelBootstrap) {
-    *FN_ENSURE_KERNEL.write().unwrap() = Some(f);
+pub fn register_kernel_bootstrap(f: fn()) {
+    ENSURE_KERNEL.set(f).ok();
 }
 
 pub fn ensure_kernel_bootstrap() {
-    if let Some(f) = *FN_ENSURE_KERNEL.read().unwrap() {
-        f();
-    }
+    ENSURE_KERNEL.get().map(|f| f());
     // In test builds, install the test deps (tokenizer, review context probes)
     // as a fallback when no real kernel bootstrap is registered.
     #[cfg(test)]
@@ -729,7 +640,7 @@ pub fn install_test_deps() {
 
 // ────────────────────────────────────────────────────────────────
 // Additional hooks needed by claude_code_hooks / mcp_stdio_harness
-// (appended during merge of Agent 1 + Agent 2 hooks)
+// (appended during host-projection hooks consolidation)
 // ────────────────────────────────────────────────────────────────
 
 // Framework Runtime (additional)
