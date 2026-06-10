@@ -12,7 +12,7 @@ pub mod goal_drive {
 // ── Re-exports from runtime-core (B3 migration: single source of truth) ──
 pub use runtime_core::autopilot_goal;
 pub use runtime_core::background_state;
-pub use runtime_core::browser_mcp;
+pub use browser_mcp;
 pub use runtime_core::cli;
 pub use runtime_core::closeout_enforcement;
 pub use runtime_core::eval_route;
@@ -381,3 +381,10 @@ mod smoke_workspace_dag_compliance_tests;
 #[cfg(test)]
 #[path = "../tests/hook_contract/mod.rs"]
 mod hook_contract_matrix;
+
+// ── browser dispatch registration ──
+/// Register browser-mcp's dispatch function with runtime-core's hook.
+/// Must be called once before any `router-rs browser` CLI command.
+pub fn init_browser_mcp_dispatch() {
+    browser_mcp::register_browser_dispatch();
+}

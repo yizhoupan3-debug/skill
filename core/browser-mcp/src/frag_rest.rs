@@ -882,7 +882,7 @@ fn skill_body_path_from_manifest(
     manifest_path: &Path,
     slug: &str,
 ) -> Result<Option<PathBuf>, String> {
-    let payload = routing_engine::text::read_json(manifest_path)?;
+    let payload = routing_engine::route::read_json(manifest_path)?;
     let keys = payload
         .get("keys")
         .and_then(Value::as_array)

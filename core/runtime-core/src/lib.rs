@@ -20,6 +20,9 @@ pub use framework_profile;
 pub mod rfv_loop;
 pub mod schema_drift;
 
+// ── browser dispatch hook (decouples runtime-core from browser-mcp crate) ──
+pub mod browser_dispatch_hook;
+
 // ── proxy / re-export modules ──
 pub mod autopilot_goal;
 pub mod atomic_write;
@@ -33,7 +36,8 @@ pub mod step_ledger;
 pub mod task_write_lock;
 
 // ── migrated supporting modules ──
-pub mod browser_mcp;
+// browser_mcp: physically migrated to core/browser-mcp crate (§2.4)
+// Use browser-mcp crate directly; dispatch via browser_dispatch_hook.
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
 pub mod cli;
