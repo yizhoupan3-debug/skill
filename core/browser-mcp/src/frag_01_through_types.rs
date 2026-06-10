@@ -5,8 +5,8 @@ use runtime_core::framework_runtime::{
     attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
 };
 use runtime_core::framework_runtime::resolve_repo_root_arg;
-use runtime_core::cli::common::route_task_with_manifest_fallback;
-use runtime_core::route::{
+use runtime_core::framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;
+use routing_engine::route::{
     build_search_results_payload, filter_record_indices_for_host, load_records_cached_for_stdio,
     search_skills_subset,
 };
@@ -240,6 +240,21 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         .get("arguments")
         .cloned()
         .unwrap_or_else(|| json!({}));
+
+    let pre_guard =
+        runtime_core::mcp_pre_guard::evaluate_mcp_pre_guard_safe(&tool_name, &arguments, &runtime.repo_root);
+    if pre_guard.blocked {
+        let reason = pre_guard
+            .reason
+            .unwrap_or_else(|| "MCP pre-guard blocked this tool call.".to_string());
+        return tool_result(Err(browser_error(
+            "MCP_PRE_GUARD",
+            &reason,
+            &["review tool arguments and retry with safe inputs"],
+            true,
+        )));
+    }
+
     let structured = match tool_name.as_str() {
         "browser_open" => runtime.open(&arguments),
         "browser_tabs" => runtime.tabs(&arguments),

@@ -7,9 +7,7 @@ use std::path::PathBuf;
 use crate::cli::args::*;
 use crate::cli::common::{parse_json_input, print_json_value};
 use super::{inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata};
-use crate::browser_mcp::{
-    resolve_browser_mcp_attach_artifact, run_browser_mcp_stdio_loop, BrowserAttachConfig,
-};
+use crate::browser_dispatch_hook;
 #[cfg(feature = "codegraph")]
 use crate::codegraph_mcp::run_codegraph_mcp_stdio_loop;
 use crate::mcp_stdio_harness::run_antigravity_mcp_loop;
@@ -380,26 +378,7 @@ pub fn dispatch_codegraph_command(command: CodegraphSubcommand) -> Result<(), St
 }
 
 pub fn dispatch_browser_command(command: BrowserSubcommand) -> Result<(), String> {
-    match command {
-        BrowserSubcommand::McpStdio(command) => run_browser_mcp_stdio_loop(
-            command.repo_root.as_deref(),
-            BrowserAttachConfig::from_cli_and_env(
-                command.runtime_attach_descriptor_path,
-                command.runtime_attach_artifact_path,
-                command.headless,
-            ),
-        ),
-        BrowserSubcommand::ResolveAttachArtifact(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let Some(path) =
-                resolve_browser_mcp_attach_artifact(&repo_root, command.search_root.as_deref())
-            else {
-                return Err("no browser-mcp runtime attach artifact candidates found".to_string());
-            };
-            println!("{path}");
-            Ok(())
-        }
-    }
+    browser_dispatch_hook::dispatch_browser_command(command)
 }
 
 pub fn dispatch_profile_command(command: ProfileSubcommand) -> Result<(), String> {

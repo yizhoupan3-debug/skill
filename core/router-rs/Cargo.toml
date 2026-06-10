@@ -15,6 +15,7 @@ core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] 
 core-math = { path = "../core-math" }
 routing-engine = { path = "../routing-engine" }
 runtime-core = { path = "../runtime-core", features = ["test-support"] }
+browser-mcp = { path = "../browser-mcp" }
 libc = "0.2"
 chrono.workspace = true
 clap = { version = "4.5.38", features = ["derive"] }

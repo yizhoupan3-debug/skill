@@ -21,5 +21,6 @@ fn main() -> Result<(), String> {
         }
     }
     let args = router_rs::cli::Cli::parse_from(args);
+    router_rs::init_browser_mcp_dispatch();
     router_rs::cli::run(&args)
 }

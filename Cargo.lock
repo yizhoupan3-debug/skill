@@ -505,12 +505,14 @@ name = "browser-mcp"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "ctor",
  "reqwest",
  "routing-engine",
  "runtime-core",
  "rusqlite",
  "serde",
  "serde_json",
+ "serial_test",
  "tungstenite",
 ]
 
@@ -4056,6 +4058,7 @@ dependencies = [
 name = "router-rs"
 version = "0.1.0"
 dependencies = [
+ "browser-mcp",
  "chrono",
  "clap",
  "codegraph-rs",
