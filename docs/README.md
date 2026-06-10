@@ -45,7 +45,7 @@ depends_on:
 | 统一运维手册（安装 / 同步 / 备份 / 故障排查） | [operations/index.md](operations/index.md)（唯一真源；旧 `maintenance/ops-runbook.md` 已重定向） |
 | **Host projection schema 校验**（闭集 MCP Key 矩阵 + 写盘前/写盘后自检 + 已知 bug；2026-06-04 opencode 故障的根因档案） | [maintenance/host-projection-schema-validity.md](maintenance/host-projection-schema-validity.md) · 引用 [spec.md](spec.md) · [framework_naming_conventions.md §MCP Key Convention](framework_naming_conventions.md#mcp-key-convention闭集禁从一个-host-抄到另一个) |
 | Plans 索引（ROADMAP 真源；已删 stub 不恢复） | [plans/README.md](plans/README.md) |
-| Workflow supervisor phase 工件 | [`configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json`](../configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json) · [`skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md`](../skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md) |
+| Workflow supervisor phase 工件 | `configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json` (removed) · [`skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md`](../skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md) |
 
 ## 概念与源码映射
 

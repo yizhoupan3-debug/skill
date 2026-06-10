@@ -118,9 +118,9 @@ Canonical API（`core-policy`）：`is_reviewer_lane_from_registry`、`review_in
 
 | 职责 | 仓库路径 |
 |------|----------|
-| Cursor hook | [`cursor_hooks/mod.rs`](../core/runtime-core/src/hosts/cursor_hooks/mod.rs) |
-| Codex hook | [`codex_hooks/mod.rs`](../core/runtime-core/src/hosts/codex_hooks/mod.rs) |
-| Claude Code hook | [`claude_code_hooks.rs`](../core/runtime-core/src/hosts/claude_code_hooks.rs) |
+| Cursor hook | [`cursor_hooks/mod.rs`](../core/host-projection/src/hosts/cursor_hooks/mod.rs) |
+| Codex hook | [`codex_hooks/mod.rs`](../core/host-projection/src/hosts/codex_hooks/mod.rs) |
+| Claude Code hook | [`claude_code_hooks.rs`](../core/host-projection/src/hosts/claude_code_hooks.rs) |
 | Antigravity MCP | `antigravity` agent / MCP 工具层 |
 | OpenCode MCP | `opencode` agent / MCP 工具层 |
 | entrypoint sync | [`host_entrypoint_sync.rs`](../core/runtime-core/src/host_entrypoint_sync.rs) |
@@ -146,7 +146,7 @@ Canonical API（`core-policy`）：`is_reviewer_lane_from_registry`、`review_in
 | 阶段 | 主要落点 |
 |------|----------|
 | 注册表 | `RUNTIME_REGISTRY.json`，[`tests/common/mod.rs`](../tests/common/mod.rs)，[`framework_host_targets.rs`](../core/runtime-core/src/framework_host_targets.rs) |
-| L3 入口 | `hosts/<host>_hooks/`（如 [`codex_hooks/mod.rs`](../core/runtime-core/src/hosts/codex_hooks/mod.rs)）或 `<host>_hooks.rs`，[`main.rs`](../core/runtime-core/src/main.rs) |
+| L3 入口 | `hosts/<host>_hooks/`（如 [`codex_hooks/mod.rs`](../core/host-projection/src/hosts/codex_hooks/mod.rs)）或 `<host>_hooks.rs`，`lib.rs` |
 | CLI 分发 | [`dispatch_body.txt`](../core/runtime-core/src/cli/dispatch_body.txt)，[`dispatch.rs`](../core/runtime-core/src/cli/dispatch.rs) |
 | 安装 / 投影 | [`host_integration/mod.rs`](../core/runtime-core/src/host_integration/mod.rs)，[`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
 | L4 + 验证 | 宿主 `hooks.json`，[`tests/host_integration.rs`](../tests/host_integration.rs)，[`tests/policy_contracts.rs`](../tests/policy_contracts.rs) |
@@ -202,12 +202,12 @@ Canonical API（`core-policy`）：`is_reviewer_lane_from_registry`、`review_in
 |------|------------|------|
 | [`framework_maint.rs`](../core/runtime-core/src/framework_maint.rs) | `refresh_host_projections` 遍历 installable 宿主 | 新宿主提供 maint verifier 或 `installable=false` |
 | [`session_supervisor/mod.rs`](../core/runtime-core/src/session_supervisor/mod.rs) | **Codex driver only** | 新 CLI 宿主补 driver 前 registry 标记 `session_supervisor_driver=unsupported` |
-| [`framework_profile.rs`](../core/runtime-core/src/framework_profile.rs) | `host_payloads` 从 `host_projections` 派生 | 新宿主补 `host_projections` + contract tests |
+| `framework_profile.rs` | `host_payloads` 从 `host_projections` 派生 | 新宿主补 `host_projections` + contract tests |
 | [`hook_posttool_normalize.rs`](../core/runtime-core/src/utils/hook_posttool_normalize.rs) | Cursor `postToolUse` → 共享 append 形状 | Codex 直连 append；Cursor 专有分支在 `cursor_hooks` |
 
 ### 3.3 Host entrypoint sync engine / provider 边界
 
-[`host_entrypoint_sync.rs`](../core/runtime-core/src/host_entrypoint_sync.rs) 负责通用 sync engine；Codex provider（`.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md`）在 [`codex_hooks/mod.rs`](../core/runtime-core/src/hosts/codex_hooks/mod.rs)。hook 编译期 embed **`AGENTS.md` + `AGENTS_CODEX.md`**（见 `policy_embed.rs`）；**不** materialize 或 overwrite 仓库根 [`AGENTS.md`](../AGENTS.md)。`router-rs framework sync-entrypoints` 为统一 CLI 入口。root 用 `full_sync`；匹配 worktree 仅 `partial_sync`（JSON hook/manifest，不覆盖本地策略文本）。`HostProjectionAdapter` 为薄 adapter 表；`RUNTIME_PROVIDER_REGISTRY` 的 host provider lane 只作目录/报告面。
+[`host_entrypoint_sync.rs`](../core/runtime-core/src/host_entrypoint_sync.rs) 负责通用 sync engine；Codex provider（`.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md`）在 [`codex_hooks/mod.rs`](../core/host-projection/src/hosts/codex_hooks/mod.rs)。hook 编译期 embed **`AGENTS.md` + `AGENTS_CODEX.md`**（见 `policy_embed.rs`）；**不** materialize 或 overwrite 仓库根 [`AGENTS.md`](../AGENTS.md)。`router-rs framework sync-entrypoints` 为统一 CLI 入口。root 用 `full_sync`；匹配 worktree 仅 `partial_sync`（JSON hook/manifest，不覆盖本地策略文本）。`HostProjectionAdapter` 为薄 adapter 表；`RUNTIME_PROVIDER_REGISTRY` 的 host provider lane 只作目录/报告面。
 
 ### 3.4 PostTool / 终端证据归一化
 

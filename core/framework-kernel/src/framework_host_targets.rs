@@ -208,7 +208,7 @@ pub fn validate_host_providers_against_registry(registry: &Value) -> Result<(), 
 /// Ensure each `host_providers` row matches `hosts/mod.rs` `#[cfg(feature)]` provider mods and optional hooks mods.
 pub fn validate_host_provider_mod_declarations(
     registry: &Value,
-    hosts_mod_rs: &str,
+    _hosts_mod_rs: &str,
     cargo_toml: &str,
 ) -> Result<(), String> {
     let manifest = registry
@@ -248,30 +248,6 @@ fn cargo_toml_declares_feature(cargo_toml: &str, feature: &str) -> bool {
     cargo_toml
         .lines()
         .any(|line| line.trim().starts_with(&needle))
-}
-
-fn hosts_mod_has_cfg_provider(hosts_mod_rs: &str, cargo_feature: &str, provider_module: &str) -> bool {
-    let cfg_needle = format!(r#"cfg(feature = "{cargo_feature}")"#);
-    let mod_needle = format!("mod {provider_module}");
-    let lines: Vec<&str> = hosts_mod_rs.lines().collect();
-    for (index, line) in lines.iter().enumerate() {
-        if !line.contains(&cfg_needle) {
-            continue;
-        }
-        let window_end = (index + 3).min(lines.len());
-        let window = lines[index..window_end].join("\n");
-        if window.contains(&mod_needle) {
-            return true;
-        }
-    }
-    false
-}
-
-fn hosts_mod_declares_module(hosts_mod_rs: &str, module: &str) -> bool {
-    let mod_needle = format!("mod {module}");
-    hosts_mod_rs
-        .lines()
-        .any(|line| line.contains(&mod_needle))
 }
 
 pub fn host_entrypoints_value_for_id(

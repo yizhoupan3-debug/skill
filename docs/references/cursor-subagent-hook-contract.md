@@ -24,7 +24,7 @@ Machine-readable source: [`configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json`
 
 ## `fork_context`
 
-Independent reviewer evidence when parsed as logical **`false`** only (`cursor_review_independent_fork` / `fork_context_from_values` in [`review/engine.rs`](../../core/runtime-core/src/review/engine.rs)):
+Independent reviewer evidence when parsed as logical **`false`** only (`cursor_review_independent_fork` / `fork_context_from_values` in `review_gate_engine.rs`):
 
 | Form | Accepted as `false` |
 |------|---------------------|

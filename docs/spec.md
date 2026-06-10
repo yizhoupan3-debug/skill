@@ -20,7 +20,7 @@ extends:
 
 > 本文件是框架**总览规约**，覆盖架构总览、设计原则、crate 拓扑、测试契约与 schema 索引。
 > 各子系统详细规约见下方 `extends` 列表中的延伸文档（各自在其领域内为真源）。
-> 实施路线图见 [`artifacts/current/roadmap-v5-deep-review.md`](../artifacts/current/roadmap-v5-deep-review.md)。
+> 实施路线图见 `artifacts/current/roadmap-v5-deep-review.md` (archived)。
 
 ---
 

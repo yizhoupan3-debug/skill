@@ -41,7 +41,7 @@ L1  Executable verification and exit codes
 | L2 continuity | `artifacts/current/`、`TRACE_EVENTS.jsonl`、`STEP_LEDGER.jsonl`、`configs/framework/*SCHEMA*` |
 | Skill 热路由（router-rs hot path） | `skills/SKILL_ROUTING_RUNTIME.json` |
 | Skill 伴生元数据（**非**每 prompt 热路径；`SKILL_PLUGIN_CATALOG` / `SKILL_ROUTING_RUNTIME_EXPLAIN` 由 refresh / policy / CI 消费；**`SKILL_ROUTING_METADATA.json` 在 `load_records_from_runtime` 时 merge**，见 `route/records.rs` `merge_sidecar_route_metadata_from_runtime`） | `skills/SKILL_PLUGIN_CATALOG.json`、`skills/SKILL_ROUTING_METADATA.json`、`skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json`（EXPLAIN：CI/companion/人读，router route 模块不读） |
-| Host registry（磁盘 loader） | `configs/framework/RUNTIME_REGISTRY.json` + `core/runtime-core/src/runtime_registry/mod.rs`（shim：``） |
+| Host registry（磁盘 loader） | `configs/framework/RUNTIME_REGISTRY.json` + `core/framework-kernel/src/runtime_registry.rs`（shim：``） |
 | 宿主投影 My/review 文案 | `configs/framework/host_projection_narrative.json` |
 | 生成物 manifest / drift | `configs/framework/GENERATED_ARTIFACTS.json` + `framework host-integration generated-artifacts-status` |
 | 任务 schema drift / Cursor hooks 减法闭集 | `core/runtime-core/src/schema_drift.rs`、`hosts/cursor_hooks/subtraction.rs`；CLI `router-rs schema-drift {contract,baseline,check}` |

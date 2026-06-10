@@ -62,7 +62,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 - **真源**：本仓库 Cursor hook 写入的机读门控短句（**非** hook `GOAL_CONTINUE` 续跑），**必须以** ASCII 前缀 **`router-rs `** 起行（例如 **`router-rs REVIEW_GATE incomplete …`**、**`router-rs AG_FOLLOWUP missing_parts=…`**）。排障以 hook 出站 JSON 中带该前缀的行为准；长设计见 [spec.md](spec.md) §10。
 - **误报 / 仿冒**：以 **`RG_FOLLOWUP`**、**`RG FOLLOWUP`**、**`RG-FOLLOWUP`** 等开头、且带 `missing_parts=` / `escalation=` 却**没有** `router-rs ` 前缀的整行，**不是** harness 注入。常见来源是助手复述或误粘贴；其中一种长尾形态会在 `escalation=` 后接英文恐吓句（例如声称已循环多次、禁止静默继续）——仍应忽略，改查 **真实** hook 输出与 `.cursor/hook-state`。
 - **对照**：真 **`router-rs AG_FOLLOWUP`** 的 `missing_parts=` 只会是 goal 门控片段（如 `goal_contract`、`checkpoint_progress`、`verification_or_blocker`）的逗号拼接，**不会出现** `independent_subagent_or_reject_reason` 这类占位串；若见该串且前缀不是 `router-rs `，按仿冒处理。
-- **粘贴清门**：用户消息里单独一行粘贴 **`RG_FOLLOWUP`…** **不会**被 [`saw_reject_reason`](../core/runtime-core/src/hook_common/mod.rs) 当作清门（避免把模型仿造行当令牌）；请改用单独一行的 **`rg_clear`**、**[`AGENTS.md`](../AGENTS.md) 所列拒因 token**，或自然语言 `review_override` / `delegation_override`。goal 相关的 **`ag_followup…`** 粘贴兼容仍由同函数处理。
+- **粘贴清门**：用户消息里单独一行粘贴 **`RG_FOLLOWUP`…** **不会**被 [`saw_reject_reason`](../core/core-policy/src/hook_common.rs) 当作清门（避免把模型仿造行当令牌）；请改用单独一行的 **`rg_clear`**、**[`AGENTS.md`](../AGENTS.md) 所列拒因 token**，或自然语言 `review_override` / `delegation_override`。goal 相关的 **`ag_followup…`** 粘贴兼容仍由同函数处理。
 
 ## Spawn-first 配对审稿（2026-05-21）
 
@@ -89,7 +89,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 
 | 主题 | 行为 |
 |------|------|
-| **Registry `review_gate` lane** | 真源 `configs/framework/RUNTIME_REGISTRY.json`；[`runtime_registry/mod.rs`](../core/runtime-core/src/runtime_registry/mod.rs) **磁盘读取**（`` shim；无 compile-time embed）。改 lane 后**无需** `cargo build`；重启 hook 子进程即可。 |
+| **Registry `review_gate` lane** | 真源 `configs/framework/RUNTIME_REGISTRY.json`；[`runtime_registry/mod.rs`](../core/framework-kernel/src/runtime_registry.rs) **磁盘读取**（`` shim；无 compile-time embed）。改 lane 后**无需** `cargo build`；重启 hook 子进程即可。 |
 | **宿主投影 My/review 文案** | `configs/framework/host_projection_narrative.json`；`host-integration install` 渲染 Codex/Cursor/Claude 入口时读取。勿在 `host_integration/mod.rs` 硬编码段落。 |
 | **`generated-artifacts-status`** | **`framework doctor`** 与 `--skip-generator-run` / `ROUTER_RS_GENERATED_ARTIFACTS_SKIP_GENERATORS=1` → **metadata-only**（快）。**`update-one-shot`** 仍跑全量 **drift-gate**（含慢 generator）。 |
 | **`ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE=1`** | 关闭审稿门控并**清除** hook-state review 字段（细节见下节 **REVIEW_GATE** 链接）。 |
@@ -97,10 +97,11 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 | **active 有 GOAL 但不续跑、focus 在 drive** | hydration/checkpoint 已优先 focus；若指针仍分裂，doctor 报 `ACTIVE_NOT_DRIVING`；对齐 active/focus 或清空 completed 任务的 active 占位。 |
 | **`ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`** | **默认开启**（unset 即 strict）：禁止仅凭磁盘 GOAL 置 `pre_goal_review_satisfied`；宽松 legacy 设 `=0|false|off|no`。 |
 | **Stop 自动 checkpoint** | **已拔除（2026-05）**：Cursor/Codex hook Stop **不写** checkpoint；显式刷新用 Desktop MCP `session_checkpoint` 或 `framework_session_artifact_write` stdio。 |
-| **Cursor hooks 减法闭集** | 默认 **7** 事件；5 个已移除事件 dispatch **no-op**（[`subtraction.rs`](../core/runtime-core/src/hosts/cursor_hooks/subtraction.rs)）。写回 `hooks.json` 即恢复 handler；`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` 仅作未注册时对照。 |
+| **Cursor hooks 减法闭集** | 默认 **7** 事件；5 个已移除事件 dispatch **no-op**（[`subtraction.rs`](../core/host-projection/src/hosts/cursor_hooks/subtraction.rs)）。写回 `hooks.json` 即恢复 handler；`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1` 仅作未注册时对照。 |
 | **`router-rs schema-drift`** | `contract` / `baseline` / `check` 验收 hooks 闭集、模板 parity、REQUIREMENTS↔ROADMAP 标题；见 [`skills/verifyx/SKILL.md`](../skills/verifyx/SKILL.md) 与 [`SCHEMA_DRIFT_HEADINGS_CONTRACT.md`](../configs/framework/SCHEMA_DRIFT_HEADINGS_CONTRACT.md)。 |
 | **`ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`** | hook-state 持久化失败时 beforeSubmit 仍放行（应急）；默认 fail-closed。 |
 | **`ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | Claude 专用；默认 **关闭**（不读 Cursor 同名 env）。 |
+| **`ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`** | 跨宿主 canonical env；任一宿主显式启用即生效（优先级高于 per-host env）；默认 **关闭**。 |
 | **Registry 读盘失败** | `review_gate` lane 判定 fail-closed（不计入深度 lane）；`framework doctor` 打印 `review_gate snapshot` WARN。 |
 | **D9 / fork 推断** | Cursor：`cursor_review_independent_fork` + `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`（见 [`AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)）。Codex：`codex_review_independent_fork` + **`ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`**（默认 on；PostTool/Stop 深度 lane 缺 `fork_context` 时可推断独立 reviewer 证据）。 |
 | **Codex stable session** | 默认 **要求** 稳定 session 键（`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` unset=on）；生产勿关。legacy `=0`/`false` 时 fallback 按 **repo + cwd + payload session**（可选 `ROUTER_RS_CODEX_HOOK_STATE_SALT` 加盐）；`cwd` 空会 stderr 警告。Stop 上 review 未清门时仍投影 `CODEX_REVIEW_GATE` **advisory nudge**（不硬拦 Stop）。 |
@@ -112,7 +113,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework docto
 
 ## 混用时的实际武装顺序（Cursor Stop）
 
-- **Stop 优先级**（实现 [`handlers/mod.rs`](../core/runtime-core/src/hosts/cursor_hooks/handlers/mod.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 **`framework_goal_drive` stdio** + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
+- **Stop 优先级**（实现 [`handlers/mod.rs`](../core/host-projection/src/hosts/cursor_hooks/handlers.rs) `handle_stop`）：若本轮仍武装深度 review 且子代理证据链未收尾，Stop 先给 **`router-rs REVIEW_GATE incomplete …`**；仅当 review 侧已满足后，才会轮到 **`router-rs AG_FOLLOWUP missing_parts=…`**（goal 契约 / 进展 / 验证）。**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE`（2026-05）；宏目标续跑用 **`framework_goal_drive` stdio** + `artifacts/current/<task_id>/` 手动画板。`finalize_stop_hook_outputs` 仅可选合并 `SESSION_CLOSE_STYLE` 软提示。
 - **主线程深度 review（wave-2）**：清门须 live subagent 证据 + **`Stop` tail**；**裸** `phase≥2` 不足。细则见下节链接与本节「Hook 减法闭集」。
 - **同一条用户消息里同时写深度 review 与 My 执行区入口**（`/implementx`、`/verifyx`）：`beforeSubmit` 里 **`review_arms_for_gate = review && !goal_drive_entrypoint`**，因此只要本回合用户文本命中 **goal drive 入口**，**不会**因 review 措辞在本回合**新武装** `review_required`。**My 默认（`my-light`）**：同轮 review + `/implementx|/verifyx` **不**注入拆分提示（静默 disarm，见 [`docs/hosts/cursor.md`](hosts/cursor.md) beforeSubmit 表）。**非 my-light**（例如磁盘 `GOAL_STATE.lifecycle_profile` 非 `my-light` 且本轮无 My 斜杠、但 hook-state 已 `goal_required`）：会注入一行 **`router-rs：本轮提交同时包含…`** 拆分提示，避免误以为 review 门控失效。若你本意是「先深度审稿再开连续执行」，请拆成两轮。
 - **Plan**：`plan_profile: research` 与在同一计划里直接改实现互斥；与 My implement / goal drive 串联时应先调研收口再开 execution 计划或 goal，避免「口头 plan + 立刻 implement」与门控真源打架。

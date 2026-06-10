@@ -29,6 +29,6 @@ depends_on:
 
 **操作员提示（2026-05 连续性退出）**：**无** hook `RFV_LOOP_CONTINUE` / digest。外研缺口时 supervisor 用 `framework_rfv_loop` stdio + 本文 / `RFV_EXTERNAL_RESEARCH.schema.json`；`HARNESS_OPERATOR_NUDGES.json` 仅为文案真源。深度合规 rollup：`task_state` 的 **`rfv_external_deep_structured_round_count`**（有对象即计数）与 **`rfv_external_strict_ok_round_count`**（仅当任务 `external_research_strict` 为真且该轮 blob 通过 strict 校验时递增）。**账本式外研路径**与 Execute `research_mode=deep`/Plan `plan_profile` 的职责分工（不自动合并）分层见 [`docs/spec.md`](../../spec.md#12-closeout-与生命周期) — **Closeout 与生命周期**。
 
-**与 `RUNTIME_REGISTRY.json` 的关系**：Execute **deep** 叙事**不**挂在 registry 的 `framework_commands` 块（退役的 autopilot 命令已删除）；`router-rs` 的 Execute live 塑形**不**在运行时读取 registry 中的 research 字段，真源为 [`core/runtime-core/src/cli/runtime_ops/body.rs`](../../../core/runtime-core/src/cli/runtime_ops/body.rs) 中 `build_live_execute_prompt` 的内嵌英文条款。改 deep 叙事时请同步该文件（`tests/policy_contracts.rs` 中有防漂移断言）。
+**与 `RUNTIME_REGISTRY.json` 的关系**：Execute **deep** 叙事**不**挂在 registry 的 `framework_commands` 块（退役的 autopilot 命令已删除）；`router-rs` 的 Execute live 塑形**不**在运行时读取 registry 中的 research 字段，真源为 `core/runtime-core/src/framework_runtime/live_execute.rs` 中 `build_live_execute_prompt` 的内嵌英文条款。改 deep 叙事时请同步该文件（`tests/policy_contracts.rs` 中有防漂移断言）。
 
 **See also**: [lane-templates.md](lane-templates.md)（External research 深度模式）、[spec.md](../../spec.md#12-reasoning-depth-contract)、[spec.md](../../spec.md)。

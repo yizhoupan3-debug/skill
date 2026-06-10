@@ -68,9 +68,9 @@ pub fn router_rs_cursor_subagent_model_inherit_nudge_enabled() -> bool {
 
 /// Per-host `REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` env var mapping.
 const FORK_CONTEXT_INFER_FALSE_BY_HOST: &[&str] = &[
-    "ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
-    "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
-    "ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+    ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV,
+    ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV,
+    ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV,
 ];
 
 /// Cross-host: missing `fork_context` on a reviewer lane may infer independent fork (`false`).
@@ -88,9 +88,9 @@ pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
 /// Legacy `ROUTER_RS_{HOST}_REVIEW_GATE_DISABLE` names are part of the operator
 /// contract (docs §5) — do not rename. Add new hosts by appending rows.
 const REVIEW_GATE_DISABLE_BY_HOST: &[(&str, &str)] = &[
-    ("cursor", "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE"),
-    ("codex", "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
-    ("claude-code", "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+    ("cursor", ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV),
+    ("codex", ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV),
+    ("claude-code", ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV),
 ];
 
 /// Emergency review-gate disable for hook hosts (`cursor` / `codex` / `claude-code`).
