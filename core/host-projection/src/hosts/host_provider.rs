@@ -39,6 +39,31 @@ pub trait HostLifecycle: Send + Sync {
     fn registered_hook_events(&self) -> &'static [&'static str] {
         &[]
     }
+
+    /// Binary name for the session supervisor driver (e.g. "codex", "claude").
+    /// Default: returns the install_tool name.
+    fn driver_binary(&self) -> &'static str {
+        ""
+    }
+
+    /// Whether this host's driver supports resume semantics.
+    fn driver_supports_resume(&self) -> bool {
+        false
+    }
+
+    /// Build CLI args for the driver command.
+    /// Returns `(args, shell_command)` where shell_command is the full shell-escaped string.
+    /// Default: returns `None` (caller falls back to legacy match).
+    fn build_driver_args(
+        &self,
+        _cwd: &str,
+        _prompt: Option<&str>,
+        _resume_target: Option<&str>,
+        _resume_mode: &str,
+        _resume_only: bool,
+    ) -> Option<(Vec<String>, String)> {
+        None
+    }
 }
 
 /// Tool-guard metadata aligned with `pre_tool_use_guard` registry signals.
@@ -59,6 +84,12 @@ pub trait HostTelemetry: Send + Sync {
     /// `router_rs_observation` host id when outbound hook JSON attaches telemetry.
     fn observation_host_id(&self) -> Option<&'static str> {
         None
+    }
+
+    /// Extract followup and additional_context surfaces from hook output JSON.
+    /// Returns `(followup, additional)` strings. Default returns `(None, None)`.
+    fn extract_observation_surfaces(&self, _output: &serde_json::Value) -> (Option<String>, Option<String>) {
+        (None, None)
     }
 }
 
@@ -176,6 +207,18 @@ pub fn host_tool_executor_for_id(host_id: &str) -> Option<&'static dyn HostToolE
 
 pub fn host_telemetry_for_id(host_id: &str) -> Option<&'static dyn HostTelemetry> {
     host_provider_for_id(host_id).map(|provider| provider as &dyn HostTelemetry)
+}
+
+/// Find a provider whose `observation_host_id()` matches, then extract surfaces.
+/// Returns `None` if no provider matches the observation host id.
+pub fn extract_observation_surfaces_for_host(
+    host_id: &str,
+    output: &serde_json::Value,
+) -> Option<(Option<String>, Option<String>)> {
+    let provider = host_provider_registry()
+        .iter()
+        .find(|p| p.observation_host_id() == Some(host_id))?;
+    Some(provider.extract_observation_surfaces(output))
 }
 
 pub fn validate_host_providers_against_registry(

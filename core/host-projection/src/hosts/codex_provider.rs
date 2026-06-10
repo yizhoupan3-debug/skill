@@ -3,6 +3,7 @@
 use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
 };
+use serde_json::Value;
 
 const HARNESS_CAPABILITIES: &[&str] = &[
     "hot_runtime_routing",
@@ -38,6 +39,41 @@ impl HostLifecycle for CodexHostProvider {
     fn registered_hook_events(&self) -> &'static [&'static str] {
         &crate::hosts::codex_hooks::INSTALL_LIFECYCLE_EVENTS
     }
+
+    fn driver_binary(&self) -> &'static str {
+        "codex"
+    }
+
+    fn driver_supports_resume(&self) -> bool {
+        true
+    }
+
+    fn build_driver_args(
+        &self,
+        cwd: &str,
+        prompt: Option<&str>,
+        resume_target: Option<&str>,
+        resume_mode: &str,
+        resume_only: bool,
+    ) -> Option<(Vec<String>, String)> {
+        let mut args = vec!["-C".to_string(), cwd.to_string()];
+        if resume_only {
+            args.push("resume".to_string());
+            if let Some(target) = resume_target {
+                if target == "last" || resume_mode == "last" {
+                    args.push("--last".to_string());
+                } else {
+                    args.push(target.to_string());
+                }
+            } else {
+                args.push("--last".to_string());
+            }
+        } else if let Some(p) = prompt {
+            args.push(p.to_string());
+        }
+        let shell_cmd = format!("codex {}", args.join(" "));
+        Some((args, shell_cmd))
+    }
 }
 
 impl HostToolExecutor for CodexHostProvider {
@@ -65,6 +101,18 @@ impl HostTelemetry for CodexHostProvider {
 
     fn observation_host_id(&self) -> Option<&'static str> {
         Some("codex")
+    }
+
+    fn extract_observation_surfaces(&self, output: &Value) -> (Option<String>, Option<String>) {
+        let followup = output
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string());
+        let additional = output
+            .pointer("/hookSpecificOutput/additionalContext")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string());
+        (followup, additional)
     }
 }
 

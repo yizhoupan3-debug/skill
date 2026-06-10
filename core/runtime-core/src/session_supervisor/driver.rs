@@ -56,56 +56,32 @@ pub fn build_driver_command(
     worktree_path: Option<String>,
 ) -> Result<DriverCommandSpec, String> {
     let effective_cwd = resolve_worktree_cwd(cwd, worktree_name.as_deref(), worktree_path.as_deref());
+
+    // Try trait-based dispatch via host provider registry.
+    if let Some(provider) = crate::hosts::host_provider_for_routing_spelling(host) {
+        let binary = provider.driver_binary();
+        if !binary.is_empty() {
+            if let Some((args, shell_command)) = provider.build_driver_args(
+                &effective_cwd,
+                prompt.as_deref(),
+                resume_target.as_deref(),
+                resume_mode,
+                resume_only,
+            ) {
+                return Ok(DriverCommandSpec {
+                    driver_id: provider.session_supervisor_driver().to_string(),
+                    binary: binary.to_string(),
+                    shell_command,
+                    args,
+                    supports_resume: provider.driver_supports_resume(),
+                });
+            }
+        }
+    }
+
+    // Fallback: smoke-shell test host (not in provider registry).
     let lowered = host.trim().to_ascii_lowercase();
     match lowered.as_str() {
-        "codex" | "codex-cli" => {
-            let mut args = vec!["-C".to_string(), effective_cwd.clone()];
-            if resume_only {
-                args.push("resume".to_string());
-                if let Some(target) = resume_target {
-                    if target == "last" || resume_mode == "last" {
-                        args.push("--last".to_string());
-                    } else {
-                        args.push(target);
-                    }
-                } else {
-                    args.push("--last".to_string());
-                }
-            } else if let Some(prompt) = prompt {
-                args.push(prompt);
-            }
-            Ok(DriverCommandSpec {
-                driver_id: "codex_driver".to_string(),
-                binary: "codex".to_string(),
-                shell_command: shell_join("codex", &args),
-                args,
-                supports_resume: true,
-            })
-        }
-        "claude" | "claude-code" => {
-            let mut args = vec!["--print".to_string()];
-            if resume_only {
-                if let Some(target) = resume_target {
-                    args.push("--resume".to_string());
-                    args.push(target);
-                }
-            } else if let Some(ref p) = prompt {
-                args.push("-p".to_string());
-                args.push(p.clone());
-            }
-            // --print does not accept a cwd flag; the working directory is set
-            // via `Command::current_dir()` in process.rs.  However, for audit
-            // transparency we pass the effective cwd as a synthetic env key in
-            // the DriverCommandSpec so callers can verify it was resolved.
-            Ok(DriverCommandSpec {
-                driver_id: "claude_code_driver".to_string(),
-                binary: "claude".to_string(),
-                shell_command: shell_join("claude", &args),
-                args,
-                supports_resume: true,
-            })
-        }
-        // Short-lived shell for §6.4 real-process smoke (`ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE`).
         "smoke" | "smoke-shell" => {
             let shell = if cfg!(unix) {
                 "/bin/sh".to_string()

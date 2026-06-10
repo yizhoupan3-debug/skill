@@ -136,9 +136,14 @@ fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) ->
     {
         return entrypoint.to_string();
     }
-    for fallback_host in ["codex", "cursor"] {
+    // Fallback: iterate all registered host providers to find an available entrypoint.
+    for provider in crate::hosts::host_provider_registry() {
+        let hid = provider.host_id();
+        if hid == requested_host {
+            continue; // already checked above
+        }
         if let Some(entrypoint) = host_entrypoints
-            .and_then(|entrypoints| entrypoints.get(fallback_host))
+            .and_then(|entrypoints| entrypoints.get(hid))
             .and_then(Value::as_str)
         {
             return entrypoint.to_string();

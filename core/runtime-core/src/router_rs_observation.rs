@@ -7,31 +7,26 @@ use serde_json::{json, Map, Value};
 
 pub const ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION: &str = "router-rs-hook-observation-v1";
 
-#[derive(Debug, Clone, Copy)]
-pub enum HookObservationHost {
-    Cursor,
-    Codex,
-    /// Claude Code hook JSON (`router-rs claude hook`).
-    ClaudeCode,
-}
+/// Observation host identifier (resolved from `HostTelemetry::observation_host_id()`).
+/// Newtype wrapper over the host_id string for type safety.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HookObservationHost(&'static str);
 
 impl HookObservationHost {
-    /// Resolve from a host_id string (typically from `HostTelemetry::observation_host_id()`).
+    /// Resolve from a host_id string via the host provider registry.
     pub fn from_host_id(host_id: &str) -> Option<Self> {
-        match host_id {
-            "cursor" => Some(Self::Cursor),
-            "codex" => Some(Self::Codex),
-            "claude-code" => Some(Self::ClaudeCode),
-            _ => None,
-        }
+        crate::hosts::host_telemetry_for_id(host_id)
+            .and_then(|t| t.observation_host_id())
+            .map(Self)
     }
 
     pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Cursor => "cursor",
-            Self::Codex => "codex",
-            Self::ClaudeCode => "claude-code",
-        }
+        self.0
+    }
+
+    /// True when this host is "codex" (used for lifecycle context input block detection).
+    pub fn is_codex(&self) -> bool {
+        self.0 == "codex"
     }
 }
 
@@ -46,49 +41,9 @@ fn classify_gate(followup: Option<&str>, additional: Option<&str>) -> Option<Gat
 }
 
 fn extract_surfaces(output: &Value, host: HookObservationHost) -> (Option<String>, Option<String>) {
-    match host {
-        HookObservationHost::Cursor => (
-            output
-                .get("followup_message")
-                .and_then(Value::as_str)
-                .map(|s| s.to_string()),
-            output
-                .get("additional_context")
-                .and_then(Value::as_str)
-                .map(|s| s.to_string()),
-        ),
-        HookObservationHost::Codex => {
-            let followup = output
-                .get("followup_message")
-                .and_then(Value::as_str)
-                .map(|s| s.to_string());
-            let additional = output
-                .pointer("/hookSpecificOutput/additionalContext")
-                .and_then(Value::as_str)
-                .map(|s| s.to_string());
-            (followup, additional)
-        }
-        HookObservationHost::ClaudeCode => {
-            let followup = output
-                .get("stopReason")
-                .or_else(|| output.get("systemMessage"))
-                .or_else(|| output.get("followup_message"))
-                .and_then(Value::as_str)
-                .map(|s| s.to_string())
-                .or_else(|| {
-                    output
-                        .get("message")
-                        .or_else(|| output.get("reason"))
-                        .and_then(Value::as_str)
-                        .map(|s| s.to_string())
-                });
-            let additional = output
-                .pointer("/hookSpecificOutput/additionalContext")
-                .and_then(Value::as_str)
-                .map(|s| s.to_string());
-            (followup, additional)
-        }
-    }
+    // Delegate to the host provider registry via HostTelemetry::extract_observation_surfaces.
+    crate::hosts::host_provider::extract_observation_surfaces_for_host(host.as_str(), output)
+        .unwrap_or((None, None))
 }
 
 fn nonempty_trimmed_str(value: Option<&Value>) -> Option<String> {
@@ -222,7 +177,7 @@ pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHo
         .pointer("/hookSpecificOutput/hookEventName")
         .and_then(Value::as_str)
         == Some("CodexLifecycleContext")
-        && matches!(host, HookObservationHost::Codex);
+        && host.is_codex();
     if lifecycle_input_block && output.get("decision").and_then(Value::as_str) == Some("block") {
         let msg = output
             .get("message")
@@ -277,6 +232,13 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn cursor() -> HookObservationHost {
+        HookObservationHost::from_host_id("cursor").unwrap()
+    }
+    fn claude_code() -> HookObservationHost {
+        HookObservationHost::from_host_id("claude-code").unwrap()
+    }
+
     #[test]
     fn classifies_review_gate_followup() {
         let followup = format!(
@@ -288,7 +250,7 @@ mod tests {
             "continue": false,
             "followup_message": followup,
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
         assert_eq!(o["gate"]["code"], "review_gate");
         assert_eq!(o["gate"]["blocking"], true);
     }
@@ -299,7 +261,7 @@ mod tests {
             "continue": true,
             "additional_context": "GOAL_CONTINUE: stale\nGoal: x",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
         assert!(o["gate"].is_null(), "GOAL_CONTINUE hook path removed: {:?}", o);
     }
 
@@ -311,7 +273,7 @@ mod tests {
             "task_id": "task-9",
             "additional_context": "GOAL_CONTINUE: x",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
         assert_eq!(o["correlation"]["session_id"], "sess-1");
         assert_eq!(o["correlation"]["task_id"], "task-9");
     }
@@ -324,7 +286,7 @@ mod tests {
             "tool_input": {"session_id": "nested"},
             "followup_message": "router-rs REVIEW_GATE x",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
         assert_eq!(o["correlation"]["session_id"], "top");
     }
 
@@ -335,7 +297,7 @@ mod tests {
             "decision": "block",
             "stopReason": "router-rs CLAUDE_REVIEW_GATE incomplete: run subagent",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::ClaudeCode);
+        let o = build_router_rs_observation_value(&v, claude_code());
         assert_eq!(o["host"], "claude-code");
         assert_eq!(o["gate"]["code"], "claude_review_gate");
         assert_eq!(o["gate"]["blocking"], true);
@@ -346,7 +308,7 @@ mod tests {
             "continue": true,
             "followup_message": "router-rs WEIRD_TOKEN hello",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
         assert_eq!(o["gate"]["code"], "unknown_router_rs");
     }
 
@@ -356,7 +318,7 @@ mod tests {
             "continue": true,
             "followup_message": "router-rs：disk full",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
         assert_eq!(o["gate"]["code"], "hook_state_degraded");
     }
 
@@ -366,7 +328,7 @@ mod tests {
             "continue": true,
             "additional_context": "CLOSEOUT_FOLLOWUP please\nGOAL_CONTINUE: x",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::Cursor);
+        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
         assert_eq!(o["gate"]["code"], "closeout_followup");
     }
 }

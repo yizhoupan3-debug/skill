@@ -3,6 +3,7 @@
 use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
 };
+use serde_json::Value;
 
 const HARNESS_CAPABILITIES: &[&str] = &[
     "hot_runtime_routing",
@@ -65,6 +66,18 @@ impl HostTelemetry for CursorHostProvider {
 
     fn observation_host_id(&self) -> Option<&'static str> {
         Some("cursor")
+    }
+
+    fn extract_observation_surfaces(&self, output: &Value) -> (Option<String>, Option<String>) {
+        let followup = output
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string());
+        let additional = output
+            .get("additional_context")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string());
+        (followup, additional)
     }
 }
 
