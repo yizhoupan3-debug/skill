@@ -7,7 +7,7 @@ use super::text::{
     common_route_stop_tokens, normalize_text, text_matches_phrase, tokenize_route_text,
 };
 use super::types::{RouteCandidate, SkillRecord};
-use crate::hook_common::is_review_prompt;
+use crate::hooks::is_review_prompt;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
