@@ -39,7 +39,7 @@ pub mod codegraph_mcp;
 pub mod cli;
 pub mod types;
 pub mod eval_route;
-pub mod framework_host_targets;
+pub use framework_kernel::framework_host_targets;
 pub mod framework_maint;
 pub mod framework_skills;
 pub mod harness_context_signals;
@@ -47,16 +47,28 @@ pub mod harness_contract;
 pub mod hook_event_routing;
 pub mod hook_outbound_protect;
 pub mod hook_timing;
-pub mod host_entrypoint_sync;
-pub mod host_integration;
+pub use host_projection::host_entrypoint_sync;
+pub use host_projection::host_integration;
 pub mod hosts;
 pub mod mcp_pre_guard;
 pub mod paper_adversarial_hook;
 pub mod paper_prose_hook;
 pub mod review_gate;
 pub mod route;
-pub mod router_self;
-pub mod runtime_registry;
+pub use framework_kernel::router_self;
+// runtime_registry: re-export from framework-kernel + review gate additions from core-policy
+pub mod runtime_registry {
+    pub use framework_kernel::runtime_registry::*;
+    // Review gate re-exports that were previously in this module
+    pub use core_policy::registry_review_gate::{
+        check_review_gate_registry_snapshot, clear_hook_registry_repo_root,
+        is_reviewer_lane_from_registry, lifecycle_profile_disables_spawn_first_nudge,
+        review_spawn_first_enabled, review_spawn_first_nudge_line,
+        review_subagent_model_inherit_nudge_line, reviewer_lanes_prompt_lines,
+        reviewer_lanes_sorted, set_hook_registry_repo_root,
+        spawn_first_includes_model_inherit_for_host, HookRegistryRepoGuard,
+    };
+}
 pub mod session_call_tracker;
 pub mod ship_readiness;
 pub mod skill_repo;

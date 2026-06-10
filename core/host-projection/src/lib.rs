@@ -1,8 +1,11 @@
-//! host-projection (B4): re-exports from runtime-core (B3).
+//! host-projection: host provider abstraction, host integration, and entrypoint sync.
 //!
-//! Physical migration complete: dependency changed from router-rs → runtime-core.
+//! Physical migration from runtime-core:
+//! - hosts/host_provider.rs: HostProvider trait + registry
+//! - hosts/hook_state_common.rs: hook state version adapter
+//! - host_integration/: install/status/remove/roots/artifacts
+//! - host_entrypoint_sync.rs: host entrypoint sync
 
-pub use runtime_core::framework_host_targets;
-pub use runtime_core::host_integration;
-pub use runtime_core::host_entrypoint_sync;
-pub use runtime_core::hosts;
+pub mod host_entrypoint_sync;
+pub mod host_integration;
+pub mod hosts;
