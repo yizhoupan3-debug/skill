@@ -75,8 +75,8 @@ pub mod runtime_registry {
 }
 pub mod session_call_tracker;
 pub mod ship_readiness;
-pub mod skill_repo;
-pub mod stdio_payload_types;
+pub use framework_kernel::skill_repo;
+pub use framework_kernel::stdio_payload_types;
 pub mod stdio_transport;
 pub mod task_command;
 pub mod telemetry_emit;
