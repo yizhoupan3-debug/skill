@@ -613,20 +613,25 @@ fn doc_and_xlsx_agent_prompts_are_rust_first() {
 
 #[test]
 fn ooxml_rust_cli_owns_docx_and_xlsx_render_commands() {
-    let source = read_text(&project_root().join("rust_tools/ooxml_parser_rs/src/main.rs"));
+    let main_source = read_text(&project_root().join("rust_tools/ooxml_parser_rs/src/main.rs"));
+    let lib_source = read_text(&project_root().join("rust_tools/ooxml_parser_rs/src/lib.rs"));
     for marker in [
         "Docx { input, json }",
         "ReadDocx {",
         "ReadXlsx {",
         "RenderXlsx(RenderXlsxArgs)",
         "RenderDocx(RenderDocxArgs)",
+    ] {
+        assert!(main_source.contains(marker), "missing marker in main.rs: {marker}");
+    }
+    for marker in [
         "fn inspect_docx(",
         "fn read_docx(",
         "fn read_xlsx(",
-        "fn render_xlsx(",
-        "fn render_docx(",
+        "fn render_xlsx",
+        "fn render_docx",
     ] {
-        assert!(source.contains(marker), "missing marker: {marker}");
+        assert!(lib_source.contains(marker), "missing marker in lib.rs: {marker}");
     }
 }
 
@@ -2196,7 +2201,7 @@ fn github_source_gate_rust_cli_is_workspace_member() {
 
 #[test]
 fn github_source_gate_rust_cli_owns_both_commands() {
-    let source = read_text(&project_root().join("rust_tools/gh_source_gate_rs/src/main.rs"));
+    let source = read_text(&project_root().join("rust_tools/gh_source_gate_rs/src/lib.rs"));
     for marker in [
         "InspectPrChecks(InspectPrChecksArgs)",
         "FetchComments(FetchCommentsArgs)",
@@ -2608,25 +2613,26 @@ fn ppt_rust_manifest_exposes_direct_cli() {
 
 #[test]
 fn ppt_rust_cli_owns_workspace_and_outline_commands() {
-    let source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/main.rs"));
-    assert!(source.contains("Init(InitArgs)"));
-    assert!(source.contains("Outline(OutlineArgs)"));
-    assert!(source.contains("BuildQa(BuildQaArgs)"));
-    assert!(source.contains("fn init_workspace("));
-    assert!(source.contains("default_value = \"deck.plan.json\""));
-    assert!(source.contains("workdir.join(\"deck.pptx\")"));
-    assert!(source.contains("QualityMode::Strict"));
-    assert!(source.contains("fn strict_quality_gate("));
-    assert!(source.contains("fn write_pptx_package("));
-    assert!(source.contains("fn build_pptx_slide_specs("));
-    assert!(source.contains("fn rust_office_outline_value("));
-    assert!(source.contains("fn rust_office_issues_value("));
-    assert!(source.contains("fn rust_office_validate_value("));
-    assert!(source.contains("rust-pptx-inspector"));
-    assert!(source.contains("fn font_check_ok("));
-    assert!(source.contains("fn inspector_ok("));
-    assert!(source.contains("ok: bool"));
-    assert!(!source.contains("officecli"));
+    let main_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/main.rs"));
+    let lib_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/lib.rs"));
+    assert!(main_source.contains("Init(InitArgs)"));
+    assert!(main_source.contains("Outline(OutlineArgs)"));
+    assert!(main_source.contains("BuildQa(BuildQaArgs)"));
+    assert!(lib_source.contains("fn init_workspace("));
+    assert!(lib_source.contains("default_value = \"deck.plan.json\""));
+    assert!(lib_source.contains("workdir.join(\"deck.pptx\")"));
+    assert!(lib_source.contains("QualityMode::Strict"));
+    assert!(lib_source.contains("fn strict_quality_gate("));
+    assert!(lib_source.contains("fn write_pptx_package("));
+    assert!(lib_source.contains("fn build_pptx_slide_specs("));
+    assert!(lib_source.contains("fn rust_office_outline_value("));
+    assert!(lib_source.contains("fn rust_office_issues_value("));
+    assert!(lib_source.contains("fn rust_office_validate_value("));
+    assert!(lib_source.contains("rust-pptx-inspector"));
+    assert!(lib_source.contains("fn font_check_ok("));
+    assert!(lib_source.contains("fn inspector_ok("));
+    assert!(lib_source.contains("ok: bool"));
+    assert!(!lib_source.contains("officecli"));
 }
 
 #[test]
@@ -2914,7 +2920,7 @@ fn slides_gate_is_executable_and_evidence_closed() {
 
 #[test]
 fn ppt_rust_outline_generation_naturalizes_copy_and_design_chain() {
-    let source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/main.rs"));
+    let source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/lib.rs"));
     for marker in [
         "fn naturalize_outline_value(",
         "fn naturalize_copy_text(",

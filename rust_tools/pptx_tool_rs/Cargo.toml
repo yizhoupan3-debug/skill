@@ -2,10 +2,19 @@
 name = "pptx_tool_rs"
 version = "0.1.0"
 edition = "2021"
+default-run = "ppt"
+
+[lib]
+name = "pptx_tool_rs"
+path = "src/lib.rs"
 
 [[bin]]
 name = "ppt"
 path = "src/bin/ppt.rs"
+
+[[bin]]
+name = "mcp-pptx"
+path = "src/mcp_main.rs"
 
 [dependencies]
 anyhow = "1.0"

@@ -2,10 +2,19 @@
 name = "gh_source_gate_rs"
 version = "0.1.0"
 edition = "2021"
+default-run = "gh-source-gate"
+
+[lib]
+name = "gh_source_gate_rs"
+path = "src/lib.rs"
 
 [[bin]]
 name = "gh-source-gate"
 path = "src/main.rs"
+
+[[bin]]
+name = "mcp-gh-source-gate"
+path = "src/mcp_main.rs"
 
 [dependencies]
 anyhow = "1.0"

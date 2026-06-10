@@ -1,0 +1,5223 @@
+use anyhow::{anyhow, bail, Context, Result};
+use clap::{Args, Subcommand, ValueEnum};
+use font8x8::{UnicodeFonts, BASIC_FONTS};
+use image::{
+    imageops::{self, FilterType},
+    DynamicImage, Rgba, RgbaImage,
+};
+use regex::Regex;
+use roxmltree::{Document, Node};
+use serde::Serialize;
+use serde_json::{json, Value};
+use std::cell::RefCell;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::ffi::OsStr;
+use std::fs::{self, File};
+use std::io::{Cursor, Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+use tempfile::TempDir;
+use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
+
+pub mod office;
+pub mod qa;
+pub mod mcp;
+
+pub const EMU_PER_INCH: f64 = 914_400.0;
+pub const POINTS_PER_INCH: f64 = 72.0;
+pub const DEFAULT_PAD_PX: u32 = 100;
+pub const SOFFICE_PROBE_TIMEOUT: Duration = Duration::from_secs(20);
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum DeckTemplate {
+    Dark,
+    Light,
+    Corporate,
+}
+
+#[derive(ValueEnum, Clone, Debug, PartialEq, Eq)]
+pub enum QualityMode {
+    Standard,
+    Strict,
+}
+
+#[derive(Args)]
+pub struct InitArgs {
+    #[arg(default_value = ".")]
+    workdir: String,
+    #[arg(long, value_enum, default_value_t = DeckTemplate::Dark)]
+    template: DeckTemplate,
+    #[arg(long, default_value_t = false)]
+    force: bool,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+pub struct NewArgs {
+    #[command(flatten)]
+    pub init: InitArgs,
+}
+
+#[derive(Args)]
+pub struct OutlineArgs {
+    input: String,
+    #[arg(short, long, default_value = "deck.plan.json")]
+    output: String,
+    #[arg(long, value_enum, default_value_t = DeckTemplate::Dark)]
+    template: DeckTemplate,
+    #[arg(long, default_value_t = false)]
+    bootstrap: bool,
+    #[arg(long, default_value_t = false)]
+    build: bool,
+    #[arg(long, default_value_t = false)]
+    qa: bool,
+    #[arg(long, value_enum, default_value_t = QualityMode::Standard)]
+    quality: QualityMode,
+    #[arg(long, default_value = "rendered")]
+    rendered_dir: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+pub struct RenderArgs {
+    input_path: String,
+    #[arg(long, visible_alias = "output_dir")]
+    output_dir: Option<String>,
+    #[arg(long, default_value_t = 1600)]
+    width: u32,
+    #[arg(long, default_value_t = 900)]
+    height: u32,
+}
+
+#[derive(Args)]
+pub struct ExtractStructureArgs {
+    input: String,
+    #[arg(short, long)]
+    output: Option<String>,
+    #[arg(long)]
+    extract_images: bool,
+    #[arg(long, default_value = "extracted_assets")]
+    image_dir: String,
+    #[arg(long, default_value_t = true)]
+    pretty: bool,
+}
+
+#[derive(Args)]
+pub struct ReadFullArgs {
+    input: String,
+    /// Linear text output (default).
+    #[arg(long, default_value_t = true, conflicts_with = "json")]
+    text: bool,
+    /// JSON structure output (same schema as extract-structure).
+    #[arg(long, default_value_t = false)]
+    json: bool,
+    /// Compact JSON (no pretty-print); only applies with --json.
+    #[arg(long, default_value_t = false)]
+    compact: bool,
+    /// 1-based slide filter, e.g. `1-10` or `3`.
+    #[arg(long)]
+    slides: Option<String>,
+}
+
+#[derive(Args)]
+pub struct EnsureRasterImageArgs {
+    #[arg(long, visible_alias = "input_files")]
+    input_files: Vec<String>,
+    #[arg(long, visible_alias = "input_dir")]
+    input_dir: Option<String>,
+    #[arg(long, visible_alias = "output_dir")]
+    output_dir: Option<String>,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+pub enum LabelMode {
+    Number,
+    Filename,
+    None,
+}
+
+#[derive(Args)]
+pub struct CreateMontageArgs {
+    #[arg(long, visible_alias = "input_files")]
+    input_files: Vec<String>,
+    #[arg(long, visible_alias = "input_dir")]
+    input_dir: Option<String>,
+    #[arg(long, visible_alias = "output_file")]
+    output_file: String,
+    #[arg(long, visible_alias = "num_col", default_value_t = 5)]
+    num_col: usize,
+    #[arg(long, visible_alias = "cell_width", default_value_t = 400)]
+    cell_width: u32,
+    #[arg(long, visible_alias = "cell_height", default_value_t = 225)]
+    cell_height: u32,
+    #[arg(long, default_value_t = 16)]
+    gap: u32,
+    #[arg(long, visible_alias = "label_mode", value_enum, default_value_t = LabelMode::Number)]
+    label_mode: LabelMode,
+    #[arg(
+        long,
+        visible_alias = "retain_converted_files",
+        default_value_t = false
+    )]
+    retain_converted_files: bool,
+    #[arg(long, visible_alias = "fail_on_image_error", default_value_t = false)]
+    fail_on_image_error: bool,
+}
+
+#[derive(Args)]
+pub struct SlidesTestArgs {
+    input_path: String,
+    #[arg(long, default_value_t = 1600)]
+    width: u32,
+    #[arg(long, default_value_t = 900)]
+    height: u32,
+    #[arg(long, visible_alias = "pad_px", default_value_t = DEFAULT_PAD_PX)]
+    pad_px: u32,
+    #[arg(long, default_value_t = false)]
+    fail_on_overflow: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_overlap: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_aesthetic: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_any: bool,
+}
+
+#[derive(Args)]
+pub struct DetectFontsArgs {
+    input_path: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+    #[arg(long, default_value_t = true)]
+    include_missing: bool,
+    #[arg(long, default_value_t = true)]
+    include_substituted: bool,
+}
+
+#[derive(Args)]
+pub struct SanitizePptxArgs {
+    input_path: String,
+    #[arg(short, long)]
+    output: Option<String>,
+}
+
+#[derive(Args)]
+pub struct QaArgs {
+    deck: String,
+    #[arg(long, default_value = "rendered")]
+    rendered_dir: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_issues: bool,
+}
+
+#[derive(Args)]
+pub struct IntakeArgs {
+    deck: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+pub struct BuildQaArgs {
+    #[arg(long, default_value = ".")]
+    workdir: String,
+    #[arg(long, default_value = "deck.plan.json")]
+    entry: String,
+    #[arg(long, default_value = "deck.pptx")]
+    deck: String,
+    #[arg(long, default_value = "rendered")]
+    rendered_dir: String,
+    #[arg(long, value_enum, default_value_t = QualityMode::Standard)]
+    quality: QualityMode,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+pub struct OfficeArgs {
+    #[command(subcommand)]
+    command: OfficeCommands,
+}
+
+#[derive(Subcommand)]
+pub enum OfficeCommands {
+    Probe(OfficeProbeArgs),
+    Doctor(OfficeDoctorArgs),
+    Outline(OfficeFileArgs),
+    Issues(OfficeFileArgs),
+    Validate(OfficeFileArgs),
+    Get(OfficeGetArgs),
+    Query(OfficeQueryArgs),
+    Watch(OfficeWatchArgs),
+    Batch(OfficeBatchArgs),
+}
+
+#[derive(Args)]
+pub struct OfficeProbeArgs {
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+pub struct OfficeDoctorArgs {
+    file: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_issues: bool,
+    #[arg(long, default_value_t = false)]
+    fail_on_validation: bool,
+}
+
+#[derive(Args)]
+pub struct OfficeFileArgs {
+    file: String,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+pub struct OfficeGetArgs {
+    file: String,
+    #[arg(default_value = "/")]
+    path: String,
+    #[arg(long, default_value_t = 1)]
+    depth: i32,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+pub struct OfficeQueryArgs {
+    file: String,
+    selector: String,
+    #[arg(long)]
+    text: Option<String>,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+#[derive(Args)]
+pub struct OfficeWatchArgs {
+    file: String,
+    #[arg(long, default_value_t = 18080)]
+    port: u16,
+    #[arg(long, default_value_t = false)]
+    browser: bool,
+}
+
+#[derive(Args)]
+pub struct OfficeBatchArgs {
+    file: String,
+    #[arg(long)]
+    input: Option<String>,
+    #[arg(long)]
+    commands: Option<String>,
+    #[arg(long, default_value_t = false)]
+    force: bool,
+    #[arg(long, default_value_t = false)]
+    json: bool,
+}
+
+
+#[derive(Debug, Serialize)]
+pub struct InitSummary {
+    workdir: String,
+    template: String,
+    files: Vec<String>,
+    rust_only: bool,
+    command_manifest: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OutlineSummary {
+    input: String,
+    output: String,
+    bootstrapped: bool,
+    built: bool,
+    qa: Option<Value>,
+}
+
+#[derive(Debug)]
+pub struct ZipBundle {
+    archive: RefCell<ZipArchive<File>>,
+    index_by_name: HashMap<String, usize>,
+    cache: RefCell<HashMap<String, Vec<u8>>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Position {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ParagraphInfo {
+    text: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TextInfo {
+    #[serde(rename = "fullText")]
+    full_text: String,
+    paragraphs: Vec<ParagraphInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ImageInfo {
+    content_type: Option<String>,
+    width: Option<u32>,
+    height: Option<u32>,
+    extracted_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct TableInfo {
+    rows: usize,
+    cols: usize,
+    data: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ChartInfo {
+    chart_type: String,
+    has_legend: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ElementInfo {
+    index: usize,
+    name: String,
+    #[serde(rename = "type")]
+    element_type: String,
+    position: Position,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    rotation: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<TextInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    image: Option<ImageInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    table: Option<TableInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    chart: Option<ChartInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    children: Option<Vec<ElementInfo>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LayoutPlaceholder {
+    idx: Option<String>,
+    name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LayoutInfo {
+    name: String,
+    placeholders: Vec<LayoutPlaceholder>,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub struct QaRenderSummary {
+    rendered_dir: String,
+    png_count: usize,
+    paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub struct QaOverflowSummary {
+    ok: bool,
+    stdout: String,
+    stderr: String,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub struct QaSummary {
+    ok: bool,
+    deck: String,
+    render: QaRenderSummary,
+    overflow_check: QaOverflowSummary,
+    overlap_check: QaOverflowSummary,
+    aesthetic_check: QaAestheticSummary,
+    font_check: Value,
+    inspector: Value,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub struct QaAestheticSummary {
+    ok: bool,
+    failing_slides: Vec<usize>,
+    stdout: String,
+    stderr: String,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub struct OfficeProbeSummary {
+    available: bool,
+    engine: String,
+    version: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[allow(dead_code)]
+pub struct OfficeDoctorSummary {
+    inspector_version: Option<String>,
+    file: String,
+    outline: Value,
+    issues: Value,
+    validation: Value,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum EmitFormat {
+    Json,
+    Text,
+}
+
+
+pub fn init_command(args: InitArgs) -> Result<()> {
+    let workdir = expand_path(&args.workdir);
+    let summary = init_workspace(&workdir, &args.template, args.force)?;
+    emit_value(
+        serde_json::to_value(summary)?,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
+}
+
+pub fn outline_command(args: OutlineArgs) -> Result<()> {
+    let input = expand_path(&args.input);
+    let workdir = input
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .to_path_buf();
+
+    if args.bootstrap {
+        init_workspace(&workdir, &args.template, false)?;
+    }
+
+    let output = expand_path(&args.output);
+    let output = if output.is_absolute() {
+        output
+    } else {
+        workdir.join(output)
+    };
+
+    let outline = read_outline(&input)?;
+    let generated = generate_outline_deck_source(&outline, &args.template)?;
+    fs::write(&output, generated)
+        .with_context(|| format!("failed to write {}", output.display()))?;
+
+    let mut qa_payload = None;
+    let strict_quality = args.quality == QualityMode::Strict;
+    if args.build || args.qa || strict_quality {
+        let deck = workdir.join("deck.pptx");
+        write_outline_deck_pptx(&outline, &deck, &args.template)?;
+        sanitize_pptx_command(SanitizePptxArgs {
+            input_path: deck.display().to_string(),
+            output: None,
+        })?;
+    }
+    if args.qa || strict_quality {
+        qa_payload = Some(serde_json::to_value(qa_summary(
+            &workdir.join("deck.pptx").display().to_string(),
+            &workdir.join(&args.rendered_dir).display().to_string(),
+        )?)?);
+        if strict_quality {
+            strict_quality_gate(qa_payload.as_ref().unwrap())?;
+        }
+    }
+
+    emit_value(
+        serde_json::to_value(OutlineSummary {
+            input: input.display().to_string(),
+            output: output.display().to_string(),
+            bootstrapped: args.bootstrap,
+            built: args.build || args.qa || strict_quality,
+            qa: qa_payload,
+        })?,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
+}
+
+pub fn qa_command(args: QaArgs) -> Result<()> {
+    qa::qa_command(args)
+}
+
+pub fn intake_command(args: IntakeArgs) -> Result<()> {
+    let structure = extract_structure_payload(&args.deck)?;
+    let inspector = office_doctor_value(&args.deck)?;
+    let payload = json!({
+        "deck": args.deck,
+        "structure": structure,
+        "inspector": inspector,
+    });
+    emit_value(
+        payload,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
+}
+
+pub fn build_qa_command(args: BuildQaArgs) -> Result<()> {
+    let workdir = expand_path(&args.workdir);
+    let entry = expand_path(&args.entry);
+    let entry = if entry.is_absolute() {
+        entry
+    } else {
+        workdir.join(entry)
+    };
+    let outline = read_outline(&entry)?;
+    let deck = workdir.join(&args.deck);
+    let deck_template = deck_template_from_outline(&outline);
+    write_outline_deck_pptx(&outline, &deck, &deck_template)?;
+    sanitize_pptx_command(SanitizePptxArgs {
+        input_path: deck.display().to_string(),
+        output: None,
+    })?;
+    let rendered = workdir.join(&args.rendered_dir);
+    let payload = qa_summary(&deck.display().to_string(), &rendered.display().to_string())?;
+    if args.quality == QualityMode::Strict {
+        strict_quality_gate(&serde_json::to_value(&payload)?)?;
+    }
+    emit_value(
+        serde_json::to_value(payload)?,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
+}
+
+pub fn office_command(args: OfficeArgs) -> Result<()> {
+    match args.command {
+        OfficeCommands::Probe(args) => office_probe_command(args),
+        OfficeCommands::Doctor(args) => office_doctor_command(args),
+        OfficeCommands::Outline(args) => {
+            office_file_passthrough("view", &args.file, Some("outline"), args.json)
+        }
+        OfficeCommands::Issues(args) => {
+            office_file_passthrough("view", &args.file, Some("issues"), args.json)
+        }
+        OfficeCommands::Validate(args) => {
+            office_file_passthrough("validate", &args.file, None, args.json)
+        }
+        OfficeCommands::Get(args) => office_get_command(args),
+        OfficeCommands::Query(args) => office_query_command(args),
+        OfficeCommands::Watch(args) => office_watch_command(args),
+        OfficeCommands::Batch(args) => office_batch_command(args),
+    }
+}
+
+pub fn office_probe_command(args: OfficeProbeArgs) -> Result<()> {
+    let payload = OfficeProbeSummary {
+        available: true,
+        engine: "rust-pptx-inspector".to_string(),
+        version: Some(env!("CARGO_PKG_VERSION").to_string()),
+    };
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else {
+        println!("inspector: {}", payload.engine);
+        println!(
+            "version: {}",
+            payload.version.unwrap_or_else(|| "unknown".to_string())
+        );
+    }
+    Ok(())
+}
+
+pub fn office_doctor_command(args: OfficeDoctorArgs) -> Result<()> {
+    let payload = office_doctor_summary(&args.file)?;
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else {
+        print_office_doctor_summary(&payload);
+    }
+    if (args.fail_on_issues && payload.issues["count"].as_u64().unwrap_or(0) > 0)
+        || (args.fail_on_validation && !payload.validation["ok"].as_bool().unwrap_or(false))
+    {
+        bail!("office doctor checks failed")
+    }
+    Ok(())
+}
+
+pub fn office_file_passthrough(
+    command: &str,
+    file: &str,
+    tail: Option<&str>,
+    json_output: bool,
+) -> Result<()> {
+    let payload = match (command, tail) {
+        ("view", Some("outline")) => rust_office_outline_value(file)?,
+        ("view", Some("issues")) => rust_office_issues_value(file)?,
+        ("validate", None) => rust_office_validate_value(file)?,
+        _ => bail!("unsupported Rust inspector command: {command} {tail:?}"),
+    };
+    emit_value(
+        payload,
+        if json_output {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )?;
+    Ok(())
+}
+
+pub fn office_get_command(args: OfficeGetArgs) -> Result<()> {
+    let payload = rust_office_get_value(&args.file, &args.path, args.depth)?;
+    emit_value(
+        payload,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
+}
+
+pub fn office_query_command(args: OfficeQueryArgs) -> Result<()> {
+    let payload = rust_office_query_value(&args.file, &args.selector, args.text.as_deref())?;
+    emit_value(
+        payload,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
+}
+
+pub fn office_watch_command(args: OfficeWatchArgs) -> Result<()> {
+    let preview = write_rust_office_preview(&args.file, args.port)?;
+    if args.browser {
+        let status = Command::new("open").arg(&preview).status()?;
+        if !status.success() {
+            bail!("failed to open browser with status {:?}", status.code());
+        }
+    }
+    println!("preview: {}", preview.display());
+    Ok(())
+}
+
+pub fn office_batch_command(args: OfficeBatchArgs) -> Result<()> {
+    let payload = rust_office_batch_value(
+        &args.file,
+        args.input.as_deref(),
+        args.commands.as_deref(),
+        args.force,
+    )?;
+    emit_value(
+        payload,
+        if args.json {
+            EmitFormat::Json
+        } else {
+            EmitFormat::Text
+        },
+    )
+}
+
+pub fn render_command(args: RenderArgs) -> Result<()> {
+    let input = expand_path(&args.input_path);
+    let output_dir = args
+        .output_dir
+        .as_deref()
+        .map(expand_path)
+        .unwrap_or_else(|| default_render_dir(&input));
+    let rendered = render_paths(&input, &output_dir, args.width, args.height)?;
+    for path in rendered {
+        println!("{}", path.display());
+    }
+    Ok(())
+}
+
+pub fn init_workspace(workdir: &Path, template: &DeckTemplate, force: bool) -> Result<InitSummary> {
+    let mut created = Vec::new();
+
+    fs::create_dir_all(workdir)?;
+    fs::create_dir_all(workdir.join("assets"))?;
+    fs::create_dir_all(workdir.join("rendered"))?;
+
+    let starter_outline = workdir.join("outline.json");
+    if !starter_outline.exists() || force {
+        fs::write(
+            &starter_outline,
+            serde_json::to_string_pretty(&starter_outline_value(template))?,
+        )
+        .with_context(|| format!("failed to write {}", starter_outline.display()))?;
+        created.push(starter_outline.display().to_string());
+    } else {
+        created.push(format!("kept:{}", starter_outline.display()));
+    }
+
+    let plan = workdir.join("deck.plan.json");
+    if !plan.exists() || force {
+        fs::write(
+            &plan,
+            generate_outline_deck_source(&starter_outline_value(template), template)?,
+        )
+        .with_context(|| format!("failed to write {}", plan.display()))?;
+        created.push(plan.display().to_string());
+    } else {
+        created.push(format!("kept:{}", plan.display()));
+    }
+
+    let sources = workdir.join("sources.md");
+    if !sources.exists() || force {
+        fs::write(&sources, starter_sources_markdown(template))
+            .with_context(|| format!("failed to write {}", sources.display()))?;
+        created.push(sources.display().to_string());
+    } else {
+        created.push(format!("kept:{}", sources.display()));
+    }
+
+    let command_manifest = workdir.join("ppt.commands.json");
+    if !command_manifest.exists() || force {
+        fs::write(
+            &command_manifest,
+            serde_json::to_string_pretty(&rust_command_manifest_value())?,
+        )
+        .with_context(|| format!("failed to write {}", command_manifest.display()))?;
+        created.push(command_manifest.display().to_string());
+    } else {
+        created.push(format!("kept:{}", command_manifest.display()));
+    }
+
+    Ok(InitSummary {
+        workdir: workdir.display().to_string(),
+        template: format!("{:?}", template).to_ascii_lowercase(),
+        files: created,
+        rust_only: true,
+        command_manifest: command_manifest.display().to_string(),
+    })
+}
+
+pub fn starter_sources_markdown(template: &DeckTemplate) -> String {
+    format!(
+        "# Sources\n\n- Deck source plan: `deck.plan.json`\n- Editable output: `deck.pptx`\n- Runtime: Rust `ppt` CLI\n- Template: `{}`\n\n## Workflow Notes\n\n- Text pass: use built-in Rust copy naturalization for ordinary prose, `$copywriting` for pitch / sales / product-message decks, and `$paper-writing` for academic prose.\n- Design pass: use `$design-md` for source-material design extraction, `$frontend-design` for a fresh premium direction, and `$visual-review` for rendered PNG evidence before the `$design-md` drift verdict.\n\nAdd source URLs, local asset paths, and review notes here before final delivery.\n",
+        format!("{:?}", template).to_ascii_lowercase()
+    )
+}
+
+pub fn rust_command_manifest_value() -> Value {
+    json!({
+        "name": "ppt-pptx-rust-commands",
+        "runtime": "ppt",
+        "commands": {
+            "build": "ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered",
+            "render": "ppt render deck.pptx --output_dir rendered",
+            "check_layout": "ppt slides-test deck.pptx --fail-on-any",
+            "check_overflow": "ppt slides-test deck.pptx --fail-on-any",
+            "check_fonts": "ppt detect-fonts deck.pptx --json",
+            "check_inspector": "ppt office doctor deck.pptx --json",
+            "check_rust": "ppt qa deck.pptx --rendered-dir rendered --fail-on-issues --json",
+            "build_rust": "ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --json",
+            "build_strict": "ppt build-qa --workdir . --entry deck.plan.json --deck deck.pptx --rendered-dir rendered --quality strict --json",
+            "intake_rust": "ppt intake deck.pptx --json",
+            "inspect_outline": "ppt office outline deck.pptx --json",
+            "watch_rust": "ppt office watch deck.pptx --browser"
+        }
+    })
+}
+
+pub fn read_outline(input: &Path) -> Result<Value> {
+    let raw = fs::read_to_string(input)
+        .with_context(|| format!("failed to read outline {}", input.display()))?;
+    if has_extension(input, "json") {
+        let value: Value = serde_json::from_str(&raw).context("failed to parse JSON outline")?;
+        return Ok(unwrap_outline_plan(value));
+    }
+    parse_outline_yaml_subset(&raw)
+}
+
+pub fn unwrap_outline_plan(value: Value) -> Value {
+    value
+        .get("outline")
+        .filter(|_| {
+            value
+                .get("format")
+                .and_then(Value::as_str)
+                .is_some_and(|format| format == "ppt-rust-outline-plan")
+        })
+        .cloned()
+        .unwrap_or(value)
+}
+
+pub fn deck_template_from_outline(outline: &Value) -> DeckTemplate {
+    let raw = outline
+        .get("template")
+        .or_else(|| outline.get("deck_template"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    match raw.to_ascii_lowercase().as_str() {
+        "light" => DeckTemplate::Light,
+        "corporate" | "academic" => DeckTemplate::Corporate,
+        "dark" => DeckTemplate::Dark,
+        _ => DeckTemplate::Dark,
+    }
+}
+
+pub fn notes_with_semantic_layout(layout: &'static str, continuation: &str) -> String {
+    format!(
+        "rust_semantic_layout:{layout}\n{continuation}",
+        layout = layout,
+        continuation = continuation.trim_start()
+    )
+}
+
+pub fn starter_outline_value(template: &DeckTemplate) -> Value {
+    let palette = match template {
+        DeckTemplate::Light => "light",
+        DeckTemplate::Corporate => "academic",
+        DeckTemplate::Dark => "dark",
+    };
+    let tmpl = match template {
+        DeckTemplate::Light => "light",
+        DeckTemplate::Corporate => "corporate",
+        DeckTemplate::Dark => "dark",
+    };
+    json!({
+        "title": "Rust Authored Deck",
+        "subtitle": "Editable PPTX generated by Rust",
+        "presenter": "Presenter",
+        "date": "2026",
+        "palette": palette,
+        "template": tmpl,
+        "slides": [
+            {
+                "title": "One Rust path",
+                "subtitle": "Outline, PPTX writing, QA and inspection stay in the ppt CLI",
+                "bullets": [
+                    "Write outline JSON or YAML",
+                    "Run ppt outline outline.json --build",
+                    "Review rendered PNGs and QA output"
+                ]
+            }
+        ],
+        "closingText": "Thank you"
+    })
+}
+
+pub fn parse_outline_yaml_subset(raw: &str) -> Result<Value> {
+    let mut root = serde_json::Map::new();
+    let mut slides = Vec::new();
+    let mut current_slide: Option<serde_json::Map<String, Value>> = None;
+    let mut current_list: Option<String> = None;
+    let mut current_object: Option<String> = None;
+
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        if !line.starts_with(' ') && trimmed.ends_with(':') {
+            current_list = None;
+            current_object = None;
+            continue;
+        }
+
+        if !line.starts_with(' ') {
+            if let Some((key, value)) = trimmed.split_once(':') {
+                root.insert(key.trim().to_string(), parse_yaml_scalar(value.trim()));
+            }
+            continue;
+        }
+
+        if trimmed.starts_with("- ") && line.starts_with("  - ") {
+            if let Some(slide) = current_slide.take() {
+                slides.push(Value::Object(slide));
+            }
+            let mut slide = serde_json::Map::new();
+            let rest = trimmed.trim_start_matches("- ").trim();
+            if let Some((key, value)) = rest.split_once(':') {
+                slide.insert(key.trim().to_string(), parse_yaml_scalar(value.trim()));
+            }
+            current_slide = Some(slide);
+            current_list = None;
+            current_object = None;
+            continue;
+        }
+
+        let Some(slide) = current_slide.as_mut() else {
+            continue;
+        };
+
+        if line.starts_with("        - ") {
+            let Some(object_key) = current_object.clone() else {
+                continue;
+            };
+            let item = trimmed.trim_start_matches("- ").trim();
+            if let Some(object) = slide.get_mut(&object_key).and_then(Value::as_object_mut) {
+                let array = object
+                    .entry("series".to_string())
+                    .or_insert_with(|| json!([]));
+                if let Some(items) = array.as_array_mut() {
+                    items.push(parse_yaml_inline_value(item));
+                }
+            }
+            continue;
+        }
+
+        if line.starts_with("        ") {
+            let object_key = current_object
+                .clone()
+                .or_else(|| current_list.clone())
+                .unwrap_or_default();
+            if object_key.is_empty() {
+                continue;
+            }
+            if let Some((key, value)) = trimmed.split_once(':') {
+                if let Some(object) = slide.get_mut(&object_key).and_then(Value::as_object_mut) {
+                    object.insert(key.trim().to_string(), parse_yaml_scalar(value.trim()));
+                }
+            }
+            continue;
+        }
+
+        if line.starts_with("    ") && !line.starts_with("      ") {
+            if let Some((key, value)) = trimmed.split_once(':') {
+                let key = key.trim().to_string();
+                let value = value.trim();
+                current_list = None;
+                current_object = None;
+                if value.is_empty() {
+                    if matches!(key.as_str(), "bullets" | "metrics" | "steps" | "timeline") {
+                        slide.insert(key.clone(), Value::Array(Vec::new()));
+                        current_list = Some(key);
+                    } else {
+                        slide.insert(key.clone(), json!({}));
+                        current_object = Some(key);
+                    }
+                } else if let Some(object_key) = current_object.clone() {
+                    if let Some(object) = slide.get_mut(&object_key).and_then(Value::as_object_mut)
+                    {
+                        object.insert(key, parse_yaml_scalar(value));
+                    }
+                } else {
+                    slide.insert(key, parse_yaml_scalar(value));
+                    current_object = None;
+                }
+            }
+            continue;
+        }
+
+        if line.starts_with("      - ") {
+            let Some(list_key) = current_list.clone() else {
+                continue;
+            };
+            let item = trimmed.trim_start_matches("- ").trim();
+            if let Some(array) = slide.get_mut(&list_key).and_then(Value::as_array_mut) {
+                array.push(parse_yaml_inline_value(item));
+            }
+            continue;
+        }
+
+        if line.starts_with("      ") && !line.starts_with("        ") {
+            if let Some((raw_key, raw_value)) = trimmed.split_once(':') {
+                let key = raw_key.trim().to_string();
+                let value = raw_value.trim();
+                if let Some(object_key) = current_object.clone() {
+                    if let Some(object) = slide.get_mut(&object_key).and_then(Value::as_object_mut)
+                    {
+                        if value.is_empty() {
+                            object.insert(key, json!([]));
+                        } else {
+                            object.insert(key, parse_yaml_scalar(value));
+                        }
+                    }
+                } else if value.is_empty() {
+                    slide.insert(key.clone(), json!({}));
+                    current_object = Some(key);
+                } else {
+                    slide.insert(key, parse_yaml_scalar(value));
+                    current_object = None;
+                }
+            }
+            continue;
+        }
+    }
+
+    if let Some(slide) = current_slide.take() {
+        slides.push(Value::Object(slide));
+    }
+    root.insert("slides".to_string(), Value::Array(slides));
+    Ok(Value::Object(root))
+}
+
+pub fn parse_yaml_inline_value(value: &str) -> Value {
+    let value = value.trim();
+    if value.starts_with('{') || value.starts_with('[') {
+        parse_yaml_jsonish(value).unwrap_or_else(|| Value::String(unquote_yaml(value).to_string()))
+    } else {
+        parse_yaml_scalar(value)
+    }
+}
+
+pub fn parse_yaml_scalar(value: &str) -> Value {
+    let value = value.trim();
+    if value.is_empty() {
+        Value::Null
+    } else if value.starts_with('[') {
+        parse_yaml_jsonish(value).unwrap_or_else(|| Value::String(unquote_yaml(value).to_string()))
+    } else {
+        Value::String(unquote_yaml(value).to_string())
+    }
+}
+
+pub fn parse_yaml_jsonish(value: &str) -> Option<Value> {
+    serde_json::from_str(value)
+        .ok()
+        .or_else(|| serde_json::from_str(&yaml_inline_to_jsonish(value)).ok())
+}
+
+pub fn yaml_inline_to_jsonish(value: &str) -> String {
+    let mut out = String::with_capacity(value.len() + 8);
+    let mut in_string = false;
+    let mut quote = '\0';
+    let mut key_start = true;
+    let mut reading_key = false;
+    for ch in value.chars() {
+        if in_string {
+            if ch == quote {
+                in_string = false;
+            }
+            out.push(ch);
+            continue;
+        }
+        match ch {
+            '"' | '\'' => {
+                in_string = true;
+                quote = ch;
+                out.push('"');
+            }
+            '{' | ',' => {
+                key_start = ch == '{';
+                reading_key = false;
+                out.push(ch);
+            }
+            ':' if reading_key => {
+                key_start = false;
+                reading_key = false;
+                out.push_str("\":");
+            }
+            ch if key_start && !ch.is_whitespace() => {
+                key_start = false;
+                reading_key = true;
+                out.push('"');
+                out.push(ch);
+            }
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+pub fn unquote_yaml(value: &str) -> &str {
+    value
+        .strip_prefix('"')
+        .and_then(|item| item.strip_suffix('"'))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|item| item.strip_suffix('\''))
+        })
+        .unwrap_or(value)
+}
+
+pub fn generate_outline_deck_source(outline: &Value, _template: &DeckTemplate) -> Result<String> {
+    let outline = naturalize_outline_value(outline);
+    serde_json::to_string_pretty(&json!({
+        "format": "ppt-rust-outline-plan",
+        "design_brief": {
+            "source": "DESIGN.md visual contract when source materials or brand examples exist; otherwise choose a frontend-design direction before styling",
+            "copy": "run built-in Rust copy naturalization before layout; use $copywriting for persuasive decks and $paper-writing for academic decks; keep direct claims and remove generic AI filler",
+            "layout": "one visual lead, readable type, no equal-weight card farm; encode the chosen design roles in deck.plan.json",
+            "audit": "render evidence, visual-review findings, design-md drift verdict, then strict Rust QA"
+        },
+        "outline": outline
+    }))
+    .context("failed to serialize Rust outline plan")
+}
+
+pub fn naturalize_outline_value(value: &Value) -> Value {
+    match value {
+        Value::String(text) => Value::String(naturalize_copy_text(text)),
+        Value::Array(items) => Value::Array(items.iter().map(naturalize_outline_value).collect()),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, value)| (key.clone(), naturalize_outline_value(value)))
+                .collect(),
+        ),
+        _ => value.clone(),
+    }
+}
+
+pub fn naturalize_copy_text(input: &str) -> String {
+    let mut text = clean_copy_spacing(input);
+    let replacements = [
+        ("核心观点如下：", ""),
+        ("核心观点如下:", ""),
+        ("请重点关注", "重点看"),
+        ("保持叙事连贯性", "让转场自然"),
+        ("结合实际选取最优方案", "回到现场约束再取舍"),
+        ("具有重要意义", "会影响具体决策"),
+        ("多维度", "几个角度"),
+        ("赋能", "支持"),
+        ("打造", "做"),
+        ("显著提升", "提高"),
+        ("持续优化", "继续改"),
+        ("进一步提升", "提高"),
+        ("全面提升", "提高"),
+        ("全方位", ""),
+        ("一站式", ""),
+        ("方法论", ""),
+        ("顶层设计", ""),
+        ("全链路", ""),
+        ("闭环", ""),
+        ("抓手", ""),
+        ("生态", ""),
+        ("矩阵", ""),
+        ("综上所述，", ""),
+        ("综上所述,", ""),
+        ("值得关注的是，", ""),
+        ("值得关注的是,", ""),
+        ("This slide presents ", ""),
+        ("This slide shows ", ""),
+        ("This slide introduces ", ""),
+        ("It is important to note that ", ""),
+    ];
+    for (from, to) in replacements {
+        text = text.replace(from, to);
+    }
+
+    for prefix in [
+        "本页主要展示了",
+        "本页主要展示",
+        "本页重点展示了",
+        "本页重点展示",
+        "本页展示了",
+        "本页展示",
+        "本页呈现了",
+        "本页呈现",
+        "本页介绍了",
+        "本页介绍",
+        "本页说明了",
+        "本页说明",
+        "本页从多个维度展开分析，",
+        "本页从多个维度展开分析,",
+    ] {
+        if let Some(rest) = text.strip_prefix(prefix) {
+            text = rest.to_string();
+            break;
+        }
+    }
+
+    // Remove common template-ish wrappers while keeping the core claim.
+    // Keep this conservative to avoid harming legitimate content.
+    for prefix in [
+        "我们认为，",
+        "我们认为,",
+        "我们将，",
+        "我们将,",
+        "我们会，",
+        "我们会,",
+        "需要指出的是，",
+        "需要指出的是,",
+        "需要说明的是，",
+        "需要说明的是,",
+    ] {
+        if let Some(rest) = text.strip_prefix(prefix) {
+            text = rest.to_string();
+            break;
+        }
+    }
+
+    clean_copy_spacing(&text)
+}
+
+pub fn clean_copy_spacing(input: &str) -> String {
+    // Preserve newlines (often intentional in PPT), but normalize excessive spaces/tabs.
+    let mut out = String::with_capacity(input.len());
+    let mut in_space = false;
+    for ch in input.chars() {
+        match ch {
+            '\n' => {
+                // trim trailing spaces before newline
+                while out.ends_with(' ') {
+                    out.pop();
+                }
+                out.push('\n');
+                in_space = false;
+            }
+            '\r' => {}
+            ch if ch.is_whitespace() => {
+                if !in_space {
+                    out.push(' ');
+                    in_space = true;
+                }
+            }
+            _ => {
+                out.push(ch);
+                in_space = false;
+            }
+        }
+    }
+    out.trim().to_string()
+}
+
+pub fn reflow_outline_slides(slides: Option<&Vec<Value>>) -> Vec<Value> {
+    let mut out = Vec::new();
+    for slide in slides.into_iter().flatten() {
+        let pattern = detect_outline_pattern(slide);
+        if pattern == "multi-card" && value_array_len(slide, "bullets") > 4 {
+            push_chunked_slide(&mut out, slide, "bullets", 4);
+        } else if pattern == "process-flow" && value_array_len(slide, "steps") > 5 {
+            push_chunked_slide(&mut out, slide, "steps", 4);
+        } else if pattern == "timeline" && value_array_len(slide, "timeline") > 5 {
+            push_chunked_slide(&mut out, slide, "timeline", 4);
+        } else if pattern == "image-text-split" && joined_array_chars(slide, "bullets") > 150 {
+            push_split_slide(&mut out, slide, "bullets");
+        } else {
+            out.push(slide.clone());
+        }
+    }
+    out
+}
+
+pub fn push_chunked_slide(out: &mut Vec<Value>, slide: &Value, key: &str, chunk_size: usize) {
+    let Some(items) = slide.get(key).and_then(Value::as_array) else {
+        out.push(slide.clone());
+        return;
+    };
+    let chunks: Vec<&[Value]> = items.chunks(chunk_size).collect();
+    for (idx, chunk) in chunks.iter().enumerate() {
+        let mut cloned = slide.as_object().cloned().unwrap_or_default();
+        cloned.insert(
+            "title".to_string(),
+            Value::String(format!(
+                "{} ({}/{})",
+                outline_str(slide, "title", "Untitled"),
+                idx + 1,
+                chunks.len()
+            )),
+        );
+        cloned.insert(key.to_string(), Value::Array(chunk.to_vec()));
+        out.push(Value::Object(cloned));
+    }
+}
+
+pub fn push_split_slide(out: &mut Vec<Value>, slide: &Value, key: &str) {
+    let Some(items) = slide.get(key).and_then(Value::as_array) else {
+        out.push(slide.clone());
+        return;
+    };
+    let mid = items.len().div_ceil(2);
+    for (idx, chunk) in [&items[..mid], &items[mid..]].iter().enumerate() {
+        let mut cloned = slide.as_object().cloned().unwrap_or_default();
+        cloned.insert(
+            "title".to_string(),
+            Value::String(format!(
+                "{} ({}/2)",
+                outline_str(slide, "title", "Untitled"),
+                idx + 1
+            )),
+        );
+        cloned.insert(key.to_string(), Value::Array(chunk.to_vec()));
+        out.push(Value::Object(cloned));
+    }
+}
+
+pub fn detect_outline_pattern(slide: &Value) -> &'static str {
+    if value_array_len(slide, "timeline") > 0 {
+        "timeline"
+    } else if value_array_len(slide, "steps") > 0 {
+        "process-flow"
+    } else if slide.get("comparison").is_some() {
+        "comparison"
+    } else if slide.get("chart").is_some() || value_array_len(slide, "metrics") >= 3 {
+        "data-panel"
+    } else if slide.get("image").is_some() && value_array_len(slide, "bullets") <= 2 {
+        "hero-image"
+    } else if slide.get("image").is_some() {
+        "image-text-split"
+    } else if value_array_len(slide, "bullets") >= 3 {
+        "multi-card"
+    } else {
+        "full-text"
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PptxSlideSpec {
+    title: String,
+    subtitle: String,
+    label: String,
+    body: Vec<String>,
+    notes: String,
+    layout: &'static str,
+}
+
+pub fn write_outline_deck_pptx(outline: &Value, output: &Path, template: &DeckTemplate) -> Result<()> {
+    let outline = naturalize_outline_value(outline);
+    let slides = build_pptx_slide_specs(&outline);
+    let palette = ppt_palette(outline.get("palette").and_then(Value::as_str).unwrap_or(
+        match template {
+            DeckTemplate::Light => "light",
+            DeckTemplate::Corporate => "academic",
+            DeckTemplate::Dark => "dark",
+        },
+    ));
+    write_pptx_package(
+        output,
+        &slides,
+        &palette,
+        outline_str(&outline, "title", "Deck"),
+    )
+}
+
+pub fn build_pptx_slide_specs(outline: &Value) -> Vec<PptxSlideSpec> {
+    let content_slides = reflow_outline_slides(outline.get("slides").and_then(Value::as_array));
+    let mut slides = Vec::new();
+    slides.push(PptxSlideSpec {
+        title: outline_str(outline, "title", "Untitled Deck").to_string(),
+        subtitle: outline_str(outline, "subtitle", "").to_string(),
+        label: "OPENING".to_string(),
+        body: [
+            outline_str(outline, "presenter", ""),
+            outline_str(outline, "date", ""),
+        ]
+        .into_iter()
+        .filter(|item| !item.is_empty())
+        .map(str::to_string)
+        .collect(),
+        notes: notes_with_semantic_layout("cover", "Cover slide generated by the Rust ppt CLI."),
+        layout: "cover",
+    });
+
+    for (idx, slide) in content_slides.iter().enumerate() {
+        let mut body = value_string_array(slide, "bullets");
+        if body.is_empty() {
+            body = value_string_array(slide, "steps");
+        }
+        if body.is_empty() {
+            body = value_string_array(slide, "timeline");
+        }
+        if body.is_empty() {
+            body = comparison_body(slide);
+        }
+        if body.is_empty() {
+            body = metrics_body(slide);
+        }
+        if body.is_empty() {
+            body.push(outline_str(slide, "body", "").to_string());
+        }
+        body.retain(|item| !item.trim().is_empty());
+        let pattern = detect_outline_pattern(slide);
+        slides.push(PptxSlideSpec {
+            title: outline_str(slide, "title", "").to_string(),
+            subtitle: outline_str(slide, "subtitle", "").to_string(),
+            label: format!("SECTION {:02}", idx + 1),
+            notes: notes_with_semantic_layout(
+                pattern,
+                &format!(
+                    "Slide {}: {}",
+                    idx + 2,
+                    outline_str(slide, "title", "Untitled")
+                ),
+            ),
+            body,
+            layout: pattern,
+        });
+    }
+
+    slides.push(PptxSlideSpec {
+        title: outline_str(outline, "closingText", "Thank you").to_string(),
+        subtitle: String::new(),
+        label: "FINAL SLIDE".to_string(),
+        body: Vec::new(),
+        notes: notes_with_semantic_layout("closing", "Closing slide generated by the Rust ppt CLI."),
+        layout: "closing",
+    });
+    slides
+}
+
+pub fn comparison_body(slide: &Value) -> Vec<String> {
+    let mut out = Vec::new();
+    for side in ["left", "right"] {
+        let value = slide
+            .get("comparison")
+            .and_then(|comparison| comparison.get(side))
+            .unwrap_or(&Value::Null);
+        let title = outline_str(value, "title", side);
+        let items = value_string_array(value, "items").join("; ");
+        if !items.is_empty() {
+            out.push(format!("{title}: {items}"));
+        }
+    }
+    out
+}
+
+pub fn metrics_body(slide: &Value) -> Vec<String> {
+    slide
+        .get("metrics")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|metric| {
+            format!(
+                "{} {}",
+                outline_str(metric, "value", ""),
+                outline_str(metric, "label", "")
+            )
+            .trim()
+            .to_string()
+        })
+        .filter(|item| !item.is_empty())
+        .collect()
+}
+
+#[derive(Clone, Debug)]
+pub struct PptPalette {
+    stage: &'static str,
+    panel: &'static str,
+    panel_soft: &'static str,
+    line: &'static str,
+    glow: &'static str,
+    text: &'static str,
+    text_soft: &'static str,
+    text_mute: &'static str,
+}
+
+pub fn ppt_palette(name: &str) -> PptPalette {
+    match name {
+        "light" => PptPalette {
+            stage: "FAFAFA",
+            panel: "FFFFFF",
+            panel_soft: "F0F0F0",
+            line: "E0E0E0",
+            glow: "3B82F6",
+            text: "1A1A1A",
+            text_soft: "555555",
+            text_mute: "777777",
+        },
+        "academic" => PptPalette {
+            stage: "FFFFFF",
+            panel: "FFFFFF",
+            panel_soft: "E7E6E6",
+            line: "E7E6E6",
+            glow: "4874CB",
+            text: "000000",
+            text_soft: "44546A",
+            text_mute: "888888",
+        },
+        _ => PptPalette {
+            stage: "000000",
+            panel: "111111",
+            panel_soft: "171717",
+            line: "2A2A2A",
+            glow: "7EA9FF",
+            text: "F2F2EE",
+            text_soft: "B9B9B2",
+            text_mute: "888883",
+        },
+    }
+}
+
+pub fn value_array_len(value: &Value, key: &str) -> usize {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(Vec::len)
+        .unwrap_or(0)
+}
+
+pub fn joined_array_chars(value: &Value, key: &str) -> usize {
+    value_string_array(value, key).join("").chars().count()
+}
+
+pub fn value_string_array(value: &Value, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| {
+                    item.as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| item.to_string())
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn write_pptx_package(
+    output: &Path,
+    slides: &[PptxSlideSpec],
+    palette: &PptPalette,
+    title: &str,
+) -> Result<()> {
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let file =
+        File::create(output).with_context(|| format!("failed to create {}", output.display()))?;
+    let mut zip = ZipWriter::new(file);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+    let mut write = |path: &str, content: String| -> Result<()> {
+        zip.start_file(path, options)?;
+        zip.write_all(content.as_bytes())?;
+        Ok(())
+    };
+
+    write("[Content_Types].xml", content_types_xml(slides.len()))?;
+    write("_rels/.rels", root_rels_xml())?;
+    write("docProps/app.xml", app_xml(slides.len()))?;
+    write("docProps/core.xml", core_xml(title))?;
+    write("ppt/presentation.xml", presentation_xml(slides.len()))?;
+    write(
+        "ppt/_rels/presentation.xml.rels",
+        presentation_rels_xml(slides.len()),
+    )?;
+    write("ppt/theme/theme1.xml", theme_xml(palette))?;
+    write(
+        "ppt/slideMasters/slideMaster1.xml",
+        slide_master_xml(palette),
+    )?;
+    write(
+        "ppt/slideMasters/_rels/slideMaster1.xml.rels",
+        slide_master_rels_xml(),
+    )?;
+    write("ppt/slideLayouts/slideLayout1.xml", slide_layout_xml())?;
+    write(
+        "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
+        slide_layout_rels_xml(),
+    )?;
+    write("ppt/notesMasters/notesMaster1.xml", notes_master_xml())?;
+    write(
+        "ppt/notesMasters/_rels/notesMaster1.xml.rels",
+        notes_master_rels_xml(),
+    )?;
+
+    for (idx, slide) in slides.iter().enumerate() {
+        let slide_no = idx + 1;
+        write(
+            &format!("ppt/slides/slide{slide_no}.xml"),
+            slide_xml(slide, slide_no, slides.len(), palette)?,
+        )?;
+        write(
+            &format!("ppt/slides/_rels/slide{slide_no}.xml.rels"),
+            slide_rels_xml(slide_no),
+        )?;
+        write(
+            &format!("ppt/notesSlides/notesSlide{slide_no}.xml"),
+            notes_slide_xml(slide, slide_no),
+        )?;
+        write(
+            &format!("ppt/notesSlides/_rels/notesSlide{slide_no}.xml.rels"),
+            notes_slide_rels_xml(slide_no),
+        )?;
+    }
+
+    zip.finish()?;
+    Ok(())
+}
+
+pub fn content_types_xml(slide_count: usize) -> String {
+    let mut overrides = String::new();
+    for idx in 1..=slide_count {
+        overrides.push_str(&format!(r#"<Override PartName="/ppt/slides/slide{idx}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/notesSlides/notesSlide{idx}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml"/>"#));
+    }
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/notesMasters/notesMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml"/>{overrides}</Types>"#
+    )
+}
+
+pub fn root_rels_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>"#.to_string()
+}
+
+pub fn app_xml(slide_count: usize) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>ppt Rust CLI</Application><PresentationFormat>Widescreen</PresentationFormat><Slides>{slide_count}</Slides><Notes>{slide_count}</Notes></Properties>"#
+    )
+}
+
+pub fn core_xml(title: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>{}</dc:title><dc:creator>ppt Rust CLI</dc:creator><cp:lastModifiedBy>ppt Rust CLI</cp:lastModifiedBy></cp:coreProperties>"#,
+        xml_escape(title)
+    )
+}
+
+pub fn presentation_xml(slide_count: usize) -> String {
+    let slide_ids = (1..=slide_count)
+        .map(|idx| format!(r#"<p:sldId id="{}" r:id="rId{}"/>"#, 255 + idx, idx + 1))
+        .collect::<Vec<_>>()
+        .join("");
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:notesMasterIdLst><p:notesMasterId r:id="rId{}"/></p:notesMasterIdLst><p:sldIdLst>{slide_ids}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000" type="wide"/><p:notesSz cx="6858000" cy="9144000"/><p:defaultTextStyle/></p:presentation>"#,
+        slide_count + 2
+    )
+}
+
+pub fn presentation_rels_xml(slide_count: usize) -> String {
+    let mut rels = String::from(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>"#,
+    );
+    for idx in 1..=slide_count {
+        rels.push_str(&format!(r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{idx}.xml"/>"#, idx + 1));
+    }
+    rels.push_str(&format!(r#"<Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="notesMasters/notesMaster1.xml"/><Relationship Id="rId{}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/></Relationships>"#, slide_count + 2, slide_count + 3));
+    rels
+}
+
+pub fn slide_rels_xml(slide_no: usize) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide" Target="../notesSlides/notesSlide{slide_no}.xml"/></Relationships>"#
+    )
+}
+
+pub fn slide_master_rels_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>"#.to_string()
+}
+
+pub fn slide_layout_rels_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>"#.to_string()
+}
+
+pub fn notes_master_rels_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>"#.to_string()
+}
+
+pub fn notes_slide_rels_xml(slide_no: usize) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesMaster" Target="../notesMasters/notesMaster1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="../slides/slide{slide_no}.xml"/></Relationships>"#
+    )
+}
+
+pub fn theme_xml(palette: &PptPalette) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="ppt Rust Theme"><a:themeElements><a:clrScheme name="RustDeck"><a:dk1><a:srgbClr val="{}"/></a:dk1><a:lt1><a:srgbClr val="{}"/></a:lt1><a:dk2><a:srgbClr val="{}"/></a:dk2><a:lt2><a:srgbClr val="{}"/></a:lt2><a:accent1><a:srgbClr val="{}"/></a:accent1><a:accent2><a:srgbClr val="{}"/></a:accent2><a:accent3><a:srgbClr val="{}"/></a:accent3><a:accent4><a:srgbClr val="{}"/></a:accent4><a:accent5><a:srgbClr val="{}"/></a:accent5><a:accent6><a:srgbClr val="{}"/></a:accent6><a:hlink><a:srgbClr val="{}"/></a:hlink><a:folHlink><a:srgbClr val="{}"/></a:folHlink></a:clrScheme><a:fontScheme name="RustDeckFonts"><a:majorFont><a:latin typeface="Arial"/><a:ea typeface="Arial"/><a:cs typeface="Arial"/></a:majorFont><a:minorFont><a:latin typeface="Arial"/><a:ea typeface="Arial"/><a:cs typeface="Arial"/></a:minorFont></a:fontScheme><a:fmtScheme name="RustDeckFormat"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:gradFill rotWithShape="1"/><a:gradFill rotWithShape="1"/></a:fillStyleLst><a:lnStyleLst><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="25400" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="38100" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle/><a:effectStyle/><a:effectStyle/></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>"#,
+        palette.stage,
+        palette.text,
+        palette.panel,
+        palette.panel_soft,
+        palette.glow,
+        palette.line,
+        palette.text_soft,
+        palette.text_mute,
+        palette.glow,
+        palette.panel_soft,
+        palette.glow,
+        palette.glow
+    )
+}
+
+pub fn slide_master_xml(palette: &PptPalette) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="{}"/></a:solidFill></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" bg1="lt1" bg2="lt2" folHlink="folHlink" hlink="hlink" tx1="dk1" tx2="dk2"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>"#,
+        palette.stage
+    )
+}
+
+pub fn slide_layout_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Rust Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>"#.to_string()
+}
+
+pub fn notes_master_xml() -> String {
+    r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:notesMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" bg1="lt1" bg2="lt2" folHlink="folHlink" hlink="hlink" tx1="dk1" tx2="dk2"/><p:notesStyle/></p:notesMaster>"#.to_string()
+}
+
+pub fn slide_background_and_rail(palette: &PptPalette) -> Vec<String> {
+    vec![
+        rect_shape(
+            2,
+            "Background",
+            ShapeBox {
+                x: 0.0,
+                y: 0.0,
+                w: 13.333,
+                h: 7.5,
+            },
+            palette.stage,
+            None,
+            0,
+        ),
+        rect_shape(
+            3,
+            "Glow Rail",
+            ShapeBox {
+                x: 0.86,
+                y: 6.86,
+                w: 11.6,
+                h: 0.018,
+            },
+            palette.glow,
+            None,
+            25000,
+        ),
+    ]
+}
+
+pub fn slide_pack_xml(title_escaped: &str, shapes_html: &str) -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="{title}"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>{inner}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"#,
+        title = title_escaped,
+        inner = shapes_html,
+    )
+}
+
+pub fn slide_shapes_label(slide: &PptxSlideSpec, palette: &PptPalette) -> String {
+    text_shape(
+        10,
+        "Slide Label",
+        &slide.label,
+        ShapeBox {
+            x: 0.9,
+            y: 0.38,
+            w: 2.7,
+            h: 0.22,
+        },
+        TextStyle {
+            size_pt: 9,
+            color: palette.text_mute,
+            bold: false,
+            title_placeholder: false,
+        },
+    )
+}
+
+pub fn slide_shapes_cover_or_closing(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
+    let panel = rect_shape(
+        4,
+        "Hero Panel",
+        ShapeBox {
+            x: 0.72,
+            y: 0.72,
+            w: 5.8,
+            h: 6.0,
+        },
+        palette.panel,
+        Some(palette.line),
+        16000,
+    );
+    let mut shapes = vec![panel, slide_shapes_label(slide, palette)];
+    let title_box = if slide.layout == "cover" {
+        (0.96, 2.02, 4.9, 1.1, 31u32)
+    } else {
+        (3.2, 2.48, 6.9, 0.9, 34u32)
+    };
+    shapes.push(text_shape(
+        11,
+        "Title",
+        &slide.title,
+        ShapeBox {
+            x: title_box.0,
+            y: title_box.1,
+            w: title_box.2,
+            h: title_box.3,
+        },
+        TextStyle {
+            size_pt: title_box.4,
+            color: palette.text,
+            bold: true,
+            title_placeholder: true,
+        },
+    ));
+    if !slide.subtitle.is_empty() {
+        let sub_y = if slide.layout == "cover" {
+            3.2
+        } else {
+            3.52
+        };
+        shapes.push(text_shape(
+            12,
+            "Subtitle",
+            &slide.subtitle,
+            ShapeBox {
+                x: 0.96,
+                y: sub_y,
+                w: 6.7,
+                h: 0.38,
+            },
+            TextStyle {
+                size_pt: 18,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    for (idx, item) in slide.body.iter().take(6).enumerate() {
+        let y = 4.35 + idx as f64 * 0.58;
+        shapes.push(text_shape(
+            20 + idx as u32,
+            "Body",
+            item,
+            ShapeBox {
+                x: 1.18,
+                y,
+                w: 10.9,
+                h: 0.42,
+            },
+            TextStyle {
+                size_pt: 18,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    shapes
+}
+
+pub fn slide_shapes_standard_content(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
+    let panel = rect_shape(
+        4,
+        "Content Panel",
+        ShapeBox {
+            x: 0.86,
+            y: 1.62,
+            w: 11.6,
+            h: 4.82,
+        },
+        palette.panel_soft,
+        Some(palette.line),
+        10000,
+    );
+    let mut shapes = vec![panel, slide_shapes_label(slide, palette)];
+    shapes.push(text_shape(
+        11,
+        "Title",
+        &slide.title,
+        ShapeBox {
+            x: 0.92,
+            y: 0.92,
+            w: 6.3,
+            h: 0.6,
+        },
+        TextStyle {
+            size_pt: 24,
+            color: palette.text,
+            bold: true,
+            title_placeholder: true,
+        },
+    ));
+    if !slide.subtitle.is_empty() {
+        shapes.push(text_shape(
+            12,
+            "Subtitle",
+            &slide.subtitle,
+            ShapeBox {
+                x: 0.96,
+                y: 1.56,
+                w: 6.7,
+                h: 0.38,
+            },
+            TextStyle {
+                size_pt: 18,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    for (idx, item) in slide.body.iter().take(6).enumerate() {
+        let y = 2.0 + idx as f64 * 0.58;
+        let text = format!("{}. {}", idx + 1, item);
+        shapes.push(text_shape(
+            20 + idx as u32,
+            "Body",
+            &text,
+            ShapeBox {
+                x: 1.18,
+                y,
+                w: 10.9,
+                h: 0.42,
+            },
+            TextStyle {
+                size_pt: 18,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    shapes
+}
+
+pub fn slide_shapes_comparison(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
+    let left_panel = rect_shape(
+        4,
+        "Compare Left",
+        ShapeBox {
+            x: 0.86,
+            y: 1.62,
+            w: 5.65,
+            h: 4.82,
+        },
+        palette.panel_soft,
+        Some(palette.line),
+        10000,
+    );
+    let right_panel = rect_shape(
+        5,
+        "Compare Right",
+        ShapeBox {
+            x: 6.72,
+            y: 1.62,
+            w: 5.74,
+            h: 4.82,
+        },
+        palette.panel_soft,
+        Some(palette.line),
+        10000,
+    );
+    let mut shapes = vec![left_panel, right_panel, slide_shapes_label(slide, palette)];
+    shapes.push(text_shape(
+        11,
+        "Title",
+        &slide.title,
+        ShapeBox {
+            x: 0.92,
+            y: 0.92,
+            w: 11.2,
+            h: 0.6,
+        },
+        TextStyle {
+            size_pt: 24,
+            color: palette.text,
+            bold: true,
+            title_placeholder: true,
+        },
+    ));
+    let left_txt = slide.body.first().cloned().unwrap_or_default();
+    let right_txt = slide.body.get(1).cloned().unwrap_or_default();
+    shapes.push(text_shape(
+        22,
+        "Column A",
+        &left_txt,
+        ShapeBox {
+            x: 1.08,
+            y: 2.05,
+            w: 5.2,
+            h: 4.2,
+        },
+        TextStyle {
+            size_pt: 17,
+            color: palette.text_soft,
+            bold: false,
+            title_placeholder: false,
+        },
+    ));
+    shapes.push(text_shape(
+        23,
+        "Column B",
+        &right_txt,
+        ShapeBox {
+            x: 6.88,
+            y: 2.05,
+            w: 5.45,
+            h: 4.2,
+        },
+        TextStyle {
+            size_pt: 17,
+            color: palette.text_soft,
+            bold: false,
+            title_placeholder: false,
+        },
+    ));
+    shapes
+}
+
+pub fn slide_shapes_hero_image(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
+    let image_plate = rect_shape(
+        4,
+        "Image Plate",
+        ShapeBox {
+            x: 0.86,
+            y: 1.62,
+            w: 5.25,
+            h: 4.82,
+        },
+        palette.panel,
+        Some(palette.line),
+        9000,
+    );
+    let text_panel = rect_shape(
+        5,
+        "Text Panel",
+        ShapeBox {
+            x: 6.35,
+            y: 1.62,
+            w: 6.1,
+            h: 4.82,
+        },
+        palette.panel_soft,
+        Some(palette.line),
+        10000,
+    );
+    let mut shapes = vec![image_plate, text_panel, slide_shapes_label(slide, palette)];
+    shapes.push(text_shape(
+        21,
+        "Image Hint",
+        "Image / schematic",
+        ShapeBox {
+            x: 1.1,
+            y: 3.35,
+            w: 4.7,
+            h: 0.45,
+        },
+        TextStyle {
+            size_pt: 14,
+            color: palette.text_mute,
+            bold: false,
+            title_placeholder: false,
+        },
+    ));
+    shapes.push(text_shape(
+        11,
+        "Title",
+        &slide.title,
+        ShapeBox {
+            x: 0.92,
+            y: 0.92,
+            w: 11.35,
+            h: 0.58,
+        },
+        TextStyle {
+            size_pt: 24,
+            color: palette.text,
+            bold: true,
+            title_placeholder: true,
+        },
+    ));
+    if !slide.subtitle.is_empty() {
+        shapes.push(text_shape(
+            12,
+            "Subtitle",
+            &slide.subtitle,
+            ShapeBox {
+                x: 0.92,
+                y: 1.48,
+                w: 10.9,
+                h: 0.35,
+            },
+            TextStyle {
+                size_pt: 16,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    for (idx, item) in slide.body.iter().take(6).enumerate() {
+        let y = 2.08 + idx as f64 * 0.62;
+        let text = format!("{}. {}", idx + 1, item);
+        shapes.push(text_shape(
+            31 + idx as u32,
+            "Body",
+            &text,
+            ShapeBox {
+                x: 6.55,
+                y,
+                w: 5.75,
+                h: 0.48,
+            },
+            TextStyle {
+                size_pt: 17,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    shapes
+}
+
+pub fn slide_shapes_image_text_split(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
+    let top_band = rect_shape(
+        4,
+        "Visual Band",
+        ShapeBox {
+            x: 0.86,
+            y: 1.62,
+            w: 11.6,
+            h: 2.65,
+        },
+        palette.panel,
+        Some(palette.line),
+        9500,
+    );
+    let lower_panel = rect_shape(
+        5,
+        "Lower Panel",
+        ShapeBox {
+            x: 0.86,
+            y: 4.55,
+            w: 11.6,
+            h: 1.88,
+        },
+        palette.panel_soft,
+        Some(palette.line),
+        10000,
+    );
+    let mut shapes = vec![top_band, lower_panel, slide_shapes_label(slide, palette)];
+    shapes.push(text_shape(
+        11,
+        "Title",
+        &slide.title,
+        ShapeBox {
+            x: 0.92,
+            y: 0.92,
+            w: 11.2,
+            h: 0.55,
+        },
+        TextStyle {
+            size_pt: 22,
+            color: palette.text,
+            bold: true,
+            title_placeholder: true,
+        },
+    ));
+    shapes.push(text_shape(
+        22,
+        "Band Hint",
+        "Figure / screenshot / diagram",
+        ShapeBox {
+            x: 1.08,
+            y: 3.42,
+            w: 10.8,
+            h: 0.35,
+        },
+        TextStyle {
+            size_pt: 13,
+            color: palette.text_mute,
+            bold: false,
+            title_placeholder: false,
+        },
+    ));
+    for (idx, item) in slide.body.iter().take(6).enumerate() {
+        let y = 4.76 + idx as f64 * 0.42;
+        let text = format!("{}. {}", idx + 1, item);
+        shapes.push(text_shape(
+            30 + idx as u32,
+            "Body",
+            &text,
+            ShapeBox {
+                x: 1.08,
+                y,
+                w: 11.1,
+                h: 0.38,
+            },
+            TextStyle {
+                size_pt: 16,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    shapes
+}
+
+pub fn slide_shapes_data_panel(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
+    let panel = rect_shape(
+        4,
+        "Content Panel",
+        ShapeBox {
+            x: 0.86,
+            y: 1.62,
+            w: 11.6,
+            h: 4.82,
+        },
+        palette.panel_soft,
+        Some(palette.line),
+        10000,
+    );
+    let mut shapes = vec![panel, slide_shapes_label(slide, palette)];
+    shapes.push(text_shape(
+        11,
+        "Title",
+        &slide.title,
+        ShapeBox {
+            x: 0.92,
+            y: 0.92,
+            w: 11.25,
+            h: 0.62,
+        },
+        TextStyle {
+            size_pt: 24,
+            color: palette.text,
+            bold: true,
+            title_placeholder: true,
+        },
+    ));
+    let kpi_count = slide.body.len().min(3);
+    let col_w = 3.55;
+    let gap = 0.38;
+    let start_x = 1.05;
+    for idx in 0..kpi_count {
+        let x = start_x + idx as f64 * (col_w + gap);
+        let line = slide
+            .body
+            .get(idx)
+            .map(String::as_str)
+            .unwrap_or("")
+            .to_string();
+        shapes.push(text_shape(
+            50 + idx as u32,
+            "Metric",
+            &line,
+            ShapeBox {
+                x,
+                y: 2.1,
+                w: col_w,
+                h: 1.25,
+            },
+            TextStyle {
+                size_pt: 22,
+                color: palette.text,
+                bold: true,
+                title_placeholder: false,
+            },
+        ));
+    }
+    let remainder_start = slide.body.len().min(3);
+    for (r_idx, item) in slide.body.iter().skip(remainder_start).take(6).enumerate() {
+        let y = 3.72 + r_idx as f64 * 0.52;
+        let text = format!("{}. {}", r_idx + 1 + remainder_start, item);
+        shapes.push(text_shape(
+            60 + r_idx as u32,
+            "Detail",
+            &text,
+            ShapeBox {
+                x: 1.12,
+                y,
+                w: 10.95,
+                h: 0.44,
+            },
+            TextStyle {
+                size_pt: 17,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    shapes
+}
+
+pub fn slide_shapes_step_lane(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
+    let panel = rect_shape(
+        4,
+        "Content Panel",
+        ShapeBox {
+            x: 0.86,
+            y: 1.62,
+            w: 11.6,
+            h: 4.82,
+        },
+        palette.panel_soft,
+        Some(palette.line),
+        10000,
+    );
+    let mut shapes = vec![panel, slide_shapes_label(slide, palette)];
+    shapes.push(text_shape(
+        11,
+        "Title",
+        &slide.title,
+        ShapeBox {
+            x: 0.92,
+            y: 0.92,
+            w: 10.95,
+            h: 0.6,
+        },
+        TextStyle {
+            size_pt: 24,
+            color: palette.text,
+            bold: true,
+            title_placeholder: true,
+        },
+    ));
+    for (idx, item) in slide.body.iter().take(6).enumerate() {
+        let y = 2.06 + idx as f64 * 0.76;
+        shapes.push(rect_shape(
+            70 + idx as u32,
+            "Lane Accent",
+            ShapeBox {
+                x: 1.06,
+                y: y + 0.06,
+                w: 0.085,
+                h: 0.55,
+            },
+            palette.glow,
+            None,
+            52000,
+        ));
+        shapes.push(text_shape(
+            20 + idx as u32,
+            "Step",
+            &format!("{}. {}", idx + 1, item),
+            ShapeBox {
+                x: 1.25,
+                y,
+                w: 10.75,
+                h: 0.65,
+            },
+            TextStyle {
+                size_pt: 17,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    shapes
+}
+
+pub fn slide_shapes_multi_card(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
+    let placements = [
+        (0.92f64, 2.03f64, 5.68f64, 1.85f64),
+        (6.65f64, 2.03f64, 5.68f64, 1.85f64),
+        (0.92f64, 4.15f64, 5.68f64, 1.85f64),
+        (6.65f64, 4.15f64, 5.68f64, 1.85f64),
+    ];
+    let mut shapes = vec![slide_shapes_label(slide, palette)];
+    shapes.push(text_shape(
+        11,
+        "Title",
+        &slide.title,
+        ShapeBox {
+            x: 0.92,
+            y: 0.92,
+            w: 10.95,
+            h: 0.62,
+        },
+        TextStyle {
+            size_pt: 24,
+            color: palette.text,
+            bold: true,
+            title_placeholder: true,
+        },
+    ));
+    let base_id: u32 = 80;
+    for (idx, item) in slide.body.iter().take(4).enumerate() {
+        let (cx, cy, cw, ch) = placements[idx];
+        shapes.push(rect_shape(
+            base_id + idx as u32 * 10,
+            "Card",
+            ShapeBox {
+                x: cx - 0.06,
+                y: cy - 0.12,
+                w: cw + 0.12,
+                h: ch + 0.16,
+            },
+            palette.panel_soft,
+            Some(palette.line),
+            11000,
+        ));
+        shapes.push(text_shape(
+            base_id + idx as u32 * 10 + 1,
+            "Card Copy",
+            &format!("{}. {}", idx + 1, item),
+            ShapeBox {
+                x: cx + 0.12,
+                y: cy + 0.1,
+                w: cw - 0.26,
+                h: ch - 0.2,
+            },
+            TextStyle {
+                size_pt: 16,
+                color: palette.text_soft,
+                bold: false,
+                title_placeholder: false,
+            },
+        ));
+    }
+    shapes
+}
+
+pub fn slide_shapes_page_footer(slide_no: usize, total: usize, palette: &PptPalette) -> String {
+    text_shape(
+        40,
+        "Page",
+        &format!("{slide_no:02} / {total:02}"),
+        ShapeBox {
+            x: 11.82,
+            y: 7.0,
+            w: 0.8,
+            h: 0.22,
+        },
+        TextStyle {
+            size_pt: 9,
+            color: palette.text_mute,
+            bold: false,
+            title_placeholder: false,
+        },
+    )
+}
+
+pub fn slide_xml(
+    slide: &PptxSlideSpec,
+    slide_no: usize,
+    total: usize,
+    palette: &PptPalette,
+) -> Result<String> {
+    let mut shapes = slide_background_and_rail(palette);
+    let inner: Vec<String> = match slide.layout {
+        "cover" | "closing" => slide_shapes_cover_or_closing(slide, palette),
+        "comparison" if slide.body.len() >= 2 => slide_shapes_comparison(slide, palette),
+        "hero-image" => slide_shapes_hero_image(slide, palette),
+        "image-text-split" => slide_shapes_image_text_split(slide, palette),
+        "data-panel" => slide_shapes_data_panel(slide, palette),
+        "timeline" | "process-flow" => slide_shapes_step_lane(slide, palette),
+        "multi-card" if slide.body.len() <= 4 && !slide.body.is_empty() => {
+            slide_shapes_multi_card(slide, palette)
+        }
+        _ => slide_shapes_standard_content(slide, palette),
+    };
+    shapes.extend(inner);
+    shapes.push(slide_shapes_page_footer(slide_no, total, palette));
+    Ok(slide_pack_xml(&xml_escape(&slide.title), &shapes.join("")))
+}
+
+pub fn notes_slide_xml(slide: &PptxSlideSpec, slide_no: usize) -> String {
+    let notes = if slide.notes.is_empty() {
+        format!("Slide {slide_no}: {}", slide.title)
+    } else {
+        slide.notes.clone()
+    };
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:notes xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>{}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>"#,
+        text_shape(
+            2,
+            "Notes",
+            &notes,
+            ShapeBox {
+                x: 0.7,
+                y: 5.0,
+                w: 5.5,
+                h: 2.0
+            },
+            TextStyle {
+                size_pt: 18,
+                color: "222222",
+                bold: false,
+                title_placeholder: false
+            }
+        )
+    )
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ShapeBox {
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TextStyle<'a> {
+    size_pt: u32,
+    color: &'a str,
+    bold: bool,
+    title_placeholder: bool,
+}
+
+pub fn rect_shape(
+    id: u32,
+    name: &str,
+    bounds: ShapeBox,
+    fill: &str,
+    line: Option<&str>,
+    transparency: u32,
+) -> String {
+    let alpha = 100000 - transparency.min(100000);
+    let line_xml = line
+        .map(|color| {
+            format!(r#"<a:ln><a:solidFill><a:srgbClr val="{color}"/></a:solidFill></a:ln>"#)
+        })
+        .unwrap_or_else(|| "<a:ln><a:noFill/></a:ln>".to_string());
+    format!(
+        r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{name}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="{}" y="{}"/><a:ext cx="{}" cy="{}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="{fill}"><a:alpha val="{alpha}"/></a:srgbClr></a:solidFill>{line_xml}</p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>"#,
+        inch_emu(bounds.x),
+        inch_emu(bounds.y),
+        inch_emu(bounds.w),
+        inch_emu(bounds.h)
+    )
+}
+
+pub fn text_shape(id: u32, name: &str, text: &str, bounds: ShapeBox, style: TextStyle<'_>) -> String {
+    let bold_attr = if style.bold { r#" b="1""# } else { "" };
+    let placeholder = if style.title_placeholder {
+        r#"<p:nvPr><p:ph type="title"/></p:nvPr>"#
+    } else {
+        "<p:nvPr/>"
+    };
+    format!(
+        r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{name}"/><p:cNvSpPr txBox="1"/>{placeholder}</p:nvSpPr><p:spPr><a:xfrm><a:off x="{}" y="{}"/><a:ext cx="{}" cy="{}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square" anchor="t"/><a:lstStyle/><a:p><a:r><a:rPr lang="zh-CN" sz="{}"{}><a:solidFill><a:srgbClr val="{}"/></a:solidFill><a:latin typeface="Arial"/><a:ea typeface="Arial"/><a:cs typeface="Arial"/></a:rPr><a:t>{}</a:t></a:r><a:endParaRPr lang="zh-CN" sz="{}"/></a:p></p:txBody></p:sp>"#,
+        inch_emu(bounds.x),
+        inch_emu(bounds.y),
+        inch_emu(bounds.w),
+        inch_emu(bounds.h),
+        style.size_pt * 100,
+        bold_attr,
+        style.color,
+        xml_escape(text),
+        style.size_pt * 100
+    )
+}
+
+pub fn inch_emu(value: f64) -> i64 {
+    (value * EMU_PER_INCH).round() as i64
+}
+
+pub fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+pub fn outline_str<'a>(value: &'a Value, key: &str, default: &'a str) -> &'a str {
+    value.get(key).and_then(Value::as_str).unwrap_or(default)
+}
+
+#[allow(dead_code)]
+pub fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<qa::QaSummary> {
+    qa::qa_summary(deck_path, rendered_dir)
+}
+
+#[allow(dead_code)]
+pub fn strict_quality_gate(payload: &Value) -> Result<()> {
+    qa::strict_quality_gate(payload)
+}
+
+#[allow(dead_code)]
+pub fn font_check_ok(payload: &Value) -> bool {
+    qa::font_check_ok(payload)
+}
+
+#[allow(dead_code)]
+pub fn inspector_ok(payload: &Value) -> bool {
+    qa::inspector_ok(payload)
+}
+
+pub fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) -> Result<Vec<PathBuf>> {
+    let dpi = if has_extension(input, "pdf") {
+        calc_dpi_via_pdf(input, width, height)?
+    } else {
+        calc_dpi_via_ooxml(input, width, height)?
+    };
+    rasterize_to_pngs(input, output_dir, dpi)
+}
+
+#[allow(dead_code)]
+pub fn slide_overflow_summary(input: &Path) -> Result<qa::QaOverflowSummary> {
+    qa::slide_overflow_summary(input)
+}
+
+#[allow(dead_code)]
+pub fn slide_overlap_summary(input: &Path) -> Result<qa::QaOverflowSummary> {
+    qa::slide_overlap_summary(input)
+}
+
+#[allow(dead_code)]
+pub fn slide_aesthetic_summary(input: &Path) -> Result<qa::QaAestheticSummary> {
+    qa::slide_aesthetic_summary(input)
+}
+
+pub fn detect_fonts_payload(input: &Path) -> Result<Value> {
+    let bundle = ZipBundle::from_path(input)?;
+    let requested = extract_requested_fonts_by_slide(&bundle)?;
+    let installed = build_font_synonym_map()?;
+    let resolved = match extract_resolved_fonts_from_odp(input) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("warning: resolved-font probe skipped: {err:#}");
+            BTreeSet::new()
+        }
+    };
+
+    let mut missing_overall = BTreeSet::new();
+    let mut substituted_overall = BTreeSet::new();
+    let mut missing_by_slide: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut substituted_by_slide: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+    for (slide_no, families) in &requested {
+        let mut slide_missing = BTreeSet::new();
+        let mut slide_substituted = BTreeSet::new();
+        for family in families {
+            let normalized = normalize_font_family_name(family);
+            if normalized.is_empty() {
+                continue;
+            }
+            let acceptable = expand_font_family_aliases(&installed, &normalized);
+            let is_installed = acceptable.iter().any(|alias| installed.contains_key(alias));
+            if !is_installed {
+                slide_missing.insert(family.clone());
+                missing_overall.insert(family.clone());
+                continue;
+            }
+            if !resolved.is_empty() && !acceptable.iter().any(|alias| resolved.contains(alias)) {
+                slide_substituted.insert(family.clone());
+                substituted_overall.insert(family.clone());
+            }
+        }
+        if !slide_missing.is_empty() {
+            missing_by_slide.insert(slide_no.to_string(), slide_missing.into_iter().collect());
+        }
+        if !slide_substituted.is_empty() {
+            substituted_by_slide.insert(
+                slide_no.to_string(),
+                slide_substituted.into_iter().collect(),
+            );
+        }
+    }
+
+    let missing = missing_overall.into_iter().collect::<Vec<_>>();
+    let substituted = substituted_overall.into_iter().collect::<Vec<_>>();
+    Ok(json!({
+        "ok": missing.is_empty() && substituted.is_empty(),
+        "font_missing_overall": missing,
+        "font_missing_by_slide": missing_by_slide,
+        "font_substituted_overall": substituted,
+        "font_substituted_by_slide": substituted_by_slide,
+    }))
+}
+
+pub fn extract_structure_payload(input_path: &str) -> Result<Value> {
+    let input = expand_path(input_path);
+    let bundle = ZipBundle::from_path(&input)?;
+    extract_pptx_structure(&bundle, &input, false, None)
+}
+
+#[allow(dead_code)]
+pub fn office_doctor_value(file: &str) -> Result<Value> {
+    office::office_doctor_value(file)
+}
+
+#[allow(dead_code)]
+pub fn office_doctor_summary(file: &str) -> Result<office::OfficeDoctorSummary> {
+    office::office_doctor_summary(file)
+}
+
+#[allow(dead_code)]
+pub fn rust_office_outline_value(file: &str) -> Result<Value> {
+    office::rust_office_outline_value(file)
+}
+
+#[allow(dead_code)]
+pub fn rust_office_issues_value(file: &str) -> Result<Value> {
+    office::rust_office_issues_value(file)
+}
+
+#[allow(dead_code)]
+pub fn rust_office_validate_value(file: &str) -> Result<Value> {
+    office::rust_office_validate_value(file)
+}
+
+#[allow(dead_code)]
+pub fn rust_office_get_value(file: &str, selector: &str, depth: i32) -> Result<Value> {
+    office::rust_office_get_value(file, selector, depth)
+}
+
+#[allow(dead_code)]
+pub fn rust_office_query_value(file: &str, selector: &str, text: Option<&str>) -> Result<Value> {
+    office::rust_office_query_value(file, selector, text)
+}
+
+#[allow(dead_code)]
+pub fn write_rust_office_preview(file: &str, port: u16) -> Result<PathBuf> {
+    office::write_rust_office_preview(file, port)
+}
+
+#[allow(dead_code)]
+pub fn rust_office_batch_value(
+    file: &str,
+    input: Option<&str>,
+    commands: Option<&str>,
+    force: bool,
+) -> Result<Value> {
+    office::rust_office_batch_value(file, input, commands, force)
+}
+
+#[allow(dead_code)]
+pub fn first_slide_title(slide: &Value) -> Option<String> {
+    office::first_slide_title(slide)
+}
+
+#[allow(dead_code)]
+pub fn slide_texts(slide: &Value) -> Vec<String> {
+    office::slide_texts(slide)
+}
+
+#[allow(dead_code)]
+pub fn select_structure_path(root: &Value, selector: &str) -> Result<Value> {
+    office::select_structure_path(root, selector)
+}
+
+#[allow(dead_code)]
+pub fn trim_json_depth(value: Value, depth: usize) -> Value {
+    office::trim_json_depth(value, depth)
+}
+
+#[allow(dead_code)]
+pub fn query_structure(structure: &Value, selector: &str, text: Option<&str>) -> Vec<Value> {
+    office::query_structure(structure, selector, text)
+}
+
+#[allow(dead_code)]
+pub fn summarize_office_doctor(
+    file: &str,
+    outline_payload: Value,
+    issues_payload: Value,
+    validate_payload: Value,
+    version: Option<String>,
+) -> Result<office::OfficeDoctorSummary> {
+    office::summarize_office_doctor(file, outline_payload, issues_payload, validate_payload, version)
+}
+
+#[allow(dead_code)]
+pub fn print_office_doctor_summary(summary: &office::OfficeDoctorSummary) {
+    office::print_office_doctor_summary(summary);
+}
+
+pub fn emit_value(value: Value, format: EmitFormat) -> Result<()> {
+    match format {
+        EmitFormat::Json => println!("{}", serde_json::to_string_pretty(&value)?),
+        EmitFormat::Text => print_text_value(&value)?,
+    }
+    Ok(())
+}
+
+pub fn print_text_value(value: &Value) -> Result<()> {
+    match value {
+        Value::Object(map) => {
+            for (key, item) in map {
+                println!("{}: {}", key, text_value(item)?);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                println!("{}", text_value(item)?);
+            }
+        }
+        other => println!("{}", text_value(other)?),
+    }
+    Ok(())
+}
+
+pub fn text_value(value: &Value) -> Result<String> {
+    Ok(match value {
+        Value::Null => "null".to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Number(value) => value.to_string(),
+        Value::String(value) => value.clone(),
+        Value::Array(_) | Value::Object(_) => serde_json::to_string(value)?,
+    })
+}
+
+pub fn extract_structure_command(args: ExtractStructureArgs) -> Result<()> {
+    let input = expand_path(&args.input);
+    let bundle = ZipBundle::from_path(&input)?;
+    let structure = extract_pptx_structure(
+        &bundle,
+        &input,
+        args.extract_images,
+        if args.extract_images {
+            Some(expand_path(&args.image_dir))
+        } else {
+            None
+        },
+    )?;
+    let json_str = if args.pretty {
+        serde_json::to_string_pretty(&structure)?
+    } else {
+        serde_json::to_string(&structure)?
+    };
+    if let Some(output) = args.output {
+        fs::write(expand_path(&output), json_str)?;
+        eprintln!("Structure extracted to {}", output);
+    } else {
+        println!("{}", json_str);
+    }
+    Ok(())
+}
+
+pub fn read_full_command(args: ReadFullArgs) -> Result<()> {
+    let input = expand_path(&args.input);
+    let bundle = ZipBundle::from_path(&input)?;
+    let mut structure = extract_pptx_structure(&bundle, &input, false, None)?;
+    if let Some(spec) = &args.slides {
+        let slide_count = structure
+            .get("slide_count")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize;
+        let selected = parse_slide_range(spec, slide_count)?;
+        structure = filter_structure_slides(structure, &selected)?;
+    }
+    if args.json {
+        let json_str = if args.compact {
+            serde_json::to_string(&structure)?
+        } else {
+            serde_json::to_string_pretty(&structure)?
+        };
+        println!("{}", json_str);
+    } else {
+        print!("{}", format_read_full_text(&structure));
+    }
+    Ok(())
+}
+
+pub fn parse_slide_range(spec: &str, max: usize) -> Result<Vec<usize>> {
+    let spec = spec.trim();
+    if max == 0 {
+        bail!("presentation contains no slides");
+    }
+    if spec.contains('-') {
+        let parts: Vec<&str> = spec.splitn(2, '-').collect();
+        let start: usize = parts[0]
+            .trim()
+            .parse()
+            .with_context(|| format!("invalid slide range start in {spec}"))?;
+        let end: usize = parts[1]
+            .trim()
+            .parse()
+            .with_context(|| format!("invalid slide range end in {spec}"))?;
+        if start == 0 || end == 0 || start > end || end > max {
+            bail!("slide range {spec} out of bounds (1-{max})");
+        }
+        Ok((start..=end).collect())
+    } else {
+        let slide_no: usize = spec
+            .parse()
+            .with_context(|| format!("invalid slide number in {spec}"))?;
+        if slide_no == 0 || slide_no > max {
+            bail!("slide {slide_no} out of bounds (1-{max})");
+        }
+        Ok(vec![slide_no])
+    }
+}
+
+pub fn filter_structure_slides(structure: Value, selected: &[usize]) -> Result<Value> {
+    let slides = structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing slides in structure"))?;
+    let selected_set: BTreeSet<usize> = selected.iter().copied().collect();
+    let filtered = slides
+        .iter()
+        .filter(|slide| {
+            slide
+                .get("index")
+                .and_then(Value::as_u64)
+                .map(|idx| selected_set.contains(&(idx as usize + 1)))
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut out = structure;
+    if let Some(obj) = out.as_object_mut() {
+        obj.insert("slide_count".to_string(), json!(filtered.len()));
+        obj.insert("slides".to_string(), json!(filtered));
+    }
+    Ok(out)
+}
+
+pub fn format_read_full_text(structure: &Value) -> String {
+    let file = structure
+        .get("file")
+        .and_then(Value::as_str)
+        .unwrap_or("deck.pptx");
+    let slide_count = structure
+        .get("slide_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let mut out = format!("FILE: {file}\nSLIDES: {slide_count}\n\n");
+    let Some(slides) = structure.get("slides").and_then(Value::as_array) else {
+        return out;
+    };
+    for slide in slides {
+        let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize;
+        let slide_no = index + 1;
+        out.push_str(&format!("=== Slide {slide_no} ===\n"));
+        if let Some(layout) = slide.get("layout").and_then(Value::as_str) {
+            if !layout.is_empty() {
+                out.push_str(&format!("LAYOUT: {layout}\n"));
+            }
+        }
+        let mut title_lines = Vec::new();
+        let mut body_lines = Vec::new();
+        let mut warnings = Vec::new();
+        if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
+            collect_read_full_elements(elements, &mut title_lines, &mut body_lines, &mut warnings);
+        }
+        out.push_str("TITLE:\n");
+        if title_lines.is_empty() {
+            out.push_str("(none)\n");
+        } else {
+            for line in &title_lines {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out.push_str("\nBODY:\n");
+        if body_lines.is_empty() {
+            out.push_str("(none)\n");
+        } else {
+            for line in &body_lines {
+                out.push_str(line);
+                out.push('\n');
+            }
+        }
+        out.push_str("\nNOTES:\n");
+        match slide.get("notes").and_then(Value::as_str) {
+            Some(notes) if !notes.trim().is_empty() => {
+                out.push_str(notes.trim());
+                out.push('\n');
+            }
+            _ => out.push_str("(none)\n"),
+        }
+        out.push_str("\nWARNINGS:\n");
+        if warnings.is_empty() {
+            out.push_str("(none)\n");
+        } else {
+            for warning in &warnings {
+                out.push_str("- ");
+                out.push_str(warning);
+                out.push('\n');
+            }
+        }
+        out.push('\n');
+    }
+    out
+}
+
+pub fn collect_read_full_elements(
+    elements: &[Value],
+    title_lines: &mut Vec<String>,
+    body_lines: &mut Vec<String>,
+    warnings: &mut Vec<String>,
+) {
+    for element in elements {
+        let name = element
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("shape");
+        let element_type = element
+            .get("type")
+            .or_else(|| element.get("element_type"))
+            .and_then(Value::as_str)
+            .unwrap_or("shape");
+        if let Some(text) = element.get("text").and_then(|t| t.get("fullText")).and_then(Value::as_str)
+        {
+            if !text.trim().is_empty() {
+                let lower = name.to_lowercase();
+                if lower.contains("title") || lower.contains("subtitle") {
+                    title_lines.push(text.trim().to_string());
+                } else {
+                    body_lines.push(text.trim().to_string());
+                }
+            }
+        }
+        if let Some(table) = element.get("table") {
+            if let Some(data) = table.get("data").and_then(Value::as_array) {
+                let rows = table.get("rows").and_then(Value::as_u64).unwrap_or(0);
+                let cols = table.get("cols").and_then(Value::as_u64).unwrap_or(0);
+                body_lines.push(format!("TABLE ({rows}x{cols}):"));
+                for row in data {
+                    if let Some(cells) = row.as_array() {
+                        let line = cells
+                            .iter()
+                            .filter_map(Value::as_str)
+                            .collect::<Vec<_>>()
+                            .join(" | ");
+                        if !line.is_empty() {
+                            body_lines.push(line);
+                        }
+                    }
+                }
+            }
+        }
+        if element_type == "image" {
+            warnings.push(format!("image \"{name}\" (no extractable text)"));
+        } else if element_type == "chart" {
+            let chart_type = element
+                .get("chart")
+                .and_then(|c| c.get("chart_type"))
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            warnings.push(format!("chart \"{name}\" (type: {chart_type})"));
+        } else if element_type == "group" {
+            if let Some(children) = element.get("children").and_then(Value::as_array) {
+                collect_read_full_elements(children, title_lines, body_lines, warnings);
+            }
+        }
+    }
+}
+
+pub fn ensure_raster_image_command(args: EnsureRasterImageArgs) -> Result<()> {
+    let paths = resolve_input_paths(&args.input_files, args.input_dir.as_deref())?;
+    let out_dir = args.output_dir.as_deref().map(expand_path);
+    let mut converted = Vec::new();
+    for path in &paths {
+        let output = ensure_raster_image(path, out_dir.as_deref())?;
+        if output != *path {
+            converted.push(path.display().to_string());
+        }
+    }
+    if !converted.is_empty() {
+        println!("Converted the following files to PNG:");
+        for item in converted {
+            println!("{}", item);
+        }
+    }
+    Ok(())
+}
+
+pub fn create_montage_command(args: CreateMontageArgs) -> Result<()> {
+    let inputs = resolve_input_paths(&args.input_files, args.input_dir.as_deref())?;
+    if inputs.is_empty() {
+        bail!("No input images found");
+    }
+    let output = expand_path(&args.output_file);
+    let parent = output.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)?;
+    let temp_dir = if args.retain_converted_files {
+        None
+    } else {
+        Some(TempDir::new().context("failed to create temp dir for montage conversions")?)
+    };
+    let converted_root = temp_dir.as_ref().map(|dir| dir.path().to_path_buf());
+    let mut items = Vec::new();
+    for input in &inputs {
+        match ensure_raster_image(input, converted_root.as_deref()) {
+            Ok(raster_path) => match image::open(&raster_path) {
+                Ok(img) => items.push((input.clone(), Some(img))),
+                Err(err) if args.fail_on_image_error => {
+                    return Err(err)
+                        .with_context(|| format!("failed to open {}", raster_path.display()))
+                }
+                Err(_) => items.push((input.clone(), None)),
+            },
+            Err(err) if args.fail_on_image_error => return Err(err),
+            Err(_) => items.push((input.clone(), None)),
+        }
+    }
+    let montage = build_montage(
+        &items,
+        args.num_col,
+        args.cell_width,
+        args.cell_height,
+        args.gap,
+        args.label_mode,
+    )?;
+    montage.save(&output)?;
+    println!("Montage saved to {}", output.display());
+    Ok(())
+}
+
+pub fn slides_test_command(args: SlidesTestArgs) -> Result<()> {
+    let input = expand_path(&args.input_path);
+    let bundle = ZipBundle::from_path(&input)?;
+    let structure = extract_pptx_structure(&bundle, &input, false, None)?;
+    let slide_w = structure
+        .get("slide_width")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| anyhow!("missing slide_width"))?;
+    let slide_h = structure
+        .get("slide_height")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| anyhow!("missing slide_height"))?;
+    let slides = structure
+        .get("slides")
+        .and_then(Value::as_array)
+        .ok_or_else(|| anyhow!("missing slides"))?;
+    let mut overflow_failing = Vec::new();
+    let mut overlap_failing = Vec::new();
+    let mut aesthetic_failing: BTreeSet<usize> = BTreeSet::new();
+
+    for slide_no in layout_rhythm_failing_slides(slides) {
+        aesthetic_failing.insert(slide_no);
+    }
+    for slide in slides {
+        let index = slide.get("index").and_then(Value::as_u64).unwrap_or(0) as usize + 1;
+        let mut overflow = false;
+        if let Some(elements) = slide.get("elements").and_then(Value::as_array) {
+            overflow = elements
+                .iter()
+                .any(|item| element_overflows(item, slide_w, slide_h));
+            if has_text_bbox_overlap(elements) {
+                overlap_failing.push(index);
+            }
+            if has_dense_text_overlap_risk(elements) || has_dense_text_density_risk(elements) {
+                aesthetic_failing.insert(index);
+            }
+            if has_decorative_title_underline_risk(elements, slide_w, slide_h) {
+                aesthetic_failing.insert(index);
+            }
+            if has_ai_copy_slop_risk(elements) {
+                aesthetic_failing.insert(index);
+            }
+        }
+        if overflow {
+            overflow_failing.push(index);
+        }
+    }
+    if overflow_failing.is_empty() && overlap_failing.is_empty() && aesthetic_failing.is_empty() {
+        println!("Test passed. No overflow/overlap/aesthetic risks detected.");
+        return Ok(());
+    }
+    if !overflow_failing.is_empty() {
+        print!("ISSUE: Overflow detected on slides (1-based indexing): ");
+        for (i, slide_no) in overflow_failing.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}", slide_no);
+        }
+        println!();
+    }
+    if !overlap_failing.is_empty() {
+        print!("ISSUE: Overlap detected on slides (1-based indexing): ");
+        for (i, slide_no) in overlap_failing.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}", slide_no);
+        }
+        println!();
+    }
+    if !aesthetic_failing.is_empty() {
+        print!("ISSUE: Dense text aesthetic risk detected on slides (1-based indexing): ");
+        for (i, slide_no) in aesthetic_failing.iter().enumerate() {
+            if i > 0 {
+                print!(", ");
+            }
+            print!("{}", slide_no);
+        }
+        println!();
+    }
+    if args.fail_on_overflow && !overflow_failing.is_empty() {
+        bail!("slides-test failed: content overflow detected");
+    }
+    if args.fail_on_overlap && !overlap_failing.is_empty() {
+        bail!("slides-test failed: content overlap detected");
+    }
+    if args.fail_on_aesthetic && !aesthetic_failing.is_empty() {
+        bail!("slides-test failed: dense text aesthetic risk detected");
+    }
+    if args.fail_on_any
+        && (!overflow_failing.is_empty() || !overlap_failing.is_empty() || !aesthetic_failing.is_empty())
+    {
+        bail!("slides-test failed: one or more checks reported issues");
+    }
+    Ok(())
+}
+
+pub fn detect_fonts_command(args: DetectFontsArgs) -> Result<()> {
+    let input = expand_path(&args.input_path);
+    let bundle = ZipBundle::from_path(&input)?;
+    let requested = extract_requested_fonts_by_slide(&bundle)?;
+    let installed = build_font_synonym_map()?;
+    let resolved = match extract_resolved_fonts_from_odp(&input) {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("warning: resolved-font probe skipped: {err:#}");
+            BTreeSet::new()
+        }
+    };
+
+    let mut missing_overall = BTreeSet::new();
+    let mut substituted_overall = BTreeSet::new();
+    let mut missing_by_slide: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut substituted_by_slide: BTreeMap<String, Vec<String>> = BTreeMap::new();
+
+    for (slide_no, families) in &requested {
+        let mut slide_missing = BTreeSet::new();
+        let mut slide_substituted = BTreeSet::new();
+        for family in families {
+            let normalized = normalize_font_family_name(family);
+            if normalized.is_empty() {
+                continue;
+            }
+            let acceptable = expand_font_family_aliases(&installed, &normalized);
+            let is_installed = acceptable.iter().any(|alias| installed.contains_key(alias));
+            if !is_installed {
+                slide_missing.insert(family.clone());
+                missing_overall.insert(family.clone());
+                continue;
+            }
+            if !resolved.is_empty() && !acceptable.iter().any(|alias| resolved.contains(alias)) {
+                slide_substituted.insert(family.clone());
+                substituted_overall.insert(family.clone());
+            }
+        }
+        if !slide_missing.is_empty() {
+            missing_by_slide.insert(slide_no.to_string(), slide_missing.into_iter().collect());
+        }
+        if !slide_substituted.is_empty() {
+            substituted_by_slide.insert(
+                slide_no.to_string(),
+                slide_substituted.into_iter().collect(),
+            );
+        }
+    }
+
+    let payload = json!({
+        "ok": missing_overall.is_empty() && substituted_overall.is_empty(),
+        "font_missing_overall": missing_overall.into_iter().collect::<Vec<_>>(),
+        "font_missing_by_slide": missing_by_slide,
+        "font_substituted_overall": substituted_overall.into_iter().collect::<Vec<_>>(),
+        "font_substituted_by_slide": substituted_by_slide,
+    });
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+    } else {
+        if args.include_missing {
+            println!(
+                "font_missing_overall: {}",
+                join_display_list(payload["font_missing_overall"].as_array())
+            );
+            println!(
+                "font_missing_by_slide: {}",
+                serde_json::to_string(&payload["font_missing_by_slide"])?
+            );
+        }
+        if args.include_substituted {
+            println!(
+                "font_substituted_overall: {}",
+                join_display_list(payload["font_substituted_overall"].as_array())
+            );
+            println!(
+                "font_substituted_by_slide: {}",
+                serde_json::to_string(&payload["font_substituted_by_slide"])?
+            );
+        }
+    }
+    Ok(())
+}
+
+pub fn sanitize_pptx_command(args: SanitizePptxArgs) -> Result<()> {
+    let input = expand_path(&args.input_path);
+    let output = args
+        .output
+        .as_deref()
+        .map(expand_path)
+        .unwrap_or_else(|| input.clone());
+    let temp_output = if output == input {
+        input.with_extension("sanitized.tmp.pptx")
+    } else {
+        output.clone()
+    };
+
+    // Security: refuse to write to a symlink (TOCTOU mitigation)
+    if let Ok(meta) = std::fs::symlink_metadata(&temp_output) {
+        if meta.file_type().is_symlink() {
+            anyhow::bail!("refusing to write to symlink: {}", temp_output.display());
+        }
+    }
+
+    let file = File::open(&input).with_context(|| format!("failed to open {}", input.display()))?;
+    let mut archive = ZipArchive::new(file).context("failed to read zip archive")?;
+    let writer = File::create(&temp_output)
+        .with_context(|| format!("failed to create {}", temp_output.display()))?;
+    let mut zip = ZipWriter::new(writer);
+
+    for idx in 0..archive.len() {
+        let mut entry = archive.by_index(idx)?;
+        let name = entry.name().to_string();
+        let options = SimpleFileOptions::default().compression_method(entry.compression());
+
+        if entry.is_dir() {
+            zip.add_directory(name, options)?;
+            continue;
+        }
+
+        let mut buf = Vec::new();
+        entry.read_to_end(&mut buf)?;
+        let data = if name == "ppt/presentation.xml" {
+            sanitize_presentation_xml(std::str::from_utf8(&buf)?)?.into_bytes()
+        } else {
+            buf
+        };
+        zip.start_file(name, options)?;
+        zip.write_all(&data)?;
+    }
+
+    zip.finish()?;
+    if output == input {
+        // Security: refuse to replace a symlink (TOCTOU mitigation)
+        if let Ok(meta) = std::fs::symlink_metadata(&input) {
+            if meta.file_type().is_symlink() {
+                anyhow::bail!("refusing to replace symlink: {}", input.display());
+            }
+        }
+        fs::rename(&temp_output, &input).with_context(|| {
+            format!(
+                "failed to replace {} with sanitized output",
+                input.display()
+            )
+        })?;
+    }
+    Ok(())
+}
+
+pub fn expand_path(input: &str) -> PathBuf {
+    if let Some(rest) = input.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            return Path::new(&home).join(rest);
+        }
+    }
+    PathBuf::from(input)
+}
+
+pub fn has_extension(path: &Path, ext: &str) -> bool {
+    path.extension()
+        .and_then(OsStr::to_str)
+        .map(|value| value.eq_ignore_ascii_case(ext))
+        .unwrap_or(false)
+}
+
+pub fn default_render_dir(input: &Path) -> PathBuf {
+    let stem = input
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .unwrap_or("rendered");
+    input.parent().unwrap_or_else(|| Path::new(".")).join(stem)
+}
+
+impl ZipBundle {
+    fn from_path(path: &Path) -> Result<Self> {
+        let file =
+            File::open(path).with_context(|| format!("failed to open {}", path.display()))?;
+        let mut archive = ZipArchive::new(file).context("failed to read zip archive")?;
+        let mut index_by_name = HashMap::new();
+        for idx in 0..archive.len() {
+            let entry = archive.by_index(idx)?;
+            index_by_name.insert(normalize_zip_path(entry.name()), idx);
+        }
+        Ok(Self {
+            archive: RefCell::new(archive),
+            index_by_name,
+            cache: RefCell::new(HashMap::new()),
+        })
+    }
+
+    fn contains(&self, path: &str) -> bool {
+        self.index_by_name.contains_key(&normalize_zip_path(path))
+    }
+
+    fn read_bytes(&self, path: &str) -> Result<Vec<u8>> {
+        let key = normalize_zip_path(path);
+        if let Some(cached) = self.cache.borrow().get(&key) {
+            return Ok(cached.clone());
+        }
+        let idx = self
+            .index_by_name
+            .get(&key)
+            .copied()
+            .ok_or_else(|| anyhow!("missing zip entry {}", path))?;
+        let mut archive = self.archive.borrow_mut();
+        let mut entry = archive.by_index(idx)?;
+        let mut buf = Vec::new();
+        entry.read_to_end(&mut buf)?;
+        self.cache.borrow_mut().insert(key, buf.clone());
+        Ok(buf)
+    }
+
+    fn text(&self, path: &str) -> Result<String> {
+        let data = self.read_bytes(path)?;
+        String::from_utf8(data).with_context(|| format!("{} is not valid utf-8 xml", path))
+    }
+
+    fn bytes(&self, path: &str) -> Result<Vec<u8>> {
+        self.read_bytes(path)
+    }
+
+    fn names(&self) -> impl Iterator<Item = &String> {
+        self.index_by_name.keys()
+    }
+}
+
+pub fn normalize_zip_path(path: &str) -> String {
+    path.replace('\\', "/")
+}
+
+pub fn normalize_path_like_zip(path: &Path) -> String {
+    let mut parts = Vec::<String>::new();
+    for component in path.components() {
+        let part = component.as_os_str().to_string_lossy();
+        match part.as_ref() {
+            "." | "" => {}
+            ".." => {
+                parts.pop();
+            }
+            _ => parts.push(part.to_string()),
+        }
+    }
+    parts.join("/")
+}
+
+pub fn calc_dpi_via_ooxml(input: &Path, max_w_px: u32, max_h_px: u32) -> Result<u32> {
+    let bundle = ZipBundle::from_path(input)?;
+    let xml = bundle.text("ppt/presentation.xml")?;
+    let doc = Document::parse(&xml)?;
+    let sld_sz = doc
+        .descendants()
+        .find(|node| node.tag_name().name() == "sldSz")
+        .ok_or_else(|| anyhow!("Slide size not found in presentation.xml"))?;
+    let cx = attr_f64(&sld_sz, "cx").ok_or_else(|| anyhow!("missing slide width"))?;
+    let cy = attr_f64(&sld_sz, "cy").ok_or_else(|| anyhow!("missing slide height"))?;
+    let width_in = cx / EMU_PER_INCH;
+    let height_in = cy / EMU_PER_INCH;
+    if width_in <= 0.0 || height_in <= 0.0 {
+        bail!("Invalid slide size values in presentation.xml");
+    }
+    Ok(((max_w_px as f64 / width_in).min(max_h_px as f64 / height_in)).round() as u32)
+}
+
+pub fn calc_dpi_via_pdf(input: &Path, max_w_px: u32, max_h_px: u32) -> Result<u32> {
+    let output = run_command_capture(
+        Command::new("pdfinfo")
+            .arg(input)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped()),
+    )
+    .context("pdfinfo failed")?;
+    let page_size = output
+        .lines()
+        .find_map(|line| line.strip_prefix("Page size:"))
+        .map(str::trim)
+        .ok_or_else(|| anyhow!("failed to read PDF page size"))?;
+    let (w_pts, h_pts) = parse_pdf_page_size(page_size)?;
+    let width_in = w_pts / POINTS_PER_INCH;
+    let height_in = h_pts / POINTS_PER_INCH;
+    if width_in <= 0.0 || height_in <= 0.0 {
+        bail!("Invalid PDF page size values");
+    }
+    Ok(((max_w_px as f64 / width_in).min(max_h_px as f64 / height_in)).round() as u32)
+}
+
+pub fn parse_pdf_page_size(value: &str) -> Result<(f64, f64)> {
+    let pts = Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*pts\b")?;
+    if let Some(caps) = pts.captures(value) {
+        return Ok((caps[1].parse()?, caps[2].parse()?));
+    }
+    let inch = Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*in\b")?;
+    if let Some(caps) = inch.captures(value) {
+        return Ok((
+            caps[1].parse::<f64>()? * POINTS_PER_INCH,
+            caps[2].parse::<f64>()? * POINTS_PER_INCH,
+        ));
+    }
+    let bare = Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)")?;
+    if let Some(caps) = bare.captures(value) {
+        return Ok((caps[1].parse()?, caps[2].parse()?));
+    }
+    bail!("Unrecognized PDF page size format: {}", value);
+}
+
+pub fn rasterize_to_pngs(input: &Path, out_dir: &Path, dpi: u32) -> Result<Vec<PathBuf>> {
+    fs::create_dir_all(out_dir)?;
+    let temp_profile = TempDir::new().context("failed to create soffice profile")?;
+    let temp_convert = TempDir::new().context("failed to create convert dir")?;
+    let pdf_path = if has_extension(input, "pdf") {
+        input.to_path_buf()
+    } else {
+        convert_to_pdf(input, temp_profile.path(), temp_convert.path())?
+    };
+    let prefix = out_dir.join("slide");
+    run_command(
+        Command::new("pdftoppm")
+            .arg("-r")
+            .arg(dpi.to_string())
+            .arg("-png")
+            .arg(&pdf_path)
+            .arg(&prefix),
+    )
+    .context("pdftoppm failed")?;
+    let mut generated = collect_prefixed_pngs(out_dir, "slide")?;
+    generated.sort();
+    let mut final_paths = Vec::new();
+    for (index, src) in generated.iter().enumerate() {
+        let dest = out_dir.join(format!("slide-{}.png", index + 1));
+        if *src != dest {
+            fs::rename(src, &dest)?;
+        }
+        final_paths.push(dest);
+    }
+    Ok(final_paths)
+}
+
+pub fn collect_prefixed_pngs(dir: &Path, prefix: &str) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(OsStr::to_str) != Some("png") {
+            continue;
+        }
+        let file_name = path.file_name().and_then(OsStr::to_str).unwrap_or_default();
+        if file_name.starts_with(prefix) {
+            files.push(path);
+        }
+    }
+    Ok(files)
+}
+
+pub fn convert_to_pdf(input: &Path, profile_dir: &Path, convert_dir: &Path) -> Result<PathBuf> {
+    let stem = input
+        .file_stem()
+        .and_then(OsStr::to_str)
+        .ok_or_else(|| anyhow!("invalid input stem"))?;
+    let pdf_path = convert_dir.join(format!("{}.pdf", stem));
+    let profile = format!("file://{}", profile_dir.display());
+    let mut direct = Command::new("soffice");
+    direct
+        .arg(format!("-env:UserInstallation={}", profile))
+        .arg("--invisible")
+        .arg("--headless")
+        .arg("--norestore")
+        .arg("--convert-to")
+        .arg("pdf")
+        .arg("--outdir")
+        .arg(convert_dir)
+        .arg(input)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let _ = run_command(&mut direct);
+    if pdf_path.exists() {
+        return Ok(pdf_path);
+    }
+    let odp_path = convert_dir.join(format!("{}.odp", stem));
+    let mut to_odp = Command::new("soffice");
+    to_odp
+        .arg(format!("-env:UserInstallation={}", profile))
+        .arg("--invisible")
+        .arg("--headless")
+        .arg("--norestore")
+        .arg("--convert-to")
+        .arg("odp")
+        .arg("--outdir")
+        .arg(convert_dir)
+        .arg(input)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let _ = run_command(&mut to_odp);
+    if !odp_path.exists() {
+        bail!("Failed to convert {} to ODP", input.display());
+    }
+    let mut odp_to_pdf = Command::new("soffice");
+    odp_to_pdf
+        .arg(format!("-env:UserInstallation={}", profile))
+        .arg("--invisible")
+        .arg("--headless")
+        .arg("--norestore")
+        .arg("--convert-to")
+        .arg("pdf")
+        .arg("--outdir")
+        .arg(convert_dir)
+        .arg(&odp_path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let _ = run_command(&mut odp_to_pdf);
+    if pdf_path.exists() {
+        return Ok(pdf_path);
+    }
+    bail!("Failed to produce PDF for {}", input.display())
+}
+
+pub fn run_command(command: &mut Command) -> Result<()> {
+    let status = command.status()?;
+    if !status.success() {
+        bail!("command failed with status {:?}", status.code());
+    }
+    Ok(())
+}
+
+pub fn run_command_timeout(command: &mut Command, timeout: Duration) -> Result<()> {
+    let mut child = command.spawn()?;
+    let started_at = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait()? {
+            if !status.success() {
+                bail!("command failed with status {:?}", status.code());
+            }
+            return Ok(());
+        }
+        if started_at.elapsed() >= timeout {
+            let _ = child.kill();
+            let _ = child.wait();
+            bail!("command timed out after {} seconds", timeout.as_secs());
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+pub fn run_command_capture(command: &mut Command) -> Result<String> {
+    let output = command.output()?;
+    if !output.status.success() {
+        bail!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+pub fn resolve_input_paths(input_files: &[String], input_dir: Option<&str>) -> Result<Vec<PathBuf>> {
+    let mut paths = Vec::new();
+    if !input_files.is_empty() {
+        for item in input_files {
+            paths.push(expand_path(item));
+        }
+        return Ok(paths);
+    }
+    let dir = input_dir.ok_or_else(|| anyhow!("provide --input-files or --input-dir"))?;
+    let root = expand_path(dir);
+    for entry in fs::read_dir(&root)? {
+        let path = entry?.path();
+        if path.is_file() && supported_image_extension(&path) {
+            paths.push(path);
+        }
+    }
+    paths.sort();
+    if paths.is_empty() {
+        bail!("No files with supported extensions in input_dir");
+    }
+    Ok(paths)
+}
+
+pub fn supported_image_extension(path: &Path) -> bool {
+    matches!(
+        path.extension().and_then(OsStr::to_str).map(|value| value.to_ascii_lowercase()),
+        Some(ext)
+            if matches!(
+                ext.as_str(),
+                "png" | "jpg" | "jpeg" | "bmp" | "gif" | "tif" | "tiff" | "webp" | "emf"
+                    | "wmf" | "emz" | "wmz" | "svg" | "svgz" | "wdp" | "jxr" | "heic"
+                    | "heif" | "pdf" | "eps" | "ps"
+            )
+    )
+}
+
+pub fn ensure_raster_image(path: &Path, out_dir: Option<&Path>) -> Result<PathBuf> {
+    let ext = path
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(|value| value.to_ascii_lowercase())
+        .unwrap_or_default();
+    let out_dir = out_dir.map(Path::to_path_buf).unwrap_or_else(|| {
+        path.parent()
+            .unwrap_or_else(|| Path::new("."))
+            .to_path_buf()
+    });
+    fs::create_dir_all(&out_dir)?;
+    let stem = path.file_stem().and_then(OsStr::to_str).unwrap_or("image");
+    let out_path = out_dir.join(format!("{}.png", stem));
+    match ext.as_str() {
+        "png" | "jpg" | "jpeg" | "bmp" | "gif" | "tif" | "tiff" | "webp" => Ok(path.to_path_buf()),
+        "emf" | "wmf" | "svg" | "svgz" => {
+            run_command(Command::new("inkscape").arg(path).arg("-o").arg(&out_path))
+                .context("inkscape conversion failed")?;
+            Ok(out_path)
+        }
+        "emz" | "wmz" => {
+            let decompressed = out_dir.join(format!(
+                "{}.{}",
+                stem,
+                if ext == "emz" { "emf" } else { "wmf" }
+            ));
+            let bytes = fs::read(path)?;
+            let mut decoder = flate_like_gzip_decoder(&bytes)?;
+            let mut buf = Vec::new();
+            decoder.read_to_end(&mut buf)?;
+            fs::write(&decompressed, buf)?;
+            run_command(
+                Command::new("inkscape")
+                    .arg(&decompressed)
+                    .arg("-o")
+                    .arg(&out_path),
+            )
+            .context("inkscape conversion failed")?;
+            Ok(out_path)
+        }
+        "wdp" | "jxr" => {
+            let tiff_path = out_dir.join(format!("{}.tiff", stem));
+            run_command(
+                Command::new("JxrDecApp")
+                    .arg("-i")
+                    .arg(path)
+                    .arg("-o")
+                    .arg(&tiff_path),
+            )
+            .context("JxrDecApp failed")?;
+            let binary = if which("magick") { "magick" } else { "convert" };
+            run_command(Command::new(binary).arg(&tiff_path).arg(&out_path))
+                .context("imagemagick conversion failed")?;
+            Ok(out_path)
+        }
+        "heic" | "heif" => {
+            let binary = if which("heif-convert") {
+                "heif-convert"
+            } else {
+                bail!("heif-convert not found");
+            };
+            run_command(Command::new(binary).arg(path).arg(&out_path))
+                .context("heif-convert failed")?;
+            Ok(out_path)
+        }
+        "pdf" | "eps" | "ps" => {
+            run_command(
+                Command::new("gs")
+                    .arg("-dSAFER")
+                    .arg("-dBATCH")
+                    .arg("-dNOPAUSE")
+                    .arg("-sDEVICE=pngalpha")
+                    .arg("-dFirstPage=1")
+                    .arg("-dLastPage=1")
+                    .arg("-r200")
+                    .arg("-o")
+                    .arg(&out_path)
+                    .arg(path),
+            )
+            .context("ghostscript failed")?;
+            Ok(out_path)
+        }
+        _ => bail!("Unsupported image format for montage: {}", path.display()),
+    }
+}
+
+pub fn which(binary: &str) -> bool {
+    Command::new("which")
+        .arg(binary)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+pub fn flate_like_gzip_decoder<'a>(bytes: &'a [u8]) -> Result<Box<dyn Read + 'a>> {
+    let cursor = Cursor::new(bytes);
+    Ok(Box::new(flate2::read::GzDecoder::new(cursor)))
+}
+
+pub fn build_montage(
+    items: &[(PathBuf, Option<DynamicImage>)],
+    num_col: usize,
+    cell_width: u32,
+    cell_height: u32,
+    gap: u32,
+    label_mode: LabelMode,
+) -> Result<RgbaImage> {
+    if num_col == 0 {
+        bail!("num_col must be positive");
+    }
+    if items.is_empty() {
+        bail!("No valid images to render.");
+    }
+    let label_height = if matches!(label_mode, LabelMode::None) {
+        0
+    } else {
+        20
+    };
+    let row_height = cell_height + label_height;
+    let rows = items.len().div_ceil(num_col);
+    let canvas_w = num_col as u32 * cell_width + (num_col as u32 + 1) * gap;
+    let canvas_h = rows as u32 * row_height + (rows as u32 + 1) * gap;
+    let mut canvas = RgbaImage::from_pixel(canvas_w, canvas_h, Rgba([242, 242, 242, 255]));
+    let placeholder = make_placeholder(
+        (cell_width as f32 * 0.6) as u32,
+        (cell_height as f32 * 0.6) as u32,
+    );
+
+    for (index, (path, image_opt)) in items.iter().enumerate() {
+        let col = index % num_col;
+        let row = index / num_col;
+        let x0 = gap + col as u32 * (cell_width + gap);
+        let y0 = gap + row as u32 * (row_height + gap);
+        let rendered = image_opt
+            .as_ref()
+            .map(|img| resize_to_fit(img, cell_width, cell_height))
+            .unwrap_or_else(|| placeholder.clone());
+        let paste_x = x0 + (cell_width - rendered.width()) / 2;
+        let paste_y = y0 + (cell_height - rendered.height()) / 2;
+        imageops::overlay(&mut canvas, &rendered, paste_x.into(), paste_y.into());
+        draw_rect_outline(
+            &mut canvas,
+            paste_x.saturating_sub(1),
+            paste_y.saturating_sub(1),
+            rendered.width() + 1,
+            rendered.height() + 1,
+            Rgba([160, 160, 160, 255]),
+        );
+        let label = match label_mode {
+            LabelMode::Number => Some((index + 1).to_string()),
+            LabelMode::Filename => path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .map(|s| s.to_string()),
+            LabelMode::None => None,
+        };
+        if let Some(label) = label {
+            draw_text_bitmap(
+                &mut canvas,
+                x0 + 4,
+                y0 + cell_height + 4,
+                &label,
+                Rgba([0, 0, 0, 255]),
+            );
+        }
+    }
+    Ok(canvas)
+}
+
+pub fn resize_to_fit(img: &DynamicImage, max_w: u32, max_h: u32) -> RgbaImage {
+    let resized = img.resize(max_w, max_h, FilterType::Lanczos3);
+    resized.to_rgba8()
+}
+
+pub fn make_placeholder(width: u32, height: u32) -> RgbaImage {
+    let mut img = RgbaImage::from_pixel(width.max(1), height.max(1), Rgba([220, 220, 220, 255]));
+    let red = Rgba([180, 0, 0, 255]);
+    let max_x = img.width().saturating_sub(1);
+    let max_y = img.height().saturating_sub(1);
+    let diag = max_x.min(max_y);
+    for i in 0..=diag {
+        img.put_pixel(i, i, red);
+        img.put_pixel(max_x.saturating_sub(i), i, red);
+    }
+    img
+}
+
+pub fn draw_rect_outline(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32, color: Rgba<u8>) {
+    if w == 0 || h == 0 {
+        return;
+    }
+    let x2 = x
+        .saturating_add(w.saturating_sub(1))
+        .min(img.width().saturating_sub(1));
+    let y2 = y
+        .saturating_add(h.saturating_sub(1))
+        .min(img.height().saturating_sub(1));
+    for xx in x..=x2 {
+        img.put_pixel(xx, y, color);
+        img.put_pixel(xx, y2, color);
+    }
+    for yy in y..=y2 {
+        img.put_pixel(x, yy, color);
+        img.put_pixel(x2, yy, color);
+    }
+}
+
+pub fn draw_text_bitmap(img: &mut RgbaImage, x: u32, y: u32, text: &str, color: Rgba<u8>) {
+    let mut cursor_x = x;
+    for ch in text.chars() {
+        if ch == '\n' {
+            cursor_x = x;
+            continue;
+        }
+        if let Some(glyph) = BASIC_FONTS.get(ch) {
+            for (row, bits) in glyph.iter().enumerate() {
+                for col in 0..8 {
+                    if (bits >> col) & 1 == 1 {
+                        let px = cursor_x + (7 - col as u32);
+                        let py = y + row as u32;
+                        if px < img.width() && py < img.height() {
+                            img.put_pixel(px, py, color);
+                        }
+                    }
+                }
+            }
+            cursor_x += 8;
+        } else {
+            cursor_x += 8;
+        }
+    }
+}
+
+pub fn extract_pptx_structure(
+    bundle: &ZipBundle,
+    input: &Path,
+    extract_images: bool,
+    image_dir: Option<PathBuf>,
+) -> Result<Value> {
+    if let Some(dir) = &image_dir {
+        if extract_images {
+            fs::create_dir_all(dir)?;
+        }
+    }
+    let presentation_xml = bundle.text("ppt/presentation.xml")?;
+    let presentation_doc = Document::parse(&presentation_xml)?;
+    let (slide_width, slide_height) = presentation_doc
+        .descendants()
+        .find(|node| node.tag_name().name() == "sldSz")
+        .map(|node| {
+            (
+                attr_f64(&node, "cx").unwrap_or_default() / EMU_PER_INCH,
+                attr_f64(&node, "cy").unwrap_or_default() / EMU_PER_INCH,
+            )
+        })
+        .ok_or_else(|| anyhow!("missing slide size in presentation.xml"))?;
+
+    let presentation_rels = parse_relationships(&bundle.text("ppt/_rels/presentation.xml.rels")?)?;
+    let slide_refs = presentation_doc
+        .descendants()
+        .filter(|node| node.tag_name().name() == "sldId")
+        .filter_map(|node| rel_attr_value(&node, "id").map(str::to_string))
+        .collect::<Vec<_>>();
+
+    let mut slides = Vec::new();
+    for (idx, rel_id) in slide_refs.iter().enumerate() {
+        let rel_target = presentation_rels
+            .get(rel_id)
+            .ok_or_else(|| anyhow!("missing relationship {} in presentation rels", rel_id))?;
+        let slide_path = normalize_zip_path(&format!("ppt/{}", rel_target));
+        let slide_xml = bundle.text(&slide_path)?;
+        let slide_doc = Document::parse(&slide_xml)?;
+        let rel_path = slide_rel_path(&slide_path);
+        let slide_rels = bundle
+            .text(&rel_path)
+            .ok()
+            .map(|text| parse_relationships(&text))
+            .transpose()?
+            .unwrap_or_default();
+        let layout_name = slide_rels
+            .iter()
+            .find(|(_, target)| target.contains("slideLayouts"))
+            .and_then(|(_, target)| extract_layout_name(bundle, target).ok());
+        let notes = slide_rels
+            .iter()
+            .find(|(_, target)| target.contains("notesSlides"))
+            .and_then(|(_, target)| extract_notes(bundle, target).ok())
+            .filter(|text| !text.trim().is_empty());
+        let elements = extract_slide_elements(
+            bundle,
+            &slide_doc,
+            &slide_rels,
+            idx,
+            extract_images,
+            image_dir.as_deref(),
+        )?;
+        slides.push(json!({
+            "index": idx,
+            "layout": layout_name,
+            "elements": elements,
+            "notes": notes,
+        }));
+    }
+
+    let available_layouts = bundle
+        .names()
+        .filter(|name| name.starts_with("ppt/slideLayouts/slideLayout") && name.ends_with(".xml"))
+        .filter_map(|name| extract_layout_info(bundle, name).ok())
+        .collect::<Vec<_>>();
+
+    Ok(json!({
+        "file": input.file_name().and_then(OsStr::to_str).unwrap_or_default(),
+        "slide_width": round4(slide_width),
+        "slide_height": round4(slide_height),
+        "slide_count": slides.len(),
+        "slides": slides,
+        "available_layouts": available_layouts,
+    }))
+}
+
+pub fn slide_rel_path(slide_path: &str) -> String {
+    let path = Path::new(slide_path);
+    let file_name = path
+        .file_name()
+        .and_then(OsStr::to_str)
+        .unwrap_or("slide1.xml");
+    let parent = path.parent().unwrap_or_else(|| Path::new("ppt/slides"));
+    normalize_zip_path(
+        &parent
+            .join("_rels")
+            .join(format!("{}.rels", file_name))
+            .display()
+            .to_string(),
+    )
+}
+
+pub fn parse_relationships(xml: &str) -> Result<HashMap<String, String>> {
+    let doc = Document::parse(xml)?;
+    let mut rels = HashMap::new();
+    for node in doc
+        .descendants()
+        .filter(|node| node.tag_name().name() == "Relationship")
+    {
+        if let (Some(id), Some(target)) = (attr_value(&node, "Id"), attr_value(&node, "Target")) {
+            rels.insert(id.to_string(), target.to_string());
+        }
+    }
+    Ok(rels)
+}
+
+pub fn resolve_target(base: &str, target: &str) -> String {
+    let base_path = Path::new(base);
+    let joined = if target.starts_with("../") || target.starts_with("./") {
+        base_path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(target)
+    } else if target.starts_with('/') {
+        PathBuf::from(target.trim_start_matches('/'))
+    } else {
+        base_path
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .join(target)
+    };
+    normalize_path_like_zip(&joined)
+}
+
+pub fn extract_layout_name(bundle: &ZipBundle, rel_target: &str) -> Result<String> {
+    let path = resolve_target("ppt/slides/slide.xml", rel_target);
+    let xml = bundle.text(&path)?;
+    let doc = Document::parse(&xml)?;
+    let name = doc
+        .descendants()
+        .find(|node| node.tag_name().name() == "cSld")
+        .and_then(|node| attr_value(&node, "name").map(str::to_string))
+        .unwrap_or_else(|| "Unknown".to_string());
+    Ok(name)
+}
+
+pub fn extract_layout_info(bundle: &ZipBundle, path: &str) -> Result<LayoutInfo> {
+    let xml = bundle.text(path)?;
+    let doc = Document::parse(&xml)?;
+    let name = doc
+        .descendants()
+        .find(|node| node.tag_name().name() == "cSld")
+        .and_then(|node| attr_value(&node, "name").map(str::to_string))
+        .unwrap_or_else(|| "Unknown".to_string());
+    let placeholders = doc
+        .descendants()
+        .filter(|node| node.tag_name().name() == "ph")
+        .map(|node| LayoutPlaceholder {
+            idx: attr_value(&node, "idx").map(str::to_string),
+            name: node
+                .ancestors()
+                .find(|ancestor| ancestor.tag_name().name() == "sp")
+                .and_then(|shape| {
+                    shape
+                        .children()
+                        .find(|child| child.tag_name().name() == "nvSpPr")
+                })
+                .and_then(|nv| {
+                    nv.descendants()
+                        .find(|child| child.tag_name().name() == "cNvPr")
+                })
+                .and_then(|nv| attr_value(&nv, "name").map(str::to_string))
+                .unwrap_or_default(),
+        })
+        .collect::<Vec<_>>();
+    Ok(LayoutInfo { name, placeholders })
+}
+
+pub fn extract_notes(bundle: &ZipBundle, rel_target: &str) -> Result<String> {
+    let path = resolve_target("ppt/slides/slide.xml", rel_target);
+    let xml = bundle.text(&path)?;
+    let doc = Document::parse(&xml)?;
+    Ok(collect_text(&doc.root_element()))
+}
+
+pub fn extract_slide_elements(
+    bundle: &ZipBundle,
+    slide_doc: &Document<'_>,
+    slide_rels: &HashMap<String, String>,
+    slide_index: usize,
+    extract_images: bool,
+    image_dir: Option<&Path>,
+) -> Result<Vec<ElementInfo>> {
+    let sp_tree = slide_doc
+        .descendants()
+        .find(|node| node.tag_name().name() == "spTree")
+        .ok_or_else(|| anyhow!("slide missing spTree"))?;
+    let mut elements = Vec::new();
+    let mut element_index = 0;
+    for child in sp_tree.children().filter(|node| node.is_element()) {
+        let local = child.tag_name().name();
+        if !matches!(local, "sp" | "pic" | "graphicFrame" | "grpSp") {
+            continue;
+        }
+        element_index += 1;
+        elements.push(extract_element(
+            bundle,
+            &child,
+            slide_rels,
+            slide_index,
+            element_index,
+            extract_images,
+            image_dir,
+        )?);
+    }
+    Ok(elements)
+}
+
+pub fn extract_element(
+    bundle: &ZipBundle,
+    node: &Node<'_, '_>,
+    slide_rels: &HashMap<String, String>,
+    slide_index: usize,
+    shape_index: usize,
+    extract_images: bool,
+    image_dir: Option<&Path>,
+) -> Result<ElementInfo> {
+    let name = node
+        .descendants()
+        .find(|child| child.tag_name().name() == "cNvPr")
+        .and_then(|child| attr_value(&child, "name").map(str::to_string))
+        .unwrap_or_default();
+    let mut element = ElementInfo {
+        index: shape_index,
+        name,
+        element_type: match node.tag_name().name() {
+            "sp" => "shape",
+            "pic" => "image",
+            "graphicFrame" => "graphicFrame",
+            "grpSp" => "group",
+            other => other,
+        }
+        .to_string(),
+        position: extract_position(node),
+        rotation: extract_rotation(node),
+        text: extract_text_info(node),
+        image: None,
+        table: None,
+        chart: None,
+        children: None,
+    };
+
+    match node.tag_name().name() {
+        "pic" => {
+            let embed_id = node
+                .descendants()
+                .find(|child| child.tag_name().name() == "blip")
+                .and_then(|child| rel_attr_value(&child, "embed").map(str::to_string));
+            if let Some(embed_id) = embed_id {
+                let info = extract_image_info(
+                    bundle,
+                    slide_rels,
+                    &embed_id,
+                    slide_index,
+                    shape_index,
+                    extract_images,
+                    image_dir,
+                )?;
+                element.image = Some(info);
+            }
+        }
+        "graphicFrame" => {
+            if let Some(tbl) = node
+                .descendants()
+                .find(|child| child.tag_name().name() == "tbl")
+            {
+                element.element_type = "table".to_string();
+                element.table = Some(extract_table_info(&tbl));
+            } else if let Some(chart) = node
+                .descendants()
+                .find(|child| child.tag_name().name() == "chart")
+            {
+                element.element_type = "chart".to_string();
+                let rel_id = rel_attr_value(&chart, "id").unwrap_or("chart");
+                element.chart = Some(ChartInfo {
+                    chart_type: rel_id.to_string(),
+                    has_legend: None,
+                });
+            }
+        }
+        "grpSp" => {
+            element.element_type = "group".to_string();
+            let mut children = Vec::new();
+            let mut child_index = 0;
+            for child in node.children().filter(|child| child.is_element()) {
+                if !matches!(
+                    child.tag_name().name(),
+                    "sp" | "pic" | "graphicFrame" | "grpSp"
+                ) {
+                    continue;
+                }
+                child_index += 1;
+                children.push(extract_element(
+                    bundle,
+                    &child,
+                    slide_rels,
+                    slide_index,
+                    child_index,
+                    extract_images,
+                    image_dir,
+                )?);
+            }
+            element.children = Some(children);
+        }
+        _ => {}
+    }
+    Ok(element)
+}
+
+pub fn extract_image_info(
+    bundle: &ZipBundle,
+    slide_rels: &HashMap<String, String>,
+    embed_id: &str,
+    slide_index: usize,
+    shape_index: usize,
+    extract_images: bool,
+    image_dir: Option<&Path>,
+) -> Result<ImageInfo> {
+    let target = slide_rels
+        .get(embed_id)
+        .ok_or_else(|| anyhow!("missing image relationship {}", embed_id))?;
+    let media_path = resolve_target("ppt/slides/slide.xml", target);
+    let bytes = bundle
+        .bytes(&media_path)
+        .with_context(|| format!("missing media {}", media_path))?;
+    let image = image::load_from_memory(&bytes).ok();
+    let content_type = media_path
+        .rsplit('.')
+        .next()
+        .map(|ext| format!("image/{}", ext));
+    let extracted_path = if extract_images {
+        if let Some(dir) = image_dir {
+            fs::create_dir_all(dir)?;
+            let ext = media_path.rsplit('.').next().unwrap_or("bin");
+            let path = dir.join(format!(
+                "slide{}_shape{}.{}",
+                slide_index + 1,
+                shape_index,
+                ext
+            ));
+            fs::write(&path, bytes)?;
+            Some(path.display().to_string())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    Ok(ImageInfo {
+        content_type,
+        width: image.as_ref().map(DynamicImage::width),
+        height: image.as_ref().map(DynamicImage::height),
+        extracted_path,
+    })
+}
+
+pub fn extract_table_info(node: &Node<'_, '_>) -> TableInfo {
+    let rows = node
+        .children()
+        .filter(|child| child.is_element() && child.tag_name().name() == "tr")
+        .map(|row| {
+            row.children()
+                .filter(|cell| cell.is_element() && cell.tag_name().name() == "tc")
+                .map(|cell| collect_text(&cell))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
+    TableInfo {
+        rows: rows.len(),
+        cols,
+        data: rows,
+    }
+}
+
+pub fn extract_position(node: &Node<'_, '_>) -> Position {
+    let xfrm = node
+        .descendants()
+        .find(|child| matches!(child.tag_name().name(), "xfrm" | "off" | "ext"));
+    let (x, y, w, h) = if let Some(xfrm) = xfrm {
+        if xfrm.tag_name().name() == "xfrm" {
+            let off = xfrm
+                .children()
+                .find(|child| child.tag_name().name() == "off");
+            let ext = xfrm
+                .children()
+                .find(|child| child.tag_name().name() == "ext");
+            (
+                off.and_then(|node| attr_f64(&node, "x"))
+                    .unwrap_or_default()
+                    / EMU_PER_INCH,
+                off.and_then(|node| attr_f64(&node, "y"))
+                    .unwrap_or_default()
+                    / EMU_PER_INCH,
+                ext.and_then(|node| attr_f64(&node, "cx"))
+                    .unwrap_or_default()
+                    / EMU_PER_INCH,
+                ext.and_then(|node| attr_f64(&node, "cy"))
+                    .unwrap_or_default()
+                    / EMU_PER_INCH,
+            )
+        } else {
+            (0.0, 0.0, 0.0, 0.0)
+        }
+    } else {
+        (0.0, 0.0, 0.0, 0.0)
+    };
+    Position {
+        x: round4(x),
+        y: round4(y),
+        w: round4(w),
+        h: round4(h),
+    }
+}
+
+pub fn extract_rotation(node: &Node<'_, '_>) -> Option<f64> {
+    node.descendants()
+        .find(|child| child.tag_name().name() == "xfrm")
+        .and_then(|xfrm| attr_f64(&xfrm, "rot"))
+        .map(|rot| rot / 60_000.0)
+        .filter(|rot| *rot != 0.0)
+}
+
+pub fn extract_text_info(node: &Node<'_, '_>) -> Option<TextInfo> {
+    let text_node = node
+        .descendants()
+        .find(|child| child.tag_name().name() == "txBody")?;
+    let paragraphs = text_node
+        .children()
+        .filter(|child| child.is_element() && child.tag_name().name() == "p")
+        .map(|paragraph| ParagraphInfo {
+            text: collect_text(&paragraph),
+        })
+        .collect::<Vec<_>>();
+    let full_text = paragraphs
+        .iter()
+        .map(|item| item.text.clone())
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some(TextInfo {
+        full_text,
+        paragraphs,
+    })
+}
+
+pub fn collect_text(node: &Node<'_, '_>) -> String {
+    node.descendants()
+        .filter(|child| child.is_element() && child.tag_name().name() == "t")
+        .filter_map(|child| child.text())
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+pub fn attr_value<'a>(node: &'a Node<'a, 'a>, key: &str) -> Option<&'a str> {
+    node.attribute(key).or_else(|| {
+        key.split_once(':')
+            .and_then(|(_, local)| node.attribute(local))
+    })
+}
+
+pub fn rel_attr_value<'a>(node: &'a Node<'a, 'a>, local: &str) -> Option<&'a str> {
+    node.attribute((
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        local,
+    ))
+    .or_else(|| node.attribute(local))
+}
+
+pub fn attr_f64(node: &Node<'_, '_>, key: &str) -> Option<f64> {
+    attr_value(node, key).and_then(|value| value.parse::<f64>().ok())
+}
+
+pub fn round4(value: f64) -> f64 {
+    (value * 10_000.0).round() / 10_000.0
+}
+
+pub fn element_overflows(element: &Value, slide_w: f64, slide_h: f64) -> bool {
+    let position = element.get("position");
+    let x = position
+        .and_then(|pos| pos.get("x"))
+        .and_then(Value::as_f64)
+        .unwrap_or_default();
+    let y = position
+        .and_then(|pos| pos.get("y"))
+        .and_then(Value::as_f64)
+        .unwrap_or_default();
+    let w = position
+        .and_then(|pos| pos.get("w"))
+        .and_then(Value::as_f64)
+        .unwrap_or_default();
+    let h = position
+        .and_then(|pos| pos.get("h"))
+        .and_then(Value::as_f64)
+        .unwrap_or_default();
+    let over = x < -0.01 || y < -0.01 || x + w > slide_w + 0.01 || y + h > slide_h + 0.01;
+    if over {
+        return true;
+    }
+    element
+        .get("children")
+        .and_then(Value::as_array)
+        .map(|children| {
+            children
+                .iter()
+                .any(|child| element_overflows(child, slide_w, slide_h))
+        })
+        .unwrap_or(false)
+}
+
+pub fn has_text_bbox_overlap(elements: &[Value]) -> bool {
+    let mut boxes = Vec::new();
+    for element in elements {
+        collect_text_boxes(element, &mut boxes);
+    }
+    for i in 0..boxes.len() {
+        for j in (i + 1)..boxes.len() {
+            if rects_overlap(&boxes[i], &boxes[j]) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+pub fn has_dense_text_overlap_risk(elements: &[Value]) -> bool {
+    let mut boxes = Vec::new();
+    for element in elements {
+        collect_text_boxes(element, &mut boxes);
+    }
+    if boxes.len() < 6 {
+        return false;
+    }
+    let mut overlap_pairs = 0usize;
+    for i in 0..boxes.len() {
+        for j in (i + 1)..boxes.len() {
+            if rects_overlap(&boxes[i], &boxes[j]) {
+                overlap_pairs += 1;
+            }
+        }
+    }
+    let pair_count = boxes.len() * (boxes.len() - 1) / 2;
+    let overlap_density = overlap_pairs as f64 / pair_count as f64;
+    overlap_density >= 0.20
+}
+
+pub fn has_dense_text_density_risk(elements: &[Value]) -> bool {
+    let stats = slide_text_stats(elements);
+    // Conservative thresholds tuned to catch document-like slides:
+    // - too many text boxes (card farm / label spam)
+    // - too much total text even if boxes do not overlap
+    stats.text_box_count >= 9
+        || (stats.text_box_count >= 6 && stats.text_char_count >= 380)
+        || stats.text_char_count >= 520
+}
+
+pub fn has_ai_copy_slop_risk(elements: &[Value]) -> bool {
+    let mut hits = 0usize;
+    for element in elements {
+        hits += count_ai_slop_hits_in_element(element);
+        if hits >= 2 {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn count_ai_slop_hits_in_element(element: &Value) -> usize {
+    let mut hits = 0usize;
+    let text = element
+        .pointer("/text/fullText")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if !text.is_empty() {
+        hits += count_ai_slop_hits(text);
+    }
+    if let Some(children) = element.get("children").and_then(Value::as_array) {
+        for child in children {
+            hits += count_ai_slop_hits_in_element(child);
+        }
+    }
+    hits
+}
+
+pub fn count_ai_slop_hits(text: &str) -> usize {
+    // High-precision only: fail on unmistakably templated filler.
+    const HARD_PHRASES: [&str; 60] = [
+        "赋能",
+        "闭环",
+        "抓手",
+        "落地",
+        "顶层设计",
+        "生态",
+        "矩阵",
+        "方法论",
+        "全链路",
+        "全方位",
+        "一站式",
+        "端到端",
+        "体系化",
+        "长效机制",
+        "协同发力",
+        "统筹推进",
+        "高标准推进",
+        "高质量发展",
+        "对标行业领先",
+        "行业领先",
+        "价值最大化",
+        "最优解",
+        "精准触达",
+        "精细化运营",
+        "提效增能",
+        "降本增效",
+        "强强联合",
+        "全面提升",
+        "显著提升",
+        "进一步提升",
+        "持续优化",
+        "打造",
+        "助力",
+        "提升效率",
+        "增强能力",
+        "赋能业务",
+        "具有重要意义",
+        "核心观点如下",
+        "综上所述",
+        "值得关注的是",
+        "本页展示",
+        "本页主要展示",
+        "本页重点展示",
+        "本页呈现",
+        "本页介绍",
+        "本页说明",
+        "方案如下",
+        "总体来说",
+        "总体而言",
+        "在此基础上",
+        "需要指出的是",
+        "需要说明的是",
+        "阶段性成果",
+        "里程碑意义",
+        "多维度",
+        "立体化",
+        "全覆盖",
+        "全面推进",
+        "稳步推进",
+        "有序推进",
+    ];
+    let mut hits = 0usize;
+    for phrase in HARD_PHRASES {
+        if text.contains(phrase) {
+            hits += 1;
+        }
+    }
+    hits + vague_promise_hits(text)
+}
+
+pub fn vague_promise_hits(text: &str) -> usize {
+    if has_any_evidence_token(text) {
+        return 0;
+    }
+    const PROMISE_VERBS: [&str; 11] = [
+        "提升", "优化", "完善", "增强", "加强", "保障", "推进", "促进", "改善", "降低", "构建",
+    ];
+    let mut hits = 0usize;
+    for verb in PROMISE_VERBS {
+        if text.contains(verb) {
+            hits += 1;
+        }
+    }
+    if text.contains("打造") {
+        hits += 1;
+    }
+    hits.min(2)
+}
+
+pub fn has_any_evidence_token(text: &str) -> bool {
+    if text.chars().any(|ch| ch.is_ascii_digit()) {
+        return true;
+    }
+    const TOKENS: [&str; 26] = [
+        "%", "pp", "ms", "秒", "分钟", "小时", "天", "周", "月", "季度", "年", "截至", "本周", "下周",
+        "本月", "下月", "Q1", "Q2", "Q3", "Q4", "样本", "n=", "N=", "口径", "对比", "基准",
+    ];
+    TOKENS.iter().any(|t| text.contains(t))
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SlideTextStats {
+    text_box_count: usize,
+    text_char_count: usize,
+}
+
+pub fn slide_text_stats(elements: &[Value]) -> SlideTextStats {
+    let mut stats = SlideTextStats {
+        text_box_count: 0,
+        text_char_count: 0,
+    };
+    for element in elements {
+        collect_text_stats(element, &mut stats);
+    }
+    stats
+}
+
+pub fn collect_text_stats(element: &Value, stats: &mut SlideTextStats) {
+    let full_text = element
+        .pointer("/text/fullText")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if !full_text.is_empty() {
+        stats.text_box_count += 1;
+        stats.text_char_count += full_text.chars().count();
+    }
+    if let Some(children) = element.get("children").and_then(Value::as_array) {
+        for child in children {
+            collect_text_stats(child, stats);
+        }
+    }
+}
+
+pub fn slide_has_rust_semantic_marker(slide: &Value) -> bool {
+    slide
+        .get("notes")
+        .and_then(Value::as_str)
+        .is_some_and(|n| n.contains("rust_semantic_layout:"))
+}
+
+pub fn semantic_layout_role_from_slide(slide: &Value) -> String {
+    slide
+        .get("notes")
+        .and_then(Value::as_str)
+        .and_then(|notes| {
+            notes.lines().find_map(|line| {
+                line.strip_prefix("rust_semantic_layout:")
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| s.to_string())
+            })
+        })
+        .unwrap_or_else(|| "__semantic_missing__".to_string())
+}
+
+pub fn deck_notes_have_semantic_markers(slides: &[Value]) -> bool {
+    slides.iter().any(slide_has_rust_semantic_marker)
+}
+
+pub fn layout_rhythm_failing_slides(slides: &[Value]) -> Vec<usize> {
+    let slide_count = slides.len();
+    if slide_count < 6 {
+        return Vec::new();
+    }
+    // Rust-generated decks share one OOXML slide layout (`Rust Blank`). Use speaker-note
+    // `rust_semantic_layout:*` markers for rhythm checks; skip when absent (foreign decks).
+    if !deck_notes_have_semantic_markers(slides) {
+        return Vec::new();
+    }
+
+    let mut layouts: Vec<String> = Vec::with_capacity(slide_count);
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for slide in slides {
+        let role = semantic_layout_role_from_slide(slide);
+        *counts.entry(role.clone()).or_insert(0) += 1;
+        layouts.push(role);
+    }
+
+    let mut failing: BTreeSet<usize> = BTreeSet::new();
+
+    // Never allow 3 consecutive slides with the same layout name.
+    let mut run_start = 0usize;
+    while run_start < layouts.len() {
+        let mut run_end = run_start + 1;
+        while run_end < layouts.len() && layouts[run_end] == layouts[run_start] {
+            run_end += 1;
+        }
+        let run_len = run_end - run_start;
+        if run_len >= 3 && !layouts[run_start].is_empty() {
+            // Mark the 3rd and onward as failing to encourage earlier role variation.
+            for idx in (run_start + 2)..run_end {
+                failing.insert(idx + 1); // 1-based slide indexing
+            }
+        }
+        run_start = run_end;
+    }
+
+    // Whole-deck isomorphic layout repetition: if one semantic role dominates too much.
+    let max_layout_share = counts
+        .values()
+        .copied()
+        .max()
+        .unwrap_or(0) as f64
+        / slide_count as f64;
+    if max_layout_share >= 0.80 {
+        for i in 0..slide_count {
+            failing.insert(i + 1);
+        }
+    }
+
+    failing.into_iter().collect()
+}
+
+pub fn has_decorative_title_underline_risk(elements: &[Value], slide_w: f64, slide_h: f64) -> bool {
+    let title_box = match find_title_candidate(elements, slide_h) {
+        Some(rect) => rect,
+        None => return false,
+    };
+
+    let window_top = title_box.3;
+    let window_bottom = (title_box.3 + 0.35).min(slide_h);
+    let min_w = slide_w * 0.35;
+    let max_h = 0.12;
+
+    for element in elements {
+        let full_text = element
+            .pointer("/text/fullText")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        if !full_text.is_empty() {
+            continue;
+        }
+        let Some((x1, y1, x2, y2)) = element_rect(element) else {
+            continue;
+        };
+        let w = x2 - x1;
+        let h = y2 - y1;
+        if w < min_w || h <= 0.0 || h > max_h {
+            continue;
+        }
+        let y_mid = (y1 + y2) / 2.0;
+        if y_mid < window_top || y_mid > window_bottom {
+            continue;
+        }
+        if (x1 - title_box.0).abs() > 0.6 {
+            continue;
+        }
+        return true;
+    }
+    false
+}
+
+pub fn find_title_candidate(elements: &[Value], slide_h: f64) -> Option<(f64, f64, f64, f64)> {
+    let top_zone_max_y = slide_h * 0.28;
+    let mut best: Option<(f64, f64, f64, f64, f64)> = None;
+    for element in elements {
+        let full_text = element
+            .pointer("/text/fullText")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        if full_text.is_empty() {
+            continue;
+        }
+        let Some((x1, y1, x2, y2)) = element_rect(element) else {
+            continue;
+        };
+        if y1 > top_zone_max_y {
+            continue;
+        }
+        let w = x2 - x1;
+        let h = y2 - y1;
+        if w <= 0.0 || h <= 0.0 {
+            continue;
+        }
+        let area = w * h;
+        match best {
+            Some((_, _, _, _, best_area)) if area <= best_area => {}
+            _ => best = Some((x1, y1, x2, y2, area)),
+        }
+    }
+    best.map(|(x1, y1, x2, y2, _)| (x1, y1, x2, y2))
+}
+
+pub fn element_rect(element: &Value) -> Option<(f64, f64, f64, f64)> {
+    let position = element.get("position")?;
+    let x = position.get("x").and_then(Value::as_f64)?;
+    let y = position.get("y").and_then(Value::as_f64)?;
+    let w = position.get("w").and_then(Value::as_f64)?;
+    let h = position.get("h").and_then(Value::as_f64)?;
+    if w <= 0.0 || h <= 0.0 {
+        return None;
+    }
+    Some((x, y, x + w, y + h))
+}
+
+pub fn collect_text_boxes(element: &Value, boxes: &mut Vec<(f64, f64, f64, f64)>) {
+    let full_text = element
+        .pointer("/text/fullText")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or("");
+    if !full_text.is_empty() {
+        let position = element.get("position");
+        let x = position
+            .and_then(|pos| pos.get("x"))
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        let y = position
+            .and_then(|pos| pos.get("y"))
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        let w = position
+            .and_then(|pos| pos.get("w"))
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        let h = position
+            .and_then(|pos| pos.get("h"))
+            .and_then(Value::as_f64)
+            .unwrap_or_default();
+        if w > 0.0 && h > 0.0 {
+            boxes.push((x, y, x + w, y + h));
+        }
+    }
+    if let Some(children) = element.get("children").and_then(Value::as_array) {
+        for child in children {
+            collect_text_boxes(child, boxes);
+        }
+    }
+}
+
+pub fn rects_overlap(a: &(f64, f64, f64, f64), b: &(f64, f64, f64, f64)) -> bool {
+    let tol = 0.01;
+    a.0 < b.2 - tol && a.2 > b.0 + tol && a.1 < b.3 - tol && a.3 > b.1 + tol
+}
+
+pub fn extract_requested_fonts_by_slide(
+    bundle: &ZipBundle,
+) -> Result<BTreeMap<usize, BTreeSet<String>>> {
+    let defaults = extract_theme_fonts(bundle)?;
+    let mut by_slide = BTreeMap::new();
+    let mut slide_names = bundle
+        .names()
+        .filter(|name| name.starts_with("ppt/slides/slide") && name.ends_with(".xml"))
+        .cloned()
+        .collect::<Vec<_>>();
+    slide_names.sort();
+    for (index, slide_name) in slide_names.iter().enumerate() {
+        let xml = bundle.text(slide_name)?;
+        let doc = Document::parse(&xml)?;
+        let mut fonts = BTreeSet::new();
+        for node in doc.descendants() {
+            match node.tag_name().name() {
+                "latin" | "ea" | "cs" | "sym" | "font" => {
+                    if let Some(face) = attr_value(&node, "typeface") {
+                        if !face.trim().is_empty() && face != "+mn-lt" && face != "+mj-lt" {
+                            fonts.insert(face.to_string());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        if fonts.is_empty() {
+            fonts.extend(defaults.iter().cloned());
+        }
+        by_slide.insert(index + 1, fonts);
+    }
+    Ok(by_slide)
+}
+
+pub fn extract_theme_fonts(bundle: &ZipBundle) -> Result<BTreeSet<String>> {
+    let theme_name = bundle
+        .names()
+        .find(|name| name.starts_with("ppt/theme/theme") && name.ends_with(".xml"))
+        .cloned()
+        .ok_or_else(|| anyhow!("missing theme xml"))?;
+    let xml = bundle.text(&theme_name)?;
+    let doc = Document::parse(&xml)?;
+    let mut fonts = BTreeSet::new();
+    for node in doc
+        .descendants()
+        .filter(|node| matches!(node.tag_name().name(), "latin" | "ea" | "cs"))
+    {
+        if let Some(face) = attr_value(&node, "typeface") {
+            if !face.trim().is_empty() {
+                fonts.insert(face.to_string());
+            }
+        }
+    }
+    Ok(fonts)
+}
+
+pub fn normalize_font_family_name(name: &str) -> String {
+    let lower = name.to_lowercase();
+    let no_paren = Regex::new(r"\([^)]*\)").unwrap().replace_all(&lower, " ");
+    let cleaned = Regex::new(r#"[\s\-\_\.,/\'\"]+"#)
+        .unwrap()
+        .replace_all(&no_paren, " ");
+    cleaned.trim().to_string()
+}
+
+pub fn build_font_synonym_map() -> Result<HashMap<String, BTreeSet<String>>> {
+    let output = run_command_capture(
+        Command::new("fc-list")
+            .arg("--format")
+            .arg("%{family}\t%{fullname}\t%{postscriptname}\n"),
+    )
+    .context("fc-list failed")?;
+    let mut syn = HashMap::<String, BTreeSet<String>>::new();
+    for line in output.lines() {
+        let parts = line.split('\t').collect::<Vec<_>>();
+        if parts.len() != 3 {
+            continue;
+        }
+        let mut names = BTreeSet::new();
+        for field in parts {
+            for item in field.split(',') {
+                let normalized = normalize_font_family_name(item);
+                if !normalized.is_empty() {
+                    names.insert(normalized.clone());
+                    names.insert(normalized.replace(' ', ""));
+                }
+            }
+        }
+        for name in names.clone() {
+            syn.entry(name).or_default().extend(names.clone());
+        }
+    }
+    Ok(syn)
+}
+
+pub fn expand_font_family_aliases(
+    synonyms: &HashMap<String, BTreeSet<String>>,
+    family: &str,
+) -> BTreeSet<String> {
+    let mut acceptable = BTreeSet::from([family.to_string(), family.replace(' ', "")]);
+    if let Some(items) = synonyms.get(family) {
+        acceptable.extend(items.iter().cloned());
+    }
+    let compact = family.replace(' ', "");
+    if let Some(items) = synonyms.get(&compact) {
+        acceptable.extend(items.iter().cloned());
+    }
+    acceptable
+}
+
+pub fn extract_resolved_fonts_from_odp(input: &Path) -> Result<BTreeSet<String>> {
+    let profile = TempDir::new()?;
+    let convert_dir = TempDir::new()?;
+    let profile_flag = format!("file://{}", profile.path().display());
+    let mut convert = Command::new("soffice");
+    convert
+        .arg(format!("-env:UserInstallation={}", profile_flag))
+        .arg("--invisible")
+        .arg("--headless")
+        .arg("--norestore")
+        .arg("--convert-to")
+        .arg("odp")
+        .arg("--outdir")
+        .arg(convert_dir.path())
+        .arg(input)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    run_command_timeout(&mut convert, SOFFICE_PROBE_TIMEOUT)?;
+    let stem = input.file_stem().and_then(OsStr::to_str).unwrap_or("deck");
+    let odp_path = convert_dir.path().join(format!("{}.odp", stem));
+    let bundle = ZipBundle::from_path(&odp_path)?;
+    let mut fonts = BTreeSet::new();
+    let font_re = Regex::new(r#"font-family[^=]*=\"([^\"]+)\""#)?;
+    for target in ["content.xml", "styles.xml"] {
+        let text = match bundle.text(target) {
+            Ok(text) => text,
+            Err(_) => continue,
+        };
+        for caps in font_re.captures_iter(&text) {
+            for value in caps[1].split(',') {
+                let normalized = normalize_font_family_name(value.trim_matches('"').trim());
+                if !normalized.is_empty() {
+                    fonts.insert(normalized);
+                }
+            }
+        }
+    }
+    Ok(fonts)
+}
+
+pub fn sanitize_presentation_xml(xml: &str) -> Result<String> {
+    let notes_master_re =
+        Regex::new(r#"(?s)<p:notesMasterIdLst(?:\s*/>|>.*?</p:notesMasterIdLst>)"#)?;
+    let sld_master_re = Regex::new(r#"(?s)<p:sldMasterIdLst(?:\s*/>|>.*?</p:sldMasterIdLst>)"#)?;
+
+    let notes_master = match notes_master_re.find(xml) {
+        Some(value) => value.as_str().to_string(),
+        None => return Ok(xml.to_string()),
+    };
+    let without_notes_master = notes_master_re.replace(xml, "").to_string();
+    if let Some(sld_master) = sld_master_re.find(&without_notes_master) {
+        let mut rebuilt = String::with_capacity(without_notes_master.len() + notes_master.len());
+        rebuilt.push_str(&without_notes_master[..sld_master.end()]);
+        rebuilt.push_str(&notes_master);
+        rebuilt.push_str(&without_notes_master[sld_master.end()..]);
+        return Ok(rebuilt);
+    }
+    Ok(without_notes_master)
+}
+
+pub fn join_display_list(value: Option<&Vec<Value>>) -> String {
+    value
+        .into_iter()
+        .flat_map(|items| items.iter())
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_slide_range_single_and_span() {
+        assert_eq!(parse_slide_range("3", 10).unwrap(), vec![3]);
+        assert_eq!(
+            parse_slide_range("1-3", 10).unwrap(),
+            vec![1, 2, 3]
+        );
+        assert!(parse_slide_range("0", 5).is_err());
+        assert!(parse_slide_range("11", 10).is_err());
+        assert!(parse_slide_range("3-2", 10).is_err());
+    }
+
+    #[test]
+    fn format_read_full_text_linear_sections() {
+        let structure = json!({
+            "file": "demo.pptx",
+            "slide_count": 1,
+            "slides": [{
+                "index": 0,
+                "layout": "Title Slide",
+                "elements": [
+                    {"name": "Title 1", "type": "shape", "text": {"fullText": "Hello Deck"}},
+                    {"name": "Content 1", "type": "shape", "text": {"fullText": "Point A"}},
+                    {"name": "Picture 1", "type": "image"}
+                ],
+                "notes": "Remember to pause"
+            }]
+        });
+        let text = format_read_full_text(&structure);
+        assert!(text.contains("=== Slide 1 ==="));
+        assert!(text.contains("TITLE:\nHello Deck"));
+        assert!(text.contains("BODY:\nPoint A"));
+        assert!(text.contains("NOTES:\nRemember to pause"));
+        assert!(text.contains("image \"Picture 1\" (no extractable text)"));
+    }
+
+    #[test]
+    fn parse_pdf_page_size_points() {
+        let (w, h) = parse_pdf_page_size("612 x 792 pts (letter)").unwrap();
+        assert_eq!(w, 612.0);
+        assert_eq!(h, 792.0);
+    }
+
+    #[test]
+    fn normalize_font_names() {
+        assert_eq!(
+            normalize_font_family_name("Helvetica Neue (Body)"),
+            "helvetica neue"
+        );
+        assert_eq!(normalize_font_family_name("PingFang-SC"), "pingfang sc");
+    }
+
+    #[test]
+    fn sanitize_presentation_xml_reorders_notes_master_after_slide_master() {
+        let input = r#"<p:presentation><p:sldMasterIdLst/><p:sldIdLst/><p:notesMasterIdLst><p:notesMasterId r:id="rId4"/></p:notesMasterIdLst><p:sldSz cx="1" cy="2"/><p:notesSz cx="2" cy="1"/><p:defaultTextStyle/></p:presentation>"#;
+        let output = sanitize_presentation_xml(input).unwrap();
+        assert!(
+            output.find("<p:sldMasterIdLst/>").unwrap()
+                < output.find("<p:notesMasterIdLst>").unwrap()
+        );
+        assert!(
+            output.find("<p:notesMasterIdLst>").unwrap() < output.find("<p:sldIdLst/>").unwrap()
+        );
+    }
+
+    #[test]
+    fn outline_source_embeds_design_brief() {
+        let outline = json!({
+            "title": "测试汇报",
+            "slides": [
+                {"title": "本页展示增长路径", "bullets": ["赋能业务", "具有重要意义"]}
+            ]
+        });
+        let source = generate_outline_deck_source(&outline, &DeckTemplate::Dark).unwrap();
+        assert!(source.contains("ppt-rust-outline-plan"));
+        assert!(source.contains("built-in Rust copy naturalization"));
+        assert!(source.contains("$copywriting"));
+        assert!(source.contains("$paper-writing"));
+        assert!(source.contains("design-md drift verdict"));
+        assert!(!source.contains("本页展示增长路径"));
+        assert!(source.contains("增长路径"));
+        assert!(source.contains("支持业务"));
+        assert!(source.contains("会影响具体决策"));
+    }
+
+    #[test]
+    fn strict_quality_gate_accepts_rust_inspector_and_rejects_overflow() {
+        let clean = json!({
+            "overflow_check": {"ok": true},
+            "overlap_check": {"ok": true},
+            "aesthetic_check": {"ok": true, "failing_slides": []},
+            "font_check": {"ok": true},
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
+        });
+        strict_quality_gate(&clean).unwrap();
+
+        let overflow = json!({
+            "overflow_check": {"ok": false},
+            "overlap_check": {"ok": true},
+            "aesthetic_check": {"ok": true, "failing_slides": []},
+            "font_check": {"ok": true},
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
+        });
+        assert!(strict_quality_gate(&overflow).is_err());
+
+        let overlap = json!({
+            "overflow_check": {"ok": true},
+            "overlap_check": {"ok": false},
+            "aesthetic_check": {"ok": true, "failing_slides": []},
+            "font_check": {"ok": true},
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
+        });
+        assert!(strict_quality_gate(&overlap).is_err());
+
+        let aesthetic = json!({
+            "overflow_check": {"ok": true},
+            "overlap_check": {"ok": true},
+            "aesthetic_check": {"ok": false, "failing_slides": [2, 4]},
+            "font_check": {"ok": true},
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
+        });
+        assert!(strict_quality_gate(&aesthetic).is_err());
+
+        let missing_overflow_field = json!({
+            "overlap_check": {"ok": true},
+            "aesthetic_check": {"ok": true, "failing_slides": []},
+            "font_check": {"ok": true},
+            "inspector": {"validation": {"ok": true}, "issues": {"count": 0}}
+        });
+        assert!(strict_quality_gate(&missing_overflow_field).is_err());
+    }
+}

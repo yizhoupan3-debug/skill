@@ -25,7 +25,7 @@
 
 `artifacts/current/<task_id>/lane-notes/phase-<slug>.json`
 
-JSON 形状见 [`configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json`](../../../configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json)（`phase`、`agents_run`、`agents_failed`、`findings_count`、`artifact_paths`）。
+JSON 形状见 `configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json` (removed)（`phase`、`agents_run`、`agents_failed`、`findings_count`、`artifact_paths`）。
 
 ```json
 {

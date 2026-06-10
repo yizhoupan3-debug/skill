@@ -2,10 +2,19 @@
 name = "ooxml_parser_rs"
 version = "0.1.0"
 edition = "2021"
+default-run = "ooxml"
+
+[lib]
+name = "ooxml_parser_rs"
+path = "src/lib.rs"
 
 [[bin]]
 name = "ooxml"
 path = "src/main.rs"
+
+[[bin]]
+name = "mcp-ooxml"
+path = "src/mcp_main.rs"
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }

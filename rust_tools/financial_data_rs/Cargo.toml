@@ -2,6 +2,19 @@
 name = "financial_data_rs"
 version = "0.1.0"
 edition = "2021"
+default-run = "financial-data"
+
+[lib]
+name = "financial_data_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "financial-data"
+path = "src/main.rs"
+
+[[bin]]
+name = "mcp-financial-data"
+path = "src/mcp_main.rs"
 
 [dependencies]
 anyhow = "1.0"

@@ -2,10 +2,19 @@
 name = "citation_tool_rs"
 version = "0.1.0"
 edition = "2021"
+default-run = "citation"
+
+[lib]
+name = "citation_tool_rs"
+path = "src/lib.rs"
 
 [[bin]]
 name = "citation"
 path = "src/main.rs"
+
+[[bin]]
+name = "mcp-citation"
+path = "src/mcp_main.rs"
 
 [dependencies]
 anyhow = "1.0"
