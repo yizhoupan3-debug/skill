@@ -79,7 +79,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 
 > 服务于 I1, I2, I3, I4, I12。无前置依赖，可立即开始。
 
-### 1.1 配置用户级迁移 [3d] — I1 ✅ 分析完成 (2026-06-10)，待实施
+### 1.1 配置用户级迁移 [3d] — I1 ✅ DONE (2026-06-12)
 
 **分析结论**：大部分项目级配置已删除，用户级已就位。核心剩余工作：
 
@@ -108,7 +108,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 | `.opencode/package-lock.json` | **已删除** ✅ |
 | `router-rs-cli/src/src/main.rs` | **已删除** ✅ |
 
-### 1.3 hook-state 清理策略 [0.5d] ✅ 基础清理完成 (2026-06-10)
+### 1.3 hook-state 清理策略 [0.5d] ✅ DONE (2026-06-12)
 
 当前：`.claude/hook-state/` 183 个、`.cursor/hook-state/` 371 个、`.codex/hook-state/` 30 个文件（均为 7 天内活跃会话产物）。
 
@@ -338,7 +338,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 
 > 服务于 I11。前置：Phase 2 完成。
 
-### 4.1 Review gate 磁盘持久化 [3d]
+### 4.1 Review gate 磁盘持久化 [3d] ✅ DONE (2026-06-12)
 
 **当前状态**：review gate 结果仅存于内存（MCP 响应），进程退出即丢失。
 
@@ -358,7 +358,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 3. `my-light` profile 下仍然 advisory（不阻断）
 4. 清理策略：task complete 后 review_gate.json 归档到 `artifacts/archive/`
 
-### 4.2 Closeout hard block metadata 强化 [3d]
+### 4.2 Closeout hard block metadata 强化 [3d] ✅ DONE (2026-06-12)
 
 **当前状态**：closeout 返回缺失项清单，但 metadata 结构扁平。
 
@@ -368,7 +368,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 3. 非 `my-light` profile 时，`hard` blocker 阻断 `complete`
 4. `my-light` 下全部降级为 soft（当前行为不变）
 
-### 4.3 Session supervisor MCP 桥接 [4d]
+### 4.3 Session supervisor MCP 桥接 [4d] ✅ DONE (2026-06-12)
 
 **当前状态**：session supervisor 仅 codex 宿主通过 `codex_driver` 原生支持，其余宿主 unsupported。
 
@@ -387,7 +387,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 4. cursor 宿主：通过 tmux session 管理桥接（如可用）
 5. `HostCapabilities` 的 `session_supervisor` 从 `unsupported` 升级为 `mcp_bridge`
 
-### 4.4 自动 evidence 采集 [3d]
+### 4.4 自动 evidence 采集 [3d] ✅ DONE (2026-06-12)
 
 **当前状态**：evidence 由 agent 手动调用 `record_evidence`，经常遗忘。
 
@@ -428,7 +428,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 2. `browser-mcp`：8 个测试覆盖 4.8K 行，MCP dispatch 路径需补测试
 3. `evolution-rs`：进化引擎核心逻辑需更多边界测试
 
-### 5.2 CI feature gate 矩阵 [2d]
+### 5.2 CI feature gate 矩阵 [2d] ✅ DONE (2026-06-12)
 
 **当前**：无 CI，无 feature matrix 测试。
 
@@ -439,7 +439,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 4. Lint：`cargo clippy --workspace -- -D warnings`
 5. Format：`cargo fmt --check`
 
-### 5.3 spec.md 重写 [3d]
+### 5.3 spec.md 重写 [3d] ✅ DONE (2026-06-12)
 
 **当前问题**：
 - spec.md 仍基于 v5 crate 拓扑（runtime-core 包含 hosts/route/browser_mcp）
@@ -451,7 +451,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 3. 宿主能力矩阵更新（三档 S/A/B）
 4. rust_tools 清单更新（11 → 6 MCP + 5 archived）
 
-### 5.4 host-scaffold CLI 工具 [3d]
+### 5.4 host-scaffold CLI 工具 [3d] ✅ DONE (2026-06-12)
 
 **目标**：`router-rs scaffold --host-id <name>` 自动生成新宿主接入所需的全部文件。
 
