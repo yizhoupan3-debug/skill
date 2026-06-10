@@ -16,7 +16,7 @@ pub mod framework_runtime;
 pub mod session_supervisor;
 pub mod closeout_enforcement;
 pub mod execution_contract;
-pub mod framework_profile;
+pub use framework_profile;
 pub mod rfv_loop;
 pub mod schema_drift;
 

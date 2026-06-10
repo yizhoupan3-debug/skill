@@ -13,6 +13,7 @@ core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 core-math = { path = "../core-math" }
 framework-kernel = { path = "../framework-kernel" }
+framework-profile = { path = "../framework-profile" }
 routing-engine = { path = "../routing-engine" }
 chrono = { version = "0.4", features = ["clock", "std", "serde"] }
 clap = { version = "4.5.38", features = ["derive"] }
