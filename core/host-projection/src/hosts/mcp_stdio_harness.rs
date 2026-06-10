@@ -1348,12 +1348,47 @@ pub fn evaluate_mcp_closeout_gate(
     let hard_block =
         mcp_closeout_hard_block_metadata(repo_root, host_id, lifecycle_profile, all_clear);
 
+    // §4.1: 持久化 review gate 状态到 artifacts/current/<task_id>/review_gate.json
+    persist_review_gate_status(repo_root, task_id, all_clear, &findings, lifecycle_profile);
+
     Ok(McpCloseoutGateVerdict {
         all_clear,
         checkpoint_only,
         hard_block,
         formatted,
     })
+}
+
+/// §4.1: 持久化 review gate 状态到 task artifact 目录。
+fn persist_review_gate_status(
+    repo_root: &Path,
+    task_id: &str,
+    cleared: bool,
+    findings: &[String],
+    lifecycle_profile: &str,
+) {
+    if task_id.is_empty() {
+        return;
+    }
+    let dir = task_artifact_dir(repo_root, Some(task_id));
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        eprintln!("[router-rs] review_gate persist: mkdir failed: {e}");
+        return;
+    }
+    let path = dir.join("review_gate.json");
+    let payload = json!({
+        "task_id": task_id,
+        "cleared": cleared,
+        "cleared_at": if cleared { Some(crate::hooks::current_local_timestamp()) } else { None },
+        "lifecycle_profile": lifecycle_profile,
+        "findings": findings,
+        "recorded_at": crate::hooks::current_local_timestamp(),
+    });
+    if let Ok(text) = serde_json::to_string_pretty(&payload) {
+        if let Err(e) = std::fs::write(&path, format!("{text}\n")) {
+            eprintln!("[router-rs] review_gate persist: write failed: {e}");
+        }
+    }
 }
 
 pub fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
