@@ -118,7 +118,7 @@ pub struct SearchCommand {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum MaintSubcommand {
-    /// Rebuild router-rs, `codex sync`, non-Codex framework installs, verify projections.
+    /// Rebuild router-rs, `framework sync-entrypoints`, non-Codex framework installs, verify projections.
     RefreshHostProjections(MaintRootsArgs),
     VerifyCursorHooks(MaintRepoArgs),
     VerifyCodexHooks(MaintRepoArgs),
@@ -208,9 +208,9 @@ pub enum FrameworkCommand {
     Snapshot(FrameworkSnapshotCommand),
     /// Human-readable workspace checks (paths, hooks, Codex sync hint).
     Doctor(RepoRootCommand),
-    /// Host-neutral alias for full host-entrypoint materialization (same as `codex sync --repo-root`).
+    /// Host-neutral host-entrypoint materialization (use `--host-id` to select host; default: all supported).
     #[command(name = "sync-entrypoints", visible_alias = "sync_entrypoints")]
-    SyncEntrypoints(RepoRootCommand),
+    SyncEntrypoints(SyncEntrypointsCommand),
     PromptCompression(JsonInputCommand),
     Statusline(RepoRootCommand),
     SessionArtifactWrite(JsonInputCommand),
@@ -286,7 +286,6 @@ pub enum HostCommand {
 #[derive(Subcommand, Debug, Clone)]
 pub enum CodexSubcommand {
     HookProjection,
-    Sync(RepoRootCommand),
     Check(RepoRootCommand),
     Hook(CodexHookCommand),
     HostIntegration(ForwardedArgsCommand),
@@ -467,6 +466,16 @@ pub struct CloseoutEvaluateCommand {
 pub struct RepoRootCommand {
     #[arg(long)]
     pub repo_root: Option<PathBuf>,
+}
+
+/// `framework sync-entrypoints` arguments.
+#[derive(Args, Debug, Clone)]
+pub struct SyncEntrypointsCommand {
+    #[arg(long)]
+    pub repo_root: Option<PathBuf>,
+    /// Select host for entrypoint materialization (e.g. `codex`). Default: all supported hosts.
+    #[arg(long)]
+    pub host_id: Option<String>,
 }
 
 #[derive(Args, Debug, Clone)]

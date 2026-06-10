@@ -20,7 +20,7 @@ depends_on:
 - **先读**：[`harness_architecture/03-hook-and-switches.md`](harness_architecture/03-hook-and-switches.md) **§5** 与 [`harness_architecture/04-closeout-and-depth.md`](harness_architecture/04-closeout-and-depth.md) **§6**，再读本文件 **§0** 与 **[§3.1](#31-可复制执行清单工程顺序)**。
 - **再改**：`RUNTIME_REGISTRY` → hooks 模块 → `dispatch` → `host_integration` → L4 → 测试（详见 §3.1）。
 - **跑测**：`cargo test --manifest-path core/router-rs/Cargo.toml`；改动根 [`tests/`](../tests/) 时再 `cargo test`。
-- **入口同步**：`router-rs framework sync-entrypoints --repo-root "$PWD"`（或兼容别名 `router-rs codex sync`）。
+- **入口同步**：`router-rs framework sync-entrypoints --repo-root "$PWD"`。
 
 ---
 
@@ -207,7 +207,7 @@ Canonical API（`core-policy`）：`is_reviewer_lane_from_registry`、`review_in
 
 ### 3.3 Host entrypoint sync engine / provider 边界
 
-[`host_entrypoint_sync.rs`](../core/runtime-core/src/host_entrypoint_sync.rs) 负责通用 sync engine；Codex provider（`.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md`）在 [`codex_hooks/mod.rs`](../core/runtime-core/src/hosts/codex_hooks/mod.rs)。hook 编译期 embed **`AGENTS.md` + `AGENTS_CODEX.md`**（见 `policy_embed.rs`）；**不** materialize 或 overwrite 仓库根 [`AGENTS.md`](../AGENTS.md)。`router-rs codex sync` 为兼容 CLI 名。root 用 `full_sync`；匹配 worktree 仅 `partial_sync`（JSON hook/manifest，不覆盖本地策略文本）。`HostProjectionAdapter` 为薄 adapter 表；`RUNTIME_PROVIDER_REGISTRY` 的 host provider lane 只作目录/报告面。
+[`host_entrypoint_sync.rs`](../core/runtime-core/src/host_entrypoint_sync.rs) 负责通用 sync engine；Codex provider（`.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md`）在 [`codex_hooks/mod.rs`](../core/runtime-core/src/hosts/codex_hooks/mod.rs)。hook 编译期 embed **`AGENTS.md` + `AGENTS_CODEX.md`**（见 `policy_embed.rs`）；**不** materialize 或 overwrite 仓库根 [`AGENTS.md`](../AGENTS.md)。`router-rs framework sync-entrypoints` 为统一 CLI 入口。root 用 `full_sync`；匹配 worktree 仅 `partial_sync`（JSON hook/manifest，不覆盖本地策略文本）。`HostProjectionAdapter` 为薄 adapter 表；`RUNTIME_PROVIDER_REGISTRY` 的 host provider lane 只作目录/报告面。
 
 ### 3.4 PostTool / 终端证据归一化
 

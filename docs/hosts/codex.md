@@ -45,7 +45,7 @@ Codex CLI 采用 **fail-closed** 策略：hook 二进制缺失时，各生命周
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CODEX_PAPER_PROSE_HOOK`）；`ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 | **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
-| 宿主入口对齐 | `router-rs codex sync` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md` 及 **`host_entrypoints_sync_manifest`**；跨宿主内核 **[`AGENTS.md`](../../AGENTS.md)** 人工维护、不由 sync 覆盖 |
+| 宿主入口对齐 | `router-rs framework sync-entrypoints --host-id codex` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md` 及 **`host_entrypoints_sync_manifest`**；跨宿主内核 **[`AGENTS.md`](../../AGENTS.md)** 人工维护、不由 sync 覆盖 |
 
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
 

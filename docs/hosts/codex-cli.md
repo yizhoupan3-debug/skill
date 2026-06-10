@@ -13,5 +13,5 @@ canonical: codex.md
 ```bash
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
   framework host-integration install --to codex --repo-root "$PWD"
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --host-id codex --repo-root "$PWD"
 ```

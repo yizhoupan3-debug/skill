@@ -142,9 +142,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     );
     println!("rebuild this binary then run:");
     println!("  router-rs framework sync-entrypoints --repo-root <repo>");
-    println!(
-        "(or `codex sync --repo-root` with the same sync engine). See AGENTS_CODEX.md (Codex Sync)."
-    );
+    println!("See AGENTS_CODEX.md (Codex Sync) for host-specific details.");
 
     println!("\n--- hook follow-up tokens (quick ref) ---");
     println!(

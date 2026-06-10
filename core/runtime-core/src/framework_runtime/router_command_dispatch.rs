@@ -54,6 +54,20 @@ fn codex_hook_stdout_payload(payload: Option<Value>) -> Value {
     payload.unwrap_or_else(|| json!({}))
 }
 
+/// Resolve host entrypoint provider by `--host-id`.
+/// Currently only `codex` has a concrete provider; other hosts can be added as needed.
+fn resolve_host_entrypoint_provider(
+    repo_root: &std::path::Path,
+    host_id: Option<&str>,
+) -> Result<crate::host_entrypoint_sync::HostEntrypointPayloadProvider, String> {
+    match host_id {
+        Some("codex") | None => codex_host_entrypoint_provider(repo_root),
+        Some(other) => Err(format!(
+            "unsupported host-id '{other}' for sync-entrypoints; supported: codex"
+        )),
+    }
+}
+
 pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
     match command {
         FrameworkCommand::Snapshot(command) => {
@@ -74,7 +88,10 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
         }
         FrameworkCommand::SyncEntrypoints(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let provider = codex_host_entrypoint_provider(&repo_root)?;
+            let provider = resolve_host_entrypoint_provider(
+                &repo_root,
+                command.host_id.as_deref(),
+            )?;
             print_json_value(&sync_host_entrypoints(&repo_root, true, provider)?)
         }
         FrameworkCommand::PromptCompression(command) => {
@@ -216,11 +233,6 @@ pub fn dispatch_diagnose_command(command: DiagnoseCommand) -> Result<(), String>
 pub fn dispatch_codex_command(command: CodexSubcommand) -> Result<(), String> {
     match command {
         CodexSubcommand::HookProjection => print_json_value(&build_codex_hook_projection()),
-        CodexSubcommand::Sync(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let provider = codex_host_entrypoint_provider(&repo_root)?;
-            print_json_value(&sync_host_entrypoints(&repo_root, true, provider)?)
-        }
         CodexSubcommand::Check(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             let provider = codex_host_entrypoint_provider(&repo_root)?;

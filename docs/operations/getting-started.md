@@ -28,7 +28,7 @@ Claude Code 可选用 `./scripts/install-claude.sh`（等价 `install --to claud
 git pull
 CARGO_TARGET_DIR="$PWD/core/router-rs/target" \
   cargo build --release --manifest-path core/router-rs/Cargo.toml
-# 对仍在使用的每个宿主重跑 install / sync（Codex: codex sync）
+# 对仍在使用的每个宿主重跑 install / sync（Codex: framework sync-entrypoints --host-id codex）
 ```
 
 ## 跨项目引导
