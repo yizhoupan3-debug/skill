@@ -301,6 +301,7 @@ pub use roots::*;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     fn unique_test_root(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -655,6 +656,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn resolve_projection_roots_uses_os_home_not_claude_home_parent_for_account_home() {
         let root = unique_test_root("account-home-root");
         let os_home = root.join("os-home");

@@ -195,8 +195,10 @@ pub fn validate_host_providers_against_registry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn registry_exposes_closed_set_host_skeletons() {
         let registry = host_provider_registry();
         assert_eq!(
@@ -213,6 +215,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn supported_hosts_each_have_provider() {
         for host_id in REGISTRY_SUPPORTED_HOST_IDS {
             assert!(
@@ -223,6 +226,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn install_tool_and_alias_resolution() {
         assert_eq!(
             host_provider_for_install_tool("cursor")
@@ -294,6 +298,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn claude_capabilities_declare_native_hooks_without_mcp_config_key() {
         let provider = host_provider_for_id("claude-code").expect("claude provider");
         let caps = provider.capabilities();
@@ -308,6 +313,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn antigravity_capabilities_declare_mcp_stdio_without_native_hooks() {
         let provider = host_provider_for_id("antigravity").expect("antigravity provider");
         let caps = provider.capabilities();
@@ -320,6 +326,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn opencode_requires_strict_pre_tool_fallback() {
         let provider = host_provider_for_id("opencode").expect("opencode provider");
         assert!(!provider.capabilities().has_native_hook);
@@ -346,6 +353,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn strict_pre_tool_fallback_hint_matches_provider_metadata() {
         assert_eq!(
             host_provider_strict_pre_tool_fallback_hint("cursor"),
@@ -365,6 +373,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn p4_sub_trait_accessors_upcast_from_host_provider() {
         let lifecycle = host_lifecycle_for_id("cursor").expect("cursor lifecycle");
         assert_eq!(lifecycle.profile_id(), "cursor_profile");
@@ -399,6 +408,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn anemic_hosts_skip_native_hook_glue_defaults() {
         for host_id in ["antigravity", "opencode"] {
             let lifecycle = host_lifecycle_for_id(host_id).expect(host_id);
@@ -412,6 +422,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn routing_aliases_expand_via_host_provider_registry() {
         let cases: &[(&str, &[&str])] = &[
             ("cursor", &["cursor"]),
@@ -439,6 +450,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn routing_spelling_resolves_retired_host_ids() {
         assert_eq!(
             host_provider_for_routing_spelling("claude-desktop")

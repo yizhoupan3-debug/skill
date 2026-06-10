@@ -387,7 +387,7 @@ fn cursor_hook_outbound_context_max_chars_env_lock() -> std::sync::MutexGuard<'s
     static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
     LOCK.get_or_init(|| std::sync::Mutex::new(()))
         .lock()
-        .expect("cursor hook outbound context max chars env lock")
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// 默认续跑类提示在 `additional_context`；`followup_message` 仅用于显式 opt-in 或硬拦截文案。
@@ -868,6 +868,7 @@ fn before_submit_spawn_first_and_model_inherit_not_duplicated() {
 }
 
 #[test]
+#[serial]
 fn before_submit_model_inherit_survives_output_policy_truncation() {
     let _lock = core_policy::test_env_sync::process_env_lock();
     let _env = SubagentModelInheritNudgeForceOnEnvGuard::new();
@@ -1106,6 +1107,7 @@ fn cursor_plan_build_path_does_not_arm_goal() {
 }
 
 #[test]
+#[serial]
 fn stop_closeout_uses_hydration_task_when_active_completed_and_focus_running() {
     let _env = core_policy::test_env_sync::process_env_lock();
     let prev = env::var_os("ROUTER_RS_CLOSEOUT_ENFORCEMENT");
@@ -2149,6 +2151,7 @@ fn before_submit_does_not_merge_goal_or_rfv_continuity() {
 }
 
 #[test]
+#[serial]
 fn stop_active_goal_does_not_inject_goal_continue() {
     let _inject_on = OperatorInjectEnabledGuard::new();
     let repo = fresh_repo();
@@ -2190,6 +2193,7 @@ fn stop_active_goal_does_not_inject_goal_continue() {
 }
 
 #[test]
+#[serial]
 fn stop_plain_session_injects_session_close_style_when_no_hard_followup() {
     let repo = fresh_repo();
     let out = dispatch_cursor_hook_event(&repo, "stop", &event("plain-close", "ok"));
@@ -2519,6 +2523,7 @@ fn stop_goal_and_rfv_do_not_merge_schema_hint_into_continue() {
 }
 
 #[test]
+#[serial]
 fn cursor_hook_output_policy_truncates_additional_context_under_env_budget() {
     let _env_lock = cursor_hook_outbound_context_max_chars_env_lock();
     let prev = env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
@@ -2549,6 +2554,7 @@ fn cursor_hook_output_policy_truncates_additional_context_under_env_budget() {
 }
 
 #[test]
+#[serial]
 fn cursor_hook_output_policy_truncates_followup_after_absurd_length() {
     let _env_lock = cursor_hook_outbound_context_max_chars_env_lock();
     let prev_cap = env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
@@ -2569,6 +2575,7 @@ fn cursor_hook_output_policy_truncates_followup_after_absurd_length() {
 }
 
 #[test]
+#[serial]
 fn cursor_hook_output_policy_is_noop_for_review_gate_advisory_lines() {
     let hard = format!(
         "router-rs REVIEW_GATE incomplete phase=0 {} {}",
@@ -2593,6 +2600,7 @@ fn cursor_hook_outbound_trunc_respects_byte_cap_and_marker() {
 }
 
 #[test]
+#[serial]
 fn outbound_truncation_preserves_review_gate_and_continuity_suppressed_lines() {
     let _env_lock = cursor_hook_outbound_context_max_chars_env_lock();
     let prev = std::env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
@@ -5109,6 +5117,7 @@ fn post_tool_use_subagent_sets_phase() {
 // Cursor-only: legacy RG_FOLLOWUP / breadth token scrub — see `review_gate_stdout_scrub_*`
 
 #[test]
+#[serial]
 fn goal_stop_followup_is_short_code_only() {
     let _my_light = MyLightOverrideGuard::force_non_my_light();
     use std::env;
@@ -6200,6 +6209,7 @@ fn session_start_additional_context_observes_router_rs_sessionstart_max_env() {
 }
 
 #[test]
+#[serial]
 fn session_start_resets_session_call_tracker() {
     let _inject_on = OperatorInjectEnabledGuard::new();
     let repo = fresh_repo();
@@ -7171,6 +7181,7 @@ fn review_gate_env_matrix_fixtures_apply_env() {
 // Cursor-only: env off / false-positive / outbound truncation — see `before_submit_skips_paper_prose_*`
 
 #[test]
+#[serial]
 fn before_submit_skips_paper_prose_when_hook_explicitly_off() {
     let _review_clear = ReviewGateDisableEnvClearGuard::new();
     let _g = hooks::harness_nudges_env_test_lock();
@@ -7198,6 +7209,7 @@ fn before_submit_skips_paper_prose_when_hook_explicitly_off() {
 }
 
 #[test]
+#[serial]
 fn before_submit_skips_paper_prose_on_java_abstract_false_positive() {
     let _review_clear = ReviewGateDisableEnvClearGuard::new();
     let _g = hooks::harness_nudges_env_test_lock();
@@ -7228,6 +7240,7 @@ fn before_submit_skips_paper_prose_on_java_abstract_false_positive() {
 }
 
 #[test]
+#[serial]
 fn before_submit_paper_prose_survives_outbound_truncation() {
     let _review_clear = ReviewGateDisableEnvClearGuard::new();
     let _g = hooks::harness_nudges_env_test_lock();
