@@ -89,6 +89,12 @@ impl HostProvider for CodexHostProvider {
             mcp_config_key: "mcp_servers",
             transport_type: "native-codex",
             config_path: ".codex/config.toml",
+            batch_execution: true,
+            cron_execution: true,
+            ci_runner: true,
+            non_interactive_entrypoint: true,
+            external_session_supervisor: true,
+            rate_limit_auto_resume: true,
         }
     }
 }

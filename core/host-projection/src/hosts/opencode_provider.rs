@@ -68,6 +68,12 @@ impl HostProvider for OpencodeHostProvider {
             mcp_config_key: "mcp",
             transport_type: "opencode-cli",
             config_path: ".opencode/opencode.json",
+            batch_execution: false,
+            cron_execution: false,
+            ci_runner: false,
+            non_interactive_entrypoint: false,
+            external_session_supervisor: false,
+            rate_limit_auto_resume: false,
         }
     }
 }

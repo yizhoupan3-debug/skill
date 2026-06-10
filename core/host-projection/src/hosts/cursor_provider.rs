@@ -85,6 +85,12 @@ impl HostProvider for CursorHostProvider {
             mcp_config_key: "mcpServers",
             transport_type: "cursor-agent",
             config_path: "mcp.json",
+            batch_execution: false,
+            cron_execution: false,
+            ci_runner: false,
+            non_interactive_entrypoint: false,
+            external_session_supervisor: false,
+            rate_limit_auto_resume: false,
         }
     }
 }

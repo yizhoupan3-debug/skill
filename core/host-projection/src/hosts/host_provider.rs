@@ -14,6 +14,13 @@ pub struct HostCapabilities {
     pub mcp_config_key: &'static str,
     pub transport_type: &'static str,
     pub config_path: &'static str,
+    // New fields from v6 roadmap I8
+    pub batch_execution: bool,
+    pub cron_execution: bool,
+    pub ci_runner: bool,
+    pub non_interactive_entrypoint: bool,
+    pub external_session_supervisor: bool,
+    pub rate_limit_auto_resume: bool,
 }
 
 /// Session / lifecycle metadata from `RUNTIME_REGISTRY.host_projections`.

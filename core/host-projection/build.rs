@@ -46,6 +46,9 @@ pub(crate) fn push_registered_host_providers(
     providers: &mut Vec<Box<dyn super::HostProvider>>,
 ) {{
     providers.push(Box::new(super::cursor_provider::CursorHostProvider));
+    providers.push(Box::new(super::claude_provider::ClaudeHostProvider));
+    providers.push(Box::new(super::opencode_provider::OpencodeHostProvider));
+    providers.push(Box::new(super::antigravity_provider::AntigravityHostProvider));
     providers.push(Box::new(super::codex_provider::CodexHostProvider));
 }}
 "#

@@ -81,6 +81,12 @@ impl HostProvider for ClaudeHostProvider {
             mcp_config_key: "",
             transport_type: "anthropic-claude-code",
             config_path: ".claude/settings.json",
+            batch_execution: false,
+            cron_execution: false,
+            ci_runner: false,
+            non_interactive_entrypoint: false,
+            external_session_supervisor: false,
+            rate_limit_auto_resume: false,
         }
     }
 }
