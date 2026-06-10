@@ -116,12 +116,9 @@ pub fn build_framework_alias_envelope(
 }
 
 fn canonical_framework_host_id(host_id: &str) -> &str {
-    match host_id {
-        "codex-cli" | "codex-app" => "codex",
-        "claude-desktop" => "claude-code",
-        "antigravity-app" | "antigravity-cli" => "antigravity",
-        _ => host_id,
-    }
+    crate::hosts::host_provider_for_routing_spelling(host_id)
+        .map(|p| p.host_id())
+        .unwrap_or(host_id)
 }
 
 fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) -> String {
