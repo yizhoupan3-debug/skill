@@ -524,7 +524,12 @@
           "relative": ".claude/settings.json"
         }
       ],
-      "session_supervisor_driver": "unsupported",
+      "session_supervisor_driver": "mcp_bridge",
+      "session_supervisor_status": {
+        "supported": true,
+        "bridge": "browser-mcp session tools (session_launch/session_list/session_inspect/session_terminate)",
+        "rationale": "Claude Code bridges session supervision through browser-mcp MCP tools. SubagentStart/Stop hooks provide native lifecycle events."
+      },
       "resume_command_examples": [
         "Continue in Claude Code in this workspace"
       ],

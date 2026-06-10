@@ -270,7 +270,7 @@ fn claude_host_builds_print_command() {
         None,
     )
     .expect("build claude command");
-    assert_eq!(command.driver_id, "claude_code_driver");
+    assert_eq!(command.driver_id, "mcp_bridge");
     assert_eq!(command.binary, "claude");
     assert!(command.args.contains(&"--print".to_string()));
     assert!(command.args.contains(&"-p".to_string()));
@@ -291,7 +291,7 @@ fn claude_host_resume_command() {
         None,
     )
     .expect("build claude resume command");
-    assert_eq!(command.driver_id, "claude_code_driver");
+    assert_eq!(command.driver_id, "mcp_bridge");
     assert!(command.args.contains(&"--resume".to_string()));
     assert!(command.args.contains(&"session-123".to_string()));
 }
@@ -309,7 +309,7 @@ fn claude_host_with_worktree_uses_effective_cwd() {
         None,
     )
     .expect("build claude with worktree");
-    assert_eq!(command.driver_id, "claude_code_driver");
+    assert_eq!(command.driver_id, "mcp_bridge");
     assert!(command.args.contains(&"--print".to_string()));
     assert!(command.args.contains(&"test".to_string()));
 }

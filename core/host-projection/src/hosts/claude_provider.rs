@@ -21,7 +21,7 @@ impl HostLifecycle for ClaudeHostProvider {
     }
 
     fn session_supervisor_driver(&self) -> &'static str {
-        "claude_code_driver"
+        "mcp_bridge"
     }
 
     fn harness_capabilities(&self) -> &'static [&'static str] {

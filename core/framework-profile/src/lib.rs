@@ -1570,7 +1570,7 @@ mod tests {
         );
         assert_eq!(
             bundle.host_payloads["claude-code"]["session_supervisor_driver"],
-            json!("unsupported")
+            json!("mcp_bridge")
         );
         assert_eq!(
             bundle.host_payloads["cursor"]["framework_alias_entrypoints"]["implementx"],
