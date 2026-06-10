@@ -133,8 +133,14 @@ pub fn register_routing_hooks() {
                 }
             },
         )
-        .expect("routing hooks registration failed");
+        .ok(); // ignore Err if already registered
     });
+}
+
+/// Auto-initialize routing hooks at library load time.
+#[ctor::ctor]
+fn auto_init_routing_hooks() {
+    register_routing_hooks();
 }
 
 // ── test helpers ──
