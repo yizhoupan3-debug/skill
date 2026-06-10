@@ -51,6 +51,6 @@ depends_on:
 3. **多宿主 hook 生成式减少分叉**：把 lane/`fork_context` 归一等逻辑更多 codegen 到单源；**风险**：生成器 bug 影响三宿主；**前置**：`host_integration` 契约测试覆盖阈值明确。
 4. **`framework_profile` 大表与日常 solo 解耦**：发布面字段与自用 hook 最小面拆分；**风险**：profile 校验与安装路径分裂；**前置**：明确「发行 profile」与「repo dev profile」两个 ID。
 5. **`ROUTER_RS_*` 命名统一（`_CHARS` → 字节）**：减少误读；**风险**：外部脚本依赖旧名；**前置**：别名读取窗口 + 弃用日志（若保留兼容期）。
-6. **Codex embed（`AGENTS.md` + `AGENTS_CODEX.md`）与 sync 材料化（`AGENTS_CODEX.md`）漂移**：继续依赖 rebuild + `framework sync-entrypoints` / `codex sync`；**不建议**默认改为每次 hook 读盘（性能与确定性 trade-off）；可选加强 CI 对比 compile-time embed 哈希。
+6. **Codex embed（`AGENTS.md` + `AGENTS_CODEX.md`）与 sync 材料化（`AGENTS_CODEX.md`）漂移**：继续依赖 rebuild + `framework sync-entrypoints`；**不建议**默认改为每次 hook 读盘（性能与确定性 trade-off）；可选加强 CI 对比 compile-time embed 哈希。
 
 每条均需单独计划、测试矩阵与回滚策略；**不要**与本「叙事地图 + profile + 漂移哨兵」交付混为单次 PR。

@@ -50,7 +50,7 @@ const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
 pub const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str =
     ".codex/host_entrypoints_sync_manifest.json";
 const HOST_ENTRYPOINT_SYNC_HINT: &str =
-    "cargo run --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"";
+    "cargo run --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --host-id codex --repo-root \"$PWD\"";
 pub const CODEX_AGENT_POLICY_PATH: &str = "AGENTS_CODEX.md";
 pub const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
 pub const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
@@ -1054,7 +1054,7 @@ pub fn build_codex_hook_manifest() -> Value {
     }
     json!({
         "version": 1,
-        "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"`.",
+        "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --host-id codex --repo-root \"$PWD\"`.",
         "hooks": hooks,
     })
 }
@@ -1085,8 +1085,8 @@ pub fn build_codex_hook_projection() -> Value {
 pub fn build_codex_hooks_readme() -> String {
     "# Codex Hooks Projection\n\n\
 Codex hooks are enabled for this repo and are managed by the Rust `router-rs` control plane.\n\n\
-<!-- managed_by: router-rs codex sync -->\n\n\
-**Policy snapshot:** the `codex_agent_policy` payload embeds repository `AGENTS.md` + `AGENTS_CODEX.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` / `framework sync-entrypoints` materialize **`AGENTS_CODEX.md`** and **`.codex/README.md`** (see `.codex/host_entrypoints_sync_manifest.json`); an existing `AGENTS_CODEX.md` on disk is preserved. When the delta file is missing, sync bootstraps **delta-only** content (not a merged kernel+delta blob). Rebuild before sync when hook payloads must carry policy edits (see `AGENTS_CODEX.md` → **Codex 构建快照与同步逻辑**).\n\n\
+<!-- managed_by: router-rs framework sync-entrypoints -->\n\n\
+**Policy snapshot:** the `codex_agent_policy` payload embeds repository `AGENTS.md` + `AGENTS_CODEX.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `framework sync-entrypoints` materializes **`AGENTS_CODEX.md`** and **`.codex/README.md`** (see `.codex/host_entrypoints_sync_manifest.json`); an existing `AGENTS_CODEX.md` on disk is preserved. When the delta file is missing, sync bootstraps **delta-only** content (not a merged kernel+delta blob). Rebuild before sync when hook payloads must carry policy edits (see `AGENTS_CODEX.md` → **Codex 构建快照与同步逻辑**).\n\n\
 Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.\n\n\
 Feature enablement uses `[features] hooks = true`; older public examples may still show `codex_hooks`, which this repository treats as a deprecated compatibility key and rewrites to `hooks`.\n\n\
 `SessionStart` injects a lightweight workspace pointer (`Repo:` and optional `source`) when operator inject is enabled; it does **not** inject a continuity digest or hook-driven `GOAL_CONTINUE`. `UserPromptSubmit` injects only trigger-specific context. `PreToolUse` blocks direct edits to generated Codex surfaces. `PostToolUse` records subagent/tool telemetry and, when opted in (`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1`, default off), may append verification-like shell commands (for example `cargo test`) to `EVIDENCE_INDEX.json` when continuity is active. `Stop` enforces closeout; `CODEX_REVIEW_GATE` is **advisory-only** (no `decision: block` on review gate — see `docs/host_adapter_contract.md` §0.1). Clear gate (Claude canonical): PostTool countable deep-lane evidence → `independent_reviewer_seen`, or bounded `rg_clear` / reject override tokens; Stop may inject a one-line nudge until satisfied. Set **`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1`** to suppress advisory nudge (unset keeps enabled). `my-light` lifecycle (`/discussx|planx|implementx|verifyx` or `GOAL_STATE.lifecycle_profile`) suppresses review Stop nudge and spawn-first. It does **not** write an automatic continuity checkpoint (`ROUTER_RS_CONTINUITY_STOP_CHECKPOINT` is a no-op). Resume work via `/implementx`, `framework_goal_drive` stdio, and manual boards under `artifacts/current/<task_id>/`. Durable cleanup should use explicit session-artifact or snapshot commands rather than an extra end-of-session hook.\n\n\
@@ -1101,7 +1101,7 @@ Use `cargo run --manifest-path core/router-rs/Cargo.toml -- framework maint inst
 Use `codex hook contract-guard` as an opt-in continuity audit. It compares a caller-provided expected `contract_digest`, owner, task, goal, and evidence intent against the live Rust `framework contract-summary` payload, then fails closed on drift unless the caller sets an explicit contract update intent.\n\n\
 Regenerate with:\n\n\
 ```sh\n\
-cargo run --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"\n\
+cargo run --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --host-id codex --repo-root \"$PWD\"\n\
 ```\n\n\
 Steady-state documentation map: `docs/README.md`.\n"
         .to_string()

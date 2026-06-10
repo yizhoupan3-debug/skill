@@ -18,7 +18,7 @@ plate: B7
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework snapshot
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework alias <slug>
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"
 
 # 自安装（P0 router_self smoke）
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework self install

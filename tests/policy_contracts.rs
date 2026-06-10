@@ -816,7 +816,7 @@ fn removed_router_flags_are_absent_from_user_docs() {
         );
     }
     assert!(docs.contains("router-rs framework snapshot"));
-    assert!(docs.contains("codex sync --repo-root"));
+    assert!(docs.contains("framework sync-entrypoints"));
     assert!(docs.contains("stdio `execute` operation"));
 }
 
