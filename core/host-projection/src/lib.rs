@@ -6,6 +6,7 @@
 //! - host_integration/: install/status/remove/roots/artifacts
 //! - host_entrypoint_sync.rs: host entrypoint sync
 
+pub mod hooks;
 pub mod host_entrypoint_sync;
 pub mod host_integration;
 pub mod hosts;

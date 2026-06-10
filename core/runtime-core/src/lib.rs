@@ -116,6 +116,7 @@ pub use hosts::mcp_stdio_harness;
 // ── routing-engine hook registration ──
 use std::sync::OnceLock;
 static ROUTING_HOOKS_INIT: OnceLock<()> = OnceLock::new();
+static HOST_PROJECTION_HOOKS_INIT: OnceLock<()> = OnceLock::new();
 
 /// Register routing-engine hooks with runtime-core implementations.
 /// Safe to call multiple times; only the first call takes effect.
@@ -141,10 +142,117 @@ pub fn register_routing_hooks() {
     });
 }
 
+/// Register host-projection hooks with runtime-core implementations.
+/// Safe to call multiple times; only the first call takes effect.
+pub fn register_host_projection_hooks() {
+    HOST_PROJECTION_HOOKS_INIT.get_or_init(|| {
+        let hooks = host_projection::hooks::build_hooks(
+            // Framework Runtime
+            framework_runtime::append_evidence_index_merged_row,
+            || false, // closeout_programmatic_enforcement_enabled
+            framework_runtime::closeout_record_path_for_task,
+            framework_runtime::closeout_stop_followup_for_completion_text,
+            || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
+            framework_runtime::current_local_timestamp,
+            framework_runtime::evaluate_closeout_record_file_for_task,
+            framework_runtime::extract_post_tool_duration_ms,
+            |_repo_root| None, // first_task_id_from_registry
+            |v| Ok(v), // framework_hook_evidence_append (passthrough)
+            framework_runtime::post_tool_call_succeeded,
+            framework_runtime::resolve_repo_root_arg,
+            framework_runtime::write_framework_session_artifacts,
+            framework_runtime::build_framework_runtime_snapshot_envelope,
+            framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
+            framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback,
+            // Hook timing
+            hook_timing::mark_hook_start,
+            hook_timing::add_lock_wait_ms,
+            hook_timing::add_cargo_check_ms,
+            hook_timing::emit_hook_timing_line,
+            // Telemetry
+            telemetry_emit::emit_hook_fired,
+            telemetry_emit::emit_tool_call,
+            telemetry_emit::hook_action_from_optional_output,
+            telemetry_emit::hook_action_from_output,
+            // Session call tracker
+            session_call_tracker::init_tracker,
+            session_call_tracker::read_tracker_state,
+            |root, name, stats| {
+                let cs = stats.map(|s| session_call_tracker::CacheStats {
+                    cache_read_input_tokens: s.cache_read_input_tokens,
+                    cache_creation_input_tokens: s.cache_creation_input_tokens,
+                    input_tokens: s.input_tokens,
+                    output_tokens: s.output_tokens,
+                });
+                session_call_tracker::record_tool_call(root, name, cs)
+            },
+            session_call_tracker::check_anomalies,
+            // Router env flags
+            router_env_flags::router_rs_skip_pre_tool_use_guard,
+            router_env_flags::router_rs_task_ledger_flock_enabled,
+            router_env_flags::router_rs_hook_timing_enabled,
+            router_env_flags::router_rs_continuity_post_tool_evidence_enabled,
+            router_env_flags::router_rs_cursor_hook_outbound_context_max_bytes,
+            router_env_flags::router_rs_session_call_tracker_tool_keys_max,
+            router_env_flags::router_rs_rfv_max_rounds_cap,
+            router_env_flags::router_rs_cursor_hook_state_lock_retries,
+            router_env_flags::router_rs_cursor_hook_state_stale_sweep_days,
+            router_env_flags::router_rs_cursor_review_gate_stop_max_nudges_cap,
+            router_env_flags::router_rs_operator_inject_globally_enabled,
+            router_env_flags::router_rs_cursor_hook_silent_enabled,
+            router_env_flags::router_rs_cursor_sessionstart_context_max_bytes,
+            // Paper hooks
+            |root, prompt, lines, host| {
+                let h = match host {
+                    host_projection::hooks::PaperProseHookHostType::Claude => paper_prose_hook::PaperProseHookHost::Claude,
+                    host_projection::hooks::PaperProseHookHostType::Cursor => paper_prose_hook::PaperProseHookHost::Cursor,
+                    host_projection::hooks::PaperProseHookHostType::Codex => paper_prose_hook::PaperProseHookHost::Codex,
+                };
+                paper_prose_hook::maybe_append_paper_prose_context(root, prompt, lines, h);
+            },
+            |root, prompt, lines, host| {
+                let h = match host {
+                    host_projection::hooks::PaperProseHookHostType::Claude => paper_prose_hook::PaperProseHookHost::Claude,
+                    host_projection::hooks::PaperProseHookHostType::Cursor => paper_prose_hook::PaperProseHookHost::Cursor,
+                    host_projection::hooks::PaperProseHookHostType::Codex => paper_prose_hook::PaperProseHookHost::Codex,
+                };
+                paper_adversarial_hook::maybe_append_paper_adversarial_context(root, prompt, lines, h);
+            },
+            // Observation
+            |output, host| {
+                let h = match host {
+                    host_projection::hooks::HookObservationHostType::ClaudeCode => router_rs_observation::HookObservationHost::ClaudeCode,
+                    host_projection::hooks::HookObservationHostType::Cursor => router_rs_observation::HookObservationHost::Cursor,
+                    host_projection::hooks::HookObservationHostType::Codex => router_rs_observation::HookObservationHost::Codex,
+                };
+                router_rs_observation::attach_router_rs_observation(output, h);
+            },
+            // Kernel
+            kernel_bootstrap::ensure_kernel_bootstrap,
+            // MCP pre-guard
+            |tool, args, root| {
+                let v = mcp_pre_guard::evaluate_mcp_pre_guard_safe(tool, args, root);
+                host_projection::hooks::McpPreGuardVerdictType { blocked: v.blocked, reason: v.reason }
+            },
+            // Web fetch guard
+            web_fetch_guard::validate_and_resolve_web_fetch_url_as_strings,
+            web_fetch_guard::resolve_web_fetch_redirect_as_string,
+            web_fetch_guard::resolve_web_fetch_addresses_as_strings,
+            // RFV loop
+            rfv_loop::framework_rfv_loop,
+            // Autopilot goal
+            autopilot_goal::framework_goal_drive,
+            |root| autopilot_goal::read_goal_state(root, None).map(|opt| opt.unwrap_or(serde_json::Value::Null)),
+        );
+        host_projection::hooks::register_hooks(hooks).ok();
+    });
+}
+
 /// Auto-initialize routing hooks at library load time.
 #[ctor::ctor]
 fn auto_init_routing_hooks() {
     register_routing_hooks();
+    register_host_projection_hooks();
 }
 
 // ── test helpers ──
