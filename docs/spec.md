@@ -1,6 +1,6 @@
 ---
-last_verified: "2026-06-09"
-version: "unified-v5-full"
+last_verified: "2026-06-11"
+version: "unified-v6"
 # 以下子文档是 spec.md 的延伸章节（Extension Chapters），各自保留聚焦内容。
 # spec.md 为总览 + 索引 + 全局契约；子文档为子系统详细规约。
 # 两者权威性等同，子文档在各自领域内为真源（详见各文档 frontmatter）。
@@ -20,7 +20,7 @@ extends:
 
 > 本文件是框架**总览规约**，覆盖架构总览、设计原则、crate 拓扑、测试契约与 schema 索引。
 > 各子系统详细规约见下方 `extends` 列表中的延伸文档（各自在其领域内为真源）。
-> 实施路线图见 `artifacts/current/roadmap-v5-deep-review.md` (archived)。
+> 实施路线图见 `artifacts/current/system-evolution-roadmap-v6.md` (v6.0-final)。
 
 ---
 
@@ -49,39 +49,71 @@ extends:
 
 ## 1. 架构总览
 
-### 1.1 Crate 拓扑
+### 1.1 Crate 拓扑 (v6)
 
 ```
-router-rs (95K LOC)          ← 主控制面
-├── 32 个功能模块（§9-§14）
-├── 704 个 #[test]
-└── CLI 入口（clap）
+runtime-core (~46K LOC)       ← 核心生命周期/存储/trace/closeout
+├── session_supervisor/       ← 工作进程管理（driver/worker/runtime）
+├── framework_runtime/        ← MCP stdio harness + hooks 注册表
+├── host_integration/         ← projection 安装/移除（re-export shim → host-projection）
+├── closeout_enforcement.rs   ← hard/soft blocker 分级
+├── 396 tests / 13 ignored
+└── features: codegraph, host-{cursor,claude-code,codex,opencode,antigravity}
 
-B0 core crates（已从历史 framework-core 拆分）
-├── core-state/（goal/rfv/evidence/pointers/state_manager）
-├── core-policy/（hook_policy/review_gate）
-├── core-math/（formal_toolchain）
-├── framework-kernel/（telemetry/tokenizer traits）
-└── 各 crate 独立 #[test]
+host-projection (~32K LOC)     ← 宿主适配层（从 runtime-core 迁出）
+├── hosts/                    ← 5 宿主 provider + hooks 实现
+│   ├── claude_code_hooks.rs  ← PreToolUse/PostToolUse/Stop/SubagentStart-Stop
+│   ├── codex_hooks/          ← Codex native hooks (5K LOC)
+│   ├── cursor_hooks/         ← Cursor agent hooks
+│   ├── opencode_agent.rs     ← OpenCode MCP stdio
+│   └── antigravity_provider.rs
+├── host_integration/         ← projection 安装/移除逻辑
+├── hooks.rs                  ← 函数指针注册表（82 个 OnceLock slots）
+└── 433 tests
 
-codegraph-rs (2.3K LOC)      ← 代码图谱
-├── types.rs（Node/Edge/FileRecord/ImpactReport）
-├── parser/{common,rust,typescript,python,go}
-├── db/{schema,node_ops,edge_ops,fts_ops,stats}
-├── graph/{mod,build}
-└── 0 #[test]（P0 缺口）
+router-rs (~558 LOC src + 6K tests) ← CLI + 集成测试
+├── CLI (clap): framework/host-integration/schema-drift
+├── tests/ (275 passed)
+└── features: codegraph, host-*
 
-evolution-rs (851 LOC)       ← 技能进化审计
-└── 2 #[test]
+routing-engine (~8K LOC)       ← 路由评分/信号缓存
+├── route/{eval,scoring,signal_cache,text}
+└── 63 tests / 12 ignored
 
-autoresearch-rs (6K LOC)     ← 研究工作区控制平面
-└── 5 集成测试
+core-state (~7K LOC)           ← Goal/RFV/Evidence/TaskState
+├── state_manager.rs, task_state.rs, step_ledger.rs
+└── 82 tests
 
-rust_tools/ (9 crates, 16K LOC)
-├── citation_tool_rs     ├── financial_data_rs    ├── gh_source_gate_rs
-├── image_gen_rs         ├── image_process_rs     ├── ooxml_parser_rs
-├── pptx_tool_rs         ├── pubmed_tool_rs       └── screenshot_rs
-└── 各自独立二进制，无跨依赖
+core-policy (~4K LOC)          ← Hook 策略/review gate/注册表
+├── review_gate_engine.rs, hook_review_disk_state.rs
+└── 含 186 条正则规则
+
+codegraph-rs (~2.5K LOC)       ← 代码图谱（FTS5 + tree-sitter）
+├── parser/{rust,typescript,python,go}
+├── db/{schema,node_ops,edge_ops,fts_ops}
+└── 64 tests (caller bug 已修复)
+
+evolution-rs (~1.8K LOC)       ← 技能进化审计
+├── 13 tests
+└── ⚠️ 测试密度偏低
+
+autoresearch-rs (~5.4K LOC)    ← 研究工作区控制平面
+├── 单文件 main.rs（待拆分）
+└── 🔴 仅 2 测试（严重不足）
+
+browser-mcp (~4.8K LOC)        ← 浏览器 MCP + session supervisor
+├── session_launch/list/inspect/terminate MCP tools
+├── browser_* MCP tools
+└── 8 tests（⚠️ 偏低）
+
+framework-profile (~1.7K LOC)  ← 运行时配置 profile
+└── 12 tests
+
+rust_tools/ (6 活跃 MCP crates)
+├── pdf_tool_rs (mcp-pdf)           ├── citation_tool_rs (mcp-citation)
+├── financial_data_rs (mcp-financial) ├── gh_source_gate_rs (mcp-gh-source-gate)
+├── ooxml_parser_rs (mcp-ooxml)     └── pptx_tool_rs (mcp-pptx)
+└── 各自 lib.rs + mcp/mod.rs + mcp_main.rs binary
 ```
 
 ### 1.2 设计原则
@@ -89,17 +121,30 @@ rust_tools/ (9 crates, 16K LOC)
 | 原则 | 含义 |
 |------|------|
 | **单一权威真源** | `RUNTIME_REGISTRY.json` 为宿主闭集唯一权威 |
-| **L4/L5 解耦** | 宿主差异仅存于 L4 适配壳 |
+| **L4/L5 解耦** | 宿主差异仅存于 L4 适配壳（host-projection） |
 | **二元编排** | 仅 `subagent` + `workflow`；team 已废弃 |
 | **纯 Rust 隔离** | PID + SQLite；tmux 已废弃 |
-| **配置驱动接入** | 新宿主目标 3 文件 / 1-2 人天 |
+| **配置驱动接入** | 新宿主 ≤ 1 天（5 文件：provider + AGENTS + docs + feature + registry） |
 | **Fail-closed** | 未知均默认拒绝 |
+| **函数指针注册表** | hooks 通过 OnceLock 函数指针注册（非 trait），82 个 slots |
+| **MCP 统一** | 4 个 MCP server 五宿主统一注册 |
+| **用户级配置** | MCP/hooks/settings 配置只放用户级（~/.config/），不在项目目录 |
 
-### 1.3 依赖关系约束
+### 1.3 依赖关系约束 (v6 DAG)
 
+```
+router-rs → runtime-core → host-projection → core-state
+                         → core-policy
+                         → routing-engine
+                         → framework-profile
+                         → codegraph-rs (optional feature)
+                         → browser-mcp (optional)
+```
+
+- host-projection 包含所有宿主 hooks 实现（从 runtime-core 迁出）
+- runtime-core 通过 re-export shim 向后兼容 `framework_kernel::hosts::*`
 - B0 core crates 不依赖 `router-rs`
 - host 特有逻辑禁止出现在 B0 core crates 中
-- cli 层与 hosts 层单向依赖（目标：hosts 不引用 cli）
 
 ---
 
@@ -208,15 +253,14 @@ rust_tools/ (9 crates, 16K LOC)
 
 | Crate | 功能 | 核心命令 |
 |-------|------|----------|
-| `citation_tool_rs` | BibTeX 引用审计/lint/渲染 | `audit`, `claim-lint`, `render`(APA/IEEE/ACM/GB/T7714) |
-| `financial_data_rs` | 金融数据获取（加密/美/港股） | `ohlcv`, `export`, `capital`, `validate` |
-| `gh_source_gate_rs` | GitHub PR 门控 | `inspect-pr-checks`, `fetch-comments`, `doctor` |
-| `image_gen_rs` | DALL-E 图像生成/编辑 | `generate`, `edit`, `generate-batch` |
-| `image_process_rs` | 图像处理 | `resize`, `crop`, `convert`, `enhance`, `watermark` |
-| `ooxml_parser_rs` | OOXML 解析（XLSX/DOCX/PPTX） | `xlsx`, `docx`, `render-xlsx`, `render-docx` |
-| `pptx_tool_rs` | PPT 全功能（大纲/QA/Office 检查） | `init`, `outline`, `render`, `qa`, `office` |
-| `pubmed_tool_rs` | PubMed API 客户端 | `search`, `fetch`, `fulltext` |
-| `screenshot_rs` | 跨平台截图 | `capture`, `list_windows`, `capture_region` |
+| `citation_tool_rs` | BibTeX 引用审计/lint/渲染 | `audit`, `claim-lint`, `render`(APA/IEEE/ACM/GB/T7714) | MCP: `mcp-citation` |
+| `financial_data_rs` | 金融数据获取（加密/美/港股） | `ohlcv`, `export`, `capital`, `validate` | MCP: `mcp-financial-data` |
+| `gh_source_gate_rs` | GitHub PR 门控 | `inspect-pr-checks`, `fetch-comments`, `doctor` | MCP: `mcp-gh-source-gate` |
+| `ooxml_parser_rs` | OOXML 解析（XLSX/DOCX/PPTX） | `xlsx`, `docx`, `render-xlsx`, `render-docx` | MCP: `mcp-ooxml` |
+| `pdf_tool_rs` | PDF 文本提取 | `pdf_read`, `pdf_info` | MCP: `mcp-pdf` |
+| `pptx_tool_rs` | PPT 全功能（大纲/QA/Office 检查） | `init`, `outline`, `render`, `qa`, `office` | MCP: `mcp-pptx` |
+
+> **已归档** (v6 §3.4)：`image_gen_rs`, `image_process_rs`, `pubmed_tool_rs`, `ref_corpus_tool_rs`, `screenshot_rs` — 无下游依赖，从 workspace 移除。
 
 ---
 
@@ -340,7 +384,15 @@ spawned → running → draining → completed
 
 **§3.5 Schema Drift 三道闸**：写盘前 validate → 写盘后 readback → manifest 路径存在性
 
-### 6.4 编译嵌入矩阵
+### 6.4 三档宿主能力 (v6)
+
+| 档位 | 宿主 | capabilities | session_supervisor | harness_capabilities |
+|------|------|-------------|-------------------|---------------------|
+| **S 档** | codex | 11 | codex_driver | 4 项 |
+| **A 档** | claude-code, cursor | 6 | mcp_bridge / unsupported | 4 项 |
+| **B 档** | opencode, antigravity | 5 | unsupported | 2 项 |
+
+### 6.5 编译嵌入矩阵
 
 | 宿主 | 嵌入内容 | 机制 |
 |------|----------|------|
