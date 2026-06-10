@@ -83,18 +83,25 @@ fn handle_request(request: &Value) -> Option<Value> {
     }
 }
 
+/// Maximum slides per single MCP request before pagination kicks in.
+const MAX_SLIDES_PER_REQUEST: u64 = 50;
+
 /// MCP tool definitions exposed by this server.
 pub fn tool_definitions() -> Vec<Value> {
     vec![
         json!({
             "name": "pptx_parse",
-            "description": "Parse a PowerPoint (.pptx) file and extract slide content. Returns structured data including slide text, tables, images, and metadata.",
+            "description": "Parse a PowerPoint (.pptx) file and extract slide content. Supports slide-range selection and pagination for large decks (max 50 slides per request).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
                         "description": "Absolute path to the .pptx file"
+                    },
+                    "slides": {
+                        "type": "string",
+                        "description": "Slide range: '1-5', '3', '1,3,7-10', or 'all' (default). 1-indexed."
                     },
                     "format": {
                         "type": "string",
@@ -126,12 +133,16 @@ fn tool_pptx_parse(args: &Value) -> Result<Value, anyhow::Error> {
         .get("format")
         .and_then(Value::as_str)
         .unwrap_or("text");
+    let slides_spec = args
+        .get("slides")
+        .and_then(Value::as_str)
+        .unwrap_or("all");
 
     let input = Path::new(path);
     let bundle = ZipBundle::from_path(input)?;
     let structure = extract_pptx_structure(&bundle, input, false, None)?;
 
-    let slide_count = structure
+    let total_slides = structure
         .get("slide_count")
         .and_then(Value::as_u64)
         .unwrap_or(0);
@@ -140,10 +151,38 @@ fn tool_pptx_parse(args: &Value) -> Result<Value, anyhow::Error> {
         .and_then(Value::as_str)
         .unwrap_or("unknown");
 
+    // Parse slide range
+    let requested_slides = parse_slide_range(slides_spec, total_slides)?;
+    let truncated_slides = requested_slides.len() as u64 > MAX_SLIDES_PER_REQUEST;
+    let effective_slides: Vec<u64> = if truncated_slides {
+        requested_slides[..MAX_SLIDES_PER_REQUEST as usize].to_vec()
+    } else {
+        requested_slides
+    };
+
+    // Filter structure to only include requested slides
+    let filtered_structure = filter_slides(&structure, &effective_slides);
+
     let text = match format {
-        "json" => serde_json::to_string_pretty(&structure)?,
-        "markdown" => format_structure_markdown(&structure),
-        _ => format_read_full_text(&structure),
+        "json" => serde_json::to_string_pretty(&filtered_structure)?,
+        "markdown" => format_structure_markdown(&filtered_structure),
+        _ => format_read_full_text(&filtered_structure),
+    };
+
+    let mut warnings = Vec::new();
+    if truncated_slides {
+        warnings.push(format!(
+            "pagination: showing slides {} of {} total (max {} per request)",
+            effective_slides.len(),
+            total_slides,
+            MAX_SLIDES_PER_REQUEST,
+        ));
+    }
+
+    let next_slide = if truncated_slides {
+        effective_slides.last().map(|s| s + 1)
+    } else {
+        None
     };
 
     Ok(json!({
@@ -154,10 +193,65 @@ fn tool_pptx_parse(args: &Value) -> Result<Value, anyhow::Error> {
         "metadata": {
             "path": path,
             "file": file_name,
-            "slide_count": slide_count,
+            "total_slides": total_slides,
+            "slides_requested": slides_spec,
+            "slides_extracted": effective_slides.len(),
             "format": format,
+            "truncated_slides": truncated_slides,
+            "next_slide": next_slide,
+            "warnings": warnings,
         }
     }))
+}
+
+/// Parse a slide range spec like "1-5", "3", "1,3,7-10", "all" into sorted unique slide numbers.
+fn parse_slide_range(spec: &str, total_slides: u64) -> Result<Vec<u64>, anyhow::Error> {
+    if spec == "all" || spec.is_empty() {
+        return Ok((1..=total_slides).collect());
+    }
+    let mut slides = Vec::new();
+    for part in spec.split(',') {
+        let part = part.trim();
+        if let Some((start, end)) = part.split_once('-') {
+            let start: u64 = start.trim().parse().map_err(|_| anyhow::anyhow!("Invalid slide range start: {start}"))?;
+            let end: u64 = end.trim().parse().map_err(|_| anyhow::anyhow!("Invalid slide range end: {end}"))?;
+            if start == 0 || end == 0 || start > end || end > total_slides {
+                return Err(anyhow::anyhow!("Slide range {start}-{end} out of bounds (total: {total_slides})"));
+            }
+            slides.extend(start..=end);
+        } else {
+            let slide: u64 = part.parse().map_err(|_| anyhow::anyhow!("Invalid slide number: {part}"))?;
+            if slide == 0 || slide > total_slides {
+                return Err(anyhow::anyhow!("Slide {slide} out of bounds (total: {total_slides})"));
+            }
+            slides.push(slide);
+        }
+    }
+    slides.sort();
+    slides.dedup();
+    if slides.is_empty() {
+        return Err(anyhow::anyhow!("No valid slides specified"));
+    }
+    Ok(slides)
+}
+
+/// Filter the PPTX structure JSON to only include slides with 1-based indices in the selection.
+fn filter_slides(structure: &Value, selected: &[u64]) -> Value {
+    let mut filtered = structure.clone();
+    if let Some(slides) = filtered.get_mut("slides").and_then(|s| s.as_array_mut()) {
+        slides.retain(|slide| {
+            let idx = slide.get("index").and_then(Value::as_u64).unwrap_or(0);
+            // index is 0-based, selected is 1-based
+            selected.contains(&(idx + 1))
+        });
+    }
+    // Update slide_count to reflect filtered count
+    if let Some(obj) = filtered.as_object_mut() {
+        if let Some(slides) = obj.get("slides").and_then(Value::as_array) {
+            obj.insert("slide_count".to_string(), json!(slides.len()));
+        }
+    }
+    filtered
 }
 
 /// Format structure as markdown with slide headings and bullet points.

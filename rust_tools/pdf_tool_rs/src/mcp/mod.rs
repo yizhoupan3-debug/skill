@@ -81,16 +81,20 @@ fn handle_request(request: &Value) -> Option<Value> {
     }
 }
 
+/// Maximum pages/slides per single MCP request before pagination kicks in.
+const MAX_PAGES_PER_REQUEST: u64 = 50;
+
 /// MCP tool definitions exposed by this server.
 pub fn tool_definitions() -> Vec<Value> {
     vec![
         json!({
             "name": "pdf_read",
-            "description": "Extract text content from a PDF file. Returns plain text with page count and metadata.",
+            "description": "Extract text content from a PDF file. Supports page-range selection and pagination for large documents (max 50 pages per request).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "path": {"type": "string", "description": "Absolute path to the PDF file"},
+                    "pages": {"type": "string", "description": "Page range: '1-5', '3', '1,3,7-10', or 'all' (default). 1-indexed."},
                     "max_chars": {"type": "integer", "description": "Maximum characters to extract (default 8000)", "default": 8000}
                 },
                 "required": ["path"]
@@ -130,26 +134,112 @@ fn tool_pdf_read(args: &Value) -> Result<Value, anyhow::Error> {
         .get("max_chars")
         .and_then(Value::as_u64)
         .unwrap_or(8000) as usize;
-    let opts = crate::read::ReadOptions {
-        max_chars,
-        text_out_dir: None,
+    let pages_spec = args
+        .get("pages")
+        .and_then(Value::as_str)
+        .unwrap_or("all");
+
+    let pdf_path = Path::new(path);
+    let total_pages = crate::read::page_count(pdf_path)? as u64;
+
+    // Parse page range
+    let requested_pages = parse_page_range(pages_spec, total_pages)?;
+    let truncated_pages = requested_pages.len() as u64 > MAX_PAGES_PER_REQUEST;
+    let effective_pages: Vec<u64> = if truncated_pages {
+        requested_pages[..MAX_PAGES_PER_REQUEST as usize].to_vec()
+    } else {
+        requested_pages
     };
-    let out = crate::read::read_pdf(Path::new(path), &opts)?;
+
+    // Extract text by pages using pdf-extract's per-page API
+    let all_pages = pdf_extract::extract_text_by_pages(pdf_path)
+        .map_err(|e| anyhow::anyhow!("PDF extraction error: {e:#}"))?;
+
+    let mut selected_text = String::new();
+    let mut pages_extracted = 0u64;
+    for &page_idx in &effective_pages {
+        // page_idx is 1-based, Vec is 0-based
+        if let Some(page_text) = all_pages.get((page_idx - 1) as usize) {
+            if !selected_text.is_empty() {
+                selected_text.push_str("\n\n--- Page {page_idx} ---\n\n");
+            }
+            selected_text.push_str(page_text);
+            pages_extracted += 1;
+        }
+    }
+
+    let char_count = selected_text.chars().count();
+    let truncated_chars = char_count > max_chars;
+    let text: String = selected_text.chars().take(max_chars).collect();
+
+    let mut warnings = Vec::new();
+    if truncated_pages {
+        warnings.push(format!(
+            "pagination: showing pages {} of {} total (max {} per request)",
+            effective_pages.len(),
+            total_pages,
+            MAX_PAGES_PER_REQUEST,
+        ));
+    }
+    if truncated_chars {
+        warnings.push("text_truncated_by_max_chars".to_string());
+    }
+
+    // Build pagination token if there are more pages
+    let next_page = if truncated_pages {
+        effective_pages.last().map(|p| p + 1)
+    } else {
+        None
+    };
+
     Ok(json!({
         "content": [{
             "type": "text",
-            "text": out.text,
+            "text": text,
         }],
         "metadata": {
             "path": path,
-            "sha256": out.file_sha256,
-            "page_count": out.page_count,
-            "content_class": out.content_class.as_str().to_string(),
-            "char_count": out.text.chars().count(),
-            "truncated": out.truncated,
-            "warnings": out.warnings,
+            "total_pages": total_pages,
+            "pages_requested": pages_spec,
+            "pages_extracted": pages_extracted,
+            "char_count": char_count,
+            "truncated_chars": truncated_chars,
+            "truncated_pages": truncated_pages,
+            "next_page": next_page,
+            "warnings": warnings,
         }
     }))
+}
+
+/// Parse a page range spec like "1-5", "3", "1,3,7-10", "all" into sorted unique page numbers.
+fn parse_page_range(spec: &str, total_pages: u64) -> Result<Vec<u64>, anyhow::Error> {
+    if spec == "all" || spec.is_empty() {
+        return Ok((1..=total_pages).collect());
+    }
+    let mut pages = Vec::new();
+    for part in spec.split(',') {
+        let part = part.trim();
+        if let Some((start, end)) = part.split_once('-') {
+            let start: u64 = start.trim().parse().map_err(|_| anyhow::anyhow!("Invalid page range start: {start}"))?;
+            let end: u64 = end.trim().parse().map_err(|_| anyhow::anyhow!("Invalid page range end: {end}"))?;
+            if start == 0 || end == 0 || start > end || end > total_pages {
+                return Err(anyhow::anyhow!("Page range {start}-{end} out of bounds (total: {total_pages})"));
+            }
+            pages.extend(start..=end);
+        } else {
+            let page: u64 = part.parse().map_err(|_| anyhow::anyhow!("Invalid page number: {part}"))?;
+            if page == 0 || page > total_pages {
+                return Err(anyhow::anyhow!("Page {page} out of bounds (total: {total_pages})"));
+            }
+            pages.push(page);
+        }
+    }
+    pages.sort();
+    pages.dedup();
+    if pages.is_empty() {
+        return Err(anyhow::anyhow!("No valid pages specified"));
+    }
+    Ok(pages)
 }
 
 fn tool_pdf_info(args: &Value) -> Result<Value, anyhow::Error> {
