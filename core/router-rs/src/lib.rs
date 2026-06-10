@@ -2,7 +2,7 @@
 #![allow(unused_variables, unused_mut)]
 
 // ── goal_drive (inline re-export from core-state) ──
-pub mod goal_drive {
+pub(crate) mod goal_drive {
     pub use core_state::state_manager::{
         framework_autopilot_goal, framework_goal_drive, GOAL_STATE_FILENAME,
         read_active_task_id, read_focus_task_id, read_primary_task_id,
@@ -10,65 +10,61 @@ pub mod goal_drive {
 }
 
 // ── Re-exports from runtime-core (B3 migration: single source of truth) ──
-pub use runtime_core::autopilot_goal;
-pub use runtime_core::background_state;
+// Only `cli` and `browser_mcp` are consumed externally (by router-rs-cli).
+// Everything else is pub(crate) — used only by this crate's tests (included via #[path]).
+pub(crate) use runtime_core::autopilot_goal;
+pub(crate) use runtime_core::background_state;
 pub use browser_mcp;
 pub use runtime_core::cli;
-pub use runtime_core::closeout_enforcement;
-pub use runtime_core::eval_route;
-pub use runtime_core::execution_contract;
-pub use runtime_core::formal_toolchain;
-pub use runtime_core::framework_host_targets;
-pub use runtime_core::framework_maint;
-pub use runtime_core::framework_profile;
-pub use runtime_core::framework_runtime;
-pub use runtime_core::framework_skills;
-pub use runtime_core::harness_context_signals;
-pub use runtime_core::harness_contract;
-pub use runtime_core::harness_operator_nudges;
-pub use runtime_core::hook_event_routing;
-pub use runtime_core::hook_observation_rules;
-pub use runtime_core::hook_outbound_protect;
-pub use runtime_core::hook_timing;
-pub use runtime_core::host_entrypoint_sync;
-pub use runtime_core::host_integration;
-pub use runtime_core::hosts;
-pub use runtime_core::kernel_bootstrap;
-pub use runtime_core::mcp_pre_guard;
-pub use runtime_core::paper_adversarial_hook;
-pub use runtime_core::paper_prose_hook;
-pub use runtime_core::review_gate;
-pub use runtime_core::rfv_loop;
-pub use runtime_core::route;
-pub use runtime_core::router_env_flags;
-pub use runtime_core::router_rs_observation;
-pub use runtime_core::router_self;
-pub use runtime_core::runtime_envelope_ids;
-pub use runtime_core::runtime_registry;
-pub use runtime_core::runtime_storage;
-pub use runtime_core::schema_drift;
-pub use runtime_core::session_call_tracker;
-pub use runtime_core::session_supervisor;
-pub use runtime_core::ship_readiness;
-pub use runtime_core::skill_repo;
-pub use runtime_core::stdio_payload_types;
-pub use runtime_core::stdio_transport;
-pub use runtime_core::task_command;
-pub use runtime_core::telemetry_emit;
-pub use runtime_core::trace_runtime;
-pub use runtime_core::web_fetch_guard;
+pub(crate) use runtime_core::closeout_enforcement;
+pub(crate) use runtime_core::eval_route;
+pub(crate) use runtime_core::execution_contract;
+pub(crate) use runtime_core::formal_toolchain;
+pub(crate) use runtime_core::framework_host_targets;
+pub(crate) use runtime_core::framework_maint;
+pub(crate) use runtime_core::framework_profile;
+pub(crate) use runtime_core::framework_runtime;
+pub(crate) use runtime_core::framework_skills;
+pub(crate) use runtime_core::harness_context_signals;
+pub(crate) use runtime_core::harness_contract;
+pub(crate) use runtime_core::harness_operator_nudges;
+pub(crate) use runtime_core::hook_event_routing;
+pub(crate) use runtime_core::hook_observation_rules;
+pub(crate) use runtime_core::hook_outbound_protect;
+pub(crate) use runtime_core::hook_timing;
+pub(crate) use runtime_core::host_entrypoint_sync;
+pub(crate) use runtime_core::host_integration;
+pub(crate) use runtime_core::hosts;
+pub(crate) use runtime_core::kernel_bootstrap;
+pub(crate) use runtime_core::mcp_pre_guard;
+pub(crate) use runtime_core::paper_adversarial_hook;
+pub(crate) use runtime_core::paper_prose_hook;
+pub(crate) use runtime_core::review_gate;
+pub(crate) use runtime_core::rfv_loop;
+pub(crate) use runtime_core::route;
+pub(crate) use runtime_core::router_env_flags;
+pub(crate) use runtime_core::router_rs_observation;
+pub(crate) use runtime_core::router_self;
+pub(crate) use runtime_core::runtime_envelope_ids;
+pub(crate) use runtime_core::runtime_registry;
+pub(crate) use runtime_core::runtime_storage;
+pub(crate) use runtime_core::schema_drift;
+pub(crate) use runtime_core::session_call_tracker;
+pub(crate) use runtime_core::session_supervisor;
+pub(crate) use runtime_core::ship_readiness;
+pub(crate) use runtime_core::skill_repo;
+pub(crate) use runtime_core::stdio_payload_types;
+pub(crate) use runtime_core::stdio_transport;
+pub(crate) use runtime_core::task_command;
+pub(crate) use runtime_core::telemetry_emit;
+pub(crate) use runtime_core::trace_runtime;
+pub(crate) use runtime_core::web_fetch_guard;
 
 // ── host submodule re-exports (for `crate::X` path compat) ──
-pub use runtime_core::hosts::mcp_stdio_harness;
-pub use runtime_core::hosts::claude_code_hooks;
-pub use runtime_core::hosts::codex_hooks;
-pub use runtime_core::hosts::cursor_hooks;
-
-// ── framework_host_integration compat alias ──
-pub mod framework_host_integration {
-    //! Install/sync CLI surface (`framework host-integration`); historical module name `host_integration`.
-    pub use crate::host_integration::*;
-}
+pub(crate) use runtime_core::hosts::mcp_stdio_harness;
+pub(crate) use runtime_core::hosts::claude_code_hooks;
+pub(crate) use runtime_core::hosts::codex_hooks;
+pub(crate) use runtime_core::hosts::cursor_hooks;
 
 // ── core-state re-exports (for pub(crate) compat) ──
 pub(crate) use runtime_core::task_state;
