@@ -737,7 +737,7 @@ static RESOLVE_REPO_ROOT_ARG: OnceLock<fn(Option<&Path>) -> Result<PathBuf, Stri
 static CURRENT_LOCAL_TIMESTAMP: OnceLock<fn() -> String> = OnceLock::new();
 static WRITE_FRAMEWORK_SESSION_ARTARTIFACTS: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
 static ROUTE_TASK_WITH_MANIFEST_FALLBACK: OnceLock<fn(&[routing_engine::route::SkillRecord], Option<&Path>, Option<&Path>, Option<&str>, &str, &str, bool, bool) -> Result<RouteDecision, String>> = OnceLock::new();
-static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<fn(&Path, Option<&str>, Option<&str>) -> Result<Value, String>> = OnceLock::new();
+static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>> = OnceLock::new();
 static BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD: OnceLock<fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value> = OnceLock::new();
 static APPEND_EVIDENCE_INDEX: OnceLock<fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<(), String>> = OnceLock::new();
 static HOOK_ACTION_FROM_OUTPUT: OnceLock<fn(&Value) -> &'static str> = OnceLock::new();
@@ -760,7 +760,7 @@ pub fn register_framework_runtime_extra(
     current_local_timestamp: fn() -> String,
     write_framework_session_artifacts: fn(Value) -> Result<Value, String>,
     route_task_with_manifest_fallback: fn(&[routing_engine::route::SkillRecord], Option<&Path>, Option<&Path>, Option<&str>, &str, &str, bool, bool) -> Result<RouteDecision, String>,
-    build_framework_runtime_snapshot_envelope: fn(&Path, Option<&str>, Option<&str>) -> Result<Value, String>,
+    build_framework_runtime_snapshot_envelope: fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>,
     build_automatic_continuity_checkpoint_payload: fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value,
     append_evidence_index: fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<(), String>,
     hook_action_from_output: fn(&Value) -> &'static str,
@@ -832,8 +832,8 @@ pub fn route_task_with_manifest_fallback(
         .unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
-pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path, task_id: Option<&str>, host_id: Option<&str>) -> Result<Value, String> {
-    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE.get().map(|f| f(repo_root, task_id, host_id)).unwrap_or_else(|| Err("hooks not registered".into()))
+pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path, artifact_root_override: Option<&Path>, task_id_override: Option<&str>) -> Result<Value, String> {
+    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE.get().map(|f| f(repo_root, artifact_root_override, task_id_override)).unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
 pub fn build_automatic_continuity_checkpoint_payload(

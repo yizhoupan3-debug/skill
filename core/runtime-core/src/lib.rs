@@ -142,13 +142,84 @@ pub fn register_routing_hooks() {
 }
 
 // ── host-projection hooks registration ──
-// TODO(v6-§2.3): Unify hooks.rs designs and implement registration.
-// For now, host-projection hooks use safe no-op defaults when unregistered.
+static HOST_PROJECTION_HOOKS_INIT: OnceLock<()> = OnceLock::new();
+
+/// Register host-projection hooks with runtime-core implementations.
+/// Safe to call multiple times; only the first call takes effect.
+pub fn register_host_projection_hooks() {
+    HOST_PROJECTION_HOOKS_INIT.get_or_init(|| {
+        // ── Agent 2 per-module registration ──
+        host_projection::hooks::register_framework_runtime(
+            framework_runtime::build_framework_contract_summary_envelope,
+            framework_runtime::try_append_post_tool_shell_evidence,
+            framework_runtime::closeout_programmatic_enforcement_enabled,
+            framework_runtime::closeout_record_path_for_task,
+            framework_runtime::evaluate_closeout_record_file_for_task,
+            framework_runtime::first_task_id_from_registry,
+            framework_runtime::framework_hook_evidence_append,
+            framework_runtime::extract_post_tool_duration_ms,
+            framework_runtime::post_tool_call_succeeded,
+            framework_runtime::closeout_stop_followup_for_completion_text,
+        );
+
+        host_projection::hooks::register_hook_timing(
+            hook_timing::mark_hook_start,
+            hook_timing::add_lock_wait_ms,
+            hook_timing::add_cargo_check_ms,
+            hook_timing::emit_hook_timing_line,
+        );
+
+        host_projection::hooks::register_telemetry(
+            telemetry_emit::emit_hook_fired,
+            telemetry_emit::emit_tool_call,
+            telemetry_emit::hook_action_from_optional_output,
+        );
+
+        host_projection::hooks::register_session_call_tracker(
+            session_call_tracker::init_tracker,
+            |_root, _name, _stats_json| Ok(()), // record_tool_call: callers always pass None
+            session_call_tracker::read_tracker_state,
+        );
+
+        host_projection::hooks::register_router_rs_observation(
+            |_output, _host| {},  // attach: no-op (runtime-core handles directly)
+            |_output| {},          // strip: no-op
+        );
+
+        host_projection::hooks::register_kernel_bootstrap(
+            kernel_bootstrap::ensure_kernel_bootstrap,
+        );
+
+        host_projection::hooks::register_paper_hooks(
+            |_root, _prompt, _lines, _host| {},  // append_prose
+            |_root, _output, _prompt, _followup| {},  // merge_prose
+            |_root, _prompt, _lines, _host| {},  // append_adversarial
+            |_root, _output, _prompt, _followup| {},  // merge_adversarial
+        );
+
+        // ── Agent 1 extra hooks (OnceLock-based) ──
+        host_projection::hooks::register_framework_runtime_extra(
+            framework_runtime::resolve_repo_root_arg,
+            framework_runtime::current_local_timestamp,
+            framework_runtime::write_framework_session_artifacts,
+            |_records, _runtime_path, _manifest_path, _host_id, _query, _session_id, _overlay, _first| {
+                Err("route_task_with_manifest_fallback: use routing-engine directly".into())
+            },
+            framework_runtime::build_framework_runtime_snapshot_envelope,
+            framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
+            framework_runtime::append_evidence_index_merged_row,
+            telemetry_emit::hook_action_from_output,
+            || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
+            session_call_tracker::check_anomalies,
+        );
+    });
+}
 
 /// Auto-initialize routing hooks at library load time.
 #[ctor::ctor]
 fn auto_init_routing_hooks() {
     register_routing_hooks();
+    register_host_projection_hooks();
 }
 
 // ── test helpers ──
