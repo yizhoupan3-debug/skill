@@ -1645,7 +1645,7 @@ fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), String> {
 
 /// Host directories that may contain hook-state subdirectories.
 const HOOK_STATE_HOST_DIRS: &[&str] = &[
-    ".claude", ".cursor", ".codex", ".antigravity", ".opencode",
+    ".claude", ".cursor", ".codex", ".gemini", ".opencode",
 ];
 
 /// Clean hook-state files older than TTL days across all host directories.
