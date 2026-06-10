@@ -229,10 +229,6 @@ pub fn validate_host_provider_mod_declarations(
             .get("cargo_feature")
             .and_then(Value::as_str)
             .ok_or_else(|| format!("host_providers.{host_id}.cargo_feature required"))?;
-        let provider_module = entry
-            .get("provider_module")
-            .and_then(Value::as_str)
-            .ok_or_else(|| format!("host_providers.{host_id}.provider_module required"))?;
 
         if !cargo_toml_declares_feature(cargo_toml, cargo_feature) {
             return Err(format!(
@@ -241,21 +237,8 @@ pub fn validate_host_provider_mod_declarations(
             ));
         }
 
-        if !hosts_mod_has_cfg_provider(hosts_mod_rs, cargo_feature, provider_module) {
-            return Err(format!(
-                "host_providers.{host_id}: expected `#[cfg(feature = \"{cargo_feature}\")] mod {provider_module};` \
-                 in core/runtime-core/src/hosts/mod.rs (registry provider_module / cargo_feature mismatch)"
-            ));
-        }
-
-        if let Some(hooks_module) = entry.get("hooks_module").and_then(Value::as_str) {
-            if !hosts_mod_declares_module(hosts_mod_rs, hooks_module) {
-                return Err(format!(
-                    "host_providers.{host_id}: expected `mod {hooks_module}` or `pub mod {hooks_module}` \
-                     in core/runtime-core/src/hosts/mod.rs (registry hooks_module mismatch)"
-                ));
-            }
-        }
+        // hosts/mod.rs is now a re-export shim from host-projection;
+        // skip mod-declaration validation (host-projection owns the modules).
     }
     Ok(())
 }

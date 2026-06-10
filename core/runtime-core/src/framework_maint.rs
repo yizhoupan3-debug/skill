@@ -1618,97 +1618,110 @@ fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), String> {
     Ok(())
 }
 
-/// Clean hook-state files older than TTL days.
+/// Host directories that may contain hook-state subdirectories.
+const HOOK_STATE_HOST_DIRS: &[&str] = &[
+    ".claude", ".cursor", ".codex", ".antigravity", ".opencode",
+];
+
+/// Clean hook-state files older than TTL days across all host directories.
 fn clean_hook_state_files(repo_root: &Path, dry_run: bool, ttl_days: u64) -> Result<(), String> {
-    let hook_state_dir = repo_root.join(".cursor").join("hook-state");
-
-    if !hook_state_dir.is_dir() {
-        println!("No .cursor/hook-state directory found. Nothing to clean.");
-        return Ok(());
-    }
-
     let cutoff = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_secs()
         .saturating_sub(ttl_days * 24 * 60 * 60);
 
-    let mut files_to_clean: Vec<(std::path::PathBuf, u64)> = Vec::new();
-    let mut kept: usize = 0;
+    let mut total_cleaned: usize = 0;
+    let mut total_kept: usize = 0;
 
-    let entries = fs::read_dir(&hook_state_dir).map_err(|e| e.to_string())?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
+    for host_dir in HOOK_STATE_HOST_DIRS {
+        let hook_state_dir = repo_root.join(host_dir).join("hook-state");
+        if !hook_state_dir.is_dir() {
             continue;
         }
 
-        let name = match path.file_name().and_then(|n| n.to_str()) {
-            Some(n) => n,
-            None => continue,
-        };
+        let mut files_to_clean: Vec<(std::path::PathBuf, u64)> = Vec::new();
+        let mut kept: usize = 0;
 
-        // Only clean review-subagent-*.json and session-terminals-*.json files
-        let is_target = name.starts_with("review-subagent-")
-            || name.starts_with("session-terminals-")
-            || name.starts_with("adversarial-loop-")
-            || name.starts_with(".tmp-");
+        let entries = fs::read_dir(&hook_state_dir).map_err(|e| e.to_string())?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
 
-        if !is_target {
-            kept += 1;
-            continue;
-        }
+            let name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n,
+                None => continue,
+            };
 
-        let mtime = fs::metadata(&path)
-            .and_then(|m| m.modified())
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
+            let is_target = name.starts_with("review-subagent-")
+                || name.starts_with("session-terminals-")
+                || name.starts_with("adversarial-loop-")
+                || name.starts_with(".tmp-");
 
-        if mtime < cutoff {
-            files_to_clean.push((path, mtime));
-        } else {
-            kept += 1;
-        }
-    }
+            if !is_target {
+                kept += 1;
+                continue;
+            }
 
-    if files_to_clean.is_empty() {
-        println!(
-            "No hook-state files older than {} days. {} files kept.",
-            ttl_days, kept
-        );
-        return Ok(());
-    }
+            let mtime = fs::metadata(&path)
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
 
-    println!(
-        "Found {} hook-state file(s) older than {} days ({} kept):",
-        files_to_clean.len(),
-        ttl_days,
-        kept
-    );
-
-    for (path, mtime) in &files_to_clean {
-        let age_days = (std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            - mtime)
-            / 86400;
-        println!("  - {} ({} days old)", path.display(), age_days);
-    }
-
-    if dry_run {
-        println!("\nDry-run mode: no files were deleted.");
-        println!("To actually delete: run without --dry-run");
-    } else {
-        println!("\nDeleting {} file(s)...", files_to_clean.len());
-        for (path, _) in &files_to_clean {
-            if let Err(e) = fs::remove_file(path) {
-                eprintln!("  Failed to delete {}: {}", path.display(), e);
+            if mtime < cutoff {
+                files_to_clean.push((path, mtime));
+            } else {
+                kept += 1;
             }
         }
-        println!("Done. {} file(s) deleted.", files_to_clean.len());
+
+        if files_to_clean.is_empty() {
+            total_kept += kept;
+            continue;
+        }
+
+        println!(
+            "[{host_dir}] Found {} hook-state file(s) older than {} days ({} kept):",
+            files_to_clean.len(),
+            ttl_days,
+            kept
+        );
+
+        for (path, mtime) in &files_to_clean {
+            let age_days = (std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                - mtime)
+                / 86400;
+            println!("  - {} ({} days old)", path.display(), age_days);
+        }
+
+        if !dry_run {
+            for (path, _) in &files_to_clean {
+                if let Err(e) = fs::remove_file(path) {
+                    eprintln!("  Failed to delete {}: {}", path.display(), e);
+                }
+            }
+        }
+
+        total_cleaned += files_to_clean.len();
+        total_kept += kept;
+    }
+
+    if total_cleaned == 0 {
+        println!(
+            "No hook-state files older than {} days across all host dirs. {} files kept.",
+            ttl_days, total_kept
+        );
+    } else if dry_run {
+        println!("\nDry-run mode: {total_cleaned} file(s) would be deleted ({total_kept} kept).");
+    } else {
+        println!("Done. {total_cleaned} hook-state file(s) deleted ({total_kept} kept).");
     }
 
     Ok(())
