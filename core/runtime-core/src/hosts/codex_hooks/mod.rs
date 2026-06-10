@@ -2924,7 +2924,7 @@ mod tests {
             run_codex_review_subagent_gate(repo, payload)
         }
 
-        const TEST_COMPACT_FINDING: &str = "[P1] core/router-rs/src/hosts/codex_hooks/mod.rs:1 — wave-2 compact gate clear evidence line";
+        const TEST_COMPACT_FINDING: &str = "[P1] core/runtime-core/src/hosts/codex_hooks/mod.rs:1 — wave-2 compact gate clear evidence line";
 
         #[test]
         fn operator_inject_off_skips_session_start_additional_context() {

@@ -43,7 +43,6 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
     "target",
 ];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
-const FRAMEWORK_PROJECTION_DESKTOP_MANIFEST_NAME: &str = ".framework-projection-desktop.json";
 const FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME: &str = ".framework-projection-antigravity.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
 const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 9] = [

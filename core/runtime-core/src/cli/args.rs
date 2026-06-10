@@ -5,10 +5,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::PathBuf;
 
-fn default_true() -> bool {
-    true
-}
-
 #[derive(Subcommand, Debug, Clone)]
 pub enum RouterCommand {
     Route(RouteCommand),

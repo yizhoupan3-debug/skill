@@ -805,7 +805,7 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         &exe,
         &repo_root,
         "Stop",
-        r#"{"hook_event_name":"Stop","session_id":"verify-compact-only","prompt":"继续","response":"[P1] core/router-rs/src/hosts/codex_hooks/mod.rs:1 — verify-codex-hooks wave-2 compact must not clear without PostTool evidence"}"#,
+        r#"{"hook_event_name":"Stop","session_id":"verify-compact-only","prompt":"继续","response":"[P1] core/runtime-core/src/hosts/codex_hooks/mod.rs:1 — verify-codex-hooks wave-2 compact must not clear without PostTool evidence"}"#,
         |stdout| {
             if !stdout.contains("CODEX_REVIEW_GATE incomplete") {
                 return Err(format!(

@@ -253,7 +253,7 @@ Out of scope: tests/
             "[P2] 见上文"
         ));
         assert!(assistant_has_substantive_compact_review_finding_line(
-            "[P1] core/router-rs/src/cursor_hooks/handlers.rs:3000 — issue"
+            "[P1] core/runtime-core/src/hosts/cursor_hooks/handlers.rs:3000 — issue"
         ));
         assert!(!assistant_has_substantive_compact_review_finding_line(
             "[P0] a\n[P1] b"

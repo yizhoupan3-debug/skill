@@ -60,33 +60,6 @@ pub fn source_traceable_heuristic(s: &str) -> bool {
     false
 }
 
-fn validate_source_list_traceable(
-    sources: &[Value],
-    ctx: &str,
-    min_len: usize,
-    err_label: &str,
-) -> Result<(), String> {
-    if sources.len() < min_len {
-        return Err(format!(
-            "external_research strict: {ctx} `{err_label}` must have at least {min_len} entries, got {}",
-            sources.len()
-        ));
-    }
-    for (j, sv) in sources.iter().enumerate() {
-        let Some(s) = sv.as_str() else {
-            return Err(format!(
-                "external_research strict: {ctx} `{err_label}[{j}]` must be string"
-            ));
-        };
-        if !source_traceable_heuristic(s) {
-            return Err(format!(
-                "external_research strict: {ctx} `{err_label}[{j}]` not traceable: {s:?}"
-            ));
-        }
-    }
-    Ok(())
-}
-
 fn external_research_strict_from_loaded_state(obj: &Map<String, Value>) -> bool {
     match obj.get("external_research_strict") {
         Some(Value::Bool(b)) => *b,
