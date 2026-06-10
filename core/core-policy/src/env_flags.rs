@@ -106,7 +106,19 @@ pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
     REVIEW_GATE_DISABLE_BY_HOST
         .iter()
         .find(|(id, _)| *id == host_id)
-        .map(|(_, env)| env_enabled_default_false(env))
+        .map(|(_, env)| {
+            let disabled = env_enabled_default_false(env);
+            if disabled {
+                static WARNED: std::sync::Once = std::sync::Once::new();
+                WARNED.call_once(|| {
+                    eprintln!(
+                        "[router-rs] deprecate: {env} is a legacy per-host env var; \
+                         use ROUTER_RS_REVIEW_GATE_DISABLE=1 to disable for all hosts"
+                    );
+                });
+            }
+            disabled
+        })
         .unwrap_or(false)
 }
 
