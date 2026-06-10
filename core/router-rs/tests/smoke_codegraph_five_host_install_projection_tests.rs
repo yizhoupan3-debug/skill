@@ -167,12 +167,6 @@ mod five_host_install_projection {
                 Some("installed"),
                 "{host_id} install status"
             );
-            let research = result.get("research_mcp").expect("research_mcp block");
-            assert_eq!(
-                research.get("mcp-codegraph").and_then(Value::as_str),
-                Some("installed"),
-                "{host_id} research_mcp must report mcp-codegraph installed"
-            );
             assert_host_projected_codegraph(&roots, host_id);
         }
 

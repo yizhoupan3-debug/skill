@@ -43,6 +43,7 @@ default = [
     "host-opencode",
     "host-antigravity",
     "host-codex",
+    "codegraph",
 ]
 host-cursor = []
 host-claude-code = []
