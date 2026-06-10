@@ -148,7 +148,7 @@ static HOST_PROJECTION_HOOKS_INIT: OnceLock<()> = OnceLock::new();
 /// Safe to call multiple times; only the first call takes effect.
 pub fn register_host_projection_hooks() {
     HOST_PROJECTION_HOOKS_INIT.get_or_init(|| {
-        // ── Agent 2 per-module registration ──
+        // ── per-module registration ──
         host_projection::hooks::register_framework_runtime(
             framework_runtime::build_framework_contract_summary_envelope,
             framework_runtime::try_append_post_tool_shell_evidence,
@@ -197,7 +197,7 @@ pub fn register_host_projection_hooks() {
             |_root, _output, _prompt, _followup| {},  // merge_adversarial
         );
 
-        // ── Agent 1 extra hooks (OnceLock-based) ──
+        // ── extra hooks (runtime, web fetch, mcp guard, env flags) ──
         host_projection::hooks::register_framework_runtime_extra(
             framework_runtime::resolve_repo_root_arg,
             framework_runtime::current_local_timestamp,
