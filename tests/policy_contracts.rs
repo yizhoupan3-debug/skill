@@ -2461,20 +2461,6 @@ fn prompt_policy_is_rust_owned() {
 }
 
 #[test]
-fn screenshot_skill_uses_workspace_rust_binary_entrypoint() {
-    let skill_doc = read_text(&project_root().join("skills/screenshot/SKILL.md"));
-    let reference_doc =
-        read_text(&project_root().join("skills/screenshot/references/os_commands.md"));
-    let manifest = read_text(&project_root().join("rust_tools/screenshot_rs/Cargo.toml"));
-    assert!(manifest.contains("[[bin]]\nname = \"screenshot\""));
-    assert!(!manifest.contains("[[bin]]\nname = \"screenshot_rs\""));
-    assert!(skill_doc.contains("rust_tools/Cargo.toml --release --bin screenshot"));
-    assert!(reference_doc.contains("rust_tools/Cargo.toml --release --bin screenshot"));
-    assert!(!skill_doc.contains("rust_tools/screenshot_rs/Cargo.toml --release"));
-    assert!(!reference_doc.contains("rust_tools/screenshot_rs/Cargo.toml --release"));
-}
-
-#[test]
 fn openai_proxy_config_does_not_commit_plaintext_api_keys() {
     let proxy_root = project_root().join("openai_proxy");
     if !proxy_root.join("config.yaml").is_file() {

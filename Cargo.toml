@@ -33,14 +33,9 @@ members = [
     "rust_tools/citation_tool_rs",
     "rust_tools/financial_data_rs",
     "rust_tools/gh_source_gate_rs",
-    "rust_tools/image_gen_rs",
-    "rust_tools/image_process_rs",
     "rust_tools/ooxml_parser_rs",
     "rust_tools/pdf_tool_rs",
-    "rust_tools/ref_corpus_tool_rs",
-    "rust_tools/pptx_tool_rs",
-    "rust_tools/pubmed_tool_rs",
-    "rust_tools/screenshot_rs"
+    "rust_tools/pptx_tool_rs"
 ]
 exclude = [
     "codex-aggregator"

@@ -35,20 +35,6 @@ fn financial_data_rejects_adjusted_stooq() {
 }
 
 #[test]
-fn image_generated_rust_cli_is_workspace_member() {
-    let manifest = read_text(&project_root().join("rust_tools/Cargo.toml"));
-    assert!(manifest.contains(r#""image_gen_rs""#));
-}
-
-#[test]
-fn image_generated_skill_docs_point_to_rust_cli_only() {
-    let docs = collect_text_under(&project_root().join("skills/image-generated"), "md");
-    assert!(docs.contains("rust_tools/image_gen_rs"));
-    assert!(!docs.contains("scripts/image_gen.py"));
-    assert!(!docs.contains("python \"$IMAGE_GEN\""));
-}
-
-#[test]
 fn update_audit_cli_contract_is_registered() {
     let args = read_text(&project_root().join("core/runtime-core/src/cli/args.rs"));
     let maint = read_text(&project_root().join("core/runtime-core/src/framework_maint.rs"));
@@ -160,132 +146,9 @@ fn update_audit_runs_on_plain_git_repo_and_preserves_status_columns() {
     );
 }
 
-#[test]
-fn image_generated_generate_dry_run_emits_openai_images_payload() {
-    let result = run_image_generated_ok(&[
-        "generate",
-        "--prompt",
-        "red square",
-        "--use-case",
-        "infographic-diagram",
-        "--dry-run",
-    ]);
-    let payload: Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert_eq!(
-        payload["endpoint"],
-        "https://api.openai.com/v1/images/generations"
-    );
-    assert_eq!(payload["model"], "dall-e-3");
-    assert_eq!(payload["n"], 1);
-    assert_eq!(payload["size"], "1024x1024");
-    assert_eq!(payload["quality"], "auto");
-    assert_eq!(payload["response_format"], "b64_json");
-    let prompt = payload["prompt"].as_str().unwrap();
-    assert!(prompt.starts_with("Use case: infographic-diagram"));
-    assert!(prompt.contains("Primary request: red square"));
-    let outputs = payload["outputs"].as_array().unwrap();
-    assert_eq!(outputs.len(), 1);
-    assert!(outputs[0].as_str().unwrap().ends_with("output.png"));
-}
-
-#[test]
-fn image_generated_batch_dry_run_has_single_out_dir_flag() {
-    let tmp = tempdir().unwrap();
-    let prompts = tmp.path().join("prompts.jsonl");
-    std::fs::write(
-        &prompts,
-        "{\"prompt\":\"red square\",\"out\":\"red.png\"}\nblue circle\n",
-    )
-    .unwrap();
-    let result = run_image_generated_ok(&[
-        "generate-batch",
-        "--input",
-        prompts.to_str().unwrap(),
-        "--out-dir",
-        tmp.path().join("out").to_str().unwrap(),
-        "--dry-run",
-    ]);
-    let payloads = parse_concatenated_json(&String::from_utf8_lossy(&result.stdout));
-    assert_eq!(payloads.len(), 2);
-    assert!(payloads[0]["outputs"][0]
-        .as_str()
-        .unwrap()
-        .ends_with("/out/red.png"));
-    assert!(payloads[1]["outputs"][0]
-        .as_str()
-        .unwrap()
-        .ends_with("/out/002-blue-circle.png"));
-}
-
-#[test]
-fn image_generated_dry_run_does_not_create_output_dirs() {
-    let tmp = tempdir().unwrap();
-    let out_dir = tmp.path().join("preview-only");
-    run_image_generated_ok(&[
-        "generate",
-        "--prompt",
-        "preview",
-        "--out-dir",
-        out_dir.to_str().unwrap(),
-        "--dry-run",
-    ]);
-    assert!(!out_dir.exists());
-}
-
-#[test]
-fn image_generated_rejects_invalid_output_compression() {
-    let result = run_image_generated_error(&[
-        "generate",
-        "--prompt",
-        "red square",
-        "--output-compression",
-        "101",
-        "--dry-run",
-    ]);
-    assert!(!result.status.success());
-    assert!(String::from_utf8_lossy(&result.stderr)
-        .contains("output-compression must be between 0 and 100"));
-}
-
-#[test]
-fn image_generated_batch_slugs_non_ascii_prompts() {
-    let tmp = tempdir().unwrap();
-    let prompts = tmp.path().join("prompts.jsonl");
-    std::fs::write(&prompts, "一只猫\n").unwrap();
-    let result = run_image_generated_ok(&[
-        "generate-batch",
-        "--input",
-        prompts.to_str().unwrap(),
-        "--out-dir",
-        tmp.path().join("out").to_str().unwrap(),
-        "--dry-run",
-    ]);
-    let payload: Value = serde_json::from_slice(&result.stdout).unwrap();
-    assert!(payload["outputs"][0]
-        .as_str()
-        .unwrap()
-        .ends_with("/out/001-image.png"));
-}
-
 fn run_financial_data_error(args: &[&str]) -> Output {
     run(cargo_manifest_command(
         &project_root().join("rust_tools/financial_data_rs/Cargo.toml"),
-        args,
-    ))
-}
-
-fn run_image_generated_ok(args: &[&str]) -> Output {
-    let output = run(cargo_manifest_command(
-        &project_root().join("rust_tools/image_gen_rs/Cargo.toml"),
-        args,
-    ));
-    common::assert_success(&output);
-    output
-}
-
-fn run_image_generated_error(args: &[&str]) -> Output {
-    run(cargo_manifest_command(
-        &project_root().join("rust_tools/image_gen_rs/Cargo.toml"),
         args,
     ))
 }
