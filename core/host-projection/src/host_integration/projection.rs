@@ -709,12 +709,12 @@ pub fn install_projection_tool(
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
     let effective_scope = projection_scope_for_tool(tool, scope)?;
     let mut out = (adapter.install)(roots, effective_scope)?;
-    // Codex needs project-level config (no user-level config path); other hosts
-    // use their own user-level MCP config, so we no longer write project .mcp.json.
-    let codex_mcp_changed = ensure_codex_research_mcp_toml(roots)?;
+    // Write project-level .mcp.json (Claude Code) + .codex/config.toml (Codex).
+    // .mcp.json is gitignored and shared across hosts; codex has no user-level config path.
+    let research_mcp_changed = ensure_research_mcp_five_host_surfaces(roots)?;
     if let Some(obj) = out.as_object_mut() {
         let prior = obj.get("changed").and_then(Value::as_bool).unwrap_or(false);
-        obj.insert("changed".to_string(), json!(prior || codex_mcp_changed));
+        obj.insert("changed".to_string(), json!(prior || research_mcp_changed));
     }
     Ok(out)
 }

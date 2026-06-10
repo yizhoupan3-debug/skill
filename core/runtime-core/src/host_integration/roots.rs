@@ -302,7 +302,13 @@ pub fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
     let meta: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
     let td = meta.get("target_directory")?.as_str()?;
     let base = PathBuf::from(td);
-    for tail in ["release/router-rs", "debug/router-rs"] {
+    // Prefer router-rs-cli (actual binary); fall back to router-rs (may be redirect shim).
+    for tail in [
+        "release/router-rs-cli",
+        "debug/router-rs-cli",
+        "release/router-rs",
+        "debug/router-rs",
+    ] {
         let candidate = base.join(tail);
         if candidate.is_file() {
             return Some(candidate);

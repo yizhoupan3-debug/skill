@@ -174,18 +174,24 @@ fn maint_skip_user_projection() -> bool {
     std::env::var_os("ROUTER_RS_MAINT_SKIP_USER_PROJECTION").is_some()
 }
 
+/// Install scopes per tool. Cursor is user-only; most tools default to project-only.
+/// Claude has a special case: project+user unless `ROUTER_RS_MAINT_SKIP_USER_PROJECTION` is set.
+const INSTALL_SCOPES_BY_TOOL: &[(&str, &[&str])] = &[
+    ("cursor", &["user"]),
+];
+
 fn projection_install_scopes_for_tool(tool: &str) -> Vec<&'static str> {
-    match tool {
-        "cursor" => vec!["user"],
-        "claude" => {
-            if maint_skip_user_projection() {
-                vec!["project"]
-            } else {
-                vec!["project", "user"]
-            }
-        }
-        _ => vec!["project"],
+    if let Some((_, scopes)) = INSTALL_SCOPES_BY_TOOL.iter().find(|(t, _)| *t == tool) {
+        return scopes.to_vec();
     }
+    if tool == "claude" {
+        return if maint_skip_user_projection() {
+            vec!["project"]
+        } else {
+            vec!["project", "user"]
+        };
+    }
+    vec!["project"]
 }
 
 fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String> {
