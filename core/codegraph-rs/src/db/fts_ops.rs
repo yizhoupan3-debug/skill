@@ -12,7 +12,15 @@ pub fn search_symbols(
     if trimmed.is_empty() {
         return Ok(Vec::new());
     }
-    let fts_query = format!("\"{}\"*", trimmed.replace('"', "\"\""));
+    // Strip FTS5 special operators to prevent query injection: + - * ^ " ( ) :
+    let sanitized: String = trimmed
+        .chars()
+        .filter(|c| !matches!(c, '+' | '-' | '*' | '^' | '"' | '(' | ')' | ':'))
+        .collect();
+    if sanitized.is_empty() {
+        return Ok(Vec::new());
+    }
+    let fts_query = format!("\"{sanitized}\"*");
     let mut stmt = conn.prepare(
         r#"
         SELECT n.id, n.symbol, n.kind, n.language, n.file_path, n.line
@@ -55,9 +63,11 @@ fn search_symbols_like(
     language: Option<&str>,
     limit: usize,
 ) -> rusqlite::Result<Vec<Node>> {
-    let like = format!("%{query}%");
+    // Escape LIKE wildcards % and _ to prevent injection
+    let escaped = query.replace('%', "\\%").replace('_', "\\_");
+    let like = format!("%{escaped}%");
     let mut stmt = conn.prepare(
-        "SELECT id, symbol, kind, language, file_path, line FROM nodes WHERE symbol LIKE ?1 ORDER BY symbol LIMIT ?2",
+        "SELECT id, symbol, kind, language, file_path, line FROM nodes WHERE symbol LIKE ?1 ESCAPE '\\' ORDER BY symbol LIMIT ?2",
     )?;
     let rows = stmt.query_map(params![like, (limit * 4) as i64], row_to_node)?;
     let mut out = Vec::new();

@@ -51,25 +51,25 @@ fn collect_symbols(node: Node<'_>, source: &[u8], out: &mut Vec<ParsedSymbol>) {
 fn collect_calls(
     node: Node<'_>,
     source: &[u8],
-    symbols: &[ParsedSymbol],
+    _symbols: &[ParsedSymbol],
     edges: &mut Vec<ParsedEdge>,
 ) {
     if node.kind() == "call_expression" {
         if let Some(func) = node.child_by_field_name("function") {
-            if let Some(callee) = callee_name(func, source) {
-                if let Some(caller) = symbols.first().map(|s| s.symbol.clone()) {
-                    edges.push(ParsedEdge {
-                        caller_symbol: caller,
-                        callee_symbol: callee,
-                        line: node.start_position().row as u32 + 1,
-                    });
-                }
+            if let (Some(caller), Some(callee)) =
+                (enclosing_symbol(node, source), callee_name(func, source))
+            {
+                edges.push(ParsedEdge {
+                    caller_symbol: caller,
+                    callee_symbol: callee,
+                    line: node.start_position().row as u32 + 1,
+                });
             }
         }
     }
     for i in 0..node.named_child_count() {
         if let Some(child) = node.named_child(i) {
-            collect_calls(child, source, symbols, edges);
+            collect_calls(child, source, _symbols, edges);
         }
     }
 }
@@ -82,4 +82,23 @@ fn callee_name(node: Node<'_>, source: &[u8]) -> Option<String> {
             .and_then(|n| n.utf8_text(source).ok().map(|s| s.to_string())),
         _ => None,
     }
+}
+
+/// Walk up the AST to find the nearest enclosing function/method declaration.
+fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
+    let mut current = node.parent();
+    while let Some(ancestor) = current {
+        match ancestor.kind() {
+            "function_declaration" | "method_declaration" => {
+                if let Some(name) = ancestor.child_by_field_name("name") {
+                    if let Ok(text) = name.utf8_text(source) {
+                        return Some(text.to_string());
+                    }
+                }
+            }
+            _ => {}
+        }
+        current = ancestor.parent();
+    }
+    None
 }
