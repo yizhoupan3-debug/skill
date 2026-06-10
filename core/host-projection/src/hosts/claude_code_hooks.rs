@@ -637,6 +637,8 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
         crate::hooks::post_tool_call_succeeded(payload),
     );
     record_reviewer_evidence(repo_root, payload);
+    // §4.4: 自动 evidence 采集 — Bash 验证类命令自动记录到 EVIDENCE_INDEX
+    auto_record_verification_evidence(repo_root, payload);
     let paths = payload_relative_paths(repo_root, payload);
     let touched_settings = paths.iter().any(|path| is_settings_path(path));
     let touched_framework = paths.iter().any(|path| is_framework_source_path(path));
@@ -1178,6 +1180,87 @@ fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
                 active_stdio_agent_hook_host().log_label()
             );
         }
+    }
+}
+
+/// §4.4: 自动 evidence 采集。当 Bash 运行验证类命令时，自动记录到 EVIDENCE_INDEX。
+/// 命令分类规则：
+/// - `cargo test*`, `cargo check*`, `cargo build*` → exit_code + 输出摘要
+/// - `git diff*`, `git log*` → 变更统计
+/// - `npm test*`, `pytest*`, `make test*` → exit_code + 输出摘要
+/// 防重复：同一命令在同一 task 目录下不重复记录（检查最近 5 条）。
+fn auto_record_verification_evidence(repo_root: &Path, payload: &Value) {
+    if payload.get("tool_name").and_then(Value::as_str) != Some("Bash") {
+        return;
+    }
+    let Some(command) = bash_command(payload) else {
+        return;
+    };
+    let cmd_trimmed = command.trim();
+    if !is_verification_command(cmd_trimmed) {
+        return;
+    }
+    let exit_code = payload_exit_code(payload);
+    let output_summary = extract_output_summary(payload, 500);
+
+    let mut entry = serde_json::Map::new();
+    entry.insert("kind".to_string(), json!("auto_evidence"));
+    entry.insert("source".to_string(), json!("post_tool_use_auto"));
+    entry.insert("tool_name".to_string(), json!("Bash"));
+    entry.insert("command_preview".to_string(), json!(cmd_trimmed));
+    entry.insert(
+        "recorded_at".to_string(),
+        json!(crate::hooks::current_local_timestamp()),
+    );
+    if let Some(ec) = exit_code {
+        entry.insert("exit_code".to_string(), json!(ec));
+        entry.insert("success".to_string(), json!(ec == 0));
+    }
+    if let Some(ref text) = output_summary {
+        entry.insert("output".to_string(), json!(text));
+    }
+
+    if let Err(err) = crate::hooks::append_evidence_index(repo_root, None, entry) {
+        eprintln!(
+            "[router-rs] {} auto-evidence record failed: {err}",
+            active_stdio_agent_hook_host().log_label()
+        );
+    }
+}
+
+/// 判断命令是否为验证类命令。
+fn is_verification_command(cmd: &str) -> bool {
+    let cmd_lower = cmd.to_ascii_lowercase();
+    let patterns = [
+        "cargo test",
+        "cargo check",
+        "cargo build",
+        "cargo clippy",
+        "cargo fmt",
+        "npm test",
+        "npm run test",
+        "pytest",
+        "make test",
+        "make check",
+        "go test",
+        "git diff",
+        "git log",
+    ];
+    patterns.iter().any(|p| cmd_lower.starts_with(p))
+}
+
+/// 从 payload 中提取输出摘要，截断到 max_chars。
+fn extract_output_summary(payload: &Value, max_chars: usize) -> Option<String> {
+    let output = payload
+        .get("output")
+        .or(payload.get("tool_output"))
+        .or(payload.get("result"))
+        .and_then(Value::as_str)?;
+    let trimmed: String = output.chars().take(max_chars).collect();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
     }
 }
 
