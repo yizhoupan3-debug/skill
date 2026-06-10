@@ -191,10 +191,28 @@ pub fn register_host_projection_hooks() {
         );
 
         host_projection::hooks::register_paper_hooks(
-            |_root, _prompt, _lines, _host| {},  // append_prose
-            |_root, _output, _prompt, _followup| {},  // merge_prose
-            |_root, _prompt, _lines, _host| {},  // append_adversarial
-            |_root, _output, _prompt, _followup| {},  // merge_adversarial
+            |root, prompt, lines, host| {
+                let h = match host {
+                    host_projection::hooks::PaperProseHookHost::Cursor => paper_prose_hook::PaperProseHookHost::Cursor,
+                    host_projection::hooks::PaperProseHookHost::Codex => paper_prose_hook::PaperProseHookHost::Codex,
+                    host_projection::hooks::PaperProseHookHost::Claude => paper_prose_hook::PaperProseHookHost::Claude,
+                };
+                paper_prose_hook::maybe_append_paper_prose_context(root, prompt, lines, h)
+            },
+            |root, output, prompt, followup| {
+                paper_prose_hook::maybe_merge_paper_prose_before_submit(root, output, prompt, followup)
+            },
+            |root, prompt, lines, host| {
+                let h = match host {
+                    host_projection::hooks::PaperProseHookHost::Cursor => paper_prose_hook::PaperProseHookHost::Cursor,
+                    host_projection::hooks::PaperProseHookHost::Codex => paper_prose_hook::PaperProseHookHost::Codex,
+                    host_projection::hooks::PaperProseHookHost::Claude => paper_prose_hook::PaperProseHookHost::Claude,
+                };
+                paper_adversarial_hook::maybe_append_paper_adversarial_context(root, prompt, lines, h)
+            },
+            |root, output, prompt, followup| {
+                paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(root, output, prompt, followup)
+            },
         );
 
         // ── extra hooks (runtime, web fetch, mcp guard, env flags) ──
@@ -202,8 +220,14 @@ pub fn register_host_projection_hooks() {
             framework_runtime::resolve_repo_root_arg,
             framework_runtime::current_local_timestamp,
             framework_runtime::write_framework_session_artifacts,
-            |_records, _runtime_path, _manifest_path, _host_id, _query, _session_id, _overlay, _first| {
-                Err("route_task_with_manifest_fallback: use routing-engine directly".into())
+            |records, runtime_path, manifest_path, host_id, query, session_id, allow_overlay, first_turn| {
+                framework_runtime::route_task_with_manifest_fallback(records, runtime_path, manifest_path, host_id, query, session_id, allow_overlay, first_turn)
+                    .map(|d| host_projection::hooks::RouteDecision {
+                        selected_skill: d.selected_skill,
+                        selected_skill_path: d.selected_skill_path,
+                        reasons: d.reasons,
+                        score: d.score,
+                    })
             },
             framework_runtime::build_framework_runtime_snapshot_envelope,
             framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
@@ -211,6 +235,34 @@ pub fn register_host_projection_hooks() {
             telemetry_emit::hook_action_from_output,
             || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
             session_call_tracker::check_anomalies,
+        );
+
+        // web_fetch_guard: convert (Url, Vec<SocketAddr>) → (String, Vec<String>)
+        host_projection::hooks::register_web_fetch_guard_extra(
+            |url| {
+                web_fetch_guard::validate_and_resolve_web_fetch_url(url)
+                    .map(|(u, addrs)| (u.to_string(), addrs.iter().map(|a| a.to_string()).collect()))
+            },
+            |base, location| {
+                let base_url = reqwest::Url::parse(base)
+                    .map_err(|e| format!("web_fetch redirect base URL parse error: {e}"))?;
+                web_fetch_guard::resolve_web_fetch_redirect(&base_url, location)
+                    .map(|u| u.to_string())
+            },
+            |host, port| {
+                web_fetch_guard::resolve_web_fetch_addresses(host, port)
+                    .map(|addrs| addrs.iter().map(|a| a.to_string()).collect())
+            },
+        );
+
+        host_projection::hooks::register_mcp_pre_guard_extra(
+            |tool, args, repo_root| {
+                let v = mcp_pre_guard::evaluate_mcp_pre_guard_safe(tool, args, repo_root);
+                host_projection::hooks::McpPreGuardVerdict {
+                    blocked: v.blocked,
+                    reason: v.reason,
+                }
+            },
         );
     });
 }

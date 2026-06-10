@@ -1,4 +1,7 @@
 //! Compile-time HostProvider registration from `RUNTIME_REGISTRY.json` → `host_targets.host_providers`.
+//!
+//! hosts/mod.rs is now a re-export shim from host-projection; we only validate
+//! that RUNTIME_REGISTRY.json is readable and host_targets.supported is non-empty.
 
 use std::env;
 use std::fs;
@@ -10,11 +13,9 @@ fn main() {
         .join("..")
         .join("..")
         .join("configs/framework/RUNTIME_REGISTRY.json");
-    let hosts_mod_path = manifest_dir.join("src/hosts/mod.rs");
     let cargo_toml_path = manifest_dir.join("Cargo.toml");
 
     println!("cargo:rerun-if-changed={}", registry_path.display());
-    println!("cargo:rerun-if-changed={}", hosts_mod_path.display());
     println!("cargo:rerun-if-changed={}", cargo_toml_path.display());
 
     let json_str = fs::read_to_string(&registry_path)
@@ -22,8 +23,6 @@ fn main() {
     let reg: serde_json::Value =
         serde_json::from_str(&json_str).expect("parse RUNTIME_REGISTRY.json");
 
-    let hosts_mod = fs::read_to_string(&hosts_mod_path)
-        .unwrap_or_else(|err| panic!("read {}: {err}", hosts_mod_path.display()));
     let cargo_toml = fs::read_to_string(&cargo_toml_path)
         .unwrap_or_else(|err| panic!("read {}: {err}", cargo_toml_path.display()));
 
@@ -88,16 +87,13 @@ fn main() {
             .and_then(serde_json::Value::as_str)
             .unwrap_or_else(|| panic!("host_providers.{host_id}.provider_type required"));
 
-        validate_host_provider_mod_declarations(
-            host_id,
-            feature,
-            module,
-            entry
-                .get("hooks_module")
-                .and_then(serde_json::Value::as_str),
-            &hosts_mod,
-            &cargo_toml,
-        );
+        // Validate that Cargo.toml declares the required feature
+        if !cargo_toml_declares_feature(&cargo_toml, feature) {
+            panic!(
+                "host_providers.{host_id}: Cargo.toml [features] missing `{feature}`; \
+                 add it manually (features are not generated from RUNTIME_REGISTRY.json)"
+            );
+        }
 
         pushes.push_str(&format!(
             "    #[cfg(feature = \"{feature}\")]\n    providers.push(Box::new(super::{module}::{provider_type}));\n"
@@ -128,65 +124,9 @@ pub(crate) fn push_registered_host_providers(
         .expect("write generated_host_providers.rs");
 }
 
-fn validate_host_provider_mod_declarations(
-    host_id: &str,
-    cargo_feature: &str,
-    provider_module: &str,
-    hooks_module: Option<&str>,
-    hosts_mod_rs: &str,
-    cargo_toml: &str,
-) {
-    if !cargo_toml_declares_feature(cargo_toml, cargo_feature) {
-        panic!(
-            "host_providers.{host_id}: Cargo.toml [features] missing `{cargo_feature}`; \
-             add it manually (features are not generated from RUNTIME_REGISTRY.json)"
-        );
-    }
-
-    if !hosts_mod_has_cfg_provider(hosts_mod_rs, cargo_feature, provider_module) {
-        panic!(
-            "host_providers.{host_id}: expected `#[cfg(feature = \"{cargo_feature}\")] mod {provider_module};` \
-             in core/runtime-core/src/hosts/mod.rs (registry provider_module / cargo_feature mismatch)"
-        );
-    }
-
-    if let Some(hooks) = hooks_module {
-        if !hosts_mod_declares_module(hosts_mod_rs, hooks) {
-            panic!(
-                "host_providers.{host_id}: expected `mod {hooks}` or `pub mod {hooks}` \
-                 in core/runtime-core/src/hosts/mod.rs (registry hooks_module mismatch)"
-            );
-        }
-    }
-}
-
 fn cargo_toml_declares_feature(cargo_toml: &str, feature: &str) -> bool {
     let needle = format!("{feature} =");
     cargo_toml
         .lines()
         .any(|line| line.trim().starts_with(&needle))
-}
-
-fn hosts_mod_has_cfg_provider(hosts_mod_rs: &str, cargo_feature: &str, provider_module: &str) -> bool {
-    let cfg_needle = format!(r#"cfg(feature = "{cargo_feature}")"#);
-    let mod_needle = format!("mod {provider_module}");
-    let lines: Vec<&str> = hosts_mod_rs.lines().collect();
-    for (index, line) in lines.iter().enumerate() {
-        if !line.contains(&cfg_needle) {
-            continue;
-        }
-        let window_end = (index + 3).min(lines.len());
-        let window = lines[index..window_end].join("\n");
-        if window.contains(&mod_needle) {
-            return true;
-        }
-    }
-    false
-}
-
-fn hosts_mod_declares_module(hosts_mod_rs: &str, module: &str) -> bool {
-    let mod_needle = format!("mod {module}");
-    hosts_mod_rs
-        .lines()
-        .any(|line| line.contains(&mod_needle))
 }
