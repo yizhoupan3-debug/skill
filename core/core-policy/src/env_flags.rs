@@ -66,16 +66,32 @@ pub fn router_rs_cursor_subagent_model_inherit_nudge_enabled() -> bool {
     env_enabled_default_true(ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV)
 }
 
+/// Per-host `REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` env var mapping.
+const FORK_CONTEXT_INFER_FALSE_BY_HOST: &[&str] = &[
+    "ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+    "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+    "ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+];
+
 /// Cross-host: missing `fork_context` on a reviewer lane may infer independent fork (`false`).
 /// Canonical `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`; legacy host env honored only when explicitly enabled. **Unset = off** (Claude semantics).
 pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
     if env_explicitly_enabled(ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV) {
         return true;
     }
-    env_explicitly_enabled(ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
-        || env_explicitly_enabled(ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
-        || env_explicitly_enabled(ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV)
+    FORK_CONTEXT_INFER_FALSE_BY_HOST
+        .iter()
+        .any(|env| env_explicitly_enabled(env))
 }
+
+/// Per-host review gate disable env var mapping.
+/// Legacy `ROUTER_RS_{HOST}_REVIEW_GATE_DISABLE` names are part of the operator
+/// contract (docs §5) — do not rename. Add new hosts by appending rows.
+const REVIEW_GATE_DISABLE_BY_HOST: &[(&str, &str)] = &[
+    ("cursor", "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE"),
+    ("codex", "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
+    ("claude-code", "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+];
 
 /// Emergency review-gate disable for hook hosts (`cursor` / `codex` / `claude-code`).
 ///
@@ -87,13 +103,11 @@ pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
     if env_enabled_default_false(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) {
         return true;
     }
-    let host_env = match host_id {
-        "cursor" => ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV,
-        "codex" => ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV,
-        "claude-code" => ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV,
-        _ => return false,
-    };
-    env_enabled_default_false(host_env)
+    REVIEW_GATE_DISABLE_BY_HOST
+        .iter()
+        .find(|(id, _)| *id == host_id)
+        .map(|(_, env)| env_enabled_default_false(env))
+        .unwrap_or(false)
 }
 
 /// Max entries in `review_subagent_pending_cycle_keys` (default **32**).

@@ -1957,10 +1957,30 @@ pub fn install_antigravity_projection(
     }))
 }
 
+/// Extract the first file-like entrypoint path (contains `/` or `.`) from the
+/// registry's `host_entrypoints` for a given host. Returns `None` if the
+/// registry is unreadable or no file path is found.
+fn registry_framework_md_path(
+    framework_root: &Path,
+    host_id: &str,
+) -> Option<String> {
+    let reg = crate::runtime_registry::load_runtime_registry_json(framework_root).ok()?;
+    let ep = crate::framework_host_targets::host_entrypoints_value_for_id(&reg, host_id).ok()?;
+    let paths: Vec<String> = match ep {
+        Value::Array(arr) => arr.into_iter().filter_map(|v| v.as_str().map(String::from)).collect(),
+        Value::String(s) => vec![s],
+        _ => vec![],
+    };
+    // Return the first path that looks like a file path and ends with .md
+    paths.into_iter().find(|p| (p.contains('/') || p.contains('.')) && p.ends_with(".md"))
+}
+
 pub fn antigravity_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+    let framework_md_rel = registry_framework_md_path(&roots.framework_root, "antigravity")
+        .unwrap_or_else(|| ".gemini/antigravity/rules/framework.md".to_string());
     let project_mcp_path = roots.project_root.join(".gemini/mcp.json");
     let project_settings_path = roots.project_root.join(".gemini/settings.json");
-    let project_framework_md_path = roots.project_root.join(".gemini/antigravity/rules/framework.md");
+    let project_framework_md_path = roots.project_root.join(&framework_md_rel);
     let user_mcp_path = roots.antigravity_home_root.join("mcp.json");
     let user_settings_path = roots.antigravity_home_root.join("settings.json");
     let user_framework_md_path = roots.antigravity_home_root.join("antigravity/rules/framework.md");
@@ -2103,7 +2123,9 @@ pub fn antigravity_framework_md_target(roots: &ResolvedProjectionRoots, scope: &
     if scope == "user" {
         roots.antigravity_home_root.join("antigravity/rules/framework.md")
     } else {
-        roots.project_root.join(".gemini/antigravity/rules/framework.md")
+        let rel = registry_framework_md_path(&roots.framework_root, "antigravity")
+            .unwrap_or_else(|| ".gemini/antigravity/rules/framework.md".to_string());
+        roots.project_root.join(rel)
     }
 }
 

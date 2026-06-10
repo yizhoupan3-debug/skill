@@ -201,19 +201,25 @@ fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String>
     Ok(tools)
 }
 
+/// Verify function type for host projection verification.
+type VerifyFn = fn(&Path) -> Result<(), String>;
+
+/// Registry of host install_tool → verify function.
+/// New hosts can be added here without modifying dispatch logic.
+const VERIFY_REGISTRY: &[(&str, VerifyFn)] = &[
+    ("codex", |root| verify_codex_hooks(root.to_path_buf())),
+    ("cursor", |root| verify_cursor_hooks(root.to_path_buf())),
+    ("claude", verify_claude_code_projection),
+    ("antigravity", verify_antigravity_projection),
+    ("opencode", verify_opencode_projection),
+];
+
 fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<(), String> {
     for tool in tools {
-        match tool.as_str() {
-            "codex" => verify_codex_hooks(repo_root.to_path_buf())?,
-            "cursor" => verify_cursor_hooks(repo_root.to_path_buf())?,
-            "claude" => verify_claude_code_projection(repo_root)?,
-            "antigravity" => verify_antigravity_projection(repo_root)?,
-            "opencode" => verify_opencode_projection(repo_root)?,
-            other => {
-                return Err(format!(
-                    "installable projection tool `{other}` has no maint verifier"
-                ));
-            }
+        if let Some((_, verify_fn)) = VERIFY_REGISTRY.iter().find(|(t, _)| t == tool) {
+            verify_fn(repo_root)?;
+        } else {
+            eprintln!("warn: no verifier registered for install tool `{tool}`, skipping");
         }
     }
     Ok(())
@@ -498,7 +504,20 @@ fn verify_antigravity_projection_scope(
     let framework_md = if scope == "user" {
         roots.antigravity_home_root.join("antigravity/rules/framework.md")
     } else {
-        roots.project_root.join(".gemini/antigravity/rules/framework.md")
+        // Read project-level path from registry host_entrypoints (fallback to known default)
+        let rel = crate::runtime_registry::load_runtime_registry_json(&roots.framework_root)
+            .ok()
+            .and_then(|reg| crate::framework_host_targets::host_entrypoints_value_for_id(&reg, "antigravity").ok())
+            .and_then(|ep| {
+                let paths: Vec<String> = match ep {
+                    serde_json::Value::Array(arr) => arr.into_iter().filter_map(|v| v.as_str().map(String::from)).collect(),
+                    serde_json::Value::String(s) => vec![s],
+                    _ => vec![],
+                };
+                paths.into_iter().find(|p| (p.contains('/') || p.contains('.')) && p.ends_with(".md"))
+            })
+            .unwrap_or_else(|| ".gemini/antigravity/rules/framework.md".to_string());
+        roots.project_root.join(rel)
     };
     let manifest = if scope == "user" {
         roots.antigravity_home_root.join(".framework-projection-antigravity.json")

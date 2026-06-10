@@ -86,28 +86,36 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     }
 
     println!("\n--- host install projections (optional in framework source repo) ---");
-    let host_install_checks = [
-        (
-            ".claude/settings.json (claude-code hooks)",
-            repo_root.join(".claude").join("settings.json"),
-        ),
-        (
-            ".claude/rules/framework.md",
-            repo_root.join(".claude").join("rules").join("framework.md"),
-        ),
-        (
-            ".gemini/antigravity/rules/framework.md",
-            repo_root
-                .join(".gemini")
-                .join("antigravity")
-                .join("rules")
-                .join("framework.md"),
-        ),
-        (
-            ".gemini/mcp.json",
-            repo_root.join(".gemini").join("mcp.json"),
-        ),
+    // Build check list dynamically from RUNTIME_REGISTRY.json host_entrypoints.
+    let mut host_install_checks: Vec<(String, std::path::PathBuf)> = Vec::new();
+    // Always-known non-entrypoint paths (settings, mcp.json per host)
+    let known_extra_checks: &[(&str, std::path::PathBuf)] = &[
+        (".claude/settings.json".into(), repo_root.join(".claude").join("settings.json")),
+        (".gemini/mcp.json".into(), repo_root.join(".gemini").join("mcp.json")),
     ];
+    for (label, path) in known_extra_checks {
+        host_install_checks.push((label.to_string(), path.clone()));
+    }
+    // Read host_entrypoints from registry for each supported host
+    if let Ok(reg) = crate::runtime_registry::load_runtime_registry_json(repo_root) {
+        if let Ok(supported) = crate::framework_host_targets::host_targets_supported_host_ids(&reg) {
+            for host_id in &supported {
+                if let Ok(ep_value) = crate::framework_host_targets::host_entrypoints_value_for_id(&reg, host_id) {
+                    let paths: Vec<String> = match &ep_value {
+                        Value::Array(arr) => arr.iter().filter_map(|v| v.as_str().map(String::from)).collect(),
+                        Value::String(s) => vec![s.clone()],
+                        _ => vec![],
+                    };
+                    for ep in &paths {
+                        // Only check file paths (skip agent policy names like AGENTS_*.md)
+                        if ep.contains('/') || ep.contains('.') {
+                            host_install_checks.push((ep.clone(), repo_root.join(ep)));
+                        }
+                    }
+                }
+            }
+        }
+    }
     let mut host_install_missing = 0usize;
     for (label, path) in &host_install_checks {
         let status = if path.is_file() {

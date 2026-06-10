@@ -131,12 +131,9 @@ pub fn build_driver_command(
 }
 
 pub fn driver_id_for_host(host: &str) -> &'static str {
-    match host.trim().to_ascii_lowercase().as_str() {
-        "codex" | "codex-cli" => "codex_driver",
-        "claude" | "claude-code" => "claude_code_driver",
-        "smoke" | "smoke-shell" => "smoke_shell_driver",
-        _ => "unknown_driver",
-    }
+    crate::hosts::host_provider_for_routing_spelling(host)
+        .map(|p| p.session_supervisor_driver())
+        .unwrap_or("unknown_driver")
 }
 
 pub fn default_resume_mode(_host: &str) -> &'static str {

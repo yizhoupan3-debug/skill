@@ -21,6 +21,25 @@ pub enum HookObservationHost {
 }
 pub type HookObservationHostType = HookObservationHost;
 
+impl HookObservationHost {
+    pub fn from_host_id(host_id: &str) -> Option<Self> {
+        match host_id {
+            "cursor" => Some(Self::Cursor),
+            "codex" => Some(Self::Codex),
+            "claude-code" => Some(Self::ClaudeCode),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Cursor => "cursor",
+            Self::Codex => "codex",
+            Self::ClaudeCode => "claude-code",
+        }
+    }
+}
+
 /// Mirror of `runtime_core::paper_prose_hook::PaperProseHookHost`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaperProseHookHost {

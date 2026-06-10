@@ -15,6 +15,26 @@ pub enum HookObservationHost {
     ClaudeCode,
 }
 
+impl HookObservationHost {
+    /// Resolve from a host_id string (typically from `HostTelemetry::observation_host_id()`).
+    pub fn from_host_id(host_id: &str) -> Option<Self> {
+        match host_id {
+            "cursor" => Some(Self::Cursor),
+            "codex" => Some(Self::Codex),
+            "claude-code" => Some(Self::ClaudeCode),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Cursor => "cursor",
+            Self::Codex => "codex",
+            Self::ClaudeCode => "claude-code",
+        }
+    }
+}
+
 fn classify_gate(followup: Option<&str>, additional: Option<&str>) -> Option<GateClassified> {
     if let Some(f) = followup {
         let line = f.lines().next().unwrap_or("").trim();
@@ -181,11 +201,7 @@ pub fn strip_router_rs_observation(output: &mut Value) {
 }
 
 pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHost) -> Value {
-    let host_str = match host {
-        HookObservationHost::Cursor => "cursor",
-        HookObservationHost::Codex => "codex",
-        HookObservationHost::ClaudeCode => "claude-code",
-    };
+    let host_str = host.as_str();
 
     if output.get("contract_guard").is_some()
         && output.get("decision").and_then(Value::as_str) == Some("block")
