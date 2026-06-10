@@ -182,8 +182,38 @@ pub fn build_framework_runtime_snapshot_envelope(
                 "current_pointer_root": snapshot.mirror_root.display().to_string(),
                 "supervisor_state": repo_root.join(SUPERVISOR_STATE_FILENAME).display().to_string(),
             },
+            "code_index": codegraph_index_snapshot(repo_root),
         }
     }))
+}
+
+/// Build code_index snapshot from codegraph database (when feature enabled).
+#[cfg(feature = "codegraph")]
+fn codegraph_index_snapshot(repo_root: &Path) -> Value {
+    match codegraph_rs::CodeGraphIndex::open(repo_root) {
+        Ok(index) => match index.index_stats() {
+            Ok(stats) => json!({
+                "enabled": true,
+                "db_path": index.db_path().display().to_string(),
+                "node_count": stats.node_count,
+                "edge_count": stats.edge_count,
+                "file_count": stats.file_count,
+                "indexed_at": stats.indexed_at,
+            }),
+            Err(e) => json!({
+                "enabled": true,
+                "error": format!("stats query failed: {e}"),
+            }),
+        },
+        Err(_) => json!({
+            "enabled": false,
+        }),
+    }
+}
+
+#[cfg(not(feature = "codegraph"))]
+fn codegraph_index_snapshot(_repo_root: &Path) -> Value {
+    json!({"enabled": false})
 }
 
 pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, String> {
