@@ -1,22 +1,22 @@
 //! `ROUTER_RS_*` 连续性/续跑类开关：保留真正改变行为边界的少量闸门。
 //!
 //! **清单真源**：宿主可见语义与默认值以仓库根 [`docs/harness_architecture/03-hook-and-switches.md`](../../docs/harness_architecture/03-hook-and-switches.md) **开关面**表格为准。
-//! Review-gate 相关 reader 真源在 [`core-policy/env_flags.rs`](../../core-policy/src/env_flags.rs)；本模块为 router-rs 薄包装与 Cursor/连续性专用 env。
+//! Review-gate 相关 reader 真源在 [`core-policy/env_flags.rs`](../../core-policy/src/env_flags.rs)；本模块为 router-rs 薄包装与连续性专用 env。
 //!
 //! Helper 映射（core-policy）：
 //! - `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE` → [`router_rs_review_spawn_first_nudge_enabled`]
-//! - `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` → [`router_rs_cursor_subagent_model_inherit_nudge_enabled`]
-//! - `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`（+ legacy 宿主别名）→ [`router_rs_review_fork_context_missing_infer_false_enabled`]
-//! - `ROUTER_RS_REVIEW_GATE_DISABLE`（+ legacy `ROUTER_RS_*_REVIEW_GATE_DISABLE`）→ [`router_rs_review_gate_disabled_for_host`]
+//! - `ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE` → [`router_rs_cursor_subagent_model_inherit_nudge_enabled`]
+//! - `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`（+ legacy per-host 别名）→ [`router_rs_review_fork_context_missing_infer_false_enabled`]
+//! - `ROUTER_RS_REVIEW_GATE_DISABLE`（+ legacy per-host `ROUTER_RS_*_REVIEW_GATE_DISABLE`）→ [`router_rs_review_gate_disabled_for_host`]
 //! - `ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES`（legacy `ROUTER_RS_CURSOR_*`）→ [`router_rs_review_gate_stop_max_nudges_cap`]
 //! - `ROUTER_RS_REVIEW_PENDING_CYCLE_MAX`（legacy `ROUTER_RS_CURSOR_*`）→ [`router_rs_review_pending_cycle_max`]
 //!
 //! 本模块直接读取：
-//! - `ROUTER_RS_OPERATOR_INJECT`、`ROUTER_RS_CURSOR_*` hook-state / pre-goal / outbound 字节上限等
+//! - `ROUTER_RS_OPERATOR_INJECT`、`ROUTER_RS_*` hook-state / pre-goal / outbound 字节上限等
 //! - `ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE`、`ROUTER_RS_TASK_LEDGER_FLOCK`、`ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD` 等
 //!
-//! v6 canonicalization: CURSOR_ prefix env vars now prefer canonical `ROUTER_RS_*` names
-//! with CURSOR_ fallback for backward compatibility. Dead per-host constants removed.
+//! v6 canonicalization: per-host prefix env vars now prefer canonical `ROUTER_RS_*` names
+//! with legacy per-host fallback for backward compatibility. Dead per-host constants removed.
 
 use std::env;
 
@@ -43,12 +43,13 @@ pub fn router_rs_cursor_autopilot_pre_goal_enabled() -> bool {
         || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED")
 }
 
-/// Cursor `SessionEnd`：是否对 `.cursor/hook-state/` 做**历史全目录前缀清扫**。
+/// Hook-state: 是否对 `.cursor/hook-state/` 做**历史全目录前缀清扫**。
+/// Legacy env: `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP`.
 pub fn router_rs_cursor_hook_state_legacy_full_sweep_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP")
 }
 
-/// Cursor：是否**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真。
+/// 是否**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真。
 /// Canonical `ROUTER_RS_PRE_GOAL_STRICT_DISK`; legacy `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` still honored.
 /// Canonical explicitly set (`0`/`false`/`off`/`no`) wins over legacy; unset falls through to legacy.
 pub fn router_rs_cursor_pre_goal_strict_disk_enabled() -> bool {
@@ -65,7 +66,7 @@ pub fn router_rs_cursor_hook_legacy_subtracted_events_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS")
 }
 
-/// `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`：hook-state 持久化失败时 beforeSubmit 仍 `continue: true`（应急）。
+/// `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`（legacy）：hook-state 持久化失败时 beforeSubmit 仍 `continue: true`（应急）。
 pub fn router_rs_cursor_hook_state_fail_open_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN")
 }

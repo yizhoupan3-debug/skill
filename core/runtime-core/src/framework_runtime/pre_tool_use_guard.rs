@@ -1,8 +1,13 @@
-//! PreToolUse strict fallback for anemic hosts (no native PreToolUse / `hard_gate_hooks`).
+//! PreToolUse strict fallback for hosts without native PreToolUse / `hard_gate_hooks`.
 //!
 //! Rich CLI hosts (Cursor, Codex, Claude Code) rely on shell hooks; MCP-only hosts must call the
-//! `pre_tool_use_guard` stdio op before high-risk tool execution. HostProvider may override
-//! `has_native_hook` on the request payload (roadmap §4.1); registry remains the default.
+//! `pre_tool_use_guard` stdio op before high-risk tool execution. Detection order:
+//! 1. HostProvider hint (`host_provider_strict_pre_tool_fallback_hint`)
+//! 2. Request payload override (`has_native_hook`)
+//! 3. Registry capability (`hard_gate_hooks` in `host_projections`)
+//! 4. Unknown host → fail-closed (strict fallback active)
+//!
+//! No hardcoded host ID list — all host identity is resolved via registry capabilities.
 
 use crate::hook_policy::{
     dangerous_bash_reason, dangerous_mcp_tool_reason, evaluate_hook_policy, HookPolicyEvaluateRequest,
@@ -16,8 +21,6 @@ use std::path::Path;
 pub const PRE_TOOL_USE_GUARD_SCHEMA_VERSION: &str = "router-rs-pre-tool-use-guard-v1";
 pub const PRE_TOOL_USE_GUARD_AUTHORITY: &str = "rust-framework-runtime";
 pub const PRE_TOOL_USE_GUARD_STDIO_OP: &str = "pre_tool_use_guard";
-
-const ANEMIC_MCP_HOST_IDS: &[&str] = &["opencode", "antigravity"];
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PreToolUseGuardRequest {
@@ -68,7 +71,6 @@ pub fn pre_tool_use_guard_contract() -> Value {
         "authority": PRE_TOOL_USE_GUARD_AUTHORITY,
         "stdio_op": PRE_TOOL_USE_GUARD_STDIO_OP,
         "phases": ["evaluate", "approve"],
-        "anemic_host_ids": ANEMIC_MCP_HOST_IDS,
         "registry_signals": {
             "hard_gate_hooks": "native PreToolUse hard gate — strict fallback off",
             "closeout_evidence_hooks_exception": "harness_capability_exceptions.closeout_evidence_hooks=unsupported → strict fallback on"
@@ -93,9 +95,7 @@ pub fn host_requires_strict_pre_tool_fallback(
     has_native_hook_override: Option<bool>,
 ) -> Result<bool, String> {
     let id = host_id.trim();
-    if ANEMIC_MCP_HOST_IDS.contains(&id) {
-        return Ok(true);
-    }
+    // 1. HostProvider hint (highest priority after explicit overrides)
     if let Some(strict) = crate::hosts::host_provider_strict_pre_tool_fallback_hint(id) {
         return Ok(strict);
     }

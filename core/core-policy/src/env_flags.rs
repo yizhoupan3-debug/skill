@@ -1,7 +1,8 @@
 //! Review-gate and cross-host `ROUTER_RS_*` env readers (B0 core-policy subset).
 //!
 //! Canonical env names take precedence; legacy per-host `ROUTER_RS_{CURSOR,CODEX,CLAUDE}_*` aliases
-//! remain honored for explicit opt-in / disable. Operator table: `docs/harness_architecture/03-hook-and-switches.md` §5.
+//! remain honored for explicit opt-in / disable (backward compatibility).
+//! Operator table: `docs/harness_architecture/03-hook-and-switches.md` §5.
 
 use std::env;
 
@@ -79,6 +80,9 @@ pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
 /// Emergency review-gate disable for hook hosts (`cursor` / `codex` / `claude-code`).
 ///
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` applies to all; legacy per-host env still honored.
+/// Per-host match arms are intentional: operators need granular emergency disable per host without
+/// affecting others. These env var names are part of the operator contract (docs §5) and cannot be
+/// replaced by registry queries without breaking existing CI/operator scripts.
 pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
     if env_enabled_default_false(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) {
         return true;

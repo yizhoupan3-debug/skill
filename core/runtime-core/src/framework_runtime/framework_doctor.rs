@@ -560,13 +560,20 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
 }
 
 /// Auto-detect and safely clean broken symlinks inside multi-host client directories.
+///
+/// Target directories include all known host integration dotdirs plus `artifacts/`.
+/// Keep this list comprehensive (not registry-derived) since stale dirs from removed hosts
+/// or renamed directories still need cleanup even after registry changes.
 pub fn auto_clean_broken_symlinks(repo_root: &Path) -> Result<(), String> {
     let targets = [
+        // Host integration directories (all known, including legacy)
         ".antigravitycli",
         ".claude",
-        ".cursor",
         ".codex",
+        ".cursor",
         ".gemini",
+        ".opencode",
+        // Project artifact directory
         "artifacts",
     ];
     let mut cleaned_count = 0;
