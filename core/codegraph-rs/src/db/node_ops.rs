@@ -65,10 +65,13 @@ pub fn resolve_symbol_filtered(
     let file_path = filter.file_path.as_deref();
     let rows = stmt.query_map(params![symbol, file_path], row_to_node)?;
     let nodes: Vec<Node> = rows.collect::<Result<_, _>>()?;
-    match nodes.len() {
-        0 => Ok(ResolveOutcome::NotFound),
-        1 => Ok(ResolveOutcome::Found(nodes.into_iter().next().unwrap())),
-        _ => Ok(ResolveOutcome::Ambiguous(nodes)),
+    if nodes.len() <= 1 {
+        Ok(nodes
+            .into_iter()
+            .next()
+            .map_or(ResolveOutcome::NotFound, ResolveOutcome::Found))
+    } else {
+        Ok(ResolveOutcome::Ambiguous(nodes))
     }
 }
 
@@ -109,6 +112,27 @@ mod tests {
     }
 
     #[test]
+    fn resolve_symbol_reports_not_found() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        seed(&conn);
+        let outcome = resolve_symbol(&conn, "nonexistent").unwrap();
+        assert!(outcome.is_none());
+    }
+
+    #[test]
+    fn resolve_symbol_filtered_empty_result() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        seed(&conn);
+        let outcome = resolve_symbol_filtered(
+            &conn,
+            "ghost",
+            &SymbolFilter::from_options(None, None),
+        )
+        .unwrap();
+        assert!(matches!(outcome, ResolveOutcome::NotFound));
+    }
+
+    #[test]
     fn resolve_symbol_reports_ambiguous_matches() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         init_schema(&conn).unwrap();
@@ -127,5 +151,17 @@ mod tests {
             resolve_symbol_filtered(&conn, "dup", &SymbolFilter::from_options(Some("b.rs"), None))
                 .unwrap();
         assert!(matches!(filtered, ResolveOutcome::Found(ref node) if node.id == "n2"));
+    }
+
+    #[test]
+    fn get_node_by_id_propagates_db_error() {
+        // Drop the connection so subsequent queries fail
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        seed(&conn);
+        drop(conn);
+        // Reopen a raw in-memory connection without schema, querying should error
+        let bad_conn = rusqlite::Connection::open_in_memory().unwrap();
+        let result = get_node_by_id(&bad_conn, "n1");
+        assert!(result.is_err(), "expected DB error for missing table");
     }
 }
