@@ -74,7 +74,7 @@ struct JournalLine {
 }
 
 /// Route-decision row for `audit` / `manifest` (legacy journal field layout).
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct AuditJournalEntry {
     pub ts: String,
     pub task: String,
@@ -96,9 +96,10 @@ pub struct AuditJournalEntry {
     pub notes: String,
 }
 
+/// Legacy journal entry with single-char JSON keys (`t`, `tk`, `i`, `f`, …).
+/// Kept for backward-compatible reads in [`load_audit_journal_entries`].
 #[derive(Debug, Deserialize, Clone)]
-#[deprecated(note = "legacy evolution journal format; prefer TelemetryEvent route_decision")]
-struct DeprecatedJournalEntry {
+struct LegacyShortKeyEntry {
     #[serde(rename = "t")]
     ts: String,
     #[serde(rename = "tk")]
@@ -123,9 +124,10 @@ struct DeprecatedJournalEntry {
     notes: String,
 }
 
+/// Legacy journal entry with full-length JSON keys and `"final"` instead of `"final_skill"`.
+/// Kept for backward-compatible reads in [`load_audit_journal_entries`].
 #[derive(Debug, Deserialize)]
-#[deprecated(note = "legacy evolution journal format; prefer TelemetryEvent route_decision")]
-struct DeprecatedLegacyEntry {
+struct LegacyFullKeyEntry {
     ts: String,
     task: String,
     init: String,
@@ -194,7 +196,7 @@ pub fn load_audit_journal_entries(path: &Path) -> anyhow::Result<Vec<AuditJourna
                 continue;
             }
         }
-        if let Ok(legacy) = serde_json::from_str::<DeprecatedJournalEntry>(trimmed) {
+        if let Ok(legacy) = serde_json::from_str::<LegacyShortKeyEntry>(trimmed) {
             entries.push(AuditJournalEntry {
                 ts: legacy.ts,
                 task: legacy.task,
@@ -210,7 +212,7 @@ pub fn load_audit_journal_entries(path: &Path) -> anyhow::Result<Vec<AuditJourna
             });
             continue;
         }
-        if let Ok(legacy) = serde_json::from_str::<DeprecatedLegacyEntry>(trimmed) {
+        if let Ok(legacy) = serde_json::from_str::<LegacyFullKeyEntry>(trimmed) {
             entries.push(AuditJournalEntry {
                 ts: legacy.ts,
                 task: legacy.task,
