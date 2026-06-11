@@ -1,7 +1,7 @@
 //! Incremental index sync + filesystem watcher (Roadmap v5 §2.8 W3/W4).
 
 use crate::db::index_ops::{
-    delete_file_index, ingest_parsed_file_with_stmts, list_indexed_files, set_meta, IndexedFileMeta,
+    ingest_parsed_file_with_stmts, list_indexed_files, set_meta, IndexedFileMeta,
     IngestStmts,
 };
 use crate::parser::{self, parse_file, ParsedFile};
@@ -27,6 +27,16 @@ const SKIP_DIRS: &[&str] = &[
     ".cursor",
     "dist",
     "build",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".next",
+    ".cache",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".tox",
+    "coverage",
+    ".turbo",
 ];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -42,6 +52,10 @@ pub fn build_full_index(index: &CodeGraphIndex, repo_root: &Path) -> anyhow::Res
     incremental_sync(index, repo_root, true)
 }
 
+/// Incremental sync: mtime fast-path first, then content-hash comparison.
+///
+/// Performance: most unchanged files are skipped with a single stat() syscall
+/// (mtime check) instead of reading the full file content for SHA-256.
 pub fn incremental_sync(
     index: &CodeGraphIndex,
     repo_root: &Path,
@@ -55,29 +69,48 @@ pub fn incremental_sync(
         .map(|meta| (meta.path.clone(), meta))
         .collect();
 
+    // Phase 1: fast mtime check — skip files whose mtime hasn't changed (O(1) per file).
+    // Only files with changed mtime need content hash comparison.
     let mut pending: Vec<FileWorkItem> = Vec::new();
     for path in discover_source_files(&repo_root)? {
         report.files_scanned += 1;
         let rel = relative_path(&repo_root, &path);
         seen.insert(rel.clone());
-        let mtime_ns = file_mtime_ns(&path)?;
-        let content_hash = file_content_hash(&path)?;
-        if !force_all && file_is_current(&indexed, &rel, &content_hash) {
-            continue;
+
+        if !force_all {
+            // Fast path: mtime unchanged → file definitely unchanged, skip without I/O
+            if let Some(stored) = indexed.get(&rel) {
+                let mtime_ns = file_mtime_ns(&path)?;
+                if stored.mtime_ns == mtime_ns {
+                    continue; // stat-only fast path
+                }
+                // mtime changed — need content hash to verify
+                let content_hash = file_content_hash(&path)?;
+                if stored.content_hash == content_hash {
+                    continue; // mtime changed but content identical
+                }
+                pending.push(FileWorkItem { path, rel, mtime_ns, content_hash });
+            } else {
+                // New file — always index
+                let mtime_ns = file_mtime_ns(&path)?;
+                let content_hash = file_content_hash(&path)?;
+                pending.push(FileWorkItem { path, rel, mtime_ns, content_hash });
+            }
+        } else {
+            // Force-all mode: always read and parse
+            let mtime_ns = file_mtime_ns(&path)?;
+            let content_hash = file_content_hash(&path)?;
+            pending.push(FileWorkItem { path, rel, mtime_ns, content_hash });
         }
-        pending.push(FileWorkItem {
-            path,
-            rel,
-            mtime_ns,
-            content_hash,
-        });
     }
 
+    // Phase 2: parallel parse unchanged files
     let parsed: Vec<ParsedFile> = pending
         .par_iter()
         .filter_map(|item| parse_work_item(item).ok().flatten())
         .collect();
 
+    // Phase 3: sequential DB ingest
     let conn = index.connection();
     let mut ingest_stmts = IngestStmts::prepare(conn)?;
     for parsed in parsed {
@@ -87,9 +120,10 @@ pub fn incremental_sync(
         report.edges_added += edges;
     }
 
+    // Phase 4: remove stale files (reusing IngestStmts.delete instead of re-preparing)
     for (path, _) in indexed {
         if !seen.contains(&path) {
-            delete_file_index(conn, &path)?;
+            ingest_stmts.delete.execute(&path)?;
             report.files_removed += 1;
         }
     }
@@ -118,24 +152,21 @@ fn parse_work_item(item: &FileWorkItem) -> anyhow::Result<Option<ParsedFile>> {
     Ok(Some(parsed))
 }
 
-fn file_is_current(
-    indexed: &HashMap<String, IndexedFileMeta>,
-    rel_path: &str,
-    content_hash: &str,
-) -> bool {
-    indexed
-        .get(rel_path)
-        .is_some_and(|stored| stored.content_hash == content_hash)
-}
-
 fn file_content_hash(path: &Path) -> anyhow::Result<String> {
     let bytes = fs::read(path).with_context(|| format!("read file for hash {}", path.display()))?;
     let digest = Sha256::digest(bytes);
     Ok(hex_encode(digest.as_slice()))
 }
 
+/// Encode bytes as hex string using a lookup table (zero intermediate allocations).
 fn hex_encode(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    const HEX_TABLE: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        out.push(HEX_TABLE[(b >> 4) as usize] as char);
+        out.push(HEX_TABLE[(b & 0x0f) as usize] as char);
+    }
+    out
 }
 
 fn discover_source_files(repo_root: &Path) -> anyhow::Result<Vec<PathBuf>> {
@@ -184,6 +215,10 @@ fn file_mtime_ns(path: &Path) -> anyhow::Result<i64> {
     Ok(duration.as_nanos() as i64)
 }
 
+/// Filesystem watcher that triggers incremental sync on file changes.
+///
+/// The watcher reuses a single SQLite connection across sync cycles and
+/// properly joins its background thread on Drop.
 pub struct IndexWatcher {
     _watcher: RecommendedWatcher,
     _handle: Option<JoinHandle<()>>,
@@ -199,6 +234,14 @@ impl IndexWatcher {
             .with_context(|| format!("watch {}", repo_root.display()))?;
 
         let handle = thread::spawn(move || {
+            // Open a single DB connection for the watcher lifetime.
+            let index = match CodeGraphIndex::open(&repo_root) {
+                Ok(idx) => idx,
+                Err(err) => {
+                    eprintln!("codegraph IndexWatcher: failed to open index: {err}");
+                    return;
+                }
+            };
             let mut pending = false;
             let mut last_event = Instant::now();
             loop {
@@ -224,13 +267,11 @@ impl IndexWatcher {
                             continue;
                         }
                         pending = false;
-                        if let Ok(index) = CodeGraphIndex::open(&repo_root) {
-                            if let Err(err) = incremental_sync(&index, &repo_root, false) {
-                                eprintln!(
-                                    "codegraph IndexWatcher: incremental_sync failed for {}: {err}",
-                                    repo_root.display()
-                                );
-                            }
+                        if let Err(err) = incremental_sync(&index, &repo_root, false) {
+                            eprintln!(
+                                "codegraph IndexWatcher: incremental_sync failed for {}: {err}",
+                                repo_root.display()
+                            );
                         }
                     }
                     Err(mpsc::RecvTimeoutError::Disconnected) => break,
@@ -242,6 +283,25 @@ impl IndexWatcher {
             _watcher: watcher,
             _handle: Some(handle),
         })
+    }
+}
+
+impl Drop for IndexWatcher {
+    fn drop(&mut self) {
+        // Drop watcher first to close the mpsc channel, signaling the thread to exit.
+        // Then join the thread to ensure clean shutdown.
+        self._watcher = {
+            let (tx, _) = mpsc::channel();
+            RecommendedWatcher::new(tx, Config::default()).unwrap_or_else(|_| {
+                // Fallback: if we can't create a dummy watcher, just let the thread die naturally
+                // by dropping the original watcher (which happens when this struct is dropped)
+                let (tx2, _) = mpsc::channel();
+                RecommendedWatcher::new(tx2, Config::default()).expect("create dummy watcher")
+            })
+        };
+        if let Some(handle) = self._handle.take() {
+            let _ = handle.join();
+        }
     }
 }
 

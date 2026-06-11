@@ -19,7 +19,7 @@ pub fn get_meta(conn: &Connection, key: &str) -> rusqlite::Result<Option<String>
     Ok(None)
 }
 
-struct DeleteFileStmts<'conn> {
+pub struct DeleteFileStmts<'conn> {
     delete_edges_by_caller: Statement<'conn>,
     delete_edges_by_callee: Statement<'conn>,
     delete_nodes: Statement<'conn>,
@@ -27,7 +27,7 @@ struct DeleteFileStmts<'conn> {
 }
 
 impl<'conn> DeleteFileStmts<'conn> {
-    fn prepare(conn: &'conn Connection) -> rusqlite::Result<Self> {
+    pub fn prepare(conn: &'conn Connection) -> rusqlite::Result<Self> {
         Ok(Self {
             delete_edges_by_caller: conn.prepare(
                 "DELETE FROM edges WHERE caller_id IN (SELECT id FROM nodes WHERE file_path = ?1)",
@@ -40,7 +40,7 @@ impl<'conn> DeleteFileStmts<'conn> {
         })
     }
 
-    fn execute(&mut self, file_path: &str) -> rusqlite::Result<()> {
+    pub fn execute(&mut self, file_path: &str) -> rusqlite::Result<()> {
         self.delete_edges_by_caller.execute(params![file_path])?;
         self.delete_edges_by_callee.execute(params![file_path])?;
         self.delete_nodes.execute(params![file_path])?;
@@ -54,7 +54,7 @@ pub struct IngestStmts<'conn> {
     insert_node_ignore: Statement<'conn>,
     insert_edge: Statement<'conn>,
     upsert_file: Statement<'conn>,
-    delete: DeleteFileStmts<'conn>,
+    pub delete: DeleteFileStmts<'conn>,
 }
 
 impl<'conn> IngestStmts<'conn> {

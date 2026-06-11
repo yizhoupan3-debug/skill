@@ -21,35 +21,27 @@ pub fn search_symbols(
         return Ok(Vec::new());
     }
     let fts_query = format!("\"{sanitized}\"*");
+
+    // Push kind/language filtering into SQL WHERE instead of post-filtering in Rust.
+    // This avoids the limit*4 over-fetch and ensures correct results even with narrow filters.
     let mut stmt = conn.prepare(
         r#"
         SELECT n.id, n.symbol, n.kind, n.language, n.file_path, n.line
         FROM nodes_fts f
         JOIN nodes n ON n.rowid = f.rowid
         WHERE nodes_fts MATCH ?1
+          AND (?2 IS NULL OR n.kind = ?2)
+          AND (?3 IS NULL OR n.language = ?3)
         ORDER BY bm25(nodes_fts)
-        LIMIT ?2
+        LIMIT ?4
         "#,
     )?;
-    let rows = stmt.query_map(params![fts_query, (limit * 4) as i64], row_to_node)?;
-    let mut out = Vec::new();
-    for row in rows {
-        let node = row?;
-        if let Some(k) = kind {
-            if node.kind != k {
-                continue;
-            }
-        }
-        if let Some(lang) = language {
-            if node.language != lang {
-                continue;
-            }
-        }
-        out.push(node);
-        if out.len() >= limit {
-            break;
-        }
-    }
+    let rows = stmt.query_map(
+        params![fts_query, kind, language, limit as i64],
+        row_to_node,
+    )?;
+    let out: Vec<Node> = rows.collect::<Result<_, _>>()?;
+
     if out.is_empty() {
         return search_symbols_like(conn, trimmed, kind, language, limit);
     }
@@ -67,28 +59,14 @@ fn search_symbols_like(
     let escaped = query.replace('%', "\\%").replace('_', "\\_");
     let like = format!("%{escaped}%");
     let mut stmt = conn.prepare(
-        "SELECT id, symbol, kind, language, file_path, line FROM nodes WHERE symbol LIKE ?1 ESCAPE '\\' ORDER BY symbol LIMIT ?2",
+        "SELECT id, symbol, kind, language, file_path, line FROM nodes
+         WHERE symbol LIKE ?1 ESCAPE '\\'
+           AND (?2 IS NULL OR kind = ?2)
+           AND (?3 IS NULL OR language = ?3)
+         ORDER BY symbol LIMIT ?4",
     )?;
-    let rows = stmt.query_map(params![like, (limit * 4) as i64], row_to_node)?;
-    let mut out = Vec::new();
-    for row in rows {
-        let node = row?;
-        if let Some(k) = kind {
-            if node.kind != k {
-                continue;
-            }
-        }
-        if let Some(lang) = language {
-            if node.language != lang {
-                continue;
-            }
-        }
-        out.push(node);
-        if out.len() >= limit {
-            break;
-        }
-    }
-    Ok(out)
+    let rows = stmt.query_map(params![like, kind, language, limit as i64], row_to_node)?;
+    rows.collect()
 }
 
 fn row_to_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<Node> {
@@ -109,28 +87,73 @@ mod tests {
     use crate::db::schema::init_schema;
     use crate::parser::{ParsedFile, ParsedSymbol};
 
-    #[test]
-    fn search_returns_matching_symbols_via_fts() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        init_schema(&conn).unwrap();
+    fn seed_test_data(conn: &rusqlite::Connection) {
+        init_schema(conn).unwrap();
         ingest_parsed_file(
-            &conn,
+            conn,
             &ParsedFile {
                 path: "a.rs".to_string(),
                 language: "rust".to_string(),
                 mtime_ns: 1,
                 content_hash: "hash-a".to_string(),
+                symbols: vec![
+                    ParsedSymbol {
+                        symbol: "search_me".to_string(),
+                        kind: "fn".to_string(),
+                        line: 1,
+                    },
+                    ParsedSymbol {
+                        symbol: "search_struct".to_string(),
+                        kind: "struct".to_string(),
+                        line: 5,
+                    },
+                ],
+                edges: vec![],
+            },
+        )
+        .unwrap();
+        ingest_parsed_file(
+            conn,
+            &ParsedFile {
+                path: "b.py".to_string(),
+                language: "python".to_string(),
+                mtime_ns: 2,
+                content_hash: "hash-b".to_string(),
                 symbols: vec![ParsedSymbol {
-                    symbol: "search_me".to_string(),
-                    kind: "fn".to_string(),
+                    symbol: "search_py".to_string(),
+                    kind: "function".to_string(),
                     line: 1,
                 }],
                 edges: vec![],
             },
         )
         .unwrap();
+    }
+
+    #[test]
+    fn search_returns_matching_symbols_via_fts() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        seed_test_data(&conn);
         let hits = search_symbols(&conn, "search", None, None, 10).unwrap();
+        assert!(hits.len() >= 2, "expected multiple search results");
+    }
+
+    #[test]
+    fn search_filters_by_kind_in_sql() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        seed_test_data(&conn);
+        let hits = search_symbols(&conn, "search", Some("fn"), None, 10).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].symbol, "search_me");
+        assert_eq!(hits[0].kind, "fn");
+    }
+
+    #[test]
+    fn search_filters_by_language_in_sql() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        seed_test_data(&conn);
+        let hits = search_symbols(&conn, "search", None, Some("python"), 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].symbol, "search_py");
     }
 }

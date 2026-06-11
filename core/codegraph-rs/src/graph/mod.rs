@@ -2,11 +2,73 @@ pub mod sync;
 
 use crate::db::node_ops::SymbolFilter;
 use crate::{ImpactReport, Node};
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, Statement};
 
-pub use sync::{
-    build_full_index, incremental_sync, IndexWatcher, SyncReport,
-};
+pub use sync::{build_full_index, incremental_sync, IndexWatcher, SyncReport};
+
+/// Cached prepared statements for graph traversal queries.
+/// Avoids re-preparing SQL on every BFS hop.
+struct GraphStmts<'conn> {
+    direct_callers: Statement<'conn>,
+    direct_callees: Statement<'conn>,
+}
+
+impl<'conn> GraphStmts<'conn> {
+    fn prepare(conn: &'conn Connection) -> rusqlite::Result<Self> {
+        Ok(Self {
+            direct_callers: conn.prepare(
+                r#"
+                SELECT n.id, n.symbol, n.kind, n.language, n.file_path, n.line
+                FROM edges e
+                JOIN nodes callee ON callee.id = e.callee_id
+                JOIN nodes n ON n.id = e.caller_id
+                WHERE callee.symbol = ?1
+                  AND (?2 IS NULL OR callee.file_path = ?2)
+                  AND (?3 IS NULL OR callee.id = ?3)
+                LIMIT 64
+                "#,
+            )?,
+            direct_callees: conn.prepare(
+                r#"
+                SELECT n.id, n.symbol, n.kind, n.language, n.file_path, n.line
+                FROM edges e
+                JOIN nodes caller ON caller.id = e.caller_id
+                JOIN nodes n ON n.id = e.callee_id
+                WHERE caller.symbol = ?1
+                  AND (?2 IS NULL OR caller.file_path = ?2)
+                  AND (?3 IS NULL OR caller.id = ?3)
+                LIMIT 64
+                "#,
+            )?,
+        })
+    }
+
+    fn direct_callers(
+        &mut self,
+        symbol: &str,
+        filter: &SymbolFilter,
+    ) -> rusqlite::Result<Vec<Node>> {
+        let rows = self.direct_callers.query_map(
+            params![symbol, filter.file_path, filter.node_id],
+            map_row,
+        )?;
+        let result: rusqlite::Result<Vec<Node>> = rows.collect();
+        result
+    }
+
+    fn direct_callees(
+        &mut self,
+        symbol: &str,
+        filter: &SymbolFilter,
+    ) -> rusqlite::Result<Vec<Node>> {
+        let rows = self.direct_callees.query_map(
+            params![symbol, filter.file_path, filter.node_id],
+            map_row,
+        )?;
+        let result: rusqlite::Result<Vec<Node>> = rows.collect();
+        result
+    }
+}
 
 pub fn find_callers(
     conn: &Connection,
@@ -18,10 +80,11 @@ pub fn find_callers(
     let mut seen = std::collections::HashSet::new();
     let mut frontier = vec![(symbol.to_string(), filter.clone())];
     let mut out = Vec::new();
+    let mut stmts = GraphStmts::prepare(conn)?;
     for _ in 0..depth {
         let mut next = Vec::new();
-        for (sym, hop_filter) in frontier {
-            for node in direct_callers(conn, &sym, &hop_filter)? {
+        for (sym, hop_filter) in &frontier {
+            for node in stmts.direct_callers(sym, hop_filter)? {
                 if seen.insert(node.id.clone()) {
                     next.push((
                         node.symbol.clone(),
@@ -39,52 +102,36 @@ pub fn find_callers(
     Ok(out)
 }
 
-fn direct_callers(
-    conn: &Connection,
-    symbol: &str,
-    filter: &SymbolFilter,
-) -> rusqlite::Result<Vec<Node>> {
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT n.id, n.symbol, n.kind, n.language, n.file_path, n.line
-        FROM edges e
-        JOIN nodes callee ON callee.id = e.callee_id
-        JOIN nodes n ON n.id = e.caller_id
-        WHERE callee.symbol = ?1
-          AND (?2 IS NULL OR callee.file_path = ?2)
-          AND (?3 IS NULL OR callee.id = ?3)
-        LIMIT 64
-        "#,
-    )?;
-    let rows = stmt.query_map(
-        params![symbol, filter.file_path, filter.node_id],
-        map_row,
-    )?;
-    rows.collect()
-}
-
 pub fn find_callees(
     conn: &Connection,
     symbol: &str,
+    depth: u32,
     filter: &SymbolFilter,
 ) -> rusqlite::Result<Vec<Node>> {
-    let mut stmt = conn.prepare(
-        r#"
-        SELECT n.id, n.symbol, n.kind, n.language, n.file_path, n.line
-        FROM edges e
-        JOIN nodes caller ON caller.id = e.caller_id
-        JOIN nodes n ON n.id = e.callee_id
-        WHERE caller.symbol = ?1
-          AND (?2 IS NULL OR caller.file_path = ?2)
-          AND (?3 IS NULL OR caller.id = ?3)
-        LIMIT 64
-        "#,
-    )?;
-    let rows = stmt.query_map(
-        params![symbol, filter.file_path, filter.node_id],
-        map_row,
-    )?;
-    rows.collect()
+    let depth = depth.max(1);
+    let mut seen = std::collections::HashSet::new();
+    let mut frontier = vec![(symbol.to_string(), filter.clone())];
+    let mut out = Vec::new();
+    let mut stmts = GraphStmts::prepare(conn)?;
+    for _ in 0..depth {
+        let mut next = Vec::new();
+        for (sym, hop_filter) in &frontier {
+            for node in stmts.direct_callees(sym, hop_filter)? {
+                if seen.insert(node.id.clone()) {
+                    next.push((
+                        node.symbol.clone(),
+                        SymbolFilter::from_options(Some(&node.file_path), None),
+                    ));
+                    out.push(node);
+                }
+            }
+        }
+        frontier = next;
+        if frontier.is_empty() {
+            break;
+        }
+    }
+    Ok(out)
 }
 
 pub fn impact_radius(
@@ -94,7 +141,7 @@ pub fn impact_radius(
     filter: &SymbolFilter,
 ) -> rusqlite::Result<ImpactReport> {
     let callers = find_callers(conn, symbol, depth, filter)?;
-    let callees = find_callees(conn, symbol, filter)?;
+    let callees = find_callees(conn, symbol, depth, filter)?;
     Ok(ImpactReport {
         symbol: symbol.to_string(),
         depth,
@@ -147,13 +194,28 @@ mod tests {
     }
 
     #[test]
+    fn find_callees_supports_depth() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        seed_graph(&conn);
+        let filter = SymbolFilter::from_options(None, None);
+        // depth=2 from "caller" should reach "target" (d1) and "leaf" (d2)
+        let callees = find_callees(&conn, "caller", 2, &filter).unwrap();
+        assert_eq!(callees.len(), 2);
+        let symbols: Vec<&str> = callees.iter().map(|n| n.symbol.as_str()).collect();
+        assert!(symbols.contains(&"target"));
+        assert!(symbols.contains(&"leaf"));
+    }
+
+    #[test]
     fn impact_radius_includes_both_directions() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         seed_graph(&conn);
         let filter = SymbolFilter::from_options(None, None);
         let report = impact_radius(&conn, "target", 2, &filter).unwrap();
         assert_eq!(report.callers.len(), 1);
+        // callees now supports BFS depth=2
         assert_eq!(report.callees.len(), 1);
+        assert_eq!(report.callees[0].symbol, "leaf");
     }
 
     #[test]
@@ -191,6 +253,7 @@ mod tests {
         let b_callees = find_callees(
             &conn,
             "caller_b",
+            1,
             &SymbolFilter::from_options(Some("b.rs"), None),
         )
         .unwrap();

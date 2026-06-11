@@ -32,6 +32,9 @@ pub struct IndexStats {
     pub edge_count: u64,
     pub file_count: u64,
     pub indexed_at: Option<String>,
+    /// SQLite database file size in bytes (None if stat fails)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub db_size_bytes: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -92,9 +95,10 @@ impl CodeGraphIndex {
     pub fn find_callees(
         &self,
         symbol: &str,
+        depth: u32,
         filter: &db::node_ops::SymbolFilter,
     ) -> anyhow::Result<Vec<Node>> {
-        Ok(graph::find_callees(&self.conn, symbol, filter)?)
+        Ok(graph::find_callees(&self.conn, symbol, depth, filter)?)
     }
 
     pub fn impact_radius(
@@ -123,7 +127,7 @@ impl CodeGraphIndex {
     }
 
     pub fn index_stats(&self) -> anyhow::Result<IndexStats> {
-        Ok(db::stats::index_stats(&self.conn)?)
+        Ok(db::stats::index_stats(&self.conn, &self.db_path)?)
     }
 
     pub fn list_files(&self) -> anyhow::Result<Vec<FileRecord>> {

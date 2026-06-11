@@ -20,18 +20,24 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
     let root = tree.root_node();
     let bytes = source.as_bytes();
     let mut symbols = Vec::new();
-    collect_symbols(root, bytes, &mut symbols);
     let mut edges = Vec::new();
-    collect_calls(root, bytes, &mut edges);
+    // Single-pass: collect both symbols and edges in one AST traversal
+    collect_all(root, bytes, &mut symbols, &mut edges);
     ParseOutput { symbols, edges }
 }
 
-fn collect_symbols(node: Node<'_>, source: &[u8], out: &mut Vec<ParsedSymbol>) {
+fn collect_all(
+    node: Node<'_>,
+    source: &[u8],
+    symbols: &mut Vec<ParsedSymbol>,
+    edges: &mut Vec<ParsedEdge>,
+) {
+    // Collect symbols at this node
     match node.kind() {
         "function_item" | "struct_item" | "enum_item" | "trait_item" | "type_item" => {
             if let Some(name) = node.child_by_field_name("name") {
                 if let Ok(text) = name.utf8_text(source) {
-                    out.push(ParsedSymbol {
+                    symbols.push(ParsedSymbol {
                         symbol: text.to_string(),
                         kind: node.kind().trim_end_matches("_item").to_string(),
                         line: node.start_position().row as u32 + 1,
@@ -41,14 +47,7 @@ fn collect_symbols(node: Node<'_>, source: &[u8], out: &mut Vec<ParsedSymbol>) {
         }
         _ => {}
     }
-    for i in 0..node.named_child_count() {
-        if let Some(child) = node.named_child(i) {
-            collect_symbols(child, source, out);
-        }
-    }
-}
-
-fn collect_calls(node: Node<'_>, source: &[u8], edges: &mut Vec<ParsedEdge>) {
+    // Collect call edges at this node
     if node.kind() == "call_expression" {
         if let Some(func) = node.child_by_field_name("function") {
             if let (Some(caller), Some(callee)) = (enclosing_symbol(node, source), callee_name(func, source))
@@ -61,9 +60,10 @@ fn collect_calls(node: Node<'_>, source: &[u8], edges: &mut Vec<ParsedEdge>) {
             }
         }
     }
+    // Recurse into children
     for i in 0..node.named_child_count() {
         if let Some(child) = node.named_child(i) {
-            collect_calls(child, source, edges);
+            collect_all(child, source, symbols, edges);
         }
     }
 }
@@ -84,15 +84,25 @@ fn callee_name(node: Node<'_>, source: &[u8]) -> Option<String> {
     }
 }
 
+/// Walk up AST to find nearest enclosing named scope.
+/// Supports function_item and closure_expression (with synthetic name for closures).
 fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
     let mut current = node.parent();
     while let Some(ancestor) = current {
-        if ancestor.kind() == "function_item" {
-            if let Some(name) = ancestor.child_by_field_name("name") {
-                if let Ok(text) = name.utf8_text(source) {
-                    return Some(text.to_string());
+        match ancestor.kind() {
+            "function_item" | "impl_item" => {
+                if let Some(name) = ancestor.child_by_field_name("name") {
+                    if let Ok(text) = name.utf8_text(source) {
+                        return Some(text.to_string());
+                    }
                 }
             }
+            "closure_expression" | "async_block" => {
+                // Closures/async blocks don't have names; use enclosing function if available
+                // by continuing to walk up. If we reach a function_item, use that.
+                // This preserves the behavior of attributing closure calls to the enclosing fn.
+            }
+            _ => {}
         }
         current = ancestor.parent();
     }

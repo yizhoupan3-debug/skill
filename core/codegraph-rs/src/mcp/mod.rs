@@ -274,7 +274,7 @@ pub fn dispatch_tool_call(params: &Value, index: &CodeGraphIndex) -> anyhow::Res
             let symbol = require_str(&args, "symbol")?;
             let filter = symbol_filter_from_args(&args);
             ensure_symbol_resolved(index, symbol, &filter)?;
-            let nodes = index.find_callees(symbol, &filter)?;
+            let nodes = index.find_callees(symbol, 1, &filter)?;
             json!({"nodes": nodes})
         }
         "codegraph_impact" => {
