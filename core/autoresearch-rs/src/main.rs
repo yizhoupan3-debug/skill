@@ -5304,15 +5304,6 @@ mod tests {
 
     // ── helpers ──────────────────────────────────────────────────────────
 
-    fn state_with_two_claims() -> Value {
-        let state = default_state(
-            "batch",
-            "Can retrieval augmented generation improve citation grounded research?",
-            "quick",
-        );
-        draft_claims_from_state(&state, None, 2)
-    }
-
     fn minimal_state() -> Value {
         default_state("test-project", "Does X improve Y?", "quick")
     }

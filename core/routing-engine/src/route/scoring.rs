@@ -11,6 +11,369 @@ use crate::hooks::is_review_prompt;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
+/// Score agent-swarm related signals. Returns `(delta, reasons)`.
+#[inline]
+fn score_agent_swarm_signals(
+    record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+    w: &ScoringWeights,
+    bounded_subagent_context: bool,
+    workflow_orchestration_context: bool,
+    parallel_execution_context: bool,
+    token_budget_pressure: bool,
+) -> (f64, Vec<String>) {
+    if record.slug != "agent-swarm-orchestration" {
+        return (0.0, Vec::new());
+    }
+    if !(bounded_subagent_context
+        || workflow_orchestration_context
+        || has_parallel_review_candidate_context(query_text, query_token_list)
+        || parallel_execution_context)
+    {
+        return (0.0, Vec::new());
+    }
+    let mut delta = w.agent_swarm_boost;
+    let mut reasons = Vec::new();
+    reasons.push(
+        "Agent-swarm boost applied: multi-agent delegation or worker orchestration wording detected."
+            .to_string(),
+    );
+    if parallel_execution_context {
+        delta += w.parallel_execution_boost;
+        reasons.push(
+            "Parallel-execution boost applied: independent lanes can run as bounded sidecars."
+                .to_string(),
+        );
+    }
+    if has_parallel_review_candidate_context(query_text, query_token_list) {
+        delta += w.parallel_review_boost;
+        reasons.push(
+            "Parallel-review boost applied: broad review scope should run subagent admission before a single-lane review."
+                .to_string(),
+        );
+    }
+    if bounded_subagent_context && token_budget_pressure {
+        delta += w.token_budget_boost;
+        reasons.push(
+            "Token-budget boost applied: bounded sidecars fit prompt-budget pressure better than wider orchestration."
+                .to_string(),
+        );
+    }
+    (delta, reasons)
+}
+
+/// Check framework-alias suppression. Returns `Some(candidate)` for early return, `None` otherwise.
+#[inline]
+fn check_framework_alias_suppression<'a>(
+    record: &'a SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+    explicit_framework_alias: bool,
+) -> Option<RouteCandidate<'a>> {
+    if framework_alias_requires_explicit_call(record) && !explicit_framework_alias {
+        let ci_gate_nl_routing = record.slug == "gh-fix-ci"
+            && should_route_to_gh_fix_ci(query_text, query_token_list);
+        if !ci_gate_nl_routing {
+            return Some(RouteCandidate {
+                record,
+                score: 0.0,
+                reasons: vec![
+                    "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
+                        .to_string(),
+                ],
+                matched_token_count: 0,
+            });
+        }
+    }
+    None
+}
+
+/// Score design-md signals. Returns `(delta, reasons)`.
+#[inline]
+fn score_design_md_signals(
+    record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+    current_score: f64,
+    w: &ScoringWeights,
+) -> (f64, Vec<String>) {
+    if record.slug != "design-md" {
+        return (0.0, Vec::new());
+    }
+    if !has_design_contract_context(query_text, query_token_list) {
+        return (0.0, Vec::new());
+    }
+    if has_design_output_audit_context(query_text, query_token_list)
+        || has_design_workflow_protocol_context(query_text, query_token_list)
+    {
+        return (0.0, Vec::new());
+    }
+    let mut reasons = Vec::new();
+    if has_quick_artifact_context(query_text, query_token_list) {
+        let new_score = current_score * w.design_md_quick_suppression_factor;
+        reasons.push(
+            "Design-md quick-task suppression applied: one-off artifact wording should not force a design contract."
+                .to_string(),
+        );
+        (new_score - current_score, reasons)
+    } else {
+        reasons.push(
+            "Design-md boost applied: reusable visual contract or design-token wording detected."
+                .to_string(),
+        );
+        (w.design_md_boost, reasons)
+    }
+}
+
+/// Score gate phrases, exact skill name, name tokens, and trigger hints.
+/// Returns `(delta, reasons, matched_query_tokens)`.
+#[inline]
+fn score_gate_name_token_signals(
+    record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+    query_tokens: &HashSet<String>,
+    w: &ScoringWeights,
+) -> (f64, Vec<String>, HashSet<String>) {
+    let mut delta = 0.0f64;
+    let mut reasons = Vec::new();
+    let mut matched_query_tokens: HashSet<String> = HashSet::new();
+
+    // Exact skill name
+    if !record.slug_lower.is_empty()
+        && (text_matches_phrase(query_token_list, &record.slug_lower)
+            || query_text.contains(&format!("${}", record.slug_lower)))
+    {
+        delta += w.exact_skill_name_boost;
+        reasons.push(format!("Exact skill name matched: {}.", record.slug));
+        for slug_tok in tokenize_route_text(&record.slug_lower) {
+            if query_tokens.contains(slug_tok.as_str()) {
+                matched_query_tokens.insert(slug_tok.clone());
+            }
+        }
+    }
+
+    // Gate phrases
+    let matched_gates = record
+        .gate_phrases
+        .iter()
+        .filter(|phrase| text_matches_phrase(query_token_list, phrase))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !matched_gates.is_empty() {
+        delta += w.gate_match_base
+            + i32::min(
+                w.gate_match_max_extra,
+                ((matched_gates.len() - 1) as i32) * w.gate_match_per_additional,
+            ) as f64;
+        reasons.push(format!(
+            "Routing gate matched: {}.",
+            matched_gates.join(", ")
+        ));
+        for phrase in &matched_gates {
+            let ptokens = tokenize_route_text(phrase);
+            if ptokens.len() == 1 {
+                for t in query_token_list {
+                    if text_matches_phrase(&[t.to_string()], phrase) {
+                        matched_query_tokens.insert(t.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // Name tokens
+    let mut shared_name_tokens = record
+        .name_tokens
+        .iter()
+        .filter(|token| query_tokens.contains(*token))
+        .cloned()
+        .collect::<Vec<_>>();
+    shared_name_tokens.sort();
+    if !shared_name_tokens.is_empty() {
+        delta += w.name_tokens_base + (shared_name_tokens.len() as f64) * w.name_tokens_per_token;
+        reasons.push(format!(
+            "Name tokens matched: {}.",
+            shared_name_tokens.join(", ")
+        ));
+        for tok in &shared_name_tokens {
+            matched_query_tokens.insert(tok.clone());
+        }
+    }
+
+    // Trigger hints
+    let matched_trigger_hints = record
+        .trigger_hints
+        .iter()
+        .filter(|phrase| {
+            phrase.chars().count() >= 2
+                && !common_route_stop_tokens().contains(&phrase.as_str())
+                && text_matches_phrase(query_token_list, phrase)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if !matched_trigger_hints.is_empty() {
+        delta += (matched_trigger_hints.len() as f64) * w.trigger_hint_per_match;
+        reasons.push(format!(
+            "Trigger hint matched: {}.",
+            matched_trigger_hints.join(", ")
+        ));
+        for phrase in &matched_trigger_hints {
+            let ptokens = tokenize_route_text(phrase);
+            if ptokens.len() == 1 {
+                for t in query_token_list {
+                    if text_matches_phrase(&[t.to_string()], phrase) {
+                        matched_query_tokens.insert(t.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    (delta, reasons, matched_query_tokens)
+}
+
+/// Score metadata positive triggers, keyword tokens, and alias tokens.
+/// Returns `(delta, reasons, matched_query_tokens)`.
+#[inline]
+fn score_metadata_trigger_signals(
+    record: &SkillRecord,
+    query_tokens: &HashSet<String>,
+    query_token_list: &[String],
+    w: &ScoringWeights,
+) -> (f64, Vec<String>, HashSet<String>) {
+    let mut delta = 0.0f64;
+    let mut reasons = Vec::new();
+    let mut matched_query_tokens: HashSet<String> = HashSet::new();
+
+    // Metadata positive triggers
+    let matched_metadata_triggers = record
+        .metadata_positive_triggers
+        .iter()
+        .filter(|phrase| {
+            phrase.chars().count() >= 2
+                && !common_route_stop_tokens().contains(&phrase.as_str())
+                && text_matches_phrase(query_token_list, phrase)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    if !matched_metadata_triggers.is_empty() {
+        delta += (matched_metadata_triggers.len() as f64) * w.metadata_trigger_per_match;
+        reasons.push(format!(
+            "Routing metadata positive trigger matched: {}.",
+            matched_metadata_triggers.join(", ")
+        ));
+        for phrase in &matched_metadata_triggers {
+            let ptokens = tokenize_route_text(phrase);
+            if ptokens.len() == 1 {
+                for t in query_token_list {
+                    if text_matches_phrase(&[t.to_string()], phrase) {
+                        matched_query_tokens.insert(t.clone());
+                    }
+                }
+            }
+        }
+    }
+
+    // Keyword tokens
+    let mut shared_keywords = record
+        .keyword_tokens
+        .iter()
+        .filter(|token| query_tokens.contains(*token))
+        .cloned()
+        .collect::<Vec<_>>();
+    shared_keywords.sort();
+    if !shared_keywords.is_empty() {
+        delta += f64::min(
+            w.keywords_max,
+            (shared_keywords.len() as f64) * w.keywords_per_keyword,
+        );
+        reasons.push(format!(
+            "Description keywords matched: {}.",
+            shared_keywords
+                .iter()
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        for tok in &shared_keywords {
+            matched_query_tokens.insert(tok.clone());
+        }
+    }
+
+    // Alias tokens
+    let mut alias_hits = record
+        .alias_tokens
+        .iter()
+        .filter(|token| query_tokens.contains(*token))
+        .cloned()
+        .collect::<Vec<_>>();
+    alias_hits.sort();
+    if !alias_hits.is_empty() {
+        delta += w.alias_hits_base + (alias_hits.len() as f64) * w.alias_hits_per_hit;
+        reasons.push(format!(
+            "Skill alias hints matched: {}.",
+            alias_hits
+                .iter()
+                .take(8)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        for tok in &alias_hits {
+            matched_query_tokens.insert(tok.clone());
+        }
+    }
+
+    (delta, reasons, matched_query_tokens)
+}
+
+/// Score session-start and code-review-deep signals. Returns `(delta, reasons)`.
+#[inline]
+fn score_session_start_signals(
+    record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+    first_turn: bool,
+    current_score: f64,
+    w: &ScoringWeights,
+) -> (f64, Vec<String>) {
+    let mut delta = 0.0f64;
+    let mut reasons = Vec::new();
+
+    if first_turn && current_score > 0.0 {
+        if record.session_start_lower == "required" {
+            delta += w.session_start_required_boost;
+            reasons.push(format!(
+                "Session-start required boost applied (+{:.0}).",
+                w.session_start_required_boost
+            ));
+        } else if record.session_start_lower == "preferred" {
+            delta += w.session_start_preferred_boost;
+            reasons.push(format!(
+                "Session-start preferred boost applied (+{:.0}).",
+                w.session_start_preferred_boost
+            ));
+        }
+    }
+
+    if record.slug == "code-review-deep"
+        && first_turn
+        && is_review_prompt(query_text)
+        && !has_paper_context(query_text, query_token_list)
+    {
+        delta += w.code_review_deep_boost;
+        reasons.push(
+            "Code-review-deep boost applied: review-class prompt without paper-only context."
+                .to_string(),
+        );
+    }
+
+    (delta, reasons)
+}
+
 pub fn score_route_candidate<'a>(
     record: &'a SkillRecord,
     query_text: &'a str,
@@ -49,53 +412,29 @@ pub fn score_route_candidate<'a>(
     let explicit_framework_alias = framework_alias_requires_explicit_call(record)
         && has_explicit_framework_alias_call(query_text, query_token_list, record);
     let parallel_execution_context = has_parallel_execution_context(query_text, query_token_list);
-    if record.slug == "agent-swarm-orchestration"
-        && (bounded_subagent_context
-            || workflow_orchestration_context
-            || has_parallel_review_candidate_context(query_text, query_token_list)
-            || parallel_execution_context)
-    {
-        score += w.agent_swarm_boost;
-        reasons.push(
-            "Agent-swarm boost applied: multi-agent delegation or worker orchestration wording detected."
-                .to_string(),
-        );
-        if parallel_execution_context {
-            score += w.parallel_execution_boost;
-            reasons.push(
-                "Parallel-execution boost applied: independent lanes can run as bounded sidecars."
-                    .to_string(),
-            );
-        }
-        if has_parallel_review_candidate_context(query_text, query_token_list) {
-            score += w.parallel_review_boost;
-            reasons.push(
-                "Parallel-review boost applied: broad review scope should run subagent admission before a single-lane review."
-                    .to_string(),
-            );
-        }
-        if bounded_subagent_context && token_budget_pressure {
-            score += w.token_budget_boost;
-            reasons.push(
-                "Token-budget boost applied: bounded sidecars fit prompt-budget pressure better than wider orchestration."
-                    .to_string(),
-            );
-        }
-    }
-    if framework_alias_requires_explicit_call(record) && !explicit_framework_alias {
-        let ci_gate_nl_routing = record.slug == "gh-fix-ci"
-            && should_route_to_gh_fix_ci(query_text, query_token_list);
-        if !ci_gate_nl_routing {
-            return RouteCandidate {
-                record,
-                score: 0.0,
-                reasons: vec![
-                    "Suppressed: framework alias skills only route from explicit /alias or $alias entrypoints."
-                        .to_string(),
-                ],
-                matched_token_count: 0,
-            };
-        }
+
+    // --- agent-swarm signals ---
+    let (swarm_delta, swarm_reasons) = score_agent_swarm_signals(
+        record,
+        query_text,
+        query_token_list,
+        w,
+        bounded_subagent_context,
+        workflow_orchestration_context,
+        parallel_execution_context,
+        token_budget_pressure,
+    );
+    score += swarm_delta;
+    reasons.extend(swarm_reasons);
+
+    // --- framework-alias suppression (early return) ---
+    if let Some(done) = check_framework_alias_suppression(
+        record,
+        query_text,
+        query_token_list,
+        explicit_framework_alias,
+    ) {
+        return done;
     }
     if let Some(done) = super::nl_route_adjustments::apply_nl_post_framework_alias_rules(
         record,
@@ -108,225 +447,37 @@ pub fn score_route_candidate<'a>(
     ) {
         return done;
     }
-    let design_output_audit_context = has_design_output_audit_context(query_text, query_token_list);
-    let design_workflow_protocol_context =
-        has_design_workflow_protocol_context(query_text, query_token_list);
-    if record.slug == "design-md"
-        && has_design_contract_context(query_text, query_token_list)
-        && !design_output_audit_context
-        && !design_workflow_protocol_context
-    {
-        if has_quick_artifact_context(query_text, query_token_list) {
-            score *= w.design_md_quick_suppression_factor;
-            reasons.push(
-                "Design-md quick-task suppression applied: one-off artifact wording should not force a design contract."
-                    .to_string(),
-            );
-        } else {
-            score += w.design_md_boost;
-            reasons.push(
-                "Design-md boost applied: reusable visual contract or design-token wording detected."
-                    .to_string(),
-            );
-        }
-    }
+
+    // --- design-md signals ---
+    let (design_delta, design_reasons) =
+        score_design_md_signals(record, query_text, query_token_list, score, w);
+    score += design_delta;
+    reasons.extend(design_reasons);
+
     if explicit_framework_alias {
         score += w.framework_alias_explicit_boost;
         reasons.push("Framework alias entrypoint matched explicitly.".to_string());
     }
 
-    if !record.slug_lower.is_empty()
-        && (text_matches_phrase(query_token_list, &record.slug_lower)
-            || query_text.contains(&format!("${}", record.slug_lower)))
-    {
-        score += w.exact_skill_name_boost;
-        reasons.push(format!("Exact skill name matched: {}.", record.slug));
+    // --- gate / name-token / trigger-hint signals ---
+    let (gate_delta, gate_reasons, gate_tokens) =
+        score_gate_name_token_signals(record, query_text, query_token_list, query_tokens, w);
+    score += gate_delta;
+    reasons.extend(gate_reasons);
+    matched_query_tokens.extend(gate_tokens);
 
-        for slug_tok in tokenize_route_text(&record.slug_lower) {
-            if query_tokens.contains(slug_tok.as_str()) {
-                matched_query_tokens.insert(slug_tok.clone());
-            }
-        }
-    }
+    // --- metadata-trigger / keyword / alias signals ---
+    let (meta_delta, meta_reasons, meta_tokens) =
+        score_metadata_trigger_signals(record, query_tokens, query_token_list, w);
+    score += meta_delta;
+    reasons.extend(meta_reasons);
+    matched_query_tokens.extend(meta_tokens);
 
-    let matched_gates = record
-        .gate_phrases
-        .iter()
-        .filter(|phrase| text_matches_phrase(query_token_list, phrase))
-        .cloned()
-        .collect::<Vec<_>>();
-    if !matched_gates.is_empty() {
-        score += w.gate_match_base
-            + i32::min(
-                w.gate_match_max_extra,
-                ((matched_gates.len() - 1) as i32) * w.gate_match_per_additional,
-            ) as f64;
-        reasons.push(format!(
-            "Routing gate matched: {}.",
-            matched_gates.join(", ")
-        ));
-        for phrase in &matched_gates {
-            let ptokens = tokenize_route_text(phrase);
-            if ptokens.len() == 1 {
-                for t in query_token_list {
-                    if text_matches_phrase(&[t.to_string()], phrase) {
-                        matched_query_tokens.insert(t.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    let mut shared_name_tokens = record
-        .name_tokens
-        .iter()
-        .filter(|token| query_tokens.contains(*token))
-        .cloned()
-        .collect::<Vec<_>>();
-    shared_name_tokens.sort();
-    if !shared_name_tokens.is_empty() {
-        score += w.name_tokens_base + (shared_name_tokens.len() as f64) * w.name_tokens_per_token;
-        reasons.push(format!(
-            "Name tokens matched: {}.",
-            shared_name_tokens.join(", ")
-        ));
-        for tok in &shared_name_tokens {
-            matched_query_tokens.insert(tok.clone());
-        }
-    }
-
-    let matched_trigger_hints = record
-        .trigger_hints
-        .iter()
-        .filter(|phrase| {
-            phrase.chars().count() >= 2
-                && !common_route_stop_tokens().contains(&phrase.as_str())
-                && text_matches_phrase(query_token_list, phrase)
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    if !matched_trigger_hints.is_empty() {
-        score += (matched_trigger_hints.len() as f64) * w.trigger_hint_per_match;
-        reasons.push(format!(
-            "Trigger hint matched: {}.",
-            matched_trigger_hints.join(", ")
-        ));
-        for phrase in &matched_trigger_hints {
-            let ptokens = tokenize_route_text(phrase);
-            if ptokens.len() == 1 {
-                for t in query_token_list {
-                    if text_matches_phrase(&[t.to_string()], phrase) {
-                        matched_query_tokens.insert(t.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    let matched_metadata_triggers = record
-        .metadata_positive_triggers
-        .iter()
-        .filter(|phrase| {
-            phrase.chars().count() >= 2
-                && !common_route_stop_tokens().contains(&phrase.as_str())
-                && text_matches_phrase(query_token_list, phrase)
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    if !matched_metadata_triggers.is_empty() {
-        score += (matched_metadata_triggers.len() as f64) * w.metadata_trigger_per_match;
-        reasons.push(format!(
-            "Routing metadata positive trigger matched: {}.",
-            matched_metadata_triggers.join(", ")
-        ));
-        for phrase in &matched_metadata_triggers {
-            let ptokens = tokenize_route_text(phrase);
-            if ptokens.len() == 1 {
-                for t in query_token_list {
-                    if text_matches_phrase(&[t.to_string()], phrase) {
-                        matched_query_tokens.insert(t.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    let mut shared_keywords = record
-        .keyword_tokens
-        .iter()
-        .filter(|token| query_tokens.contains(*token))
-        .cloned()
-        .collect::<Vec<_>>();
-    shared_keywords.sort();
-    if !shared_keywords.is_empty() {
-        score += f64::min(
-            w.keywords_max,
-            (shared_keywords.len() as f64) * w.keywords_per_keyword,
-        );
-        reasons.push(format!(
-            "Description keywords matched: {}.",
-            shared_keywords
-                .iter()
-                .take(8)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-        for tok in &shared_keywords {
-            matched_query_tokens.insert(tok.clone());
-        }
-    }
-
-    let mut alias_hits = record
-        .alias_tokens
-        .iter()
-        .filter(|token| query_tokens.contains(*token))
-        .cloned()
-        .collect::<Vec<_>>();
-    alias_hits.sort();
-    if !alias_hits.is_empty() {
-        score += w.alias_hits_base + (alias_hits.len() as f64) * w.alias_hits_per_hit;
-        reasons.push(format!(
-            "Skill alias hints matched: {}.",
-            alias_hits
-                .iter()
-                .take(8)
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ")
-        ));
-        for tok in &alias_hits {
-            matched_query_tokens.insert(tok.clone());
-        }
-    }
-
-    if first_turn && score > 0.0 {
-        if record.session_start_lower == "required" {
-            score += w.session_start_required_boost;
-            reasons.push(format!(
-                "Session-start required boost applied (+{:.0}).",
-                w.session_start_required_boost
-            ));
-        } else if record.session_start_lower == "preferred" {
-            score += w.session_start_preferred_boost;
-            reasons.push(format!(
-                "Session-start preferred boost applied (+{:.0}).",
-                w.session_start_preferred_boost
-            ));
-        }
-    }
-
-    if record.slug == "code-review-deep"
-        && first_turn
-        && is_review_prompt(query_text)
-        && !has_paper_context(query_text, query_token_list)
-    {
-        score += w.code_review_deep_boost;
-        reasons.push(
-            "Code-review-deep boost applied: review-class prompt without paper-only context."
-                .to_string(),
-        );
-    }
+    // --- session-start / code-review-deep signals ---
+    let (start_delta, start_reasons) =
+        score_session_start_signals(record, query_text, query_token_list, first_turn, score, w);
+    score += start_delta;
+    reasons.extend(start_reasons);
 
     if record.owner_lower == "gate" && score > 0.0 {
         score += w.gate_owner_boost;

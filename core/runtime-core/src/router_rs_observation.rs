@@ -226,9 +226,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn cursor() -> HookObservationHost {
-        HookObservationHost::from_host_id("cursor").unwrap()
-    }
     fn claude_code() -> HookObservationHost {
         HookObservationHost::from_host_id("claude-code").unwrap()
     }

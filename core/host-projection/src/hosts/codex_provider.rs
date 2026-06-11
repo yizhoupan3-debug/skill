@@ -2,15 +2,9 @@
 
 use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
+    HARNESS_CAPABILITIES_FULL,
 };
 use serde_json::Value;
-
-const HARNESS_CAPABILITIES: &[&str] = &[
-    "hot_runtime_routing",
-    "l2_continuity_contract",
-    "closeout_evidence_hooks",
-    "review_gate_router_observation",
-];
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CodexHostProvider;
@@ -25,7 +19,7 @@ impl HostLifecycle for CodexHostProvider {
     }
 
     fn harness_capabilities(&self) -> &'static [&'static str] {
-        HARNESS_CAPABILITIES
+        HARNESS_CAPABILITIES_FULL
     }
 
     fn context_file(&self) -> &'static str {

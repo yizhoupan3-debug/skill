@@ -41,32 +41,19 @@ pub fn read_primary_task_id(repo_root: &Path) -> Option<String> {
 }
 
 pub fn read_active_task_id(repo_root: &Path) -> Option<String> {
-    // Try TASK_POINTERS.json first (Phase 3C consolidated file)
-    let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
-    if pointers_path.is_file() {
-        let raw = fs::read_to_string(&pointers_path).ok()?;
-        let data: Value = serde_json::from_str(&raw).ok()?;
-        if let Some(tid) = data.get("active_task_id").and_then(Value::as_str) {
-            let tid = tid.trim().to_string();
-            if !tid.is_empty() {
-                crate::utils::path_guard::safe_task_id_component(&tid)?;
-                return Some(tid);
-            }
-        }
-    }
-    // Fallback: legacy active_task.json
-    let path = repo_root.join("artifacts/current/active_task.json");
-    let raw = fs::read_to_string(&path).ok()?;
-    parse_task_id_from_pointer_json(&raw)
+    read_pointer_task_id(repo_root, "active_task_id", "active_task.json")
 }
 
 pub fn read_focus_task_id(repo_root: &Path) -> Option<String> {
-    // Try TASK_POINTERS.json first (Phase 3C consolidated file)
+    read_pointer_task_id(repo_root, "focus_task_id", "focus_task.json")
+}
+
+fn read_pointer_task_id(repo_root: &Path, key: &str, legacy_filename: &str) -> Option<String> {
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
     if pointers_path.is_file() {
         let raw = fs::read_to_string(&pointers_path).ok()?;
         let data: Value = serde_json::from_str(&raw).ok()?;
-        if let Some(tid) = data.get("focus_task_id").and_then(Value::as_str) {
+        if let Some(tid) = data.get(key).and_then(Value::as_str) {
             let tid = tid.trim().to_string();
             if !tid.is_empty() {
                 crate::utils::path_guard::safe_task_id_component(&tid)?;
@@ -74,8 +61,7 @@ pub fn read_focus_task_id(repo_root: &Path) -> Option<String> {
             }
         }
     }
-    // Fallback: legacy focus_task.json
-    let path = repo_root.join("artifacts/current/focus_task.json");
+    let path = repo_root.join("artifacts/current").join(legacy_filename);
     let raw = fs::read_to_string(&path).ok()?;
     parse_task_id_from_pointer_json(&raw)
 }
@@ -228,23 +214,28 @@ fn pointer_file_matches_task_id(path: &Path, task_id: &str) -> bool {
         .is_some_and(|id| id == task_id)
 }
 
-/// Write `artifacts/current/active_task.json` (`{"task_id":…}` only).
-pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), String> {
-    crate::utils::path_guard::validate_task_id_component(task_id)?;
+/// Load TASK_POINTERS.json, creating parent dirs if needed.
+fn load_task_pointers_json(repo_root: &Path) -> Result<Value, String> {
     let mirror = repo_root.join("artifacts/current");
     fs::create_dir_all(&mirror).map_err(|e| format!("mkdir {}: {e}", mirror.display()))?;
     let pointers_path = mirror.join("TASK_POINTERS.json");
-    let mut pointers = if pointers_path.is_file() {
+    Ok(if pointers_path.is_file() {
         serde_json::from_str::<Value>(&fs::read_to_string(&pointers_path).unwrap_or_default())
             .unwrap_or_else(|_| json!({}))
     } else {
         json!({})
-    };
+    })
+}
+
+/// Write `artifacts/current/active_task.json` (`{"task_id":…}` only).
+pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), String> {
+    crate::utils::path_guard::validate_task_id_component(task_id)?;
+    let mut pointers = load_task_pointers_json(repo_root)?;
     if let Some(obj) = pointers.as_object_mut() {
         obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
         obj.insert("active_task_id".to_string(), json!(task_id));
     }
-    write_atomic_json(&pointers_path, &pointers)
+    write_atomic_json(&repo_root.join("artifacts/current/TASK_POINTERS.json"), &pointers)
 }
 
 fn write_focus_task_pointer_minimal(
@@ -253,20 +244,11 @@ fn write_focus_task_pointer_minimal(
     task_label: &str,
 ) -> Result<(), String> {
     crate::utils::path_guard::validate_task_id_component(task_id)?;
-    let mirror = repo_root.join("artifacts/current");
-    fs::create_dir_all(&mirror).map_err(|e| format!("mkdir {}: {e}", mirror.display()))?;
-    let pointers_path = mirror.join("TASK_POINTERS.json");
-    let mut pointers = if pointers_path.is_file() {
-        serde_json::from_str::<Value>(&fs::read_to_string(&pointers_path).unwrap_or_default())
-            .unwrap_or_else(|_| json!({}))
-    } else {
-        json!({})
-    };
+    let mut pointers = load_task_pointers_json(repo_root)?;
     let updated_at = now_iso();
     if let Some(obj) = pointers.as_object_mut() {
         obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
         obj.insert("focus_task_id".to_string(), json!(task_id));
-        // Update matching task entry in tasks array
         if let Some(tasks) = obj.get_mut("tasks").and_then(|v| v.as_array_mut()) {
             let mut found = false;
             for entry in tasks.iter_mut() {
@@ -294,7 +276,7 @@ fn write_focus_task_pointer_minimal(
             }]));
         }
     }
-    write_atomic_json(&pointers_path, &pointers)
+    write_atomic_json(&repo_root.join("artifacts/current/TASK_POINTERS.json"), &pointers)
 }
 
 fn goal_drive_set_focus_from_payload(payload: &Value) -> bool {

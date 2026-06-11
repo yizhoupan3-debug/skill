@@ -1,7 +1,7 @@
 //! Workspace DAG compliance smoke tests.
 //!
-//! Verifies the nine-crate architecture matches roadmap v5 §1.3:
-//! - 9 core crates exist in workspace
+//! Verifies the eight-crate architecture matches roadmap v5 §1.3:
+//! - 8 core crates exist in workspace (core-math merged into runtime-core 2026-06-11)
 //! - Leaf crates have zero workspace deps
 //! - DAG direction is correct (no reverse edges)
 //! - B10/B11/B8 are fully independent
@@ -53,7 +53,6 @@ fn workspace_has_nine_core_crates() {
     let expected_crates = [
         "core/core-state",
         "core/core-policy",
-        "core/core-math",
         "core/framework-kernel",
         "core/routing-engine",
         "core/router-rs",
@@ -77,7 +76,6 @@ fn leaf_crates_have_zero_workspace_deps() {
     let leaf_crates = [
         "core/core-state",
         "core/framework-kernel",
-        "core/core-math",
         "core/routing-engine",
         "core/evolution-rs",
         "core/codegraph-rs",
@@ -87,7 +85,6 @@ fn leaf_crates_have_zero_workspace_deps() {
     let workspace_core = [
         "core-state",
         "core-policy",
-        "core-math",
         "framework-kernel",
         "routing-engine",
         "router-rs",
@@ -142,7 +139,6 @@ fn router_rs_deps_are_correct() {
         "core-state",
         "framework-kernel",
         "core-policy",
-        "core-math",
         "routing-engine",
     ];
     for dep in &expected_deps {
@@ -160,7 +156,6 @@ fn b10_codegraph_rs_is_independent() {
     let framework_crates = [
         "core-state",
         "core-policy",
-        "core-math",
         "framework-kernel",
         "routing-engine",
         "router-rs",
@@ -180,7 +175,6 @@ fn b11_evolution_rs_is_independent() {
     let framework_crates = [
         "core-state",
         "core-policy",
-        "core-math",
         "framework-kernel",
         "routing-engine",
         "router-rs",

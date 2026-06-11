@@ -20,7 +20,6 @@ members = [
     "core/framework-kernel",
     "core/framework-profile",
     "core/core-policy",
-    "core/core-math",
     "core/routing-engine",
     "core/router-rs",
     "core/router-rs-cli",

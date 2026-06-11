@@ -92,658 +92,492 @@ fn next_background_parallel_group_id() -> String {
     format!("pgroup_{nanos:x}")
 }
 
+/// 构建一个填充了所有默认 `None`/空值字段的 `BackgroundControlResponsePayload` 基础壳。
+/// 各 handler 只需覆盖业务上有意义的字段。
+fn base_response(
+    operation: &str,
+    supported_multitask_strategies: Vec<String>,
+) -> BackgroundControlResponsePayload {
+    BackgroundControlResponsePayload {
+        schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
+        authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
+        operation: operation.to_string(),
+        resolved_parallel_group_id: None,
+        lane_ids: None,
+        normalized_multitask_strategy: None,
+        supported_multitask_strategies,
+        strategy_supported: true,
+        accepted: None,
+        requires_takeover: None,
+        error: None,
+        should_retry: None,
+        next_retry_count: None,
+        backoff_seconds: None,
+        terminal_status: None,
+        resolved_status: None,
+        finalize_immediately: None,
+        cancel_running_task: None,
+        reason: String::new(),
+        effect_plan: background_effect_plan("noop"),
+    }
+}
+
+// ─── per-operation handlers ──────────────────────────────────────────
+
+fn handle_batch_plan(
+    payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let batch_size = payload.batch_size.unwrap_or(0);
+    if batch_size == 0 {
+        let mut effect_plan = background_effect_plan("reject");
+        effect_plan.terminal_status = Some("failed".to_string());
+        let mut resp = base_response("batch-plan", supported_multitask_strategies);
+        resp.strategy_supported = true;
+        resp.accepted = Some(false);
+        resp.requires_takeover = Some(false);
+        resp.error =
+            Some("enqueue_background_batch requires at least one request.".to_string());
+        resp.terminal_status = Some("failed".to_string());
+        resp.finalize_immediately = Some(true);
+        resp.cancel_running_task = Some(false);
+        resp.reason = "batch-plan-empty".to_string();
+        resp.effect_plan = effect_plan;
+        return Ok(resp);
+    }
+
+    let requested_group_id = payload
+        .requested_parallel_group_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string());
+    let mut request_group_ids = HashSet::new();
+    if let Some(values) = payload.request_parallel_group_ids.as_ref() {
+        for value in values {
+            if let Some(group_id) = value
+                .as_deref()
+                .map(str::trim)
+                .filter(|candidate| !candidate.is_empty())
+            {
+                request_group_ids.insert(group_id.to_string());
+            }
+        }
+    }
+    if request_group_ids.len() > 1 {
+        let mut effect_plan = background_effect_plan("reject");
+        effect_plan.terminal_status = Some("failed".to_string());
+        let mut resp = base_response("batch-plan", supported_multitask_strategies);
+        resp.accepted = Some(false);
+        resp.requires_takeover = Some(false);
+        resp.error = Some(
+            "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
+                .to_string(),
+        );
+        resp.terminal_status = Some("failed".to_string());
+        resp.finalize_immediately = Some(true);
+        resp.cancel_running_task = Some(false);
+        resp.reason = "batch-plan-misaligned-parallel-group".to_string();
+        resp.effect_plan = effect_plan;
+        return Ok(resp);
+    }
+    if let Some(requested) = requested_group_id.as_ref() {
+        if let Some(existing) = request_group_ids.iter().next() {
+            if existing != requested {
+                let mut effect_plan = background_effect_plan("reject");
+                effect_plan.terminal_status = Some("failed".to_string());
+                let mut resp = base_response("batch-plan", supported_multitask_strategies);
+                resp.accepted = Some(false);
+                resp.requires_takeover = Some(false);
+                resp.error = Some(
+                    "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
+                        .to_string(),
+                );
+                resp.terminal_status = Some("failed".to_string());
+                resp.finalize_immediately = Some(true);
+                resp.cancel_running_task = Some(false);
+                resp.reason = "batch-plan-misaligned-parallel-group".to_string();
+                resp.effect_plan = effect_plan;
+                return Ok(resp);
+            }
+        }
+    }
+
+    let resolved_parallel_group_id = requested_group_id
+        .or_else(|| request_group_ids.into_iter().next())
+        .unwrap_or_else(next_background_parallel_group_id);
+    let lane_id_prefix = payload
+        .lane_id_prefix
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("lane");
+    let lane_ids = (0..batch_size)
+        .map(|index| {
+            payload
+                .request_lane_ids
+                .as_ref()
+                .and_then(|values| values.get(index))
+                .and_then(|value| value.as_deref())
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| format!("{lane_id_prefix}-{}", index + 1))
+        })
+        .collect::<Vec<_>>();
+    let effect_plan = background_effect_plan("plan_batch");
+    let mut resp = base_response("batch-plan", supported_multitask_strategies);
+    resp.resolved_parallel_group_id = Some(resolved_parallel_group_id);
+    resp.lane_ids = Some(lane_ids);
+    resp.accepted = Some(true);
+    resp.requires_takeover = Some(false);
+    resp.finalize_immediately = Some(false);
+    resp.cancel_running_task = Some(false);
+    resp.reason = "batch-plan-resolved".to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
+fn handle_enqueue(
+    payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let normalized_multitask_strategy =
+        normalize_multitask_strategy(payload.multitask_strategy.as_deref());
+    let strategy_supported = supported_multitask_strategies
+        .iter()
+        .any(|strategy| strategy == &normalized_multitask_strategy);
+    if !strategy_supported {
+        let mut effect_plan = background_effect_plan("reject");
+        effect_plan.terminal_status = Some("failed".to_string());
+        let mut resp = base_response("enqueue", supported_multitask_strategies);
+        resp.normalized_multitask_strategy = Some(normalized_multitask_strategy);
+        resp.strategy_supported = false;
+        resp.accepted = Some(false);
+        resp.requires_takeover = Some(false);
+        resp.error = Some(format!(
+            "Unsupported multitask strategy: {}. Supported strategies: interrupt, reject",
+            payload.multitask_strategy.as_deref().unwrap_or("reject")
+        ));
+        resp.reason = "invalid-multitask-strategy".to_string();
+        resp.effect_plan = effect_plan;
+        return Ok(resp);
+    }
+    let active_job_count = payload.active_job_count.unwrap_or(0);
+    let capacity_limit = payload.capacity_limit.unwrap_or(0);
+    if active_job_count >= capacity_limit {
+        let mut effect_plan = background_effect_plan("reject");
+        effect_plan.terminal_status = Some("failed".to_string());
+        let mut resp = base_response("enqueue", supported_multitask_strategies);
+        resp.normalized_multitask_strategy = Some(normalized_multitask_strategy.clone());
+        resp.accepted = Some(false);
+        resp.requires_takeover = Some(normalized_multitask_strategy == "interrupt");
+        resp.error = Some(format!(
+            "Too many admitted background jobs ({}/{})",
+            active_job_count, capacity_limit
+        ));
+        resp.reason = "capacity-rejected".to_string();
+        resp.effect_plan = effect_plan;
+        return Ok(resp);
+    }
+    let effect_plan = background_effect_plan("admit");
+    let mut resp = base_response("enqueue", supported_multitask_strategies);
+    resp.normalized_multitask_strategy = Some(normalized_multitask_strategy.clone());
+    resp.accepted = Some(true);
+    resp.requires_takeover = Some(normalized_multitask_strategy == "interrupt");
+    resp.reason = "accepted".to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
+fn handle_interrupt(
+    payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let current_status = payload
+        .current_status
+        .unwrap_or_else(|| "queued".to_string());
+    let task_active = payload.task_active.unwrap_or(false);
+    let task_done = payload.task_done.unwrap_or(false);
+    let finalize_immediately =
+        matches!(current_status.as_str(), "queued" | "retry_scheduled")
+            || !task_active
+            || task_done;
+    let mut effect_plan = if finalize_immediately {
+        background_effect_plan("finalize_interrupted")
+    } else {
+        background_effect_plan("request_interrupt")
+    };
+    effect_plan.finalize_immediately = Some(finalize_immediately);
+    effect_plan.cancel_running_task =
+        Some(!finalize_immediately && task_active && !task_done);
+    effect_plan.resolved_status = Some("interrupt_requested".to_string());
+    effect_plan.terminal_status = Some(if finalize_immediately {
+        "interrupted".to_string()
+    } else {
+        "interrupt_requested".to_string()
+    });
+    let terminal = if finalize_immediately {
+        "interrupted"
+    } else {
+        "interrupt_requested"
+    };
+    let reason = if finalize_immediately {
+        "interrupt-finalized"
+    } else {
+        "interrupt-cancel-running-task"
+    };
+    let mut resp = base_response("interrupt", supported_multitask_strategies);
+    resp.terminal_status = Some(terminal.to_string());
+    resp.resolved_status = Some("interrupt_requested".to_string());
+    resp.finalize_immediately = Some(finalize_immediately);
+    resp.cancel_running_task = Some(!finalize_immediately && task_active && !task_done);
+    resp.reason = reason.to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
+fn handle_claim(
+    payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let current_status = payload
+        .current_status
+        .unwrap_or_else(|| "queued".to_string());
+    if matches!(
+        current_status.as_str(),
+        "interrupt_requested" | "interrupted"
+    ) {
+        let mut effect_plan = background_effect_plan("finalize_interrupted");
+        effect_plan.finalize_immediately = Some(true);
+        effect_plan.terminal_status = Some("interrupted".to_string());
+        effect_plan.resolved_status = Some("interrupted".to_string());
+        let mut resp = base_response("claim", supported_multitask_strategies);
+        resp.terminal_status = Some("interrupted".to_string());
+        resp.resolved_status = Some("interrupted".to_string());
+        resp.finalize_immediately = Some(true);
+        resp.cancel_running_task = Some(false);
+        resp.reason = "claim-suppressed-interrupted".to_string();
+        resp.effect_plan = effect_plan;
+        return Ok(resp);
+    }
+    if matches!(
+        current_status.as_str(),
+        "completed" | "failed" | "retry_exhausted"
+    ) {
+        let mut effect_plan = background_effect_plan("finalize_terminal");
+        effect_plan.finalize_immediately = Some(true);
+        effect_plan.terminal_status = Some(current_status.clone());
+        effect_plan.resolved_status = Some(current_status.clone());
+        let mut resp = base_response("claim", supported_multitask_strategies);
+        resp.terminal_status = Some(current_status.clone());
+        resp.resolved_status = Some(current_status);
+        resp.finalize_immediately = Some(true);
+        resp.cancel_running_task = Some(false);
+        resp.reason = "claim-suppressed-terminal".to_string();
+        resp.effect_plan = effect_plan;
+        return Ok(resp);
+    }
+    let mut effect_plan = background_effect_plan("claim_execution");
+    effect_plan.finalize_immediately = Some(false);
+    effect_plan.resolved_status = Some("running".to_string());
+    let mut resp = base_response("claim", supported_multitask_strategies);
+    resp.resolved_status = Some("running".to_string());
+    resp.finalize_immediately = Some(false);
+    resp.cancel_running_task = Some(false);
+    resp.reason = "claim-running".to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
+fn handle_complete(
+    payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let mut effect_plan = background_effect_plan("finalize_completed");
+    effect_plan.finalize_immediately = Some(true);
+    effect_plan.terminal_status = Some("completed".to_string());
+    effect_plan.resolved_status = Some("completed".to_string());
+    let mut resp = base_response("complete", supported_multitask_strategies);
+    resp.terminal_status = Some("completed".to_string());
+    resp.resolved_status = Some("completed".to_string());
+    resp.finalize_immediately = Some(true);
+    resp.cancel_running_task = Some(false);
+    resp.reason = "complete-finalized".to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
+fn handle_completion_race(
+    payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let current_status = payload
+        .current_status
+        .unwrap_or_else(|| "running".to_string());
+    let lost_race = matches!(
+        current_status.as_str(),
+        "interrupt_requested" | "interrupted"
+    );
+    let terminal_status = if lost_race {
+        "interrupted"
+    } else {
+        "completed"
+    };
+    let mut effect_plan = if lost_race {
+        background_effect_plan("finalize_interrupted")
+    } else {
+        background_effect_plan("finalize_completed")
+    };
+    effect_plan.finalize_immediately = Some(true);
+    effect_plan.terminal_status = Some(terminal_status.to_string());
+    effect_plan.resolved_status = Some(terminal_status.to_string());
+    let reason = if lost_race {
+        "completion-race-lost"
+    } else {
+        "completion-race-won"
+    };
+    let mut resp = base_response("completion-race", supported_multitask_strategies);
+    resp.terminal_status = Some(terminal_status.to_string());
+    resp.resolved_status = Some(terminal_status.to_string());
+    resp.finalize_immediately = Some(true);
+    resp.cancel_running_task = Some(false);
+    resp.reason = reason.to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
+fn handle_retry_claim(
+    payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let current_status = payload
+        .current_status
+        .unwrap_or_else(|| "retry_scheduled".to_string());
+    let interrupted = matches!(
+        current_status.as_str(),
+        "interrupt_requested" | "interrupted"
+    );
+    let terminal_status = if interrupted {
+        "interrupted"
+    } else {
+        "retry_claimed"
+    };
+    let mut effect_plan = if interrupted {
+        background_effect_plan("finalize_interrupted")
+    } else {
+        background_effect_plan("claim_retry")
+    };
+    effect_plan.finalize_immediately = Some(interrupted);
+    effect_plan.terminal_status = Some(terminal_status.to_string());
+    effect_plan.resolved_status = Some(terminal_status.to_string());
+    let reason = if interrupted {
+        "retry-claim-interrupted"
+    } else {
+        "retry-claim-granted"
+    };
+    let mut resp = base_response("retry-claim", supported_multitask_strategies);
+    resp.terminal_status = Some(terminal_status.to_string());
+    resp.resolved_status = Some(terminal_status.to_string());
+    resp.finalize_immediately = Some(interrupted);
+    resp.cancel_running_task = Some(false);
+    resp.reason = reason.to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
+fn handle_interrupt_finalize(
+    _payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let mut effect_plan = background_effect_plan("finalize_interrupted");
+    effect_plan.finalize_immediately = Some(true);
+    effect_plan.terminal_status = Some("interrupted".to_string());
+    effect_plan.resolved_status = Some("interrupted".to_string());
+    let mut resp = base_response("interrupt-finalize", supported_multitask_strategies);
+    resp.terminal_status = Some("interrupted".to_string());
+    resp.resolved_status = Some("interrupted".to_string());
+    resp.finalize_immediately = Some(true);
+    resp.cancel_running_task = Some(false);
+    resp.reason = "interrupt-finalized".to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
+fn handle_retry(
+    payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let attempt = payload.attempt.unwrap_or(1).max(1);
+    let retry_count = payload.retry_count.unwrap_or(0);
+    let max_attempts = payload.max_attempts.unwrap_or(1).max(1);
+    if attempt >= max_attempts {
+        let mut effect_plan = background_effect_plan("finalize_terminal");
+        let terminal = if max_attempts > 1 {
+            "retry_exhausted"
+        } else {
+            "failed"
+        };
+        effect_plan.terminal_status = Some(terminal.to_string());
+        let mut resp = base_response("retry", supported_multitask_strategies);
+        resp.should_retry = Some(false);
+        resp.next_retry_count = Some(retry_count);
+        resp.backoff_seconds = Some(0.0);
+        resp.terminal_status = Some(terminal.to_string());
+        resp.reason = "attempt-budget-exhausted".to_string();
+        resp.effect_plan = effect_plan;
+        return Ok(resp);
+    }
+    let next_retry_count = retry_count + 1;
+    let backoff_seconds = compute_backoff_seconds(
+        payload.backoff_base_seconds.unwrap_or(0.0),
+        payload.backoff_multiplier.unwrap_or(2.0),
+        next_retry_count,
+        payload.max_backoff_seconds,
+    );
+    let mut effect_plan = background_effect_plan("schedule_retry");
+    effect_plan.next_retry_count = Some(next_retry_count);
+    effect_plan.backoff_seconds = Some(backoff_seconds);
+    effect_plan.terminal_status = Some("retry_scheduled".to_string());
+    let mut resp = base_response("retry", supported_multitask_strategies);
+    resp.should_retry = Some(true);
+    resp.next_retry_count = Some(next_retry_count);
+    resp.backoff_seconds = Some(backoff_seconds);
+    resp.terminal_status = Some("retry_scheduled".to_string());
+    resp.reason = "retry-scheduled".to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
+fn handle_session_release(
+    payload: BackgroundControlRequestPayload,
+    supported_multitask_strategies: Vec<String>,
+) -> Result<BackgroundControlResponsePayload, String> {
+    let mut effect_plan = background_effect_plan("wait_for_release");
+    effect_plan.wait_timeout_seconds = Some(5.0);
+    effect_plan.wait_poll_interval_seconds =
+        Some(compute_release_poll_interval_seconds(payload.retry_count));
+    let mut resp = base_response("session-release", supported_multitask_strategies);
+    resp.reason = "session-release-wait".to_string();
+    resp.effect_plan = effect_plan;
+    Ok(resp)
+}
+
 pub fn build_background_control_response(
     payload: BackgroundControlRequestPayload,
 ) -> Result<BackgroundControlResponsePayload, String> {
     let supported_multitask_strategies = vec!["interrupt".to_string(), "reject".to_string()];
     match payload.operation.as_str() {
-        "batch-plan" => {
-            let batch_size = payload.batch_size.unwrap_or(0);
-            if batch_size == 0 {
-                let mut effect_plan = background_effect_plan("reject");
-                effect_plan.terminal_status = Some("failed".to_string());
-                return Ok(BackgroundControlResponsePayload {
-                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                    operation: payload.operation,
-                    resolved_parallel_group_id: None,
-                    lane_ids: None,
-                    normalized_multitask_strategy: None,
-                    supported_multitask_strategies,
-                    strategy_supported: true,
-                    accepted: Some(false),
-                    requires_takeover: Some(false),
-                    error: Some(
-                        "enqueue_background_batch requires at least one request.".to_string(),
-                    ),
-                    should_retry: None,
-                    next_retry_count: None,
-                    backoff_seconds: None,
-                    terminal_status: Some("failed".to_string()),
-                    resolved_status: None,
-                    finalize_immediately: Some(true),
-                    cancel_running_task: Some(false),
-                    reason: "batch-plan-empty".to_string(),
-                    effect_plan,
-                });
-            }
-
-            let requested_group_id = payload
-                .requested_parallel_group_id
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(|value| value.to_string());
-            let mut request_group_ids = HashSet::new();
-            if let Some(values) = payload.request_parallel_group_ids.as_ref() {
-                for value in values {
-                    if let Some(group_id) = value
-                        .as_deref()
-                        .map(str::trim)
-                        .filter(|candidate| !candidate.is_empty())
-                    {
-                        request_group_ids.insert(group_id.to_string());
-                    }
-                }
-            }
-            if request_group_ids.len() > 1 {
-                let mut effect_plan = background_effect_plan("reject");
-                effect_plan.terminal_status = Some("failed".to_string());
-                return Ok(BackgroundControlResponsePayload {
-                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                    operation: payload.operation,
-                    resolved_parallel_group_id: None,
-                    lane_ids: None,
-                    normalized_multitask_strategy: None,
-                    supported_multitask_strategies,
-                    strategy_supported: true,
-                    accepted: Some(false),
-                    requires_takeover: Some(false),
-                    error: Some(
-                        "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
-                            .to_string(),
-                    ),
-                    should_retry: None,
-                    next_retry_count: None,
-                    backoff_seconds: None,
-                    terminal_status: Some("failed".to_string()),
-                    resolved_status: None,
-                    finalize_immediately: Some(true),
-                    cancel_running_task: Some(false),
-                    reason: "batch-plan-misaligned-parallel-group".to_string(),
-                    effect_plan,
-                });
-            }
-            if let Some(requested) = requested_group_id.as_ref() {
-                if let Some(existing) = request_group_ids.iter().next() {
-                    if existing != requested {
-                        let mut effect_plan = background_effect_plan("reject");
-                        effect_plan.terminal_status = Some("failed".to_string());
-                        return Ok(BackgroundControlResponsePayload {
-                            schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                            authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                            operation: payload.operation,
-                            resolved_parallel_group_id: None,
-                            lane_ids: None,
-                            normalized_multitask_strategy: None,
-                            supported_multitask_strategies,
-                            strategy_supported: true,
-                            accepted: Some(false),
-                            requires_takeover: Some(false),
-                            error: Some(
-                                "enqueue_background_batch requires one consistent parallel_group_id across the whole batch."
-                                    .to_string(),
-                            ),
-                            should_retry: None,
-                            next_retry_count: None,
-                            backoff_seconds: None,
-                            terminal_status: Some("failed".to_string()),
-                            resolved_status: None,
-                            finalize_immediately: Some(true),
-                            cancel_running_task: Some(false),
-                            reason: "batch-plan-misaligned-parallel-group".to_string(),
-                            effect_plan,
-                        });
-                    }
-                }
-            }
-
-            let resolved_parallel_group_id = requested_group_id
-                .or_else(|| request_group_ids.into_iter().next())
-                .unwrap_or_else(next_background_parallel_group_id);
-            let lane_id_prefix = payload
-                .lane_id_prefix
-                .as_deref()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .unwrap_or("lane");
-            let lane_ids = (0..batch_size)
-                .map(|index| {
-                    payload
-                        .request_lane_ids
-                        .as_ref()
-                        .and_then(|values| values.get(index))
-                        .and_then(|value| value.as_deref())
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                        .map(|value| value.to_string())
-                        .unwrap_or_else(|| format!("{lane_id_prefix}-{}", index + 1))
-                })
-                .collect::<Vec<_>>();
-            let effect_plan = background_effect_plan("plan_batch");
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: Some(resolved_parallel_group_id),
-                lane_ids: Some(lane_ids),
-                normalized_multitask_strategy: None,
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: Some(true),
-                requires_takeover: Some(false),
-                error: None,
-                should_retry: None,
-                next_retry_count: None,
-                backoff_seconds: None,
-                terminal_status: None,
-                resolved_status: None,
-                finalize_immediately: Some(false),
-                cancel_running_task: Some(false),
-                reason: "batch-plan-resolved".to_string(),
-                effect_plan,
-            })
-        }
-        "enqueue" => {
-            let normalized_multitask_strategy =
-                normalize_multitask_strategy(payload.multitask_strategy.as_deref());
-            let strategy_supported = supported_multitask_strategies
-                .iter()
-                .any(|strategy| strategy == &normalized_multitask_strategy);
-            if !strategy_supported {
-                let mut effect_plan = background_effect_plan("reject");
-                effect_plan.terminal_status = Some("failed".to_string());
-                return Ok(BackgroundControlResponsePayload {
-                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                    operation: payload.operation,
-                    resolved_parallel_group_id: None,
-                    lane_ids: None,
-                    normalized_multitask_strategy: Some(normalized_multitask_strategy),
-                    supported_multitask_strategies,
-                    strategy_supported: false,
-                    accepted: Some(false),
-                    requires_takeover: Some(false),
-                    error: Some(format!(
-                        "Unsupported multitask strategy: {}. Supported strategies: interrupt, reject",
-                        payload.multitask_strategy.as_deref().unwrap_or("reject")
-                    )),
-                    should_retry: None,
-                    next_retry_count: None,
-                    backoff_seconds: None,
-                    terminal_status: None,
-                    resolved_status: None,
-                    finalize_immediately: None,
-                    cancel_running_task: None,
-                    reason: "invalid-multitask-strategy".to_string(),
-                    effect_plan,
-                });
-            }
-            let active_job_count = payload.active_job_count.unwrap_or(0);
-            let capacity_limit = payload.capacity_limit.unwrap_or(0);
-            if active_job_count >= capacity_limit {
-                let mut effect_plan = background_effect_plan("reject");
-                effect_plan.terminal_status = Some("failed".to_string());
-                return Ok(BackgroundControlResponsePayload {
-                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                    operation: payload.operation,
-                    resolved_parallel_group_id: None,
-                    lane_ids: None,
-                    normalized_multitask_strategy: Some(normalized_multitask_strategy.clone()),
-                    supported_multitask_strategies,
-                    strategy_supported: true,
-                    accepted: Some(false),
-                    requires_takeover: Some(normalized_multitask_strategy == "interrupt"),
-                    error: Some(format!(
-                        "Too many admitted background jobs ({}/{})",
-                        active_job_count, capacity_limit
-                    )),
-                    should_retry: None,
-                    next_retry_count: None,
-                    backoff_seconds: None,
-                    terminal_status: None,
-                    resolved_status: None,
-                    finalize_immediately: None,
-                    cancel_running_task: None,
-                    reason: "capacity-rejected".to_string(),
-                    effect_plan,
-                });
-            }
-            let effect_plan = background_effect_plan("admit");
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: None,
-                lane_ids: None,
-                normalized_multitask_strategy: Some(normalized_multitask_strategy.clone()),
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: Some(true),
-                requires_takeover: Some(normalized_multitask_strategy == "interrupt"),
-                error: None,
-                should_retry: None,
-                next_retry_count: None,
-                backoff_seconds: None,
-                terminal_status: None,
-                resolved_status: None,
-                finalize_immediately: None,
-                cancel_running_task: None,
-                reason: "accepted".to_string(),
-                effect_plan,
-            })
-        }
-        "interrupt" => {
-            let current_status = payload
-                .current_status
-                .unwrap_or_else(|| "queued".to_string());
-            let task_active = payload.task_active.unwrap_or(false);
-            let task_done = payload.task_done.unwrap_or(false);
-            let finalize_immediately =
-                matches!(current_status.as_str(), "queued" | "retry_scheduled")
-                    || !task_active
-                    || task_done;
-            let mut effect_plan = if finalize_immediately {
-                background_effect_plan("finalize_interrupted")
-            } else {
-                background_effect_plan("request_interrupt")
-            };
-            effect_plan.finalize_immediately = Some(finalize_immediately);
-            effect_plan.cancel_running_task =
-                Some(!finalize_immediately && task_active && !task_done);
-            effect_plan.resolved_status = Some("interrupt_requested".to_string());
-            effect_plan.terminal_status = Some(if finalize_immediately {
-                "interrupted".to_string()
-            } else {
-                "interrupt_requested".to_string()
-            });
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: None,
-                lane_ids: None,
-                normalized_multitask_strategy: None,
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: None,
-                requires_takeover: None,
-                error: None,
-                should_retry: None,
-                next_retry_count: None,
-                backoff_seconds: None,
-                terminal_status: Some(if finalize_immediately {
-                    "interrupted".to_string()
-                } else {
-                    "interrupt_requested".to_string()
-                }),
-                resolved_status: Some("interrupt_requested".to_string()),
-                finalize_immediately: Some(finalize_immediately),
-                cancel_running_task: Some(!finalize_immediately && task_active && !task_done),
-                reason: if finalize_immediately {
-                    "interrupt-finalized".to_string()
-                } else {
-                    "interrupt-cancel-running-task".to_string()
-                },
-                effect_plan,
-            })
-        }
-        "claim" => {
-            let current_status = payload
-                .current_status
-                .unwrap_or_else(|| "queued".to_string());
-            if matches!(
-                current_status.as_str(),
-                "interrupt_requested" | "interrupted"
-            ) {
-                let mut effect_plan = background_effect_plan("finalize_interrupted");
-                effect_plan.finalize_immediately = Some(true);
-                effect_plan.terminal_status = Some("interrupted".to_string());
-                effect_plan.resolved_status = Some("interrupted".to_string());
-                return Ok(BackgroundControlResponsePayload {
-                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                    operation: payload.operation,
-                    resolved_parallel_group_id: None,
-                    lane_ids: None,
-                    normalized_multitask_strategy: None,
-                    supported_multitask_strategies,
-                    strategy_supported: true,
-                    accepted: None,
-                    requires_takeover: None,
-                    error: None,
-                    should_retry: None,
-                    next_retry_count: None,
-                    backoff_seconds: None,
-                    terminal_status: Some("interrupted".to_string()),
-                    resolved_status: Some("interrupted".to_string()),
-                    finalize_immediately: Some(true),
-                    cancel_running_task: Some(false),
-                    reason: "claim-suppressed-interrupted".to_string(),
-                    effect_plan,
-                });
-            }
-            if matches!(
-                current_status.as_str(),
-                "completed" | "failed" | "retry_exhausted"
-            ) {
-                let mut effect_plan = background_effect_plan("finalize_terminal");
-                effect_plan.finalize_immediately = Some(true);
-                effect_plan.terminal_status = Some(current_status.clone());
-                effect_plan.resolved_status = Some(current_status.clone());
-                return Ok(BackgroundControlResponsePayload {
-                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                    operation: payload.operation,
-                    resolved_parallel_group_id: None,
-                    lane_ids: None,
-                    normalized_multitask_strategy: None,
-                    supported_multitask_strategies,
-                    strategy_supported: true,
-                    accepted: None,
-                    requires_takeover: None,
-                    error: None,
-                    should_retry: None,
-                    next_retry_count: None,
-                    backoff_seconds: None,
-                    terminal_status: Some(current_status.clone()),
-                    resolved_status: Some(current_status),
-                    finalize_immediately: Some(true),
-                    cancel_running_task: Some(false),
-                    reason: "claim-suppressed-terminal".to_string(),
-                    effect_plan,
-                });
-            }
-            let mut effect_plan = background_effect_plan("claim_execution");
-            effect_plan.finalize_immediately = Some(false);
-            effect_plan.resolved_status = Some("running".to_string());
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: None,
-                lane_ids: None,
-                normalized_multitask_strategy: None,
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: None,
-                requires_takeover: None,
-                error: None,
-                should_retry: None,
-                next_retry_count: None,
-                backoff_seconds: None,
-                terminal_status: None,
-                resolved_status: Some("running".to_string()),
-                finalize_immediately: Some(false),
-                cancel_running_task: Some(false),
-                reason: "claim-running".to_string(),
-                effect_plan,
-            })
-        }
-        "complete" => {
-            let mut effect_plan = background_effect_plan("finalize_completed");
-            effect_plan.finalize_immediately = Some(true);
-            effect_plan.terminal_status = Some("completed".to_string());
-            effect_plan.resolved_status = Some("completed".to_string());
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: None,
-                lane_ids: None,
-                normalized_multitask_strategy: None,
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: None,
-                requires_takeover: None,
-                error: None,
-                should_retry: None,
-                next_retry_count: None,
-                backoff_seconds: None,
-                terminal_status: Some("completed".to_string()),
-                resolved_status: Some("completed".to_string()),
-                finalize_immediately: Some(true),
-                cancel_running_task: Some(false),
-                reason: "complete-finalized".to_string(),
-                effect_plan,
-            })
-        }
-        "completion-race" => {
-            let current_status = payload
-                .current_status
-                .unwrap_or_else(|| "running".to_string());
-            let lost_race = matches!(
-                current_status.as_str(),
-                "interrupt_requested" | "interrupted"
-            );
-            let terminal_status = if lost_race {
-                "interrupted"
-            } else {
-                "completed"
-            };
-            let mut effect_plan = if lost_race {
-                background_effect_plan("finalize_interrupted")
-            } else {
-                background_effect_plan("finalize_completed")
-            };
-            effect_plan.finalize_immediately = Some(true);
-            effect_plan.terminal_status = Some(terminal_status.to_string());
-            effect_plan.resolved_status = Some(terminal_status.to_string());
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: None,
-                lane_ids: None,
-                normalized_multitask_strategy: None,
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: None,
-                requires_takeover: None,
-                error: None,
-                should_retry: None,
-                next_retry_count: None,
-                backoff_seconds: None,
-                terminal_status: Some(terminal_status.to_string()),
-                resolved_status: Some(terminal_status.to_string()),
-                finalize_immediately: Some(true),
-                cancel_running_task: Some(false),
-                reason: if lost_race {
-                    "completion-race-lost".to_string()
-                } else {
-                    "completion-race-won".to_string()
-                },
-                effect_plan,
-            })
-        }
-        "retry-claim" => {
-            let current_status = payload
-                .current_status
-                .unwrap_or_else(|| "retry_scheduled".to_string());
-            let interrupted = matches!(
-                current_status.as_str(),
-                "interrupt_requested" | "interrupted"
-            );
-            let terminal_status = if interrupted {
-                "interrupted"
-            } else {
-                "retry_claimed"
-            };
-            let mut effect_plan = if interrupted {
-                background_effect_plan("finalize_interrupted")
-            } else {
-                background_effect_plan("claim_retry")
-            };
-            effect_plan.finalize_immediately = Some(interrupted);
-            effect_plan.terminal_status = Some(terminal_status.to_string());
-            effect_plan.resolved_status = Some(terminal_status.to_string());
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: None,
-                lane_ids: None,
-                normalized_multitask_strategy: None,
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: None,
-                requires_takeover: None,
-                error: None,
-                should_retry: None,
-                next_retry_count: None,
-                backoff_seconds: None,
-                terminal_status: Some(terminal_status.to_string()),
-                resolved_status: Some(terminal_status.to_string()),
-                finalize_immediately: Some(interrupted),
-                cancel_running_task: Some(false),
-                reason: if interrupted {
-                    "retry-claim-interrupted".to_string()
-                } else {
-                    "retry-claim-granted".to_string()
-                },
-                effect_plan,
-            })
-        }
-        "interrupt-finalize" => {
-            let mut effect_plan = background_effect_plan("finalize_interrupted");
-            effect_plan.finalize_immediately = Some(true);
-            effect_plan.terminal_status = Some("interrupted".to_string());
-            effect_plan.resolved_status = Some("interrupted".to_string());
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: None,
-                lane_ids: None,
-                normalized_multitask_strategy: None,
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: None,
-                requires_takeover: None,
-                error: None,
-                should_retry: None,
-                next_retry_count: None,
-                backoff_seconds: None,
-                terminal_status: Some("interrupted".to_string()),
-                resolved_status: Some("interrupted".to_string()),
-                finalize_immediately: Some(true),
-                cancel_running_task: Some(false),
-                reason: "interrupt-finalized".to_string(),
-                effect_plan,
-            })
-        }
-        "retry" => {
-            let attempt = payload.attempt.unwrap_or(1).max(1);
-            let retry_count = payload.retry_count.unwrap_or(0);
-            let max_attempts = payload.max_attempts.unwrap_or(1).max(1);
-            if attempt >= max_attempts {
-                let mut effect_plan = background_effect_plan("finalize_terminal");
-                effect_plan.terminal_status = Some(if max_attempts > 1 {
-                    "retry_exhausted".to_string()
-                } else {
-                    "failed".to_string()
-                });
-                return Ok(BackgroundControlResponsePayload {
-                    schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                    authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                    operation: payload.operation,
-                    resolved_parallel_group_id: None,
-                    lane_ids: None,
-                    normalized_multitask_strategy: None,
-                    supported_multitask_strategies,
-                    strategy_supported: true,
-                    accepted: None,
-                    requires_takeover: None,
-                    error: None,
-                    should_retry: Some(false),
-                    next_retry_count: Some(retry_count),
-                    backoff_seconds: Some(0.0),
-                    terminal_status: Some(if max_attempts > 1 {
-                        "retry_exhausted".to_string()
-                    } else {
-                        "failed".to_string()
-                    }),
-                    resolved_status: None,
-                    finalize_immediately: None,
-                    cancel_running_task: None,
-                    reason: "attempt-budget-exhausted".to_string(),
-                    effect_plan,
-                });
-            }
-            let next_retry_count = retry_count + 1;
-            let backoff_seconds = compute_backoff_seconds(
-                payload.backoff_base_seconds.unwrap_or(0.0),
-                payload.backoff_multiplier.unwrap_or(2.0),
-                next_retry_count,
-                payload.max_backoff_seconds,
-            );
-            let mut effect_plan = background_effect_plan("schedule_retry");
-            effect_plan.next_retry_count = Some(next_retry_count);
-            effect_plan.backoff_seconds = Some(backoff_seconds);
-            effect_plan.terminal_status = Some("retry_scheduled".to_string());
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: None,
-                lane_ids: None,
-                normalized_multitask_strategy: None,
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: None,
-                requires_takeover: None,
-                error: None,
-                should_retry: Some(true),
-                next_retry_count: Some(next_retry_count),
-                backoff_seconds: Some(backoff_seconds),
-                terminal_status: Some("retry_scheduled".to_string()),
-                resolved_status: None,
-                finalize_immediately: None,
-                cancel_running_task: None,
-                reason: "retry-scheduled".to_string(),
-                effect_plan,
-            })
-        }
-        "session-release" => {
-            let mut effect_plan = background_effect_plan("wait_for_release");
-            effect_plan.wait_timeout_seconds = Some(5.0);
-            effect_plan.wait_poll_interval_seconds =
-                Some(compute_release_poll_interval_seconds(payload.retry_count));
-            Ok(BackgroundControlResponsePayload {
-                schema_version: BACKGROUND_CONTROL_SCHEMA_VERSION.to_string(),
-                authority: BACKGROUND_CONTROL_AUTHORITY.to_string(),
-                operation: payload.operation,
-                resolved_parallel_group_id: None,
-                lane_ids: None,
-                normalized_multitask_strategy: None,
-                supported_multitask_strategies,
-                strategy_supported: true,
-                accepted: None,
-                requires_takeover: None,
-                error: None,
-                should_retry: None,
-                next_retry_count: None,
-                backoff_seconds: None,
-                terminal_status: None,
-                resolved_status: None,
-                finalize_immediately: None,
-                cancel_running_task: None,
-                reason: "session-release-wait".to_string(),
-                effect_plan,
-            })
-        }
+        "batch-plan" => handle_batch_plan(payload, supported_multitask_strategies),
+        "enqueue" => handle_enqueue(payload, supported_multitask_strategies),
+        "interrupt" => handle_interrupt(payload, supported_multitask_strategies),
+        "claim" => handle_claim(payload, supported_multitask_strategies),
+        "complete" => handle_complete(payload, supported_multitask_strategies),
+        "completion-race" => handle_completion_race(payload, supported_multitask_strategies),
+        "retry-claim" => handle_retry_claim(payload, supported_multitask_strategies),
+        "interrupt-finalize" => handle_interrupt_finalize(payload, supported_multitask_strategies),
+        "retry" => handle_retry(payload, supported_multitask_strategies),
+        "session-release" => handle_session_release(payload, supported_multitask_strategies),
         other => Err(format!("unsupported background control operation: {other}")),
     }
 }

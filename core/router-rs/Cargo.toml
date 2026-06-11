@@ -12,24 +12,23 @@ path = "src/lib.rs"
 core-state = { path = "../core-state" }
 framework-kernel = { path = "../framework-kernel" }
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
-core-math = { path = "../core-math" }
 routing-engine = { path = "../routing-engine" }
 runtime-core = { path = "../runtime-core", features = ["test-support"] }
 browser-mcp = { path = "../browser-mcp" }
-libc = "0.2"
+libc.workspace = true
 chrono.workspace = true
-clap = { version = "4.5.38", features = ["derive"] }
-regex = "1.11.1"
-rayon = "1.10.0"
-reqwest = { version = "0.12.15", default-features = false, features = ["blocking", "json", "rustls-tls"] }
-rusqlite = { version = "0.32.1", features = ["bundled"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-sha2 = "0.11"
-hex = "0.4"
-tungstenite = "0.24.0"
-fs2 = "0.4"
-which = "8.0.0"
+clap.workspace = true
+regex.workspace = true
+rayon.workspace = true
+reqwest.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hex.workspace = true
+tungstenite.workspace = true
+fs2.workspace = true
+which.workspace = true
 
 [features]
 default = [

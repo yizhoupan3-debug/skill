@@ -16,19 +16,19 @@ core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
 routing-engine = { path = "../routing-engine" }
-chrono = { version = "0.4", features = ["clock", "std", "serde"] }
-clap = { version = "4.5", features = ["derive"] }
-fs2 = "0.4"
-libc = "0.2"
-regex = "1.11"
-reqwest = { version = "0.12", features = ["blocking"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-sha2 = "0.11"
-which = "8"
+chrono.workspace = true
+clap.workspace = true
+fs2.workspace = true
+libc.workspace = true
+regex.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+which.workspace = true
 
 [build-dependencies]
-serde_json = "1.0"
+serde_json.workspace = true
 
 [dev-dependencies]
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }

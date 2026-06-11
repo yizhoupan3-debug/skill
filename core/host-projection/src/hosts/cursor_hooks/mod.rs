@@ -86,15 +86,5 @@ mod tests {
         });
     }
 
-    /// Guard that ensures test deps are installed on first use.
-    /// Drop this at the start of any test that uses review/arbitration functions.
-    pub(crate) struct TestDepsGuard;
-    impl TestDepsGuard {
-        pub(crate) fn new() -> Self {
-            ensure_test_deps();
-            Self
-        }
-    }
-
     include!("tests.rs");
 }

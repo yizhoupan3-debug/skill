@@ -5,6 +5,18 @@
 
 use std::sync::OnceLock;
 
+/// Full harness capabilities for hosts with complete hook support (claude, cursor, codex).
+pub const HARNESS_CAPABILITIES_FULL: &[&str] = &[
+    "hot_runtime_routing",
+    "l2_continuity_contract",
+    "closeout_evidence_hooks",
+    "review_gate_router_observation",
+];
+
+/// Minimal harness capabilities for hosts with basic support (antigravity, opencode).
+pub const HARNESS_CAPABILITIES_MINIMAL: &[&str] =
+    &["hot_runtime_routing", "l2_continuity_contract"];
+
 /// Declared harness surface for a closed-set host (roadmap §4.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HostCapabilities {

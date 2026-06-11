@@ -5,6 +5,7 @@ use super::paths::*;
 use super::sqlite::*;
 use super::*;
 use serde_json::{json, Map};
+use serial_test::serial;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -1770,6 +1771,7 @@ fn filesystem_reject_symlink_write_target_rejects_symlink() {
 // ── env helpers ──
 
 #[test]
+#[serial]
 fn env_checkpoint_storage_db_path_returns_none_when_unset() {
     let prior = std::env::var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE").ok();
     std::env::remove_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE");
@@ -1780,6 +1782,7 @@ fn env_checkpoint_storage_db_path_returns_none_when_unset() {
 }
 
 #[test]
+#[serial]
 fn env_checkpoint_storage_db_path_returns_path_when_set() {
     let prior = std::env::var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE").ok();
     std::env::set_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", "/tmp/test.sqlite3");

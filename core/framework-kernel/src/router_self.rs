@@ -175,13 +175,6 @@ fn pick_router_rs_copy_source() -> Result<PathBuf, String> {
     )
 }
 
-/// Install a codesign-safe router-rs for Claude Desktop MCP (not ephemeral `/tmp` paths).
-#[allow(dead_code)]
-pub fn install_router_rs_for_desktop_mcp() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| String::from("/tmp"));
-    install_router_rs_for_desktop_mcp_at(Path::new(&home))
-}
-
 /// Install Desktop MCP binary under `{home}/.local/share/skill-framework/bin/router-rs`.
 pub fn install_router_rs_for_desktop_mcp_at(home_account: &Path) -> Result<PathBuf, String> {
     #[cfg(not(unix))]

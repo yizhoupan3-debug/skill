@@ -22,6 +22,210 @@ use regex::Regex;
 use serde_json::Value;
 use std::sync::OnceLock;
 
+// ---------------------------------------------------------------------------
+// Data-driven signal table
+// ---------------------------------------------------------------------------
+
+/// How markers are matched against the query.
+enum SignalMatchMode {
+    /// `query_text.contains(normalize_text(marker)) || text_matches_phrase(...)`.
+    NormalizeAndToken,
+    /// `query_text.contains(marker) || text_matches_phrase(...)` — raw substring + token.
+    ContainsOrToken,
+}
+
+struct SignalDef {
+    name: &'static str,
+    mode: SignalMatchMode,
+    markers: &'static [&'static str],
+}
+
+macro_rules! sig {
+    ($name:expr, normalize => $markers:expr) => {
+        SignalDef {
+            name: $name,
+            mode: SignalMatchMode::NormalizeAndToken,
+            markers: $markers,
+        }
+    };
+    ($name:expr, contains_or_token => $markers:expr) => {
+        SignalDef {
+            name: $name,
+            mode: SignalMatchMode::ContainsOrToken,
+            markers: $markers,
+        }
+    };
+}
+
+/// All pure-template signal definitions. Each entry replaces a hand-written
+/// `has_xxx_context` function that was just `.iter().any(…)` over a marker list.
+const SIGNAL_DEFS: &[SignalDef] = &[
+    // ── Contains-mode signals (raw `query_text.contains(marker)`) ──────
+    sig!("runtime_lightweighting", contains_or_token => &[
+        "runtime 轻量化", "轻量化", "兼容层", "胶水层",
+        "沉到 runtime", "沉到runtime", "runtime 下沉", "下沉 runtime",
+        "沉到运行时", "减少入口", "减入口", "不损害功能", "加重负担", "没有用",
+    ]),
+    sig!("systematic_debug", contains_or_token => &[
+        "root-cause analysis", "root cause analysis", "root-cause", "root cause",
+        "根因", "找根因", "bug", "报错", "失败", "崩了", "不工作", "哪里错了",
+        "flaky", "flake", "traceback", "error", "tdd workflow", "tdd",
+        "定位根因", "修这个 bug", "fix login", "login bug",
+    ]),
+    sig!("copywriting", normalize => &[
+        "ux 微文案", "ux", "微文案", "空状态", "cta", "转化", "转化率",
+        "点击创建", "创建项目", "广告词", "产品卖点", "落地页", "品牌故事",
+        "copywriting", "in-app microcopy", "tagline",
+    ]),
+    sig!("prose_naturalization", normalize => &[
+        "润色", "润色得自然", "自然一点", "改自然", "自然化", "文本精修",
+        "表达优化", "去模板腔", "像人写的", "humanize", "aigc", "ai 味", "ai味",
+        "ai 感", "逐句评估", "哪些句子", "普通说明", "说明文字", "普通写作",
+    ]),
+    sig!("paper", normalize => &[
+        "paper", "manuscript", "论文", "稿子", "稿件", "摘要", "引言",
+        "审稿意见", "reviewer comments", "rebuttal", "appendix", "claim",
+        "投稿", "期刊", "科研",
+    ]),
+    sig!("scientific_figure_plotting", normalize => &[
+        "scientific figures", "scientific figure", "publication chart",
+        "publication figure", "journal style", "科研出图", "论文图", "期刊风格",
+        "matplotlib", "seaborn", "plotnine", "raincloud", "ridge plot",
+        "statistical annotations", "colorblind-safe", "cjk font",
+    ]),
+    // ── NormalizeAndToken-mode signals ─────────────────────────────────
+    sig!("sentry", normalize => &[
+        "sentry", "production error", "production errors", "线上异常",
+    ]),
+    sig!("pr_triage_summary", normalize => &[
+        "quick PR 状态梳理", "pr 状态梳理", "pr review summary",
+        "pull request summary", "reviewer feedback digest", "changed-file digest",
+        "changed files summary", "pr triage", "pr-level follow-up",
+        "pr follow-up", "changed-file surface",
+    ]),
+    sig!("non_github_ci_provider", normalize => &[
+        "gitlab", "gitlab ci", "circleci", "circle ci", "jenkins",
+        "azure pipelines", "buildkite", "travis", "bitbucket pipelines",
+    ]),
+    sig!("design_reference", normalize => &[
+        "参考源", "verified tokens", "品牌 token", "stripe", "linear", "apple",
+        "vercel", "liquid glass motion", "产品风格映射", "borrowable cues",
+    ]),
+    sig!("visual_evidence_review", normalize => &[
+        "看图", "截图", "界面图", "视觉问题", "可读性审查", "重叠", "层级",
+        "渲染", "rendered", "screenshot", "visual review", "ui overlap",
+        "readability review",
+    ]),
+    sig!("design_output_audit", normalize => &[
+        "设计审计", "设计验收", "验收结论", "风格漂移", "ai 味", "反模式",
+        "drift", "anti-pattern", "audit produced",
+    ]),
+    sig!("design_workflow_protocol", normalize => &[
+        "设计工件协议", "设计工作流", "设计迭代协议", "design workflow",
+        "design artifact protocol", "prompt 到 screenshot 到 verdict",
+        "每轮都按这个工作流跑", "工作流跑",
+    ]),
+    sig!("beamer_slide", normalize => &[
+        "beamer", "beamer slides", "latex beamer", "latex 幻灯片",
+        "beamer 编译", "学术 ppt",
+    ]),
+    sig!("source_slide_format", normalize => &[
+        "markdown slides", "slidev", "marp", "html slides", "source slide formats",
+        "source-first slides", "用 markdown 做 slides", "根据大纲做 html slides",
+        "browser-matched pdf", "presentation.html",
+    ]),
+    sig!("diagramming", normalize => &[
+        "mermaid", "graphviz", "dot diagram", "流程图", "研究流程图",
+        "技术路线图", "方法图", "实验流程", "pipeline 图", "时序图", "架构图",
+        "依赖图", "状态机",
+    ]),
+    sig!("bounded_subagent", normalize => &[
+        "sidecar", "sidecars", "subagent", "subagents", "delegation plan",
+        "multiagent", "multi-agent", "多 agent", "多 agent 执行", "多 agent 路由",
+        "bounded sidecar", "bounded sidecars", "bounded subagent",
+        "bounded subagents", "subagent lane", "sidecar lane",
+        "local-supervisor", "local-supervisor queue", "保留 sidecar 边界",
+        "只切 sidecar", "并行 sidecar", "不实际 spawn", "stay local",
+        "主线程保留", "保留主线程", "主线程集成", "lane-local output",
+        "不创建 worker",
+    ]),
+    sig!("token_budget_pressure", normalize => &[
+        "token budget", "context budget", "token 开销", "token 成本",
+        "降低 token", "压 token", "省 token", "缩上下文",
+    ]),
+    sig!("workflow_negation", normalize => &[
+        "不要 workflow", "不要进入 workflow", "不进 workflow", "不用 workflow",
+        "无需 workflow", "not workflow", "without workflow",
+        "不要 workflow orchestration", "不要 workflow 编排", "只是 sidecar",
+        "only sidecar", "tdd workflow", "用 tdd workflow",
+        "test driven development",
+    ]),
+    sig!("workflow_orchestration", normalize => &[
+        "workflow orchestration", "workflow supervisor", "workflow mode",
+        "workflow 编排", "用 workflow", ".claude/workflows", "/workflow",
+        "ultracode", "worker lifecycle", "worker orchestration",
+        "multi-worker", "multi worker", "parallel worker", "parallel workers",
+        "disjoint files", "disjoint file", "disjoint write", "disjoint writes",
+        "disjoint scope", "disjoint scopes", "disjoint write scope",
+        "disjoint write scopes", "lane-local", "lane local", "lane-local delta",
+        "worker write scope", "worker write scopes", "workflow 协作",
+        "团队编排", "多 worker", "worker 生命周期",
+        "supervisor-led", "supervisor led",
+    ]),
+    sig!("explicit_prose_polish", normalize => &[
+        "润色", "文字精修", "SCI润色", "SCI 润色", "英文论文润色",
+        "学术润色", "只改表达", "polish", "proofread", "copyedit",
+        "rewrite introduction", "rewrite abstract", "manuscript editing",
+        "academic writing",
+    ]),
+    sig!("design_contract", normalize => &[
+        "design.md", "设计规范", "设计系统", "设计 token", "design token",
+        "design tokens", "视觉身份", "视觉规范", "品牌风格", "品牌规范",
+        "house style", "visual identity", "style contract", "统一设计规范",
+        "统一视觉", "统一风格", "风格漂移", "根据 design.md",
+    ]),
+    sig!("design_contract_negation", normalize => &[
+        "不需要设计系统", "不需要设计规范", "不用设计系统", "不用设计规范",
+        "无需设计系统", "无需设计规范", "不要设计系统", "不要设计规范",
+        "no design system", "without design system",
+    ]),
+    sig!("quick_artifact", normalize => &[
+        "快速", "普通", "简单", "临时", "quick", "simple", "draft", "utility",
+    ]),
+];
+
+/// Generic engine: check whether `query_text` / `query_token_list` matches
+/// any marker in `markers` using the given `mode`.
+fn signal_matches(
+    mode: &SignalMatchMode,
+    query_text: &str,
+    query_token_list: &[String],
+    markers: &[&str],
+) -> bool {
+    match mode {
+        SignalMatchMode::NormalizeAndToken => {
+            markers.iter().any(|m| {
+                query_text.contains(&normalize_text(m))
+                    || text_matches_phrase(query_token_list, m)
+            })
+        }
+        SignalMatchMode::ContainsOrToken => {
+            markers.iter().any(|m| {
+                query_text.contains(*m) || text_matches_phrase(query_token_list, m)
+            })
+        }
+    }
+}
+
+/// Look up a signal definition by name and evaluate it.
+fn has_signal_by_name(name: &str, query_text: &str, query_token_list: &[String]) -> bool {
+    SIGNAL_DEFS
+        .iter()
+        .find(|def| def.name == name)
+        .map(|def| signal_matches(&def.mode, query_text, query_token_list, def.markers))
+        .unwrap_or(false)
+}
+
 const ROUTING_SIGNAL_MARKERS_EMBED: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../configs/framework/ROUTING_SIGNAL_MARKERS.json"
@@ -232,79 +436,18 @@ pub fn has_runtime_lightweighting_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "runtime 轻量化",
-        "轻量化",
-        "兼容层",
-        "胶水层",
-        "沉到 runtime",
-        "沉到runtime",
-        "runtime 下沉",
-        "下沉 runtime",
-        "沉到运行时",
-        "减少入口",
-        "减入口",
-        "不损害功能",
-        "加重负担",
-        "没有用",
-    ]
-    .iter()
-    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+    has_signal_by_name("runtime_lightweighting", query_text, query_token_list)
 }
 
 pub fn has_systematic_debug_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "root-cause analysis",
-        "root cause analysis",
-        "root-cause",
-        "root cause",
-        "根因",
-        "找根因",
-        "bug",
-        "报错",
-        "失败",
-        "崩了",
-        "不工作",
-        "哪里错了",
-        "flaky",
-        "flake",
-        "traceback",
-        "error",
-        "tdd workflow",
-        "tdd",
-        "定位根因",
-        "修这个 bug",
-        "fix login",
-        "login bug",
-    ]
-    .iter()
-    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+    has_signal_by_name("systematic_debug", query_text, query_token_list)
 }
 
 pub fn has_scientific_figure_plotting_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "scientific figures",
-        "scientific figure",
-        "publication chart",
-        "publication figure",
-        "journal style",
-        "科研出图",
-        "论文图",
-        "期刊风格",
-        "matplotlib",
-        "seaborn",
-        "plotnine",
-        "raincloud",
-        "ridge plot",
-        "statistical annotations",
-        "colorblind-safe",
-        "cjk font",
-    ]
-    .iter()
-    .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
+    has_signal_by_name("scientific_figure_plotting", query_text, query_token_list)
 }
 
 pub fn has_rendered_visual_evidence_context(
@@ -361,58 +504,11 @@ pub fn has_prose_naturalization_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "润色",
-        "润色得自然",
-        "自然一点",
-        "改自然",
-        "自然化",
-        "文本精修",
-        "表达优化",
-        "去模板腔",
-        "像人写的",
-        "humanize",
-        "aigc",
-        "ai 味",
-        "ai味",
-        "ai 感",
-        "逐句评估",
-        "哪些句子",
-        "普通说明",
-        "说明文字",
-        "普通写作",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("prose_naturalization", query_text, query_token_list)
 }
 
 pub fn has_copywriting_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "ux 微文案",
-        "ux",
-        "微文案",
-        "空状态",
-        "cta",
-        "转化",
-        "转化率",
-        "点击创建",
-        "创建项目",
-        "广告词",
-        "产品卖点",
-        "落地页",
-        "品牌故事",
-        "copywriting",
-        "in-app microcopy",
-        "tagline",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("copywriting", query_text, query_token_list)
 }
 
 pub fn is_overlay_record(record: &SkillRecord) -> bool {
@@ -457,129 +553,22 @@ pub fn has_plan_mode_owner_context(query_text: &str, query_token_list: &[String]
 }
 
 pub fn has_bounded_subagent_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "sidecar",
-        "sidecars",
-        "subagent",
-        "subagents",
-        "delegation plan",
-        "multiagent",
-        "multi-agent",
-        "多 agent",
-        "多 agent 执行",
-        "多 agent 路由",
-        "bounded sidecar",
-        "bounded sidecars",
-        "bounded subagent",
-        "bounded subagents",
-        "subagent lane",
-        "sidecar lane",
-        "local-supervisor",
-        "local-supervisor queue",
-        "保留 sidecar 边界",
-        "只切 sidecar",
-        "并行 sidecar",
-        "不实际 spawn",
-        "stay local",
-        "主线程保留",
-        "保留主线程",
-        "主线程集成",
-        "lane-local output",
-        "不创建 worker",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("bounded_subagent", query_text, query_token_list)
 }
 
 pub fn has_token_budget_pressure(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "token budget",
-        "context budget",
-        "token 开销",
-        "token 成本",
-        "降低 token",
-        "压 token",
-        "省 token",
-        "缩上下文",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("token_budget_pressure", query_text, query_token_list)
 }
 
 pub fn has_workflow_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "不要 workflow",
-        "不要进入 workflow",
-        "不进 workflow",
-        "不用 workflow",
-        "无需 workflow",
-        "not workflow",
-        "without workflow",
-        "不要 workflow orchestration",
-        "不要 workflow 编排",
-        "只是 sidecar",
-        "only sidecar",
-        "tdd workflow",
-        "用 tdd workflow",
-        "test driven development",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("workflow_negation", query_text, query_token_list)
 }
 
 pub fn has_workflow_orchestration_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "workflow orchestration",
-        "workflow supervisor",
-        "workflow mode",
-        "workflow 编排",
-        "用 workflow",
-        ".claude/workflows",
-        "/workflow",
-        "ultracode",
-        "worker lifecycle",
-        "worker orchestration",
-        "multi-worker",
-        "multi worker",
-        "parallel worker",
-        "parallel workers",
-        "disjoint files",
-        "disjoint file",
-        "disjoint write",
-        "disjoint writes",
-        "disjoint scope",
-        "disjoint scopes",
-        "disjoint write scope",
-        "disjoint write scopes",
-        "lane-local",
-        "lane local",
-        "lane-local delta",
-        "worker write scope",
-        "worker write scopes",
-        "workflow 协作",
-        "团队编排",
-        "多 worker",
-        "worker 生命周期",
-        "supervisor-led",
-        "supervisor led",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("workflow_orchestration", query_text, query_token_list)
 }
 
 pub fn has_parallel_execution_context(
@@ -736,28 +725,7 @@ pub fn has_paper_prose_negation_context(
 }
 
 pub fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "paper",
-        "manuscript",
-        "论文",
-        "稿子",
-        "稿件",
-        "摘要",
-        "引言",
-        "审稿意见",
-        "reviewer comments",
-        "rebuttal",
-        "appendix",
-        "claim",
-        "投稿",
-        "期刊",
-        "科研",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("paper", query_text, query_token_list)
 }
 
 /// True when the query is about reviewing/checking a mathematical proof or derivation,
@@ -800,38 +768,11 @@ pub fn has_github_pr_context(query_text: &str, query_token_list: &[String]) -> b
 }
 
 pub fn has_pr_triage_summary_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "quick PR 状态梳理",
-        "pr 状态梳理",
-        "pr review summary",
-        "pull request summary",
-        "reviewer feedback digest",
-        "changed-file digest",
-        "changed files summary",
-        "pr triage",
-        "pr-level follow-up",
-        "pr follow-up",
-        "changed-file surface",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("pr_triage_summary", query_text, query_token_list)
 }
 
 pub fn has_sentry_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "sentry",
-        "production error",
-        "production errors",
-        "线上异常",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("sentry", query_text, query_token_list)
 }
 
 pub fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -866,22 +807,7 @@ pub fn has_non_github_ci_provider_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "gitlab",
-        "gitlab ci",
-        "circleci",
-        "circle ci",
-        "jenkins",
-        "azure pipelines",
-        "buildkite",
-        "travis",
-        "bitbucket pipelines",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("non_github_ci_provider", query_text, query_token_list)
 }
 
 pub fn should_route_to_gh_fix_ci(query_text: &str, query_token_list: &[String]) -> bool {
@@ -1002,27 +928,7 @@ pub fn has_explicit_prose_polish_marker(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "润色",
-        "文字精修",
-        "SCI润色",
-        "SCI 润色",
-        "英文论文润色",
-        "学术润色",
-        "只改表达",
-        "polish",
-        "proofread",
-        "copyedit",
-        "rewrite introduction",
-        "rewrite abstract",
-        "manuscript editing",
-        "academic writing",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("explicit_prose_polish", query_text, query_token_list)
 }
 
 /// 不要求 `has_paper_context` 的显式学术润色（如「SCI润色 abstract」「polish this abstract」）。
@@ -1342,49 +1248,14 @@ pub fn has_paper_ref_first_workflow_context(
 }
 
 pub fn has_design_reference_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "参考源",
-        "verified tokens",
-        "品牌 token",
-        "stripe",
-        "linear",
-        "apple",
-        "vercel",
-        "liquid glass motion",
-        "产品风格映射",
-        "borrowable cues",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("design_reference", query_text, query_token_list)
 }
 
 pub fn has_visual_evidence_review_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "看图",
-        "截图",
-        "界面图",
-        "视觉问题",
-        "可读性审查",
-        "重叠",
-        "层级",
-        "渲染",
-        "rendered",
-        "screenshot",
-        "visual review",
-        "ui overlap",
-        "readability review",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("visual_evidence_review", query_text, query_token_list)
 }
 
 pub fn artifact_gate_matches_query(query_token_list: &[String]) -> bool {
@@ -1435,105 +1306,32 @@ pub fn artifact_gate_target_slug(query_token_list: &[String]) -> Option<&'static
 }
 
 pub fn has_design_contract_context(query_text: &str, query_token_list: &[String]) -> bool {
-    const MARKERS: [&str; 18] = [
-        "design.md",
-        "设计规范",
-        "设计系统",
-        "设计 token",
-        "design token",
-        "design tokens",
-        "视觉身份",
-        "视觉规范",
-        "品牌风格",
-        "品牌规范",
-        "house style",
-        "visual identity",
-        "style contract",
-        "统一设计规范",
-        "统一视觉",
-        "统一风格",
-        "风格漂移",
-        "根据 design.md",
-    ];
-    MARKERS.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("design_contract", query_text, query_token_list)
 }
 
 pub fn has_design_contract_negation_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    const MARKERS: [&str; 10] = [
-        "不需要设计系统",
-        "不需要设计规范",
-        "不用设计系统",
-        "不用设计规范",
-        "无需设计系统",
-        "无需设计规范",
-        "不要设计系统",
-        "不要设计规范",
-        "no design system",
-        "without design system",
-    ];
-    MARKERS.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("design_contract_negation", query_text, query_token_list)
 }
 
 pub fn has_design_output_audit_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "设计审计",
-        "设计验收",
-        "验收结论",
-        "风格漂移",
-        "ai 味",
-        "反模式",
-        "drift",
-        "anti-pattern",
-        "audit produced",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("design_output_audit", query_text, query_token_list)
 }
 
 pub fn has_design_workflow_protocol_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "设计工件协议",
-        "设计工作流",
-        "设计迭代协议",
-        "design workflow",
-        "design artifact protocol",
-        "prompt 到 screenshot 到 verdict",
-        "每轮都按这个工作流跑",
-        "工作流跑",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("design_workflow_protocol", query_text, query_token_list)
 }
 
 pub fn has_quick_artifact_context(query_text: &str, query_token_list: &[String]) -> bool {
-    const MARKERS: [&str; 8] = [
-        "快速", "普通", "简单", "临时", "quick", "simple", "draft", "utility",
-    ];
-    MARKERS.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("quick_artifact", query_text, query_token_list)
 }
 
 pub fn should_defer_to_artifact_gate(
@@ -1596,65 +1394,18 @@ pub fn should_prefer_design_contract_over_artifact(
 }
 
 pub fn has_beamer_slide_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "beamer",
-        "beamer slides",
-        "latex beamer",
-        "latex 幻灯片",
-        "beamer 编译",
-        "学术 ppt",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("beamer_slide", query_text, query_token_list)
 }
 
 pub fn has_source_slide_format_context(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    [
-        "markdown slides",
-        "slidev",
-        "marp",
-        "html slides",
-        "source slide formats",
-        "source-first slides",
-        "用 markdown 做 slides",
-        "根据大纲做 html slides",
-        "browser-matched pdf",
-        "presentation.html",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("source_slide_format", query_text, query_token_list)
 }
 
 pub fn has_diagramming_context(query_text: &str, query_token_list: &[String]) -> bool {
-    [
-        "mermaid",
-        "graphviz",
-        "dot diagram",
-        "流程图",
-        "研究流程图",
-        "技术路线图",
-        "方法图",
-        "实验流程",
-        "pipeline 图",
-        "时序图",
-        "架构图",
-        "依赖图",
-        "状态机",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    has_signal_by_name("diagramming", query_text, query_token_list)
 }
 
 pub fn build_route_context(

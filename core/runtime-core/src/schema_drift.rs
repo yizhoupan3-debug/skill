@@ -463,7 +463,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn seven_event_hooks_json(command: &str) -> String {
     format!(
         r#"{{
@@ -480,7 +480,7 @@ fn seven_event_hooks_json(command: &str) -> String {
     )
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 fn write_minimal_seven_event_hooks(repo: &Path, hooks_command: &str, template_command: &str) {
     fs::create_dir_all(repo.join(".cursor")).unwrap();
     fs::write(
