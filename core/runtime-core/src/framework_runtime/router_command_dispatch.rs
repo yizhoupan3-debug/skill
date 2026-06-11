@@ -55,15 +55,28 @@ fn codex_hook_stdout_payload(payload: Option<Value>) -> Value {
 }
 
 /// Resolve host entrypoint provider by `--host-id`.
-/// Currently only `codex` has a concrete provider; other hosts can be added as needed.
+/// Registry-driven: iterates `host_provider_registry` to find a concrete provider.
+/// Falls back to the first registered host when no host_id is specified.
 fn resolve_host_entrypoint_provider(
     repo_root: &std::path::Path,
     host_id: Option<&str>,
 ) -> Result<crate::host_entrypoint_sync::HostEntrypointPayloadProvider, String> {
-    match host_id {
-        Some("codex") | None => codex_host_entrypoint_provider(repo_root),
-        Some(other) => Err(format!(
-            "unsupported host-id '{other}' for sync-entrypoints; supported: codex"
+    let resolved = host_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| crate::hosts::default_host_id());
+    // Currently only codex has a concrete entrypoint provider.
+    // Future hosts add their own providers here via the registry pattern.
+    match crate::hosts::host_provider_for_routing_spelling(resolved) {
+        Some(provider) if provider.host_id() == "codex" || provider.install_tool() == "codex" => {
+            codex_host_entrypoint_provider(repo_root)
+        }
+        Some(provider) => Err(format!(
+            "host '{}' does not yet have an entrypoint provider; only codex is currently supported",
+            provider.host_id()
+        )),
+        None => Err(format!(
+            "unknown host-id '{resolved}' for sync-entrypoints; not found in host_provider_registry"
         )),
     }
 }

@@ -41,10 +41,17 @@ Goal state 的生命周期：**创建 → 工作 → 显式完成 → 清理**�
 ### I5. runtime-core 82K → 21K [Phase 1]
 route/ (6.7K) + hosts/ (24K) + browser_mcp/ (4.7K) + host_integration/ (6K) = 41K 行迁移至目标 crate。迁移后 runtime-core 仅保留核心生命周期/存储/trace/closeout。
 
-### I6. 中间代码零宿主名硬编码 [Phase 1] ✅ 达标 (2026-06-11)
+### I6. 中间代码零宿主名硬编码 [Phase 1] ✅ 彻底达标 (2026-06-11)
 runtime-core（非 hosts/ 目录）和 core-policy 中不允许出现任何宿主名字符串（除退役别名兼容层）。所有宿主差异通过 registry capabilities + HostProvider trait 驱动。
 
-**当前残留**：7 处生产代码 + 15 个 legacy env + 退役别名 ~25 处。
+**2026-06-11 彻底解耦完成**：runtime-layer 所有生产代码中的宿主名硬编码已清除：
+- `PaperProseHookHost` 重复枚举消除 → 统一使用 `host_projection::hooks::PaperProseHookHost`（含 `env_var()` / `adversarial_env_var()`）
+- `paper_adversarial_hook.rs` 硬编码 env var 映射 → 委托给 `host.adversarial_env_var()`
+- `worker.rs` codex 专属速率限制分支 → 统一 `rate_limit_patterns()` 所有 host 通用
+- `alias.rs` codex 默认 fallback → `crate::hosts::default_host_id()` 注册表驱动
+- `router_command_dispatch.rs` codex 硬编码 match → 注册表查询 + 泛化错误消息
+- `router_rs_observation.rs` `is_codex()` 删除 → 事件名 `CodexLifecycleContext` 自身已足够
+- `lib.rs` 枚举桥接代码删除 → 直接传递 `host_projection::hooks::PaperProseHookHost`
 
 ### I7. codex sync 统一化 [Phase 1]
 删除 `codex sync` 子命令。`host-integration install --to codex` 吸收全部功能。`sync-entrypoints` 泛化为接受 `--host-id`。
@@ -58,10 +65,14 @@ HostProvider trait 扩展 8 个 capability 字段，从 registry 自动映射。
 - FTS5 查询参数清洗 ✅（`*`/`"` 转义 + 保留字后跟 `(` 识别）
 - `framework_snapshot` 新增 `code_index` 字段 ✅
 
-### I10. 活跃 rust_tools MCP 化 [Phase 2] ⏳ 1/6 完成
-6 个活跃工具（citation, financial_data, gh_source_gate, ooxml, pdf, pptx）注册为 MCP 工具。5 个孤立 crate 从 workspace 移除 ✅。
+### I10. 活跃 rust_tools MCP 化 [Phase 2] ✅ DONE (2026-06-11)
+6 个活跃工具（citation, financial_data, gh_source_gate, ooxml, pdf, pptx）全部注册为 MCP 工具。5 个孤立 crate 从 workspace 移除 ✅。
 - `pdf_tool_rs`: ✅ MCP 化完成 (mcp-pdf binary, pdf_read + pdf_info)
-- 其余 5 个: ⏳ 待提取 lib.rs（每个 ~0.5d）
+- `citation_tool_rs`: ✅ MCP 化完成 (mcp/mod.rs 7.8K, citation_audit + citation_lint)
+- `financial_data_rs`: ✅ MCP 化完成 (mcp/mod.rs 8.7K, financial_data)
+- `gh_source_gate_rs`: ✅ MCP 化完成 (mcp/mod.rs 7.3K, gh_source_gate)
+- `ooxml_parser_rs`: ✅ MCP 化完成 (mcp/mod.rs 10.1K, ooxml_parse)
+- `pptx_tool_rs`: ✅ MCP 化完成 (mcp/mod.rs 11.6K, pptx_parse)
 
 ### I11. Tier 2 能力对齐 [Phase 3]
 review gate 磁盘持久化 + closeout hard block metadata + session supervisor MCP 桥接 + 自动 evidence 采集。harness_capabilities 从 2 项扩展到 4 项。
@@ -169,7 +180,7 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 ### 1.8 API Surface 清理 [1.5d] — I12 ✅ 首轮完成 (2026-06-10)
 
 **已完成**：
-- 删除 `goal_prediction` 死模块（纯 re-export，无内部引用）
+- ~~删除 `goal_prediction` 死模块（纯 re-export，无内部引用）~~ **勘误 (2026-06-11)**：`core/core-state/src/goal_prediction.rs` 是**活的实现模块**（7.6KB，含 `GoalStatePrediction`、`PredictionVerification` 等结构体），runtime-core 有 21 处活跃引用（closeout_enforcement、telemetry_emit、framework_runtime 等 5 个文件）。**此模块不可删除**。原始审计可能混淆了 `goal_prediction`（活实现）与某个 re-export wrapper。
 - 6 条 core-policy re-export 从 `pub use` 降为 `pub(crate) use`（内部仍可用，外部不再暴露）
 - 4 个 pub mod 保持 pub（router-rs 外部 crate 需要）
 - 1185 tests passed（runtime-core + router-rs）
@@ -202,8 +213,16 @@ review gate 磁盘持久化 + closeout hard block metadata + session supervisor 
 ### 2.6 HostCapabilities 扩展 + HOST_PROJECTION_ADAPTERS 自动化 [3d] — I8 ✅
 6 新字段：batch_execution / cron_execution / ci_runner / non_interactive_entrypoint / external_session_supervisor / rate_limit_auto_resume。codex=true（S档），其余=false。
 
-### 2.7 中间代码去宿主化 [3d] — I6 ✅
+### 2.7 中间代码去宿主化 [3d] — I6 ✅ 彻底完成 (2026-06-11)
 `ANEMIC_MCP_HOST_IDS` 删除，改用 `hard_gate_hooks` registry capability。4 文件文档去宿主化。
+
+**2026-06-11 补充**：runtime-core 业务逻辑层的 7 处宿主名硬编码全部清除：
+- PaperProseHookHost 枚举统一（消除 runtime-core ↔ host-projection 重复定义 + 桥接代码）
+- 速率限制分类统一（删除 codex 专属模式集，所有 host 使用通用模式集）
+- 默认宿主 fallback → `default_host_id()` 注册表驱动
+- sync-entrypoints → 注册表查询（不再硬编码 "codex"）
+- observation → 删除 `is_codex()`（事件名自身已足够区分）
+- 全 workspace 1347+ tests passed（runtime-core 914 + host-projection 433）
 
 ---
 

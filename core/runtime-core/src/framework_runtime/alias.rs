@@ -126,7 +126,8 @@ fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) ->
         host_id
             .map(str::trim)
             .filter(|value| !value.is_empty())
-            .unwrap_or("codex"),
+            // Data-driven default: first registered host, no hardcoded name.
+            .unwrap_or_else(|| crate::hosts::default_host_id()),
     );
     let host_entrypoints =
         alias_value_at_path(alias_record, &["host_entrypoints"]).and_then(Value::as_object);

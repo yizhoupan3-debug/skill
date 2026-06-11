@@ -14,7 +14,6 @@ use std::fs;
 use std::path::Path;
 
 const REL_PATH: &str = "configs/framework/PAPER_ADVERSARIAL_HOOK.txt";
-const ENV_HOOK_CURSOR: &str = "ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK";
 /// 首行须与 `merge_hook_nudge_paragraph` strip 前缀、`apply_cursor_hook_output_policy` SILENT 放行子串一致。
 pub const PREFIX_LINE: &str = "**PAPER_ADVERSARIAL_HOOK**";
 
@@ -27,11 +26,7 @@ fn builtin_block() -> String {
 }
 
 fn adversarial_env_for_host(host: PaperProseHookHost) -> &'static str {
-    match host {
-        PaperProseHookHost::Cursor => ENV_HOOK_CURSOR,
-        PaperProseHookHost::Codex => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
-        PaperProseHookHost::Claude => "ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK",
-    }
+    host.adversarial_env_var()
 }
 
 pub fn paper_adversarial_hook_requested(host: PaperProseHookHost) -> bool {
@@ -326,12 +321,13 @@ mod tests {
     fn requested_false_when_operator_inject_killed() {
         let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
-        let prior_hook = std::env::var(ENV_HOOK_CURSOR).ok();
+        let hook_var = PaperProseHookHost::Cursor.adversarial_env_var();
+        let prior_hook = std::env::var(hook_var).ok();
         std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
-        std::env::set_var(ENV_HOOK_CURSOR, "1");
+        std::env::set_var(hook_var, "1");
         assert!(!cursor_paper_adversarial_hook_requested());
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
-        restore_env(ENV_HOOK_CURSOR, prior_hook);
+        restore_env(hook_var, prior_hook);
     }
 
     /// review P1-5：未显式 opt-in 子开关时必须关（默认 opt-in 为 false）。
@@ -339,12 +335,13 @@ mod tests {
     fn requested_false_when_hook_env_unset() {
         let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
-        let prior_hook = std::env::var(ENV_HOOK_CURSOR).ok();
+        let hook_var = PaperProseHookHost::Cursor.adversarial_env_var();
+        let prior_hook = std::env::var(hook_var).ok();
         std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
-        std::env::remove_var(ENV_HOOK_CURSOR);
+        std::env::remove_var(hook_var);
         assert!(!cursor_paper_adversarial_hook_requested());
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
-        restore_env(ENV_HOOK_CURSOR, prior_hook);
+        restore_env(hook_var, prior_hook);
     }
 
     /// review P1-5：开关 + 命中 prompt 时必须真合并；用磁盘 txt 真源走完整路径。
@@ -352,9 +349,10 @@ mod tests {
     fn merge_injects_when_enabled_and_prompt_paper() {
         let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
-        let prior_hook = std::env::var(ENV_HOOK_CURSOR).ok();
+        let hook_var = PaperProseHookHost::Cursor.adversarial_env_var();
+        let prior_hook = std::env::var(hook_var).ok();
         std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
-        std::env::set_var(ENV_HOOK_CURSOR, "1");
+        std::env::set_var(hook_var, "1");
 
         let tmp = std::env::temp_dir().join("paper-adv-merge-on");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -380,7 +378,7 @@ mod tests {
         assert!(ctx.contains("短段正文"));
 
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
-        restore_env(ENV_HOOK_CURSOR, prior_hook);
+        restore_env(hook_var, prior_hook);
     }
 
     /// review P1-5：开关关闭时即使 prompt 强命中（`审稿`）也不注入。
@@ -388,9 +386,10 @@ mod tests {
     fn merge_skips_when_hook_disabled_even_if_prompt_paper() {
         let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
-        let prior_hook = std::env::var(ENV_HOOK_CURSOR).ok();
+        let hook_var = PaperProseHookHost::Cursor.adversarial_env_var();
+        let prior_hook = std::env::var(hook_var).ok();
         std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
-        std::env::remove_var(ENV_HOOK_CURSOR);
+        std::env::remove_var(hook_var);
 
         let tmp = std::env::temp_dir().join("paper-adv-merge-off");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -408,6 +407,6 @@ mod tests {
         assert!(out.get("followup_message").is_none());
 
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
-        restore_env(ENV_HOOK_CURSOR, prior_hook);
+        restore_env(hook_var, prior_hook);
     }
 }

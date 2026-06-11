@@ -315,12 +315,9 @@ pub fn classify_rate_limit_block(
     evidence_text: &str,
 ) -> Result<BlockClassification, String> {
     let lowered = host.trim().to_ascii_lowercase();
-    let mut matched = match lowered.as_str() {
-        "codex" | "codex-cli" => detect_rate_limit(evidence_text, codex_rate_limit_patterns()),
-        // Generic fallback: use common HTTP 429 / rate-limit patterns that
-        // apply to claude-code, cursor, and any future host.
-        _other => detect_rate_limit(evidence_text, generic_rate_limit_patterns()),
-    };
+    // All hosts use the same universal rate-limit patterns.
+    // No host-specific pattern sets — new hosts get coverage automatically.
+    let mut matched = detect_rate_limit(evidence_text, rate_limit_patterns());
     if let Some(classification) = matched.as_mut() {
         classification.host = lowered;
     }
@@ -371,25 +368,10 @@ fn parse_duration_caps(caps: &regex::Captures<'_>) -> Option<i64> {
     Some(amount * multiplier)
 }
 
-fn codex_rate_limit_patterns() -> &'static [Regex] {
-    static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
-    PATTERNS
-        .get_or_init(|| {
-            vec![
-                Regex::new("(?i)rate limit").expect("valid regex"),
-                Regex::new("(?i)try again").expect("valid regex"),
-                Regex::new("(?i)too many requests").expect("valid regex"),
-                Regex::new("(?i)429").expect("valid regex"),
-                Regex::new("(?i)overloaded").expect("valid regex"),
-            ]
-        })
-        .as_slice()
-}
-
-/// Generic rate-limit patterns that work across hosts (claude-code, cursor,
-/// opencode, antigravity, and any future host).  These match the common HTTP
-/// 429 / rate-limit vocabulary that all LLM APIs share.
-fn generic_rate_limit_patterns() -> &'static [Regex] {
+/// Universal rate-limit patterns that work across all hosts.
+/// Matches common HTTP 429 / rate-limit vocabulary shared by all LLM APIs.
+/// New hosts automatically get coverage without code changes.
+fn rate_limit_patterns() -> &'static [Regex] {
     static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
     PATTERNS
         .get_or_init(|| {
@@ -398,7 +380,7 @@ fn generic_rate_limit_patterns() -> &'static [Regex] {
                 Regex::new("(?i)too many (?:requests|queries)").expect("valid regex"),
                 Regex::new("(?i)\\b429\\b").expect("valid regex"),
                 Regex::new("(?i)overloaded").expect("valid regex"),
-                Regex::new("(?i)try again (?:later|in)").expect("valid regex"),
+                Regex::new("(?i)try again (?:later|in|now)").expect("valid regex"),
                 Regex::new("(?i)quota exceeded").expect("valid regex"),
                 Regex::new("(?i)usage limit").expect("valid regex"),
             ]

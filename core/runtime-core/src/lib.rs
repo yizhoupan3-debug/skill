@@ -192,23 +192,13 @@ pub fn register_host_projection_hooks() {
 
         host_projection::hooks::register_paper_hooks(
             |root, prompt, lines, host| {
-                let h = match host {
-                    host_projection::hooks::PaperProseHookHost::Cursor => paper_prose_hook::PaperProseHookHost::Cursor,
-                    host_projection::hooks::PaperProseHookHost::Codex => paper_prose_hook::PaperProseHookHost::Codex,
-                    host_projection::hooks::PaperProseHookHost::Claude => paper_prose_hook::PaperProseHookHost::Claude,
-                };
-                paper_prose_hook::maybe_append_paper_prose_context(root, prompt, lines, h)
+                paper_prose_hook::maybe_append_paper_prose_context(root, prompt, lines, host)
             },
             |root, output, prompt, followup| {
                 paper_prose_hook::maybe_merge_paper_prose_before_submit(root, output, prompt, followup)
             },
             |root, prompt, lines, host| {
-                let h = match host {
-                    host_projection::hooks::PaperProseHookHost::Cursor => paper_prose_hook::PaperProseHookHost::Cursor,
-                    host_projection::hooks::PaperProseHookHost::Codex => paper_prose_hook::PaperProseHookHost::Codex,
-                    host_projection::hooks::PaperProseHookHost::Claude => paper_prose_hook::PaperProseHookHost::Claude,
-                };
-                paper_adversarial_hook::maybe_append_paper_adversarial_context(root, prompt, lines, h)
+                paper_adversarial_hook::maybe_append_paper_adversarial_context(root, prompt, lines, host)
             },
             |root, output, prompt, followup| {
                 paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(root, output, prompt, followup)

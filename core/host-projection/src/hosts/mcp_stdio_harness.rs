@@ -595,6 +595,10 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                                 "type": "string",
                                 "description": "task id，默认当前 active task",
                             },
+                            "session_id": {
+                                "type": "string",
+                                "description": "session 隔离 ID（可选，MCP harness 自动注入连接级 session_id）",
+                            },
                             "round": {
                                 "type": "integer",
                                 "description": "RFV round number (append_round 时需要)",
@@ -623,10 +627,6 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             "reason": {
                                 "type": "string",
                                 "description": "原因说明（append_round 时需要）",
-                            },
-                            "external_research_summary": {
-                                "type": "string",
-                                "description": "外部调研摘要（append_round 时可选）",
                             },
                             "max_rounds": {
                                 "type": "integer",
@@ -679,30 +679,16 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             "blockers": {
                                 "type": "array",
                                 "items": {"type": "string"},
+                                "description": "阻塞项列表",
                             },
                             "risks": {
                                 "type": "array",
                                 "items": {"type": "string"},
+                                "description": "风险项列表",
                             },
                             "notes": {
                                 "type": "string",
-                            },
-                            "artifacts_checked": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "path": {"type": "string"},
-                                        "exists": {"type": "boolean"},
-                                        "size_bytes": {"type": "integer"},
-                                        "checks": {"type": "array", "items": {"type": "string"}},
-                                    },
-                                },
-                                "description": "产物验证记录",
-                            },
-                            "started_at": {
-                                "type": "string",
-                                "description": "任务开始时间（ISO 8601）",
+                                "description": "备注",
                             },
                         },
                         "required": ["task_id", "summary", "verification_status"],
@@ -720,7 +706,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             },
                             "max_bytes": {
                                 "type": "integer",
-                                "description": "响应体最大字节数（默认 50000）",
+                                "description": "响应体最大字节数（默认 50000，上限 50000，超出自动截断）",
                             },
                         },
                         "required": ["url"],
@@ -739,7 +725,11 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             },
                             "task_id": {
                                 "type": "string",
-                                "description": "task id，默认当前 active task",
+                                "description": "task id，必填",
+                            },
+                            "session_id": {
+                                "type": "string",
+                                "description": "session 隔离 ID（可选，MCP harness 自动注入连接级 session_id）",
                             },
                             "goal": {
                                 "type": "string",
@@ -747,7 +737,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             },
                             "note": {
                                 "type": "string",
-                                "description": "备注信息",
+                                "description": "备注信息（checkpoint 时需要）",
                             },
                             "blocker": {
                                 "type": "string",
@@ -801,7 +791,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                                 "description": "是否同时设置 focus_task 指针（start 时可选，默认 true）",
                             },
                         },
-                        "required": ["operation"],
+                        "required": ["operation", "task_id"],
                     },
                 },
             ],
@@ -2001,7 +1991,10 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
         .get("operation")
         .and_then(Value::as_str)
         .ok_or("Missing required argument: operation")?;
-    let task_id = arguments.get("task_id").and_then(Value::as_str);
+    let task_id = arguments
+        .get("task_id")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: task_id")?;
 
     let repo_root_str = repo_root.to_string_lossy().to_string();
 
@@ -2009,9 +2002,7 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
         "repo_root": repo_root_str,
         "operation": operation,
     });
-    if let Some(tid) = task_id {
-        payload["task_id"] = json!(tid);
-    }
+    payload["task_id"] = json!(task_id);
 
     match operation {
         "start" => {
@@ -2042,6 +2033,22 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or(connection_session_id);
             payload["session_id"] = json!(session_id);
+            // pass-through: downstream state_manager consumes these for start
+            if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {
+                payload["lifecycle_profile"] = json!(lp);
+            }
+            if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {
+                payload["current_horizon"] = json!(ch);
+            }
+            if let Some(cg) = arguments.get("completion_gates") {
+                payload["completion_gates"] = cg.clone();
+            }
+            if let Some(md) = arguments.get("metadata") {
+                payload["metadata"] = md.clone();
+            }
+            if let Some(sf) = arguments.get("set_focus").and_then(Value::as_bool) {
+                payload["set_focus"] = json!(sf);
+            }
         }
         "checkpoint" => {
             let note = arguments
@@ -2074,10 +2081,7 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
     let result = core_state::state_manager::framework_goal_drive(payload)?;
 
     // Invalidate snapshot/task_view caches after goal state write (H3 FIX)
-    let op = arguments.get("operation").and_then(|v| v.as_str()).unwrap_or("");
-    if op != "status" {
-        invalidate_evidence_caches();
-    }
+    invalidate_evidence_caches();
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
