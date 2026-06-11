@@ -106,7 +106,16 @@ impl CdpClient {
     }
 
     fn read_message(&mut self) -> Result<Value, Value> {
+        let deadline = std::time::Instant::now() + Duration::from_secs(15);
         loop {
+            if std::time::Instant::now() >= deadline {
+                return Err(browser_error(
+                    "CDP_CALL_FAILED",
+                    "CDP read_message timed out after 15s (too many non-text frames).",
+                    &["retry after refreshing browser state"],
+                    true,
+                ));
+            }
             match self.socket.read() {
                 Ok(Message::Text(text)) => {
                     return serde_json::from_str::<Value>(&text).map_err(|err| {

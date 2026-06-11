@@ -124,14 +124,42 @@ impl RateLimiter {
 }
 
 // Global caches and rate limiter (session-scoped via OnceLock)
-static SNAPSHOT_CACHE: OnceLock<Arc<std::sync::Mutex<Option<SnapshotCache>>>> = OnceLock::new();
+// Caches use RwLock for concurrent reads; rate limiter uses Mutex (read+write in one call).
+static SNAPSHOT_CACHE: OnceLock<Arc<std::sync::RwLock<Option<SnapshotCache>>>> = OnceLock::new();
 static TASK_VIEW_CACHE: OnceLock<
-    Arc<std::sync::Mutex<HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>>>,
+    Arc<std::sync::RwLock<HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>>>,
 > = OnceLock::new();
 static RATE_LIMITER: OnceLock<Arc<std::sync::Mutex<RateLimiter>>> = OnceLock::new();
 
-/// Poison-safe lock helper that recovers from mutex poisoning.
-/// Returns the guard, or None if lock acquisition failed.
+/// Poison-safe lock helpers that recover from lock poisoning.
+macro_rules! poison_safe_read_lock {
+    ($lock:expr) => {{
+        match $lock.read() {
+            Ok(guard) => Some(guard),
+            Err(poisoned) => {
+                eprintln!(
+                    "[router-rs warning] rwlock poisoned (read), recovering"
+                );
+                Some(poisoned.into_inner())
+            }
+        }
+    }};
+}
+
+macro_rules! poison_safe_write_lock {
+    ($lock:expr) => {{
+        match $lock.write() {
+            Ok(guard) => Some(guard),
+            Err(poisoned) => {
+                eprintln!(
+                    "[router-rs warning] rwlock poisoned (write), recovering"
+                );
+                Some(poisoned.into_inner())
+            }
+        }
+    }};
+}
+
 macro_rules! poison_safe_lock {
     ($mutex:expr) => {{
         match $mutex.lock() {
@@ -146,13 +174,13 @@ macro_rules! poison_safe_lock {
     }};
 }
 
-fn get_snapshot_cache() -> &'static Arc<std::sync::Mutex<Option<SnapshotCache>>> {
-    SNAPSHOT_CACHE.get_or_init(|| Arc::new(std::sync::Mutex::new(None)))
+fn get_snapshot_cache() -> &'static Arc<std::sync::RwLock<Option<SnapshotCache>>> {
+    SNAPSHOT_CACHE.get_or_init(|| Arc::new(std::sync::RwLock::new(None)))
 }
 
 fn get_task_view_cache(
-) -> &'static Arc<std::sync::Mutex<HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>>> {
-    TASK_VIEW_CACHE.get_or_init(|| Arc::new(std::sync::Mutex::new(HashMap::new())))
+) -> &'static Arc<std::sync::RwLock<HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>>> {
+    TASK_VIEW_CACHE.get_or_init(|| Arc::new(std::sync::RwLock::new(HashMap::new())))
 }
 
 fn get_rate_limiter() -> &'static Arc<std::sync::Mutex<RateLimiter>> {
@@ -225,7 +253,7 @@ fn get_cached_task_view(repo_root: &Path) -> core_state::task_state::ResolvedTas
     let cache_key = repo_root.to_path_buf();
     {
         let cache = get_task_view_cache();
-        if let Some(guard) = poison_safe_lock!(cache) {
+        if let Some(guard) = poison_safe_read_lock!(cache) {
             if let Some((ref view, ref expires_at)) = guard.get(&cache_key) {
                 if Instant::now() < *expires_at {
                     return view.clone();
@@ -240,7 +268,7 @@ fn get_cached_task_view(repo_root: &Path) -> core_state::task_state::ResolvedTas
     // Update cache with configurable TTL, evicting stale/overflow entries
     {
         let cache = get_task_view_cache();
-        if let Some(mut guard) = poison_safe_lock!(cache) {
+        if let Some(mut guard) = poison_safe_write_lock!(cache) {
             guard.insert(
                 cache_key,
                 (view.clone(), Instant::now() + Duration::from_secs(ttl_secs)),
@@ -920,7 +948,7 @@ fn tool_framework_snapshot(repo_root: &Path) -> Result<String, String> {
     // Try to read from cache (configurable TTL, default 30 seconds)
     {
         let cache = get_snapshot_cache();
-        if let Some(guard) = poison_safe_lock!(cache) {
+        if let Some(guard) = poison_safe_read_lock!(cache) {
             if let Some(ref cached) = *guard {
                 if cached.is_valid() {
                     return Ok(cached.content.clone());
@@ -936,7 +964,7 @@ fn tool_framework_snapshot(repo_root: &Path) -> Result<String, String> {
     // Update cache with configurable TTL
     {
         let cache = get_snapshot_cache();
-        if let Some(mut guard) = poison_safe_lock!(cache) {
+        if let Some(mut guard) = poison_safe_write_lock!(cache) {
             *guard = Some(SnapshotCache {
                 content: content.clone(),
                 expires_at: Instant::now() + Duration::from_secs(ttl_secs),
@@ -950,11 +978,11 @@ fn tool_framework_snapshot(repo_root: &Path) -> Result<String, String> {
 /// Invalidate evidence-dependent caches (snapshot / task view).
 fn invalidate_evidence_caches() {
     // Clear snapshot cache
-    if let Some(mut guard) = poison_safe_lock!(get_snapshot_cache()) {
+    if let Some(mut guard) = poison_safe_write_lock!(get_snapshot_cache()) {
         *guard = None;
     }
     // Clear task view cache
-    if let Some(mut guard) = poison_safe_lock!(get_task_view_cache()) {
+    if let Some(mut guard) = poison_safe_write_lock!(get_task_view_cache()) {
         guard.clear();
     }
 }
