@@ -22,7 +22,6 @@ members = [
     "core/core-policy",
     "core/routing-engine",
     "core/router-rs",
-    "core/router-rs-cli",
     "core/runtime-core",
     "core/browser-mcp",
     "core/host-projection",

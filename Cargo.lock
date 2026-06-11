@@ -2798,6 +2798,7 @@ dependencies = [
  "fs2",
  "hex",
  "libc",
+ "mimalloc",
  "rayon",
  "regex",
  "reqwest",
@@ -2810,16 +2811,6 @@ dependencies = [
  "sha2 0.11.0",
  "tungstenite",
  "which",
-]
-
-[[package]]
-name = "router-rs-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "mimalloc",
- "router-rs",
- "serde_json",
 ]
 
 [[package]]

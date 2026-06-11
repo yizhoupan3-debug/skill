@@ -29,6 +29,11 @@ hex.workspace = true
 tungstenite.workspace = true
 fs2.workspace = true
 which.workspace = true
+mimalloc.workspace = true
+
+[[bin]]
+name = "router-rs-cli"
+path = "src/bin/router-rs-cli.rs"
 
 [features]
 default = [
