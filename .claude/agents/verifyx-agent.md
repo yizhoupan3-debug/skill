@@ -15,6 +15,7 @@ tools:
   - mcp__router-rs-framework__goal_state_read
   - mcp__router-rs-framework__record_evidence
   - mcp__router-rs-framework__session_checkpoint
+timeout_secs: 300
 ---
 
 # Verifyx Agent
@@ -78,3 +79,11 @@ See `skills/verifyx/references/evidence-protocol.md` for canonical format.
 - Does not implement or fix code — only verifies and ships.
 - Does not push to remote unless user explicitly requests.
 - Advisory mode under `my-light`: closeout_gate and complete do not hard-block.
+
+## Timeout & Self-Check (mandatory)
+
+- **Hard deadline: 5 minutes** (`timeout_secs: 300`). Verification must be fast.
+- If a validation command hangs for >60s, kill it and mark as `partial`.
+- If approaching 4 minutes, skip non-critical validations and ship what you have
+  with `verification_status: "partial"` and a note listing skipped items.
+- Never retry a failing command more than once.

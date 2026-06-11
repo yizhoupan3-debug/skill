@@ -54,3 +54,19 @@ if [ ! -x "${ROUTER_RS_BIN:-}" ]; then
 fi
 
 printf '%s' "$HOOK_PAYLOAD" | "$ROUTER_RS_BIN" host claude hook --event="$HOOK_EVENT" --repo-root "$ROOT"
+
+# Health monitor integration for SubagentStart/SubagentStop
+HEALTH_MONITOR="$FW/configs/framework/agent-health-monitor.sh"
+if [ -x "$HEALTH_MONITOR" ]; then
+  case "$(printf '%s' "$HOOK_EVENT" | tr '[:upper:]' '[:lower:]')" in
+    subagentstart)
+      AGENT_NAME=$(printf '%s' "$HOOK_PAYLOAD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_name','unknown'))" 2>/dev/null || echo "unknown")
+      AGENT_ID=$(printf '%s' "$HOOK_PAYLOAD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('name','') or d.get('tool_input',{}).get('description','') or 'agent-'+str(id(d)))" 2>/dev/null || echo "agent-$$")
+      "$HEALTH_MONITOR" start "$AGENT_NAME" "$AGENT_ID" >/dev/null 2>&1 || true
+      ;;
+    subagentstop)
+      AGENT_ID=$(printf '%s' "$HOOK_PAYLOAD" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('tool_input',{}).get('name','') or d.get('tool_input',{}).get('description','') or 'agent-'+str(id(d)))" 2>/dev/null || echo "agent-$$")
+      "$HEALTH_MONITOR" stop "$AGENT_ID" >/dev/null 2>&1 || true
+      ;;
+  esac
+fi

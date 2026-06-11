@@ -14,6 +14,7 @@ tools:
   - Agent
   - WebSearch
   - WebFetch
+timeout_secs: 480
 ---
 
 # Deep Review Agent
@@ -76,3 +77,14 @@ security, logging/monitoring. Report separately from code quality findings.
 - Does not open PRs, merge, or commit unless user explicitly requests.
 - Does not silently rewrite implementation.
 - External network research appears as indented evidence under specific findings.
+
+## Timeout & Self-Check (mandatory)
+
+- **Hard deadline: 8 minutes** (`timeout_secs: 480`). If approaching 6 minutes and
+  still collecting findings, synthesize what you have and return partial results.
+- **Stuck detection**: If a sub-agent call returns no progress after 2 attempts,
+  abandon that lane and report the gap.
+- **Never block indefinitely** on external resources (web fetch, file I/O).
+  Use timeouts on all external calls; skip on failure with a caveat finding.
+- If the parent signals you are taking too long, wrap up immediately with
+  a `[P2] incomplete — timeout reached` summary.
