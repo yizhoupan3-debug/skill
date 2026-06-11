@@ -132,6 +132,19 @@ pub fn launch_worker(
     Ok(worker)
 }
 
+/// Compute exponential backoff based on how many times this worker has been blocked.
+/// Steps: 30s → 60s → 120s → 300s (cap).
+fn exponential_backoff_seconds(worker: &WorkerSessionRecord) -> i64 {
+    let block_count = worker
+        .events
+        .iter()
+        .filter(|e| e.event == "blocked")
+        .count() as u32;
+    let base = 30i64;
+    let backoff = base * 2_i64.pow(block_count.min(3)); // 30, 60, 120, 300
+    backoff.min(DEFAULT_BACKOFF_SECONDS)
+}
+
 pub fn mark_worker_blocked(
     worker: &mut WorkerSessionRecord,
     payload: &Value,
@@ -152,9 +165,13 @@ pub fn mark_worker_blocked(
             }
         };
 
+    // Use the larger of: parsed duration from error message, or exponential backoff
+    let exp_backoff = exponential_backoff_seconds(worker);
+    let effective_backoff = classification.backoff_seconds.max(exp_backoff);
+
     worker.status = classification.status.clone();
     worker.blocked_reason = Some(classification.blocked_reason.clone());
-    worker.next_resume_at = Some(add_seconds_rfc3339(now, classification.backoff_seconds)?);
+    worker.next_resume_at = Some(add_seconds_rfc3339(now, effective_backoff)?);
     worker.last_error = classification.matched_text.clone();
     worker.updated_at = now.to_string();
     push_event(
@@ -163,8 +180,9 @@ pub fn mark_worker_blocked(
         &classification.status,
         now,
         Some(format!(
-            "next resume scheduled after {} seconds",
-            classification.backoff_seconds
+            "next resume scheduled after {} seconds (attempt {})",
+            effective_backoff,
+            worker.events.iter().filter(|e| e.event == "blocked").count(),
         )),
     );
     Ok(classification)

@@ -35,7 +35,6 @@ use crate::stdio_transport::runtime_concurrency_defaults_payload;
 
 use super::constants::FRAMEWORK_RUNTIME_AUTHORITY;
 use super::json_payload::required_non_empty_string;
-use super::json_value::value_text;
 
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
     BackgroundControlEffectPlanPayload {

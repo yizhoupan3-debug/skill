@@ -45,16 +45,19 @@ pub fn set_test_review_gate_disable_override(v: Option<bool>) {
     TEST_CURSOR_REVIEW_GATE_DISABLE.with(|c| c.set(v));
 }
 
+#[cfg(test)]
 thread_local! {
     static FORCE_CURSOR_HOOK_STATE_LOCK_FAILURE_FOR_TEST: Cell<bool> =
         const { Cell::new(false) };
 }
 
 /// 仅限单测：`acquire_state_lock` 直接失败，校验「hook-state 锁不可用」降级路径。
+#[cfg(test)]
 pub fn set_force_cursor_hook_state_lock_failure(v: bool) {
     FORCE_CURSOR_HOOK_STATE_LOCK_FAILURE_FOR_TEST.with(|c| c.set(v));
 }
 
+#[cfg(test)]
 fn should_force_hook_state_lock_failure_for_test() -> bool {
     FORCE_CURSOR_HOOK_STATE_LOCK_FAILURE_FOR_TEST.with(|c| c.get())
 }

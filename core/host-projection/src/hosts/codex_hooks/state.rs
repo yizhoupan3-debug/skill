@@ -1,4 +1,4 @@
-use super::{lifecycle_host, CodexLifecycleContextState, CodexLifecycleHostKind};
+use super::{lifecycle_host, CodexLifecycleContextState};
 use crate::hooks::router_rs_env_enabled_default_true;
 use sha2::{Digest, Sha256};
 use serde_json::{json, Value};

@@ -10,13 +10,13 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         if let Some(msg) = closeout_msg {
             out["followup_message"] = Value::String(msg);
         }
-        let skip_review_output_lint = out.get("followup_message").is_some();
+        let _skip_review_output_lint = out.get("followup_message").is_some();
         finalize_stop_hook_outputs(repo_root, &mut out, &frame);
         return out;
     }
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
-        let skip_review_output_lint = true;
+        let _skip_review_output_lint = true;
         let mut out = if stop_lock_failure_is_fail_closed(repo_root, event) {
             json!({
                 "followup_message": review_gate_stop_lock_unavailable_line()
@@ -202,7 +202,7 @@ fn handle_pre_compact(repo_root: &Path, event: &Value) -> Value {
     }
     let mut out = match load_state(repo_root, event) {
         Ok(Some(state)) => {
-            let mut summary = format!(
+            let summary = format!(
                 "router-rs 门控快照：phase={} review={} delegation={} override={} reject={} pre_goal_ok={} subagentStart_n={} subagent_stop={}",
                 state.phase,
                 state.review_required,

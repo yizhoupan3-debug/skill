@@ -48,12 +48,6 @@ impl StdioAgentHookHost {
         }
     }
 
-    fn review_gate_disable_env(self) -> &'static str {
-        match self {
-            Self::ClaudeCode => "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
-        }
-    }
-
     fn session_namespace_env(self) -> &'static str {
         match self {
             Self::ClaudeCode => "ROUTER_RS_CLAUDE_SESSION_NAMESPACE",
@@ -81,13 +75,6 @@ impl StdioAgentHookHost {
     fn user_config_dir_leaf(self) -> &'static str {
         match self {
             Self::ClaudeCode => ".claude",
-        }
-    }
-
-    fn review_gate_incomplete_stop_reason(self) -> &'static str {
-        match self {
-            Self::ClaudeCode => "router-rs CLAUDE_REVIEW_GATE incomplete: run an observed independent reviewer lane with explicit fork_context=false before closing this review turn.",
-
         }
     }
 

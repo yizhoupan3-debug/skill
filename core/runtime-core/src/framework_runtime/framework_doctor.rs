@@ -1,6 +1,5 @@
 //! Human-readable checks for `router-rs framework doctor`.
 
-use crate::autopilot_goal::read_task_pointer_pair;
 use crate::router_env_flags::router_rs_task_ledger_flock_enabled;
 use crate::task_state::resolve_task_view;
 use serde_json::{json, Value};

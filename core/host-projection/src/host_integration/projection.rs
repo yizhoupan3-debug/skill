@@ -708,7 +708,7 @@ pub fn install_projection_tool(
     }
     let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-    let mut out = (adapter.install)(roots, effective_scope)?;
+    let out = (adapter.install)(roots, effective_scope)?;
     // MCP 配置已统一由各宿主的 user-level install 路径写入，
     // 不再在 project scope 写入 .mcp.json / .codex/config.toml。
     Ok(out)
@@ -2514,7 +2514,7 @@ pub fn install_cursor_mcp_server(
 ) -> Result<CursorMcpInstallOutcome, String> {
     let browser_server = cursor_mcp_server_payload(roots);
     let framework_server = cursor_router_rs_framework_payload(roots);
-    let codegraph_server = codegraph_mcp_server_payload(roots);
+    let _codegraph_server = codegraph_mcp_server_payload(roots);
     if let Some(payload) = read_json_if_exists(path)? {
         if let Some(existing) = payload
             .get("mcp_servers")
@@ -2918,7 +2918,7 @@ pub fn install_skills_projection_tools(command: &str, tools: &[String], to: &[St
 }
 
 pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
-    let normalized = raw.trim().to_lowercase();
+    let _normalized = raw.trim().to_lowercase();
     if let Some(adapter) = projection_adapter_for_raw(raw) {
         return Ok(adapter.tool.to_string());
     }
@@ -2933,7 +2933,7 @@ pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, S
 }
 
 pub fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {
-    let mut tools = registry_projection_tools(framework_root).unwrap_or_else(|_| {
+    let tools = registry_projection_tools(framework_root).unwrap_or_else(|_| {
         vec![
             "cursor".to_string(),
             "claude".to_string(),

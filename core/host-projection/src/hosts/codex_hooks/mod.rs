@@ -13,7 +13,7 @@ use crate::host_entrypoint_sync::HostEntrypointPayloadProvider;
 use crate::host_integration::ensure_codex_skill_surface;
 use core_policy::review_gate_engine::{
     fork_context_from_values, maybe_bump_codex_review_phase_for_compact_findings,
-    review_independent_fork, review_independent_reviewer_evidence,
+    review_independent_reviewer_evidence,
     ReviewGateFacts,
 };
 use core_policy::HookReviewDiskCore;
@@ -39,7 +39,6 @@ use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Once;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -109,41 +108,32 @@ const INSTALL_EVENTS: [&str; 7] = INSTALL_LIFECYCLE_EVENTS;
 
 struct HostStrings {
     review_gate_tag: &'static str,
-    review_gate_disable_env: &'static str,
     stop_hook_active_bypass_env: &'static str,
     require_stable_session_key_env: &'static str,
     hook_state_salt_env: &'static str,
     hook_state_unreadable_tag: &'static str,
     lifecycle_label: &'static str,
     spawn_first_host_id: &'static str,
-    paper_prose_hook_env: &'static str,
-    paper_adversarial_hook_env: &'static str,
 }
 
 const CODEX_STRINGS: HostStrings = HostStrings {
     review_gate_tag: "CODEX_REVIEW_GATE",
-    review_gate_disable_env: "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE",
     stop_hook_active_bypass_env: "ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS",
     require_stable_session_key_env: "ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY",
     hook_state_salt_env: "ROUTER_RS_CODEX_HOOK_STATE_SALT",
     hook_state_unreadable_tag: "CODEX_HOOK_STATE_UNREADABLE",
     lifecycle_label: "Codex",
     spawn_first_host_id: "codex",
-    paper_prose_hook_env: "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
-    paper_adversarial_hook_env: "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
 };
 
 const ANTIGRAVITY_CLI_STRINGS: HostStrings = HostStrings {
     review_gate_tag: "ANTIGRAVITY_CLI_REVIEW_GATE",
-    review_gate_disable_env: "ROUTER_RS_ANTIGRAVITY_CLI_REVIEW_GATE_DISABLE",
     stop_hook_active_bypass_env: "ROUTER_RS_ANTIGRAVITY_CLI_STOP_HOOK_ACTIVE_BYPASS",
     require_stable_session_key_env: "ROUTER_RS_ANTIGRAVITY_CLI_REQUIRE_STABLE_SESSION_KEY",
     hook_state_salt_env: "ROUTER_RS_ANTIGRAVITY_CLI_HOOK_STATE_SALT",
     hook_state_unreadable_tag: "ANTIGRAVITY_CLI_HOOK_STATE_UNREADABLE",
     lifecycle_label: "Antigravity CLI",
     spawn_first_host_id: "antigravity",
-    paper_prose_hook_env: "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_PROSE_HOOK",
-    paper_adversarial_hook_env: "ROUTER_RS_ANTIGRAVITY_CLI_PAPER_ADVERSARIAL_HOOK",
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -168,10 +158,6 @@ impl CodexLifecycleHostKind {
 
     fn review_gate_tag(self) -> &'static str {
         self.strings().review_gate_tag
-    }
-
-    fn review_gate_disable_env(self) -> &'static str {
-        self.strings().review_gate_disable_env
     }
 
     fn stop_hook_active_bypass_env(self) -> &'static str {

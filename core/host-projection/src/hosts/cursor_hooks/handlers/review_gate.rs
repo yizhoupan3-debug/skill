@@ -236,7 +236,7 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
     if fs::create_dir_all(&dir).is_err() {
         return None;
     }
-    let session = session_key(event);
+    let _session = session_key(event);
     let lock_path = state_lock_path(repo_root, event);
 
     #[cfg(unix)]

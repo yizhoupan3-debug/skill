@@ -6,7 +6,7 @@
 
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 // ────────────────────────────────────────────────────────────────
 // Mirror types (avoid dependency on runtime-core definitions)
@@ -678,13 +678,14 @@ pub fn ensure_kernel_bootstrap() {
 // harness_operator_nudges: test-only proxy
 // ────────────────────────────────────────────────────────────────
 
-static HARNESS_NUDGE_TEST_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+#[cfg(test)]
+static HARNESS_NUDGE_TEST_MUTEX: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
 
 /// Test-only env lock. Replaces `harness_operator_nudges::harness_nudges_env_test_lock`.
 #[cfg(test)]
 pub fn harness_nudges_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
     HARNESS_NUDGE_TEST_MUTEX
-        .get_or_init(|| Mutex::new(()))
+        .get_or_init(|| std::sync::Mutex::new(()))
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
