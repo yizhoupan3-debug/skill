@@ -2,6 +2,7 @@ use super::*;
 use super::lifecycle_context_tests::{env_lock, fresh_repo, run_gate, TEST_COMPACT_FINDING};
 use super::lifecycle_context_tests::SEQ;
 use serde_json::json;
+use serial_test::serial;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 fn codex_review_gate_disable_env_skips_block() {
@@ -829,6 +830,7 @@ fn codex_state_lock_blocks_when_held() {
 }
 
 #[test]
+#[serial]
 fn codex_state_lock_serializes_concurrent_writes() {
     let repo = fresh_repo();
     let event = json!({"session_id":"lock-inc"});

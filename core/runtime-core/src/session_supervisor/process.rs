@@ -41,6 +41,11 @@ pub fn launch_process(
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
+        // SAFETY: pre_exec runs in the forked child just before exec.
+        // setsid() creates a new session and detaches the child from the parent's
+        // controlling terminal, which is the intended behavior for a daemon-like
+        // worker process. The closure is trivial and does not touch parent state;
+        // Rust's pre_exec contract guarantees it runs in a single-threaded child.
         unsafe {
             cmd.pre_exec(|| {
                 libc::setsid();
@@ -95,6 +100,9 @@ fn kill_pid_alive(pid: u32) -> bool {
     if pid == 0 {
         return false;
     }
+    // SAFETY: kill(pid, 0) is a POSIX existence check that delivers no signal.
+    // The pid is validated to be non-zero above; the return value is checked for
+    // ESRCH (no such process) and EPERM (exists but no permission). No UB path.
     unsafe {
         let rc = libc::kill(pid as libc::pid_t, 0);
         if rc == 0 {
@@ -171,6 +179,9 @@ pub fn reconcile_process_state(worker: &mut WorkerSessionRecord) {
 fn send_signal_to_pgrp(pid: u32, signal: i32) -> Result<(), String> {
     // setsid() in launch_process makes the worker a session leader; prefer pgid kill
     // so shell-spawned children (e.g. smoke-shell's sleep loop) are terminated too.
+    // SAFETY: getpgid() reads the kernel's process group table for the given pid.
+    // The pid comes from a prior successful spawn in this supervisor. The worst case
+    // is that the pid no longer exists, in which case -1 is returned and handled below.
     let pgid = unsafe { libc::getpgid(pid as libc::pid_t) };
     let target = if pgid > 0 {
         -(pgid as libc::pid_t)

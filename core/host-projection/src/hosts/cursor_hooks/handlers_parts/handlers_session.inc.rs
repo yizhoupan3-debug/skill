@@ -651,6 +651,10 @@ fn collect_terminal_observations(terminals_dir: &Path) -> Vec<TerminalObservatio
 
 #[cfg(unix)]
 fn process_pgid(pid: u32) -> Option<u32> {
+    // SAFETY: getpgid() reads the kernel's process group table for the given pid.
+    // The pid originates from Cursor terminal metadata (a text file header).
+    // The worst case is that the pid no longer exists, in which case -1 is returned
+    // and the None path is taken. No memory safety concern.
     let pgid = unsafe { libc::getpgid(pid as libc::pid_t) };
     if pgid <= 0 {
         None
@@ -661,6 +665,8 @@ fn process_pgid(pid: u32) -> Option<u32> {
 
 #[cfg(unix)]
 fn current_pgid() -> Option<u32> {
+    // SAFETY: getpgrp() returns the process group ID of the calling process.
+    // It is a simple read-only syscall with no arguments; it cannot fail or cause UB.
     let pgid = unsafe { libc::getpgrp() };
     if pgid <= 0 {
         None
@@ -671,6 +677,8 @@ fn current_pgid() -> Option<u32> {
 
 #[cfg(unix)]
 fn current_ppid() -> Option<u32> {
+    // SAFETY: getppid() returns the parent process ID of the calling process.
+    // It is a simple read-only syscall with no arguments; it cannot fail or cause UB.
     let ppid = unsafe { libc::getppid() };
     if ppid <= 0 {
         None
@@ -694,6 +702,11 @@ fn signal_pid_or_pgrp(pid: u32, pgid: Option<u32>, signal: libc::c_int) {
         Some(g) => -(g as libc::pid_t),
         None => pid as libc::pid_t,
     };
+    // SAFETY: kill(target, signal) sends a signal to a process or process group.
+    // The pid comes from Cursor terminal metadata; the pgid from getpgid() above.
+    // The safe_pgid guard prevents accidentally signaling our own process group.
+    // kill is a simple syscall; if the target no longer exists it returns -1 (ESRCH),
+    // which is harmless. No memory safety concern.
     unsafe {
         let _ = libc::kill(target, signal);
     }

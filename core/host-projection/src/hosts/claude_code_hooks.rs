@@ -883,6 +883,11 @@ struct ClaudeReviewStateLock {
 impl Drop for ClaudeReviewStateLock {
     fn drop(&mut self) {
         let fd = self.file.as_raw_fd();
+        // SAFETY: flock(LOCK_UN) releases an advisory lock previously acquired via
+        // LOCK_EX in acquire_claude_review_state_lock. The fd comes from a valid
+        // File handle that is still open (we are inside Drop for that handle's owner).
+        // flock is a simple syscall with no memory safety concerns; its worst case is
+        // returning -1 on an already-unlocked fd, which is harmless.
         unsafe {
             let _ = libc::flock(fd, libc::LOCK_UN);
         }
@@ -915,6 +920,11 @@ fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewSta
         .open(&lock_path)
         .map_err(|e| format!("claude_state_lock_open_failed: {e}"))?;
     let fd = file.as_raw_fd();
+    // SAFETY: flock(LOCK_EX) acquires an exclusive advisory lock on the given fd.
+    // The fd comes from a freshly opened file (OpenOptions above) and is guaranteed
+    // valid. flock is a simple syscall that operates on kernel file table entries;
+    // it cannot cause memory unsafety. If the lock is unavailable, it blocks until
+    // acquired (LOCK_EX semantics). The return value is checked for errors below.
     let rc = unsafe { libc::flock(fd, libc::LOCK_EX) };
     if rc != 0 {
         return Err(format!(
