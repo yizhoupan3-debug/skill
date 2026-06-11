@@ -330,6 +330,8 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     let sync_report = router_rs_json(&[
         "framework",
         "sync-entrypoints",
+        "--host-id",
+        "codex",
         "--repo-root",
         repo_root.to_str().unwrap(),
     ]);
@@ -434,6 +436,8 @@ fn codex_sync_does_not_write_root_agents_md() {
     let sync_report = router_rs_json(&[
         "framework",
         "sync-entrypoints",
+        "--host-id",
+        "codex",
         "--repo-root",
         repo_root.to_str().unwrap(),
     ]);
@@ -459,6 +463,8 @@ fn codex_sync_preserves_existing_agents_codex_delta_file() {
     let sync_report = router_rs_json(&[
         "framework",
         "sync-entrypoints",
+        "--host-id",
+        "codex",
         "--repo-root",
         repo_root.to_str().unwrap(),
     ]);
@@ -3571,15 +3577,15 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
         signals_rs.contains("has_paper_prose_negation_context"),
         "nl_route_adjustments must register has_paper_prose_negation_context"
     );
-    let paper_prose_hook_rs = read_text(&root.join("core/runtime-core/src/paper_prose_hook.rs"));
+    let hooks_rs = read_text(&root.join("core/host-projection/src/hooks.rs"));
     for env in [
         "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
         "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
         "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
     ] {
         assert!(
-            paper_prose_hook_rs.contains(env),
-            "paper_prose_hook.rs must declare {env}"
+            hooks_rs.contains(env),
+            "host-projection/src/hooks.rs must declare {env} (v6: moved from paper_prose_hook.rs)"
         );
     }
 }
