@@ -2380,7 +2380,7 @@ fn repo_local_codex_omits_framework_mcp_entrypoint() {
 fn browser_mcp_live_config_never_points_to_node_runtime() {
     let surfaces = [
         ".codex/config.toml",
-        "core/runtime-core/src/host_integration/mod.rs",
+        "core/host-projection/src/host_integration/mod.rs",
     ];
     let joined = surfaces
         .iter()
@@ -2429,9 +2429,9 @@ fn browser_mcp_exposes_repo_skill_router_tools() {
 #[test]
 fn install_skills_uses_rust_only_entrypoints() {
     assert!(!project_root().join("scripts/install_skills.sh").exists());
-    let mod_source = read_text(&project_root().join("core/runtime-core/src/host_integration/mod.rs"));
-    let roots_source = read_text(&project_root().join("core/runtime-core/src/host_integration/roots.rs"));
-    let projection_source = read_text(&project_root().join("core/runtime-core/src/host_integration/projection.rs"));
+    let mod_source = read_text(&project_root().join("core/host-projection/src/host_integration/mod.rs"));
+    let roots_source = read_text(&project_root().join("core/host-projection/src/host_integration/roots.rs"));
+    let projection_source = read_text(&project_root().join("core/host-projection/src/host_integration/projection.rs"));
     assert!(mod_source.contains("InstallSkills") || roots_source.contains("InstallSkills"), "missing marker: InstallSkills");
     assert!(mod_source.contains("InstallNativeIntegration") || roots_source.contains("InstallNativeIntegration"), "missing marker: InstallNativeIntegration");
     assert!(projection_source.contains("validate_default_bootstrap") || roots_source.contains("validate_default_bootstrap"), "missing marker: validate_default_bootstrap");

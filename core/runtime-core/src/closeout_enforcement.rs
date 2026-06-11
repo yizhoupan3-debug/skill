@@ -393,7 +393,7 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         ));
     }
 
-    // TODO(R9-tech-debt): task-scoped depth / `GOAL_STATE.completion_gates` alignment
+    // NOTE(v7): task-scoped depth / `GOAL_STATE.completion_gates` alignment
     // Status: Phase 3 pointer consolidation (3B/3C) completed 2026-06-02.
     //   下一迭代目标：重新评估 closeout 与 completion_gates 对齐
     //   ——Phase 3 合并完成后 state model 已简化 (5 files → 2 control-plane anchors),

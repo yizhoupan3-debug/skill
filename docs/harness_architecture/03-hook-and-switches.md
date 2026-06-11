@@ -26,7 +26,7 @@ depends_on:
 
 **stdin 体量**：`router-rs claude hook` 从 stdin 读取的原始输入 **上限 4 MiB**（与 Codex hook 限量读取一致），溢出返回错误；合法 JSON 解析错误返回 `stdin_json_invalid:` 前缀消息。
 
-`router-rs framework host-integration install --to claude` 写入的 hook **command** 须将 stdin **原样交给** `router-rs claude hook`；不在 Bash 层用 `grep` 对 `cursor_version` / `workspace_roots` / `/.cursor/` 做预短路（历史上曾与 Rust 真源分裂）。安装串见 [`host_integration/mod.rs`](../../core/runtime-core/src/host_integration/mod.rs) 的 `build_router_rs_claude_hook_command`。
+`router-rs framework host-integration install --to claude` 写入的 hook **command** 须将 stdin **原样交给** `router-rs claude hook`；不在 Bash 层用 `grep` 对 `cursor_version` / `workspace_roots` / `/.cursor/` 做预短路（历史上曾与 Rust 真源分裂）。安装串见 [`host_integration/mod.rs`](../../core/host-projection/src/host_integration/mod.rs) 的 `build_router_rs_claude_hook_command`。
 
 ### 4.2 Cursor `additional_context`：合并链路与出站字节上限
 

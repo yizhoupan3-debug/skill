@@ -1,0 +1,19 @@
+{
+  "agents": {
+    "agent-test-001": {
+      "name": "test-review",
+      "started_at": "2026-06-11T11:01:23Z",
+      "status": "stopped",
+      "last_heartbeat": "2026-06-11T11:01:23Z",
+      "stopped_at": "2026-06-11T11:01:23Z"
+    },
+    "agent-test-002": {
+      "name": "test-verify",
+      "started_at": "2026-06-11T11:01:23Z",
+      "status": "stopped",
+      "last_heartbeat": "2026-06-11T11:01:23Z",
+      "stopped_at": "2026-06-11T11:01:23Z"
+    }
+  },
+  "last_check": "2026-06-11T11:01:23.324631Z"
+}

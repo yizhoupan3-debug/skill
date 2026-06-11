@@ -24,7 +24,7 @@ pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
 /// `append_round` rejects values outside this set so PASS/FAIL is auditable, not free-form.
 pub const ALLOWED_VERIFY_RESULTS: &[&str] = &["PASS", "FAIL", "SKIPPED", "UNKNOWN"];
 
-// TODO(RFV-external-research): integrate strict validation path
+// NOTE(v7): integrate strict validation path with external research API
 /// Heuristic: source string looks like a machine-checkable external pointer (URL, DOI, arXiv, …).
 pub fn source_traceable_heuristic(s: &str) -> bool {
     let t = s.trim();

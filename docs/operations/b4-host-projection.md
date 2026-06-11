@@ -7,7 +7,7 @@ plate: B4
 
 ## 职责
 
-将框架统一协议**投影**到各宿主：hook 绑定、MCP 注册、`host_projection_narrative` 文案、生成物 drift 探测。实现：`core/runtime-core/src/host_integration/`、各 `hosts/*_hooks`。
+将框架统一协议**投影**到各宿主：hook 绑定、MCP 注册、`host_projection_narrative` 文案、生成物 drift 探测。实现：`core/host-projection/src/host_integration/`、各 `hosts/*_hooks`。
 
 **宿主 id 闭集**：仅以 [`configs/framework/RUNTIME_REGISTRY.json`](../../configs/framework/RUNTIME_REGISTRY.json) → `host_targets.supported` 为准。
 
@@ -44,7 +44,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 ## 相关路径
 
-- `core/runtime-core/src/host_integration/`
+- `core/host-projection/src/host_integration/`
 - `configs/framework/host_projection_narrative.json`
 - `configs/framework/GENERATED_ARTIFACTS.json`（若存在）/ harness §2.3
 - `docs/hosts/`（各宿主操作手册）

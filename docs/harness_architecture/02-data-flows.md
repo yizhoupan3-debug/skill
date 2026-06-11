@@ -39,7 +39,7 @@ depends_on:
 | [`configs/framework/host_projection_narrative.json`](../../configs/framework/host_projection_narrative.json) | 各宿主 framework 投影内的 **My lifecycle 默认链** 与 **review findings-only** 英文段落；`framework host-integration install` 渲染时读取。叙事政策仍以 [`AGENTS.md`](../../AGENTS.md) 为跨宿主真源，本 JSON 仅为安装产物文案真源。 |
 | [`configs/framework/GENERATED_ARTIFACTS.json`](../../configs/framework/GENERATED_ARTIFACTS.json) | 声明须纳入版本库的生成物路径、generator 命令与 `compare` 模式（`byte-for-byte` / `normalized-text`）。 |
 
-**`generated-artifacts-status` 两种模式**（[`host_integration/mod.rs`](../../core/runtime-core/src/host_integration/mod.rs)）：
+**`generated-artifacts-status` 两种模式**（[`host_integration/mod.rs`](../../core/host-projection/src/host_integration/mod.rs)）：
 
 | 模式 | 触发 | 行为 |
 |------|------|------|

@@ -124,7 +124,7 @@ Canonical API（`core-policy`）：`is_reviewer_lane_from_registry`、`review_in
 | Antigravity MCP | `antigravity` agent / MCP 工具层 |
 | OpenCode MCP | `opencode` agent / MCP 工具层 |
 | entrypoint sync | [`host_entrypoint_sync.rs`](../core/runtime-core/src/host_entrypoint_sync.rs) |
-| install / 投影 | [`host_integration/mod.rs`](../core/runtime-core/src/host_integration/mod.rs) |
+| install / 投影 | [`host_integration/mod.rs`](../core/host-projection/src/host_integration/mod.rs) |
 | CLI 分发 | [`dispatch.rs`](../core/runtime-core/src/cli/dispatch.rs) |
 | 闭集 id / install_tool | `configs/framework/RUNTIME_REGISTRY.json` |
 | review_gate loader | [`registry_review_gate.rs`](../core/core-policy/src/registry_review_gate.rs)（`runtime_registry` re-export） |
@@ -148,7 +148,7 @@ Canonical API（`core-policy`）：`is_reviewer_lane_from_registry`、`review_in
 | 注册表 | `RUNTIME_REGISTRY.json`，[`tests/common/mod.rs`](../tests/common/mod.rs)，[`framework_host_targets.rs`](../core/runtime-core/src/framework_host_targets.rs) |
 | L3 入口 | `hosts/<host>_hooks/`（如 [`codex_hooks/mod.rs`](../core/host-projection/src/hosts/codex_hooks/mod.rs)）或 `<host>_hooks.rs`，`lib.rs` |
 | CLI 分发 | [`dispatch_body.txt`](../core/runtime-core/src/cli/dispatch_body.txt)，[`dispatch.rs`](../core/runtime-core/src/cli/dispatch.rs) |
-| 安装 / 投影 | [`host_integration/mod.rs`](../core/runtime-core/src/host_integration/mod.rs)，[`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
+| 安装 / 投影 | [`host_integration/mod.rs`](../core/host-projection/src/host_integration/mod.rs)，[`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json) |
 | L4 + 验证 | 宿主 `hooks.json`，[`tests/host_integration.rs`](../tests/host_integration.rs)，[`tests/policy_contracts.rs`](../tests/policy_contracts.rs) |
 
 - [ ] **`RUNTIME_REGISTRY.json`**：`host_targets.supported`、`install_tool`、`host_entrypoints` 与现网对称。
