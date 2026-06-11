@@ -4,7 +4,7 @@ use crate::db::index_ops::{
     ingest_parsed_file_with_stmts, list_indexed_files, set_meta, IndexedFileMeta,
     IngestStmts,
 };
-use crate::parser::{self, parse_file, ParsedFile};
+use crate::parser::{self, parse_file, skill::parse_skill_manifest, ParsedFile};
 use crate::CodeGraphIndex;
 use anyhow::Context;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -110,7 +110,10 @@ pub fn incremental_sync(
         .filter_map(|item| parse_work_item(item).ok().flatten())
         .collect();
 
-    // Phase 3: sequential DB ingest
+    // Phase 3: skill manifest sync — index skill metadata into FTS
+    sync_skill_manifest(index, &repo_root, force_all, &mut report)?;
+
+    // Phase 4: sequential DB ingest (source files)
     let conn = index.connection();
     let mut ingest_stmts = IngestStmts::prepare(conn)?;
     for parsed in parsed {
@@ -120,7 +123,7 @@ pub fn incremental_sync(
         report.edges_added += edges;
     }
 
-    // Phase 4: remove stale files (reusing IngestStmts.delete instead of re-preparing)
+    // Phase 5: remove stale files (reusing IngestStmts.delete instead of re-preparing)
     for (path, _) in indexed {
         if !seen.contains(&path) {
             ingest_stmts.delete.execute(&path)?;
@@ -131,6 +134,58 @@ pub fn incremental_sync(
     let indexed_at = chrono::Local::now().to_rfc3339();
     set_meta(conn, "indexed_at", &indexed_at)?;
     Ok(report)
+}
+
+/// Sync skill manifest metadata into the codegraph index.
+///
+/// Reads `skills/SKILL_MANIFEST.json`, checks mtime/content-hash for incremental
+/// updates, and ingests skill + keyword nodes into the DB with FTS indexing.
+fn sync_skill_manifest(
+    index: &CodeGraphIndex,
+    repo_root: &Path,
+    force_all: bool,
+    report: &mut SyncReport,
+) -> anyhow::Result<()> {
+    let manifest_path = repo_root.join("skills/SKILL_MANIFEST.json");
+    if !manifest_path.is_file() {
+        return Ok(());
+    }
+
+    let rel_path = "skills/SKILL_MANIFEST.json".to_string();
+    let conn = index.connection();
+
+    // Check if we need to re-index
+    let indexed = list_indexed_files(conn)?
+        .into_iter()
+        .find(|m| m.path == rel_path);
+
+    if !force_all {
+        if let Some(ref stored) = indexed {
+            let mtime_ns = file_mtime_ns(&manifest_path)?;
+            if stored.mtime_ns == mtime_ns {
+                return Ok(()); // mtime unchanged, skip
+            }
+            let content_hash = file_content_hash(&manifest_path)?;
+            if stored.content_hash == content_hash {
+                return Ok(()); // content unchanged
+            }
+        }
+    }
+
+    // Parse the manifest
+    let Some(parsed) = parse_skill_manifest(repo_root) else {
+        return Ok(());
+    };
+
+    // Ingest: delete old skill nodes for this file, insert new ones
+    let mut stmts = IngestStmts::prepare(conn)?;
+    let (nodes, edges) = ingest_parsed_file_with_stmts(conn, &mut stmts, &parsed)?;
+    report.nodes_added += nodes;
+    report.edges_added += edges;
+    report.files_updated += 1;
+    report.files_scanned += 1;
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]

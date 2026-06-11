@@ -212,6 +212,32 @@ pub fn tool_definitions() -> Vec<Value> {
                 }
             }),
         ),
+        tool_def(
+            "codegraph_dead_code",
+            "Detect dead code by finding all function/method symbols with zero callers (in-degree = 0 in the call graph). Optionally filter by language and minimum line number. Returns symbols, file paths, line numbers, and caller counts. Use this to identify unused functions that are candidates for removal.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "language": {"type": "string", "description": "Filter by language: rust, typescript, python, go"},
+                    "min_lines": {"type": "integer", "minimum": 1, "description": "Filter: only return functions whose line number >= this value (useful to focus on larger functions)"}
+                }
+            }),
+            json!({
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "symbol": {"type": "string"},
+                        "kind": {"type": "string"},
+                        "language": {"type": "string"},
+                        "file_path": {"type": "string"},
+                        "line": {"type": "integer"},
+                        "callers_count": {"type": "integer"}
+                    }
+                }
+            }),
+        ),
     ]
 }
 
@@ -327,6 +353,15 @@ pub fn dispatch_tool_call(params: &Value, index: &CodeGraphIndex) -> anyhow::Res
             }
             body
         }
+        "codegraph_dead_code" => {
+            let language = optional_str(&args, "language");
+            let min_lines = args
+                .get("min_lines")
+                .and_then(Value::as_u64)
+                .map(|v| v.clamp(1, 100_000) as u32);
+            let nodes = index.find_dead_code(language, min_lines)?;
+            json!({"dead_functions": nodes, "count": nodes.len()})
+        }
         other => anyhow::bail!("unknown tool: {other}"),
     };
     let elapsed_ms = start.elapsed().as_millis();
@@ -418,7 +453,7 @@ mod tests {
     #[test]
     fn exposes_six_mcp_tools_with_schemas() {
         let tools = tool_definitions();
-        assert_eq!(tools.len(), 6);
+        assert_eq!(tools.len(), 7);
         let expected = [
             "codegraph_search",
             "codegraph_callers",
@@ -426,6 +461,7 @@ mod tests {
             "codegraph_impact",
             "codegraph_node",
             "codegraph_status",
+            "codegraph_dead_code",
         ];
         for name in expected {
             let tool = tools
@@ -551,14 +587,60 @@ mod tests {
     }
 
     #[test]
-    fn handle_request_tools_list_returns_six_tools() {
+    fn codegraph_dead_code_dispatch_works() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time since epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("codegraph-dead-{suffix}"));
+        std::fs::create_dir_all(&root).expect("create temp directory");
+        std::fs::write(
+            root.join("lib.rs"),
+            "fn callee() {}\nfn caller() { callee(); }\n",
+        )
+        .expect("should succeed");
+        let index = CodeGraphIndex::open(&root).expect("open test index");
+        index.build_full_index(&root).expect("build full index");
+
+        let result = dispatch_tool_call(
+            &json!({"name": "codegraph_dead_code", "arguments": {}}),
+            &index,
+        )
+        .expect("should succeed");
+        let structured = result.get("structuredContent").expect("get structuredContent");
+        let dead = structured["dead_functions"]
+            .as_array()
+            .expect("expected dead_functions array");
+        // caller has no callers → dead
+        // callee has 1 caller → not dead
+        let symbols: Vec<&str> = dead.iter().map(|n| n["symbol"].as_str().unwrap()).collect();
+        assert!(symbols.contains(&"caller"), "caller should be dead code");
+        assert!(!symbols.contains(&"callee"), "callee is called");
+        assert_eq!(structured["count"].as_u64().unwrap(), dead.len() as u64);
+
+        // Test with language filter
+        let filtered = dispatch_tool_call(
+            &json!({"name": "codegraph_dead_code", "arguments": {"language": "rust"}}),
+            &index,
+        )
+        .expect("should succeed");
+        let filtered_dead = filtered["structuredContent"]["dead_functions"]
+            .as_array()
+            .expect("expected array");
+        assert!(filtered_dead.len() >= 1);
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn handle_request_tools_list_returns_seven_tools() {
         let (root, index) = temp_index();
         let response = super::handle_request(
             &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
             &index,
         )
         .expect("should succeed");
-        assert_eq!(response["result"]["tools"].as_array().expect("as_array should succeed").len(), 6);
+        assert_eq!(response["result"]["tools"].as_array().expect("as_array should succeed").len(), 7);
         let _ = std::fs::remove_dir_all(root);
     }
 

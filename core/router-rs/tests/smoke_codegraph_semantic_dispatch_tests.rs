@@ -20,6 +20,7 @@ const CODEGRAPH_TOOLS: &[&str] = &[
     "codegraph_impact",
     "codegraph_node",
     "codegraph_status",
+    "codegraph_dead_code",
 ];
 
 fn framework_repo_root() -> PathBuf {

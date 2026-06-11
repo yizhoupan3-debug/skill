@@ -2,6 +2,7 @@ pub mod common;
 mod go;
 mod python;
 mod rust;
+pub mod skill;
 mod typescript;
 
 use std::path::Path;

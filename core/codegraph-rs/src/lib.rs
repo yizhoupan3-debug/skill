@@ -134,6 +134,14 @@ impl CodeGraphIndex {
         Ok(db::stats::list_files(&self.conn)?)
     }
 
+    pub fn find_dead_code(
+        &self,
+        language: Option<&str>,
+        min_lines: Option<u32>,
+    ) -> anyhow::Result<Vec<db::node_ops::DeadCodeNode>> {
+        Ok(db::node_ops::find_dead_code(&self.conn, language, min_lines)?)
+    }
+
     pub fn build_full_index(&self, repo_root: &Path) -> anyhow::Result<graph::SyncReport> {
         graph::build_full_index(self, repo_root)
     }
@@ -149,5 +157,43 @@ impl CodeGraphIndex {
     pub fn spawn_watcher(&self, repo_root: PathBuf) -> anyhow::Result<graph::IndexWatcher> {
         let _ = self.db_path();
         graph::IndexWatcher::spawn(repo_root)
+    }
+
+    /// Ingest MCP tool registry entries into the index as `mcp_tool`-kinded nodes.
+    ///
+    /// Idempotent: deletes existing `mcp_tool` nodes before inserting.
+    /// Returns the number of tools ingested.
+    pub fn ingest_mcp_tools(&self, registry: &serde_json::Value) -> anyhow::Result<usize> {
+        Ok(db::mcp_tool_ops::ingest_mcp_tools(&self.conn, registry)?)
+    }
+
+    /// Resolve a tool name to its managed server ID via indexed lookup.
+    ///
+    /// Returns `None` if the tool is not found.
+    pub fn search_mcp_tool(&self, tool_name: &str) -> Option<String> {
+        db::mcp_tool_ops::resolve_mcp_tool_server_id(&self.conn, tool_name)
+    }
+
+    /// List all MCP tool nodes in the index.
+    pub fn list_mcp_tools(&self) -> anyhow::Result<Vec<Node>> {
+        Ok(db::mcp_tool_ops::list_mcp_tools(&self.conn)?)
+    }
+
+    /// Ingest skill metadata from SKILL_MANIFEST.json into the index.
+    ///
+    /// Idempotent: deletes existing `skill` nodes before inserting.
+    /// Returns the number of skills ingested.
+    pub fn ingest_skills(&self, manifest: &serde_json::Value) -> anyhow::Result<usize> {
+        Ok(db::skill_ops::ingest_skills(&self.conn, manifest)?)
+    }
+
+    /// Find a skill by exact slug match.
+    pub fn find_skill(&self, slug: &str) -> Option<Node> {
+        db::skill_ops::find_skill_by_slug(&self.conn, slug)
+    }
+
+    /// List all skill nodes in the index.
+    pub fn list_skills(&self) -> anyhow::Result<Vec<Node>> {
+        Ok(db::skill_ops::list_skills(&self.conn)?)
     }
 }

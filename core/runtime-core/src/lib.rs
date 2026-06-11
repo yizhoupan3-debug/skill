@@ -40,6 +40,8 @@ pub mod task_write_lock;
 // Use browser-mcp crate directly; dispatch via browser_dispatch_hook.
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
+#[cfg(feature = "codegraph")]
+pub mod codegraph_fts_bridge;
 pub mod cli;
 pub mod types;
 pub mod eval_route;
