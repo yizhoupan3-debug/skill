@@ -486,10 +486,12 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 "operation": "status",
                 "task_id": tid,
                 "rfv_loop_state_path": path.display().to_string(),
-                "rfv_loop_state": state.clone(),
             });
             if let Some(ref st) = state {
                 merge_operator_nudge_refs(&mut resp, &repo_root, Some(st));
+            }
+            if let Some(st) = state {
+                resp["rfv_loop_state"] = st;
             }
             Ok(resp)
         }
@@ -623,7 +625,6 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 "operation": "start",
                 "task_id": task_id,
                 "rfv_loop_state_path": path.display().to_string(),
-                "rfv_loop_state": value.clone(),
                 "goal_state_cleared": goal_state_cleared,
                 "warning": if capped {
                     Some(format!(
@@ -635,6 +636,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 },
             });
             merge_operator_nudge_refs(&mut resp, &repo_root, Some(&value));
+            resp["rfv_loop_state"] = value;
             Ok(resp)
         }
         "append_round" => {
@@ -758,17 +760,20 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             let entry = Value::Object(entry_map);
 
             let supervisor_closes = matches!(supervisor_decision.as_str(), "close" | "closed");
+
+            // Push entry now so preview and final state share the same entry.
+            // If gates reject, we undo the push before returning Err.
+            {
+                let rounds = obj
+                    .get_mut("rounds")
+                    .and_then(|r| r.as_array_mut())
+                    .ok_or_else(|| "RFV_LOOP_STATE.rounds missing".to_string())?;
+                rounds.push(entry);
+            }
+
             if supervisor_closes {
                 if let Some(ref g) = close_gates_cfg {
-                    let mut preview_map = obj.clone();
-                    {
-                        let pr = preview_map
-                            .get_mut("rounds")
-                            .and_then(|r| r.as_array_mut())
-                            .ok_or_else(|| "RFV_LOOP_STATE.rounds missing".to_string())?;
-                        pr.push(entry.clone());
-                    }
-                    let closing = preview_map
+                    let closing = obj
                         .get("rounds")
                         .and_then(|r| r.as_array())
                         .and_then(|a| a.last())
@@ -776,7 +781,10 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                         .ok_or_else(|| {
                             "RFV close_gates: internal error resolving closing round".to_string()
                         })?;
-                    enforce_rfv_close_gates(&repo_root, &task_id, &preview_map, closing, g)?;
+                    if let Err(e) = enforce_rfv_close_gates(&repo_root, &task_id, obj, closing, g) {
+                        obj.get_mut("rounds").and_then(|r| r.as_array_mut()).map(|a| a.pop());
+                        return Err(e);
+                    }
                 }
             }
 
@@ -785,15 +793,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 && round_n >= max_rounds;
             if closes_due_to_round_cap {
                 if let Some(ref g) = close_gates_cfg {
-                    let mut preview_map = obj.clone();
-                    {
-                        let pr = preview_map
-                            .get_mut("rounds")
-                            .and_then(|r| r.as_array_mut())
-                            .ok_or_else(|| "RFV_LOOP_STATE.rounds missing".to_string())?;
-                        pr.push(entry.clone());
-                    }
-                    let closing = preview_map
+                    let closing = obj
                         .get("rounds")
                         .and_then(|r| r.as_array())
                         .and_then(|a| a.last())
@@ -802,15 +802,12 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                             "RFV close_gates: internal error resolving closing round (max_rounds)"
                                 .to_string()
                         })?;
-                    enforce_rfv_close_gates(&repo_root, &task_id, &preview_map, closing, g)?;
+                    if let Err(e) = enforce_rfv_close_gates(&repo_root, &task_id, obj, closing, g) {
+                        obj.get_mut("rounds").and_then(|r| r.as_array_mut()).map(|a| a.pop());
+                        return Err(e);
+                    }
                 }
             }
-
-            let rounds = obj
-                .get_mut("rounds")
-                .and_then(|r| r.as_array_mut())
-                .ok_or_else(|| "RFV_LOOP_STATE.rounds missing".to_string())?;
-            rounds.push(entry);
 
             obj.insert("current_round".to_string(), json!(round_n));
             obj.insert("updated_at".to_string(), json!(now_iso()));
@@ -854,12 +851,12 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 "operation": "append_round",
                 "task_id": task_id,
                 "rfv_loop_state_path": path.display().to_string(),
-                "rfv_loop_state": state,
             });
             if let Some(w) = round_cap_warning {
                 resp["warning"] = json!(w);
             }
             merge_operator_nudge_refs(&mut resp, &repo_root, Some(&state));
+            resp["rfv_loop_state"] = state;
             crate::telemetry_emit::emit_rfv_round(round_n as u32, &verify_result);
             Ok(resp)
         }

@@ -91,7 +91,7 @@ pub(super) fn load_framework_runtime_view(
         {
             format!(
                 "supervisor task_id '{supervisor_task_id}' disagrees with focus task pointer '{}'",
-                focus_task_id.clone().unwrap_or_default()
+                focus_task_id.as_deref().unwrap_or("")
             )
         } else {
             String::new()
@@ -112,7 +112,7 @@ pub(super) fn load_framework_runtime_view(
         {
             format!(
                 "focus task pointer '{}' disagrees with active task pointer '{pointer_task_id}'",
-                focus_task_id.clone().unwrap_or_default()
+                focus_task_id.as_deref().unwrap_or("")
             )
         } else {
             String::new()
@@ -124,8 +124,8 @@ pub(super) fn load_framework_runtime_view(
             Some(direct)
         } else if pointer_task_id.is_empty().not() {
             Some(pointer_task_id.clone())
-        } else if let Some(focus_task_id) = focus_task_id.clone() {
-            Some(focus_task_id)
+        } else if focus_task_id.is_some() {
+            focus_task_id.clone()
         } else {
             supervisor_task_id
                 .is_empty()
@@ -133,8 +133,8 @@ pub(super) fn load_framework_runtime_view(
                 .then_some(supervisor_task_id.clone())
         }
     };
-    if let Some(task_id) = active_task_id.clone() {
-        if !known_task_ids.iter().any(|existing| existing == &task_id) {
+    if let Some(ref task_id) = active_task_id {
+        if !known_task_ids.iter().any(|existing| existing == task_id) {
             known_task_ids.push(task_id.clone());
         }
         if supervisor_state
@@ -144,14 +144,14 @@ pub(super) fn load_framework_runtime_view(
             == Some(true)
             && !recoverable_task_ids
                 .iter()
-                .any(|existing| existing == &task_id)
+                .any(|existing| existing == task_id)
         {
-            recoverable_task_ids.push(task_id);
+            recoverable_task_ids.push(task_id.clone());
         }
     }
-    if let Some(task_id) = focus_task_id.clone() {
-        if !known_task_ids.iter().any(|existing| existing == &task_id) {
-            known_task_ids.push(task_id);
+    if let Some(ref task_id) = focus_task_id {
+        if !known_task_ids.iter().any(|existing| existing == task_id) {
+            known_task_ids.push(task_id.clone());
         }
     }
     if task_id_override.is_none() {
@@ -1032,19 +1032,9 @@ fn load_routing_runtime_version(repo_root: &Path) -> u64 {
 }
 
 fn synthesized_status(supervisor_state: &Map<String, Value>) -> String {
-    let verification = supervisor_state
-        .get("verification")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    let continuity = supervisor_state
-        .get("continuity")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
     first_nonempty(&[
-        value_text(verification.get("verification_status")),
-        value_text(continuity.get("story_state")),
+        value_text(supervisor_state.get("verification").and_then(|v| v.get("verification_status"))),
+        value_text(supervisor_state.get("continuity").and_then(|v| v.get("story_state"))),
         value_text(supervisor_state.get("active_phase")),
         "in_progress".to_string(),
     ])

@@ -78,14 +78,14 @@ pub fn find_skill_with_fts(index: &CodeGraphIndex, slug: &str) -> Option<codegra
 mod tests {
     use super::*;
     use serde_json::json;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_index() -> (std::path::PathBuf, CodeGraphIndex) {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
             .expect("system time")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("fts-bridge-{suffix}"));
+        let pid = std::process::id();
+        let root = std::env::temp_dir().join(format!("fts-bridge-{pid}-{suffix}"));
         std::fs::create_dir_all(&root).expect("create temp dir");
         let index = CodeGraphIndex::open(&root).expect("open index");
         (root, index)

@@ -110,13 +110,13 @@ impl BackgroundStateStore {
         let now_iso = now.to_rfc3339();
         for job_id in &stale_ids {
             if let Some(job) = self.jobs.get_mut(job_id) {
-                let prev_status = job.status.clone();
+                let reaper_msg = format!(
+                    "reaped: {} heartbeat stale > {STALE_ACTIVE_HEARTBEAT_TTL_SECS}s",
+                    &job.status
+                );
                 job.status = "interrupted".to_string();
                 job.interrupted_at = Some(now_iso.clone());
                 job.updated_at = now_iso.clone();
-                let reaper_msg = format!(
-                    "reaped: {prev_status} heartbeat stale > {STALE_ACTIVE_HEARTBEAT_TTL_SECS}s"
-                );
                 job.error = Some(match job.error.as_deref() {
                     Some(prev) if !prev.is_empty() => format!("{prev}; {reaper_msg}"),
                     _ => reaper_msg,
@@ -327,7 +327,7 @@ impl BackgroundStateStore {
         self.reserve_session(job_id, resolved_session_id.as_deref(), &mutation.status)?;
         let resolved_mutation = BackgroundJobStatusMutation {
             status: mutation.status.clone(),
-            session_id: resolved_session_id.clone(),
+            session_id: resolved_session_id,
             parallel_group_id: mutation.parallel_group_id.clone(),
             lane_id: mutation.lane_id.clone(),
             parent_job_id: mutation.parent_job_id.clone(),
@@ -353,14 +353,15 @@ impl BackgroundStateStore {
             last_attempt_finished_at: mutation.last_attempt_finished_at.clone(),
             last_failure_at: mutation.last_failure_at.clone(),
         };
+        let resolved_session_ref = resolved_mutation.session_id.as_deref();
         let updated = resolved_mutation.apply(job_id, existing.as_ref());
         self.jobs.insert(job_id.to_string(), updated.clone());
         self.release_previous_session(
             job_id,
             previous_session_id.as_deref(),
-            resolved_session_id.as_deref(),
+            resolved_session_ref,
         );
-        self.finalize_session(job_id, resolved_session_id.as_deref(), &mutation.status);
+        self.finalize_session(job_id, resolved_session_ref, &mutation.status);
         let persisted_payload_text = self.persist()?;
         Ok((updated, persisted_payload_text))
     }
@@ -502,8 +503,8 @@ impl BackgroundStateStore {
     pub(super) fn parallel_group_summaries(&self) -> Vec<BackgroundParallelGroupSummary> {
         let mut grouped: HashMap<String, Vec<BackgroundRunStatus>> = HashMap::new();
         for job in self.jobs.values() {
-            if let Some(group_id) = job.parallel_group_id.clone() {
-                grouped.entry(group_id).or_default().push(job.clone());
+            if let Some(ref group_id) = job.parallel_group_id {
+                grouped.entry(group_id.clone()).or_default().push(job.clone());
             }
         }
         let mut group_ids = grouped.keys().cloned().collect::<Vec<_>>();

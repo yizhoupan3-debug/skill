@@ -183,12 +183,14 @@ pub fn build_sandbox_control_response(
         "transition" => {
             let current_state = payload
                 .current_state
-                .clone()
-                .ok_or_else(|| "sandbox control transition requires current_state".to_string())?;
+                .as_deref()
+                .ok_or_else(|| "sandbox control transition requires current_state".to_string())?
+                .to_string();
             let next_state = payload
                 .next_state
-                .clone()
-                .ok_or_else(|| "sandbox control transition requires next_state".to_string())?;
+                .as_deref()
+                .ok_or_else(|| "sandbox control transition requires next_state".to_string())?
+                .to_string();
             let allowed = sandbox_transition_allowed(&current_state, &next_state);
             SandboxResponseBuilder::new(&payload, allowed, if allowed {
                 "transition-accepted"
@@ -196,8 +198,8 @@ pub fn build_sandbox_control_response(
                 "invalid-transition"
             })
             .current_state(Some(current_state.clone()))
-            .next_state(Some(next_state.clone()))
-            .resolved_state(Some(next_state))
+            .resolved_state(Some(next_state.clone()))
+            .next_state(Some(next_state))
             .error(if allowed {
                 None
             } else {
@@ -212,8 +214,9 @@ pub fn build_sandbox_control_response(
         "cleanup" => {
             let current_state = payload
                 .current_state
-                .clone()
-                .unwrap_or_else(|| "draining".to_string());
+                .as_deref()
+                .unwrap_or("draining")
+                .to_string();
             let cleanup_failed = payload.cleanup_failed.unwrap_or(false);
             let resolved_state = if cleanup_failed { "failed" } else { "recycled" };
             let allowed = matches!(current_state.as_str(), "draining");
@@ -258,8 +261,9 @@ pub fn build_sandbox_control_response(
         "admit" => {
             let current_state = payload
                 .current_state
-                .clone()
-                .unwrap_or_else(|| "warm".to_string());
+                .as_deref()
+                .unwrap_or("warm")
+                .to_string();
             let categories = payload.capability_categories.clone().unwrap_or_default();
             let tool_category = payload
                 .tool_category
@@ -308,8 +312,8 @@ pub fn build_sandbox_control_response(
                     .current_state(Some(current_state))
                     .next_state(Some("failed".to_string()))
                     .resolved_state(Some("failed".to_string()))
-                    .error(Some(reason.clone()))
-                    .failure_reason(Some(reason))
+                    .failure_reason(Some(reason.clone()))
+                    .error(Some(reason))
                     .cleanup_required(Some(false))
                     .quarantined(Some(true))
                     .effective_capabilities(Some(categories))
@@ -330,8 +334,9 @@ pub fn build_sandbox_control_response(
         "execution_result" => {
             let current_state = payload
                 .current_state
-                .clone()
-                .unwrap_or_else(|| "busy".to_string());
+                .as_deref()
+                .unwrap_or("busy")
+                .to_string();
             let budget_violation = [
                 (
                     "cpu_exceeded",
@@ -382,8 +387,8 @@ pub fn build_sandbox_control_response(
                 .current_state(Some(current_state))
                 .next_state(Some(resolved_state.to_string()))
                 .resolved_state(Some(resolved_state.to_string()))
-                .error(Some(reason.clone()))
-                .failure_reason(Some(reason))
+                .failure_reason(Some(reason.clone()))
+                .error(Some(reason))
                 .cleanup_required(Some(resolved_state == "draining"))
                 .quarantined(Some(resolved_state == "failed"))
                 .effective_capabilities(payload.capability_categories.clone())
