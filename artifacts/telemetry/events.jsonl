@@ -7298,3 +7298,853 @@
 {"ts":"2026-06-11T22:43:25.387522+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
 {"ts":"2026-06-11T22:43:25.387529+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
 {"ts":"2026-06-11T22:43:25.387535+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811031+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811065+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811078+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811084+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811093+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811106+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811112+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811119+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811125+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:05:30.811131+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285421+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285440+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285446+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285454+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285462+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285468+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285475+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285482+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285489+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.285495+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635389+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635424+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635432+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635439+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635448+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635454+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635460+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635468+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635474+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.635480+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951227+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951248+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951254+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951260+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951266+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951271+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951277+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951283+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951288+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:05:31.951294+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352705+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352723+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352729+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352735+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352741+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352746+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352753+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352759+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352766+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:05:32.352773+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484409+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484448+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484461+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484468+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484476+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484489+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484495+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484502+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484509+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.484515+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958893+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958913+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958920+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958928+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958935+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958942+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958949+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958956+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958963+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:07:20.958969+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309403+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309431+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309441+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309447+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309456+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309462+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309468+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309478+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309484+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.309490+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604884+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604903+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604908+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604915+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604920+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604926+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604931+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604937+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604942+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:07:21.604948+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005358+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005377+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005382+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005388+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005394+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005400+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005406+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005412+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005419+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:07:22.005426+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174823+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174863+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174877+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174883+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174892+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174905+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174910+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174918+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174924+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.174930+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649162+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649181+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649187+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649195+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649203+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649209+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649216+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649224+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649233+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.649239+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.998929+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.998952+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.998959+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.998965+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.998975+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.998981+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.998987+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.998996+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.999002+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:09:05.999008+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295777+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295795+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295801+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295806+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295811+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295817+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295823+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295829+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295833+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.295840+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696762+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696780+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696785+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696791+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696797+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696803+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696810+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696818+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696825+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:09:06.696831+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740683+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740727+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740740+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740747+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740755+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740768+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740774+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740781+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740787+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:10:49.740794+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224754+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224775+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224781+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224790+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224799+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224806+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224813+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224820+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224827+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.224833+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579875+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579900+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579907+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579913+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579923+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579929+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579935+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579945+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579951+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.579957+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905760+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905781+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905787+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905793+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905798+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905804+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905810+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905815+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905820+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:10:50.905827+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313078+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313095+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313100+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313107+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313112+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313118+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313124+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313130+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313137+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:10:51.313144+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265428+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265464+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265477+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265483+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265492+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265504+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265510+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265518+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265524+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.265530+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739271+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739290+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739296+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739305+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739312+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739319+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739325+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739334+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739343+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:12:38.739349+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091257+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091280+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091288+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091294+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091304+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091310+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091316+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091325+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091331+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.091337+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387808+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387825+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387830+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387836+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387841+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387847+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387853+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387859+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387863+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.387871+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790018+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790037+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790042+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790048+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790054+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790060+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790066+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790072+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790079+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:12:39.790085+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150816+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150858+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150871+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150877+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150886+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150898+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150904+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150911+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150917+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.150923+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.624947+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.624967+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.624973+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.624981+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.624988+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.624995+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.625002+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.625009+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.625016+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.625022+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979592+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979614+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979621+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979627+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979637+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979643+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979649+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979658+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979664+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:14:58.979671+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.275935+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.275956+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.275961+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.275967+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.275972+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.275979+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.275985+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.275991+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.275996+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.276002+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676297+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676316+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676321+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676328+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676333+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676339+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676345+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676352+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676359+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:14:59.676365+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216065+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216105+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216119+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216126+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216134+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216147+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216153+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216161+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216167+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.216173+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693791+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693814+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693820+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693830+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693838+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693845+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693852+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693859+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693866+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:17:32.693873+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048617+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048641+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048650+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048656+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048667+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048673+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048679+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048689+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048695+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.048702+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349115+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349134+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349140+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349145+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349150+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349155+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349160+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349166+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349171+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.349176+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757808+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757827+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757833+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757839+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757844+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757850+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757856+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757863+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757870+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:17:33.757876+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220153+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220191+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220203+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220209+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220217+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220228+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220234+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220241+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220248+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.220254+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842249+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842291+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842309+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842328+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842349+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842380+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842401+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842420+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842442+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:19:20.842457+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270391+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270419+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270427+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270433+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270443+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270450+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270456+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270466+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270473+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.270479+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572804+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572824+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572829+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572835+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572840+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572846+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572852+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572858+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572863+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:19:21.572869+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001797+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001817+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001823+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001829+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001834+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001841+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001847+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001853+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001860+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:19:22.001867+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934884+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934927+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934941+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934947+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934955+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934968+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934974+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934982+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934988+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:20:22.934994+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426177+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426199+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426205+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426215+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426224+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426230+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426237+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426245+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426256+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.426265+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.816927+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.816949+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.816958+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.816965+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.816976+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.816983+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.816990+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.817+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.817007+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:20:23.817014+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129109+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129128+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129133+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129139+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129144+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129151+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129156+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129162+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129167+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.129173+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561369+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561401+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561415+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561430+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561445+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561460+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561476+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561494+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561513+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:20:24.561531+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289240+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289285+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289299+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289306+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289314+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289327+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289333+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289340+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289346+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.289352+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789768+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789788+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789795+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789804+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789813+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789820+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789826+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789834+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789841+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:22:12.789847+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159822+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159846+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159854+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159860+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159871+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159877+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159883+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159892+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159898+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.159905+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478638+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478674+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478688+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478702+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478715+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478737+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478746+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478752+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478757+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.478763+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902807+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902826+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902832+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902838+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902843+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902849+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902855+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902861+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902868+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:22:13.902875+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685830+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685887+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685901+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685907+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685915+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685927+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685933+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685958+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685982+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:24:01.685998+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223357+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223379+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223386+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223394+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223402+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223410+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223417+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223424+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223432+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.223439+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632013+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632041+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632051+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632058+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632070+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632077+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632084+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632095+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632103+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:24:02.632110+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.059820+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.059851+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.059857+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.059864+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.059870+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.059875+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.059881+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.059887+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.059892+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.060058+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517464+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517482+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517488+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517494+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517500+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517506+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517512+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517519+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517526+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:24:03.517533+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766561+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766601+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766615+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766621+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766630+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766643+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766649+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766657+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766663+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:26:04.766669+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271210+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271237+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271244+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271255+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271264+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271270+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271277+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271285+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271292+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.271298+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628724+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628749+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628757+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628763+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628773+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628779+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628786+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628795+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628801+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.628807+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949169+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949192+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949198+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949204+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949209+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949217+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949222+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949228+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949233+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:26:05.949240+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362877+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362898+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362904+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362910+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362916+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362922+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362928+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362934+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362941+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:26:06.362948+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385839+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385879+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385893+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385899+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385907+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385919+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385925+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385933+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385939+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.385945+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864718+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864739+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864745+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864753+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864761+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864768+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864775+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864782+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864790+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:28:02.864796+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220126+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220153+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220161+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220167+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220177+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220183+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220189+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220198+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220204+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.220210+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516660+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516682+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516687+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516693+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516698+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516704+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516709+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516715+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516720+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.516727+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921840+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921859+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921864+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921871+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921876+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921882+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921888+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921895+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921901+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:28:03.921908+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792778+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792820+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792833+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792840+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792848+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792861+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792867+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792874+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792881+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:30:01.792887+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276805+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276825+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276831+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276839+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276847+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276854+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276861+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276868+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276875+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.276881+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633493+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633515+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633522+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633528+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633539+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633545+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633551+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633560+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633566+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:30:02.633572+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004103+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004124+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004130+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004136+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004142+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004149+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004155+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004161+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004167+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.004174+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409526+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409543+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409548+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409554+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409561+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409568+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409574+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409580+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409587+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:30:03.409594+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241729+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241768+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241782+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241788+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241796+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241809+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241814+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241822+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241828+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.241834+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724260+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724278+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724284+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724293+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724301+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724307+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724314+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724321+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724328+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:32:02.724335+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081379+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081402+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081410+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081416+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081426+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081433+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081439+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081448+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081454+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.081460+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401130+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401182+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401196+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401213+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401226+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401238+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401260+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401268+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401274+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.401280+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826260+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826278+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826284+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826290+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826295+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826301+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826308+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826314+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826321+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:32:03.826328+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407196+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407234+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407247+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407253+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407262+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407275+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407281+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407289+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407295+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.407301+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887277+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887301+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887307+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887317+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887325+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887332+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887339+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887347+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887354+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:34:00.887360+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240752+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240772+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240779+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240785+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240795+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240801+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240807+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240816+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240822+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.240829+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566042+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566061+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566068+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566074+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566079+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566085+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566091+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566096+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566101+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.566108+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973279+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973298+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973304+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973310+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973315+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973321+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973328+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973334+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973341+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:34:01.973348+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698363+00:00","kind":"route_decision","task":"深度review现在的路由系统和 skill 边界。","skill":"skill-framework-developer","confidence":106.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698462+00:00","kind":"route_decision","task":"减法视角和第一性原理review我的skill系统，是否已经清晰的变成行为驱动（讨论-规划-执行-验证），是否还有多余入口和不必要抽象","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698494+00:00","kind":"route_decision","task":"继续核查现在的skill系统，给优化方向","skill":"skill-framework-developer","confidence":133.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698508+00:00","kind":"route_decision","task":"skill 路由没触发怎么办，帮我做 miss repair 并减少 token 消耗","skill":"skill-framework-developer","confidence":153.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698528+00:00","kind":"route_decision","task":"用 Cursor Plan：在策划文档闸门列出可验收 todo，按 plan revision round 迭代；对照计划与实际给我 delta；代码与测试通过后完成分支合并推送前的收口对照。","skill":"plan-mode","confidence":90.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698596+00:00","kind":"route_decision","task":"根据既定 PRD 直接实现 React 页面，不要重新做蓝图规划。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698612+00:00","kind":"route_decision","task":"需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar。","skill":"agent-swarm-orchestration","confidence":147.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698631+00:00","kind":"route_decision","task":"同时调研前端、后端、测试三个方向，然后汇总方案","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698673+00:00","kind":"route_decision","task":"并行检查 API、数据库和 UI 三个模块的回归风险","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:36:49.698700+00:00","kind":"route_decision","task":"请分三路并行研究这个问题：策略、实现、测试","skill":"agent-swarm-orchestration","confidence":82.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103521+00:00","kind":"route_decision","task":"use parallel workers to implement disjoint files with lane-local write scopes","skill":"agent-swarm-orchestration","confidence":73.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103566+00:00","kind":"route_decision","task":"全面 review 这套架构，先给我结构层面的判断。","skill":"agent-swarm-orchestration","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103583+00:00","kind":"route_decision","task":"先别直接开始改页面，先帮我把这个产品做得像 Linear 一样，给我参考源、verified tokens 和可借的组件气质。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103607+00:00","kind":"route_decision","task":"我想要 Stripe 的品牌 token，再混一点 liquid glass motion，先给我参考源和取舍，不要直接开始改页面。","skill":"design-md","confidence":87.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103628+00:00","kind":"route_decision","task":"基于这张界面图做 UI 重叠、层级和可读性审查，直接告诉我哪里有视觉问题。","skill":"visual-review","confidence":49.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103678+00:00","kind":"route_decision","task":"做一个有统一视觉身份的 landing page，不要 AI 味，先沉淀 UI 设计规范和 design tokens。","skill":"design-md","confidence":141.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103696+00:00","kind":"route_decision","task":"做一个高级感品牌 PPT，先统一设计规范、视觉身份、主题 token 和图表配色，再开始做 slides。","skill":"design-md","confidence":139.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103715+00:00","kind":"route_decision","task":"根据这个 DESIGN.md 做一个产品发布会 PPT，必须复用里面的颜色、字体、组件和章节页规则。","skill":"design-md","confidence":116.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103736+00:00","kind":"route_decision","task":"快速做一个普通汇报 PPT，不需要设计系统，能讲清楚就行。","skill":"slides","confidence":51.0,"reroute":false}
+{"ts":"2026-06-11T23:36:51.103752+00:00","kind":"route_decision","task":"CI 失败帮我修","skill":"gh-fix-ci","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.136881+00:00","kind":"route_decision","task":"publication chart matplotlib","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.136949+00:00","kind":"route_decision","task":"publication chart matplotlib export png","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.136974+00:00","kind":"route_decision","task":"科研出图，matplotlib 改成期刊风格","skill":"scientific-figure-plotting","confidence":119.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.136990+00:00","kind":"route_decision","task":"优化这个 Python 服务的内存占用，跑在 Linux/CUDA 服务器上，不涉及 Mac、Apple Silicon 或 MPS。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.137037+00:00","kind":"route_decision","task":"把 pandas 热路径加速，考虑换成 polars 或更快的序列化方案。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.137058+00:00","kind":"route_decision","task":"MacBook 上这个 Node 应用内存泄漏，帮我定位普通服务端内存问题。","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.137080+00:00","kind":"route_decision","task":"全面核查现在的skill，哪些应该合并，哪些应该精简，哪些应该沉到runtime","skill":"skill-framework-developer","confidence":207.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.137108+00:00","kind":"route_decision","task":"帮我画一个技术路线图和研究流程图，用 Mermaid 表达","skill":"diagramming","confidence":135.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.137129+00:00","kind":"route_decision","task":"帮我组织 worker 协作，判断是否需要 bounded sidecar 多 agent","skill":"agent-swarm-orchestration","confidence":124.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.137150+00:00","kind":"route_decision","task":"请用 /autopilot-deep 深度调研这个系统","skill":"none","confidence":0.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855065+00:00","kind":"route_decision","task":"帮我做一个演示文稿，关于河川修复的","skill":"slides","confidence":28.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855103+00:00","kind":"route_decision","task":"把这个 PDF 里的表格提取出来","skill":"pdf","confidence":175.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855121+00:00","kind":"route_decision","task":"帮我整理一个 Word 文档模板，并导出 docx","skill":"doc","confidence":80.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855139+00:00","kind":"route_decision","task":"/gitx 提交代码并推送到远端","skill":"gitx","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855156+00:00","kind":"route_decision","task":"/update","skill":"update","confidence":100.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855170+00:00","kind":"route_decision","task":"GitHub Actions CI 挂了，帮我修一下","skill":"gh-fix-ci","confidence":203.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855186+00:00","kind":"route_decision","task":"需要多 agent 并行处理这个跨模块任务","skill":"agent-swarm-orchestration","confidence":109.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855205+00:00","kind":"route_decision","task":"SCI润色 abstract","skill":"paper-workbench","confidence":111.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855221+00:00","kind":"route_decision","task":"polish this abstract for clarity","skill":"paper-workbench","confidence":85.0,"reroute":false}
+{"ts":"2026-06-11T23:36:52.855240+00:00","kind":"route_decision","task":"帮我写论文的 related work 部分","skill":"paper-workbench","confidence":150.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.978865+00:00","kind":"route_decision","task":"只审不改，别润色，看 claim 和证据","skill":"paper-workbench","confidence":255.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.978911+00:00","kind":"route_decision","task":"修复 CI 里 latex 模板编译失败","skill":"gh-fix-ci","confidence":225.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.978946+00:00","kind":"route_decision","task":"根据 reviewer comments 直接改稿，别先给方案","skill":"paper-workbench","confidence":122.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.978962+00:00","kind":"route_decision","task":"论文 figure layout 只 review 排版","skill":"paper-workbench","confidence":47.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.978976+00:00","kind":"route_decision","task":"不润色，只批评这篇论文的科学性","skill":"paper-workbench","confidence":183.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.978995+00:00","kind":"route_decision","task":"基于这组截图做 UI 审查，告诉我哪里有视觉问题","skill":"visual-review","confidence":67.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.979029+00:00","kind":"route_decision","task":"博士开题：整体推进这篇论文，先判断能不能投和还缺哪些硬证据","skill":"paper-workbench","confidence":136.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.979046+00:00","kind":"route_decision","task":"预注册和主分析、探索性分析怎么切分，方案偏离要怎么记录","skill":"experiment-reproducibility","confidence":83.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.979064+00:00","kind":"route_decision","task":"请给出严格的数学推导与证明：证明柯西-施瓦茨不等式，每一步都要可检验。","skill":"math-derivation","confidence":23.0,"reroute":false}
+{"ts":"2026-06-11T23:36:53.979082+00:00","kind":"route_decision","task":"用 matplotlib 和 seaborn 做科研出图，双栏论文插图风格，加 statistical annotations。","skill":"scientific-figure-plotting","confidence":165.0,"reroute":false}

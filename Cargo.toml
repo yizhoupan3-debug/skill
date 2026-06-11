@@ -27,13 +27,7 @@ members = [
     "core/host-projection",
     "core/autoresearch-rs",
     "core/evolution-rs",
-    "core/codegraph-rs",
-    "rust_tools/citation_tool_rs",
-    "rust_tools/financial_data_rs",
-    "rust_tools/gh_source_gate_rs",
-    "rust_tools/ooxml_parser_rs",
-    "rust_tools/pdf_tool_rs",
-    "rust_tools/pptx_tool_rs"
+    "core/codegraph-rs"
 ]
 exclude = [
     "codex-aggregator"

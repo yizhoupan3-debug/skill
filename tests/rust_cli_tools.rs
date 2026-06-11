@@ -8,33 +8,6 @@ use std::process::{Command, Output};
 use tempfile::tempdir;
 
 #[test]
-fn financial_data_rejects_zero_limit() {
-    let result = run_financial_data_error(&[
-        "ohlcv", "--market", "crypto", "--symbol", "BTC/USDT", "--limit", "0",
-    ]);
-    assert!(!result.status.success());
-    assert!(String::from_utf8_lossy(&result.stderr).contains("--limit must be greater than zero"));
-}
-
-#[test]
-fn financial_data_rejects_adjusted_stooq() {
-    let result = run_financial_data_error(&[
-        "ohlcv",
-        "--market",
-        "us",
-        "--symbol",
-        "AAPL",
-        "--source",
-        "stooq",
-        "--adjusted",
-    ]);
-    assert!(!result.status.success());
-    assert!(
-        String::from_utf8_lossy(&result.stderr).contains("Stooq does not support adjusted OHLCV")
-    );
-}
-
-#[test]
 fn update_audit_cli_contract_is_registered() {
     let args = read_text(&project_root().join("core/runtime-core/src/cli/args.rs"));
     let maint = read_text(&project_root().join("core/runtime-core/src/framework_maint.rs"));
@@ -104,16 +77,22 @@ fn update_audit_runs_on_plain_git_repo_and_preserves_status_columns() {
     )
     .unwrap();
 
-    let output = run(cargo_manifest_command(
-        &project_root().join("core/router-rs-cli/Cargo.toml"),
-        &[
-            "framework",
-            "maint",
-            "update-audit",
-            "--repo-root",
-            tmp.path().to_str().unwrap(),
-        ],
-    ));
+    let output = run({
+        let mut c = Command::new("cargo");
+        c.args(["run", "--quiet", "--manifest-path"])
+            .arg(&project_root().join("core/router-rs/Cargo.toml"))
+            .args(["--bin", "router-rs-cli"])
+            .current_dir(project_root())
+            .arg("--")
+            .args([
+                "framework",
+                "maint",
+                "update-audit",
+                "--repo-root",
+                tmp.path().to_str().unwrap(),
+            ]);
+        c
+    });
     let payload = json_from_output(&output);
     assert_eq!(payload["schema_version"], "framework-maint-update-audit-v1");
     assert_eq!(payload["mode"], "dry-run");

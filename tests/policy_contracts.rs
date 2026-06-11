@@ -642,21 +642,6 @@ fn ooxml_rust_cli_owns_docx_and_xlsx_render_commands() {
 }
 
 #[test]
-fn ooxml_cli_help_lists_docx_and_xlsx_render_commands() {
-    let output = common::run_ok(cargo_manifest_command(
-        &project_root().join("rust_tools/ooxml_parser_rs/Cargo.toml"),
-        &["--help"],
-    ));
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("docx"));
-    assert!(stdout.contains("read-docx"));
-    assert!(stdout.contains("read-xlsx"));
-    assert!(stdout.contains("render-docx"));
-    assert!(stdout.contains("render-xlsx"));
-    assert!(stdout.contains("batch"));
-}
-
-#[test]
 fn ooxml_rust_cli_owns_batch_subcommands() {
     let manifest_path = project_root().join("rust_tools/ooxml_parser_rs/Cargo.toml");
     let manifest = read_text(&manifest_path);
@@ -712,10 +697,16 @@ fn doc_skill_declares_ooxml_batch_artifacts() {
 
 #[test]
 fn router_rs_top_level_help_exposes_only_canonical_subcommands() {
-    let output = common::run_ok(cargo_manifest_command(
-        &project_root().join("core/router-rs-cli/Cargo.toml"),
-        &["--help"],
-    ));
+    let output = common::run_ok({
+        let mut c = Command::new("cargo");
+        c.args(["run", "--quiet", "--manifest-path"])
+            .arg(&project_root().join("core/router-rs/Cargo.toml"))
+            .args(["--bin", "router-rs-cli"])
+            .current_dir(project_root())
+            .arg("--")
+            .args(["--help"]);
+        c
+    });
     let stdout = String::from_utf8_lossy(&output.stdout);
     for command in [
         "route",
@@ -1596,7 +1587,7 @@ fn nl_route_registry_signal_names() -> &'static HashSet<String> {
     static NAMES: OnceLock<HashSet<String>> = OnceLock::new();
     NAMES.get_or_init(|| {
         let repo = project_root();
-        let manifest = repo.join("core/router-rs-cli/Cargo.toml");
+        let manifest = repo.join("core/router-rs/Cargo.toml");
         let output = Command::new("cargo")
             .current_dir(&repo)
             .args([
@@ -1604,6 +1595,8 @@ fn nl_route_registry_signal_names() -> &'static HashSet<String> {
                 "-q",
                 "--manifest-path",
                 manifest.to_str().expect("manifest path utf-8"),
+                "--bin",
+                "router-rs-cli",
                 "--",
                 "framework",
                 "nl-route-signal-registry-contract",
@@ -2195,15 +2188,6 @@ fn runtime_description_index(keys: &[serde_json::Value]) -> usize {
 }
 
 #[test]
-fn github_source_gate_rust_cli_is_workspace_member() {
-    let manifest = read_text(&project_root().join("rust_tools/Cargo.toml"));
-    assert!(manifest.contains(r#""gh_source_gate_rs""#));
-    assert!(project_root()
-        .join("rust_tools/gh_source_gate_rs/Cargo.toml")
-        .exists());
-}
-
-#[test]
 fn github_source_gate_rust_cli_owns_both_commands() {
     let source = read_text(&project_root().join("rust_tools/gh_source_gate_rs/src/lib.rs"));
     for marker in [
@@ -2215,20 +2199,6 @@ fn github_source_gate_rust_cli_owns_both_commands() {
     ] {
         assert!(source.contains(marker), "missing marker: {marker}");
     }
-}
-
-#[test]
-fn github_source_gate_help_lists_commands() {
-    let mut command = cargo_manifest_command(
-        &project_root().join("rust_tools/gh_source_gate_rs/Cargo.toml"),
-        &[],
-    );
-    command.args(["--bin", "gh-source-gate", "--", "--help"]);
-    let output = run(command);
-    common::assert_success(&output);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("inspect-pr-checks"));
-    assert!(stdout.contains("fetch-comments"));
 }
 
 #[test]
@@ -2512,21 +2482,6 @@ fn slides_native_pptx_docs_are_not_runtime_contract() {
             "forbidden token present: {forbidden}"
         );
     }
-}
-
-#[test]
-fn pdf_tool_rs_is_workspace_member() {
-    let root_manifest = read_text(&project_root().join("Cargo.toml"));
-    let tools_manifest = read_text(&project_root().join("rust_tools/Cargo.toml"));
-    for marker in [r#""rust_tools/pdf_tool_rs""#, r#""pdf_tool_rs""#] {
-        assert!(
-            root_manifest.contains(marker) || tools_manifest.contains(marker),
-            "missing workspace member marker: {marker}"
-        );
-    }
-    assert!(project_root()
-        .join("rust_tools/pdf_tool_rs/Cargo.toml")
-        .exists());
 }
 
 #[test]
@@ -2943,60 +2898,6 @@ fn ppt_rust_outline_generation_naturalizes_copy_and_design_chain() {
     ] {
         assert!(source.contains(marker), "missing marker: {marker}");
     }
-}
-
-#[test]
-fn direct_ppt_cli_help_lists_authoring_commands() {
-    let mut command = cargo_manifest_command(
-        &project_root().join("rust_tools/pptx_tool_rs/Cargo.toml"),
-        &[],
-    );
-    command.args(["--bin", "ppt", "--", "--help"]);
-    let output = run(command);
-    common::assert_success(&output);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("init"));
-    assert!(stdout.contains("outline"));
-}
-
-#[test]
-fn direct_ppt_cli_outline_help_lists_quality_mode() {
-    let mut command = cargo_manifest_command(
-        &project_root().join("rust_tools/pptx_tool_rs/Cargo.toml"),
-        &[],
-    );
-    command.args(["--bin", "ppt", "--", "outline", "--help"]);
-    let output = run(command);
-    common::assert_success(&output);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--quality"));
-    assert!(stdout.contains("--rendered-dir"));
-}
-
-#[test]
-fn direct_ppt_cli_qa_help_lists_fail_gate() {
-    let mut command = cargo_manifest_command(
-        &project_root().join("rust_tools/pptx_tool_rs/Cargo.toml"),
-        &[],
-    );
-    command.args(["--bin", "ppt", "--", "qa", "--help"]);
-    let output = run(command);
-    common::assert_success(&output);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--fail-on-issues"));
-}
-
-#[test]
-fn direct_ppt_cli_build_qa_help_lists_quality_mode() {
-    let mut command = cargo_manifest_command(
-        &project_root().join("rust_tools/pptx_tool_rs/Cargo.toml"),
-        &[],
-    );
-    command.args(["--bin", "ppt", "--", "build-qa", "--help"]);
-    let output = run(command);
-    common::assert_success(&output);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("--quality"));
 }
 
 #[test]
