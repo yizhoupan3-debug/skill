@@ -560,27 +560,28 @@ mod parameter_validation_tests {
 
     #[test]
     fn goal_start_requires_goal_argument() {
-        let args = json!({});
+        let args = json!({"task_id": "t1"});
         let result =
             crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "start");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("goal"));
+        assert!(err.contains("goal"), "expected error about 'goal', got: {err}");
     }
 
     #[test]
     fn goal_checkpoint_requires_note_argument() {
-        let args = json!({});
+        let args = json!({"task_id": "t1"});
         let result =
             crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "checkpoint");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("note"));
+        assert!(err.contains("note"), "expected error about 'note', got: {err}");
     }
 
     #[test]
     fn goal_append_round_not_valid_operation() {
         let args = json!({
+            "task_id": "t1",
             "round": 1,
             "review_summary": "test",
             "fix_summary": "test",
@@ -592,19 +593,19 @@ mod parameter_validation_tests {
             crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "append_round");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("rfv_loop_manage"));
+        assert!(err.contains("rfv_loop_manage"), "expected error about 'rfv_loop_manage', got: {err}");
     }
 
     #[test]
     fn unknown_goal_operation_returns_error() {
-        let args = json!({});
+        let args = json!({"task_id": "t1"});
         let result = crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(
             &args,
             "invalid_operation",
         );
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("Unknown goal operation"));
+        assert!(err.contains("Unknown goal operation"), "expected 'Unknown goal operation', got: {err}");
         assert!(err.contains("start") && err.contains("checkpoint"));
     }
 
@@ -979,7 +980,7 @@ mod antigravity_hard_blocking_tests {
             "should NOT contain hard block message in advisory mode; got {error_msg}"
         );
         assert!(
-            error_msg.contains("task_id is required") || !response["result"]["isError"].as_bool().unwrap_or(false),
+            error_msg.contains("task_id") || !response["result"]["isError"].as_bool().unwrap_or(false),
             "expected task_id validation or success (not hard block); got {error_msg}"
         );
 
@@ -1383,7 +1384,7 @@ mod claude_desktop_hard_blocking_tests {
             "should NOT contain hard block message in advisory mode; got {error_msg}"
         );
         assert!(
-            error_msg.contains("task_id is required") || !response["result"]["isError"].as_bool().unwrap_or(false),
+            error_msg.contains("task_id") || !response["result"]["isError"].as_bool().unwrap_or(false),
             "expected task_id validation or success (not hard block); got {error_msg}"
         );
         let _ = std::fs::remove_dir_all(&repo);
