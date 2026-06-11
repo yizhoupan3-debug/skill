@@ -50,6 +50,24 @@ pub enum PaperProseHookHost {
 pub type PaperProseHookHostType = PaperProseHookHost;
 
 impl PaperProseHookHost {
+    /// Per-host env var controlling prose hook injection.
+    pub fn env_var(self) -> &'static str {
+        match self {
+            Self::Cursor => "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
+            Self::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
+            Self::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
+        }
+    }
+
+    /// Per-host env var controlling adversarial review hook injection.
+    pub fn adversarial_env_var(self) -> &'static str {
+        match self {
+            Self::Cursor => "ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK",
+            Self::Codex => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
+            Self::Claude => "ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK",
+        }
+    }
+
     pub fn from_codex_lifecycle_state_dir(_state_dir_leaf: &str) -> Self {
         Self::Codex
     }

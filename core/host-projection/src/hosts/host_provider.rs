@@ -131,6 +131,15 @@ pub fn host_provider_registry() -> &'static [Box<dyn HostProvider>] {
         .as_slice()
 }
 
+/// Returns the host_id of the first registered provider.
+/// Used as a data-driven default instead of hardcoding a specific host name.
+pub fn default_host_id() -> &'static str {
+    host_provider_registry()
+        .first()
+        .map(|p| p.host_id())
+        .unwrap_or("codex")
+}
+
 pub fn host_provider_for_id(host_id: &str) -> Option<&'static dyn HostProvider> {
     let needle = host_id.trim();
     host_provider_registry()

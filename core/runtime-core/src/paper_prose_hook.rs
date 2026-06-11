@@ -17,26 +17,8 @@ pub const PREFIX_LINE: &str = "**PAPER_PROSE_QUALITY_HOOK**";
 
 const BUILTIN_TXT: &str = include_str!("../../../configs/framework/PAPER_PROSE_QUALITY_HOOK.txt");
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PaperProseHookHost {
-    Cursor,
-    Codex,
-    Claude,
-}
-
-impl PaperProseHookHost {
-    pub fn env_var(self) -> &'static str {
-        match self {
-            Self::Cursor => "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
-            Self::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
-            Self::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
-        }
-    }
-
-    pub fn from_codex_lifecycle_state_dir(_state_dir_leaf: &str) -> Self {
-        Self::Codex
-    }
-}
+/// Single source of truth: re-export from host-projection.
+pub use host_projection::hooks::PaperProseHookHost;
 
 fn builtin_block() -> String {
     BUILTIN_TXT.trim().to_string()

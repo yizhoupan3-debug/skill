@@ -23,11 +23,6 @@ impl HookObservationHost {
     pub fn as_str(&self) -> &'static str {
         self.0
     }
-
-    /// True when this host is "codex" (used for lifecycle context input block detection).
-    pub fn is_codex(&self) -> bool {
-        self.0 == "codex"
-    }
 }
 
 fn classify_gate(followup: Option<&str>, additional: Option<&str>) -> Option<GateClassified> {
@@ -176,8 +171,7 @@ pub fn build_router_rs_observation_value(output: &Value, host: HookObservationHo
     let lifecycle_input_block = output
         .pointer("/hookSpecificOutput/hookEventName")
         .and_then(Value::as_str)
-        == Some("CodexLifecycleContext")
-        && host.is_codex();
+        == Some("CodexLifecycleContext");
     if lifecycle_input_block && output.get("decision").and_then(Value::as_str) == Some("block") {
         let msg = output
             .get("message")
