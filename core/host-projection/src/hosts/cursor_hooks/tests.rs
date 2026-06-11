@@ -1159,6 +1159,7 @@ fn stop_closeout_uses_hydration_task_when_active_completed_and_focus_running() {
 }
 
 #[test]
+#[serial]
 fn stop_completion_claim_allows_when_closeout_record_passes() {
     let _env = core_policy::test_env_sync::process_env_lock();
     use std::env;

@@ -101,10 +101,7 @@ fn hydrate_trace_event_object(
     payload
         .entry("schema_version".to_string())
         .or_insert_with(|| Value::String("runtime-trace-v2".to_string()));
-    Value::Object(payload)
-        .as_object()
-        .cloned()
-        .unwrap_or_default()
+    payload
 }
 
 fn trace_event_matches_scope(
@@ -216,12 +213,13 @@ fn compaction_delta_to_trace_event(
     payload: Value,
     line_number: usize,
 ) -> Result<Map<String, Value>, String> {
-    let object = payload.as_object().cloned().ok_or_else(|| {
-        format!(
+    let object = match payload {
+        Value::Object(obj) => obj,
+        _ => return Err(format!(
             "trace compaction delta line {} must decode to a JSON object",
             line_number
-        )
-    })?;
+        )),
+    };
     let generation = trace_event_usize_field(&object, "generation").unwrap_or(0);
     let seq = trace_event_usize_field(&object, "seq")
         .ok_or_else(|| format!("trace compaction delta line {line_number} missing seq"))?;

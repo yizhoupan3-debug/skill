@@ -135,15 +135,14 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
     let is_full = detail_level == "full";
     let snapshot = load_framework_runtime_view(repo_root, artifact_root_override, task_id_override);
     let continuity = classify_runtime_continuity(&snapshot);
-    let continuity_route = continuity
-        .get("route")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
     let primary_owner = {
         let direct = value_text(snapshot.supervisor_state.get("primary_owner"));
         if direct.is_empty() {
-            continuity_route.first().map(|item| value_text(Some(item)))
+            continuity
+                .get("route")
+                .and_then(Value::as_array)
+                .and_then(|arr| arr.first())
+                .map(|item| value_text(Some(item)))
         } else {
             Some(direct)
         }
@@ -245,7 +244,7 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
             .map(|rows| rows.len())
             .unwrap_or(0),
         "evidence_count": normalize_evidence_index(&snapshot.evidence_index).len(),
-        "trace_skill_count": continuity_route.len(),
+        "trace_skill_count": continuity.get("route").and_then(Value::as_array).map(|a| a.len()).unwrap_or(0),
         "continuity": continuity_value,
         "supervisor_state": {
             "task_id": nonempty_string(snapshot.supervisor_state.get("task_id")),

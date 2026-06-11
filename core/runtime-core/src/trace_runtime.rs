@@ -117,10 +117,10 @@ pub fn record_trace_event(
     );
     let cursor = build_trace_cursor(payload.generation, payload.seq, &event_id);
     let mut event = Map::new();
-    event.insert("event_id".to_string(), Value::String(event_id.clone()));
+    event.insert("event_id".to_string(), Value::String(event_id));
     event.insert("seq".to_string(), json!(payload.seq));
     event.insert("generation".to_string(), json!(payload.generation));
-    event.insert("cursor".to_string(), Value::String(cursor.clone()));
+    event.insert("cursor".to_string(), Value::String(cursor));
     event.insert("ts".to_string(), Value::String(Utc::now().to_rfc3339()));
     event.insert(
         "run_id".to_string(),
@@ -130,8 +130,8 @@ pub fn record_trace_event(
         "job_id".to_string(),
         payload
             .job_id
-            .clone()
-            .map(Value::String)
+            .as_deref()
+            .map(|s| Value::String(s.to_string()))
             .unwrap_or(Value::Null),
     );
     event.insert("kind".to_string(), Value::String(payload.kind.clone()));
@@ -146,8 +146,9 @@ pub fn record_trace_event(
         Value::String(payload.event_schema_version),
     );
 
+    let event_value = Value::Object(event);
     let sink_line = serde_json::to_string(&json!({
-        "event": Value::Object(event.clone()),
+        "event": &event_value,
         "sink_schema_version": payload.sink_schema_version,
     }))
     .map_err(|err| format!("serialize trace event sink line failed: {err}"))?
@@ -159,7 +160,7 @@ pub fn record_trace_event(
     }
 
     let (delta_path, delta_line, delta_bytes_written) = maybe_append_compaction_delta(
-        &Value::Object(event.clone()),
+        &event_value,
         payload.compaction_manifest_path.as_deref(),
         payload.compaction_manifest_text.as_deref(),
         payload.write_outputs,
@@ -169,7 +170,7 @@ pub fn record_trace_event(
         schema_version: TRACE_RECORD_EVENT_SCHEMA_VERSION.to_string(),
         authority: TRACE_STREAM_IO_AUTHORITY.to_string(),
         path: payload.path,
-        event: Value::Object(event),
+        event: event_value,
         bytes_written: sink_line.len(),
         sink_line,
         delta_path,
@@ -201,8 +202,8 @@ pub fn compact_trace_stream(
             writes: Vec::new(),
         });
     }
-    let stream_text = match payload.event_stream_text.clone() {
-        Some(value) => value,
+    let stream_text = match payload.event_stream_text.as_deref() {
+        Some(value) => value.to_string(),
         None => match payload.event_stream_path.as_deref() {
             Some(path) if Path::new(path).exists() => fs::read_to_string(path)
                 .map_err(|err| format!("read trace stream failed for {path}: {err}"))?,
@@ -263,8 +264,8 @@ pub fn compact_trace_stream(
         "job_id".to_string(),
         payload
             .job_id
-            .clone()
-            .map(Value::String)
+            .as_deref()
+            .map(|s| Value::String(s.to_string()))
             .unwrap_or(Value::Null),
     );
     state_payload.insert("generation".to_string(), json!(active_generation));
@@ -292,7 +293,7 @@ pub fn compact_trace_stream(
                 .collect(),
         ),
     );
-    let state_value = Value::Object(state_payload.clone());
+    let state_value = Value::Object(state_payload);
     let state_serialized = pretty_json_line(&state_value)?;
     let state_ref = build_artifact_ref(
         "state_ref",
@@ -305,7 +306,8 @@ pub fn compact_trace_stream(
     if let Some(output_path) = payload.output_path.as_deref() {
         let output_payload = payload
             .output_text
-            .clone()
+            .as_deref()
+            .map(str::to_string)
             .or_else(|| fs::read_to_string(output_path).ok());
         if let Some(output_payload) = output_payload {
             artifact_refs.push(build_artifact_ref(
@@ -371,8 +373,8 @@ pub fn compact_trace_stream(
         "job_id".to_string(),
         payload
             .job_id
-            .clone()
-            .map(Value::String)
+            .as_deref()
+            .map(|s| Value::String(s.to_string()))
             .unwrap_or(Value::Null),
     );
     snapshot.insert(
@@ -416,7 +418,7 @@ pub fn compact_trace_stream(
         "schema_version": TRACE_COMPACTION_MANIFEST_SCHEMA_VERSION,
         "run_id": payload.run_id,
         "job_id": payload.job_id,
-        "backend_family": payload.backend_family.clone().unwrap_or_else(|| "filesystem".to_string()),
+        "backend_family": payload.backend_family.as_deref().unwrap_or("filesystem"),
         "compaction_supported": true,
         "snapshot_delta_supported": true,
         "latest_stable_snapshot": snapshot_value,
@@ -772,7 +774,8 @@ fn previous_manifest_payload(
 ) -> Result<Option<Value>, String> {
     let raw = payload
         .previous_manifest_text
-        .clone()
+        .as_deref()
+        .map(str::to_string)
         .or_else(|| fs::read_to_string(manifest_path).ok());
     raw.map(|value| {
         serde_json::from_str::<Value>(&value).map_err(|err| {

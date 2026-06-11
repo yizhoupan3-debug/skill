@@ -325,6 +325,7 @@ pub fn build_execution_kernel_live_response_serialization_contract() -> Map<Stri
         .iter()
         .map(|field| Value::String((*field).to_string()))
         .collect::<Vec<_>>();
+    let steady_state_fields_ref = &steady_state_fields;
     let mut live_primary_required_metadata_fields = steady_state_fields.clone();
     live_primary_required_metadata_fields.extend(
         EXECUTION_LIVE_PRIMARY_REQUIRED_RUNTIME_FIELDS
@@ -350,7 +351,7 @@ pub fn build_execution_kernel_live_response_serialization_contract() -> Map<Stri
     );
     runtime_response_metadata_fields.insert(
         "steady_state_kernel".to_string(),
-        Value::Array(steady_state_fields.clone()),
+        Value::Array(steady_state_fields_ref.clone()),
     );
     runtime_response_metadata_fields.insert(
         "live_primary".to_string(),
@@ -427,7 +428,7 @@ pub fn build_execution_kernel_live_response_serialization_contract() -> Map<Stri
     );
     live_primary.insert(
         "steady_state_metadata_fields".to_string(),
-        Value::Array(steady_state_fields.clone()),
+        Value::Array(steady_state_fields_ref.clone()),
     );
     live_primary.insert(
         "pass_through_metadata_fields".to_string(),
@@ -592,7 +593,8 @@ pub fn build_execution_contract_bundle() -> Map<String, Value> {
 fn resolve_execution_kernel_expectations(
     kernel_contract: Option<&Map<String, Value>>,
 ) -> ExecutionKernelExpectations {
-    let contract = kernel_contract.cloned().unwrap_or_default();
+    let empty = Map::new();
+    let contract = kernel_contract.unwrap_or(&empty);
     ExecutionKernelExpectations {
         execution_kernel: non_empty_string(contract.get("execution_kernel"), EXECUTION_KERNEL_KIND),
         execution_kernel_authority: non_empty_string(
@@ -642,12 +644,12 @@ fn normalize_execution_kernel_metadata_contract_impl(
     let expected_fields = expected_object
         .get("steady_state_fields")
         .and_then(Value::as_array)
-        .cloned()
+        .map(Vec::as_slice)
         .unwrap_or_default();
     let payload_fields = payload
         .get("steady_state_fields")
         .and_then(Value::as_array)
-        .cloned()
+        .map(Vec::as_slice)
         .unwrap_or_default();
     if payload_fields != expected_fields {
         return Err(

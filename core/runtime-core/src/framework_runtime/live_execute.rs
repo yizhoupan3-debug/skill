@@ -65,8 +65,9 @@ fn parse_execute_aggregator_host_allowlist() -> Result<Option<HashSet<String>>, 
 pub fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, String> {
     let prompt_preview = payload
         .prompt_preview
-        .clone()
-        .filter(|value| !value.trim().is_empty());
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string);
     if payload.dry_run {
         let dry_run_prompt_preview =
             Some(prompt_preview.unwrap_or_else(|| build_live_execute_prompt(&payload)));

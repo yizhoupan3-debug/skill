@@ -40,14 +40,14 @@ fn mapping_string(
 }
 
 fn merge_attach_path_values(
-    explicit_value: Option<String>,
+    explicit_value: Option<&str>,
     descriptor_value: Option<String>,
     field_name: &str,
 ) -> Result<Option<String>, String> {
     match (explicit_value, descriptor_value) {
         (None, descriptor) => Ok(descriptor),
-        (Some(explicit), None) => Ok(Some(explicit)),
-        (Some(explicit), Some(descriptor)) if explicit == descriptor => Ok(Some(explicit)),
+        (Some(explicit), None) => Ok(Some(explicit.to_string())),
+        (Some(explicit), Some(descriptor)) if explicit == descriptor => Ok(Some(explicit.to_string())),
         (Some(_), Some(_)) => Err(format!(
             "External runtime event attach received conflicting {field_name:?} values between direct args and attach_descriptor."
         )),
@@ -69,21 +69,21 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
         optional_non_empty_string(payload, "binding_artifact_path");
     let explicit_handoff_path = optional_non_empty_string(payload, "handoff_path");
     let explicit_resume_manifest_path = optional_non_empty_string(payload, "resume_manifest_path");
+    let explicit_binding_artifact_path_ref = explicit_binding_artifact_path.as_ref().map(|_| ());
+    let explicit_handoff_path_ref = explicit_handoff_path.as_ref().map(|_| ());
+    let explicit_resume_manifest_path_ref = explicit_resume_manifest_path.as_ref().map(|_| ());
     let attach_descriptor = match payload.get("attach_descriptor") {
         None | Some(Value::Null) => {
             return Ok(NormalizedAttachRequest {
-                binding_artifact_path: explicit_binding_artifact_path.clone(),
-                handoff_path: explicit_handoff_path.clone(),
-                resume_manifest_path: explicit_resume_manifest_path.clone(),
+                binding_artifact_path: explicit_binding_artifact_path,
+                handoff_path: explicit_handoff_path,
+                resume_manifest_path: explicit_resume_manifest_path,
                 trace_stream_path: None,
-                binding_artifact_resolution: explicit_binding_artifact_path
-                    .as_ref()
+                binding_artifact_resolution: explicit_binding_artifact_path_ref
                     .map(|_| "explicit_request".to_string()),
-                handoff_resolution: explicit_handoff_path
-                    .as_ref()
+                handoff_resolution: explicit_handoff_path_ref
                     .map(|_| "explicit_request".to_string()),
-                resume_manifest_resolution: explicit_resume_manifest_path
-                    .as_ref()
+                resume_manifest_resolution: explicit_resume_manifest_path_ref
                     .map(|_| "explicit_request".to_string()),
             });
         }
@@ -173,17 +173,17 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
     let descriptor_resume = mapping_string(resolved_mapping, "resume_manifest_path")?;
     let descriptor_trace_stream = mapping_string(resolved_mapping, "trace_stream_path")?;
     let binding_artifact_path = merge_attach_path_values(
-        explicit_binding_artifact_path.clone(),
+        explicit_binding_artifact_path.as_deref(),
         descriptor_binding,
         "binding_artifact_path",
     )?;
     let handoff_path = merge_attach_path_values(
-        explicit_handoff_path.clone(),
+        explicit_handoff_path.as_deref(),
         descriptor_handoff,
         "handoff_path",
     )?;
     let resume_manifest_path = merge_attach_path_values(
-        explicit_resume_manifest_path.clone(),
+        explicit_resume_manifest_path.as_deref(),
         descriptor_resume,
         "resume_manifest_path",
     )?;
@@ -192,7 +192,7 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
         handoff_path,
         resume_manifest_path,
         trace_stream_path: descriptor_trace_stream,
-        binding_artifact_resolution: if explicit_binding_artifact_path.is_some() {
+        binding_artifact_resolution: if explicit_binding_artifact_path_ref.is_some() {
             Some("explicit_request".to_string())
         } else {
             resolution_mapping
@@ -201,7 +201,7 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
                 .transpose()?
                 .flatten()
         },
-        handoff_resolution: if explicit_handoff_path.is_some() {
+        handoff_resolution: if explicit_handoff_path_ref.is_some() {
             Some("explicit_request".to_string())
         } else {
             resolution_mapping
@@ -210,7 +210,7 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
                 .transpose()?
                 .flatten()
         },
-        resume_manifest_resolution: if explicit_resume_manifest_path.is_some() {
+        resume_manifest_resolution: if explicit_resume_manifest_path_ref.is_some() {
             Some("explicit_request".to_string())
         } else {
             resolution_mapping
@@ -510,12 +510,13 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     let mut resume_source = normalized_request.resume_manifest_resolution;
 
     let requested_paths = [
-        binding_path.clone(),
-        handoff_file.clone(),
-        resume_file.clone(),
+        binding_path.as_deref(),
+        handoff_file.as_deref(),
+        resume_file.as_deref(),
     ]
     .into_iter()
     .flatten()
+    .map(Path::to_path_buf)
     .collect::<Vec<_>>();
     let storage_backend = resolve_storage_backend(&requested_paths);
     require_requested_artifact(
@@ -586,7 +587,7 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     }
 
     let transport = if let Some(transport_path) = transport_path.as_ref() {
-        load_json_artifact(&Some(transport_path.clone()), storage_backend.as_ref())?.ok_or_else(
+        load_json_artifact(&Some(transport_path.to_path_buf()), storage_backend.as_ref())?.ok_or_else(
             || "External runtime event attach could not load a transport descriptor.".to_string(),
         )?
     } else {
