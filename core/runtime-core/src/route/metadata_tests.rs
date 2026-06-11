@@ -670,20 +670,19 @@ mod route_metadata_tests {
     }
 
     #[test]
-    #[ignore = "paper-reviewer skill removed from SKILL_MANIFEST.json; depends on non-existent manifest row"]
-    fn manifest_paper_reviewer_row_accepts_plain_slug_literal() {
+    fn manifest_paper_writing_row_accepts_plain_slug_literal() {
         let manifest_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
         let records = load_records_from_manifest(&manifest_path).expect("manifest load");
         let rec = records
             .iter()
-            .find(|r| r.slug == "paper-reviewer")
-            .expect("paper-reviewer row");
+            .find(|r| r.slug == "paper-writing")
+            .expect("paper-writing row");
         assert!(
             !rec.framework_alias_entrypoints.is_empty(),
             "manifest row should carry framework alias entrypoints"
         );
-        let q = normalize_text("用 paper-reviewer 逻辑模式审一下 claim evidence");
+        let q = normalize_text("用 paper-writing 做一轮论文改稿");
         assert!(
             has_literal_framework_alias_call(&q, rec),
             "{:?}",

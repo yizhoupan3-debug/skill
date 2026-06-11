@@ -1352,7 +1352,6 @@ fn host_projection_narrative_covers_installable_hosts() {
 }
 
 #[test]
-#[ignore = "plugin catalog contains skills (e.g. formal-verification) missing from SKILL_ROUTING_METADATA.json; data inconsistency to fix separately"]
 fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
     let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
     let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
@@ -1405,7 +1404,6 @@ fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
 }
 
 #[test]
-#[ignore = "plugin catalog companion schemas contract; passes but kept gated for CI stability"]
 fn plugin_catalog_routing_metadata_companion_schemas_contract() {
     let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
     let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));

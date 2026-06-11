@@ -393,36 +393,30 @@
       "skill_path": "skills/visual-review/SKILL.md"
     },
     "research-discovery": {
-      "enabled": true,
-      "source": "local"
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/research-discovery/SKILL.md"
     },
     "research-execution": {
-      "enabled": true,
-      "source": "local"
-    },
-    "literature-verification": {
-      "enabled": true,
-      "source": "local"
-    },
-    "statistical-verification": {
-      "enabled": true,
-      "source": "local"
-    },
-    "formal-verification": {
-      "enabled": true,
-      "source": "local"
-    },
-    "reproducibility-verification": {
-      "enabled": true,
-      "source": "local"
-    },
-    "prose-verification": {
-      "enabled": true,
-      "source": "local"
-    },
-    "structure-verification": {
-      "enabled": true,
-      "source": "local"
+      "host_support": {
+        "platforms": [
+          "antigravity",
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/research-execution/SKILL.md"
     }
   },
   "source_of_truth": false

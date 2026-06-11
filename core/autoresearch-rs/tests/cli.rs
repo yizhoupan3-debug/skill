@@ -248,7 +248,8 @@ fn full_loop_records_scientific_sense_fields() {
 
 #[test]
 #[ignore = "requires live arxiv.org network access"]
-fn can_record_external_research_from_arxiv() {
+fn arxiv_research_full_e2e_single_claim_and_batch_gate() {
+    // Phase 1: single-claim research (was can_record_external_research_from_arxiv)
     let tmp = temp_base("external-research");
     run_ctl(vec![
         s("init"),
@@ -290,12 +291,9 @@ fn can_record_external_research_from_arxiv() {
     assert!(
         text(root.join("literature/EXTERNAL_RESEARCH.md")).contains("Managed External Research")
     );
-}
 
-#[test]
-#[ignore = "requires live arxiv.org network access"]
-fn batch_research_and_gate_recommendation() {
-    let tmp = temp_base("batch-research");
+    // Phase 2: batch research + gate recommendation (was batch_research_and_gate_recommendation)
+    let tmp2 = temp_base("batch-research");
     run_ctl(vec![
         s("init"),
         s("--project"),
@@ -303,20 +301,20 @@ fn batch_research_and_gate_recommendation() {
         s("--question"),
         s("Can retrieval augmented generation improve citation grounded research?"),
         s("--dir"),
-        tmp.display().to_string(),
+        tmp2.display().to_string(),
     ]);
-    let root = tmp.join("batch-research");
+    let root2 = tmp2.join("batch-research");
     run_ctl(vec![
         s("draft-claims"),
         s("--workspace"),
-        root.display().to_string(),
+        root2.display().to_string(),
         s("--count"),
         s("2"),
     ]);
     run_ctl(vec![
         s("research-all"),
         s("--workspace"),
-        root.display().to_string(),
+        root2.display().to_string(),
         s("--source"),
         s("arxiv"),
         s("--limit"),
@@ -324,13 +322,13 @@ fn batch_research_and_gate_recommendation() {
         s("--max-claims"),
         s("2"),
     ]);
-    let state = load_state(&root);
-    assert_eq!(state["external_research"].as_array().unwrap().len(), 2);
+    let state2 = load_state(&root2);
+    assert_eq!(state2["external_research"].as_array().unwrap().len(), 2);
 
     let recommendation = run_ctl(vec![
         s("gate-from-research"),
         s("--workspace"),
-        root.display().to_string(),
+        root2.display().to_string(),
     ]);
     assert!(recommendation.contains("recommended_status: pending"));
     assert!(recommendation.contains("reviewed_claims:"));
@@ -340,9 +338,9 @@ fn batch_research_and_gate_recommendation() {
         run_ctl(vec![
             s("compare-claim"),
             s("--workspace"),
-            root.display().to_string(),
+            root2.display().to_string(),
             s("--claim"),
-            state["novelty_gate"]["draft_claims"][claim_index]["claim"]
+            state2["novelty_gate"]["draft_claims"][claim_index]["claim"]
                 .as_str()
                 .unwrap()
                 .to_string(),
@@ -365,12 +363,12 @@ fn batch_research_and_gate_recommendation() {
     let applied = run_ctl(vec![
         s("gate-from-research"),
         s("--workspace"),
-        root.display().to_string(),
+        root2.display().to_string(),
         s("--apply"),
     ]);
     assert!(applied.contains("recommended_status: passed"));
-    let state = load_state(&root);
-    assert_eq!(state["novelty_gate"]["status"].as_str(), Some("passed"));
+    let state2 = load_state(&root2);
+    assert_eq!(state2["novelty_gate"]["status"].as_str(), Some("passed"));
 }
 
 #[test]
