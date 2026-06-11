@@ -84,6 +84,7 @@ pub mod web_fetch_guard;
 #[cfg(test)]
 pub mod test_env_sync;
 pub mod mcp_stdio_test_support;
+#[allow(unused_imports)]
 pub mod integration_test_prelude;
 
 // ── modules with transitive deps ──
@@ -99,10 +100,7 @@ pub mod hook_posttool_normalize;
 // ── re-exports from core-policy (crate-internal only) ──
 pub(crate) use core_policy::hook_common;
 pub(crate) use core_policy::hook_policy;
-pub(crate) use core_policy::lane_normalize;
 pub(crate) use core_policy::review_gate_engine;
-pub(crate) use core_policy::review_output_lint;
-pub(crate) use core_policy::review_routing_signals;
 
 // ── crate-level re-exports for `crate::X` path compat ──
 pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;

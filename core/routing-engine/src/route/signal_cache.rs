@@ -1,19 +1,21 @@
 //! Per-query signal memoization for routing hot paths.
 //!
-//! Uses a process-wide mutex so `rayon` parallel scoring threads share one
-//! cache per query fingerprint within a single `search_skills` / `route_task` call.
+//! Uses per-thread caching so `rayon` parallel scoring threads each maintain
+//! their own cache, eliminating the global Mutex bottleneck that previously
+//! serialized all parallel scoring threads.
 
-use super::text::{normalize_text, tokenize_route_text};
 use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::sync::Mutex;
-
-static SIGNAL_CACHE: Mutex<Option<SignalCacheState>> = Mutex::new(None);
 
 struct SignalCacheState {
     query_key: u64,
     hits: HashMap<&'static str, bool>,
+}
+
+thread_local! {
+    static SIGNAL_CACHE: std::cell::RefCell<Option<SignalCacheState>> =
+        std::cell::RefCell::new(None);
 }
 
 fn query_fingerprint(query_text: &str, query_token_list: &[String]) -> u64 {
@@ -26,10 +28,11 @@ fn query_fingerprint(query_text: &str, query_token_list: &[String]) -> u64 {
 }
 
 /// Reset the query cache (optional; `cached_signal` auto-resets on query change).
+#[cfg(test)]
 pub fn signal_cache_reset() {
-    if let Ok(mut guard) = SIGNAL_CACHE.lock() {
-        *guard = None;
-    }
+    SIGNAL_CACHE.with(|cache| {
+        *cache.borrow_mut() = None;
+    });
 }
 
 /// Memoize a boolean routing signal for the current query on this thread.
@@ -40,27 +43,28 @@ pub fn cached_signal(
     mut eval: impl FnMut() -> bool,
 ) -> bool {
     let key = query_fingerprint(query_text, query_token_list);
-    let mut guard = SIGNAL_CACHE
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if guard.as_ref().map(|state| state.query_key) != Some(key) {
-        *guard = Some(SignalCacheState {
-            query_key: key,
-            hits: HashMap::new(),
-        });
-    }
-    let state = guard.as_mut().expect("cache state just initialized");
-    if let Some(&hit) = state.hits.get(name) {
-        return hit;
-    }
-    let value = eval();
-    state.hits.insert(name, value);
-    value
+    SIGNAL_CACHE.with(|cache| {
+        let mut guard = cache.borrow_mut();
+        if guard.as_ref().map(|state| state.query_key) != Some(key) {
+            *guard = Some(SignalCacheState {
+                query_key: key,
+                hits: HashMap::new(),
+            });
+        }
+        let state = guard.as_mut().expect("cache state just initialized");
+        if let Some(&hit) = state.hits.get(name) {
+            return hit;
+        }
+        let value = eval();
+        state.hits.insert(name, value);
+        value
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::text::{normalize_text, tokenize_route_text};
 
     #[test]
     fn cached_signal_deduplicates_within_same_query() {

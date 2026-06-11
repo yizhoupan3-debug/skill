@@ -99,7 +99,8 @@ impl EvolutionObserver {
         self.events_seen
     }
 
-    pub fn snapshot(&self) -> WindowSnapshot {
+    #[cfg(test)]
+    fn snapshot(&self) -> WindowSnapshot {
         WindowSnapshot::from(&self.counters)
     }
 

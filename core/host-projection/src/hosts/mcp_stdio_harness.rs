@@ -185,6 +185,27 @@ fn snapshot_cache_ttl_secs() -> u64 {
     })
 }
 
+/// Maximum number of entries in the TASK_VIEW_CACHE to prevent unbounded memory growth.
+const TASK_VIEW_CACHE_MAX_ENTRIES: usize = 128;
+
+/// Evict expired entries, then oldest entries if still over capacity.
+fn evict_task_view_cache_if_needed(
+    cache: &mut HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>,
+) {
+    let now = Instant::now();
+    // Phase 1: remove expired entries
+    cache.retain(|_, (_, expires_at)| now < *expires_at);
+    // Phase 2: if still over capacity, remove oldest entries by expiration time
+    if cache.len() > TASK_VIEW_CACHE_MAX_ENTRIES {
+        let mut entries: Vec<_> = cache.iter().map(|(k, v)| (k.clone(), v.1)).collect();
+        entries.sort_by_key(|(_, exp)| *exp);
+        let to_remove = cache.len() - TASK_VIEW_CACHE_MAX_ENTRIES;
+        for (key, _) in entries.iter().take(to_remove) {
+            cache.remove(key);
+        }
+    }
+}
+
 /// Get task view cache TTL from environment variable.
 /// Default: 5 seconds. Env: ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS
 fn task_view_cache_ttl_secs() -> u64 {
@@ -216,7 +237,7 @@ fn get_cached_task_view(repo_root: &Path) -> core_state::task_state::ResolvedTas
     // Cache miss: recompute
     let view = resolve_task_view(repo_root, None);
 
-    // Update cache with configurable TTL
+    // Update cache with configurable TTL, evicting stale/overflow entries
     {
         let cache = get_task_view_cache();
         if let Some(mut guard) = poison_safe_lock!(cache) {
@@ -224,6 +245,7 @@ fn get_cached_task_view(repo_root: &Path) -> core_state::task_state::ResolvedTas
                 cache_key,
                 (view.clone(), Instant::now() + Duration::from_secs(ttl_secs)),
             );
+            evict_task_view_cache_if_needed(&mut guard);
         }
     }
 
@@ -845,7 +867,7 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
         eprintln!("[router-rs warning] record_tool_call failed: {e}");
     }
 
-    let mut result = match tool_name {
+    let result = match tool_name {
         "framework_snapshot" => tool_framework_snapshot(repo_root),
         "skill_route" => tool_skill_route(arguments, repo_root, host_id),
         "record_evidence" => tool_record_evidence(arguments, repo_root),
@@ -1576,7 +1598,7 @@ fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
                         resp.status()
                     )
                 })?;
-            let base = reqwest::Url::parse(&current_url)
+            let _base = reqwest::Url::parse(&current_url)
                 .map_err(|err| format!("web_fetch redirect base URL invalid: {err}"))?;
             current_url = crate::hooks::resolve_web_fetch_redirect(&current_url, location)?;
             // Pin DNS for redirect target to prevent DNS rebinding TOCTOU.
@@ -2154,10 +2176,13 @@ pub fn init_tracker_for_test(path: &std::path::Path) -> Result<(), String> {
 
 #[cfg(any(test, feature = "test-support"))]
 mod tests {
+    #[cfg(test)]
     use std::path::PathBuf;
 
+    #[cfg(test)]
     use super::*;
 
+    #[cfg(test)]
     fn unique_test_repo(name: &str) -> PathBuf {
         let path = crate::hosts::test_shim::unique_temp_repo(&format!("mcp-{name}"));
         let _ = std::fs::remove_dir_all(&path);

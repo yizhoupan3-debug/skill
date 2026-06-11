@@ -120,38 +120,31 @@ pub fn terminate_process(pid: u32) -> Result<(), String> {
     }
     #[cfg(unix)]
     {
+        // Phase 1: SIGTERM with 500ms budget (5 × 100ms)
         send_signal_to_pgrp(pid, libc::SIGTERM)?;
-        for _ in 0..50 {
-            if reap_child_if_exited(pid) {
-                // Guard against ECHILD false-positive: reap_child_if_exited may
-                // return true when waitpid returns ECHILD (e.g. child process
-                // died, but the parent shell is still alive).  Double-check with
-                // a direct kill(0) probe before declaring the process gone.
+        for _ in 0..5 {
+            if !kill_pid_alive(pid) || reap_child_if_exited(pid) {
                 if !kill_pid_alive(pid) {
                     return Ok(());
                 }
-            }
-            if !kill_pid_alive(pid) {
-                return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
         }
-        if kill_pid_alive(pid) {
-            send_signal_to_pgrp(pid, libc::SIGKILL)?;
-            for _ in 0..50 {
-                if reap_child_if_exited(pid) {
-                    if !kill_pid_alive(pid) {
-                        return Ok(());
-                    }
-                }
+        if !kill_pid_alive(pid) {
+            return Ok(());
+        }
+        // Phase 2: SIGKILL with 1.5s budget (15 × 100ms)
+        send_signal_to_pgrp(pid, libc::SIGKILL)?;
+        for _ in 0..15 {
+            if !kill_pid_alive(pid) || reap_child_if_exited(pid) {
                 if !kill_pid_alive(pid) {
                     return Ok(());
                 }
-                thread::sleep(Duration::from_millis(100));
             }
-            // Last resort: block until the child is reaped so kill(0) won't see a zombie.
-            let _ = wait_for_child(pid, true);
+            thread::sleep(Duration::from_millis(100));
         }
+        // Last resort: non-blocking reap attempt so kill(0) won't see a zombie.
+        let _ = wait_for_child(pid, false);
         Ok(())
     }
     #[cfg(not(unix))]

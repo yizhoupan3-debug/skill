@@ -1,6 +1,6 @@
 //! Candidate scoring and owner/overlay selection.
 use super::aliases::{framework_alias_requires_explicit_call, has_explicit_framework_alias_call};
-use super::scoring_config::{scoring_weights, ScoringWeights};
+use super::scoring_config::ScoringWeights;
 use super::signal_cache::cached_signal;
 use super::signals::*;
 use super::text::{
@@ -707,6 +707,7 @@ pub fn priority_rank(priority: &str) -> i32 {
 
 #[cfg(test)]
 mod paper_prose_routing_score_tests {
+    use crate::route::scoring_config::scoring_weights;
     use super::*;
     use crate::route::load_records;
     use std::collections::HashSet;
