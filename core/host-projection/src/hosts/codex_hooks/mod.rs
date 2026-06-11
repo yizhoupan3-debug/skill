@@ -977,42 +977,6 @@ fn run_codex_lifecycle_context_hook_inner(
     Ok(result)
 }
 
-pub fn read_hook_stdin_payload() -> Result<Value, String> {
-    read_stdin_payload()
-}
-
-pub fn merge_lifecycle_install_hooks_json(
-    host: CodexLifecycleHostKind,
-    existing: Option<Value>,
-    hook_commands: &BTreeMap<String, String>,
-    events: &[&str],
-) -> Result<(Value, HooksMergeStat), String> {
-    merge_hooks_json_for_events(host, existing, hook_commands, events)
-}
-
-pub fn hooks_install_serialize_pretty(value: &Value) -> Result<String, String> {
-    serialize_ascii_json_pretty(value)
-}
-
-pub fn hooks_install_write_atomic(path: &Path, text: &str) -> Result<(), String> {
-    write_atomic_text(path, text)
-}
-
-pub fn hooks_install_sha256_hex(text: &str) -> String {
-    sha256_hex(text)
-}
-
-pub fn hooks_install_acquire_lock(home: &Path) -> Result<HooksInstallLock, String> {
-    acquire_install_lock(home)
-}
-
-pub fn run_codex_pre_tool_use_hook(
-    repo_root: &Path,
-    payload: &Value,
-) -> Result<Option<Value>, String> {
-    run_pre_tool_use(repo_root, payload)
-}
-
 #[cfg(test)]
 fn run_codex_review_subagent_gate(
     repo_root: &Path,
