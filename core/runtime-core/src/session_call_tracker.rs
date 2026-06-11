@@ -62,15 +62,6 @@ pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
     write_tracker(&path, &payload)
 }
 
-/// Set the host_id field in the tracker for multi-host isolation.
-#[allow(dead_code)]
-pub fn set_host_id(repo_root: &Path, host_id: &str) -> Result<(), String> {
-    let path = tracker_path(repo_root);
-    let mut payload = load_or_init_tracker(&path)?;
-    payload["host_id"] = json!(host_id);
-    write_tracker(&path, &payload)
-}
-
 /// Record a tool call in the session tracker.
 pub fn record_tool_call(repo_root: &Path, tool_name: &str, cache_stats: Option<CacheStats>) -> Result<(), String> {
     apply_task_ledger_mutation(repo_root, || {

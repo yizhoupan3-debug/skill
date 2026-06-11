@@ -123,18 +123,6 @@ pub enum VerificationStatus {
 }
 
 impl VerificationStatus {
-    /// Parse from the free-form string used in closeout records and supervisor
-    /// state. Returns `None` for unrecognised values rather than panicking.
-    pub fn from_str_loose(s: &str) -> Option<Self> {
-        match s {
-            "passed" => Some(Self::Passed),
-            "failed" => Some(Self::Failed),
-            "partial" => Some(Self::Partial),
-            "not_run" => Some(Self::NotRun),
-            _ => None,
-        }
-    }
-
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Passed => "passed",

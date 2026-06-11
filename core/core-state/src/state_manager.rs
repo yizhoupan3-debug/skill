@@ -454,23 +454,6 @@ pub fn select_goal_state_from_pointer_ids(
     Ok(None)
 }
 
-/// Task id for automatic Stop checkpoint: continuation selection, else active → focus → session slug.
-pub fn resolve_checkpoint_task_id_from_pointer_ids(
-    repo_root: &Path,
-    active_task_id: &Option<String>,
-    focus_task_id: &Option<String>,
-) -> String {
-    if let Ok(Some((_, tid))) =
-        select_goal_state_from_pointer_ids(repo_root, active_task_id, focus_task_id)
-    {
-        return tid;
-    }
-    active_task_id
-        .clone()
-        .or_else(|| focus_task_id.clone())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| CONTINUITY_SESSION_CHECKPOINT_TASK_ID.to_string())
-}
 
 /// 诊断 / 测试专用 mtime 扫描：picks the **newest** `GOAL_STATE.json` under `artifacts/current/**`.
 ///
@@ -1283,11 +1266,6 @@ fn set_terminal_flags(
         "goal_state_path": path.display().to_string(),
         "goal_state": state,
     }))
-}
-
-/// Returns the relative path for a task's GOAL_STATE file (for display in messages).
-pub fn goal_state_rel_path_for_task(task_id: &str) -> String {
-    format!("artifacts/current/{task_id}/GOAL_STATE.json")
 }
 
 /// 将带首行前缀的段落合并进 `followup_message` 或 `additional_context`（`\n\n` 分段，与 AUTOPILOT/RFV 刷新逻辑一致）。

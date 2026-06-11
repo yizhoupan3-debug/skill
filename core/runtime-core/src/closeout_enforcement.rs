@@ -110,22 +110,6 @@ pub fn closeout_rule_category(rule: &str) -> &'static str {
     }
 }
 
-/// When `my-light` is active, downgrade all hard violations to soft.
-/// Returns the modified violations and whether any hard blockers remain.
-pub fn downgrade_violations_for_profile(
-    violations: &mut [CloseoutViolation],
-    lifecycle_profile: &str,
-) -> bool {
-    if lifecycle_profile == "my-light" {
-        for v in violations.iter_mut() {
-            v.category = "soft".to_string();
-        }
-        false
-    } else {
-        violations.iter().any(|v| v.category == "hard")
-    }
-}
-
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct CloseoutViolation {
     pub rule: String,

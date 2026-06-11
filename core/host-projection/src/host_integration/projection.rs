@@ -1627,15 +1627,6 @@ pub fn codegraph_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     }
 }
 
-/// Project `.mcp.json` + Codex `.codex/config.toml` research MCP (paperplain + mcp-codegraph).
-pub fn ensure_research_mcp_five_host_surfaces(
-    roots: &ResolvedProjectionRoots,
-) -> Result<bool, String> {
-    let mut changed = ensure_project_research_mcp_json(roots)?;
-    changed |= ensure_codex_research_mcp_toml(roots)?;
-    Ok(changed)
-}
-
 /// router-rs-framework payload for project `.mcp.json` (Claude Code).
 pub fn claude_code_router_rs_framework_payload(roots: &ResolvedProjectionRoots) -> Value {
     make_mcp_server_payload(

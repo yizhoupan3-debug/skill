@@ -376,10 +376,6 @@ pub fn ensure_router_rs_installed_for_mcp_with_roots(roots: &ResolvedProjectionR
     Ok(())
 }
 
-pub fn host_account_home_from_roots(roots: &ResolvedProjectionRoots) -> PathBuf {
-    roots.account_home_root.clone()
-}
-
 pub fn resolve_stable_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
     match resolve_mcp_router_rs_command(framework_root) {
         McpRouterRsCommand::OnPath => which::which("router-rs").ok(),

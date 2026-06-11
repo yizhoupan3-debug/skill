@@ -426,12 +426,6 @@ pub fn task_view_has_active_goal_focus_mismatch_note(view: &ResolvedTaskView) ->
         .any(|n| n.starts_with(RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL))
 }
 
-pub fn task_view_has_active_goal_not_driving_focus_note(view: &ResolvedTaskView) -> bool {
-    view.resolution_notes
-        .iter()
-        .any(|n| n.starts_with(RESOLUTION_NOTE_ACTIVE_GOAL_NOT_DRIVING_FOCUS_DRIVES))
-}
-
 fn rfv_loop_active(state: &Value) -> bool {
     state
         .get("loop_status")

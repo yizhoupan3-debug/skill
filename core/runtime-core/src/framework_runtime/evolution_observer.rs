@@ -91,10 +91,6 @@ impl EvolutionObserver {
         }
     }
 
-    pub fn with_default_alerts_path() -> Self {
-        Self::new(EvolutionObserverConfig::default())
-    }
-
     pub fn events_seen(&self) -> u64 {
         self.events_seen
     }
