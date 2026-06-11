@@ -23,7 +23,8 @@ pub fn load_records(
     let runtime_path = runtime_path.or(default_runtime_path.as_deref());
     if let Some(path) = runtime_path {
         if path.exists() {
-            let mut records = load_records_from_runtime(path)?;
+            // Try lightweight index first; fall back to full runtime on failure.
+            let mut records = load_records_from_index_or_runtime(path)?;
             if let Some(manifest) = manifest_path {
                 if manifest.exists() {
                     let meta = load_manifest_route_meta(manifest)?;
@@ -40,6 +41,104 @@ pub fn load_records(
         }
     }
     Err("No routing index found.".to_string())
+}
+
+/// Try loading from `SKILL_ROUTING_INDEX.json` (sibling of runtime file).
+/// Falls back to the full runtime file if the index is missing or unparseable.
+fn load_records_from_index_or_runtime(runtime_path: &Path) -> Result<Vec<SkillRecord>, String> {
+    if let Some(index_path) = index_sibling_path(runtime_path) {
+        if index_path.is_file() {
+            match load_records_from_index(&index_path) {
+                Ok(records) if !records.is_empty() => return Ok(records),
+                Ok(_) => eprintln!("[router-rs] index file empty, falling back to full runtime"),
+                Err(err) => eprintln!(
+                    "[router-rs] index load failed ({}), falling back to full runtime",
+                    err
+                ),
+            }
+        }
+    }
+    load_records_from_runtime(runtime_path)
+}
+
+/// Derive the index JSON path next to the runtime JSON.
+fn index_sibling_path(runtime_path: &Path) -> Option<PathBuf> {
+    runtime_path
+        .parent()
+        .map(|parent| parent.join("SKILL_ROUTING_INDEX.json"))
+}
+
+/// Parse the lightweight index file (`SKILL_ROUTING_INDEX.json`).
+/// The index has the same array-of-arrays format but with fewer keys and
+/// truncated description / trigger_hints fields.
+fn load_records_from_index(path: &Path) -> Result<Vec<SkillRecord>, String> {
+    let payload = read_json(path)?;
+    let rows = payload
+        .get("skills")
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("index missing skills rows: {}", path.display()))?;
+    let keys = payload
+        .get("keys")
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("index missing keys: {}", path.display()))?;
+
+    let mut index: HashMap<String, usize> = HashMap::new();
+    for (idx, key) in keys.iter().enumerate() {
+        if let Some(raw) = key.as_str() {
+            index.insert(raw.to_string(), idx);
+        }
+    }
+
+    let idx_slug = *index
+        .get("slug")
+        .ok_or_else(|| format!("index missing slug key: {}", path.display()))?;
+    let idx_layer = *index
+        .get("layer")
+        .ok_or_else(|| format!("index missing layer key: {}", path.display()))?;
+    let idx_owner = *index
+        .get("owner")
+        .ok_or_else(|| format!("index missing owner key: {}", path.display()))?;
+    let idx_gate = *index
+        .get("gate")
+        .ok_or_else(|| format!("index missing gate key: {}", path.display()))?;
+    let idx_summary = *index
+        .get("summary")
+        .or_else(|| index.get("description"))
+        .ok_or_else(|| format!("index missing summary/description key: {}", path.display()))?;
+    let idx_trigger_hints = *index
+        .get("trigger_hints")
+        .or_else(|| index.get("triggers"))
+        .ok_or_else(|| format!("index missing trigger_hints key: {}", path.display()))?;
+    let idx_priority = index.get("priority").copied();
+    let idx_session_start = index.get("session_start").copied();
+    let indexes = RecordRowIndexes::from_required(
+        [
+            idx_slug,
+            idx_layer,
+            idx_owner,
+            idx_gate,
+            idx_summary,
+            idx_trigger_hints,
+        ],
+        idx_priority,
+        idx_session_start,
+    );
+    let indexes = RecordRowIndexes {
+        skill_path: index.get("skill_path").copied(),
+        host_platforms: index
+            .get("host_platforms")
+            .or_else(|| index.get("source_position"))
+            .copied(),
+        record_kind: index.get("kind").copied(),
+        ..indexes
+    };
+
+    // Merge sidecar metadata (same as full runtime path).
+    let mut records = collect_skill_records_from_rows(rows, indexes);
+    let mut meta = HashMap::new();
+    merge_sidecar_route_metadata_from_runtime(path, &mut meta)?;
+    apply_manifest_route_meta(&mut records, &meta);
+    Ok(records)
 }
 
 pub fn load_inline_records(payload: &Value) -> Result<Vec<SkillRecord>, String> {
@@ -316,6 +415,7 @@ fn min_entry_mtime(entry: &RecordsCacheEntry) -> Option<u64> {
         entry.runtime_mtime,
         entry.manifest_mtime,
         entry.metadata_mtime,
+        entry.index_mtime,
     ]
     .into_iter()
     .filter_map(|t| {
@@ -353,6 +453,7 @@ pub fn load_records_cached_for_stdio_resolved(
     let manifest_mtime = file_modified_at(manifest_path);
     let metadata_sidecar = route_metadata_sidecar(runtime_path, manifest_path);
     let metadata_mtime = file_modified_at(metadata_sidecar.as_deref());
+    let index_mtime = file_modified_at(runtime_path.and_then(|p| index_sibling_path(p)).as_deref());
 
     {
         let state = records_cache_state()
@@ -362,6 +463,7 @@ pub fn load_records_cached_for_stdio_resolved(
             if entry.runtime_mtime == runtime_mtime
                 && entry.manifest_mtime == manifest_mtime
                 && entry.metadata_mtime == metadata_mtime
+                && entry.index_mtime == index_mtime
             {
                 return Ok(Arc::clone(&entry.records));
             }
@@ -373,6 +475,7 @@ pub fn load_records_cached_for_stdio_resolved(
         runtime_mtime,
         manifest_mtime,
         metadata_mtime,
+        index_mtime,
         records: Arc::clone(&records),
     };
     let mut state = records_cache_state()

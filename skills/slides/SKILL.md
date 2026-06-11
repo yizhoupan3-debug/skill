@@ -44,6 +44,12 @@ artifact_outputs:
 
 ---
 
+## Quick Ref
+- **Purpose**: PPT/PPTX 演示文稿的 artifact-first 生成门控，Rust CLI 驱动，从 deck.plan.json 确定性构建
+- **Key Rules**: 视觉优先内容 ≤45 词/slide；body ≥18pt；anti-ugly 黑名单硬拦；CLI-first 单命令门控；已存在 .pptx 先 intake 再改
+- **Trigger**: "做个 PPT"、"生成演示文稿"、"slides"、"PowerPoint"、"presentation deck"
+<!-- full content below; load on demand -->
+
 # slides
 
 This skill owns the presentation entry gate for artifact-first slide work.

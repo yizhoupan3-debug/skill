@@ -39,6 +39,12 @@ metadata:
 
 ---
 
+## Quick Ref
+- **Purpose**: 多 agent 编排准入门——选择 local/sidecar/workflow 模式，判定 spawn admission 与宿主执行面
+- **Key Rules**: 默认保守不自动升格 workflow；3 模式优先级 explicit > auto_multi_phase > sidecar > local；spawn 需满足 admission 条件；team 概念已废弃
+- **Trigger**: "多 agent 协作"、"workflow 编排"、"swarm"、"planner-coder-reviewer"、"/workflow"
+<!-- full content below; load on demand -->
+
 - **Dual-Dimension Audit (Pre: Swarm-Graph/Handoff-Logic, Post: Consensus/Task-Completion Results)** → runtime verification gate
 # agent-swarm-orchestration
 

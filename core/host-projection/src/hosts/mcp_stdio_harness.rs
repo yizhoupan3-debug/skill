@@ -896,7 +896,7 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
     }
 
     let result = match tool_name {
-        "framework_snapshot" => tool_framework_snapshot(repo_root),
+        "framework_snapshot" => tool_framework_snapshot(arguments, repo_root),
         "skill_route" => tool_skill_route(arguments, repo_root, host_id),
         "record_evidence" => tool_record_evidence(arguments, repo_root),
         "session_checkpoint" => tool_session_checkpoint(arguments, repo_root),
@@ -943,10 +943,16 @@ fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_
     }
 }
 
-fn tool_framework_snapshot(repo_root: &Path) -> Result<String, String> {
+fn tool_framework_snapshot(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+    let detail_level = arguments
+        .get("detail_level")
+        .and_then(Value::as_str)
+        .unwrap_or("summary");
+    let is_full = detail_level == "full";
     let ttl_secs = snapshot_cache_ttl_secs();
     // Try to read from cache (configurable TTL, default 30 seconds)
-    {
+    // Only use cache for summary mode; full mode always recomputes
+    if !is_full {
         let cache = get_snapshot_cache();
         if let Some(guard) = poison_safe_read_lock!(cache) {
             if let Some(ref cached) = *guard {
@@ -958,11 +964,16 @@ fn tool_framework_snapshot(repo_root: &Path) -> Result<String, String> {
     }
 
     // Cache miss: recompute
-    let envelope = crate::hooks::build_framework_runtime_snapshot_envelope(repo_root, None, None)?;
+    let envelope = crate::hooks::build_framework_runtime_snapshot_envelope_with_level(
+        repo_root,
+        None,
+        None,
+        detail_level,
+    )?;
     let content = serde_json::to_string_pretty(&envelope).map_err(|e| e.to_string())?;
 
-    // Update cache with configurable TTL
-    {
+    // Update cache with configurable TTL (summary mode only)
+    if !is_full {
         let cache = get_snapshot_cache();
         if let Some(mut guard) = poison_safe_write_lock!(cache) {
             *guard = Some(SnapshotCache {

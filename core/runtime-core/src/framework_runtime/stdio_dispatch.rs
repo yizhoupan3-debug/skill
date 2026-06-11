@@ -67,7 +67,8 @@ use super::trace_transport::{
 };
 use super::{
     build_framework_alias_envelope, build_framework_contract_summary_envelope,
-    build_framework_prompt_compression_envelope, build_framework_runtime_snapshot_envelope,
+    build_framework_prompt_compression_envelope,
+    build_framework_runtime_snapshot_envelope_with_level,
     build_runtime_observability_health_snapshot, build_sandbox_control_response,
     evaluate_closeout_record_file_for_task, evaluate_pre_tool_use_guard_value,
     framework_hook_evidence_append, resolve_repo_root_arg, write_framework_session_artifacts,
@@ -494,10 +495,13 @@ fn dispatch_stdio_framework_runtime_snapshot(payload: Value) -> Result<Value, St
     let repo_root = resolve_repo_root_arg(Some(Path::new(&repo_root)))?;
     let artifact_root = optional_non_empty_string(&payload, "artifact_source_dir");
     let task_id = optional_non_empty_string(&payload, "task_id");
-    serde_json::to_value(build_framework_runtime_snapshot_envelope(
+    let detail_level = optional_non_empty_string(&payload, "detail_level")
+        .unwrap_or_else(|| "summary".to_string());
+    serde_json::to_value(build_framework_runtime_snapshot_envelope_with_level(
         repo_root.as_path(),
         artifact_root.as_deref().map(Path::new),
         task_id.as_deref(),
+        &detail_level,
     )?)
     .map_err(|err| format!("serialize framework runtime snapshot output failed: {err}"))
 }

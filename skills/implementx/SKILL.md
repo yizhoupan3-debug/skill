@@ -28,6 +28,12 @@ metadata:
   tags: [my-lifecycle, implement, multi-agent, one-breath, orchestrator-worker]
 ---
 
+## Quick Ref
+- **Purpose**: 产品交付 wave 执行器——主线程纯编排，所有实现严格委派给 subagent，一气呵成跑完所有 wave
+- **Key Rules**: 主线程禁止写产品代码；parallel 每 wave ≥3 lane；subagent 必须写 lane-notes（五字段 schema）；one-breath 不停 wave 问用户
+- **Trigger**: `/implementx`（通常接 `/planx` 之后）
+<!-- full content below; load on demand -->
+
 # implementx
 
 （共享 header 见 [`../my-lifecycle-common/header.md`](../my-lifecycle-common/header.md)）

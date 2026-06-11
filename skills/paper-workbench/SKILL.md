@@ -46,6 +46,12 @@ source: local
 
 ---
 
+## Quick Ref
+- **Purpose**: 论文全流程前门——自动路由 reviewer/writer lane，一站式审稿、返修、投稿
+- **Key Rules**: 默认 hostile-but-fair 审稿立场；edit_scope 门控（surgical/refactor）；审稿意见逐条关停；prose chain 自动触发；禁降 claim 逃避
+- **Trigger**: "帮我审这篇 paper"、"改到能投"、"R&R"、"顶刊"、"先审再改"、"整体推进这篇论文"
+<!-- full content below; load on demand -->
+
 # Paper Workbench
 
 This skill is the one front door for paper work.

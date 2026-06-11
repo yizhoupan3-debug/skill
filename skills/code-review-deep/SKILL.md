@@ -54,6 +54,12 @@ allowed_tools:
   - mcp__mcp-codegraph__codegraph_status
 ---
 
+## Quick Ref
+- **Purpose**: 深度对抗式代码审查（review-only），默认输出 severity-sorted findings 紧凑列表
+- **Key Rules**: 默认只审不改；hostile-but-fair 立场；P0/P1 须有 evidence；lens 可扩展目录选型；broad review ≥2 spawned reviewer lane
+- **Trigger**: "review"、"代码审查"、"帮我 review"、"deep code review"、"$code-review-deep"
+<!-- full content below; load on demand -->
+
 # Code review (deep owner)
 
 Judgment-focused review for code and change sets **without** rewriting by default. Portable across repositories: do **not** assume framework-specific files or audit commands exist unless the workspace is this skill/harness repo.

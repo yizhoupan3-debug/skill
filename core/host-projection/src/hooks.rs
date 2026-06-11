@@ -1173,6 +1173,7 @@ static CURRENT_LOCAL_TIMESTAMP: OnceLock<fn() -> String> = OnceLock::new();
 static WRITE_FRAMEWORK_SESSION_ARTARTIFACTS: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
 static ROUTE_TASK_WITH_MANIFEST_FALLBACK: OnceLock<fn(&[routing_engine::route::SkillRecord], Option<&Path>, Option<&Path>, Option<&str>, &str, &str, bool, bool) -> Result<RouteDecision, String>> = OnceLock::new();
 static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>> = OnceLock::new();
+static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL: OnceLock<fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>> = OnceLock::new();
 static BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD: OnceLock<fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value> = OnceLock::new();
 static APPEND_EVIDENCE_INDEX: OnceLock<fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<(), String>> = OnceLock::new();
 static HOOK_ACTION_FROM_OUTPUT: OnceLock<fn(&Value) -> &'static str> = OnceLock::new();
@@ -1269,6 +1270,21 @@ pub fn route_task_with_manifest_fallback(
 
 pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path, artifact_root_override: Option<&Path>, task_id_override: Option<&str>) -> Result<Value, String> {
     BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE.get().map(|f| f(repo_root, artifact_root_override, task_id_override)).unwrap_or_else(|| Err("hooks not registered".into()))
+}
+
+pub fn build_framework_runtime_snapshot_envelope_with_level(repo_root: &Path, artifact_root_override: Option<&Path>, task_id_override: Option<&str>, detail_level: &str) -> Result<Value, String> {
+    if let Some(f) = BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL.get() {
+        f(repo_root, artifact_root_override, task_id_override, detail_level)
+    } else {
+        // Fallback: use old function pointer (ignores detail_level, returns old format)
+        build_framework_runtime_snapshot_envelope(repo_root, artifact_root_override, task_id_override)
+    }
+}
+
+pub fn register_build_framework_runtime_snapshot_envelope_with_level(
+    func: fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>,
+) {
+    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL.set(func).ok();
 }
 
 pub fn build_automatic_continuity_checkpoint_payload(

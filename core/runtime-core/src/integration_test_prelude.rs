@@ -38,6 +38,7 @@ pub(crate) use crate::execution_contract::{
 };
 pub(crate) use crate::framework_runtime::{
     build_framework_alias_envelope, build_framework_runtime_snapshot_envelope,
+    build_framework_runtime_snapshot_envelope_with_level,
     build_framework_statusline, framework_hook_evidence_append, run_continuity_audit,
     write_framework_session_artifacts, FrameworkAliasBuildOptions,
 };

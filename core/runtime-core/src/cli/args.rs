@@ -515,6 +515,8 @@ pub struct FrameworkSnapshotCommand {
     pub artifact_source_dir: Option<PathBuf>,
     #[arg(long)]
     pub task_id: Option<String>,
+    #[arg(long)]
+    pub detail_level: Option<String>,
 }
 
 #[derive(Args, Debug, Clone)]

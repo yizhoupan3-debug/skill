@@ -91,6 +91,7 @@ pub struct RecordsCacheEntry {
     pub runtime_mtime: Option<SystemTime>,
     pub manifest_mtime: Option<SystemTime>,
     pub metadata_mtime: Option<SystemTime>,
+    pub index_mtime: Option<SystemTime>,
     pub records: Arc<Vec<SkillRecord>>,
 }
 

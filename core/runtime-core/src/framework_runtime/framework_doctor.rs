@@ -220,7 +220,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     }
 
     println!("\n--- control plane (supervisor / pointers) ---");
-    match super::build_framework_runtime_snapshot_envelope(repo_root, None, None) {
+    match super::build_framework_runtime_snapshot_envelope_with_level(repo_root, None, None, "full") {
         Ok(envelope) => {
             let snapshot = &envelope["runtime_snapshot"];
             let state = snapshot

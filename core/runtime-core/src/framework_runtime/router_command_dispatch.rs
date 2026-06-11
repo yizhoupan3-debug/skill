@@ -27,7 +27,7 @@ use crate::framework_profile::{
 };
 use crate::framework_runtime::{
     build_framework_alias_envelope, build_framework_contract_summary_envelope,
-    build_framework_prompt_compression_envelope, build_framework_runtime_snapshot_envelope,
+    build_framework_prompt_compression_envelope, build_framework_runtime_snapshot_envelope_with_level,
     build_framework_statusline, framework_hook_evidence_append, resolve_repo_root_arg,
     run_framework_doctor, write_framework_session_artifacts, FrameworkAliasBuildOptions,
 };
@@ -85,10 +85,12 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
     match command {
         FrameworkCommand::Snapshot(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            print_json_value(&build_framework_runtime_snapshot_envelope(
+            let detail_level = command.detail_level.as_deref().unwrap_or("summary");
+            print_json_value(&build_framework_runtime_snapshot_envelope_with_level(
                 &repo_root,
                 command.artifact_source_dir.as_deref(),
                 command.task_id.as_deref(),
+                detail_level,
             )?)
         }
         FrameworkCommand::Doctor(command) => {

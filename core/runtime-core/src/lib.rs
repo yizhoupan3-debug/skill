@@ -226,6 +226,9 @@ pub fn register_host_projection_hooks() {
             || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
             session_call_tracker::check_anomalies,
         );
+        host_projection::hooks::register_build_framework_runtime_snapshot_envelope_with_level(
+            framework_runtime::build_framework_runtime_snapshot_envelope_with_level,
+        );
 
         // web_fetch_guard: convert (Url, Vec<SocketAddr>) → (String, Vec<String>)
         host_projection::hooks::register_web_fetch_guard_extra(
