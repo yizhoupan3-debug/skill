@@ -426,7 +426,7 @@ pub(super) fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLo
     Err(CodexHookError::StateLockTimeout)
 }
 
-pub(super) fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLifecycleContextState>, CodexHookError> {
+pub(crate) fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLifecycleContextState>, CodexHookError> {
     let text = match fs::read_to_string(path) {
         Ok(value) => value,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -478,7 +478,7 @@ pub(super) fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLife
         .or_else(|_| Ok(None))
 }
 
-pub(super) fn codex_load_state(
+pub(crate) fn codex_load_state(
     repo_root: &Path,
     event: &Value,
 ) -> Result<Option<CodexLifecycleContextState>, CodexHookError> {

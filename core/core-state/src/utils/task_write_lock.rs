@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn apply_task_ledger_mutation_callers_use_assume_l1_held() {
         for (label, src) in [
-            ("state_manager", include_str!("../state_manager.rs")),
+            ("goal_ops", include_str!("../state_manager/goal_ops.rs")),
             ("step_ledger", include_str!("../step_ledger.rs")),
         ] {
             assert!(

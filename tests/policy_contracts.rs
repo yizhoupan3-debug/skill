@@ -2458,7 +2458,11 @@ fn sync_skills_uses_router_rs_directly() {
         &project_root().join("core/host-projection/src/hosts/codex_hooks/mod.rs"),
     );
     assert!(codex_source.contains("codex_host_entrypoint_provider"));
-    assert!(codex_source.contains("HostEntrypointPayloadProvider"));
+    // HostEntrypointPayloadProvider lives in install.rs after codex_hooks split
+    let codex_install = read_text(
+        &project_root().join("core/host-projection/src/hosts/codex_hooks/install.rs"),
+    );
+    assert!(codex_install.contains("HostEntrypointPayloadProvider"));
 }
 
 #[test]
