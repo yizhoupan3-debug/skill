@@ -253,7 +253,6 @@ fn append_jsonl_entry(
         .map_err(|err| format!("serialize step ledger entry failed: {err}"))?
         + "\n";
     file.write_all(line.as_bytes())
-        .and_then(|_| file.sync_all())
         .map_err(|err| format!("append step ledger {} failed: {err}", path.display()))?;
 
     // Auto-compact when the file grows past 100 lines.

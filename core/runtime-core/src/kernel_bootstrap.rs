@@ -51,13 +51,14 @@ pub fn ensure_kernel_bootstrap() {
 }
 
 /// Invalidate route record cache when `SKILL_ROUTING_RUNTIME.json` changes on disk (P1-1).
+/// Polls every 1s (config file changes don't need sub-second detection).
 fn spawn_routing_runtime_cache_invalidator() {
     thread::spawn(|| {
         let watch = routing_runtime_watch();
         let mut rx = watch.receiver();
         let _ = rx.borrow_and_update();
         loop {
-            thread::sleep(Duration::from_millis(250));
+            thread::sleep(Duration::from_secs(1));
             if !matches!(rx.has_changed(), Ok(true)) {
                 continue;
             }

@@ -201,6 +201,10 @@ fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, String> {
         return Ok(hit.clone());
     }
     let loaded = load_snapshot_from_disk(&path)?;
+    // Evict all if cache grows unbounded (different repos accumulate)
+    if guard.len() >= 64 {
+        guard.clear();
+    }
     guard.insert(key, loaded.clone());
     Ok(loaded)
 }

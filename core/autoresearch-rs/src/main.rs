@@ -2504,27 +2504,25 @@ fn research_all_claims(
     let state_ref = Arc::new(next_state.clone());
     let source = source.clone();
     let worker_count = to_process.len().min(4).max(1);
-    let (task_tx, task_rx) = mpsc::channel::<Value>();
     let (result_tx, result_rx) = mpsc::channel();
-    let task_rx = Arc::new(std::sync::Mutex::new(task_rx));
-    // Spawn worker threads
+    let tasks = Arc::new(to_process);
+    let next_idx = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    // Spawn worker threads — each claims work via atomic index (no Mutex contention)
     let mut handles = Vec::with_capacity(worker_count);
     for _ in 0..worker_count {
-        let task_rx = Arc::clone(&task_rx);
+        let tasks = Arc::clone(&tasks);
+        let next_idx = Arc::clone(&next_idx);
         let result_tx = result_tx.clone();
         let client = Arc::clone(&client);
         let state_ref = Arc::clone(&state_ref);
         let source = source.clone();
         handles.push(std::thread::spawn(move || {
             loop {
-                let record = {
-                    let rx = task_rx.lock().unwrap();
-                    rx.recv()
-                };
-                let record = match record {
-                    Ok(r) => r,
-                    Err(_) => break,
-                };
+                let idx = next_idx.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if idx >= tasks.len() {
+                    break;
+                }
+                let record = &tasks[idx];
                 let claim_id = record.get("claim_id").and_then(Value::as_str);
                 let query = match default_research_query(Some(&record), None) {
                     Ok(q) => q,
@@ -2546,11 +2544,6 @@ fn research_all_claims(
             }
         }));
     }
-    // Dispatch tasks
-    for record in to_process {
-        let _ = task_tx.send(record);
-    }
-    drop(task_tx);
     drop(result_tx); // drop original sender; workers hold clones
     // Collect results: blocks until all worker clones are dropped
     let mut errors: Vec<String> = Vec::new();
