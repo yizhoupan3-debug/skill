@@ -168,38 +168,38 @@ mod tests {
     use crate::db::schema::init_schema;
 
     fn seed_graph(conn: &rusqlite::Connection) {
-        init_schema(conn).unwrap();
+        init_schema(conn).expect("initialize schema");
         for (id, sym) in [("a", "caller"), ("b", "target"), ("c", "leaf")] {
             conn.execute(
                 "INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES (?1, ?2, 'fn', 'rust', 'f.rs', 1)",
                 rusqlite::params![id, sym],
             )
-            .unwrap();
+            .expect("should succeed");
         }
         conn.execute(
             "INSERT INTO edges (caller_id, callee_id) VALUES ('a', 'b'), ('b', 'c')",
             [],
         )
-        .unwrap();
+        .expect("should succeed");
     }
 
     #[test]
     fn find_callers_returns_direct_caller() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
         seed_graph(&conn);
         let filter = SymbolFilter::from_options(None, None);
-        let callers = find_callers(&conn, "target", 1, &filter).unwrap();
+        let callers = find_callers(&conn, "target", 1, &filter).expect("find callers");
         assert_eq!(callers.len(), 1);
         assert_eq!(callers[0].symbol, "caller");
     }
 
     #[test]
     fn find_callees_supports_depth() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
         seed_graph(&conn);
         let filter = SymbolFilter::from_options(None, None);
         // depth=2 from "caller" should reach "target" (d1) and "leaf" (d2)
-        let callees = find_callees(&conn, "caller", 2, &filter).unwrap();
+        let callees = find_callees(&conn, "caller", 2, &filter).expect("find callees");
         assert_eq!(callees.len(), 2);
         let symbols: Vec<&str> = callees.iter().map(|n| n.symbol.as_str()).collect();
         assert!(symbols.contains(&"target"));
@@ -208,10 +208,10 @@ mod tests {
 
     #[test]
     fn impact_radius_includes_both_directions() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
         seed_graph(&conn);
         let filter = SymbolFilter::from_options(None, None);
-        let report = impact_radius(&conn, "target", 2, &filter).unwrap();
+        let report = impact_radius(&conn, "target", 2, &filter).expect("impact radius");
         assert_eq!(report.callers.len(), 1);
         // callees now supports BFS depth=2
         assert_eq!(report.callees.len(), 1);
@@ -220,8 +220,8 @@ mod tests {
 
     #[test]
     fn duplicate_symbol_callers_do_not_cross_files() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        init_schema(&conn).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        init_schema(&conn).expect("initialize schema");
         for (id, path, caller) in [
             ("a1", "a.rs", "caller_a"),
             ("a2", "a.rs", "shared"),
@@ -232,13 +232,13 @@ mod tests {
                 "INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES (?1, ?2, 'fn', 'rust', ?3, 1)",
                 rusqlite::params![id, caller, path],
             )
-            .unwrap();
+            .expect("should succeed");
         }
         conn.execute(
             "INSERT INTO edges (caller_id, callee_id) VALUES ('a1', 'a2'), ('b1', 'b2')",
             [],
         )
-        .unwrap();
+        .expect("should succeed");
 
         let a_callers = find_callers(
             &conn,
@@ -246,7 +246,7 @@ mod tests {
             1,
             &SymbolFilter::from_options(Some("a.rs"), None),
         )
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(a_callers.len(), 1);
         assert_eq!(a_callers[0].symbol, "caller_a");
 
@@ -256,7 +256,7 @@ mod tests {
             1,
             &SymbolFilter::from_options(Some("b.rs"), None),
         )
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(b_callees.len(), 1);
         assert_eq!(b_callees[0].symbol, "shared");
         assert_eq!(b_callees[0].file_path, "b.rs");

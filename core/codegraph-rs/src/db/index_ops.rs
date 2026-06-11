@@ -173,8 +173,8 @@ mod tests {
 
     #[test]
     fn ingest_replaces_prior_file_nodes() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        init_schema(&conn).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        init_schema(&conn).expect("initialize schema");
         let parsed = ParsedFile {
             path: "src/a.rs".to_string(),
             language: "rust".to_string(),
@@ -191,21 +191,21 @@ mod tests {
                 line: 4,
             }],
         };
-        let (nodes, edges) = ingest_parsed_file(&conn, &parsed).unwrap();
+        let (nodes, edges) = ingest_parsed_file(&conn, &parsed).expect("ingest parsed file");
         assert_eq!(nodes, 1);
         assert_eq!(edges, 1);
-        delete_file_index(&conn, "src/a.rs").unwrap();
+        delete_file_index(&conn, "src/a.rs").expect("ingest parsed file");
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))
-            .unwrap();
+            .expect("query row from DB");
         assert_eq!(count, 0);
     }
 
     #[test]
     fn ingest_stmts_reused_across_files() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        init_schema(&conn).unwrap();
-        let mut stmts = IngestStmts::prepare(&conn).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        init_schema(&conn).expect("initialize schema");
+        let mut stmts = IngestStmts::prepare(&conn).expect("initialize schema");
         for (path, sym) in [("a.rs", "alpha"), ("b.rs", "beta")] {
             let parsed = ParsedFile {
                 path: path.to_string(),
@@ -219,11 +219,11 @@ mod tests {
                 }],
                 edges: vec![],
             };
-            super::ingest_parsed_file_with_stmts(&conn, &mut stmts, &parsed).unwrap();
+            super::ingest_parsed_file_with_stmts(&conn, &mut stmts, &parsed).expect("ingest parsed file");
         }
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))
-            .unwrap();
+            .expect("query row from DB");
         assert_eq!(count, 2);
     }
 }

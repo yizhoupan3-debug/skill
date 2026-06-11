@@ -407,11 +407,11 @@ mod tests {
     fn temp_index() -> (std::path::PathBuf, CodeGraphIndex) {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time since epoch")
             .as_nanos();
         let root = std::env::temp_dir().join(format!("codegraph-mcp-{suffix}"));
-        std::fs::create_dir_all(&root).unwrap();
-        let index = CodeGraphIndex::open(&root).unwrap();
+        std::fs::create_dir_all(&root).expect("create temp directory");
+        let index = CodeGraphIndex::open(&root).expect("create temp directory");
         (root, index)
     }
 
@@ -435,7 +435,7 @@ mod tests {
             assert!(tool.get("inputSchema").is_some());
             assert!(tool.get("outputSchema").is_some());
             // Descriptions should be meaningful (> 50 chars)
-            let desc = tool.get("description").and_then(|v| v.as_str()).unwrap();
+            let desc = tool.get("description").and_then(|v| v.as_str()).expect("should succeed");
             assert!(desc.len() > 50, "tool {name} description too short: {desc}");
         }
     }
@@ -447,17 +447,17 @@ mod tests {
             &json!({"name": "codegraph_status", "arguments": {}}),
             &index,
         )
-        .unwrap();
-        let structured = result.get("structuredContent").unwrap();
+        .expect("should succeed");
+        let structured = result.get("structuredContent").expect("get should succeed");
         assert_eq!(
             structured.get("schema_version").and_then(|v| v.as_str()),
             Some(crate::SCHEMA_VERSION)
         );
         // Should include db_size_bytes in stats
-        let stats = structured.get("stats").unwrap();
+        let stats = structured.get("stats").expect("get should succeed");
         assert!(stats.get("db_size_bytes").is_some());
         // Should include _meta with elapsed_ms
-        let meta = result.get("_meta").unwrap();
+        let meta = result.get("_meta").expect("get should succeed");
         assert!(meta.get("elapsed_ms").is_some());
         let _ = std::fs::remove_dir_all(root);
     }
@@ -466,31 +466,31 @@ mod tests {
     fn dispatch_search_callers_callees_after_index() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time since epoch")
             .as_nanos();
         let root = std::env::temp_dir().join(format!("codegraph-dispatch-{suffix}"));
-        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&root).expect("create temp directory");
         std::fs::write(
             root.join("lib.rs"),
             "fn callee() {}\nfn caller() { callee(); }\n",
         )
-        .unwrap();
-        let index = CodeGraphIndex::open(&root).unwrap();
-        index.build_full_index(&root).unwrap();
+        .expect("should succeed");
+        let index = CodeGraphIndex::open(&root).expect("open test index");
+        index.build_full_index(&root).expect("open test index");
 
         let search = dispatch_tool_call(
             &json!({"name": "codegraph_search", "arguments": {"query": "caller"}}),
             &index,
         )
-        .unwrap();
-        let nodes = search["structuredContent"]["nodes"].as_array().unwrap();
+        .expect("should succeed");
+        let nodes = search["structuredContent"]["nodes"].as_array().expect("as_array should succeed");
         assert!(nodes.iter().any(|n| n["symbol"] == "caller"));
 
         let callers = dispatch_tool_call(
             &json!({"name": "codegraph_callers", "arguments": {"symbol": "callee"}}),
             &index,
         )
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(
             callers["structuredContent"]["nodes"][0]["symbol"],
             "caller"
@@ -500,7 +500,7 @@ mod tests {
             &json!({"name": "codegraph_callees", "arguments": {"symbol": "caller"}}),
             &index,
         )
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(
             callees["structuredContent"]["nodes"][0]["symbol"],
             "callee"
@@ -510,15 +510,15 @@ mod tests {
             &json!({"name": "codegraph_impact", "arguments": {"symbol": "callee", "depth": 1}}),
             &index,
         )
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(impact["structuredContent"]["callers"][0]["symbol"], "caller");
 
-        let node_id = nodes[0]["id"].as_str().unwrap();
+        let node_id = nodes[0]["id"].as_str().expect("as_str should succeed");
         let node = dispatch_tool_call(
             &json!({"name": "codegraph_node", "arguments": {"id": node_id}}),
             &index,
         )
-        .unwrap();
+        .expect("should succeed");
         assert_eq!(node["structuredContent"]["node"]["symbol"], "caller");
 
         let _ = std::fs::remove_dir_all(root);
@@ -528,20 +528,20 @@ mod tests {
     fn codegraph_node_returns_candidates_for_ambiguous_symbol() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time since epoch")
             .as_nanos();
         let root = std::env::temp_dir().join(format!("codegraph-ambig-{suffix}"));
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::write(root.join("a.rs"), "fn shared() {}\n").unwrap();
-        std::fs::write(root.join("b.rs"), "fn shared() {}\n").unwrap();
-        let index = CodeGraphIndex::open(&root).unwrap();
-        index.build_full_index(&root).unwrap();
+        std::fs::create_dir_all(&root).expect("create temp directory");
+        std::fs::write(root.join("a.rs"), "fn shared() {}\n").expect("create temp directory");
+        std::fs::write(root.join("b.rs"), "fn shared() {}\n").expect("create temp directory");
+        let index = CodeGraphIndex::open(&root).expect("create temp directory");
+        index.build_full_index(&root).expect("write test file");
 
         let result = dispatch_tool_call(
             &json!({"name": "codegraph_node", "arguments": {"symbol": "shared"}}),
             &index,
         )
-        .unwrap();
+        .expect("should succeed");
         let candidates = result["structuredContent"]["candidates"]
             .as_array()
             .expect("expected candidates for ambiguous symbol");
@@ -557,8 +557,8 @@ mod tests {
             &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
             &index,
         )
-        .unwrap();
-        assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 6);
+        .expect("should succeed");
+        assert_eq!(response["result"]["tools"].as_array().expect("as_array should succeed").len(), 6);
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -566,13 +566,13 @@ mod tests {
     fn prepare_index_runs_sync_and_spawns_watcher() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time since epoch")
             .as_nanos();
         let root = std::env::temp_dir().join(format!("codegraph-prepare-{suffix}"));
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::write(root.join("lib.rs"), "fn gamma() {}\n").unwrap();
-        let (index, _watcher) = super::prepare_index(&root).unwrap();
-        let stats = index.index_stats().unwrap();
+        std::fs::create_dir_all(&root).expect("create temp directory");
+        std::fs::write(root.join("lib.rs"), "fn gamma() {}\n").expect("create temp directory");
+        let (index, _watcher) = super::prepare_index(&root).expect("create temp directory");
+        let stats = index.index_stats().expect("create temp directory");
         assert!(stats.node_count >= 1);
         let _ = std::fs::remove_dir_all(root);
     }
@@ -581,14 +581,14 @@ mod tests {
     fn ambiguous_symbol_error_is_structured_json() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time since epoch")
             .as_nanos();
         let root = std::env::temp_dir().join(format!("codegraph-err-{suffix}"));
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::write(root.join("a.rs"), "fn dup() {}\n").unwrap();
-        std::fs::write(root.join("b.rs"), "fn dup() {}\n").unwrap();
-        let index = CodeGraphIndex::open(&root).unwrap();
-        index.build_full_index(&root).unwrap();
+        std::fs::create_dir_all(&root).expect("create temp directory");
+        std::fs::write(root.join("a.rs"), "fn dup() {}\n").expect("create temp directory");
+        std::fs::write(root.join("b.rs"), "fn dup() {}\n").expect("create temp directory");
+        let index = CodeGraphIndex::open(&root).expect("create temp directory");
+        index.build_full_index(&root).expect("write test file");
 
         let result = dispatch_tool_call(
             &json!({"name": "codegraph_callers", "arguments": {"symbol": "dup"}}),
@@ -600,7 +600,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&err_msg)
             .expect("error should be valid JSON");
         assert_eq!(parsed["error"], "ambiguous_symbol");
-        assert!(parsed["candidates"].as_array().unwrap().len() >= 1);
+        assert!(parsed["candidates"].as_array().expect("as_array should succeed").len() >= 1);
 
         let _ = std::fs::remove_dir_all(root);
     }

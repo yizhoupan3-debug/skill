@@ -77,7 +77,7 @@ fn main() {
     helper();
 }
 "#;
-        let parsed = parse_file(Path::new("main.rs"), src, 1).unwrap();
+        let parsed = parse_file(Path::new("main.rs"), src, 1).expect("parse file");
         assert!(parsed.symbols.iter().any(|s| s.symbol == "main"));
         assert!(parsed.edges.iter().any(|e| e.callee_symbol == "helper"));
     }

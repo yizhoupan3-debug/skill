@@ -120,30 +120,30 @@ mod tests {
 
     #[test]
     fn schema_initializes_on_memory_db() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        init_schema(&conn).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        init_schema(&conn).expect("initialize schema");
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table'", [], |r| {
                 r.get(0)
             })
-            .unwrap();
+            .expect("query row from DB");
         assert!(count >= 4);
     }
 
     #[test]
     fn fresh_schema_stamps_current_version() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        init_schema(&conn).unwrap();
-        migrate_schema(&conn).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        init_schema(&conn).expect("initialize schema");
+        migrate_schema(&conn).expect("initialize schema");
         assert_eq!(
-            get_meta(&conn, META_SCHEMA_VERSION_KEY).unwrap().as_deref(),
+            get_meta(&conn, META_SCHEMA_VERSION_KEY).expect("initialize schema").as_deref(),
             Some(SCHEMA_VERSION)
         );
     }
 
     #[test]
     fn legacy_v2_db_migrates_content_hash_column() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
         conn.execute_batch(
             r#"
             CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -159,10 +159,10 @@ mod tests {
             );
             "#,
         )
-        .unwrap();
-        migrate_schema(&conn).unwrap();
+        .expect("should succeed");
+        migrate_schema(&conn).expect("migrate schema");
         assert_eq!(
-            get_meta(&conn, META_SCHEMA_VERSION_KEY).unwrap().as_deref(),
+            get_meta(&conn, META_SCHEMA_VERSION_KEY).expect("migrate schema").as_deref(),
             Some(SCHEMA_VERSION)
         );
         let has_hash: i64 = conn
@@ -171,13 +171,13 @@ mod tests {
                 [],
                 |r| r.get(0),
             )
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(has_hash, 1);
     }
 
     #[test]
     fn legacy_v1_db_migrates_to_current() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
         conn.execute_batch(
             r#"
             PRAGMA journal_mode=WAL;
@@ -193,10 +193,10 @@ mod tests {
             );
             "#,
         )
-        .unwrap();
-        migrate_schema(&conn).unwrap();
+        .expect("should succeed");
+        migrate_schema(&conn).expect("migrate schema");
         assert_eq!(
-            get_meta(&conn, META_SCHEMA_VERSION_KEY).unwrap().as_deref(),
+            get_meta(&conn, META_SCHEMA_VERSION_KEY).expect("migrate schema").as_deref(),
             Some(SCHEMA_VERSION)
         );
         let pair_index: i64 = conn
@@ -205,26 +205,26 @@ mod tests {
                 [],
                 |r| r.get(0),
             )
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(pair_index, 1);
     }
 
     #[test]
     fn fts_trigger_syncs_on_insert() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        init_schema(&conn).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        init_schema(&conn).expect("initialize schema");
         conn.execute(
             "INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             rusqlite::params!["n1", "alpha_fn", "fn", "rust", "a.rs", 1],
         )
-        .unwrap();
+        .expect("should succeed");
         let hits: i64 = conn
             .query_row(
                 "SELECT COUNT(*) FROM nodes_fts WHERE nodes_fts MATCH ?1",
                 ["alpha"],
                 |r| r.get(0),
             )
-            .unwrap();
+            .expect("should succeed");
         assert_eq!(hits, 1);
     }
 }

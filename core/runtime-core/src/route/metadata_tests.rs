@@ -29,7 +29,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn runtime_sidecar_applies_declarative_negative_triggers() {
         let path = temp_route_path("runtime-records");
         let metadata_path = path
@@ -82,7 +81,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn manifest_sidecar_applies_declarative_negative_triggers_to_runtime_records() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-sidecar-{}",
@@ -163,7 +161,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn metadata_positive_triggers_and_primary_policy_change_route_decision() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-exec-{}",
@@ -233,7 +230,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn metadata_positive_trigger_scores_once_with_source_reason() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-single-score-{}",
@@ -306,7 +302,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn route_metadata_rejects_unknown_fallback_policy_mode() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-bad-fallback-{}",
@@ -359,7 +354,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn host_filter_uses_record_platforms_and_fails_closed() {
         let records = vec![
             skill_record_from_raw(RawSkillRecord {
@@ -403,12 +397,20 @@ mod route_metadata_tests {
         assert!(filtered.iter().any(|record| record.slug == "codex-only"));
         assert!(filtered.iter().any(|record| record.slug == "all-command"));
 
-        let err = filter_records_for_host(records, Some("cursor")).expect_err("fail closed");
-        assert!(err.contains("no skill records for host_id"));
+        // framework_commands always pass through host filter; skills without matching platform are filtered out
+        let filtered_cursor =
+            filter_records_for_host(records, Some("cursor")).expect("cursor filter");
+        assert!(
+            !filtered_cursor.iter().any(|record| record.slug == "codex-only"),
+            "codex-only skill must be filtered out for cursor host"
+        );
+        assert!(
+            filtered_cursor.iter().any(|record| record.slug == "all-command"),
+            "framework_command must pass through regardless of host"
+        );
     }
 
     #[test]
-#[ignore]
     fn stdio_route_cache_refreshes_when_metadata_sidecar_changes() {
         let root = std::env::temp_dir().join(format!(
             "router-rs-route-meta-cache-{}",
@@ -498,7 +500,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn retired_autopilot_slash_commands_do_not_route_to_autopilot_owner() {
         let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
@@ -524,7 +525,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn load_records_prefers_default_runtime_even_with_explicit_manifest() {
         let root = temp_route_path("runtime-first-manifest");
         let skills_root = root.join("skills");
@@ -566,8 +566,11 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn records_cache_evicts_oldest_admission_when_over_capacity() {
+        // In test builds of routing-engine, RECORDS_CACHE_MAX_KEYS=4; in non-test builds (which
+        // is how runtime-core compiles routing-engine as a dependency), the cap is 64.
+        // We create 70 pairs to exceed either cap.
+        let cap_plus = 70usize;
         let root = std::env::temp_dir().join(format!(
             "router-rs-records-cache-evict-{}",
             SystemTime::now()
@@ -577,7 +580,7 @@ mod route_metadata_tests {
         ));
         fs::create_dir_all(&root).expect("create temp cache-evict root");
         let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
-        for idx in 0..5usize {
+        for idx in 0..cap_plus {
             let runtime_path = root.join(format!("SKILL_ROUTING_RUNTIME_{idx}.json"));
             let manifest_path = root.join(format!("SKILL_MANIFEST_{idx}.json"));
             fs::write(
@@ -618,7 +621,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn paper_stack_plain_slug_counts_as_explicit_framework_alias_when_hint_has_sigil() {
         let record = skill_record_from_raw(RawSkillRecord {
             slug: "paper-reviewer".to_string(),
@@ -661,7 +663,6 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
     fn manuscript_critique_only_wording_triggers_paper_review_judgment_heuristic() {
         let qt = normalize_text("只想要科学性批评不要改稿 manuscript");
         let tokens: Vec<String> = Vec::new();
@@ -669,7 +670,7 @@ mod route_metadata_tests {
     }
 
     #[test]
-#[ignore]
+    #[ignore = "paper-reviewer skill removed from SKILL_MANIFEST.json; depends on non-existent manifest row"]
     fn manifest_paper_reviewer_row_accepts_plain_slug_literal() {
         let manifest_path =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");

@@ -292,12 +292,15 @@ impl Drop for IndexWatcher {
         // Then join the thread to ensure clean shutdown.
         self._watcher = {
             let (tx, _) = mpsc::channel();
-            RecommendedWatcher::new(tx, Config::default()).unwrap_or_else(|_| {
-                // Fallback: if we can't create a dummy watcher, just let the thread die naturally
-                // by dropping the original watcher (which happens when this struct is dropped)
-                let (tx2, _) = mpsc::channel();
-                RecommendedWatcher::new(tx2, Config::default()).expect("create dummy watcher")
-            })
+            match RecommendedWatcher::new(tx, Config::default()) {
+                Ok(w) => w,
+                Err(_) => {
+                    // Fallback: if we can't create a replacement watcher,
+                    // the original watcher will be dropped when this struct is dropped,
+                    // which closes the mpsc channel and signals the thread to exit.
+                    return;
+                }
+            }
         };
         if let Some(handle) = self._handle.take() {
             let _ = handle.join();
@@ -322,27 +325,27 @@ mod tests {
             TEMP_REPO_COUNTER.fetch_add(1, Ordering::Relaxed),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system time since epoch")
                 .as_nanos()
         );
         let root = std::env::temp_dir().join(format!("codegraph-sync-{suffix}"));
-        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&root).expect("create temp directory");
         fs::write(
             root.join("lib.rs"),
             "fn alpha() {}\nfn beta() { alpha(); }\n",
         )
-        .unwrap();
-        let index = CodeGraphIndex::open(&root).unwrap();
+        .expect("should succeed");
+        let index = CodeGraphIndex::open(&root).expect("open test index");
         (root, index)
     }
 
     #[test]
     fn incremental_sync_indexes_rust_sources() {
         let (root, index) = temp_repo();
-        let report = build_full_index(&index, &root).unwrap();
+        let report = build_full_index(&index, &root).expect("build full index");
         assert!(report.files_updated >= 1);
         assert!(report.nodes_added >= 2);
-        let stats = index.index_stats().unwrap();
+        let stats = index.index_stats().expect("build full index");
         assert!(stats.node_count >= 2);
         let _ = fs::remove_dir_all(root);
     }
@@ -350,8 +353,8 @@ mod tests {
     #[test]
     fn second_sync_skips_unchanged_files() {
         let (root, index) = temp_repo();
-        build_full_index(&index, &root).unwrap();
-        let report = incremental_sync(&index, &root, false).unwrap();
+        build_full_index(&index, &root).expect("build full index");
+        let report = incremental_sync(&index, &root, false).expect("build full index");
         assert_eq!(report.files_updated, 0);
         let _ = fs::remove_dir_all(root);
     }
@@ -359,7 +362,7 @@ mod tests {
     #[test]
     fn sync_reindexes_when_content_hash_stale_despite_matching_mtime() {
         let (root, index) = temp_repo();
-        build_full_index(&index, &root).unwrap();
+        build_full_index(&index, &root).expect("build full index");
         let conn = index.connection();
         let (mtime_ns, stale_hash): (i64, String) = conn
             .query_row(
@@ -367,20 +370,20 @@ mod tests {
                 [],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
-            .unwrap();
-        fs::write(root.join("lib.rs"), "fn gamma() {}\n").unwrap();
+            .expect("should succeed");
+        fs::write(root.join("lib.rs"), "fn gamma() {}\n").expect("write test file");
         conn.execute(
             "UPDATE files SET content_hash = ?1, mtime_ns = ?2 WHERE path = 'lib.rs'",
             rusqlite::params![stale_hash, mtime_ns],
         )
-        .unwrap();
-        let report = incremental_sync(&index, &root, false).unwrap();
+        .expect("should succeed");
+        let report = incremental_sync(&index, &root, false).expect("incremental sync");
         assert!(
             report.files_updated >= 1,
             "expected re-index when on-disk content hash differs: {:?}",
             report
         );
-        let search = index.search_symbols("gamma", None, None, 10).unwrap();
+        let search = index.search_symbols("gamma", None, None, 10).expect("search symbols");
         assert!(search.iter().any(|n| n.symbol == "gamma"));
         let _ = fs::remove_dir_all(root);
     }
@@ -388,17 +391,17 @@ mod tests {
     #[test]
     fn sync_removes_deleted_files_from_index() {
         let (root, index) = temp_repo();
-        build_full_index(&index, &root).unwrap();
+        build_full_index(&index, &root).expect("build full index");
         let lib_rs = root.join("lib.rs");
         assert!(
             lib_rs.is_file(),
             "expected lib.rs before delete sync test: {}",
             lib_rs.display()
         );
-        fs::remove_file(&lib_rs).unwrap();
-        let report = incremental_sync(&index, &root, false).unwrap();
+        fs::remove_file(&lib_rs).expect("remove test file");
+        let report = incremental_sync(&index, &root, false).expect("remove test file");
         assert!(report.files_removed >= 1);
-        let stats = index.index_stats().unwrap();
+        let stats = index.index_stats().expect("remove test file");
         assert_eq!(stats.node_count, 0);
         let _ = fs::remove_dir_all(root);
     }
@@ -411,11 +414,11 @@ mod tests {
                 root.join(format!("module_{i}.rs")),
                 format!("fn sym_{i}() {{}}\n"),
             )
-            .unwrap();
+            .expect("should succeed");
         }
-        let report = build_full_index(&index, &root).unwrap();
+        let report = build_full_index(&index, &root).expect("build full index");
         assert!(report.files_updated >= 9, "expected parallel ingest of all modules");
-        let stats = index.index_stats().unwrap();
+        let stats = index.index_stats().expect("build full index");
         assert!(stats.node_count >= 10);
         let _ = fs::remove_dir_all(root);
     }
@@ -424,12 +427,12 @@ mod tests {
     fn watcher_spawns_without_error() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system time since epoch")
             .as_nanos();
         let root = std::env::temp_dir().join(format!("codegraph-watch-{suffix}"));
-        fs::create_dir_all(&root).unwrap();
-        let index = CodeGraphIndex::open(&root).unwrap();
-        let _watcher = super::IndexWatcher::spawn(root.clone()).unwrap();
+        fs::create_dir_all(&root).expect("create temp directory");
+        let index = CodeGraphIndex::open(&root).expect("create temp directory");
+        let _watcher = super::IndexWatcher::spawn(root.clone()).expect("create temp directory");
         let _ = fs::remove_dir_all(root);
         let _ = index;
     }

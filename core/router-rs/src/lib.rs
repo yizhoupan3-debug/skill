@@ -318,8 +318,8 @@ pub use runtime_core::integration_test_prelude;
 #[cfg(feature = "codegraph")]
 pub use runtime_core::codegraph_mcp;
 #[cfg(feature = "codegraph")]
-pub mod mcp_common;
-pub mod types;
+pub(crate) mod mcp_common;
+pub(crate) mod types;
 
 // ── proxy modules (thin re-exports kept in router-rs, used only by tests) ──
 #[cfg(test)]
@@ -336,7 +336,8 @@ mod task_write_lock {
 }
 
 // ── hook_status (inline) ──
-pub mod hook_status {
+#[allow(dead_code)] // constants available for hook status tracking
+pub(crate) mod hook_status {
     pub const REVIEW_GATE_CHECKING: &str = "Loading Codex turn context";
     pub const REVIEW_GATE_UPDATING: &str = "Recording Codex tool evidence";
     pub const REVIEW_GATE_ENFORCING: &str = "Enforcing Codex review gate";

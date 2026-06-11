@@ -45,18 +45,18 @@ mod tests {
 
     #[test]
     fn stats_reflect_empty_index() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        init_schema(&conn).unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        init_schema(&conn).expect("initialize schema");
         // Use a temp path for db_path
         let tmp = std::env::temp_dir().join("codegraph-stats-test");
-        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::create_dir_all(&tmp).expect("create temp directory");
         let db_path = tmp.join("index.sqlite");
         // Create empty file so metadata works
-        std::fs::write(&db_path, "").unwrap();
-        let stats = index_stats(&conn, &db_path).unwrap();
+        std::fs::write(&db_path, "").expect("create temp directory");
+        let stats = index_stats(&conn, &db_path).expect("write test file");
         assert_eq!(stats.node_count, 0);
         assert!(stats.db_size_bytes.is_some());
-        assert!(list_files(&conn).unwrap().is_empty());
+        assert!(list_files(&conn).expect("list files").is_empty());
         let _ = std::fs::remove_dir_all(tmp);
     }
 }

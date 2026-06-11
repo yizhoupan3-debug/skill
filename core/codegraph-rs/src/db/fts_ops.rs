@@ -88,7 +88,7 @@ mod tests {
     use crate::parser::{ParsedFile, ParsedSymbol};
 
     fn seed_test_data(conn: &rusqlite::Connection) {
-        init_schema(conn).unwrap();
+        init_schema(conn).expect("initialize schema");
         ingest_parsed_file(
             conn,
             &ParsedFile {
@@ -111,7 +111,7 @@ mod tests {
                 edges: vec![],
             },
         )
-        .unwrap();
+        .expect("should succeed");
         ingest_parsed_file(
             conn,
             &ParsedFile {
@@ -127,22 +127,22 @@ mod tests {
                 edges: vec![],
             },
         )
-        .unwrap();
+        .expect("should succeed");
     }
 
     #[test]
     fn search_returns_matching_symbols_via_fts() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
         seed_test_data(&conn);
-        let hits = search_symbols(&conn, "search", None, None, 10).unwrap();
+        let hits = search_symbols(&conn, "search", None, None, 10).expect("search symbols");
         assert!(hits.len() >= 2, "expected multiple search results");
     }
 
     #[test]
     fn search_filters_by_kind_in_sql() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
         seed_test_data(&conn);
-        let hits = search_symbols(&conn, "search", Some("fn"), None, 10).unwrap();
+        let hits = search_symbols(&conn, "search", Some("fn"), None, 10).expect("search symbols");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].symbol, "search_me");
         assert_eq!(hits[0].kind, "fn");
@@ -150,9 +150,9 @@ mod tests {
 
     #[test]
     fn search_filters_by_language_in_sql() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
         seed_test_data(&conn);
-        let hits = search_symbols(&conn, "search", None, Some("python"), 10).unwrap();
+        let hits = search_symbols(&conn, "search", None, Some("python"), 10).expect("search symbols");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].symbol, "search_py");
     }
