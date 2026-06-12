@@ -2563,6 +2563,7 @@ fn ppt_rust_manifest_exposes_direct_cli() {
 fn ppt_rust_cli_owns_workspace_and_outline_commands() {
     let main_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/main.rs"));
     let lib_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/lib.rs"));
+    let commands_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/commands.rs"));
     let qa_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/qa.rs"));
     let office_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/office.rs"));
     assert!(main_source.contains("Init(InitArgs)"));
@@ -2570,11 +2571,14 @@ fn ppt_rust_cli_owns_workspace_and_outline_commands() {
     assert!(main_source.contains("BuildQa(BuildQaArgs)"));
     assert!(lib_source.contains("fn init_workspace("));
     assert!(lib_source.contains("default_value = \"deck.plan.json\""));
-    assert!(lib_source.contains("workdir.join(\"deck.pptx\")"));
-    assert!(lib_source.contains("QualityMode::Strict"));
+    // workdir.join("deck.pptx") 和 QualityMode::Strict 已移至 commands.rs
+    assert!(commands_source.contains("workdir.join(\"deck.pptx\")"));
+    assert!(commands_source.contains("QualityMode::Strict"));
     assert!(lib_source.contains("fn strict_quality_gate("));
     assert!(lib_source.contains("fn write_pptx_package("));
-    assert!(lib_source.contains("fn build_pptx_slide_specs("));
+    // build_pptx_slide_specs 已移至 slide_specs.rs 子模块
+    let slide_specs_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/slide_specs.rs"));
+    assert!(slide_specs_source.contains("fn build_pptx_slide_specs("));
     assert!(office_source.contains("fn rust_office_outline_value("));
     assert!(office_source.contains("fn rust_office_issues_value("));
     assert!(office_source.contains("fn rust_office_validate_value("));
@@ -2870,20 +2874,31 @@ fn slides_gate_is_executable_and_evidence_closed() {
 
 #[test]
 fn ppt_rust_outline_generation_naturalizes_copy_and_design_chain() {
-    let source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/lib.rs"));
+    // naturalize_outline_value 已移至 yaml_parse.rs，naturalize_copy_text 已移至 text_processing.rs
+    let yaml_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/yaml_parse.rs"));
+    let text_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/text_processing.rs"));
     for marker in [
         "fn naturalize_outline_value(",
-        "fn naturalize_copy_text(",
         "let outline = naturalize_outline_value(outline);",
+    ] {
+        assert!(yaml_source.contains(marker), "missing marker in yaml_parse.rs: {marker}");
+    }
+    for marker in [
+        "fn naturalize_copy_text(",
+        r#""本页展示""#,
+        r#""赋能""#,
+    ] {
+        assert!(text_source.contains(marker), "missing marker in text_processing.rs: {marker}");
+    }
+    // design-md drift verdict + copy naturalization markers 已移至 yaml_parse.rs
+    for marker in [
+        "design-md drift verdict",
         "generic AI filler",
         "built-in Rust copy naturalization",
         "$copywriting",
         "$paper-writing",
-        "design-md drift verdict",
-        r#""本页展示""#,
-        r#""赋能""#,
     ] {
-        assert!(source.contains(marker), "missing marker: {marker}");
+        assert!(yaml_source.contains(marker), "missing marker in yaml_parse.rs: {marker}");
     }
 }
 

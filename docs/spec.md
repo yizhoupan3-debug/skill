@@ -102,7 +102,7 @@ rust_tools/ (6 活跃 MCP crates)
 └── 各自 lib.rs + mcp/mod.rs + mcp_main.rs binary
 ```
 
-### 1.2 设计原则
+> 各 crate 的详细模块拆解、pub API 和技术债见 [`docs/modules/`](modules/) 下对应文档。
 
 | 原则 | 含义 |
 |------|------|

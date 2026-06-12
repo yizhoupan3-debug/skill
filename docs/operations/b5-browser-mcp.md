@@ -3,6 +3,8 @@ last_verified: "2026-06-09"
 plate: B5
 ---
 
+> 代码结构与 API 详见 [`docs/modules/browser-mcp.md`](../modules/browser-mcp.md)。
+
 # B5 — browser-mcp
 
 ## 职责

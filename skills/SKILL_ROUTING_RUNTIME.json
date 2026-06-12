@@ -4,7 +4,7 @@
   "scope": {
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
     "full_skill_count": 44,
-    "hot_skill_count": 43,
+    "hot_skill_count": 44,
     "manifest_skill_count": 38,
     "kind": "hot",
     "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
@@ -1330,6 +1330,47 @@
       "skills/scientific-figure-plotting/SKILL.md",
       "skill",
       null,
+      null
+    ],
+    [
+      "simplify",
+      "L2",
+      "owner",
+      "none",
+      "P2",
+      "行为守恒的三维度并行代码简化审查（复用/质量/效率）。默认 findings-only，可选自动修复模式。与 code-review-deep 互补。集成框架生命周期。",
+      "preferred",
+      [
+        "/simplify",
+        "simplify",
+        "代码简化",
+        "简化代码",
+        "代码清理",
+        "code simplify",
+        "clean up code",
+        "重构简化",
+        "去重",
+        "过度工程",
+        "质量门"
+      ],
+      "project",
+      [
+        "claude-code",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
+      "skills/simplify/SKILL.md",
+      "skill",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Glob",
+        "Grep",
+        "Agent"
+      ],
       null
     ],
     [
