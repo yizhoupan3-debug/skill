@@ -22,7 +22,6 @@ static ATOMIC_WRITE_NONCE: AtomicU64 = AtomicU64::new(0);
 /// Structured error type for Codex hook operations.
 /// Replaces ad-hoc `Result<_, String>` with typed, matchable errors.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum CodexHookError {
     /// Failed to create the hook-state directory.
     StateDirCreate(io::Error),
@@ -46,10 +45,6 @@ pub enum CodexHookError {
     StateWriteFailed,
     /// Failed to serialize payload to JSON.
     PayloadSerialization(serde_json::Error),
-    /// router-rs binary not found.
-    BinaryUnavailable,
-    /// Install lock timeout.
-    InstallLockTimeout,
     /// Generic error for install/sync operations.
     InstallSync(String),
 }
@@ -68,8 +63,6 @@ impl std::fmt::Display for CodexHookError {
             Self::StateJsonInvalid(msg) => write!(f, "state_json_invalid: {msg}"),
             Self::StateWriteFailed => write!(f, "state_write_failed"),
             Self::PayloadSerialization(e) => write!(f, "payload_serialization_failed: {e}"),
-            Self::BinaryUnavailable => write!(f, "router-rs binary unavailable"),
-            Self::InstallLockTimeout => write!(f, "install_lock_timeout"),
             Self::InstallSync(msg) => write!(f, "{msg}"),
         }
     }

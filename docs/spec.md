@@ -1,19 +1,6 @@
 ---
-last_verified: "2026-06-11"
-version: "unified-v6"
-# 以下子文档是 spec.md 的延伸章节（Extension Chapters），各自保留聚焦内容。
-# spec.md 为总览 + 索引 + 全局契约；子文档为子系统详细规约。
-# 两者权威性等同，子文档在各自领域内为真源（详见各文档 frontmatter）。
-extends:
-  - docs/host_adapter_contract.md        # §7 宿主接入详表
-  - docs/rust_contracts.md               # §8 路由与插件、§13 传输与持久化
-  - docs/harness_architecture/           # §2 五层模型、§5 多 Agent 编排、§10 Hook 系统
-  - docs/rust_contracts/                 # Rust 契约拆分详设
-  - docs/framework_profile_contract.md   # §9.6 运维开关组合
-  - docs/closeout_enforcement.md         # §12 Closeout 运维参考
-  - docs/task_state_unified_resolve.md   # §3 Task state 设计
-  - docs/rfv_loop_harness.md             # §12.2 RFV harness
-  - docs/harness_policy_map.md           # 叙事裁判地图
+last_verified: "2026-06-12"
+version: "unified-v6.5"
 ---
 
 # 框架统一规约 (Unified Framework Specification)

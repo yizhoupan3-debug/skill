@@ -197,6 +197,15 @@ pub fn managed_mcp_server_for_tool(registry: &Value, tool_name: &str) -> Option<
     None
 }
 
+/// Return all managed MCP server IDs from the registry.
+pub fn managed_mcp_server_ids(registry: &Value) -> Vec<String> {
+    registry
+        .get("managed_mcp_servers")
+        .and_then(Value::as_object)
+        .map(|obj| obj.keys().cloned().collect())
+        .unwrap_or_default()
+}
+
 /// Parse Cursor-style MCP tool FQN: `mcp__{server_id}__{tool_name}`.
 pub fn parse_host_mcp_tool_fqn(fqn: &str) -> Option<(String, String)> {
     let rest = fqn.strip_prefix("mcp__")?;

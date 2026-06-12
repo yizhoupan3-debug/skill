@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - ../host_adapter_contract.md
+  - ../spec.md
   - ../spec.md
 ---
 

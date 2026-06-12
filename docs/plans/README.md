@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - ../framework_operator_primer.md
+  - ../spec.md
 ---
 
 # Plans index

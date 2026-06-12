@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-08"
 depends_on:
-  - ../framework_operator_primer.md
+  - ../spec.md
   - ../../skills/pdf/SKILL.md
   - ../../skills/doc/SKILL.md
   - ../../skills/primary-runtime/spreadsheets/SKILL.md

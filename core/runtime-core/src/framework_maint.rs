@@ -537,7 +537,9 @@ fn verify_opencode_projection_scope(
     }
 
     let config_text = fs::read_to_string(&config).map_err(|e| e.to_string())?;
-    let required_mcps = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
+    let registry = framework_kernel::runtime_registry::load_runtime_registry_payload(&roots.project_root)
+        .map_err(|e| format!("verify_opencode_projection: {e}"))?;
+    let required_mcps = framework_kernel::runtime_registry::managed_mcp_server_ids(&registry);
     for mcp_id in &required_mcps {
         if !config_text.contains(mcp_id) {
             return Err(format!(
@@ -599,7 +601,9 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
             "verify_codex_hooks: .codex/config.toml must not use deprecated codex_hooks".into(),
         );
     }
-    let required_mcps = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
+    let registry = framework_kernel::runtime_registry::load_runtime_registry_payload(&repo_root)
+        .map_err(|e| format!("verify_codex_hooks: {e}"))?;
+    let required_mcps = framework_kernel::runtime_registry::managed_mcp_server_ids(&registry);
     for mcp_id in &required_mcps {
         if !config.contains(mcp_id) {
             return Err(format!(

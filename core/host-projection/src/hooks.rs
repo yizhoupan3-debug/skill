@@ -73,7 +73,7 @@ impl PaperProseHookHost {
     }
 }
 
-/// Mirror of `runtime_core::ship_readiness::GoalReadiness`.
+/// Goal readiness flags used by review gate handlers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct GoalReadiness {
     pub contract: bool,
@@ -515,12 +515,30 @@ pub fn strip_router_rs_observation(output: &mut Value) {
 }
 
 // ────────────────────────────────────────────────────────────────
-// hook_outbound_protect: function-pointer proxies (OnceLock)
+// hook_outbound_protect: default policy (register removed — was never called in production)
 // ────────────────────────────────────────────────────────────────
 
+#[cfg(not(test))]
+pub fn hook_outbound_line_is_framework_protected(_line: &str) -> bool {
+    false
+}
+
+#[cfg(not(test))]
+pub fn truncate_hook_outbound_lines_preserving(
+    combined: &str,
+    _max_bytes: usize,
+    _suffix: &str,
+) -> String {
+    combined.to_string()
+}
+
+// In tests, use a static override so test registrations can inject behavior.
+#[cfg(test)]
 static OUTBOUND_PROTECTED: OnceLock<fn(&str) -> bool> = OnceLock::new();
+#[cfg(test)]
 static TRUNCATE_OUTBOUND: OnceLock<fn(&str, usize, &str) -> String> = OnceLock::new();
 
+#[cfg(test)]
 pub fn register_hook_outbound_protect(
     is_protected: fn(&str) -> bool,
     truncate: fn(&str, usize, &str) -> String,
@@ -529,10 +547,12 @@ pub fn register_hook_outbound_protect(
     TRUNCATE_OUTBOUND.set(truncate).ok();
 }
 
+#[cfg(test)]
 pub fn hook_outbound_line_is_framework_protected(line: &str) -> bool {
     OUTBOUND_PROTECTED.get().map(|f| f(line)).unwrap_or(false)
 }
 
+#[cfg(test)]
 pub fn truncate_hook_outbound_lines_preserving(
     combined: &str,
     max_bytes: usize,
@@ -544,16 +564,23 @@ pub fn truncate_hook_outbound_lines_preserving(
         .unwrap_or_else(|| combined.to_string())
 }
 
-// ────────────────────────────────────────────────────────────────
-// hook_posttool_normalize: function-pointer proxy (OnceLock)
+// hook_posttool_normalize: default policy (register removed — was never called in production)
 // ────────────────────────────────────────────────────────────────
 
+#[cfg(not(test))]
+pub fn synthetic_post_tool_evidence_shape(_event: &Value) -> Value {
+    serde_json::json!({})
+}
+
+#[cfg(test)]
 static SYNTHETIC_POST_TOOL: OnceLock<fn(&Value) -> Value> = OnceLock::new();
 
+#[cfg(test)]
 pub fn register_hook_posttool_normalize(f: fn(&Value) -> Value) {
     SYNTHETIC_POST_TOOL.set(f).ok();
 }
 
+#[cfg(test)]
 pub fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
     SYNTHETIC_POST_TOOL
         .get()
@@ -562,12 +589,34 @@ pub fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
 }
 
 // ────────────────────────────────────────────────────────────────
-// ship_readiness: function-pointer proxies (OnceLock)
+// ship_readiness: default policy (register removed — was never called in production)
 // ────────────────────────────────────────────────────────────────
 
+#[cfg(not(test))]
+pub fn evaluate_goal_readiness_from_disk(
+    _repo_root: &Path,
+    _goal: &Value,
+    _task_id: &str,
+) -> GoalReadiness {
+    GoalReadiness::default()
+}
+
+#[cfg(not(test))]
+pub fn goal_stop_followup_line(
+    _contract: bool,
+    _progress: bool,
+    _verification: bool,
+    _goal_followup_count: u32,
+) -> String {
+    String::new()
+}
+
+#[cfg(test)]
 static EVAL_GOAL_READINESS: OnceLock<fn(&Path, &Value, &str) -> GoalReadiness> = OnceLock::new();
+#[cfg(test)]
 static GOAL_STOP_FOLLOWUP: OnceLock<fn(bool, bool, bool, u32) -> String> = OnceLock::new();
 
+#[cfg(test)]
 pub fn register_ship_readiness(
     evaluate: fn(&Path, &Value, &str) -> GoalReadiness,
     followup: fn(bool, bool, bool, u32) -> String,
@@ -576,6 +625,7 @@ pub fn register_ship_readiness(
     GOAL_STOP_FOLLOWUP.set(followup).ok();
 }
 
+#[cfg(test)]
 pub fn evaluate_goal_readiness_from_disk(
     repo_root: &Path,
     goal: &Value,
@@ -587,6 +637,7 @@ pub fn evaluate_goal_readiness_from_disk(
         .unwrap_or_default()
 }
 
+#[cfg(test)]
 pub fn goal_stop_followup_line(
     contract: bool,
     progress: bool,
@@ -868,13 +919,10 @@ pub fn install_test_deps() {
                 return combined.to_string();
             }
             let budget = max_bytes.saturating_sub(suffix.len());
-            // Truncate at line boundary when possible.
             let mut end = budget.min(combined.len());
-            // Find the last newline before the budget to avoid splitting lines.
             if let Some(nl) = combined[..end].rfind('\n') {
                 end = nl;
             }
-            // Ensure we don't land in the middle of a multi-byte UTF-8 char.
             while end > 0 && !combined.is_char_boundary(end) {
                 end -= 1;
             }
@@ -888,8 +936,6 @@ pub fn install_test_deps() {
             goal: &Value,
             task_id: &str,
         ) -> GoalReadiness {
-            // Simplified evaluation: check goal text, non_goals, validation_commands,
-            // done_when for contract; checkpoints/evidence for progress/verification.
             let has_goal_text = goal
                 .get("goal")
                 .and_then(Value::as_str)
@@ -911,29 +957,23 @@ pub fn install_test_deps() {
                 .map(|a| a.iter().filter(|v| v.as_str().map(|s| !s.trim().is_empty()).unwrap_or(false)).count())
                 .unwrap_or(0);
             let contract = has_goal_text && has_non_goals && has_validation && done_when_count >= 2;
-
             let has_checkpoints = goal
                 .get("checkpoints")
                 .and_then(Value::as_array)
                 .map(|a| !a.is_empty())
                 .unwrap_or(false);
-            // Check for evidence index on disk.
             let evidence_path = repo_root
                 .join("artifacts/current")
                 .join(task_id)
                 .join("EVIDENCE_INDEX.json");
             let has_evidence = evidence_path.is_file();
-
             let status = goal
                 .get("status")
                 .and_then(Value::as_str)
                 .unwrap_or("");
             let progress = has_checkpoints || has_evidence || status == "completed";
-            // Verification is satisfied when evidence exists, status is completed,
-            // or checkpoints exist (running goals with checkpoint history are considered verified).
             let verification = has_evidence || status == "completed"
                 || (has_checkpoints && status == "running");
-
             GoalReadiness { contract, progress, verification }
         }
         fn test_goal_stop_followup(
@@ -1188,8 +1228,6 @@ static RESOLVE_WEB_FETCH_ADDRESSES: OnceLock<fn(&str, u16) -> Result<Vec<String>
 // MCP Pre Guard
 static EVALUATE_MCP_PRE_GUARD_SAFE: OnceLock<fn(&str, &Value, &Path) -> McpPreGuardVerdict> = OnceLock::new();
 
-// Router Env Flags (additional)
-static ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD: OnceLock<fn() -> bool> = OnceLock::new();
 
 pub fn register_framework_runtime_extra(
     resolve_repo_root_arg: fn(Option<&Path>) -> Result<PathBuf, String>,
@@ -1231,11 +1269,6 @@ pub fn register_mcp_pre_guard_extra(
     EVALUATE_MCP_PRE_GUARD_SAFE.set(evaluate).ok();
 }
 
-pub fn register_router_env_flags_extra(
-    skip_pre_tool_use_guard: fn() -> bool,
-) {
-    ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD.set(skip_pre_tool_use_guard).ok();
-}
 
 pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
     RESOLVE_REPO_ROOT_ARG.get().map(|f| f(repo_root)).unwrap_or_else(|| {
@@ -1333,9 +1366,6 @@ pub fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments: &Value, repo_root
     EVALUATE_MCP_PRE_GUARD_SAFE.get().map(|f| f(tool_name, arguments, repo_root)).unwrap_or(McpPreGuardVerdict { blocked: false, reason: None })
 }
 
-pub fn router_rs_skip_pre_tool_use_guard() -> bool {
-    ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD.get().map(|f| f()).unwrap_or(false)
-}
 
 // ── RFV loop full implementation hook (registered by runtime-core) ──
 static RFV_LOOP_DRIVE: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();

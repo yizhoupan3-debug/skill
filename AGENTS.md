@@ -29,7 +29,7 @@
 
 ## Lifecycle
 
-- **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/references/EXECUTION_LADDER.md`。
+- **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/spec.md` §6。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
 - **Closeout**：`closeout_gate` / `complete` 为 advisory（`my-light`）。
 

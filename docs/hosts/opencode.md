@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-12"
 depends_on:
-  - ../host_adapter_contract.md
+  - ../spec.md
 ---
 
 # Opencode 宿主操作手册

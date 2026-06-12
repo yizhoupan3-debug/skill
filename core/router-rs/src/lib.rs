@@ -1,15 +1,6 @@
 #![recursion_limit = "256"]
 #![allow(unused_variables, unused_mut)]
 
-// ── goal_drive (inline re-export from core-state) ──
-#[cfg(test)]
-pub(crate) mod goal_drive {
-    pub use core_state::state_manager::{
-        framework_autopilot_goal, framework_goal_drive, GOAL_STATE_FILENAME,
-        read_active_task_id, read_focus_task_id, read_primary_task_id,
-    };
-}
-
 // ── Re-exports from runtime-core (B3 migration: single source of truth) ──
 // Only `cli` and `browser_mcp` are consumed externally (by router-rs-cli).
 // The rest are pub(crate) — used only by this crate's tests (included via #[path]).
@@ -90,8 +81,6 @@ pub(crate) use runtime_core::schema_drift;
 pub(crate) use runtime_core::session_call_tracker;
 #[cfg(test)]
 pub(crate) use runtime_core::session_supervisor;
-#[cfg(test)]
-pub(crate) use runtime_core::ship_readiness;
 #[cfg(test)]
 pub(crate) use runtime_core::skill_repo;
 #[cfg(test)]
@@ -319,7 +308,6 @@ pub use runtime_core::integration_test_prelude;
 pub use runtime_core::codegraph_mcp;
 #[cfg(feature = "codegraph")]
 pub(crate) mod mcp_common;
-pub(crate) mod types;
 
 // ── proxy modules (thin re-exports kept in router-rs, used only by tests) ──
 #[cfg(test)]

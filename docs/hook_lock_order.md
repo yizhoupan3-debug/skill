@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-02"
 depends_on:
-  - harness_architecture/index.md
+  - spec.md
 ---
 
 # Hook lock order (router-rs)

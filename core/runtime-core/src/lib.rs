@@ -41,9 +41,7 @@ pub mod task_write_lock;
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
 #[cfg(feature = "codegraph")]
-pub mod codegraph_fts_bridge;
 pub mod cli;
-pub mod types;
 pub mod eval_route;
 pub use framework_kernel::framework_host_targets;
 pub mod framework_maint;
@@ -76,7 +74,6 @@ pub mod runtime_registry {
     };
 }
 pub mod session_call_tracker;
-pub mod ship_readiness;
 pub use framework_kernel::skill_repo;
 pub use framework_kernel::stdio_payload_types;
 pub mod stdio_transport;

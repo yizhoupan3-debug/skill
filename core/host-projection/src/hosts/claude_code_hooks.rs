@@ -497,9 +497,6 @@ fn block_stop(reason: &str) -> Option<Value> {
 }
 
 fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
-    if crate::hooks::router_rs_skip_pre_tool_use_guard() {
-        return None;
-    }
     let mut warn_contexts: Vec<String> = Vec::new();
     for path in payload_relative_paths(repo_root, payload) {
         if is_cross_host_or_retired_surface(&path) {
