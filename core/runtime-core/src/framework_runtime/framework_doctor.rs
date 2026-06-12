@@ -161,7 +161,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
         "Host-injected machine lines start with ASCII `router-rs ` (e.g. REVIEW_GATE / AG_FOLLOWUP)."
     );
     println!(
-        "Lines starting with RG_FOLLOWUP / RG FOLLOWUP without that prefix are not from this harness; see docs/framework_operator_primer.md."
+        "Lines starting with RG_FOLLOWUP / RG FOLLOWUP without that prefix are not from this harness."
     );
 
     println!("\n--- ephemeral Stop checkpoint rows (operator) ---");

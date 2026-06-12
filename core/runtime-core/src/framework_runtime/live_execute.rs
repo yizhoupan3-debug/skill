@@ -131,7 +131,7 @@ pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     } else {
         lines.push("- For each major claim, include at least two independent evidence anchors and one uncertainty note when evidence is incomplete.".to_string());
         lines.push("- If verification_required or evidence_required is true, treat missing evidence as an explicit blocker instead of silently concluding.".to_string());
-        lines.push("- Auditable multi-round external research belongs in ledger `RFV_LOOP_STATE.json` via stdio op `framework_rfv_loop`; read `docs/rfv_loop_harness.md` / `docs/references/rfv-loop/external-research-harness.md`; hooks never auto-create that ledger.".to_string());
+        lines.push("- Auditable multi-round external research belongs in ledger `RFV_LOOP_STATE.json` via stdio op `framework_rfv_loop`; see `core/runtime-core/src/rfv_loop.rs`; hooks never auto-create that ledger.".to_string());
     }
     let prompt_reasons = payload
         .reasons

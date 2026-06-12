@@ -296,18 +296,12 @@ fn refresh_skill_stays_out_of_project_host_entrypoints() {
 }
 
 #[test]
-#[ignore = "rfv_loop_harness.md removed in v6.5 docs consolidation"]
 fn rfv_harness_reference_moved_to_docs() {
     assert!(!project_root()
         .join("skills/review-fix-verify-loop/SKILL.md")
         .exists());
-    assert!(project_root().join("docs/rfv_loop_harness.md").exists());
-    assert!(project_root()
-        .join("docs/references/rfv-loop/reasoning-depth-contract.md")
-        .exists());
-    assert!(project_root()
-        .join("docs/references/rfv-loop/external-research-harness.md")
-        .exists());
+    // RFV harness 文档已整合入 codebase 模块文档，不再作为独立文件存在。
+    // 实现逻辑见 core/runtime-core/src/rfv_loop.rs。
 }
 
 #[test]

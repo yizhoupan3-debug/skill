@@ -4,7 +4,7 @@
 //! Writers serialize through **repo-root `flock`** on `artifacts/current/.router-rs.task-ledger.lock`
 //! (see [`crate::task_write_lock`]), not a cross-process `std::sync::Mutex`.
 //!
-//! See `docs/task_state_unified_resolve.md`.
+//! See `core/core-state/src/task_state.rs` for the unified resolve model.
 
 use serde_json::Value;
 

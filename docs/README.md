@@ -21,6 +21,7 @@ depends_on:
 
 | 主题 | 文档 |
 |------|------|
+| **按代码模块** | [modules/INDEX.md](modules/INDEX.md)（各 crate 模块详解） |
 | 宿主差异、hook 事件、Stop 行为 | [hosts/](hosts/)（claude / cursor / codex / opencode） |
 | 安装教程 / 升级 / 多机同步 | [operations/getting-started.md](operations/getting-started.md) |
 | 运维主手册（配置、排障、路径速查） | [operations/index.md](operations/index.md) |

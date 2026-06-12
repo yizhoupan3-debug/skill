@@ -165,7 +165,7 @@ When invoked, run **every wave** in `WAVE_STATE.json` from current `wave_id` thr
 ```json
 {
   "lane_id": "w3-lane-auth",
-  "scope_paths": ["core/router-rs/src/hosts/cursor_hooks/"],
+  "scope_paths": ["core/host-projection/src/hosts/cursor_hooks/"],
   "output_path": "artifacts/current/<task_id>/lane-notes/w3-lane-auth.md",
   "max_lines": 15,
   "fork_context": false,

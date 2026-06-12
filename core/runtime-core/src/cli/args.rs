@@ -202,11 +202,11 @@ pub enum FrameworkCommand {
     /// 追加一条外部 hook 验证记录到 `EVIDENCE_INDEX.json`（需连续性已初始化）。
     HookEvidenceAppend(JsonInputCommand),
     Alias(FrameworkAliasCommand),
-    /// 只读聚合 `ResolvedTaskView`（调试与未来 hook 消费）；见 `docs/task_state_unified_resolve.md`。
+    /// 只读聚合 `ResolvedTaskView`（调试与未来 hook 消费）；见 `core/core-state/src/task_state.rs`。
     TaskStateResolve(FrameworkTaskStateResolveCommand),
-    /// 统一任务账本写分发（envelope：`kind` + `payload`）；见 `docs/task_state_unified_resolve.md` §5 阶段 2.5。
+    /// 统一任务账本写分发（envelope：`kind` + `payload`）；见 `core/runtime-core/src/task_command.rs`。
     TaskLedgerDispatch(JsonInputCommand),
-    /// 将 GOAL/RFV/Evidence 投影写入 `TASK_STATE.json`（阶段 3）；见 `docs/task_state_unified_resolve.md`。
+    /// 将 GOAL/RFV/Evidence 投影写入 `TASK_STATE.json`（阶段 3）；见 `core/core-state/src/task_state_aggregate.rs`。
     TaskStateAggregateSync(FrameworkTaskStateAggregateSyncCommand),
     /// Append or summarize task-scoped `STEP_LEDGER.jsonl` recovery records.
     StepLedger(JsonInputCommand),

@@ -1,5 +1,5 @@
 //! Policy docs and skills must keep resolvable relative markdown links.
-//! See `docs/harness_policy_map.md` (link hygiene) and path audit 2026-05.
+//! See path audit 2026-05.
 
 use std::fs;
 use std::path::{Component, Path, PathBuf};

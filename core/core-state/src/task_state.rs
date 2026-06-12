@@ -1,6 +1,8 @@
 //! Unified **read model** for per-task continuity artifacts (L2) consumed by L3.
 //!
-//! Design: `docs/task_state_unified_resolve.md`. **Writes** serialize via `task_write_lock`
+//! Design: see `core/core-state/src/task_state.rs` (this file) and
+//! `core/core-state/src/task_state_aggregate.rs` for the three-phase resolve model.
+//! **Writes** serialize via `task_write_lock`
 //! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `CursorContinuityFrame`).
 
 use crate::state_manager::{goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task};

@@ -16,6 +16,6 @@
 
 ## MCP（可选 · 项目特有）
 
-项目 `.claude/mcp.json` 可注册 `browser-mcp` 等；历史 Desktop 配置见 **`mcp.README.md`**（`claude-desktop` 已退役，勿作真源）。
+项目 `.claude/mcp.json` 可注册 `browser-mcp` 等（`claude-desktop` 已退役，勿作真源）。
 
 路由：`skills/SKILL_ROUTING_RUNTIME.json` · 产物：`artifacts/current/`。

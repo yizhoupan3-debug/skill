@@ -4,7 +4,7 @@
 //! and task-scoped append logs such as `STEP_LEDGER.jsonl`.
 //! This file is refreshed after ledger mutations so humans/tools can open one JSON for goal+rfv+evidence rollup.
 //!
-//! Design: `docs/task_state_unified_resolve.md` §5 阶段 3.
+//! Design: see `task_state.rs` §5 阶段 3.
 
 use crate::utils::atomic_write::write_atomic_json;
 use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};

@@ -2,7 +2,7 @@
 //!
 //! Canonical env names take precedence; legacy per-host `ROUTER_RS_{CURSOR,CODEX,CLAUDE}_*` aliases
 //! remain honored for explicit opt-in / disable (backward compatibility).
-//! Operator table: `docs/harness_architecture/03-hook-and-switches.md` §5.
+//! Operator table: see below `// §5` comments in this file.
 
 use std::env;
 

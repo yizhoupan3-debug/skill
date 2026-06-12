@@ -44,6 +44,6 @@ Skill 集成（CG-5）：`planx` / `implementx` / `verifyx` / `code-review-deep`
 ## 相关路径
 
 - `core/codegraph-rs/`
-- `core/router-rs/src/codegraph_mcp/`
+- `core/runtime-core/src/codegraph_mcp/`
 - `configs/framework/RUNTIME_REGISTRY.json` → `mcp-codegraph`
 - `artifacts/current/roadmap-v5-exec/lane-notes/phase-cg-w*.json`

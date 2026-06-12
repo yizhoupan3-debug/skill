@@ -197,7 +197,7 @@ router-rs → runtime-core → host-projection → core-state
 
 ### 3.2 codegraph-rs — 代码知识图谱
 
-**功能**：基于 tree-sitter 的代码图谱构建与查询，支持 Rust/TypeScript/JavaScript/Python/Go。入口：`core/codegraph-rs/src/lib.rs`；增量同步与 watcher：`graph/sync.rs`；MCP 薄壳分发：`core/router-rs/src/codegraph_mcp/mod.rs`。
+**功能**：基于 tree-sitter 的代码图谱构建与查询，支持 Rust/TypeScript/JavaScript/Python/Go。入口：`core/codegraph-rs/src/lib.rs`；增量同步与 watcher：`graph/sync.rs`；MCP 薄壳分发：`core/runtime-core/src/codegraph_mcp/mod.rs`。
 
 | 模块 | 功能 | 核心 API |
 |------|------|----------|
@@ -394,8 +394,8 @@ spawned → running → draining → completed
 | # | 文件 | 操作 |
 |---|------|------|
 | 1 | `configs/framework/RUNTIME_REGISTRY.json` | 注册宿主 id + 元数据 |
-| 2 | `core/runtime-core/src/hosts/<host>_hook_host.rs` | 实现 `HostHook` trait |
-| 3 | `core/runtime-core/src/hosts/<host>_hooks/` | 事件 handler 目录 |
+| 2 | `core/host-projection/src/hosts/<host>_hooks.rs` | 宿主 hook 实现 |
+| 3 | `core/host-projection/src/hosts/<host>_hooks/` | 事件 handler 目录 |
 
 ### 7.2 HostHook trait
 
@@ -415,7 +415,7 @@ pub trait HostHook {
 ### 7.3 接入 Checklist
 
 - [ ] `RUNTIME_REGISTRY.json` — host_targets.supported + metadata
-- [ ] `framework_host_targets.rs` — 只读注册表，fail-closed
+- [ ] `framework_host_targets.rs` — 只读注册表，fail-closed（位于 `core/framework-kernel/`）
 - [ ] `hosts/<host>_hooks/` — 事件 handler
 - [ ] `cli/dispatch.rs` — 子命令分发
 - [ ] `host_integration/projection/` — install/status/remove + 三道闸

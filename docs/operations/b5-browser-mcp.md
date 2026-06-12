@@ -7,7 +7,7 @@ plate: B5
 
 ## 职责
 
-浏览器自动化 MCP：`browser-mcp` stdio 服务、`session_launch`、页面 attach、与 **web_fetch_guard** 协同的 URL 策略。实现：`core/runtime-core/src/browser_mcp/`；Node 侧包由 `host-integration install` 投影注册。
+浏览器自动化 MCP：`browser-mcp` stdio 服务、`session_launch`、页面 attach、与 **web_fetch_guard** 协同的 URL 策略。实现：`core/browser-mcp/`；Node 侧包由 `host-integration install` 投影注册。
 
 ## 启动 / 配置
 
@@ -37,7 +37,7 @@ P8 后 **无 tmux** 依赖；`session_supervisor` 管理 attach 生命周期。
 
 ## 相关路径
 
-- `core/runtime-core/src/browser_mcp/`
+- `core/browser-mcp/`
 - `core/runtime-core/src/web_fetch_guard.rs`
 - `docs/operations/security.md` §SSRF
 - `RUNTIME_REGISTRY.json` → `managed_mcp_servers.browser-mcp`（跨五宿主统一声明）

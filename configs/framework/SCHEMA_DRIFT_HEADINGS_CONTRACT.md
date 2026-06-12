@@ -1,6 +1,6 @@
 # Schema drift — task headings contract
 
-**Owner**: `core/router-rs/src/schema_drift.rs`  
+**Owner**: `core/runtime-core/src/schema_drift.rs`  
 **Evidence protocol**: `skills/verifyx/references/evidence-protocol.md`  
 **Verify skill**: `skills/verifyx/SKILL.md`
 

@@ -1,5 +1,5 @@
 //! Cursor alwaysApply rules must keep markdown links to policy canonicals
-//! (drift guard for harness subtraction). See `docs/harness_policy_map.md`.
+//! (drift guard for harness subtraction).
 //!
 //! Fenced-code stripping toggles only on lines that match a **CommonMark subset**:
 //! at most **three** ASCII spaces, then `` ``` `` (opening or closing). More-indented

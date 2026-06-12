@@ -541,7 +541,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             // NOTE: `external_research_strict` defaults to true (enforce structured ER quality),
             // while `prefer_structured_external_research` defaults to false (loose recommendation).
             // These have different design intents despite similar naming.
-            // See: docs/references/rfv-loop/reasoning-depth-contract.md
+            // See: core/runtime-core/src/rfv_loop.rs (this file) reasoning depth logic
             let external_research_strict = payload
                 .get("external_research_strict")
                 .and_then(Value::as_bool)

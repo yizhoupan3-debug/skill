@@ -383,7 +383,7 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     //   ——Phase 3 合并完成后 state model 已简化 (5 files → 2 control-plane anchors),
     //     closeout gate 应对齐 GOAL_STATE.completion_gates.min_depth_score。
     // References:
-    //   - Contract: docs/references/rfv-loop/reasoning-depth-contract.md
+    //   - Contract: see `core/runtime-core/src/rfv_loop.rs` reasoning depth logic
     // Expected behavior when implemented: closeout gate should check min_depth_score
     //   from GOAL_STATE.completion_gates against depth_compliance_aggregate output
 

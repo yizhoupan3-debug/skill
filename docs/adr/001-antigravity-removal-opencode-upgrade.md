@@ -1,5 +1,6 @@
 # Spec: Antigravity 移除 + 四宿主一致性 + 注册表驱动
 
+> **Status**: Executed (2026-06-12) — all items below have been completed.
 > **日期**: 2026-06-12
 > **版本**: v2 (深度审计后)
 > **范围**: host-projection / runtime-core / framework-kernel / configs / docs / policy / skills

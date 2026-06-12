@@ -1,6 +1,6 @@
 //! `ROUTER_RS_*` 连续性/续跑类开关：保留真正改变行为边界的少量闸门。
 //!
-//! **清单真源**：宿主可见语义与默认值以仓库根 [`docs/harness_architecture/03-hook-and-switches.md`](../../docs/harness_architecture/03-hook-and-switches.md) **开关面**表格为准。
+//! **清单真源**：宿主可见语义与默认值以 [`env_flags.rs`](../../core-policy/src/env_flags.rs) **开关面**表格为准。
 //! Review-gate 相关 reader 真源在 [`core-policy/env_flags.rs`](../../core-policy/src/env_flags.rs)；本模块为 router-rs 薄包装与连续性专用 env。
 //!
 //! Helper 映射（core-policy）：
