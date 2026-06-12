@@ -2069,3 +2069,63 @@ mod resolve_repo_root_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod truncate_utf8_tests {
+    use super::truncate_utf8_chars;
+
+    #[test]
+    fn truncate_short_string_unchanged() {
+        assert_eq!(truncate_utf8_chars("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_exact_length_unchanged() {
+        assert_eq!(truncate_utf8_chars("hello", 5), "hello");
+    }
+
+    #[test]
+    fn truncate_long_string_cut() {
+        let result = truncate_utf8_chars("hello world", 5);
+        assert!(result.len() <= 5);
+        assert!(result.starts_with("hello"));
+    }
+
+    #[test]
+    fn truncate_empty_string() {
+        assert_eq!(truncate_utf8_chars("", 10), "");
+    }
+
+    #[test]
+    fn truncate_multibyte_utf8() {
+        let result = truncate_utf8_chars("你好世界", 7);
+        assert!(result.len() <= 7);
+        assert!(!result.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod detect_verify_tests {
+    use super::detect_and_verify_physical_artifact;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn detect_nonexistent_path_returns_false() {
+        assert!(!detect_and_verify_physical_artifact(
+            Path::new("/nonexistent"),
+            "ls /nonexistent/file.txt",
+        ));
+    }
+
+    #[test]
+    fn detect_file_path_returns_true() {
+        let dir = tempdir().unwrap();
+        let file = dir.path().join("output.txt");
+        fs::write(&file, "test").unwrap();
+        assert!(detect_and_verify_physical_artifact(
+            dir.path(),
+            &format!("cat {}", file.display()),
+        ));
+    }
+}

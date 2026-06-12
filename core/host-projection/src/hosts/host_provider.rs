@@ -36,8 +36,12 @@ pub struct HostCapabilities {
 pub trait HostLifecycle: Send + Sync {
     fn profile_id(&self) -> &'static str;
     fn session_supervisor_driver(&self) -> &'static str;
-    fn harness_capabilities(&self) -> &'static [&'static str];
     fn context_file(&self) -> &'static str;
+
+    /// Harness capabilities. All 4 closed-set hosts use FULL.
+    fn harness_capabilities(&self) -> &'static [&'static str] {
+        HARNESS_CAPABILITIES_FULL
+    }
 
     /// Project-local hook manifest when the host installs a native hook bundle.
     fn hooks_manifest_path(&self) -> Option<&'static str> {
@@ -78,15 +82,24 @@ pub trait HostLifecycle: Send + Sync {
 /// Tool-guard metadata aligned with `pre_tool_use_guard` registry signals.
 pub trait HostToolExecutor: Send + Sync {
     fn has_hard_gate_hooks(&self) -> bool;
-    fn closeout_evidence_hooks_supported(&self) -> bool;
 
-    /// Static strict-fallback hint when `has_native_hook` override is absent.
-    fn requires_strict_pre_tool_fallback_default(&self) -> bool;
+    /// All 4 closed-set hosts support closeout evidence hooks.
+    fn closeout_evidence_hooks_supported(&self) -> bool {
+        true
+    }
+
+    /// All 4 closed-set hosts have native hooks; strict fallback not needed.
+    fn requires_strict_pre_tool_fallback_default(&self) -> bool {
+        false
+    }
 }
 
 /// Telemetry / observation metadata for hook journal routing.
 pub trait HostTelemetry: Send + Sync {
-    fn review_gate_router_observable(&self) -> bool;
+    /// All 4 closed-set hosts are review gate observable.
+    fn review_gate_router_observable(&self) -> bool {
+        true
+    }
     /// Transport family label for telemetry journal routing.
     fn hook_telemetry_surface(&self) -> &'static str;
 

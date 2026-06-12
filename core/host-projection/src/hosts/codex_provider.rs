@@ -2,7 +2,6 @@
 
 use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
-    HARNESS_CAPABILITIES_FULL,
 };
 use serde_json::Value;
 
@@ -16,10 +15,6 @@ impl HostLifecycle for CodexHostProvider {
 
     fn session_supervisor_driver(&self) -> &'static str {
         "codex_driver"
-    }
-
-    fn harness_capabilities(&self) -> &'static [&'static str] {
-        HARNESS_CAPABILITIES_FULL
     }
 
     fn context_file(&self) -> &'static str {
@@ -74,21 +69,9 @@ impl HostToolExecutor for CodexHostProvider {
     fn has_hard_gate_hooks(&self) -> bool {
         true
     }
-
-    fn closeout_evidence_hooks_supported(&self) -> bool {
-        true
-    }
-
-    fn requires_strict_pre_tool_fallback_default(&self) -> bool {
-        false
-    }
 }
 
 impl HostTelemetry for CodexHostProvider {
-    fn review_gate_router_observable(&self) -> bool {
-        true
-    }
-
     fn hook_telemetry_surface(&self) -> &'static str {
         "native-codex"
     }

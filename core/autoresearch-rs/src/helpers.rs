@@ -1174,23 +1174,13 @@ mod tests {
     }
 
     #[test]
-    fn optional_str_some() {
-        assert_eq!(optional_str(Some("hello")), json!("hello"));
+    fn optional_string_some() {
+        assert_eq!(optional_string(Some("hello")), json!("hello"));
     }
 
     #[test]
-    fn optional_str_none() {
-        assert_eq!(optional_str(None), json!(null));
-    }
-
-    #[test]
-    fn json_merge_overwrites_keys() {
-        let mut base = json!({"a": 1, "b": 2});
-        let patch = json!({"b": 3, "c": 4});
-        json_merge(&mut base, &patch);
-        assert_eq!(base["a"], 1);
-        assert_eq!(base["b"], 3);
-        assert_eq!(base["c"], 4);
+    fn optional_string_none() {
+        assert_eq!(optional_string(None), json!(null));
     }
 
     #[test]

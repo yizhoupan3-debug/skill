@@ -1127,21 +1127,4 @@ mod tests {
     fn format_overlap_risk_unknown_passthrough() {
         assert_eq!(format_overlap_risk("unknown"), "unknown");
     }
-
-    #[test]
-    fn summarize_rules_in_empty() {
-        let state = json!({"rules": []});
-        assert!(summarize_rules_in(&state).is_empty());
-    }
-
-    #[test]
-    fn summarize_rules_in_with_rules() {
-        let state = json!({"rules": [
-            {"rule_id": "R1", "description": "Check A"},
-            {"rule_id": "R2", "description": "Check B"},
-        ]});
-        let lines = summarize_rules_in(&state);
-        assert_eq!(lines.len(), 2);
-        assert!(lines[0].contains("R1"));
-    }
 }
