@@ -264,3 +264,34 @@ pub(super) fn format_resume(state: &Value) -> String {
     }
     lines.join("\n")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn write_if_missing_creates_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.md");
+        write_if_missing(&path, "content".to_string()).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "content");
+    }
+
+    #[test]
+    fn write_if_missing_does_not_overwrite() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.md");
+        fs::write(&path, "original").unwrap();
+        write_if_missing(&path, "new".to_string()).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "original");
+    }
+
+    #[test]
+    fn write_if_missing_creates_parent_dirs() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("a/b/c/test.md");
+        write_if_missing(&path, "deep".to_string()).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "deep");
+    }
+}

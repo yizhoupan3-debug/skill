@@ -75,7 +75,7 @@ impl HostProvider for OpencodeHostProvider {
         HostCapabilities {
             has_native_hook: true,
             supports_subagent: true,
-            supports_worktree: false,
+            supports_worktree: true,
             mcp_config_key: "mcp",
             transport_type: "opencode-plugin",
             config_path: ".opencode/opencode.json",
