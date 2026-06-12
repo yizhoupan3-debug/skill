@@ -149,8 +149,7 @@ fn markdown_link_url_contains(body: &str, needle: &str) -> bool {
 fn assert_canonical_markdown_links(path: &Path, text: &str) {
     let needles = [
         ("AGENTS.md", "AGENTS.md"),
-        ("harness_architecture.md", "harness_architecture/"),
-        ("harness_policy_map.md", "harness_policy_map.md"),
+        ("spec.md", "spec.md"),
     ];
     for (label, needle) in needles {
         assert!(

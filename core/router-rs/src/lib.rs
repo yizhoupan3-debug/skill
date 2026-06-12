@@ -1,5 +1,4 @@
 #![recursion_limit = "256"]
-#![allow(unused_variables, unused_mut)]
 
 // ── Re-exports from runtime-core (B3 migration: single source of truth) ──
 // Only `cli` and `browser_mcp` are consumed externally (by router-rs-cli).
@@ -323,8 +322,8 @@ mod task_write_lock {
     pub use runtime_core::task_write_lock::*;
 }
 
-// ── hook_status (inline) ──
-#[allow(dead_code)] // constants available for hook status tracking
+// ── hook_status (inline, test-only) ──
+#[cfg(test)]
 pub(crate) mod hook_status {
     pub const REVIEW_GATE_CHECKING: &str = "Loading Codex turn context";
     pub const REVIEW_GATE_UPDATING: &str = "Recording Codex tool evidence";

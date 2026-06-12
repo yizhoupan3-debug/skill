@@ -10,7 +10,6 @@ use super::{inspect_trace_stream, replay_trace_stream, write_trace_compaction_de
 use crate::browser_dispatch_hook;
 #[cfg(feature = "codegraph")]
 use crate::codegraph_mcp::run_codegraph_mcp_stdio_loop;
-use crate::mcp_stdio_harness::run_mcp_stdio;
 use crate::claude_code_hooks::run_claude_hook_cli;
 use crate::closeout_enforcement::{
     closeout_enforcement_contract, evaluate_closeout_record_value,

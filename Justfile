@@ -2,17 +2,49 @@
 fmt:
     cargo fmt --manifest-path core/router-rs/Cargo.toml
 
+fmt-all:
+    cargo fmt --workspace --check
+
 clippy:
     cargo clippy --manifest-path core/router-rs/Cargo.toml --all-targets -- -D warnings
+
+clippy-all:
+    cargo clippy --workspace --all-targets -- -D warnings
 
 test:
     cargo test --manifest-path core/router-rs/Cargo.toml
 
 test-all:
     cargo test --manifest-path core/router-rs/Cargo.toml
-    cargo test --manifest-path core/antigravity/Cargo.toml
     cargo test --test policy_contracts
     cargo test --test host_integration
+    cargo test --test browser_mcp_scripts
+    cargo test --test rust_cli_tools
+    cargo test --manifest-path core/runtime-core/Cargo.toml --lib
+    cargo test --manifest-path core/host-projection/Cargo.toml --lib
+
+test-workspace:
+    cargo test --workspace
+
+# --- Performance benchmarks ---
+
+bench:
+    SEARCH_BENCH=1 cargo bench --manifest-path core/router-rs/Cargo.toml --bench search_bench
+
+bench-all:
+    SEARCH_BENCH=1 cargo bench --manifest-path core/router-rs/Cargo.toml
+    cargo bench --manifest-path rust_tools/pdf_tool_rs/Cargo.toml
+
+# --- Debug / analysis ---
+
+miri:
+    cargo +nightly miri test --lib -p core-state -p framework-kernel -p core-policy
+
+coverage:
+    cargo llvm-cov --workspace --lcov --output-path lcov.info
+
+memory-profile:
+    bash scripts/bench-memory.sh
 
 audit:
     cargo deny --manifest-path core/router-rs/Cargo.toml check

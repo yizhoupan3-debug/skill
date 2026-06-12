@@ -419,7 +419,7 @@ pub trait HostHook {
 - [ ] `hosts/<host>_hooks/` — 事件 handler
 - [ ] `cli/dispatch.rs` — 子命令分发
 - [ ] `host_integration/projection/` — install/status/remove + 三道闸
-- [ ] `host_entrypoint_sync.rs` — provider trait
+- [ ] `host_entrypoint_sync.rs` — provider trait（真源在 host-projection，runtime-core 重导出）
 - [ ] 测试 + Schema 校验
 
 ### 7.4 硬编码耦合盘点
@@ -605,12 +605,14 @@ pub trait HostHook {
 - `closeout_gate` — 门控定义及拦截逻辑，用于验证是否满足 closeout 状态
 - `closeout_record_write` — 写入 closeout 记录与断言结果
 
-### 12.4 ship_readiness.rs
+### 12.4 Goal readiness（原 ship_readiness.rs，已迁移）
 
-**功能**：Goal/Stop followup 评估 — 磁盘检查就绪度 + followup 提示。
+**历史**：`ship_readiness.rs` 曾位于 runtime-core，提供 Goal/Stop followup 评估。已删除，逻辑迁移至 `host-projection/src/hooks.rs`。
 
-- `evaluate_goal_readiness_from_disk()` — contract/progress/verification 三元组
-- `goal_stop_followup_line()` — Stop followup 文案
+**当前行为**：
+- 生产环境下 `evaluate_goal_readiness_from_disk()` 返回 `GoalReadiness::default()`（全 false）
+- 生产环境下 `goal_stop_followup_line()` 返回空字符串
+- 仅 `#[cfg(test)]` 下通过 `register_ship_readiness()` 注入可测试实现
 
 ### 12.5 连续性锚点
 
@@ -661,6 +663,8 @@ pub trait HostHook {
 - 支持 stdio `execute` operation 处理机制
 
 ### 13.4 host_entrypoint_sync.rs — 入口同步
+
+**真源**：`core/host-projection/src/host_entrypoint_sync.rs`（runtime-core 通过 `pub use` 重导出）。
 
 **功能**：通用 sync engine + Codex provider。
 
@@ -812,7 +816,7 @@ pub trait HostHook {
 | codegraph-rs | 2.3K | 25 | C |
 | evolution-rs | 851 | 2 | D |
 | autoresearch-rs | 6K | 8 | D |
-| rust_tools (9) | 16K | ~102 | C |
+| rust_tools (6) | ~16K | ~102 | C |
 | **合计** | **130K** | **~1,850** | |
 
 ### 17.2 router-rs 子模块覆盖
@@ -831,7 +835,6 @@ pub trait HostHook {
 | harness_operator_nudges | 7 | | schema_drift | 6 |
 | mcp_pre_guard | 6 | | browser_mcp | 5 |
 | runtime_registry | 5 | | html_to_markdown | 4 |
-| ship_readiness | 3 | | formal_toolchain | 3 |
 | harness_contract | 2 | | framework_maint | 2 |
 | **trace_runtime** | **0** | | **router_self** | **0** |
 | **runtime_envelope_ids** | **0** | | **content_extract** | **1** |

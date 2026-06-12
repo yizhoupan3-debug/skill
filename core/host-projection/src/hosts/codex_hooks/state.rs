@@ -636,3 +636,81 @@ where
     Ok(output)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn codex_stable_session_from_session_id() {
+        let event = json!({"session_id": "abc-123"});
+        assert_eq!(codex_stable_session_raw(&event), Some("abc-123".to_string()));
+    }
+
+    #[test]
+    fn codex_stable_session_from_session_id_camel() {
+        let event = json!({"sessionId": "camel-case-id"});
+        assert_eq!(codex_stable_session_raw(&event), Some("camel-case-id".to_string()));
+    }
+
+    #[test]
+    fn codex_stable_session_from_conversation_id() {
+        let event = json!({"conversation_id": "conv-456"});
+        assert_eq!(codex_stable_session_raw(&event), Some("conv-456".to_string()));
+    }
+
+    #[test]
+    fn codex_stable_session_trims_whitespace() {
+        let event = json!({"session_id": "  padded  "});
+        assert_eq!(codex_stable_session_raw(&event), Some("padded".to_string()));
+    }
+
+    #[test]
+    fn codex_stable_session_empty_string_returns_none() {
+        let event = json!({"session_id": ""});
+        assert_eq!(codex_stable_session_raw(&event), None);
+    }
+
+    #[test]
+    fn codex_stable_session_no_key_returns_none() {
+        let event = json!({"other": "value"});
+        std::env::remove_var("CODEX_SESSION_ID");
+        std::env::remove_var("CODEX_CONVERSATION_ID");
+        assert_eq!(codex_stable_session_raw(&event), None);
+    }
+
+    #[test]
+    fn codex_hook_error_display() {
+        let err = CodexHookError::StateLockTimeout;
+        assert_eq!(format!("{err}"), "state_lock_timeout");
+
+        let err = CodexHookError::StateWriteFailed;
+        assert_eq!(format!("{err}"), "state_write_failed");
+
+        let err = CodexHookError::StateJsonInvalid("bad field".to_string());
+        assert!(format!("{err}").contains("bad field"));
+
+        let err = CodexHookError::InstallSync("msg".to_string());
+        assert_eq!(format!("{err}"), "msg");
+    }
+
+    #[test]
+    fn codex_hook_error_is_std_error() {
+        let err: Box<dyn std::error::Error> = Box::new(CodexHookError::StateLockTimeout);
+        assert!(err.to_string().contains("state_lock_timeout"));
+    }
+
+    #[test]
+    fn codex_hook_error_from_string() {
+        let err: CodexHookError = "test error".to_string().into();
+        assert!(matches!(err, CodexHookError::InstallSync(_)));
+    }
+
+    #[test]
+    fn codex_hook_error_to_string_roundtrip() {
+        let err = CodexHookError::StateDirCreate(std::io::Error::new(std::io::ErrorKind::NotFound, "test"));
+        let s: String = err.into();
+        assert!(s.contains("state_dir_create_failed"));
+    }
+}
+

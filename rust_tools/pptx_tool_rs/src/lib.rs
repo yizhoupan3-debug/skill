@@ -425,62 +425,6 @@ pub struct LayoutInfo {
     placeholders: Vec<LayoutPlaceholder>,
 }
 
-#[derive(Debug, Serialize)]
-#[allow(dead_code)]
-pub struct QaRenderSummary {
-    rendered_dir: String,
-    png_count: usize,
-    paths: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[allow(dead_code)]
-pub struct QaOverflowSummary {
-    ok: bool,
-    stdout: String,
-    stderr: String,
-}
-
-#[derive(Debug, Serialize)]
-#[allow(dead_code)]
-pub struct QaSummary {
-    ok: bool,
-    deck: String,
-    render: QaRenderSummary,
-    overflow_check: QaOverflowSummary,
-    overlap_check: QaOverflowSummary,
-    aesthetic_check: QaAestheticSummary,
-    font_check: Value,
-    inspector: Value,
-}
-
-#[derive(Debug, Serialize)]
-#[allow(dead_code)]
-pub struct QaAestheticSummary {
-    ok: bool,
-    failing_slides: Vec<usize>,
-    stdout: String,
-    stderr: String,
-}
-
-#[derive(Debug, Serialize)]
-#[allow(dead_code)]
-pub struct OfficeProbeSummary {
-    available: bool,
-    engine: String,
-    version: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[allow(dead_code)]
-pub struct OfficeDoctorSummary {
-    inspector_version: Option<String>,
-    file: String,
-    outline: Value,
-    issues: Value,
-    validation: Value,
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum EmitFormat {
     Json,
@@ -566,7 +510,7 @@ pub fn qa_command(args: QaArgs) -> Result<()> {
 
 pub fn intake_command(args: IntakeArgs) -> Result<()> {
     let structure = extract_structure_payload(&args.deck)?;
-    let inspector = office_doctor_value(&args.deck)?;
+    let inspector = office::office_doctor_value(&args.deck)?;
     let payload = json!({
         "deck": args.deck,
         "structure": structure,
@@ -614,56 +558,15 @@ pub fn build_qa_command(args: BuildQaArgs) -> Result<()> {
 }
 
 pub fn office_command(args: OfficeArgs) -> Result<()> {
-    match args.command {
-        OfficeCommands::Probe(args) => office_probe_command(args),
-        OfficeCommands::Doctor(args) => office_doctor_command(args),
-        OfficeCommands::Outline(args) => {
-            office_file_passthrough("view", &args.file, Some("outline"), args.json)
-        }
-        OfficeCommands::Issues(args) => {
-            office_file_passthrough("view", &args.file, Some("issues"), args.json)
-        }
-        OfficeCommands::Validate(args) => {
-            office_file_passthrough("validate", &args.file, None, args.json)
-        }
-        OfficeCommands::Get(args) => office_get_command(args),
-        OfficeCommands::Query(args) => office_query_command(args),
-        OfficeCommands::Watch(args) => office_watch_command(args),
-        OfficeCommands::Batch(args) => office_batch_command(args),
-    }
+    office::office_command(args)
 }
 
 pub fn office_probe_command(args: OfficeProbeArgs) -> Result<()> {
-    let payload = OfficeProbeSummary {
-        available: true,
-        engine: "rust-pptx-inspector".to_string(),
-        version: Some(env!("CARGO_PKG_VERSION").to_string()),
-    };
-    if args.json {
-        println!("{}", serde_json::to_string_pretty(&payload)?);
-    } else {
-        println!("inspector: {}", payload.engine);
-        println!(
-            "version: {}",
-            payload.version.unwrap_or_else(|| "unknown".to_string())
-        );
-    }
-    Ok(())
+    office::office_probe_command(args)
 }
 
 pub fn office_doctor_command(args: OfficeDoctorArgs) -> Result<()> {
-    let payload = office_doctor_summary(&args.file)?;
-    if args.json {
-        println!("{}", serde_json::to_string_pretty(&payload)?);
-    } else {
-        print_office_doctor_summary(&payload);
-    }
-    if (args.fail_on_issues && payload.issues["count"].as_u64().unwrap_or(0) > 0)
-        || (args.fail_on_validation && !payload.validation["ok"].as_bool().unwrap_or(false))
-    {
-        bail!("office doctor checks failed")
-    }
-    Ok(())
+    office::office_doctor_command(args)
 }
 
 pub fn office_file_passthrough(
@@ -672,74 +575,23 @@ pub fn office_file_passthrough(
     tail: Option<&str>,
     json_output: bool,
 ) -> Result<()> {
-    let payload = match (command, tail) {
-        ("view", Some("outline")) => rust_office_outline_value(file)?,
-        ("view", Some("issues")) => rust_office_issues_value(file)?,
-        ("validate", None) => rust_office_validate_value(file)?,
-        _ => bail!("unsupported Rust inspector command: {command} {tail:?}"),
-    };
-    emit_value(
-        payload,
-        if json_output {
-            EmitFormat::Json
-        } else {
-            EmitFormat::Text
-        },
-    )?;
-    Ok(())
+    office::office_file_passthrough(command, file, tail, json_output)
 }
 
 pub fn office_get_command(args: OfficeGetArgs) -> Result<()> {
-    let payload = rust_office_get_value(&args.file, &args.path, args.depth)?;
-    emit_value(
-        payload,
-        if args.json {
-            EmitFormat::Json
-        } else {
-            EmitFormat::Text
-        },
-    )
+    office::office_get_command(args)
 }
 
 pub fn office_query_command(args: OfficeQueryArgs) -> Result<()> {
-    let payload = rust_office_query_value(&args.file, &args.selector, args.text.as_deref())?;
-    emit_value(
-        payload,
-        if args.json {
-            EmitFormat::Json
-        } else {
-            EmitFormat::Text
-        },
-    )
+    office::office_query_command(args)
 }
 
 pub fn office_watch_command(args: OfficeWatchArgs) -> Result<()> {
-    let preview = write_rust_office_preview(&args.file, args.port)?;
-    if args.browser {
-        let status = Command::new("open").arg(&preview).status()?;
-        if !status.success() {
-            bail!("failed to open browser with status {:?}", status.code());
-        }
-    }
-    println!("preview: {}", preview.display());
-    Ok(())
+    office::office_watch_command(args)
 }
 
 pub fn office_batch_command(args: OfficeBatchArgs) -> Result<()> {
-    let payload = rust_office_batch_value(
-        &args.file,
-        args.input.as_deref(),
-        args.commands.as_deref(),
-        args.force,
-    )?;
-    emit_value(
-        payload,
-        if args.json {
-            EmitFormat::Json
-        } else {
-            EmitFormat::Text
-        },
-    )
+    office::office_batch_command(args)
 }
 
 pub fn render_command(args: RenderArgs) -> Result<()> {
@@ -2626,16 +2478,6 @@ pub fn strict_quality_gate(payload: &Value) -> Result<()> {
     qa::strict_quality_gate(payload)
 }
 
-#[allow(dead_code)]
-pub fn font_check_ok(payload: &Value) -> bool {
-    qa::font_check_ok(payload)
-}
-
-#[allow(dead_code)]
-pub fn inspector_ok(payload: &Value) -> bool {
-    qa::inspector_ok(payload)
-}
-
 pub fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) -> Result<Vec<PathBuf>> {
     let dpi = if has_extension(input, "pdf") {
         calc_dpi_via_pdf(input, width, height)?
@@ -2643,21 +2485,6 @@ pub fn render_paths(input: &Path, output_dir: &Path, width: u32, height: u32) ->
         calc_dpi_via_ooxml(input, width, height)?
     };
     rasterize_to_pngs(input, output_dir, dpi)
-}
-
-#[allow(dead_code)]
-pub fn slide_overflow_summary(input: &Path) -> Result<qa::QaOverflowSummary> {
-    qa::slide_overflow_summary(input)
-}
-
-#[allow(dead_code)]
-pub fn slide_overlap_summary(input: &Path) -> Result<qa::QaOverflowSummary> {
-    qa::slide_overlap_summary(input)
-}
-
-#[allow(dead_code)]
-pub fn slide_aesthetic_summary(input: &Path) -> Result<qa::QaAestheticSummary> {
-    qa::slide_aesthetic_summary(input)
 }
 
 pub fn detect_fonts_payload(input: &Path) -> Result<Value> {
@@ -2723,97 +2550,6 @@ pub fn extract_structure_payload(input_path: &str) -> Result<Value> {
     let input = expand_path(input_path);
     let bundle = ZipBundle::from_path(&input)?;
     extract_pptx_structure(&bundle, &input, false, None)
-}
-
-#[allow(dead_code)]
-pub fn office_doctor_value(file: &str) -> Result<Value> {
-    office::office_doctor_value(file)
-}
-
-#[allow(dead_code)]
-pub fn office_doctor_summary(file: &str) -> Result<office::OfficeDoctorSummary> {
-    office::office_doctor_summary(file)
-}
-
-#[allow(dead_code)]
-pub fn rust_office_outline_value(file: &str) -> Result<Value> {
-    office::rust_office_outline_value(file)
-}
-
-#[allow(dead_code)]
-pub fn rust_office_issues_value(file: &str) -> Result<Value> {
-    office::rust_office_issues_value(file)
-}
-
-#[allow(dead_code)]
-pub fn rust_office_validate_value(file: &str) -> Result<Value> {
-    office::rust_office_validate_value(file)
-}
-
-#[allow(dead_code)]
-pub fn rust_office_get_value(file: &str, selector: &str, depth: i32) -> Result<Value> {
-    office::rust_office_get_value(file, selector, depth)
-}
-
-#[allow(dead_code)]
-pub fn rust_office_query_value(file: &str, selector: &str, text: Option<&str>) -> Result<Value> {
-    office::rust_office_query_value(file, selector, text)
-}
-
-#[allow(dead_code)]
-pub fn write_rust_office_preview(file: &str, port: u16) -> Result<PathBuf> {
-    office::write_rust_office_preview(file, port)
-}
-
-#[allow(dead_code)]
-pub fn rust_office_batch_value(
-    file: &str,
-    input: Option<&str>,
-    commands: Option<&str>,
-    force: bool,
-) -> Result<Value> {
-    office::rust_office_batch_value(file, input, commands, force)
-}
-
-#[allow(dead_code)]
-pub fn first_slide_title(slide: &Value) -> Option<String> {
-    office::first_slide_title(slide)
-}
-
-#[allow(dead_code)]
-pub fn slide_texts(slide: &Value) -> Vec<String> {
-    office::slide_texts(slide)
-}
-
-#[allow(dead_code)]
-pub fn select_structure_path(root: &Value, selector: &str) -> Result<Value> {
-    office::select_structure_path(root, selector)
-}
-
-#[allow(dead_code)]
-pub fn trim_json_depth(value: Value, depth: usize) -> Value {
-    office::trim_json_depth(value, depth)
-}
-
-#[allow(dead_code)]
-pub fn query_structure(structure: &Value, selector: &str, text: Option<&str>) -> Vec<Value> {
-    office::query_structure(structure, selector, text)
-}
-
-#[allow(dead_code)]
-pub fn summarize_office_doctor(
-    file: &str,
-    outline_payload: Value,
-    issues_payload: Value,
-    validate_payload: Value,
-    version: Option<String>,
-) -> Result<office::OfficeDoctorSummary> {
-    office::summarize_office_doctor(file, outline_payload, issues_payload, validate_payload, version)
-}
-
-#[allow(dead_code)]
-pub fn print_office_doctor_summary(summary: &office::OfficeDoctorSummary) {
-    office::print_office_doctor_summary(summary);
 }
 
 pub fn emit_value(value: Value, format: EmitFormat) -> Result<()> {

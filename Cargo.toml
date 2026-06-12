@@ -42,11 +42,14 @@ rust-version = "1.80"
 anyhow = "1.0"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 clap = { version = "4.5", features = ["derive"] }
+criterion = { version = "0.5", features = ["html_reports"] }
+dhat = "0.3"
 fs2 = "0.4"
 hex = "0.4"
 libc = "0.2"
 mimalloc = "0.1"
 notify = "7.0"
+pprof = { version = "0.14", features = ["criterion", "flamegraph"] }
 rayon = "1.10"
 regex = "1.11.1"
 reqwest = { version = "0.12.15", default-features = false, features = ["blocking", "json", "rustls-tls"] }
@@ -66,3 +69,10 @@ codegen-units = 1
 opt-level = 3
 panic = "abort"
 strip = true
+
+[profile.bench]
+inherits = "release"
+debug = true  # bench 需要 debug symbols 以生成 flamegraph
+
+[profile.test]
+opt-level = 1  # test 构建适度优化，加速大型测试

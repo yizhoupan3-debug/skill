@@ -52,13 +52,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 | 板块 | 文档 | 职责摘要 |
 |------|------|----------|
-| **B0** framework-kernel | [b0-framework-kernel.md](b0-framework-kernel.md) | core-state / core-policy / core-math、TelemetryWriter、registry 快照 |
-| **B1** routing-engine | [b1-routing-engine.md](b1-routing-engine.md) | 技能路由、tokenize、评分与热路由 JSON |
-| **B3** runtime-core | [b3-runtime-core.md](b3-runtime-core.md) | stdio ops、task ledger、live_execute、session_supervisor |
-| **B4** host-projection | [b4-host-projection.md](b4-host-projection.md) | host-integration 安装、投影、生成物 drift |
 | **B5** browser-mcp | [b5-browser-mcp.md](b5-browser-mcp.md) | browser-mcp MCP 服务、session_launch、URL 防护 |
-| **B7** CLI | [b7-cli.md](b7-cli.md) | `router-rs` 命令面、薄壳与向后兼容 |
-| **B8** research-engine | [b8-research-engine.md](b8-research-engine.md) | RFV loop、外研 harness、autoresearch-rs |
 | **B10** codegraph | [b10-codegraph.md](b10-codegraph.md) | 代码图谱索引、MCP 六工具、sync/watcher |
 | **B11** evolution-engine | [b11-evolution-engine.md](b11-evolution-engine.md) | 遥测 journal、evolution-rs analyze/audit |
 

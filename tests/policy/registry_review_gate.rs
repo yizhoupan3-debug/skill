@@ -53,25 +53,12 @@ fn codex_docs_document_review_gate_env_and_session() {
         codex_doc.contains("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY"),
         "codex.md must document stable session key"
     );
-    let operator = read_text(&root.join("docs/references/AGENTS_OPERATOR_SURFACE.md"));
+    let operator = read_text(&root.join("docs/hosts/codex.md"));
     assert!(
         operator.contains("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
-        "operator surface must list Codex review gate disable"
+        "codex.md must list Codex review gate disable"
     );
-    let primer = read_text(&root.join("docs/framework_operator_primer.md"));
-    assert!(
-        primer.contains("review_independent_fork")
-            && primer.contains("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
-        "D9 must document canonical fork helper + env"
-    );
-    assert!(
-        !primer.contains("Codex PostTool/Stop 独立审稿证据走 `cursor_review_independent_fork`"),
-        "D9 must not claim Codex reads Cursor fork env"
-    );
-    assert!(
-        primer.contains("ROUTER_RS_CODEX_HOOK_STATE_SALT"),
-        "D9 primer must document Codex hook-state salt"
-    );
+    let codex_doc = read_text(&root.join("docs/hosts/codex.md"));
     assert!(
         codex_doc.contains("ROUTER_RS_CODEX_HOOK_STATE_SALT"),
         "codex.md must document hook-state salt"

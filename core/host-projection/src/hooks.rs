@@ -1379,3 +1379,120 @@ pub fn register_rfv_loop_drive(func: fn(Value) -> Result<Value, String>) {
 pub fn rfv_loop_drive_registered() -> Option<fn(Value) -> Result<Value, String>> {
     RFV_LOOP_DRIVE.get().copied()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn env_enabled_default_true_returns_true_when_unset() {
+        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        assert!(router_rs_operator_inject_globally_enabled());
+    }
+
+    #[test]
+    fn env_enabled_default_false_returns_false_when_unset() {
+        std::env::remove_var("ROUTER_RS_HOOK_SILENT");
+        assert!(!router_rs_cursor_hook_silent_enabled());
+    }
+
+    #[test]
+    fn outbound_context_max_bytes_default() {
+        std::env::remove_var("ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
+        std::env::remove_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
+        assert_eq!(router_rs_cursor_hook_outbound_context_max_bytes(), 8192);
+    }
+
+    #[test]
+    fn hook_state_lock_retries_default() {
+        std::env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES");
+        assert_eq!(router_rs_cursor_hook_state_lock_retries(), 8);
+    }
+
+    #[test]
+    fn review_pending_cycle_max_default() {
+        std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+        assert_eq!(router_rs_cursor_review_pending_cycle_max(), 3);
+    }
+
+    #[test]
+    fn stale_sweep_days_default() {
+        std::env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS");
+        assert_eq!(router_rs_cursor_hook_state_stale_sweep_days(), 7);
+    }
+
+    #[test]
+    fn goal_readiness_default_all_false() {
+        let r = GoalReadiness::default();
+        assert!(!r.contract);
+        assert!(!r.progress);
+        assert!(!r.verification);
+    }
+
+    #[test]
+    fn hook_outbound_default_not_protected() {
+        assert!(!hook_outbound_line_is_framework_protected("any line"));
+    }
+
+    #[test]
+    fn truncate_outbound_default_passthrough() {
+        let input = "hello world";
+        assert_eq!(truncate_hook_outbound_lines_preserving(input, 5, "..."), input);
+    }
+
+    #[test]
+    fn synthetic_post_tool_default_empty() {
+        let result = synthetic_post_tool_evidence_shape(&json!({"tool": "test"}));
+        assert_eq!(result, json!({}));
+    }
+
+    #[test]
+    fn evaluate_goal_readiness_default_all_false() {
+        let r = evaluate_goal_readiness_from_disk(Path::new("/tmp"), &json!({"goal": "test"}), "t1");
+        assert!(!r.contract);
+        assert!(!r.progress);
+        assert!(!r.verification);
+    }
+
+    #[test]
+    fn goal_stop_followup_default_empty() {
+        assert!(goal_stop_followup_line(false, false, false, 0).is_empty());
+    }
+
+    #[test]
+    fn hook_observation_host_roundtrip() {
+        for host in [HookObservationHost::Cursor, HookObservationHost::Codex, HookObservationHost::ClaudeCode] {
+            assert_eq!(HookObservationHost::from_host_id(host.as_str()), Some(host));
+        }
+        assert_eq!(HookObservationHost::from_host_id("unknown"), None);
+    }
+
+    #[test]
+    fn paper_prose_hook_host_env_var() {
+        assert_eq!(PaperProseHookHost::Cursor.env_var(), "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
+        assert_eq!(PaperProseHookHost::Codex.env_var(), "ROUTER_RS_CODEX_PAPER_PROSE_HOOK");
+        assert_eq!(PaperProseHookHost::Claude.env_var(), "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
+    }
+
+    #[test]
+    fn route_decision_default() {
+        let d = RouteDecision::default();
+        assert!(d.selected_skill.is_empty());
+        assert!(d.reasons.is_empty());
+        assert_eq!(d.score, 0.0);
+    }
+
+    #[test]
+    fn mcp_pre_guard_verdict_default() {
+        let v = McpPreGuardVerdict::default();
+        assert!(!v.blocked);
+        assert!(v.reason.is_none());
+    }
+
+    #[test]
+    fn constants_values() {
+        assert_eq!(MAX_CONCURRENT_SUBAGENTS_LIMIT, 24);
+        assert!(RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH.ends_with(".json"));
+    }
+}

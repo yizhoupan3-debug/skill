@@ -3,6 +3,7 @@ name = "router-rs"
 version = "0.1.0"
 edition = "2021"
 autotests = false
+default-run = "router-rs-cli"
 
 [lib]
 name = "router_rs"

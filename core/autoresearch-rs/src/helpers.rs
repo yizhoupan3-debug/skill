@@ -1111,3 +1111,120 @@ pub(super) fn markdown_link(value: Option<&str>) -> String {
         .map(|item| format!("[link]({})", item.trim()))
         .unwrap_or_else(|| "-".into())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn str_field_returns_value() {
+        let v = json!({"title": "hello"});
+        assert_eq!(str_field(&v, "title"), "hello");
+    }
+
+    #[test]
+    fn str_field_returns_dash_for_missing() {
+        let v = json!({});
+        assert_eq!(str_field(&v, "title"), "-");
+    }
+
+    #[test]
+    fn str_field_default_custom_default() {
+        let v = json!({});
+        assert_eq!(str_field_default(&v, "key", "N/A"), "N/A");
+    }
+
+    #[test]
+    fn str_key_returns_value() {
+        let v = json!({"name": "test"});
+        assert_eq!(str_key(&v, "name"), "test");
+    }
+
+    #[test]
+    fn str_key_returns_dash_for_missing() {
+        let v = json!({});
+        assert_eq!(str_key(&v, "name"), "-");
+    }
+
+    #[test]
+    fn arr_returns_array() {
+        let v = json!({"items": [1, 2, 3]});
+        assert_eq!(arr(&v, "items").len(), 3);
+    }
+
+    #[test]
+    fn arr_mut_creates_empty_array_if_missing() {
+        let mut v = json!({});
+        let a = arr_mut(&mut v, "new_key");
+        assert!(a.is_empty());
+    }
+
+    #[test]
+    fn set_key_inserts_value() {
+        let mut v = json!({});
+        set_key(&mut v, "name", json!("test"));
+        assert_eq!(v["name"], "test");
+    }
+
+    #[test]
+    fn string_vec_creates_json_array() {
+        let result = string_vec(&["a".to_string(), "b".to_string()]);
+        assert_eq!(result, json!(["a", "b"]));
+    }
+
+    #[test]
+    fn optional_str_some() {
+        assert_eq!(optional_str(Some("hello")), json!("hello"));
+    }
+
+    #[test]
+    fn optional_str_none() {
+        assert_eq!(optional_str(None), json!(null));
+    }
+
+    #[test]
+    fn json_merge_overwrites_keys() {
+        let mut base = json!({"a": 1, "b": 2});
+        let patch = json!({"b": 3, "c": 4});
+        json_merge(&mut base, &patch);
+        assert_eq!(base["a"], 1);
+        assert_eq!(base["b"], 3);
+        assert_eq!(base["c"], 4);
+    }
+
+    #[test]
+    fn decode_xml_entities_basic() {
+        assert_eq!(decode_xml_entities("&lt;div&gt;"), "<div>");
+        assert_eq!(decode_xml_entities("a &amp; b"), "a & b");
+        assert_eq!(decode_xml_entities("&quot;hello&quot;"), "\"hello\"");
+    }
+
+    #[test]
+    fn decode_xml_entities_normalizes_whitespace() {
+        assert_eq!(decode_xml_entities("  hello   world  "), "hello world");
+    }
+
+    #[test]
+    fn markdown_link_some() {
+        assert_eq!(markdown_link(Some("https://example.com")), "[link](https://example.com)");
+    }
+
+    #[test]
+    fn markdown_link_none() {
+        assert_eq!(markdown_link(None), "-");
+    }
+
+    #[test]
+    fn markdown_link_empty() {
+        assert_eq!(markdown_link(Some("  ")), "-");
+    }
+
+    #[test]
+    fn stopwords_is_nonempty() {
+        let sw = stopwords();
+        assert!(!sw.is_empty());
+        assert!(sw.contains("the"));
+        assert!(sw.contains("is"));
+    }
+}

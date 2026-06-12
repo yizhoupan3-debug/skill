@@ -24,6 +24,5 @@ Reads `artifacts/telemetry/events.jsonl` (`TelemetryEvent` + optional `ts`), app
 
 ## Architecture
 This core is designed for maximum throughput using:
-- **`memmap2`**: Zero-copy file access.
-- **`rayon`**: Parallel processing of JSONL entries.
 - **`serde`**: Highly optimized JSON serialization.
+- **`sha2`**: Content-addressed hashing for deduplication.

@@ -55,7 +55,7 @@ thread_local! {
 // Hook timeout
 // ---------------------------------------------------------------------------
 
-pub(super) fn codex_hook_command_timeout_secs(host: CodexLifecycleHostKind, event: &str) -> u64 {
+pub(super) fn codex_hook_command_timeout_secs(_host: CodexLifecycleHostKind, event: &str) -> u64 {
     match event {
         "SessionStart" => 3,
         "PostToolUse" => 5,

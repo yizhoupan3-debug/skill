@@ -797,7 +797,7 @@ fn framework_naming_conventions_has_no_router_rs_default_value_table() {
 
 #[test]
 fn removed_router_flags_are_absent_from_user_docs() {
-    let docs = ["RTK.md", "docs/spec.md"]
+    let docs = ["RTK.md", "docs/spec.md", "AGENTS_CODEX.md"]
         .iter()
         .map(|path| read_text(&project_root().join(path)))
         .collect::<Vec<_>>()
@@ -2569,6 +2569,8 @@ fn ppt_rust_manifest_exposes_direct_cli() {
 fn ppt_rust_cli_owns_workspace_and_outline_commands() {
     let main_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/main.rs"));
     let lib_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/lib.rs"));
+    let qa_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/qa.rs"));
+    let office_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/office.rs"));
     assert!(main_source.contains("Init(InitArgs)"));
     assert!(main_source.contains("Outline(OutlineArgs)"));
     assert!(main_source.contains("BuildQa(BuildQaArgs)"));
@@ -2579,13 +2581,13 @@ fn ppt_rust_cli_owns_workspace_and_outline_commands() {
     assert!(lib_source.contains("fn strict_quality_gate("));
     assert!(lib_source.contains("fn write_pptx_package("));
     assert!(lib_source.contains("fn build_pptx_slide_specs("));
-    assert!(lib_source.contains("fn rust_office_outline_value("));
-    assert!(lib_source.contains("fn rust_office_issues_value("));
-    assert!(lib_source.contains("fn rust_office_validate_value("));
-    assert!(lib_source.contains("rust-pptx-inspector"));
-    assert!(lib_source.contains("fn font_check_ok("));
-    assert!(lib_source.contains("fn inspector_ok("));
-    assert!(lib_source.contains("ok: bool"));
+    assert!(office_source.contains("fn rust_office_outline_value("));
+    assert!(office_source.contains("fn rust_office_issues_value("));
+    assert!(office_source.contains("fn rust_office_validate_value("));
+    assert!(office_source.contains("rust-pptx-inspector"));
+    assert!(qa_source.contains("fn font_check_ok("));
+    assert!(qa_source.contains("fn inspector_ok("));
+    assert!(qa_source.contains("ok: bool"));
     assert!(!lib_source.contains("officecli"));
 }
 
