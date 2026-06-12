@@ -52,11 +52,7 @@ impl HostLifecycle for ClaudeHostProvider {
     }
 }
 
-impl HostToolExecutor for ClaudeHostProvider {
-    fn has_hard_gate_hooks(&self) -> bool {
-        true
-    }
-}
+impl HostToolExecutor for ClaudeHostProvider {}
 
 impl HostTelemetry for ClaudeHostProvider {
     fn hook_telemetry_surface(&self) -> &'static str {
@@ -104,18 +100,10 @@ impl HostProvider for ClaudeHostProvider {
 
     fn capabilities(&self) -> HostCapabilities {
         HostCapabilities {
-            has_native_hook: true,
-            supports_subagent: true,
-            supports_worktree: true,
             mcp_config_key: "",
             transport_type: "anthropic-claude-code",
             config_path: ".claude/settings.json",
-            batch_execution: false,
-            cron_execution: false,
-            ci_runner: false,
-            non_interactive_entrypoint: false,
-            external_session_supervisor: false,
-            rate_limit_auto_resume: false,
+            ..Default::default()
         }
     }
 }

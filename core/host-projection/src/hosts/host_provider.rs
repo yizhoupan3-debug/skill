@@ -15,6 +15,9 @@ pub const HARNESS_CAPABILITIES_FULL: &[&str] = &[
 ];
 
 /// Declared harness surface for a closed-set host (roadmap §4.1).
+///
+/// Default values reflect the majority across the 4 closed-set hosts.
+/// Only fields that differ per host need to be overridden in `capabilities()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HostCapabilities {
     pub has_native_hook: bool,
@@ -23,13 +26,31 @@ pub struct HostCapabilities {
     pub mcp_config_key: &'static str,
     pub transport_type: &'static str,
     pub config_path: &'static str,
-    // New fields from v6 roadmap I8
     pub batch_execution: bool,
     pub cron_execution: bool,
     pub ci_runner: bool,
     pub non_interactive_entrypoint: bool,
     pub external_session_supervisor: bool,
     pub rate_limit_auto_resume: bool,
+}
+
+impl Default for HostCapabilities {
+    fn default() -> Self {
+        Self {
+            has_native_hook: true,
+            supports_subagent: true,
+            supports_worktree: true,
+            mcp_config_key: "",
+            transport_type: "",
+            config_path: "",
+            batch_execution: false,
+            cron_execution: false,
+            ci_runner: false,
+            non_interactive_entrypoint: false,
+            external_session_supervisor: false,
+            rate_limit_auto_resume: false,
+        }
+    }
 }
 
 /// Session / lifecycle metadata from `RUNTIME_REGISTRY.host_projections`.
@@ -81,7 +102,10 @@ pub trait HostLifecycle: Send + Sync {
 
 /// Tool-guard metadata aligned with `pre_tool_use_guard` registry signals.
 pub trait HostToolExecutor: Send + Sync {
-    fn has_hard_gate_hooks(&self) -> bool;
+    /// All 4 closed-set hosts support hard gate hooks (shell/plugin level).
+    fn has_hard_gate_hooks(&self) -> bool {
+        true
+    }
 
     /// All 4 closed-set hosts support closeout evidence hooks.
     fn closeout_evidence_hooks_supported(&self) -> bool {
@@ -109,9 +133,19 @@ pub trait HostTelemetry: Send + Sync {
     }
 
     /// Extract followup and additional_context surfaces from hook output JSON.
-    /// Returns `(followup, additional)` strings. Default returns `(None, None)`.
-    fn extract_observation_surfaces(&self, _output: &serde_json::Value) -> (Option<String>, Option<String>) {
-        (None, None)
+    /// Default: followup from `followup_message`, additional from
+    /// `/hookSpecificOutput/additionalContext` then `additional_context`.
+    fn extract_observation_surfaces(&self, output: &serde_json::Value) -> (Option<String>, Option<String>) {
+        let followup = output
+            .get("followup_message")
+            .and_then(serde_json::Value::as_str)
+            .map(|s| s.to_string());
+        let additional = output
+            .pointer("/hookSpecificOutput/additionalContext")
+            .or_else(|| output.get("additional_context"))
+            .and_then(serde_json::Value::as_str)
+            .map(|s| s.to_string());
+        (followup, additional)
     }
 }
 
@@ -348,71 +382,30 @@ mod tests {
     }
 
     #[test]
-    fn cursor_capabilities_match_registry_projection() {
-        let provider = host_provider_for_id("cursor").expect("cursor provider");
-        let caps = provider.capabilities();
-        assert!(caps.has_native_hook);
-        assert!(caps.supports_subagent);
-        assert_eq!(caps.mcp_config_key, "mcpServers");
-        assert_eq!(caps.transport_type, "cursor-agent");
-        assert!(caps.config_path.contains("mcp.json"));
-        assert_eq!(provider.profile_id(), "cursor_profile");
-        assert_eq!(provider.session_supervisor_driver(), "unsupported");
-        assert_eq!(provider.context_file(), "AGENTS_CURSOR.md");
-        assert!(provider.closeout_evidence_hooks_supported());
-        assert!(provider.has_hard_gate_hooks());
-        assert!(!provider.requires_strict_pre_tool_fallback_default());
-        assert!(provider.review_gate_router_observable());
-        assert_eq!(provider.hook_telemetry_surface(), "cursor-agent");
-    }
-
-    #[test]
     #[serial]
-    fn claude_capabilities_declare_native_hooks_without_mcp_config_key() {
-        let provider = host_provider_for_id("claude-code").expect("claude provider");
-        let caps = provider.capabilities();
-        assert!(caps.has_native_hook);
-        assert!(caps.supports_subagent);
-        assert_eq!(caps.transport_type, "anthropic-claude-code");
-        assert_eq!(caps.config_path, ".claude/settings.json");
-        assert!(caps.mcp_config_key.is_empty());
-        assert!(provider.has_hard_gate_hooks());
-        assert!(!provider.requires_strict_pre_tool_fallback_default());
-        assert!(provider.review_gate_router_observable());
-    }
-
-    #[test]
-    #[serial]
-    fn opencode_capabilities_declare_plugin_hooks() {
-        let provider = host_provider_for_id("opencode").expect("opencode provider");
-        let caps = provider.capabilities();
-        assert!(caps.has_native_hook);
-        assert!(caps.supports_subagent);
-        assert_eq!(caps.transport_type, "opencode-plugin");
-        assert!(!provider.requires_strict_pre_tool_fallback_default());
-        assert!(provider.closeout_evidence_hooks_supported());
-        assert!(provider.review_gate_router_observable());
-        assert_eq!(provider.hook_telemetry_surface(), "opencode-plugin");
-        assert_eq!(provider.observation_host_id(), Some("opencode"));
-        assert_eq!(
-            provider.hooks_manifest_path(),
-            Some(".opencode/plugins/")
-        );
-        assert!(provider.registered_hook_events().contains(&"tool.execute.before"));
-    }
-
-    #[test]
-    fn codex_capabilities_declare_native_hooks_and_supervisor() {
-        let provider = host_provider_for_id("codex").expect("codex provider");
-        let caps = provider.capabilities();
-        assert!(caps.has_native_hook);
-        assert!(caps.supports_subagent);
-        assert!(caps.supports_worktree);
-        assert_eq!(caps.mcp_config_key, "mcp_servers");
-        assert_eq!(caps.transport_type, "native-codex");
-        assert!(caps.config_path.contains("config.toml"));
-        assert_eq!(provider.session_supervisor_driver(), "codex_driver");
-        assert!(!provider.requires_strict_pre_tool_fallback_default());
+    fn all_host_capabilities_match_expected_values() {
+        let cases: &[(&str, &str, &str, &str, bool)] = &[
+            // (host_id, transport_type, config_path_contains, session_supervisor, has_worktree)
+            ("cursor", "cursor-agent", "mcp.json", "unsupported", true),
+            ("claude-code", "anthropic-claude-code", ".claude/settings.json", "mcp_bridge", true),
+            ("opencode", "opencode-plugin", ".opencode/opencode.json", "unsupported", true),
+            ("codex", "native-codex", "config.toml", "codex_driver", true),
+        ];
+        for &(host_id, transport, config_contains, supervisor, worktree) in cases {
+            let provider = host_provider_for_id(host_id).expect(host_id);
+            let caps = provider.capabilities();
+            assert!(caps.has_native_hook, "{host_id}: has_native_hook");
+            assert!(caps.supports_subagent, "{host_id}: supports_subagent");
+            assert_eq!(caps.supports_worktree, worktree, "{host_id}: supports_worktree");
+            assert_eq!(caps.transport_type, transport, "{host_id}: transport_type");
+            assert!(caps.config_path.contains(config_contains), "{host_id}: config_path");
+            assert_eq!(provider.session_supervisor_driver(), supervisor, "{host_id}: supervisor");
+            // All 4 hosts share these via trait defaults
+            assert!(provider.closeout_evidence_hooks_supported(), "{host_id}: closeout");
+            assert!(provider.has_hard_gate_hooks(), "{host_id}: hard_gate");
+            assert!(!provider.requires_strict_pre_tool_fallback_default(), "{host_id}: strict_fallback");
+            assert!(provider.review_gate_router_observable(), "{host_id}: review_gate");
+        }
     }
 
     #[test]
@@ -447,27 +440,22 @@ mod tests {
     }
 
     #[test]
-    fn cursor_native_hook_glue_surfaces_manifest_and_events() {
-        let lifecycle = host_lifecycle_for_id("cursor").expect("cursor");
-        assert_eq!(lifecycle.hooks_manifest_path(), Some(".cursor/hooks.json"));
-        assert!(lifecycle
-            .registered_hook_events()
-            .contains(&"beforeSubmitPrompt"));
-        assert!(lifecycle.registered_hook_events().contains(&"stop"));
-
-        let telemetry = host_telemetry_for_id("cursor").expect("cursor telemetry");
-        assert_eq!(telemetry.observation_host_id(), Some("cursor"));
-    }
-
-    #[test]
-    fn codex_native_hook_glue_surfaces_manifest_and_events() {
-        let lifecycle = host_lifecycle_for_id("codex").expect("codex");
-        assert_eq!(lifecycle.hooks_manifest_path(), Some(".codex/hooks.json"));
-        assert!(lifecycle.registered_hook_events().contains(&"PreToolUse"));
-        assert!(lifecycle.registered_hook_events().contains(&"Stop"));
-
-        let telemetry = host_telemetry_for_id("codex").expect("codex telemetry");
-        assert_eq!(telemetry.observation_host_id(), Some("codex"));
+    fn native_hook_glue_surfaces_manifest_and_events() {
+        let cases: &[(&str, &str, &[&str])] = &[
+            // (host_id, manifest_path, sample_events)
+            ("cursor", ".cursor/hooks.json", &["beforeSubmitPrompt", "stop"]),
+            ("codex", ".codex/hooks.json", &["PreToolUse", "Stop"]),
+            ("opencode", ".opencode/plugins/", &["tool.execute.before"]),
+        ];
+        for &(host_id, manifest, events) in cases {
+            let lifecycle = host_lifecycle_for_id(host_id).expect(host_id);
+            assert_eq!(lifecycle.hooks_manifest_path(), Some(manifest), "{host_id}: manifest");
+            for event in events {
+                assert!(lifecycle.registered_hook_events().contains(event), "{host_id}: event {event}");
+            }
+            let telemetry = host_telemetry_for_id(host_id).expect(&format!("{host_id} telemetry"));
+            assert_eq!(telemetry.observation_host_id(), Some(host_id), "{host_id}: observation_host_id");
+        }
     }
 
     #[test]

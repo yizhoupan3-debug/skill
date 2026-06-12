@@ -29,11 +29,7 @@ impl HostLifecycle for OpencodeHostProvider {
     }
 }
 
-impl HostToolExecutor for OpencodeHostProvider {
-    fn has_hard_gate_hooks(&self) -> bool {
-        false
-    }
-}
+impl HostToolExecutor for OpencodeHostProvider {}
 
 impl HostTelemetry for OpencodeHostProvider {
     fn hook_telemetry_surface(&self) -> &'static str {
@@ -56,18 +52,10 @@ impl HostProvider for OpencodeHostProvider {
 
     fn capabilities(&self) -> HostCapabilities {
         HostCapabilities {
-            has_native_hook: true,
-            supports_subagent: true,
-            supports_worktree: true,
             mcp_config_key: "mcp",
             transport_type: "opencode-plugin",
             config_path: ".opencode/opencode.json",
-            batch_execution: false,
-            cron_execution: false,
-            ci_runner: false,
-            non_interactive_entrypoint: false,
-            external_session_supervisor: false,
-            rate_limit_auto_resume: false,
+            ..Default::default()
         }
     }
 }

@@ -65,11 +65,7 @@ impl HostLifecycle for CodexHostProvider {
     }
 }
 
-impl HostToolExecutor for CodexHostProvider {
-    fn has_hard_gate_hooks(&self) -> bool {
-        true
-    }
-}
+impl HostToolExecutor for CodexHostProvider {}
 
 impl HostTelemetry for CodexHostProvider {
     fn hook_telemetry_surface(&self) -> &'static str {
@@ -78,18 +74,6 @@ impl HostTelemetry for CodexHostProvider {
 
     fn observation_host_id(&self) -> Option<&'static str> {
         Some("codex")
-    }
-
-    fn extract_observation_surfaces(&self, output: &Value) -> (Option<String>, Option<String>) {
-        let followup = output
-            .get("followup_message")
-            .and_then(Value::as_str)
-            .map(|s| s.to_string());
-        let additional = output
-            .pointer("/hookSpecificOutput/additionalContext")
-            .and_then(Value::as_str)
-            .map(|s| s.to_string());
-        (followup, additional)
     }
 }
 
@@ -108,9 +92,6 @@ impl HostProvider for CodexHostProvider {
 
     fn capabilities(&self) -> HostCapabilities {
         HostCapabilities {
-            has_native_hook: true,
-            supports_subagent: true,
-            supports_worktree: true,
             mcp_config_key: "mcp_servers",
             transport_type: "native-codex",
             config_path: ".codex/config.toml",
@@ -120,6 +101,7 @@ impl HostProvider for CodexHostProvider {
             non_interactive_entrypoint: true,
             external_session_supervisor: true,
             rate_limit_auto_resume: true,
+            ..Default::default()
         }
     }
 }
