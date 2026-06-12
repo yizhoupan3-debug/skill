@@ -5,17 +5,14 @@
 
 use std::sync::OnceLock;
 
-/// Full harness capabilities for hosts with complete hook support (claude, cursor, codex).
+/// Full harness capabilities for hosts with complete hook support
+/// (claude, cursor, codex, opencode — all 4 closed-set hosts).
 pub const HARNESS_CAPABILITIES_FULL: &[&str] = &[
     "hot_runtime_routing",
     "l2_continuity_contract",
     "closeout_evidence_hooks",
     "review_gate_router_observation",
 ];
-
-/// Minimal harness capabilities for hosts with basic support (antigravity, opencode).
-pub const HARNESS_CAPABILITIES_MINIMAL: &[&str] =
-    &["hot_runtime_routing", "l2_continuity_contract"];
 
 /// Declared harness surface for a closed-set host (roadmap §4.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -318,18 +315,6 @@ mod tests {
             "claude-code"
         );
         assert_eq!(
-            host_provider_for_install_tool("antigravity")
-                .expect("antigravity")
-                .host_id(),
-            "antigravity"
-        );
-        assert_eq!(
-            host_provider_for_install_tool("antigravity-app")
-                .expect("antigravity-app alias")
-                .host_id(),
-            "antigravity"
-        );
-        assert_eq!(
             host_provider_for_install_tool("opencode")
                 .expect("opencode")
                 .host_id(),
@@ -362,7 +347,7 @@ mod tests {
         assert_eq!(provider.session_supervisor_driver(), "unsupported");
         assert_eq!(provider.context_file(), "AGENTS_CURSOR.md");
         assert!(provider.closeout_evidence_hooks_supported());
-        assert!(!provider.has_hard_gate_hooks());
+        assert!(provider.has_hard_gate_hooks());
         assert!(!provider.requires_strict_pre_tool_fallback_default());
         assert!(provider.review_gate_router_observable());
         assert_eq!(provider.hook_telemetry_surface(), "cursor-agent");
@@ -385,28 +370,22 @@ mod tests {
 
     #[test]
     #[serial]
-    fn antigravity_capabilities_declare_mcp_stdio_without_native_hooks() {
-        let provider = host_provider_for_id("antigravity").expect("antigravity provider");
-        let caps = provider.capabilities();
-        assert!(!caps.has_native_hook);
-        assert_eq!(caps.transport_type, "mcp-stdio");
-        assert!(!provider.closeout_evidence_hooks_supported());
-        assert!(provider.requires_strict_pre_tool_fallback_default());
-        assert!(!provider.review_gate_router_observable());
-        assert_eq!(provider.hook_telemetry_surface(), "mcp-stdio");
-    }
-
-    #[test]
-    #[serial]
-    fn opencode_requires_strict_pre_tool_fallback() {
+    fn opencode_capabilities_declare_plugin_hooks() {
         let provider = host_provider_for_id("opencode").expect("opencode provider");
-        assert!(!provider.capabilities().has_native_hook);
-        assert!(provider.requires_strict_pre_tool_fallback_default());
-        assert_eq!(provider.hook_telemetry_surface(), "opencode-cli");
+        let caps = provider.capabilities();
+        assert!(caps.has_native_hook);
+        assert!(caps.supports_subagent);
+        assert_eq!(caps.transport_type, "opencode-plugin");
+        assert!(!provider.requires_strict_pre_tool_fallback_default());
+        assert!(provider.closeout_evidence_hooks_supported());
+        assert!(provider.review_gate_router_observable());
+        assert_eq!(provider.hook_telemetry_surface(), "opencode-plugin");
+        assert_eq!(provider.observation_host_id(), Some("opencode"));
         assert_eq!(
-            provider.capabilities().config_path,
-            ".opencode/opencode.json"
+            provider.hooks_manifest_path(),
+            Some(".opencode/plugins/")
         );
+        assert!(provider.registered_hook_events().contains(&"tool.execute.before"));
     }
 
     #[test]
@@ -432,7 +411,7 @@ mod tests {
         );
         assert_eq!(
             host_provider_strict_pre_tool_fallback_hint("opencode"),
-            Some(true)
+            Some(false)
         );
         assert!(host_provider_strict_pre_tool_fallback_hint("unknown-host").is_none());
     }
@@ -450,8 +429,8 @@ mod tests {
         assert_eq!(lifecycle.profile_id(), "cursor_profile");
         let tool_exec = host_tool_executor_for_id("codex").expect("codex tool executor");
         assert!(!tool_exec.requires_strict_pre_tool_fallback_default());
-        let telemetry = host_telemetry_for_id("antigravity").expect("antigravity telemetry");
-        assert!(!telemetry.review_gate_router_observable());
+        let telemetry = host_telemetry_for_id("opencode").expect("opencode telemetry");
+        assert!(telemetry.review_gate_router_observable());
     }
 
     #[test]
@@ -480,20 +459,6 @@ mod tests {
 
     #[test]
     #[serial]
-    fn anemic_hosts_skip_native_hook_glue_defaults() {
-        for host_id in ["antigravity", "opencode"] {
-            let lifecycle = host_lifecycle_for_id(host_id).expect(host_id);
-            assert_eq!(lifecycle.hooks_manifest_path(), None);
-            assert!(lifecycle.registered_hook_events().is_empty());
-            assert_eq!(
-                host_telemetry_for_id(host_id).and_then(|t| t.observation_host_id()),
-                None
-            );
-        }
-    }
-
-    #[test]
-    #[serial]
     fn routing_aliases_expand_via_host_provider_registry() {
         let cases: &[(&str, &[&str])] = &[
             ("cursor", &["cursor"]),
@@ -504,10 +469,6 @@ mod tests {
             ("claude", &["claude", "claude-code", "claude-desktop"]),
             ("codex-cli", &["codex-cli", "codex", "codex-app"]),
             ("codex", &["codex", "codex-cli", "codex-app"]),
-            (
-                "antigravity-cli",
-                &["antigravity-cli", "antigravity", "antigravity-app"],
-            ),
         ];
         for (input, expected) in cases {
             let aliases = host_provider_routing_aliases(input);
@@ -528,12 +489,6 @@ mod tests {
                 .expect("claude-desktop")
                 .host_id(),
             "claude-code"
-        );
-        assert_eq!(
-            host_provider_for_routing_spelling("antigravity-cli")
-                .expect("antigravity-cli")
-                .host_id(),
-            "antigravity"
         );
     }
 }

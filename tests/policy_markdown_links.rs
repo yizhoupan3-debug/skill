@@ -104,7 +104,6 @@ fn collect_policy_markdown_files(root: &Path) -> Vec<PathBuf> {
         "AGENTS_CURSOR.md",
         "AGENTS_CODEX.md",
         "AGENTS_CLAUDE.md",
-        "AGENTS_ANTIGRAVITY.md",
         "MIGRATION.md",
         "README.md",
     ] {

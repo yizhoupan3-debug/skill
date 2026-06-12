@@ -636,10 +636,9 @@ pub fn run_codex_lifecycle_context_hook_for_state_dir(
 ) -> Result<Option<Value>, String> {
     let host = match state_dir_leaf {
         ".codex" => CodexLifecycleHostKind::CODEX,
-        ".antigravitycli" => CodexLifecycleHostKind::ANTIGRAVITY_CLI,
         other => {
             return Err(format!(
-                "unsupported lifecycle state_dir_leaf `{other}` (expected `.codex` or `.antigravitycli`)"
+                "unsupported lifecycle state_dir_leaf `{other}` (expected `.codex`)"
             ));
         }
     };
@@ -689,9 +688,6 @@ fn run_codex_lifecycle_context_hook_inner(
             }
             _ => {}
         }
-    }
-    if event_name == "pretooluse" && host == CodexLifecycleHostKind::ANTIGRAVITY_CLI {
-        return super::pretool::run_pre_tool_use(repo_root, payload);
     }
     let mut result: Option<Value> = match event_name.as_str() {
         "sessionstart" => handle_codex_session_start(repo_root, payload),

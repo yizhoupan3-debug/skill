@@ -3,12 +3,12 @@ export const meta = {
   name: 'batch1-p0-security-fixes',
   description: 'Batch 1: P0安全修复 — 路径遍历防护、fsync对齐、死函数删除',
   phases: [
-    { title: 'P0修复', detail: '4项安全/完整性修复' },
+    { title: 'P0修复', detail: '3项安全/完整性修复' },
     { title: '验证', detail: 'cargo check + 测试' },
   ],
 }
 
-// Batch 1: 4 P0 fixes, each as an independent agent
+// Batch 1: 3 P0 fixes, each as an independent agent
 // Using pipeline to process sequentially (3 agents per item: fix, verify, commit-msg)
 
 const fixes = [
@@ -59,26 +59,6 @@ write_transport_binding_payload（约第2151行）和 write_checkpoint_resume_ma
 输出修改内容和行号。`,
   },
   {
-    name: 'fsync_task_ledger',
-    prompt: `面向用户的可见输出使用简体中文。
-
-修复 core/antigravity/src/task_ledger.rs 中 append_transaction_assuming_l1_held 的 fsync 缺失。
-
-## 问题
-约第94-167行，两个分支（文件已存在/文件不存在）都在 writeln! 后直接 drop file，无 sync。
-
-## 修复方案
-在 writeln!(file, "{}", serialized)?; 之后、函数返回之前，添加：
-file.sync_all().map_err(|e| format!("fsync task_ledger failed: {e}"))?;
-
-注意：
-- file 变量需要是 mut 才能调用 sync_all（已经是 mut）
-- 这是低优先级修复（append-only 格式），但仍应与其他写入模式对齐
-
-## 完成后
-输出修改内容和行号。`,
-  },
-  {
     name: 'dead_code_removal',
     prompt: `面向用户的可见输出使用简体中文。
 
@@ -119,7 +99,6 @@ const buildResult = await agent(`面向用户的可见输出使用简体中文�
 
 运行 cargo check 验证所有 P0 修复是否编译通过：
 1. cd /Users/joe/Developer/skill/core/router-rs && cargo check 2>&1
-2. cd /Users/joe/Developer/skill/core/antigravity && cargo check 2>&1
 
 如果编译失败，分析错误并报告需要的额外修复。
 

@@ -613,14 +613,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "framework-profile"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "fs2"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1757,7 +1749,6 @@ dependencies = [
  "core-state",
  "ctor",
  "framework-kernel",
- "framework-profile",
  "fs2",
  "hex",
  "host-projection",

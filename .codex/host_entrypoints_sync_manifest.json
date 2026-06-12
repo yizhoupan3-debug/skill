@@ -20,10 +20,6 @@
   "shared_system": {
     "agent_policy_entrypoint": "AGENTS_CODEX.md",
     "host_entrypoints": {
-      "antigravity": [
-        "AGENTS_ANTIGRAVITY.md",
-        ".gemini/antigravity/rules/framework.md"
-      ],
       "claude-code": [
         "AGENTS_CLAUDE.md",
         ".claude/rules/framework.md",
@@ -42,7 +38,6 @@
       "cursor",
       "claude-code",
       "opencode",
-      "antigravity",
       "codex"
     ]
   }

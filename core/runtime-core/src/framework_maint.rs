@@ -216,7 +216,6 @@ const VERIFY_REGISTRY: &[(&str, VerifyFn)] = &[
     ("codex", |root| verify_codex_hooks(root.to_path_buf())),
     ("cursor", |root| verify_cursor_hooks(root.to_path_buf())),
     ("claude", verify_claude_code_projection),
-    ("antigravity", verify_antigravity_projection),
     ("opencode", verify_opencode_projection),
 ];
 
@@ -463,122 +462,10 @@ fn verify_claude_user_projection(framework_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn verify_antigravity_projection(repo_root: &Path) -> Result<(), String> {
-    let roots = crate::host_integration::resolve_projection_roots(
-        None,
-        Some(repo_root),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )?;
-
-    let mut last_error = None;
-    for scope in ["project", "user"] {
-        match verify_antigravity_projection_scope(&roots, scope) {
-            Ok(()) => {
-                eprintln!("verify_antigravity_projection: ok");
-                return Ok(());
-            }
-            Err(e) => {
-                last_error = Some(e);
-            }
-        }
-    }
-
-    Err(last_error.unwrap_or_else(|| "verify_antigravity_projection: failed to resolve projection roots".to_string()))
-}
-
-fn verify_antigravity_projection_scope(
-    roots: &crate::host_integration::ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<(), String> {
-    let mcp = if scope == "user" {
-        roots.antigravity_home_root.join("mcp.json")
-    } else {
-        roots.project_root.join(".gemini/mcp.json")
-    };
-    let settings = if scope == "user" {
-        roots.antigravity_home_root.join("settings.json")
-    } else {
-        roots.project_root.join(".gemini/settings.json")
-    };
-    let framework_md = if scope == "user" {
-        roots.antigravity_home_root.join("antigravity/rules/framework.md")
-    } else {
-        // Read project-level path from registry host_entrypoints (fallback to known default)
-        let rel = crate::runtime_registry::load_runtime_registry_json(&roots.framework_root)
-            .ok()
-            .and_then(|reg| crate::framework_host_targets::host_entrypoints_value_for_id(&reg, "antigravity").ok())
-            .and_then(|ep| {
-                let paths: Vec<String> = match ep {
-                    serde_json::Value::Array(arr) => arr.into_iter().filter_map(|v| v.as_str().map(String::from)).collect(),
-                    serde_json::Value::String(s) => vec![s],
-                    _ => vec![],
-                };
-                paths.into_iter().find(|p| (p.contains('/') || p.contains('.')) && p.ends_with(".md"))
-            })
-            .unwrap_or_else(|| ".gemini/antigravity/rules/framework.md".to_string());
-        roots.project_root.join(rel)
-    };
-    let manifest = if scope == "user" {
-        roots.antigravity_home_root.join(".framework-projection-antigravity.json")
-    } else {
-        roots.project_root.join(".gemini/.framework-projection-antigravity.json")
-    };
-
-    for path in [&mcp, &settings, &framework_md, &manifest] {
-        if !path.is_file() {
-            return Err(format!(
-                "verify_antigravity_projection: missing {} in scope {}",
-                path.display(),
-                scope
-            ));
-        }
-    }
-
-    let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
-    let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
-    let host_projection = manifest_json
-        .get("host_projection")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    if host_projection != "antigravity" {
-        return Err(format!(
-            "verify_antigravity_projection: manifest must declare antigravity in scope {} (retired antigravity-app rejected)",
-            scope
-        ));
-    }
-    let mcp_text = fs::read_to_string(&mcp).map_err(|e| e.to_string())?;
-    let required_mcps = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
-    for mcp_id in &required_mcps {
-        if !mcp_text.contains(mcp_id) {
-            return Err(format!(
-                "verify_antigravity_projection: mcp.json must register {} in scope {}",
-                mcp_id, scope
-            ));
-        }
-    }
-    let md_text = fs::read_to_string(&framework_md).map_err(|e| e.to_string())?;
-    if !md_text.contains("antigravity") {
-        return Err(format!(
-            "verify_antigravity_projection: framework.md must reference antigravity in scope {}",
-            scope
-        ));
-    }
-    Ok(())
-}
-
 fn verify_opencode_projection(repo_root: &Path) -> Result<(), String> {
     let roots = crate::host_integration::resolve_projection_roots(
         None,
         Some(repo_root),
-        None,
-        None,
         None,
         None,
         None,
@@ -749,7 +636,7 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         "Kiro",
         "qoder",
         "qoderwork",
-        "antigravity",
+        "antigravity", // intentionally retained: guard against stale hooks referencing retired hosts
         "trae",
     ];
     for marker in STALE_HOST_MARKERS {
@@ -1304,7 +1191,7 @@ fn is_key_document_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     let is_root_doc = matches!(
         path,
-        "README.md" | "AGENTS.md" | "AGENTS_ANTIGRAVITY.md" | "AGENTS_CURSOR.md" | "AGENTS_CODEX.md" | "AGENTS_CLAUDE.md" | "RTK.md" | "docs/README.md"
+        "README.md" | "AGENTS.md" | "AGENTS_CURSOR.md" | "AGENTS_CODEX.md" | "AGENTS_CLAUDE.md" | "RTK.md" | "docs/README.md"
     );
     let is_research_doc = lower.contains("research")
         || lower.contains("paper")

@@ -54,8 +54,6 @@ mod five_host_install_projection {
             codex_home_root: home.join(".codex"),
             cursor_home_root: home.join(".cursor"),
             claude_home_root: home.join(".claude"),
-            antigravity_home_root: home.join(".gemini"),
-            antigravity_cli_home_root: home.join(".antigravitycli"),
             opencode_home_root: home.join(".opencode"),
         };
         (root, roots)
@@ -120,11 +118,6 @@ mod five_host_install_projection {
                 assert!(path.is_file(), "opencode project opencode.json must exist");
                 assert_mcp_servers_camel_codegraph(&read_json(&path), host_id);
             }
-            "antigravity" => {
-                let path = roots.project_root.join(".gemini/mcp.json");
-                assert!(path.is_file(), "antigravity project mcp.json must exist");
-                assert_mcp_servers_camel_codegraph(&read_json(&path), host_id);
-            }
             other => panic!("unexpected host_id {other}"),
         }
     }
@@ -136,7 +129,7 @@ mod five_host_install_projection {
             load_runtime_registry_json(&framework_root).expect("load RUNTIME_REGISTRY");
         let host_ids =
             host_targets_supported_host_ids(&registry).expect("supported host ids");
-        assert_eq!(host_ids.len(), 5, "closed-set must remain five hosts");
+        assert_eq!(host_ids.len(), 4, "closed-set must remain four hosts (codex, claude-code, cursor, opencode)");
 
         let (cleanup_root, roots) = test_roots(&framework_root);
         let prior_home = std::env::var_os("HOME");

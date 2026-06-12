@@ -1,4 +1,4 @@
-//! MCP stdio harness: Antigravity / Opencode 共用 stdio transport（`claude-desktop` 已退役，入口 fail-closed）。
+//! MCP stdio harness: Opencode 共用 stdio transport（`claude-desktop` 已退役，入口 fail-closed）。
 //!
 //! MCP 服务器（stdio transport），提供 tools / prompts / resources 三类端点，
 //! 替代 shell hook 协议（PreToolUse / UserPromptSubmit / PostToolUse / Stop）。
@@ -34,12 +34,19 @@ const WEB_FETCH_TIMEOUT_SECS: u64 = 30;
 
 /// Shared host display label for MCP-hosted sessions.
 /// Used by closeout hard-block and advisory review gate prompts (review never hard-blocks Stop).
-fn mcp_host_display_label(host_id: &str) -> &'static str {
-    match host_id {
-        "antigravity" | "antigravity-app" => "Antigravity",
-        "opencode" => "Opencode",
-        _ => "MCP Host",
-    }
+/// Resolved from HostProvider registry; falls back to "MCP Host" for unknown hosts.
+fn mcp_host_display_label(host_id: &str) -> String {
+    crate::hosts::host_provider_for_id(host_id)
+        .map(|p| {
+            // Capitalize first letter of host_id as display name
+            let id = p.host_id();
+            let mut chars = id.chars();
+            match chars.next() {
+                Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
+                None => "MCP Host".to_string(),
+            }
+        })
+        .unwrap_or_else(|| "MCP Host".to_string())
 }
 
 fn reject_retired_claude_desktop_host(host_id: &str) -> Result<(), String> {
@@ -299,13 +306,6 @@ pub fn run_claude_desktop_mcp_loop(repo_root_arg: Option<&Path>) -> Result<(), S
     reject_retired_claude_desktop_host("claude-desktop")
 }
 
-pub fn run_antigravity_mcp_loop(repo_root_arg: Option<&Path>) -> Result<(), String> {
-    let repo_root = crate::hooks::resolve_repo_root_arg(repo_root_arg)?;
-    let stdin = io::stdin();
-    let stdout = io::stdout();
-    run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root, "antigravity")
-}
-
 pub fn run_mcp_stdio<R: BufRead, W: Write>(
     mut input: R,
     mut output: W,
@@ -525,7 +525,13 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                     "description": "返回当前仓库的框架运行时快照（与 `router-rs framework snapshot` 同源），含完整连续性视图。",
                     "inputSchema": {
                         "type": "object",
-                        "properties": {},
+                        "properties": {
+                            "detail_level": {
+                                "type": "string",
+                                "enum": ["summary", "full"],
+                                "description": "快照详细级别（默认 summary）",
+                            },
+                        },
                     },
                 },
                 {
@@ -651,36 +657,36 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             },
                             "round": {
                                 "type": "integer",
-                                "description": "RFV round number (append_round 时需要)",
+                                "description": "RFV round number（operation=append_round 时必填）",
                             },
                             "goal": {
                                 "type": "string",
-                                "description": "RFV goal (start 时需要)",
+                                "description": "RFV goal（operation=start 时必填）",
                             },
                             "review_summary": {
                                 "type": "string",
-                                "description": "append_round 时需要",
+                                "description": "审查摘要（operation=append_round 时必填）",
                             },
                             "fix_summary": {
                                 "type": "string",
-                                "description": "append_round 时需要",
+                                "description": "修复摘要（operation=append_round 时必填）",
                             },
                             "verify_result": {
                                 "type": "string",
                                 "enum": ["PASS", "FAIL", "SKIPPED", "UNKNOWN"],
-                                "description": "验证结果（append_round 时需要）",
+                                "description": "验证结果（operation=append_round 时必填）",
                             },
                             "supervisor_decision": {
                                 "type": "string",
-                                "description": "supervisor 决策（append_round 时需要）",
+                                "description": "supervisor 决策（operation=append_round 时必填）",
                             },
                             "reason": {
                                 "type": "string",
-                                "description": "原因说明（append_round 时需要）",
+                                "description": "原因说明（operation=append_round 时必填）",
                             },
                             "max_rounds": {
                                 "type": "integer",
-                                "description": "最大轮次（start 时可选，默认 100）",
+                                "description": "最大轮次（start 时可选，默认 3）",
                             },
                             "allow_external_research": {
                                 "type": "boolean",
@@ -775,7 +781,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             },
                             "task_id": {
                                 "type": "string",
-                                "description": "task id，必填",
+                                "description": "task id（可选，默认从 .supervisor_state.json 读取当前活跃 task）",
                             },
                             "session_id": {
                                 "type": "string",
@@ -783,15 +789,15 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             },
                             "goal": {
                                 "type": "string",
-                                "description": "goal 内容（start 时需要）",
+                                "description": "goal 内容（operation=start 时必填）",
                             },
                             "note": {
                                 "type": "string",
-                                "description": "备注信息（checkpoint 时需要）",
+                                "description": "备注信息（operation=checkpoint 时必填）",
                             },
                             "blocker": {
                                 "type": "string",
-                                "description": "blocker 描述（block 时需要）",
+                                "description": "blocker 描述（operation=block 时必填）",
                             },
                             "non_goals": {
                                 "type": "array",
@@ -810,7 +816,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             },
                             "drive_until_done": {
                                 "type": "boolean",
-                                "description": "是否自动驱动到完成（start 时可选，默认 false）",
+                                "description": "是否自动驱动到完成（start 时可选，默认 true）。true 时自动填充缺失的 non_goals/done_when/validation_commands",
                             },
                             "lifecycle_profile": {
                                 "type": "string",
@@ -841,7 +847,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                                 "description": "是否同时设置 focus_task 指针（start 时可选，默认 true）",
                             },
                         },
-                        "required": ["operation", "task_id"],
+                        "required": ["operation"],
                     },
                 },
             ],
@@ -1093,7 +1099,6 @@ fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, S
         .map(str::to_string);
     let command_display = command.as_deref().unwrap_or("");
     let exit_code = arguments.get("exit_code").and_then(Value::as_i64);
-    let output = arguments.get("output").and_then(Value::as_str);
 
     crate::hooks::append_evidence_index(repo_root, None, entry)?;
 
@@ -1104,17 +1109,9 @@ fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Result<String, S
         .map(|ec| ec.to_string())
         .unwrap_or_else(|| "null".to_string());
     let honor_note = " (honor-system: not bound to host tool execution — verify independently)";
-    if let Some(text) = output {
-        let max_chars = evidence_output_max_chars();
-        let trimmed = text.chars().take(max_chars).collect::<String>();
-        Ok(format!(
-            "Evidence recorded{honor_note}: {tool_name_display} '{command_display}' -> exit={exit_display}\n{trimmed}"
-        ))
-    } else {
-        Ok(format!(
-            "Evidence recorded{honor_note}: {tool_name_display} '{command_display}' -> exit={exit_display}"
-        ))
-    }
+    Ok(format!(
+        "Evidence recorded{honor_note}: {tool_name_display} '{command_display}' -> exit={exit_display}"
+    ))
 }
 
 /// 获取 evidence output 的最大字符数配置。
@@ -1446,7 +1443,7 @@ pub fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &str) ->
     Ok(evaluate_mcp_closeout_gate(arguments, repo_root, host_id)?.formatted)
 }
 
-fn tool_closeout_record_write(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
+fn tool_closeout_record_write(arguments: &Value, repo_root: &Path, _host_id: &str) -> Result<String, String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -1541,28 +1538,10 @@ fn tool_closeout_record_write(arguments: &Value, repo_root: &Path, host_id: &str
         })
         .unwrap_or_default();
 
-    let mut result = json!({
+    let result = json!({
         "closeout_allowed": closeout_allowed,
-        "record_path": record_path.to_string_lossy().to_string(),
         "violations": violations,
     });
-
-    if let Ok(mcp_verdict) = evaluate_mcp_closeout_gate(
-        &json!({ "task_id": task_id }),
-        repo_root,
-        host_id,
-    ) {
-        if let Some(obj) = result.as_object_mut() {
-            obj.insert(
-                "mcp_closeout_gate".to_string(),
-                json!({
-                    "all_clear": mcp_verdict.all_clear,
-                    "checkpoint_only": mcp_verdict.checkpoint_only,
-                    "hard_block": mcp_verdict.hard_block,
-                }),
-            );
-        }
-    }
 
     Ok(serde_json::to_string_pretty(&result).map_err(|e| format!("serialize closeout result failed: {e}"))?)
 }
@@ -1757,7 +1736,7 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path, host
             let task_view = get_cached_task_view(repo_root);
             let lifecycle_profile = task_lifecycle_profile(&task_view);
             let gate_mode =
-                mcp_closeout_gate_mode_narrative(repo_root, host_id, host_name, lifecycle_profile);
+                mcp_closeout_gate_mode_narrative(repo_root, host_id, &host_name, lifecycle_profile);
             {
                 let lane_lines = core_policy::registry_review_gate::reviewer_lanes_prompt_lines(Some(repo_root));
                 format!(
@@ -2022,6 +2001,9 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path, connection_session_
                 .get("verify_result")
                 .and_then(Value::as_str)
                 .ok_or("append_round requires 'verify_result' argument (string)")?;
+            if !matches!(verify_result, "PASS" | "FAIL" | "SKIPPED" | "UNKNOWN") {
+                return Err(format!("verify_result must be one of PASS/FAIL/SKIPPED/UNKNOWN, got: {verify_result}"));
+            }
             payload["verify_result"] = json!(verify_result);
 
             let supervisor_decision = arguments
@@ -2043,8 +2025,28 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path, connection_session_
         }
     }
 
-    let result = core_state::rfv_loop::framework_rfv_loop(payload)?;
+    // Prefer runtime-core's full implementation (has append_round support).
+    // Fall back to core-state's lightweight version if runtime-core hook not registered.
+    let result = match crate::hooks::rfv_loop_drive_registered() {
+        Some(f) => f(payload)?,
+        None => core_state::rfv_loop::framework_rfv_loop(payload)?,
+    };
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+}
+
+/// Resolve the active task_id from `.supervisor_state.json` when not explicitly provided.
+fn resolve_active_task_id(repo_root: &Path) -> Result<String, String> {
+    let state_path = repo_root.join(".supervisor_state.json");
+    let content = std::fs::read_to_string(&state_path)
+        .map_err(|e| format!("Cannot auto-resolve task_id: {e} (provide task_id explicitly or start a task first)"))?;
+    let state: Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Cannot parse .supervisor_state.json: {e}"))?;
+    state
+        .get("task_id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| s.to_string())
+        .ok_or_else(|| "No active task_id in .supervisor_state.json (provide task_id explicitly or start a task first)".to_string())
 }
 
 fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_session_id: &str) -> Result<String, String> {
@@ -2052,10 +2054,12 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
         .get("operation")
         .and_then(Value::as_str)
         .ok_or("Missing required argument: operation")?;
-    let task_id = arguments
-        .get("task_id")
-        .and_then(Value::as_str)
-        .ok_or("Missing required argument: task_id")?;
+
+    // Auto-resolve task_id from .supervisor_state.json when not provided
+    let task_id = match arguments.get("task_id").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+        Some(tid) => tid.to_string(),
+        None => resolve_active_task_id(repo_root)?,
+    };
 
     let repo_root_str = repo_root.to_string_lossy().to_string();
 
@@ -2072,6 +2076,31 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
                 .and_then(Value::as_str)
                 .ok_or("start requires 'goal' argument (string)")?;
             payload["goal"] = json!(goal);
+
+            // drive_until_done defaults to true (matches core-state behavior)
+            let drive_until_done = arguments
+                .get("drive_until_done")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            payload["drive_until_done"] = json!(drive_until_done);
+
+            // Auto-fill contract fields when drive_until_done=true and not explicitly provided
+            if drive_until_done {
+                if arguments.get("non_goals").is_none() {
+                    payload["non_goals"] = json!(["不处理此 goal 范围外的功能"]);
+                }
+                if arguments.get("done_when").is_none() {
+                    payload["done_when"] = json!([
+                        format!("goal 已完成: {goal}"),
+                        "cargo check / test 通过".to_string(),
+                    ]);
+                }
+                if arguments.get("validation_commands").is_none() {
+                    payload["validation_commands"] = json!(["cargo check --workspace", "cargo test --workspace"]);
+                }
+            }
+
+            // Pass through explicitly provided contract fields (override defaults)
             if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {
                 payload["non_goals"] = json!(ng);
             }
@@ -2084,9 +2113,7 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
             {
                 payload["validation_commands"] = json!(vc);
             }
-            if let Some(dud) = arguments.get("drive_until_done").and_then(Value::as_bool) {
-                payload["drive_until_done"] = json!(dud);
-            }
+
             // v6 session-scoped goal: pass through optional session_id, or inject connection-level
             let session_id = arguments
                 .get("session_id")

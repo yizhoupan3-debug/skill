@@ -28,7 +28,7 @@ depends_on:
   - 主要包含任务状态文件 `GOAL_STATE.json` 以及交互/审核状态文件 `RFV_LOOP_STATE.json`。
 - **门控与审稿机制**：
   - 结合 `beforeSubmitPrompt`、`stop`、`subagentStart`/`subagentStop`、`postToolUse`、`sessionStart`/`sessionEnd` 等 7 个核心事件进行行为守卫。
-  - **Stop `REVIEW_GATE` 全局 advisory-only**（对齐 [`AGENTS_CURSOR.md`](../../AGENTS_CURSOR.md)、[`host_adapter_contract.md`](../host_adapter_contract.md) §0.1）：仅 `followup_message` nudge，**不** `permission: deny` / 硬拦 Stop。**`lifecycle_profile: my-light`** 在 My 入口或磁盘 `GOAL_STATE` 时另 **suppress** `REVIEW_GATE` / spawn-first nudge；findings-only review 仍可用（见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)）。
+  - **Stop `REVIEW_GATE` 全局 advisory-only**（对齐 [`AGENTS_CURSOR.md`](../../AGENTS_CURSOR.md)）：仅 `followup_message` nudge，**不** `permission: deny` / 硬拦 Stop。**`lifecycle_profile: my-light`** 在 My 入口或磁盘 `GOAL_STATE` 时另 **suppress** `REVIEW_GATE` / spawn-first nudge；findings-only review 仍可用（见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)）。
 
 ## Fail-open / Fail-closed 设计意图
 

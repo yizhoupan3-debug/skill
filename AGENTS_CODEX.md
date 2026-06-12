@@ -1,6 +1,6 @@
 # Codex Agent Policy
 
-跨宿主协议见 [`AGENTS.md`](AGENTS.md)。**双文件注入**：编译期嵌入 `AGENTS.md` + 本文件；勿单独使用本文件。本文仅 **Codex**（`codex`）transport delta。手册 [`docs/hosts/codex.md`](docs/hosts/codex.md) · [`host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1。
+跨宿主协议见 [`AGENTS.md`](AGENTS.md)。**双文件注入**：编译期嵌入 `AGENTS.md` + 本文件；勿单独使用本文件。本文仅 **Codex**（`codex`）transport delta。手册 [`docs/hosts/codex.md`](docs/hosts/codex.md) · [`host_adapter_contract.md`](docs/spec.md) §0.1。
 
 ## 策略嵌入与同步
 

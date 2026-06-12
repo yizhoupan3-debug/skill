@@ -10,7 +10,7 @@ use super::{inspect_trace_stream, replay_trace_stream, write_trace_compaction_de
 use crate::browser_dispatch_hook;
 #[cfg(feature = "codegraph")]
 use crate::codegraph_mcp::run_codegraph_mcp_stdio_loop;
-use crate::mcp_stdio_harness::run_antigravity_mcp_loop;
+use crate::mcp_stdio_harness::run_mcp_stdio;
 use crate::claude_code_hooks::run_claude_hook_cli;
 use crate::closeout_enforcement::{
     closeout_enforcement_contract, evaluate_closeout_record_value,
@@ -428,14 +428,12 @@ host_id: {hid}
     }))
 }
 
-/// Unified host command dispatcher (merged: codex, cursor, claude, antigravity, opencode)
+/// Unified host command dispatcher (merged: codex, cursor, claude, opencode)
 pub fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
     match command {
         HostCommand::Codex { command } => dispatch_codex_command(command),
         HostCommand::Cursor { command } => dispatch_cursor_command(command),
         HostCommand::Claude { command } => dispatch_claude_command(command),
-        HostCommand::Antigravity { command } => dispatch_antigravity_command(command),
-        HostCommand::AntigravityAppHost { command } => dispatch_antigravity_command(command),
         HostCommand::Opencode { command } => dispatch_opencode_command(command),
     }
 }
@@ -498,18 +496,6 @@ pub fn dispatch_claude_command(command: ClaudeSubcommand) -> Result<(), String> 
     match command {
         ClaudeSubcommand::Hook(command) => {
             run_claude_hook_cli(&command.event, command.repo_root.as_deref())
-        }
-    }
-}
-
-pub fn dispatch_antigravity_command(command: AntigravitySubcommand) -> Result<(), String> {
-    match command {
-        AntigravitySubcommand::Agent(command) => {
-            eprintln!(
-                "[router-rs] deprecate: bare `antigravity agent` → prefer `host antigravity agent` (antigravity-app alias accepted)"
-            );
-            let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            run_antigravity_mcp_loop(Some(&root))
         }
     }
 }

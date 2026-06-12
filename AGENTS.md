@@ -4,7 +4,7 @@
 
 **双文件注入（硬约束）**：各闭集宿主须**同时**注入仓库根 **`AGENTS.md`**（跨宿主内核）与 **`AGENTS_<HOST>.md`**（transport delta）；**禁止**合并为单文件。
 
-**闭集宿主（2026-06）**：`codex`、`claude-code`、`antigravity`、`cursor`、`opencode` — 真源 `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。已退役 id：`claude-desktop`、`codex-app`、`codex-cli`、`antigravity-app`、`antigravity-cli`。
+**闭集宿主（2026-06）**：`codex`、`claude-code`、`cursor`、`opencode` — 真源 `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。已退役 id：`claude-desktop`、`codex-app`、`codex-cli`。
 
 ## 权威分层
 
@@ -38,6 +38,25 @@
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
 - Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
 - **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。
+
+## 启动序列（跨宿主 DAG）
+
+- **T0 并行**：`framework_snapshot` ∥ `skill_route` ∥ `goal_state_manage(start)` — 无数据依赖，首轮必须。
+- **T1 按需**：`record_evidence` — 验证类命令后追加。
+- **T2 延迟**：`session_checkpoint` → `closeout_gate` → `goal_state_manage(complete)` — 对话结束时执行，首轮跳过。
+
+## 宿主能力差异（降级矩阵）
+
+| 能力 | claude-code | cursor | codex | opencode |
+|------|:-----------:|:------:|:-----:|:--------:|
+| hard gate hooks | ✓ | ✓ | ✓ | ✗ |
+| closeout evidence hooks | ✓ | ✓ | ✓ | ✗ |
+| review gate observable | ✓ | ✓ | ✓ | ✗ |
+| session supervisor | mcp_bridge | ✗ | codex_driver | ✗ |
+| worktree | ✓ | ✓ | ✓ | ✗ |
+| batch/cron/CI | ✗ | ✗ | ✓ | ✗ |
+
+详见 `configs/framework/RUNTIME_REGISTRY.json` 各宿主 `harness_capability_exceptions`。
 
 ## Task Intake
 

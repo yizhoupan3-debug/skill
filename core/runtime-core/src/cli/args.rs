@@ -11,19 +11,10 @@ pub enum RouterCommand {
         #[command(subcommand)]
         command: FrameworkCommand,
     },
-    /// Unified host commands: codex, cursor, claude, antigravity, opencode
+    /// Unified host commands: codex, cursor, claude, opencode
     Host {
         #[command(subcommand)]
         command: HostCommand,
-    },
-    Antigravity {
-        #[command(subcommand)]
-        command: AntigravitySubcommand,
-    },
-    #[command(name = "antigravity-app")]
-    AntigravityApp {
-        #[command(subcommand)]
-        command: AntigravitySubcommand,
     },
     Trace {
         #[command(subcommand)]
@@ -262,7 +253,7 @@ pub enum SkillsSubcommand {
     },
 }
 
-/// Unified host commands (merged: codex, cursor, claude, antigravity-app, opencode)
+/// Unified host commands (merged: codex, cursor, claude, opencode)
 #[derive(Subcommand, Debug, Clone)]
 pub enum HostCommand {
     Codex {
@@ -276,15 +267,6 @@ pub enum HostCommand {
     Claude {
         #[command(subcommand)]
         command: ClaudeSubcommand,
-    },
-    Antigravity {
-        #[command(subcommand)]
-        command: AntigravitySubcommand,
-    },
-    #[command(name = "antigravity-app")]
-    AntigravityAppHost {
-        #[command(subcommand)]
-        command: AntigravitySubcommand,
     },
     Opencode {
         #[command(subcommand)]
@@ -312,13 +294,6 @@ pub enum ClaudeSubcommand {
 }
 
 #[derive(Subcommand, Debug, Clone)]
-pub enum AntigravitySubcommand {
-    /// Run MCP stdio agent loop (skills, evidence, closeout gating; hard block for non-my-light).
-    #[command(name = "agent")]
-    Agent(AntigravityAgentCommand),
-}
-
-#[derive(Subcommand, Debug, Clone)]
 pub enum OpenCodeSubcommand {
     /// Run MCP stdio agent loop (framework snapshot, skill routing, goal/closeout).
     #[command(name = "agent")]
@@ -327,12 +302,6 @@ pub enum OpenCodeSubcommand {
 
 #[derive(Args, Debug, Clone)]
 pub struct OpenCodeAgentCommand {
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
-}
-
-#[derive(Args, Debug, Clone)]
-pub struct AntigravityAgentCommand {
     #[arg(long)]
     pub repo_root: Option<PathBuf>,
 }

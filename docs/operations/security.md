@@ -36,4 +36,4 @@ Smoke：`cargo test -p router-rs smoke_p0_hook_policy`（`mcp_safety` / `contrac
 
 - 勿将 `.env`、密钥提交 Git
 - `framework doctor` 不替代渗透测试；生产暴露 MCP 前审查 `RUNTIME_REGISTRY` 工具面
-- 详细 env 安全相关开关：[`../references/AGENTS_OPERATOR_SURFACE.md`](../references/AGENTS_OPERATOR_SURFACE.md)
+- 详细 env 安全相关开关：见 [`AGENTS.md`](../../AGENTS.md) § Coding First Principles

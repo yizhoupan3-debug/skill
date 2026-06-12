@@ -162,7 +162,7 @@ const docsResult = await agent(
   '3. CROSS_HOST_SURFACES 和 RETIRED_SURFACES 的注释是否解释了区别\n' +
   '4. router_env_flags.rs 中 router_rs_skip_pre_tool_use_guard 的文档是否完整\n' +
   '5. 检查 docs/harness_architecture/ 下是否有需要更新的文档\n' +
-  '6. 检查 docs/hosts/ 下是否有过期引用（如 antigravity-cli.md 中对 .agents 的引用）\n\n' +
+  '6. 检查 docs/hosts/ 下是否有过期引用\n\n' +
   '只更新注释和文档，不改逻辑。用 python3 脚本精确替换。',
   { label: 'docs:update', phase: 'Docs' }
 )

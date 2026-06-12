@@ -12,6 +12,10 @@ pub fn search_symbols(
     if trimmed.is_empty() {
         return Ok(Vec::new());
     }
+    // Reject excessively long queries to prevent slow FTS/LIKE scans
+    if trimmed.len() > 4096 {
+        return Ok(Vec::new());
+    }
     // Strip FTS5 special operators to prevent query injection: + - * ^ " ( ) :
     let sanitized: String = trimmed
         .chars()
@@ -55,8 +59,11 @@ fn search_symbols_like(
     language: Option<&str>,
     limit: usize,
 ) -> rusqlite::Result<Vec<Node>> {
-    // Escape LIKE wildcards % and _ to prevent injection
-    let escaped = query.replace('%', "\\%").replace('_', "\\_");
+    // Escape LIKE wildcards: backslash first, then % and _
+    let escaped = query
+        .replace('\\', "\\\\")
+        .replace('%', "\\%")
+        .replace('_', "\\_");
     let like = format!("%{escaped}%");
     let mut stmt = conn.prepare(
         "SELECT id, symbol, kind, language, file_path, line FROM nodes

@@ -11,7 +11,7 @@ import { AUDIT_FINDINGS_SCHEMA as FINDINGS_SCHEMA } from './workflow-helpers.js'
 const AUDIT_TASKS = [
   {
     name: '架构设计',
-    prompt: '审计Claude Code CLI的架构设计问题。检查核心模块划分（router-rs, antigravity, cli）、模块间依赖关系、耦合与循环依赖、扩展点设计。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[{"severity":"critical|high|medium|low","category":"架构设计","title":"...","description":"...","location":"...","impact":"...","recommendation":"..."}],"summary":"..."}'
+    prompt: '审计Claude Code CLI的架构设计问题。检查核心模块划分（router-rs, cli）、模块间依赖关系、耦合与循环依赖、扩展点设计。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[{"severity":"critical|high|medium|low","category":"架构设计","title":"...","description":"...","location":"...","impact":"...","recommendation":"..."}],"summary":"..."}'
   },
   {
     name: 'MCP集成',
@@ -19,11 +19,11 @@ const AUDIT_TASKS = [
   },
   {
     name: '权限安全',
-    prompt: '审计Claude Code CLI的权限与安全机制。检查Bash/Shell命令执行安全边界、文件系统访问权限、SSRF防护、敏感信息处理、hook机制安全性、配置文件权限。检查cli/antigravity-cli/src/、.claude/settings.json。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[...],"summary":"..."}'
+    prompt: '审计Claude Code CLI的权限与安全机制。检查Bash/Shell命令执行安全边界、文件系统访问权限、SSRF防护、敏感信息处理、hook机制安全性、配置文件权限。检查.cli/目录、.claude/settings.json。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[...],"summary":"..."}'
   },
   {
     name: '用户体验',
-    prompt: '审计Claude Code CLI的用户体验问题。检查命令行界面一致性、帮助信息和错误提示质量、进度反馈和状态显示、配置复杂度和学习曲线、常见操作的便捷性。检查cli/antigravity-cli/src/、core/router-rs/src/。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[...],"summary":"..."}'
+    prompt: '审计Claude Code CLI的用户体验问题。检查命令行界面一致性、帮助信息和错误提示质量、进度反馈和状态显示、配置复杂度和学习曲线、常见操作的便捷性。检查cli/src/、core/router-rs/src/。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[...],"summary":"..."}'
   },
   {
     name: '文档一致性',
@@ -31,11 +31,11 @@ const AUDIT_TASKS = [
   },
   {
     name: '跨平台兼容',
-    prompt: '审计Claude Code CLI的跨平台兼容性。检查Unix/Linux/macOS/Windows差异处理、路径处理一致性、Shell兼容性、环境变量处理差异、特殊字符和编码问题。检查cli/antigravity-cli/src/中的平台相关代码。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[...],"summary":"..."}'
+    prompt: '审计Claude Code CLI的跨平台兼容性。检查Unix/Linux/macOS/Windows差异处理、路径处理一致性、Shell兼容性、环境变量处理差异、特殊字符和编码问题。检查cli/src/中的平台相关代码。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[...],"summary":"..."}'
   },
   {
     name: '测试覆盖',
-    prompt: '审计Claude Code CLI的测试覆盖情况。检查单元测试覆盖、集成测试关键路径覆盖、边界条件和错误处理测试、Mock使用合理性、测试可维护性。检查tests/、core/router-rs/tests/、cli/antigravity-cli/tests/、*_test.rs或test_*.py文件。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[...],"summary":"..."}'
+    prompt: '审计Claude Code CLI的测试覆盖情况。检查单元测试覆盖、集成测试关键路径覆盖、边界条件和错误处理测试、Mock使用合理性、测试可维护性。检查tests/、core/router-rs/tests/、*_test.rs或test_*.py文件。项目根目录：/Users/joe/Developer/skill。输出JSON: {"findings":[...],"summary":"..."}'
   },
 ]
 

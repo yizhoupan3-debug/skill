@@ -43,7 +43,6 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
     "target",
 ];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
-const FRAMEWORK_PROJECTION_ANTIGRAVITY_MANIFEST_NAME: &str = ".framework-projection-antigravity.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
 const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 9] = [
     "discussx",
@@ -174,10 +173,6 @@ enum Commands {
         #[arg(long)]
         claude_home: Option<PathBuf>,
         #[arg(long)]
-        antigravity_home: Option<PathBuf>,
-        #[arg(long)]
-        antigravity_cli_home: Option<PathBuf>,
-        #[arg(long)]
         opencode_home: Option<PathBuf>,
         #[arg(long)]
         to: Vec<String>,
@@ -223,10 +218,6 @@ pub struct ProjectionCommand {
     #[arg(long)]
     claude_home: Option<PathBuf>,
     #[arg(long)]
-    antigravity_home: Option<PathBuf>,
-    #[arg(long)]
-    antigravity_cli_home: Option<PathBuf>,
-    #[arg(long)]
     opencode_home: Option<PathBuf>,
     #[arg(long)]
     home: Option<PathBuf>,
@@ -253,10 +244,6 @@ pub struct ProjectionStatusCommand {
     #[arg(long)]
     claude_home: Option<PathBuf>,
     #[arg(long)]
-    antigravity_home: Option<PathBuf>,
-    #[arg(long)]
-    antigravity_cli_home: Option<PathBuf>,
-    #[arg(long)]
     opencode_home: Option<PathBuf>,
     #[arg(long)]
     home: Option<PathBuf>,
@@ -272,8 +259,6 @@ pub struct ResolvedProjectionRoots {
     pub codex_home_root: PathBuf,
     pub cursor_home_root: PathBuf,
     pub claude_home_root: PathBuf,
-    pub antigravity_home_root: PathBuf,
-    pub antigravity_cli_home_root: PathBuf,
     pub opencode_home_root: PathBuf,
 }
 
@@ -342,16 +327,11 @@ mod tests {
         let root = repo_root();
 
         assert_eq!(canonical_tool_name("claude-code", &root).unwrap(), "claude");
-        assert_eq!(
-            canonical_tool_name("antigravity-app", &root).unwrap(),
-            "antigravity"
-        );
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
-        for tool in ["cursor", "claude", "opencode", "antigravity", "codex"] {
+        for tool in ["cursor", "claude", "opencode", "codex"] {
             assert!(err.contains(tool), "expected supported tool {tool} in error: {err}");
         }
-        assert!(err.contains("antigravity-app"), "{err}");
         assert!(err.contains("claude-code"), "{err}");
         assert!(err.contains("codex-cli"), "{err}");
     }
@@ -367,7 +347,6 @@ mod tests {
                 "cursor".to_string(),
                 "claude".to_string(),
                 "opencode".to_string(),
-                "antigravity".to_string(),
                 "codex".to_string(),
             ]
         );
@@ -603,8 +582,6 @@ mod tests {
             codex_home_root: root.join("codex"),
             cursor_home_root: cursor_home.clone(),
             claude_home_root: root.join("claude"),
-            antigravity_home_root: root.join("gemini"),
-            antigravity_cli_home_root: root.join("antigravitycli"),
             opencode_home_root: root.join("opencode"),
         };
         std::env::set_var("HOME", &home);
@@ -675,8 +652,6 @@ mod tests {
             Some(&custom_claude),
             None,
             None,
-            None,
-            None,
         )
         .expect("resolve roots");
         assert_eq!(roots.account_home_root, os_home);
@@ -717,8 +692,6 @@ mod tests {
             codex_home_root: home.join(".codex"),
             cursor_home_root: home.join(".cursor"),
             claude_home_root: home.join(".claude"),
-            antigravity_home_root: home.join(".gemini"),
-            antigravity_cli_home_root: home.join(".antigravitycli"),
             opencode_home_root: home.join(".opencode"),
         };
 
@@ -762,8 +735,6 @@ mod tests {
             codex_home_root: home.join(".codex"),
             cursor_home_root: home.join(".cursor"),
             claude_home_root: home.join(".claude"),
-            antigravity_home_root: home.join(".gemini"),
-            antigravity_cli_home_root: home.join(".antigravitycli"),
             opencode_home_root: home.join(".opencode"),
         };
 

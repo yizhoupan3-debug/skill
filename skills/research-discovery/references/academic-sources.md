@@ -357,7 +357,7 @@ CrossRef: query.bibliographic={survey or textbook title}&rows=5
 
 Synthesis must populate `theory_background.theorem_applicability` (applies_when /
 fails_when) and `analogy_candidates.breaks_when` — see
-[math-background-inquiry.md](../../../docs/references/rfv-loop/math-background-inquiry.md).
+[math-background-inquiry.md](../../../docs/spec.md).
 
 ---
 

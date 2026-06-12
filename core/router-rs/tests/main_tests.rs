@@ -1013,7 +1013,8 @@ fn hook_evidence_append_allows_autopilot_goal_complete() {
         "task_id": "hook-goal",
     }))
     .expect("goal complete should see task-local hook evidence");
-    assert_eq!(done["goal_state"]["status"], json!("completed"));
+    assert_eq!(done["operation"], json!("completed"),
+        "goal complete should return operation=completed; got: {done}");
     let _ = fs::remove_dir_all(&repo_root);
 }
 

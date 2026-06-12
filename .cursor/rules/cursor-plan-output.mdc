@@ -7,4 +7,4 @@ alwaysApply: true
 
 调用 **CreatePlan** 生成或更新 **`.plan.md`** 时，产出物必须满足 [`skills/plan-mode/SKILL.md`](../../skills/plan-mode/SKILL.md)：**CreatePlan 输出契约**、**Todo 四元组**（动作 / 范围 / Done when / Verify）、`plan_profile`（`execution` vs `research`）、末条 Git 或调研收口、以及（有前置调研时）正文 **`## 执行计划继承面`**。
 
-**本规则不重复** skill 全文；调用后不合规则**直接编辑**该 `.plan.md` 补齐。主路径不用 hook 生成 plan 正文。跨宿主地图见 [AGENTS.md](../../AGENTS.md)、[harness_architecture.md](../../docs/harness_architecture/index.md)、[harness_policy_map.md](../../docs/harness_policy_map.md)。
+**本规则不重复** skill 全文；调用后不合规则**直接编辑**该 `.plan.md` 补齐。主路径不用 hook 生成 plan 正文。跨宿主地图见 [AGENTS.md](../../AGENTS.md)、[harness_architecture.md](../../docs/spec.md)、[harness_policy_map.md](../../docs/spec.md)。

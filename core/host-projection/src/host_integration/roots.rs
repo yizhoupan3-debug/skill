@@ -75,8 +75,6 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             codex_home,
             cursor_home,
             claude_home,
-            antigravity_home,
-            antigravity_cli_home,
             opencode_home,
             to,
             scope,
@@ -95,8 +93,6 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                 codex_home,
                 cursor_home,
                 claude_home,
-                antigravity_home: antigravity_home.clone(),
-                antigravity_cli_home,
                 opencode_home,
                 home,
                 scope,
@@ -114,8 +110,6 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                         codex_home: projection_command.codex_home.clone(),
                         cursor_home: projection_command.cursor_home.clone(),
                         claude_home: projection_command.claude_home.clone(),
-                        antigravity_home: projection_command.antigravity_home.clone(),
-                        antigravity_cli_home: projection_command.antigravity_cli_home.clone(),
                         opencode_home: projection_command.opencode_home.clone(),
                         home: projection_command.home.clone(),
                     })?
@@ -550,8 +544,6 @@ pub fn resolve_projection_roots(
     codex_home: Option<&Path>,
     cursor_home: Option<&Path>,
     claude_home: Option<&Path>,
-    antigravity_home: Option<&Path>,
-    antigravity_cli_home: Option<&Path>,
     opencode_home: Option<&Path>,
     shared_home: Option<&Path>,
 ) -> Result<ResolvedProjectionRoots, String> {
@@ -561,9 +553,6 @@ pub fn resolve_projection_roots(
     let codex_home_root = resolve_host_home(codex_home, shared_home, "CODEX_HOME", ".codex")?;
     let cursor_home_root = resolve_host_home(cursor_home, shared_home, "CURSOR_HOME", ".cursor")?;
     let claude_home_root = resolve_host_home(claude_home, shared_home, "CLAUDE_HOME", ".claude")?;
-    let antigravity_home_root = resolve_host_home(antigravity_home, shared_home, "ANTIGRAVITY_HOME", ".gemini")?;
-    let antigravity_cli_home_root =
-        resolve_host_home(antigravity_cli_home, shared_home, "ANTIGRAVITY_CLI_HOME", ".antigravitycli")?;
     let opencode_home_root = resolve_host_home(
         opencode_home,
         shared_home,
@@ -582,8 +571,6 @@ pub fn resolve_projection_roots(
         codex_home_root,
         cursor_home_root,
         claude_home_root,
-        antigravity_home_root,
-        antigravity_cli_home_root,
         opencode_home_root,
     })
 }

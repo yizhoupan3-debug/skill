@@ -1,6 +1,6 @@
 # Cursor Agent Policy
 
-跨宿主协议见 [`AGENTS.md`](AGENTS.md)。**双文件注入**：须与 `AGENTS.md` 同时生效，勿单独使用本文件。本文仅 **Cursor**（`cursor`）transport delta。手册 [`docs/hosts/cursor.md`](docs/hosts/cursor.md) · [`host_adapter_contract.md`](docs/host_adapter_contract.md) §0.1。
+跨宿主协议见 [`AGENTS.md`](AGENTS.md)。**双文件注入**：须与 `AGENTS.md` 同时生效，勿单独使用本文件。本文仅 **Cursor**（`cursor`）transport delta。手册 [`docs/hosts/cursor.md`](docs/hosts/cursor.md) · [`host_adapter_contract.md`](docs/spec.md) §0.1。
 
 ## Transport 要点
 

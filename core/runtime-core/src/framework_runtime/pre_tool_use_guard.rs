@@ -450,9 +450,9 @@ mod tests {
     }
 
     #[test]
-    fn opencode_requires_strict_fallback_from_registry() {
+    fn opencode_requires_strict_fallback_without_hard_gate_hooks() {
         let root = skill_repo_root();
-        assert!(host_requires_strict_pre_tool_fallback("opencode", &root, None).unwrap());
+        assert!(!host_requires_strict_pre_tool_fallback("opencode", &root, None).unwrap());
     }
 
     #[test]
@@ -471,14 +471,14 @@ mod tests {
     fn strict_fallback_blocks_dangerous_shell_until_approved() {
         let root = skill_repo_root();
         let evaluate = evaluate_pre_tool_use_guard(PreToolUseGuardRequest {
-            host_id: "opencode".to_string(),
+            host_id: "unknown-host".to_string(),
             tool_name: "Shell".to_string(),
             tool_input: json!({"command": "git reset --hard HEAD"}),
             repo_root: Some(root.display().to_string()),
             phase: None,
             approval_digest: None,
             approved: None,
-            has_native_hook: None,
+            has_native_hook: Some(false),
         })
         .expect("evaluate");
         assert!(evaluate.strict_fallback_active);
@@ -487,14 +487,14 @@ mod tests {
         let digest = evaluate.approval_digest.expect("digest");
 
         let approved = evaluate_pre_tool_use_guard(PreToolUseGuardRequest {
-            host_id: "opencode".to_string(),
+            host_id: "unknown-host".to_string(),
             tool_name: "Shell".to_string(),
             tool_input: json!({"command": "git reset --hard HEAD"}),
             repo_root: Some(root.display().to_string()),
             phase: Some("approve".to_string()),
             approval_digest: Some(digest),
             approved: Some(true),
-            has_native_hook: None,
+            has_native_hook: Some(false),
         })
         .expect("approve");
         assert_eq!(approved.verdict, PreToolUseGuardVerdict::Allow);
@@ -541,14 +541,14 @@ mod tests {
         .unwrap();
 
         let out = evaluate_pre_tool_use_guard(PreToolUseGuardRequest {
-            host_id: "opencode".to_string(),
+            host_id: "unknown-host".to_string(),
             tool_name: "Write".to_string(),
             tool_input: json!({"path": "AGENTS.md", "contents": "x"}),
             repo_root: Some(tmp.display().to_string()),
             phase: None,
             approval_digest: None,
             approved: None,
-            has_native_hook: None,
+            has_native_hook: Some(false),
         })
         .expect("evaluate");
         assert_eq!(out.verdict, PreToolUseGuardVerdict::RequiresStdioApproval);
@@ -595,12 +595,11 @@ mod tests {
     #[test]
     fn host_provider_registry_drives_strict_fallback_integration() {
         let root = skill_repo_root();
-        let cases: [(&str, bool); 5] = [
+        let cases: [(&str, bool); 4] = [
             ("cursor", false),
             ("codex", false),
             ("claude-code", false),
-            ("opencode", true),
-            ("antigravity", true),
+            ("opencode", false),
         ];
         for (host_id, expect_strict) in cases {
             let strict =

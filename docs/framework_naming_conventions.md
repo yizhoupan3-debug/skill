@@ -29,15 +29,14 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Claude Code | `ROUTER_RS_CLAUDE_*` | Shell hook integration |
 | Cursor | `ROUTER_RS_CURSOR_*` | Cursor IDE integration |
 | Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
-| Antigravity App | - | MCP stdio，无 shell hook env |
 
-**默认值与语义**：`ROUTER_RS_*` 的完整表见 [`spec.md`](spec.md)（唯一裁判）；宿主分层与 closeout 相关 env 见 [`harness_architecture/04-closeout-and-depth.md`](harness_architecture/04-closeout-and-depth.md) §5。本文件只定义命名模式，不维护第二份 env 默认值表。
+**默认值与语义**：`ROUTER_RS_*` 的完整表见 [`spec.md`](spec.md)（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
 
 ### MCP Key Convention（**闭集，禁从一个 host 抄到另一个**）
 
 > 与 `ROUTER_RS_*` env var 命名**正交**：env var 前缀按 host 走；MCP 顶层 key 按该 host **官方文档/源码**实测值走。**两套不能混。**
 >
-> 完整矩阵与官方来源见 [`maintenance/host-projection-schema-validity.md`](maintenance/host-projection-schema-validity.md) §1。本表只做"投影写盘 key 名"速查。
+> MCP Key 矩阵与 host projection 校验见 [`spec.md`](spec.md) §7。本表只做"投影写盘 key 名"速查。
 
 | host_id | MCP 配置文件 | **顶层 key（字面量）** | transport 字面量 | `managed_key_paths` 字面量 |
 |---------|--------------|------------------------|------------------|----------------------------|
@@ -45,17 +44,16 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | `claude-code` | 项目 `.mcp.json` | `mcpServers`（**camel**） | `"stdio"` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
 | `codex` | 项目 `.codex/config.toml` | `mcp_servers`（**snake**，**TOML 表**） | 无 `type`（`command` 隐式） | `mcp_servers.router-rs-framework` · `mcp_servers.browser-mcp` · `mcp_servers.mcp-codegraph` · `mcp_servers.paperplain` |
 | `opencode` | `~/.config/opencode/opencode.json` | `mcpServers`（**camel**） | `"local"` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
-| `antigravity` | 项目 `.gemini/mcp.json`；用户 `~/.gemini/antigravity/mcp.json` | `mcpServers` | `"stdio"` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
 
 **三个最常踩的坑**：
 
-1. **snake_case vs camelCase**：TOML (codex) 和 Cursor JSON 用 `mcp_servers`；JSON (claude-code / opencode / antigravity) 用 `mcpServers`。
+1. **snake_case vs camelCase**：TOML (codex) 和 Cursor JSON 用 `mcp_servers`；JSON (claude-code / opencode) 用 `mcpServers`。
 2. **Cursor 是 snake_case JSON**：Cursor 用 `mcp_servers` 而非 `mcpServers`，与其他 JSON 宿主不同。
 3. **transport 字段**：opencode 用 `"local"`；其余 host 用 `"stdio"`（或隐式）。
 
-**改动任何 host projection 前必读** [`maintenance/host-projection-schema-validity.md`](maintenance/host-projection-schema-validity.md) §3.5 自检机制。
+**改动任何 host projection 前必读** [`spec.md`](spec.md) §7 与宿主手册 `docs/hosts/<host>.md`。
 
-场景子集与 closeout 分层见 [`references/AGENTS_OPERATOR_SURFACE.md`](references/AGENTS_OPERATOR_SURFACE.md)（含 **Operator profiles** 可复制组合）。
+closeout 分层见 [`spec.md`](spec.md) §12。
 
 ---
 

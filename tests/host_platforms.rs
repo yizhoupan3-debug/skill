@@ -1,10 +1,9 @@
 //! Normalize `SKILL.md` `metadata.platforms` tokens to the closed host ids in
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`
-//! (`codex`, `claude-code`, `antigravity`, `cursor`, `opencode`).
+//! (`codex`, `claude-code`, `cursor`, `opencode`).
 //!
 //! Legacy tokens:
 //! - `claude` → `claude-code`
-//! - `antigravity-app` → `antigravity` (deprecated alias)
 //! - `codex-cli` → `codex` (deprecated alias)
 //! - `codex-app` → retired (rejected)
 //! - `supported` / `all-hosts` → every supported host id
@@ -40,21 +39,18 @@ pub fn normalize_skill_host_platforms(
             }
             "codex-app" => {
                 return Err(format!(
-                    "retired host platform token `{t}` (closed-set ids: codex, cursor, claude-code, antigravity, opencode)"
+                    "retired host platform token `{t}` (closed-set ids: codex, cursor, claude-code, opencode)"
                 ));
             }
             "claude" => {
                 out.insert("claude-code".to_string());
             }
-            "cursor" | "claude-code" | "antigravity" | "opencode" => {
+            "cursor" | "claude-code" | "opencode" => {
                 out.insert(t);
-            }
-            "antigravity-app" => {
-                out.insert("antigravity".to_string());
             }
             other => {
                 return Err(format!(
-                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, cursor, claude, claude-code, antigravity, antigravity-app, opencode)"
+                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, cursor, claude, claude-code, opencode)"
                 ));
             }
         }

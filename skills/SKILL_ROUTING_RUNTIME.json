@@ -49,7 +49,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -75,7 +74,6 @@
       ],
       "runtime",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -113,7 +111,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -157,7 +154,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -193,7 +189,6 @@
       ],
       "runtime",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -219,7 +214,6 @@
       ],
       "runtime",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -249,7 +243,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -288,7 +281,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -326,7 +318,6 @@
       ],
       "runtime",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -352,7 +343,6 @@
       ],
       "runtime",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -387,7 +377,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -415,7 +404,6 @@
       ],
       "runtime",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -449,7 +437,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -489,7 +476,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -519,7 +505,6 @@
       ],
       "runtime",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -571,7 +556,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -744,7 +728,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -782,7 +765,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -815,7 +797,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -853,7 +834,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -910,7 +890,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -942,7 +921,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -974,7 +952,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -1010,7 +987,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -1085,7 +1061,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -1239,7 +1214,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -1347,7 +1321,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -1386,7 +1359,6 @@
       ],
       "project",
       [
-        "antigravity",
         "claude-code",
         "codex",
         "codex",
@@ -1446,7 +1418,6 @@
     ]
   ],
   "default_host_platforms": [
-    "antigravity",
     "claude-code",
     "codex",
     "cursor",

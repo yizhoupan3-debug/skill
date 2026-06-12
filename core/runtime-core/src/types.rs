@@ -85,7 +85,7 @@ pub struct RuntimePaths {
 // ---------------------------------------------------------------------------
 
 /// Manifest written alongside each host projection (Claude Code, Claude Desktop,
-/// Codex CLI, Cursor, OpenCode, Antigravity, etc.).
+/// Codex CLI, Cursor, OpenCode, etc.).
 ///
 /// Common shape extracted from `write_*_projection_manifest` functions in
 /// `host_integration::projection`.

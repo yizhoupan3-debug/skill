@@ -9,7 +9,7 @@ depends_on:
 
 # 运维手册（按功能模块）
 
-**入口真源**：本目录按 Roadmap v5 **板块架构**（B0–B11）组织运维内容，替代历史上按宿主分章的 [`../maintenance/claude-desktop-runbook.md`](../maintenance/claude-desktop-runbook.md)。
+**入口真源**：本目录按 Roadmap v5 **板块架构**（B0–B11）组织运维内容。
 
 **政策与叙事**（生命周期、Closeout、路由规则）仍以仓库根 [`AGENTS.md`](../../AGENTS.md) 为准；本手册只覆盖**操作、配置、排障、路径**。
 
@@ -71,8 +71,8 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 | 安装 / 升级 / 多机同步 | [getting-started.md](getting-started.md) |
 | 安全（SSRF、MCP 策略、沙箱） | [security.md](security.md) |
 | 备份 / 恢复 / 卸载 | [backup-restore.md](backup-restore.md) |
-| 运维开关组合（profile） | [`../operator_profiles.md`](../operator_profiles.md) → harness §5 为裁判 |
-| 使用者一页纸（术语、REVIEW_GATE 快查） | [`../framework_operator_primer.md`](../framework_operator_primer.md) |
+| 运维开关组合（profile） | [`spec.md`](../spec.md) §5 + [`framework_profile_contract.md`](../framework_profile_contract.md) |
+| 使用者入门 | [`getting-started.md`](getting-started.md) + [`AGENTS.md`](../../AGENTS.md) |
 
 ---
 
@@ -80,7 +80,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 | 旧路径 | 处理 |
 |--------|------|
-| `docs/maintenance/ops-runbook.md` | **stub**：重定向至本目录；历史 URL 保留 |
+| `docs/maintenance/` | 已删除（redirect stub） |
 | `docs/hosts/*.md` | 各宿主 hook 事件、Stop 行为、env 快查（**非**本手册重复） |
 | `AGENTS.md` | 跨宿主政策真源，本手册不复制 |
 
@@ -97,7 +97,6 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 | `${workspaceRoot}` | VS Code/Cursor 变量，MCP stdio 不展开 |
 | `${workspaceFolder}` | 同上 |
 | `${CLAUDE_PROJECT_DIR:-.}` | Claude Desktop 不保证注入该变量；fallback 到 `.` 时 CWD 不一定是项目根 |
-| `${ANTIGRAVITY_CLI_PROJECT_ROOT:-.}` | Antigravity CLI 变量，不保证注入 |
 
 ### 强制规则
 

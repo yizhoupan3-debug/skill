@@ -1,12 +1,12 @@
 ---
-last_verified: "2026-06-02"
+last_verified: "2026-06-12"
 depends_on:
   - ../host_adapter_contract.md
 ---
 
 # Opencode 宿主操作手册
 
-**闭集 id**: `opencode` · **传输**: opencode-cli · **权威**: `RUNTIME_REGISTRY.json` → `host_projections.opencode`
+**闭集 id**: `opencode` · **传输**: opencode-plugin（JS/TS 插件 hook + MCP 双通道） · **权威**: `RUNTIME_REGISTRY.json` → `host_projections.opencode`
 
 ## 代理身份与画风
 
@@ -18,7 +18,21 @@ depends_on:
 
 - **任务推进**: `/implementx` + `framework_goal_drive` stdio
 - **任务状态**: `artifacts/current/<task_id>/GOAL_STATE.json`
-- **门控模式**: 无 shell hook，框架门控通过 `opencode.json` 的 permission 规则与 MCP 工具层实现
+- **门控模式**: 插件 hook + MCP 工具层双通道。`tool.execute.before` 可 throw 阻断工具执行（等价 PreToolUse）；`session.idle` 等价 Stop；closeout/review 在 MCP 工具层实现
+
+## 插件 Hook 系统
+
+OpenCode 通过 JS/TS 插件系统提供完整 hook 生命周期：
+
+| OpenCode Hook | 等价于 | 能力 |
+|---|---|---|
+| `tool.execute.before` | PreToolUse | 拦截工具调用，可修改参数或 throw 阻断 |
+| `tool.execute.after` | PostToolUse | 工具执行后处理 |
+| `session.idle` | Stop | 会话空闲时触发 |
+| `permission.asked` / `permission.replied` | Permission hooks | 权限拦截 |
+| `shell.env` | 环境注入 | 注入 shell 环境变量 |
+
+插件加载顺序：全局配置 → 项目配置 → `~/.config/opencode/plugins/` → `.opencode/plugins/`
 
 ## opencode.json 配置结构
 
@@ -36,6 +50,7 @@ depends_on:
 
 - 三类: Allow / Ask / Deny；权限分类: read, write, run, browser
 - 框架 MCP server 通常注册为 project scope 的 `mcp`
+- `permission.asked` / `permission.replied` 插件 hook 可拦截权限请求
 
 ## 自定义 Agent 管理
 

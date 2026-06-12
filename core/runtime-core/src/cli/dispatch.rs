@@ -3,7 +3,7 @@
 use super::args::*;
 use super::common::{manifest_fallback_path, print_json_value, route_task_with_manifest_fallback};
 use crate::framework_runtime::router_command_dispatch::{
-    dispatch_antigravity_command, dispatch_browser_command, dispatch_closeout_command,
+    dispatch_browser_command, dispatch_closeout_command,
     dispatch_diagnose_command, dispatch_eval_command,
     dispatch_framework_command, dispatch_hook_policy_command, dispatch_host_command,
     dispatch_migrate_command, dispatch_schema_drift_command, dispatch_storage_command,
@@ -65,8 +65,6 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         }
         RouterCommand::Framework { command } => dispatch_framework_command(command),
         RouterCommand::Host { command } => dispatch_host_command(command),
-        RouterCommand::Antigravity { command } => dispatch_antigravity_command(command),
-        RouterCommand::AntigravityApp { command } => dispatch_antigravity_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
         RouterCommand::Browser { command } => dispatch_browser_command(command),

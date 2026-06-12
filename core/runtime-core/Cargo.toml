@@ -12,7 +12,6 @@ path = "src/lib.rs"
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 framework-kernel = { path = "../framework-kernel" }
-framework-profile = { path = "../framework-profile" }
 host-projection = { path = "../host-projection" }
 routing-engine = { path = "../routing-engine" }
 chrono.workspace = true
@@ -40,14 +39,12 @@ default = [
     "host-cursor",
     "host-claude-code",
     "host-opencode",
-    "host-antigravity",
     "host-codex",
     "codegraph",
 ]
 host-cursor = []
 host-claude-code = []
 host-opencode = []
-host-antigravity = []
 host-codex = []
 # Expose test helpers for downstream crate integration tests
 test-support = ["host-projection/test-support"]

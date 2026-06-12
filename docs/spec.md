@@ -58,15 +58,14 @@ runtime-core (~46K LOC)       ← 核心生命周期/存储/trace/closeout
 ├── host_integration/         ← projection 安装/移除（re-export shim → host-projection）
 ├── closeout_enforcement.rs   ← hard/soft blocker 分级
 ├── 396 tests / 13 ignored
-└── features: codegraph, host-{cursor,claude-code,codex,opencode,antigravity}
+└── features: codegraph, host-{cursor,claude-code,codex,opencode}
 
 host-projection (~32K LOC)     ← 宿主适配层（从 runtime-core 迁出）
-├── hosts/                    ← 5 宿主 provider + hooks 实现
+├── hosts/                    ← 4 宿主 provider + hooks 实现
 │   ├── claude_code_hooks.rs  ← PreToolUse/PostToolUse/Stop/SubagentStart-Stop
 │   ├── codex_hooks/          ← Codex native hooks (5K LOC)
 │   ├── cursor_hooks/         ← Cursor agent hooks
 │   ├── opencode_agent.rs     ← OpenCode MCP stdio
-│   └── antigravity_provider.rs
 ├── host_integration/         ← projection 安装/移除逻辑
 ├── hooks.rs                  ← 函数指针注册表（82 个 OnceLock slots）
 └── 433 tests
@@ -330,14 +329,14 @@ spawned → running → draining → completed
 
 ### 5.5 REVIEW_GATE 差异
 
-> **清门真源（2026-06）**：`core-policy::review_gate_satisfied` — `independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override。**全宿主 Stop advisory-only**（不 `permission: deny` / `decision:block`）。详见 [`host_adapter_contract.md`](host_adapter_contract.md) §0.1。
+> **清门真源（2026-06）**：`core-policy::review_gate_satisfied` — `independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override。**全宿主 Stop advisory-only**（不 `permission: deny` / `decision:block`）。详见 [`hosts/cursor.md`](hosts/cursor.md) §门控。
 
-| 能力 | claude-code | cursor | codex | opencode | antigravity |
-|------|:-----------:|:------:|:-----:|:--------:|:-----------:|
-| 可数深度 lane | `reviewer_lanes`（registry 共用闭集） | 同左 | 同左 | skill + `review-lanes/` | 同左 |
-| spawn-first | ✅ | ✅ | ✅ | — | — |
-| Stop 出站 | advisory nudge | advisory nudge | advisory nudge | MCP advisory | MCP advisory |
-| my-light | suppress nudge | suppress nudge | suppress nudge | suppress nudge | suppress nudge |
+| 能力 | claude-code | cursor | codex | opencode |
+|------|:-----------:|:------:|:-----:|:--------:|
+| 可数深度 lane | `reviewer_lanes`（registry 共用闭集） | 同左 | 同左 | skill + `review-lanes/` |
+| spawn-first | ✅ | ✅ | ✅ | — |
+| Stop 出站 | advisory nudge | advisory nudge | advisory nudge | MCP advisory |
+| my-light | suppress nudge | suppress nudge | suppress nudge | suppress nudge |
 
 ---
 
@@ -354,22 +353,21 @@ spawned → running → draining → completed
 | `claude-code` | `claude` | `anthropic-claude-code` |
 | `cursor` | `cursor` | `cursor-agent` |
 | `codex` | `codex` | `native-codex` |
-| `opencode` | `opencode` | `opencode-cli` |
-| `antigravity` | `antigravity` | `mcp-stdio` |
+| `opencode` | `opencode` | `opencode-plugin` |
 
 > **退役 id** 不在闭集内；仅保留 stub 重定向页，见 [`MIGRATION.md`](../MIGRATION.md) 与 [`docs/hosts/`](hosts/) 下 `status: retired` 页。
 
 ### 6.2 Hook 事件矩阵
 
-| 事件 | claude-code | cursor | codex | opencode | antigravity |
-|------|:-----------:|:------:|:-----:|:--------:|:---------------:|
-| PreToolUse | ✅ core | — | ✅ | — | — |
-| UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | — | — |
-| PostToolUse | ✅ core | ✅ | ✅ | — | — |
-| Stop | ✅ core | ✅ | ✅ | — | — |
-| SessionStart | optional | ✅ | ✅ | — | — |
-| SubagentStart | optional | ✅ | ✅ ² | — | — |
-| SubagentStop | optional | ✅ | ✅ ² | — | — |
+| 事件 | claude-code | cursor | codex | opencode |
+|------|:-----------:|:------:|:-----:|:--------:|
+| PreToolUse | ✅ core | — | ✅ | — |
+| UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | — |
+| PostToolUse | ✅ core | ✅ | ✅ | — |
+| Stop | ✅ core | ✅ | ✅ | — |
+| SessionStart | optional | ✅ | ✅ | — |
+| SubagentStart | optional | ✅ | ✅ ² | — |
+| SubagentStop | optional | ✅ | ✅ ² | — |
 
 ¹ `beforeSubmitPrompt` 映射 · ² v0.133.0+
 
@@ -380,7 +378,6 @@ spawned → running → draining → completed
 | claude-code | `mcpServers` | `local`/`stdio` | `.claude/settings.json` |
 | cursor | `mcp_servers` | `stdio` | `.cursor/mcp.json` |
 | opencode | `mcp` | 无 type 字段 | `opencode.json` |
-| antigravity | `mcp` | `stdio` | `.gemini/settings.json` |
 
 **§3.5 Schema Drift 三道闸**：写盘前 validate → 写盘后 readback → manifest 路径存在性
 
@@ -390,7 +387,7 @@ spawned → running → draining → completed
 |------|------|-------------|-------------------|---------------------|
 | **S 档** | codex | 11 | codex_driver | 4 项 |
 | **A 档** | claude-code, cursor | 6 | mcp_bridge / unsupported | 4 项 |
-| **B 档** | opencode, antigravity | 5 | unsupported | 2 项 |
+| **B 档** | opencode | 5 | unsupported | 2 项 |
 
 ### 6.5 编译嵌入矩阵
 
@@ -400,7 +397,6 @@ spawned → running → draining → completed
 | cursor | hooks.json + .mdc | `host_integration/projection` |
 | codex | AGENTS.md + AGENTS_CODEX.md | `policy_embed.rs` |
 | opencode | opencode.json 投影 | `host_integration/projection` |
-| antigravity | .gemini/settings.json | `host_integration/projection` |
 
 ---
 
@@ -503,7 +499,7 @@ pub trait HostHook {
 
 **功能**：Worker 生命周期管理（launch/resume/terminate/mark_blocked/resume_due）。
 
-- 驱动：codex/cursor/claude/antigravity（`driver.rs`）
+- 驱动：codex/cursor/claude（`driver.rs`）
 - 原生进程驱动（session_supervisor 主实现位于 `runtime-core`；`router-rs` 为 thin facade 门面）
 - 速率限制检测：正则模式匹配
 - 入口：`handle_session_supervisor_operation()`

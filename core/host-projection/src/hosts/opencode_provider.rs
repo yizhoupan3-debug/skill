@@ -1,8 +1,8 @@
-//! OpenCode host: `HostProvider` skeleton (MCP stdio projection metadata).
+//! OpenCode host: `HostProvider` with plugin-based hook support.
 
 use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
-    HARNESS_CAPABILITIES_MINIMAL,
+    HARNESS_CAPABILITIES_FULL,
 };
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -18,11 +18,19 @@ impl HostLifecycle for OpencodeHostProvider {
     }
 
     fn harness_capabilities(&self) -> &'static [&'static str] {
-        HARNESS_CAPABILITIES_MINIMAL
+        HARNESS_CAPABILITIES_FULL
     }
 
     fn context_file(&self) -> &'static str {
         "AGENTS_OPENCODE.md"
+    }
+
+    fn hooks_manifest_path(&self) -> Option<&'static str> {
+        Some(super::opencode_hooks::OPENCODE_HOOKS_PATH)
+    }
+
+    fn registered_hook_events(&self) -> &'static [&'static str] {
+        super::opencode_hooks::OPENCODE_HOOKS_REGISTERED_EVENTS
     }
 }
 
@@ -32,21 +40,25 @@ impl HostToolExecutor for OpencodeHostProvider {
     }
 
     fn closeout_evidence_hooks_supported(&self) -> bool {
-        false
+        true
     }
 
     fn requires_strict_pre_tool_fallback_default(&self) -> bool {
-        true
+        false
     }
 }
 
 impl HostTelemetry for OpencodeHostProvider {
     fn review_gate_router_observable(&self) -> bool {
-        false
+        true
     }
 
     fn hook_telemetry_surface(&self) -> &'static str {
-        "opencode-cli"
+        "opencode-plugin"
+    }
+
+    fn observation_host_id(&self) -> Option<&'static str> {
+        Some("opencode")
     }
 }
 
@@ -61,11 +73,11 @@ impl HostProvider for OpencodeHostProvider {
 
     fn capabilities(&self) -> HostCapabilities {
         HostCapabilities {
-            has_native_hook: false,
-            supports_subagent: false,
+            has_native_hook: true,
+            supports_subagent: true,
             supports_worktree: false,
             mcp_config_key: "mcp",
-            transport_type: "opencode-cli",
+            transport_type: "opencode-plugin",
             config_path: ".opencode/opencode.json",
             batch_execution: false,
             cron_execution: false,

@@ -5,7 +5,6 @@
     "agent-swarm-orchestration": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -18,7 +17,6 @@
     "citation-management": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -31,7 +29,6 @@
     "code-review-deep": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -44,7 +41,6 @@
     "deepinterview": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -57,7 +53,6 @@
     "design-md": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -70,7 +65,6 @@
     "diagramming": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -83,7 +77,6 @@
     "discussx": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -96,7 +89,6 @@
     "doc": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -109,7 +101,6 @@
     "experiment-reproducibility": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -122,7 +113,6 @@
     "gh-address-comments": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -135,7 +125,6 @@
     "gh-fix-ci": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -148,7 +137,6 @@
     "gitx": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -161,7 +149,6 @@
     "implementx": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -174,7 +161,6 @@
     "math-derivation": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -187,7 +173,6 @@
     "mcp-server-management": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -200,7 +185,6 @@
     "paper-workbench": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -213,7 +197,6 @@
     "paper-writing": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -226,7 +209,6 @@
     "pdf": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -239,7 +221,6 @@
     "plan-mode": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -252,7 +233,6 @@
     "planx": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -265,7 +245,6 @@
     "python-env-management": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -278,7 +257,6 @@
     "scientific-figure-plotting": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -291,7 +269,6 @@
     "sentry": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -304,7 +281,6 @@
     "skill-framework-developer": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -317,7 +293,6 @@
     "slides": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -330,7 +305,6 @@
     "spreadsheets": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -343,7 +317,6 @@
     "statistical-analysis": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -356,7 +329,6 @@
     "update": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -369,7 +341,6 @@
     "verifyx": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -382,7 +353,6 @@
     "visual-review": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -395,7 +365,6 @@
     "research-discovery": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",
@@ -408,7 +377,6 @@
     "research-execution": {
       "host_support": {
         "platforms": [
-          "antigravity",
           "claude-code",
           "codex",
           "cursor",

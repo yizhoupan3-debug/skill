@@ -61,7 +61,7 @@ pub fn framework_autopilot_goal(payload: Value) -> Result<Value, String> {
 }
 
 fn invalidate_route_records_cache_on_write() {
-    // antigravity-core has no route records cache; no-op for goal drive writes.
+    // No route records cache; no-op for goal drive writes.
 }
 
 fn resolve_session_id(payload: &Value) -> String {
@@ -455,7 +455,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 "operation": "start",
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
-                "goal_state": value,
+                "status": "running",
                 "rfv_loop_superseded": rfv_loop_superseded,
             }))
         }
@@ -503,7 +503,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 "operation": "checkpoint",
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
-                "goal_state": state,
             }))
         }
         "pause" => set_terminal_flags(
@@ -697,7 +696,5 @@ fn set_terminal_flags(
         "ok": true,
         "operation": status,
         "task_id": task_id,
-        "goal_state_path": path.display().to_string(),
-        "goal_state": state,
     }))
 }

@@ -234,15 +234,6 @@
         "hard_gate_hooks"
       ]
     },
-    "antigravity": {
-      "status": "implemented",
-      "projection": "mcp_capability_profile",
-      "capabilities": [
-        "context_files",
-        "mcp_config_paths"
-      ],
-      "notes": "Antigravity MCP host; hard closeout gate on goal_state_manage and closeout_gate tool execution."
-    },
     "mcp": {
       "status": "declared",
       "projection": "mcp_capability_profile",

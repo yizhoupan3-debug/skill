@@ -12,7 +12,6 @@ fn main() -> Result<(), String> {
             if cmd == "codex"
                 || cmd == "claude"
                 || cmd == "cursor"
-                || cmd == "antigravity-app"
                 || cmd == "opencode"
             {
                 args.insert(1, std::ffi::OsString::from("host"));

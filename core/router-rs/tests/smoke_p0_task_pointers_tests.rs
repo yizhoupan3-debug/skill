@@ -1,5 +1,5 @@
 //! Roadmap v5 §6.2 P0: `state_manager/task_pointers` coverage at router-rs boundary
-//! (physical module: `core/antigravity` → `core_state::state_manager`).
+//! (physical module: `core_state::state_manager`).
 
 use core_state::state_manager::{
     neutralize_task_pointers_for_task, read_task_pointer_pair, read_primary_task_id,

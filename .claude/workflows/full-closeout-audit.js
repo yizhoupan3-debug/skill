@@ -156,7 +156,7 @@ git diff --stat HEAD~50..HEAD 2>/dev/null || git log --oneline --since="2026-05-
 await agent(
   `面向用户的可见输出使用简体中文。
 审查变更完整性: 本次大面积升级中是否有被遗忘的子系统。
-检查: core/framework-core/ 是否同步更新、cli/antigravity-cli/ 是否跟进、evals/ 是否适配、templates/ 是否同步。`,
+检查: core/framework-core/ 是否同步更新、evals/ 是否适配、templates/ 是否同步。`,
   { label: 'commit:变更完整性', phase: 'Phase1-CommitReview', schema: FINDING }
 )
 
@@ -215,7 +215,7 @@ await agent(
 
 await agent(
   `面向用户的可见输出使用简体中文。
-审计CLI: cli/mod.rs, args.rs, common.rs, dispatch.rs, runtime_ops.rs。检查参数解析完整性、子命令dispatch覆盖、错误处理、antigravity-cli引用。`,
+审计CLI: cli/mod.rs, args.rs, common.rs, dispatch.rs, runtime_ops.rs。检查参数解析完整性、子命令dispatch覆盖、错误处理。`,
   { label: 'harness:CLI', phase: 'Phase2-HarnessAudit', schema: FINDING }
 )
 
@@ -268,7 +268,7 @@ await agent(
 
 await agent(
   `面向用户的可见输出使用简体中文。
-审计其他宿主配置: .cursor/config.toml, .cursor/hooks.json, .codex/config.toml, .codex/hooks.json, .codex/README.md, .codex/host_entrypoints_sync_manifest.json, .antigravitycli/全部, .opencode/opencode.json, .opencode/.framework-projection.json, .gemini/全部。检查与框架契约一致、hooks命令路径、projection匹配、配置漂移。`,
+审计其他宿主配置: .cursor/config.toml, .cursor/hooks.json, .codex/config.toml, .codex/hooks.json, .codex/README.md, .codex/host_entrypoints_sync_manifest.json, .opencode/opencode.json, .opencode/.framework-projection.json, .gemini/全部。检查与框架契约一致、hooks命令路径、projection匹配、配置漂移。`,
   { label: 'doc:宿主配置', phase: 'Phase3-DocAudit', schema: FINDING }
 )
 
@@ -585,12 +585,7 @@ await agent(
 Codex特化: .codex/config.toml完整？hooks.json正确？README准确？host_entrypoints_sync_manifest完整？AGENTS_CODEX.md仅含Codex特有？codex_hooks隔离？`,
   { label: 'host:Codex', phase: 'Phase7-HostSpecific', schema: FINDING }
 )
-
-await agent(
-  `面向用户的可见输出使用简体中文。
-Antigravity特化: .antigravitycli/配置完整？AGENTS_ANTIGRAVITY.md仅含特有？core/framework-core与router-rs集成？cli/antigravity-cli引用正确？`,
-  { label: 'host:Antigravity', phase: 'Phase7-HostSpecific', schema: FINDING }
-)
+// antigravity host audit removed (host retired)
 
 await agent(
   `面向用户的可见输出使用简体中文。
@@ -600,7 +595,7 @@ OpenCode特化: .opencode/opencode.json完整？framework-projection正确？AGE
 
 await agent(
   `面向用户的可见输出使用简体中文。
-Gemini特化: .gemini/mcp.json完整？settings.json正确？framework-projection-antigravity正确(是否该有自己projection)？缺少AGENTS_GEMINI.md？`,
+Gemini特化: .gemini/mcp.json完整？settings.json正确？缺少AGENTS_GEMINI.md？`,
   { label: 'host:Gemini', phase: 'Phase7-HostSpecific', schema: FINDING }
 )
 
@@ -1186,7 +1181,7 @@ lifecycle-simplify分支评估: git log main..lifecycle-simplify --oneline, git 
 
 await agent(
   `面向用户的可见输出使用简体中文。
-远程分支评估: git branch -r列出。每个分支(antigravity-cli-engine, cursor/paper-adversarial-skills, dependabot/*, feat/deep-audit-and-retire-ts-browser-mcp): 已合并？需合并？可删除？`,
+远程分支评估: git branch -r列出。每个分支(cursor/paper-adversarial-skills, dependabot/*, feat/deep-audit-and-retire-ts-browser-mcp): 已合并？需合并？可删除？`,
   { label: 'merge:远程分支', phase: 'Phase15-Merge' }
 )
 

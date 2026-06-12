@@ -235,7 +235,7 @@ pub fn reviewer_lanes_sorted(repo_root: Option<&Path>) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// MCP prompt bullet lines for registry `reviewer_lanes` (Antigravity / OpenCode shared).
+/// MCP prompt bullet lines for registry `reviewer_lanes` (OpenCode shared).
 pub fn reviewer_lanes_prompt_lines(repo_root: Option<&Path>) -> String {
     let lanes = reviewer_lanes_sorted(repo_root);
     if lanes.is_empty() {

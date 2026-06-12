@@ -530,14 +530,14 @@ fn skill_tool_definitions(empty_output: Value) -> Vec<Value> {
             "skill_route",
             "Route Skill Request",
             "Route a user request through this repository's skills/SKILL_ROUTING_RUNTIME.json, with SKILL_MANIFEST.json fallback, and return the selected skill plus the exact SKILL.md path to read.",
-            json!({"type": "object", "properties": {"query": {"type": "string"}, "hostId": {"type": "string", "description": "Closed-set host id (cursor, claude-code, codex, antigravity, opencode); legacy aliases accepted at filter boundary."}, "sessionId": {"type": "string"}, "allowOverlay": {"type": "boolean"}, "firstTurn": {"type": "boolean"}}, "required": ["query"]}),
+            json!({"type": "object", "properties": {"query": {"type": "string"}, "hostId": {"type": "string", "description": "Closed-set host id (cursor, claude-code, codex, opencode); legacy aliases accepted at filter boundary."}, "sessionId": {"type": "string"}, "allowOverlay": {"type": "boolean"}, "firstTurn": {"type": "boolean"}}, "required": ["query"]}),
             empty_output.clone(),
         ),
         tool_definition(
             "skill_search",
             "Search Repository Skills",
             "Search this repository's SKILL_ROUTING_RUNTIME.json catalog (with SKILL_MANIFEST.json fallback) and return the best matching skill records.",
-            json!({"type": "object", "properties": {"query": {"type": "string"}, "hostId": {"type": "string", "description": "Closed-set host id (cursor, claude-code, codex, antigravity, opencode); legacy aliases accepted at filter boundary."}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}}, "required": ["query"]}),
+            json!({"type": "object", "properties": {"query": {"type": "string"}, "hostId": {"type": "string", "description": "Closed-set host id (cursor, claude-code, codex, opencode); legacy aliases accepted at filter boundary."}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}}, "required": ["query"]}),
             empty_output.clone(),
         ),
         tool_definition(

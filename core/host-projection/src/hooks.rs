@@ -1336,3 +1336,16 @@ pub fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments: &Value, repo_root
 pub fn router_rs_skip_pre_tool_use_guard() -> bool {
     ROUTER_RS_SKIP_PRE_TOOL_USE_GUARD.get().map(|f| f()).unwrap_or(false)
 }
+
+// ── RFV loop full implementation hook (registered by runtime-core) ──
+static RFV_LOOP_DRIVE: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
+
+pub fn register_rfv_loop_drive(func: fn(Value) -> Result<Value, String>) {
+    RFV_LOOP_DRIVE.set(func).ok();
+}
+
+/// Call the registered rfv_loop implementation (runtime-core has append_round support).
+/// Returns None if not registered (caller should fall back to core-state).
+pub fn rfv_loop_drive_registered() -> Option<fn(Value) -> Result<Value, String>> {
+    RFV_LOOP_DRIVE.get().copied()
+}

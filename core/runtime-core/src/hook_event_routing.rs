@@ -45,13 +45,16 @@ fn normalized_event_key(raw: &str) -> String {
 pub fn canonical_hook_event(raw: &str) -> Option<&'static str> {
     match normalized_event_key(raw).as_str() {
         "sessionstart" => Some("SessionStart"),
-        "pretooluse" => Some("PreToolUse"),
+        "pretooluse" | "toolexecutebefore" => Some("PreToolUse"),
+        "toolexecuteafter" | "posttooluse" => Some("PostToolUse"),
         "userpromptsubmit" | "beforesubmitprompt" => Some("UserPromptSubmit"),
-        "posttooluse" => Some("PostToolUse"),
+        "sessionend" | "sessionidle" => Some("SessionEnd"),
         "stop" => Some("Stop"),
         "subagentstart" => Some("SubagentStart"),
         "subagentstop" => Some("SubagentStop"),
-        "sessionend" => Some("SessionEnd"),
+        "sessioncreated" | "sessiondeleted" => Some("SessionEnd"),
+        "permissionasked" | "permissionreplied" => Some("PreToolUse"),
+        "fileedited" | "shellenv" => Some("PostToolUse"),
         _ => None,
     }
 }

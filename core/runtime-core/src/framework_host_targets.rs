@@ -325,14 +325,13 @@ mod tests {
     fn registry_hosts_map_to_install_tools_and_manifest_entrypoints() {
         let root = repo_root();
         let pairs = host_id_and_skills_install_tool_pairs(&root).expect("pairs");
-        assert!(pairs.iter().any(|(host_id, _)| host_id == "antigravity"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "opencode"));
         let reg = load_runtime_registry_json(&root).expect("registry");
         for (host_id, tool) in pairs {
             assert!(
                 matches!(
                     tool.as_str(),
-                    "codex" | "cursor" | "claude" | "opencode" | "antigravity"
+                    "codex" | "cursor" | "claude" | "opencode"
                 ),
                 "unexpected mapping {host_id} -> {tool}"
             );
@@ -354,7 +353,6 @@ mod tests {
         assert_eq!(
             sorted,
             vec![
-                "antigravity".to_string(),
                 "claude-code".to_string(),
                 "codex".to_string(),
                 "cursor".to_string(),
@@ -370,14 +368,11 @@ mod tests {
         let pairs = installable_host_id_and_skills_install_tool_pairs(&root).expect("pairs");
         assert!(pairs.iter().any(|(host_id, _)| host_id == "cursor"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "claude-code"));
-        assert!(pairs.iter().any(|(host_id, _)| host_id == "antigravity"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "opencode"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "codex"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "codex-app"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "codex-cli"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "claude-desktop"));
-        assert!(!pairs.iter().any(|(host_id, _)| host_id == "antigravity-app"));
-        assert!(!pairs.iter().any(|(host_id, _)| host_id == "antigravity-cli"));
     }
 
     #[test]
@@ -429,7 +424,7 @@ mod tests {
             .get("host_projections")
             .and_then(Value::as_object)
             .expect("host_projections");
-        for host_id in ["cursor", "claude-code", "antigravity", "opencode", "codex"] {
+        for host_id in ["cursor", "claude-code", "opencode", "codex"] {
             let projection = projections
                 .get(host_id)
                 .and_then(Value::as_object)
@@ -475,7 +470,24 @@ mod tests {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            assert_eq!(provider.harness_capabilities(), registry_harness.as_slice());
+            let harness_exceptions: Vec<&str> = projection
+                .get("harness_capability_exceptions")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter(|row| {
+                            row.get("status").and_then(Value::as_str) == Some("unsupported")
+                        })
+                        .filter_map(|row| row.get("cap").and_then(Value::as_str))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let effective_harness: Vec<&str> = registry_harness
+                .iter()
+                .copied()
+                .filter(|cap| !harness_exceptions.contains(cap))
+                .collect();
+            assert_eq!(provider.harness_capabilities(), effective_harness.as_slice());
             let has_hard_gate = projection
                 .get("capabilities")
                 .and_then(Value::as_array)

@@ -45,14 +45,6 @@ const INSTALL_STATUS_STOP: &str = "Enforcing Codex review gate";
 const INSTALL_STATUS_SUBAGENT_START: &str = "Recording Codex subagent start";
 const INSTALL_STATUS_SUBAGENT_STOP: &str = "Recording Codex subagent stop";
 
-const INSTALL_STATUS_ANTIGRAVITY_SESSION_START: &str = "Loading Antigravity CLI session state";
-const INSTALL_STATUS_ANTIGRAVITY_PRE_TOOL: &str = "Checking Antigravity CLI generated-surface guard";
-const INSTALL_STATUS_ANTIGRAVITY_USER_PROMPT: &str = "Loading Antigravity CLI turn context";
-const INSTALL_STATUS_ANTIGRAVITY_POST_TOOL: &str = "Recording Antigravity CLI tool evidence";
-const INSTALL_STATUS_ANTIGRAVITY_STOP: &str = "Enforcing Antigravity CLI review gate";
-const INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_START: &str = "Recording Antigravity CLI subagent start";
-const INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_STOP: &str = "Recording Antigravity CLI subagent stop";
-
 static ATOMIC_WRITE_NONCE: AtomicU64 = AtomicU64::new(0);
 #[cfg(test)]
 thread_local! {
@@ -67,9 +59,7 @@ pub(super) fn codex_hook_command_timeout_secs(host: CodexLifecycleHostKind, even
     match event {
         "SessionStart" => 3,
         "PostToolUse" => 5,
-        "SubagentStart" | "SubagentStop" => {
-            if host.state_dir_leaf == ".antigravitycli" { 10 } else { 5 }
-        }
+        "SubagentStart" | "SubagentStop" => 5,
         _ => 8,
     }
 }
@@ -82,28 +72,16 @@ pub(super) fn protected_generated_paths() -> Vec<&'static str> {
     PROTECTED_GENERATED_PATHS.to_vec()
 }
 
-pub(super) fn hook_event_status_message(host: CodexLifecycleHostKind, event_name: &str) -> &'static str {
-    match host.state_dir_leaf {
-        ".antigravitycli" => match event_name {
-            "SessionStart" => INSTALL_STATUS_ANTIGRAVITY_SESSION_START,
-            "PreToolUse" => INSTALL_STATUS_ANTIGRAVITY_PRE_TOOL,
-            "UserPromptSubmit" => INSTALL_STATUS_ANTIGRAVITY_USER_PROMPT,
-            "PostToolUse" => INSTALL_STATUS_ANTIGRAVITY_POST_TOOL,
-            "Stop" => INSTALL_STATUS_ANTIGRAVITY_STOP,
-            "SubagentStart" => INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_START,
-            "SubagentStop" => INSTALL_STATUS_ANTIGRAVITY_SUBAGENT_STOP,
-            _ => "",
-        },
-        _ => match event_name {
-            "SessionStart" => INSTALL_STATUS_SESSION_START,
-            "PreToolUse" => INSTALL_STATUS_PRE_TOOL,
-            "UserPromptSubmit" => INSTALL_STATUS_USER_PROMPT,
-            "PostToolUse" => INSTALL_STATUS_POST_TOOL,
-            "Stop" => INSTALL_STATUS_STOP,
-            "SubagentStart" => INSTALL_STATUS_SUBAGENT_START,
-            "SubagentStop" => INSTALL_STATUS_SUBAGENT_STOP,
-            _ => "",
-        },
+pub(super) fn hook_event_status_message(_host: CodexLifecycleHostKind, event_name: &str) -> &'static str {
+    match event_name {
+        "SessionStart" => INSTALL_STATUS_SESSION_START,
+        "PreToolUse" => INSTALL_STATUS_PRE_TOOL,
+        "UserPromptSubmit" => INSTALL_STATUS_USER_PROMPT,
+        "PostToolUse" => INSTALL_STATUS_POST_TOOL,
+        "Stop" => INSTALL_STATUS_STOP,
+        "SubagentStart" => INSTALL_STATUS_SUBAGENT_START,
+        "SubagentStop" => INSTALL_STATUS_SUBAGENT_STOP,
+        _ => "",
     }
 }
 

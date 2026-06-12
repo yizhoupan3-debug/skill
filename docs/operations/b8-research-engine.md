@@ -21,7 +21,7 @@ cargo run --manifest-path core/autoresearch-rs/Cargo.toml -- --help
 
 状态磁盘：`artifacts/current/<task_id>/RFV_LOOP_STATE.json`；轮次追加经 `framework_rfv_loop` `append_round`。
 
-深度外研契约：[`../references/rfv-loop/external-research-harness.md`](../references/rfv-loop/external-research-harness.md)。
+深度外研契约：见 [`spec.md`](../spec.md) + 代码 `core/core-state/src/rfv_loop.rs`。
 
 ## 排障
 

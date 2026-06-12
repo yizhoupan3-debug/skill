@@ -373,10 +373,7 @@ mod tests {
         }))
         .expect("start");
         assert_eq!(out["ok"], json!(true));
-        assert_eq!(
-            out["goal_state"][REQUIRES_COMPLETION_EVIDENCE_KEY],
-            json!(true)
-        );
+        assert_eq!(out["operation"], json!("start"));
 
         let st = framework_goal_drive(json!({
             "repo_root": rr,
@@ -385,6 +382,10 @@ mod tests {
         }))
         .expect("status");
         assert!(st["goal_state"].is_object());
+        assert_eq!(
+            st["goal_state"][REQUIRES_COMPLETION_EVIDENCE_KEY],
+            json!(true)
+        );
 
         fs::write(
             repo.join("artifacts/current/my-task/EVIDENCE_INDEX.json"),
@@ -424,8 +425,16 @@ mod tests {
             "lifecycle_profile": "my-light",
         }))
         .expect("start");
+        assert_eq!(out["ok"], json!(true));
+        // Verify lifecycle_profile persisted via status read
+        let st = framework_goal_drive(json!({
+            "repo_root": rr,
+            "operation": "status",
+            "task_id": "t-lite",
+        }))
+        .expect("status");
         assert_eq!(
-            out["goal_state"]["lifecycle_profile"],
+            st["goal_state"]["lifecycle_profile"],
             json!("my-light")
         );
         let _ = fs::remove_dir_all(&repo);

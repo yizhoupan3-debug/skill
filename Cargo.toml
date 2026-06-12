@@ -18,7 +18,6 @@ members = [
     ".",
     "core/core-state",
     "core/framework-kernel",
-    "core/framework-profile",
     "core/core-policy",
     "core/routing-engine",
     "core/router-rs",

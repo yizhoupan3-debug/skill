@@ -68,7 +68,7 @@ mod desktop_mcp_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &test_repo_dir(),
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("web_fetch response");
@@ -93,7 +93,7 @@ mod desktop_mcp_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &test_repo_dir(),
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("pre-guard response");
@@ -122,7 +122,7 @@ mod desktop_mcp_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &test_repo_dir(),
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("web_fetch response");
@@ -153,7 +153,7 @@ mod desktop_mcp_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &test_repo_dir(),
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("web_fetch response");
@@ -178,7 +178,7 @@ mod desktop_mcp_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &repo,
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("skill_route response");
@@ -192,7 +192,7 @@ mod desktop_mcp_tests {
     fn closeout_gate_requires_session_summary_file() {
         let repo = test_repo_dir();
         // Pointer 机制已移除，需显式传 task_id
-        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": "no-summary-task"}), &repo, "antigravity")
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": "no-summary-task"}), &repo, "opencode")
             .expect("closeout_gate");
         assert!(
             out.contains("BLOCKED") || out.contains("checkpoint: missing"),
@@ -213,7 +213,7 @@ mod desktop_mcp_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             r#"{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"framework://session_summary"}}"#,
             &repo,
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("resources/read");
@@ -234,7 +234,7 @@ mod desktop_mcp_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             r#"{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"review_gate"}}"#,
             &repo,
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("prompts/get response");
@@ -262,7 +262,7 @@ mod desktop_mcp_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             r#"{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"framework_routing"}}"#,
             &repo,
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("prompts/get response");
@@ -288,7 +288,7 @@ mod desktop_mcp_tests {
         )
         .unwrap();
 
-        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "antigravity")
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "opencode")
             .expect("closeout_gate");
         assert!(
             out.contains("no hook REVIEW_GATE"),
@@ -317,7 +317,7 @@ mod desktop_mcp_tests {
         std::fs::write(review_lanes.join("lane-a.md"), "[P2] example — ok").unwrap();
 
         let out =
-            crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "antigravity")
+            crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "opencode")
                 .expect("closeout_gate");
         assert!(
             !out.contains("WARN: review_gate: GOAL suggests review work"),
@@ -348,7 +348,7 @@ mod desktop_mcp_tests {
         )
         .unwrap();
 
-        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "antigravity")
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "opencode")
             .expect("closeout_gate");
         assert!(
             out.contains("WARN: evidence: only self-attested"),
@@ -872,7 +872,7 @@ mod json_parse_error_tests {
         let path = unique_test_repo_dir();
         mcp_stdio_test_support::seed_minimal_current_task_layout(&path);
 
-        let response = crate::mcp_stdio_harness::handle_mcp_request("not valid json {", &path, "antigravity", "test-session");
+        let response = crate::mcp_stdio_harness::handle_mcp_request("not valid json {", &path, "opencode", "test-session");
 
         // Should return an error response
         assert!(
@@ -895,7 +895,7 @@ mod json_parse_error_tests {
 
         // Missing method field
         let response =
-            crate::mcp_stdio_harness::handle_mcp_request(r#"{"jsonrpc":"2.0","id":1}"#, &path, "antigravity", "test-session");
+            crate::mcp_stdio_harness::handle_mcp_request(r#"{"jsonrpc":"2.0","id":1}"#, &path, "opencode", "test-session");
 
         assert!(response.is_some());
         let resp = response.unwrap();
@@ -907,382 +907,6 @@ mod json_parse_error_tests {
     }
 }
 
-#[cfg(test)]
-mod antigravity_hard_blocking_tests {
-    use serde_json::json;
-    use crate::mcp_stdio_test_support;
-    use std::path::PathBuf;
-
-    fn test_repo_dir() -> PathBuf {
-        let path = mcp_stdio_test_support::unique_temp_repo("antigravity-mcp");
-        mcp_stdio_test_support::seed_minimal_current_task_layout(&path);
-        path
-    }
-
-    #[test]
-    fn antigravity_closeout_gate_advisory_unsatisfied_by_default() {
-        let repo = test_repo_dir();
-        // Default seed has no successful evidence and no session summary.
-        // Under advisory-only mode, closeout_gate returns OK with ADVISORY verdict (not hard-blocked).
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "closeout_gate",
-                "arguments": {}
-            }
-        });
-
-        let response = crate::mcp_stdio_harness::handle_mcp_request(
-            &req.to_string(),
-            &repo,
-            "antigravity",
-            "test-session",
-        ).expect("should get response");
-
-        // Advisory mode: NOT an error, just reports findings
-        assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
-        let text = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("ADVISORY"), "expected ADVISORY verdict; got {text}");
-
-        let _ = std::fs::remove_dir_all(&repo);
-    }
-
-    #[test]
-    fn antigravity_goal_state_manage_complete_advisory_unsatisfied() {
-        let repo = test_repo_dir();
-        // Under advisory-only mode, the MCP layer does not hard-block complete.
-        // The test now expects a task_id validation error instead of a hard block.
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "goal_state_manage",
-                "arguments": {
-                    "operation": "complete"
-                }
-            }
-        });
-
-        let response = crate::mcp_stdio_harness::handle_mcp_request(
-            &req.to_string(),
-            &repo,
-            "antigravity",
-            "test-session",
-        ).expect("should get response");
-
-        // Advisory mode: no hard block, but task_id validation still applies
-        let error_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(
-            !error_msg.contains("[Antigravity App Hard Block]"),
-            "should NOT contain hard block message in advisory mode; got {error_msg}"
-        );
-        assert!(
-            error_msg.contains("task_id") || !response["result"]["isError"].as_bool().unwrap_or(false),
-            "expected task_id validation or success (not hard block); got {error_msg}"
-        );
-
-        let _ = std::fs::remove_dir_all(&repo);
-    }
-
-    #[test]
-    fn antigravity_allows_unsatisfied_under_my_light_profile() {
-        let repo = test_repo_dir();
-        // Create active task with my-light lifecycle_profile
-        let task_id = "test-my-light";
-        
-        // Rewrite active_task.json to point to our test-my-light task
-        std::fs::write(
-            repo.join("artifacts/current/active_task.json"),
-            format!(r#"{{"task_id":"{task_id}"}}"#)
-        ).unwrap();
-
-        let task_dir = repo.join("artifacts/current").join(task_id);
-        std::fs::create_dir_all(&task_dir).unwrap();
-        std::fs::write(
-            task_dir.join("GOAL_STATE.json"),
-            r#"{
-                "schema_version": "router-rs-autopilot-goal-v1",
-                "status": "running",
-                "lifecycle_profile": "my-light",
-                "goal": "ship feature",
-                "non_goals": [],
-                "done_when": [],
-                "validation_commands": [],
-                "checkpoints": []
-            }"#
-        ).unwrap();
-
-        // Under my-light, closeout_gate tool call should NOT be hard-blocked even if unsatisfied.
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "closeout_gate",
-                "arguments": {
-                    "task_id": task_id
-                }
-            }
-        });
-
-        let response = crate::mcp_stdio_harness::handle_mcp_request(
-            &req.to_string(),
-            &repo,
-            "antigravity",
-            "test-session",
-        ).expect("should get response");
-
-        // Should be Ok content (isError is not present or false)
-        assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
-        let content_msg = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(
-            content_msg.contains("[Closeout Gate] ADVISORY:")
-                || content_msg.contains("my-light: MCP hard block disabled"),
-            "my-light closeout should be advisory: {content_msg}"
-        );
-
-        let _ = std::fs::remove_dir_all(&repo);
-    }
-
-    #[test]
-    fn antigravity_review_goal_without_evidence_advisory() {
-        let repo = test_repo_dir();
-        let task_id = "test-strict-review";
-        
-        std::fs::write(
-            repo.join("artifacts/current/active_task.json"),
-            format!(r#"{{"task_id":"{task_id}"}}"#)
-        ).unwrap();
-
-        let task_dir = repo.join("artifacts/current").join(task_id);
-        std::fs::create_dir_all(&task_dir).unwrap();
-        std::fs::write(
-            task_dir.join("GOAL_STATE.json"),
-            r#"{
-                "schema_version": "router-rs-autopilot-goal-v1",
-                "status": "running",
-                "lifecycle_profile": "strict",
-                "goal": "深度 review 这个 PR",
-                "non_goals": [],
-                "done_when": [],
-                "validation_commands": [],
-                "checkpoints": []
-            }"#
-        ).unwrap();
-
-        // 写入 successful evidence 和 session summary
-        std::fs::write(
-            task_dir.join("EVIDENCE_INDEX.json"),
-            r#"{"artifacts":[{"kind":"mcp_record_evidence","source":"mcp_record_evidence","success":true,"command_preview":"cargo test"}]}"#
-        ).unwrap();
-        std::fs::write(task_dir.join("SESSION_SUMMARY.md"), "summary").unwrap();
-
-        // 尝试 complete。由于 review_goal 成立但没有 evidence，应当物理拦截。
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "goal_state_manage",
-                "arguments": {
-                    "task_id": task_id,
-                    "operation": "complete"
-                }
-            }
-        });
-
-        let response = crate::mcp_stdio_harness::handle_mcp_request(
-            &req.to_string(),
-            &repo,
-            "antigravity",
-            "test-session",
-        ).expect("should get response");
-
-        // Advisory mode: complete is NOT hard-blocked even with review goal.
-        // The MCP layer no longer intercepts complete, so it proceeds to goal_state_manage.
-        assert!(
-            !response["result"]["isError"].as_bool().unwrap_or(false),
-            "advisory mode should not block goal_state_manage complete; got {:?}",
-            response["result"]["content"][0]["text"]
-        );
-
-        let _ = std::fs::remove_dir_all(&repo);
-    }
-
-    #[test]
-    fn antigravity_review_goal_with_review_lanes_artifact_satisfies_gate() {
-        let repo = test_repo_dir();
-        let task_id = "test-artifact-review";
-        
-        std::fs::write(
-            repo.join("artifacts/current/active_task.json"),
-            format!(r#"{{"task_id":"{task_id}"}}"#)
-        ).unwrap();
-
-        let task_dir = repo.join("artifacts/current").join(task_id);
-        std::fs::create_dir_all(&task_dir).unwrap();
-        std::fs::write(
-            task_dir.join("GOAL_STATE.json"),
-            r#"{
-                "schema_version": "router-rs-autopilot-goal-v1",
-                "status": "running",
-                "lifecycle_profile": "strict",
-                "goal": "深度 review 这个 PR",
-                "non_goals": [],
-                "done_when": [],
-                "validation_commands": [],
-                "checkpoints": []
-            }"#
-        ).unwrap();
-
-        // 写入 successful evidence 和 session summary
-        std::fs::write(
-            task_dir.join("EVIDENCE_INDEX.json"),
-            r#"{"artifacts":[{"kind":"mcp_record_evidence","source":"mcp_record_evidence","success":true,"command_preview":"cargo test"}]}"#
-        ).unwrap();
-        std::fs::write(task_dir.join("SESSION_SUMMARY.md"), "summary").unwrap();
-
-        // 创建 review-lanes 物理工件
-        let lanes_dir = task_dir.join("review-lanes");
-        std::fs::create_dir_all(&lanes_dir).unwrap();
-        std::fs::write(lanes_dir.join("general-purpose.md"), "[P1] foo.rs:1 - finding").unwrap();
-
-        // 1. 验证 closeout_gate 工具。应当清分并通过，返回 PASS。
-        let req_gate = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "closeout_gate",
-                "arguments": {
-                    "task_id": task_id
-                }
-            }
-        });
-        let response_gate = crate::mcp_stdio_harness::handle_mcp_request(
-            &req_gate.to_string(),
-            &repo,
-            "antigravity",
-            "test-session",
-        ).expect("should get response");
-        assert!(!response_gate["result"]["isError"].as_bool().unwrap_or(false));
-        let content_gate = response_gate["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(content_gate.contains("[Closeout Gate] PASS: all closeout gates satisfied"));
-
-        // 2. 尝试 complete。由于 review-lanes 工件已满足，应当顺利执行不被 Hard Block 拦截。
-        let req_complete = json!({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": {
-                "name": "goal_state_manage",
-                "arguments": {
-                    "task_id": task_id,
-                    "operation": "complete"
-                }
-            }
-        });
-
-        let response_complete = crate::mcp_stdio_harness::handle_mcp_request(
-            &req_complete.to_string(),
-            &repo,
-            "antigravity",
-            "test-session",
-        ).expect("should get response");
-
-        // 应当无 error
-        assert!(!response_complete["result"]["isError"].as_bool().unwrap_or(false));
-        let content_complete = response_complete["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(content_complete.contains("Goal state updated to complete") || content_complete.contains("complete"));
-
-        let _ = std::fs::remove_dir_all(&repo);
-    }
-
-    #[test]
-    fn antigravity_closeout_gate_resolves_active_task_pointer() {
-        let repo = test_repo_dir();
-        let task_id = "test-task";
-        let task_dir = repo.join("artifacts/current").join(task_id);
-        std::fs::create_dir_all(&task_dir).unwrap();
-        std::fs::write(
-            task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"ship"}"#,
-        )
-        .unwrap();
-
-        // Pointer 机制已移除，需显式传 task_id
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "closeout_gate",
-                "arguments": { "task_id": task_id }
-            }
-        });
-        let response = crate::mcp_stdio_harness::handle_mcp_request(
-            &req.to_string(),
-            &repo,
-            "antigravity",
-            "test-session",
-        )
-        .expect("response");
-        assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
-        let text = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(
-            text.contains("goal_state: present"),
-            "active_task.json must resolve GOAL_STATE; got {text}"
-        );
-
-        let _ = std::fs::remove_dir_all(&repo);
-    }
-
-    #[test]
-    fn antigravity_closeout_gate_checkpoint_advisory_when_task_summary_missing() {
-        let repo = test_repo_dir();
-        let task_id = "test-task";
-        let task_dir = repo.join("artifacts/current").join(task_id);
-        std::fs::create_dir_all(&task_dir).unwrap();
-        std::fs::write(
-            task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"ship"}"#,
-        )
-        .unwrap();
-        std::fs::write(
-            task_dir.join("EVIDENCE_INDEX.json"),
-            r#"{"artifacts":[{"kind":"mcp_record_evidence","source":"mcp_record_evidence","success":true,"command_preview":"cargo test"}]}"#,
-        )
-        .unwrap();
-
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "closeout_gate",
-                "arguments": { "task_id": task_id }
-            }
-        });
-        let response = crate::mcp_stdio_harness::handle_mcp_request(
-            &req.to_string(),
-            &repo,
-            "antigravity",
-            "test-session",
-        )
-        .expect("response");
-        assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
-        let text = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(
-            text.contains("ADVISORY: checkpoint missing"),
-            "expected checkpoint advisory when task SESSION_SUMMARY missing; got {text}"
-        );
-
-        let _ = std::fs::remove_dir_all(&repo);
-    }
-}
 
 #[cfg(test)]
 mod claude_desktop_hard_blocking_tests {
@@ -1312,7 +936,7 @@ mod claude_desktop_hard_blocking_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &repo,
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("response");
@@ -1350,7 +974,7 @@ mod claude_desktop_hard_blocking_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &repo,
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("response");
@@ -1374,7 +998,7 @@ mod claude_desktop_hard_blocking_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &repo,
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("response");
@@ -1433,7 +1057,7 @@ mod claude_desktop_hard_blocking_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &repo,
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("response");
@@ -1465,14 +1089,15 @@ mod claude_desktop_hard_blocking_tests {
         let response = crate::mcp_stdio_harness::handle_mcp_request(
             &req.to_string(),
             &repo,
-            "antigravity",
+            "opencode",
             "test-session",
         )
         .expect("response");
         assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
         let text = response["result"]["content"][0]["text"].as_str().unwrap();
         let payload: serde_json::Value = serde_json::from_str(text).expect("json");
-        assert!(payload.get("mcp_closeout_gate").is_some());
+        assert!(payload.get("closeout_allowed").is_some(),
+            "closeout_record_write should return closeout_allowed field; got: {payload}");
         let _ = std::fs::remove_dir_all(&repo);
     }
 }
@@ -1500,7 +1125,7 @@ mod claude_desktop_stdio_e2e_tests {
             .to_path_buf();
 
         let mut child = Command::new(bin)
-            .args(["antigravity", "agent", "--repo-root", repo.to_str().unwrap()])
+            .args(["opencode", "agent", "--repo-root", repo.to_str().unwrap()])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

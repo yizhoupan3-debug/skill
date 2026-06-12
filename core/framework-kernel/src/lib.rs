@@ -12,6 +12,9 @@ pub mod tokenizer;
 pub mod skill_repo;
 pub mod stdio_payload_types;
 
+// ── migrated from framework-profile crate ──
+pub mod framework_profile;
+
 pub use telemetry::{
     emit_telemetry, global_telemetry_writer, install_global_telemetry_writer, LogAggregator,
     LogAggregatorHandle, MpscTelemetryWriter, PredictionOutcomeCheck, TelemetryEvent,

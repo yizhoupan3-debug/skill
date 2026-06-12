@@ -77,7 +77,7 @@ Start by classifying the task into one or more lanes:
 
 - `experiment_design`: variables, controls, ablations, baselines, metrics, sample size, and failure criteria.
 - `math_verification`: assumptions, derivation witnesses, theorem/lemma dependencies, and checker options.
-- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_rfv_loop` with `external_mode=modeling` + [math-reasoning-harness.md](../../docs/references/rfv-loop/math-reasoning-harness.md) section F.
+- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_rfv_loop` with `external_mode=modeling` + [math-reasoning-harness.md](../../docs/spec.md) section F.
 - `code_verification`: implementation audit, tests, deterministic repro, and benchmark commands.
 - `reproducibility`: environment, data/versioning, seeds, configs, and artifact trace.
 

@@ -40,14 +40,12 @@ default = [
     "host-cursor",
     "host-claude-code",
     "host-opencode",
-    "host-antigravity",
     "host-codex",
     "codegraph",
 ]
 host-cursor = []
 host-claude-code = []
 host-opencode = []
-host-antigravity = []
 host-codex = []
 codegraph = ["runtime-core/codegraph"]
 

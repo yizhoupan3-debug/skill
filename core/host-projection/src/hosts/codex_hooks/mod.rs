@@ -16,7 +16,6 @@ pub use install::{
 mod drift;
 
 pub(crate) mod pretool;
-use pretool::classify_protected_generated_path;
 
 mod contract_guard;
 
@@ -42,16 +41,13 @@ pub const CODEX_AGENT_POLICY_PATH: &str = "AGENTS_CODEX.md";
 pub const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
 pub const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
 pub const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 1] = [CODEX_HOOKS_PATH];
-pub(super) const PROTECTED_GENERATED_PATHS: [&str; 9] = [
+pub(super) const PROTECTED_GENERATED_PATHS: [&str; 6] = [
     CODEX_AGENT_POLICY_PATH,
     "AGENTS.md",
-    "AGENTS_ANTIGRAVITY.md",
     "AGENTS_CURSOR.md",
     CODEX_HOOKS_PATH,
     CODEX_HOOKS_README_PATH,
     HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,
-    ".antigravitycli/hooks.json",
-    ".antigravitycli/.router-rs-install.manifest.json",
 ];
 pub(super) const PROTECTED_GENERATED_PREFIXES: [&str; 3] = [
     "skills/SKILL_",
@@ -120,16 +116,6 @@ const CODEX_STRINGS: HostStrings = HostStrings {
     spawn_first_host_id: "codex",
 };
 
-const ANTIGRAVITY_CLI_STRINGS: HostStrings = HostStrings {
-    review_gate_tag: "ANTIGRAVITY_CLI_REVIEW_GATE",
-    stop_hook_active_bypass_env: "ROUTER_RS_ANTIGRAVITY_CLI_STOP_HOOK_ACTIVE_BYPASS",
-    require_stable_session_key_env: "ROUTER_RS_ANTIGRAVITY_CLI_REQUIRE_STABLE_SESSION_KEY",
-    hook_state_salt_env: "ROUTER_RS_ANTIGRAVITY_CLI_HOOK_STATE_SALT",
-    hook_state_unreadable_tag: "ANTIGRAVITY_CLI_HOOK_STATE_UNREADABLE",
-    lifecycle_label: "Antigravity CLI",
-    spawn_first_host_id: "antigravity",
-};
-
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct CodexLifecycleHostKind {
     state_dir_leaf: &'static str,
@@ -139,13 +125,9 @@ impl CodexLifecycleHostKind {
     pub const CODEX: Self = Self {
         state_dir_leaf: ".codex",
     };
-    pub const ANTIGRAVITY_CLI: Self = Self {
-        state_dir_leaf: ".antigravitycli",
-    };
 
     fn strings(self) -> &'static HostStrings {
         match self.state_dir_leaf {
-            ".antigravitycli" => &ANTIGRAVITY_CLI_STRINGS,
             _ => &CODEX_STRINGS,
         }
     }

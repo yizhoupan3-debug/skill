@@ -956,18 +956,6 @@ fn classify_rate_limit_generic_cursor() {
 }
 
 #[test]
-fn classify_rate_limit_generic_antigravity() {
-    let result = super::worker::classify_rate_limit_block(
-        "antigravity",
-        "The model is currently overloaded. Please try again later.",
-    );
-    assert!(result.is_ok(), "antigravity should be classified via generic patterns: {result:?}");
-    let cls = result.unwrap();
-    assert_eq!(cls.blocked_reason, "rate_limit");
-    assert_eq!(cls.host, "antigravity");
-}
-
-#[test]
 fn classify_rate_limit_generic_unknown_host() {
     let result = super::worker::classify_rate_limit_block(
         "future-host",

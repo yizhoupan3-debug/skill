@@ -54,7 +54,7 @@ dimension-grouped **findings** (not a gate state machine report).
 Default: run external calibration when network is available.
 
 - Closest prior work, venue/article-type norms, required baselines, citation currency.
-- Follow [`docs/references/rfv-loop/reasoning-depth-contract.md`](../../../docs/references/rfv-loop/reasoning-depth-contract.md)
+- Follow [`docs/spec.md)
   §A–B: **Claims**, **Contradiction sweep**, **Unknowns**, **retrieval_trace**.
 
 If skipped, output **`skip_reason`** (e.g. offline, user waived, no network) — do not

@@ -260,38 +260,34 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
     // Only include these fields when non-empty (both modes) or in full mode
     if is_full {
         // In full mode, always include verbose path fields
-        let obj = runtime_snapshot
-            .as_object_mut()
-            .expect("runtime_snapshot is an object");
-        obj.insert(
-            "artifact_base".to_string(),
-            json!(snapshot.artifact_base.display().to_string()),
-        );
-        obj.insert(
-            "current_root".to_string(),
-            json!(snapshot.current_root.display().to_string()),
-        );
-        obj.insert(
-            "mirror_root".to_string(),
-            json!(snapshot.mirror_root.display().to_string()),
-        );
-        obj.insert(
-            "task_root".to_string(),
-            json!(snapshot.task_root.display().to_string()),
-        );
-        obj.insert(
-            "control_plane_missing".to_string(),
-            control_plane_missing_value,
-        );
-        obj.insert(
-            "control_plane_inconsistency_reasons".to_string(),
-            cp_inconsistency_value,
-        );
-        obj.insert("recoverable_task_ids".to_string(), recoverable_value);
-    } else {
-        let obj = runtime_snapshot
-            .as_object_mut()
-            .expect("runtime_snapshot is an object");
+        if let Some(obj) = runtime_snapshot.as_object_mut() {
+            obj.insert(
+                "artifact_base".to_string(),
+                json!(snapshot.artifact_base.display().to_string()),
+            );
+            obj.insert(
+                "current_root".to_string(),
+                json!(snapshot.current_root.display().to_string()),
+            );
+            obj.insert(
+                "mirror_root".to_string(),
+                json!(snapshot.mirror_root.display().to_string()),
+            );
+            obj.insert(
+                "task_root".to_string(),
+                json!(snapshot.task_root.display().to_string()),
+            );
+            obj.insert(
+                "control_plane_missing".to_string(),
+                control_plane_missing_value,
+            );
+            obj.insert(
+                "control_plane_inconsistency_reasons".to_string(),
+                cp_inconsistency_value,
+            );
+            obj.insert("recoverable_task_ids".to_string(), recoverable_value);
+        }
+    } else if let Some(obj) = runtime_snapshot.as_object_mut() {
         // In summary mode, only include these if they have content
         if !control_plane_missing.is_empty() {
             obj.insert(
@@ -413,14 +409,16 @@ fn codegraph_index_snapshot(repo_root: &Path) -> Value {
                 "edge_count": stats.edge_count,
                 "file_count": stats.file_count,
                 "indexed_at": stats.indexed_at,
+                "db_size_bytes": stats.db_size_bytes,
             }),
             Err(e) => json!({
                 "enabled": true,
                 "error": format!("stats query failed: {e}"),
             }),
         },
-        Err(_) => json!({
+        Err(e) => json!({
             "enabled": false,
+            "error": format!("open failed: {e}"),
         }),
     }
 }

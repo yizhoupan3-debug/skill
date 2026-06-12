@@ -1,4 +1,4 @@
-//! MCP stdio hosts (Antigravity / Opencode): closeout + review_gate advisory contract slice.
+//! MCP stdio hosts (Opencode): closeout + review_gate advisory contract slice.
 //!
 //! Complements the Cursor/Codex/Claude matrix in `mod.rs`; uses shared MCP harness helpers.
 
@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use crate::mcp_stdio_harness;
 use crate::mcp_stdio_test_support;
 
-const MCP_HOSTS: &[&str] = &["antigravity", "opencode"];
+const MCP_HOSTS: &[&str] = &["opencode"];
 
 fn fresh_mcp_repo(host: &str, label: &str) -> PathBuf {
     let path = mcp_stdio_test_support::unique_temp_repo(&format!("hook-contract-{host}-{label}"));

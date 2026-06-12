@@ -365,13 +365,6 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
         ])
     );
     assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["antigravity"],
-        serde_json::json!([
-            "AGENTS_ANTIGRAVITY.md",
-            ".gemini/antigravity/rules/framework.md"
-        ])
-    );
-    assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["opencode"],
         ".opencode/opencode.json"
     );
@@ -1077,7 +1070,6 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
         &[
             "cursor".to_string(),
             "claude".to_string(),
-            "antigravity-app".to_string(),
             "opencode".to_string(),
             "codex-cli".to_string(),
         ],
@@ -1838,7 +1830,6 @@ fn runtime_registry_on_disk_closed_set_is_canonical_five_hosts() {
         "docs/hosts/codex.md",
         "docs/hosts/cursor.md",
         "docs/hosts/claude.md",
-        "docs/hosts/antigravity.md",
         "docs/hosts/opencode.md",
     ] {
         assert!(
@@ -1850,7 +1841,6 @@ fn runtime_registry_on_disk_closed_set_is_canonical_five_hosts() {
         "AGENTS_CODEX.md",
         "AGENTS_CURSOR.md",
         "AGENTS_CLAUDE.md",
-        "AGENTS_ANTIGRAVITY.md",
         "AGENTS_OPENCODE.md",
     ] {
         assert!(

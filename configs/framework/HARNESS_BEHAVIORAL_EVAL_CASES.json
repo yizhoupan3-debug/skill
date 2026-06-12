@@ -4,31 +4,46 @@
   "tracks": [
     {
       "id": "routing_accuracy",
-      "case_ids": ["route_miss_owner_near_miss"]
+      "case_ids": [
+        "route_miss_owner_near_miss"
+      ]
     },
     {
       "id": "token_efficiency",
-      "case_ids": ["sessionstart_budget_guard", "tool_output_success_silent"]
+      "case_ids": [
+        "sessionstart_budget_guard",
+        "tool_output_success_silent"
+      ]
     },
     {
       "id": "long_task_continuity",
-      "case_ids": ["step_ledger_resume_summary"]
+      "case_ids": [
+        "step_ledger_resume_summary"
+      ]
     },
     {
       "id": "trajectory_health",
-      "case_ids": ["trace_event_payload_contract"]
+      "case_ids": [
+        "trace_event_payload_contract"
+      ]
     },
     {
       "id": "closeout_integrity",
-      "case_ids": ["completion_without_evidence_blocked"]
+      "case_ids": [
+        "completion_without_evidence_blocked"
+      ]
     },
     {
       "id": "skill_contract_quality",
-      "case_ids": ["skill_contract_lint_high_impact"]
+      "case_ids": [
+        "skill_contract_lint_high_impact"
+      ]
     },
     {
       "id": "subagent_lane_integrity",
-      "case_ids": ["lane_contract_requires_digest_and_verification"]
+      "case_ids": [
+        "lane_contract_requires_digest_and_verification"
+      ]
     },
     {
       "id": "review_gate_integrity",
@@ -45,7 +60,9 @@
     },
     {
       "id": "contract_integrity",
-      "case_ids": ["skill_contract_lint_high_impact"]
+      "case_ids": [
+        "skill_contract_lint_high_impact"
+      ]
     }
   ],
   "cases": [
@@ -156,12 +173,6 @@
       "failure_class": "subagent_misuse",
       "fixture": "tests/fixtures/review_gate/env_matrix/em-05-lite-cap-2.json",
       "verify": "cargo test --manifest-path core/router-rs/Cargo.toml review_lite_cap_refused_at_pending_max"
-    },
-    {
-      "id": "antigravity_app_install_projection",
-      "failure_class": "verification_missing",
-      "fixture": "docs/hosts/antigravity-app.md",
-      "verify": "cargo test --manifest-path core/router-rs/Cargo.toml host_integration"
     }
   ]
 }

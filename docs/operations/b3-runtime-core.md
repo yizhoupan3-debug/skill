@@ -22,7 +22,7 @@ plate: B3
 
 **任务目录真源**：`artifacts/current/<task_id>/`（`GOAL_STATE.json`、`RFV_LOOP_STATE.json`、`WAVE_STATE.json`）。
 
-Env 与 flock：见 [`../harness_architecture/02-data-flows.md`](../harness_architecture/02-data-flows.md) §3.1；`ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时 `framework doctor` 会 WARN。
+Env 与 flock：见 [`spec.md`](../spec.md)；`ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时 `framework doctor` 会 WARN。
 
 ## 排障
 

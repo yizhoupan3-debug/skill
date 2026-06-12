@@ -37,7 +37,7 @@ impl HostLifecycle for CursorHostProvider {
 
 impl HostToolExecutor for CursorHostProvider {
     fn has_hard_gate_hooks(&self) -> bool {
-        false
+        true
     }
 
     fn closeout_evidence_hooks_supported(&self) -> bool {

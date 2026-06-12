@@ -16,7 +16,7 @@ pub mod framework_runtime;
 pub mod session_supervisor;
 pub mod closeout_enforcement;
 pub mod execution_contract;
-pub use framework_profile;
+pub use framework_kernel::framework_profile;
 pub mod rfv_loop;
 pub mod schema_drift;
 
@@ -257,6 +257,9 @@ pub fn register_host_projection_hooks() {
                 }
             },
         );
+
+        // ── RFV loop full implementation (supports append_round) ──
+        host_projection::hooks::register_rfv_loop_drive(rfv_loop::framework_rfv_loop);
     });
 }
 

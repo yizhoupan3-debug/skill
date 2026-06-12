@@ -1,4 +1,4 @@
-//! Minimal RFV loop surface for antigravity-core tests and goal/RFV mutex.
+//! Minimal RFV loop surface for tests and goal/RFV mutex.
 
 use crate::state_manager::{
     deactivate_goal_for_conflict_with_rfv, read_active_task_id, read_rfv_loop_state,

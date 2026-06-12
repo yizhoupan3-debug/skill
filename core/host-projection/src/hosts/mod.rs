@@ -6,11 +6,11 @@ pub mod host_provider;
 pub mod hook_state_common;
 
 // ── Migrated host providers ──
-pub mod antigravity_provider;
 pub mod claude_code_hooks;
 pub mod claude_provider;
 pub mod mcp_stdio_harness;
 pub mod opencode_agent;
+pub mod opencode_hooks;
 pub mod opencode_provider;
 
 // ── Test shims ──

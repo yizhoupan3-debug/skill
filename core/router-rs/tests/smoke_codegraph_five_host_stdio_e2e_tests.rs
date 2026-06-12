@@ -77,8 +77,6 @@ mod five_host_stdio_e2e {
             codex_home_root: home.join(".codex"),
             cursor_home_root: home.join(".cursor"),
             claude_home_root: home.join(".claude"),
-            antigravity_home_root: home.join(".gemini"),
-            antigravity_cli_home_root: home.join(".antigravitycli"),
             opencode_home_root: home.join(".opencode"),
         };
         (root, roots)
@@ -103,7 +101,6 @@ mod five_host_stdio_e2e {
                 roots.project_root.join(".opencode/opencode.json"),
                 "mcpServers",
             ),
-            "antigravity" => (roots.project_root.join(".gemini/mcp.json"), "mcpServers"),
             other => panic!("unexpected host_id {other}"),
         }
     }

@@ -2,11 +2,11 @@
 
 这份仓库是一整套给 Codex 和 Cursor 共用的 skill 系统：包含 `skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。把这个仓库通过 GitHub 分享给别人后，对方可以在 Windows 上克隆、验证，并按本机的 `CODEX_HOME` / `CURSOR_HOME` 或工作区路径启用；不要依赖某台机器的绝对路径。
 
-**使用者一页纸**（宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检命令）：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)。
+**使用者一页纸**（宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检命令）：[`docs/hosts/`](docs/hosts/) + [`AGENTS.md`](AGENTS.md)。
 
-**近期变更（2026-06）**：闭集宿主收敛为 **五宿主**（`codex`、`claude-code`、`antigravity`、`cursor`、`opencode`）；`claude-desktop`、`codex-app`、`codex-cli`、`antigravity-app`、`antigravity-cli` 已退役 — 见 [`MIGRATION.md`](MIGRATION.md) §闭集宿主收敛（2026-06）。
+**近期变更（2026-06）**：闭集宿主收敛为 **四宿主**（`codex`、`claude-code`、`cursor`、`opencode`）；`claude-desktop`、`codex-app`、`codex-cli` 已退役 — 见 [`MIGRATION.md`](MIGRATION.md) §闭集宿主收敛（2026-06）。
 
-**近期变更（2026-05）**：`/autopilot` 已退役（用 `/implementx`）；Cursor hooks 默认 **7 事件**减法闭集；`docs/plans/` 与 `docs/history/` 过期 stub 已移除（索引见 [`docs/plans/README.md`](docs/plans/README.md)）；控制面硬化（registry 磁盘 loader、`host_projection_narrative.json`、生成物 metadata-only doctor）见 [`MIGRATION.md`](MIGRATION.md) 与 [`docs/harness_architecture/02-data-flows.md`](docs/harness_architecture/02-data-flows.md) §2.3。文档地图：[`docs/README.md`](docs/README.md)。
+**近期变更（2026-05）**：`/autopilot` 已退役（用 `/implementx`）；Cursor hooks 默认 **7 事件**减法闭集；`docs/plans/` 与 `docs/history/` 过期 stub 已移除（索引见 [`docs/plans/README.md`](docs/plans/README.md)）；控制面硬化（registry 磁盘 loader、`host_projection_narrative.json`、生成物 metadata-only doctor）见 [`MIGRATION.md`](MIGRATION.md) 与 [`docs/spec.md`](docs/spec.md)。文档地图：[`docs/README.md`](docs/README.md)。
 
 ## 我该怎么入门（两条路径）
 
@@ -26,8 +26,8 @@
 
 - `AGENTS.md`：Codex 和 Cursor 进入本仓库时共同遵守的项目规则。
   - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 [`AGENTS_CODEX.md`](AGENTS_CODEX.md) → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
-- `docs/README.md`：契约与分层文档索引（阅读顺序、主题表、`target-dir`/hook 清理边界）。
-- `docs/harness_architecture/`：连续性控制面 **L1–L5** 上层设计（证据流、续跑流、扩展规则），详见 [`index.md`](docs/harness_architecture/index.md)。
+- `docs/README.md`：文档索引（阅读顺序、主题表）。
+- `docs/spec.md`：统一规约（架构、五层模型、沙箱、路由、Closeout）。
 - `skills/`：全部 skill 源文件，每个 skill 通常在 `skills/<name>/SKILL.md`。
 - `skills/SKILL_ROUTING_RUNTIME.json`：运行时路由入口。Codex 应先查这个文件，再按命中结果读取对应 skill。
 - `skills/SKILL_MANIFEST.json`、`skills/SKILL_ROUTING_INDEX.md` 等：路由索引与 manifest（**热表** `SKILL_ROUTING_RUNTIME.json` 与 manifest 为手维护真源；`refresh --write-companions` 只再生 tiers/companion stubs）。
@@ -163,7 +163,7 @@ codex
 - Cursor hooks 来自 `.cursor/hooks.json`，对当前工作区会话生效，不是跨所有仓库的全局策略。
 - 本仓库在 `.cursor/hooks.json` 注册 **7 个** hook 事件（减法闭集，见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)），经 [`configs/framework/cursor-router-rs-hook.sh`](configs/framework/cursor-router-rs-hook.sh) 调用 `router-rs cursor hook`；launcher **优先仓库 release**（~8MB），并 `source` [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。关键门控 fail-closed；`postToolUse` 对 `Read` 等走 Rust fast-path。`.cursor/hook-state/` 存门控状态。
 - 若使用 Codex CLI hooks，状态文件在 `.codex/hook-state/`，与 Cursor 独立。
-- Codex `.codex/hooks.json` 包装脚本解析 `router-rs` 的顺序为：环境变量 **`ROUTER_RS_BIN`**（可执行绝对路径）→ 仓库 `core/router-rs/target/{release,debug}` → 仓库根 `target/{release,debug}` → **`command -v router-rs`**（最后手段；生产环境建议固定前两档之一）。缺少二进制时各生命周期事件一律 fail-closed（单行 JSON `decision:block`）。`.codex/hook-state/` 跨事件串联依赖 stdin 常见字段（`session_id` 等，含 camelCase）或 **`CODEX_SESSION_ID`** / **`CODEX_CONVERSATION_ID`**；需要硬前置时可设 **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=1`**，在无稳定键时阻断 `UserPromptSubmit`/`PostToolUse`/`Stop`（详见 `docs/harness_architecture/03-hook-and-switches.md` 环境变量表）。
+- Codex `.codex/hooks.json` 包装脚本解析 `router-rs` 的顺序为：环境变量 **`ROUTER_RS_BIN`**（可执行绝对路径）→ 仓库 `core/router-rs/target/{release,debug}` → 仓库根 `target/{release,debug}` → **`command -v router-rs`**（最后手段；生产环境建议固定前两档之一）。缺少二进制时各生命周期事件一律 fail-closed（单行 JSON `decision:block`）。`.codex/hook-state/` 跨事件串联依赖 stdin 常见字段（`session_id` 等，含 camelCase）或 **`CODEX_SESSION_ID`** / **`CODEX_CONVERSATION_ID`**；需要硬前置时可设 **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=1`**，在无稳定键时阻断 `UserPromptSubmit`/`PostToolUse`/`Stop`。
 - 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `core/runtime-core/src/hosts/cursor_hooks/` 内 handlers），与 Codex 不完全相同。
 - Cursor 技能分为两层：仓库路由技能走 `skills/`（由 `SKILL_ROUTING_RUNTIME.json` 管理）；用户侧/内置技能由 Cursor 自身加载（如 `~/.cursor/skills/` 与 `~/.cursor/skills-cursor/`），不写回本仓库 runtime。
 
@@ -175,7 +175,7 @@ codex
 - 安装二进制：`cargo install --path /path/to/skill/core/router-rs`；若可执行文件名不是默认，在环境里设 `ROUTER_RS_BIN`（hooks 内展开）。
 - 与「本仓库 embedded」模式对照：本仓库 `.cursor/hooks.json` 与跨仓模板都走同一个 launcher；跨仓通常依赖 PATH / `ROUTER_RS_BIN` 或 `SKILL_FRAMEWORK_ROOT`。
 - **`router-rs framework …` 维护命令**：在目标仓库目录执行时，若当前目录不是框架检出根，需设置 **`SKILL_FRAMEWORK_ROOT`**（或传 `--framework-root`），否则会报无法解析 `framework_root`（实现会尝试从已安装二进制路径、`CURSOR_WORKSPACE_ROOT` 等推断，不可靠时以环境变量为准）。
-- Hook 减法与内存：[`docs/framework_operator_primer.md`](docs/framework_operator_primer.md)「Hook 减法闭集」；恢复已删 Cursor 事件见 [`MIGRATION.md`](MIGRATION.md)。
+- Hook 减法与内存：[`docs/hosts/cursor.md`](docs/hosts/cursor.md)；恢复已删 Cursor 事件见 [`MIGRATION.md`](MIGRATION.md)。
 
 ### Claude Code（项目级 + 用户级）
 

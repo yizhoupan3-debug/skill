@@ -277,7 +277,6 @@ pub fn allowed_dot_generated_artifact(path: &str) -> bool {
             | ".claude/CLAUDE.md"
             | ".claude/mcp.json"
             | ".claude/.framework-projection-desktop.json"
-            | ".gemini/antigravity/rules/framework.md"
             | ".gemini/settings.json"
             | ".gemini/mcp.json"
             | ".opencode/opencode.json"
