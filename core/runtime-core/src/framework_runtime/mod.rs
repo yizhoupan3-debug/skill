@@ -584,7 +584,7 @@ fn stable_json_sha256(value: &Value) -> Result<String, String> {
 }
 
 /// Machine-readable per-host harness surface from `RUNTIME_REGISTRY.json` (for contract-summary / audits).
-pub fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String> {
+fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String> {
     let path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
     if !path.is_file() {
         return Err(format!(
@@ -901,12 +901,12 @@ fn registry_task_sort_key(row: &Value) -> String {
     ])
 }
 
-pub fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
+fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
     input.chars().take(max_chars).collect()
 }
 
 /// Stable task id when no active/focus pointer exists (review-only sessions).
-pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
+pub(crate) const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
 
 
 
@@ -1343,7 +1343,7 @@ fn tool_name_is_shell_like(name: &str) -> bool {
         || n == "pwsh"
 }
 
-pub fn shell_command_looks_like_verification(command: &str) -> bool {
+fn shell_command_looks_like_verification(command: &str) -> bool {
     let c = command.to_ascii_lowercase();
     // Original (Rust / Python / JS test runners + lint).
     c.contains("cargo test")
@@ -1418,7 +1418,7 @@ pub fn shell_command_looks_like_verification(command: &str) -> bool {
         || crate::formal_toolchain::ascii_lower_contains_formal_toolchain_tokens(&c)
 }
 
-pub fn detect_and_verify_physical_artifact(repo_root: &Path, command: &str) -> bool {
+fn detect_and_verify_physical_artifact(repo_root: &Path, command: &str) -> bool {
     let c = command.to_ascii_lowercase();
     let max_delta = 15; // 15s safe time window for mtime verification to accommodate slow disks
 

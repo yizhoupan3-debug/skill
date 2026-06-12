@@ -845,28 +845,6 @@ fn normalize_evidence_index(payload: &Value) -> Vec<Map<String, Value>> {
         .unwrap_or_default()
 }
 
-#[allow(dead_code)]
-fn normalize_next_actions(payload: &Value) -> Vec<String> {
-    let actions = if payload.get("schema_version").and_then(Value::as_str)
-        == Some("next-actions-v2")
-    {
-        payload.get("next_actions")
-    } else {
-        payload
-            .get("next_actions")
-            .or_else(|| payload.get("actions"))
-    };
-    actions
-        .and_then(Value::as_array)
-        .map(|rows| {
-            rows.iter()
-                .map(coerce_next_action_line)
-                .filter(|item| !item.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 fn normalize_trace_skills(payload: &Value) -> Vec<String> {
     let skills = if payload.get("schema_version").and_then(Value::as_str)
         == Some(TRACE_METADATA_SCHEMA_VERSION)

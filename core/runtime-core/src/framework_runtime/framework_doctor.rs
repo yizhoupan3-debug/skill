@@ -90,7 +90,6 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     // Always-known non-entrypoint paths (settings, mcp.json per host)
     let known_extra_checks: &[(&str, std::path::PathBuf)] = &[
         (".claude/settings.json".into(), repo_root.join(".claude").join("settings.json")),
-        (".gemini/mcp.json".into(), repo_root.join(".gemini").join("mcp.json")),
     ];
     for (label, path) in known_extra_checks {
         host_install_checks.push((label.to_string(), path.clone()));
@@ -126,8 +125,14 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
         println!("{label}: {status} ({})", path.display());
     }
     if host_install_missing > 0 {
+        let installable: Vec<&str> = crate::hosts::host_provider_registry()
+            .iter()
+            .filter(|p| p.capabilities().config_path.contains('/'))
+            .map(|p| p.host_id())
+            .collect();
         println!(
-            "hint: router-rs framework host-integration install --to claude-code|opencode --scope project"
+            "hint: router-rs framework host-integration install --to {} --scope project",
+            installable.join("|")
         );
         let deprecated_shim = repo_root
             .join(".claude")

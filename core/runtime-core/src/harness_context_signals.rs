@@ -98,23 +98,6 @@ pub fn rfv_state_signals_math(state: &Value) -> bool {
         .any(text_signals_math_or_formal_checker)
 }
 
-/// OR over Autopilot `GOAL_STATE` `goal` and `validation_commands` (mirrors RFV `verify_commands`).
-pub fn autopilot_state_signals_math(state: &Value) -> bool {
-    if state
-        .get("goal")
-        .and_then(Value::as_str)
-        .is_some_and(text_signals_math_or_formal_checker)
-    {
-        return true;
-    }
-    let Some(cmds) = state.get("validation_commands").and_then(Value::as_array) else {
-        return false;
-    };
-    cmds.iter()
-        .filter_map(Value::as_str)
-        .any(text_signals_math_or_formal_checker)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,17 +202,4 @@ mod tests {
         assert!(!rfv_state_signals_math(&st3));
     }
 
-    #[test]
-    fn autopilot_state_scans_validation_commands() {
-        let st = serde_json::json!({
-            "goal": "ship feature X",
-            "validation_commands": ["python -c \"import sympy; print(2)\""]
-        });
-        assert!(autopilot_state_signals_math(&st));
-        let st2 = serde_json::json!({
-            "goal": "proof of concept demo",
-            "validation_commands": ["cargo test -q"]
-        });
-        assert!(!autopilot_state_signals_math(&st2));
-    }
 }

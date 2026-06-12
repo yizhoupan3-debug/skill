@@ -2,11 +2,11 @@ use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const HARNESS_CONTRACT_SCHEMA_VERSION: &str = "router-rs-harness-contract-v1";
-pub const HARNESS_SKILL_LINT_SCHEMA_VERSION: &str = "router-rs-harness-skill-contract-lint-v1";
-pub const HARNESS_CONTRACT_AUTHORITY: &str = "rust-harness-contract";
+pub(crate) const HARNESS_CONTRACT_SCHEMA_VERSION: &str = "router-rs-harness-contract-v1";
+pub(crate) const HARNESS_SKILL_LINT_SCHEMA_VERSION: &str = "router-rs-harness-skill-contract-lint-v1";
+pub(crate) const HARNESS_CONTRACT_AUTHORITY: &str = "rust-harness-contract";
 
-pub const FAILURE_TAXONOMY: &[(&str, &str)] = &[
+pub(crate) const FAILURE_TAXONOMY: &[(&str, &str)] = &[
     ("route_miss", "The task routes to the wrong owner/gate or misses an expected owner."),
     ("owner_drift", "The active owner, goal, or scope changes without explicit contract update intent."),
     ("context_rot", "Large or irrelevant context accumulates in the parent thread or hot prompt surface."),

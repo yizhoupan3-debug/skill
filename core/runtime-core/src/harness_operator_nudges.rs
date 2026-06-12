@@ -18,7 +18,7 @@ const EXPECTED_SCHEMA_VERSION: &str = "harness-operator-nudges-v1";
 ///
 /// P1-E: also OR-gated by `ROUTER_RS_OPERATOR_INJECT` (aggregate kill-switch). When the
 /// aggregate flag is off, nudges are disabled regardless of the per-nudge env.
-pub fn harness_operator_nudges_globally_enabled() -> bool {
+fn harness_operator_nudges_globally_enabled() -> bool {
     router_rs_operator_inject_globally_enabled()
         && router_rs_env_enabled_default_true(HARNESS_NUDGES_ENV)
 }

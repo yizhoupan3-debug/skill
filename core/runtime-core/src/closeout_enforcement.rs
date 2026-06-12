@@ -10,7 +10,7 @@ const ALLOWED_VERIFICATION_STATUSES: &[&str] = &["passed", "failed", "partial", 
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-pub struct CloseoutCommandRecord {
+pub(crate) struct CloseoutCommandRecord {
     #[serde(default)]
     pub command: String,
     #[serde(default)]
@@ -28,7 +28,7 @@ pub struct CloseoutCommandRecord {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-pub struct CloseoutArtifactRecord {
+pub(crate) struct CloseoutArtifactRecord {
     #[serde(default)]
     pub path: String,
     #[serde(default)]
@@ -80,7 +80,7 @@ pub struct CloseoutRecord {
 
 /// Classify a rule name as "hard" (must fix before complete) or "soft" (advisory).
 /// Returns `"hard"` by default for unknown rules (fail-safe).
-pub fn closeout_rule_category(rule: &str) -> &'static str {
+fn closeout_rule_category(rule: &str) -> &'static str {
     match rule {
         // hard: structural/schema errors that make the record unreliable
         "schema_version_mismatch"
