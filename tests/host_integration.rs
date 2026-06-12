@@ -2041,7 +2041,7 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&home).unwrap();
 
-    let framework_status = router_rs_json_with_home(&home, &[
+    let _framework_status = router_rs_json_with_home(&home, &[
         "framework",
         "host-integration",
         "status",

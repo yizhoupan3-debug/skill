@@ -59,6 +59,7 @@ artifacts/runtime/
 artifacts/session_supervisor/
 core/router-rs/artifacts/session_supervisor/
 core/router-rs/artifacts/telemetry/
+artifacts/telemetry/
 core/router-rs/probe.err
 **/.router-rs.*.lock
 artifacts/codex-skill-surface/

@@ -11,6 +11,7 @@
 
 include!("frag_01_through_types.rs");
 include!("frag_impl_browser_runtime.rs");
+include!("frag_impl_browser_runtime_attach.rs");
 include!("frag_impl_cdp.rs");
 include!("frag_rest.rs");
 

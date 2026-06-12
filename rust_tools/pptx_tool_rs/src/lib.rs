@@ -1668,163 +1668,97 @@ pub fn slide_shapes_label(slide: &PptxSlideSpec, palette: &PptPalette) -> String
     )
 }
 
-pub fn slide_shapes_cover_or_closing(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
-    let panel = rect_shape(
-        4,
-        "Hero Panel",
-        ShapeBox {
-            x: 0.72,
-            y: 0.72,
-            w: 5.8,
-            h: 6.0,
-        },
-        palette.panel,
-        Some(palette.line),
-        16000,
-    );
+
+/// Configuration for data-driven slide layout rendering.
+/// Replaces 5 nearly-identical `slide_shapes_*` functions with a single generic renderer.
+#[derive(Debug, Clone)]
+struct LayoutConfig {
+    /// Panel name (e.g. "Content Panel", "Hero Panel")
+    panel_name: &'static str,
+    /// Panel bounding box
+    panel_box: ShapeBox,
+    /// Panel fill color field: true = palette.panel, false = palette.panel_soft
+    panel_use_hard: bool,
+    /// Panel z-order
+    panel_z: u32,
+    /// Title bounding box
+    title_box: ShapeBox,
+    /// Title font size
+    title_size: u32,
+    /// Subtitle bounding box (if subtitle exists)
+    subtitle_box: ShapeBox,
+    /// Body item start y coordinate
+    body_start_y: f64,
+    /// Body item y step
+    body_step_y: f64,
+    /// Body item bounding box width/height
+    body_w: f64,
+    body_h: f64,
+    /// Body item x offset
+    body_x: f64,
+    /// Maximum body items
+    body_max: usize,
+    /// Whether to number body items (1. 2. 3.)
+    body_numbered: bool,
+}
+
+/// Generic data-driven slide shape renderer.
+/// Replaces `slide_shapes_cover_or_closing`, `slide_shapes_standard_content`,
+/// `slide_shapes_data_panel`, `slide_shapes_step_lane`, `slide_shapes_multi_card`.
+fn slide_shapes_from_config(slide: &PptxSlideSpec, palette: &PptPalette, cfg: &LayoutConfig) -> Vec<String> {
+    let panel_color = if cfg.panel_use_hard { palette.panel } else { palette.panel_soft };
+    let panel = rect_shape(4, cfg.panel_name, cfg.panel_box.clone(), panel_color, Some(palette.line), cfg.panel_z);
     let mut shapes = vec![panel, slide_shapes_label(slide, palette)];
-    let title_box = if slide.layout == "cover" {
-        (0.96, 2.02, 4.9, 1.1, 31u32)
-    } else {
-        (3.2, 2.48, 6.9, 0.9, 34u32)
-    };
-    shapes.push(text_shape(
-        11,
-        "Title",
-        &slide.title,
-        ShapeBox {
-            x: title_box.0,
-            y: title_box.1,
-            w: title_box.2,
-            h: title_box.3,
-        },
-        TextStyle {
-            size_pt: title_box.4,
-            color: palette.text,
-            bold: true,
-            title_placeholder: true,
-        },
-    ));
+    shapes.push(text_shape(11, "Title", &slide.title, cfg.title_box.clone(), TextStyle {
+        size_pt: cfg.title_size, color: palette.text, bold: true, title_placeholder: true,
+    }));
     if !slide.subtitle.is_empty() {
-        let sub_y = if slide.layout == "cover" {
-            3.2
-        } else {
-            3.52
-        };
-        shapes.push(text_shape(
-            12,
-            "Subtitle",
-            &slide.subtitle,
-            ShapeBox {
-                x: 0.96,
-                y: sub_y,
-                w: 6.7,
-                h: 0.38,
-            },
-            TextStyle {
-                size_pt: 18,
-                color: palette.text_soft,
-                bold: false,
-                title_placeholder: false,
-            },
-        ));
+        shapes.push(text_shape(12, "Subtitle", &slide.subtitle, cfg.subtitle_box.clone(), TextStyle {
+            size_pt: 18, color: palette.text_soft, bold: false, title_placeholder: false,
+        }));
     }
-    for (idx, item) in slide.body.iter().take(6).enumerate() {
-        let y = 4.35 + idx as f64 * 0.58;
-        shapes.push(text_shape(
-            20 + idx as u32,
-            "Body",
-            item,
-            ShapeBox {
-                x: 1.18,
-                y,
-                w: 10.9,
-                h: 0.42,
-            },
-            TextStyle {
-                size_pt: 18,
-                color: palette.text_soft,
-                bold: false,
-                title_placeholder: false,
-            },
-        ));
+    for (idx, item) in slide.body.iter().take(cfg.body_max).enumerate() {
+        let y = cfg.body_start_y + idx as f64 * cfg.body_step_y;
+        let text = if cfg.body_numbered { format!("{}. {}", idx + 1, item) } else { item.clone() };
+        shapes.push(text_shape(20 + idx as u32, "Body", &text, ShapeBox {
+            x: cfg.body_x, y, w: cfg.body_w, h: cfg.body_h,
+        }, TextStyle {
+            size_pt: 18, color: palette.text_soft, bold: false, title_placeholder: false,
+        }));
     }
     shapes
 }
 
+pub fn slide_shapes_cover_or_closing(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
+    // cover vs closing: title/subtitle positions differ
+    let (title_box, title_size, subtitle_y) = if slide.layout == "cover" {
+        (ShapeBox { x: 0.96, y: 2.02, w: 4.9, h: 1.1 }, 31u32, 3.2)
+    } else {
+        (ShapeBox { x: 3.2, y: 2.48, w: 6.9, h: 0.9 }, 34, 3.52)
+    };
+    slide_shapes_from_config(slide, palette, &LayoutConfig {
+        panel_name: "Hero Panel",
+        panel_box: ShapeBox { x: 0.72, y: 0.72, w: 5.8, h: 6.0 },
+        panel_use_hard: true, panel_z: 16000,
+        title_box, title_size,
+        subtitle_box: ShapeBox { x: 0.96, y: subtitle_y, w: 6.7, h: 0.38 },
+        body_start_y: 4.35, body_step_y: 0.58,
+        body_x: 1.18, body_w: 10.9, body_h: 0.42,
+        body_max: 6, body_numbered: false,
+    })
+}
+
 pub fn slide_shapes_standard_content(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
-    let panel = rect_shape(
-        4,
-        "Content Panel",
-        ShapeBox {
-            x: 0.86,
-            y: 1.62,
-            w: 11.6,
-            h: 4.82,
-        },
-        palette.panel_soft,
-        Some(palette.line),
-        10000,
-    );
-    let mut shapes = vec![panel, slide_shapes_label(slide, palette)];
-    shapes.push(text_shape(
-        11,
-        "Title",
-        &slide.title,
-        ShapeBox {
-            x: 0.92,
-            y: 0.92,
-            w: 6.3,
-            h: 0.6,
-        },
-        TextStyle {
-            size_pt: 24,
-            color: palette.text,
-            bold: true,
-            title_placeholder: true,
-        },
-    ));
-    if !slide.subtitle.is_empty() {
-        shapes.push(text_shape(
-            12,
-            "Subtitle",
-            &slide.subtitle,
-            ShapeBox {
-                x: 0.96,
-                y: 1.56,
-                w: 6.7,
-                h: 0.38,
-            },
-            TextStyle {
-                size_pt: 18,
-                color: palette.text_soft,
-                bold: false,
-                title_placeholder: false,
-            },
-        ));
-    }
-    for (idx, item) in slide.body.iter().take(6).enumerate() {
-        let y = 2.0 + idx as f64 * 0.58;
-        let text = format!("{}. {}", idx + 1, item);
-        shapes.push(text_shape(
-            20 + idx as u32,
-            "Body",
-            &text,
-            ShapeBox {
-                x: 1.18,
-                y,
-                w: 10.9,
-                h: 0.42,
-            },
-            TextStyle {
-                size_pt: 18,
-                color: palette.text_soft,
-                bold: false,
-                title_placeholder: false,
-            },
-        ));
-    }
-    shapes
+    slide_shapes_from_config(slide, palette, &LayoutConfig {
+        panel_name: "Content Panel",
+        panel_box: ShapeBox { x: 0.86, y: 1.62, w: 11.6, h: 4.82 },
+        panel_use_hard: false, panel_z: 10000,
+        title_box: ShapeBox { x: 0.92, y: 0.92, w: 6.3, h: 0.6 }, title_size: 24,
+        subtitle_box: ShapeBox { x: 0.96, y: 1.56, w: 6.7, h: 0.38 },
+        body_start_y: 2.0, body_step_y: 0.58,
+        body_x: 1.18, body_w: 10.9, body_h: 0.42,
+        body_max: 6, body_numbered: true,
+    })
 }
 
 pub fn slide_shapes_comparison(slide: &PptxSlideSpec, palette: &PptPalette) -> Vec<String> {
@@ -2468,12 +2402,10 @@ pub fn outline_str<'a>(value: &'a Value, key: &str, default: &'a str) -> &'a str
     value.get(key).and_then(Value::as_str).unwrap_or(default)
 }
 
-#[allow(dead_code)]
 pub fn qa_summary(deck_path: &str, rendered_dir: &str) -> Result<qa::QaSummary> {
     qa::qa_summary(deck_path, rendered_dir)
 }
 
-#[allow(dead_code)]
 pub fn strict_quality_gate(payload: &Value) -> Result<()> {
     qa::strict_quality_gate(payload)
 }
@@ -3201,10 +3133,6 @@ impl ZipBundle {
         String::from_utf8(data).with_context(|| format!("{} is not valid utf-8 xml", path))
     }
 
-    fn bytes(&self, path: &str) -> Result<Vec<u8>> {
-        self.read_bytes(path)
-    }
-
     fn names(&self) -> impl Iterator<Item = &String> {
         self.index_by_name.keys()
     }
@@ -3270,19 +3198,28 @@ pub fn calc_dpi_via_pdf(input: &Path, max_w_px: u32, max_h_px: u32) -> Result<u3
 }
 
 pub fn parse_pdf_page_size(value: &str) -> Result<(f64, f64)> {
-    let pts = Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*pts\b")?;
-    if let Some(caps) = pts.captures(value) {
+    fn re_pts() -> &'static Regex {
+        static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*pts\b").unwrap())
+    }
+    fn re_in() -> &'static Regex {
+        static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*in\b").unwrap())
+    }
+    fn re_bare() -> &'static Regex {
+        static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)").unwrap())
+    }
+    if let Some(caps) = re_pts().captures(value) {
         return Ok((caps[1].parse()?, caps[2].parse()?));
     }
-    let inch = Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)\s*in\b")?;
-    if let Some(caps) = inch.captures(value) {
+    if let Some(caps) = re_in().captures(value) {
         return Ok((
             caps[1].parse::<f64>()? * POINTS_PER_INCH,
             caps[2].parse::<f64>()? * POINTS_PER_INCH,
         ));
     }
-    let bare = Regex::new(r"([0-9]+(?:\.[0-9]+)?)\s*x\s*([0-9]+(?:\.[0-9]+)?)")?;
-    if let Some(caps) = bare.captures(value) {
+    if let Some(caps) = re_bare().captures(value) {
         return Ok((caps[1].parse()?, caps[2].parse()?));
     }
     bail!("Unrecognized PDF page size format: {}", value);
@@ -4038,7 +3975,7 @@ pub fn extract_image_info(
         .ok_or_else(|| anyhow!("missing image relationship {}", embed_id))?;
     let media_path = resolve_target("ppt/slides/slide.xml", target);
     let bytes = bundle
-        .bytes(&media_path)
+        .read_bytes(&media_path)
         .with_context(|| format!("missing media {}", media_path))?;
     let image = image::load_from_memory(&bytes).ok();
     let content_type = media_path
@@ -4699,11 +4636,17 @@ pub fn extract_theme_fonts(bundle: &ZipBundle) -> Result<BTreeSet<String>> {
 }
 
 pub fn normalize_font_family_name(name: &str) -> String {
+    fn re_paren() -> &'static Regex {
+        static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| Regex::new(r"\([^)]*\)").unwrap())
+    }
+    fn re_sep() -> &'static Regex {
+        static RE: std::sync::OnceLock<Regex> = std::sync::OnceLock::new();
+        RE.get_or_init(|| Regex::new(r#"[\s\-\_\.,/\'\"]+"#).unwrap())
+    }
     let lower = name.to_lowercase();
-    let no_paren = Regex::new(r"\([^)]*\)").unwrap().replace_all(&lower, " ");
-    let cleaned = Regex::new(r#"[\s\-\_\.,/\'\"]+"#)
-        .unwrap()
-        .replace_all(&no_paren, " ");
+    let no_paren = re_paren().replace_all(&lower, " ");
+    let cleaned = re_sep().replace_all(&no_paren, " ");
     cleaned.trim().to_string()
 }
 

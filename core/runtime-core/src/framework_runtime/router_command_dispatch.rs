@@ -2,7 +2,8 @@
 
 use serde_json::{json, Value};
 use std::fs;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use crate::cli::args::*;
 use crate::cli::common::{parse_json_input, print_json_value};
@@ -505,7 +506,85 @@ pub fn dispatch_opencode_command(command: OpenCodeSubcommand) -> Result<(), Stri
             let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             crate::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
         }
+        OpenCodeSubcommand::Hook(command) => {
+            run_opencode_hook_cli(&command.event, command.repo_root.as_deref())
+        }
     }
+}
+
+/// Run opencode hook event dispatch via stdin JSON payload.
+fn run_opencode_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<(), String> {
+    crate::kernel_bootstrap::ensure_kernel_bootstrap();
+    crate::hook_timing::mark_hook_start();
+    let result = (|| -> Result<(), String> {
+        // Read stdin JSON payload (same pattern as cursor/claude/codex)
+        let payload = crate::cursor_hooks::read_cursor_hook_stdin_json()
+            .unwrap_or_else(|_| serde_json::json!({}));
+        let repo_root = cli_repo_root
+            .map(|p| p.to_path_buf())
+            .or_else(|| {
+                payload
+                    .get("cwd")
+                    .and_then(serde_json::Value::as_str)
+                    .map(std::path::PathBuf::from)
+            })
+            .or_else(|| std::env::current_dir().ok())
+            .ok_or("repo_root required")?;
+        let _registry_guard =
+            crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
+
+        // Dispatch via HostHookDispatcher trait
+        use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher};
+        use host_projection::hosts::opencode_hooks::OpencodeHookDispatcher;
+
+        let hook_event = HookEvent {
+            repo_root: &repo_root,
+            event_name: event,
+            payload: &payload,
+        };
+        let dispatcher = OpencodeHookDispatcher;
+        let output = dispatcher.dispatch(&hook_event);
+
+        // Serialize output
+        let json_output = match output {
+            Some(hook_output) => {
+                use host_projection::hosts::hook_dispatch::HookOutput;
+                match hook_output {
+                    HookOutput::AdditionalContext(ctx) => serde_json::json!({
+                        "hookSpecificOutput": { "additionalContext": ctx }
+                    }),
+                    HookOutput::Deny { reason } => serde_json::json!({
+                        "decision": "deny",
+                        "reason": reason,
+                    }),
+                    HookOutput::Warn { message } => serde_json::json!({
+                        "decision": "allow",
+                        "warning": message,
+                    }),
+                    HookOutput::Block { reason } => serde_json::json!({
+                        "decision": "block",
+                        "reason": reason,
+                    }),
+                    HookOutput::Advisory { message } => serde_json::json!({
+                        "decision": "allow",
+                        "advisory": message,
+                    }),
+                    HookOutput::Raw(value) => value,
+                    HookOutput::None => serde_json::json!({}),
+                }
+            }
+            None => serde_json::json!({}),
+        };
+
+        let mut stdout = std::io::stdout();
+        let serialized = serde_json::to_string(&json_output).map_err(|e| e.to_string())?;
+        stdout
+            .write_all(format!("{serialized}\n").as_bytes())
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    })();
+    crate::hook_timing::emit_hook_timing_line(event);
+    result
 }
 
 pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {

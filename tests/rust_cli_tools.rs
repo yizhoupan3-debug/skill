@@ -1,10 +1,8 @@
 mod common;
 
-use common::{
-    assert_success, cargo_manifest_command, json_from_output, project_root, read_text, run,
-};
+use common::{assert_success, json_from_output, project_root, read_text, run};
 use serde_json::Value;
-use std::process::{Command, Output};
+use std::process::Command;
 use tempfile::tempdir;
 
 #[test]
@@ -80,7 +78,7 @@ fn update_audit_runs_on_plain_git_repo_and_preserves_status_columns() {
     let output = run({
         let mut c = Command::new("cargo");
         c.args(["run", "--quiet", "--manifest-path"])
-            .arg(&project_root().join("core/router-rs/Cargo.toml"))
+            .arg(project_root().join("core/router-rs/Cargo.toml"))
             .args(["--bin", "router-rs-cli"])
             .current_dir(project_root())
             .arg("--")
@@ -125,10 +123,4 @@ fn update_audit_runs_on_plain_git_repo_and_preserves_status_columns() {
     );
 }
 
-fn run_financial_data_error(args: &[&str]) -> Output {
-    run(cargo_manifest_command(
-        &project_root().join("rust_tools/financial_data_rs/Cargo.toml"),
-        args,
-    ))
-}
 

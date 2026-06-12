@@ -274,6 +274,49 @@ fn parse_env_u64(var: &str) -> Option<u64> {
 }
 
 // ────────────────────────────────────────────────────────────────
+// Cross-host stdin reader (shared by claude, codex, opencode)
+// ────────────────────────────────────────────────────────────────
+
+/// Read stdin with 4 MiB limit and UTF-8 error normalization.
+/// Shared across all hook-based hosts (claude, codex, opencode).
+pub fn read_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String, String> {
+    use std::io::Read as _;
+    const LIMIT: u64 = 4 * 1024 * 1024;
+    let mut input = String::new();
+    let mut limited = reader.take(LIMIT);
+    limited.read_to_string(&mut input).map_err(|err| {
+        let msg = err.to_string();
+        let lower = msg.to_ascii_lowercase();
+        if matches!(err.kind(), std::io::ErrorKind::InvalidData)
+            || lower.contains("utf-8")
+            || lower.contains("utf8")
+            || lower.contains("utf")
+        {
+            return "stdin_invalid_utf8".to_string();
+        }
+        msg
+    })?;
+    if limited.limit() == 0 {
+        let inner = limited.into_inner();
+        let mut probe = [0u8; 1];
+        if inner.read(&mut probe).map_err(|err| err.to_string())? > 0 {
+            return Err("stdin payload exceeds 4 MiB limit".to_string());
+        }
+    }
+    Ok(input)
+}
+
+/// Read stdin as JSON with 4 MiB limit. Returns empty object if stdin is empty.
+pub fn read_stdin_json_limited() -> Result<Value, String> {
+    let mut stdin = std::io::stdin();
+    let input = read_stdin_limited(&mut stdin)?;
+    if input.trim().is_empty() {
+        return Ok(serde_json::json!({}));
+    }
+    serde_json::from_str(&input).map_err(|_| "stdin_json_invalid".to_string())
+}
+
+// ────────────────────────────────────────────────────────────────
 // hook_timing: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
@@ -1210,7 +1253,7 @@ pub fn install_test_deps() {
 // Framework Runtime (additional)
 static RESOLVE_REPO_ROOT_ARG: OnceLock<fn(Option<&Path>) -> Result<PathBuf, String>> = OnceLock::new();
 static CURRENT_LOCAL_TIMESTAMP: OnceLock<fn() -> String> = OnceLock::new();
-static WRITE_FRAMEWORK_SESSION_ARTARTIFACTS: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
+static WRITE_FRAMEWORK_SESSION_ARTIFACTS: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
 static ROUTE_TASK_WITH_MANIFEST_FALLBACK: OnceLock<fn(&[routing_engine::route::SkillRecord], Option<&Path>, Option<&Path>, Option<&str>, &str, &str, bool, bool) -> Result<RouteDecision, String>> = OnceLock::new();
 static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>> = OnceLock::new();
 static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL: OnceLock<fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>> = OnceLock::new();
@@ -1243,7 +1286,7 @@ pub fn register_framework_runtime_extra(
 ) {
     RESOLVE_REPO_ROOT_ARG.set(resolve_repo_root_arg).ok();
     CURRENT_LOCAL_TIMESTAMP.set(current_local_timestamp).ok();
-    WRITE_FRAMEWORK_SESSION_ARTARTIFACTS.set(write_framework_session_artifacts).ok();
+    WRITE_FRAMEWORK_SESSION_ARTIFACTS.set(write_framework_session_artifacts).ok();
     ROUTE_TASK_WITH_MANIFEST_FALLBACK.set(route_task_with_manifest_fallback).ok();
     BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE.set(build_framework_runtime_snapshot_envelope).ok();
     BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD.set(build_automatic_continuity_checkpoint_payload).ok();
@@ -1282,7 +1325,7 @@ pub fn current_local_timestamp() -> String {
 }
 
 pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
-    WRITE_FRAMEWORK_SESSION_ARTARTIFACTS.get().map(|f| f(payload)).unwrap_or_else(|| Err("hooks not registered".into()))
+    WRITE_FRAMEWORK_SESSION_ARTIFACTS.get().map(|f| f(payload)).unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
 pub fn route_task_with_manifest_fallback(

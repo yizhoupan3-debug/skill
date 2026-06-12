@@ -694,7 +694,7 @@ fn router_rs_top_level_help_exposes_only_canonical_subcommands() {
     let output = common::run_ok({
         let mut c = Command::new("cargo");
         c.args(["run", "--quiet", "--manifest-path"])
-            .arg(&project_root().join("core/router-rs/Cargo.toml"))
+            .arg(project_root().join("core/router-rs/Cargo.toml"))
             .args(["--bin", "router-rs-cli"])
             .current_dir(project_root())
             .arg("--")
@@ -2390,7 +2390,7 @@ fn install_skills_uses_rust_only_entrypoints() {
     assert!(!project_root().join("scripts/install_skills.sh").exists());
     let mod_source = read_text(&project_root().join("core/host-projection/src/host_integration/mod.rs"));
     let roots_source = read_text(&project_root().join("core/host-projection/src/host_integration/roots.rs"));
-    let projection_source = read_text(&project_root().join("core/host-projection/src/host_integration/projection.rs"));
+    let projection_source = read_text(&project_root().join("core/host-projection/src/host_integration/projection/mod.rs"));
     assert!(mod_source.contains("InstallSkills") || roots_source.contains("InstallSkills"), "missing marker: InstallSkills");
     assert!(mod_source.contains("InstallNativeIntegration") || roots_source.contains("InstallNativeIntegration"), "missing marker: InstallNativeIntegration");
     assert!(projection_source.contains("validate_default_bootstrap") || roots_source.contains("validate_default_bootstrap"), "missing marker: validate_default_bootstrap");

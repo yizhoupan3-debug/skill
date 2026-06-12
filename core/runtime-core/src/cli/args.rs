@@ -298,10 +298,21 @@ pub enum OpenCodeSubcommand {
     /// Run MCP stdio agent loop (framework snapshot, skill routing, goal/closeout).
     #[command(name = "agent")]
     Agent(OpenCodeAgentCommand),
+    /// Run hook event dispatch (PreToolUse, PostToolUse, Stop, etc.).
+    #[command(name = "hook")]
+    Hook(OpenCodeHookCommand),
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct OpenCodeAgentCommand {
+    #[arg(long)]
+    pub repo_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct OpenCodeHookCommand {
+    #[arg(long)]
+    pub event: String,
     #[arg(long)]
     pub repo_root: Option<PathBuf>,
 }

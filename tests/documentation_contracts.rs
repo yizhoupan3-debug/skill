@@ -1,7 +1,5 @@
 mod common;
 
-use std::fs;
-
 use common::{project_root, read_text};
 use regex::Regex;
 use serde_json::Value;

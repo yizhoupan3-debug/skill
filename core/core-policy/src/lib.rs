@@ -1,5 +1,7 @@
 //! Hook policy, guards, review signals, and permission exemptions (B0 core-policy).
+pub mod crypto_util;
 pub mod dev_exempt;
+pub mod session_key;
 pub mod env_flags;
 pub mod hook_common;
 pub mod hook_policy;

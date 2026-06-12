@@ -740,31 +740,9 @@ pub(super) fn read_stdin_payload() -> Result<Value, String> {
     serde_json::from_str::<Value>(trimmed).map_err(|err| format!("stdin_json_invalid: {err}"))
 }
 
+/// 4 MiB stdin reader — delegates to shared `hooks::read_stdin_limited`.
 pub(crate) fn read_codex_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String, String> {
-    const LIMIT: u64 = 4 * 1024 * 1024;
-    let mut input = String::new();
-    let mut limited = reader.take(LIMIT);
-    use std::io::Read as _;
-    limited.read_to_string(&mut input).map_err(|err| {
-        let msg = err.to_string();
-        let lower = msg.to_ascii_lowercase();
-        if matches!(err.kind(), std::io::ErrorKind::InvalidData)
-            || lower.contains("utf-8")
-            || lower.contains("utf8")
-            || lower.contains("utf")
-        {
-            return "stdin_invalid_utf8".to_string();
-        }
-        msg
-    })?;
-    if limited.limit() == 0 {
-        let inner = limited.into_inner();
-        let mut probe = [0u8; 1];
-        if inner.read(&mut probe).map_err(|err| err.to_string())? > 0 {
-            return Err("stdin payload exceeds 4 MiB limit".to_string());
-        }
-    }
-    Ok(input)
+    crate::hooks::read_stdin_limited(reader)
 }
 
 pub(super) fn canonical_codex_audit_command(command: &str) -> Result<&'static str, String> {

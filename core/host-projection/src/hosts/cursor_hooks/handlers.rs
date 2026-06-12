@@ -26,10 +26,7 @@ fn subagent_tool_names() -> &'static [&'static str] {
 
 /// MCP / 宿主可能使用 `…subagent…` 等未列入清单的工具名。
 fn tool_name_matches_subagent_lane(normalized: &str) -> bool {
-    if subagent_tool_names().contains(&normalized) {
-        return true;
-    }
-    normalized.contains("subagent") || normalized.contains("spawn_agent") || normalized == "task"
+    crate::hosts::hook_dispatch::is_subagent_tool(normalized)
 }
 
 fn goal_contract_re() -> &'static Regex {
@@ -890,15 +887,6 @@ fn extract_first_session_string_including_tool_input(event: &Value) -> Option<St
 /// 派生 `.cursor/hook-state/review-subagent-<key>.json` 文件名组件。
 /// 顺序：`extract_first_session_string_including_tool_input`（含 **`tool_input` 内父会话 id**）→ `ROUTER_RS_CURSOR_SESSION_NAMESPACE` → `cwd`（含嵌套 workspace 字段）→ 常量 fallback。
 fn session_key(event: &Value) -> String {
-    if let Some(raw) = extract_first_session_string_including_tool_input(event) {
-        return short_hash(&raw);
-    }
-    if let Ok(ns) = std::env::var("ROUTER_RS_CURSOR_SESSION_NAMESPACE") {
-        let t = ns.trim();
-        if !t.is_empty() {
-            return short_hash(&format!("env::{t}"));
-        }
-    }
     const CWD_KEYS: &[&str] = &[
         "cwd",
         "workspaceFolder",
@@ -907,28 +895,26 @@ fn session_key(event: &Value) -> String {
         "workspace_root",
         "root",
     ];
-    let cwd = first_nonempty_event_str(event, CWD_KEYS);
-    if !cwd.trim().is_empty() {
-        // 与 Cursor「每 hook 新进程」兼容：cwd fallback 必须跨调用稳定，否则状态永不累积。
-        return short_hash(&format!("cwd::{cwd}"));
-    }
-    short_hash("router-rs-cursor-session-fallback")
+    core_policy::session_key::session_key_core(
+        &core_policy::session_key::SessionKeyConfig {
+            env_var: "ROUTER_RS_CURSOR_SESSION_NAMESPACE",
+        },
+        || extract_first_session_string_including_tool_input(event),
+        || {
+            let cwd = first_nonempty_event_str(event, CWD_KEYS);
+            if cwd.is_empty() { None } else { Some(cwd) }
+        },
+        "router-rs-cursor-session-fallback",
+    )
 }
 
 
 fn short_hash(input: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
-    let digest = hasher.finalize();
-    hex_lower(&digest[..16])
+    core_policy::crypto_util::short_hash(input)
 }
 
 fn hex_lower(bytes: &[u8]) -> String {
-    let mut s = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        let _ = std::fmt::Write::write_fmt(&mut s, format_args!("{:02x}", byte));
-    }
-    s
+    core_policy::crypto_util::hex_lower(bytes)
 }
 fn state_dir(repo_root: &Path) -> PathBuf {
     repo_root.join(".cursor").join("hook-state")

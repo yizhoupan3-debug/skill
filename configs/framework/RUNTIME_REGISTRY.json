@@ -72,7 +72,8 @@
         "cargo_feature": "host-opencode",
         "provider_module": "opencode_provider",
         "provider_type": "OpencodeHostProvider",
-        "hooks_module": "opencode_agent",
+        "hooks_module": "opencode_hooks",
+        "cli_hook_subcommand": "hook",
         "cli_agent_subcommand": "agent",
         "dispatch_fn": "dispatch_opencode_command"
       },

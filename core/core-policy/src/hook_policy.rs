@@ -374,10 +374,129 @@ fn shell_words(command: &str) -> Vec<String> {
     words
 }
 
+/// Cached regex match: compiles the pattern once (with `(?i)` case-insensitive prefix, matching
+/// the original runtime behavior) via `OnceLock` and reuses it across calls.
+/// All callers pass static string literals — dynamic patterns must use `Regex::new` directly.
 fn regex_is_match(pattern: &str, text: &str) -> bool {
-    Regex::new(&format!("(?i){pattern}"))
-        .ok()
-        .is_some_and(|regex| regex.is_match(text))
+    // Each unique pattern string maps to a dedicated static OnceLock.
+    // We use match-dispatch on known patterns to avoid runtime recompilation.
+    // Every arm prepends `(?i)` to match the original `Regex::new(&format!("(?i){pattern}"))` behavior.
+    // Patterns that already contain `(?i)` get it doubled (harmless — first wins in regex crate).
+    match pattern {
+        // classify_validation patterns
+        r"(^|[;&|]\s*)(cargo\s+)(check|test|fmt|clippy)\b" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"\bpython3?\s+-m\s+json\.tool\b" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"(^|[;&|]\s*)jq\b" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"\b(npm|pnpm)\s+(test|run\s+(lint|typecheck)|lint|typecheck)\b" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"\b(pytest|python3?\s+-m\s+pytest|ruff\s+check|mypy)\b" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        // HIGH_RISK_MCP_TOOLS patterns
+        r"^session_launch$" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"^session_resume_due$" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        // MCP_ARG_RISK_PATTERNS tool name patterns
+        r"^browser_get_network$" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"^browser_fill$" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"^session_mark_blocked$" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        // MCP_ARG_RISK_PATTERNS value patterns (already contain (?i) — doubled prefix is harmless)
+        r"(?i)(password|token|secret|cookie|authorization|api.?key)" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"(?i)(password|secret|token|credential)" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"(?i)(curl|wget|fetch)\s+\S+\s*\|\s*(sh|bash)" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"(?i)(rm\s+-[a-zA-Z]*r[a-zA-Z]*f|rm\s+-[a-zA-Z]*f[a-zA-Z]*r)" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"(?i)(0\.0\.0\.0|169\.254|metadata\.google|169\.254\.169\.254)" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"(?i)(password|token|secret|api.?key|credential)" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        // SHELL_INJECTION_PATTERNS (called via regex_is_match from dangerous_mcp_tool_reason)
+        r"\b(curl|wget)\b[^;&|]*\|\s*(sh|bash)\b" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"\b(sh|bash)\s+<\s*\(\s*(curl|wget)\b" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"(^|[;&|]\s*)git(\s+-C\s+\S+)?\s+reset\s+--hard\b" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        r"(^|[;&|]\s*)git(\s+-C\s+\S+)?\s+push\b[^;&|]*(--force|--force-with-lease)" => {
+            static RE: OnceLock<Regex> = OnceLock::new();
+            RE.get_or_init(|| Regex::new(&format!("(?i){pattern}")).expect("valid regex"))
+                .is_match(text)
+        }
+        // Fallback: unknown pattern — compile at runtime (dynamic pattern, cannot cache).
+        // Add a new match arm above if a new static pattern is introduced.
+        _ => {
+            // dynamic pattern, cannot cache
+            Regex::new(&format!("(?i){pattern}"))
+                .ok()
+                .is_some_and(|regex| regex.is_match(text))
+        }
+    }
 }
 
 /// Pre-compiled (case-insensitive) regexes for the dangerous-bash patterns.
@@ -609,7 +728,6 @@ pub fn hook_policy_contract() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
 
     #[test]
     fn dangerous_bash_matches_python_guard_cases() {

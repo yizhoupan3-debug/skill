@@ -5,10 +5,16 @@ pub mod cursor_provider;
 pub mod host_provider;
 pub mod hook_state_common;
 
+/// Unified hook dispatch trait + shared utilities for all 4 hosts.
+pub mod hook_dispatch;
+
+/// Cross-host file state lock abstraction.
+pub mod file_state_lock;
+
 // ── Migrated host providers ──
 pub mod claude_code_hooks;
 pub mod claude_provider;
-pub mod mcp_stdio_harness;
+pub mod mcp_stdio_harness_dir; pub use mcp_stdio_harness_dir as mcp_stdio_harness;
 pub mod opencode_agent;
 pub mod opencode_hooks;
 pub mod opencode_provider;
