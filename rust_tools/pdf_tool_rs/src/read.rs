@@ -1,8 +1,9 @@
 use crate::schema::{ContentClass, FileResult, ProcessStatus};
 use anyhow::{Context, Result};
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+pub use mcp_stdio_common::util::file_sha256;
 
 pub struct ReadOptions {
     pub max_chars: usize,
@@ -17,12 +18,6 @@ pub struct ReadOutput {
     pub file_sha256: String,
     pub text_path: Option<String>,
     pub truncated: bool,
-}
-
-pub fn file_sha256(path: &Path) -> Result<String> {
-    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    let hash = Sha256::digest(&bytes);
-    Ok(hex::encode(hash))
 }
 
 pub fn page_count(path: &Path) -> Result<u32> {

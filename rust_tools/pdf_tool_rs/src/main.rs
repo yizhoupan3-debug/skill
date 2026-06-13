@@ -117,11 +117,10 @@ fn main() -> Result<()> {
                 out_dir,
                 jobs,
                 resume,
-                skip_scanned,
                 fail_fast,
                 max_chars,
             };
-            let summary = batch::run_batch(paths, &opts)?;
+            let summary = batch::run_batch(paths, &opts, skip_scanned)?;
             batch::print_catalog_summary(&summary)?;
         }
     }

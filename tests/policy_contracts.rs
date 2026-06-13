@@ -638,14 +638,20 @@ fn ooxml_rust_cli_owns_batch_subcommands() {
     let batch = read_text(&project_root().join("rust_tools/ooxml_parser_rs/src/batch.rs"));
     for marker in [
         "fn run_batch(",
+        "read_docx_content",
+        "read_xlsx_content",
+        "OOXML",
+    ] {
+        assert!(batch.contains(marker), "batch.rs missing marker: {marker}");
+    }
+
+    let engine = read_text(&project_root().join("rust_tools/batch-common/src/engine.rs"));
+    for marker in [
         "catalog.json",
         "results.jsonl",
         "checkpoint.json",
-        "OOXML_BATCH_JOBS",
-        "read_docx_content",
-        "read_xlsx_content",
     ] {
-        assert!(batch.contains(marker), "batch.rs missing marker: {marker}");
+        assert!(engine.contains(marker), "batch-common engine.rs missing marker: {marker}");
     }
 
     let main_path = project_root().join("rust_tools/ooxml_parser_rs/src/main.rs");

@@ -1,134 +1,36 @@
+//! OOXML-specific batch schema types.
+pub use batch_common::schema::{classify_text, ContentClass, ProcessStatus};
+use batch_common::engine::BatchResult;
 use serde::{Deserialize, Serialize};
+use std::io::{Result as IoResult, Write};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum FileKind {
-    Docx,
-    Xlsx,
-    Unsupported,
-}
-
+pub enum FileKind { Docx, Xlsx, Pptx, Unsupported }
 impl FileKind {
     pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Docx => "docx",
-            Self::Xlsx => "xlsx",
-            Self::Unsupported => "unsupported",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ContentClass {
-    Text,
-    Empty,
-    Mixed,
-    Error,
-}
-
-impl ContentClass {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Text => "text",
-            Self::Empty => "empty",
-            Self::Mixed => "mixed",
-            Self::Error => "error",
-        }
-    }
-}
-
-pub fn classify_text(char_count: usize) -> ContentClass {
-    if char_count == 0 {
-        ContentClass::Empty
-    } else if char_count >= 80 {
-        ContentClass::Text
-    } else {
-        ContentClass::Mixed
+        match self { Self::Docx => "docx", Self::Xlsx => "xlsx", Self::Pptx => "pptx", Self::Unsupported => "unsupported" }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileResult {
-    pub path: String,
-    pub sha256: String,
-    pub file_kind: FileKind,
-    pub status: ProcessStatus,
-    pub content_class: ContentClass,
-    /// Sheet count for xlsx; 0 for docx.
-    pub unit_count: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub text_path: Option<String>,
-    pub char_count: usize,
-    pub truncated: bool,
-    pub warnings: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    pub path: String, pub sha256: String, pub file_kind: FileKind, pub status: ProcessStatus,
+    pub content_class: ContentClass, pub unit_count: u32,
+    #[serde(skip_serializing_if = "Option::is_none")] pub text_path: Option<String>,
+    pub char_count: usize, pub truncated: bool, pub warnings: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ProcessStatus {
-    Ok,
-    Error,
-    Skipped,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Catalog {
-    pub version: u32,
-    pub out_dir: String,
-    pub total: usize,
-    pub processed: usize,
-    pub failed: usize,
-    pub skipped: usize,
-    pub entries: Vec<FileResult>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Checkpoint {
-    pub completed: Vec<String>,
-    pub failed: Vec<String>,
-    pub skipped: Vec<String>,
-}
-
-impl Checkpoint {
-    pub fn is_done(&self, path_key: &str) -> bool {
-        self.completed.contains(&path_key.to_string())
-            || self.failed.contains(&path_key.to_string())
-            || self.skipped.contains(&path_key.to_string())
+impl BatchResult for FileResult {
+    fn path(&self) -> &str { &self.path }
+    fn status(&self) -> ProcessStatus { self.status }
+    fn write_index_row(&self, writer: &mut dyn Write) -> IoResult<()> {
+        let text_ref = self.text_path.as_deref().unwrap_or("-");
+        writeln!(writer, "| {} | {} | {:?} | {} | {} | {} |",
+            self.path, self.file_kind.as_str(), self.status, self.content_class.as_str(), self.unit_count, text_ref)
     }
-
-    pub fn mark(&mut self, path_key: &str, status: ProcessStatus) {
-        let key = path_key.to_string();
-        self.completed.retain(|p| p != &key);
-        self.failed.retain(|p| p != &key);
-        self.skipped.retain(|p| p != &key);
-        match status {
-            ProcessStatus::Ok => self.completed.push(key),
-            ProcessStatus::Error => self.failed.push(key),
-            ProcessStatus::Skipped => self.skipped.push(key),
-        }
+    fn to_summary_entry(&self) -> serde_json::Value {
+        serde_json::json!({"path": self.path, "file_kind": self.file_kind, "status": self.status, "content_class": self.content_class, "unit_count": self.unit_count})
     }
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct CatalogSummary {
-    pub version: u32,
-    pub total: usize,
-    pub processed: usize,
-    pub failed: usize,
-    pub skipped: usize,
-    pub out_dir: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub sample: Vec<CatalogSummaryEntry>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct CatalogSummaryEntry {
-    pub path: String,
-    pub file_kind: FileKind,
-    pub status: ProcessStatus,
-    pub content_class: ContentClass,
-    pub unit_count: u32,
 }

@@ -63,7 +63,7 @@ enum Commands {
         #[arg(long)]
         extract_images: bool,
     },
-    /// Batch-read multiple .docx / .xlsx files into a catalog directory
+    /// Batch-read multiple .docx / .xlsx / .pptx files into a catalog directory
     Batch {
         #[arg(long)]
         manifest: Option<PathBuf>,
@@ -129,9 +129,8 @@ fn main() -> Result<()> {
                 resume,
                 fail_fast,
                 max_chars,
-                max_rows,
             };
-            let summary = batch::run_batch(paths, &opts)?;
+            let summary = batch::run_batch(paths, &opts, max_rows)?;
             batch::print_catalog_summary(&summary)?;
         }
     }

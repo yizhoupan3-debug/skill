@@ -223,6 +223,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "batch-common"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rayon",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "bit_field"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1626,6 +1636,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mcp-stdio-common"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "hex",
+ "sha2",
+]
+
+[[package]]
 name = "md-5"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1792,14 +1811,14 @@ name = "ooxml_parser_rs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "batch-common",
  "calamine",
  "clap",
- "hex",
+ "mcp-stdio-common",
  "quick-xml",
  "rayon",
  "serde",
  "serde_json",
- "sha2",
  "tempfile",
  "zip",
 ]
@@ -1848,10 +1867,12 @@ name = "pdf_tool_rs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "batch-common",
  "clap",
  "criterion",
  "hex",
  "lopdf",
+ "mcp-stdio-common",
  "pdf-extract",
  "rayon",
  "serde",
@@ -1970,6 +1991,7 @@ dependencies = [
  "flate2",
  "font8x8",
  "image",
+ "mcp-stdio-common",
  "regex",
  "roxmltree",
  "serde",

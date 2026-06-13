@@ -1,8 +1,10 @@
 [workspace]
 members = [
+    "batch-common",
     "citation_tool_rs",
     "financial_data_rs",
     "gh_source_gate_rs",
+    "mcp-stdio-common",
     "ooxml_parser_rs",
     "pdf_tool_rs",
     "pptx_tool_rs",

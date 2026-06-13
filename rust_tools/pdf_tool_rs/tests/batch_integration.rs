@@ -15,7 +15,6 @@ fn batch_opts(out_dir: PathBuf) -> BatchOptions {
         out_dir,
         jobs: 2,
         resume: false,
-        skip_scanned: false,
         fail_fast: false,
         max_chars: 8000,
     }
@@ -46,7 +45,7 @@ fn batch_writes_jsonl_catalog_and_text() {
     .unwrap();
 
     let paths = load_paths(Some(&manifest_path), false).unwrap();
-    let summary = run_batch(paths, &batch_opts(out.clone())).unwrap();
+    let summary = run_batch(paths, &batch_opts(out.clone()), false).unwrap();
     assert_eq!(summary.total, 1);
     assert_eq!(summary.processed, 1);
 
@@ -94,14 +93,14 @@ fn batch_resume_skips_completed() {
     .unwrap();
 
     let paths = load_paths(Some(&manifest_path), false).unwrap();
-    run_batch(paths.clone(), &batch_opts(out.clone())).unwrap();
+    run_batch(paths.clone(), &batch_opts(out.clone()), false).unwrap();
 
     let jsonl_before = fs::read_to_string(out.join("results.jsonl")).unwrap();
     let lines_before = jsonl_before.lines().count();
 
     let mut resume_opts = batch_opts(out.clone());
     resume_opts.resume = true;
-    let summary = run_batch(paths, &resume_opts).unwrap();
+    let summary = run_batch(paths, &resume_opts, false).unwrap();
     assert_eq!(summary.processed, 1);
 
     let jsonl_after = fs::read_to_string(out.join("results.jsonl")).unwrap();
@@ -132,9 +131,8 @@ fn skip_scanned_shallow_probe_skips_blank_pages() {
     assert!(should_skip);
 
     let out = tmp.path().join("out");
-    let mut opts = batch_opts(out.clone());
-    opts.skip_scanned = true;
-    let summary = run_batch(vec![blank], &opts).unwrap();
+    let opts = batch_opts(out.clone());
+    let summary = run_batch(vec![blank], &opts, true).unwrap();
     assert_eq!(summary.skipped, 1);
     assert_eq!(summary.processed, 0);
 
@@ -157,9 +155,8 @@ fn skip_scanned_skips_image_only_pdf() {
     let tmp = tempdir().unwrap();
     let pdf = image_only_pdf_in(tmp.path());
     let out = tmp.path().join("out");
-    let mut opts = batch_opts(out.clone());
-    opts.skip_scanned = true;
-    let summary = run_batch(vec![pdf], &opts).unwrap();
+    let opts = batch_opts(out.clone());
+    let summary = run_batch(vec![pdf], &opts, true).unwrap();
     assert_eq!(summary.skipped, 1);
     assert_eq!(summary.processed, 0);
 
@@ -177,9 +174,8 @@ fn skip_scanned_does_not_skip_text_pdf() {
     assert!(!should_skip);
 
     let out = tmp.path().join("out");
-    let mut opts = batch_opts(out.clone());
-    opts.skip_scanned = true;
-    let summary = run_batch(vec![pdf], &opts).unwrap();
+    let opts = batch_opts(out.clone());
+    let summary = run_batch(vec![pdf], &opts, true).unwrap();
     assert_eq!(summary.processed, 1);
     assert_eq!(summary.skipped, 0);
 }
@@ -190,7 +186,7 @@ fn jsonl_each_line_is_valid_file_result() {
     let pdf = hello_pdf_in(tmp.path());
     let out = tmp.path().join("out");
     let paths = vec![pdf];
-    run_batch(paths, &batch_opts(out.clone())).unwrap();
+    run_batch(paths, &batch_opts(out.clone()), false).unwrap();
 
     let file = fs::File::open(out.join("results.jsonl")).unwrap();
     for line in BufReader::new(file).lines() {

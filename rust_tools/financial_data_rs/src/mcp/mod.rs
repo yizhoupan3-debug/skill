@@ -1,85 +1,7 @@
-//! MCP stdio server for financial_data_rs — exposes `financial_data` tool.
+//! MCP tool definitions and dispatch for financial_data_rs.
 
 use anyhow::Result;
 use serde_json::{json, Value};
-use std::io::{self, BufRead, Write};
-use std::path::Path;
-
-const SERVER_NAME: &str = "mcp-financial-data";
-const SERVER_VERSION: &str = "0.1.0";
-const PROTOCOL_VERSION: &str = "2024-11-05";
-
-/// Run the MCP stdio server. Reads JSON-RPC lines from stdin, writes to stdout.
-pub fn run_stdio_mcp(_repo_root: &Path) -> Result<()> {
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
-    for line in stdin.lock().lines() {
-        let line = match line {
-            Ok(l) => l,
-            Err(err) => {
-                eprintln!("financial-data MCP stdin read error: {err}");
-                break;
-            }
-        };
-        if line.trim().is_empty() {
-            continue;
-        }
-        let request: Value = match serde_json::from_str(&line) {
-            Ok(v) => v,
-            Err(err) => {
-                let resp = json!({
-                    "jsonrpc": "2.0", "id": null,
-                    "error": {"code": -32700, "message": format!("Parse error: {err}")},
-                });
-                writeln!(stdout, "{}", serde_json::to_string(&resp)?)?;
-                stdout.flush()?;
-                continue;
-            }
-        };
-        if let Some(response) = handle_request(&request) {
-            writeln!(stdout, "{}", serde_json::to_string(&response)?)?;
-            stdout.flush()?;
-        }
-    }
-    Ok(())
-}
-
-fn handle_request(request: &Value) -> Option<Value> {
-    let id = request.get("id").cloned();
-    let method = request.get("method").and_then(Value::as_str).unwrap_or("");
-    match method {
-        "notifications/initialized" | "notifications/cancelled" => None,
-        "initialize" => Some(json!({
-            "jsonrpc": "2.0", "id": id,
-            "result": {
-                "protocolVersion": PROTOCOL_VERSION,
-                "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-                "capabilities": {"tools": {"listChanged": false}},
-            }
-        })),
-        "ping" => Some(json!({"jsonrpc": "2.0", "id": id, "result": {}})),
-        "tools/list" => Some(json!({
-            "jsonrpc": "2.0", "id": id,
-            "result": {"tools": tool_definitions()}
-        })),
-        "tools/call" => {
-            let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
-            match dispatch_tool_call(&params) {
-                Ok(result) => Some(json!({
-                    "jsonrpc": "2.0", "id": id, "result": result,
-                })),
-                Err(err) => Some(json!({
-                    "jsonrpc": "2.0", "id": id,
-                    "error": {"code": -32000, "message": err.to_string()},
-                })),
-            }
-        }
-        _ => Some(json!({
-            "jsonrpc": "2.0", "id": id,
-            "error": {"code": -32601, "message": format!("Method not found: {method}")},
-        })),
-    }
-}
 
 /// MCP tool definitions exposed by this server.
 pub fn tool_definitions() -> Vec<Value> {
@@ -112,11 +34,10 @@ pub fn tool_definitions() -> Vec<Value> {
     ]
 }
 
-fn dispatch_tool_call(params: &Value) -> Result<Value, anyhow::Error> {
-    let tool_name = params.get("name").and_then(Value::as_str).unwrap_or("");
-    let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+/// Dispatch a tool call by name and arguments.
+pub fn dispatch(tool_name: &str, args: &Value) -> Result<Value> {
     match tool_name {
-        "financial_data" => tool_financial_data(&args),
+        "financial_data" => tool_financial_data(args),
         _ => Err(anyhow::anyhow!("Unknown tool: {tool_name}")),
     }
 }

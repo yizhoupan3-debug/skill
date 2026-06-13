@@ -1320,21 +1320,7 @@ pub fn sanitize_pptx_command(args: SanitizePptxArgs) -> Result<()> {
     Ok(())
 }
 
-pub fn expand_path(input: &str) -> PathBuf {
-    if let Some(rest) = input.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return Path::new(&home).join(rest);
-        }
-    }
-    PathBuf::from(input)
-}
-
-pub fn has_extension(path: &Path, ext: &str) -> bool {
-    path.extension()
-        .and_then(OsStr::to_str)
-        .map(|value| value.eq_ignore_ascii_case(ext))
-        .unwrap_or(false)
-}
+pub use mcp_stdio_common::util::{expand_path, has_extension};
 
 pub fn default_render_dir(input: &Path) -> PathBuf {
     let stem = input

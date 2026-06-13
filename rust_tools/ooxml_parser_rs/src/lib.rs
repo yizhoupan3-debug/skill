@@ -7,7 +7,6 @@ use calamine::{open_workbook, Data, Reader as CalamineReader, Xlsx};
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader as XmlReader;
 use serde::Serialize;
-use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::fs::{self, canonicalize, File};
@@ -17,6 +16,33 @@ use std::process::{Command, Stdio};
 use tempfile::TempDir;
 use zip::result::ZipError;
 use zip::ZipArchive;
+
+pub use mcp_stdio_common::util::{expand_path, file_sha256, has_extension};
+
+// ---------------------------------------------------------------------------
+// OoxmlKind — lightweight file-kind enum for batch dispatch
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OoxmlKind {
+    Docx,
+    Xlsx,
+    Pptx,
+    Unsupported,
+}
+
+pub fn detect_ooxml_kind(path: &Path) -> OoxmlKind {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .map(|ext| ext.to_ascii_lowercase())
+        .map(|ext| match ext.as_str() {
+            "docx" => OoxmlKind::Docx,
+            "xlsx" => OoxmlKind::Xlsx,
+            "pptx" => OoxmlKind::Pptx,
+            _ => OoxmlKind::Unsupported,
+        })
+        .unwrap_or(OoxmlKind::Unsupported)
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -28,11 +54,6 @@ pub const POINTS_PER_INCH: f64 = 72.0;
 // ---------------------------------------------------------------------------
 // Utility helpers
 // ---------------------------------------------------------------------------
-
-pub fn file_sha256(path: &Path) -> Result<String> {
-    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
-    Ok(hex::encode(Sha256::digest(&bytes)))
-}
 
 fn local_name(name: &[u8]) -> &[u8] {
     name.rsplit(|byte| *byte == b':').next().unwrap_or(name)
@@ -1519,17 +1540,100 @@ pub fn read_xlsx(input: &str, max_rows: usize, sheets: &[String], as_json: bool,
 }
 
 // ---------------------------------------------------------------------------
-// Rendering helpers (used by CLI render subcommands)
+// PPTX content reading (for batch delegation)
 // ---------------------------------------------------------------------------
 
-pub fn expand_path(input: &str) -> PathBuf {
-    if let Some(rest) = input.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return Path::new(&home).join(rest);
+#[derive(Debug)]
+pub struct PptxReadOutput {
+    pub path: String,
+    pub slide_count: u32,
+    pub slides: Vec<PptxSlideText>,
+}
+
+#[derive(Debug)]
+pub struct PptxSlideText {
+    pub slide_number: u32,
+    pub text: String,
+}
+
+/// Read PPTX slide text content by scanning slide XML parts in the zip archive.
+pub fn read_pptx_content(path: &Path) -> Result<PptxReadOutput> {
+    let file = File::open(path)?;
+    let mut archive = ZipArchive::new(file)?;
+    let mut slides = Vec::new();
+
+    // Collect slide part names in order
+    let mut slide_parts: Vec<String> = Vec::new();
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i)?;
+        let name = entry.name().to_string();
+        if name.starts_with("ppt/slides/slide") && name.ends_with(".xml") {
+            slide_parts.push(name);
         }
     }
-    PathBuf::from(input)
+    slide_parts.sort();
+
+    for (idx, part_name) in slide_parts.iter().enumerate() {
+        let xml = read_zip_entry(&mut archive, part_name)?;
+        let mut text_parts = Vec::new();
+        let mut reader = XmlReader::from_str(&xml);
+        reader.trim_text(true);
+        let mut buf = Vec::new();
+        let mut in_text = false;
+
+        loop {
+            match reader.read_event_into(&mut buf)? {
+                Event::Start(event) if local_name(event.name().as_ref()) == b"t" => {
+                    in_text = true;
+                }
+                Event::Text(text) if in_text => {
+                    if let Ok(s) = text.unescape() {
+                        text_parts.push(s.to_string());
+                    }
+                }
+                Event::End(event) if local_name(event.name().as_ref()) == b"t" => {
+                    in_text = false;
+                }
+                Event::Eof => break,
+                _ => {}
+            }
+            buf.clear();
+        }
+
+        slides.push(PptxSlideText {
+            slide_number: (idx + 1) as u32,
+            text: text_parts.join(" "),
+        });
+    }
+
+    Ok(PptxReadOutput {
+        path: canonicalize(path)?.to_string_lossy().into_owned(),
+        slide_count: slides.len() as u32,
+        slides,
+    })
 }
+
+/// Format PPTX read output as a linear text string.
+pub fn pptx_read_text_string(output: &PptxReadOutput) -> String {
+    let mut out = String::new();
+    writeln!(out, "FILE: {}", output.path).ok();
+    writeln!(out, "SLIDES: {}", output.slide_count).ok();
+    writeln!(out).ok();
+    for slide in &output.slides {
+        writeln!(out, "=== Slide {} ===", slide.slide_number).ok();
+        if slide.text.is_empty() {
+            writeln!(out, "(no text)").ok();
+        } else {
+            writeln!(out, "{}", slide.text).ok();
+        }
+        writeln!(out).ok();
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// Rendering helpers (used by CLI render subcommands)
+// ---------------------------------------------------------------------------
 
 fn default_render_dir(input: &Path) -> PathBuf {
     let stem = input
@@ -1537,13 +1641,6 @@ fn default_render_dir(input: &Path) -> PathBuf {
         .and_then(|value| value.to_str())
         .unwrap_or("rendered");
     input.parent().unwrap_or_else(|| Path::new(".")).join(stem)
-}
-
-pub fn has_extension(path: &Path, extension: &str) -> bool {
-    path.extension()
-        .and_then(|value| value.to_str())
-        .map(|value| value.eq_ignore_ascii_case(extension))
-        .unwrap_or(false)
 }
 
 fn run_command(command: &mut Command) -> Result<()> {
@@ -1698,7 +1795,7 @@ fn collect_prefixed_pngs(dir: &Path, prefix: &str) -> Result<Vec<PathBuf>> {
 }
 
 // ---------------------------------------------------------------------------
-// PPTX
+// PPTX extract (CLI subcommand)
 // ---------------------------------------------------------------------------
 
 pub fn extract_pptx(input: &str, output: Option<String>) -> Result<()> {

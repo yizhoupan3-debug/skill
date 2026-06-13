@@ -696,9 +696,10 @@ fn fetch_all_comments(owner: &str, repo: &str, number: i64, repo_root: &Path) ->
     let mut reviews_cursor: Option<String> = None;
     let mut threads_cursor: Option<String> = None;
     let mut pr_meta: Option<Value> = None;
+    let mut warnings: Vec<String> = Vec::new();
 
     loop {
-        let payload = gh_api_graphql(
+        let payload = match gh_api_graphql(
             repo_root,
             owner,
             repo,
@@ -706,20 +707,43 @@ fn fetch_all_comments(owner: &str, repo: &str, number: i64, repo_root: &Path) ->
             comments_cursor.as_deref(),
             reviews_cursor.as_deref(),
             threads_cursor.as_deref(),
-        )?;
+        ) {
+            Ok(p) => p,
+            Err(e) => {
+                warnings.push(format!("GraphQL request failed: {e:#}"));
+                // Conservative: on error, set all cursors to None to stop pagination
+                comments_cursor = None;
+                reviews_cursor = None;
+                threads_cursor = None;
+                if comments_cursor.is_none() && reviews_cursor.is_none() && threads_cursor.is_none() {
+                    break;
+                }
+                continue;
+            }
+        };
         if payload
             .get("errors")
             .and_then(Value::as_array)
             .is_some_and(|errors| !errors.is_empty())
         {
-            bail!(
-                "GitHub GraphQL errors:\n{}",
-                serde_json::to_string_pretty(&payload["errors"])?
-            );
+            let err_str = serde_json::to_string_pretty(&payload["errors"])
+                .unwrap_or_else(|_| "unknown".to_string());
+            warnings.push(format!("GitHub GraphQL errors: {err_str}"));
+            // Conservative: on errors, stop all pagination
+            comments_cursor = None;
+            reviews_cursor = None;
+            threads_cursor = None;
+            break;
         }
-        let pr = payload
+        let pr = match payload
             .pointer("/data/repository/pullRequest")
-            .ok_or_else(|| anyhow!("Error: missing pullRequest in GraphQL response."))?;
+        {
+            Some(pr) => pr,
+            None => {
+                warnings.push("missing pullRequest in GraphQL response".to_string());
+                break;
+            }
+        };
 
         if pr_meta.is_none() {
             pr_meta = Some(json!({
@@ -746,13 +770,17 @@ fn fetch_all_comments(owner: &str, repo: &str, number: i64, repo_root: &Path) ->
     }
 
     let summary = comments_summary(&conversation_comments, &reviews, &review_threads);
-    Ok(json!({
+    let mut result = json!({
         "pull_request": pr_meta.unwrap_or_else(|| json!({})),
         "summary": summary,
         "conversation_comments": conversation_comments,
         "reviews": reviews,
         "review_threads": review_threads,
-    }))
+    });
+    if !warnings.is_empty() {
+        result["warnings"] = json!(warnings);
+    }
+    Ok(result)
 }
 
 fn comments_summary(
