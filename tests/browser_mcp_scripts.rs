@@ -365,7 +365,7 @@ fn launcher_leaves_sqlite_attach_discovery_to_rust_runtime() {
 }
 
 #[test]
-fn browser_mcp_stdio_exposes_repository_skill_router_tools() {
+fn browser_mcp_stdio_exposes_browser_and_web_fetch_tools() {
     let repo_root = project_root();
     let request = [
         serde_json::to_string(&json!({
@@ -373,26 +373,6 @@ fn browser_mcp_stdio_exposes_repository_skill_router_tools() {
             "id": 1,
             "method": "tools/list",
             "params": {}
-        }))
-        .unwrap(),
-        serde_json::to_string(&json!({
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": {
-                "name": "skill_route",
-                "arguments": {"query": "路由系统触发稳定吗"}
-            }
-        }))
-        .unwrap(),
-        serde_json::to_string(&json!({
-            "jsonrpc": "2.0",
-            "id": 3,
-            "method": "tools/call",
-            "params": {
-                "name": "skill_read",
-                "arguments": {"skill": "skill-framework-developer", "maxChars": 4000}
-            }
         }))
         .unwrap(),
     ]
@@ -427,17 +407,14 @@ fn browser_mcp_stdio_exposes_repository_skill_router_tools() {
         .iter()
         .filter_map(|tool| tool.get("name").and_then(serde_json::Value::as_str))
         .collect::<Vec<_>>();
-    assert!(tool_names.contains(&"skill_route"));
-    assert!(tool_names.contains(&"skill_search"));
-    assert!(tool_names.contains(&"skill_read"));
-    assert_eq!(
-        payloads[1]["result"]["structuredContent"]["decision"]["selected_skill"],
-        "skill-framework-developer"
-    );
-    assert!(payloads[2]["result"]["structuredContent"]["content"]
-        .as_str()
-        .unwrap()
-        .contains("# skill-framework-developer"));
+    // browser-mcp should expose browser tools and web_fetch, but NOT skill routing
+    assert!(tool_names.contains(&"browser_open"));
+    assert!(tool_names.contains(&"web_fetch"));
+    assert!(tool_names.contains(&"browser_diagnostics"));
+    // skill routing tools should NOT be in browser-mcp anymore
+    assert!(!tool_names.contains(&"skill_route"));
+    assert!(!tool_names.contains(&"skill_search"));
+    assert!(!tool_names.contains(&"skill_read"));
 }
 
 #[test]

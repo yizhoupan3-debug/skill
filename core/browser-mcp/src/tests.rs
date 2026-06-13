@@ -71,25 +71,15 @@ fn browser_mcp_stdio_lists_full_tool_surface() {
             "background_list",
             "background_inspect",
             "background_terminate",
+            "web_fetch",
             "browser_diagnostics",
-            "skill_route_status",
         ]
-    );
-    let status_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "skill_route_status", "arguments": {}}}),
-            &mut runtime,
-        )
-        .expect("status response");
-    assert_eq!(status_response["result"]["isError"], false);
-    assert_eq!(
-        status_response["result"]["structuredContent"]["routing_tools_exposed"],
-        false
     );
     fs::remove_dir_all(repo_root).expect("cleanup");
 }
 
 #[test]
-fn browser_mcp_exposes_repo_skill_routing_tools_when_runtime_exists() {
+fn browser_mcp_exposes_session_and_background_tools() {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -106,54 +96,11 @@ fn browser_mcp_exposes_repo_skill_routing_tools_when_runtime_exists() {
         .iter()
         .filter_map(|tool| tool.get("name").and_then(Value::as_str))
         .collect::<Vec<_>>();
-    assert!(names.contains(&"skill_route"));
-    assert!(names.contains(&"skill_search"));
-    assert!(names.contains(&"skill_read"));
     assert!(names.contains(&"session_list"));
     assert!(names.contains(&"background_list"));
 
-    let route_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "skill_route", "arguments": {"query": "需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar"}}}),
-            &mut runtime,
-        )
-        .expect("route response");
-    assert_eq!(route_response["result"]["isError"], false);
-    assert_eq!(
-        route_response["result"]["structuredContent"]["decision"]["selected_skill"],
-        "agent-swarm-orchestration"
-    );
-    assert!(
-        route_response["result"]["structuredContent"]["selected_skill_path"]
-            .as_str()
-            .unwrap()
-            .ends_with("skills/agent-swarm-orchestration/SKILL.md")
-    );
-
-    let search_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "DESIGN.md 设计规范 token", "limit": 5}}}),
-            &mut runtime,
-        )
-        .expect("search response");
-    assert_eq!(search_response["result"]["isError"], false);
-    assert!(search_response["result"]["structuredContent"]["matches"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|item| item["record"]["name"] == "design-md"));
-
-    let read_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "skill_read", "arguments": {"skill": "agent-swarm-orchestration"}}}),
-            &mut runtime,
-        )
-        .expect("read response");
-    assert_eq!(read_response["result"]["isError"], false);
-    assert!(read_response["result"]["structuredContent"]["content"]
-        .as_str()
-        .unwrap()
-        .contains("# agent-swarm-orchestration"));
-
     let session_list_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "session_list", "arguments": {}}}),
+            &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "session_list", "arguments": {}}}),
             &mut runtime,
         )
         .expect("session list response");
@@ -165,7 +112,7 @@ fn browser_mcp_exposes_repo_skill_routing_tools_when_runtime_exists() {
         .join("runtime")
         .join("background_state.json");
     let background_list_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "background_list", "arguments": {"statePath": background_path.to_string_lossy()}}}),
+            &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "background_list", "arguments": {"statePath": background_path.to_string_lossy()}}}),
             &mut runtime,
         )
         .expect("background list response");
@@ -181,67 +128,6 @@ fn browser_mcp_exposes_repo_skill_routing_tools_when_runtime_exists() {
     assert_eq!(
         background_terminate_response["result"]["structuredContent"]["job"]["status"],
         "interrupted"
-    );
-}
-
-#[test]
-#[ignore = "skill_search host filter depends on manifest routing; run with full workspace setup"]
-fn browser_mcp_skill_search_respects_host_id_filter() {
-    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .expect("canonical repo root");
-    let mut runtime = BrowserRuntime::new(repo_root.clone());
-
-    let codex_search = handle_browser_mcp_request(
-        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "discuss", "hostId": "codex", "limit": 20}}}),
-        &mut runtime,
-    )
-    .expect("codex search");
-    assert_eq!(codex_search["result"]["isError"], false);
-    let codex_names: Vec<&str> = codex_search["result"]["structuredContent"]["matches"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|item| item["record"]["name"].as_str())
-        .collect();
-    assert!(
-        codex_names.iter().any(|name| *name == "discussx"),
-        "codex host search should surface discussx: {codex_names:?}"
-    );
-
-    let cursor_search = handle_browser_mcp_request(
-        &json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "discuss", "hostId": "cursor", "limit": 20}}}),
-        &mut runtime,
-    )
-    .expect("cursor search");
-    assert_eq!(cursor_search["result"]["isError"], false);
-    let cursor_names: Vec<&str> = cursor_search["result"]["structuredContent"]["matches"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|item| item["record"]["name"].as_str())
-        .collect();
-    assert!(
-        cursor_names.iter().any(|name| *name == "discussx"),
-        "cursor host search should surface discussx: {cursor_names:?}"
-    );
-
-    let legacy = handle_browser_mcp_request(
-        &json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "skill_search", "arguments": {"query": "discuss", "hostId": "codex-cli", "limit": 20}}}),
-        &mut runtime,
-    )
-    .expect("legacy codex-cli search");
-    assert_eq!(legacy["result"]["isError"], false);
-    let legacy_names: Vec<&str> = legacy["result"]["structuredContent"]["matches"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(|item| item["record"]["name"].as_str())
-        .collect();
-    assert!(
-        legacy_names.iter().any(|name| *name == "discussx"),
-        "codex-cli alias should map to codex host filter: {legacy_names:?}"
     );
 }
 
@@ -1043,16 +929,6 @@ fn runtime_diagnostics_zero_sessions() {
     fs::remove_dir_all(repo_root).unwrap();
 }
 
-#[test]
-fn runtime_skill_route_status_shows_missing_artifacts() {
-    let repo_root = temp_root("skill-status");
-    let mut runtime = BrowserRuntime::new(repo_root.clone());
-    let result = runtime.skill_route_status().unwrap();
-    assert_eq!(result["routing_tools_exposed"], false);
-    assert_eq!(result["runtime_exists"], false);
-    fs::remove_dir_all(repo_root).unwrap();
-}
-
 // ───────────────────────────────────────────────────────────────────
 // 工具定义完整性测试
 // ───────────────────────────────────────────────────────────────────
@@ -1427,46 +1303,6 @@ fn browser_get_network_without_session_returns_session_not_found() {
 }
 
 // ───────────────────────────────────────────────────────────────────
-// skill_body_path 路径验证测试
-// ───────────────────────────────────────────────────────────────────
-
-#[test]
-fn skill_body_path_rejects_slash() {
-    let repo_root = temp_root("skill-path");
-    assert!(skill_body_path(&repo_root, "foo/bar").is_err());
-    fs::remove_dir_all(repo_root).unwrap();
-}
-
-#[test]
-fn skill_body_path_rejects_dot_dot() {
-    let repo_root = temp_root("skill-dotdot");
-    assert!(skill_body_path(&repo_root, "../etc/passwd").is_err());
-    fs::remove_dir_all(repo_root).unwrap();
-}
-
-#[test]
-fn skill_body_path_rejects_empty() {
-    let repo_root = temp_root("skill-empty");
-    assert!(skill_body_path(&repo_root, "").is_err());
-    assert!(skill_body_path(&repo_root, "  ").is_err());
-    fs::remove_dir_all(repo_root).unwrap();
-}
-
-#[test]
-fn skill_body_path_rejects_leading_dot() {
-    let repo_root = temp_root("skill-dot");
-    assert!(skill_body_path(&repo_root, ".hidden").is_err());
-    fs::remove_dir_all(repo_root).unwrap();
-}
-
-#[test]
-fn skill_body_path_rejects_backslash() {
-    let repo_root = temp_root("skill-bs");
-    assert!(skill_body_path(&repo_root, "foo\\bar").is_err());
-    fs::remove_dir_all(repo_root).unwrap();
-}
-
-// ───────────────────────────────────────────────────────────────────
 // AttachArtifactCandidateRank 排序测试
 // ───────────────────────────────────────────────────────────────────
 
@@ -1587,33 +1423,6 @@ fn network_event_value_contains_expected_fields() {
     assert_eq!(v["ok"], true);
     assert_eq!(v["durationMs"], 50);
     assert!(v["errorText"].is_null());
-}
-
-// ───────────────────────────────────────────────────────────────────
-// skill_runtime_available / skill_runtime_path / skill_manifest_path
-// ───────────────────────────────────────────────────────────────────
-
-#[test]
-fn skill_runtime_not_available_without_skills_dir() {
-    let repo_root = temp_root("no-skills");
-    assert!(!skill_runtime_available(&repo_root));
-    fs::remove_dir_all(repo_root).unwrap();
-}
-
-#[test]
-fn skill_runtime_path_points_to_expected_location() {
-    let repo_root = temp_root("rt-path");
-    let expected = repo_root.join("skills/SKILL_ROUTING_RUNTIME.json");
-    assert_eq!(skill_runtime_path(&repo_root), expected);
-    fs::remove_dir_all(repo_root).unwrap();
-}
-
-#[test]
-fn skill_manifest_path_points_to_expected_location() {
-    let repo_root = temp_root("manifest-path");
-    let expected = repo_root.join("skills/SKILL_MANIFEST.json");
-    assert_eq!(skill_manifest_path(&repo_root), expected);
-    fs::remove_dir_all(repo_root).unwrap();
 }
 
 // ───────────────────────────────────────────────────────────────────

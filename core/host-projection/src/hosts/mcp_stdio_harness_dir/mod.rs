@@ -181,6 +181,8 @@ macro_rules! poison_safe_lock {
 
 mod tools;
 use tools::*;
+#[cfg(any(test, feature = "test-support"))]
+pub use tools::{build_evidence_entry, tool_closeout_gate};
 fn get_snapshot_cache() -> &'static Arc<std::sync::RwLock<Option<SnapshotCache>>> {
     SNAPSHOT_CACHE.get_or_init(|| Arc::new(std::sync::RwLock::new(None)))
 }
@@ -546,6 +548,58 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             },
                         },
                         "required": ["query"],
+                    },
+                },
+                {
+                    "name": "skill_search",
+                    "description": "Search this repository's full skills/SKILL_MANIFEST.json catalog and return the best matching skill records.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Search string (min 2 chars). Substring match, case-insensitive.",
+                            },
+                            "hostId": {
+                                "type": "string",
+                                "description": "Filter skills by host ID (optional)",
+                            },
+                            "limit": {
+                                "type": "integer",
+                                "description": "Max results to return (default 10, max 50)",
+                                "minimum": 1,
+                                "maximum": 50,
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+                {
+                    "name": "skill_read",
+                    "description": "Read one matched skills/<name>/SKILL.md body from this repository's canonical skills/ source.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "skill": {
+                                "type": "string",
+                                "description": "Skill slug to read",
+                            },
+                            "maxChars": {
+                                "type": "integer",
+                                "description": "Max characters to return (default 20000, max 50000)",
+                                "minimum": 1,
+                                "maximum": 50000,
+                            },
+                        },
+                        "required": ["skill"],
+                    },
+                },
+                {
+                    "name": "skill_route_status",
+                    "description": "Check if skill routing runtime artifacts exist and routing tools are exposed.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {},
                     },
                 },
                 {
@@ -1460,10 +1514,13 @@ mod tests {
         let response = handle_tools_list(Some(json!(1)));
         let tools = response["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 11, "expected 11 tools, got: {:?}", names);
+        assert_eq!(names.len(), 14, "expected 14 tools, got: {:?}", names);
         for tool in &[
             "framework_snapshot",
             "skill_route",
+            "skill_search",
+            "skill_read",
+            "skill_route_status",
             "record_evidence",
             "session_checkpoint",
             "closeout_gate",

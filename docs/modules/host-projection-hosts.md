@@ -65,7 +65,7 @@ HostHookDispatcher trait
 | 文件 | 行数 | 功能 |
 |------|------|------|
 | `mcp_stdio_harness_dir/mod.rs` | 1,600 | MCP 工具分发主循环 |
-| `mcp_stdio_harness_dir/tools.rs` | 822 | 工具实现（evidence、goal、rfv、closeout、session、snapshot、web_fetch） |
+| `mcp_stdio_harness_dir/tools.rs` | 900+ | 工具实现（evidence、goal、rfv、closeout、session、snapshot、web_fetch、skill_route/skill_search/skill_read/skill_route_status） |
 
 ## 已知技术债
 

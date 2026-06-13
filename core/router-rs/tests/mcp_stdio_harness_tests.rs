@@ -23,6 +23,9 @@ mod desktop_mcp_tests {
         let handler_arms = [
             "framework_snapshot",
             "skill_route",
+            "skill_search",
+            "skill_read",
+            "skill_route_status",
             "record_evidence",
             "session_checkpoint",
             "closeout_gate",

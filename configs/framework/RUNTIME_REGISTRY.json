@@ -303,6 +303,7 @@
         "skill_route",
         "skill_read",
         "skill_search",
+        "skill_route_status",
         "goal_state_manage",
         "goal_state_read",
         "closeout_gate",
@@ -362,7 +363,8 @@
         "background_inspect",
         "background_terminate",
         "browser_diagnostics",
-        "session_classify_block"
+        "session_classify_block",
+        "web_fetch"
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.browser-mcp",

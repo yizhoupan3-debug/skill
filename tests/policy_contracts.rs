@@ -2365,18 +2365,19 @@ fn browser_mcp_rust_sources_concat() -> String {
 }
 
 #[test]
-fn browser_mcp_exposes_repo_skill_router_tools() {
+fn browser_mcp_does_not_expose_skill_routing_tools() {
     let source = browser_mcp_rust_sources_concat();
+    // After tool separation, browser-mcp should NOT contain skill routing tools
     for marker in [
         "skill_route",
         "skill_search",
         "skill_read",
         "skill_route_status",
-        "skills/SKILL_ROUTING_RUNTIME.json",
-        "Read selected_skill_path from the canonical skills/ source before doing task work.",
     ] {
-        assert!(source.contains(marker), "missing marker: {marker}");
+        assert!(!source.contains(marker), "browser-mcp should NOT contain: {marker}");
     }
+    // But should still contain web_fetch
+    assert!(source.contains("web_fetch"), "browser-mcp should contain web_fetch");
 }
 
 #[test]

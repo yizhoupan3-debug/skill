@@ -19,151 +19,76 @@ impl BrowserRuntime {
         }
     }
 
-    fn skill_route(&self, input: &Value) -> Result<Value, Value> {
-        let query = required_string_arg(input, "query")?;
-        let host_id = optional_string(input, "hostId");
-        let session_id =
-            optional_string(input, "sessionId").unwrap_or_else(|| "cowork-mcp".to_string());
-        let allow_overlay = optional_bool(input, "allowOverlay").unwrap_or(true);
-        let first_turn = optional_bool(input, "firstTurn").unwrap_or(true);
-        let runtime_path = skill_runtime_path(&self.repo_root);
-        let manifest_path = skill_manifest_path(&self.repo_root);
-        if !runtime_path.is_file() {
-            return Err(skill_error(
-                "SKILL_RUNTIME_MISSING",
-                &format!(
-                    "Missing repository skill runtime: {}",
-                    runtime_path.display()
-                ),
-            ));
-        }
-        let records = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
-            .map_err(|err| skill_error("SKILL_ROUTE_FAILED", &err))?;
-        let host_indices = filter_record_indices_for_host(records.as_ref(), host_id.as_deref())
-            .map_err(|err| skill_error("SKILL_ROUTE_FAILED", &err))?;
-        let filtered: Vec<_> = host_indices
-            .iter()
-            .map(|&idx| records[idx].clone())
-            .collect();
-        let decision = route_task_with_manifest_fallback(
-            &filtered,
-            Some(&runtime_path),
-            Some(&manifest_path),
-            host_id.as_deref(),
-            &query,
-            &session_id,
-            allow_overlay,
-            first_turn,
-        )
-        .map_err(|err| skill_error("SKILL_ROUTE_FAILED", &err))?;
-        let selected_path = if decision.selected_skill == "none" {
-            None
-        } else {
-            Some(
-                skill_body_path(&self.repo_root, &decision.selected_skill)
-                    .map_err(|err| skill_error("SKILL_READ_BLOCKED", &err))?,
-            )
-        };
-        let overlay_path = decision
-            .overlay_skill
-            .as_ref()
-            .map(|slug| skill_body_path(&self.repo_root, slug))
-            .transpose()
-            .map_err(|err| skill_error("SKILL_READ_BLOCKED", &err))?;
-        Ok(json!({
-            "schema_version": "cowork-skill-route-v1",
-            "authority": "router-rs-browser-mcp",
-            "repo_root": self.repo_root.to_string_lossy(),
-            "runtime_path": runtime_path.to_string_lossy(),
-            "manifest_path": manifest_path.to_string_lossy(),
-            "decision": decision,
-            "selected_skill_path": selected_path
-                .as_ref()
-                .map(|path| path.to_string_lossy().to_string()),
-            "overlay_skill_path": overlay_path.map(|path| path.to_string_lossy().to_string()),
-            "next_step": if selected_path.is_some() {
-                "Read selected_skill_path from the canonical skills/ source before doing task work."
-            } else {
-                "No skill body is required; proceed with the native runtime instructions already in context."
-            },
-        }))
-    }
-
-    fn skill_search(&self, input: &Value) -> Result<Value, Value> {
-        let query = required_string_arg(input, "query")?;
-        let host_id = optional_string(input, "hostId");
-        let limit = optional_u64(input, "limit")?.unwrap_or(10).clamp(1, 50) as usize;
-        let runtime_path = skill_runtime_path(&self.repo_root);
-        let manifest_path = skill_manifest_path(&self.repo_root);
-        if !runtime_path.is_file() && !manifest_path.is_file() {
-            return Err(skill_error(
-                "SKILL_RUNTIME_MISSING",
-                &format!(
-                    "Missing repository skill runtime ({}) and manifest ({})",
-                    runtime_path.display(),
-                    manifest_path.display()
-                ),
-            ));
-        }
-        let records = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
-            .map_err(|err| skill_error("SKILL_SEARCH_FAILED", &err))?;
-        let host_indices = filter_record_indices_for_host(records.as_ref(), host_id.as_deref())
-            .map_err(|err| skill_error("SKILL_SEARCH_FAILED", &err))?;
-        let rows = search_skills_subset(records.as_ref(), Some(&host_indices), &query, limit);
-        let results = build_search_results_payload(&query, rows);
-        serde_json::to_value(results)
-            .map_err(|err| skill_error("SKILL_SEARCH_FAILED", &err.to_string()))
-    }
-
-    fn skill_read(&self, input: &Value) -> Result<Value, Value> {
-        let slug = required_string_arg(input, "skill")?;
-        let max_chars = optional_u64(input, "maxChars")?
-            .unwrap_or(20_000)
+    pub fn web_fetch(&self, input: &Value) -> Result<Value, Value> {
+        let url = required_string_arg(input, "url")?;
+        let max_bytes = optional_u64(input, "max_bytes")?
+            .unwrap_or(50_000)
             .clamp(1, 50_000) as usize;
-        let path = skill_body_path(&self.repo_root, &slug)
-            .map_err(|err| skill_error("SKILL_READ_BLOCKED", &err))?;
-        let content = fs::read_to_string(&path).map_err(|err| {
-            skill_error("SKILL_READ_FAILED", &format!("{}: {err}", path.display()))
-        })?;
-        let truncated = content.chars().count() > max_chars;
-        Ok(json!({
-            "schema_version": "cowork-skill-read-v1",
-            "authority": "router-rs-browser-mcp",
-            "skill": slug,
-            "path": path.to_string_lossy(),
-            "content": truncate_text(&content, max_chars),
-            "truncated": truncated,
-        }))
-    }
 
-    fn skill_route_status(&self) -> Result<Value, Value> {
-        let runtime_path = skill_runtime_path(&self.repo_root);
-        let manifest_path = skill_manifest_path(&self.repo_root);
-        let mut remediation = Vec::new();
-        if !runtime_path.is_file() {
-            remediation.push(format!(
-                "generate repository runtime artifacts so {} exists",
-                runtime_path.to_string_lossy()
-            ));
+        // Validate URL scheme and resolve DNS to prevent SSRF
+        let (parsed_url, initial_addrs) =
+            runtime_core::web_fetch_guard::validate_and_resolve_web_fetch_url(&url)
+                .map_err(|e| runtime_error("SSRF_BLOCKED", &e))?;
+
+        let parsed_url_str = parsed_url.to_string();
+        let pin_host = parsed_url.host_str()
+            .ok_or_else(|| runtime_error("URL_PARSE_ERROR", &format!("web_fetch URL missing host: {url}")))?;
+
+        let mut client_builder = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent("browser-mcp/0.3");
+
+        // Pin DNS results to prevent DNS rebinding TOCTOU
+        for addr in &initial_addrs {
+            client_builder = client_builder.resolve(pin_host, *addr);
         }
-        if !manifest_path.is_file() {
-            remediation.push(format!(
-                "generate repository runtime artifacts so {} exists",
-                manifest_path.to_string_lossy()
-            ));
+
+        // Apply proxy settings if present
+        for key in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY"] {
+            if let Ok(proxy_url) = std::env::var(key) {
+                let trimmed = proxy_url.trim();
+                if !trimmed.is_empty() {
+                    if let Ok(proxy) = reqwest::Proxy::all(trimmed) {
+                        client_builder = client_builder.proxy(proxy);
+                        break;
+                    }
+                }
+            }
         }
-        remediation.push("call browser_diagnostics for attach/runtime details".to_string());
+
+        let client = client_builder
+            .build()
+            .map_err(|err| runtime_error("CLIENT_BUILD_FAILED", &format!("web_fetch client build failed: {err}")))?;
+
+        let response = client
+            .get(&parsed_url_str)
+            .send()
+            .map_err(|err| runtime_error("FETCH_FAILED", &format!("web_fetch request failed: {err}")))?;
+
+        let status = response.status().as_u16();
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .to_string();
+
+        let body = response
+            .bytes()
+            .map_err(|err| runtime_error("BODY_READ_FAILED", &format!("web_fetch read body failed: {err}")))?;
+
+        let truncated = body.len() > max_bytes;
+        let slice = &body[..body.len().min(max_bytes)];
+        let body_text = String::from_utf8_lossy(slice).into_owned();
+
         Ok(json!({
-            "schema_version": "cowork-skill-route-status-v1",
-            "authority": "router-rs-browser-mcp",
-            "repo_root": self.repo_root.to_string_lossy(),
-            "skills_dir_exists": self.repo_root.join("skills").is_dir(),
-            "runtime_path": runtime_path.to_string_lossy(),
-            "runtime_exists": runtime_path.is_file(),
-            "manifest_path": manifest_path.to_string_lossy(),
-            "manifest_exists": manifest_path.is_file(),
-            "routing_tools_exposed": skill_runtime_available(&self.repo_root),
-            "remediation": remediation,
+            "url": parsed_url_str,
+            "status": status,
+            "content_type": content_type,
+            "content_length": body.len(),
+            "truncated": truncated,
+            "body": body_text,
         }))
     }
 
@@ -1084,19 +1009,6 @@ impl BrowserRuntime {
     fn diagnostics(&mut self, _input: &Value) -> Result<Value, Value> {
         let mut tabs = 0usize;
         let mut network_events = 0usize;
-        let runtime_path = skill_runtime_path(&self.repo_root);
-        let manifest_path = skill_manifest_path(&self.repo_root);
-        let routing_tools_exposed = skill_runtime_available(&self.repo_root);
-        let mut skill_remediation = Vec::new();
-        if !runtime_path.is_file() {
-            skill_remediation.push(format!("generate {}", runtime_path.to_string_lossy()));
-        }
-        if !manifest_path.is_file() {
-            skill_remediation.push(format!("generate {}", manifest_path.to_string_lossy()));
-        }
-        if skill_remediation.is_empty() {
-            skill_remediation.push("skill runtime artifacts look healthy".to_string());
-        }
         for session in self.sessions.values() {
             tabs += session.tabs.len();
             for tab in session.tabs.values() {
@@ -1124,14 +1036,6 @@ impl BrowserRuntime {
             "networkEventBufferSize": network_events,
             "screenshotCount": screenshot_count,
             "runtimeVersion": SERVER_VERSION,
-            "skillRouting": {
-                "runtimePath": runtime_path.to_string_lossy(),
-                "runtimeExists": runtime_path.is_file(),
-                "manifestPath": manifest_path.to_string_lossy(),
-                "manifestExists": manifest_path.is_file(),
-                "routingToolsExposed": routing_tools_exposed,
-                "remediation": skill_remediation,
-            },
             "attachedRuntime": self.attached_runtime_diagnostics(),
         }))
     }

@@ -5,11 +5,6 @@ use runtime_core::framework_runtime::{
     attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
 };
 use runtime_core::framework_runtime::resolve_repo_root_arg;
-use runtime_core::framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;
-use routing_engine::route::{
-    build_search_results_payload, filter_record_indices_for_host, load_records_cached_for_stdio,
-    search_skills_subset,
-};
 use runtime_core::session_supervisor::handle_session_supervisor_operation;
 use chrono::{Local, SecondsFormat};
 use rusqlite::Connection;
@@ -282,10 +277,7 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         "background_list" => runtime.background_list(&arguments),
         "background_inspect" => runtime.background_inspect(&arguments),
         "background_terminate" => runtime.background_terminate(&arguments),
-        "skill_route" => runtime.skill_route(&arguments),
-        "skill_search" => runtime.skill_search(&arguments),
-        "skill_read" => runtime.skill_read(&arguments),
-        "skill_route_status" => runtime.skill_route_status(),
+        "web_fetch" => runtime.web_fetch(&arguments),
         "browser_diagnostics" => runtime.diagnostics(&arguments),
         _ => Err(browser_error(
             "INVALID_INPUT",
@@ -315,9 +307,8 @@ fn tool_result(structured: Result<Value, Value>) -> Result<Value, Value> {
     }
 }
 
-fn tool_definitions(repo_root: &Path) -> Vec<Value> {
+fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
     let empty_output = json!({"type": "object", "additionalProperties": true});
-    let skill_tools_available = skill_runtime_available(repo_root);
     let mut tools = vec![
         tool_definition(
             "browser_open",
@@ -502,9 +493,13 @@ fn tool_definitions(repo_root: &Path) -> Vec<Value> {
             empty_output.clone(),
         ),
     ];
-    if skill_tools_available {
-        tools.extend(skill_tool_definitions(empty_output.clone()));
-    }
+    tools.push(tool_definition(
+        "web_fetch",
+        "Fetch URL",
+        "Read-only HTTP GET to fetch external URL content (bypasses Bash sandbox). Returns status and body summary.",
+        json!({"type": "object", "properties": {"url": {"type": "string", "description": "http(s) URL"}, "max_bytes": {"type": "integer", "description": "Max response body bytes (default 50000)", "minimum": 1}}, "required": ["url"]}),
+        json!({"type": "object", "properties": {"url": {"type": "string"}, "status": {"type": "integer"}, "content_type": {"type": "string"}, "content_length": {"type": "integer"}, "truncated": {"type": "boolean"}, "body": {"type": "string"}}, "additionalProperties": true}),
+    ));
     tools.push(tool_definition(
         "browser_diagnostics",
         "Browser Diagnostics",
@@ -512,42 +507,7 @@ fn tool_definitions(repo_root: &Path) -> Vec<Value> {
         json!({"type": "object", "properties": {}}),
         empty_output,
     ));
-    if !skill_tools_available {
-        tools.push(tool_definition(
-            "skill_route_status",
-            "Repository Skill Route Status",
-            "Explain why repository skill routing tools are not exposed for this repo root.",
-            json!({"type": "object", "properties": {}}),
-            json!({"type": "object", "additionalProperties": true}),
-        ));
-    }
     tools
-}
-
-fn skill_tool_definitions(empty_output: Value) -> Vec<Value> {
-    vec![
-        tool_definition(
-            "skill_route",
-            "Route Skill Request",
-            "Route a user request through this repository's skills/SKILL_ROUTING_RUNTIME.json, with SKILL_MANIFEST.json fallback, and return the selected skill plus the exact SKILL.md path to read.",
-            json!({"type": "object", "properties": {"query": {"type": "string"}, "hostId": {"type": "string", "description": "Closed-set host id (cursor, claude-code, codex, opencode); legacy aliases accepted at filter boundary."}, "sessionId": {"type": "string"}, "allowOverlay": {"type": "boolean"}, "firstTurn": {"type": "boolean"}}, "required": ["query"]}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "skill_search",
-            "Search Repository Skills",
-            "Search this repository's SKILL_ROUTING_RUNTIME.json catalog (with SKILL_MANIFEST.json fallback) and return the best matching skill records.",
-            json!({"type": "object", "properties": {"query": {"type": "string"}, "hostId": {"type": "string", "description": "Closed-set host id (cursor, claude-code, codex, opencode); legacy aliases accepted at filter boundary."}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}}, "required": ["query"]}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "skill_read",
-            "Read Repository Skill",
-            "Read one matched skills/<name>/SKILL.md body from this repository's canonical skills/ source.",
-            json!({"type": "object", "properties": {"skill": {"type": "string"}, "maxChars": {"type": "integer", "minimum": 1, "maximum": 50000}}, "required": ["skill"]}),
-            empty_output,
-        ),
-    ]
 }
 
 fn session_supervisor_worker_fields_schema() -> Value {
