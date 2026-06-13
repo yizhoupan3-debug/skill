@@ -1000,7 +1000,7 @@ mod tests {
     #[test]
     #[serial]
     fn user_prompt_submit_injects_paper_prose_by_default() {
-        let _g = crate::hosts::test_shim::harness_nudges_env_test_lock();
+        let _g = core_policy::test_env_sync::process_env_lock();
         let prior = std::env::var_os("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
         std::env::remove_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
         let repo = unique_test_repo("prose-ups");

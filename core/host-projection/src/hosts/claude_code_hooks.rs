@@ -473,6 +473,7 @@ fn block_stop(reason: &str) -> Option<Value> {
 }
 
 fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
+    crate::hooks::ensure_kernel_bootstrap();
     let mut warn_contexts: Vec<String> = Vec::new();
     for path in payload_relative_paths(repo_root, payload) {
         if is_cross_host_or_retired_surface(&path) {
@@ -523,6 +524,7 @@ fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
 }
 
 fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
+    crate::hooks::ensure_kernel_bootstrap();
     let prompt = claude_user_prompt_text(payload);
     let review_sync = if !agent_review_gate_disabled()
         && should_sync_review_gate_on_user_prompt(repo_root, &prompt)
@@ -585,6 +587,7 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
 }
 
 fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
+    crate::hooks::ensure_kernel_bootstrap();
     let tool_name = payload
         .get("tool_name")
         .or(payload.get("tool"))
@@ -628,6 +631,7 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
 }
 
 fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
+    crate::hooks::ensure_kernel_bootstrap();
     if let Some(msg) = crate::hooks::closeout_stop_followup_for_completion_text(
         repo_root,
         &claude_closeout_completion_text(payload),

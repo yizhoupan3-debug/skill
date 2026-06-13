@@ -350,6 +350,9 @@ mod tests {
     use serde_json::{json, Value};
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    /// Lock for tests that mutate env vars (CLAUDE_SESSION_ID etc.) to avoid race conditions.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn goal_start_writes_and_status_reads() {
         let suffix = SystemTime::now()
@@ -1056,6 +1059,7 @@ mod tests {
     /// session-scoped: stale detection when session_id mismatches
     #[test]
     fn goal_read_annotates_stale_when_session_id_mismatches() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1106,8 +1110,7 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/match-task")).expect("mkdir");
 
-        std::env::set_var("CLAUDE_SESSION_ID", "my-session-789");
-
+        // Pass session_id in payload to avoid env var race with parallel tests.
         let rr = repo.display().to_string();
         framework_goal_drive(json!({
             "repo_root": rr,
@@ -1118,6 +1121,7 @@ mod tests {
             "done_when": ["d1", "d2"],
             "validation_commands": ["echo ok"],
             "drive_until_done": true,
+            "session_id": "my-session-789",
         }))
         .expect("start");
 
@@ -1128,7 +1132,6 @@ mod tests {
         // Should NOT be stale since session matches
         assert!(st.get("stale").is_none());
 
-        std::env::remove_var("CLAUDE_SESSION_ID");
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1159,15 +1162,14 @@ mod tests {
         });
         crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
 
-        std::env::set_var("CLAUDE_SESSION_ID", "any-session");
-
+        // Legacy goal without session_id should NOT be marked stale regardless of current env.
+        // No need to set CLAUDE_SESSION_ID — annotate_goal_staleness returns early
+        // when goal has no session_id field.
         let st = read_goal_state(&repo, Some("legacy-task"))
             .expect("read")
             .expect("state");
-        // Legacy goal should NOT be marked stale
         assert!(st.get("stale").is_none());
 
-        std::env::remove_var("CLAUDE_SESSION_ID");
         let _ = fs::remove_dir_all(&repo);
     }
 
