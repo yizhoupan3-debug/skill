@@ -401,10 +401,15 @@ mod tests {
             .unwrap_or_else(|e| e.into_inner());
         let key = "PDF_BATCH_JOBS";
         let prev = std::env::var(key).ok();
+        // SAFETY: Mutex guard `PDF_BATCH_JOBS_TEST_LOCK` serializes all tests that
+        // modify environment variables. No concurrent thread reads/writes env vars
+        // while this guard is held.
         unsafe {
             std::env::remove_var(key);
         }
         run();
+        // SAFETY: Same serialization guarantee as above. Restoring the prior env var
+        // (or removing it if it was absent) maintains test isolation.
         unsafe {
             match prev {
                 Some(v) => std::env::set_var(key, v),
@@ -435,6 +440,7 @@ mod tests {
     #[test]
     fn resolve_jobs_env_override() {
         with_pdf_batch_jobs_env(|| {
+            // SAFETY: Guarded by `with_pdf_batch_jobs_env` which holds `PDF_BATCH_JOBS_TEST_LOCK`.
             unsafe {
                 std::env::set_var("PDF_BATCH_JOBS", "3");
             }

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Review Subagent Gate（Cursor）
 
-叙事：[AGENTS.md](../../AGENTS.md) + [AGENTS_CURSOR.md](../../AGENTS_CURSOR.md)（双文件注入）· [harness_architecture.md](../../docs/spec.md) · [harness_policy_map.md](../../docs/spec.md) · [host_adapter_contract.md](../../docs/spec.md) §0.1 · [code-review-deep/SKILL.md](../../skills/code-review-deep/SKILL.md)
+叙事：[AGENTS.md](../../AGENTS.md) + [AGENTS_CURSOR.md](../../AGENTS_CURSOR.md)（双文件注入）· [docs/spec.md §架构](../../docs/spec.md) · [docs/spec.md §策略](../../docs/spec.md) · [docs/spec.md §0.1](../../docs/spec.md) §0.1 · [code-review-deep/SKILL.md](../../skills/code-review-deep/SKILL.md)
 
 **清门真源（Claude canonical）**：`core-policy::review_gate_satisfied` — armed 时须 `independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override；Cursor **不得**用 multiset pending 单独替代此条件。
 

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Execution Subagent Gate（仅 Cursor）
 
-跨宿主基线、默认执行方式、拒因集合与 closeout 一律以 [AGENTS.md](../../AGENTS.md) 为准（`/autopilot` 已退役，执行入口为 `/implementx`）；Cursor transport delta 见 [AGENTS_CURSOR.md](../../AGENTS_CURSOR.md)（**双文件注入**，delta 不重复内核）。连续性见 [harness_architecture.md](../../docs/spec.md)、[harness_policy_map.md](../../docs/spec.md)。
+跨宿主基线、默认执行方式、拒因集合与 closeout 一律以 [AGENTS.md](../../AGENTS.md) 为准（`/autopilot` 已退役，执行入口为 `/implementx`）；Cursor transport delta 见 [AGENTS_CURSOR.md](../../AGENTS_CURSOR.md)（**双文件注入**，delta 不重复内核）。连续性见 [docs/spec.md §架构](../../docs/spec.md)、[docs/spec.md §策略](../../docs/spec.md)。
 
 本文件只补 Cursor 独有差异：
 

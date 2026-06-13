@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Subagent Model Inherit（仅 Cursor）
 
-跨宿主基线见 [AGENTS.md](../../AGENTS.md) + [AGENTS_CURSOR.md](../../AGENTS_CURSOR.md)（双文件注入）· [harness_policy_map.md](../../docs/spec.md) · [harness_architecture.md](../../docs/spec.md)；lane/并行度见 [execution-subagent-gate.mdc](execution-subagent-gate.mdc)。本节只约束 **子代理模型选择**。
+跨宿主基线见 [AGENTS.md](../../AGENTS.md) + [AGENTS_CURSOR.md](../../AGENTS_CURSOR.md)（双文件注入）· [docs/spec.md §策略](../../docs/spec.md) · [docs/spec.md §架构](../../docs/spec.md)；lane/并行度见 [execution-subagent-gate.mdc](execution-subagent-gate.mdc)。本节只约束 **子代理模型选择**。
 
 ## 硬约束
 

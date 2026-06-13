@@ -217,8 +217,8 @@ fn write_tracker(path: &Path, payload: &Value) -> Result<(), String> {
             .map_err(|e| format!("Failed to create tracker dir: {e}"))?;
     }
 
-    // Use temp file + rename for atomic write
-    let temp_path = path.with_extension("tmp");
+    // Use temp file + rename for atomic write (PID suffix avoids cross-process collision)
+    let temp_path = path.with_extension(format!("{}.tmp", std::process::id()));
     let content = serde_json::to_string_pretty(payload)
         .map_err(|e| format!("Failed to serialize tracker: {e}"))?;
 

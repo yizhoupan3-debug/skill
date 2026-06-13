@@ -1011,8 +1011,10 @@ mod claude_desktop_hard_blocking_tests {
             "should NOT contain hard block message in advisory mode; got {error_msg}"
         );
         assert!(
-            error_msg.contains("task_id") || !response["result"]["isError"].as_bool().unwrap_or(false),
-            "expected task_id validation or success (not hard block); got {error_msg}"
+            error_msg.contains("task_id")
+                || error_msg.contains("GOAL_STATE")
+                || !response["result"]["isError"].as_bool().unwrap_or(false),
+            "expected task_id/GOAL_STATE validation or success (not hard block); got {error_msg}"
         );
         let _ = std::fs::remove_dir_all(&repo);
     }

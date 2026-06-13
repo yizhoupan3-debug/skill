@@ -1274,31 +1274,17 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path, connection_session_
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
-/// Resolve the active task_id from `.supervisor_state.json` when not explicitly provided.
-fn resolve_active_task_id(repo_root: &Path) -> Result<String, String> {
-    let state_path = repo_root.join(".supervisor_state.json");
-    let content = std::fs::read_to_string(&state_path)
-        .map_err(|e| format!("Cannot auto-resolve task_id: {e} (provide task_id explicitly or start a task first)"))?;
-    let state: Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Cannot parse .supervisor_state.json: {e}"))?;
-    state
-        .get("task_id")
-        .and_then(Value::as_str)
-        .filter(|s| !s.trim().is_empty())
-        .map(|s| s.to_string())
-        .ok_or_else(|| "No active task_id in .supervisor_state.json (provide task_id explicitly or start a task first)".to_string())
-}
-
 fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_session_id: &str) -> Result<String, String> {
     let operation = arguments
         .get("operation")
         .and_then(Value::as_str)
         .ok_or("Missing required argument: operation")?;
 
-    // Auto-resolve task_id from .supervisor_state.json when not provided
+    // Auto-resolve task_id from TASK_POINTERS.json (shared with all other tools)
     let task_id = match arguments.get("task_id").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
         Some(tid) => tid.to_string(),
-        None => resolve_active_task_id(repo_root)?,
+        None => core_state::state_manager::read_primary_task_id(repo_root)
+            .ok_or("No active task_id in TASK_POINTERS.json (start a task first or provide task_id explicitly)")?,
     };
 
     let repo_root_str = repo_root.to_string_lossy().to_string();

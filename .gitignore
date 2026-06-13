@@ -116,6 +116,11 @@ artifacts/*.pptx
 # External projects (do not commit here)
 OutlookManager/
 
+# Environment files — prevent accidental secret commits
+.env
+.env.*
+.env.local
+
 # Binary templates
 templates/
 

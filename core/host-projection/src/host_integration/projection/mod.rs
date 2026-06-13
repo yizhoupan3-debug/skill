@@ -787,12 +787,11 @@ fn skills_runtime_rel_path(framework_root: &Path) -> String {
 fn framework_entrypoint_render_context(
     roots: &ResolvedProjectionRoots,
     host_label: &str,
-) -> (HostProjectionNarrative, String) {
-    let narrative = load_host_projection_narrative(&roots.framework_root).unwrap_or_else(|err| {
-        panic!("host projection narrative must load before rendering {host_label} entrypoint: {err}")
-    });
+) -> Result<(HostProjectionNarrative, String), String> {
+    let narrative = load_host_projection_narrative(&roots.framework_root)
+        .map_err(|err| format!("host projection narrative must load before rendering {host_label} entrypoint: {err}"))?;
     let runtime_rel = skills_runtime_rel_path(&roots.framework_root);
-    (narrative, runtime_rel)
+    Ok((narrative, runtime_rel))
 }
 
 fn framework_entrypoint_common_footer(runtime_rel: &str, agents_delta_file: &str) -> String {
@@ -801,10 +800,10 @@ fn framework_entrypoint_common_footer(runtime_rel: &str, agents_delta_file: &str
     )
 }
 
-pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> String {
+pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Result<String, String> {
     let narrative = load_host_projection_narrative(&roots.framework_root)
-        .expect("host projection narrative must load before rendering claude project narrative");
-    format!(
+        .map_err(|err| format!("host projection narrative must load before rendering claude project narrative: {err}"))?;
+    Ok(format!(
         r#"<!-- managed_by: skill-framework · claude-code · keep ≤48 lines -->
 <!-- projection_id: claude-code-project-narrative -->
 <!-- host_projection: claude-code -->
@@ -836,17 +835,17 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Strin
 路由：`skills/SKILL_ROUTING_RUNTIME.json` · 产物：`artifacts/current/`。
 "#,
         gsd = lifecycle_paragraph_for_host(&narrative, "claude-code"),
-    )
+    ))
 }
 
-pub fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
-    let (narrative, runtime_rel) = framework_entrypoint_render_context(roots, "claude");
-    format!(
+pub fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> Result<String, String> {
+    let (narrative, runtime_rel) = framework_entrypoint_render_context(roots, "claude")?;
+    Ok(format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n{footer}",
         gsd = lifecycle_paragraph_for_host(&narrative, "claude-code"),
         review = narrative.review_findings_only_paragraph,
         footer = framework_entrypoint_common_footer(&runtime_rel, "AGENTS_CLAUDE.md"),
-    )
+    ))
 }
 
 pub fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path) -> String {

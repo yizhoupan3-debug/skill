@@ -457,11 +457,11 @@ pub fn install_claude_projection(
     let target = claude_entrypoint_target(roots, scope);
     let settings_path = claude_settings_target(roots, scope);
     let changed =
-        write_text_if_changed(&target, &render_claude_framework_entrypoint(roots, scope))?;
+        write_text_if_changed(&target, &render_claude_framework_entrypoint(roots, scope)?)?;
     let narrative_changed = if scope == "project" {
         write_text_if_changed(
             &claude_project_narrative_path(roots),
-            &render_claude_project_narrative(roots),
+            &render_claude_project_narrative(roots)?,
         )?
     } else {
         false

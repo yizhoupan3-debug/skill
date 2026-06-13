@@ -41,10 +41,14 @@ pub fn write_atomic_text_to_temp(
         fs::create_dir_all(parent)
             .map_err(|err| format!("create parent directory failed: {err}"))?;
     }
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
+    let mut opts = OpenOptions::new();
+    opts.create(true).truncate(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    let mut file = opts
         .open(tmp_path)
         .map_err(|err| format!("open temp file failed for {}: {err}", tmp_path.display()))?;
     file.write_all(content.as_bytes())

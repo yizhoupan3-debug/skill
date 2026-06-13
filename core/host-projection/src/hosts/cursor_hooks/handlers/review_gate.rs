@@ -529,15 +529,18 @@ fn migrate_v1(raw: &Value) -> ReviewGateState {
     state.followup_count = raw
         .get("followup_count")
         .and_then(Value::as_u64)
-        .unwrap_or(0) as u32;
+        .map(|v| u32::try_from(v).unwrap_or(u32::MAX))
+        .unwrap_or(0);
     state.review_followup_count = raw
         .get("review_followup_count")
         .and_then(Value::as_u64)
-        .unwrap_or(0) as u32;
+        .map(|v| u32::try_from(v).unwrap_or(u32::MAX))
+        .unwrap_or(0);
     state.goal_followup_count = raw
         .get("goal_followup_count")
         .and_then(Value::as_u64)
-        .unwrap_or(0) as u32;
+        .map(|v| u32::try_from(v).unwrap_or(u32::MAX))
+        .unwrap_or(0);
     state
 }
 
@@ -561,7 +564,7 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
         base = parsed;
     } else if let Some(obj) = raw.as_object() {
         if let Some(v) = obj.get("phase").and_then(Value::as_u64) {
-            base.phase = v as u32;
+            base.phase = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj.get("review_required").and_then(Value::as_bool) {
             base.review_required = v;
@@ -579,7 +582,7 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
             base.reject_reason_seen = v;
         }
         if let Some(v) = obj.get("active_subagent_count").and_then(Value::as_u64) {
-            base.active_subagent_count = v as u32;
+            base.active_subagent_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj
             .get("active_subagent_last_started_at")
@@ -588,19 +591,19 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
             base.active_subagent_last_started_at = Some(v.to_string());
         }
         if let Some(v) = obj.get("subagent_start_count").and_then(Value::as_u64) {
-            base.subagent_start_count = v as u32;
+            base.subagent_start_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj.get("subagent_stop_count").and_then(Value::as_u64) {
-            base.subagent_stop_count = v as u32;
+            base.subagent_stop_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj.get("followup_count").and_then(Value::as_u64) {
-            base.followup_count = v as u32;
+            base.followup_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj.get("review_followup_count").and_then(Value::as_u64) {
-            base.review_followup_count = v as u32;
+            base.review_followup_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj.get("goal_followup_count").and_then(Value::as_u64) {
-            base.goal_followup_count = v as u32;
+            base.goal_followup_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj
             .get("pre_goal_review_satisfied")

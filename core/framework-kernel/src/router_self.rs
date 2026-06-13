@@ -293,7 +293,8 @@ pub fn resolve_router_rs_test_bin() -> PathBuf {
         }
     }
     panic!(
-        "router-rs-cli test binary not found; run `cargo build -p router-rs-cli` or `cargo test -p router-rs` so CARGO_BIN_EXE is available"
+        "router-rs-cli test binary not found; run `cargo test -p router-rs` (which auto-builds), \
+         or manually `cargo build -p router-rs-cli`"
     );
 }
 

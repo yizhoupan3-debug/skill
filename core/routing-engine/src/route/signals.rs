@@ -235,11 +235,13 @@ fn routing_signal_markers_json() -> &'static Value {
     static CELL: OnceLock<Value> = OnceLock::new();
     CELL.get_or_init(|| {
         let v: Value = serde_json::from_str(ROUTING_SIGNAL_MARKERS_EMBED)
-            .expect("ROUTING_SIGNAL_MARKERS.json must parse");
+            .expect("ROUTING_SIGNAL_MARKERS.json: embedded JSON must parse (build artifact corrupted)");
+        let version = v.get("schema_version").and_then(Value::as_str);
         assert_eq!(
-            v.get("schema_version").and_then(Value::as_str),
+            version,
             Some("routing-signal-markers-v1"),
-            "ROUTING_SIGNAL_MARKERS schema_version mismatch"
+            "ROUTING_SIGNAL_MARKERS schema_version={version:?}, expected \"routing-signal-markers-v1\" — \
+             configs/framework/ROUTING_SIGNAL_MARKERS.json was modified without updating this assertion"
         );
         v
     })
@@ -248,7 +250,10 @@ fn routing_signal_markers_json() -> &'static Value {
 fn string_list_field<'a>(root: &'a Value, key: &'static str) -> &'a Vec<Value> {
     root.get(key)
         .and_then(Value::as_array)
-        .unwrap_or_else(|| panic!("ROUTING_SIGNAL_MARKERS missing array field `{key}`"))
+        .unwrap_or_else(|| panic!(
+            "ROUTING_SIGNAL_MARKERS.json missing required array field `{key}` — \
+             check configs/framework/ROUTING_SIGNAL_MARKERS.json schema"
+        ))
 }
 
 fn meta_routing_anchors() -> &'static [String] {
