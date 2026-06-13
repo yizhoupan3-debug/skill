@@ -441,6 +441,7 @@ pub trait HostHook {
 - `load_records_from_runtime()` — 纯配置加载
 - `SKILL_ROUTING_METADATA.json` — 运行时元数据补丁
 - `filter_records_for_host()` — 按 host_platforms 过滤
+  - `SKILL_MANIFEST.json` 中 `host_platforms` 支持通配符令牌：`"supported"` / `"all-hosts"` 展开为 `host_targets.supported` 全集（规范化逻辑见 `tests/host_platforms.rs`）
 - 可插拔性：**4.0/5**
 
 ### 8.2 路由评分
@@ -761,47 +762,13 @@ pub trait HostHook {
 
 ## 15. 可观测性
 
-> aspirational — 部分已实现（trace_runtime），部分计划中。
-
-### 15.1 JSONL ↔ OTel 映射
-
-| JSONL 键 | OTel 属性 | 信号 |
-|----------|-----------|------|
-| `ts` | `time_unix_nano` | span/metric/log |
-| `event_id` | `runtime.event.id` | span/log |
-| `kind` | `runtime.kind` | span/log |
-| `stage` | `runtime.stage` | span/metric/log |
-| `status` | `runtime.status` | span/metric/log |
-| `job_id` | `runtime.job_id` | span/metric/log |
-| `session_id` | `runtime.session_id` | span/metric/log |
-
-### 15.2 核心指标
-
-| 指标 | 类型 | 状态 |
-|------|------|------|
-| `runtime.route_mismatch_total` | Counter | aspirational |
-| `runtime.sandbox_timeout_total` | Counter | aspirational |
-| `runtime.subagent_spawn_total` | Counter | aspirational |
-| `runtime.workflow_phase_duration_ms` | Histogram | aspirational |
+> **deferred** — `trace_runtime` 已实现基础 JSONL 事件流；OTel 映射与核心指标计数器待 v8 规划。实现时在此补充 schema。
 
 ---
 
 ## 16. 存储压缩
 
-> aspirational — 运行期契约冻结，实现待定。
-
-### 16.1 快照与增量
-
-- **SnapshotCheckpoint**：每代一个快照（schema_version, generation, snapshot_id, state_digest, delta_cursor）
-- **增量日志**：Latest Snapshot + Monotonic Generation-local Deltas
-- **生成物分离**：大对象写入 Artifact Refs
-
-### 16.2 世代滚动
-
-- 新世代继承最小必要状态
-- 旧世代保持可读
-- 世代号单调递增
-- 回放不能要求扫描全量历史流
+> **deferred** — 快照/增量/世代滚动方案已设计，运行期契约冻结。实现时在此补充 schema 与压缩策略。
 
 ---
 

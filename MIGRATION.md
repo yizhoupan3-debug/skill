@@ -8,6 +8,7 @@
 |---------|-------------|
 | `codex-cli`、`codex-app` | **`codex`**（`install --to codex`） |
 | `claude-desktop` | **`claude-code`**（`install --to claude-code` / `./scripts/install-claude.sh`）；勿再 `install-claude-desktop.sh` |
+| `antigravity`、`antigravity-app`、`antigravity-cli` | 早期实验性宿主 id，产品线已终止（2026-06），无替代宿主 |
 
 **文档**：宿主手册见 [`docs/hosts/`](docs/hosts/)。运维见 [`docs/operations/index.md`](docs/operations/index.md)（按功能模块 B0–B11）。
 
