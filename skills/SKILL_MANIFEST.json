@@ -1393,6 +1393,47 @@
       null
     ],
     [
+      "simplify",
+      "L2",
+      "owner",
+      "none",
+      "P2",
+      "行为守恒的三维度并行代码简化审查（复用/质量/效率）。默认 findings-only，可选自动修复模式。与 code-review-deep 互补。集成框架生命周期。",
+      "preferred",
+      [
+        "/simplify",
+        "simplify",
+        "代码简化",
+        "简化代码",
+        "代码清理",
+        "code simplify",
+        "clean up code",
+        "重构简化",
+        "去重",
+        "过度工程",
+        "质量门"
+      ],
+      "project",
+      3,
+      "skills/simplify/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
+      "skill",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Glob",
+        "Grep",
+        "Agent"
+      ],
+      null
+    ],
+    [
       "statistical-analysis",
       "L4",
       "owner",
@@ -1484,5 +1525,5 @@
   ],
   "full_skill_count": 38,
   "hot_skill_count": 44,
-  "manifest_skill_count": 44
+  "manifest_skill_count": 45
 }
