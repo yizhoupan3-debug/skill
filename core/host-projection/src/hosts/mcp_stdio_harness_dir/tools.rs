@@ -183,12 +183,13 @@ pub(super) fn tool_skill_route(arguments: &Value, repo_root: &Path, host_id: &st
         .unwrap_or(true); // Default to first_turn=true on error
 
     let runtime_path = skill_routing_runtime_json(repo_root);
-    let records = load_records_cached_for_stdio(Some(&runtime_path), None)?;
+    let manifest_path = skill_manifest_path(repo_root);
+    let records = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))?;
     let records = filter_records_for_host(records.as_ref(), Some(host_id))?;
     let decision = crate::hooks::route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
-        None,
+        Some(&manifest_path),
         Some(host_id),
         query,
         "session",

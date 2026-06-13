@@ -497,6 +497,10 @@ pub fn dispatch_claude_command(command: ClaudeSubcommand) -> Result<(), String> 
         ClaudeSubcommand::Hook(command) => {
             run_claude_hook_cli(&command.event, command.repo_root.as_deref())
         }
+        ClaudeSubcommand::Agent(command) => {
+            let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            crate::hosts::claude_agent::run_claude_agent_mcp_loop(Some(&root))
+        }
     }
 }
 

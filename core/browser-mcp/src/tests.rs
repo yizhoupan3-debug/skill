@@ -545,7 +545,6 @@ fn make_descriptor(role: &str, name: &str, tag: &str, test_id: Option<&str>) -> 
         enabled: true,
         tag: tag.to_string(),
         test_id: test_id.map(str::to_string),
-        _ordinal: 0,
         selector: String::new(),
     }
 }
@@ -587,7 +586,6 @@ fn make_snapshot(url: &str, title: &str, text: &str) -> PageSnapshot {
         interactive_elements: vec![],
         text_content: text.to_string(),
         text_lines: vec![text.to_string()],
-        _created_at: 0,
     }
 }
 
@@ -1416,7 +1414,7 @@ fn network_event_value_contains_expected_fields() {
         error_text: None,
         duration_ms: Some(50),
     };
-    let v = network_event_value(event);
+    let v = network_event_value(&event);
     assert_eq!(v["id"], "req_1");
     assert_eq!(v["method"], "GET");
     assert_eq!(v["status"], 200);

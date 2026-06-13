@@ -44,16 +44,10 @@ impl BrowserRuntime {
             client_builder = client_builder.resolve(pin_host, *addr);
         }
 
-        // Apply proxy settings if present
-        for key in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY"] {
-            if let Ok(proxy_url) = std::env::var(key) {
-                let trimmed = proxy_url.trim();
-                if !trimmed.is_empty() {
-                    if let Ok(proxy) = reqwest::Proxy::all(trimmed) {
-                        client_builder = client_builder.proxy(proxy);
-                        break;
-                    }
-                }
+        // 使用缓存的代理配置（env 在进程生命周期内不变）
+        if let Some(proxy_url) = cached_proxy_url() {
+            if let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
+                client_builder = client_builder.proxy(proxy);
             }
         }
 
@@ -537,7 +531,6 @@ impl BrowserRuntime {
                     })
                     .rev()
                     .take(limit)
-                    .cloned()
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default()
@@ -1167,7 +1160,6 @@ impl BrowserRuntime {
                     false,
                 )
             })?;
-        let browser_pid = child.id();
         wait_for_cdp(port)?;
         self.browser_processes.insert(session_id.clone(), child);
         self.sessions.insert(
@@ -1181,7 +1173,6 @@ impl BrowserRuntime {
                 },
                 current_tab_id: None,
                 tabs: HashMap::new(),
-                _browser_pid: browser_pid,
                 user_data_dir,
                 cdp: CdpClient::connect(port)?,
             },
@@ -1409,8 +1400,7 @@ impl BrowserRuntime {
             .and_then(|session| session.tabs.get(tab_id))
             .map(|tab| tab.fingerprint_to_ref.clone())
             .unwrap_or_default();
-        let snapshot = self.capture_snapshot(session_id, tab_id, &previous_ref_map)?;
-        let mut effective = snapshot.clone();
+        let mut snapshot = self.capture_snapshot(session_id, tab_id, &previous_ref_map)?;
         if let Some(session) = self.sessions.get_mut(session_id) {
             let tab = session.tabs.get_mut(tab_id).ok_or_else(|| {
                 browser_error(
@@ -1427,33 +1417,55 @@ impl BrowserRuntime {
                 .unwrap_or(true);
             if changed {
                 tab.page_revision += 1;
-                effective.revision = tab.page_revision;
-                for element in &mut effective.interactive_elements {
+                snapshot.revision = tab.page_revision;
+                for element in &mut snapshot.interactive_elements {
                     element.page_revision = tab.page_revision;
                 }
-                tab.last_snapshot = Some(effective.clone());
-                tab.snapshot_history.push_back(effective.clone());
+                tab.url = snapshot.url.clone();
+                tab.title = snapshot.title.clone();
+                tab.loading_state = snapshot.loading_state.clone();
+                // 唯一必要的 clone：存入 snapshot_history（保留最近 8 个快照用于 diff）
+                tab.snapshot_history.push_back(snapshot.clone());
                 while tab.snapshot_history.len() > SNAPSHOT_HISTORY_LIMIT {
                     tab.snapshot_history.pop_front();
                 }
-            } else if let Some(last) = tab.last_snapshot.clone() {
-                effective = last;
+                tab.last_snapshot = Some(snapshot);
+            } else {
+                snapshot = tab.last_snapshot.clone().unwrap_or(snapshot);
+                tab.url = snapshot.url.clone();
+                tab.title = snapshot.title.clone();
+                tab.loading_state = snapshot.loading_state.clone();
             }
-            tab.url = effective.url.clone();
-            tab.title = effective.title.clone();
-            tab.loading_state = effective.loading_state.clone();
-            tab.indexed_elements = effective
-                .interactive_elements
-                .iter()
-                .map(|element| (element.ref_id.clone(), element.clone()))
-                .collect();
-            tab.fingerprint_to_ref = effective
-                .interactive_elements
-                .iter()
-                .map(|element| (element.fingerprint.clone(), element.ref_id.clone()))
-                .collect();
+            // 从 tab.last_snapshot 读取（无论 changed 与否，都已是最新的）
+            if let Some(ref effective) = tab.last_snapshot {
+                tab.indexed_elements = effective
+                    .interactive_elements
+                    .iter()
+                    .map(|element| (element.ref_id.clone(), element.clone()))
+                    .collect();
+                tab.fingerprint_to_ref = effective
+                    .interactive_elements
+                    .iter()
+                    .map(|element| (element.fingerprint.clone(), element.ref_id.clone()))
+                    .collect();
+            }
         }
-        Ok(effective)
+        // 返回最新快照（从 tab 中读取，避免 snapshot 已被 move 的问题）
+        Ok(self
+            .sessions
+            .get(session_id)
+            .and_then(|s| s.tabs.get(tab_id))
+            .and_then(|t| t.last_snapshot.clone())
+            .unwrap_or(PageSnapshot {
+                revision: 0,
+                url: String::new(),
+                title: String::new(),
+                loading_state: "idle".to_string(),
+                summary: json!({}),
+                interactive_elements: Vec::new(),
+                text_content: String::new(),
+                text_lines: Vec::new(),
+            }))
     }
 
     fn capture_snapshot(
@@ -1485,7 +1497,6 @@ impl BrowserRuntime {
             interactive_elements,
             text_lines: to_text_lines(&text_content),
             text_content,
-            _created_at: now_millis(),
         })
     }
 
@@ -1506,8 +1517,8 @@ impl BrowserRuntime {
         tab_id: &str,
     ) -> Result<Vec<ElementDescriptor>, Value> {
         let payload = self.evaluate_json(session_id, tab_id, element_collection_expression())?;
-        let items = payload.as_array().cloned().unwrap_or_default();
-        let mut descriptors = Vec::new();
+        let items = payload.as_array().map(Vec::as_slice).unwrap_or(&[]);
+        let mut descriptors = Vec::with_capacity(items.len());
         for item in items {
             descriptors.push(ElementDescriptor {
                 role: value_str(item.get("role")).to_string(),
@@ -1523,7 +1534,6 @@ impl BrowserRuntime {
                     .get("testId")
                     .and_then(Value::as_str)
                     .map(str::to_string),
-                _ordinal: item.get("ordinal").and_then(Value::as_u64).unwrap_or(0) as usize,
                 selector: value_str(item.get("selector")).to_string(),
             });
         }

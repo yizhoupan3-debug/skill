@@ -1,4 +1,7 @@
 // CDP/Chrome 助手、Attach 候选、skill 路由与 MCP 收尾工具函数。
+use std::net::TcpListener;
+use std::sync::OnceLock;
+
 fn wait_for_cdp(port: u16) -> Result<(), Value> {
     let deadline = SystemTime::now() + Duration::from_secs(8);
     while SystemTime::now() < deadline {
@@ -33,6 +36,24 @@ fn cdp_http_json(port: u16, path: &str) -> Result<Value, Value> {
         })
 }
 
+/// 缓存的代理 URL（进程生命周期内 env 不变），避免每次 web_fetch 重复查找 5 个环境变量。
+fn cached_proxy_url() -> Option<&'static str> {
+    static PROXY: OnceLock<Option<String>> = OnceLock::new();
+    PROXY
+        .get_or_init(|| {
+            for key in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY"] {
+                if let Ok(url) = std::env::var(key) {
+                    let trimmed = url.trim().to_string();
+                    if !trimmed.is_empty() {
+                        return Some(trimmed);
+                    }
+                }
+            }
+            None
+        })
+        .as_deref()
+}
+
 fn find_chrome_binary() -> Result<PathBuf, Value> {
     if let Ok(path) = std::env::var("BROWSER_MCP_CHROME_PATH") {
         let path = PathBuf::from(path);
@@ -63,7 +84,10 @@ fn find_chrome_binary() -> Result<PathBuf, Value> {
 }
 
 fn allocate_debug_port() -> u16 {
-    49_000 + ((now_millis() % 10_000) as u16)
+    // 绑定端口 0 让 OS 分配可用端口，立即释放后返回
+    TcpListener::bind("127.0.0.1:0")
+        .map(|listener| listener.local_addr().map(|addr| addr.port()).unwrap_or(9222))
+        .unwrap_or(9222)
 }
 
 fn summary_expression() -> &'static str {
@@ -123,7 +147,7 @@ return Array.from(document.querySelectorAll(selector)).map((el, index) => {
   const visible = !!(rect.width && rect.height) && getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none';
   const label = el.getAttribute('aria-label') || el.getAttribute('placeholder') || el.innerText || el.value || el.textContent || '';
   return {role: roleFor(el), name: String(label).replace(/\s+/g,' ').trim().slice(0,120), text: String(el.innerText || el.textContent || '').replace(/\s+/g,' ').trim().slice(0,160), visible, enabled: !el.disabled, tag: el.tagName.toLowerCase(), testId: el.dataset ? el.dataset.testid || null : null, ordinal: index, selector: cssPath(el)};
-}).filter(item => item.visible);
+}).slice(0, 800);
 })()"#
 }
 
@@ -154,17 +178,26 @@ fn has_meaningful_change(previous: &PageSnapshot, next: &PageSnapshot) -> bool {
     if previous.text_content != next.text_content {
         return true;
     }
-    let previous_fingerprints = previous
+    // 单 HashSet + any：任一侧出现另一侧没有的 fingerprint 即认为有变化
+    let prev_fps: std::collections::HashSet<&str> = previous
         .interactive_elements
         .iter()
-        .map(|element| element.fingerprint.as_str())
-        .collect::<std::collections::HashSet<_>>();
-    let next_fingerprints = next
-        .interactive_elements
+        .map(|e| e.fingerprint.as_str())
+        .collect();
+    next.interactive_elements
         .iter()
-        .map(|element| element.fingerprint.as_str())
-        .collect::<std::collections::HashSet<_>>();
-    previous_fingerprints != next_fingerprints
+        .any(|e| !prev_fps.contains(e.fingerprint.as_str()))
+        || {
+            let next_fps: std::collections::HashSet<&str> = next
+                .interactive_elements
+                .iter()
+                .map(|e| e.fingerprint.as_str())
+                .collect();
+            previous
+                .interactive_elements
+                .iter()
+                .any(|e| !next_fps.contains(e.fingerprint.as_str()))
+        }
 }
 
 fn compute_delta(previous: &PageSnapshot, next: &PageSnapshot) -> Value {
@@ -178,11 +211,23 @@ fn compute_delta(previous: &PageSnapshot, next: &PageSnapshot) -> Value {
         .iter()
         .map(|element| element.ref_id.as_str())
         .collect::<std::collections::HashSet<_>>();
-    let previous_text = previous
-        .text_lines
-        .iter()
-        .map(String::as_str)
-        .collect::<std::collections::HashSet<_>>();
+    // newText：只在文本实际变化时才遍历，避免无变化时白建 HashSet
+    let new_text: Vec<Value> = if previous.text_content != next.text_content {
+        let prev_lines: std::collections::HashSet<&str> = previous
+            .text_lines
+            .iter()
+            .map(String::as_str)
+            .collect();
+        next.text_lines
+            .iter()
+            .filter(|line| !prev_lines.contains(line.as_str()))
+            .take(10)
+            .cloned()
+            .map(Value::String)
+            .collect()
+    } else {
+        Vec::new()
+    };
     json!({
         "fromRevision": previous.revision,
         "toRevision": next.revision,
@@ -190,8 +235,8 @@ fn compute_delta(previous: &PageSnapshot, next: &PageSnapshot) -> Value {
         "titleChanged": previous.title != next.title,
         "newElements": next.interactive_elements.iter().filter(|element| !previous_refs.contains(element.ref_id.as_str())).take(10).map(|element| json!({"ref": element.ref_id, "role": element.role, "name": element.name})).collect::<Vec<_>>(),
         "removedRefs": previous.interactive_elements.iter().filter(|element| !next_refs.contains(element.ref_id.as_str())).take(10).map(|element| Value::String(element.ref_id.clone())).collect::<Vec<_>>(),
-        "newText": next.text_lines.iter().filter(|line| !previous_text.contains(line.as_str())).take(10).cloned().collect::<Vec<_>>(),
-        "alerts": next.text_lines.iter().filter(|line| line.to_ascii_lowercase().contains("error") || line.to_ascii_lowercase().contains("failed") || line.to_ascii_lowercase().contains("invalid") || line.to_ascii_lowercase().contains("warning")).take(5).cloned().collect::<Vec<_>>(),
+        "newText": new_text,
+        "alerts": next.text_lines.iter().filter(|line| line.to_ascii_lowercase().contains("error") || line.to_ascii_lowercase().contains("failed") || line.to_ascii_lowercase().contains("invalid") || line.to_ascii_lowercase().contains("warning")).take(5).cloned().map(Value::String).collect::<Vec<_>>(),
     })
 }
 
@@ -209,7 +254,7 @@ fn interactive_element_value(element: &InteractiveElement) -> Value {
     })
 }
 
-fn network_event_value(event: NetworkEvent) -> Value {
+fn network_event_value(event: &NetworkEvent) -> Value {
     json!({
         "id": event.id,
         "method": event.method,
@@ -268,22 +313,33 @@ fn base_attached_runtime_diagnostics(configured_source: &ConfiguredAttachSource)
     })
 }
 
+fn select_fields<'a>(source: &'a Value, fields: &[&str]) -> Value {
+    let mut map = serde_json::Map::new();
+    for field in fields {
+        map.insert(
+            field.to_string(),
+            source.get(*field).cloned().unwrap_or(Value::Null),
+        );
+    }
+    Value::Object(map)
+}
+
 fn attached_runtime_replay_context(diagnostics: &Value) -> Value {
-    json!({
-        "descriptorSource": diagnostics.get("descriptorSource").cloned().unwrap_or(Value::Null),
-        "descriptorPath": diagnostics.get("descriptorPath").cloned().unwrap_or(Value::Null),
-        "inputArtifactKind": diagnostics.get("inputArtifactKind").cloned().unwrap_or(Value::Null),
-        "attachMode": diagnostics.get("attachMode").cloned().unwrap_or(Value::Null),
-        "artifactBackendFamily": diagnostics.get("artifactBackendFamily").cloned().unwrap_or(Value::Null),
-        "recommendedEntrypoint": diagnostics.get("recommendedEntrypoint").cloned().unwrap_or(Value::Null),
-        "sourceTransportMethod": diagnostics.get("sourceTransportMethod").cloned().unwrap_or(Value::Null),
-        "sourceHandoffMethod": diagnostics.get("sourceHandoffMethod").cloned().unwrap_or(Value::Null),
-        "traceStreamPath": diagnostics.get("traceStreamPath").cloned().unwrap_or(Value::Null),
-        "bindingArtifactSource": diagnostics.get("bindingArtifactSource").cloned().unwrap_or(Value::Null),
-        "handoffSource": diagnostics.get("handoffSource").cloned().unwrap_or(Value::Null),
-        "resumeManifestSource": diagnostics.get("resumeManifestSource").cloned().unwrap_or(Value::Null),
-        "traceStreamSource": diagnostics.get("traceStreamSource").cloned().unwrap_or(Value::Null),
-    })
+    select_fields(diagnostics, &[
+        "descriptorSource",
+        "descriptorPath",
+        "inputArtifactKind",
+        "attachMode",
+        "artifactBackendFamily",
+        "recommendedEntrypoint",
+        "sourceTransportMethod",
+        "sourceHandoffMethod",
+        "traceStreamPath",
+        "bindingArtifactSource",
+        "handoffSource",
+        "resumeManifestSource",
+        "traceStreamSource",
+    ])
 }
 
 fn descriptor_leaf<'a>(descriptor: &'a Value, path_parts: &[&str]) -> Option<&'a Value> {
@@ -963,13 +1019,22 @@ fn json_type_name(value: &Value) -> &'static str {
 }
 
 fn truncate_text(text: &str, max_chars: usize) -> String {
-    if text.chars().count() <= max_chars {
+    // 快速路径：对 ASCII 文本直接用字节长度判断，O(1)
+    if text.len() <= max_chars {
         return text.to_string();
     }
-    let mut output = text
-        .chars()
-        .take(max_chars.saturating_sub(1))
-        .collect::<String>();
+    if max_chars < 2 {
+        return "...".to_string();
+    }
+    // 多字节文本：只扫描到 max_chars-1 处即停止，O(max_chars) 而非 O(n)
+    // 保留 max_chars-1 个原始字符 + "..." 后缀
+    let end = text
+        .char_indices()
+        .nth(max_chars - 2)
+        .map(|(pos, ch)| pos + ch.len_utf8())
+        .unwrap_or(0);
+    let mut output = String::with_capacity(end + 3);
+    output.push_str(&text[..end]);
     output.push_str("...");
     output
 }

@@ -264,6 +264,7 @@ pub enum HostCommand {
         #[command(subcommand)]
         command: CursorSubcommand,
     },
+    #[command(alias = "claude-desktop")]
     Claude {
         #[command(subcommand)]
         command: ClaudeSubcommand,
@@ -290,7 +291,16 @@ pub enum CursorSubcommand {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum ClaudeSubcommand {
+    /// Run MCP stdio agent loop (framework snapshot, skill routing, goal/closeout).
+    #[command(name = "agent")]
+    Agent(ClaudeAgentCommand),
     Hook(ClaudeHookCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ClaudeAgentCommand {
+    #[arg(long)]
+    pub repo_root: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug, Clone)]

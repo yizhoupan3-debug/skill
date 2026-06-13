@@ -21,6 +21,7 @@
     "source",
     "source_position",
     "skill_path",
+    "host_platforms",
     "kind",
     "allowedTools",
     "model"
@@ -56,6 +57,11 @@
         "opencode"
       ],
       "skills/agent-swarm-orchestration/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -81,6 +87,13 @@
         "opencode"
       ],
       "skills/discussx/SKILL.md",
+      [
+        "claude-code",
+        "codex",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "framework_command",
       null,
       "haiku"
@@ -118,6 +131,11 @@
         "opencode"
       ],
       "skills/gh-address-comments/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -161,6 +179,11 @@
         "opencode"
       ],
       "skills/gh-fix-ci/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -196,6 +219,13 @@
         "opencode"
       ],
       "skills/implementx/SKILL.md",
+      [
+        "claude-code",
+        "codex",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "framework_command",
       null,
       null
@@ -221,6 +251,13 @@
         "opencode"
       ],
       "skills/planx/SKILL.md",
+      [
+        "claude-code",
+        "codex",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "framework_command",
       null,
       "sonnet"
@@ -250,6 +287,11 @@
         "opencode"
       ],
       "skills/sentry/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -288,6 +330,11 @@
         "opencode"
       ],
       "skills/skill-framework-developer/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -325,6 +372,13 @@
         "opencode"
       ],
       "skills/update/SKILL.md",
+      [
+        "claude-code",
+        "codex",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "framework_command",
       null,
       null
@@ -350,6 +404,13 @@
         "opencode"
       ],
       "skills/verifyx/SKILL.md",
+      [
+        "claude-code",
+        "codex",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "framework_command",
       null,
       null
@@ -384,6 +445,11 @@
         "opencode"
       ],
       "skills/citation-management/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -411,6 +477,13 @@
         "opencode"
       ],
       "skills/deepinterview/SKILL.md",
+      [
+        "claude-code",
+        "codex",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "framework_command",
       null,
       null
@@ -444,6 +517,11 @@
         "opencode"
       ],
       "skills/plan-mode/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -483,6 +561,11 @@
         "opencode"
       ],
       "skills/code-review-deep/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       [
         "Read",
@@ -512,6 +595,13 @@
         "opencode"
       ],
       "skills/gitx/SKILL.md",
+      [
+        "claude-code",
+        "codex",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "framework_command",
       null,
       null
@@ -563,6 +653,11 @@
         "opencode"
       ],
       "skills/paper-workbench/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       [
         "Read",
@@ -595,6 +690,11 @@
       "project",
       3,
       "skills/paper-workbench/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       [
         "Read",
@@ -642,6 +742,9 @@
       "local",
       "skills/research-discovery",
       "skills/research-discovery/SKILL.md",
+      [
+        "supported"
+      ],
       "skill",
       null,
       null
@@ -678,6 +781,9 @@
       "local",
       "skills/research-execution",
       "skills/research-execution/SKILL.md",
+      [
+        "supported"
+      ],
       "skill",
       null,
       null
@@ -699,6 +805,12 @@
       "local",
       "skills/deep-research",
       "skills/deep-research/SKILL.md",
+      [
+        "claude-code",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -735,6 +847,11 @@
         "opencode"
       ],
       "skills/design-md/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -772,6 +889,11 @@
         "opencode"
       ],
       "skills/diagramming/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -804,6 +926,11 @@
         "opencode"
       ],
       "skills/doc/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -841,6 +968,11 @@
         "opencode"
       ],
       "skills/experiment-reproducibility/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -866,6 +998,11 @@
       "local",
       10,
       "skills/infographic/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -897,6 +1034,11 @@
         "opencode"
       ],
       "skills/mcp-server-management/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -928,6 +1070,11 @@
         "opencode"
       ],
       "skills/pdf/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -959,6 +1106,11 @@
         "opencode"
       ],
       "skills/slides/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       [
         "Read",
@@ -994,6 +1146,11 @@
         "opencode"
       ],
       "skills/primary-runtime/spreadsheets/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -1029,6 +1186,11 @@
       "project",
       10,
       "skills/tikz-paper-figure/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       [
         "Read",
@@ -1068,6 +1230,11 @@
         "opencode"
       ],
       "skills/visual-review/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -1109,6 +1276,11 @@
       "local",
       10,
       "skills/algo-trading/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       [
         "Bash",
@@ -1142,6 +1314,11 @@
       "local",
       10,
       "skills/email-template/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -1165,6 +1342,9 @@
       "local",
       "skills/formal-verification",
       "skills/formal-verification/SKILL.md",
+      [
+        "supported"
+      ],
       "skill",
       null,
       null
@@ -1188,6 +1368,9 @@
       "local",
       "skills/literature-verification",
       "skills/literature-verification/SKILL.md",
+      [
+        "supported"
+      ],
       "skill",
       null,
       null
@@ -1221,6 +1404,11 @@
         "opencode"
       ],
       "skills/math-derivation/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -1244,6 +1432,9 @@
       "local",
       "skills/prose-verification",
       "skills/prose-verification/SKILL.md",
+      [
+        "supported"
+      ],
       "skill",
       null,
       null
@@ -1273,6 +1464,9 @@
       "project",
       3,
       "skills/python-env-management/SKILL.md",
+      [
+        "cursor"
+      ],
       "skill",
       null,
       null
@@ -1295,6 +1489,9 @@
       "local",
       "skills/reproducibility-verification",
       "skills/reproducibility-verification/SKILL.md",
+      [
+        "supported"
+      ],
       "skill",
       null,
       null
@@ -1328,6 +1525,11 @@
         "opencode"
       ],
       "skills/scientific-figure-plotting/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -1361,6 +1563,11 @@
         "opencode"
       ],
       "skills/simplify/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       [
         "Read",
@@ -1407,6 +1614,11 @@
         "opencode"
       ],
       "skills/statistical-analysis/SKILL.md",
+      [
+        "claude-code",
+        "cursor",
+        "opencode"
+      ],
       "skill",
       null,
       null
@@ -1430,6 +1642,9 @@
       "local",
       "skills/statistical-verification",
       "skills/statistical-verification/SKILL.md",
+      [
+        "supported"
+      ],
       "skill",
       null,
       null
@@ -1453,6 +1668,9 @@
       "local",
       "skills/structure-verification",
       "skills/structure-verification/SKILL.md",
+      [
+        "supported"
+      ],
       "skill",
       null,
       null

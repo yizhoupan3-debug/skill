@@ -622,7 +622,6 @@ struct SessionRecord {
     viewport: ViewportSize,
     current_tab_id: Option<String>,
     tabs: HashMap<String, TabRecord>,
-    _browser_pid: u32,
     user_data_dir: PathBuf,
     cdp: CdpClient,
 }
@@ -672,7 +671,6 @@ struct ElementDescriptor {
     enabled: bool,
     tag: String,
     test_id: Option<String>,
-    _ordinal: usize,
     selector: String,
 }
 
@@ -686,7 +684,6 @@ struct PageSnapshot {
     interactive_elements: Vec<InteractiveElement>,
     text_content: String,
     text_lines: Vec<String>,
-    _created_at: u128,
 }
 
 #[derive(Clone, Debug)]

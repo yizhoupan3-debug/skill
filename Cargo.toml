@@ -27,7 +27,7 @@ members = [
     "core/autoresearch-rs",
     "core/evolution-rs",
     "core/codegraph-rs"
-]
+, "tron-search"]
 exclude = [
     "codex-aggregator"
 ]
