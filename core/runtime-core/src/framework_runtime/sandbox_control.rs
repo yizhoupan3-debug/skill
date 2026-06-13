@@ -1,4 +1,4 @@
-//! Sandbox 控制面状态机（Roadmap v5 P7：自 `cli/runtime_ops.inc` 下沉至 B3）。
+//! Sandbox 控制面状态机。
 
 use chrono::Utc;
 use serde_json::json;

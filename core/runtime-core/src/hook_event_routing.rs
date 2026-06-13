@@ -1,4 +1,4 @@
-//! Cross-host hook lifecycle event routing contract (Roadmap v5 §6.4 cat.3).
+//! Cross-host hook lifecycle event routing contract.
 
 use serde_json::{json, Value};
 

@@ -1,5 +1,4 @@
 //! Background/worker orchestration policy、runtime control-plane 描述与 observability 契约。
-//! 自 `cli/runtime_ops.inc` 下沉（Roadmap v5 P7）。
 
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};

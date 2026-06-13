@@ -1,4 +1,4 @@
-//! Roadmap v5 §6.4 cat.5: sandbox close path drain -> cleanup -> recycled (registry contract).
+//! sandbox close path drain -> cleanup -> recycled (registry contract).
 
 use std::fs;
 use std::path::PathBuf;

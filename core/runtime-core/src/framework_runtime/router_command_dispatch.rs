@@ -1,4 +1,4 @@
-//! 子命令 `dispatch_*` 实现（Roadmap v5 P7：自 `cli/dispatch.rs` 下沉至 B3）。
+//! 子命令 `dispatch_*` 实现。
 
 use serde_json::{json, Value};
 use std::fs;

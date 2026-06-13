@@ -1,13 +1,13 @@
 ---
 last_verified: "2026-06-12"
-version: "unified-v6.5"
+version: "unified-v7"
 ---
 
 # 框架统一规约 (Unified Framework Specification)
 
 > 本文件是框架**总览规约**，覆盖架构总览、设计原则、crate 拓扑、测试契约与 schema 索引。
 > 各子系统详细规约见下方 `extends` 列表中的延伸文档（各自在其领域内为真源）。
-> 实施路线图见 `artifacts/current/system-evolution-roadmap-v6.md` (v6.0-final)。
+> 实施路线图见 `artifacts/current/roadmap-v7.md`。
 
 ---
 
@@ -36,10 +36,10 @@ version: "unified-v6.5"
 
 ## 1. 架构总览
 
-### 1.1 Crate 拓扑 (v6)
+### 1.1 Crate 拓扑 (v7)
 
 ```
-runtime-core (~46K LOC)       ← 核心生命周期/存储/trace/closeout
+runtime-core (~38K LOC)       ← 核心生命周期/存储/trace/closeout
 ├── session_supervisor/       ← 工作进程管理（driver/worker/runtime）
 ├── framework_runtime/        ← MCP stdio harness + hooks 注册表
 ├── host_integration/         ← projection 安装/移除（re-export shim → host-projection）
@@ -47,7 +47,7 @@ runtime-core (~46K LOC)       ← 核心生命周期/存储/trace/closeout
 ├── 396 tests / 13 ignored
 └── features: codegraph, host-{cursor,claude-code,codex,opencode}
 
-host-projection (~32K LOC)     ← 宿主适配层（从 runtime-core 迁出）
+host-projection (~34K LOC)     ← 宿主适配层（从 runtime-core 迁出）
 ├── hosts/                    ← 4 宿主 provider + hooks 实现
 │   ├── claude_code_hooks.rs  ← PreToolUse/PostToolUse/Stop/SubagentStart-Stop
 │   ├── codex_hooks/          ← Codex native hooks (5K LOC)
@@ -92,8 +92,7 @@ browser-mcp (~4.8K LOC)        ← 浏览器 MCP + session supervisor
 ├── browser_* MCP tools
 └── 8 tests（⚠️ 偏低）
 
-framework-profile (~1.7K LOC)  ← 运行时配置 profile
-└── 12 tests
+framework-profile（已并入 framework-kernel）← 运行时配置 profile
 
 rust_tools/ (6 活跃 MCP crates)
 ├── pdf_tool_rs (mcp-pdf)           ├── citation_tool_rs (mcp-citation)
@@ -109,20 +108,20 @@ rust_tools/ (6 活跃 MCP crates)
 | **单一权威真源** | `RUNTIME_REGISTRY.json` 为宿主闭集唯一权威 |
 | **L4/L5 解耦** | 宿主差异仅存于 L4 适配壳（host-projection） |
 | **二元编排** | 仅 `subagent` + `workflow`；team 已废弃 |
-| **纯 Rust 隔离** | PID + SQLite；tmux 已废弃 |
+| **纯 Rust 隔离** | PID + SQLite |
 | **配置驱动接入** | 新宿主 ≤ 1 天（5 文件：provider + AGENTS + docs + feature + registry） |
 | **Fail-closed** | 未知均默认拒绝 |
 | **函数指针注册表** | hooks 通过 OnceLock 函数指针注册（非 trait），82 个 slots |
-| **MCP 统一** | 4 个 MCP server 五宿主统一注册 |
+| **MCP 统一** | 4 个 MCP server 四宿主统一注册 |
 | **用户级配置** | MCP/hooks/settings 配置只放用户级（~/.config/），不在项目目录 |
 
-### 1.3 依赖关系约束 (v6 DAG)
+### 1.3 依赖关系约束 (v7 DAG)
 
 ```
 router-rs → runtime-core → host-projection → core-state
                          → core-policy
                          → routing-engine
-                         → framework-profile
+                         → framework-kernel (含 framework_profile)
                          → codegraph-rs (optional feature)
                          → browser-mcp (optional)
 ```
@@ -246,7 +245,7 @@ router-rs → runtime-core → host-projection → core-state
 | `pdf_tool_rs` | PDF 文本提取 | `pdf_read`, `pdf_info` | MCP: `mcp-pdf` |
 | `pptx_tool_rs` | PPT 全功能（大纲/QA/Office 检查） | `init`, `outline`, `render`, `qa`, `office` | MCP: `mcp-pptx` |
 
-> **已归档** (v6 §3.4)：`image_gen_rs`, `image_process_rs`, `pubmed_tool_rs`, `ref_corpus_tool_rs`, `screenshot_rs` — 无下游依赖，从 workspace 移除。
+> **已归档** (v6 之前)：`image_gen_rs`, `image_process_rs`, `pubmed_tool_rs`, `ref_corpus_tool_rs`, `screenshot_rs` — 无下游依赖，从 workspace 移除。
 
 ---
 
@@ -333,7 +332,7 @@ spawned → running → draining → completed
 
 ### 6.1 宿主闭集
 
-权威真源：`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`（五 id 闭集）。
+权威真源：`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`（四 id 闭集）。
 
 | 宿主 ID | install_tool | 运输模式 |
 |---------|-------------|---------|
@@ -342,39 +341,40 @@ spawned → running → draining → completed
 | `codex` | `codex` | `native-codex` |
 | `opencode` | `opencode` | `opencode-plugin` |
 
-> **退役 id** 不在闭集内；仅保留 stub 重定向页，见 [`MIGRATION.md`](../MIGRATION.md) 与 [`docs/hosts/`](hosts/) 下 `status: retired` 页。
+> **退役 id** 不在闭集内；迁移指引见 [`MIGRATION.md`](../MIGRATION.md)。
 
 ### 6.2 Hook 事件矩阵
 
 | 事件 | claude-code | cursor | codex | opencode |
 |------|:-----------:|:------:|:-----:|:--------:|
-| PreToolUse | ✅ core | — | ✅ | — |
-| UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | — |
-| PostToolUse | ✅ core | ✅ | ✅ | — |
-| Stop | ✅ core | ✅ | ✅ | — |
-| SessionStart | optional | ✅ | ✅ | — |
-| SubagentStart | optional | ✅ | ✅ ² | — |
-| SubagentStop | optional | ✅ | ✅ ² | — |
+| PreToolUse | ✅ core | — | ✅ | ✅ ⁴ |
+| UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | ✅ ⁴ |
+| PostToolUse | ✅ core | ✅ | ✅ | ✅ ⁴ |
+| Stop | ✅ core | ✅ | ✅ | ✅ ⁴ |
+| SessionStart | optional | ✅ | ✅ | ✅ ⁴ |
+| SubagentStart | optional | ✅ | ✅ ² | ✅ ⁴ |
+| SubagentStop | optional | ✅ | ✅ ² | ✅ ⁴ |
 
-¹ `beforeSubmitPrompt` 映射 · ² v0.133.0+
+¹ `beforeSubmitPrompt` 映射 · ² v0.133.0+ · ⁴ 通过 `router-rs opencode agent` Rust 统一后端（JS 插件 bridge → `tool.execute.before/after` / `session.idle`）
 
 ### 6.3 MCP 配置差异
 
 | 宿主 | 顶层 key | transport | 配置文件 |
 |------|----------|-----------|----------|
-| claude-code | `mcpServers` | `local`/`stdio` | `.claude/settings.json` |
-| cursor | `mcp_servers` | `stdio` | `.cursor/mcp.json` |
-| opencode | `mcp` | 无 type 字段 | `opencode.json` |
+| claude-code | `mcpServers` | `stdio` | `~/.claude/mcp.json` |
+| cursor | `mcpServers` | `stdio` | `~/.cursor/mcp.json` |
+| opencode | `mcp` | `local` | `~/.config/opencode/opencode.json` |
+| codex | `mcp_servers` (TOML) | `stdio` | `~/.codex/config.toml` |
 
-**§3.5 Schema Drift 三道闸**：写盘前 validate → 写盘后 readback → manifest 路径存在性
+**§14.7 Schema Drift 三道闸**：写盘前 validate → 写盘后 readback → manifest 路径存在性
 
-### 6.4 三档宿主能力 (v6)
+### 6.4 三档宿主能力 (v7)
 
 | 档位 | 宿主 | capabilities | session_supervisor | harness_capabilities |
 |------|------|-------------|-------------------|---------------------|
 | **S 档** | codex | 11 | codex_driver | 4 项 |
 | **A 档** | claude-code, cursor | 6 | mcp_bridge / unsupported | 4 项 |
-| **B 档** | opencode | 5 | unsupported | 2 项 |
+| **B 档** | opencode | 5 | unsupported | 4 项 |
 
 ### 6.5 编译嵌入矩阵
 

@@ -10,12 +10,12 @@ last_verified: "2026-06-13"
 
 | 层级 | Crate | 行数 | 文档 |
 |------|-------|------|------|
-| B0 | `framework-kernel` | ~1,400 | [framework-kernel.md](framework-kernel.md) |
-| B1 | `runtime-core` | ~14,000 | [runtime-core.md](runtime-core.md) |
+| B0 | `framework-kernel` | ~3,900 | [framework-kernel.md](framework-kernel.md) |
+| B1 | `runtime-core` | ~38,000 | [runtime-core.md](runtime-core.md) |
 | B1 | `core-policy` | ~4,400 | [core-policy.md](core-policy.md) |
-| B1 | `core-state` | ~2,000 | （薄代理，见 runtime-core） |
-| B2 | `host-projection` | ~17,000 | [host-projection.md](host-projection.md) |
-| B2 | `browser-mcp` | ~6,100 | [browser-mcp.md](browser-mcp.md) |
+| B1 | `core-state` | ~6,900 | （薄代理，见 runtime-core） |
+| B2 | `host-projection` | ~34,000 | [host-projection.md](host-projection.md) |
+| B2 | `browser-mcp` | ~5,600 | [browser-mcp.md](browser-mcp.md) |
 
 ## 子模块详解
 

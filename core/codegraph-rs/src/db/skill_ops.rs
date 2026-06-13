@@ -1,4 +1,4 @@
-//! Skill metadata ingestion and FTS lookup (v6.5 codegraph integration).
+//! Skill metadata ingestion and FTS lookup.
 //!
 //! Stores each skill from `SKILL_MANIFEST.json` as a node with `kind="skill"`,
 //! `language="json"`, `file_path="manifest://SKILL_MANIFEST.json"`.

@@ -372,7 +372,7 @@ fn terminate_non_dry_run_without_pid_marks_interrupted() {
     assert_eq!(worker.status, "interrupted");
 }
 
-/// Roadmap v5 §6.4 cat.1: 8-way parallel spawn → terminate close stability (dry_run).
+/// 8-way parallel spawn → terminate close stability (dry_run).
 #[test]
 fn subagent_parallel_spawn_close_stability() {
     const N: usize = 8;
@@ -470,7 +470,7 @@ fn subagent_parallel_spawn_close_stability() {
     let _ = fs::remove_file(state_path);
 }
 
-/// Roadmap v5 §6.4 cat.1: subagent spawn → shutdown smoke (dry_run E2E via supervisor op API).
+/// subagent spawn → shutdown smoke (dry_run E2E via supervisor op API).
 #[test]
 fn subagent_lifecycle_spawn_terminate_shutdown_smoke() {
     let state_path = temp_state_path("subagent-lifecycle-smoke");
@@ -518,7 +518,7 @@ fn subagent_lifecycle_spawn_terminate_shutdown_smoke() {
     let _ = fs::remove_file(state_path);
 }
 
-/// Roadmap v5 §6.4 cat.1: spawn error path → blocked → dry_run terminate shutdown.
+/// spawn error path → blocked → dry_run terminate shutdown.
 #[test]
 fn subagent_spawn_error_shutdown_smoke() {
     let state_path = temp_state_path("error-shutdown-smoke");
@@ -692,7 +692,7 @@ fn sample_worker_for_idle_test(status: &str) -> WorkerSessionRecord {
     }
 }
 
-/// Roadmap v5 §6.4 cat.1: stale worker reaped on `list` after heartbeat TTL (dry_run, no real process).
+/// stale worker reaped on `list` after heartbeat TTL (dry_run, no real process).
 #[test]
 fn subagent_spawn_timeout_shutdown_smoke() {
     let state_path = temp_state_path("timeout-shutdown-smoke");
@@ -744,7 +744,7 @@ fn subagent_spawn_timeout_shutdown_smoke() {
     let _ = fs::remove_file(state_path);
 }
 
-/// Roadmap v5 §6.4 cat.1: after shutdown, supervisor must not leak locks, temps, or active workers.
+/// after shutdown, supervisor must not leak locks, temps, or active workers.
 #[test]
 fn subagent_resource_leak_detection() {
     const N: usize = 4;
@@ -843,7 +843,7 @@ fn subagent_resource_leak_detection() {
     let _ = fs::remove_dir_all(&state_dir);
 }
 
-/// Roadmap v5 §6.4 cat.1: non-dry_run real process spawn → terminate smoke (`smoke-shell` / `sleep 1`).
+/// non-dry_run real process spawn → terminate smoke (`smoke-shell` / `sleep 1`).
 ///
 /// Opt-in: `ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE=1` (skipped by default for CI).
 #[test]

@@ -1,4 +1,4 @@
-//! Trace stream replay / inspect / metadata I/O（Roadmap v5 P7：自 `cli/runtime_ops.inc` 下沉）。
+//! Trace stream replay / inspect / metadata I/O.
 
 use chrono::Utc;
 use serde_json::{json, Map, Value};

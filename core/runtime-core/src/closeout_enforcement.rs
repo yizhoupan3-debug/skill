@@ -377,15 +377,11 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         ));
     }
 
-    // NOTE(v7): task-scoped depth / `GOAL_STATE.completion_gates` alignment
-    // Status: Phase 3 pointer consolidation (3B/3C) completed 2026-06-02.
-    //   下一迭代目标：重新评估 closeout 与 completion_gates 对齐
-    //   ——Phase 3 合并完成后 state model 已简化 (5 files → 2 control-plane anchors),
-    //     closeout gate 应对齐 GOAL_STATE.completion_gates.min_depth_score。
-    // References:
-    //   - Contract: see `core/runtime-core/src/rfv_loop.rs` reasoning depth logic
-    // Expected behavior when implemented: closeout gate should check min_depth_score
-    //   from GOAL_STATE.completion_gates against depth_compliance_aggregate output
+    // TODO: task-scoped depth / `GOAL_STATE.completion_gates` alignment
+    // Phase 3 pointer consolidation (3B/3C) completed 2026-06-02.
+    // Next: re-evaluate closeout vs completion_gates alignment — state model simplified
+    //   (5 files → 2 control-plane anchors), closeout gate should align with
+    //   GOAL_STATE.completion_gates.min_depth_score against depth_compliance_aggregate output.
 
     // R7 (depth review P0-B): verification_status=passed but record carries no command evidence
     // and the optional EvidenceContext (when supplied by orchestrator) shows no successful

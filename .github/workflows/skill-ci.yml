@@ -14,7 +14,6 @@ on:
       - '.github/workflows/**'
       - 'AGENTS.md'
       - '.codex/**'
-      - 'configs/codex/**'
       - 'configs/framework/**'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -31,7 +30,6 @@ on:
       - '.github/workflows/**'
       - 'AGENTS.md'
       - '.codex/**'
-      - 'configs/codex/**'
       - 'configs/framework/**'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -75,7 +73,7 @@ jobs:
           cargo install cargo-deny --locked
           cargo deny check
 
-      - name: Build antigravity crates
+      - name: Build core-state crate
         run: |
           cargo build --release --manifest-path core/core-state/Cargo.toml
 
@@ -106,7 +104,7 @@ jobs:
       - name: Run Rust CLI tools integration tests
         run: cargo test --test rust_cli_tools
 
-      - name: Run antigravity crate tests
+      - name: Run core-state crate tests
         run: cargo test --manifest-path core/core-state/Cargo.toml
 
       - name: Run router-rs crate tests
@@ -174,7 +172,6 @@ jobs:
           - "host-claude-code"
           - "host-codex"
           - "host-opencode"
-          - "host-antigravity"
           - "no-default-features"
     steps:
       - uses: actions/checkout@v4
@@ -228,7 +225,7 @@ jobs:
       - name: Build workspace
         run: cargo build --workspace
 
-      - name: Run antigravity crate tests
+      - name: Run core-state crate tests
         run: cargo test --manifest-path core/core-state/Cargo.toml
 
       - name: Run router-rs crate tests

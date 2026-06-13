@@ -1,4 +1,4 @@
-//! MCP tool schema + dispatch (Roadmap v5 §2.8 W2 / CG-2).
+//! MCP tool schema + dispatch.
 
 use crate::db::node_ops::{ResolveOutcome, SymbolFilter};
 use crate::CodeGraphIndex;

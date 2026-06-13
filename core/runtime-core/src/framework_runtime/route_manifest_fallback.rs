@@ -1,4 +1,4 @@
-//! SKILL_MANIFEST 冷表回退路由（Roadmap v5 P7：自 CLI common 下沉至 B3）。
+//! SKILL_MANIFEST 冷表回退路由。
 
 use std::path::{Path, PathBuf};
 

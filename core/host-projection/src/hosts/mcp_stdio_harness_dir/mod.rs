@@ -835,7 +835,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             },
                             "task_id": {
                                 "type": "string",
-                                "description": "task id（可选，默认从 .supervisor_state.json 读取当前活跃 task）",
+                                "description": "task id（可选，默认从 TASK_POINTERS.json 读取当前活跃 task）",
                             },
                             "session_id": {
                                 "type": "string",
@@ -1212,7 +1212,7 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path, connection_session_
             {
                 payload["allow_external_research"] = json!(er);
             }
-            // v6 session-scoped: inject connection_session_id if not explicit
+            // inject connection_session_id if not explicit
             let session_id = arguments
                 .get("session_id")
                 .and_then(Value::as_str)
@@ -1340,7 +1340,7 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
                 payload["validation_commands"] = json!(vc);
             }
 
-            // v6 session-scoped goal: pass through optional session_id, or inject connection-level
+            // pass through optional session_id, or inject connection-level
             let session_id = arguments
                 .get("session_id")
                 .and_then(Value::as_str)

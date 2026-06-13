@@ -1,7 +1,7 @@
 //! Minimal RFV loop surface for tests and goal/RFV mutex.
 
 use crate::state_manager::{
-    deactivate_goal_for_conflict_with_rfv, read_active_task_id, read_rfv_loop_state,
+    deactivate_goal_for_conflict_with_rfv, read_primary_task_id, read_rfv_loop_state,
     rfv_loop_state_path,
 };
 use crate::utils::atomic_write::write_atomic_json;
@@ -60,7 +60,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             let state = read_rfv_loop_state(&repo_root, task_id_override)?;
             let tid = task_id_override
                 .map(|s| s.to_string())
-                .or_else(|| read_active_task_id(&repo_root))
+                .or_else(|| read_primary_task_id(&repo_root))
                 .unwrap_or_default();
             let path = if tid.is_empty() {
                 PathBuf::new()
@@ -78,9 +78,9 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
         "start" | "upsert" => {
             let task_id = task_id_override
                 .map(|s| s.to_string())
-                .or_else(|| read_active_task_id(&repo_root))
+                .or_else(|| read_primary_task_id(&repo_root))
                 .ok_or_else(|| {
-                    "framework_rfv_loop start requires task_id in payload or active_task.json"
+                    "framework_rfv_loop start requires task_id in payload or TASK_POINTERS.json"
                         .to_string()
                 })?;
             path_guard::validate_task_id_component(&task_id)?;

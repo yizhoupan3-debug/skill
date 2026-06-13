@@ -1,4 +1,4 @@
-//! Roadmap v5 CG deferred: B1 semantic dispatch smoke for `mcp-codegraph` tools.
+//! B1 semantic dispatch smoke for `mcp-codegraph` tools.
 //!
 //! Verifies RUNTIME_REGISTRY managed MCP wiring and SKILL_MANIFEST allowedTools
 //! align with `codegraph_*` tool intents (no live MCP stdio required).

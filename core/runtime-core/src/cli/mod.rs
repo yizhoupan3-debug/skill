@@ -34,7 +34,7 @@ pub fn run(args: &args::Cli) -> Result<(), String> {
 
 pub use args::Cli;
 
-/// Roadmap v5 B7：薄 CLI 壳行数预算（不含 `runtime_ops` stdio 控制面）。
+/// 薄 CLI 壳行数预算（不含 `runtime_ops` stdio 控制面）。
 pub const CLI_THIN_SHELL_LINE_BUDGET: usize = 1500;
 
 /// `runtime_ops.inc` 行数上限（P7 增量切片：全量迁入 B3 前只减不增）。

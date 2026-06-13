@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# RETIRED 2026-06: ref_corpus_tool_rs archived before v6. This script is no longer maintained.
+echo "ERROR: install-ref-corpus-tool.sh has been retired. ref_corpus_tool_rs was archived before v6." >&2
+exit 1
 # Install the Rust `ref-corpus` CLI to ~/.local/bin (or REF_CORPUS_BIN_DIR).
 set -euo pipefail
 

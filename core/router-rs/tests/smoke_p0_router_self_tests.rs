@@ -1,4 +1,4 @@
-//! Roadmap v5 §6.2 P0 (#5.2.1): `router_self` binary install/validate/dispatch smoke.
+//! `router_self` binary install/validate/dispatch smoke.
 
 use crate::router_self::{
     install_router_rs_for_desktop_mcp_at, install_router_rs_to_bin_dir,

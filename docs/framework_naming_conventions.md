@@ -29,6 +29,7 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | Claude Code | `ROUTER_RS_CLAUDE_*` | Shell hook integration |
 | Cursor | `ROUTER_RS_CURSOR_*` | Cursor IDE integration |
 | Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
+| OpenCode | `ROUTER_RS_OPENCODE_*` | OpenCode MCP stdio |
 
 **默认值与语义**：`ROUTER_RS_*` 的完整表见 [`spec.md`](spec.md)（唯一裁判）。本文件只定义命名模式，不维护第二份 env 默认值表。
 

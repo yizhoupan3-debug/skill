@@ -1,4 +1,4 @@
-//! Stdio JSON op domain registry (Roadmap v5 P7：自 `cli/runtime_ops.inc` 下沉)。
+//! Stdio JSON op domain registry.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StdioOpDomain {

@@ -1,4 +1,4 @@
-//! Incremental index sync + filesystem watcher (Roadmap v5 §2.8 W3/W4).
+//! Incremental index sync + filesystem watcher.
 
 use crate::db::index_ops::{
     ingest_parsed_file_with_stmts, list_indexed_files, set_meta, IndexedFileMeta,

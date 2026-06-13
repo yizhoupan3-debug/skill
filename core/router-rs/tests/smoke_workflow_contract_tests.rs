@@ -1,4 +1,4 @@
-//! Roadmap v5 §6.4 cat.2: workflow script static contract smoke (meta.phases shape).
+//! workflow script static contract smoke (meta.phases shape).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -82,7 +82,7 @@ fn assert_workflow_dir_contract(workflow_dir: &Path) {
     );
 }
 
-/// Roadmap v5 §6.4 cat.2: every workflow entry script exposes meta.phases with titles.
+/// every workflow entry script exposes meta.phases with titles.
 #[test]
 fn workflow_single_phase_meta_contract_smoke() {
     assert_workflow_dir_contract(&workflow_scripts_dir());
@@ -141,7 +141,7 @@ fn workflow_multi_phase_sequential_contract(content: &str) -> Result<(), String>
     Ok(())
 }
 
-/// Roadmap v5 §6.4 cat.2: at least one workflow script runs multi-phase in meta order (static).
+/// at least one workflow script runs multi-phase in meta order (static).
 #[test]
 fn workflow_multi_phase_sequential_smoke() {
     let workflow_dir = workflow_scripts_dir();
@@ -214,7 +214,7 @@ fn workflow_verify_outer_catch_ok(content: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Roadmap v5 §6.4 cat.2: top-level pipeline workflows isolate agent failures via .catch().
+/// top-level pipeline workflows isolate agent failures via .catch().
 #[test]
 fn workflow_error_isolation_smoke() {
     let workflow_dir = workflow_scripts_dir();
@@ -285,7 +285,7 @@ fn workflow_parallel_pipeline_contract(content: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Roadmap v5 §6.4 cat.2: at least one workflow combines Scan `parallel` with Verify `pipeline` (static).
+/// at least one workflow combines Scan `parallel` with Verify `pipeline` (static).
 #[test]
 fn workflow_parallel_pipeline_smoke() {
     let workflow_dir = workflow_scripts_dir();
@@ -366,7 +366,7 @@ fn workflow_state_isolation_contract(content: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Roadmap v5 §6.4 cat.4: workflow agents stay within declared phase boundaries (static).
+/// workflow agents stay within declared phase boundaries (static).
 #[test]
 fn workflow_state_isolation_smoke() {
     let workflow_dir = workflow_scripts_dir();

@@ -1,5 +1,4 @@
 //! Runtime event transport / handoff / checkpoint resume manifest descriptors.
-//! Roadmap v5 P7：自 `cli/runtime_ops.inc` 下沉至 B3。
 
 use serde_json::{json, Value};
 

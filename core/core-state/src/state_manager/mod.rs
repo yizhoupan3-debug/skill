@@ -142,7 +142,7 @@ pub fn read_goal_state(
     let raw = fs::read_to_string(&path).map_err(|err| format!("read GOAL_STATE: {err}"))?;
     let mut value: Value =
         serde_json::from_str(&raw).map_err(|err| format!("parse GOAL_STATE: {err}"))?;
-    // v6 session-scoped goal: check session_id staleness
+    // session-scoped goal: check session_id staleness
     annotate_goal_staleness(&mut value);
     Ok(Some(value))
 }
@@ -161,7 +161,7 @@ pub fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<
     }
     let raw = fs::read_to_string(&path).ok()?;
     let mut value: Value = serde_json::from_str(&raw).ok()?;
-    // v6 session-scoped goal: annotate staleness
+    // session-scoped goal: annotate staleness
     annotate_goal_staleness(&mut value);
     let tid_out = task_id
         .trim()
@@ -777,7 +777,7 @@ mod tests {
             "task_id": "nogate",
         }))
         .expect("complete without evidence");
-        // v6: complete auto-deletes GOAL_STATE.json
+        // complete auto-deletes GOAL_STATE.json
         let goal_path = goal_state_path_for_task(&repo, "nogate").expect("goal path");
         assert!(!goal_path.is_file(), "GOAL_STATE should be deleted after complete");
         let _ = fs::remove_dir_all(&repo);
@@ -922,7 +922,7 @@ mod tests {
             "task_id": "gok",
         }))
         .expect("complete ok");
-        // v6: complete auto-deletes GOAL_STATE.json
+        // complete auto-deletes GOAL_STATE.json
         let goal_path = goal_state_path_for_task(&repo, "gok").expect("goal path");
         assert!(!goal_path.is_file(), "GOAL_STATE should be deleted after complete");
         let _ = fs::remove_dir_all(&repo);
@@ -1001,7 +1001,7 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
-    /// v6 session-scoped: start writes session_id, complete deletes GOAL_STATE.json
+    /// session-scoped: start writes session_id, complete deletes GOAL_STATE.json
     #[test]
     fn goal_session_scoped_start_writes_session_id_and_complete_deletes() {
         let suffix = SystemTime::now()
@@ -1053,7 +1053,7 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
-    /// v6 session-scoped: stale detection when session_id mismatches
+    /// session-scoped: stale detection when session_id mismatches
     #[test]
     fn goal_read_annotates_stale_when_session_id_mismatches() {
         let suffix = SystemTime::now()
@@ -1095,7 +1095,7 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
-    /// v6 session-scoped: same session_id is NOT stale
+    /// session-scoped: same session_id is NOT stale
     #[test]
     fn goal_read_not_stale_when_session_id_matches() {
         let suffix = SystemTime::now()
@@ -1132,7 +1132,7 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
-    /// v6 session-scoped: legacy goals without session_id are NOT stale (backward compat)
+    /// session-scoped: legacy goals without session_id are NOT stale (backward compat)
     #[test]
     fn goal_read_legacy_without_session_id_not_stale() {
         let suffix = SystemTime::now()
@@ -1171,7 +1171,7 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
-    /// v6: stale goals do NOT request continuation
+    /// stale goals do NOT request continuation
     #[test]
     fn stale_goal_does_not_request_continuation() {
         let mut goal = json!({

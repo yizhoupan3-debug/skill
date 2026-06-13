@@ -20,11 +20,10 @@ pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
     "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
 /// `retrieval_trace` prose fields must be at least this many **trimmed** chars under strict mode.
 pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
-/// Allowed `verify_result` enum (uppercase); see `reasoning-depth-contract.md`.
+/// Allowed `verify_result` enum (uppercase).
 /// `append_round` rejects values outside this set so PASS/FAIL is auditable, not free-form.
 pub const ALLOWED_VERIFY_RESULTS: &[&str] = &["PASS", "FAIL", "SKIPPED", "UNKNOWN"];
 
-// NOTE(v7): integrate strict validation path with external research API
 /// Heuristic: source string looks like a machine-checkable external pointer (URL, DOI, arXiv, …).
 pub fn source_traceable_heuristic(s: &str) -> bool {
     let t = s.trim();

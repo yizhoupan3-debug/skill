@@ -1,4 +1,4 @@
-//! Roadmap v5 §4.1: object-safe host abstraction for B4 (`Box<dyn HostProvider>` registry).
+//! Object-safe host abstraction (`Box<dyn HostProvider>` registry).
 //!
 //! P4: `HostLifecycle` / `HostToolExecutor` / `HostTelemetry` expose static metadata hooks
 //! consumed by `pre_tool_use_guard` and `host_integration` without registry I/O.

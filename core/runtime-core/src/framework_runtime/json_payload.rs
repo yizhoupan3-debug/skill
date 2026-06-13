@@ -1,5 +1,4 @@
 //! JSON payload field extractors shared by B3 runtime control-plane modules.
-//! Roadmap v5 P7：自 `cli/runtime_ops.inc` 下沉。
 
 use serde_json::Value;
 

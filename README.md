@@ -1,12 +1,10 @@
-# Codex + Cursor Skill System Handoff Guide
+# Skill System — 四宿主共用框架
 
-这份仓库是一整套给 Codex 和 Cursor 共用的 skill 系统：包含 `skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。把这个仓库通过 GitHub 分享给别人后，对方可以在 Windows 上克隆、验证，并按本机的 `CODEX_HOME` / `CURSOR_HOME` 或工作区路径启用；不要依赖某台机器的绝对路径。
+这份仓库是一整套给 Claude Code、Codex、Cursor 和 OpenCode 共用的 skill 系统：包含 `skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。把这个仓库通过 GitHub 分享给别人后，对方可以在 Windows 上克隆、验证，并按本机的宿主全局路径或工作区路径启用；不要依赖某台机器的绝对路径。
 
 **使用者一页纸**（宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检命令）：[`docs/hosts/`](docs/hosts/) + [`AGENTS.md`](AGENTS.md)。
 
-**近期变更（2026-06）**：闭集宿主收敛为 **四宿主**（`codex`、`claude-code`、`cursor`、`opencode`）；`claude-desktop`、`codex-app`、`codex-cli` 已退役 — 见 [`MIGRATION.md`](MIGRATION.md) §闭集宿主收敛（2026-06）。
-
-**近期变更（2026-05）**：`/autopilot` 已退役（用 `/implementx`）；Cursor hooks 默认 **7 事件**减法闭集；`docs/plans/` 与 `docs/history/` 过期 stub 已移除（索引见 [`docs/plans/README.md`](docs/plans/README.md)）；控制面硬化（registry 磁盘 loader、`host_projection_narrative.json`、生成物 metadata-only doctor）见 [`MIGRATION.md`](MIGRATION.md) 与 [`docs/spec.md`](docs/spec.md)。文档地图：[`docs/README.md`](docs/README.md)。
+**近期变更（2026-06）**：闭集宿主收敛为 **四宿主**（`codex`、`claude-code`、`cursor`、`opencode`）；`claude-desktop`、`codex-app`、`codex-cli` 已退役 — 见 [`MIGRATION.md`](MIGRATION.md)。历史变更详见 [`MIGRATION.md`](MIGRATION.md)。文档地图：[`docs/README.md`](docs/README.md)。
 
 ## 我该怎么入门（两条路径）
 
@@ -24,7 +22,7 @@
 
 ## 这套系统包含什么
 
-- `AGENTS.md`：Codex 和 Cursor 进入本仓库时共同遵守的项目规则。
+- `AGENTS.md`：四宿主（Claude Code、Codex、Cursor、OpenCode）进入本仓库时共同遵守的项目规则。
   - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 [`AGENTS_CODEX.md`](AGENTS_CODEX.md) → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
 - `docs/README.md`：文档索引（阅读顺序、主题表）。
 - `docs/spec.md`：统一规约（架构、五层模型、沙箱、路由、Closeout）。
@@ -181,8 +179,8 @@ codex
 
 - **My 生命周期**（与 Cursor 一致）：`/discussx` → `/planx` → `/implementx` → `/verifyx`；全局叙事在 **`~/.claude/rules/framework.md`**（对齐 `~/.cursor/rules/framework.mdc`）。
 - Hooks：`.claude/settings.json` 合并 **4 事件** → [`claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)；env [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env)。
-- **安装（推荐）**：`./scripts/install-claude.sh`（project + user）。详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)。
-- **其它仓库**：`./scripts/claude-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`，再 `install-claude.sh --scope user`。
+- **安装（推荐）**：`cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to claude-code`（project + user）。详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)。
+- **其它仓库**：`cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to claude-code --repo-root "$SKILL_FRAMEWORK_ROOT"`。
 
 **别的目录验收清单（Cursor 工作区 = 目标项目根）**
 

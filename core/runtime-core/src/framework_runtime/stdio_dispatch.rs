@@ -1,4 +1,4 @@
-//! Stdio JSON request dispatch (Roadmap v5 P7：自 `cli/runtime_ops.inc` 下沉)。
+//! Stdio JSON request dispatch.
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;

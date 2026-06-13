@@ -1,4 +1,4 @@
-//! Roadmap v5 §2.3 P0 / §6.2: independent `trace_runtime` compaction smoke (module-local).
+//! independent `trace_runtime` compaction smoke (module-local).
 
 use crate::trace_runtime::{
     compact_trace_stream, record_trace_event, TraceCompactRequestPayload,

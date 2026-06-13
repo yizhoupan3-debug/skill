@@ -1,4 +1,4 @@
-//! Lightweight online evolution observer (Roadmap v5 §2.9 EV-5).
+//! Lightweight online evolution observer.
 //!
 //! Subscribes to `TelemetryEvent` via a fan-out `TelemetryWriter`, maintains sliding-window
 //! counters, and appends threshold alerts to `artifacts/evolution/alerts.jsonl`.

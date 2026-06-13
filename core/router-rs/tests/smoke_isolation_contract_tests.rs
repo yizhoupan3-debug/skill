@@ -1,4 +1,4 @@
-//! Roadmap v5 §6.4 cat.4: subagent context + filesystem isolation contracts.
+//! subagent context + filesystem isolation contracts.
 
 use std::fs;
 use std::path::Path;

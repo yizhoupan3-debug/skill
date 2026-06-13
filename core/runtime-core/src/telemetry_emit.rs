@@ -1,4 +1,4 @@
-//! Thin telemetry journal emitters (Roadmap v5 §2.9 EV-2).
+//! Thin telemetry journal emitters.
 
 use core_state::goal_prediction::{GoalStatePrediction, PredictionVerification};
 use framework_kernel::{emit_telemetry, PredictionOutcomeCheck, TelemetryEvent};

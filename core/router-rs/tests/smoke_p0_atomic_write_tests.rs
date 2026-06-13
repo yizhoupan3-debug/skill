@@ -1,4 +1,4 @@
-//! Roadmap v5 §6.2 P0: `state_manager/atomic_write` coverage
+//! `state_manager/atomic_write` coverage
 //! (physical module: `core-state/utils/atomic_write.rs`, re-exported as `crate::atomic_write`).
 
 use crate::atomic_write::{write_atomic_json, write_atomic_text};

@@ -1,4 +1,4 @@
-//! Roadmap v5 §6.2 P0: `hook_policy/{bash_guard,mcp_safety,contract}` coverage
+//! `hook_policy/{bash_guard,mcp_safety,contract}` coverage
 //! (physical module: `core-policy/hook_policy.rs`).
 
 use core_policy::hook_policy::{

@@ -1,4 +1,4 @@
-//! Developer Exemption: explicit env gate + canonical path prefix allowlist (Roadmap v5 §4.4).
+//! Developer Exemption: explicit env gate + canonical path prefix allowlist.
 //!
 //! Enable via `core-policy` feature `dev-exempt` and `ROUTER_RS_DEV_EXEMPT=1`.
 

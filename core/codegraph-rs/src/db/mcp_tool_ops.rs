@@ -1,4 +1,4 @@
-//! MCP tool registry ingestion and FTS lookup (v6.5 codegraph integration).
+//! MCP tool registry ingestion and FTS lookup.
 //!
 //! Stores each managed MCP tool as a node with `kind="mcp_tool"`,
 //! `language="json"`, `file_path="registry://RUNTIME_REGISTRY.json"`.

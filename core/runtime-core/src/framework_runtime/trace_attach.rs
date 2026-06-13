@@ -1,4 +1,4 @@
-//! Runtime event attach / subscribe / cleanup（Roadmap v5 P7：自 `cli/runtime_ops.inc` 下沉）。
+//! Runtime event attach / subscribe / cleanup.
 
 use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};

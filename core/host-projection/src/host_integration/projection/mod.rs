@@ -825,7 +825,7 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
 
 - 四事件：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`（`.claude/settings.json` + `router-rs claude hook`）。
 - Goal/RFV：`framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/`。
-- 默认 **`lifecycle_profile: my-light`**：closeout/complete 为 advisory，suppress review Stop nudge；非 my-light 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/spec.md` §0.1）。
+- 默认 **`lifecycle_profile: my-light`**：closeout/complete 为 advisory，suppress review Stop nudge；非 my-light 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/spec.md` §6）。
 - 检查点：`session_checkpoint`（非自动）。
 
 ## MCP（可选）
@@ -933,7 +933,7 @@ pub fn paperplain_mcp_server_payload() -> Value {
     })
 }
 
-/// Independent `mcp-codegraph` stdio server (Roadmap v5 §2.8 W3 / CG-3).
+/// Independent `mcp-codegraph` stdio server.
 pub fn codegraph_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     let repo_root = roots.project_root.to_string_lossy();
     match crate::host_integration::roots::resolve_mcp_codegraph_command(&roots.framework_root) {

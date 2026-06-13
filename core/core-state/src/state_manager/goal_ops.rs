@@ -550,7 +550,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 None,
             )?;
             neutralize_task_pointers_for_task(&repo_root, &task_id)?;
-            // Auto-delete GOAL_STATE.json after successful completion (v6 session-scoped goal)
+            // Auto-delete GOAL_STATE.json after successful completion (session-scoped goal)
             let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
             if goal_path.is_file() {
                 let _ = fs::remove_file(&goal_path);

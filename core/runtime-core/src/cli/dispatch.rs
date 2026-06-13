@@ -1,4 +1,4 @@
-//! 子命令薄分发壳（Roadmap v5 B7）：解析后的 `RouterCommand` → B3 `router_command_dispatch`。
+//! 子命令薄分发壳：解析后的 `RouterCommand` → B3 `router_command_dispatch`。
 
 use super::args::*;
 use super::common::{manifest_fallback_path, print_json_value, route_task_with_manifest_fallback};

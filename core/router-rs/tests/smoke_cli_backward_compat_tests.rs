@@ -1,4 +1,4 @@
-//! Roadmap v5 P10: CLI top-level subcommand backward compatibility (parse-only smoke).
+//! CLI top-level subcommand backward compatibility (parse-only smoke).
 
 use clap::Parser;
 

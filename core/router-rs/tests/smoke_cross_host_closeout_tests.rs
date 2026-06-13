@@ -1,4 +1,4 @@
-//! Roadmap v5 §6.4 cat.3: cross-host closeout + evidence write consistency (registry-driven).
+//! cross-host closeout + evidence write consistency (registry-driven).
 
 use std::fs;
 use std::path::{Path, PathBuf};

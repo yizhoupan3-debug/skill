@@ -1,4 +1,4 @@
-//! Stdio / live-execute JSON 载荷类型（Roadmap v5 P7：自 `cli/args.rs` 下沉，减轻 B7 行数）。
+//! Stdio / live-execute JSON 载荷类型。
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

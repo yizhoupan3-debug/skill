@@ -29,7 +29,7 @@ depends_on:
 | Env 命名模式 | [framework_naming_conventions.md](framework_naming_conventions.md) |
 | Profile 契约 | [framework_profile_contract.md](framework_profile_contract.md) |
 | Git 规范 | [git_hygiene.md](git_hygiene.md) |
-| Cursor 子代理 hook 契约 | [hosts/cursor.md](hosts/cursor.md) |
+| Cursor 子代理 hook 契约 | [references/cursor-subagent-hook-contract.md](references/cursor-subagent-hook-contract.md) |
 | REVIEW_GATE ADR | [adr/ADR-review-gate-lite.md](adr/ADR-review-gate-lite.md) |
 | Review 流程 | [references/review-protocol.md](references/review-protocol.md) |
 | Office CLI 工具 | [references/office-document-clis.md](references/office-document-clis.md) |

@@ -1,4 +1,4 @@
-//! Roadmap v5 §6.2 P0: `state_manager/rfv_state` coverage at router-rs boundary
+//! `state_manager/rfv_state` coverage at router-rs boundary
 //! (physical module: `core/core-state` → `core_state::state_manager`).
 
 use core_state::state_manager::{

@@ -1,4 +1,4 @@
-//! CodeGraph MCP thin dispatch (Roadmap v5 B10).
+//! CodeGraph MCP thin dispatch.
 //!
 //! Runs as an independent stdio MCP surface — never inside `browser_mcp`.
 
