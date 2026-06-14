@@ -115,7 +115,7 @@ mod resolve_repo_root_tests {
         fs::create_dir_all(tmp.join("configs/framework")).unwrap();
         fs::write(
             tmp.join("configs/framework/RUNTIME_REGISTRY.json"),
-            r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v2","framework_commands":{}}"#,
         )
         .unwrap();
         fs::create_dir_all(tmp.join("core/router-rs/src")).unwrap();

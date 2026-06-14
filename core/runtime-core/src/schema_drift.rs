@@ -107,7 +107,7 @@ pub struct SchemaDriftCheckResponse {
     pub drift: Vec<SchemaDriftDriftItem>,
 }
 
-pub fn resolve_task_id_for_schema_drift(repo_root: &Path, task_id: Option<&str>) -> Result<String, String> {
+pub fn resolve_task_id_for_schema_drift(_repo_root: &Path, task_id: Option<&str>) -> Result<String, String> {
     if let Some(id) = task_id.map(str::trim).filter(|s| !s.is_empty()) {
         crate::path_guard::safe_task_id_component(id)
             .ok_or_else(|| format!("schema-drift: invalid task_id {:?}", id))?;

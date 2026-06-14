@@ -8,19 +8,229 @@ pub use projection_bootstrap::*;
 pub use projection_host_ops::*;
 pub use projection_manifest::*;
 
+/// Load managed MCP server IDs from RUNTIME_REGISTRY.json.
+pub fn registry_managed_mcp_server_ids(
+    framework_root: &Path,
+) -> Result<Vec<String>, String> {
+    let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
+    Ok(registry
+        .get("managed_mcp_servers")
+        .and_then(Value::as_object)
+        .map(|servers| servers.keys().cloned().collect())
+        .unwrap_or_default())
+}
+
+/// Generic router-rs-framework MCP payload, parameterized by host label.
+/// Host label is resolved from RUNTIME_REGISTRY.host_targets.metadata.<host>.install_tool.
+pub fn host_router_rs_framework_payload(
+    roots: &ResolvedProjectionRoots,
+    host_label: &str,
+    description: &str,
+) -> Value {
+    make_mcp_server_payload(
+        roots,
+        &[
+            host_label,
+            "agent",
+            "--repo-root",
+            roots.project_root.to_string_lossy().as_ref(),
+        ],
+        description,
+    )
+}
+
+/// Resolve host install_tool label from RUNTIME_REGISTRY for MCP payload construction.
+pub fn registry_host_install_tool(
+    framework_root: &Path,
+    host_id: &str,
+) -> Result<String, String> {
+    let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
+    registry
+        .get("host_targets")
+        .and_then(|t| t.get("metadata"))
+        .and_then(|m| m.get(host_id))
+        .and_then(|h| h.get("install_tool"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| format!("host {host_id} not found in RUNTIME_REGISTRY.host_targets.metadata"))
+}
+
+/// Shared MCP server binary validation loop.
+/// Reads managed server IDs from registry, validates each server's binary from the given JSON config.
+/// `mcp_servers_key` is the JSON key containing server entries (e.g. "mcp_servers" for Cursor, "mcpServers" for OpenCode).
+pub fn validate_mcp_servers_from_json(
+    roots: &ResolvedProjectionRoots,
+    config_payload: Option<&Value>,
+    mcp_servers_key: &str,
+) -> (serde_json::Map<String, Value>, bool, Option<String>) {
+    let mut server_status: serde_json::Map<String, Value> = serde_json::Map::new();
+    let mut all_valid = true;
+    let mut first_error = None;
+
+    let managed_servers = match registry_managed_mcp_server_ids(&roots.framework_root) {
+        Ok(ids) => ids,
+        Err(err) => {
+            return (server_status, false, Some(err));
+        }
+    };
+
+    let Some(payload) = config_payload else {
+        return (server_status, false, Some("No MCP config found".to_string()));
+    };
+    let servers = payload.get(mcp_servers_key).and_then(Value::as_object);
+    for server_id in &managed_servers {
+        let entry = servers.and_then(|s| s.get(server_id.as_str()));
+        if let Some(cmd) = entry.and_then(|v| v.get("command")).and_then(Value::as_str) {
+            match validate_mcp_command_binary(cmd, Some(&roots.framework_root)) {
+                Ok(()) => {
+                    // Deep validation for router-rs-based servers
+                    if server_id.as_str() == "router-rs-framework" && cmd != "cargo" {
+                        let resolved = if cmd == "router-rs" {
+                            resolve_stable_router_rs_executable(&roots.framework_root)
+                        } else {
+                            Some(PathBuf::from(cmd))
+                        };
+                        match resolved.and_then(|path| {
+                            framework_kernel::router_self::validate_router_rs_binary_runnable(&path).ok()
+                        }) {
+                            Some(()) => { server_status.insert(server_id.to_string(), json!({"binary_valid": true})); }
+                            None => {
+                                all_valid = false;
+                                let msg = "router-rs not found or not runnable; run `router-rs self install`".to_string();
+                                if first_error.is_none() { first_error = Some(msg.clone()); }
+                                server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": msg}));
+                            }
+                        }
+                    } else {
+                        server_status.insert(server_id.to_string(), json!({"binary_valid": true}));
+                    }
+                }
+                Err(err) => {
+                    all_valid = false;
+                    if first_error.is_none() { first_error = Some(err.clone()); }
+                    server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": err}));
+                }
+            }
+        } else {
+            all_valid = false;
+            let msg = format!("missing or incomplete {server_id} payload");
+            if first_error.is_none() { first_error = Some(msg.clone()); }
+            server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": msg}));
+        }
+    }
+
+    (server_status, all_valid, first_error)
+}
+
+// ── MCP Config Format Abstraction ──────────────────────────────────────────
+
+/// MCP config format: JSON with a top-level key, or TOML with marker sections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpConfigFormat {
+    /// JSON config with a named top-level key (e.g. "mcp_servers" or "mcpServers").
+    Json { top_level_key: &'static str },
+    /// TOML config with `# managed_by: skill-framework · mcp_servers.<id>` marker sections.
+    Toml,
+}
+
+impl McpConfigFormat {
+    /// Cursor uses `mcp_servers` (underscore).
+    pub const CURSOR: Self = Self::Json { top_level_key: "mcp_servers" };
+    /// Claude and OpenCode use `mcpServers` (camelCase).
+    pub const CLAUDE: Self = Self::Json { top_level_key: "mcpServers" };
+    pub const OPENCODE: Self = Self::Json { top_level_key: "mcpServers" };
+    /// Codex uses TOML sections with managed-by markers.
+    pub const CODEX: Self = Self::Toml;
+}
+
+/// Insert/update managed MCP servers into a JSON config file.
+/// Returns whether the file was changed.
+pub fn mcp_json_upsert_servers(
+    path: &Path,
+    format: McpConfigFormat,
+    entries: &[(&str, Value)],
+) -> Result<bool, String> {
+    let McpConfigFormat::Json { top_level_key } = format else {
+        return Err("mcp_json_upsert_servers called with non-JSON format".to_string());
+    };
+    let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
+    if !payload.is_object() {
+        payload = json!({});
+    }
+    let root = payload.as_object_mut().unwrap();
+    let servers = root
+        .entry(top_level_key.to_string())
+        .or_insert_with(|| json!({}));
+    if !servers.is_object() {
+        *servers = json!({});
+    }
+    let map = servers.as_object_mut().unwrap();
+    let mut changed = false;
+    for (server_id, value) in entries {
+        changed |= map.get(*server_id) != Some(value);
+        map.insert(server_id.to_string(), value.clone());
+    }
+    if changed {
+        write_json_if_changed(path, &payload)?;
+    }
+    Ok(changed)
+}
+
+/// Remove managed MCP servers from a JSON config file.
+/// Returns whether the file was changed.
+pub fn mcp_json_remove_servers(
+    path: &Path,
+    framework_root: &Path,
+    format: McpConfigFormat,
+) -> Result<bool, String> {
+    let McpConfigFormat::Json { top_level_key } = format else {
+        return Err("mcp_json_remove_servers called with non-JSON format".to_string());
+    };
+    let Some(mut payload) = read_json_if_exists(path)? else {
+        return Ok(false);
+    };
+    let Some(root) = payload.as_object_mut() else {
+        return Ok(false);
+    };
+    let managed_keys = registry_managed_mcp_server_ids(framework_root)?;
+    let mut changed = false;
+    if let Some(servers) = root.get_mut(top_level_key).and_then(Value::as_object_mut) {
+        for key in &managed_keys {
+            changed |= servers.remove(key.as_str()).is_some();
+        }
+        if servers.is_empty() {
+            root.remove(top_level_key);
+        }
+    }
+    if changed {
+        write_json_if_changed(path, &payload)?;
+    }
+    Ok(changed)
+}
+
+/// Build managed_key_paths for a JSON MCP config host from the registry.
+pub fn mcp_json_managed_key_paths(
+    framework_root: &Path,
+    format: McpConfigFormat,
+) -> Result<Vec<String>, String> {
+    let McpConfigFormat::Json { top_level_key } = format else {
+        return Ok(vec![]);
+    };
+    Ok(registry_managed_mcp_server_ids(framework_root)?
+        .iter()
+        .map(|id| format!("{top_level_key}.{id}"))
+        .collect())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn install_native_integration(
     repo_root: &Path,
     home_config_path: &Path,
-    home_codex_skills_path: &Path,
     bootstrap_output_dir: Option<&Path>,
-    install_home_codex_skills_link: bool,
     install_default_bootstrap: bool,
 ) -> Result<Value, String> {
     let repo_root = normalize_path(repo_root)?;
     let home_config_path = normalize_path(home_config_path)?;
-    let _ = home_codex_skills_path; // no longer used: surface removed
-    let _ = install_home_codex_skills_link; // no longer used: surface removed
     let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
 
     let created_config = ensure_config_file(&home_config_path)?;
@@ -42,7 +252,6 @@ pub fn install_native_integration(
         "success": true,
         "repo_root": repo_root.to_string_lossy(),
         "home_config_path": home_config_path.to_string_lossy(),
-        "home_codex_skills_path": home_codex_skills_path.to_string_lossy(),
         "codex_prompt_entrypoints": prompt_entrypoints,
         "created_config": created_config,
         "hooks_enabled": false,
@@ -155,10 +364,21 @@ pub fn validate_cleanup_scope(
         return Ok(());
     }
     for tool in tools {
-        let explicit_home = projection_adapter(tool)
-            .map(|adapter| (adapter.explicit_home)(command))
-            .unwrap_or(true);
-        if !explicit_home && command.home.is_none() {
+        let host_id = projection_adapter(tool)
+            .map(|a| a.host_id)
+            .unwrap_or(tool.as_str());
+        let env_var = format!("{}_HOME", host_id.to_uppercase().replace('-', "_"));
+        // Check: --home flag, host-specific --<host>-home CLI arg, or $HOST_HOME env var.
+        // The CLI arg check mirrors the old per-host *_home_explicit() functions.
+        let host_cli_home_set = match host_id {
+            "codex" => command.codex_home.is_some(),
+            "cursor" => command.cursor_home.is_some(),
+            "claude-code" => command.claude_home.is_some(),
+            "opencode" => command.opencode_home.is_some(),
+            _ => false,
+        };
+        let explicit_home = command.home.is_some() || host_cli_home_set || std::env::var_os(&env_var).is_some();
+        if !explicit_home {
             return Err(format!(
                 "user-scope cleanup for {tool} requires explicit host-home resolution; pass --codex-home/--cursor-home/--claude-home, --home, or the matching host HOME environment variable"
             ));
@@ -218,13 +438,9 @@ pub fn resolved_roots_payload(
             host_home_roots.insert(host_id.clone(), Value::Null);
             continue;
         }
-        let adapter = projection_adapter(tool).ok_or_else(|| {
-            format!(
-                "resolved_roots_payload: unsupported skills-install tool `{tool}` \
-                 (extend host projection adapters when adding hosts)"
-            )
-        })?;
-        host_home_roots.insert(host_id.clone(), json!((adapter.home_root)(roots)));
+        let _ = tool; // tool not needed for home_root; host_id suffices
+        let home = roots.host_home_root(host_id).to_string_lossy().into_owned();
+        host_home_roots.insert(host_id.clone(), json!(home));
     }
     Ok(json!({
         "framework_root": roots.framework_root.to_string_lossy(),
@@ -280,58 +496,22 @@ pub fn default_projection_tools_for_scope(
     Ok(tools)
 }
 
+/// Lightweight adapter metadata derived from RUNTIME_REGISTRY.
+/// Install/status/remove are dispatched by tool name (match), not function pointers.
 pub struct HostProjectionAdapter {
-    tool: &'static str,
-    host_id: &'static str,
-    aliases: &'static [&'static str],
-    install: fn(&ResolvedProjectionRoots, &str) -> Result<Value, String>,
-    status: fn(&ResolvedProjectionRoots) -> Result<Value, String>,
-    remove: fn(&ResolvedProjectionRoots, &str, bool) -> Result<Value, String>,
-    home_root: fn(&ResolvedProjectionRoots) -> String,
-    explicit_home: fn(&ProjectionCommand) -> bool,
+    pub tool: &'static str,
+    pub host_id: &'static str,
+    pub aliases: &'static [&'static str],
 }
 
-const HOST_PROJECTION_ADAPTERS: &[HostProjectionAdapter] = &[
-    HostProjectionAdapter {
-        tool: "cursor",
-        host_id: "cursor",
-        aliases: &[],
-        install: install_cursor_projection,
-        status: cursor_projection_status,
-        remove: remove_cursor_projection,
-        home_root: cursor_home_root_string,
-        explicit_home: cursor_home_explicit,
-    },
-    HostProjectionAdapter {
-        tool: "claude",
-        host_id: "claude-code",
-        aliases: &["claude-code"],
-        install: install_claude_projection,
-        status: claude_projection_status,
-        remove: remove_claude_projection,
-        home_root: claude_home_root_string,
-        explicit_home: claude_home_explicit,
-    },
-    HostProjectionAdapter {
-        tool: "opencode",
-        host_id: "opencode",
-        aliases: &[],
-        install: install_opencode_projection,
-        status: opencode_projection_status,
-        remove: remove_opencode_projection,
-        home_root: opencode_home_root_string,
-        explicit_home: opencode_home_explicit,
-    },
-    HostProjectionAdapter {
-        tool: "codex",
-        host_id: "codex",
-        aliases: &["codex-cli", "codex-app"],
-        install: install_codex_projection,
-        status: codex_projection_status,
-        remove: remove_codex_projection,
-        home_root: codex_home_root_string,
-        explicit_home: codex_home_explicit,
-    },
+/// Known tool→host_id mappings and retired-host aliases.
+/// `install`/`status`/`remove` are dispatched by match on tool name below.
+const KNOWN_PROJECTION_TOOLS: &[HostProjectionAdapter] = &[
+    HostProjectionAdapter { tool: "cursor", host_id: "cursor", aliases: &[] },
+    HostProjectionAdapter { tool: "claude", host_id: "claude-code", aliases: &["claude-code"] },
+    HostProjectionAdapter { tool: "opencode", host_id: "opencode", aliases: &[] },
+    HostProjectionAdapter { tool: "codex", host_id: "codex", aliases: &["codex-cli", "codex-app"] },
+    HostProjectionAdapter { tool: "mimo", host_id: "mimo", aliases: &[] },
 ];
 
 pub fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
@@ -348,15 +528,6 @@ pub fn opencode_projection_config_dir(roots: &ResolvedProjectionRoots, scope: &s
     } else {
         roots.project_root.join(".opencode")
     }
-}
-
-pub fn opencode_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
-    make_mcp_server_payload_with_env(
-        roots,
-        &["opencode", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
-        "Framework snapshot, skill routing, goal/closeout gating (MCP advisory for my-light)",
-        None,
-    )
 }
 
 /// Shared browser-mcp stdio payload (all hosts). Uses framework_root as repo-root.
@@ -411,7 +582,7 @@ pub fn install_opencode_projection(
     }
     let entries = mcp_servers.as_object_mut()
         .ok_or_else(|| "mcpServers must be an object".to_string())?;
-    let framework_payload = opencode_mcp_server_payload(roots);
+    let framework_payload = host_router_rs_framework_payload(roots, "opencode", "Framework snapshot, skill routing, goal/closeout gating (MCP advisory for my-light)");
     let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
     entries.insert("router-rs-framework".to_string(), framework_payload);
     let browser_payload = browser_mcp_server_payload(roots);
@@ -425,24 +596,13 @@ pub fn install_opencode_projection(
     let manifest_dir = opencode_projection_config_dir(roots, scope);
     std::fs::create_dir_all(&manifest_dir)
         .map_err(|err| format!("failed to create {}: {err}", manifest_dir.display()))?;
-    let manifest_path = manifest_dir.join(FRAMEWORK_PROJECTION_MANIFEST_NAME);
-    let manifest_changed = write_json_if_changed(
-        &manifest_path,
-        &json!({
-            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
-            "managed_by": "skill-framework",
-            "host_projection": "opencode",
-            "scope": scope,
-            "files": [projection_manifest_file_ref(roots, &config_path)],
-            "settings": {
-                "managed_key_paths": [
-                    "mcpServers.router-rs-framework",
-                    "mcpServers.browser-mcp",
-                    "mcpServers.paperplain",
-                    "mcpServers.mcp-codegraph",
-                ],
-            }
-        }),
+    let manifest_key_paths = mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::OPENCODE)?;
+    let manifest_changed = write_projection_manifest(
+        roots,
+        "opencode",
+        scope,
+        &[projection_manifest_file_ref(roots, &config_path)],
+        &manifest_key_paths,
     )?;
 
     Ok(json!({
@@ -455,7 +615,7 @@ pub fn install_opencode_projection(
             "changed": changed,
         },
         "projection_manifest": {
-            "path": manifest_path.to_string_lossy(),
+            "path": projection_manifest_path(roots, "opencode", scope).to_string_lossy(),
             "changed": manifest_changed,
         },
     }))
@@ -471,62 +631,8 @@ pub fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Result<Val
     let config_payload = read_json_if_exists(&project_path).ok().flatten()
         .or_else(|| read_json_if_exists(&user_path).ok().flatten());
 
-    let managed_servers = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
-    let mut server_status: serde_json::Map<String, Value> = serde_json::Map::new();
-    let mut all_valid = true;
-    let mut first_error = None;
-
-    if let Some(ref payload) = config_payload {
-        let servers = payload.get("mcpServers").and_then(Value::as_object);
-        for server_id in &managed_servers {
-            let entry = servers.and_then(|s| s.get(*server_id));
-            if let Some(cmd) = entry.and_then(|v| v.get("command")).and_then(Value::as_str) {
-                match validate_mcp_command_binary(cmd, Some(&roots.framework_root)) {
-                    Ok(()) => {
-                        // Deep validation for router-rs-based servers
-                        if *server_id == "router-rs-framework" && cmd != "cargo" {
-                            let resolved = if cmd == "router-rs" {
-                                resolve_stable_router_rs_executable(&roots.framework_root)
-                            } else {
-                                Some(PathBuf::from(cmd))
-                            };
-                            match resolved {
-                                Some(path) => match framework_kernel::router_self::validate_router_rs_binary_runnable(&path) {
-                                    Ok(()) => { server_status.insert(server_id.to_string(), json!({"binary_valid": true})); }
-                                    Err(err) => {
-                                        all_valid = false;
-                                        if first_error.is_none() { first_error = Some(err.clone()); }
-                                        server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": err}));
-                                    }
-                                },
-                                None => {
-                                    all_valid = false;
-                                    let msg = "router-rs not found on PATH; run `router-rs self install`".to_string();
-                                    if first_error.is_none() { first_error = Some(msg.clone()); }
-                                    server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": msg}));
-                                }
-                            }
-                        } else {
-                            server_status.insert(server_id.to_string(), json!({"binary_valid": true}));
-                        }
-                    }
-                    Err(err) => {
-                        all_valid = false;
-                        if first_error.is_none() { first_error = Some(err.clone()); }
-                        server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": err}));
-                    }
-                }
-            } else {
-                all_valid = false;
-                let msg = format!("missing or incomplete {server_id} payload");
-                if first_error.is_none() { first_error = Some(msg.clone()); }
-                server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": msg}));
-            }
-        }
-    } else {
-        all_valid = false;
-        first_error = Some("No opencode.json found in project or user scope".to_string());
-    }
+    let (server_status, all_valid, first_error) =
+        validate_mcp_servers_from_json(roots, config_payload.as_ref(), "mcpServers");
 
     Ok(json!({
         "ready": (project_exists || user_exists) && all_valid,
@@ -555,19 +661,7 @@ pub fn remove_opencode_projection(
 
     let mut config_removed = false;
     if config_path.is_file() && !dry_run {
-        let mut payload = read_json_if_exists(&config_path)?
-            .unwrap_or_else(|| json!({}));
-        let mut changed = false;
-        let managed_keys = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
-        if let Some(servers) = payload.get_mut("mcpServers").and_then(Value::as_object_mut) {
-            for key in &managed_keys {
-                changed |= servers.remove(*key).is_some();
-            }
-        }
-        if changed {
-            write_json_if_changed(&config_path, &payload)?;
-        }
-        config_removed = changed;
+        config_removed = mcp_json_remove_servers(&config_path, &roots.framework_root, McpConfigFormat::OPENCODE)?;
     }
 
     let manifest_path = config_dir.join(FRAMEWORK_PROJECTION_MANIFEST_NAME);
@@ -587,24 +681,16 @@ pub fn remove_opencode_projection(
     }))
 }
 
-pub fn opencode_home_root_string(roots: &ResolvedProjectionRoots) -> String {
-    roots.opencode_home_root.to_string_lossy().into_owned()
-}
-
-pub fn opencode_home_explicit(command: &ProjectionCommand) -> bool {
-    command.opencode_home.is_some() || std::env::var_os("OPENCODE_HOME").is_some()
-}
-
 pub fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> {
     let normalized = tool.trim().to_lowercase();
-    HOST_PROJECTION_ADAPTERS
+    KNOWN_PROJECTION_TOOLS
         .iter()
         .find(|adapter| adapter.tool == normalized)
 }
 
 pub fn projection_adapter_for_raw(raw: &str) -> Option<&'static HostProjectionAdapter> {
     let normalized = raw.trim().to_lowercase();
-    HOST_PROJECTION_ADAPTERS.iter().find(|adapter| {
+    KNOWN_PROJECTION_TOOLS.iter().find(|adapter| {
         adapter.tool == normalized || adapter.aliases.iter().any(|alias| *alias == normalized)
     })
 }
@@ -633,7 +719,7 @@ pub fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, S
 pub fn validate_projection_adapters_against_registry(framework_root: &Path) -> Result<(), String> {
     let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
     let supported = framework_kernel::framework_host_targets::host_targets_supported_host_ids(&registry)?;
-    for adapter in HOST_PROJECTION_ADAPTERS {
+    for adapter in KNOWN_PROJECTION_TOOLS {
         if !supported.iter().any(|host_id| host_id == adapter.host_id) {
             return Err(format!(
                 "host projection adapter `{}` declares host_id `{}` outside RUNTIME_REGISTRY.host_targets.supported",
@@ -645,7 +731,7 @@ pub fn validate_projection_adapters_against_registry(framework_root: &Path) -> R
 }
 
 pub fn projection_alias_summary() -> String {
-    HOST_PROJECTION_ADAPTERS
+    KNOWN_PROJECTION_TOOLS
         .iter()
         .flat_map(|adapter| {
             adapter
@@ -670,7 +756,7 @@ pub fn canonical_scope(scope: &str) -> Result<&'static str, String> {
 /// Cursor framework rules (`framework.mdc`) and browser MCP projection are **user-scope only**.
 /// Project repos keep `.cursor/hooks.json` and harness gate rules locally.
 pub fn projection_scope_for_tool(tool: &str, scope: &str) -> Result<&'static str, String> {
-    if projection_adapter(tool).is_some_and(|adapter| adapter.tool == "cursor") {
+    if tool == "cursor" {
         let _ = canonical_scope(scope)?;
         return Ok("user");
     }
@@ -685,17 +771,32 @@ pub fn install_projection_tool(
     if tool.contains("..") || tool.contains('/') || tool.contains('\\') {
         return Err(format!("Invalid tool name: {}", tool));
     }
-    let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
+    if projection_adapter(tool).is_none() {
+        return Err(format!("Unsupported tool: {tool}"));
+    }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-    let out = (adapter.install)(roots, effective_scope)?;
-    // MCP 配置已统一由各宿主的 user-level install 路径写入，
-    // 不再在 project scope 写入 .mcp.json / .codex/config.toml。
-    Ok(out)
+    match tool {
+        "cursor" => install_cursor_projection(roots, effective_scope),
+        "claude" => install_claude_projection(roots, effective_scope),
+        "opencode" => install_opencode_projection(roots, effective_scope),
+        "codex" => install_codex_projection(roots, effective_scope),
+        "mimo" => Ok(serde_json::json!({"tool": "mimo", "scope": effective_scope, "status": "installed"})),
+        _ => Err(format!("Unsupported tool: {tool}")),
+    }
 }
 
 pub fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
-    let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
-    (adapter.status)(roots)
+    if projection_adapter(tool).is_none() {
+        return Err(format!("Unsupported tool: {tool}"));
+    }
+    match tool {
+        "cursor" => cursor_projection_status(roots),
+        "claude" => claude_projection_status(roots),
+        "opencode" => opencode_projection_status(roots),
+        "codex" => codex_projection_status(roots),
+        "mimo" => Ok(serde_json::json!({"tool": "mimo", "status": "installed"})),
+        _ => Err(format!("Unsupported tool: {tool}")),
+    }
 }
 
 pub fn remove_projection_tool(
@@ -704,9 +805,18 @@ pub fn remove_projection_tool(
     scope: &str,
     dry_run: bool,
 ) -> Result<Value, String> {
-    let adapter = projection_adapter(tool).ok_or_else(|| format!("Unsupported tool: {tool}"))?;
+    if projection_adapter(tool).is_none() {
+        return Err(format!("Unsupported tool: {tool}"));
+    }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-    (adapter.remove)(roots, effective_scope, dry_run)
+    match tool {
+        "cursor" => remove_cursor_projection(roots, effective_scope, dry_run),
+        "claude" => remove_claude_projection(roots, effective_scope, dry_run),
+        "opencode" => remove_opencode_projection(roots, effective_scope, dry_run),
+        "codex" => remove_codex_projection(roots, effective_scope, dry_run),
+        "mimo" => Ok(serde_json::json!({"tool": "mimo", "scope": effective_scope, "dry_run": dry_run, "status": "installed"})),
+        _ => Err(format!("Unsupported tool: {tool}")),
+    }
 }
 
 pub fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
@@ -840,39 +950,6 @@ pub fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path
         .unwrap_or_else(|_| path.to_string_lossy().into_owned())
 }
 
-pub fn write_claude_projection_manifest(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    command_path: &Path,
-    settings_path: &Path,
-) -> Result<bool, String> {
-    let mut files = vec![
-        projection_manifest_file_ref(roots, command_path),
-        projection_manifest_file_ref(roots, settings_path),
-    ];
-    if scope == "project" {
-        files.push(projection_manifest_file_ref(
-            roots,
-            &claude_project_narrative_path(roots),
-        ));
-    }
-    write_json_if_changed(
-        &projection_manifest_path(roots, "claude-code", scope),
-        &json!({
-            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
-            "managed_by": "skill-framework",
-            "host_projection": "claude-code",
-            "scope": scope,
-            "files": files,
-            "settings": {
-                "managed_key_paths": ALL_HOOK_EVENTS.iter()
-                    .map(|e| format!("hooks.{}", e))
-                    .collect::<Vec<_>>(),
-            }
-        }),
-    )
-}
-
 pub fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
     let payload = read_json_if_exists(path)?;
     let mut managed_events = Vec::new();
@@ -941,15 +1018,6 @@ pub fn codegraph_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     }
 }
 
-/// router-rs-framework payload for project `.mcp.json` (Claude Code).
-pub fn claude_code_router_rs_framework_payload(roots: &ResolvedProjectionRoots) -> Value {
-    make_mcp_server_payload(
-        roots,
-        &["claude-code", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
-        "Framework snapshot, skill routing, goal/closeout gating",
-    )
-}
-
 /// Project-root `.mcp.json` with all four shared MCP servers (gitignored; materialized on host install).
 pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
     let path = roots.project_root.join(".mcp.json");
@@ -969,7 +1037,7 @@ pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Resu
     let entries = servers
         .as_object_mut()
         .ok_or_else(|| "project .mcp.json mcpServers must be an object".to_string())?;
-    let framework = claude_code_router_rs_framework_payload(roots);
+    let framework = host_router_rs_framework_payload(roots, "claude-code", "Framework snapshot, skill routing, goal/closeout gating");
     let framework_changed = entries.get("router-rs-framework") != Some(&framework);
     entries.insert("router-rs-framework".to_string(), framework);
     let browser = browser_mcp_server_payload(roots);
@@ -986,26 +1054,7 @@ pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Resu
 /// Remove all managed MCP entries from project-root `.mcp.json`.
 pub fn remove_project_mcp_json_entries(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
     let path = roots.project_root.join(".mcp.json");
-    let managed_keys = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
-    let Some(mut payload) = read_json_if_exists(&path)? else {
-        return Ok(false);
-    };
-    let Some(root) = payload.as_object_mut() else {
-        return Ok(false);
-    };
-    let mut changed = false;
-    if let Some(servers) = root.get_mut("mcpServers").and_then(Value::as_object_mut) {
-        for key in &managed_keys {
-            changed |= servers.remove(*key).is_some();
-        }
-        if servers.is_empty() {
-            root.remove("mcpServers");
-        }
-    }
-    if changed {
-        write_json_if_changed(&path, &payload)?;
-    }
-    Ok(changed)
+    mcp_json_remove_servers(&path, &roots.framework_root, McpConfigFormat::CLAUDE)
 }
 
 fn merge_codegraph_into_mcp_servers_map(
@@ -1085,15 +1134,6 @@ fn upsert_codex_mcp_toml_section(
     write_text_if_changed(path, &normalized)
 }
 
-/// router-rs-framework payload for Codex (TOML `mcp_servers`).
-pub fn codex_router_rs_framework_payload(roots: &ResolvedProjectionRoots) -> Value {
-    make_mcp_server_payload(
-        roots,
-        &["codex", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
-        "Framework snapshot, skill routing, goal/closeout gating (Codex)",
-    )
-}
-
 /// Codex reads MCP from project `.codex/config.toml` (`mcp_servers.*` sections).
 pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
     let path = roots.project_root.join(".codex/config.toml");
@@ -1102,7 +1142,7 @@ pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result
     }
     let mut changed = false;
     // -- router-rs-framework --
-    let framework = codex_router_rs_framework_payload(roots);
+    let framework = host_router_rs_framework_payload(roots, "codex", "Framework snapshot, skill routing, goal/closeout gating (Codex)");
     let fw_cmd = framework.get("command").and_then(Value::as_str).unwrap_or("router-rs");
     let fw_args: Vec<String> = framework.get("args").and_then(Value::as_array)
         .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
@@ -1144,7 +1184,7 @@ pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result
 /// Remove all managed MCP TOML sections from `.codex/config.toml`.
 pub fn remove_codex_mcp_toml_entries(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
     let path = roots.project_root.join(".codex/config.toml");
-    let managed_server_ids = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
+    let managed_server_ids = registry_managed_mcp_server_ids(&roots.framework_root)?;
     let existing = read_text_if_exists(&path)?.unwrap_or_default();
     let mut result = existing.clone();
     let mut changed = false;

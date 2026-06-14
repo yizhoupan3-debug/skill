@@ -19,10 +19,10 @@ pub struct CloseoutCommandRecord {
     #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
     pub duration_ms: Option<i64>,
     #[serde(default)]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
     pub stdout_summary: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
     pub stderr_summary: Option<String>,
 }
 
@@ -37,7 +37,7 @@ pub struct CloseoutArtifactRecord {
     #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
     pub size_bytes: Option<i64>,
     #[serde(default)]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
     pub checks: Vec<String>,
 }
 
@@ -57,7 +57,7 @@ pub struct CloseoutRecord {
     #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
     pub started_at: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)]
+    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
     pub ended_at: Option<String>,
     #[serde(default)]
     pub changed_files: Vec<String>,
@@ -488,7 +488,7 @@ pub struct CloseoutEvidenceContext {
     pub task_id: Option<String>,
     /// Whether the task's `EVIDENCE_INDEX.json` `artifacts` array is non-empty.
     /// (Reserved: future R-rules may want to flag "rows present but none successful".)
-    #[allow(dead_code)]
+    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
     pub evidence_rows_non_empty: bool,
     /// Whether the task's `EVIDENCE_INDEX.json` has at least one row with
     /// `success==true` or `exit_code==0`.

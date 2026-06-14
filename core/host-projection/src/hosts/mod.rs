@@ -16,6 +16,8 @@ pub mod claude_agent;
 pub mod claude_code_hooks;
 pub mod claude_provider;
 pub mod mcp_stdio_harness_dir; pub use mcp_stdio_harness_dir as mcp_stdio_harness;
+pub mod mimo_hooks;
+pub mod mimo_provider;
 pub mod opencode_agent;
 pub mod opencode_hooks;
 pub mod opencode_provider;
@@ -23,6 +25,10 @@ pub mod opencode_provider;
 // ── Test shims ──
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_shim;
+
+// ── Unified hook contract tests (all 4 hosts) ──
+#[cfg(test)]
+mod unified_hook_tests;
 
 pub use host_provider::{
     default_host_id, host_lifecycle_for_id, host_provider_for_id, host_provider_for_install_tool,

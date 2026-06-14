@@ -1,0 +1,21 @@
+[package]
+name = "runtime-storage"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "rt_storage"
+path = "src/lib.rs"
+
+[dependencies]
+core-state = { path = "../core-state" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+fs2 = { workspace = true }
+hex = { workspace = true }
+rusqlite = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
+serial_test = "3"

@@ -107,7 +107,7 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
         serde_json::from_str::<Value>(&fs::read_to_string(&reg_path).unwrap_or_default())
             .ok()
             .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
-            .unwrap_or_else(|| json!(["claude-code", "cursor", "opencode"]).as_array().cloned().unwrap())
+            .unwrap_or_else(|| json!(["claude-code", "codex", "cursor", "opencode"]).as_array().cloned().unwrap())
     };
     all_hosts.sort_by(|a, b| a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or("")));
 

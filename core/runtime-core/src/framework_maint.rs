@@ -429,7 +429,7 @@ fn claude_rule_has_stale_gsd_narrative(text: &str) -> bool {
         || (text.contains("GOAL_CONTINUE") && !text.contains("does not inject GOAL_CONTINUE"))
 }
 
-fn verify_claude_user_projection(framework_root: &Path) -> Result<(), String> {
+fn verify_claude_user_projection(_framework_root: &Path) -> Result<(), String> {
     let claude_home = claude_home_path()?;
     let rule = claude_home.join("rules").join("framework.md");
     if !rule.is_file() {

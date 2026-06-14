@@ -6,7 +6,7 @@
 
 use super::state::codex_load_state;
 use super::{
-    lifecycle_host, CodexLifecycleHostKind, CodexLifecycleContextState, CODEX_REVIEW_SUBAGENT_TOOL_NAMES,
+    lifecycle_host, CodexLifecycleHostKind, CodexLifecycleContextState,
     CODEX_REVIEW_SUBAGENT_TYPES, CODEX_ADDITIONAL_CONTEXT_MAX_BYTES,
 };
 use crate::hooks;
@@ -73,7 +73,7 @@ pub(super) fn codex_tool_input(event: &Value) -> Value {
 
 pub(crate) fn saw_subagent_codex(tool_name: &str, _tool_input: &Value) -> bool {
     let name = normalize_tool_name(Some(tool_name));
-    CODEX_REVIEW_SUBAGENT_TOOL_NAMES.contains(&name.as_str())
+    core_policy::subagent::is_subagent_tool(&name)
 }
 
 fn codex_recognized_subagent_kind(tool_input: &Value) -> Option<String> {

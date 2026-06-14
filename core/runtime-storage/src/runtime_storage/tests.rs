@@ -22,7 +22,7 @@ fn unique_temp_dir(prefix: &str) -> PathBuf {
 
 #[test]
 fn effective_storage_root_does_not_silently_consult_codex_or_cursor_home() {
-    let _lock = crate::test_env_sync::process_env_lock();
+    let _lock = core_policy::test_env_sync::process_env_lock();
     // Regression: an earlier revision had `effective_storage_root_for_request`
     // fall back to `CODEX_HOME` / `CURSOR_HOME` when the caller did not
     // pin a `storage_root`. That made codex-CLI processes write to
@@ -699,7 +699,7 @@ fn canonicalize_or_clean_absolute_path_cleans_absolute() {
 
 #[test]
 fn explicit_storage_root_override_returns_none_when_unset() {
-    let _lock = crate::test_env_sync::process_env_lock();
+    let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
     std::env::remove_var("ROUTER_RS_STORAGE_ROOT");
     assert_eq!(explicit_storage_root_override(), None);
@@ -710,7 +710,7 @@ fn explicit_storage_root_override_returns_none_when_unset() {
 
 #[test]
 fn explicit_storage_root_override_returns_none_when_empty() {
-    let _lock = crate::test_env_sync::process_env_lock();
+    let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
     std::env::set_var("ROUTER_RS_STORAGE_ROOT", "  ");
     assert_eq!(explicit_storage_root_override(), None);
@@ -722,7 +722,7 @@ fn explicit_storage_root_override_returns_none_when_empty() {
 
 #[test]
 fn explicit_storage_root_override_returns_value_when_set() {
-    let _lock = crate::test_env_sync::process_env_lock();
+    let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
     std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/my/root");
     assert_eq!(
@@ -739,7 +739,7 @@ fn explicit_storage_root_override_returns_value_when_set() {
 
 #[test]
 fn effective_storage_root_prefers_explicit_over_env() {
-    let _lock = crate::test_env_sync::process_env_lock();
+    let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
     std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/env/root");
     let request = RuntimeStorageRequestPayload {
@@ -765,7 +765,7 @@ fn effective_storage_root_prefers_explicit_over_env() {
 
 #[test]
 fn effective_storage_root_empty_explicit_falls_to_env() {
-    let _lock = crate::test_env_sync::process_env_lock();
+    let _lock = core_policy::test_env_sync::process_env_lock();
     // When storage_root is set but empty/whitespace, the function does NOT
     // early-return; it falls through to explicit_storage_root_override().
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
@@ -793,7 +793,7 @@ fn effective_storage_root_empty_explicit_falls_to_env() {
 
 #[test]
 fn effective_storage_root_sqlite_uses_db_parent() {
-    let _lock = crate::test_env_sync::process_env_lock();
+    let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
     std::env::remove_var("ROUTER_RS_STORAGE_ROOT");
     let request = RuntimeStorageRequestPayload {

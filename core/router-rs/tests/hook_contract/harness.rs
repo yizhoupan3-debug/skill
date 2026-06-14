@@ -10,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::cursor_hooks::dispatch_cursor_hook_event;
 use crate::hosts::claude_code_hooks::dispatch_claude_hook_payload_for_test;
 use crate::hosts::codex_hooks::run_codex_lifecycle_context_hook_for_state_dir;
+use crate::opencode_hooks::dispatch_opencode_hook_event;
 use crate::test_env_sync::ProcessEnvLockGuard;
 
 const SPAWN_FIRST_NUDGE_ENV: &str = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
@@ -23,6 +24,7 @@ pub enum MatrixHost {
     Cursor,
     Codex,
     Claude,
+    Opencode,
 }
 
 pub const DEEP_REVIEW_PROMPT: &str = "全面review这个仓库";
@@ -70,6 +72,9 @@ pub fn fresh_matrix_repo(host: MatrixHost, label: &str) -> PathBuf {
         MatrixHost::Claude => {
             fs::create_dir_all(root.join(".claude/hook-state")).expect("claude hook-state");
         }
+        MatrixHost::Opencode => {
+            fs::create_dir_all(root.join(".opencode")).expect("opencode dir");
+        }
     }
     root
 }
@@ -79,6 +84,7 @@ pub fn host_label(host: MatrixHost) -> &'static str {
         MatrixHost::Cursor => "cursor",
         MatrixHost::Codex => "codex",
         MatrixHost::Claude => "claude",
+        MatrixHost::Opencode => "opencode",
     }
 }
 
@@ -117,6 +123,10 @@ fn review_gate_disable_env_keys(host: MatrixHost) -> [&'static str; 2] {
         MatrixHost::Claude => [
             CANONICAL_REVIEW_GATE_DISABLE_ENV,
             "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
+        ],
+        MatrixHost::Opencode => [
+            CANONICAL_REVIEW_GATE_DISABLE_ENV,
+            "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE",
         ],
     }
 }
@@ -390,6 +400,7 @@ fn paper_prose_hook_env(host: MatrixHost) -> &'static str {
         MatrixHost::Cursor => "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
         MatrixHost::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
         MatrixHost::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
+        MatrixHost::Opencode => "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK",
     }
 }
 
@@ -426,6 +437,10 @@ fn session_payload(host: MatrixHost, repo: &Path, session_id: &str, prompt: &str
             "session_id": session_id,
             "prompt": prompt,
         }),
+        MatrixHost::Opencode => json!({
+            "session_id": session_id,
+            "prompt": prompt,
+        }),
     }
 }
 
@@ -449,6 +464,10 @@ fn stop_payload(
             "prompt": prompt,
         }),
         MatrixHost::Claude => json!({
+            "session_id": session_id,
+            "prompt": prompt,
+        }),
+        MatrixHost::Opencode => json!({
             "session_id": session_id,
             "prompt": prompt,
         }),
@@ -482,7 +501,7 @@ pub fn dispatch_stop(
 
 pub fn user_prompt_additional_context(host: MatrixHost, out: &Value) -> String {
     match host {
-        MatrixHost::Cursor => out
+        MatrixHost::Cursor | MatrixHost::Opencode => out
             .get("additional_context")
             .and_then(Value::as_str)
             .unwrap_or_default()
@@ -553,6 +572,18 @@ pub fn dispatch_reviewer_with_fork(
             });
             dispatch_claude_hook_payload_for_test("post-tool-use", repo, &payload)
         }
+        MatrixHost::Opencode => {
+            let mut tool_input = json!({ "subagent_type": "general-purpose" });
+            if let Some(f) = fork {
+                tool_input["fork_context"] = json!(f);
+            }
+            let payload = json!({
+                "session_id": session_id,
+                "tool_name": "Task",
+                "tool_input": tool_input,
+            });
+            dispatch_opencode_hook_event(repo, "PostToolUse", &payload)
+        }
     }
 }
 
@@ -603,6 +634,17 @@ pub fn dispatch_independent_reviewer(host: MatrixHost, repo: &Path, session_id: 
             });
             dispatch_claude_hook_payload_for_test("post-tool-use", repo, &payload)
         }
+        MatrixHost::Opencode => {
+            let payload = json!({
+                "session_id": session_id,
+                "tool_name": "Task",
+                "tool_input": {
+                    "subagent_type": "general-purpose",
+                    "fork_context": false,
+                },
+            });
+            dispatch_opencode_hook_event(repo, "PostToolUse", &payload)
+        }
     }
 }
 
@@ -628,6 +670,7 @@ fn dispatch_hook(host: MatrixHost, repo: &Path, canonical: &str, payload: &Value
             };
             dispatch_claude_hook_payload_for_test(canonical_event, repo, payload)
         }
+        MatrixHost::Opencode => dispatch_opencode_hook_event(repo, canonical, payload),
     }
 }
 
@@ -651,7 +694,7 @@ pub fn user_visible_blob(host: MatrixHost, out: &Value) -> String {
                 .unwrap_or_default()
                 .to_string()
         }
-        MatrixHost::Cursor | MatrixHost::Codex => {
+        MatrixHost::Cursor | MatrixHost::Codex | MatrixHost::Opencode => {
             let mut s = out
                 .get("followup_message")
                 .and_then(Value::as_str)
@@ -683,6 +726,9 @@ pub fn stop_review_gate_advisory(host: MatrixHost, out: &Value) -> bool {
                     .and_then(Value::as_str)
                     .is_some_and(|s| s.contains("CLAUDE_REVIEW_GATE"))
         }
+        MatrixHost::Opencode => {
+            user_visible_blob(host, out).contains("opencode-review-gate")
+        }
     }
 }
 
@@ -700,6 +746,10 @@ pub fn stop_review_gate_blocked(host: MatrixHost, out: &Value) -> bool {
         MatrixHost::Claude => {
             out.get("decision").and_then(Value::as_str) == Some("block")
                 && user_visible_blob(host, out).contains("CLAUDE_REVIEW_GATE")
+        }
+        MatrixHost::Opencode => {
+            out.get("continue").and_then(Value::as_bool) == Some(false)
+                && user_visible_blob(host, out).contains("opencode-review-gate")
         }
     }
 }
@@ -732,9 +782,16 @@ pub fn dispatch_closeout_claim_stop(host: MatrixHost, repo: &Path, session_id: &
         }
         MatrixHost::Codex => dispatch_stop(host, repo, session_id, "all done, shipped", None),
         MatrixHost::Claude => dispatch_stop(host, repo, session_id, "done", None),
+        MatrixHost::Opencode => {
+            panic!("Opencode is my-light; closeout tests should not dispatch closeout_claim_stop")
+        }
     }
 }
 
-/// All matrix hosts in this slice (Cursor + Codex + Claude).
-pub const MATRIX_HOSTS: &[MatrixHost] =
-    &[MatrixHost::Cursor, MatrixHost::Codex, MatrixHost::Claude];
+/// All matrix hosts in this slice (Cursor + Codex + Claude + Opencode).
+pub const MATRIX_HOSTS: &[MatrixHost] = &[
+    MatrixHost::Cursor,
+    MatrixHost::Codex,
+    MatrixHost::Claude,
+    MatrixHost::Opencode,
+];

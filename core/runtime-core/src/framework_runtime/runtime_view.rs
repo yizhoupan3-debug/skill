@@ -66,8 +66,8 @@ pub(super) fn load_framework_runtime_view(
         );
         (active, focus, registry)
     };
-    let active_task_pointer_present = task_pointers_present || mirror_root.join("active_task.json").is_file();
-    let focus_task_pointer_present = task_pointers_present || mirror_root.join("focus_task.json").is_file();
+    let _active_task_pointer_present = task_pointers_present || mirror_root.join("active_task.json").is_file();
+    let _focus_task_pointer_present = task_pointers_present || mirror_root.join("focus_task.json").is_file();
     let task_registry_present = task_pointers_present || mirror_root.join("task_registry.json").is_file();
     let (registered_tasks, mut known_task_ids, mut recoverable_task_ids) =
         normalized_task_registry(&registry_payload);

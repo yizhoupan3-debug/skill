@@ -18,7 +18,6 @@ struct NativeInstallFixture {
     tmp: tempfile::TempDir,
     repo_root: std::path::PathBuf,
     home_config_path: std::path::PathBuf,
-    home_codex_skills_path: std::path::PathBuf,
 }
 
 fn build_native_install_fixture(config_toml: Option<&str>) -> NativeInstallFixture {
@@ -38,12 +37,10 @@ fn build_native_install_fixture(config_toml: Option<&str>) -> NativeInstallFixtu
     if let Some(content) = config_toml {
         write_text(&home_config_path, content);
     }
-    let home_codex_skills_path = tmp.path().join("home/.codex/skills");
     NativeInstallFixture {
         tmp,
         repo_root,
         home_config_path,
-        home_codex_skills_path,
     }
 }
 
@@ -58,8 +55,6 @@ macro_rules! install_native_integration_test {
                 $f.repo_root.to_str().unwrap(),
                 "--home-config-path",
                 $f.home_config_path.to_str().unwrap(),
-                "--home-codex-skills-path",
-                $f.home_codex_skills_path.to_str().unwrap(),
                 "--skip-default-bootstrap",
             ]);
             $body
@@ -207,7 +202,7 @@ fn install_native_integration_idempotent() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex":"/implementx"}}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v2","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex":"/implementx"}}}}"#,
     );
     write_text(
         &repo_root.join("skills/optional-heavy/SKILL.md"),
@@ -215,7 +210,6 @@ fn install_native_integration_idempotent() {
     );
 
     let home_config_path = tmp.path().join("home/.codex/config.toml");
-    let home_codex_skills_path = tmp.path().join("home/.codex/skills");
     let bootstrap_output_dir = tmp.path().join("bootstrap");
 
     let args = vec![
@@ -224,8 +218,6 @@ fn install_native_integration_idempotent() {
         repo_root.display().to_string(),
         "--home-config-path".to_string(),
         home_config_path.display().to_string(),
-        "--home-codex-skills-path".to_string(),
-        home_codex_skills_path.display().to_string(),
         "--bootstrap-output-dir".to_string(),
         bootstrap_output_dir.display().to_string(),
     ];
@@ -279,8 +271,6 @@ fn install_native_integration_prompt_entrypoints_clean() {
         repo_root.to_str().unwrap(),
         "--home-config-path",
         tmp.path().join("home/.codex/config.toml").to_str().unwrap(),
-        "--home-codex-skills-path",
-        tmp.path().join("home/.codex/skills").to_str().unwrap(),
         "--skip-default-bootstrap",
     ]);
 
@@ -2046,7 +2036,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
     write_text(
         &registry_path,
         &serde_json::to_string_pretty(&json!({
-            "schema_version": "framework-runtime-registry-v1",
+            "schema_version": "framework-runtime-registry-v2",
             "framework_core": {
                 "authority": "rust",
                 "source": "framework-root-native",

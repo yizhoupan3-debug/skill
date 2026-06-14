@@ -3425,7 +3425,6 @@ fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {
                         | ".venv"
                         | "venv"
                         | "__pycache__"
-                        | "codex-skill-surface"
                         | "generated-artifacts-drift-check"
                 )
             ) {

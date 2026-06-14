@@ -1,10 +1,10 @@
 //! OpenCode host: full `HostHookDispatcher` implementation.
 //!
-//! OpenCode uses a TS/JS plugin system for hook events. This module provides
-//! the Rust-side dispatch logic that the plugin system calls via `router-rs opencode hook`.
+//! OpenCode uses `router-rs opencode hook --event=...` for all hook events,
+//! unified with cursor/claude/codex via the shared `HostHookDispatcher` trait.
+//! Hook launcher: `configs/framework/opencode-router-rs-hook.sh`.
 //!
 //! Hook events: tool.execute.before, tool.execute.after, session.idle, etc.
-//! Plugins load from: ~/.config/opencode/plugins/ + .opencode/plugins/
 
 use super::file_state_lock::HookStateConfig;
 use super::hook_dispatch::{
@@ -13,13 +13,16 @@ use super::hook_dispatch::{
     subagent_lane_bits, HookEvent, HookOutput, HostHookConfig, HostHookDispatcher,
 };
 use crate::hooks;
-use core_policy::hook_common::{has_override, normalize_tool_name, saw_reject_reason};
+use core_policy::hook_common::{
+    has_override, normalize_tool_name, saw_reject_reason, should_inject_spawn_first_review_nudge,
+};
+use core_policy::registry_review_gate::review_spawn_first_nudge_line;
 use core_policy::review_gate_engine::{
     fork_context_from_values, review_independent_reviewer_evidence, ReviewGateFacts,
 };
 use core_policy::HookReviewDiskCore;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
 
@@ -27,7 +30,7 @@ use std::path::Path;
 // Constants
 // ────────────────────────────────────────────────────────────────
 
-pub const OPENCODE_HOOKS_PATH: &str = ".opencode/plugins/";
+pub const OPENCODE_HOOKS_PATH: &str = ".opencode/hooks.json";
 
 /// Hook events registered by the OpenCode plugin system.
 pub const OPENCODE_HOOKS_REGISTERED_EVENTS: &[&str] = &[
@@ -202,14 +205,12 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         // Build additional context
         let mut contexts = Vec::new();
 
+        // Spawn-first nudge (cross-host contract: inject skill pointer when review arms)
         if state.core.review_required && !state.core.review_override {
-            contexts.push(format!(
-                "[{OPENCODE_REVIEW_GATE_TAG}] Review required. \
-                 Phase: {}, Override: {}, Reject seen: {}",
-                state.review_phase,
-                state.core.review_override,
-                state.core.reject_reason_seen,
-            ));
+            let repo_root_opt = Some(event.repo_root);
+            if should_inject_spawn_first_review_nudge(repo_root_opt, &prompt) {
+                contexts.push(review_spawn_first_nudge_line(repo_root_opt, "opencode"));
+            }
         }
 
         // Goal drive context
@@ -221,6 +222,20 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         if let Some(goal_ctx) = build_goal_context(event.repo_root, &session_key) {
             contexts.push(goal_ctx);
         }
+
+        // Paper context injection (parity with Claude/Cursor/Codex)
+        crate::hooks::maybe_append_paper_adversarial_context(
+            event.repo_root,
+            &prompt,
+            &mut contexts,
+            crate::hooks::PaperProseHookHostType::OpenCode,
+        );
+        crate::hooks::maybe_append_paper_prose_context(
+            event.repo_root,
+            &prompt,
+            &mut contexts,
+            crate::hooks::PaperProseHookHostType::OpenCode,
+        );
 
         compact_contexts(contexts, self.additional_context_max_bytes())
             .map(HookOutput::AdditionalContext)
@@ -305,6 +320,13 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
     // ── Stop: closeout gate + review gate check ──
 
     fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> {
+        // my-light suppression: if stop prompt is a lifecycle entry, skip review gate
+        let stop_prompt = extract_prompt_text(event.payload);
+        if is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &stop_prompt) {
+            opencode_state_config().remove_state(event.repo_root);
+            return None;
+        }
+
         // Default closeout check
         let completion_text = hook_dispatch::extract_completion_text(event);
         if let Some(msg) =
@@ -314,9 +336,31 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         }
 
         // Load review gate state
-        let state: OpencodeHookState = opencode_state_config().load_state(event.repo_root);
+        let mut state: OpencodeHookState = opencode_state_config().load_state(event.repo_root);
 
-        // Check reject
+        // Check override in stop prompt (cross-host contract: Cursor/Codex/Opencode check Stop-time override)
+        if has_override(&stop_prompt) {
+            state.core.review_override = true;
+        }
+
+        // Check reject / rg_clear tokens in stop prompt, signal_text, or response text
+        // (cross-host contract: reject tokens in user prompt or assistant response clear the gate)
+        let signal_text = event
+            .payload
+            .get("signal_text")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if saw_reject_reason(signal_text, &stop_prompt)
+            || saw_reject_reason(&stop_prompt, &completion_text)
+            || saw_reject_reason(&completion_text, &stop_prompt)
+        {
+            state.core.reject_reason_seen = true;
+            state.core.review_required = false;
+            opencode_state_config().save_state(event.repo_root, &state);
+            return None;
+        }
+
+        // Check reject from previous arming
         if state.core.reject_reason_seen {
             return Some(HookOutput::Block {
                 reason: format!(
@@ -429,7 +473,7 @@ fn extract_paths_from_tool_input(tool_input: &Value, _tool_name: &str) -> Vec<St
 fn classify_protected_path(path: &Path, repo_root: &Path) -> Option<&'static str> {
     let path_str = path.to_string_lossy();
 
-    // Framework-guarded paths
+    // Framework-guarded paths (cross-host)
     if path_str.contains(".claude/settings.json")
         || path_str.contains(".claude/rules/")
         || path_str.contains(".claude/CLAUDE.md")
@@ -437,7 +481,13 @@ fn classify_protected_path(path: &Path, repo_root: &Path) -> Option<&'static str
         return Some("Framework configuration path. Use framework tools instead.");
     }
 
-    // Host-private paths (other hosts)
+    // Host-private paths: protect own host state and other hosts
+    if path_str.contains(".opencode/") {
+        return Some("OpenCode host-private directory. Use framework host-integration tools.");
+    }
+    if path_str.contains(".codex/") {
+        return Some("Codex host-private directory. Use framework host-integration tools.");
+    }
     if path_str.contains(".cursor/") && !path_str.starts_with(&repo_root.to_string_lossy().to_string()) {
         return Some("Other host's private directory.");
     }
@@ -472,8 +522,28 @@ fn is_verification_command(tool_name: &str, tool_input: &Value) -> bool {
 
 /// Append shell evidence to the EVIDENCE_INDEX for verification commands.
 fn append_shell_evidence(repo_root: &Path, tool_name: &str, tool_input: &Value, succeeded: bool) {
-    let _ = (repo_root, tool_name, tool_input, succeeded);
-    // Evidence recording is delegated to MCP layer or future hook integration
+    if !is_verification_command(tool_name, tool_input) {
+        return;
+    }
+    let command = tool_input
+        .get("command")
+        .or(tool_input.get("cmd"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let cmd_trimmed: String = command.chars().take(200).collect();
+    let mut entry = serde_json::Map::new();
+    entry.insert("kind".to_string(), json!("auto_evidence"));
+    entry.insert("source".to_string(), json!("post_tool_use_auto"));
+    entry.insert("tool_name".to_string(), json!(tool_name));
+    entry.insert("command_preview".to_string(), json!(cmd_trimmed));
+    entry.insert("success".to_string(), json!(succeeded));
+    entry.insert(
+        "recorded_at".to_string(),
+        json!(crate::hooks::current_local_timestamp()),
+    );
+    if let Err(err) = crate::hooks::append_evidence_index(repo_root, None, entry) {
+        eprintln!("[router-rs] opencode auto-evidence record failed: {err}");
+    }
 }
 
 /// Check if a tool name indicates a reviewer-type tool.
@@ -495,4 +565,41 @@ fn build_goal_context(repo_root: &Path, session_key: &str) -> Option<String> {
     let goal = goal_state.get("goal").and_then(Value::as_str)?;
     let status = goal_state.get("status").and_then(Value::as_str).unwrap_or("active");
     Some(format!("[goal:{status}] {goal}"))
+}
+
+// ────────────────────────────────────────────────────────────────
+// Test harness (shared with hook_contract matrix)
+// ────────────────────────────────────────────────────────────────
+
+#[cfg(any(test, feature = "test-support"))]
+pub fn dispatch_opencode_hook_event(
+    repo_root: &Path,
+    event_name: &str,
+    payload: &Value,
+) -> Value {
+    crate::hooks::ensure_kernel_bootstrap();
+    let event = HookEvent {
+        repo_root,
+        event_name,
+        payload,
+    };
+    match OpencodeHookDispatcher.dispatch(&event) {
+        Some(HookOutput::AdditionalContext(ctx)) => {
+            json!({ "continue": true, "additional_context": ctx })
+        }
+        Some(HookOutput::Deny { reason }) => {
+            json!({ "continue": false, "followup_message": reason })
+        }
+        Some(HookOutput::Warn { message }) => {
+            json!({ "continue": true, "followup_message": message })
+        }
+        Some(HookOutput::Block { reason }) => {
+            json!({ "continue": false, "followup_message": reason })
+        }
+        Some(HookOutput::Advisory { message }) => {
+            json!({ "continue": true, "followup_message": message })
+        }
+        Some(HookOutput::Raw(val)) => val,
+        None | Some(HookOutput::None) => json!({}),
+    }
 }

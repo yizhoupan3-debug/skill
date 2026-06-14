@@ -394,7 +394,7 @@ fn build_framework_alias_entry_contract(
 
 fn build_framework_alias_state_machine(
     alias_name: &str,
-    alias_record: &Value,
+    _alias_record: &Value,
     continuity: &Value,
     skill_path: &str,
     max_lines: usize,

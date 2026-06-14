@@ -104,6 +104,8 @@ pub(crate) use runtime_core::hosts::claude_code_hooks;
 pub(crate) use runtime_core::hosts::codex_hooks;
 #[cfg(test)]
 pub(crate) use runtime_core::hosts::cursor_hooks;
+#[cfg(test)]
+pub(crate) use runtime_core::hosts::opencode_hooks;
 
 // ── core-state re-exports (for pub(crate) compat) ──
 #[cfg(test)]
@@ -276,6 +278,8 @@ pub use runtime_core::harness_operator_nudges::harness_nudges_env_test_lock;
 pub use runtime_core::hosts::cursor_hooks::set_test_review_gate_disable_override;
 #[cfg(test)]
 pub use runtime_core::hosts::claude_code_hooks::dispatch_claude_hook_payload_for_test;
+#[cfg(test)]
+pub use runtime_core::hosts::opencode_hooks::dispatch_opencode_hook_event;
 #[cfg(test)]
 pub use runtime_core::session_call_tracker::test_lock_roundtrip;
 

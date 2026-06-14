@@ -131,7 +131,7 @@ mod framework_root_from_exe_tests {
         fs::create_dir_all(root.join("configs/framework")).unwrap();
         fs::write(
             root.join("configs/framework/RUNTIME_REGISTRY.json"),
-            r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v2","framework_commands":{}}"#,
         )
         .unwrap();
         fs::create_dir_all(root.join("core/router-rs")).unwrap();

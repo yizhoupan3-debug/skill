@@ -54,14 +54,6 @@ pub(super) const PROTECTED_GENERATED_PREFIXES: [&str; 3] = [
     "configs/framework/RUNTIME_REGISTRY.json",
     "core/router-rs/",
 ];
-pub(super) const CODEX_REVIEW_SUBAGENT_TOOL_NAMES: [&str; 6] = [
-    "task",
-    "functions.task",
-    "functions.subagent",
-    "functions.spawn_agent",
-    "subagent",
-    "spawn_agent",
-];
 pub(super) const CODEX_REVIEW_SUBAGENT_TYPES: &[&str] = &[
     "default",
     "explore",

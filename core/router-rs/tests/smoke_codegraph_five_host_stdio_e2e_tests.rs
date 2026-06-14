@@ -74,10 +74,12 @@ mod five_host_stdio_e2e {
             project_root: project_root.clone(),
             artifact_root: project_root.join("artifacts"),
             account_home_root: home.clone(),
-            codex_home_root: home.join(".codex"),
-            cursor_home_root: home.join(".cursor"),
-            claude_home_root: home.join(".claude"),
-            opencode_home_root: home.join(".opencode"),
+            host_home_roots: [
+                ("codex".into(), home.join(".codex")),
+                ("cursor".into(), home.join(".cursor")),
+                ("claude-code".into(), home.join(".claude")),
+                ("opencode".into(), home.join(".opencode")),
+            ].into_iter().collect(),
         };
         (root, roots)
     }
@@ -94,7 +96,7 @@ mod five_host_stdio_e2e {
         host_id: &str,
     ) -> (PathBuf, &'static str) {
         match host_id {
-            "cursor" => (roots.cursor_home_root.join("mcp.json"), "mcp_servers"),
+            "cursor" => (roots.host_home_root("cursor").join("mcp.json"), "mcp_servers"),
             "claude-code" => (roots.project_root.join(".mcp.json"), "mcpServers"),
             "codex" => (roots.project_root.join(".mcp.json"), "mcpServers"),
             "opencode" => (

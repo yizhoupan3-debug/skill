@@ -1040,6 +1040,24 @@ mod tests {
         }
     }
 
+    #[test]
+    fn is_host_private_path_exempts_claude_plans_directory() {
+        // .claude/plans/ is a session scratch area (plan mode), not host-private state
+        assert!(!is_host_private_path("~/.claude/plans/dynamic-baking-curry.md"));
+        assert!(!is_host_private_path(".claude/plans/foo.md"));
+        // Absolute path under HOME also exempt
+        if let Ok(home) = std::env::var("HOME") {
+            let plans_path = format!("{home}/.claude/plans/some-plan.md");
+            assert!(!is_host_private_path(&plans_path));
+            // But actual host-private paths under HOME must still be blocked
+            let settings_path = format!("{home}/.claude/settings.json");
+            assert!(is_host_private_path(&settings_path));
+        }
+        // Relative host-private paths must still be blocked
+        assert!(is_host_private_path("~/.claude/settings.json"));
+        assert!(is_host_private_path(".claude/hook-state/review_gate_123.json"));
+    }
+
     fn unique_test_repo(name: &str) -> PathBuf {
         let mut path = std::env::temp_dir();
         path.push(format!(

@@ -1805,7 +1805,7 @@ fn framework_alias_fails_closed_for_missing_alias_record() {
     fs::create_dir_all(&registry_dir).expect("create registry dir");
     fs::write(
         registry_dir.join("RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md"}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v2","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md"}}}"#,
     )
     .expect("write registry");
 

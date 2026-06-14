@@ -16,7 +16,18 @@ fn main() -> Result<(), String> {
                     || p.aliases().iter().any(|a| *a == cmd_lower)
             });
             if is_host_alias {
-                args.insert(1, std::ffi::OsString::from("host"));
+                // Map old-style `router-rs <host> <subcommand>` to registry-driven
+                // `router-rs host <action> <host-id> <subcommand>`.
+                // Determine action (hook/agent) from the subcommand or default.
+                let action = match args.get(2).and_then(|s| s.to_str()) {
+                    Some("agent" | "Agent") => "agent",
+                    _ => "hook",
+                };
+                // Replace the host alias with the expanded form
+                let host_id = args[1].clone();
+                args[1] = std::ffi::OsString::from("host");
+                args.insert(2, std::ffi::OsString::from(action));
+                args.insert(3, host_id);
             }
         }
     }

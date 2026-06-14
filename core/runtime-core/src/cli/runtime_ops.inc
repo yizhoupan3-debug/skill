@@ -41,7 +41,7 @@ pub fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value,
 pub fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
     validate_write_path(path, None)?;
 
-    let parent = path.parent().ok_or_else(|| {
+    let _parent = path.parent().ok_or_else(|| {
         format!(
             "write path {} has no parent directory",
             path.display()
@@ -67,7 +67,7 @@ pub fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
     const MAX_TEMP_ATTEMPTS: u32 = 128;
     let (tmp_path, mut file) = {
         let mut chosen: Option<(PathBuf, fs::File)> = None;
-        for attempt in 0u32..MAX_TEMP_ATTEMPTS {
+        for _attempt in 0u32..MAX_TEMP_ATTEMPTS {
             let sequence = WRITE_TEXT_PAYLOAD_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
             let candidate = path.with_file_name(format!(
                 "{file_name}.{pid}.{thread_id}.{nonce}.{sequence}.tmp"

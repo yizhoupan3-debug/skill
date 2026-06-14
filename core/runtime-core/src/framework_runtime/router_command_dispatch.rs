@@ -16,6 +16,7 @@ use crate::closeout_enforcement::{
     closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context, CloseoutEvidenceContext,
 };
+use host_projection::hosts::mimo_hooks::run_mimo_hook;
 use crate::codex_hooks::{
     build_codex_hook_projection, codex_host_entrypoint_provider, install_codex_cli_hooks,
     resolve_codex_home, run_codex_audit_hook, InstallMode,
@@ -428,10 +429,56 @@ host_id: {hid}
     }))
 }
 
-/// Unified host command dispatcher (merged: codex, cursor, claude, opencode)
+/// Generic hook dispatch routed by host_id.
+pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Result<(), String> {
+    match host_id {
+        "cursor" => run_review_gate(&command.event, command.repo_root.as_deref()),
+        "claude-code" if command.direct => {
+            run_claude_hook_direct(
+                &command.event,
+                command.repo_root.as_deref(),
+                command.env_file.as_deref(),
+            )
+        }
+        "claude-code" => run_claude_hook_cli(&command.event, command.repo_root.as_deref()),
+        "opencode" => run_opencode_hook_cli(&command.event, command.repo_root.as_deref()),
+        "codex" => dispatch_codex_hook(command.event.as_str(), command.repo_root.as_deref()),
+        "mimo" => run_mimo_hook(&command.event, command.repo_root.as_deref())
+            .map(|_| ()),
+        _ => Err(format!("hook dispatch not implemented for host `{host_id}`")),
+    }
+}
+
+/// Hook dispatch for Codex via generic `hook` action.
+fn dispatch_codex_hook(event: &str, repo_root: Option<&Path>) -> Result<(), String> {
+    let repo_root = resolve_repo_root_arg(repo_root)?;
+    let payload = run_codex_audit_hook(event, &repo_root)?;
+    print_json_value(&codex_hook_stdout_payload(payload))?;
+    std::process::exit(0);
+}
+
+/// Generic agent dispatch routed by host_id.
+pub fn dispatch_agent_command(host_id: &str, command: GenericAgentCommand) -> Result<(), String> {
+    match host_id {
+        "claude-code" => {
+            let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            crate::hosts::claude_agent::run_claude_agent_mcp_loop(Some(&root))
+        }
+        "opencode" => {
+            let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
+            crate::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
+        }
+        _ => Err(format!("agent dispatch not implemented for host `{host_id}`")),
+    }
+}
+
+/// Unified host command dispatcher (registry-driven: Codex / Hook / Agent).
 pub fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
     match command {
         HostCommand::Codex { command } => dispatch_codex_command(command),
+        HostCommand::Hook { host_id, command } => dispatch_hook_command(&host_id, command),
+        HostCommand::Agent { host_id, command } => dispatch_agent_command(&host_id, command),
+        // Deprecated per-host variants (remove in v7.1)
         HostCommand::Cursor { command } => dispatch_cursor_command(command),
         HostCommand::Claude { command } => dispatch_claude_command(command),
         HostCommand::Opencode { command } => dispatch_opencode_command(command),
@@ -612,7 +659,7 @@ pub fn dispatch_opencode_command(command: OpenCodeSubcommand) -> Result<(), Stri
 fn run_opencode_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<(), String> {
     crate::kernel_bootstrap::ensure_kernel_bootstrap();
     crate::hook_timing::mark_hook_start();
-    let result = (|| -> Result<(), String> {
+    let _result = (|| -> Result<(), String> {
         // Read stdin JSON payload (same pattern as cursor/claude/codex)
         let payload = crate::cursor_hooks::read_cursor_hook_stdin_json()
             .unwrap_or_else(|_| serde_json::json!({}));

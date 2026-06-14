@@ -1,5 +1,5 @@
 {
-  "schema_version": "framework-runtime-registry-v1",
+  "schema_version": "framework-runtime-registry-v2",
   "framework_core": {
     "authority": "rust",
     "source": "framework-root-native",
@@ -11,7 +11,8 @@
       "cursor",
       "claude-code",
       "opencode",
-      "codex"
+      "codex",
+      "mimo"
     ],
     "shared_system_source": "skills",
     "metadata": {
@@ -49,6 +50,13 @@
         "installable": true,
         "default_framework_command": "implementx",
         "host_entrypoints": "AGENTS_CODEX.md"
+      },
+      "mimo": {
+        "install_tool": "mimo",
+        "projection_status": "implemented",
+        "installable": true,
+        "default_framework_command": "implementx",
+        "host_entrypoints": "AGENTS_MIMO.md"
       }
     },
     "host_providers": {
@@ -84,6 +92,14 @@
         "hooks_module": "codex_hooks",
         "cli_hook_subcommand": "hook",
         "dispatch_fn": "dispatch_codex_command"
+      },
+      "mimo": {
+        "cargo_feature": "host-mimo",
+        "provider_module": "mimo_provider",
+        "provider_type": "MimoHostProvider",
+        "hooks_module": "mimo_hooks",
+        "cli_hook_subcommand": "hook",
+        "dispatch_fn": "dispatch_mimo_command"
       }
     }
   },
@@ -536,7 +552,7 @@
     "opencode": {
       "profile_id": "opencode_profile",
       "host_id": "opencode",
-      "transport": "opencode-plugin",
+      "transport": "native-opencode",
       "context_files": [
         "AGENTS_OPENCODE.md"
       ],
@@ -633,6 +649,58 @@
         "rate_limit_auto_resume",
         "host_resume_entrypoint",
         "hard_gate_hooks",
+        "framework_alias_entrypoints"
+      ],
+      "managed_mcp_server_ids": [
+        "router-rs-framework",
+        "browser-mcp",
+        "mcp-codegraph",
+        "paperplain"
+      ]
+    },
+    "mimo": {
+      "profile_id": "mimo_profile",
+      "host_id": "mimo",
+      "transport": "native-mimo",
+      "context_files": [
+        "AGENTS_MIMO.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "user",
+          "host_root": "mimo",
+          "relative": "settings.json"
+        },
+        {
+          "scope": "project",
+          "relative": ".mimo/settings.json"
+        }
+      ],
+      "mcp_config_paths": [
+        {
+          "scope": "project",
+          "relative": ".mimo/settings.json"
+        }
+      ],
+      "session_supervisor_driver": "unsupported",
+      "session_supervisor_status": {
+        "supported": false,
+        "rationale": "Mimo host does not expose external process supervision or auto-resume. Long-running goals must rely on in-session continuity artifacts."
+      },
+      "resume_command_examples": [
+        "Continue in the same Mimo session"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract",
+        "closeout_evidence_hooks",
+        "review_gate_router_observation"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "mcp_servers",
+        "workspace_bootstrap",
+        "interactive_agent_chat",
         "framework_alias_entrypoints"
       ],
       "managed_mcp_server_ids": [

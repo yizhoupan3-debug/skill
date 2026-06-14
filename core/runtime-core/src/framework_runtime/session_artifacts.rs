@@ -115,7 +115,7 @@ fn build_session_artifact_write_plan(payload: &Value) -> Result<SessionArtifactW
     };
     let summary_path = primary_dir.join(SESSION_SUMMARY_FILENAME);
     let evidence_path = primary_dir.join(EVIDENCE_INDEX_FILENAME);
-    let summary_text = render_session_summary(&task, &phase, &status, &summary);
+    let _summary_text = render_session_summary(&task, &phase, &status, &summary);
     let evidence_payload = if write_evidence {
         build_evidence_index_payload(&evidence)
     } else {

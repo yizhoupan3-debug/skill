@@ -1,0 +1,11 @@
+# clippy configuration for skill framework
+# See: https://doc.rust-lang.org/clippy/configuration.html
+
+# Allow more arguments before warning (framework APIs tend to have many params)
+too-many-arguments-threshold = 8
+
+# Higher cognitive complexity threshold for framework orchestration code
+cognitive-complexity-threshold = 30
+
+# Allow large error types (FrameworkError enum variants)
+large-error-threshold = 256

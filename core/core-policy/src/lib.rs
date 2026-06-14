@@ -2,6 +2,7 @@
 pub mod crypto_util;
 pub mod dev_exempt;
 pub mod session_key;
+pub mod subagent;
 pub mod env_flags;
 pub mod hook_common;
 pub mod hook_policy;
@@ -77,6 +78,7 @@ pub use review_output_lint::{
     assistant_has_substantive_compact_review_finding_line, lint_review_output, LintFinding,
     LintSeverity,
 };
+pub use subagent::{is_subagent_tool, SUBAGENT_TOOL_NAMES};
 pub use review_routing_signals::{
     parallel_review_candidate_markers, review_gate_compiled_regexes,
     ParallelReviewCandidateMarkers,

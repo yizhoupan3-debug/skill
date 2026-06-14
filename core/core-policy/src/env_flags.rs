@@ -91,6 +91,7 @@ const REVIEW_GATE_DISABLE_BY_HOST: &[(&str, &str)] = &[
     ("cursor", ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV),
     ("codex", ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV),
     ("claude-code", ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV),
+    ("opencode", "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE"),
 ];
 
 /// Emergency review-gate disable for hook hosts (`cursor` / `codex` / `claude-code`).

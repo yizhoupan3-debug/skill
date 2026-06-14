@@ -88,6 +88,27 @@ fn matrix_my_light_suppresses_review_gate_on_stop() {
     });
 }
 
+/// Dual "review + /implementx" in same prompt suppresses review gate arming across all hosts.
+#[test]
+fn matrix_dual_review_implementx_suppresses_review_arming() {
+    run_for_hosts("dual-review-implementx", |host| {
+        let _gate = ReviewGateActiveGuard::new(host);
+        let repo = fresh_matrix_repo(host, "dual");
+        let sid = format!("{}-dual", harness::host_label(host));
+        let prompt = "请全面review这个仓库 /implementx 修复刚发现的问题";
+        dispatch_user_prompt_submit(host, &repo, &sid, prompt);
+        let stop = dispatch_stop(host, &repo, &sid, "继续", None);
+        assert!(
+            stop_allowed(host, &stop),
+            "{host:?} dual review+implementx must not hard-block Stop; out={stop:?}"
+        );
+        assert!(
+            !stop_review_gate_advisory(host, &stop),
+            "{host:?} dual prompt must suppress REVIEW_GATE nudge; out={stop:?}"
+        );
+    });
+}
+
 /// Narrow single-path review must not arm deep review gate nor Stop-block.
 #[test]
 fn matrix_narrow_review_skips_arming_and_stop_block() {
@@ -105,6 +126,33 @@ fn matrix_narrow_review_skips_arming_and_stop_block() {
             "{host:?} narrow review must not Stop-block; out={stop:?}"
         );
     });
+}
+
+/// Plain prompt (no review keywords) must not inject any review context or block Stop.
+#[test]
+fn matrix_non_automation_prompt_is_silent() {
+    for host in MATRIX_HOSTS {
+        let _gate = ReviewGateActiveGuard::new(*host);
+        let _model_off = if *host == MatrixHost::Cursor {
+            Some(CursorModelInheritDisableGuard::disable())
+        } else {
+            None
+        };
+        let repo = fresh_matrix_repo(*host, "silent");
+        let sid = format!("{}-silent", harness::host_label(*host));
+        let out = dispatch_user_prompt_submit(*host, &repo, &sid, "帮我修复 main.rs 的测试");
+        let ctx = user_prompt_additional_context(*host, &out);
+        assert!(
+            ctx.is_empty(),
+            "{host:?} plain prompt must not inject review context; ctx={ctx:?}"
+        );
+        let stop = dispatch_stop(*host, &repo, &sid, "done", None);
+        assert!(
+            stop_allowed(*host, &stop),
+            "{host:?} plain prompt must not block Stop; out={stop:?}"
+        );
+        let _ = _model_off;
+    }
 }
 
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE=1` suppresses REVIEW_GATE nudges on Stop (all hosts).

@@ -126,11 +126,7 @@ enum Commands {
         #[arg(long)]
         home_config_path: PathBuf,
         #[arg(long)]
-        home_codex_skills_path: PathBuf,
-        #[arg(long)]
         bootstrap_output_dir: Option<PathBuf>,
-        #[arg(long)]
-        skip_home_codex_skills_link: bool,
         #[arg(long)]
         skip_default_bootstrap: bool,
     },
@@ -233,10 +229,17 @@ pub struct ResolvedProjectionRoots {
     pub artifact_root: PathBuf,
     /// OS account home for Desktop official config paths and stable MCP binary (not `CLAUDE_HOME` parent).
     pub account_home_root: PathBuf,
-    pub codex_home_root: PathBuf,
-    pub cursor_home_root: PathBuf,
-    pub claude_home_root: PathBuf,
-    pub opencode_home_root: PathBuf,
+    /// Per-host home roots, keyed by host_id (e.g. "codex", "cursor", "claude-code", "opencode").
+    pub host_home_roots: BTreeMap<String, PathBuf>,
+}
+
+impl ResolvedProjectionRoots {
+    /// Get the home root for a specific host. Panics if host_id not found.
+    pub fn host_home_root(&self, host_id: &str) -> &PathBuf {
+        self.host_home_roots.get(host_id).unwrap_or_else(|| {
+            panic!("host_home_root: host_id {host_id:?} not found in resolved roots")
+        })
+    }
 }
 
 pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
@@ -306,7 +309,7 @@ mod tests {
         assert_eq!(canonical_tool_name("claude-code", &root).unwrap(), "claude");
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
-        for tool in ["cursor", "claude", "opencode", "codex"] {
+        for tool in ["cursor", "claude", "opencode", "codex", "mimo"] {
             assert!(err.contains(tool), "expected supported tool {tool} in error: {err}");
         }
         assert!(err.contains("claude-code"), "{err}");
@@ -325,6 +328,7 @@ mod tests {
                 "claude".to_string(),
                 "opencode".to_string(),
                 "codex".to_string(),
+                "mimo".to_string(),
             ]
         );
     }
@@ -357,7 +361,7 @@ mod tests {
         write_test_file(
             &repo_registry,
             r#"{
-  "schema_version": "framework-runtime-registry-v1",
+  "schema_version": "framework-runtime-registry-v2",
   "runtime_profiles": []
 }"#,
         );
@@ -556,10 +560,12 @@ mod tests {
             project_root: framework_root.clone(),
             artifact_root: framework_root.join("artifacts"),
             account_home_root: home.clone(),
-            codex_home_root: root.join("codex"),
-            cursor_home_root: cursor_home.clone(),
-            claude_home_root: root.join("claude"),
-            opencode_home_root: root.join("opencode"),
+            host_home_roots: [
+                ("codex".into(), root.join("codex")),
+                ("cursor".into(), cursor_home.clone()),
+                ("claude-code".into(), root.join("claude")),
+                ("opencode".into(), root.join("opencode")),
+            ].into_iter().collect(),
         };
         std::env::set_var("HOME", &home);
         let outcome =
@@ -632,8 +638,8 @@ mod tests {
         )
         .expect("resolve roots");
         assert_eq!(roots.account_home_root, os_home);
-        assert_eq!(roots.claude_home_root, custom_claude);
-        assert_eq!(roots.opencode_home_root, os_home.join(".opencode"));
+        assert_eq!(roots.host_home_root("claude-code").as_path(), custom_claude.as_path());
+        assert_eq!(roots.host_home_root("opencode").as_path(), os_home.join(".opencode").as_path());
 
         if let Some(h) = prior_home {
             std::env::set_var("HOME", h);
@@ -666,10 +672,12 @@ mod tests {
             project_root: project_root.clone(),
             artifact_root: project_root.join("artifacts"),
             account_home_root: home.clone(),
-            codex_home_root: home.join(".codex"),
-            cursor_home_root: home.join(".cursor"),
-            claude_home_root: home.join(".claude"),
-            opencode_home_root: home.join(".opencode"),
+            host_home_roots: [
+                ("codex".into(), home.join(".codex")),
+                ("cursor".into(), home.join(".cursor")),
+                ("claude-code".into(), home.join(".claude")),
+                ("opencode".into(), home.join(".opencode")),
+            ].into_iter().collect(),
         };
 
         let changed =
@@ -709,10 +717,12 @@ mod tests {
             project_root: project_root.clone(),
             artifact_root: project_root.join("artifacts"),
             account_home_root: home.clone(),
-            codex_home_root: home.join(".codex"),
-            cursor_home_root: home.join(".cursor"),
-            claude_home_root: home.join(".claude"),
-            opencode_home_root: home.join(".opencode"),
+            host_home_roots: [
+                ("codex".into(), home.join(".codex")),
+                ("cursor".into(), home.join(".cursor")),
+                ("claude-code".into(), home.join(".claude")),
+                ("opencode".into(), home.join(".opencode")),
+            ].into_iter().collect(),
         };
 
         let changed =

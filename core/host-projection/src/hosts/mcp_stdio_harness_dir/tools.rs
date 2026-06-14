@@ -604,12 +604,6 @@ pub(super) fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Pa
 
 #[derive(Debug, Clone)]
 pub struct McpCloseoutGateVerdict {
-    #[allow(dead_code)]
-    pub all_clear: bool,
-    #[allow(dead_code)]
-    pub checkpoint_only: bool,
-    #[allow(dead_code)]
-    pub hard_block: bool,
     pub formatted: String,
 }
 
@@ -735,9 +729,6 @@ pub fn evaluate_mcp_closeout_gate(
     persist_review_gate_status(repo_root, task_id, all_clear, &findings, lifecycle_profile);
 
     Ok(McpCloseoutGateVerdict {
-        all_clear,
-        checkpoint_only,
-        hard_block,
         formatted,
     })
 }

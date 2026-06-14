@@ -46,6 +46,7 @@ pub enum PaperProseHookHost {
     Cursor,
     Codex,
     Claude,
+    OpenCode,
 }
 pub type PaperProseHookHostType = PaperProseHookHost;
 
@@ -56,6 +57,7 @@ impl PaperProseHookHost {
             Self::Cursor => "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
             Self::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
             Self::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
+            Self::OpenCode => "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK",
         }
     }
 
@@ -65,6 +67,7 @@ impl PaperProseHookHost {
             Self::Cursor => "ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK",
             Self::Codex => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
             Self::Claude => "ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK",
+            Self::OpenCode => "ROUTER_RS_OPENCODE_PAPER_ADVERSARIAL_HOOK",
         }
     }
 
@@ -1080,6 +1083,7 @@ pub fn install_test_deps() {
                 PaperProseHookHost::Cursor => "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
                 PaperProseHookHost::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
                 PaperProseHookHost::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
+                PaperProseHookHost::OpenCode => "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK",
             };
             if !super::hooks::router_rs_env_enabled_default_true(env_var) {
                 return;

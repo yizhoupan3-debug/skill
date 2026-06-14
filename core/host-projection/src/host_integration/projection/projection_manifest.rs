@@ -174,7 +174,7 @@ pub fn append_mcp_path(paths: &mut Value, include: bool, mcp_path: &Path) {
 
 pub fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.codex_home_root.join("prompts").join("framework.md")
+        roots.host_home_root("codex").join("prompts").join("framework.md")
     } else {
         roots
             .project_root
@@ -186,7 +186,7 @@ pub fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> 
 
 pub fn cursor_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.cursor_home_root.join("rules").join("framework.mdc")
+        roots.host_home_root("cursor").join("rules").join("framework.mdc")
     } else {
         roots
             .project_root
@@ -198,7 +198,7 @@ pub fn cursor_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) ->
 
 pub fn codex_prompt_entrypoints_root(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.codex_home_root.clone()
+        roots.host_home_root("codex").clone()
     } else {
         roots.project_root.join(".codex")
     }
@@ -209,47 +209,38 @@ pub fn projection_manifest_path(
     host_projection: &str,
     scope: &str,
 ) -> PathBuf {
-    match (host_projection, scope) {
-        ("codex", "user") => roots
-            .codex_home_root
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("codex", _) => roots
-            .project_root
-            .join(".codex")
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("cursor", "user") => roots
-            .cursor_home_root
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("cursor", _) => roots
-            .project_root
-            .join(".cursor")
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("claude-code", "user") => roots
-            .claude_home_root
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        ("claude-code", _) => roots
-            .project_root
-            .join(".claude")
-            .join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
-        _ => roots.project_root.join(FRAMEWORK_PROJECTION_MANIFEST_NAME),
+    let manifest_name = FRAMEWORK_PROJECTION_MANIFEST_NAME;
+    if scope == "user" {
+        return roots.host_home_root(host_projection).join(manifest_name);
     }
+    // Project scope: use .<host_dir> under project_root.
+    // Host dir mapping: host_id -> dotfile name (e.g. "claude-code" -> ".claude")
+    let host_dir = match host_projection {
+        "claude-code" => ".claude".to_string(),
+        other => format!(".{other}"),
+    };
+    roots.project_root.join(&host_dir).join(manifest_name)
 }
 
-pub fn write_codex_projection_manifest(
+/// Unified projection manifest writer for all hosts.
+/// Replaces per-host `write_*_projection_manifest` functions.
+pub fn write_projection_manifest(
     roots: &ResolvedProjectionRoots,
+    host_projection: &str,
     scope: &str,
-    command_path: &Path,
+    files: &[String],
+    managed_key_paths: &[String],
 ) -> Result<bool, String> {
     write_json_if_changed(
-        &projection_manifest_path(roots, "codex", scope),
+        &projection_manifest_path(roots, host_projection, scope),
         &json!({
             "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
             "managed_by": "skill-framework",
-            "host_projection": "codex",
+            "host_projection": host_projection,
             "scope": scope,
-            "files": [command_path.to_string_lossy()],
+            "files": files,
             "settings": {
-                "managed_key_paths": [],
+                "managed_key_paths": managed_key_paths,
             }
         }),
     )
@@ -268,29 +259,8 @@ pub fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope:
     )
 }
 
-pub fn write_cursor_projection_manifest(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-    managed_files: &[String],
-    managed_key_paths: &[String],
-) -> Result<bool, String> {
-    write_json_if_changed(
-        &projection_manifest_path(roots, "cursor", scope),
-        &json!({
-            "schema_version": FRAMEWORK_PROJECTION_SCHEMA_VERSION,
-            "managed_by": "skill-framework",
-            "host_projection": "cursor",
-            "scope": scope,
-            "files": managed_files,
-            "settings": {
-                "managed_key_paths": managed_key_paths,
-            }
-        }),
-    )
-}
-
 pub fn cursor_mcp_config_path(roots: &ResolvedProjectionRoots) -> PathBuf {
-    roots.cursor_home_root.join("mcp.json")
+    roots.host_home_root("cursor").join("mcp.json")
 }
 
 pub fn cursor_mcp_server_key_path() -> &'static str {
@@ -314,7 +284,7 @@ pub fn install_cursor_mcp_server(
     path: &Path,
 ) -> Result<CursorMcpInstallOutcome, String> {
     let browser_server = cursor_mcp_server_payload(roots);
-    let framework_server = cursor_router_rs_framework_payload(roots);
+    let framework_server = host_router_rs_framework_payload(roots, "cursor", "Framework snapshot, skill routing, goal/closeout gating (Cursor)");
     // codegraph 注入走 merge_codegraph_into_mcp_servers_map，无需提前构造
     if let Some(payload) = read_json_if_exists(path)? {
         if let Some(existing) = payload
@@ -438,29 +408,8 @@ pub fn cursor_mcp_entry_is_framework_owned_stale(existing: &Value, framework_roo
     is_repo_build_executable_path(cmd, framework_root)
 }
 
-pub fn remove_cursor_mcp_server(path: &Path) -> Result<bool, String> {
-    let Some(mut payload) = read_json_if_exists(path)? else {
-        return Ok(false);
-    };
-    let Some(root) = payload.as_object_mut() else {
-        return Ok(false);
-    };
-    let managed_keys = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
-    let mut changed = false;
-    if let Some(mcp_servers) = root.get_mut("mcp_servers") {
-        if let Some(servers) = mcp_servers.as_object_mut() {
-            for key in &managed_keys {
-                changed |= servers.remove(*key).is_some();
-            }
-            if servers.is_empty() {
-                root.remove("mcp_servers");
-            }
-        }
-    }
-    if changed {
-        write_json_if_changed(path, &payload)?;
-    }
-    Ok(changed)
+pub fn remove_cursor_mcp_server(path: &Path, framework_root: &Path) -> Result<bool, String> {
+    mcp_json_remove_servers(path, framework_root, McpConfigFormat::CURSOR)
 }
 
 pub fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String> {
@@ -576,15 +525,6 @@ pub fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
             "args": args,
         }),
     }
-}
-
-/// router-rs-framework payload for Cursor (uses `mcp_servers` key, snake_case).
-pub fn cursor_router_rs_framework_payload(roots: &ResolvedProjectionRoots) -> Value {
-    make_mcp_server_payload(
-        roots,
-        &["cursor", "agent", "--repo-root", roots.project_root.to_string_lossy().as_ref()],
-        "Framework snapshot, skill routing, goal/closeout gating (Cursor)",
-    )
 }
 
 pub fn cursor_router_rs_framework_key_path() -> &'static str {

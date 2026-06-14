@@ -1370,6 +1370,10 @@ fn is_host_private_path(path: &str) -> bool {
     if normalized.starts_with(".claude/") && is_repo_claude_hook_state_file(&normalized) {
         return true;
     }
+    // `.claude/plans/` is a session scratch area (plan mode), not host-private state.
+    if normalized.contains("/.claude/plans/") || normalized.starts_with(".claude/plans/") {
+        return false;
+    }
     let leaf = active_stdio_agent_hook_host().user_config_dir_leaf();
     let tilde_prefix = format!("~/{}/", leaf.trim_start_matches('/'));
     if normalized.starts_with(&tilde_prefix) {

@@ -388,7 +388,7 @@ mod tests {
             // (host_id, transport_type, config_path_contains, session_supervisor, has_worktree)
             ("cursor", "cursor-agent", "mcp.json", "unsupported", true),
             ("claude-code", "anthropic-claude-code", ".claude/settings.json", "mcp_bridge", true),
-            ("opencode", "opencode-plugin", ".opencode/opencode.json", "unsupported", true),
+            ("opencode", "native-opencode", ".opencode/opencode.json", "unsupported", true),
             ("codex", "native-codex", "config.toml", "codex_driver", true),
         ];
         for &(host_id, transport, config_contains, supervisor, worktree) in cases {
@@ -445,7 +445,7 @@ mod tests {
             // (host_id, manifest_path, sample_events)
             ("cursor", ".cursor/hooks.json", &["beforeSubmitPrompt", "stop"]),
             ("codex", ".codex/hooks.json", &["PreToolUse", "Stop"]),
-            ("opencode", ".opencode/plugins/", &["tool.execute.before"]),
+            // opencode: no manifest (native hook via launcher script), events tested separately
         ];
         for &(host_id, manifest, events) in cases {
             let lifecycle = host_lifecycle_for_id(host_id).expect(host_id);

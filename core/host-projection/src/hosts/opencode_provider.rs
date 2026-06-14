@@ -1,4 +1,7 @@
-//! OpenCode host: `HostProvider` with plugin-based hook support.
+//! OpenCode host: `HostProvider` with native Rust hook support.
+//!
+//! OpenCode uses `router-rs opencode hook --event=...` for all hook events,
+//! unified with cursor/claude/codex via the shared `HostHookDispatcher` trait.
 
 use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
@@ -20,12 +23,12 @@ impl HostLifecycle for OpencodeHostProvider {
         "AGENTS_OPENCODE.md"
     }
 
-    fn hooks_manifest_path(&self) -> Option<&'static str> {
-        Some(super::opencode_hooks::OPENCODE_HOOKS_PATH)
-    }
-
     fn registered_hook_events(&self) -> &'static [&'static str] {
         super::opencode_hooks::OPENCODE_HOOKS_REGISTERED_EVENTS
+    }
+
+    fn driver_binary(&self) -> &'static str {
+        "opencode"
     }
 }
 
@@ -33,7 +36,7 @@ impl HostToolExecutor for OpencodeHostProvider {}
 
 impl HostTelemetry for OpencodeHostProvider {
     fn hook_telemetry_surface(&self) -> &'static str {
-        "opencode-plugin"
+        "native-opencode"
     }
 
     fn observation_host_id(&self) -> Option<&'static str> {
@@ -50,10 +53,14 @@ impl HostProvider for OpencodeHostProvider {
         "opencode"
     }
 
+    fn aliases(&self) -> &'static [&'static str] {
+        &["opencode"]
+    }
+
     fn capabilities(&self) -> HostCapabilities {
         HostCapabilities {
-            mcp_config_key: "mcp",
-            transport_type: "opencode-plugin",
+            mcp_config_key: "mcpServers",
+            transport_type: "native-opencode",
             config_path: ".opencode/opencode.json",
             ..Default::default()
         }

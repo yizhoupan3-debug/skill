@@ -21,6 +21,7 @@ members = [
     "core/core-policy",
     "core/routing-engine",
     "core/router-rs",
+    "core/runtime-storage",
     "core/runtime-core",
     "core/browser-mcp",
     "core/host-projection",

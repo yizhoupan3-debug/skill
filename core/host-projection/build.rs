@@ -40,6 +40,7 @@ fn main() {
         ("codex", ("codex_provider", "CodexHostProvider")),
         ("claude-code", ("claude_provider", "ClaudeHostProvider")),
         ("opencode", ("opencode_provider", "OpencodeHostProvider")),
+        ("mimo", ("mimo_provider", "MimoHostProvider")),
     ]
     .into_iter()
     .collect();

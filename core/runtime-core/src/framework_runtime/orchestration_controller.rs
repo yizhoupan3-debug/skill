@@ -390,7 +390,7 @@ fn handle_claim(
 }
 
 fn handle_complete(
-    payload: BackgroundControlRequestPayload,
+    _payload: BackgroundControlRequestPayload,
     supported_multitask_strategies: Vec<String>,
 ) -> Result<BackgroundControlResponsePayload, String> {
     let mut effect_plan = background_effect_plan("finalize_completed");

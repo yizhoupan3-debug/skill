@@ -253,22 +253,65 @@ pub enum SkillsSubcommand {
     },
 }
 
-/// Unified host commands (merged: codex, cursor, claude, opencode)
+/// Generic hook command shared across all hook-capable hosts.
+#[derive(Args, Debug, Clone)]
+pub struct GenericHookCommand {
+    /// Hook event name (e.g. PreToolUse, Stop)
+    #[arg(long)]
+    pub event: String,
+    #[arg(long)]
+    pub repo_root: Option<PathBuf>,
+    /// Direct hook dispatch — reads .env, handles SessionStart, dispatches hook.
+    /// Replaces bash wrapper chain (Claude-specific, ignored for other hosts).
+    #[arg(long)]
+    pub direct: bool,
+    /// Path to .env file (Claude-specific direct mode).
+    #[arg(long)]
+    pub env_file: Option<PathBuf>,
+}
+
+/// Generic MCP agent command shared across all MCP-native hosts.
+#[derive(Args, Debug, Clone)]
+pub struct GenericAgentCommand {
+    #[arg(long)]
+    pub repo_root: Option<PathBuf>,
+}
+
+/// Registry-driven host commands.
+///
+/// Generic `Hook` and `Agent` variants eliminate per-host enum variants.
+/// `Codex` retains its own variant due to unique subcommands (HookProjection, InstallHooks).
+/// Old per-host variants (Cursor, Claude, Opencode) are hidden and deprecated — remove in v7.1.
 #[derive(Subcommand, Debug, Clone)]
 pub enum HostCommand {
     Codex {
         #[command(subcommand)]
         command: CodexSubcommand,
     },
+    /// Run a hook event for any hook-capable host (cursor, claude-code, opencode, codex).
+    Hook {
+        host_id: String,
+        #[command(flatten)]
+        command: GenericHookCommand,
+    },
+    /// Run an MCP stdio agent loop (opencode, claude-code).
+    Agent {
+        host_id: String,
+        #[command(flatten)]
+        command: GenericAgentCommand,
+    },
+    // ── Deprecated per-host variants (hidden, remove in v7.1) ──
+    #[command(hide = true)]
     Cursor {
         #[command(subcommand)]
         command: CursorSubcommand,
     },
-    #[command(alias = "claude-desktop")]
+    #[command(hide = true)]
     Claude {
         #[command(subcommand)]
         command: ClaudeSubcommand,
     },
+    #[command(hide = true)]
     Opencode {
         #[command(subcommand)]
         command: OpenCodeSubcommand,

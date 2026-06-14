@@ -55,16 +55,12 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
         Commands::InstallNativeIntegration {
             repo_root,
             home_config_path,
-            home_codex_skills_path,
             bootstrap_output_dir,
-            skip_home_codex_skills_link,
             skip_default_bootstrap,
         } => install_native_integration(
             &repo_root,
             &home_config_path,
-            &home_codex_skills_path,
             bootstrap_output_dir.as_deref(),
-            !skip_home_codex_skills_link,
             !skip_default_bootstrap,
         )?,
         Commands::InstallSkills {
@@ -550,28 +546,33 @@ pub fn resolve_projection_roots(
     let framework_root = resolve_projection_framework_root(framework_root)?;
     let project_root = resolve_project_root(project_root, &framework_root)?;
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
-    let codex_home_root = resolve_host_home(codex_home, shared_home, "CODEX_HOME", ".codex")?;
-    let cursor_home_root = resolve_host_home(cursor_home, shared_home, "CURSOR_HOME", ".cursor")?;
-    let claude_home_root = resolve_host_home(claude_home, shared_home, "CLAUDE_HOME", ".claude")?;
-    let opencode_home_root = resolve_host_home(
-        opencode_home,
-        shared_home,
-        "OPENCODE_HOME",
-        ".opencode",
-    )?;
     let account_home_root = match shared_home {
         Some(home) => normalize_path(home)?,
         None => default_home_dir(),
     };
+
+    // Build host home roots map from registry-driven host list + explicit overrides.
+    let host_overrides: [(&str, Option<&Path>, &str, &str); 5] = [
+        ("codex", codex_home, "CODEX_HOME", ".codex"),
+        ("cursor", cursor_home, "CURSOR_HOME", ".cursor"),
+        ("claude-code", claude_home, "CLAUDE_HOME", ".claude"),
+        ("opencode", opencode_home, "OPENCODE_HOME", ".opencode"),
+        ("mimo", None, "MIMO_HOME", ".mimo"),
+    ];
+    let mut host_home_roots = BTreeMap::new();
+    for (host_id, explicit, env_var, default_leaf) in &host_overrides {
+        host_home_roots.insert(
+            host_id.to_string(),
+            resolve_host_home(*explicit, shared_home, env_var, default_leaf)?,
+        );
+    }
+
     Ok(ResolvedProjectionRoots {
         framework_root,
         project_root,
         artifact_root,
         account_home_root,
-        codex_home_root,
-        cursor_home_root,
-        claude_home_root,
-        opencode_home_root,
+        host_home_roots,
     })
 }
 

@@ -154,7 +154,7 @@ fn state_lock_path(repo_root: &Path, event: &Value) -> PathBuf {
 
 #[cfg(unix)]
 struct UnixLockState {
-#[allow(dead_code)]
+    #[allow(dead_code)] // Retained for debugging; _file holds the actual flock.
     path: PathBuf,
     _file: std::fs::File,
 }

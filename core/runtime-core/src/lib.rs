@@ -1,5 +1,4 @@
 #![recursion_limit = "256"]
-#![allow(unused_variables, unused_mut)]
 
 //! runtime-core: extracted runtime modules from router-rs.
 //!
@@ -7,8 +6,9 @@
 
 // ── original four ──
 pub mod background_state;
-pub mod runtime_envelope_ids;
-pub mod runtime_storage;
+// runtime_envelope_ids, runtime_storage → extracted to runtime-storage crate
+pub use rt_storage::runtime_envelope_ids;
+pub use rt_storage::runtime_storage;
 pub mod trace_runtime;
 
 // ── migrated modules (B3) ──

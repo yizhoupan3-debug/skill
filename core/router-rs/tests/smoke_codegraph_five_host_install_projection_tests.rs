@@ -51,10 +51,12 @@ mod five_host_install_projection {
             project_root: project_root.clone(),
             artifact_root: project_root.join("artifacts"),
             account_home_root: home.clone(),
-            codex_home_root: home.join(".codex"),
-            cursor_home_root: home.join(".cursor"),
-            claude_home_root: home.join(".claude"),
-            opencode_home_root: home.join(".opencode"),
+            host_home_roots: [
+                ("codex".into(), home.join(".codex")),
+                ("cursor".into(), home.join(".cursor")),
+                ("claude-code".into(), home.join(".claude")),
+                ("opencode".into(), home.join(".opencode")),
+            ].into_iter().collect(),
         };
         (root, roots)
     }
@@ -101,7 +103,7 @@ mod five_host_install_projection {
     fn assert_host_projected_codegraph(roots: &ResolvedProjectionRoots, host_id: &str) {
         match host_id {
             "cursor" => {
-                let path = roots.cursor_home_root.join("mcp.json");
+                let path = roots.host_home_root("cursor").join("mcp.json");
                 assert!(path.is_file(), "cursor user mcp.json must exist");
                 assert_mcp_servers_codegraph(&read_json(&path), host_id);
             }
@@ -118,6 +120,9 @@ mod five_host_install_projection {
                 assert!(path.is_file(), "opencode project opencode.json must exist");
                 assert_mcp_servers_camel_codegraph(&read_json(&path), host_id);
             }
+            "mimo" => {
+                // mimo 没有独立的 host projection (native MCP only)。
+            }
             other => panic!("unexpected host_id {other}"),
         }
     }
@@ -129,7 +134,7 @@ mod five_host_install_projection {
             load_runtime_registry_json(&framework_root).expect("load RUNTIME_REGISTRY");
         let host_ids =
             host_targets_supported_host_ids(&registry).expect("supported host ids");
-        assert_eq!(host_ids.len(), 4, "closed-set must remain four hosts (codex, claude-code, cursor, opencode)");
+        assert_eq!(host_ids.len(), 5, "closed-set must remain five hosts (codex, claude-code, cursor, opencode, mimo)");
 
         let (cleanup_root, roots) = test_roots(&framework_root);
         let prior_home = std::env::var_os("HOME");

@@ -3,29 +3,6 @@
 //! Extracted from projection.rs to keep file size ≤2000 lines.
 
 use super::*;
-pub fn codex_home_root_string(roots: &ResolvedProjectionRoots) -> String {
-    roots.codex_home_root.to_string_lossy().into_owned()
-}
-
-pub fn cursor_home_root_string(roots: &ResolvedProjectionRoots) -> String {
-    roots.cursor_home_root.to_string_lossy().into_owned()
-}
-
-pub fn claude_home_root_string(roots: &ResolvedProjectionRoots) -> String {
-    roots.claude_home_root.to_string_lossy().into_owned()
-}
-
-pub fn codex_home_explicit(command: &ProjectionCommand) -> bool {
-    command.codex_home.is_some() || std::env::var_os("CODEX_HOME").is_some()
-}
-
-pub fn cursor_home_explicit(command: &ProjectionCommand) -> bool {
-    command.cursor_home.is_some() || std::env::var_os("CURSOR_HOME").is_some()
-}
-
-pub fn claude_home_explicit(command: &ProjectionCommand) -> bool {
-    command.claude_home.is_some() || std::env::var_os("CLAUDE_HOME").is_some()
-}
 
 pub fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
     ensure_router_rs_installed_for_mcp_with_roots(roots)?;
@@ -33,7 +10,7 @@ pub fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) ->
     let changed = write_text_if_changed(&target, &render_codex_framework_entrypoint(roots, scope))?;
     let prompt_entrypoints =
         codex_prompt_entrypoints_disabled(&codex_prompt_entrypoints_root(roots, scope));
-    let manifest_changed = write_codex_projection_manifest(roots, scope, &target)?;
+    let manifest_changed = write_projection_manifest(roots, "codex", scope, &[target.to_string_lossy().into_owned()], &[])?;
     let prompt_entrypoints_changed = prompt_entrypoints
         .get("changed")
         .and_then(Value::as_bool)
@@ -99,10 +76,7 @@ pub fn install_cursor_projection(
         changed |= mcp_install.changed;
         if mcp_install.managed {
             managed_files.push(mcp_path.to_string_lossy().to_string());
-            managed_key_paths.push(cursor_mcp_server_key_path().to_string());
-            managed_key_paths.push(cursor_router_rs_framework_key_path().to_string());
-            managed_key_paths.push(cursor_codegraph_mcp_server_key_path().to_string());
-            managed_key_paths.push(cursor_paperplain_mcp_server_key_path().to_string());
+            managed_key_paths.extend(mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::CURSOR)?);
         }
         mcp = json!({
             "managed": mcp_install.managed,
@@ -114,7 +88,7 @@ pub fn install_cursor_projection(
         });
     }
     let manifest_changed =
-        write_cursor_projection_manifest(roots, scope, &managed_files, &managed_key_paths)?;
+        write_projection_manifest(roots, "cursor", scope, &managed_files, &managed_key_paths)?;
     Ok(json!({
         "status": "installed",
         "changed": changed || manifest_changed,
@@ -138,40 +112,15 @@ pub fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value
     let mcp_path = cursor_mcp_config_path(roots);
     let rules_ready = managed_projection_file_exists(&user_target)?;
     let mcp_exists = mcp_path.is_file();
-    let managed_servers = ["router-rs-framework", "browser-mcp", "mcp-codegraph", "paperplain"];
-    let mut server_status: serde_json::Map<String, Value> = serde_json::Map::new();
-    let mut all_valid = true;
-    let mut first_error = None;
-
-    if mcp_exists {
-        if let Ok(Some(mcp_json)) = read_json_if_exists(&mcp_path) {
-            let servers = mcp_json.get("mcp_servers").and_then(Value::as_object);
-            for server_id in &managed_servers {
-                let entry = servers.and_then(|s| s.get(*server_id));
-                if let Some(cmd) = entry.and_then(|v| v.get("command")).and_then(Value::as_str) {
-                    match validate_mcp_command_binary(cmd, Some(&roots.framework_root)) {
-                        Ok(()) => { server_status.insert(server_id.to_string(), json!({"binary_valid": true})); }
-                        Err(err) => {
-                            all_valid = false;
-                            if first_error.is_none() { first_error = Some(err.clone()); }
-                            server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": err}));
-                        }
-                    }
-                } else {
-                    all_valid = false;
-                    let msg = format!("missing or incomplete {server_id} payload");
-                    if first_error.is_none() { first_error = Some(msg.clone()); }
-                    server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": msg}));
-                }
-            }
-        } else {
-            all_valid = false;
-            first_error = Some("Failed to read or parse ~/.cursor/mcp.json".to_string());
-        }
+    let config_payload = if mcp_exists { read_json_if_exists(&mcp_path).ok().flatten() } else { None };
+    let (server_status, mcp_valid, mcp_error) =
+        validate_mcp_servers_from_json(roots, config_payload.as_ref(), "mcp_servers");
+    let all_valid = mcp_valid;
+    let first_error = if !mcp_exists {
+        Some("~/.cursor/mcp.json does not exist".to_string())
     } else {
-        all_valid = false;
-        first_error = Some("~/.cursor/mcp.json does not exist".to_string());
-    }
+        mcp_error
+    };
 
     let ready = rules_ready && mcp_exists && all_valid;
     Ok(json!({
@@ -271,7 +220,7 @@ pub fn remove_cursor_projection(
     let mcp_skipped_user_owned =
         scope == "user" && !mcp_would_remove && cursor_mcp_server_exists(&mcp_path)?;
     let mcp_changed = if !dry_run && mcp_would_remove {
-        remove_cursor_mcp_server(&mcp_path)?
+        remove_cursor_mcp_server(&mcp_path, &roots.framework_root)?
     } else {
         false
     };
@@ -315,7 +264,7 @@ pub fn remove_cursor_projection(
 
 pub fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.claude_home_root.join("rules").join("framework.md")
+        roots.host_home_root("claude-code").join("rules").join("framework.md")
     } else {
         roots
             .project_root
@@ -331,7 +280,7 @@ pub fn claude_project_narrative_path(roots: &ResolvedProjectionRoots) -> PathBuf
 
 pub fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.claude_home_root.join("settings.json")
+        roots.host_home_root("claude-code").join("settings.json")
     } else {
         roots.project_root.join(".claude").join("settings.json")
     }
@@ -467,7 +416,18 @@ pub fn install_claude_projection(
     };
     let hooks_changed = install_claude_settings_hooks(&settings_path)?;
     let env_changed = install_claude_hook_env_if_absent(roots)?;
-    let manifest_changed = write_claude_projection_manifest(roots, scope, &target, &settings_path)?;
+    let mut manifest_files = vec![
+        projection_manifest_file_ref(roots, &target),
+        projection_manifest_file_ref(roots, &settings_path),
+    ];
+    if scope == "project" {
+        manifest_files.push(projection_manifest_file_ref(
+            roots,
+            &claude_project_narrative_path(roots),
+        ));
+    }
+    let manifest_key_paths: Vec<String> = ALL_HOOK_EVENTS.iter().map(|e| format!("hooks.{e}")).collect();
+    let manifest_changed = write_projection_manifest(roots, "claude-code", scope, &manifest_files, &manifest_key_paths)?;
     Ok(json!({
         "status": "installed",
         "changed": changed || narrative_changed || hooks_changed || env_changed || manifest_changed,
