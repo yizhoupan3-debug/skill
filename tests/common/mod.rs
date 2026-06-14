@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod review_gate_lanes;
 
 #[allow(unused_imports)]

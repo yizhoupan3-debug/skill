@@ -52,7 +52,7 @@ fn cli_backward_compat_top_level_commands_smoke() {
                 command: FrameworkCommand::Doctor(_),
             } => {}
             RouterCommand::Host { command } => match command {
-                HostCommand::Codex { .. } | HostCommand::Cursor { .. } => {}
+                HostCommand::Codex { .. } | HostCommand::Hook { .. } => {}
                 other => panic!("unexpected host variant in smoke: {other:?}"),
             },
             RouterCommand::Storage { .. } | RouterCommand::Diagnose { .. } => {}

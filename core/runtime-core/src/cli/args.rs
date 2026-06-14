@@ -281,40 +281,23 @@ pub struct GenericAgentCommand {
 ///
 /// Generic `Hook` and `Agent` variants eliminate per-host enum variants.
 /// `Codex` retains its own variant due to unique subcommands (HookProjection, InstallHooks).
-/// Old per-host variants (Cursor, Claude, Opencode) are hidden and deprecated — remove in v7.1.
 #[derive(Subcommand, Debug, Clone)]
 pub enum HostCommand {
     Codex {
         #[command(subcommand)]
         command: CodexSubcommand,
     },
-    /// Run a hook event for any hook-capable host (cursor, claude-code, opencode, codex).
+    /// Run a hook event for any hook-capable host (cursor, claude-code, opencode, codex, mimo).
     Hook {
         host_id: String,
         #[command(flatten)]
         command: GenericHookCommand,
     },
-    /// Run an MCP stdio agent loop (opencode, claude-code).
+    /// Run an MCP stdio agent loop (opencode, claude-code, mimo).
     Agent {
         host_id: String,
         #[command(flatten)]
         command: GenericAgentCommand,
-    },
-    // ── Deprecated per-host variants (hidden, remove in v7.1) ──
-    #[command(hide = true)]
-    Cursor {
-        #[command(subcommand)]
-        command: CursorSubcommand,
-    },
-    #[command(hide = true)]
-    Claude {
-        #[command(subcommand)]
-        command: ClaudeSubcommand,
-    },
-    #[command(hide = true)]
-    Opencode {
-        #[command(subcommand)]
-        command: OpenCodeSubcommand,
     },
 }
 
@@ -325,53 +308,6 @@ pub enum CodexSubcommand {
     Hook(CodexHookCommand),
     HostIntegration(ForwardedArgsCommand),
     InstallHooks(InstallHooksCommand),
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum CursorSubcommand {
-    Hook(CursorHookCommand),
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum ClaudeSubcommand {
-    /// Run MCP stdio agent loop (framework snapshot, skill routing, goal/closeout).
-    #[command(name = "agent")]
-    Agent(ClaudeAgentCommand),
-    Hook(ClaudeHookCommand),
-    /// Direct hook dispatch — reads .env, handles SessionStart, dispatches hook.
-    /// Replaces bash wrapper chain. Usage: router-rs claude-hook <EventName>
-    #[command(name = "claude-hook")]
-    ClaudeHookDirect(ClaudeHookDirectCommand),
-}
-
-#[derive(Args, Debug, Clone)]
-pub struct ClaudeAgentCommand {
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum OpenCodeSubcommand {
-    /// Run MCP stdio agent loop (framework snapshot, skill routing, goal/closeout).
-    #[command(name = "agent")]
-    Agent(OpenCodeAgentCommand),
-    /// Run hook event dispatch (PreToolUse, PostToolUse, Stop, etc.).
-    #[command(name = "hook")]
-    Hook(OpenCodeHookCommand),
-}
-
-#[derive(Args, Debug, Clone)]
-pub struct OpenCodeAgentCommand {
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
-}
-
-#[derive(Args, Debug, Clone)]
-pub struct OpenCodeHookCommand {
-    #[arg(long)]
-    pub event: String,
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
 }
 
 /// Diagnostic commands (merged: profile, browser)
