@@ -633,12 +633,24 @@ fn dispatch_hook(host: MatrixHost, repo: &Path, canonical: &str, payload: &Value
 
 pub fn user_visible_blob(host: MatrixHost, out: &Value) -> String {
     match host {
-        MatrixHost::Claude => out
-            .get("stopReason")
-            .or_else(|| out.get("reason"))
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string(),
+        MatrixHost::Claude => {
+            // Primary: stopReason / reason (block_stop path)
+            let primary = out
+                .get("stopReason")
+                .or_else(|| out.get("reason"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            if !primary.is_empty() {
+                return primary;
+            }
+            // Fallback: hookSpecificOutput.additionalContext (advisory add_context path)
+            out.get("hookSpecificOutput")
+                .and_then(|h| h.get("additionalContext"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        }
         MatrixHost::Cursor | MatrixHost::Codex => {
             let mut s = out
                 .get("followup_message")

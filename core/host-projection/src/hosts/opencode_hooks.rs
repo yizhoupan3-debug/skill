@@ -171,7 +171,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
 
         // Load or create review gate state
         // state_dir managed by HookStateConfig
-        let state_path = opencode_state_config().state_path(event.repo_root);
+        let _state_path = opencode_state_config().state_path(event.repo_root);
         let mut state: OpencodeHookState = opencode_state_config().load_state(event.repo_root);
 
         // Check for reject reason
@@ -256,7 +256,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
 
         // Load state
         // state_dir managed by HookStateConfig
-        let state_path = opencode_state_config().state_path(event.repo_root);
+        let _state_path = opencode_state_config().state_path(event.repo_root);
         let mut state: OpencodeHookState = opencode_state_config().load_state(event.repo_root);
 
         // Shell evidence for verification commands
@@ -379,7 +379,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         let (review_lane, parallel_lane) = subagent_lane_bits(kind.as_deref());
 
         // state_dir managed by HookStateConfig
-        let state_path = opencode_state_config().state_path(event.repo_root);
+        let _state_path = opencode_state_config().state_path(event.repo_root);
         let mut state: OpencodeHookState = opencode_state_config().load_state(event.repo_root);
 
         if review_lane {

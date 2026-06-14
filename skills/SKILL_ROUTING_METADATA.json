@@ -4,6 +4,9 @@
     "agent-swarm-orchestration": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
+    "algo-trading": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
     "citation-management": {
       "selection_reason": "allowlisted first-turn owner"
     },
@@ -25,8 +28,14 @@
     "doc": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
+    "email-template": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
     "experiment-reproducibility": {
       "selection_reason": "allowlisted first-turn owner"
+    },
+    "formal-verification": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "gh-address-comments": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
@@ -38,6 +47,12 @@
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "implementx": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "infographic": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "literature-verification": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "math-derivation": {
@@ -61,13 +76,28 @@
     "planx": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
+    "prose-verification": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
     "python-env-management": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "reproducibility-verification": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "research-discovery": {
+      "selection_reason": "allowlisted first-turn owner"
+    },
+    "research-execution": {
+      "selection_reason": "allowlisted first-turn owner"
     },
     "scientific-figure-plotting": {
       "selection_reason": "allowlisted first-turn owner"
     },
     "sentry": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "simplify": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
     "skill-framework-developer": {
@@ -82,6 +112,18 @@
     "statistical-analysis": {
       "selection_reason": "allowlisted first-turn owner"
     },
+    "statistical-verification": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "structure-verification": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "systematic-debugging": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
+    "tikz-paper-figure": {
+      "selection_reason": "manifest row (router-rs framework skills refresh stub)"
+    },
     "update": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
     },
@@ -90,12 +132,6 @@
     },
     "visual-review": {
       "selection_reason": "manifest row (router-rs framework skills refresh stub)"
-    },
-    "research-discovery": {
-      "selection_reason": "allowlisted first-turn owner"
-    },
-    "research-execution": {
-      "selection_reason": "allowlisted first-turn owner"
     }
   },
   "source_of_truth": false

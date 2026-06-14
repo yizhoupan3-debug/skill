@@ -21,53 +21,26 @@ report=$(cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- \
 }
 
 # Extract key metrics from the JSON report.
-route_accuracy=$(echo "$report" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(d.get('route_accuracy', 0))
-")
-total_cases=$(echo "$report" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(d.get('total_cases', 0))
-")
-passed=$(echo "$report" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(d.get('passed', 0))
-")
-failed=$(echo "$report" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(d.get('failed', 0))
-")
-wrong_owner_rate=$(echo "$report" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-print(d.get('wrong_owner_rate', 0))
-")
+route_accuracy=$(echo "$report" | jq -r '.route_accuracy // 0')
+total_cases=$(echo "$report" | jq -r '.total_cases // 0')
+passed=$(echo "$report" | jq -r '.passed // 0')
+failed=$(echo "$report" | jq -r '.failed // 0')
+wrong_owner_rate=$(echo "$report" | jq -r '.wrong_owner_rate // 0')
 
 echo "Routing eval: ${passed}/${total_cases} passed, accuracy=${route_accuracy}, threshold=${threshold}"
 
 # Print individual failures for debugging.
 if [[ "$failed" -gt 0 ]]; then
   echo "--- failures ---"
-  echo "$report" | python3 -c "
-import json, sys
-d = json.load(sys.stdin)
-for f in d.get('failures', []):
-    print(f\"  {f['case_id']}: {f['field']} expected={f['expected']} got={f['got']}\")
-"
+  echo "$report" | jq -r '.failures[]? | "  \(.case_id): \(.field) expected=\(.expected) got=\(.got)"'
   echo "--- end failures ---"
 fi
 
 # Gate: route_accuracy must meet threshold.
-python3 -c "
-import sys
-acc = float('${route_accuracy}')
-thr = float('${threshold}')
-if acc < thr:
-    print(f'FAIL: route_accuracy {acc:.4f} < {thr:.2f} threshold')
-    sys.exit(1)
-print(f'OK: route_accuracy {acc:.4f} >= {thr:.2f}')
-"
+acc_ok=$(echo "$report" | jq -e ".route_accuracy >= $threshold" >/dev/null 2>&1 && echo 1 || echo 0)
+if [[ "$acc_ok" -eq 0 ]]; then
+  actual=$(echo "$report" | jq -r '.route_accuracy // 0')
+  printf 'FAIL: route_accuracy %.4f < %.2f threshold\n' "$actual" "$threshold"
+  exit 1
+fi
+printf 'OK: route_accuracy %.4f >= %.2f\n' "$route_accuracy" "$threshold"

@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
 # Benchmark Cursor hook subprocess latency (p50/p95).
+# Dependencies: jq, awk (no python).
 set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
-if command -v uv >/dev/null 2>&1 && [[ -f "$REPO_ROOT/pyproject.toml" ]]; then
-  PYTHON=(uv run --directory "$REPO_ROOT" python)
-else
-  PYTHON=(python3)
-fi
 ITERATIONS=20
 EVENTS="beforeSubmitPrompt,postToolUse"
 REPORT=""
@@ -102,16 +98,20 @@ hook_payload() {
 percentile() {
   local p="$1"
   shift
-  "${PYTHON[@]}" - "$p" "$@" <<'PY'
-import sys
-p = float(sys.argv[1])
-vals = sorted(int(x) for x in sys.argv[2:])
-if not vals:
-    print(0)
-    sys.exit(0)
-idx = min(len(vals) - 1, max(0, int(round((p / 100.0) * (len(vals) - 1)))))
-print(vals[idx])
-PY
+  printf '%s\n' "$@" | sort -n | awk -v p="$p" '
+    { vals[NR] = $1 }
+    END {
+      if (NR == 0) { print 0; exit }
+      idx = int((p / 100.0) * (NR - 1) + 0.5)
+      if (idx < 0) idx = 0
+      if (idx >= NR) idx = NR - 1
+      print vals[idx + 1]
+    }
+  '
+}
+
+now_ms() {
+  perl -MTime::HiRes=time -e 'printf "%d\n", time()*1000' 2>/dev/null || echo $(($(date +%s) * 1000))
 }
 
 IFS=',' read -r -a EVENT_ARR <<< "$EVENTS"
@@ -119,7 +119,7 @@ TMPDIR_BENCH="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR_BENCH"' EXIT
 
 echo "bench-hooks repo=$REPO_ROOT bin=$ROUTER_RS_BIN iterations=$ITERATIONS"
-REPORT_LINES=()
+REPORT_JSON='{}'
 
 for ev in "${EVENT_ARR[@]}"; do
   ev="$(echo "$ev" | xargs)"
@@ -128,47 +128,35 @@ for ev in "${EVENT_ARR[@]}"; do
   : > "$times_file"
   payload="$(hook_payload "$ev")"
   for ((i = 1; i <= ITERATIONS; i++)); do
-    start_ms=$("${PYTHON[@]}" -c 'import time; print(int(time.time()*1000))')
+    start_ms=$(now_ms)
     printf '%s' "$payload" | "$ROUTER_RS_BIN" host cursor hook --event="$ev" --repo-root "$REPO_ROOT" >/dev/null 2>/dev/null || true
-    end_ms=$("${PYTHON[@]}" -c 'import time; print(int(time.time()*1000))')
+    end_ms=$(now_ms)
     echo $((end_ms - start_ms)) >> "$times_file"
   done
   mapfile -t samples < "$times_file"
   p50=$(percentile 50 "${samples[@]}")
   p95=$(percentile 95 "${samples[@]}")
   echo "  $ev: p50=${p50}ms p95=${p95}ms (n=${#samples[@]})"
-  REPORT_LINES+=("$ev $p50 $p95 ${#samples[@]}")
+  REPORT_JSON=$(echo "$REPORT_JSON" | jq --arg ev "$ev" --argjson p50 "$p50" --argjson p95 "$p95" --argjson n "${#samples[@]}" \
+    '. + {($ev): {"p50_ms": $p50, "p95_ms": $p95, "n": $n}}')
 done
 
-"${PYTHON[@]}" - "${REPORT:-}" "${REPORT_LINES[@]}" <<'PY'
-import json, sys
-out_path = sys.argv[1]
-rows = sys.argv[2:]
-report = {}
-for row in rows:
-    ev, p50, p95, n = row.split()
-    report[ev] = {"p50_ms": int(p50), "p95_ms": int(p95), "n": int(n)}
-text = json.dumps(report, indent=2)
-if out_path:
-    import os
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    open(out_path, "w").write(text + "\n")
-    print(f"wrote {out_path}")
-else:
-    print(text)
-PY
+if [[ -n "$REPORT" ]]; then
+  mkdir -p "$(dirname "$REPORT")"
+  echo "$REPORT_JSON" > "$REPORT"
+  echo "wrote $REPORT"
+else
+  echo "$REPORT_JSON" | jq .
+fi
 
 if [[ -n "$COMPARE" && -f "$COMPARE" && -n "$REPORT" ]]; then
-  "${PYTHON[@]}" - "$COMPARE" "$REPORT" <<'PY'
-import json, sys
-base = json.load(open(sys.argv[1]))
-cur = json.load(open(sys.argv[2]))
-for ev, c in cur.items():
-    b = base.get(ev, {})
-    bp95 = b.get("p95_ms", 0)
-    cp95 = c.get("p95_ms", 0)
-    if bp95:
-        pct = (bp95 - cp95) / bp95 * 100.0
-        print(f"  {ev}: p95 {cp95}ms vs baseline {bp95}ms ({pct:+.1f}%)")
-PY
+  jq -r --slurpfile base "$COMPARE" '
+    to_entries[] |
+    .key as $ev |
+    .value.p95_ms as $cp95 |
+    ($base[0][$ev].p95_ms // 0) as $bp95 |
+    (if $bp95 > 0 then (($bp95 - $cp95) / $bp95 * 100) else 0 end) as $pct |
+    (if $pct > 0 then "+" else "" end) as $sign |
+    "  \($ev): p95 \($cp95)ms vs baseline \($bp95)ms (\($sign)\($pct | . * 10 | round / 10 | tostring)%)"
+  ' "$REPORT"
 fi

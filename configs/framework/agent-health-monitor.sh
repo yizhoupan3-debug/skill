@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Subagent health monitor — tracks spawn/stop, detects stuck agents, auto-terminates.
 # Called from SubagentStart/SubagentStop hooks and on-demand health checks.
+# Dependencies: jq (replaces prior python3 usage).
 #
 # Usage:
 #   agent-health-monitor.sh start <agent_name> <agent_id>   # record spawn
@@ -30,20 +31,12 @@ do_start() {
   local now
   now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  python3 -c "
-import json, sys
-with open('$STATE_FILE', 'r') as f:
-    state = json.load(f)
-state['agents']['$agent_id'] = {
-    'name': '$name',
-    'started_at': '$now',
-    'status': 'running',
-    'last_heartbeat': '$now'
-}
-with open('$STATE_FILE', 'w') as f:
-    json.dump(state, f, indent=2)
-print(json.dumps({'event': 'agent_start', 'agent_id': '$agent_id', 'name': '$name'}))
-"
+  local tmp="${STATE_FILE}.tmp"
+  jq --arg name "$name" --arg aid "$agent_id" --arg now "$now" \
+    '.agents[$aid] = {"name": $name, "started_at": $now, "status": "running", "last_heartbeat": $now}' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+
+  jq -n --arg name "$name" --arg aid "$agent_id" '{event:"agent_start",agent_id:$aid,name:$name}'
 }
 
 # Record agent stop
@@ -53,60 +46,55 @@ do_stop() {
   local now
   now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  python3 -c "
-import json
-with open('$STATE_FILE', 'r') as f:
-    state = json.load(f)
-if '$agent_id' in state['agents']:
-    agent = state['agents']['$agent_id']
-    agent['status'] = 'stopped'
-    agent['stopped_at'] = '$now'
-with open('$STATE_FILE', 'w') as f:
-    json.dump(state, f, indent=2)
-print(json.dumps({'event': 'agent_stop', 'agent_id': '$agent_id'}))
-"
+  local tmp="${STATE_FILE}.tmp"
+  jq --arg aid "$agent_id" --arg now "$now" \
+    'if .agents[$aid] then .agents[$aid].status = "stopped" | .agents[$aid].stopped_at = $now else . end' \
+    "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+
+  jq -n --arg aid "$agent_id" '{event:"agent_stop",agent_id:$aid}'
 }
 
-# Health check — returns JSON with agent statuses and warnings
+# Health check — returns JSON with agent statuses and warnings (single file read for atomicity)
 do_check() {
   init_state
   local timeout_secs="${1:-$DEFAULT_TIMEOUT_SECS}"
+  local now
+  now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  local tmp="${STATE_FILE}.tmp"
 
-  python3 -c "
-import json, sys
-from datetime import datetime, timezone
-
-timeout = int('$timeout_secs')
-with open('$STATE_FILE', 'r') as f:
-    state = json.load(f)
-
-now = datetime.now(timezone.utc)
-report = {'healthy': True, 'agents': [], 'stuck': [], 'timeout_secs': timeout}
-
-for aid, agent in state.get('agents', {}).items():
-    if agent.get('status') != 'running':
-        continue
-    started = datetime.fromisoformat(agent['started_at'].replace('Z', '+00:00'))
-    age_secs = int((now - started).total_seconds())
-    entry = {
-        'agent_id': aid,
-        'name': agent.get('name', 'unknown'),
-        'age_secs': age_secs,
-        'age_human': f'{age_secs // 60}m{age_secs % 60}s',
+  # Single file read: compute report AND updated state atomically
+  local combined
+  combined=$(jq --argjson timeout "$timeout_secs" --arg now "$now" '
+    (.agents // {}) as $agents |
+    ([$now | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime] | .[0]) as $now_epoch |
+    [
+      $agents | to_entries[] |
+      select(.value.status == "running") |
+      (.value.started_at | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime) as $started |
+      {
+        agent_id: .key,
+        name: (.value.name // "unknown"),
+        age_secs: (($now_epoch - $started) | floor),
+        age_human: (((($now_epoch - $started) | floor) / 60 | floor | tostring) + "m" + ((($now_epoch - $started) | floor) % 60 | tostring) + "s")
+      }
+    ] as $active |
+    [$active[] | select(.age_secs > $timeout)] as $stuck |
+    {
+      _updated_state: (.last_check = $now),
+      report: {
+        healthy: ($stuck | length == 0),
+        agents: $active,
+        stuck: [$stuck[].agent_id],
+        timeout_secs: $timeout,
+        active_count: ($active | length),
+        stuck_count: ($stuck | length)
+      }
     }
-    report['agents'].append(entry)
-    if age_secs > timeout:
-        entry['status'] = 'STUCK'
-        report['stuck'].append(aid)
-        report['healthy'] = False
+  ' "$STATE_FILE")
 
-report['active_count'] = len(report['agents'])
-report['stuck_count'] = len(report['stuck'])
-state['last_check'] = now.isoformat().replace('+00:00', 'Z')
-with open('$STATE_FILE', 'w') as f:
-    json.dump(state, f, indent=2)
-print(json.dumps(report, indent=2))
-"
+  # Write updated state and output report
+  printf '%s' "$combined" | jq '._updated_state' > "$tmp" && mv "$tmp" "$STATE_FILE"
+  printf '%s' "$combined" | jq '.report'
 }
 
 # Kill stuck agents by sending MCP terminate
@@ -115,51 +103,50 @@ do_kill_stuck() {
   local report
   report=$(do_check "$timeout_secs")
   local stuck_count
-  stuck_count=$(echo "$report" | python3 -c "import json,sys; print(json.load(sys.stdin).get('stuck_count',0))")
+  stuck_count=$(printf '%s' "$report" | jq -r '.stuck_count')
 
   if [ "$stuck_count" -eq 0 ]; then
     echo '{"action":"none","reason":"no stuck agents"}'
     return 0
   fi
 
-  echo "$report" | python3 -c "
-import json, sys
-report = json.load(sys.stdin)
-actions = []
-for aid in report.get('stuck', []):
-    agent = next((a for a in report['agents'] if a['agent_id'] == aid), {})
-    actions.append({
-        'action': 'terminate',
-        'agent_id': aid,
-        'name': agent.get('name', 'unknown'),
-        'age_secs': agent.get('age_secs', 0),
-    })
-print(json.dumps({'action': 'terminate_stuck', 'count': len(actions), 'agents': actions}, indent=2))
-"
+  printf '%s' "$report" | jq '{
+    action: "terminate_stuck",
+    count: (.stuck | length),
+    agents: [
+      .stuck[] as $aid |
+      (.agents[] | select(.agent_id == $aid)) // {} |
+      {
+        action: "terminate",
+        agent_id: $aid,
+        name: (.name // "unknown"),
+        age_secs: (.age_secs // 0)
+      }
+    ]
+  }'
 }
 
 # Clean up old entries (> 1 hour)
 do_cleanup() {
   init_state
-  python3 -c "
-import json
-from datetime import datetime, timezone, timedelta
+  local now_epoch
+  now_epoch=$(date -u +%s)
+  local cutoff=$((now_epoch - 3600))
 
-with open('$STATE_FILE', 'r') as f:
-    state = json.load(f)
-now = datetime.now(timezone.utc)
-cutoff = now - timedelta(hours=1)
-before = len(state.get('agents', {}))
-state['agents'] = {
-    k: v for k, v in state.get('agents', {}).items()
-    if v.get('status') == 'running' or
-       datetime.fromisoformat(v.get('stopped_at', '2099-01-01T00:00:00Z').replace('Z', '+00:00')) > cutoff
-}
-after = len(state['agents'])
-with open('$STATE_FILE', 'w') as f:
-    json.dump(state, f, indent=2)
-print(json.dumps({'cleaned': before - after, 'remaining': after}))
-"
+  local before after tmp="${STATE_FILE}.tmp"
+  before=$(jq '.agents | length' "$STATE_FILE")
+
+  jq --argjson cutoff "$cutoff" '
+    .agents |= with_entries(
+      select(
+        .value.status == "running" or
+        (.value.stopped_at // "2099-01-01T00:00:00Z" | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime) > $cutoff
+      )
+    )
+  ' "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
+
+  after=$(jq '.agents | length' "$STATE_FILE")
+  printf '%s\n' "{\"cleaned\":$((before - after)),\"remaining\":$after}"
 }
 
 # Main dispatch

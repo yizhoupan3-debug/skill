@@ -4,14 +4,15 @@ description: Verify and format academic citations and bibliographies.
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
+routing_priority: P2
 session_start: preferred
 user-invocable: true
 disable-model-invocation: true
 trigger_hints:
   - 文献引用管理
-  - 参考文献核查
+  - BibTeX 格式核查
   - BibTeX
-  - DOI
+  - DOI 格式验证
   - PMID
   - Zotero-style cleanup
   - 文中引用与参考文献表一致性检查

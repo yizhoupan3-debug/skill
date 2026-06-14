@@ -6,6 +6,7 @@ description: |
 routing_layer: L1
 routing_owner: owner
 routing_gate: none
+routing_priority: P2
 session_start: n/a
 user-invocable: true
 disable-model-invocation: true

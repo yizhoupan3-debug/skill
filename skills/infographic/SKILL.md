@@ -8,6 +8,7 @@ description: |
 routing_layer: L3
 routing_owner: owner
 routing_gate: none
+routing_priority: P3
 session_start: n/a
 user-invocable: false
 disable-model-invocation: true

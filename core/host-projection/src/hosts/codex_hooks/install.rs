@@ -15,7 +15,6 @@ use super::{
     PROTECTED_GENERATED_PATHS, ROUTER_RS_HOOK_PROJECTION_VERSION,
 };
 use crate::host_entrypoint_sync::HostEntrypointPayloadProvider;
-use crate::host_integration::ensure_codex_skill_surface;
 use chrono::Utc;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -365,8 +364,9 @@ pub fn codex_host_entrypoint_provider(
     })
 }
 
-fn codex_host_entrypoint_after_apply(repo_root: &Path) -> Result<Value, String> {
-    ensure_codex_skill_surface(repo_root)
+fn codex_host_entrypoint_after_apply(_repo_root: &Path) -> Result<Value, String> {
+    // Surface removed: Codex uses runtime routing like other hosts.
+    Ok(json!({}))
 }
 
 // ---------------------------------------------------------------------------

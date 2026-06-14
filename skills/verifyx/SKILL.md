@@ -119,12 +119,8 @@ Pointer cleanup：遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-l
 
 验证收口阶段的只读交叉检查；结论写入 `EVIDENCE_INDEX` 或 `VERIFY_REPORT.md` 一行摘要。
 
-| 场景 | 工具 | 何时 |
-|------|------|------|
-| 索引就绪 | `codegraph_status` | 涉及符号/调用链断言前确认索引覆盖改动文件 |
-| 符号定位 | `codegraph_search` / `codegraph_node` | 核对 ROADMAP 中列出的 symbol 仍存在于预期路径 |
-| 调用链 | `codegraph_callers` | refactor 后确认无意外 orphan caller（与测试互补） |
-| 影响半径 | `codegraph_impact` | 公共 API 变更的 residual risk 一行记录 |
+> 工具与场景表：见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
+> 何时：涉及符号/调用链断言前确认索引覆盖改动文件；核对 ROADMAP 中 symbol 仍存在于预期路径；refactor 后确认无意外 orphan caller；公共 API 变更的 residual risk 一行记录。
 
 ## Pre-conditions
 

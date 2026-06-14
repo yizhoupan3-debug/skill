@@ -8,6 +8,7 @@ description: |
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
+routing_priority: P1
 session_start: preferred
 user-invocable: true
 disable-model-invocation: false
@@ -174,12 +175,8 @@ Use when the user allows network/tools or scope touches third-party crates/servi
 
 Review lane **只读**；图谱用于定位与 call-chain 证据，不替代 Read/Grep。
 
-| 场景 | 工具 | 何时 |
-|------|------|------|
-| 索引就绪 | `codegraph_status` | 宽范围 review 前；索引 stale 时在 finding 中加 caveat |
-| 符号定位 | `codegraph_search` / `codegraph_node` | 消歧 FQN、核实 path:anchor 是否存在 |
-| 调用链 | `codegraph_callers` / `codegraph_callees` | P0/P1 需 concrete call chain 时优先于手工 rg |
-| 影响半径 | `codegraph_impact` | API/行为变更的 blast radius 与测试缺口 |
+> 工具与场景表：见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
+> 何时：宽范围 review 前确认就绪（stale 时在 finding 中加 caveat）；消歧 FQN、核实 path:anchor；P0/P1 需 concrete call chain 时优先于手工 rg；API/行为变更的 blast radius 与测试缺口。
 
 ## Integration / boundaries
 

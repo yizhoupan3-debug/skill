@@ -74,7 +74,7 @@ fn tool_pptx_parse(args: &Value) -> Result<Value, anyhow::Error> {
         .unwrap_or("unknown");
 
     // Parse slide range
-    let requested_slides = parse_slide_range(slides_spec, total_slides)?;
+    let requested_slides = mcp_stdio_common::util::parse_range(slides_spec, total_slides)?;
     let truncated_slides = requested_slides.len() as u64 > MAX_SLIDES_PER_REQUEST;
     let effective_slides: Vec<u64> = if truncated_slides {
         requested_slides[..MAX_SLIDES_PER_REQUEST as usize].to_vec()
@@ -124,37 +124,6 @@ fn tool_pptx_parse(args: &Value) -> Result<Value, anyhow::Error> {
             "warnings": warnings,
         }
     }))
-}
-
-/// Parse a slide range spec like "1-5", "3", "1,3,7-10", "all" into sorted unique slide numbers.
-fn parse_slide_range(spec: &str, total_slides: u64) -> Result<Vec<u64>, anyhow::Error> {
-    if spec == "all" || spec.is_empty() {
-        return Ok((1..=total_slides).collect());
-    }
-    let mut slides = Vec::new();
-    for part in spec.split(',') {
-        let part = part.trim();
-        if let Some((start, end)) = part.split_once('-') {
-            let start: u64 = start.trim().parse().map_err(|_| anyhow::anyhow!("Invalid slide range start: {start}"))?;
-            let end: u64 = end.trim().parse().map_err(|_| anyhow::anyhow!("Invalid slide range end: {end}"))?;
-            if start == 0 || end == 0 || start > end || end > total_slides {
-                return Err(anyhow::anyhow!("Slide range {start}-{end} out of bounds (total: {total_slides})"));
-            }
-            slides.extend(start..=end);
-        } else {
-            let slide: u64 = part.parse().map_err(|_| anyhow::anyhow!("Invalid slide number: {part}"))?;
-            if slide == 0 || slide > total_slides {
-                return Err(anyhow::anyhow!("Slide {slide} out of bounds (total: {total_slides})"));
-            }
-            slides.push(slide);
-        }
-    }
-    slides.sort();
-    slides.dedup();
-    if slides.is_empty() {
-        return Err(anyhow::anyhow!("No valid slides specified"));
-    }
-    Ok(slides)
 }
 
 /// Filter the PPTX structure JSON to only include slides with 1-based indices in the selection.

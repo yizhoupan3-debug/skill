@@ -692,7 +692,7 @@ fn descriptor_resolved_artifact_top_level_fallback() {
 }
 
 // ───────────────────────────────────────────────────────────────────
-// 纯函数测试：browser_error / skill_error / runtime_error
+// 纯函数测试：browser_error / runtime_error
 // ───────────────────────────────────────────────────────────────────
 
 #[test]
@@ -704,13 +704,6 @@ fn browser_error_structure() {
     let actions = err["suggested_next_actions"].as_array().unwrap();
     assert_eq!(actions.len(), 1);
     assert_eq!(actions[0], "action1");
-}
-
-#[test]
-fn skill_error_uses_skill_code() {
-    let err = skill_error("SKILL_MISSING", "not found");
-    assert_eq!(err["code"], "SKILL_MISSING");
-    assert_eq!(err["recoverable"], true);
 }
 
 #[test]

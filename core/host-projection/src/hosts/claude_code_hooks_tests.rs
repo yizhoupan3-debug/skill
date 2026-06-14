@@ -52,9 +52,14 @@ mod tests {
 
         let output = run_stop(&repo, &payload).unwrap();
 
-        assert_eq!(output["continue"], false);
-        assert_eq!(output["stopReason"], "Run targeted Rust contract tests for framework routing/runtime changes before ending this turn.");
-        assert_eq!(output["decision"], "block");
+        // Advisory — untested framework emits add_context, not block_stop
+        let ctx = output["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .expect("advisory should have additionalContext");
+        assert!(
+            ctx.contains("Framework source files were modified"),
+            "unexpected advisory: {ctx}"
+        );
         clear_touch_state(&repo, &payload);
         let _ = fs::remove_dir_all(repo);
     }
@@ -96,9 +101,15 @@ mod tests {
         assert!(run_post_tool_use(&repo, &payload).is_none());
         let output = run_stop(&repo, &session).unwrap();
 
-        assert_eq!(output["continue"], false);
-        assert_eq!(output["stopReason"], "Run targeted Rust contract tests for framework routing/runtime changes before ending this turn.");
-        assert_eq!(output["decision"], "block");
+        // Advisory — failed test still leaves framework_tested=false;
+        // run_stop returns add_context, not block_stop.
+        let ctx = output["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .expect("advisory should have additionalContext");
+        assert!(
+            ctx.contains("Framework source files were modified"),
+            "unexpected advisory: {ctx}"
+        );
         clear_touch_state(&repo, &session);
         let _ = fs::remove_dir_all(repo);
     }
@@ -537,12 +548,14 @@ mod tests {
         let session = json!({ "session_id": "s-corrupt-rg" });
         let path = review_state_path(&repo, &session);
         fs::write(&path, "{not json").unwrap();
-        let out = run_stop(&repo, &session).expect("block");
-        assert_eq!(out["decision"], "block");
-        let reason = out["stopReason"].as_str().unwrap();
+        let out = run_stop(&repo, &session).expect("advisory");
+        // Advisory — corrupted state is not a reason to block indefinitely
+        let ctx = out["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .expect("advisory should have additionalContext");
         assert!(
-            reason.contains(CLAUDE_HOOK_STATE_UNREADABLE),
-            "unexpected: {reason}"
+            ctx.contains("hook-state unreadable"),
+            "unexpected advisory: {ctx}"
         );
         let _ = fs::remove_file(&path);
         let _ = fs::remove_dir_all(repo);
@@ -554,12 +567,15 @@ mod tests {
         let session = json!({ "session_id": "s-corrupt-touch" });
         let path = touch_state_path(&repo, &session);
         fs::write(&path, "{not json").unwrap();
-        let out = run_stop(&repo, &session).expect("block");
-        assert_eq!(out["decision"], "block");
-        assert!(out["stopReason"]
+        let out = run_stop(&repo, &session).expect("advisory");
+        // Advisory — corrupted state is not a reason to block indefinitely
+        let ctx = out["hookSpecificOutput"]["additionalContext"]
             .as_str()
-            .unwrap()
-            .contains(CLAUDE_HOOK_STATE_UNREADABLE));
+            .expect("advisory should have additionalContext");
+        assert!(
+            ctx.contains("hook-state unreadable"),
+            "unexpected advisory: {ctx}"
+        );
         let _ = fs::remove_file(&path);
         let _ = fs::remove_dir_all(repo);
     }

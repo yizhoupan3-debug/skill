@@ -61,15 +61,11 @@ if [[ ! -f "$META" ]]; then
   exit 1
 fi
 
-APPLIED_ID="$(python3 -c "
-import json, sys
-try:
-    data = json.load(open(sys.argv[1]))
-    print(data['appliedId'])
-except Exception as e:
-    print(f'error: failed to read appliedId from {sys.argv[1]}: {e}', file=sys.stderr)
-    sys.exit(1)
-" "$META")"
+APPLIED_ID="$(jq -r '.appliedId // empty' "$META")"
+if [[ -z "$APPLIED_ID" ]]; then
+  echo "error: failed to read appliedId from $META" >&2
+  exit 1
+fi
 CONFIG_FILE="$CONFIG_LIB/${APPLIED_ID}.json"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
@@ -80,22 +76,14 @@ fi
 export PATCH_CONFIG_FILE="$CONFIG_FILE"
 export PATCH_HOSTS_JSON="$HOSTS_JSON"
 
-python3 <<'PY'
-import json
-import os
-from pathlib import Path
-
-path = Path(os.environ["PATCH_CONFIG_FILE"])
-hosts = json.loads(os.environ["PATCH_HOSTS_JSON"])
-data = json.loads(path.read_text())
-current = data.get("coworkEgressAllowedHosts")
-if current == hosts:
-    print(f"ok: coworkEgressAllowedHosts already {hosts!r} in {path.name}")
-    raise SystemExit(0)
-data["coworkEgressAllowedHosts"] = hosts
-path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-print(f"patched: {path}")
-print(f"  coworkEgressAllowedHosts -> {hosts!r}")
-print("")
-print("Next: Cmd+Q quit Claude Desktop, reopen, then Cowork 联网测试 (browser-mcp).")
-PY
+is_same=$(jq --argjson hosts "$HOSTS_JSON" '.coworkEgressAllowedHosts == $hosts' "$CONFIG_FILE")
+if [[ "$is_same" == "true" ]]; then
+  echo "ok: coworkEgressAllowedHosts already $HOSTS_JSON in $(basename "$CONFIG_FILE")"
+  exit 0
+fi
+tmp="${CONFIG_FILE}.tmp"
+jq --argjson hosts "$HOSTS_JSON" '.coworkEgressAllowedHosts = $hosts' "$CONFIG_FILE" > "$tmp" && mv "$tmp" "$CONFIG_FILE"
+echo "patched: $CONFIG_FILE"
+echo "  coworkEgressAllowedHosts -> $HOSTS_JSON"
+echo ""
+echo "Next: Cmd+Q quit Claude Desktop, reopen, then Cowork 联网测试 (browser-mcp)."

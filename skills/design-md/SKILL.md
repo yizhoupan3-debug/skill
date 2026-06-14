@@ -21,7 +21,7 @@ trigger_hints:
   - 生成 DESIGN.md
   - extract design tokens
   - design contract
-  - PPT 设计规范
+  - DESIGN.md 设计规范
   - UI 设计规范
 metadata:
   version: "1.0.0"

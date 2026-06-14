@@ -18,7 +18,7 @@ fi
 
 TARGET_DIR="$(
   cargo metadata --manifest-path "${MANIFEST}" --format-version 1 --no-deps \
-    | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])'
+    | jq -r '.target_directory'
 )"
 BIN_PATH="${TARGET_DIR}/release/${BIN_NAME}"
 

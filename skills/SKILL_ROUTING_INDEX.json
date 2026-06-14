@@ -5,10 +5,12 @@
   "keys": [
     "slug",
     "gate",
-    "desc",
-    "hints",
+    "description",
+    "trigger_hints",
     "path",
-    "kind"
+    "kind",
+    "layer",
+    "owner"
   ],
   "skills": [
     [
@@ -20,127 +22,53 @@
         "agent 编排",
         "swarm architecture",
         "agent orchestrator",
-        "task routing system"
+        "task routing system",
+        "planner-coder-reviewer",
+        "shared agent memory",
+        "agent supervisor",
+        "multi-agent workflow",
+        "多 agent 执行",
+        "/workflow"
       ],
       "skills/agent-swarm-orchestration/SKILL.md",
-      "s"
+      "skill",
+      "L0",
+      "gate"
     ],
     [
-      "discussx",
+      "algo-trading",
       "none",
-      "Personal lifecycle discuss — requirement",
+      "Design and implement algorithmic trading",
       [
-        "/discussx",
-        "discussx"
+        "量化策略",
+        "回测",
+        "trading",
+        "backtest",
+        "Sharpe",
+        "drawdown",
+        "因子研究",
+        "factor research",
+        "交易策略",
+        "trading bot",
+        "risk rules",
+        "pairs trading",
+        "统计套利",
+        "alpha",
+        "量化",
+        "金融数据",
+        "market data",
+        "A股数据",
+        "crypto data",
+        "OHLCV",
+        "fundamentals",
+        "roe",
+        "algo-trading",
+        "financial-data"
       ],
-      "skills/discussx/SKILL.md",
-      "f"
-    ],
-    [
-      "gh-address-comments",
-      "source",
-      "Address GitHub PR review comments and li",
-      [
-        "/gh-address-comments",
-        "address comments",
-        "PR review summary",
-        "pull request summary",
-        "reviewer feedback digest"
-      ],
-      "skills/gh-address-comments/SKILL.md",
-      "s"
-    ],
-    [
-      "gh-fix-ci",
-      "source",
-      "Triage and fix failing GitHub Actions PR",
-      [
-        "/gh-fix-ci",
-        "fix ci",
-        "ci failed",
-        "ci failure",
-        "CI 失败"
-      ],
-      "skills/gh-fix-ci/SKILL.md",
-      "s"
-    ],
-    [
-      "implementx",
-      "none",
-      "Personal lifecycle implement — one-breat",
-      [
-        "/implementx",
-        "implementx",
-        "写 README",
-        "补文档",
-        "API 文档"
-      ],
-      "skills/implementx/SKILL.md",
-      "f"
-    ],
-    [
-      "planx",
-      "none",
-      "Personal lifecycle plan — ROADMAP and WA",
-      [
-        "/planx",
-        "planx"
-      ],
-      "skills/planx/SKILL.md",
-      "f"
-    ],
-    [
-      "sentry",
-      "source",
-      "Inspect Sentry production errors and iss",
-      [
-        "Sentry evidence",
-        "sentry",
-        "production errors",
-        "triage",
-        "error monitoring"
-      ],
-      "skills/sentry/SKILL.md",
-      "s"
-    ],
-    [
-      "skill-framework-developer",
-      "none",
-      "Design and tune cross-host skill routing",
-      [
-        "skill 框架治理",
-        "路由系统",
-        "skill 路由",
-        "owner / gate / overlay",
-        "边界重叠"
-      ],
-      "skills/skill-framework-developer/SKILL.md",
-      "s"
-    ],
-    [
-      "update",
-      "none",
-      "Refresh key docs, git tracking, and stal",
-      [
-        "/update",
-        "一口气更新",
-        "更新关键文档",
-        "科研文档更新",
-        "刷新文档"
-      ],
-      "skills/update/SKILL.md",
-      "f"
-    ],
-    [
-      "verifyx",
-      "none",
-      "Personal lifecycle verify+ship — evidenc",
-      [
-        "/verifyx",
-        "verifyx"
-      ],
-      "skills/verifyx/SKILL.md",
-      "f"
+      "skills/algo-trading/SKILL.md",
+      "skill",
+      "L4",
+      "owner"
     ],
     [
       "citation-management",
@@ -148,13 +76,67 @@
       "Verify and format academic citations and",
       [
         "文献引用管理",
-        "参考文献核查",
+        "BibTeX 格式核查",
         "BibTeX",
-        "DOI",
-        "PMID"
+        "DOI 格式验证",
+        "PMID",
+        "Zotero-style cleanup",
+        "文中引用与参考文献表一致性检查",
+        "APA",
+        "IEEE",
+        "ACM",
+        "GB/T 7714"
       ],
       "skills/citation-management/SKILL.md",
-      "s"
+      "skill",
+      "L1",
+      "owner"
+    ],
+    [
+      "code-review-deep",
+      "none",
+      "Deep adversarial-style code review (revi",
+      [
+        "$code-review-deep",
+        "code-review-deep",
+        "review",
+        "code review",
+        "代码审查",
+        "帮我 review",
+        "deep code review",
+        "深度 code review",
+        "深度代码审查",
+        "严苛代码评审",
+        "security code review",
+        "security-focused code review",
+        "threat model review",
+        "adversarial code review",
+        "只允许审不改",
+        "review-only 代码审查"
+      ],
+      "skills/code-review-deep/SKILL.md",
+      "skill",
+      "L2",
+      "owner"
+    ],
+    [
+      "deep-research",
+      "approve",
+      "Deep research harness — fan-out web sear",
+      [
+        "deep research",
+        "deep-research",
+        "全面研究",
+        "web research",
+        "fact check",
+        "网络调研",
+        "信息收集",
+        "多源验证"
+      ],
+      "skills/deep-research/SKILL.md",
+      "skill",
+      "L2",
+      "user"
     ],
     [
       "deepinterview",
@@ -167,115 +149,9 @@
         "澄清需求"
       ],
       "skills/deepinterview/SKILL.md",
-      "f"
-    ],
-    [
-      "plan-mode",
-      "none",
-      "Cross-host Plan / 策划文档闸门：先用本地证据起草可执行计划，再",
-      [
-        "Cursor Plan",
-        "Plan 模式",
-        "策划文档闸门",
-        "可验收 todo",
-        "gitx plan 收口"
-      ],
-      "skills/plan-mode/SKILL.md",
-      "s"
-    ],
-    [
-      "code-review-deep",
-      "none",
-      "Deep adversarial-style code review (revi",
-      [
-        "$code-review-deep",
-        "code-review-deep",
-        "review",
-        "code review",
-        "代码审查"
-      ],
-      "skills/code-review-deep/SKILL.md",
-      "s"
-    ],
-    [
-      "gitx",
-      "none",
-      "Run the safe Git review-fix-tidy-commit-",
-      [
-        "/gitx",
-        "gitx"
-      ],
-      "skills/gitx/SKILL.md",
-      "f"
-    ],
-    [
-      "paper-workbench",
-      "none",
-      "Unified front door for paper work. Use w",
-      [
-        "论文写作",
-        "写论文",
-        "论文润色",
-        "英文论文润色",
-        "SCI润色"
-      ],
-      "skills/paper-workbench/SKILL.md",
-      "s"
-    ],
-    [
-      "paper-writing",
-      "none",
-      "Prose-chain paper writing lane: story ca",
-      [
-        "$paper-writing",
-        "paper writing",
-        "论文改稿",
-        "改稿",
-        "润色落笔"
-      ],
-      "skills/paper-workbench/SKILL.md",
-      "s"
-    ],
-    [
-      "research-discovery",
-      "none",
-      "Research discovery front door: deep topi",
-      [
-        "调研方向",
-        "文献综述",
-        "研究方向",
-        "知识地图",
-        "主题深挖"
-      ],
-      "skills/research-discovery/SKILL.md",
-      "s"
-    ],
-    [
-      "research-execution",
-      "none",
-      "Research execution lanes: experiment des",
-      [
-        "实验设计",
-        "实验方案设计",
-        "方法正确性核查",
-        "代码和数学联合核查",
-        "推导方法正确性"
-      ],
-      "skills/research-execution/SKILL.md",
-      "s"
-    ],
-    [
-      "deep-research",
-      "approve",
-      "Deep research harness — fan-out web sear",
-      [
-        "深度调研",
-        "deep research",
-        "全面研究",
-        "deep-research"
-      ],
-      "skills/deep-research/SKILL.md",
-      "s"
+      "framework_command",
+      "L1",
+      "owner"
     ],
     [
       "design-md",
@@ -286,10 +162,20 @@
         "设计规范",
         "设计系统",
         "设计 token",
-        "视觉身份"
+        "视觉身份",
+        "风格漂移",
+        "设计验收",
+        "根据 DESIGN.md",
+        "生成 DESIGN.md",
+        "extract design tokens",
+        "design contract",
+        "DESIGN.md 设计规范",
+        "UI 设计规范"
       ],
       "skills/design-md/SKILL.md",
-      "s"
+      "skill",
+      "L3",
+      "gate"
     ],
     [
       "diagramming",
@@ -300,10 +186,34 @@
         "readable markdown-ready text diagrams",
         "flowchart",
         "流程图",
-        "research diagram"
+        "research diagram",
+        "研究流程图",
+        "technical roadmap",
+        "技术路线图",
+        "方法图",
+        "实验流程",
+        "pipeline 图",
+        "sequence diagram",
+        "时序图",
+        "erd"
       ],
       "skills/diagramming/SKILL.md",
-      "s"
+      "skill",
+      "L3",
+      "owner"
+    ],
+    [
+      "discussx",
+      "none",
+      "Personal lifecycle discuss — requirement",
+      [
+        "/discussx",
+        "discussx"
+      ],
+      "skills/discussx/SKILL.md",
+      "framework_command",
+      "L0",
+      "owner"
     ],
     [
       "doc",
@@ -314,136 +224,16 @@
         "模板化文档生成",
         "表格或版式修复",
         "render-aware",
+        "docx",
+        "pagination",
+        "document layout",
+        "word document",
         "docx"
       ],
       "skills/doc/SKILL.md",
-      "s"
-    ],
-    [
-      "experiment-reproducibility",
-      "none",
-      "Ensure and manage research experiment re",
-      [
-        "怎么保证可复现",
-        "环境管理",
-        "随机种子",
-        "数据版本控制",
-        "实验配置"
-      ],
-      "skills/experiment-reproducibility/SKILL.md",
-      "s"
-    ],
-    [
-      "infographic",
-      "none",
-      "Generate HTML/CSS/JS infographics: knowl",
-      [
-        "信息图",
-        "infographic",
-        "一图读懂",
-        "知识卡片",
-        "数据长图"
-      ],
-      "skills/infographic/SKILL.md",
-      "s"
-    ],
-    [
-      "mcp-server-management",
-      "none",
-      "创建、配置、调试和注册 MCP server，实现 AI agent 工具集成。",
-      [
-        "MCP server",
-        "创建 MCP",
-        "MCP 调试",
-        "MCP 注册",
-        "MCP 配置"
-      ],
-      "skills/mcp-server-management/SKILL.md",
-      "s"
-    ],
-    [
-      "pdf",
-      "artifact",
-      "Handle layout-aware PDF reading, editing",
-      [
-        "pdf",
-        "rendering",
-        "layout",
-        "typography",
-        "reportlab"
-      ],
-      "skills/pdf/SKILL.md",
-      "s"
-    ],
-    [
-      "slides",
-      "artifact",
-      "Route presentation, PPT, PPTX, and slide",
-      [
-        "PPT",
-        "pptx",
-        "做个PPT",
-        "生成演示文稿",
-        "slides"
-      ],
-      "skills/slides/SKILL.md",
-      "s"
-    ],
-    [
-      "spreadsheets",
-      "artifact",
-      "Route workbook-native spreadsheet artifa",
-      [
-        "Excel",
-        "spreadsheet",
-        "xlsx",
-        "csv",
-        "sheet review"
-      ],
-      "skills/primary-runtime/spreadsheets/SKILL.md",
-      "s"
-    ],
-    [
-      "tikz-paper-figure",
-      "none",
-      "Convert AI diagrams, screenshots, sketch",
-      [
-        "TikZ",
-        "LaTeX standalone",
-        "LaTeX 配图",
-        "论文配图",
-        "论文 TikZ"
-      ],
-      "skills/tikz-paper-figure/SKILL.md",
-      "s"
-    ],
-    [
-      "visual-review",
-      "evidence",
-      "Review screenshots and rendered visual a",
-      [
-        "看图",
-        "visual",
-        "visual review",
-        "UI review",
-        "screenshot"
-      ],
-      "skills/visual-review/SKILL.md",
-      "s"
-    ],
-    [
-      "algo-trading",
-      "none",
-      "Design and implement algorithmic trading",
-      [
-        "量化策略",
-        "回测",
-        "trading",
-        "backtest",
-        "Sharpe"
-      ],
-      "skills/algo-trading/SKILL.md",
-      "s"
+      "skill",
+      "L3",
+      "gate"
     ],
     [
       "email-template",
@@ -454,10 +244,43 @@
         "HTML 邮件",
         "html email",
         "email template",
-        "email 排版"
+        "email 排版",
+        "Outlook 兼容",
+        "HTML email compatibility",
+        "MJML",
+        "React Email",
+        "newsletter markup",
+        "newsletter"
       ],
       "skills/email-template/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
+    ],
+    [
+      "experiment-reproducibility",
+      "none",
+      "Ensure and manage research experiment re",
+      [
+        "怎么保证可复现",
+        "环境管理",
+        "随机种子",
+        "数据版本控制",
+        "实验配置",
+        "reproducibility",
+        "environment snapshot",
+        "seed management",
+        "DVC",
+        "MLflow tracking",
+        "预注册",
+        "方案偏离",
+        "主分析",
+        "探索性分析"
+      ],
+      "skills/experiment-reproducibility/SKILL.md",
+      "skill",
+      "L3",
+      "owner"
     ],
     [
       "formal-verification",
@@ -468,10 +291,124 @@
         "CAS验证",
         "SMT检查",
         "witness验证",
-        "量纲检查"
+        "量纲检查",
+        "formal verification"
       ],
       "skills/formal-verification/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
+    ],
+    [
+      "gh-address-comments",
+      "source",
+      "Address GitHub PR review comments and li",
+      [
+        "/gh-address-comments",
+        "address comments",
+        "PR review summary",
+        "pull request summary",
+        "reviewer feedback digest",
+        "changed-file digest",
+        "changed files summary",
+        "PR triage",
+        "PR comments",
+        "review comments",
+        "PR 评论回复",
+        "reviewer 意见处理",
+        "review feedback",
+        "address PR feedback"
+      ],
+      "skills/gh-address-comments/SKILL.md",
+      "skill",
+      "L0",
+      "gate"
+    ],
+    [
+      "gh-fix-ci",
+      "source",
+      "Triage and fix failing GitHub Actions PR",
+      [
+        "/gh-fix-ci",
+        "fix ci",
+        "ci failed",
+        "ci failure",
+        "CI 失败",
+        "github actions",
+        "CI 失败排查",
+        "CI 修复",
+        "修复 CI",
+        "CI 里",
+        "模板编译失败",
+        "workflow 失败",
+        "fix build",
+        "green ci",
+        "ci broken",
+        "编译失败",
+        "pull request summary CI failure",
+        "github actions pull request summary failing checks",
+        "failing checks",
+        "PR summary CI"
+      ],
+      "skills/gh-fix-ci/SKILL.md",
+      "skill",
+      "L0",
+      "gate"
+    ],
+    [
+      "gitx",
+      "none",
+      "Run the safe Git review-fix-tidy-commit-",
+      [
+        "/gitx",
+        "gitx"
+      ],
+      "skills/gitx/SKILL.md",
+      "framework_command",
+      "L2",
+      "owner"
+    ],
+    [
+      "implementx",
+      "none",
+      "Personal lifecycle implement — one-breat",
+      [
+        "/implementx",
+        "implementx",
+        "写 README",
+        "补文档",
+        "API 文档",
+        "写 ADR",
+        "生成 changelog",
+        "onboarding guide",
+        "文档完整性",
+        "documentation",
+        "readme",
+        "api docs"
+      ],
+      "skills/implementx/SKILL.md",
+      "framework_command",
+      "L0",
+      "owner"
+    ],
+    [
+      "infographic",
+      "none",
+      "Generate HTML/CSS/JS infographics: knowl",
+      [
+        "信息图",
+        "infographic",
+        "一图读懂",
+        "知识卡片",
+        "数据长图",
+        "单页长图",
+        "summary poster",
+        "data visualization"
+      ],
+      "skills/infographic/SKILL.md",
+      "skill",
+      "L3",
+      "owner"
     ],
     [
       "literature-verification",
@@ -482,10 +419,13 @@
         "引用检查",
         "DOI验证",
         "contradiction sweep",
-        "citation verification"
+        "citation verification",
+        "literature check"
       ],
       "skills/literature-verification/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
     ],
     [
       "math-derivation",
@@ -496,10 +436,153 @@
         "定理证明",
         "公式推导",
         "不等式证明",
-        "ODE"
+        "ODE",
+        "PDE 推导",
+        "收敛性证明",
+        "存在唯一性证明",
+        "变分推导",
+        "线性代数证明"
       ],
       "skills/math-derivation/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
+    ],
+    [
+      "mcp-server-management",
+      "none",
+      "创建、配置、调试和注册 MCP server，实现 AI agent 工具集成。",
+      [
+        "MCP server",
+        "创建 MCP",
+        "MCP 调试",
+        "MCP 注册",
+        "MCP 配置",
+        "tool server",
+        "MCP 开发",
+        "model context protocol"
+      ],
+      "skills/mcp-server-management/SKILL.md",
+      "skill",
+      "L3",
+      "owner"
+    ],
+    [
+      "paper-workbench",
+      "none",
+      "Unified front door for paper work. Use w",
+      [
+        "论文写作",
+        "写论文",
+        "论文润色",
+        "英文论文润色",
+        "SCI润色",
+        "学术润色",
+        "帮我审这篇 paper",
+        "帮我审这篇论文",
+        "paper review",
+        "严审",
+        "能不能投",
+        "投稿前把关",
+        "全文审核",
+        "根据 reviewer comments 改论文",
+        "按审稿意见改论文",
+        "缩口径",
+        "写 rebuttal",
+        "整体推进这篇论文",
+        "先审再改",
+        "顶刊标准",
+        "顶会标准",
+        "top-tier paper",
+        "CCF-A 论文",
+        "精准修改",
+        "大面积重构",
+        "只改摘要",
+        "顶刊标准改稿",
+        "顶会标准改稿",
+        "Nature",
+        "Science",
+        "Cell",
+        "NeurIPS",
+        "ICML",
+        "ICLR"
+      ],
+      "skills/paper-workbench/SKILL.md",
+      "skill",
+      "L2",
+      "owner"
+    ],
+    [
+      "paper-writing",
+      "none",
+      "Prose-chain paper writing lane: story ca",
+      [
+        "$paper-writing",
+        "paper writing",
+        "论文改稿",
+        "改稿",
+        "润色落笔",
+        "section rewrite",
+        "prose ladder",
+        "story card"
+      ],
+      "skills/paper-workbench/SKILL.md",
+      "skill",
+      "L2",
+      "owner"
+    ],
+    [
+      "pdf",
+      "artifact",
+      "Handle layout-aware PDF reading, editing",
+      [
+        "pdf",
+        "rendering",
+        "layout",
+        "typography",
+        "reportlab",
+        "编辑 PDF",
+        "合并 PDF",
+        "PDF 转文字"
+      ],
+      "skills/pdf/SKILL.md",
+      "skill",
+      "L3",
+      "gate"
+    ],
+    [
+      "plan-mode",
+      "none",
+      "Cross-host Plan / 策划文档闸门：先用本地证据起草可执行计划，再",
+      [
+        "Cursor Plan",
+        "Plan 模式",
+        "策划文档闸门",
+        "可验收 todo",
+        "gitx plan 收口",
+        "计划对照实际",
+        "CreatePlan",
+        "调研计划",
+        "纯调研",
+        "research-only plan"
+      ],
+      "skills/plan-mode/SKILL.md",
+      "skill",
+      "L1",
+      "owner"
+    ],
+    [
+      "planx",
+      "none",
+      "Personal lifecycle plan — ROADMAP and WA",
+      [
+        "/planx",
+        "planx"
+      ],
+      "skills/planx/SKILL.md",
+      "framework_command",
+      "L0",
+      "owner"
     ],
     [
       "prose-verification",
@@ -510,10 +593,13 @@
         "术语一致性",
         "风格检查",
         "prose check",
-        "writing verification"
+        "writing verification",
+        "claim drift"
       ],
       "skills/prose-verification/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
     ],
     [
       "python-env-management",
@@ -524,10 +610,19 @@
         "python 版本混乱",
         "不用 pip",
         "uv 包管理",
-        "uv.lock"
+        "uv.lock",
+        ".python-version",
+        "全局 python 包",
+        "python PATH",
+        "pip 禁用",
+        "python 长期治理",
+        "macos python setup",
+        "astral uv"
       ],
       "skills/python-env-management/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
     ],
     [
       "reproducibility-verification",
@@ -541,7 +636,73 @@
         "deterministic rerun"
       ],
       "skills/reproducibility-verification/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
+    ],
+    [
+      "research-discovery",
+      "none",
+      "Research discovery front door: deep topi",
+      [
+        "调研方向",
+        "文献综述",
+        "研究方向",
+        "知识地图",
+        "主题深挖",
+        "研究综述",
+        "相关定理",
+        "理论背景",
+        "数学背景",
+        "用什么数学",
+        "该用什么理论",
+        "深度调研这个科研方向",
+        "深调研",
+        "research harness",
+        "类比",
+        "未知性质",
+        "性质不清楚",
+        "非手稿科研",
+        "survey",
+        "landscape",
+        "related work",
+        "knowledge gap",
+        "closest work"
+      ],
+      "skills/research-discovery/SKILL.md",
+      "skill",
+      "L2",
+      "owner"
+    ],
+    [
+      "research-execution",
+      "none",
+      "Research execution lanes: experiment des",
+      [
+        "实验设计",
+        "实验方案设计",
+        "方法正确性核查",
+        "代码和数学联合核查",
+        "推导方法正确性",
+        "研究路线设计",
+        "ablation 方案",
+        "benchmark 方案",
+        "控制方程",
+        "本构方程",
+        "量纲分析",
+        "无量纲化",
+        "数学建模",
+        "模型搭建",
+        "modeling",
+        "governing equation",
+        "baseline 设计",
+        "不确定性管理",
+        "失败复盘"
+      ],
+      "skills/research-execution/SKILL.md",
+      "skill",
+      "L2",
+      "owner"
     ],
     [
       "scientific-figure-plotting",
@@ -552,15 +713,39 @@
         "plotting",
         "matplotlib",
         "seaborn",
-        "publication"
+        "publication",
+        "charts",
+        "科研出图",
+        "statistical annotations",
+        "colorblind-safe palettes",
+        "CJK font"
       ],
       "skills/scientific-figure-plotting/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
+    ],
+    [
+      "sentry",
+      "source",
+      "Inspect Sentry production errors and iss",
+      [
+        "Sentry evidence",
+        "sentry",
+        "production errors",
+        "triage",
+        "error monitoring",
+        "incident debugging"
+      ],
+      "skills/sentry/SKILL.md",
+      "skill",
+      "L0",
+      "gate"
     ],
     [
       "simplify",
       "none",
-      "行为守恒的三维度并行代码简化审查（复用/质量/效率）。默认 findings-only，可选自动修复模式。",
+      "行为守恒的三维度并行代码简化审查（复用/质量/效率）。默认 findings-only，不用于找 bug 或安全漏洞。",
       [
         "/simplify",
         "simplify",
@@ -568,13 +753,79 @@
         "简化代码",
         "代码清理",
         "code simplify",
+        "clean up code",
         "重构简化",
         "去重",
         "过度工程",
         "质量门"
       ],
       "skills/simplify/SKILL.md",
-      "s"
+      "skill",
+      "L2",
+      "owner"
+    ],
+    [
+      "skill-framework-developer",
+      "none",
+      "Design and tune cross-host skill routing",
+      [
+        "skill 框架治理",
+        "路由系统",
+        "skill 路由",
+        "owner / gate / overlay",
+        "边界重叠",
+        "同步状态",
+        "路由表",
+        "skill 库维护",
+        "注册表",
+        "框架策略",
+        "路由诊断",
+        "skill 边界",
+        "维护规范",
+        "同步健康",
+        "框架自优化"
+      ],
+      "skills/skill-framework-developer/SKILL.md",
+      "skill",
+      "L0",
+      "owner"
+    ],
+    [
+      "slides",
+      "artifact",
+      "Route presentation, PPT, PPTX, and slide",
+      [
+        "PPT",
+        "pptx",
+        "做个PPT",
+        "生成演示文稿",
+        "slides",
+        "PowerPoint",
+        "presentation deck",
+        "presentation"
+      ],
+      "skills/slides/SKILL.md",
+      "skill",
+      "L3",
+      "gate"
+    ],
+    [
+      "spreadsheets",
+      "artifact",
+      "Route workbook-native spreadsheet artifa",
+      [
+        "Excel",
+        "spreadsheet",
+        "xlsx",
+        "csv",
+        "sheet review",
+        "xls",
+        "tsv"
+      ],
+      "skills/primary-runtime/spreadsheets/SKILL.md",
+      "skill",
+      "L3",
+      "gate"
     ],
     [
       "statistical-analysis",
@@ -585,10 +836,22 @@
         "显著性怎么算",
         "p 值",
         "效应量",
-        "贝叶斯"
+        "贝叶斯",
+        "多重比较",
+        "统计功效",
+        "回归诊断",
+        "interpreting hypothesis tests",
+        "假设检验怎么选",
+        "置信区间怎么报",
+        "A/B 测试怎么做显著性",
+        "多组比较怎么校正",
+        "需要多少样本量",
+        "power analysis"
       ],
       "skills/statistical-analysis/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
     ],
     [
       "statistical-verification",
@@ -599,10 +862,13 @@
         "p值验证",
         "GRIM test",
         "stats audit",
-        "statistical verification"
+        "statistical verification",
+        "假设检验审查"
       ],
       "skills/statistical-verification/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
     ],
     [
       "structure-verification",
@@ -613,10 +879,102 @@
         "LaTeX编译",
         "图表引用检查",
         "format check",
-        "structure verification"
+        "structure verification",
+        "cross-reference"
       ],
       "skills/structure-verification/SKILL.md",
-      "s"
+      "skill",
+      "L4",
+      "owner"
+    ],
+    [
+      "tikz-paper-figure",
+      "none",
+      "Convert AI diagrams, screenshots, sketch",
+      [
+        "TikZ",
+        "LaTeX standalone",
+        "LaTeX 配图",
+        "论文配图",
+        "论文 TikZ",
+        "AI image to TikZ",
+        "AI 图转 TikZ",
+        "AI 图转论文图",
+        "截图转 TikZ",
+        "recreate this figure in TikZ",
+        "复刻图片",
+        "paper figure",
+        "thesis figure",
+        "method figure",
+        "system architecture figure",
+        "protocol diagram",
+        "standalone figure",
+        "tikz-paper-figure"
+      ],
+      "skills/tikz-paper-figure/SKILL.md",
+      "skill",
+      "L3",
+      "owner"
+    ],
+    [
+      "update",
+      "none",
+      "Refresh key docs, git tracking, and stal",
+      [
+        "/update",
+        "一口气更新",
+        "更新关键文档",
+        "科研文档更新",
+        "刷新文档",
+        "扫描文档",
+        "git 跟踪文件",
+        "git tracking",
+        "死代码清理",
+        "旧文档清理",
+        "stale files",
+        "dead code",
+        "registry 更新",
+        "同步投影"
+      ],
+      "skills/update/SKILL.md",
+      "framework_command",
+      "L0",
+      "owner"
+    ],
+    [
+      "verifyx",
+      "none",
+      "Personal lifecycle verify+ship — evidenc",
+      [
+        "/verifyx",
+        "verifyx"
+      ],
+      "skills/verifyx/SKILL.md",
+      "framework_command",
+      "L0",
+      "owner"
+    ],
+    [
+      "visual-review",
+      "evidence",
+      "Review screenshots and rendered visual a",
+      [
+        "看图",
+        "visual",
+        "visual review",
+        "UI review",
+        "screenshot",
+        "screenshot UI",
+        "chart screenshot",
+        "chart export",
+        "exported chart",
+        "图表截图",
+        "图表导出"
+      ],
+      "skills/visual-review/SKILL.md",
+      "skill",
+      "L3",
+      "gate"
     ]
   ]
 }

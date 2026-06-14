@@ -63,7 +63,7 @@ case "${MODE:-}" in
     ;;
 esac
 
-for cmd in python3 npm; do
+for cmd in jq npm; do
   command -v "$cmd" >/dev/null 2>&1 || { echo "error: $cmd not found; install it first" >&2; exit 1; }
 done
 
@@ -81,45 +81,36 @@ patch_desktop_config() {
     return 0
   fi
   export PATCH_CFG="$cfg" PATCH_MODE="$MODE" PATCH_ACCOUNT="$ACCOUNT_ID" PATCH_COWORK_FILES="$COWORK_FILES"
-  python3 <<'PY'
-import json
-import os
-from pathlib import Path
-
-path = Path(os.environ["PATCH_CFG"])
-mode = os.environ["PATCH_MODE"]
-account = os.environ["PATCH_ACCOUNT"]
-cowork_files = os.environ["PATCH_COWORK_FILES"]
-data = json.loads(path.read_text())
-prefs = data.setdefault("preferences", {})
-prefs["bypassPermissionsModeEnabled"] = True
-gate = prefs.setdefault("bypassPermissionsGateByAccount", {})
-opt = prefs.setdefault("bypassPermissionsOptInByAccount", {})
-gate[account] = True
-opt[account] = True
-ep = prefs.setdefault("epitaxyPrefs", {})
-old = ep.get("cc-landing-draft-permission-mode")
-ep["cc-landing-draft-permission-mode"] = mode
-folder_key = f"epitaxy-folder-permission-mode.{account}"
-folders = ep.setdefault(folder_key, {})
-if isinstance(folders, dict):
-    paths = [cowork_files]
-    extra = os.environ.get("CLAUDE_DESKTOP_FOLDER_PATHS", "")
-    if extra.strip():
-        paths.extend(p.strip() for p in extra.split(":") if p.strip())
-    for p in paths:
-        folders[p] = mode
-acks = ep.setdefault(f"epitaxy-perm-mode-acks.{account}", [])
-if isinstance(acks, list):
-    for p in folders:
-        entry = f"{p}:{mode}"
-        if entry not in acks:
-            acks.append(entry)
-path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
-print(f"patched: {path}")
-print(f"  cc-landing-draft-permission-mode: {old!r} -> {mode!r}")
-print(f"  epitaxy folders ({len(folders)}): {mode}")
-PY
+  # Build folder paths array in bash (jq can't access CLAUDE_DESKTOP_FOLDER_PATHS)
+  folder_paths_json=$(printf '%s' "$COWORK_FILES" | jq -R .)
+  if [[ -n "${CLAUDE_DESKTOP_FOLDER_PATHS:-}" ]]; then
+    extra_paths=$(printf '%s' "$CLAUDE_DESKTOP_FOLDER_PATHS" | tr ':' '\n' | grep -v '^$' | jq -R . | jq -s .)
+    folder_paths_json=$(echo "[$folder_paths_json]" "$extra_paths" | jq -s 'add')
+  else
+    folder_paths_json="[$folder_paths_json]"
+  fi
+  old_mode=$(jq -r '.preferences.epitaxyPrefs["cc-landing-draft-permission-mode"] // "null"' "$cfg")
+  tmp="${cfg}.tmp"
+  jq --arg mode "$MODE" --arg account "$ACCOUNT_ID" --argjson paths "$folder_paths_json" '
+    .preferences //= {} |
+    .preferences.bypassPermissionsModeEnabled = true |
+    .preferences.bypassPermissionsGateByAccount //= {} |
+    .preferences.bypassPermissionsGateByAccount[$account] = true |
+    .preferences.bypassPermissionsOptInByAccount //= {} |
+    .preferences.bypassPermissionsOptInByAccount[$account] = true |
+    .preferences.epitaxyPrefs //= {} |
+    .preferences.epitaxyPrefs["cc-landing-draft-permission-mode"] = $mode |
+    .preferences.epitaxyPrefs[("epitaxy-folder-permission-mode." + $account)] =
+      ((.preferences.epitaxyPrefs[("epitaxy-folder-permission-mode." + $account)] // {}) *
+       ($paths | reduce .[] as $p ({}; . + {($p): $mode}))) |
+    .preferences.epitaxyPrefs[("epitaxy-perm-mode-acks." + $account)] =
+      [(.preferences.epitaxyPrefs[("epitaxy-folder-permission-mode." + $account)] // {} | keys[]) as $p | ($p + ":" + $mode)]
+  ' "$cfg" > "$tmp" && mv "$tmp" "$cfg"
+  new_folder_count=$(jq --arg account "$ACCOUNT_ID" \
+    '.preferences.epitaxyPrefs[("epitaxy-folder-permission-mode." + $account)] | length' "$cfg")
+  echo "patched: $cfg"
+  echo "  cc-landing-draft-permission-mode: '$old_mode' -> '$MODE'"
+  echo "  epitaxy folders ($new_folder_count): $MODE"
 }
 
 patch_leveldb() {

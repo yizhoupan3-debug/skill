@@ -288,9 +288,6 @@ fn update_skill_exposes_explicit_entrypoint_like_gitx() {
 fn refresh_skill_stays_out_of_project_host_entrypoints() {
     assert!(!project_root().join("skills/refresh/SKILL.md").exists());
     assert!(!project_root().join(".codex/skills/refresh").exists());
-    assert!(!project_root()
-        .join("artifacts/codex-skill-surface/skills/refresh")
-        .exists());
     let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
     assert!(registry["framework_commands"]["refresh"].is_null());
 }
@@ -462,40 +459,6 @@ fn codex_sync_preserves_existing_agents_codex_delta_file() {
         "sync must not rewrite unchanged AGENTS_CODEX.md: {sync_report}"
     );
     assert_eq!(read_text(&repo_root.join("AGENTS_CODEX.md")), delta);
-}
-
-#[test]
-fn codex_user_skill_surface_stays_lightweight_and_explicit() {
-    let surface_root = project_root().join("artifacts/codex-skill-surface/skills");
-    let manifest_path = surface_root.join(".codex-skill-surface.json");
-    if !manifest_path.exists() {
-        return;
-    }
-    let manifest = read_json(&manifest_path);
-    let skills = manifest["skills"].as_array().unwrap();
-    assert!(
-        skills.len() < 40,
-        "surface loaded too many skills: {}",
-        skills.len()
-    );
-    assert!(skills.iter().any(|item| item.as_str() == Some("discussx")));
-    assert!(skills.iter().any(|item| item.as_str() == Some("implementx")));
-    assert!(!skills.iter().any(|item| item.as_str() == Some("gsd")));
-    assert!(skills.iter().any(|item| item.as_str() == Some("gitx")));
-    assert!(skills
-        .iter()
-        .any(|item| item.as_str() == Some("deepinterview")));
-    assert!(!skills.iter().any(|item| item.as_str() == Some("team")));
-    assert!(!skills.iter().any(|item| item.as_str() == Some("refresh")));
-    assert!(!skills.iter().any(|item| item.as_str() == Some("autopilot")));
-    assert!(surface_root.join("discussx/SKILL.md").exists());
-    assert!(surface_root.join("implementx/SKILL.md").exists());
-    assert!(!surface_root.join("gsd").exists());
-    assert!(surface_root.join("gitx/SKILL.md").exists());
-    assert!(surface_root.join("deepinterview/SKILL.md").exists());
-    assert!(!surface_root.join("team/SKILL.md").exists());
-    let my_impl = read_text(&surface_root.join("implementx/SKILL.md"));
-    assert!(my_impl.contains("/implementx"));
 }
 
 #[test]
@@ -797,7 +760,12 @@ fn framework_naming_conventions_has_no_router_rs_default_value_table() {
 
 #[test]
 fn removed_router_flags_are_absent_from_user_docs() {
-    let docs = ["RTK.md", "docs/spec.md", "AGENTS_CODEX.md"]
+    let docs = ["RTK.md", "docs/spec.md", "AGENTS_CODEX.md",
+        "docs/spec-core-crates.md", "docs/spec-sandbox-contract.md",
+        "docs/spec-multi-agent.md", "docs/spec-host-matrix.md",
+        "docs/spec-routing-plugin.md", "docs/spec-runtime-subsystems.md",
+        "docs/spec-security-lifecycle.md", "docs/spec-auxiliary.md",
+        "docs/spec-observability-testing.md"]
         .iter()
         .map(|path| read_text(&project_root().join(path)))
         .collect::<Vec<_>>()
@@ -1203,6 +1171,13 @@ fn runtime_framework_command_rows_match_manifest() {
     let root = project_root();
     let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
     let manifest = read_json(&root.join("skills/SKILL_MANIFEST.json"));
+    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
+    let supported_host_set: HashSet<String> = registry["host_targets"]["supported"]
+        .as_array()
+        .expect("host_targets.supported")
+        .iter()
+        .map(|v| v.as_str().expect("host id").to_string())
+        .collect();
     let runtime_keys = runtime["keys"].as_array().expect("runtime keys");
     let manifest_keys = manifest["keys"].as_array().expect("manifest keys");
     let r_slug = key_index(runtime_keys, "slug");
@@ -1261,13 +1236,20 @@ fn runtime_framework_command_rows_match_manifest() {
             .iter()
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect();
-        let manifest_hosts: HashSet<String> = manifest_row
+        let raw_manifest_hosts: Vec<String> = manifest_row
             .get(m_hosts)
             .and_then(Value::as_array)
             .expect("manifest host_platforms")
             .iter()
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect();
+        // [supported] / [all-hosts] wildcard: expand to registry set before comparing.
+        let manifest_hosts: HashSet<String> =
+            if raw_manifest_hosts.len() == 1 && (raw_manifest_hosts[0] == "supported" || raw_manifest_hosts[0] == "all-hosts") {
+                supported_host_set.clone()
+            } else {
+                raw_manifest_hosts.into_iter().collect()
+            };
         assert_eq!(
             runtime_hosts, manifest_hosts,
             "{slug}: host_platforms mismatch runtime vs manifest"
@@ -1746,6 +1728,7 @@ fn nl_route_adjustments_json_schema_version() {
                     | "docs"
                     | "pre_framework_alias_rules"
                     | "post_framework_alias_rules"
+                    | "visual_evidence_markers"
             ),
             "NL_ROUTE_ADJUSTMENTS: unknown root key `{k}`"
         );
@@ -2077,82 +2060,6 @@ fn discussx_skill_forbids_pre_exec_drive_until_done_true() {
     );
 }
 
-/// 防止 framework 命令的 `skill_path` 再次指回仅存在于生成投影下的路径（裸 clone 会断链）。
-#[test]
-fn framework_command_skill_paths_do_not_use_codex_skill_surface_aliases() {
-    let root = project_root();
-    let forbidden = ["artifacts/codex-skill-surface/skills/autopilot/"];
-    for rel in [
-        "configs/framework/RUNTIME_REGISTRY.json",
-        "skills/SKILL_ROUTING_RUNTIME.json",
-        "skills/SKILL_PLUGIN_CATALOG.json",
-    ] {
-        let text = read_text(&root.join(rel));
-        for needle in forbidden {
-            assert!(
-                !text.contains(needle),
-                "{rel} must not reference legacy surface path {needle:?}"
-            );
-        }
-    }
-    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
-    let my_impl = &registry["framework_commands"]["implementx"];
-    assert_eq!(
-        my_impl["skill_path"].as_str().expect("implementx skill_path"),
-        "skills/implementx/SKILL.md"
-    );
-    assert!(
-        registry["framework_commands"].get("gsd").is_none(),
-        "framework_commands.gsd must be removed"
-    );
-    assert!(
-        registry["framework_commands"].get("autopilot").is_none(),
-        "autopilot framework_command must be removed"
-    );
-    assert!(
-        registry["framework_commands"].get("team").is_none(),
-        "retired framework_commands.team must be removed (fail-closed; use workflow NL routing)"
-    );
-
-    let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
-    let runtime_slugs = runtime["skills"]
-        .as_array()
-        .expect("runtime skills")
-        .iter()
-        .filter_map(|row| row.get(0).and_then(|value| value.as_str()))
-        .collect::<Vec<_>>();
-    assert!(
-        !runtime_slugs.contains(&"team"),
-        "retired team slug must not be a hot runtime skill"
-    );
-    assert!(
-        !runtime_slugs.contains(&"workflow"),
-        "workflow orchestration is NL-routed to agent-swarm-orchestration, not a hot runtime slug"
-    );
-
-    let plugin_catalog = read_json(&root.join("skills/SKILL_PLUGIN_CATALOG.json"));
-    assert!(
-        plugin_catalog["skills"].get("team").is_none(),
-        "retired team slug must not be a plugin skill record"
-    );
-    assert!(
-        plugin_catalog["skills"].get("workflow").is_none(),
-        "workflow orchestration must not be a plugin skill record"
-    );
-    assert!(
-        !root
-            .join("artifacts/codex-skill-surface/skills/team/SKILL.md")
-            .exists(),
-        "retired team slug must not be a generated Codex skill surface"
-    );
-    assert!(
-        !root
-            .join("artifacts/codex-skill-surface/skills/workflow/SKILL.md")
-            .exists(),
-        "workflow orchestration must not be a generated Codex skill surface"
-    );
-}
-
 fn key_index(keys: &[serde_json::Value], name: &str) -> usize {
     keys.iter()
         .position(|key| key.as_str() == Some(name))
@@ -2407,7 +2314,6 @@ fn sync_skills_uses_router_rs_directly() {
     for forbidden in [
         "crate::codex_hooks",
         "build_codex_",
-        "ensure_codex_skill_surface",
     ] {
         assert!(
             !sync_source.contains(forbidden),

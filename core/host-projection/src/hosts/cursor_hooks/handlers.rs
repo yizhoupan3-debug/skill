@@ -13,17 +13,6 @@ fn release_lock_then_finalize_stop(
 
 pub const STATE_VERSION: u32 = 3;
 
-fn subagent_tool_names() -> &'static [&'static str] {
-    &[
-        "task",
-        "functions.task",
-        "functions.subagent",
-        "functions.spawn_agent",
-        "subagent",
-        "spawn_agent",
-    ]
-}
-
 /// MCP / 宿主可能使用 `…subagent…` 等未列入清单的工具名。
 fn tool_name_matches_subagent_lane(normalized: &str) -> bool {
     crate::hosts::hook_dispatch::is_subagent_tool(normalized)
@@ -908,14 +897,6 @@ fn session_key(event: &Value) -> String {
     )
 }
 
-
-fn short_hash(input: &str) -> String {
-    core_policy::crypto_util::short_hash(input)
-}
-
-fn hex_lower(bytes: &[u8]) -> String {
-    core_policy::crypto_util::hex_lower(bytes)
-}
 fn state_dir(repo_root: &Path) -> PathBuf {
     repo_root.join(".cursor").join("hook-state")
 }

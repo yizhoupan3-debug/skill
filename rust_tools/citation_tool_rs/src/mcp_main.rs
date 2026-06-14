@@ -4,5 +4,10 @@ use std::path::PathBuf;
 
 fn main() -> anyhow::Result<()> {
     let repo_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    citation_tool_rs::mcp::run_stdio_mcp(&repo_root)
+    mcp_stdio_common::stdio_server::run_stdio_mcp(
+        &repo_root,
+        "mcp-citation",
+        citation_tool_rs::mcp::tool_definitions,
+        citation_tool_rs::mcp::dispatch,
+    )
 }

@@ -16,9 +16,13 @@ user-invocable: true
 disable-model-invocation: true
 short_description: Deep research harness
 trigger_hints:
-  - 深度调研
   - deep research
   - 全面研究
+  - web research
+  - fact check
+  - 网络调研
+  - 信息收集
+  - 多源验证
 metadata:
   version: "1.0.0"
   platforms: [supported]

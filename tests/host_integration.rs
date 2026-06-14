@@ -250,145 +250,8 @@ fn install_native_integration_idempotent() {
     assert_eq!(first["default_bootstrap"]["status"], "materialized");
     assert!(["already-present", "repaired-stale"]
         .contains(&second["default_bootstrap"]["status"].as_str().unwrap()));
-    assert_eq!(first["home_codex_skills_changed"], true);
-    assert_eq!(second["home_codex_skills_changed"], false);
     assert_eq!(first["codex_prompt_entrypoints"]["changed"], false);
     assert_eq!(second["codex_prompt_entrypoints"]["changed"], false);
-}
-
-#[test]
-fn install_native_integration_symlink_structure() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
-    seed_framework_markers(&repo_root);
-    write_text(
-        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
-        r#"{"skills":[["systematic-debugging","L0","gate","evidence","required","debug",[],97.0,"P1"]]}"#,
-    );
-    write_text(
-        &repo_root.join("skills/gitx/SKILL.md"),
-        "---\nname: gitx\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/deepinterview/SKILL.md"),
-        "---\nname: deepinterview\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/systematic-debugging/SKILL.md"),
-        "---\nname: systematic-debugging\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/skill-framework-developer/SKILL.md"),
-        "---\nname: skill-framework-developer\n---\n",
-    );
-    write_text(
-        &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex":"/implementx"}}}}"#,
-    );
-
-    let home_codex_skills_path = tmp.path().join("home/.codex/skills");
-    host_integration_json(&[
-        "install-native-integration",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--home-config-path",
-        tmp.path().join("home/.codex/config.toml").to_str().unwrap(),
-        "--home-codex-skills-path",
-        home_codex_skills_path.to_str().unwrap(),
-        "--skip-default-bootstrap",
-    ]);
-
-    let surface_root = repo_root.join("artifacts/codex-skill-surface/skills");
-    assert!(is_symlink_to(&home_codex_skills_path, &surface_root));
-    assert!(is_symlink_to(
-        &surface_root.join("gitx"),
-        &repo_root.join("skills/gitx")
-    ));
-    assert!(is_symlink_to(
-        &surface_root.join("deepinterview"),
-        &repo_root.join("skills/deepinterview")
-    ));
-    assert!(is_symlink_to(
-        &surface_root.join("systematic-debugging"),
-        &repo_root.join("skills/systematic-debugging")
-    ));
-    assert_framework_alias_skill(&surface_root, "implementx");
-    assert!(
-        !surface_root.join("gsd").exists(),
-        "legacy gsd must not be published to codex skill surface"
-    );
-    assert!(
-        !surface_root.join("team/SKILL.md").exists(),
-        "retired team slug must not be a visible Codex skill surface"
-    );
-    assert!(
-        !surface_root.join("workflow/SKILL.md").exists(),
-        "workflow orchestration must not be a visible Codex skill surface"
-    );
-}
-
-#[test]
-fn install_native_integration_surface_runtime_contract() {
-    let tmp = tempdir().unwrap();
-    let repo_root = tmp.path().join("repo");
-    std::fs::create_dir_all(repo_root.join("skills")).unwrap();
-    seed_framework_markers(&repo_root);
-    write_text(
-        &repo_root.join("skills/SKILL_ROUTING_RUNTIME.json"),
-        r#"{"skills":[["systematic-debugging","L0","gate","evidence","required","debug",[],97.0,"P1"]]}"#,
-    );
-    write_text(
-        &repo_root.join("skills/gitx/SKILL.md"),
-        "---\nname: gitx\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/deepinterview/SKILL.md"),
-        "---\nname: deepinterview\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/systematic-debugging/SKILL.md"),
-        "---\nname: systematic-debugging\n---\n",
-    );
-    write_text(
-        &repo_root.join("skills/skill-framework-developer/SKILL.md"),
-        "---\nname: skill-framework-developer\n---\n",
-    );
-    write_text(
-        &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v1","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex":"/implementx"}}}}"#,
-    );
-    write_text(
-        &repo_root.join("skills/optional-heavy/SKILL.md"),
-        "---\nname: optional-heavy\n---\n",
-    );
-
-    host_integration_json(&[
-        "install-native-integration",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-        "--home-config-path",
-        tmp.path().join("home/.codex/config.toml").to_str().unwrap(),
-        "--home-codex-skills-path",
-        tmp.path().join("home/.codex/skills").to_str().unwrap(),
-        "--skip-default-bootstrap",
-    ]);
-
-    let surface_root = repo_root.join("artifacts/codex-skill-surface/skills");
-    let surface_runtime = read_json(&surface_root.join("SKILL_ROUTING_RUNTIME.json"));
-    let surface_runtime_text = serde_json::to_string(&surface_runtime).unwrap();
-    assert!(!surface_runtime_text.contains("review-fix-verify-loop"));
-    assert!(!surface_runtime_text.contains("artifacts/codex-skill-surface"));
-    assert_eq!(
-        surface_runtime["skills"][0][8],
-        "skills/systematic-debugging/SKILL.md"
-    );
-    assert!(surface_root
-        .parent()
-        .unwrap()
-        .join(surface_runtime["skills"][0][8].as_str().unwrap())
-        .is_file());
-    assert!(!surface_root.join("optional-heavy").exists());
 }
 
 #[test]
@@ -2079,25 +1942,6 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
     );
 }
 
-fn is_symlink_to(path: &Path, expected_target: &Path) -> bool {
-    let Ok(metadata) = std::fs::symlink_metadata(path) else {
-        return false;
-    };
-    if !metadata.file_type().is_symlink() {
-        return false;
-    }
-    let Ok(target) = std::fs::read_link(path).map(|target| {
-        if target.is_absolute() {
-            target
-        } else {
-            path.parent().unwrap_or_else(|| Path::new(".")).join(target)
-        }
-    }) else {
-        return false;
-    };
-    target.canonicalize().ok() == expected_target.canonicalize().ok()
-}
-
 fn normalize_alias_equivalence(mut payload: serde_json::Value) -> serde_json::Value {
     if let Some(object) = payload.as_object_mut() {
         object.remove("invocation");
@@ -2130,19 +1974,6 @@ fn normalize_alias_equivalence(mut payload: serde_json::Value) -> serde_json::Va
         }
     }
     payload
-}
-
-fn assert_framework_alias_skill(surface_root: &Path, slug: &str) {
-    let content = read_text(&surface_root.join(slug).join("SKILL.md"));
-    assert!(content.contains(&format!("name: {slug}")));
-    assert!(
-        content.contains("generated lightweight Codex CLI alias")
-            || content.contains("generated-codex-skill-surface"),
-        "expected generated alias marker in surface SKILL.md"
-    );
-    assert!(content.contains(&format!("`/{slug}`")));
-    assert!(!content.contains(&format!("`${slug}`")));
-    assert!(content.contains("skills/skill-framework-developer/SKILL.md"));
 }
 
 #[test]

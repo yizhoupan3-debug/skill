@@ -295,6 +295,10 @@ pub enum ClaudeSubcommand {
     #[command(name = "agent")]
     Agent(ClaudeAgentCommand),
     Hook(ClaudeHookCommand),
+    /// Direct hook dispatch — reads .env, handles SessionStart, dispatches hook.
+    /// Replaces bash wrapper chain. Usage: router-rs claude-hook <EventName>
+    #[command(name = "claude-hook")]
+    ClaudeHookDirect(ClaudeHookDirectCommand),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -564,6 +568,18 @@ pub struct ClaudeHookCommand {
     pub event: String,
     #[arg(long)]
     pub repo_root: Option<PathBuf>,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ClaudeHookDirectCommand {
+    /// Hook event name (PreToolUse, PostToolUse, Stop, etc.)
+    pub event: String,
+    /// Override repo root (default: CLAUDE_PROJECT_ROOT env or git rev-parse)
+    #[arg(long)]
+    pub repo_root: Option<PathBuf>,
+    /// Path to .env file (default: <repo_root>/.claude/router-rs-hook.env)
+    #[arg(long)]
+    pub env_file: Option<PathBuf>,
 }
 
 #[derive(Args, Debug, Clone)]

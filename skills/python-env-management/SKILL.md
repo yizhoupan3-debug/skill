@@ -9,6 +9,7 @@ description: |
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
+routing_priority: P3
 session_start: n/a
 user-invocable: true
 disable-model-invocation: false

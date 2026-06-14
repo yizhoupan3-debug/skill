@@ -462,7 +462,7 @@ pub fn dispatch_codex_command(command: CodexSubcommand) -> Result<(), String> {
                 .ok_or("hook event required")?;
             let payload = run_codex_audit_hook(&event_name, &repo_root)?;
             print_json_value(&codex_hook_stdout_payload(payload))?;
-            Ok(())
+            std::process::exit(0);
         }
         CodexSubcommand::HostIntegration(command) => {
             let payload = run_host_integration_from_args(&command.args)?;
@@ -497,9 +497,101 @@ pub fn dispatch_claude_command(command: ClaudeSubcommand) -> Result<(), String> 
         ClaudeSubcommand::Hook(command) => {
             run_claude_hook_cli(&command.event, command.repo_root.as_deref())
         }
+        ClaudeSubcommand::ClaudeHookDirect(command) => {
+            run_claude_hook_direct(&command.event, command.repo_root.as_deref(), command.env_file.as_deref())
+        }
         ClaudeSubcommand::Agent(command) => {
             let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             crate::hosts::claude_agent::run_claude_agent_mcp_loop(Some(&root))
+        }
+    }
+}
+
+/// Direct hook dispatch — replaces bash wrapper chain.
+/// Reads .env, handles SessionStart short-circuit, delegates to run_claude_hook, exits immediately.
+fn run_claude_hook_direct(
+    event: &str,
+    cli_repo_root: Option<&Path>,
+    env_file: Option<&Path>,
+) -> Result<(), String> {
+    // Resolve repo root
+    let repo_root = if let Some(r) = cli_repo_root {
+        r.to_path_buf()
+    } else if let Ok(r) = std::env::var("CLAUDE_PROJECT_ROOT") {
+        PathBuf::from(r)
+    } else {
+        std::env::current_dir().map_err(|e| format!("cwd: {e}"))?
+    };
+
+    // Read .env file and set env vars
+    let default_env_path = repo_root.join(".claude/router-rs-hook.env");
+    let env_path = env_file.unwrap_or(&default_env_path);
+    if env_path.is_file() {
+        if let Ok(content) = std::fs::read_to_string(env_path) {
+            for line in content.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') {
+                    continue;
+                }
+                if let Some((key, value)) = line.split_once('=') {
+                    let key = key.trim();
+                    let value = value.trim();
+                    let expanded = value.replace("${HOME}", &std::env::var("HOME").unwrap_or_default());
+                    let expanded = expanded.trim_matches('"').trim_matches('\'');
+                    std::env::set_var(key, expanded);
+                }
+            }
+        }
+    }
+
+    // SessionStart short-circuit — no stdin read needed
+    let event_lower = event.to_ascii_lowercase();
+    if event_lower == "sessionstart" || event_lower == "subagentstart" || event_lower == "subagentstop" {
+        if event_lower == "sessionstart" {
+            clean_stale_hook_state(&repo_root);
+        }
+        let _ = std::io::stdout().write_all(
+            b"{\"decision\":\"allow\",\"suppressOutput\":true}\n",
+        );
+        std::process::exit(0);
+    }
+
+    // Delegate to run_claude_hook (reads stdin, dispatches, returns output)
+    // On unsupported events, return allow instead of error
+    let mut output = match host_projection::hosts::claude_code_hooks::run_claude_hook(event, &repo_root) {
+        Ok(v) => v,
+        Err(_) => serde_json::json!({"suppressOutput": true}),
+    };
+    host_projection::hooks::attach_router_rs_observation(
+        &mut output,
+        host_projection::hooks::HookObservationHostType::ClaudeCode,
+    );
+
+    // Write output and exit immediately (skip background thread cleanup)
+    let serialized = serde_json::to_string(&output).map_err(|e| e.to_string())?;
+    let _ = std::io::stdout().write_all(format!("{serialized}\n").as_bytes());
+    std::process::exit(0);
+}
+
+/// Clean stale hook-state files (> 1h lock files, > 24h JSON files)
+fn clean_stale_hook_state(repo_root: &Path) {
+    let hook_state_dir = repo_root.join(".claude/hook-state");
+    if !hook_state_dir.is_dir() {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(&hook_state_dir) else { return };
+    let now = std::time::SystemTime::now();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_lock = path.extension().map_or(false, |e| e == "lock");
+        if let Ok(meta) = path.metadata() {
+            if let Ok(age) = now.duration_since(meta.modified().unwrap_or(std::time::UNIX_EPOCH)) {
+                if (is_lock && age > std::time::Duration::from_secs(3600))
+                    || (!is_lock && age > std::time::Duration::from_secs(86400))
+                {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
         }
     }
 }
@@ -588,7 +680,9 @@ fn run_opencode_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<()
         Ok(())
     })();
     crate::hook_timing::emit_hook_timing_line(event);
-    result
+    // Force immediate exit — skip background thread cleanup (file watcher, telemetry).
+    // Hook processes are short-lived fire-and-forget; background threads are not needed.
+    std::process::exit(0);
 }
 
 pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {

@@ -306,14 +306,8 @@ printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start
 
 Coordinator **只读**；subagent handoff 可引用图谱结论，但不替代 lane 内 Read/Grep。
 
-| 场景 | 工具 | 何时 |
-|------|------|------|
-| 索引就绪 | `codegraph_status` | 每 wave 调度前；stale 时在 lane prompt 注明「先 sync/重建索引」 |
-| 符号定位 | `codegraph_search` / `codegraph_node` | 校验 `scope_paths` 是否覆盖真实 symbol owner |
-| 调用链 | `codegraph_callers` / `codegraph_callees` | 并行 lane 拆分时确认 disjoint 与依赖方向 |
-| 影响半径 | `codegraph_impact` | 改公共 API 前评估需同步的 lane 或 verify 命令 |
-
-MCP 进程启动时自动 incremental sync；勿在 implement lane 内手改索引 DB。
+> 工具与场景表：见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
+> 何时：每 wave 调度前检查就绪（stale 时注明「先 sync/重建索引」）；拆 scope 前符号定位校验 `scope_paths`；并行 lane 确认 disjoint 与依赖方向；改公共 API 前评估影响半径。勿在 implement lane 内手改索引 DB。
 
 ---
 

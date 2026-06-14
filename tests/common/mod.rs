@@ -167,8 +167,6 @@ pub fn seed_framework_markers(root: &Path) {
         &root.join("core/router-rs/Cargo.toml"),
         "[package]\nname = \"router-rs-marker\"\nversion = \"0.0.0\"\nedition = \"2021\"\n",
     );
-    // `ensure_codex_skill_surface` may `read_dir` the skills source root when pinned/runtime
-    // slugs yield an empty desired set — the directory must exist.
     fs::create_dir_all(root.join("skills")).unwrap_or_else(|err| {
         panic!("failed to create {}: {err}", root.join("skills").display());
     });

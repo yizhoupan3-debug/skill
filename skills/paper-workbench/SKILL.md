@@ -1,22 +1,13 @@
 ---
 name: paper-workbench
 description: |
-  Unified front door for paper work. Use when the user has a manuscript-level
-  task and should not have to choose between review, revision, logic, figures,
-  or prose lanes first. Good for requests like "帮我看这篇 paper 现在能不能投",
-  "根据 reviewer comments 改到能投", "先审再改", "整体推进这篇论文", or
-  "这篇稿子现在该怎么处理". Also use when manuscript preparation should start
-  from target-journal refs, e.g. "先下载20篇目标期刊相近ref再写" or "学ref讲故事".
-  Also use for feedback/repair asks like "paper review不好用，彻底优化",
-  "论文写作不好用，持续优化", or "允许外部调研". This skill picks the right paper
-  lane first, allows external literature / venue lookup when useful, and keeps
-  the workflow continuous without making the user switch skills. Use top-tier
-  journal / top-conference standards when the user says 顶刊, 顶会, CCF-A,
-  Nature/Science/Cell, NeurIPS/ICML/ICLR, or wants the paper pushed toward a
-  genuinely selective venue rather than merely polished.
+  论文全流程前门：自动路由 reviewer/writer lane，一站式审稿、返修、投稿。
+  用户无需在 review、revision、logic、figures、prose 之间手动选择。
+  按顶刊/顶会标准把关，支持 rebuttal、R&R、cover letter 全流程。
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
+routing_priority: P1
 session_start: preferred
 user-invocable: true
 disable-model-invocation: false
@@ -31,7 +22,12 @@ trigger_hints:
   - abstract 改写
   - introduction 重写
   - 顶刊 / 顶会 / CCF-A
-  - Nature / Science / Cell / NeurIPS / ICML / ICLR
+  - Nature
+  - Science
+  - Cell
+  - NeurIPS
+  - ICML
+  - ICLR
   - top-tier 论文
   - revision modes
   - claim 漂移

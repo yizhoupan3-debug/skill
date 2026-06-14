@@ -14,6 +14,18 @@
       "kind": "skill",
       "skill_path": "skills/agent-swarm-orchestration/SKILL.md"
     },
+    "algo-trading": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/algo-trading/SKILL.md"
+    },
     "citation-management": {
       "host_support": {
         "platforms": [
@@ -98,6 +110,18 @@
       "kind": "skill",
       "skill_path": "skills/doc/SKILL.md"
     },
+    "email-template": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/email-template/SKILL.md"
+    },
     "experiment-reproducibility": {
       "host_support": {
         "platforms": [
@@ -109,6 +133,18 @@
       },
       "kind": "skill",
       "skill_path": "skills/experiment-reproducibility/SKILL.md"
+    },
+    "formal-verification": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/formal-verification/SKILL.md"
     },
     "gh-address-comments": {
       "host_support": {
@@ -157,6 +193,30 @@
       },
       "kind": "skill",
       "skill_path": "skills/implementx/SKILL.md"
+    },
+    "infographic": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/infographic/SKILL.md"
+    },
+    "literature-verification": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/literature-verification/SKILL.md"
     },
     "math-derivation": {
       "host_support": {
@@ -242,6 +302,18 @@
       "kind": "skill",
       "skill_path": "skills/planx/SKILL.md"
     },
+    "prose-verification": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/prose-verification/SKILL.md"
+    },
     "python-env-management": {
       "host_support": {
         "platforms": [
@@ -253,6 +325,42 @@
       },
       "kind": "skill",
       "skill_path": "skills/python-env-management/SKILL.md"
+    },
+    "reproducibility-verification": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/reproducibility-verification/SKILL.md"
+    },
+    "research-discovery": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/research-discovery/SKILL.md"
+    },
+    "research-execution": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/research-execution/SKILL.md"
     },
     "scientific-figure-plotting": {
       "host_support": {
@@ -277,6 +385,18 @@
       },
       "kind": "skill",
       "skill_path": "skills/sentry/SKILL.md"
+    },
+    "simplify": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/simplify/SKILL.md"
     },
     "skill-framework-developer": {
       "host_support": {
@@ -326,6 +446,54 @@
       "kind": "skill",
       "skill_path": "skills/statistical-analysis/SKILL.md"
     },
+    "statistical-verification": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/statistical-verification/SKILL.md"
+    },
+    "structure-verification": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/structure-verification/SKILL.md"
+    },
+    "systematic-debugging": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/systematic-debugging/SKILL.md"
+    },
+    "tikz-paper-figure": {
+      "host_support": {
+        "platforms": [
+          "claude-code",
+          "codex",
+          "cursor",
+          "opencode"
+        ]
+      },
+      "kind": "skill",
+      "skill_path": "skills/tikz-paper-figure/SKILL.md"
+    },
     "update": {
       "host_support": {
         "platforms": [
@@ -361,30 +529,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/visual-review/SKILL.md"
-    },
-    "research-discovery": {
-      "host_support": {
-        "platforms": [
-          "claude-code",
-          "codex",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/research-discovery/SKILL.md"
-    },
-    "research-execution": {
-      "host_support": {
-        "platforms": [
-          "claude-code",
-          "codex",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/research-execution/SKILL.md"
     }
   },
   "source_of_truth": false

@@ -448,6 +448,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "mcp-stdio-common",
  "regex",
  "serde",
  "serde_json",
@@ -834,6 +835,7 @@ dependencies = [
  "clap",
  "csv",
  "futures",
+ "mcp-stdio-common",
  "reqwest",
  "serde",
  "serde_json",
@@ -1021,6 +1023,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "mcp-stdio-common",
  "regex",
  "serde",
  "serde_json",
@@ -1641,6 +1644,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "hex",
+ "serde",
+ "serde_json",
  "sha2",
 ]
 

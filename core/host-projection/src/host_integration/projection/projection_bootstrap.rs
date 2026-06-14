@@ -2,7 +2,6 @@
 //!
 //! Extracted from projection.rs to keep file size ≤2000 lines.
 
-use super::projection::*;
 use super::*;
 pub fn default_home_dir() -> PathBuf {
     std::env::var_os("HOME")
@@ -620,31 +619,6 @@ pub fn format_status_line() -> String {
         .collect::<Vec<_>>()
         .join(", ");
     format!("status_line = [{items}]")
-}
-
-pub fn ensure_codex_skills_symlink(target_path: &Path, source_path: &Path) -> Result<bool, String> {
-    let source_path = normalize_path(source_path)?;
-    if codex_skills_matches_source(target_path, &source_path)? {
-        return Ok(false);
-    }
-    if target_path.exists() || symlink_exists(target_path) {
-        remove_path(target_path).map_err(|err| err.to_string())?;
-    }
-    if let Some(parent) = target_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-    }
-    create_dir_symlink(&source_path, target_path)?;
-    Ok(true)
-}
-
-#[cfg(unix)]
-pub fn create_dir_symlink(source_path: &Path, target_path: &Path) -> Result<(), String> {
-    std::os::unix::fs::symlink(source_path, target_path).map_err(|err| err.to_string())
-}
-
-#[cfg(windows)]
-pub fn create_dir_symlink(source_path: &Path, target_path: &Path) -> Result<(), String> {
-    std::os::windows::fs::symlink_dir(source_path, target_path).map_err(|err| err.to_string())
 }
 
 pub fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {

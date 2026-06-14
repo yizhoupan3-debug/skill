@@ -62,7 +62,6 @@ core/router-rs/artifacts/telemetry/
 artifacts/telemetry/
 core/router-rs/probe.err
 **/.router-rs.*.lock
-artifacts/codex-skill-surface/
 artifacts/ops/
 artifacts/evidence/
 artifacts/scratch/

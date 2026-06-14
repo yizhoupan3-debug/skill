@@ -10,7 +10,7 @@ const ALLOWED_VERIFICATION_STATUSES: &[&str] = &["passed", "failed", "partial", 
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct CloseoutCommandRecord {
+pub struct CloseoutCommandRecord {
     #[serde(default)]
     pub command: String,
     #[serde(default)]
@@ -28,7 +28,7 @@ pub(crate) struct CloseoutCommandRecord {
 
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct CloseoutArtifactRecord {
+pub struct CloseoutArtifactRecord {
     #[serde(default)]
     pub path: String,
     #[serde(default)]

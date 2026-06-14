@@ -4,6 +4,7 @@ description: |
   行为守恒的三维度并行代码简化审查（复用/质量/效率）。
   默认 findings-only，可选自动修复模式。
   与 code-review-deep 互补：review = 审查专家，simplify = 质量门。
+  不用于找 bug 或安全漏洞——那属于 code-review-deep。
   集成框架生命周期：implementx → simplify → verifyx。
 routing_layer: L2
 routing_owner: owner
@@ -419,13 +420,12 @@ commit
 |------|----------|------|
 | **Claude Code CLI** | 完全支持 | Agent subagent 并行 + Bash 测试门控 |
 | **Cursor** | 完全支持 | Task subagent 并行 + 测试门控 |
-| **Claude Desktop** | 完全支持 | 浏览器外网可选（查阅文档/示例） |
+| **Codex** | 支持 | 按需路由加载 |
 
 ### 宿主差异
 
 - **Claude Code**: 使用 `Agent` 工具 spawn 三维度子代理；PostToolUse hook 可记录简化证据
 - **Cursor**: 使用 `Task` 工具 spawn 子代理；lane 命名遵循 Cursor 规范
-- **Claude Desktop**: MCP 路由 + `session_launch` 可选并行会话
 
 所有宿主共享同一份 `SKILL.md`，行为契约和测试门控逻辑不变。
 

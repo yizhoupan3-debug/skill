@@ -2,7 +2,6 @@
 //!
 //! Extracted from projection.rs to keep file size ≤2000 lines.
 
-use super::projection::*;
 use super::*;
 pub fn make_mcp_server_payload(roots: &ResolvedProjectionRoots, host_args: &[&str], description: &str) -> Value {
     make_mcp_server_payload_with_env(roots, host_args, description, None)

@@ -1,118 +1,101 @@
 #!/usr/bin/env bash
 # Workspace bootstrap template must match repo .cursor/hooks.json (7-event subtraction set).
 # Event lists are loaded from `router-rs schema-drift contract` (single source with subtraction.rs).
+# Dependencies: jq (no python).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 hooks="$root/.cursor/hooks.json"
 template="$root/configs/framework/cursor-hooks.workspace-template.json"
 for f in "$hooks" "$template"; do
-  [[ -f "$f" ]] || {
-    echo "FAIL: missing $f"
-    exit 1
-  }
+  [[ -f "$f" ]] || { echo "FAIL: missing $f"; exit 1; }
 done
-uv run python - <<'PY'
-import json
-import subprocess
-import sys
-from pathlib import Path
 
-root = Path(".").resolve()
-manifest = root / "core/router-rs/Cargo.toml"
+# Load contract from router-rs
+contract=$(cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- schema-drift contract 2>/dev/null) || {
+  echo "FAIL: cargo schema-drift contract failed" >&2
+  exit 1
+}
+required=$(echo "$contract" | jq -r '.cursor_hooks_required[]')
+forbidden=$(echo "$contract" | jq -r '.cursor_hooks_forbidden[]')
 
-def load_contract() -> dict:
-    out = subprocess.check_output(
-        [
-            "cargo",
-            "run",
-            "--quiet",
-            "--manifest-path",
-            str(manifest),
-            "--",
-            "schema-drift",
-            "contract",
-        ],
-        cwd=root,
-        text=True,
-    )
-    return json.loads(out)
+# Build timeout expectations as JSON
+gate_timeouts='{
+  "beforeSubmitPrompt": 20, "stop": 20, "postToolUse": 20,
+  "subagentStart": 20, "subagentStop": 20, "sessionStart": 5, "sessionEnd": 15
+}'
 
-contract = load_contract()
-REQUIRED = contract["cursor_hooks_required"]
-FORBIDDEN = contract["cursor_hooks_forbidden"]
+# Validate a hooks JSON file against contract
+validate_hooks() {
+  local label="$1" file="$2"
+  local h
+  h=$(jq '.hooks // {}' "$file")
+  local keys
+  keys=$(echo "$h" | jq -r 'keys[]')
+  local errs=""
 
-hooks = json.loads((root / ".cursor/hooks.json").read_text())
-template = json.loads(
-    (root / "configs/framework/cursor-hooks.workspace-template.json").read_text()
-)
+  # Check required events
+  for ev in $required; do
+    if ! echo "$keys" | grep -qx "$ev"; then
+      errs="${errs}${label}: missing required event ${ev}\n"
+    fi
+  done
 
-GATE_TIMEOUT_EVENTS = {
-    "beforeSubmitPrompt": 20,
-    "stop": 20,
-    "postToolUse": 20,
-    "subagentStart": 20,
-    "subagentStop": 20,
-    "sessionStart": 5,
-    "sessionEnd": 15,
+  # Check forbidden events
+  for ev in $forbidden; do
+    if echo "$keys" | grep -qx "$ev"; then
+      errs="${errs}${label}: forbidden removed event ${ev} still registered\n"
+    fi
+  done
+
+  # Check timeouts and commands
+  for ev in beforeSubmitPrompt stop postToolUse subagentStart subagentStop sessionStart sessionEnd; do
+    local want
+    want=$(echo "$gate_timeouts" | jq -r --arg ev "$ev" '.[$ev] // empty')
+    [[ -z "$want" ]] && continue
+    local actual_timeout
+    actual_timeout=$(echo "$h" | jq -r --arg ev "$ev" '.[$ev][0].timeout // empty')
+    if [[ -n "$actual_timeout" && "$actual_timeout" != "$want" ]]; then
+      errs="${errs}${label}: ${ev} timeout must be ${want}s (got ${actual_timeout})\n"
+    fi
+    local cmd
+    cmd=$(echo "$h" | jq -r --arg ev "$ev" '.[$ev][0].command // empty')
+    if [[ -n "$cmd" && "$cmd" != *"cursor-router-rs-hook.sh"* ]]; then
+      errs="${errs}${label}: ${ev} must invoke cursor-router-rs-hook.sh\n"
+    fi
+  done
+
+  printf '%s' "$errs"
 }
 
+errs=""
+errs+=$(validate_hooks ".cursor/hooks.json" "$hooks")
+errs+=$(validate_hooks "workspace-template" "$template")
 
-def hook_map(doc: dict) -> dict:
-    h = doc.get("hooks") or {}
-    out = {}
-    for ev, entries in h.items():
-        cmds = [e.get("command", "") for e in entries if isinstance(e, dict)]
-        timeouts = [e.get("timeout") for e in entries if isinstance(e, dict)]
-        out[ev] = {"commands": cmds, "timeouts": timeouts}
-    return out
+# Check key mismatch
+h_keys=$(jq -r '.hooks // {} | keys | sort | join(",")' "$hooks")
+t_keys=$(jq -r '.hooks // {} | keys | sort | join(",")' "$template")
+if [[ "$h_keys" != "$t_keys" ]]; then
+  errs="${errs}event key mismatch: hooks=[${h_keys}] template=[${t_keys}]\n"
+else
+  # Check timeout and command parity between hooks and template
+  for ev in $(echo "$h_keys" | tr ',' '\n'); do
+    h_to=$(jq -r --arg ev "$ev" '.hooks[$ev][0].timeout // empty' "$hooks")
+    t_to=$(jq -r --arg ev "$ev" '.hooks[$ev][0].timeout // empty' "$template")
+    if [[ "$h_to" != "$t_to" ]]; then
+      errs="${errs}timeout mismatch on ${ev}: hooks=${h_to} template=${t_to}\n"
+    fi
+    h_cmd=$(jq -r --arg ev "$ev" '.hooks[$ev][0].command // empty' "$hooks")
+    t_cmd=$(jq -r --arg ev "$ev" '.hooks[$ev][0].command // empty' "$template")
+    if [[ "$h_cmd" != "$t_cmd" ]]; then
+      errs="${errs}command mismatch on ${ev}\n"
+    fi
+  done
+fi
 
-
-def errors_for(label: str, hm: dict) -> list[str]:
-    errs = []
-    keys = set(hm)
-    for ev in REQUIRED:
-        if ev not in keys:
-            errs.append(f"{label}: missing required event {ev}")
-    for ev in FORBIDDEN:
-        if ev in keys:
-            errs.append(f"{label}: forbidden removed event {ev} still registered")
-    for ev, want in GATE_TIMEOUT_EVENTS.items():
-        if ev not in hm:
-            continue
-        ts = hm[ev]["timeouts"]
-        if not ts or ts[0] != want:
-            errs.append(
-                f"{label}: {ev} timeout must be {want}s (got {ts!r}); "
-                "PostToolUse 20s avoids hung review multiset on slow disks"
-            )
-        cmd = hm[ev]["commands"][0] if hm[ev]["commands"] else ""
-        if "cursor-router-rs-hook.sh" not in cmd:
-            errs.append(f"{label}: {ev} must invoke cursor-router-rs-hook.sh")
-    return errs
-
-
-h = hook_map(hooks)
-t = hook_map(template)
-errs = errors_for(".cursor/hooks.json", h) + errors_for("workspace-template", t)
-if set(h.keys()) != set(t.keys()):
-    errs.append(
-        f"event key mismatch: hooks={sorted(h.keys())} template={sorted(t.keys())}"
-    )
-else:
-    for ev in sorted(h.keys()):
-        if h[ev]["timeouts"] != t[ev]["timeouts"]:
-            errs.append(
-                f"timeout mismatch on {ev}: hooks={h[ev]['timeouts']} template={t[ev]['timeouts']}"
-            )
-        if h[ev]["commands"] != t[ev]["commands"]:
-            errs.append(f"command mismatch on {ev}")
-
-if errs:
-    print("\n".join(errs), file=sys.stderr)
-    sys.exit(1)
-print(
-    "OK: .cursor/hooks.json matches cursor-hooks.workspace-template.json "
-    f"({len(REQUIRED)} events, contract-driven lists)"
-)
-PY
+if [[ -n "$errs" ]]; then
+  printf '%b' "$errs" >&2
+  exit 1
+fi
+event_count=$(echo "$required" | wc -l | tr -d ' ')
+echo "OK: .cursor/hooks.json matches cursor-hooks.workspace-template.json (${event_count} events, contract-driven lists)"

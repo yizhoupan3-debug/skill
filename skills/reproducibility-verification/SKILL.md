@@ -1,8 +1,8 @@
 ---
 name: reproducibility-verification
 description: |
-  无状态内部 skill：验证实验的可复现性——种子、确定性、环境锁定、数据版本和
-  checkpoint 恢复。由 research-execution、paper-workbench 内联调用。
+  experiment-reproducibility 的无状态审计子能力：验证实验的可复现性——种子、确定性、环境锁定、数据版本和
+  checkpoint 恢复。由 research-execution、paper-workbench 内联调用，不独立编排会话。
 routing_layer: L4
 routing_owner: owner
 routing_gate: none

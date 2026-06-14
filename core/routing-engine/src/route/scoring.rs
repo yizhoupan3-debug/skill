@@ -502,24 +502,10 @@ pub fn score_route_candidate<'a>(
     }
 
     if record.slug == "visual-review" && score > 0.0 {
-        let visual_evidence_markers = [
-            "看图",
-            "截图",
-            "渲染",
-            "render",
-            "screenshot",
-            "ui",
-            "layout",
-            "chart",
-            "视觉",
-            "switch",
-            "切换",
-            "组件",
-            "component",
-        ];
-        if !visual_evidence_markers
+        let markers = super::nl_route_adjustments::visual_evidence_markers();
+        if !markers
             .iter()
-            .any(|marker| query_text.contains(marker))
+            .any(|marker| query_text.contains(marker.as_str()))
         {
             score *= w.visual_review_weak_factor;
             reasons.push(

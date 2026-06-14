@@ -253,6 +253,34 @@ fn apply_manifest_route_meta(
     });
 }
 
+/// Expand `["supported"]` / `["all-hosts"]` wildcard in host_platforms to all registered hosts.
+fn expand_supported_host_platforms(records: &mut [SkillRecord], any_sibling_path: &Path) {
+    let is_wildcard = |hp: &[String]| hp.len() == 1 && (hp[0] == "supported" || hp[0] == "all-hosts");
+    if !records.iter().any(|r| is_wildcard(&r.host_platforms)) {
+        return;
+    }
+    let all_hosts: Vec<String> = any_sibling_path
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|repo| repo.join("configs/framework/RUNTIME_REGISTRY.json"))
+        .and_then(|reg_path| read_json(&reg_path).ok())
+        .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
+        .map(|arr| {
+            let mut v: Vec<String> = arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect();
+            v.sort();
+            v
+        })
+        .unwrap_or_default();
+    if all_hosts.is_empty() {
+        return;
+    }
+    for record in records.iter_mut() {
+        if is_wildcard(&record.host_platforms) {
+            record.host_platforms = all_hosts.clone();
+        }
+    }
+}
+
 fn apply_manifest_host_platforms(
     records: &mut [SkillRecord],
     manifest_path: &Path,
@@ -277,13 +305,33 @@ fn apply_manifest_host_platforms(
     let Some(idx_hosts) = key_index.get("host_platforms") else {
         return Ok(());
     };
+
+    // Load all registered hosts so [supported] can be expanded.
+    let all_hosts: Vec<String> = manifest_path
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|repo| repo.join("configs/framework/RUNTIME_REGISTRY.json"))
+        .and_then(|reg_path| read_json(&reg_path).ok())
+        .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .unwrap_or_default();
+
     let mut hosts_by_slug = HashMap::new();
     for row in rows.iter().filter_map(Value::as_array) {
         if row.len() <= idx_slug.max(*idx_hosts) {
             continue;
         }
         let slug = value_to_string(&row[idx_slug]);
-        let hosts = value_to_string_list(&row[*idx_hosts]);
+        let raw_hosts = value_to_string_list(&row[*idx_hosts]);
+        // Expand [supported] / [all-hosts] wildcard to all registered hosts.
+        let hosts = if raw_hosts.len() == 1
+            && (raw_hosts[0] == "supported" || raw_hosts[0] == "all-hosts")
+            && !all_hosts.is_empty()
+        {
+            all_hosts.clone()
+        } else {
+            raw_hosts
+        };
         if !hosts.is_empty() {
             hosts_by_slug.insert(slug, hosts);
         }
@@ -774,5 +822,8 @@ pub fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, Strin
         ..indexes
     };
 
-    Ok(collect_skill_records_from_rows(rows, indexes))
+    let mut records = collect_skill_records_from_rows(rows, indexes);
+    // Expand [supported] / [all-hosts] wildcard in host_platforms.
+    expand_supported_host_platforms(&mut records, path);
+    Ok(records)
 }

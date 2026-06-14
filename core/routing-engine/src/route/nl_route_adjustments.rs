@@ -199,6 +199,7 @@ struct CompiledRule {
 struct CompiledNl {
     pre: Vec<CompiledRule>,
     post: Vec<CompiledRule>,
+    visual_evidence_markers: Vec<String>,
 }
 
 fn parse_record_filter(filter: Option<&Value>) -> Result<RecordFilter, String> {
@@ -410,6 +411,7 @@ fn compile_nl_route_adjustments(json: &str) -> Result<CompiledNl, String> {
         "docs",
         "pre_framework_alias_rules",
         "post_framework_alias_rules",
+        "visual_evidence_markers",
     ];
     for k in root_obj.keys() {
         if !ROOT_KEYS.contains(&k.as_str()) {
@@ -435,9 +437,19 @@ fn compile_nl_route_adjustments(json: &str) -> Result<CompiledNl, String> {
         .and_then(Value::as_array)
         .map(Vec::as_slice)
         .unwrap_or(&[]);
+    let visual_evidence_markers = root_obj
+        .get("visual_evidence_markers")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     Ok(CompiledNl {
         pre: compile_rule_vec(pre, "pre_framework_alias_rules")?,
         post: compile_rule_vec(post, "post_framework_alias_rules")?,
+        visual_evidence_markers,
     })
 }
 
@@ -448,6 +460,12 @@ fn compiled_nl() -> &'static CompiledNl {
             panic!("NL_ROUTE_ADJUSTMENTS.json failed compile-time validation: {e}");
         })
     })
+}
+
+/// Returns the visual evidence markers loaded from `NL_ROUTE_ADJUSTMENTS.json`.
+/// Cached via `OnceLock` so the config file is parsed at most once.
+pub fn visual_evidence_markers() -> &'static [String] {
+    &compiled_nl().visual_evidence_markers
 }
 
 fn matches_record_filter(filter: &RecordFilter, record: &SkillRecord) -> bool {
@@ -528,6 +546,11 @@ fn eval_when_expr(
     }
 }
 
+/// Maximum cumulative NL boost that can be applied to a single skill.
+/// Prevents multiple boost rules from stacking to unbeatable 100+ scores.
+/// Suppress rules are not affected by this cap.
+const MAX_NL_BOOST_ACCUMULATION: f64 = 90.0;
+
 #[allow(clippy::too_many_arguments)]
 fn apply_rule_list<'a>(
     rules: &[CompiledRule],
@@ -539,6 +562,7 @@ fn apply_rule_list<'a>(
     score: &mut f64,
     reasons: &mut Vec<String>,
 ) -> Option<RouteCandidate<'a>> {
+    let mut nl_boost_accumulated = 0.0f64;
     for rule in rules {
         if !matches_record_filter(&rule.record, record) {
             continue;
@@ -555,6 +579,7 @@ fn apply_rule_list<'a>(
         }
         match &rule.action {
             CompiledAction::Suppress { reason } => {
+                // Suppress always takes effect regardless of boost cap.
                 return Some(RouteCandidate {
                     record,
                     score: 0.0,
@@ -563,7 +588,16 @@ fn apply_rule_list<'a>(
                 });
             }
             CompiledAction::Boost { delta, reason } => {
-                *score += delta;
+                if nl_boost_accumulated >= MAX_NL_BOOST_ACCUMULATION {
+                    continue;
+                }
+                let effective = if nl_boost_accumulated + *delta > MAX_NL_BOOST_ACCUMULATION {
+                    MAX_NL_BOOST_ACCUMULATION - nl_boost_accumulated
+                } else {
+                    *delta
+                };
+                nl_boost_accumulated += effective;
+                *score += effective;
                 reasons.push(reason.clone());
             }
         }

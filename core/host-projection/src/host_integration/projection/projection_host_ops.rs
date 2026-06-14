@@ -2,7 +2,6 @@
 //!
 //! Extracted from projection.rs to keep file size ≤2000 lines.
 
-use super::projection::*;
 use super::*;
 pub fn codex_home_root_string(roots: &ResolvedProjectionRoots) -> String {
     roots.codex_home_root.to_string_lossy().into_owned()

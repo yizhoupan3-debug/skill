@@ -11,7 +11,6 @@ use crate::host_integration::{
     cargo_router_rs_executable, resolve_maint_roots, run_host_integration_from_args,
 };
 use serde_json::{json, Value};
-use std::collections::BTreeSet;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -655,7 +654,6 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
             ));
         }
     }
-    verify_codex_skill_runtime_health(&repo_root)?;
 
     crate::framework_runtime::eprint_codex_hooks_duplicate_warnings(&repo_root);
 
@@ -734,144 +732,6 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
 
     eprintln!("Codex hook projection verified");
     Ok(())
-}
-
-fn verify_codex_skill_runtime_health(repo_root: &Path) -> Result<(), String> {
-    let repo_runtime = repo_root.join("skills/SKILL_ROUTING_RUNTIME.json");
-    verify_runtime_skill_paths(repo_root, &repo_runtime, "repo skill runtime")?;
-
-    let surface_runtime =
-        repo_root.join("artifacts/codex-skill-surface/skills/SKILL_ROUTING_RUNTIME.json");
-    let surface_paths = if surface_runtime.is_file() {
-        let surface_root = surface_runtime
-            .parent()
-            .and_then(Path::parent)
-            .ok_or_else(|| {
-                format!(
-                    "verify_codex_hooks: invalid Codex surface runtime path {}",
-                    surface_runtime.display()
-                )
-            })?;
-        Some(verify_runtime_skill_paths(
-            surface_root,
-            &surface_runtime,
-            "Codex skill surface runtime",
-        )?)
-    } else {
-        None
-    };
-
-    let codex_home = codex_home_path()?;
-    let global_runtime = codex_home.join("skills/SKILL_ROUTING_RUNTIME.json");
-    if global_runtime.is_file() {
-        let global_paths =
-            verify_runtime_skill_paths(&codex_home, &global_runtime, "Codex global skill runtime")?;
-        if let Some(surface_paths) = surface_paths {
-            if global_paths != surface_paths {
-                return Err(format!(
-                    "verify_codex_hooks: Codex global skill runtime drifted from generated surface runtime\nsurface_only={:?}\nglobal_only={:?}",
-                    surface_paths
-                        .difference(&global_paths)
-                        .cloned()
-                        .collect::<Vec<_>>(),
-                    global_paths
-                        .difference(&surface_paths)
-                        .cloned()
-                        .collect::<Vec<_>>()
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-fn verify_runtime_skill_paths(
-    root: &Path,
-    runtime_path: &Path,
-    label: &str,
-) -> Result<BTreeSet<String>, String> {
-    let text = fs::read_to_string(runtime_path).map_err(|err| {
-        format!(
-            "verify_codex_hooks: failed to read {label} {}: {err}",
-            runtime_path.display()
-        )
-    })?;
-    let runtime: Value = serde_json::from_str(&text).map_err(|err| {
-        format!(
-            "verify_codex_hooks: failed to parse {label} {}: {err}",
-            runtime_path.display()
-        )
-    })?;
-    let paths = collect_runtime_skill_paths(&runtime);
-    for path in &paths {
-        if path.contains("artifacts/codex-skill-surface") {
-            return Err(format!(
-                "verify_codex_hooks: {label} must not reference generated surface paths: {path}"
-            ));
-        }
-        let resolved = crate::path_guard::join_repo_relative_under_root(root, path)?;
-        if !resolved.is_file() {
-            return Err(format!(
-                "verify_codex_hooks: {label} references missing skill_path {} under {}",
-                resolved.display(),
-                root.display()
-            ));
-        }
-    }
-    Ok(paths)
-}
-
-fn collect_runtime_skill_paths(value: &Value) -> BTreeSet<String> {
-    let mut paths = BTreeSet::new();
-    collect_runtime_skill_paths_inner(value, &mut paths);
-    paths
-}
-
-fn collect_runtime_skill_paths_inner(value: &Value, paths: &mut BTreeSet<String>) {
-    match value {
-        Value::Object(map) => {
-            if let (Some(keys), Some(skills)) = (
-                map.get("keys").and_then(Value::as_array),
-                map.get("skills").and_then(Value::as_array),
-            ) {
-                let skill_path_idx = keys
-                    .iter()
-                    .position(|key| key.as_str() == Some("skill_path"));
-                if let Some(idx) = skill_path_idx {
-                    for row in skills {
-                        if let Some(path) = row
-                            .as_array()
-                            .and_then(|cols| cols.get(idx))
-                            .and_then(Value::as_str)
-                        {
-                            paths.insert(path.to_string());
-                        }
-                    }
-                }
-            }
-            for (key, child) in map {
-                if key == "skill_path" {
-                    if let Some(path) = child.as_str() {
-                        paths.insert(path.to_string());
-                    }
-                } else if key == "skill_paths" {
-                    if let Some(items) = child.as_array() {
-                        for path in items.iter().filter_map(Value::as_str) {
-                            paths.insert(path.to_string());
-                        }
-                    }
-                } else {
-                    collect_runtime_skill_paths_inner(child, paths);
-                }
-            }
-        }
-        Value::Array(items) => {
-            for child in items {
-                collect_runtime_skill_paths_inner(child, paths);
-            }
-        }
-        _ => {}
-    }
 }
 
 fn codex_hook_smoke(
@@ -1777,32 +1637,5 @@ mod tests {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, text).unwrap();
-    }
-
-    #[test]
-    fn runtime_path_check_rejects_missing_skill_path() {
-        let root = fresh_root("missing-skill-path");
-        let runtime = root.join("skills/SKILL_ROUTING_RUNTIME.json");
-        write(
-            &runtime,
-            r#"{"keys":["slug","layer","owner","gate","session_start","summary","trigger_hints","priority","skill_path"],"skills":[["x","L0","owner","none","n/a","x",[],"P1","skills/missing/SKILL.md"]]}"#,
-        );
-        let err = verify_runtime_skill_paths(&root, &runtime, "test runtime").unwrap_err();
-        assert!(err.contains("missing skill_path"), "{err}");
-    }
-
-    #[test]
-    fn runtime_path_check_rejects_generated_surface_paths() {
-        let root = fresh_root("surface-path");
-        let runtime = root.join("skills/SKILL_ROUTING_RUNTIME.json");
-        write(
-            &runtime,
-            r#"{"keys":["slug","layer","owner","gate","session_start","summary","trigger_hints","priority","skill_path"],"skills":[["x","L0","owner","none","n/a","x",[],"P1","artifacts/codex-skill-surface/skills/x/SKILL.md"]]}"#,
-        );
-        let err = verify_runtime_skill_paths(&root, &runtime, "test runtime").unwrap_err();
-        assert!(
-            err.contains("must not reference generated surface paths"),
-            "{err}"
-        );
     }
 }

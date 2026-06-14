@@ -609,12 +609,29 @@ fn primary_owner_query_text(query: &str, records: &[SkillRecord], allow_overlay:
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Layer-based penalty applied during fuzzy rescue to discourage
+/// low-priority layers from winning fuzzy matches over higher-priority ones.
+fn fuzzy_layer_penalty(layer: &str) -> f64 {
+    match layer {
+        "L0" => 0.0,
+        "L1" => -0.02,
+        "L2" => -0.05,
+        "L3" => -0.08,
+        "L4" => -0.12,
+        _ => -0.05,
+    }
+}
+
 fn fuzzy_rescue_best_match<'a>(
     records: impl Iterator<Item = &'a SkillRecord>,
     query: &str,
 ) -> Option<(&'a SkillRecord, f64)> {
     records
-        .map(|record| (record, fuzzy_fallback_score(query, record)))
+        .map(|record| {
+            let raw_sim = fuzzy_fallback_score(query, record);
+            let effective = (raw_sim + fuzzy_layer_penalty(&record.layer)).max(0.0);
+            (record, effective)
+        })
         .filter(|(_, sim)| *sim >= FUZZY_MIN_SIMILARITY)
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal))
         .map(|(record, sim)| (record, sim))

@@ -54,7 +54,7 @@ Codex CLI 采用 **fail-closed** 策略：hook 二进制缺失时，各生命周
 - **文件 Scope 配置**：
   - **[`AGENTS.md`](../../AGENTS.md)**（跨宿主内核，人工维护）、**[`AGENTS_CODEX.md`](../../AGENTS_CODEX.md)**（Codex delta，sync 材料化）、**`.codex/hooks.json`**：**Project**，位于仓库根或 `.codex/`。
   - **Framework prompt 快照**：**Project**，路径为 `.codex/prompts/framework.md`。
-  - **全局 skill surface**：**User**，路径为 `$CODEX_HOME/skills`，指向仓库中 `artifacts/codex-skill-surface/skills`。
+  - **全局 skill surface**：**已移除**。Codex 与其他宿主统一使用运行时路由（`skills/SKILL_ROUTING_RUNTIME.json`），不再需要文件投影。
 - **同步与安装命令**：
   当修改了 `router-rs` 嵌入的 AGENTS 文本、Codex hook 模板或需重新材料化时，运行以下同步命令：
   ```bash

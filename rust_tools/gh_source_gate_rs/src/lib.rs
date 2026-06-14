@@ -730,9 +730,6 @@ fn fetch_all_comments(owner: &str, repo: &str, number: i64, repo_root: &Path) ->
                 .unwrap_or_else(|_| "unknown".to_string());
             warnings.push(format!("GitHub GraphQL errors: {err_str}"));
             // Conservative: on errors, stop all pagination
-            comments_cursor = None;
-            reviews_cursor = None;
-            threads_cursor = None;
             break;
         }
         let pr = match payload

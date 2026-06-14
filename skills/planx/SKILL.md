@@ -3,6 +3,7 @@ name: planx
 description: |
   Personal lifecycle — plan/roadmap (doc-only). Writes ROADMAP.md and WAVE_STATE.json with explicit serial/parallel DAG.
   Use when user explicitly requests plan after /discussx. Does not mutate product code.
+  My lifecycle 专用，产出 ROADMAP + WAVE_STATE DAG。
 routing_layer: L0
 routing_owner: owner
 routing_gate: none
@@ -120,14 +121,8 @@ At most **one** read-only reviewer on `ROADMAP.md` → compact `lane-notes/` onl
 
 只读；用于 wave/lane 拆分与影响面评估（doc-only，不写索引）。
 
-| 场景 | 工具 | 何时 |
-|------|------|------|
-| 索引就绪 | `codegraph_status` | 计划前确认图谱非空、文件数合理；MCP 启动时会自动 incremental sync |
-| 符号定位 | `codegraph_search` / `codegraph_node` | 拆 scope 前解析 FQN、确认 owner 模块 |
-| 调用链 | `codegraph_callers` / `codegraph_callees` | 评估改动是否会波及其他 lane |
-| 影响半径 | `codegraph_impact` | 高风险 refactor 前写入 ROADMAP 验证项 |
-
-详见 [`docs/operations/b10-codegraph.md`](../../docs/operations/b10-codegraph.md)。
+> 工具与场景表：见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
+> 何时：计划前确认图谱非空、文件数合理（MCP 启动时自动 incremental sync）；拆 scope 前解析 FQN、确认 owner 模块；评估改动是否会波及其他 lane；高风险 refactor 前写入 ROADMAP 验证项。
 
 ## Next
 

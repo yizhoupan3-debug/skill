@@ -3,14 +3,13 @@
 //! Extracted from mcp_stdio_harness.rs to keep file size ≤2000 lines.
 
 use super::*;
+use framework_kernel::skill_repo::skill_routing_runtime_json;
 use serde_json::{json, Map, Value};
 use std::path::Path;
 use routing_engine::route::{
     filter_record_indices_for_host, load_records_cached_for_stdio,
     search_skills_subset, build_search_results_payload,
 };
-use routing_engine::text::read_json;
-use framework_kernel::skill_repo::skill_routing_runtime_json;
 
 pub(super) fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_id: &str, connection_session_id: &str) -> Value {
     let default_params = json!({});
@@ -605,8 +604,11 @@ pub(super) fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Pa
 
 #[derive(Debug, Clone)]
 pub struct McpCloseoutGateVerdict {
+    #[allow(dead_code)]
     pub all_clear: bool,
+    #[allow(dead_code)]
     pub checkpoint_only: bool,
+    #[allow(dead_code)]
     pub hard_block: bool,
     pub formatted: String,
 }

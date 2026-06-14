@@ -3,7 +3,6 @@
 use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
 };
-use serde_json::Value;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct CodexHostProvider;

@@ -577,6 +577,41 @@
       "host_id": "cursor",
       "expected_owner": "planx",
       "notes": "My lifecycle plan entry on cursor"
+    },
+    {
+      "id": "fuzzy-rescue-code-bug-review",
+      "category": "fuzzy-rescue",
+      "task": "帮我 review 这段代码，找出 bug 和逻辑错误",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "Fuzzy rescue should not route generic code queries to paper/slides/ci skills",
+      "forbidden_owners": [
+        "paper-workbench",
+        "slides",
+        "gh-fix-ci"
+      ]
+    },
+    {
+      "id": "overlay-skill-name-in-query",
+      "category": "overlay",
+      "task": "深度review这个 skill 路由系统的架构，顺便看看 code review 的质量",
+      "focus_skill": "skill-framework-developer",
+      "expected_owner": "skill-framework-developer",
+      "expected_overlay": "code-review-deep",
+      "first_turn": true,
+      "notes": "When query mentions overlay skill name explicitly, it should be selected as overlay"
+    },
+    {
+      "id": "stop-token-deploy-to-production",
+      "category": "stop-token",
+      "task": "部署到生产",
+      "focus_skill": null,
+      "expected_owner": null,
+      "expected_overlay": null,
+      "first_turn": true,
+      "notes": "After removing 部署 from stop tokens, query should be able to match deployment-related skills"
     }
   ]
 }

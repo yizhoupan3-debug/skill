@@ -25,8 +25,8 @@
 Hook launchers、CI、`Cargo.toml` workspace 已对齐 `core/*`；勿再引用 `scripts/*-rs`。
 
 - **唯一可写 skill 源**：`$SKILL_FRAMEWORK_ROOT/skills/`（示例：`$SKILL_FRAMEWORK_ROOT/skills/`）
-- **Codex 全局**：`~/.codex/skills` → `artifacts/codex-skill-surface/skills`
-- **Agents 全局**：`~/.agents/skills` → 同上 surface
+- **Codex 全局**：与其他宿主统一使用运行时路由（`skills/SKILL_ROUTING_RUNTIME.json`），不再需要文件投影
+- **Agents 全局**：同 Codex，使用运行时路由
 - **已删除（2026-05-19 激进清理）**：`~/Documents/skill`、`~/Documents/skill.nosync` 及同批空壳/无关目录；勿再引用。`~/skills_backup` 此前已删。
 - **生成物漂移检测**：`router-rs` 仍把历史路径 `/Users/joe/Documents/skill` 当作 forbidden marker，用于拒绝陈旧 bootstrap/投影。
 

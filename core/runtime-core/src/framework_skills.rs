@@ -100,16 +100,35 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
         .unwrap_or_default();
     let path_idx = keys.iter().position(|k| *k == "skill_path").unwrap_or(7);
     let host_idx = keys.iter().position(|k| *k == "host_platforms");
+
+    // Load all registered hosts from RUNTIME_REGISTRY so [supported] expands correctly.
+    let mut all_hosts: Vec<Value> = {
+        let reg_path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
+        serde_json::from_str::<Value>(&fs::read_to_string(&reg_path).unwrap_or_default())
+            .ok()
+            .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
+            .unwrap_or_else(|| json!(["claude-code", "cursor", "opencode"]).as_array().cloned().unwrap())
+    };
+    all_hosts.sort_by(|a, b| a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or("")));
+
     let mut plugin_skills = serde_json::Map::new();
     let mut metadata_skills = serde_json::Map::new();
     if let Some(rows) = manifest["skills"].as_array() {
         for row in rows {
             let slug = row.get(0).and_then(Value::as_str).unwrap_or("");
             let skill_path = row.get(path_idx).and_then(Value::as_str).unwrap_or("");
-            let platforms = host_idx
+            let raw_platforms = host_idx
                 .and_then(|i| row.get(i))
                 .cloned()
                 .unwrap_or_else(|| json!(["supported"]));
+            // Expand [supported] wildcard to all registered hosts.
+            let platforms = if raw_platforms.as_array().is_some_and(|a| {
+                a.len() == 1 && a[0].as_str() == Some("supported")
+            }) {
+                json!(all_hosts)
+            } else {
+                raw_platforms
+            };
             plugin_skills.insert(
                 slug.to_string(),
                 json!({

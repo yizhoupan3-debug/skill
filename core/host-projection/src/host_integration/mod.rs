@@ -1,7 +1,6 @@
 use framework_kernel::repo_roots::{framework_root_from_executable_path, is_framework_root};
 use framework_kernel::runtime_registry::{
     load_runtime_registry, load_runtime_registry_payload,
-    load_runtime_registry_payload_if_repo_local,
 };
 use chrono::Local;
 use clap::{Parser, Subcommand};
@@ -23,8 +22,6 @@ const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "context-remaining",
     "git-branch",
 ];
-const CODEX_SKILL_SURFACE_REL: &str = "artifacts/codex-skill-surface/skills";
-const CODEX_SKILL_SURFACE_MANIFEST_NAME: &str = ".codex-skill-surface.json";
 const FRAMEWORK_PROJECTION_SCHEMA_VERSION: &str = "framework-host-projection-v1";
 const HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION: &str = "framework-host-projection-narrative-v2";
 const GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION: &str =
@@ -44,26 +41,6 @@ const GENERATED_ARTIFACT_COPY_SKIP_DIR_NAMES: [&str; 10] = [
 ];
 const FRAMEWORK_PROJECTION_MANIFEST_NAME: &str = ".framework-projection.json";
 const DEFAULT_PROJECT_SCOPE: &str = "project";
-const HOST_SKILL_SURFACE_PINNED_SKILLS: [&str; 9] = [
-    "discussx",
-    "planx",
-    "implementx",
-    "verifyx",
-    "code-review-deep",
-    "deepinterview",
-    "gitx",
-    "plan-mode",
-    "update",
-];
-/// Metadata-only doctor and full drift-gate both use paths declared in
-/// `configs/framework/GENERATED_ARTIFACTS.json` (`framework maint update-one-shot`).
-const CODEX_SYSTEM_PROVIDED_SKILLS: [&str; 5] = [
-    "imagegen",
-    "openai-docs",
-    "plugin-creator",
-    "skill-creator",
-    "skill-installer",
-];
 const CURRENT_ALLOWED_ARTIFACT_NAMES: [&str; 3] =
     ["active_task.json", "focus_task.json", "task_registry.json"];
 const TASK_ALLOWED_ARTIFACT_NAMES: [&str; 6] = [

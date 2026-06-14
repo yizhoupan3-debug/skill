@@ -65,7 +65,7 @@ fn tool_pdf_read(args: &Value) -> Result<Value, anyhow::Error> {
     let total_pages = crate::read::page_count(pdf_path)? as u64;
 
     // Parse page range
-    let requested_pages = parse_page_range(pages_spec, total_pages)?;
+    let requested_pages = mcp_stdio_common::util::parse_range(pages_spec, total_pages)?;
     let truncated_pages = requested_pages.len() as u64 > MAX_PAGES_PER_REQUEST;
     let effective_pages: Vec<u64> = if truncated_pages {
         requested_pages[..MAX_PAGES_PER_REQUEST as usize].to_vec()
@@ -131,37 +131,6 @@ fn tool_pdf_read(args: &Value) -> Result<Value, anyhow::Error> {
             "warnings": warnings,
         }
     }))
-}
-
-/// Parse a page range spec like "1-5", "3", "1,3,7-10", "all" into sorted unique page numbers.
-fn parse_page_range(spec: &str, total_pages: u64) -> Result<Vec<u64>, anyhow::Error> {
-    if spec == "all" || spec.is_empty() {
-        return Ok((1..=total_pages).collect());
-    }
-    let mut pages = Vec::new();
-    for part in spec.split(',') {
-        let part = part.trim();
-        if let Some((start, end)) = part.split_once('-') {
-            let start: u64 = start.trim().parse().map_err(|_| anyhow::anyhow!("Invalid page range start: {start}"))?;
-            let end: u64 = end.trim().parse().map_err(|_| anyhow::anyhow!("Invalid page range end: {end}"))?;
-            if start == 0 || end == 0 || start > end || end > total_pages {
-                return Err(anyhow::anyhow!("Page range {start}-{end} out of bounds (total: {total_pages})"));
-            }
-            pages.extend(start..=end);
-        } else {
-            let page: u64 = part.parse().map_err(|_| anyhow::anyhow!("Invalid page number: {part}"))?;
-            if page == 0 || page > total_pages {
-                return Err(anyhow::anyhow!("Page {page} out of bounds (total: {total_pages})"));
-            }
-            pages.push(page);
-        }
-    }
-    pages.sort();
-    pages.dedup();
-    if pages.is_empty() {
-        return Err(anyhow::anyhow!("No valid pages specified"));
-    }
-    Ok(pages)
 }
 
 fn tool_pdf_info(args: &Value) -> Result<Value, anyhow::Error> {

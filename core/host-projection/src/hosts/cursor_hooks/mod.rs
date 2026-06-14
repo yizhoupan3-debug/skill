@@ -11,7 +11,6 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};

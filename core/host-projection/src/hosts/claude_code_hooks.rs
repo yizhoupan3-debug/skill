@@ -392,7 +392,9 @@ pub fn run_claude_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<
     stdout
         .write_all(format!("{serialized}\n").as_bytes())
         .map_err(|e| e.to_string())?;
-    Ok(())
+    // Force immediate exit — skip background thread cleanup (file watcher, telemetry).
+    // Hook processes are short-lived fire-and-forget; background threads are not needed.
+    std::process::exit(0);
 }
 
 fn parse_stdio_agent_hook_stdin_trimmed(trimmed: &str) -> Result<Value, String> {
@@ -459,16 +461,6 @@ fn add_context(event: &str, context: &str) -> Option<Value> {
             "hookEventName": event,
             "additionalContext": context,
         },
-    }))
-}
-
-fn block_stop(reason: &str) -> Option<Value> {
-    Some(json!({
-        "continue": false,
-        "stopReason": reason,
-        "decision": "block",
-        "reason": reason,
-        "suppressOutput": true,
     }))
 }
 
@@ -636,7 +628,8 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
         repo_root,
         &claude_closeout_completion_text(payload),
     ) {
-        return block_stop(&msg);
+        // Advisory only — do not block_stop (causes infinite retry loop)
+        return add_context("Stop", &format!("[advisory] {msg}"));
     }
 
     let review_load = load_review_gate_disk(repo_root, payload);
@@ -647,7 +640,8 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
             active_stdio_agent_hook_host().log_label(),
             review_state_path(repo_root, payload).display()
         );
-        return block_stop(active_stdio_agent_hook_host().hook_state_unreadable());
+        // Advisory — corrupted state is not a reason to block indefinitely
+        return add_context("Stop", "[advisory] hook-state unreadable; clearing stale files.");
     }
     if matches!(touch_load, AgentDiskState::Unreadable) {
         eprintln!(
@@ -655,7 +649,9 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
             active_stdio_agent_hook_host().log_label(),
             touch_state_path(repo_root, payload).display()
         );
-        return block_stop(active_stdio_agent_hook_host().hook_state_unreadable());
+        // Advisory — corrupted state is not a reason to block indefinitely
+        clear_touch_state(repo_root, payload);
+        return add_context("Stop", "[advisory] hook-state unreadable; cleared stale files.");
     }
 
     let stop_signal = claude_stop_signal_text(payload);
@@ -665,7 +661,6 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     let mut review_state = match review_load {
         AgentDiskState::Absent => ReviewGateState::default(),
         AgentDiskState::Ok(s) => s,
-        // Unreadable 已在上方 early return 处理，此处不可达
         AgentDiskState::Unreadable => unreachable!("Unreadable already returned above"),
     };
     if reject_now {
@@ -682,14 +677,20 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     let state = match touch_load {
         AgentDiskState::Absent => TouchState::default(),
         AgentDiskState::Ok(s) => s,
-        // Unreadable 已在上方 early return 处理，此处不可达
         AgentDiskState::Unreadable => unreachable!("Unreadable already returned above"),
     };
     if state.settings && !state.settings_validated {
-        return block_stop(active_stdio_agent_hook_host().validate_settings_stop_reason());
+        // Advisory — warn but do not block
+        clear_touch_state(repo_root, payload);
+        return add_context("Stop", &format!(
+            "[advisory] {}",
+            active_stdio_agent_hook_host().validate_settings_stop_reason()
+        ));
     }
     if state.framework && !state.framework_tested {
-        return block_stop("Run targeted Rust contract tests for framework routing/runtime changes before ending this turn.");
+        // Advisory — warn but do not block
+        clear_touch_state(repo_root, payload);
+        return add_context("Stop", "[advisory] Framework source files were modified. Consider running tests.");
     }
     clear_review_state(repo_root, payload);
     clear_touch_state(repo_root, payload);
@@ -766,14 +767,6 @@ fn repo_fallback_token(repo_root: &Path) -> String {
         "{label}-repo::{}",
         resolved.to_string_lossy().replace('\\', "/")
     )
-}
-
-fn short_hash(input: &str) -> String {
-    core_policy::crypto_util::short_hash(input)
-}
-
-fn hex_lower(bytes: &[u8]) -> String {
-    core_policy::crypto_util::hex_lower(bytes)
 }
 
 /// 与 Cursor `session_key` 同类：**显式会话串** → **宿主 `ROUTER_RS_*_SESSION_NAMESPACE`** → **`cwd` 类字段** → **repo 稳定 token**。

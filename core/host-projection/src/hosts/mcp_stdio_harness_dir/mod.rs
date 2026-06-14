@@ -11,15 +11,14 @@
 
 // route_task_with_manifest_fallback — not needed in host-projection; skill routing via framework_kernel
 // framework_runtime functions accessed via crate::hooks
-use routing_engine::route::{filter_records_for_host, load_records_cached_for_stdio};
-use framework_kernel::skill_repo::skill_routing_runtime_json;
+use routing_engine::route::filter_records_for_host;
 use crate::hooks::{
     check_anomalies, init_tracker, read_tracker_state, record_tool_call,
 };
 use core_policy::hook_common::is_review_prompt;
 use core_policy::review_gate_engine::{fork_context_from_values, review_independent_reviewer_evidence};
 use core_state::task_state::resolve_task_view;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, Write};
@@ -524,59 +523,41 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
             "tools": [
                 {
                     "name": "framework_snapshot",
-                    "description": "返回当前仓库的框架运行时快照（与 `router-rs framework snapshot` 同源），含完整连续性视图。",
+                    "description": "框架运行时快照（summary/full）。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "detail_level": {
-                                "type": "string",
-                                "enum": ["summary", "full"],
-                                "description": "快照详细级别（默认 summary）",
-                            },
+                            "detail_level": {"type": "string", "enum": ["summary", "full"]},
                         },
                     },
                 },
                 {
                     "name": "skill_route",
-                    "description": "传入自然语言查询，返回匹配的 skill 路由结果（与热路由 `SKILL_ROUTING_RUNTIME.json` 同源）。",
+                    "description": "自然语言查询匹配 skill 路由结果。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "自然语言查询",
-                            },
+                            "query": {"type": "string"},
                         },
                         "required": ["query"],
                     },
                 },
                 {
                     "name": "skill_search",
-                    "description": "Search this repository's full skills/SKILL_MANIFEST.json catalog and return the best matching skill records.",
+                    "description": "Search full skill catalog, return best matches.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "Search string (min 2 chars). Substring match, case-insensitive.",
-                            },
-                            "hostId": {
-                                "type": "string",
-                                "description": "Filter skills by host ID (optional)",
-                            },
-                            "limit": {
-                                "type": "integer",
-                                "description": "Max results to return (default 10, max 50)",
-                                "minimum": 1,
-                                "maximum": 50,
-                            },
+                            "query": {"type": "string"},
+                            "hostId": {"type": "string"},
+                            "limit": {"type": "integer", "minimum": 1, "maximum": 50},
                         },
                         "required": ["query"],
                     },
                 },
                 {
                     "name": "skill_read",
-                    "description": "Read one matched skills/<name>/SKILL.md body from this repository's canonical skills/ source.",
+                    "description": "Read matched skill SKILL.md body (max 20K chars).",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -584,19 +565,14 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                                 "type": "string",
                                 "description": "Skill slug to read",
                             },
-                            "maxChars": {
-                                "type": "integer",
-                                "description": "Max characters to return (default 20000, max 50000)",
-                                "minimum": 1,
-                                "maximum": 50000,
-                            },
+                            "maxChars": {"type": "integer", "minimum": 1, "maximum": 50000},
                         },
                         "required": ["skill"],
                     },
                 },
                 {
                     "name": "skill_route_status",
-                    "description": "Check if skill routing runtime artifacts exist and routing tools are exposed.",
+                    "description": "Check routing artifacts exist.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {},
@@ -604,56 +580,34 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "record_evidence",
-                    "description": "追加一条 evidence 记录到当前 task 的 EVIDENCE_INDEX（与 CLI PostToolUse 自动追加同形）。agent 应在执行验证类命令后主动调用。",
+                    "description": "追加 evidence 到 EVIDENCE_INDEX。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "tool_name": {
-                                "type": "string",
-                                "description": "工具名（如 Bash、Read、Write）",
-                            },
-                            "command": {
-                                "type": "string",
-                                "description": "执行的命令或操作描述",
-                            },
-                            "exit_code": {
-                                "type": "integer",
-                                "description": "exit code，0 表示成功",
-                            },
-                            "output": {
-                                "type": "string",
-                                "description": "命令输出摘要（可选，最多 2000 字符）",
-                            },
+                            "tool_name": {"type": "string"},
+                            "command": {"type": "string"},
+                            "exit_code": {"type": "integer"},
+                            "output": {"type": "string"},
                         },
                         "required": ["tool_name", "command"],
                     },
                 },
                 {
                     "name": "session_checkpoint",
-                    "description": "写入 SESSION_SUMMARY 和 NEXT_ACTIONS checkpoint（与 CLI Stop 自动写入同形）。agent 应在完成阶段性工作时主动调用。",
+                    "description": "写入 SESSION_SUMMARY + NEXT_ACTIONS checkpoint。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "summary": {
-                                "type": "string",
-                                "description": "当前会话进展摘要",
-                            },
-                            "next_actions": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "下一步行动列表",
-                            },
-                            "task_id": {
-                                "type": "string",
-                                "description": "task id，默认当前 active task",
-                            },
+                            "summary": {"type": "string"},
+                            "next_actions": {"type": "array", "items": {"type": "string"}},
+                            "task_id": {"type": "string"},
                         },
                         "required": ["summary"],
                     },
                 },
                 {
                     "name": "closeout_gate",
-                    "description": "返回 closeout 状态与缺失项清单（与 CLI Stop 同源）。非 my-light 时未满足则后续 complete 硬拦；my-light 为 advisory 自检。",
+                    "description": "closeout 状态与缺失项清单（advisory）。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -670,10 +624,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "task_id": {
-                                "type": "string",
-                                "description": "task id，默认当前 active task",
-                            },
+                            "task_id": {"type": "string"},
                         },
                     },
                 },
@@ -683,10 +634,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "task_id": {
-                                "type": "string",
-                                "description": "task id，默认当前 active task",
-                            },
+                            "task_id": {"type": "string"},
                         },
                     },
                 },
@@ -696,128 +644,48 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "operation": {
-                                "type": "string",
-                                "enum": ["start", "append_round"],
-                                "description": "操作类型",
-                            },
-                            "task_id": {
-                                "type": "string",
-                                "description": "task id，默认当前 active task",
-                            },
-                            "session_id": {
-                                "type": "string",
-                                "description": "session 隔离 ID（可选，MCP harness 自动注入连接级 session_id）",
-                            },
-                            "round": {
-                                "type": "integer",
-                                "description": "RFV round number（operation=append_round 时必填）",
-                            },
-                            "goal": {
-                                "type": "string",
-                                "description": "RFV goal（operation=start 时必填）",
-                            },
-                            "review_summary": {
-                                "type": "string",
-                                "description": "审查摘要（operation=append_round 时必填）",
-                            },
-                            "fix_summary": {
-                                "type": "string",
-                                "description": "修复摘要（operation=append_round 时必填）",
-                            },
-                            "verify_result": {
-                                "type": "string",
-                                "enum": ["PASS", "FAIL", "SKIPPED", "UNKNOWN"],
-                                "description": "验证结果（operation=append_round 时必填）",
-                            },
-                            "supervisor_decision": {
-                                "type": "string",
-                                "description": "supervisor 决策（operation=append_round 时必填）",
-                            },
-                            "reason": {
-                                "type": "string",
-                                "description": "原因说明（operation=append_round 时必填）",
-                            },
-                            "max_rounds": {
-                                "type": "integer",
-                                "description": "最大轮次（start 时可选，默认 3）",
-                            },
-                            "allow_external_research": {
-                                "type": "boolean",
-                                "description": "是否允许外部调研（start 时可选，默认 false）",
-                            },
+                            "operation": {"type": "string", "enum": ["start", "append_round"]},
+                            "task_id": {"type": "string"},
+                            "session_id": {"type": "string"},
+                            "round": {"type": "integer"},
+                            "goal": {"type": "string"},
+                            "review_summary": {"type": "string"},
+                            "fix_summary": {"type": "string"},
+                            "verify_result": {"type": "string", "enum": ["PASS", "FAIL", "SKIPPED", "UNKNOWN"]},
+                            "supervisor_decision": {"type": "string"},
+                            "reason": {"type": "string"},
+                            "max_rounds": {"type": "integer"},
+                            "allow_external_research": {"type": "boolean"},
                         },
                         "required": ["operation"],
                     },
                 },
                 {
                     "name": "closeout_record_write",
-                    "description": "写入并验证 closeout record。写入 artifacts/closeout/<task_id>.json 并返回验证结果。",
+                    "description": "写入并验证 closeout record (artifacts/closeout/<task_id>.json)。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "task_id": {
-                                "type": "string",
-                                "description": "task id",
-                            },
-                            "summary": {
-                                "type": "string",
-                                "description": "任务摘要",
-                            },
-                            "verification_status": {
-                                "type": "string",
-                                "enum": ["passed", "failed", "partial", "not_run"],
-                                "description": "验证状态",
-                            },
-                            "changed_files": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "变更的文件列表",
-                            },
-                            "commands_run": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "command": {"type": "string"},
-                                        "exit_code": {"type": "integer"},
-                                        "duration_ms": {"type": "integer"},
-                                    },
-                                },
-                                "description": "执行的命令列表",
-                            },
-                            "blockers": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "阻塞项列表",
-                            },
-                            "risks": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "风险项列表",
-                            },
-                            "notes": {
-                                "type": "string",
-                                "description": "备注",
-                            },
+                            "task_id": {"type": "string"},
+                            "summary": {"type": "string"},
+                            "verification_status": {"type": "string", "enum": ["passed", "failed", "partial", "not_run"]},
+                            "changed_files": {"type": "array", "items": {"type": "string"}},
+                            "commands_run": {"type": "array", "items": {"type": "object", "properties": {"command": {"type": "string"}, "exit_code": {"type": "integer"}, "duration_ms": {"type": "integer"}}}},
+                            "blockers": {"type": "array", "items": {"type": "string"}},
+                            "risks": {"type": "array", "items": {"type": "string"}},
+                            "notes": {"type": "string"},
                         },
                         "required": ["task_id", "summary", "verification_status"],
                     },
                 },
                 {
                     "name": "web_fetch",
-                    "description": "只读 HTTP GET 抓取外部 URL（绕过 Bash 沙箱；Desktop MCP 进程内执行）。返回 status、body 摘要。",
+                    "description": "只读 HTTP GET 抓取外部 URL。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "url": {
-                                "type": "string",
-                                "description": "http(s) URL",
-                            },
-                            "max_bytes": {
-                                "type": "integer",
-                                "description": "响应体最大字节数（默认 50000，上限 50000，超出自动截断）",
-                            },
+                            "url": {"type": "string"},
+                            "max_bytes": {"type": "integer"},
                         },
                         "required": ["url"],
                     },
@@ -828,78 +696,21 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "operation": {
-                                "type": "string",
-                                "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear", "block"],
-                                "description": "操作类型",
-                            },
-                            "task_id": {
-                                "type": "string",
-                                "description": "task id（可选，默认从 TASK_POINTERS.json 读取当前活跃 task）",
-                            },
-                            "session_id": {
-                                "type": "string",
-                                "description": "session 隔离 ID（可选，MCP harness 自动注入连接级 session_id）",
-                            },
-                            "goal": {
-                                "type": "string",
-                                "description": "goal 内容（operation=start 时必填）",
-                            },
-                            "note": {
-                                "type": "string",
-                                "description": "备注信息（operation=checkpoint 时必填）",
-                            },
-                            "blocker": {
-                                "type": "string",
-                                "description": "blocker 描述（operation=block 时必填）",
-                            },
-                            "non_goals": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "非目标列表（start 时可选）",
-                            },
-                            "done_when": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "完成条件列表（start 时可选）",
-                            },
-                            "validation_commands": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "验证命令列表（start 时可选）",
-                            },
-                            "drive_until_done": {
-                                "type": "boolean",
-                                "description": "是否自动驱动到完成（start 时可选，默认 true）。true 时自动填充缺失的 non_goals/done_when/validation_commands",
-                            },
-                            "lifecycle_profile": {
-                                "type": "string",
-                                "enum": ["my", "my-light"],
-                                "description": "生命周期 profile（start 时可选，默认 my-light）",
-                            },
-                            "current_horizon": {
-                                "type": "string",
-                                "description": "当前阶段/视野（start 时可选）",
-                            },
-                            "completion_gates": {
-                                "type": "object",
-                                "description": "完成门控配置（start 时可选）",
-                                "properties": {
-                                    "enabled": {"type": "boolean"},
-                                    "min_depth_score": {"type": "number"},
-                                    "require_successful_evidence_row": {"type": "boolean"},
-                                    "min_goal_checkpoints": {"type": "integer"},
-                                    "block_on_rfv_pass_without_evidence": {"type": "boolean"},
-                                },
-                            },
-                            "metadata": {
-                                "type": "object",
-                                "description": "附加元数据（start 时可选）",
-                            },
-                            "set_focus": {
-                                "type": "boolean",
-                                "description": "是否同时设置 focus_task 指针（start 时可选，默认 true）",
-                            },
+                            "operation": {"type": "string", "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear", "block"]},
+                            "task_id": {"type": "string"},
+                            "session_id": {"type": "string"},
+                            "goal": {"type": "string"},
+                            "note": {"type": "string"},
+                            "blocker": {"type": "string"},
+                            "non_goals": {"type": "array", "items": {"type": "string"}},
+                            "done_when": {"type": "array", "items": {"type": "string"}},
+                            "validation_commands": {"type": "array", "items": {"type": "string"}},
+                            "drive_until_done": {"type": "boolean"},
+                            "lifecycle_profile": {"type": "string", "enum": ["my", "my-light"]},
+                            "current_horizon": {"type": "string"},
+                            "completion_gates": {"type": "object"},
+                            "metadata": {"type": "object"},
+                            "set_focus": {"type": "boolean"},
                         },
                         "required": ["operation"],
                     },

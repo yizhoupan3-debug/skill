@@ -872,18 +872,6 @@ fn browser_error(
     })
 }
 
-fn skill_error(code: &str, message: &str) -> Value {
-    browser_error(
-        code,
-        message,
-        &[
-            "ensure the MCP server was started with --repo-root pointing at the repository root",
-            "ensure skills/SKILL_ROUTING_RUNTIME.json and skills/SKILL_MANIFEST.json are generated",
-        ],
-        true,
-    )
-}
-
 fn runtime_error(code: &str, message: &str) -> Value {
     browser_error(
         code,
