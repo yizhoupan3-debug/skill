@@ -2,6 +2,8 @@
 name = "host-projection"
 version = "0.1.0"
 edition = "2021"
+[lints]
+workspace = true
 
 [lib]
 name = "host_projection"

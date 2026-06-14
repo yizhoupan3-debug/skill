@@ -263,6 +263,14 @@
         "mcp_config_paths"
       ],
       "notes": "OpenCode MCP capability profile."
+    },
+    "mimo": {
+      "status": "implemented",
+      "projection": "mimo_profile",
+      "capabilities": [
+        "context_files"
+      ],
+      "notes": "Mimo host projection — minimal profile."
     }
   },
   "governance_eval_loop": {

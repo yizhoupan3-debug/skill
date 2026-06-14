@@ -261,13 +261,6 @@ pub struct GenericHookCommand {
     pub event: String,
     #[arg(long)]
     pub repo_root: Option<PathBuf>,
-    /// Direct hook dispatch — reads .env, handles SessionStart, dispatches hook.
-    /// Replaces bash wrapper chain (Claude-specific, ignored for other hosts).
-    #[arg(long)]
-    pub direct: bool,
-    /// Path to .env file (Claude-specific direct mode).
-    #[arg(long)]
-    pub env_file: Option<PathBuf>,
 }
 
 /// Generic MCP agent command shared across all MCP-native hosts.

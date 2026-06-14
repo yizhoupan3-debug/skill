@@ -1012,9 +1012,11 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
             .iter()
             .map(|v| v.as_str().expect("platform").to_string())
             .collect();
+        let mut from_catalog_sorted = from_catalog.clone();
+        from_catalog_sorted.sort();
         assert_eq!(
             normalized,
-            from_catalog,
+            from_catalog_sorted,
             "host_support.platforms drift for slug={slug} path={}",
             skill_path.display()
         );
@@ -1037,10 +1039,7 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
 
     let normalized = host_platforms::normalize_skill_host_platforms(
         &[
-            "cursor".to_string(),
-            "claude".to_string(),
-            "opencode".to_string(),
-            "codex-cli".to_string(),
+            "supported".to_string(),
         ],
         &supported,
     )

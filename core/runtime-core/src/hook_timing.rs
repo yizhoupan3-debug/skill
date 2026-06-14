@@ -93,8 +93,8 @@ mod tests {
         let out = Command::new(bin)
             .args([
                 "host",
-                "cursor",
                 "hook",
+                "cursor",
                 "--event=beforeSubmitPrompt",
                 &format!("--repo-root={}", repo.display()),
             ])

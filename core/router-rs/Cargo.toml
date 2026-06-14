@@ -5,6 +5,9 @@ edition = "2021"
 autotests = false
 default-run = "router-rs-cli"
 
+[lints]
+workspace = true
+
 [lib]
 name = "router_rs"
 path = "src/lib.rs"

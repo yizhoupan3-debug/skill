@@ -1,1 +1,0 @@
-{"ts":"2026-06-13T16:39:02Z","kind":"low_confidence_rate_high","metric":"low_confidence_rate","value":1.0,"threshold":0.35,"window":{"route_total":10,"route_reroute":0,"route_low_confidence":10,"tool_total":0,"tool_failure":0}}

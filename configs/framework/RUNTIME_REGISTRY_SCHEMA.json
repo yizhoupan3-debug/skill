@@ -5,7 +5,8 @@
     "cursor",
     "claude-code",
     "opencode",
-    "codex"
+    "codex",
+    "mimo"
   ],
   "projection_status_values": [
     "implemented",

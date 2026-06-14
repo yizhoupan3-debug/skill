@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "Code knowledge graph MCP server (Roadmap v5 B10)"
 
+[lints]
+workspace = true
+
 [lib]
 name = "codegraph_rs"
 path = "src/lib.rs"

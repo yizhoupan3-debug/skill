@@ -433,13 +433,6 @@ host_id: {hid}
 pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Result<(), String> {
     match host_id {
         "cursor" => run_review_gate(&command.event, command.repo_root.as_deref()),
-        "claude-code" if command.direct => {
-            run_claude_hook_direct(
-                &command.event,
-                command.repo_root.as_deref(),
-                command.env_file.as_deref(),
-            )
-        }
         "claude-code" => run_claude_hook_cli(&command.event, command.repo_root.as_deref()),
         "opencode" => run_opencode_hook_cli(&command.event, command.repo_root.as_deref()),
         "codex" => dispatch_codex_hook(command.event.as_str(), command.repo_root.as_deref()),

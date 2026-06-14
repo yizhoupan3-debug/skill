@@ -2119,7 +2119,8 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
             "cursor",
             "claude-code",
             "opencode",
-            "codex"
+            "codex",
+            "mimo"
         ])
     );
     assert_eq!(

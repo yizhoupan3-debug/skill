@@ -60,8 +60,7 @@ pub(crate) use runtime_core::paper_prose_hook;
 pub(crate) use runtime_core::review_gate;
 #[cfg(test)]
 pub(crate) use runtime_core::rfv_loop;
-#[cfg(test)]
-pub(crate) use runtime_core::route;
+pub use runtime_core::route;
 #[cfg(test)]
 pub(crate) use runtime_core::router_env_flags;
 #[cfg(test)]

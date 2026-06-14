@@ -1130,7 +1130,7 @@ mod claude_desktop_stdio_e2e_tests {
             .to_path_buf();
 
         let mut child = Command::new(bin)
-            .args(["opencode", "agent", "--repo-root", repo.to_str().unwrap()])
+            .args(["host", "agent", "opencode", "--repo-root", repo.to_str().unwrap()])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

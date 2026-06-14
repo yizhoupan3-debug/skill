@@ -60,6 +60,9 @@ artifacts/session_supervisor/
 core/router-rs/artifacts/session_supervisor/
 core/router-rs/artifacts/telemetry/
 artifacts/telemetry/
+artifacts/evolution/
+core/browser-mcp/artifacts/evolution/
+core/browser-mcp/artifacts/session_supervisor/
 core/router-rs/probe.err
 **/.router-rs.*.lock
 artifacts/ops/
