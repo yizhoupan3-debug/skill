@@ -40,6 +40,6 @@ P8 后 **无 tmux** 依赖；`session_supervisor` 管理 attach 生命周期。
 ## 相关路径
 
 - `core/browser-mcp/`
-- `core/runtime-core/src/web_fetch_guard.rs`
+- `core/runtime-core/src/contracts/web_fetch_guard.rs`
 - `docs/operations/security.md` §SSRF
 - `RUNTIME_REGISTRY.json` → `managed_mcp_servers.browser-mcp`（跨五宿主统一声明）

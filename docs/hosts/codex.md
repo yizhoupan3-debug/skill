@@ -120,7 +120,7 @@ Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentSta
 ```json
 {
   "lane_id": "w3-lane-codex",
-  "scope_paths": ["core/runtime-core/src/hosts/codex_hooks/"],
+  "scope_paths": ["core/host-projection/src/hosts/codex_hooks/"],
   "output_path": "artifacts/current/<task_id>/lane-notes/w3-lane-codex.md",
   "max_lines": 15,
   "forbidden": ["paste full transcript to main chat"]

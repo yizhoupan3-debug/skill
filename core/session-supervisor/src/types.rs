@@ -4,9 +4,9 @@ use serde_json::Value;
 pub const SESSION_SUPERVISOR_SCHEMA_VERSION: &str = "router-rs-session-supervisor-response-v1";
 pub const SESSION_SUPERVISOR_STORE_SCHEMA_VERSION: &str = "router-rs-session-supervisor-store-v1";
 pub const SESSION_SUPERVISOR_AUTHORITY: &str = "rust-session-supervisor";
-pub const DEFAULT_BACKOFF_SECONDS: i64 = 300;
+pub(crate) const DEFAULT_BACKOFF_SECONDS: i64 = 300;
 /// Workers without a live process that stay in active statuses longer than this are reaped on `list`.
-pub const DEFAULT_WORKER_STALE_AFTER_SECS: i64 = 300;
+pub(crate) const DEFAULT_WORKER_STALE_AFTER_SECS: i64 = 300;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SessionSupervisorStore {
