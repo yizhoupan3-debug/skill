@@ -2,6 +2,7 @@
 pub mod crypto_util;
 pub mod dev_exempt;
 pub mod env_flags;
+pub mod error;
 pub mod hook_common;
 pub mod hook_policy;
 pub mod hook_review_disk_state;
