@@ -1,13 +1,13 @@
 //! Runtime event transport / handoff / checkpoint resume manifest descriptors.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::runtime_envelope_ids::{
     CHECKPOINT_RESUME_MANIFEST_AUTHORITY, CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION,
     RUNTIME_CONTROL_PLANE_AUTHORITY, TRACE_DESCRIPTOR_AUTHORITY, TRACE_DESCRIPTOR_SCHEMA_VERSION,
 };
 
-use super::json_payload::{
+use super::json_value::{
     nested_bool, nested_non_empty_string, optional_bool, optional_non_empty_string,
     required_non_empty_string,
 };
@@ -287,18 +287,13 @@ mod tests {
 
     #[test]
     fn describe_transport_requires_session_id() {
-        let err = build_trace_transport_descriptor(json!({}))
-            .expect_err("missing session_id");
+        let err = build_trace_transport_descriptor(json!({})).expect_err("missing session_id");
         assert!(err.contains("session_id"));
     }
 
     #[test]
     fn transport_payload_defaults_poll_runtime_method() {
-        let payload = build_trace_transport_payload(
-            &json!({}),
-            "sess-1".to_string(),
-            None,
-        );
+        let payload = build_trace_transport_payload(&json!({}), "sess-1".to_string(), None);
         assert_eq!(
             payload.get("transport_kind").and_then(Value::as_str),
             Some("poll")

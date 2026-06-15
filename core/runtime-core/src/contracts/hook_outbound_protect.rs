@@ -54,9 +54,7 @@ fn partition_outbound_lines(combined: &str) -> (Vec<&str>, Vec<&str>) {
     for line in combined.lines() {
         if hook_outbound_line_starts_paper_hook_block(line) {
             in_paper_hook_block = true;
-        } else if in_paper_hook_block
-            && line.trim_start().starts_with("router-rs REVIEW_GATE")
-        {
+        } else if in_paper_hook_block && line.trim_start().starts_with("router-rs REVIEW_GATE") {
             in_paper_hook_block = false;
         }
         if in_paper_hook_block || hook_outbound_line_is_framework_protected(line) {
@@ -105,9 +103,8 @@ mod tests {
     #[test]
     fn protected_paper_prose_survives_truncation() {
         let filler = "x".repeat(900);
-        let combined = format!(
-            "{filler}\n**PAPER_PROSE_QUALITY_HOOK**\nprose chain body must remain"
-        );
+        let combined =
+            format!("{filler}\n**PAPER_PROSE_QUALITY_HOOK**\nprose chain body must remain");
         let out = truncate_hook_outbound_lines_preserving(&combined, 640, "...");
         assert!(out.contains("PAPER_PROSE_QUALITY_HOOK"));
         assert!(out.contains("prose chain body must remain"));
@@ -115,7 +112,7 @@ mod tests {
 
     #[test]
     fn full_paper_prose_hook_body_survives_byte_cap() {
-        let hook_body = include_str!("../../../configs/framework/PAPER_PROSE_QUALITY_HOOK.txt");
+        let hook_body = include_str!("../../../../configs/framework/PAPER_PROSE_QUALITY_HOOK.txt");
         let filler = "y".repeat(900);
         let combined = format!("{filler}\n{hook_body}");
         let out = truncate_hook_outbound_lines_preserving(&combined, 1024, "...");

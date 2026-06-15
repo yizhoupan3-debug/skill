@@ -140,8 +140,7 @@ nl_signals! {
 pub fn nl_route_signal_registry_names_json() -> String {
     let mut names: Vec<&'static str> = NL_SIGNAL_REGISTRY.iter().map(|e| e.name).collect();
     names.sort_unstable();
-    serde_json::to_string(&names)
-        .expect("Vec<&str> serialization is infallible")
+    serde_json::to_string(&names).expect("Vec<&str> serialization is infallible")
 }
 
 fn nl_registry_find(name: &str) -> Option<NlSignalEvalFn> {

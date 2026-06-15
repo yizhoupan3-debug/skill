@@ -1,5 +1,5 @@
 use crate::Node;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,8 +160,8 @@ fn row_to_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<Node> {
 #[cfg(test)]
 mod tests {
     use super::{
-        find_dead_code, get_node_by_id, resolve_symbol, resolve_symbol_filtered,
-        ResolveOutcome, SymbolFilter,
+        ResolveOutcome, SymbolFilter, find_dead_code, get_node_by_id, resolve_symbol,
+        resolve_symbol_filtered,
     };
     use crate::db::schema::init_schema;
 
@@ -176,16 +176,26 @@ mod tests {
 
     #[test]
     fn resolve_symbol_finds_node() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed(&conn);
-        let node = resolve_symbol(&conn, "foo").expect("resolve symbol").expect("resolve symbol");
+        let node = resolve_symbol(&conn, "foo")
+            .expect("resolve symbol")
+            .expect("resolve symbol");
         assert_eq!(node.id, "n1");
-        assert_eq!(get_node_by_id(&conn, "n1").expect("resolve symbol").expect("resolve symbol").symbol, "foo");
+        assert_eq!(
+            get_node_by_id(&conn, "n1")
+                .expect("resolve symbol")
+                .expect("resolve symbol")
+                .symbol,
+            "foo"
+        );
     }
 
     #[test]
     fn resolve_symbol_reports_not_found() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed(&conn);
         let outcome = resolve_symbol(&conn, "nonexistent").expect("resolve symbol");
         assert!(outcome.is_none());
@@ -193,20 +203,19 @@ mod tests {
 
     #[test]
     fn resolve_symbol_filtered_empty_result() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed(&conn);
-        let outcome = resolve_symbol_filtered(
-            &conn,
-            "ghost",
-            &SymbolFilter::from_options(None, None),
-        )
-        .expect("should succeed");
+        let outcome =
+            resolve_symbol_filtered(&conn, "ghost", &SymbolFilter::from_options(None, None))
+                .expect("should succeed");
         assert!(matches!(outcome, ResolveOutcome::NotFound));
     }
 
     #[test]
     fn resolve_symbol_reports_ambiguous_matches() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         init_schema(&conn).expect("initialize schema");
         for (id, path) in [("n1", "a.rs"), ("n2", "b.rs")] {
             conn.execute(
@@ -216,23 +225,29 @@ mod tests {
             .expect("should succeed");
         }
         let outcome =
-            resolve_symbol_filtered(&conn, "dup", &SymbolFilter::from_options(None, None)).expect("resolve symbol filtered");
+            resolve_symbol_filtered(&conn, "dup", &SymbolFilter::from_options(None, None))
+                .expect("resolve symbol filtered");
         assert!(matches!(outcome, ResolveOutcome::Ambiguous(ref nodes) if nodes.len() == 2));
 
-        let filtered =
-            resolve_symbol_filtered(&conn, "dup", &SymbolFilter::from_options(Some("b.rs"), None))
-                .expect("resolve symbol filtered");
+        let filtered = resolve_symbol_filtered(
+            &conn,
+            "dup",
+            &SymbolFilter::from_options(Some("b.rs"), None),
+        )
+        .expect("resolve symbol filtered");
         assert!(matches!(filtered, ResolveOutcome::Found(ref node) if node.id == "n2"));
     }
 
     #[test]
     fn get_node_by_id_propagates_db_error() {
         // Drop the connection so subsequent queries fail
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed(&conn);
         drop(conn);
         // Reopen a raw in-memory connection without schema, querying should error
-        let bad_conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let bad_conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         let result = get_node_by_id(&bad_conn, "n1");
         assert!(result.is_err(), "expected DB error for missing table");
     }
@@ -263,7 +278,10 @@ mod tests {
         // caller has no callers (entry point), orphan has no callers
         // callee has 1 caller so is NOT dead
         let symbols: Vec<&str> = dead.iter().map(|n| n.symbol.as_str()).collect();
-        assert!(symbols.contains(&"caller"), "caller should be dead (no callers)");
+        assert!(
+            symbols.contains(&"caller"),
+            "caller should be dead (no callers)"
+        );
         assert!(symbols.contains(&"orphan"), "orphan should be dead");
         assert!(!symbols.contains(&"callee"), "callee has a caller");
     }
@@ -331,6 +349,9 @@ mod tests {
         .expect("should succeed");
 
         let dead = find_dead_code(&conn, None, None).expect("find dead code");
-        assert!(dead.is_empty(), "structs and traits should not appear in dead code");
+        assert!(
+            dead.is_empty(),
+            "structs and traits should not appear in dead code"
+        );
     }
 }

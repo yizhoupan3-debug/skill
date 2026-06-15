@@ -1,14 +1,14 @@
 //! `state_manager/task_pointers` coverage at router-rs boundary
 //! (physical module: `core_state::state_manager`).
 
-use core_state::state_manager::{
-    neutralize_task_pointers_for_task, read_task_pointer_pair, read_primary_task_id,
-    sync_task_pointers_after_goal_drive, write_active_task_pointer,
-};
-use core_state::task_state::read_task_pointers;
 use crate::framework_runtime::{
     build_framework_runtime_snapshot_envelope, write_framework_session_artifacts,
 };
+use core_state::state_manager::{
+    neutralize_task_pointers_for_task, read_primary_task_id, read_task_pointer_pair,
+    sync_task_pointers_after_goal_drive, write_active_task_pointer,
+};
+use core_state::task_state::read_task_pointers;
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;
@@ -46,8 +46,7 @@ fn task_pointers_read_sync_smoke() {
     assert_eq!(pointers.focus_task_id.as_deref(), Some("ptr-read"));
     assert_eq!(read_primary_task_id(&repo).as_deref(), Some("ptr-read"));
 
-    let snapshot =
-        build_framework_runtime_snapshot_envelope(&repo, None, None).expect("snapshot");
+    let snapshot = build_framework_runtime_snapshot_envelope(&repo, None, None).expect("snapshot");
     let runtime = &snapshot["runtime_snapshot"];
     assert_eq!(runtime["active_task_id"], json!("ptr-read"));
     assert_eq!(runtime["focus_task_id"], json!("ptr-read"));
@@ -106,17 +105,14 @@ fn task_pointers_write_sync_smoke() {
         .as_array()
         .and_then(|rows| {
             rows.iter().find(|row| {
-                row.get("task_id")
-                    .and_then(serde_json::Value::as_str)
-                    == Some("ptr-write")
+                row.get("task_id").and_then(serde_json::Value::as_str) == Some("ptr-write")
             })
         })
         .expect("registry row");
     assert_eq!(task_row["task"], json!("router write sync"));
     assert_eq!(task_row["phase"], json!("implementation"));
 
-    let snapshot =
-        build_framework_runtime_snapshot_envelope(&repo, None, None).expect("snapshot");
+    let snapshot = build_framework_runtime_snapshot_envelope(&repo, None, None).expect("snapshot");
     assert_eq!(
         snapshot["runtime_snapshot"]["active_task_id"],
         json!("ptr-write")
@@ -132,25 +128,21 @@ fn task_pointers_neutralize_sync_smoke() {
     let _ = fs::remove_dir_all(&repo);
     fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
 
-    sync_task_pointers_after_goal_drive(
-        &repo,
-        "ptr-done",
-        "done",
-        &json!({"set_focus": true}),
-    )
-    .expect("sync");
+    sync_task_pointers_after_goal_drive(&repo, "ptr-done", "done", &json!({"set_focus": true}))
+        .expect("sync");
     neutralize_task_pointers_for_task(&repo, "ptr-done").expect("neutralize");
 
     let pointers = read_task_pointers(&repo);
     assert!(pointers.active_task_id.is_none());
     assert!(pointers.focus_task_id.is_none());
 
-    let snapshot =
-        build_framework_runtime_snapshot_envelope(&repo, None, None).expect("snapshot");
+    let snapshot = build_framework_runtime_snapshot_envelope(&repo, None, None).expect("snapshot");
     let runtime = &snapshot["runtime_snapshot"];
     assert!(
         runtime["active_task_id"].is_null()
-            || runtime["active_task_id"].as_str().is_some_and(str::is_empty)
+            || runtime["active_task_id"]
+                .as_str()
+                .is_some_and(str::is_empty)
     );
 
     let _ = fs::remove_dir_all(&repo);
@@ -179,8 +171,7 @@ fn task_pointers_set_focus_false_router_snapshot_smoke() {
     assert_eq!(pointers.active_task_id.as_deref(), Some("ptr-active-only"));
     assert!(pointers.focus_task_id.is_none());
 
-    let snapshot =
-        build_framework_runtime_snapshot_envelope(&repo, None, None).expect("snapshot");
+    let snapshot = build_framework_runtime_snapshot_envelope(&repo, None, None).expect("snapshot");
     let runtime = &snapshot["runtime_snapshot"];
     assert_eq!(runtime["active_task_id"], json!("ptr-active-only"));
     assert!(

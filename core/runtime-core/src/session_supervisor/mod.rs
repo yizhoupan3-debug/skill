@@ -1,7 +1,8 @@
 //! Session supervisor: native-process worker lifecycle for long-running CLI hosts.
 
 use crate::runtime_storage::acquire_runtime_path_lock;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
+use tracing::{debug, instrument};
 
 mod driver;
 mod evolution_idle;
@@ -16,19 +17,19 @@ mod tests;
 pub use types::{SESSION_SUPERVISOR_AUTHORITY, SESSION_SUPERVISOR_SCHEMA_VERSION};
 pub use worker::classify_rate_limit_block;
 
-use process::reconcile_process_state;
-use runtime::{load_store, now_from_payload, optional_bool, required_non_empty_string, resolve_state_path, save_store};
 use evolution_idle::maybe_trigger_evolution_on_idle;
+use process::reconcile_process_state;
+use runtime::{
+    load_store, now_from_payload, optional_bool, required_non_empty_string, resolve_state_path,
+    save_store,
+};
+use types::DEFAULT_WORKER_STALE_AFTER_SECS;
 use worker::{
     launch_worker, mark_worker_blocked, reap_stale_workers, resume_worker, terminate_worker,
     worker_ready_for_resume,
 };
-use types::DEFAULT_WORKER_STALE_AFTER_SECS;
 
-fn evolution_idle_side_effect(
-    payload: &Value,
-    workers: &[types::WorkerSessionRecord],
-) -> Value {
+fn evolution_idle_side_effect(payload: &Value, workers: &[types::WorkerSessionRecord]) -> Value {
     let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let dry_run = optional_bool(payload, "dry_run").unwrap_or(false);
     let force = optional_bool(payload, "force_evolution_idle").unwrap_or(false);
@@ -39,8 +40,10 @@ fn evolution_idle_side_effect(
     })
 }
 
+#[instrument(level = "info", skip_all, fields(operation))]
 pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, String> {
     let operation = required_non_empty_string(&payload, "operation", "session supervisor")?;
+    debug!(%operation, "session supervisor operation");
     let state_path = resolve_state_path(&payload)?;
 
     if operation == "classify_block" {
@@ -181,7 +184,13 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
                         worker.status = "failed".to_string();
                         worker.last_error = Some(err.clone());
                         worker.updated_at = now.clone();
-                        runtime::push_event(worker, "resume_failed", "failed", &now, Some(err.clone()));
+                        runtime::push_event(
+                            worker,
+                            "resume_failed",
+                            "failed",
+                            &now,
+                            Some(err.clone()),
+                        );
                         failed_workers.push(json!({
                             "worker_id": worker.worker_id,
                             "status": worker.status,

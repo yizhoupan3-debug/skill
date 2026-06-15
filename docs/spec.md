@@ -105,7 +105,7 @@ rust_tools/ (6 活跃 MCP crates)
 | **配置驱动接入** | 新宿主 ≤ 1 天（5 文件：provider + AGENTS + docs + feature + registry） |
 | **Fail-closed** | 未知均默认拒绝 |
 | **函数指针注册表** | hooks 通过 OnceLock 函数指针注册（非 trait），82 个 slots |
-| **MCP 统一** | 4 个 MCP server 四宿主统一注册 |
+| **MCP 统一** | 4 个 MCP server 五宿主统一注册 |
 | **用户级配置** | MCP/hooks/settings 配置只放用户级（~/.config/），不在项目目录 |
 
 ### 1.3 依赖关系约束 (v7 DAG)

@@ -7,7 +7,7 @@ use crate::state_manager::{
 use crate::utils::atomic_write::write_atomic_json;
 use crate::utils::path_guard;
 use crate::utils::task_write_lock;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::path::PathBuf;
 
 const RFV_LOOP_SCHEMA_VERSION: &str = "router-rs-rfv-loop-v1";
@@ -105,8 +105,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             );
             let path = rfv_loop_state_path(&repo_root, &task_id)?;
             if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("mkdir RFV task dir: {e}"))?;
+                std::fs::create_dir_all(parent).map_err(|e| format!("mkdir RFV task dir: {e}"))?;
             }
             write_atomic_json(&path, &Value::Object(obj.clone()))?;
             let goal_state_cleared = deactivate_goal_for_conflict_with_rfv(&repo_root, &task_id)?;
@@ -119,6 +118,8 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 "goal_state_cleared": goal_state_cleared,
             }))
         }
-        other => Err(format!("framework_rfv_loop: unsupported operation `{other}`")),
+        other => Err(format!(
+            "framework_rfv_loop: unsupported operation `{other}`"
+        )),
     }
 }

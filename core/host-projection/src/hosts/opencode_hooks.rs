@@ -8,21 +8,21 @@
 
 use super::file_state_lock::HookStateConfig;
 use super::hook_dispatch::{
-    self, compact_contexts, extract_prompt_text, extract_session_key, extract_tool_input,
-    extract_tool_name, is_review_gate_suppressed, is_subagent_tool, recognize_subagent_type,
-    subagent_lane_bits, HookEvent, HookOutput, HostHookConfig, HostHookDispatcher,
+    self, HookEvent, HookOutput, HostHookConfig, HostHookDispatcher, compact_contexts,
+    extract_prompt_text, extract_session_key, extract_tool_input, extract_tool_name,
+    is_review_gate_suppressed, is_subagent_tool, recognize_subagent_type, subagent_lane_bits,
 };
 use crate::hooks;
+use core_policy::HookReviewDiskCore;
 use core_policy::hook_common::{
     has_override, normalize_tool_name, saw_reject_reason, should_inject_spawn_first_review_nudge,
 };
 use core_policy::registry_review_gate::review_spawn_first_nudge_line;
 use core_policy::review_gate_engine::{
-    fork_context_from_values, review_independent_reviewer_evidence, ReviewGateFacts,
+    ReviewGateFacts, fork_context_from_values, review_independent_reviewer_evidence,
 };
-use core_policy::HookReviewDiskCore;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
@@ -152,9 +152,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
             let path = Path::new(path_str);
             if let Some(reason) = classify_protected_path(path, event.repo_root) {
                 return Some(HookOutput::Deny {
-                    reason: format!(
-                        "Protected framework path: {path_str}. {reason}"
-                    ),
+                    reason: format!("Protected framework path: {path_str}. {reason}"),
                 });
             }
         }
@@ -488,7 +486,9 @@ fn classify_protected_path(path: &Path, repo_root: &Path) -> Option<&'static str
     if path_str.contains(".codex/") {
         return Some("Codex host-private directory. Use framework host-integration tools.");
     }
-    if path_str.contains(".cursor/") && !path_str.starts_with(&repo_root.to_string_lossy().to_string()) {
+    if path_str.contains(".cursor/")
+        && !path_str.starts_with(&repo_root.to_string_lossy().to_string())
+    {
         return Some("Other host's private directory.");
     }
 
@@ -563,7 +563,10 @@ fn build_goal_context(repo_root: &Path, session_key: &str) -> Option<String> {
     let content = fs::read_to_string(&goal_path).ok()?;
     let goal_state: Value = serde_json::from_str(&content).ok()?;
     let goal = goal_state.get("goal").and_then(Value::as_str)?;
-    let status = goal_state.get("status").and_then(Value::as_str).unwrap_or("active");
+    let status = goal_state
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("active");
     Some(format!("[goal:{status}] {goal}"))
 }
 
@@ -572,11 +575,7 @@ fn build_goal_context(repo_root: &Path, session_key: &str) -> Option<String> {
 // ────────────────────────────────────────────────────────────────
 
 #[cfg(any(test, feature = "test-support"))]
-pub fn dispatch_opencode_hook_event(
-    repo_root: &Path,
-    event_name: &str,
-    payload: &Value,
-) -> Value {
+pub fn dispatch_opencode_hook_event(repo_root: &Path, event_name: &str, payload: &Value) -> Value {
     crate::hooks::ensure_kernel_bootstrap();
     let event = HookEvent {
         repo_root,

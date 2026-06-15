@@ -3,7 +3,7 @@
 //! Crate-level boundary so append stays in [`crate::framework_runtime`] while Cursor-only
 //! JSON merging stays out of that module. Field extraction helpers live in [`crate::cursor_hooks`].
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Normalize heterogeneous Cursor PostTool payloads into the shape [`crate::framework_runtime::try_append_post_tool_shell_evidence`]
 /// understands (preserves original fields like `tool_output` / `exit_code` where present).

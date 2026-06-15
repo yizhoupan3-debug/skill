@@ -310,7 +310,7 @@ fn runtime_view_active_task_id_matches_resolve_task_view() {
 fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
     let _env = crate::test_env_sync::process_env_lock();
     let prev = std::env::var_os("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE");
-    std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1");
+    unsafe { std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1") };
 
     let repo_root = temp_dir_path("post-tool-evidence-append");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -357,8 +357,8 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         .contains("cargo test"));
 
     match prev {
-        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", v),
-        None => std::env::remove_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE") },
     }
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -368,7 +368,7 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
 fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
     let _env = crate::test_env_sync::process_env_lock();
     let prev = std::env::var_os("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE");
-    std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1");
+    unsafe { std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1") };
 
     let repo_root = temp_dir_path("cursor-post-tool-evidence-append");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -415,8 +415,8 @@ fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         .contains("cargo test"));
 
     match prev {
-        Some(v) => std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", v),
-        None => std::env::remove_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE") },
     }
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -548,7 +548,8 @@ fn hook_evidence_append_allows_autopilot_goal_complete() {
         "task_id": "hook-goal",
     }))
     .expect("goal complete should see task-local hook evidence");
-    assert_eq!(done["goal_state"]["status"], json!("completed"));
+    assert_eq!(done["operation"], json!("completed"),
+        "goal complete should return operation=completed; got: {done}");
     let _ = fs::remove_dir_all(&repo_root);
 }
 
@@ -1378,6 +1379,7 @@ fn stdio_framework_rfv_loop_roundtrip() {
         "payload": {
             "repo_root": rr,
             "operation": "start",
+            "task_id": "rfv-stdio-task",
             "goal": "deepen RFV",
             "max_rounds": 100u64,
             "allow_external_research": true,
@@ -1607,13 +1609,6 @@ fn runtime_control_plane_payload_is_rust_owned() {
     assert!(payload["services"].get("agent_factory").is_none());
 }
 
-fn execution_kernel_contract_shape_fields(shape: &Value) -> Vec<String> {
-    let object = shape.as_object().expect("contract shape object");
-    let mut keys: Vec<String> = object.keys().cloned().collect();
-    keys.sort_unstable();
-    keys
-}
-
 
 #[test]
 fn runtime_observability_exporter_descriptor_is_rust_owned() {
@@ -1830,6 +1825,120 @@ fn write_text_payload_uses_unique_temp_paths_under_concurrency() {
     assert_eq!(tmp_entries, 0);
 
     fs::remove_file(&output_path).expect("cleanup concurrent write output");
+}
+
+#[test]
+fn framework_snapshot_summary_mode_is_smaller_than_full() {
+    use crate::framework_runtime::build_framework_runtime_snapshot_envelope_with_level;
+
+    let repo_root = temp_dir_path("framework-snapshot-detail-level");
+    let task_id = "detail-level-task";
+    let task_root = repo_root.join("artifacts").join("current").join(task_id);
+    write_text_fixture(
+        &task_root.join("SESSION_SUMMARY.md"),
+        "- task: detail level test\n- phase: implementation\n- status: in_progress\n",
+    );
+    write_text_fixture(
+        &task_root.join("NEXT_ACTIONS.json"),
+        r#"{"next_actions":["Verify"]}"#,
+    );
+    write_text_fixture(
+        &task_root.join("EVIDENCE_INDEX.json"),
+        r#"{"artifacts":[]}"#,
+    );
+    write_text_fixture(
+        &task_root.join("TRACE_METADATA.json"),
+        r#"{"task":"detail level test","matched_skills":["autopilot"]}"#,
+    );
+    fs::create_dir_all(repo_root.join("artifacts/current")).expect("mkdir");
+    write_text_fixture(
+        &repo_root.join("artifacts/current/task_registry.json"),
+        &json!({
+            "schema_version": "task-registry-v1",
+            "focus_task_id": task_id,
+            "tasks": [
+                {"task_id": "detail-level-task", "task": "detail level test", "status": "in_progress", "updated_at": "2026-06-12T10:00:00+08:00"},
+                {"task_id": "other-task-1", "task": "other task 1", "status": "completed", "updated_at": "2026-06-11T10:00:00+08:00"},
+                {"task_id": "other-task-2", "task": "other task 2", "status": "completed", "updated_at": "2026-06-10T10:00:00+08:00"},
+                {"task_id": "other-task-3", "task": "other task 3 that has a very long description which should be truncated in summary mode to save tokens", "status": "completed", "updated_at": "2026-06-09T10:00:00+08:00"},
+            ]
+        }).to_string(),
+    );
+    write_text_fixture(
+        &repo_root.join(".supervisor_state.json"),
+        &json!({
+            "task_id": task_id,
+            "task_summary": "detail level test",
+            "active_phase": "implementation",
+        })
+        .to_string(),
+    );
+
+    let summary =
+        build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "summary")
+            .expect("summary snapshot");
+    let full = build_framework_runtime_snapshot_envelope_with_level(&repo_root, None, None, "full")
+        .expect("full snapshot");
+
+    assert_eq!(summary["runtime_snapshot"]["_truncated"], json!(true));
+    assert!(full["runtime_snapshot"].get("_truncated").is_none());
+
+    assert_eq!(
+        summary["runtime_snapshot"]["detail_level"],
+        json!("summary")
+    );
+    assert_eq!(full["runtime_snapshot"]["detail_level"], json!("full"));
+
+    let summary_ids = summary["runtime_snapshot"]["known_task_ids"]
+        .as_array()
+        .expect("known_task_ids array in summary");
+    assert!(summary_ids.len() <= 3);
+
+    let full_ids = full["runtime_snapshot"]["known_task_ids"]
+        .as_array()
+        .expect("known_task_ids array in full");
+    assert_eq!(full_ids.len(), 4);
+
+    assert!(
+        summary["runtime_snapshot"]["paths"]
+            .get("session_summary")
+            .is_none()
+    );
+    assert!(
+        full["runtime_snapshot"]["paths"]
+            .get("session_summary")
+            .is_some()
+    );
+
+    let summary_tasks = summary["runtime_snapshot"]["registered_tasks"]["tasks"]
+        .as_array()
+        .expect("registered_tasks.tasks array in summary");
+    let long_task = summary_tasks
+        .iter()
+        .find(|t| t["task_id"] == "other-task-3")
+        .expect("find long task");
+    let task_desc = long_task["task"].as_str().expect("task description");
+    assert!(task_desc.len() <= 80, "got {} chars", task_desc.len());
+
+    assert!(
+        full["runtime_snapshot"]["continuity"]
+            .get("paths")
+            .is_some()
+    );
+    assert!(
+        summary["runtime_snapshot"]["continuity"]
+            .get("paths")
+            .is_none()
+    );
+
+    let summary_size = serde_json::to_string(&summary).unwrap().len();
+    let full_size = serde_json::to_string(&full).unwrap().len();
+    assert!(
+        summary_size < full_size,
+        "summary ({summary_size} bytes) should be smaller than full ({full_size} bytes)"
+    );
+
+    let _ = fs::remove_dir_all(&repo_root);
 }
 
 

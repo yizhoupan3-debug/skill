@@ -155,20 +155,22 @@ mod tests {
     fn review_prompt_advises_stop_until_independent_reviewer_seen() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("review-gate-block");
         let payload = json!({ "session_id": "s-review", "prompt": "深度 review 这个 PR" });
         let context = run_user_prompt_submit(&repo, &payload).expect("review context");
-        assert!(context["hookSpecificOutput"]["additionalContext"]
-            .as_str()
-            .unwrap_or("")
-            .contains("fork_context=false"));
+        assert!(
+            context["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap_or("")
+                .contains("fork_context=false")
+        );
         let stop = run_stop(&repo, &json!({ "session_id": "s-review" })).expect("stop advisory");
         assert_stop_review_gate_advisory(&stop);
         let _ = fs::remove_dir_all(repo);
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
     }
 
@@ -176,7 +178,7 @@ mod tests {
     fn review_gate_requires_explicit_false_fork() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("review-gate-shared-fork");
         let prompt = json!({ "session_id": "s-shared", "prompt": "深度 review 这个 PR" });
         let _ = run_user_prompt_submit(&repo, &prompt);
@@ -190,8 +192,8 @@ mod tests {
         assert_stop_review_gate_advisory(&stop);
         let _ = fs::remove_dir_all(repo);
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
     }
 
@@ -199,7 +201,7 @@ mod tests {
     fn review_gate_allows_matching_independent_reviewer() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("review-gate-pass");
         let prompt = json!({ "session_id": "s-pass", "prompt": "深度 review 这个 PR" });
         let _ = run_user_prompt_submit(&repo, &prompt);
@@ -212,8 +214,8 @@ mod tests {
         assert!(run_stop(&repo, &json!({ "session_id": "s-pass" })).is_none());
         let _ = fs::remove_dir_all(repo);
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
     }
 
@@ -221,7 +223,7 @@ mod tests {
     fn review_gate_accepts_review_lane_with_fork_false() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("review-gate-review-lane");
         let prompt = json!({ "session_id": "s-review-lane", "prompt": "深度 review 这个 PR" });
         let _ = run_user_prompt_submit(&repo, &prompt);
@@ -237,8 +239,8 @@ mod tests {
         );
         let _ = fs::remove_dir_all(repo);
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
     }
 
@@ -246,7 +248,7 @@ mod tests {
     fn review_gate_rejects_explore_even_with_fork_false() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("review-gate-explore-reject");
         let prompt = json!({ "session_id": "s-explore", "prompt": "深度 review 这个 PR" });
         let _ = run_user_prompt_submit(&repo, &prompt);
@@ -260,8 +262,8 @@ mod tests {
         assert_stop_review_gate_advisory(&stop);
         let _ = fs::remove_dir_all(repo);
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
     }
 
@@ -269,7 +271,7 @@ mod tests {
     fn review_gate_skipped_when_disable_env_set() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", "1");
+        unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", "1") };
         let repo = unique_test_repo("review-gate-disabled-env");
         let payload = json!({ "session_id": "s-off", "prompt": "深度 review 这个 PR" });
         assert!(
@@ -282,8 +284,8 @@ mod tests {
             "disable env must allow Stop without independent reviewer evidence; got {stop:?}"
         );
         match prev {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_dir_all(repo);
     }
@@ -292,15 +294,15 @@ mod tests {
     fn review_gate_still_advises_when_disable_env_is_noncanonical_token() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", "maybe");
+        unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", "maybe") };
         let repo = unique_test_repo("review-gate-disable-garbage");
         let payload = json!({ "session_id": "s-garbage", "prompt": "深度 review 这个 PR" });
         let _ = run_user_prompt_submit(&repo, &payload).expect("review nag");
         let stop = run_stop(&repo, &json!({ "session_id": "s-garbage" })).expect("stop advisory");
         assert_stop_review_gate_advisory(&stop);
         match prev {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_dir_all(repo);
     }
@@ -340,13 +342,13 @@ mod tests {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_ns = std::env::var_os("ROUTER_RS_CLAUDE_SESSION_NAMESPACE");
         let repo = unique_test_repo("claude-ns");
-        std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", "lane-a");
+        unsafe { std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", "lane-a") };
         let a = session_key(&repo, &json!({}));
-        std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", "lane-b");
+        unsafe { std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", "lane-b") };
         let b = session_key(&repo, &json!({}));
         match prev_ns {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE") },
         }
         assert_ne!(a, b, "namespace must split state for empty payload");
         let _ = fs::remove_dir_all(repo);
@@ -356,13 +358,13 @@ mod tests {
     fn session_key_repo_fallback_stable_without_id() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_ns = std::env::var_os("ROUTER_RS_CLAUDE_SESSION_NAMESPACE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE") };
         let repo = unique_test_repo("claude-repo-fb");
         let k1 = session_key(&repo, &json!({}));
         let k2 = session_key(&repo, &json!({}));
         match prev_ns {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_SESSION_NAMESPACE") },
         }
         assert_eq!(k1, k2);
         let _ = fs::remove_dir_all(repo);
@@ -421,8 +423,8 @@ mod tests {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
         let prev_canon = std::env::var_os("ROUTER_RS_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
+        unsafe { std::env::remove_var("ROUTER_RS_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("legacy-review-gate-migrate");
         let sid = "s-legacy-load";
         let session = json!({ "session_id": sid });
@@ -450,12 +452,12 @@ mod tests {
             .expect("armed legacy state must still advise Stop until reviewer contract met");
         assert_stop_review_gate_advisory(&out);
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         match prev_canon {
-            Some(v) => std::env::set_var("ROUTER_RS_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_dir_all(repo);
     }
@@ -466,7 +468,8 @@ mod tests {
         let session = json!({ "session_id": "s-path" });
         let path = review_state_path(&repo, &session);
         assert!(
-            path.to_string_lossy().contains("/.claude/hook-state/review-subagent-"),
+            path.to_string_lossy()
+                .contains("/.claude/hook-state/review-subagent-"),
             "unexpected path: {}",
             path.display()
         );
@@ -516,8 +519,13 @@ mod tests {
         // SKILL_ROUTING_RUNTIME.json is now warn-only (not deny)
         let out = run_pre_tool_use(&repo, &payload).expect("warn");
         assert_eq!(out["hookSpecificOutput"]["hookEventName"], "PreToolUse");
-        let ctx = out["hookSpecificOutput"]["additionalContext"].as_str().unwrap();
-        assert!(ctx.contains("SKILL_ROUTING_RUNTIME.json"), "warn should mention the file");
+        let ctx = out["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap();
+        assert!(
+            ctx.contains("SKILL_ROUTING_RUNTIME.json"),
+            "warn should mention the file"
+        );
         assert_eq!(out["suppressOutput"], true, "warn should suppress output");
         assert!(
             out.get("decision").is_none(),
@@ -584,19 +592,21 @@ mod tests {
     fn user_prompt_submit_returns_context_when_review_gate_corrupt() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("corrupt-review-ups");
         let session = json!({ "session_id": "s-corrupt-ups", "prompt": "深度 review 这个 PR" });
         let path = review_state_path(&repo, &session);
         fs::write(&path, "{not json").unwrap();
         let out = run_user_prompt_submit(&repo, &session).expect("context");
-        assert!(out["hookSpecificOutput"]["additionalContext"]
-            .as_str()
-            .unwrap()
-            .contains(CLAUDE_HOOK_STATE_UNREADABLE));
+        assert!(
+            out["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap()
+                .contains(CLAUDE_HOOK_STATE_UNREADABLE)
+        );
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_file(&path);
         let _ = fs::remove_dir_all(repo);
@@ -606,7 +616,7 @@ mod tests {
     fn user_prompt_submit_implementx_returns_unreadable_when_review_gate_corrupt() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("corrupt-review-implementx");
         let session = json!({ "session_id": "s-corrupt-impl", "prompt": "/implementx" });
         let path = review_state_path(&repo, &session);
@@ -624,8 +634,8 @@ mod tests {
             "must not mask corrupt state with implement nudge; got {ctx:?}"
         );
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_file(&path);
         let _ = fs::remove_dir_all(repo);
@@ -635,7 +645,7 @@ mod tests {
     fn user_prompt_submit_discussx_returns_unreadable_when_review_gate_corrupt() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("corrupt-review-discussx");
         let session = json!({ "session_id": "s-corrupt-discuss", "prompt": "/discussx" });
         let path = review_state_path(&repo, &session);
@@ -653,8 +663,8 @@ mod tests {
             "must not mask corrupt state with pre-exec nudge; got {ctx:?}"
         );
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_file(&path);
         let _ = fs::remove_dir_all(repo);
@@ -664,14 +674,11 @@ mod tests {
     fn user_prompt_submit_review_and_implementx_suppresses_review_arming() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("claude-dual-review-implementx");
         let sid = "s-claude-dual";
         let prompt = "请全面review这个仓库 /implementx 修复刚发现的问题";
-        let _ = run_user_prompt_submit(
-            &repo,
-            &json!({ "session_id": sid, "prompt": prompt }),
-        );
+        let _ = run_user_prompt_submit(&repo, &json!({ "session_id": sid, "prompt": prompt }));
         let state = match load_review_gate_disk(&repo, &json!({ "session_id": sid })) {
             AgentDiskState::Ok(s) => s,
             other => panic!("expected state, got {other:?}"),
@@ -681,8 +688,8 @@ mod tests {
             "goal drive must suppress review arming on Claude UPS; got {state:?}"
         );
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_dir_all(repo);
     }
@@ -874,7 +881,7 @@ mod tests {
     fn my_light_implementx_stop_suppresses_review_gate_when_review_armed() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("my-light-stop");
         let sid = "s-my-light";
         let armed = json!({ "session_id": sid, "prompt": "全面review" });
@@ -885,8 +892,8 @@ mod tests {
             "my-light must suppress CLAUDE_REVIEW_GATE on Stop"
         );
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_dir_all(repo);
     }
@@ -895,7 +902,7 @@ mod tests {
     fn my_light_user_prompt_clears_sticky_review_required() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("my-light-clear");
         let sid = "s-clear";
         let _ = run_user_prompt_submit(
@@ -920,8 +927,8 @@ mod tests {
             "my-light UPS must clear sticky review_required"
         );
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_dir_all(repo);
     }
@@ -930,7 +937,7 @@ mod tests {
     fn second_review_prompt_in_same_session_requires_fresh_reviewer_evidence() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("rearm-review");
         let sid = "s-rearm";
         let _ = run_user_prompt_submit(
@@ -950,8 +957,8 @@ mod tests {
         let stop = run_stop(&repo, &json!({ "session_id": sid })).expect("stop advisory");
         assert_stop_review_gate_advisory(&stop);
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_dir_all(repo);
     }
@@ -960,7 +967,7 @@ mod tests {
     fn narrow_path_review_disarms_sticky_deep_arm() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("narrow-disarm");
         let sid = "s-narrow";
         let _ = run_user_prompt_submit(
@@ -977,11 +984,15 @@ mod tests {
         };
         assert!(!cleared.review_required);
         assert!(
-            run_stop(&repo, &json!({ "session_id": sid, "prompt": "review ./README.md" })).is_none()
+            run_stop(
+                &repo,
+                &json!({ "session_id": sid, "prompt": "review ./README.md" })
+            )
+            .is_none()
         );
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_dir_all(repo);
     }
@@ -990,7 +1001,7 @@ mod tests {
     fn failed_subagent_post_tool_does_not_record_reviewer_evidence() {
         let _env = crate::hosts::test_shim::process_env_lock();
         let prev_disable = std::env::var_os("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
-        std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") };
         let repo = unique_test_repo("failed-subagent");
         let sid = "s-fail";
         let _ = run_user_prompt_submit(
@@ -1007,8 +1018,8 @@ mod tests {
         let stop = run_stop(&repo, &json!({ "session_id": sid })).expect("stop advisory");
         assert_stop_review_gate_advisory(&stop);
         match prev_disable {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE") },
         }
         let _ = fs::remove_dir_all(repo);
     }
@@ -1018,7 +1029,7 @@ mod tests {
     fn user_prompt_submit_injects_paper_prose_by_default() {
         let _g = core_policy::test_env_sync::process_env_lock();
         let prior = std::env::var_os("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
-        std::env::remove_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
+        unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK") };
         let repo = unique_test_repo("prose-ups");
         let payload = json!({
             "prompt": "polish this abstract for clarity",
@@ -1035,15 +1046,17 @@ mod tests {
         );
         let _ = fs::remove_dir_all(&repo);
         match prior {
-            Some(v) => std::env::set_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK", v),
-            None => std::env::remove_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK") },
         }
     }
 
     #[test]
     fn is_host_private_path_exempts_claude_plans_directory() {
         // .claude/plans/ is a session scratch area (plan mode), not host-private state
-        assert!(!is_host_private_path("~/.claude/plans/dynamic-baking-curry.md"));
+        assert!(!is_host_private_path(
+            "~/.claude/plans/dynamic-baking-curry.md"
+        ));
         assert!(!is_host_private_path(".claude/plans/foo.md"));
         // Absolute path under HOME also exempt
         if let Ok(home) = std::env::var("HOME") {
@@ -1055,7 +1068,9 @@ mod tests {
         }
         // Relative host-private paths must still be blocked
         assert!(is_host_private_path("~/.claude/settings.json"));
-        assert!(is_host_private_path(".claude/hook-state/review_gate_123.json"));
+        assert!(is_host_private_path(
+            ".claude/hook-state/review_gate_123.json"
+        ));
     }
 
     fn unique_test_repo(name: &str) -> PathBuf {

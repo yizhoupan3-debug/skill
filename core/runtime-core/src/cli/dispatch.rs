@@ -2,19 +2,18 @@
 
 use super::args::*;
 use super::common::{manifest_fallback_path, print_json_value, route_task_with_manifest_fallback};
-use crate::framework_runtime::router_command_dispatch::{
-    dispatch_browser_command, dispatch_closeout_command,
-    dispatch_diagnose_command, dispatch_eval_command,
-    dispatch_framework_command, dispatch_hook_policy_command, dispatch_host_command,
-    dispatch_migrate_command, dispatch_schema_drift_command, dispatch_storage_command,
-    dispatch_trace_command,
-};
 #[cfg(feature = "codegraph")]
 use crate::framework_runtime::router_command_dispatch::dispatch_codegraph_command;
+use crate::framework_runtime::router_command_dispatch::{
+    dispatch_browser_command, dispatch_closeout_command, dispatch_diagnose_command,
+    dispatch_eval_command, dispatch_framework_command, dispatch_hook_policy_command,
+    dispatch_host_command, dispatch_migrate_command, dispatch_schema_drift_command,
+    dispatch_storage_command, dispatch_trace_command,
+};
 use crate::route::{
-    build_search_results_payload, filter_record_indices_for_host, filter_records_for_host,
-    load_records, load_records_cached_for_stdio, load_records_from_manifest, search_skills_subset,
-    MatchRow, SearchResultsPayload,
+    MatchRow, SearchResultsPayload, build_search_results_payload, filter_record_indices_for_host,
+    filter_records_for_host, load_records, load_records_cached_for_stdio,
+    load_records_from_manifest, search_skills_subset,
 };
 use crate::router_self;
 
@@ -50,12 +49,8 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
             };
             let host_indices =
                 filter_record_indices_for_host(&records, command.host_id.as_deref())?;
-            let rows = search_skills_subset(
-                &records,
-                Some(&host_indices),
-                &command.query,
-                command.limit,
-            );
+            let rows =
+                search_skills_subset(&records, Some(&host_indices), &command.query, command.limit);
             let payload = build_search_results_payload(&command.query, rows.clone());
             if command.json {
                 return print_json_value(&payload);

@@ -1,15 +1,15 @@
 //! Live execute HTTP path, prompt builder, and aggregator URL validation.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::sync::OnceLock;
 use std::time::Duration;
 
 use crate::execution_contract::{
-    build_steady_state_execution_kernel_metadata, EXECUTION_AUTHORITY, EXECUTION_MODEL_ID_SOURCE,
-    EXECUTION_RESPONSE_SHAPE_DRY_RUN, EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
-    EXECUTION_SCHEMA_VERSION,
+    EXECUTION_AUTHORITY, EXECUTION_MODEL_ID_SOURCE, EXECUTION_RESPONSE_SHAPE_DRY_RUN,
+    EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY, EXECUTION_SCHEMA_VERSION,
+    build_steady_state_execution_kernel_metadata,
 };
 use crate::stdio_payload_types::{
     ExecuteRequestPayload, ExecuteResponsePayload, ExecuteUsagePayload,
@@ -89,8 +89,6 @@ pub fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponse
         live_result,
     ))
 }
-
-
 
 pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     let research_mode = infer_research_mode(payload);
@@ -309,9 +307,7 @@ fn infer_research_mode(payload: &ExecuteRequestPayload) -> ResearchMode {
     if payload_text_signals_deep_research(&task) {
         return ResearchMode::Deep;
     }
-    if task.contains("快查")
-        || task.contains("快速调研")
-    {
+    if task.contains("快查") || task.contains("快速调研") {
         return ResearchMode::Quick;
     }
     for reason in &payload.reasons {

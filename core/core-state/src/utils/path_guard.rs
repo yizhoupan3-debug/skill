@@ -62,10 +62,7 @@ pub fn join_repo_relative_under_root(root: &Path, relative: &str) -> Result<Path
 /// themselves.
 pub fn reject_unsafe_path(path: &Path) -> Result<(), String> {
     // 1. Reject path traversal via `..` components.
-    if path
-        .components()
-        .any(|c| matches!(c, Component::ParentDir))
-    {
+    if path.components().any(|c| matches!(c, Component::ParentDir)) {
         return Err(format!(
             "write path {} must not contain '..' traversal segments",
             path.display()
@@ -82,10 +79,7 @@ pub fn reject_unsafe_path(path: &Path) -> Result<(), String> {
         Ok(_) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => {
-            return Err(format!(
-                "stat write path {} failed: {err}",
-                path.display()
-            ));
+            return Err(format!("stat write path {} failed: {err}", path.display()));
         }
     }
     Ok(())

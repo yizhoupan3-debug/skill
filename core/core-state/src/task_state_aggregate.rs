@@ -6,9 +6,9 @@
 //!
 //! Design: see `task_state.rs` §5 阶段 3.
 
-use crate::utils::atomic_write::write_atomic_json;
-use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::state_manager::read_rfv_loop_state;
+use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
+use crate::utils::atomic_write::write_atomic_json;
 use chrono::Utc;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -98,14 +98,14 @@ fn validate_task_id_component(task_id: &str) -> Result<&str, String> {
 mod tests {
     use super::*;
     use crate::state_manager::framework_goal_drive;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::fs;
 
     #[test]
     fn sync_writes_after_goal_start() {
         let _env = ();
         let prev = std::env::var_os("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO");
-        std::env::set_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", "1");
+        unsafe { std::env::set_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", "1") };
         let tmp = std::env::temp_dir().join(format!(
             "router-rs-task-agg-{}",
             std::time::SystemTime::now()
@@ -142,8 +142,8 @@ mod tests {
         assert_eq!(v.get("task_id").and_then(Value::as_str), Some("t-agg"));
         assert!(v.get("goal_state").is_some());
         match prev {
-            Some(v) => std::env::set_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", v),
-            None => std::env::remove_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }

@@ -137,7 +137,7 @@ web_fetch  // 从 router-rs-framework 迁移逻辑
 **修改文件**：
 - `CLAUDE.md` - 更新网络访问优先级说明
 - `AGENTS.md` - 更新 MCP 工具清单
-- `docs/hosts/claude-desktop.md` - 更新宿主特有说明
+- `docs/hosts/claude.md` - 更新宿主特有说明
 
 ---
 

@@ -1,11 +1,9 @@
 mod review_gate_lanes;
 
 #[allow(unused_imports)]
-pub use review_gate_lanes::{
-    assert_reviewer_lanes_closed, reviewer_lanes_from_registry,
-};
+pub use review_gate_lanes::{assert_reviewer_lanes_closed, reviewer_lanes_from_registry};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -101,13 +99,7 @@ pub fn project_root() -> PathBuf {
 }
 
 /// Closed-set host ids (2026-06). Order matches `RUNTIME_REGISTRY.json` → `host_targets.supported`.
-pub const CANONICAL_HOST_IDS: &[&str] = &[
-    "cursor",
-    "claude-code",
-    "opencode",
-    "codex",
-    "mimo",
-];
+pub const CANONICAL_HOST_IDS: &[&str] = &["cursor", "claude-code", "opencode", "codex", "mimo"];
 
 /// Retired host ids that must not appear in registry `supported` or `metadata`.
 pub const RETIRED_HOST_IDS: &[&str] = &[
@@ -183,7 +175,10 @@ pub fn read_text(path: &Path) -> String {
             let alternative = PathBuf::from(path_str.replace("/skills/", "/skills/.archive-cold/"));
             if alternative.exists() {
                 return fs::read_to_string(&alternative).unwrap_or_else(|err| {
-                    panic!("failed to read (archive fallback) {}: {err}", alternative.display());
+                    panic!(
+                        "failed to read (archive fallback) {}: {err}",
+                        alternative.display()
+                    );
                 });
             }
         }
@@ -201,12 +196,10 @@ pub fn read_text(path: &Path) -> String {
             }
         }
         if path_str.contains("/core/router-rs/src/hook_common.rs") {
-            let alternative = PathBuf::from(
-                path_str.replace(
-                    "/core/router-rs/src/hook_common.rs",
-                    "/core/core-policy/src/hook_common.rs",
-                ),
-            );
+            let alternative = PathBuf::from(path_str.replace(
+                "/core/router-rs/src/hook_common.rs",
+                "/core/core-policy/src/hook_common.rs",
+            ));
             if alternative.is_file() {
                 return fs::read_to_string(&alternative).unwrap_or_else(|err| {
                     panic!(
@@ -289,9 +282,7 @@ where
 
 pub fn router_rs_binary() -> Option<PathBuf> {
     static CACHE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
-    CACHE.get_or_init(|| {
-        resolve_router_rs_binary()
-    }).clone()
+    CACHE.get_or_init(resolve_router_rs_binary).clone()
 }
 
 /// 与仓库根 `.cargo/config.toml` 的 `[build] target-dir` 对齐，避免误用陈旧的
@@ -334,29 +325,30 @@ fn resolve_router_rs_binary() -> Option<PathBuf> {
     let root = project_root();
     // Session-local `CARGO_TARGET_DIR`: pick under that tree first when the binary exists (matches
     // `cargo metadata` in that session).
-    if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
-        if let Some(p) = pick_router_rs_under_target_dir(&PathBuf::from(td)) {
-            return Some(p);
-        }
+    if let Ok(td) = std::env::var("CARGO_TARGET_DIR")
+        && let Some(p) = pick_router_rs_under_target_dir(&PathBuf::from(td))
+    {
+        return Some(p);
     }
     // Same resolution path as `cargo_router_rs_executable` inside router-rs (stable vs MCP stubs).
     if let Some(p) = router_rs_binary_via_cargo_metadata(&root) {
         return Some(p);
     }
-    if let Some(base) = cargo_target_dir_from_config(&root) {
-        if let Some(p) = pick_router_rs_under_target_dir(&base) {
-            return Some(p);
-        }
+    if let Some(base) = cargo_target_dir_from_config(&root)
+        && let Some(p) = pick_router_rs_under_target_dir(&base)
+    {
+        return Some(p);
     }
-    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs-cli").map(PathBuf::from) {
-        if path.is_file() {
-            return Some(path);
-        }
+    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs-cli").map(PathBuf::from)
+        && path.is_file()
+    {
+        return Some(path);
     }
-    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs").map(PathBuf::from) {
-        if path.is_file() && !is_redirect_shim(&path) {
-            return Some(path);
-        }
+    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs").map(PathBuf::from)
+        && path.is_file()
+        && !is_redirect_shim(&path)
+    {
+        return Some(path);
     }
     [
         root.join("target/debug/router-rs-cli"),

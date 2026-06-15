@@ -1,7 +1,7 @@
 //! B0 kernel DI: TokenizerProvider (B1→B0) and Telemetry MPSC aggregator.
 use framework_kernel::{
-    install_global_telemetry_writer, install_tokenizer_provider, LogAggregator,
-    LogAggregatorHandle, TokenizerProvider,
+    LogAggregator, LogAggregatorHandle, TokenizerProvider, install_global_telemetry_writer,
+    install_tokenizer_provider,
 };
 use routing_engine::routing_runtime_watch;
 use std::path::PathBuf;

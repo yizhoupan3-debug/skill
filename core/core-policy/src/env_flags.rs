@@ -23,6 +23,8 @@ const ROUTER_RS_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_REVIEW_GATE_DISABLE";
 const ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE";
 const ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE";
 const ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE";
+const ROUTER_RS_MIMO_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_MIMO_REVIEW_GATE_DISABLE";
+const ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE";
 
 const ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV: &str = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
 const ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV: &str =
@@ -91,7 +93,8 @@ const REVIEW_GATE_DISABLE_BY_HOST: &[(&str, &str)] = &[
     ("cursor", ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV),
     ("codex", ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV),
     ("claude-code", ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV),
-    ("opencode", "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE"),
+    ("opencode", ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE_ENV),
+    ("mimo", ROUTER_RS_MIMO_REVIEW_GATE_DISABLE_ENV),
 ];
 
 /// Emergency review-gate disable for hook hosts (`cursor` / `codex` / `claude-code`).
@@ -164,9 +167,7 @@ fn parse_review_gate_stop_max_nudges_cap(raw: Option<&str>) -> Option<u32> {
     if let Some(n) = t.parse::<u32>().ok().filter(|v| *v >= 1) {
         return Some(n);
     }
-    eprintln!(
-        "[core-policy] invalid review gate stop max nudges={raw:?}; using default cap 8"
-    );
+    eprintln!("[core-policy] invalid review gate stop max nudges={raw:?}; using default cap 8");
     Some(8)
 }
 
@@ -216,18 +217,18 @@ mod tests {
         ];
         let prev: Vec<_> = keys.iter().map(|k| (*k, env::var_os(k))).collect();
         for key in keys {
-            env::remove_var(key);
+            unsafe { env::remove_var(key) };
         }
         assert!(!router_rs_review_gate_disabled_for_host("cursor"));
-        env::set_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV, "1");
+        unsafe { env::set_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV, "1") };
         assert!(router_rs_review_gate_disabled_for_host("codex"));
-        env::remove_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV);
-        env::set_var(ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV, "true");
+        unsafe { env::remove_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) };
+        unsafe { env::set_var(ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV, "true") };
         assert!(router_rs_review_gate_disabled_for_host("claude-code"));
         for (key, val) in prev {
             match val {
-                Some(v) => env::set_var(key, v),
-                None => env::remove_var(key),
+                Some(v) => unsafe { env::set_var(key, v) },
+                None => unsafe { env::remove_var(key) },
             }
         }
     }
@@ -237,20 +238,20 @@ mod tests {
         let _g = process_env_lock();
         let prev_canon = env::var_os(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV);
         let prev_legacy = env::var_os(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV);
-        env::remove_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV);
-        env::remove_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV);
+        unsafe { env::remove_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV) };
+        unsafe { env::remove_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV) };
         assert_eq!(router_rs_review_pending_cycle_max(), 32);
-        env::set_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV, "64");
+        unsafe { env::set_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV, "64") };
         assert_eq!(router_rs_review_pending_cycle_max(), 64);
-        env::set_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV, "48");
+        unsafe { env::set_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV, "48") };
         assert_eq!(router_rs_review_pending_cycle_max(), 48);
         match prev_canon {
-            Some(v) => env::set_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV, v),
-            None => env::remove_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV),
+            Some(v) => unsafe { env::set_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV, v) },
+            None => unsafe { env::remove_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV) },
         }
         match prev_legacy {
-            Some(v) => env::set_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV, v),
-            None => env::remove_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV),
+            Some(v) => unsafe { env::set_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV, v) },
+            None => unsafe { env::remove_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV) },
         }
     }
 
@@ -263,18 +264,18 @@ mod tests {
         ];
         let prev: Vec<_> = keys.iter().map(|k| (*k, env::var_os(k))).collect();
         for key in keys {
-            env::remove_var(key);
+            unsafe { env::remove_var(key) };
         }
         assert!(router_rs_review_gate_stop_max_nudges_cap().is_none());
-        env::set_var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV, "3");
+        unsafe { env::set_var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV, "3") };
         assert_eq!(router_rs_review_gate_stop_max_nudges_cap(), Some(3));
-        env::remove_var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV);
-        env::set_var(ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV, "5");
+        unsafe { env::remove_var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV) };
+        unsafe { env::set_var(ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV, "5") };
         assert_eq!(router_rs_review_gate_stop_max_nudges_cap(), Some(5));
         for (key, val) in prev {
             match val {
-                Some(v) => env::set_var(key, v),
-                None => env::remove_var(key),
+                Some(v) => unsafe { env::set_var(key, v) },
+                None => unsafe { env::remove_var(key) },
             }
         }
     }

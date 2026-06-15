@@ -6,28 +6,27 @@
 
 use super::state::codex_load_state;
 use super::{
-    lifecycle_host, CodexLifecycleHostKind, CodexLifecycleContextState,
-    CODEX_REVIEW_SUBAGENT_TYPES, CODEX_ADDITIONAL_CONTEXT_MAX_BYTES,
+    CODEX_ADDITIONAL_CONTEXT_MAX_BYTES, CODEX_REVIEW_SUBAGENT_TYPES, CodexLifecycleContextState,
+    CodexLifecycleHostKind, lifecycle_host,
 };
 use crate::hooks;
 use crate::hooks::{
-    try_append_post_tool_shell_evidence,
-    router_rs_operator_inject_globally_enabled,
+    router_rs_operator_inject_globally_enabled, try_append_post_tool_shell_evidence,
 };
+use core_policy::HookReviewDiskCore;
 use core_policy::hook_common::{
     has_override, is_reviewer_lane_normalized, normalize_subagent_type, normalize_tool_name,
 };
 use core_policy::review_gate_engine::{
-    fork_context_from_values, maybe_bump_codex_review_phase_for_compact_findings,
-    review_independent_reviewer_evidence, ReviewGateFacts,
+    ReviewGateFacts, fork_context_from_values, maybe_bump_codex_review_phase_for_compact_findings,
+    review_independent_reviewer_evidence,
 };
-use core_policy::HookReviewDiskCore;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::path::Path;
 
-use super::state::with_codex_state_lock;
 use super::drift::codex_projection_drift_warning;
+use super::state::with_codex_state_lock;
 
 // ---------------------------------------------------------------------------
 // Helper functions used by handlers
@@ -147,7 +146,9 @@ fn codex_stop_hook_active_replay(event: &Value) -> bool {
 
 /// Codex-internal Stop replays (`stop_hook_active`): skip gate enforcement only when explicitly opted in.
 fn codex_stop_hook_active_bypass_enabled() -> bool {
-    crate::hooks::router_rs_env_enabled_default_false(lifecycle_host().stop_hook_active_bypass_env())
+    crate::hooks::router_rs_env_enabled_default_false(
+        lifecycle_host().stop_hook_active_bypass_env(),
+    )
 }
 
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` or legacy `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE`.
@@ -256,7 +257,9 @@ pub(crate) fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
     if combined.len() <= max_bytes {
         return Some(combined);
     }
-    Some(truncate_codex_additional_context_bytes(&combined, max_bytes))
+    Some(truncate_codex_additional_context_bytes(
+        &combined, max_bytes,
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -309,11 +312,9 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
                     next.phase = prev.phase;
                     next.subagent_start_count = prev.subagent_start_count;
                 }
-                next.review_gate.review_required =
-                    prev.review_gate.review_required || review_arms;
+                next.review_gate.review_required = prev.review_gate.review_required || review_arms;
             }
-            next.review_gate.review_override =
-                prev.review_gate.review_override || override_now;
+            next.review_gate.review_override = prev.review_gate.review_override || override_now;
             next.review_gate.reject_reason_seen = prev.review_gate.reject_reason_seen;
         } else {
             next.seq = 1;
@@ -334,12 +335,17 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
     }
     if facts.review_required
         && !facts.review_override
-        && core_policy::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &prompt)
-    {
-        contexts.push(core_policy::registry_review_gate::review_spawn_first_nudge_line(
+        && core_policy::hook_common::should_inject_spawn_first_review_nudge(
             Some(repo_root),
-            lifecycle_host().spawn_first_host_id(),
-        ));
+            &prompt,
+        )
+    {
+        contexts.push(
+            core_policy::registry_review_gate::review_spawn_first_nudge_line(
+                Some(repo_root),
+                lifecycle_host().spawn_first_host_id(),
+            ),
+        );
     }
     let paper_host = lifecycle_host().paper_prose_hook_host();
     hooks::maybe_append_paper_adversarial_context(repo_root, &prompt, &mut contexts, paper_host);
@@ -421,7 +427,10 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
             let post_facts = ReviewGateFacts::from_prompt(&prompt_for_profile);
             let should_arm_review = state.review_gate.review_required || post_facts.review_required;
             if should_arm_review
-                && !core_policy::hook_common::my_light_profile_active(Some(repo_root), &prompt_for_profile)
+                && !core_policy::hook_common::my_light_profile_active(
+                    Some(repo_root),
+                    &prompt_for_profile,
+                )
             {
                 state.review_gate.review_required = true;
             }
@@ -818,12 +827,12 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
         }
     }
     let result = match canonical {
-        "pre-tool-use" => Ok(attach_codex_hook_observation(super::pretool::run_codex_pre_tool_use(
-            repo_root, &payload,
-        )?)),
-        "contract-guard" => Ok(attach_codex_hook_observation(super::contract_guard::run_codex_contract_guard(
-            repo_root, &payload,
-        )?)),
+        "pre-tool-use" => Ok(attach_codex_hook_observation(
+            super::pretool::run_codex_pre_tool_use(repo_root, &payload)?,
+        )),
+        "contract-guard" => Ok(attach_codex_hook_observation(
+            super::contract_guard::run_codex_contract_guard(repo_root, &payload)?,
+        )),
         "lifecycle-context" => Ok(attach_codex_hook_observation(
             run_codex_lifecycle_context_hook(repo_root, &payload)?,
         )),

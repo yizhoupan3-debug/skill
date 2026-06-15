@@ -5,11 +5,11 @@
 
 use super::install::protected_generated_paths;
 use super::{HOST_ENTRYPOINT_SYNC_HINT, PROTECTED_GENERATED_PREFIXES};
-use serde_json::{json, Value};
+use regex::Regex;
+use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use regex::Regex;
 
 // ---------------------------------------------------------------------------
 // PreToolUse handler
@@ -33,7 +33,10 @@ pub(super) fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Result<Opti
     Ok(None)
 }
 
-pub(super) fn run_codex_pre_tool_use(repo_root: &Path, payload: &Value) -> Result<Option<Value>, String> {
+pub(super) fn run_codex_pre_tool_use(
+    repo_root: &Path,
+    payload: &Value,
+) -> Result<Option<Value>, String> {
     run_pre_tool_use(repo_root, payload)
 }
 
@@ -249,7 +252,9 @@ static MUTATING_COMMAND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
 });
 
 fn bash_command_looks_mutating(command: &str) -> bool {
-    MUTATING_COMMAND_PATTERNS.iter().any(|re| re.is_match(command))
+    MUTATING_COMMAND_PATTERNS
+        .iter()
+        .any(|re| re.is_match(command))
 }
 
 fn bash_segment_mentions_generated_path(segment: &str, hint: &str) -> bool {
@@ -269,8 +274,10 @@ fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
         let regexes = map.entry(hint.to_string()).or_insert_with(|| {
             let escaped = regex::escape(hint);
             let p1 = format!(r#"(>>?|>\|)\s*['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
-            let p2 = format!(r#"\btee\b(?:\s+-a)?\s+['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
-            let p3 = format!(r#"\bdd\b[^\n;&|]*\bof=['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
+            let p2 =
+                format!(r#"\btee\b(?:\s+-a)?\s+['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
+            let p3 =
+                format!(r#"\bdd\b[^\n;&|]*\bof=['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
             [
                 Regex::new(&p1).unwrap(),
                 Regex::new(&p2).unwrap(),

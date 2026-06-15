@@ -1,11 +1,12 @@
+#![allow(dead_code)]
 mod common;
 
 use common::{
-    assert_canonical_closed_set_host_ids, host_integration_json, json_from_output, output_text,
-    project_root, read_json, read_text, router_rs_command, router_rs_json, run,
-    seed_framework_markers, write_json, write_text, CANONICAL_HOST_IDS, RETIRED_HOST_IDS,
+    CANONICAL_HOST_IDS, RETIRED_HOST_IDS, assert_canonical_closed_set_host_ids,
+    host_integration_json, json_from_output, output_text, project_root, read_json, read_text,
+    router_rs_command, router_rs_json, run, seed_framework_markers, write_json, write_text,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 use std::process::Command;
 use tempfile::tempdir;
@@ -240,8 +241,10 @@ fn install_native_integration_idempotent() {
     assert_eq!(second["hooks_disabled_changed"], false);
     assert_eq!(second["deprecated_codex_hooks_removed"], false);
     assert_eq!(first["default_bootstrap"]["status"], "materialized");
-    assert!(["already-present", "repaired-stale"]
-        .contains(&second["default_bootstrap"]["status"].as_str().unwrap()));
+    assert!(
+        ["already-present", "repaired-stale"]
+            .contains(&second["default_bootstrap"]["status"].as_str().unwrap())
+    );
     assert_eq!(first["codex_prompt_entrypoints"]["changed"], false);
     assert_eq!(second["codex_prompt_entrypoints"]["changed"], false);
 }
@@ -276,10 +279,11 @@ fn install_native_integration_prompt_entrypoints_clean() {
 
     assert!(!tmp.path().join("home/.codex/prompts/gsd.md").exists());
     assert!(!tmp.path().join("home/.codex/prompts/gitx.md").exists());
-    assert!(!tmp
-        .path()
-        .join("home/.codex/prompts/systematic-debugging.md")
-        .exists());
+    assert!(
+        !tmp.path()
+            .join("home/.codex/prompts/systematic-debugging.md")
+            .exists()
+    );
 }
 
 install_native_integration_test!(
@@ -396,18 +400,26 @@ fn current_artifact_clutter_plan_archives_current_mirrors() {
         .map(|plan| plan["source"].as_str().unwrap().to_string())
         .collect::<Vec<_>>();
 
-    assert!(sources
-        .iter()
-        .any(|path| path.ends_with("artifacts/current/SESSION_SUMMARY.md")));
-    assert!(sources
-        .iter()
-        .any(|path| path.ends_with("artifacts/current/NEXT_ACTIONS.json")));
-    assert!(!sources
-        .iter()
-        .any(|path| path.ends_with("artifacts/current/task-1/SESSION_SUMMARY.md")));
-    assert!(!sources
-        .iter()
-        .any(|path| path.ends_with("artifacts/current/task-1/CONTINUITY_JOURNAL.json")));
+    assert!(
+        sources
+            .iter()
+            .any(|path| path.ends_with("artifacts/current/SESSION_SUMMARY.md"))
+    );
+    assert!(
+        sources
+            .iter()
+            .any(|path| path.ends_with("artifacts/current/NEXT_ACTIONS.json"))
+    );
+    assert!(
+        !sources
+            .iter()
+            .any(|path| path.ends_with("artifacts/current/task-1/SESSION_SUMMARY.md"))
+    );
+    assert!(
+        !sources
+            .iter()
+            .any(|path| path.ends_with("artifacts/current/task-1/CONTINUITY_JOURNAL.json"))
+    );
 }
 
 #[test]
@@ -558,14 +570,17 @@ fn install_skills_claude_target_installs_only_claude() {
     });
     assert_eq!(fallback_json["decision"], "block");
     assert_eq!(fallback_json["suppressOutput"], true);
-    assert!(repo_root
-        .join(".claude/.framework-projection.json")
-        .exists());
+    assert!(
+        repo_root
+            .join(".claude/.framework-projection.json")
+            .exists()
+    );
     let manifest = read_json(&repo_root.join(".claude/.framework-projection.json"));
-    assert!(manifest["files"].as_array().unwrap().iter().any(|path| path
-        .as_str()
-        .unwrap_or_default()
-        .ends_with(".claude/settings.json")));
+    assert!(manifest["files"].as_array().unwrap().iter().any(|path| {
+        path.as_str()
+            .unwrap_or_default()
+            .ends_with(".claude/settings.json")
+    }));
     assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".codex/prompts/framework.md").exists());
 }
@@ -696,9 +711,11 @@ fn remove_claude_projection_removes_managed_settings_hooks() {
         ])
     );
     assert!(!repo_root.join(".claude/rules/framework.md").exists());
-    assert!(!repo_root
-        .join(".claude/.framework-projection.json")
-        .exists());
+    assert!(
+        !repo_root
+            .join(".claude/.framework-projection.json")
+            .exists()
+    );
     let settings = read_json(&settings_path);
     assert_eq!(settings["theme"], "dark");
     assert!(settings.get("hooks").is_none());
@@ -800,10 +817,12 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
     assert_eq!(args[3], json!(framework_root.to_string_lossy()));
     let manifest_path = cursor_home.join(".framework-projection.json");
     let manifest_payload = common::read_json(&manifest_path);
-    assert!(manifest_payload["settings"]["managed_key_paths"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("mcp_servers.browser-mcp")));
+    assert!(
+        manifest_payload["settings"]["managed_key_paths"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("mcp_servers.browser-mcp"))
+    );
     assert_eq!(
         mcp_payload["mcp_servers"]["paperplain"]["command"],
         json!("npx")
@@ -837,10 +856,12 @@ fn cursor_user_scope_projection_manages_browser_mcp_server() {
     ]);
     assert_eq!(remove["success"], true);
     let removed_payload = common::read_json(&mcp_path);
-    assert!(removed_payload
-        .get("mcp_servers")
-        .and_then(|servers| servers.get("browser-mcp"))
-        .is_none());
+    assert!(
+        removed_payload
+            .get("mcp_servers")
+            .and_then(|servers| servers.get("browser-mcp"))
+            .is_none()
+    );
 }
 
 #[test]
@@ -904,10 +925,12 @@ fn cursor_user_scope_install_preserves_user_owned_browser_mcp_server() {
     let manifest_path = cursor_home.join(".framework-projection.json");
     let manifest_payload = common::read_json(&manifest_path);
     assert_eq!(manifest_payload["settings"]["managed_key_paths"], json!([]));
-    assert!(!manifest_payload["files"]
-        .as_array()
-        .unwrap()
-        .contains(&json!(mcp_path.to_string_lossy().to_string())));
+    assert!(
+        !manifest_payload["files"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(mcp_path.to_string_lossy().to_string()))
+    );
 }
 
 #[test]
@@ -949,7 +972,10 @@ fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
     ]);
     assert_eq!(install["success"], true);
     assert_eq!(install["results"]["cursor"]["mcp"]["managed"], true);
-    assert_eq!(install["results"]["cursor"]["mcp"]["skipped_user_owned"], json!(false));
+    assert_eq!(
+        install["results"]["cursor"]["mcp"]["skipped_user_owned"],
+        json!(false)
+    );
     assert!(
         install["results"]["cursor"]["mcp"]["reason"] == json!("already-managed-equivalent")
             || install["results"]["cursor"]["mcp"]["reason"] == json!("installed"),
@@ -963,10 +989,12 @@ fn cursor_user_scope_install_marks_equivalent_browser_mcp_server_managed() {
 
     let manifest_path = cursor_home.join(".framework-projection.json");
     let manifest_payload = common::read_json(&manifest_path);
-    assert!(manifest_payload["settings"]["managed_key_paths"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("mcp_servers.browser-mcp")));
+    assert!(
+        manifest_payload["settings"]["managed_key_paths"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("mcp_servers.browser-mcp"))
+    );
 }
 
 #[test]
@@ -1241,10 +1269,12 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
         .iter()
         .find(|alias| alias["alias"] == "--repo-root")
         .unwrap();
-    assert!(repo_root_alias["kept_policy"]
-        .as_str()
-        .unwrap()
-        .contains("never resolves or fills project_root"));
+    assert!(
+        repo_root_alias["kept_policy"]
+            .as_str()
+            .unwrap()
+            .contains("never resolves or fills project_root")
+    );
 
     let status = router_rs_json(&[
         "framework",
@@ -1409,7 +1439,9 @@ fn generated_artifacts_status_fails_when_manifest_omits_checked_in_projection() 
         .as_array()
         .unwrap();
     assert!(
-        undeclared.iter().any(|path| path == ".claude/rules/framework.md"),
+        undeclared
+            .iter()
+            .any(|path| path == ".claude/rules/framework.md"),
         "expected undeclared projection, got {undeclared:?}"
     );
 }
@@ -1683,11 +1715,9 @@ fn route_search_host_id_filters_skill_body_platforms_but_keeps_framework_command
         "--json",
     ]);
     assert!(
-        filtered["matches"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|entry| { entry["record"]["name"].as_str().unwrap_or_default() != "opencode-only" }),
+        filtered["matches"].as_array().unwrap().iter().all(|entry| {
+            entry["record"]["name"].as_str().unwrap_or_default() != "opencode-only"
+        }),
         "cursor host search must not return opencode-only skill: {filtered}"
     );
 
@@ -1894,31 +1924,9 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
     std::fs::create_dir_all(&project_root).unwrap();
     std::fs::create_dir_all(&home).unwrap();
 
-    let _framework_status = router_rs_json_with_home(&home, &[
-        "framework",
-        "host-integration",
-        "status",
-        "--framework-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-    ]);
-    let framework_status_with_repo_root = router_rs_json_with_home(&home, &[
-        "framework",
-        "host-integration",
-        "status",
-        "--repo-root",
-        framework_root.to_str().unwrap(),
-        "--project-root",
-        project_root.to_str().unwrap(),
-        "--home",
-        home.to_str().unwrap(),
-    ]);
-    assert_eq!(
-        normalize_alias_equivalence(framework_status_with_repo_root),
-        normalize_alias_equivalence(router_rs_json_with_home(&home, &[
+    let _framework_status = router_rs_json_with_home(
+        &home,
+        &[
             "framework",
             "host-integration",
             "status",
@@ -1928,7 +1936,38 @@ fn compatibility_alias_outputs_are_normalized_equivalent() {
             project_root.to_str().unwrap(),
             "--home",
             home.to_str().unwrap(),
-        ]))
+        ],
+    );
+    let framework_status_with_repo_root = router_rs_json_with_home(
+        &home,
+        &[
+            "framework",
+            "host-integration",
+            "status",
+            "--repo-root",
+            framework_root.to_str().unwrap(),
+            "--project-root",
+            project_root.to_str().unwrap(),
+            "--home",
+            home.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(
+        normalize_alias_equivalence(framework_status_with_repo_root),
+        normalize_alias_equivalence(router_rs_json_with_home(
+            &home,
+            &[
+                "framework",
+                "host-integration",
+                "status",
+                "--framework-root",
+                framework_root.to_str().unwrap(),
+                "--project-root",
+                project_root.to_str().unwrap(),
+                "--home",
+                home.to_str().unwrap(),
+            ]
+        ))
     );
 }
 
@@ -1952,7 +1991,10 @@ fn normalize_alias_equivalence(mut payload: serde_json::Value) -> serde_json::Va
             }
             keys
         };
-        if let Some(host_targets) = object.get_mut("host_targets").and_then(Value::as_object_mut) {
+        if let Some(host_targets) = object
+            .get_mut("host_targets")
+            .and_then(Value::as_object_mut)
+        {
             for key in &host_keys {
                 host_targets.remove(key.as_str());
             }
@@ -2065,10 +2107,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let aliases = &payload["framework_commands"];
     assert!(aliases.get("autopilot").is_none());
     assert!(aliases.get("gsd").is_none());
-    assert_eq!(
-        aliases["implementx"]["canonical_owner"],
-        "implementx"
-    );
+    assert_eq!(aliases["implementx"]["canonical_owner"], "implementx");
     assert_eq!(
         aliases["implementx"]["host_entrypoints"]["codex"],
         "/implementx"
@@ -2115,13 +2154,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         payload["host_targets"]["supported"],
-        json!([
-            "cursor",
-            "claude-code",
-            "opencode",
-            "codex",
-            "mimo"
-        ])
+        json!(["cursor", "claude-code", "opencode", "codex", "mimo"])
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["codex"]["install_tool"],
@@ -2328,4 +2361,3 @@ fn install_claude_script_help_exits_zero() {
         .expect("install-claude.sh --help");
     assert!(status.success());
 }
-

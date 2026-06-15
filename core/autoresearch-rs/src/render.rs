@@ -674,7 +674,12 @@ pub(super) fn render_current_context_summary(state: &Value) -> String {
     lines.join("\n")
 }
 
-pub(super) fn upsert_managed_block(text: &str, start_marker: &str, end_marker: &str, content: &str) -> String {
+pub(super) fn upsert_managed_block(
+    text: &str,
+    start_marker: &str,
+    end_marker: &str,
+    content: &str,
+) -> String {
     let managed = format!("{start_marker}\n{}\n{end_marker}", content.trim_end());
     if text.contains(start_marker) && text.contains(end_marker) {
         let pattern = Regex::new(&format!(
@@ -1101,7 +1106,6 @@ pub(super) fn format_reflection_note(decision: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn escape_table_cell_pipe() {

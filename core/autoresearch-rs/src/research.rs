@@ -1,10 +1,10 @@
 //! External research: HTTP clients, Semantic Scholar/arXiv adapters, claim research,
 //! novelty gate recommendation from research.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use reqwest::blocking::Client;
 use reqwest::header::{ACCEPT, USER_AGENT};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::time::Duration;
 use uuid::Uuid;
@@ -18,7 +18,11 @@ pub(super) fn http_client(timeout_secs: u64) -> Result<Client> {
         .context("failed to build HTTP client")
 }
 
-pub(super) fn fetch_semantic_scholar(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
+pub(super) fn fetch_semantic_scholar(
+    client: &Client,
+    query: &str,
+    limit: usize,
+) -> Result<Vec<Value>> {
     let response: Value = client
         .get(SEMANTIC_SCHOLAR_BASE_URL)
         .header(USER_AGENT, "autoresearch-rs/0.1")
@@ -149,7 +153,10 @@ pub(super) fn claim_record_for_research(state: &Value, claim_id: Option<&str>) -
     top_priority_claim(state)
 }
 
-pub(super) fn default_research_query(record: Option<&Value>, explicit_query: Option<&str>) -> Result<String> {
+pub(super) fn default_research_query(
+    record: Option<&Value>,
+    explicit_query: Option<&str>,
+) -> Result<String> {
     if let Some(query) = explicit_query
         .map(str::trim)
         .filter(|query| !query.is_empty())
@@ -255,7 +262,7 @@ pub(super) fn research_all_claims(
     max_claims: usize,
     timeout_secs: u64,
 ) -> Result<Value> {
-    use std::sync::{mpsc, Arc};
+    use std::sync::{Arc, mpsc};
     let mut next_state = ensure_state_defaults(state);
     let records = claim_records_for_batch(&next_state, max_claims);
     if records.is_empty() {
@@ -356,7 +363,10 @@ pub(super) fn external_research_result_count(entry: &Value) -> usize {
         .unwrap_or(0)
 }
 
-pub(super) fn external_research_entries_for_claim<'a>(state: &'a Value, claim_id: &str) -> Vec<&'a Value> {
+pub(super) fn external_research_entries_for_claim<'a>(
+    state: &'a Value,
+    claim_id: &str,
+) -> Vec<&'a Value> {
     arr(state, "external_research")
         .iter()
         .filter(|entry| entry.get("claim_id").and_then(Value::as_str) == Some(claim_id))
@@ -429,7 +439,10 @@ pub(super) fn compared_claim_ids(state: &Value) -> HashSet<String> {
         .collect()
 }
 
-pub(super) fn novelty_gate_recommendation_from_research(state: &Value, min_results: usize) -> Value {
+pub(super) fn novelty_gate_recommendation_from_research(
+    state: &Value,
+    min_results: usize,
+) -> Value {
     let min_results = min_results.max(1);
     let claim_ids = claim_ids_for_gate(state);
     let compared_ids = compared_claim_ids(state);
@@ -681,17 +694,23 @@ pub(super) fn propose_claims_from_question(question: &str, count: usize) -> Vec<
         (
             "setting",
             "testable hypothesis",
-            format!("The value of {focus} depends on the specific setting or constraint around {target}."),
+            format!(
+                "The value of {focus} depends on the specific setting or constraint around {target}."
+            ),
         ),
         (
             "framing",
             "paper-facing positioning claim",
-            format!("The strongest paper-facing claim is that {focus} can {effect}, not that it is universally better."),
+            format!(
+                "The strongest paper-facing claim is that {focus} can {effect}, not that it is universally better."
+            ),
         ),
         (
             "comparison",
             "reviewer-facing claim",
-            format!("The core reviewer question is whether {focus} beats the closest simple baseline for {target}."),
+            format!(
+                "The core reviewer question is whether {focus} beats the closest simple baseline for {target}."
+            ),
         ),
     ];
     templates
@@ -710,7 +729,11 @@ pub(super) fn propose_claims_from_question(question: &str, count: usize) -> Vec<
         .collect()
 }
 
-pub(super) fn draft_claims_from_state(state: &Value, question_override: Option<&str>, count: usize) -> Value {
+pub(super) fn draft_claims_from_state(
+    state: &Value,
+    question_override: Option<&str>,
+    count: usize,
+) -> Value {
     let mut next_state = ensure_state_defaults(state);
     let question = question_override
         .map(ToString::to_string)

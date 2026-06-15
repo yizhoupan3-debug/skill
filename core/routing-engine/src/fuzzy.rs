@@ -136,8 +136,14 @@ mod tests {
 
     #[test]
     fn test_jaccard_partial_overlap() {
-        let a: HashSet<String> = ["abc", "bcd", "cde"].iter().map(|s| s.to_string()).collect();
-        let b: HashSet<String> = ["bcd", "cde", "def"].iter().map(|s| s.to_string()).collect();
+        let a: HashSet<String> = ["abc", "bcd", "cde"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let b: HashSet<String> = ["bcd", "cde", "def"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
         // intersection = {bcd, cde} = 2, union = {abc, bcd, cde, def} = 4
         assert_eq!(jaccard_similarity(&a, &b), 0.5);
     }
@@ -161,10 +167,7 @@ mod tests {
 
     #[test]
     fn test_fuzzy_fallback_score_with_hints() {
-        let record = make_test_record(vec![
-            "code review".to_string(),
-            "review code".to_string(),
-        ]);
+        let record = make_test_record(vec!["code review".to_string(), "review code".to_string()]);
         let score = fuzzy_fallback_score("help me review code", &record);
         assert!(score > 0.0, "expected positive score, got {score}");
     }

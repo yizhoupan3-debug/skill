@@ -3,6 +3,7 @@ use super::aliases::{framework_alias_requires_explicit_call, has_explicit_framew
 use super::scoring_config::ScoringWeights;
 use super::signal_cache::cached_signal;
 use super::signals::*;
+use tracing::debug;
 use super::text::{
     common_route_stop_tokens, normalize_text, text_matches_phrase, tokenize_route_text,
 };
@@ -72,8 +73,8 @@ fn check_framework_alias_suppression<'a>(
     explicit_framework_alias: bool,
 ) -> Option<RouteCandidate<'a>> {
     if framework_alias_requires_explicit_call(record) && !explicit_framework_alias {
-        let ci_gate_nl_routing = record.slug == "gh-fix-ci"
-            && should_route_to_gh_fix_ci(query_text, query_token_list);
+        let ci_gate_nl_routing =
+            record.slug == "gh-fix-ci" && should_route_to_gh_fix_ci(query_text, query_token_list);
         if !ci_gate_nl_routing {
             return Some(RouteCandidate {
                 record,
@@ -555,12 +556,21 @@ pub fn score_route_candidate<'a>(
             record.slug
         ));
     }
-    RouteCandidate {
+    let candidate = RouteCandidate {
         record,
         score,
         reasons,
         matched_token_count: matched_query_tokens.len(),
+    };
+    if score > 0.0 {
+        debug!(
+            slug = %candidate.record.slug,
+            score = candidate.score,
+            matched = candidate.matched_token_count,
+            "route candidate scored"
+        );
     }
+    candidate
 }
 
 pub fn pick_owner<'a>(
@@ -607,12 +617,9 @@ pub fn pick_owner<'a>(
             return top_owner.clone();
         }
     }
-    if let Some(mut top_gate) =
-        top_gate.filter(|candidate| {
-            candidate.score >= w.gate_before_owner_threshold
-                && candidate.score >= top_owner_score
-        })
-    {
+    if let Some(mut top_gate) = top_gate.filter(|candidate| {
+        candidate.score >= w.gate_before_owner_threshold && candidate.score >= top_owner_score
+    }) {
         top_gate
             .reasons
             .push("Prioritized via gate-before-owner precedence.".to_string());
@@ -681,10 +688,7 @@ pub fn pick_owner<'a>(
     fallback_pool.remove(0)
 }
 
-pub fn route_candidate_cmp(
-    left: &RouteCandidate<'_>,
-    right: &RouteCandidate<'_>,
-) -> Ordering {
+pub fn route_candidate_cmp(left: &RouteCandidate<'_>, right: &RouteCandidate<'_>) -> Ordering {
     let left_s = finite_route_score(left.score);
     let right_s = finite_route_score(right.score);
     right_s
@@ -844,9 +848,9 @@ pub fn priority_rank(priority: &str) -> i32 {
 
 #[cfg(test)]
 mod paper_prose_routing_score_tests {
-    use crate::route::scoring_config::scoring_weights;
     use super::*;
     use crate::route::load_records;
+    use crate::route::scoring_config::scoring_weights;
     use std::collections::HashSet;
     use std::path::PathBuf;
 
@@ -882,6 +886,44 @@ mod paper_prose_routing_score_tests {
                 de.score
             );
         }
+    }
+
+    #[test]
+    fn snapshot_scoring_output_for_common_queries() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let w = scoring_weights();
+
+        let queries = vec![
+            "SCI润色 abstract",
+            "code review 找bug",
+            "help me write tests",
+            "重构这个模块",
+            "security audit",
+        ];
+
+        let mut results = Vec::new();
+        for q in queries {
+            let tokens = tokenize_route_text(q);
+            let set: HashSet<String> = tokens.iter().cloned().collect();
+            let mut scores: Vec<_> = records
+                .iter()
+                .map(|r| {
+                    let s = score_route_candidate(r, q, &tokens, &set, true, w);
+                    (r.slug.clone(), s.score, s.reasons)
+                })
+                .filter(|(_, score, _)| *score > 0.0)
+                .collect();
+            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+            results.push(serde_json::json!({
+                "query": q,
+                "top3": scores.into_iter().take(3).map(|(slug, score, reasons)| {
+                    serde_json::json!({"slug": slug, "score": score, "reasons": reasons})
+                }).collect::<Vec<_>>()
+            }));
+        }
+        insta::assert_json_snapshot!("scoring_common_queries", results);
     }
 }
 

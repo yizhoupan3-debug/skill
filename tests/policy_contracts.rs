@@ -1,10 +1,11 @@
+#![allow(dead_code)]
 mod common;
 mod host_platforms;
 
 use common::{
-    assert_canonical_closed_set_host_ids, assert_success, cargo_manifest_command,
-    json_from_output, project_root, read_json, read_text, router_rs_json, run,
-    seed_framework_markers, CANONICAL_HOST_IDS, RETIRED_HOST_IDS,
+    CANONICAL_HOST_IDS, RETIRED_HOST_IDS, assert_canonical_closed_set_host_ids, assert_success,
+    cargo_manifest_command, json_from_output, project_root, read_json, read_text, router_rs_json,
+    run, seed_framework_markers,
 };
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -97,7 +98,11 @@ fn manifest_or_runtime_lane_contains(manifest_slugs: &HashSet<&str>, slug: &str)
     slug == "none"
         || manifest_slugs.contains(slug)
         || FRAMEWORK_COMMAND_IDS.contains(&slug)
-        || project_root().join("skills").join(slug).join("SKILL.md").is_file()
+        || project_root()
+            .join("skills")
+            .join(slug)
+            .join("SKILL.md")
+            .is_file()
 }
 
 #[test]
@@ -117,12 +122,16 @@ fn router_rs_main_binary_compiles() {
 
 #[test]
 fn repo_local_plugin_wrapper_stays_removed() {
-    assert!(!project_root()
-        .join("plugins/skill-framework-native")
-        .exists());
-    assert!(!project_root()
-        .join("plugins/skill-framework-native/.mcp.json")
-        .exists());
+    assert!(
+        !project_root()
+            .join("plugins/skill-framework-native")
+            .exists()
+    );
+    assert!(
+        !project_root()
+            .join("plugins/skill-framework-native/.mcp.json")
+            .exists()
+    );
 }
 
 #[test]
@@ -294,9 +303,11 @@ fn refresh_skill_stays_out_of_project_host_entrypoints() {
 
 #[test]
 fn rfv_harness_reference_moved_to_docs() {
-    assert!(!project_root()
-        .join("skills/review-fix-verify-loop/SKILL.md")
-        .exists());
+    assert!(
+        !project_root()
+            .join("skills/review-fix-verify-loop/SKILL.md")
+            .exists()
+    );
     // RFV harness 文档已整合入 codebase 模块文档，不再作为独立文件存在。
     // 实现逻辑见 core/runtime-core/src/rfv_loop.rs。
 }
@@ -382,24 +393,32 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     let codex_policy = read_text(&repo_root.join("AGENTS_CODEX.md"));
     assert!(codex_policy.contains("Codex Agent Policy"));
     assert!(codex_policy.contains("AGENTS.md"));
-    assert!(manifest["full_sync"]["text_files"]
-        .as_array()
-        .unwrap()
-        .contains(&serde_json::json!("AGENTS_CODEX.md")));
-    assert!(manifest["full_sync"]["text_files"]
-        .as_array()
-        .unwrap()
-        .contains(&serde_json::json!(".codex/README.md")));
-    assert!(manifest["full_sync"]["json_files"]
-        .as_array()
-        .unwrap()
-        .contains(&serde_json::json!(".codex/hooks.json")));
-    assert!(manifest["partial_sync"]["json_files"]
-        .as_array()
-        .unwrap()
-        .contains(&serde_json::json!(
-            ".codex/host_entrypoints_sync_manifest.json"
-        )));
+    assert!(
+        manifest["full_sync"]["text_files"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!("AGENTS_CODEX.md"))
+    );
+    assert!(
+        manifest["full_sync"]["text_files"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!(".codex/README.md"))
+    );
+    assert!(
+        manifest["full_sync"]["json_files"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!(".codex/hooks.json"))
+    );
+    assert!(
+        manifest["partial_sync"]["json_files"]
+            .as_array()
+            .unwrap()
+            .contains(&serde_json::json!(
+                ".codex/host_entrypoints_sync_manifest.json"
+            ))
+    );
     assert_eq!(
         manifest["partial_sync"]["text_files"],
         serde_json::json!([])
@@ -579,7 +598,10 @@ fn ooxml_rust_cli_owns_docx_and_xlsx_render_commands() {
         "RenderXlsx(RenderXlsxArgs)",
         "RenderDocx(RenderDocxArgs)",
     ] {
-        assert!(main_source.contains(marker), "missing marker in main.rs: {marker}");
+        assert!(
+            main_source.contains(marker),
+            "missing marker in main.rs: {marker}"
+        );
     }
     for marker in [
         "fn inspect_docx(",
@@ -588,7 +610,10 @@ fn ooxml_rust_cli_owns_docx_and_xlsx_render_commands() {
         "fn render_xlsx",
         "fn render_docx",
     ] {
-        assert!(lib_source.contains(marker), "missing marker in lib.rs: {marker}");
+        assert!(
+            lib_source.contains(marker),
+            "missing marker in lib.rs: {marker}"
+        );
     }
 }
 
@@ -609,12 +634,11 @@ fn ooxml_rust_cli_owns_batch_subcommands() {
     }
 
     let engine = read_text(&project_root().join("rust_tools/batch-common/src/engine.rs"));
-    for marker in [
-        "catalog.json",
-        "results.jsonl",
-        "checkpoint.json",
-    ] {
-        assert!(engine.contains(marker), "batch-common engine.rs missing marker: {marker}");
+    for marker in ["catalog.json", "results.jsonl", "checkpoint.json"] {
+        assert!(
+            engine.contains(marker),
+            "batch-common engine.rs missing marker: {marker}"
+        );
     }
 
     let main_path = project_root().join("rust_tools/ooxml_parser_rs/src/main.rs");
@@ -760,16 +784,24 @@ fn framework_naming_conventions_has_no_router_rs_default_value_table() {
 
 #[test]
 fn removed_router_flags_are_absent_from_user_docs() {
-    let docs = ["RTK.md", "docs/spec.md", "AGENTS_CODEX.md",
-        "docs/spec-core-crates.md", "docs/spec-sandbox-contract.md",
-        "docs/spec-multi-agent.md", "docs/spec-host-matrix.md",
-        "docs/spec-routing-plugin.md", "docs/spec-runtime-subsystems.md",
-        "docs/spec-security-lifecycle.md", "docs/spec-auxiliary.md",
-        "docs/spec-observability-testing.md"]
-        .iter()
-        .map(|path| read_text(&project_root().join(path)))
-        .collect::<Vec<_>>()
-        .join("\n");
+    let docs = [
+        "RTK.md",
+        "docs/spec.md",
+        "AGENTS_CODEX.md",
+        "docs/spec-core-crates.md",
+        "docs/spec-sandbox-contract.md",
+        "docs/spec-multi-agent.md",
+        "docs/spec-host-matrix.md",
+        "docs/spec-routing-plugin.md",
+        "docs/spec-runtime-subsystems.md",
+        "docs/spec-security-lifecycle.md",
+        "docs/spec-auxiliary.md",
+        "docs/spec-observability-testing.md",
+    ]
+    .iter()
+    .map(|path| read_text(&project_root().join(path)))
+    .collect::<Vec<_>>()
+    .join("\n");
 
     for removed_flag in [
         "--framework-refresh-json",
@@ -962,10 +994,10 @@ fn value_string_list(value: Option<&Value>) -> Vec<String> {
 
 fn raw_platforms_from_skill_frontmatter(meta: &Map<String, Value>) -> Vec<String> {
     let mut raw = value_string_list(meta.get("platforms"));
-    if raw.is_empty() {
-        if let Some(Value::Object(inner)) = meta.get("metadata") {
-            raw = value_string_list(inner.get("platforms"));
-        }
+    if raw.is_empty()
+        && let Some(Value::Object(inner)) = meta.get("metadata")
+    {
+        raw = value_string_list(inner.get("platforms"));
     }
     raw
 }
@@ -985,7 +1017,11 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
         .as_object()
         .expect("plugin catalog skills")
     {
-        let platforms = match record.get("host_support").and_then(|hs| hs.get("platforms")).and_then(|p| p.as_array()) {
+        let platforms = match record
+            .get("host_support")
+            .and_then(|hs| hs.get("platforms"))
+            .and_then(|p| p.as_array())
+        {
             Some(arr) => arr,
             None => continue, // Skills without host_support (e.g. stub entries)
         };
@@ -1005,9 +1041,8 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
         let raw = raw_platforms_from_skill_frontmatter(&meta);
         let mut supported_ids: Vec<String> = allowed.iter().cloned().collect();
         supported_ids.sort();
-        let normalized =
-            host_platforms::normalize_skill_host_platforms(&raw, &supported_ids)
-                .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
+        let normalized = host_platforms::normalize_skill_host_platforms(&raw, &supported_ids)
+            .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
         let from_catalog: Vec<String> = platforms
             .iter()
             .map(|v| v.as_str().expect("platform").to_string())
@@ -1037,13 +1072,9 @@ fn skill_host_platform_aliases_cover_runtime_registry_supported_hosts() {
     let mut supported: Vec<String> = allowed.iter().cloned().collect();
     supported.sort();
 
-    let normalized = host_platforms::normalize_skill_host_platforms(
-        &[
-            "supported".to_string(),
-        ],
-        &supported,
-    )
-    .expect("stock aliases should normalize");
+    let normalized =
+        host_platforms::normalize_skill_host_platforms(&["supported".to_string()], &supported)
+            .expect("stock aliases should normalize");
     let normalized_set: HashSet<String> = normalized.into_iter().collect();
 
     assert_eq!(
@@ -1122,11 +1153,9 @@ fn hot_runtime_codex_only_slugs_have_no_extra_hosts() {
             .expect("skill_path");
         let meta = parse_skill_md_frontmatter_map(&skill_path);
         let raw = raw_platforms_from_skill_frontmatter(&meta);
-        let allowed_platforms = host_platforms::normalize_skill_host_platforms(
-            &raw,
-            &supported_ids,
-        )
-        .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
+        let allowed_platforms =
+            host_platforms::normalize_skill_host_platforms(&raw, &supported_ids)
+                .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
         let allowed_set: HashSet<String> = allowed_platforms.into_iter().collect();
 
         let runtime_keys = runtime["keys"].as_array().expect("runtime keys");
@@ -1243,12 +1272,13 @@ fn runtime_framework_command_rows_match_manifest() {
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect();
         // [supported] / [all-hosts] wildcard: expand to registry set before comparing.
-        let manifest_hosts: HashSet<String> =
-            if raw_manifest_hosts.len() == 1 && (raw_manifest_hosts[0] == "supported" || raw_manifest_hosts[0] == "all-hosts") {
-                supported_host_set.clone()
-            } else {
-                raw_manifest_hosts.into_iter().collect()
-            };
+        let manifest_hosts: HashSet<String> = if raw_manifest_hosts.len() == 1
+            && (raw_manifest_hosts[0] == "supported" || raw_manifest_hosts[0] == "all-hosts")
+        {
+            supported_host_set.clone()
+        } else {
+            raw_manifest_hosts.into_iter().collect()
+        };
         assert_eq!(
             runtime_hosts, manifest_hosts,
             "{slug}: host_platforms mismatch runtime vs manifest"
@@ -1300,15 +1330,17 @@ fn host_projection_narrative_covers_installable_hosts() {
         if meta.get("installable").and_then(Value::as_bool) != Some(true) {
             continue;
         }
-        if meta.get("deprecated_alias_of").and_then(Value::as_str).is_some() {
+        if meta
+            .get("deprecated_alias_of")
+            .and_then(Value::as_str)
+            .is_some()
+        {
             continue;
         }
         let paragraph = by_host
             .get(host_id)
             .and_then(Value::as_str)
-            .unwrap_or_else(|| {
-                panic!("lifecycle_by_host missing installable host {host_id}")
-            });
+            .unwrap_or_else(|| panic!("lifecycle_by_host missing installable host {host_id}"));
         assert!(
             paragraph.contains("/discussx") || paragraph.contains("Default lifecycle"),
             "{host_id}: lifecycle paragraph must reference My lifecycle (/discussx or Default lifecycle)"
@@ -1406,7 +1438,10 @@ fn gsd_slash_commands_removed_from_runtime_and_hooks() {
     let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
     let registry_text = read_text(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
     assert!(
-        registry.get("framework_commands").and_then(|v| v.get("gsd")).is_none(),
+        registry
+            .get("framework_commands")
+            .and_then(|v| v.get("gsd"))
+            .is_none(),
         "framework_commands.gsd must stay removed"
     );
     assert!(
@@ -1686,17 +1721,17 @@ fn nl_policy_validate_rule(rule: &Value, ctx: &str) {
         "suppress" | "boost" => {}
         other => panic!("{ctx}: unknown action.type `{other}`"),
     }
-    if let Some(rec) = obj.get("record") {
-        if !rec.is_null() {
-            let robj = rec
-                .as_object()
-                .unwrap_or_else(|| panic!("{ctx}: record must be object or null"));
-            for k in robj.keys() {
-                assert!(
-                    matches!(k.as_str(), "slug" | "slugs" | "gate_lower"),
-                    "{ctx}: unknown record key `{k}`"
-                );
-            }
+    if let Some(rec) = obj.get("record")
+        && !rec.is_null()
+    {
+        let robj = rec
+            .as_object()
+            .unwrap_or_else(|| panic!("{ctx}: record must be object or null"));
+        for k in robj.keys() {
+            assert!(
+                matches!(k.as_str(), "slug" | "slugs" | "gate_lower"),
+                "{ctx}: unknown record key `{k}`"
+            );
         }
     }
     let mut signals = HashSet::new();
@@ -2021,10 +2056,12 @@ fn my_goal_persistence_contract_documents_execution_zone() {
         leader.contains("framework_goal_drive") && !leader.contains("GOAL_CONTINUE"),
         "continuation_hook_leader should be stdio-only: {leader}"
     );
-    assert!(registry
-        .get("framework_commands")
-        .and_then(|fc| fc.get("autopilot"))
-        .is_none());
+    assert!(
+        registry
+            .get("framework_commands")
+            .and_then(|fc| fc.get("autopilot"))
+            .is_none()
+    );
 }
 
 /// Legacy GSD framework_command removed; My implementx is the published execution surface.
@@ -2037,7 +2074,10 @@ fn my_framework_commands_exclude_legacy_gsd() {
     );
     let my_impl = &registry["framework_commands"]["implementx"];
     assert!(
-        my_impl.get("surface_publish").and_then(|v| v.as_bool()).unwrap_or(true),
+        my_impl
+            .get("surface_publish")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true),
         "implementx defaults to surface_publish true"
     );
 }
@@ -2068,10 +2108,7 @@ fn key_index(keys: &[serde_json::Value], name: &str) -> usize {
 fn key_index_first(keys: &[serde_json::Value], names: &[&str]) -> usize {
     names
         .iter()
-        .find_map(|name| {
-            keys.iter()
-                .position(|key| key.as_str() == Some(*name))
-        })
+        .find_map(|name| keys.iter().position(|key| key.as_str() == Some(*name)))
         .unwrap_or_else(|| panic!("missing keys {:?}", names))
 }
 
@@ -2131,9 +2168,11 @@ fn framework_runtime_python_package_stays_removed() {
 
 #[test]
 fn autoresearch_runtime_controller_stays_without_legacy_skill_entrypoint() {
-    assert!(project_root()
-        .join("core/autoresearch-rs/src/main.rs")
-        .exists());
+    assert!(
+        project_root()
+            .join("core/autoresearch-rs/src/main.rs")
+            .exists()
+    );
     assert!(!project_root().join("skills/autoresearch").exists());
 }
 
@@ -2184,19 +2223,13 @@ fn cursor_hooks_json_matches_workspace_template_seven_event_set() {
         .collect();
 
     let hooks = read_json(&project_root().join(".cursor/hooks.json"));
-    let template = read_json(
-        &project_root().join("configs/framework/cursor-hooks.workspace-template.json"),
-    );
+    let template =
+        read_json(&project_root().join("configs/framework/cursor-hooks.workspace-template.json"));
     for doc in [(&hooks, "hooks.json"), (&template, "workspace-template")] {
         let events = doc.0["hooks"].as_object().expect("hooks object");
         for ev in &required {
             let key = ev.clone();
-            assert!(
-                events.contains_key(&key),
-                "{} missing event {}",
-                doc.1,
-                ev
-            );
+            assert!(events.contains_key(&key), "{} missing event {}", doc.1, ev);
             let cmd = events[&key][0]["command"].as_str().unwrap_or("");
             assert!(
                 cmd.contains("cursor-router-rs-hook.sh"),
@@ -2286,21 +2319,42 @@ fn browser_mcp_does_not_expose_skill_routing_tools() {
         "skill_read",
         "skill_route_status",
     ] {
-        assert!(!source.contains(marker), "browser-mcp should NOT contain: {marker}");
+        assert!(
+            !source.contains(marker),
+            "browser-mcp should NOT contain: {marker}"
+        );
     }
     // But should still contain web_fetch
-    assert!(source.contains("web_fetch"), "browser-mcp should contain web_fetch");
+    assert!(
+        source.contains("web_fetch"),
+        "browser-mcp should contain web_fetch"
+    );
 }
 
 #[test]
 fn install_skills_uses_rust_only_entrypoints() {
     assert!(!project_root().join("scripts/install_skills.sh").exists());
-    let mod_source = read_text(&project_root().join("core/host-projection/src/host_integration/mod.rs"));
-    let roots_source = read_text(&project_root().join("core/host-projection/src/host_integration/roots.rs"));
-    let projection_source = read_text(&project_root().join("core/host-projection/src/host_integration/projection/mod.rs"));
-    assert!(mod_source.contains("InstallSkills") || roots_source.contains("InstallSkills"), "missing marker: InstallSkills");
-    assert!(mod_source.contains("InstallNativeIntegration") || roots_source.contains("InstallNativeIntegration"), "missing marker: InstallNativeIntegration");
-    assert!(projection_source.contains("validate_default_bootstrap") || roots_source.contains("validate_default_bootstrap"), "missing marker: validate_default_bootstrap");
+    let mod_source =
+        read_text(&project_root().join("core/host-projection/src/host_integration/mod.rs"));
+    let roots_source =
+        read_text(&project_root().join("core/host-projection/src/host_integration/roots.rs"));
+    let projection_source = read_text(
+        &project_root().join("core/host-projection/src/host_integration/projection/mod.rs"),
+    );
+    assert!(
+        mod_source.contains("InstallSkills") || roots_source.contains("InstallSkills"),
+        "missing marker: InstallSkills"
+    );
+    assert!(
+        mod_source.contains("InstallNativeIntegration")
+            || roots_source.contains("InstallNativeIntegration"),
+        "missing marker: InstallNativeIntegration"
+    );
+    assert!(
+        projection_source.contains("validate_default_bootstrap")
+            || roots_source.contains("validate_default_bootstrap"),
+        "missing marker: validate_default_bootstrap"
+    );
 }
 
 #[test]
@@ -2310,23 +2364,18 @@ fn sync_skills_uses_router_rs_directly() {
         read_text(&project_root().join("core/host-projection/src/host_entrypoint_sync.rs"));
     assert!(sync_source.contains("sync_host_entrypoints"));
     assert!(sync_source.contains("HostEntrypointPayloadProvider"));
-    for forbidden in [
-        "crate::codex_hooks",
-        "build_codex_",
-    ] {
+    for forbidden in ["crate::codex_hooks", "build_codex_"] {
         assert!(
             !sync_source.contains(forbidden),
             "host_entrypoint_sync must stay provider-based and host-neutral: {forbidden}"
         );
     }
-    let codex_source = read_text(
-        &project_root().join("core/host-projection/src/hosts/codex_hooks/mod.rs"),
-    );
+    let codex_source =
+        read_text(&project_root().join("core/host-projection/src/hosts/codex_hooks/mod.rs"));
     assert!(codex_source.contains("codex_host_entrypoint_provider"));
     // HostEntrypointPayloadProvider lives in install.rs after codex_hooks split
-    let codex_install = read_text(
-        &project_root().join("core/host-projection/src/hosts/codex_hooks/install.rs"),
-    );
+    let codex_install =
+        read_text(&project_root().join("core/host-projection/src/hosts/codex_hooks/install.rs"));
     assert!(codex_install.contains("HostEntrypointPayloadProvider"));
 }
 
@@ -2403,7 +2452,12 @@ fn pdf_rust_cli_owns_batch_subcommands() {
         }
     } else {
         let batch = read_text(&project_root().join("rust_tools/pdf_tool_rs/src/batch.rs"));
-        for marker in ["fn run_batch(", "catalog.json", "results.jsonl", "checkpoint.json"] {
+        for marker in [
+            "fn run_batch(",
+            "catalog.json",
+            "results.jsonl",
+            "checkpoint.json",
+        ] {
             assert!(batch.contains(marker), "batch.rs missing marker: {marker}");
         }
     }
@@ -2426,7 +2480,11 @@ fn pdf_batch_skip_scanned_documented() {
     }
 
     let read_rs = read_text(&project_root().join("rust_tools/pdf_tool_rs/src/read.rs"));
-    for marker in ["shallow_scan_classify", "SHALLOW_SAMPLE_PAGES", "classify_content"] {
+    for marker in [
+        "shallow_scan_classify",
+        "SHALLOW_SAMPLE_PAGES",
+        "classify_content",
+    ] {
         assert!(
             read_rs.contains(marker),
             "read.rs missing skip-scanned implementation marker: {marker}"
@@ -2439,10 +2497,7 @@ fn pdf_batch_skip_scanned_documented() {
         "batch.rs must wire --skip-scanned"
     );
 
-    let bench = read_text(
-        &project_root()
-            .join("rust_tools/pdf_tool_rs/benches/batch_bench.rs"),
-    );
+    let bench = read_text(&project_root().join("rust_tools/pdf_tool_rs/benches/batch_bench.rs"));
     assert!(
         bench.contains("PDF_BENCH"),
         "batch_bench.rs must gate on PDF_BENCH"
@@ -2466,16 +2521,19 @@ fn ppt_rust_manifest_exposes_direct_cli() {
     let manifest = read_text(&project_root().join("rust_tools/pptx_tool_rs/Cargo.toml"));
     assert!(manifest.contains("name = \"ppt\""));
     assert!(manifest.contains("path = \"src/bin/ppt.rs\""));
-    assert!(project_root()
-        .join("rust_tools/pptx_tool_rs/src/bin/ppt.rs")
-        .exists());
+    assert!(
+        project_root()
+            .join("rust_tools/pptx_tool_rs/src/bin/ppt.rs")
+            .exists()
+    );
 }
 
 #[test]
 fn ppt_rust_cli_owns_workspace_and_outline_commands() {
     let main_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/main.rs"));
     let lib_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/lib.rs"));
-    let commands_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/commands.rs"));
+    let commands_source =
+        read_text(&project_root().join("rust_tools/pptx_tool_rs/src/commands.rs"));
     let qa_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/qa.rs"));
     let office_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/office.rs"));
     assert!(main_source.contains("Init(InitArgs)"));
@@ -2489,7 +2547,8 @@ fn ppt_rust_cli_owns_workspace_and_outline_commands() {
     assert!(lib_source.contains("fn strict_quality_gate("));
     assert!(lib_source.contains("fn write_pptx_package("));
     // build_pptx_slide_specs 已移至 slide_specs.rs 子模块
-    let slide_specs_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/slide_specs.rs"));
+    let slide_specs_source =
+        read_text(&project_root().join("rust_tools/pptx_tool_rs/src/slide_specs.rs"));
     assert!(slide_specs_source.contains("fn build_pptx_slide_specs("));
     assert!(office_source.contains("fn rust_office_outline_value("));
     assert!(office_source.contains("fn rust_office_issues_value("));
@@ -2538,20 +2597,26 @@ fn ppt_rust_cli_builds_editable_deck_without_node_assets() {
     let commands_manifest = read_json(&temp.path().join("ppt.commands.json"));
     assert_eq!(commands_manifest["runtime"].as_str(), Some("ppt"));
     let commands = commands_manifest["commands"].as_object().unwrap();
-    assert!(commands
-        .values()
-        .all(|command| command.as_str().unwrap().starts_with("ppt ")));
+    assert!(
+        commands
+            .values()
+            .all(|command| command.as_str().unwrap().starts_with("ppt "))
+    );
     assert!(commands.contains_key("check_inspector"));
     assert!(commands.contains_key("watch_rust"));
     assert!(commands.contains_key("build_strict"));
-    assert!(commands["check_rust"]
-        .as_str()
-        .unwrap()
-        .contains("--fail-on-issues"));
-    assert!(commands["build_strict"]
-        .as_str()
-        .unwrap()
-        .contains("--quality strict"));
+    assert!(
+        commands["check_rust"]
+            .as_str()
+            .unwrap()
+            .contains("--fail-on-issues")
+    );
+    assert!(
+        commands["build_strict"]
+            .as_str()
+            .unwrap()
+            .contains("--quality strict")
+    );
 
     let mut extract = cargo_manifest_command(&manifest, &[]);
     extract
@@ -2559,10 +2624,12 @@ fn ppt_rust_cli_builds_editable_deck_without_node_assets() {
         .arg(temp.path().join("deck.pptx"));
     let structure = json_from_output(&run(extract));
     assert_eq!(structure["slide_count"].as_u64(), Some(3));
-    assert!(structure["slides"][0]["notes"]
-        .as_str()
-        .unwrap_or_default()
-        .contains("Cover slide generated by the Rust ppt CLI."));
+    assert!(
+        structure["slides"][0]["notes"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Cover slide generated by the Rust ppt CLI.")
+    );
 
     let mut doctor = cargo_manifest_command(&manifest, &[]);
     doctor
@@ -2749,8 +2816,10 @@ fn ppt_skill_references_source_first_and_editable_rules() {
     assert!(method.contains("change `deck.plan.json`, then rebuild"));
     assert!(rust_cli.contains("Rust `ppt office ...` owns inspection"));
     assert!(rust_cli.contains("not a package wrapper or\na second runtime"));
-    assert!(rust_cli
-        .contains("built-in Rust copy naturalization plus `$copywriting` / `$paper-writing"));
+    assert!(
+        rust_cli
+            .contains("built-in Rust copy naturalization plus `$copywriting` / `$paper-writing")
+    );
     assert!(visualization.contains("Prefer editable primitives"));
     assert!(install.contains("There is no skill-local package install step"));
     assert!(install.contains("text and design intentional"));
@@ -2777,7 +2846,10 @@ fn slides_gate_is_executable_and_evidence_closed() {
         "temp",
         "artifacts/scratch",
     ] {
-        assert!(skill.contains(marker), "missing slides gate marker: {marker}");
+        assert!(
+            skill.contains(marker),
+            "missing slides gate marker: {marker}"
+        );
     }
     assert!(!skill.contains("@oai/artifact-tool"));
     assert!(!skill.contains("compact verification pass"));
@@ -2788,19 +2860,22 @@ fn slides_gate_is_executable_and_evidence_closed() {
 fn ppt_rust_outline_generation_naturalizes_copy_and_design_chain() {
     // naturalize_outline_value 已移至 yaml_parse.rs，naturalize_copy_text 已移至 text_processing.rs
     let yaml_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/yaml_parse.rs"));
-    let text_source = read_text(&project_root().join("rust_tools/pptx_tool_rs/src/text_processing.rs"));
+    let text_source =
+        read_text(&project_root().join("rust_tools/pptx_tool_rs/src/text_processing.rs"));
     for marker in [
         "fn naturalize_outline_value(",
         "let outline = naturalize_outline_value(outline);",
     ] {
-        assert!(yaml_source.contains(marker), "missing marker in yaml_parse.rs: {marker}");
+        assert!(
+            yaml_source.contains(marker),
+            "missing marker in yaml_parse.rs: {marker}"
+        );
     }
-    for marker in [
-        "fn naturalize_copy_text(",
-        r#""本页展示""#,
-        r#""赋能""#,
-    ] {
-        assert!(text_source.contains(marker), "missing marker in text_processing.rs: {marker}");
+    for marker in ["fn naturalize_copy_text(", r#""本页展示""#, r#""赋能""#] {
+        assert!(
+            text_source.contains(marker),
+            "missing marker in text_processing.rs: {marker}"
+        );
     }
     // design-md drift verdict + copy naturalization markers 已移至 yaml_parse.rs
     for marker in [
@@ -2810,7 +2885,10 @@ fn ppt_rust_outline_generation_naturalizes_copy_and_design_chain() {
         "$copywriting",
         "$paper-writing",
     ] {
-        assert!(yaml_source.contains(marker), "missing marker in yaml_parse.rs: {marker}");
+        assert!(
+            yaml_source.contains(marker),
+            "missing marker in yaml_parse.rs: {marker}"
+        );
     }
 }
 
@@ -2920,9 +2998,11 @@ fn closeout_evaluate_blocks_unverified_completion_via_cli() {
     let response = router_rs_json(&["closeout", "evaluate", "--input-json", &payload.to_string()]);
     assert_eq!(response["closeout_allowed"], false);
     let violations = response["violations"].as_array().expect("violations array");
-    assert!(violations
-        .iter()
-        .any(|v| v["rule"] == "claimed_done_without_evidence"));
+    assert!(
+        violations
+            .iter()
+            .any(|v| v["rule"] == "claimed_done_without_evidence")
+    );
 }
 
 #[test]
@@ -2967,11 +3047,13 @@ fn closeout_evaluate_uses_task_evidence_context_via_cli() {
         record_path.to_str().unwrap(),
     ]);
     assert_eq!(response["closeout_allowed"], false, "got {response:#?}");
-    assert!(response["violations"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|v| v["rule"] == "claimed_passed_without_evidence_index_rows"));
+    assert!(
+        response["violations"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v["rule"] == "claimed_passed_without_evidence_index_rows")
+    );
 }
 
 #[test]
@@ -2982,9 +3064,11 @@ fn closeout_contract_command_lists_rules() {
         "got {response:#?}"
     );
     let rules = response["rules"].as_array().expect("rules array");
-    assert!(rules
-        .iter()
-        .any(|v| v == "verification_passed_with_missing_artifact"));
+    assert!(
+        rules
+            .iter()
+            .any(|v| v == "verification_passed_with_missing_artifact")
+    );
 }
 
 #[test]
@@ -3016,9 +3100,7 @@ fn eval_route_cli_reports_metrics() {
     );
     assert!(response["passed"].as_u64().unwrap() > 0);
     // overtrigger must be zero (false positives are worse than false negatives)
-    let wrong_owner_rate = response["wrong_owner_rate"]
-        .as_f64()
-        .unwrap_or(0.0);
+    let wrong_owner_rate = response["wrong_owner_rate"].as_f64().unwrap_or(0.0);
     assert!(
         wrong_owner_rate < 0.05,
         "Wrong-owner rate {:.4} exceeds 5% tolerance (threshold 0.05).",
@@ -3027,9 +3109,7 @@ fn eval_route_cli_reports_metrics() {
     // Per-case owner_correct: every eval case with expected_owner must route
     // to the expected skill. This catches manifest-only slugs that were
     // previously missing from the runtime index.
-    let failures = response["failures"]
-        .as_array()
-        .expect("failures array");
+    let failures = response["failures"].as_array().expect("failures array");
     let owner_failures: Vec<&serde_json::Value> = failures
         .iter()
         .filter(|f| f["field"].as_str() == Some("selected_skill"))
@@ -3126,14 +3206,14 @@ fn harness_behavioral_eval_cases_cover_required_tracks() {
         .iter()
         .map(|v| v["id"].as_str().expect("case id").to_string())
         .collect::<BTreeSet<_>>();
-    let taxonomy_ids =
-        read_json(&project_root().join("configs/framework/HARNESS_FAILURE_TAXONOMY.json"))
-            ["classes"]
-            .as_array()
-            .expect("taxonomy classes")
-            .iter()
-            .map(|v| v["id"].as_str().expect("failure class id").to_string())
-            .collect::<BTreeSet<_>>();
+    let taxonomy_ids = read_json(
+        &project_root().join("configs/framework/HARNESS_FAILURE_TAXONOMY.json"),
+    )["classes"]
+        .as_array()
+        .expect("taxonomy classes")
+        .iter()
+        .map(|v| v["id"].as_str().expect("failure class id").to_string())
+        .collect::<BTreeSet<_>>();
     let response = router_rs_json(&["eval", "harness-contract"]);
     let contract_tracks = response["behavioral_eval_tracks"]
         .as_array()
@@ -3190,11 +3270,7 @@ fn harness_behavioral_eval_cases_cover_required_tracks() {
 #[test]
 fn cursor_subagent_hook_contract_consumer_subset() {
     let path = project_root().join("configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json");
-    assert!(
-        path.is_file(),
-        "missing {}",
-        path.display()
-    );
+    assert!(path.is_file(), "missing {}", path.display());
     let v = read_json(&path);
     assert_eq!(
         v["schema_version"].as_str().unwrap_or_default(),
@@ -3355,7 +3431,11 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
                 .and_then(|r| r.get("slug"))
                 .and_then(Value::as_str)
                 == Some("paper-workbench")
-            && rule.get("action").and_then(|a| a.get("type")).and_then(Value::as_str) == Some("boost")
+            && rule
+                .get("action")
+                .and_then(|a| a.get("type"))
+                .and_then(Value::as_str)
+                == Some("boost")
     });
     assert!(
         has_prose_boost,
@@ -3371,7 +3451,11 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
                 .and_then(|r| r.get("slug"))
                 .and_then(Value::as_str)
                 == Some("paper-workbench")
-            && rule.get("action").and_then(|a| a.get("type")).and_then(Value::as_str) == Some("boost")
+            && rule
+                .get("action")
+                .and_then(|a| a.get("type"))
+                .and_then(Value::as_str)
+                == Some("boost")
     });
     assert!(
         has_writing_boost,

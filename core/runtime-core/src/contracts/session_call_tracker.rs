@@ -5,7 +5,7 @@
 //! where PreToolUse/Stop hooks are unavailable.
 
 use crate::task_write_lock::apply_task_ledger_mutation;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
@@ -63,7 +63,11 @@ pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
 }
 
 /// Record a tool call in the session tracker.
-pub fn record_tool_call(repo_root: &Path, tool_name: &str, cache_stats: Option<CacheStats>) -> Result<(), String> {
+pub fn record_tool_call(
+    repo_root: &Path,
+    tool_name: &str,
+    cache_stats: Option<CacheStats>,
+) -> Result<(), String> {
     apply_task_ledger_mutation(repo_root, || {
         let path = tracker_path(repo_root);
         let mut payload = load_or_init_tracker(&path)?;
@@ -79,18 +83,31 @@ pub fn record_tool_call(repo_root: &Path, tool_name: &str, cache_stats: Option<C
 
         // Token usage accumulation
         if let Some(stats) = cache_stats {
-            let tu = payload["token_usage"].as_object_mut()
+            let tu = payload["token_usage"]
+                .as_object_mut()
                 .ok_or_else(|| "token_usage not an object".to_string())?;
             let cur_in = tu.get("input").and_then(Value::as_u64).unwrap_or(0);
             let cur_out = tu.get("output").and_then(Value::as_u64).unwrap_or(0);
             let cur_cr = tu.get("cache_read").and_then(Value::as_u64).unwrap_or(0);
-            let cur_cc = tu.get("cache_creation").and_then(Value::as_u64).unwrap_or(0);
+            let cur_cc = tu
+                .get("cache_creation")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
             tu.insert("input".to_string(), json!(cur_in + stats.input_tokens));
             tu.insert("output".to_string(), json!(cur_out + stats.output_tokens));
-            tu.insert("cache_read".to_string(), json!(cur_cr + stats.cache_read_input_tokens));
-            tu.insert("cache_creation".to_string(), json!(cur_cc + stats.cache_creation_input_tokens));
+            tu.insert(
+                "cache_read".to_string(),
+                json!(cur_cr + stats.cache_read_input_tokens),
+            );
+            tu.insert(
+                "cache_creation".to_string(),
+                json!(cur_cc + stats.cache_creation_input_tokens),
+            );
             // total = input + output; cache tokens are subsets of input, reported in separate fields
-            tu.insert("total".to_string(), json!(cur_in + stats.input_tokens + cur_out + stats.output_tokens));
+            tu.insert(
+                "total".to_string(),
+                json!(cur_in + stats.input_tokens + cur_out + stats.output_tokens),
+            );
         }
 
         write_tracker(&path, &payload)
@@ -154,7 +171,6 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
         write_tracker(&path, &payload)?;
 
         Ok(warnings)
-
     })
 }
 
@@ -208,9 +224,10 @@ fn load_or_init_tracker(path: &Path) -> Result<Value, String> {
 fn write_tracker(path: &Path, payload: &Value) -> Result<(), String> {
     // Acquire global lock for thread-safe writes
     let lock = get_tracker_lock();
-    let _guard = lock
-        .lock()
-        .map_err(|e| { eprintln!("[router-rs] tracker lock poisoned: {e}"); format!("tracker lock poisoned: {e}") })?;
+    let _guard = lock.lock().map_err(|e| {
+        eprintln!("[router-rs] tracker lock poisoned: {e}");
+        format!("tracker lock poisoned: {e}")
+    })?;
 
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)

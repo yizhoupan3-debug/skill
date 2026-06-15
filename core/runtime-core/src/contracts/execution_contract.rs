@@ -1,4 +1,5 @@
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
+use tracing::debug;
 
 pub const EXECUTION_SCHEMA_VERSION: &str = "router-rs-execute-response-v1";
 pub const EXECUTION_METADATA_SCHEMA_VERSION: &str = "router-rs-execution-kernel-metadata-v1";
@@ -162,7 +163,7 @@ fn normalize_runtime_field_group(
                 _ => {
                     return Err(format!(
                         "execution-kernel metadata contract returned an invalid runtime field group: {name}={payload:?}"
-                    ))
+                    ));
                 }
             }
         }
@@ -562,6 +563,7 @@ pub fn build_pre_tool_use_guard_execution_contract() -> Value {
 }
 
 pub fn build_execution_contract_bundle() -> Map<String, Value> {
+    debug!("building execution contract bundle");
     let mut payload = Map::new();
     payload.insert(
         "schema_version".to_string(),
@@ -873,7 +875,7 @@ fn validate_execution_kernel_steady_state_metadata_impl(
             other => {
                 return Err(format!(
                     "execution-kernel steady-state metadata returned an invalid value: {field}={other:?}"
-                ))
+                ));
             }
         }
     }

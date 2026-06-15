@@ -20,7 +20,7 @@ last_verified: "2026-06-13"
 | `hooks` | 1,541 | 函数指针代理层（OnceLock slots，解耦 runtime-core 与宿主 hooks） |
 | `host_entrypoint_sync` | 541 | 宿主入口同步 |
 | `host_integration/` | 6,794 | 宿主集成核心（详见 [host-projection-projection.md](host-projection-projection.md)） |
-| `hosts/` | ~15,700+ | 四宿主 hook 实现（详见 [host-projection-hosts.md](host-projection-hosts.md)） |
+| `hosts/` | ~15,700+ | 五宿主 hook 实现（详见 [host-projection-hosts.md](host-projection-hosts.md)） |
 
 ## hooks.rs 函数指针代理层
 

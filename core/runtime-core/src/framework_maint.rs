@@ -10,7 +10,7 @@ use crate::cli::args::{
 use crate::host_integration::{
     cargo_router_rs_executable, resolve_maint_roots, run_host_integration_from_args,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -175,9 +175,7 @@ fn maint_skip_user_projection() -> bool {
 
 /// Install scopes per tool. Cursor is user-only; most tools default to project-only.
 /// Claude has a special case: project+user unless `ROUTER_RS_MAINT_SKIP_USER_PROJECTION` is set.
-const INSTALL_SCOPES_BY_TOOL: &[(&str, &[&str])] = &[
-    ("cursor", &["user"]),
-];
+const INSTALL_SCOPES_BY_TOOL: &[(&str, &[&str])] = &[("cursor", &["user"])];
 
 fn projection_install_scopes_for_tool(tool: &str) -> Vec<&'static str> {
     if let Some((_, scopes)) = INSTALL_SCOPES_BY_TOOL.iter().find(|(t, _)| *t == tool) {
@@ -209,24 +207,41 @@ fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String>
 /// Verify function type for host projection verification.
 type VerifyFn = fn(&Path) -> Result<(), String>;
 
-/// Registry of host install_tool → verify function.
-/// New hosts can be added here without modifying dispatch logic.
-const VERIFY_REGISTRY: &[(&str, VerifyFn)] = &[
-    ("codex", |root| verify_codex_hooks(root.to_path_buf())),
-    ("cursor", |root| verify_cursor_hooks(root.to_path_buf())),
-    ("claude", verify_claude_code_projection),
-    ("opencode", verify_opencode_projection),
-];
-
 fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<(), String> {
+    let registry = build_verify_registry(repo_root)?;
     for tool in tools {
-        if let Some((_, verify_fn)) = VERIFY_REGISTRY.iter().find(|(t, _)| t == tool) {
+        if let Some(verify_fn) = registry.get(tool) {
             verify_fn(repo_root)?;
         } else {
             eprintln!("warn: no verifier registered for install tool `{tool}`, skipping");
         }
     }
     Ok(())
+}
+
+/// Build the verify registry from RUNTIME_REGISTRY at runtime.
+/// New hosts only need an entry in RUNTIME_REGISTRY + a `verify_*_projection` fn
+/// in this module; no changes to dispatch logic.
+fn build_verify_registry(
+    repo_root: &Path,
+) -> Result<std::collections::BTreeMap<String, VerifyFn>, String> {
+    let pairs = crate::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
+        repo_root,
+    )?;
+    let mut map = std::collections::BTreeMap::new();
+    // Registry-driven dispatch table: add new hosts here.
+    const VERIFY_TABLE: &[(&str, VerifyFn)] = &[
+        ("codex", |root| verify_codex_hooks(root.to_path_buf())),
+        ("cursor", |root| verify_cursor_hooks(root.to_path_buf())),
+        ("claude-code", verify_claude_code_projection),
+        ("opencode", verify_opencode_projection),
+    ];
+    for (host_id, tool) in pairs {
+        if let Some((_, verify_fn)) = VERIFY_TABLE.iter().find(|(id, _)| *id == host_id.as_str()) {
+            map.insert(tool, *verify_fn);
+        }
+    }
+    Ok(map)
 }
 
 fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
@@ -536,8 +551,9 @@ fn verify_opencode_projection_scope(
     }
 
     let config_text = fs::read_to_string(&config).map_err(|e| e.to_string())?;
-    let registry = framework_kernel::runtime_registry::load_runtime_registry_payload(&roots.project_root)
-        .map_err(|e| format!("verify_opencode_projection: {e}"))?;
+    let registry =
+        framework_kernel::runtime_registry::load_runtime_registry_payload(&roots.project_root)
+            .map_err(|e| format!("verify_opencode_projection: {e}"))?;
     let required_mcps = framework_kernel::runtime_registry::managed_mcp_server_ids(&registry);
     for mcp_id in &required_mcps {
         if !config_text.contains(mcp_id) {
@@ -1055,7 +1071,13 @@ fn is_key_document_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     let is_root_doc = matches!(
         path,
-        "README.md" | "AGENTS.md" | "AGENTS_CURSOR.md" | "AGENTS_CODEX.md" | "AGENTS_CLAUDE.md" | "RTK.md" | "docs/README.md"
+        "README.md"
+            | "AGENTS.md"
+            | "AGENTS_CURSOR.md"
+            | "AGENTS_CODEX.md"
+            | "AGENTS_CLAUDE.md"
+            | "RTK.md"
+            | "docs/README.md"
     );
     let is_research_doc = lower.contains("research")
         || lower.contains("paper")
@@ -1395,9 +1417,7 @@ fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), String> {
 }
 
 /// Host directories that may contain hook-state subdirectories.
-const HOOK_STATE_HOST_DIRS: &[&str] = &[
-    ".claude", ".cursor", ".codex", ".gemini", ".opencode",
-];
+const HOOK_STATE_HOST_DIRS: &[&str] = &[".claude", ".cursor", ".codex", ".gemini", ".opencode"];
 
 /// Clean hook-state files older than TTL days across all host directories.
 fn clean_hook_state_files(repo_root: &Path, dry_run: bool, ttl_days: u64) -> Result<(), String> {

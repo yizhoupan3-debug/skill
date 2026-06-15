@@ -2,11 +2,11 @@
 
 use clap::Parser;
 
+use crate::cli::Cli;
 use crate::cli::args::{
-    CloseoutCommand, FrameworkCommand, HostCommand, HookPolicyCommand, RouterCommand,
+    CloseoutCommand, FrameworkCommand, HookPolicyCommand, HostCommand, RouterCommand,
 };
 use crate::router_self::RouterSelfCommands;
-use crate::cli::Cli;
 
 /// Canonical top-level `router-rs` subcommands must keep parsing (binary name + shape stable).
 #[test]
@@ -17,7 +17,14 @@ fn cli_backward_compat_top_level_commands_smoke() {
         &["router-rs", "framework", "doctor", "--repo-root", "."],
         &["router-rs", "host", "codex", "hook", "--event", "Stop"],
         &["router-rs", "host", "hook", "cursor", "--event", "stop"],
-        &["router-rs", "host", "hook", "claude-code", "--event", "PreToolUse"],
+        &[
+            "router-rs",
+            "host",
+            "hook",
+            "claude-code",
+            "--event",
+            "PreToolUse",
+        ],
         &["router-rs", "host", "agent", "opencode"],
         &["router-rs", "storage", "backend-catalog"],
         &[
@@ -33,7 +40,13 @@ fn cli_backward_compat_top_level_commands_smoke() {
         &["router-rs", "eval", "route-contract"],
         &["router-rs", "schema-drift", "contract"],
         &["router-rs", "self", "clean"],
-        &["router-rs", "self", "install", "--bin-dir", "/tmp/smoke-router-bin"],
+        &[
+            "router-rs",
+            "self",
+            "install",
+            "--bin-dir",
+            "/tmp/smoke-router-bin",
+        ],
         &["router-rs", "--stdio-json"],
     ];
 
@@ -54,7 +67,9 @@ fn cli_backward_compat_top_level_commands_smoke() {
                 command: FrameworkCommand::Doctor(_),
             } => {}
             RouterCommand::Host { command } => match command {
-                HostCommand::Codex { .. } | HostCommand::Hook { .. } | HostCommand::Agent { .. } => {},
+                HostCommand::Codex { .. }
+                | HostCommand::Hook { .. }
+                | HostCommand::Agent { .. } => {}
             },
             RouterCommand::Storage { .. } | RouterCommand::Diagnose { .. } => {}
             RouterCommand::HookPolicy {

@@ -192,11 +192,15 @@ pub fn build_sandbox_control_response(
                 .ok_or_else(|| "sandbox control transition requires next_state".to_string())?
                 .to_string();
             let allowed = sandbox_transition_allowed(&current_state, &next_state);
-            SandboxResponseBuilder::new(&payload, allowed, if allowed {
-                "transition-accepted"
-            } else {
-                "invalid-transition"
-            })
+            SandboxResponseBuilder::new(
+                &payload,
+                allowed,
+                if allowed {
+                    "transition-accepted"
+                } else {
+                    "invalid-transition"
+                },
+            )
             .current_state(Some(current_state.clone()))
             .resolved_state(Some(next_state.clone()))
             .next_state(Some(next_state))
@@ -205,7 +209,8 @@ pub fn build_sandbox_control_response(
             } else {
                 Some(format!(
                     "invalid sandbox transition: {:?} -> {:?}",
-                    current_state, payload.next_state.as_deref().unwrap_or("")
+                    current_state,
+                    payload.next_state.as_deref().unwrap_or("")
                 ))
             })
             .effective_capabilities(payload.capability_categories.clone())

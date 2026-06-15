@@ -1,11 +1,9 @@
-use framework_kernel::repo_roots::{framework_root_from_executable_path, is_framework_root};
-use framework_kernel::runtime_registry::{
-    load_runtime_registry, load_runtime_registry_payload,
-};
 use chrono::Local;
 use clap::{Parser, Subcommand};
+use framework_kernel::repo_roots::{framework_root_from_executable_path, is_framework_root};
+use framework_kernel::runtime_registry::{load_runtime_registry, load_runtime_registry_payload};
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io;
@@ -253,7 +251,6 @@ pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> 
     run_host_integration_payload(Cli::parse_from(iter))
 }
 
-
 mod artifacts;
 mod projection;
 mod roots;
@@ -310,7 +307,10 @@ mod tests {
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
         for tool in ["cursor", "claude", "opencode", "codex", "mimo"] {
-            assert!(err.contains(tool), "expected supported tool {tool} in error: {err}");
+            assert!(
+                err.contains(tool),
+                "expected supported tool {tool} in error: {err}"
+            );
         }
         assert!(err.contains("claude-code"), "{err}");
         assert!(err.contains("codex-cli"), "{err}");
@@ -474,7 +474,7 @@ mod tests {
     fn generated_artifact_generator_timeout_kills_process() {
         let root = unique_test_root("generator-timeout");
         fs::create_dir_all(&root).unwrap();
-        std::env::set_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS", "1");
+        unsafe { std::env::set_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS", "1") };
 
         let timeout = run_generated_artifact_generator("sleep 5", &root, &root);
         assert!(timeout.is_err(), "expected timeout failure");
@@ -484,7 +484,7 @@ mod tests {
             "timeout message should include configured timeout: {timeout_msg}"
         );
 
-        std::env::remove_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS");
+        unsafe { std::env::remove_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS") };
         let _ = fs::remove_dir_all(root);
     }
 
@@ -505,16 +505,12 @@ mod tests {
     fn validate_mcp_command_binary_rejects_repo_target_artifacts() {
         let root = unique_test_root("mcp-validate-repo-target");
         let framework_root = root.join("framework");
-        let artifact = framework_root
-            .join("core/router-rs/target/release/router-rs");
+        let artifact = framework_root.join("core/router-rs/target/release/router-rs");
         fs::create_dir_all(artifact.parent().unwrap()).unwrap();
         write_test_file(&artifact, "#!/bin/sh\n");
 
-        let err = validate_mcp_command_binary(
-            &artifact.to_string_lossy(),
-            Some(&framework_root),
-        )
-        .expect_err("repo target artifact must be rejected");
+        let err = validate_mcp_command_binary(&artifact.to_string_lossy(), Some(&framework_root))
+            .expect_err("repo target artifact must be rejected");
         assert!(
             err.contains("ephemeral build path") || err.contains("repo build artifact"),
             "unexpected error: {err}"
@@ -531,10 +527,7 @@ mod tests {
         let cursor_home = root.join("cursor-home");
         fs::create_dir_all(home.join(".local/bin")).unwrap();
         fs::create_dir_all(&cursor_home).unwrap();
-        write_test_file(
-            &home.join(".local/bin/router-rs"),
-            "#!/bin/sh\n",
-        );
+        write_test_file(&home.join(".local/bin/router-rs"), "#!/bin/sh\n");
         write_test_file(
             &framework_root.join("core/router-rs/Cargo.toml"),
             "[package]\nname = \"router-rs\"\n",
@@ -565,12 +558,17 @@ mod tests {
                 ("cursor".into(), cursor_home.clone()),
                 ("claude-code".into(), root.join("claude")),
                 ("opencode".into(), root.join("opencode")),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         };
-        std::env::set_var("HOME", &home);
+        unsafe { std::env::set_var("HOME", &home) };
         let outcome =
             install_cursor_mcp_server(&roots, &cursor_home.join("mcp.json")).expect("install");
-        assert!(outcome.changed, "expected stale browser-mcp entry to be rewritten");
+        assert!(
+            outcome.changed,
+            "expected stale browser-mcp entry to be rewritten"
+        );
         assert!(!outcome.skipped_user_owned);
 
         let payload = read_json_if_exists(&cursor_home.join("mcp.json"))
@@ -584,7 +582,7 @@ mod tests {
             "expected stable PATH or install-path command, got {command}"
         );
 
-        std::env::remove_var("HOME");
+        unsafe { std::env::remove_var("HOME") };
         let _ = fs::remove_dir_all(root);
     }
 
@@ -600,8 +598,8 @@ mod tests {
             &framework_root.join("core/router-rs/target/release/router-rs"),
             "#!/bin/sh\n",
         );
-        std::env::set_var("HOME", &home);
-        std::env::remove_var("ROUTER_RS_BIN");
+        unsafe { std::env::set_var("HOME", &home) };
+        unsafe { std::env::remove_var("ROUTER_RS_BIN") };
 
         let command = resolve_mcp_router_rs_command(&framework_root);
         assert_ne!(command, McpRouterRsCommand::CargoBootstrap);
@@ -610,7 +608,7 @@ mod tests {
             McpRouterRsCommand::CargoBootstrap => unreachable!(),
         }
 
-        std::env::remove_var("HOME");
+        unsafe { std::env::remove_var("HOME") };
         let _ = fs::remove_dir_all(root);
     }
 
@@ -623,8 +621,8 @@ mod tests {
         fs::create_dir_all(&custom_claude).unwrap();
         let prior_home = std::env::var_os("HOME");
         let prior_claude = std::env::var_os("CLAUDE_HOME");
-        std::env::set_var("HOME", &os_home);
-        std::env::set_var("CLAUDE_HOME", &custom_claude);
+        unsafe { std::env::set_var("HOME", &os_home) };
+        unsafe { std::env::set_var("CLAUDE_HOME", &custom_claude) };
 
         let roots = resolve_projection_roots(
             None,
@@ -638,18 +636,24 @@ mod tests {
         )
         .expect("resolve roots");
         assert_eq!(roots.account_home_root, os_home);
-        assert_eq!(roots.host_home_root("claude-code").as_path(), custom_claude.as_path());
-        assert_eq!(roots.host_home_root("opencode").as_path(), os_home.join(".opencode").as_path());
+        assert_eq!(
+            roots.host_home_root("claude-code").as_path(),
+            custom_claude.as_path()
+        );
+        assert_eq!(
+            roots.host_home_root("opencode").as_path(),
+            os_home.join(".opencode").as_path()
+        );
 
         if let Some(h) = prior_home {
-            std::env::set_var("HOME", h);
+            unsafe { std::env::set_var("HOME", h) };
         } else {
-            std::env::remove_var("HOME");
+            unsafe { std::env::remove_var("HOME") };
         }
         if let Some(c) = prior_claude {
-            std::env::set_var("CLAUDE_HOME", c);
+            unsafe { std::env::set_var("CLAUDE_HOME", c) };
         } else {
-            std::env::remove_var("CLAUDE_HOME");
+            unsafe { std::env::remove_var("CLAUDE_HOME") };
         }
         let _ = fs::remove_dir_all(root);
     }
@@ -677,7 +681,9 @@ mod tests {
                 ("cursor".into(), home.join(".cursor")),
                 ("claude-code".into(), home.join(".claude")),
                 ("opencode".into(), home.join(".opencode")),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         };
 
         let changed =
@@ -722,7 +728,9 @@ mod tests {
                 ("cursor".into(), home.join(".cursor")),
                 ("claude-code".into(), home.join(".claude")),
                 ("opencode".into(), home.join(".opencode")),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         };
 
         let changed =
@@ -736,9 +744,7 @@ mod tests {
             .get("mcpServers")
             .and_then(Value::as_object)
             .expect("mcpServers object");
-        let codegraph = servers
-            .get("mcp-codegraph")
-            .expect("mcp-codegraph entry");
+        let codegraph = servers.get("mcp-codegraph").expect("mcp-codegraph entry");
         assert_eq!(codegraph.get("type").and_then(Value::as_str), Some("stdio"));
         assert!(
             codegraph.get("command").is_some(),

@@ -141,6 +141,9 @@ mod tests {
         let weights: ScoringWeights = serde_json::from_str(DEFAULTS_JSON).unwrap();
         assert_eq!(weights.layer_threshold("L0"), weights.layer_threshold_l0);
         assert_eq!(weights.layer_threshold("L2"), weights.layer_threshold_l2_l3);
-        assert_eq!(weights.layer_threshold("unknown"), weights.layer_threshold_default);
+        assert_eq!(
+            weights.layer_threshold("unknown"),
+            weights.layer_threshold_default
+        );
     }
 }

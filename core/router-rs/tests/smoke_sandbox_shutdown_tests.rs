@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::framework_runtime::{
     build_runtime_control_plane_payload, build_sandbox_control_response,
@@ -89,7 +89,9 @@ fn graceful_drain_cleanup_recycle_smoke() {
         Some("async-drain-and-recycle")
     );
     assert!(contract_allows_transition(&contract, "busy", "draining"));
-    assert!(contract_allows_transition(&contract, "draining", "recycled"));
+    assert!(contract_allows_transition(
+        &contract, "draining", "recycled"
+    ));
 
     let drain = build_sandbox_control_response(sandbox_request(
         "execution_result",
@@ -139,10 +141,7 @@ fn graceful_drain_cleanup_recycle_smoke() {
         Some("recycled"),
         "stdio sandbox_control must match in-process drain-close path"
     );
-    assert_eq!(
-        stdio_recycled["reason"].as_str(),
-        Some("cleanup-completed")
-    );
+    assert_eq!(stdio_recycled["reason"].as_str(), Some("cleanup-completed"));
 }
 
 /// draining -> cleanup(cleanup_failed=true) -> failed matches control-plane force-close path.
@@ -172,10 +171,7 @@ fn force_drain_to_failed_smoke() {
     assert_eq!(failed.reason, "cleanup-failed");
     assert_eq!(failed.resolved_state.as_deref(), Some("failed"));
     assert_eq!(failed.quarantined, Some(true));
-    assert_eq!(
-        failed.event_kind.as_deref(),
-        Some("sandbox.cleanup_failed")
-    );
+    assert_eq!(failed.event_kind.as_deref(), Some("sandbox.cleanup_failed"));
 
     let stdio_failed = dispatch_stdio_json_request(
         "sandbox_control",
@@ -316,16 +312,15 @@ fn concurrent_close_safety_smoke() {
         "now": close_now,
     }))
     .expect("final list after concurrent close");
-    let workers = listed["workers"]
-        .as_array()
-        .expect("workers array");
+    let workers = listed["workers"].as_array().expect("workers array");
     assert_eq!(workers.len(), N, "workers={workers:?}");
     for worker in workers {
         assert_eq!(worker["status"], json!("interrupted"));
     }
 
     let store_text = fs::read_to_string(state_path.as_ref()).expect("read supervisor store");
-    let store: Value = serde_json::from_str(&store_text).expect("parse supervisor store after concurrent close");
+    let store: Value =
+        serde_json::from_str(&store_text).expect("parse supervisor store after concurrent close");
     assert!(
         store.get("workers").and_then(Value::as_array).is_some(),
         "store must remain valid JSON after concurrent terminate/list"

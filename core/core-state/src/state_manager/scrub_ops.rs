@@ -66,10 +66,7 @@ pub fn scrub_followup_fields_in_hook_output(output: &mut Value) {
 }
 
 /// 去掉 `followup_message` 中以某前缀开头的段落（`\n\n` 分隔），用于刷新 AUTOPILOT/RFV 合并文案。
-pub fn strip_followup_paragraphs_with_line_prefix(
-    text: &str,
-    first_line_prefix: &str,
-) -> String {
+pub fn strip_followup_paragraphs_with_line_prefix(text: &str, first_line_prefix: &str) -> String {
     text.split("\n\n")
         .filter(|seg| {
             !seg.lines().any(|l| {
@@ -113,7 +110,6 @@ pub fn merge_hook_nudge_paragraph(
     }
 }
 
-
 #[cfg(test)]
 fn scrub_concat_evils() -> (String, String) {
     // Fragment so the imitation template never appears verbatim in workspace source.
@@ -128,7 +124,6 @@ fn scrub_concat_evils() -> (String, String) {
     let block = format!("lead\n\n{spoof_line}\ntrailer");
     (spoof_line, block)
 }
-
 
 #[cfg(test)]
 mod spoof_scrub_tests {

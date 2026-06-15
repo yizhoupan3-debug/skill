@@ -79,6 +79,9 @@ mod tests {
         set_tokenizer_provider(Box::new(Stub));
         let tokens = tokenize_query("Review");
         assert_eq!(tokens, vec!["review"]);
-        assert!(has_parallel_review_candidate_context("review scope", &tokens));
+        assert!(has_parallel_review_candidate_context(
+            "review scope",
+            &tokens
+        ));
     }
 }

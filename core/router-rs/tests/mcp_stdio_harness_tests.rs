@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod desktop_mcp_tests {
     use crate::mcp_stdio_test_support;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::path::PathBuf;
 
     fn test_repo_dir() -> PathBuf {
@@ -186,8 +186,14 @@ mod desktop_mcp_tests {
         )
         .expect("skill_route response");
         let out = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(out.contains("\"routed\":true"), "expected routed:true: {out}");
-        assert!(out.contains("implementx"), "expected implementx slug: {out}");
+        assert!(
+            out.contains("\"routed\":true"),
+            "expected routed:true: {out}"
+        );
+        assert!(
+            out.contains("implementx"),
+            "expected implementx slug: {out}"
+        );
         let _ = std::fs::remove_dir_all(&repo);
     }
 
@@ -195,8 +201,12 @@ mod desktop_mcp_tests {
     fn closeout_gate_requires_session_summary_file() {
         let repo = test_repo_dir();
         // Pointer 机制已移除，需显式传 task_id
-        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": "no-summary-task"}), &repo, "opencode")
-            .expect("closeout_gate");
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(
+            &json!({"task_id": "no-summary-task"}),
+            &repo,
+            "opencode",
+        )
+        .expect("closeout_gate");
         assert!(
             out.contains("BLOCKED") || out.contains("checkpoint: missing"),
             "without SESSION_SUMMARY must not PASS: {out}"
@@ -227,7 +237,10 @@ mod desktop_mcp_tests {
             text.contains("Test Session"),
             "must read artifacts/current/SESSION_SUMMARY.md, not repo escape: {text}"
         );
-        assert!(!text.contains("escaped-content"), "path traversal via task_id: {text}");
+        assert!(
+            !text.contains("escaped-content"),
+            "path traversal via task_id: {text}"
+        );
         let _ = std::fs::remove_dir_all(&repo);
     }
 
@@ -291,8 +304,12 @@ mod desktop_mcp_tests {
         )
         .unwrap();
 
-        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "opencode")
-            .expect("closeout_gate");
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(
+            &json!({"task_id": task_id}),
+            &repo,
+            "opencode",
+        )
+        .expect("closeout_gate");
         assert!(
             out.contains("no hook REVIEW_GATE"),
             "expected static Desktop advisory: {out}"
@@ -319,9 +336,12 @@ mod desktop_mcp_tests {
         .unwrap();
         std::fs::write(review_lanes.join("lane-a.md"), "[P2] example — ok").unwrap();
 
-        let out =
-            crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "opencode")
-                .expect("closeout_gate");
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(
+            &json!({"task_id": task_id}),
+            &repo,
+            "opencode",
+        )
+        .expect("closeout_gate");
         assert!(
             !out.contains("WARN: review_gate: GOAL suggests review work"),
             "review-lanes evidence should clear review WARN: {out}"
@@ -351,8 +371,12 @@ mod desktop_mcp_tests {
         )
         .unwrap();
 
-        let out = crate::mcp_stdio_harness::tool_closeout_gate(&json!({"task_id": task_id}), &repo, "opencode")
-            .expect("closeout_gate");
+        let out = crate::mcp_stdio_harness::tool_closeout_gate(
+            &json!({"task_id": task_id}),
+            &repo,
+            "opencode",
+        )
+        .expect("closeout_gate");
         assert!(
             out.contains("WARN: evidence: only self-attested"),
             "expected self-attest warning in: {out}"
@@ -398,8 +422,7 @@ mod desktop_mcp_tests {
             "command": "cat foo.txt",
             "output": "contents",
         });
-        let entry_without =
-            crate::mcp_stdio_harness::build_evidence_entry(&args_without).unwrap();
+        let entry_without = crate::mcp_stdio_harness::build_evidence_entry(&args_without).unwrap();
         assert!(entry_without.get("exit_code").is_none());
         assert!(entry_without.get("success").is_none());
 
@@ -438,10 +461,12 @@ mod desktop_mcp_tests {
         let parsed: serde_json::Value = serde_json::from_str(&content).unwrap();
         assert_eq!(parsed["task_id"], "test-closeout");
         assert_eq!(parsed["verification_status"], "passed");
-        assert!(parsed["schema_version"]
-            .as_str()
-            .unwrap()
-            .contains("closeout-record"));
+        assert!(
+            parsed["schema_version"]
+                .as_str()
+                .unwrap()
+                .contains("closeout-record")
+        );
 
         let _ = std::fs::remove_dir_all(&repo);
     }
@@ -520,8 +545,8 @@ mod routing_tests {
 
     #[test]
     fn filter_warning_logged_when_all_filtered() {
-        use crate::route::filter_records_for_host;
         use crate::route::SkillRecord;
+        use crate::route::filter_records_for_host;
 
         let records = vec![SkillRecord {
             slug: "test-skill".to_string(),
@@ -564,11 +589,13 @@ mod parameter_validation_tests {
     #[test]
     fn goal_start_requires_goal_argument() {
         let args = json!({"task_id": "t1"});
-        let result =
-            crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "start");
+        let result = crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "start");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("goal"), "expected error about 'goal', got: {err}");
+        assert!(
+            err.contains("goal"),
+            "expected error about 'goal', got: {err}"
+        );
     }
 
     #[test]
@@ -578,7 +605,10 @@ mod parameter_validation_tests {
             crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "checkpoint");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("note"), "expected error about 'note', got: {err}");
+        assert!(
+            err.contains("note"),
+            "expected error about 'note', got: {err}"
+        );
     }
 
     #[test]
@@ -596,7 +626,10 @@ mod parameter_validation_tests {
             crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "append_round");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("rfv_loop_manage"), "expected error about 'rfv_loop_manage', got: {err}");
+        assert!(
+            err.contains("rfv_loop_manage"),
+            "expected error about 'rfv_loop_manage', got: {err}"
+        );
     }
 
     #[test]
@@ -608,7 +641,10 @@ mod parameter_validation_tests {
         );
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("Unknown goal operation"), "expected 'Unknown goal operation', got: {err}");
+        assert!(
+            err.contains("Unknown goal operation"),
+            "expected 'Unknown goal operation', got: {err}"
+        );
         assert!(err.contains("start") && err.contains("checkpoint"));
     }
 
@@ -634,10 +670,8 @@ mod parameter_validation_tests {
     #[test]
     fn unknown_rfv_operation_returns_error() {
         let args = json!({});
-        let result = crate::mcp_stdio_harness::tool_rfv_loop_manage_test_helper(
-            &args,
-            "invalid_operation",
-        );
+        let result =
+            crate::mcp_stdio_harness::tool_rfv_loop_manage_test_helper(&args, "invalid_operation");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Unknown RFV loop operation"));
@@ -647,8 +681,7 @@ mod parameter_validation_tests {
     #[test]
     fn goal_start_requires_task_id_explicitly() {
         let args = json!({"goal": "test goal"});
-        let result =
-            crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "start");
+        let result = crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "start");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -673,8 +706,7 @@ mod parameter_validation_tests {
     #[test]
     fn goal_block_requires_blocker() {
         let args = json!({"task_id": "test-task"});
-        let result =
-            crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "block");
+        let result = crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "block");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
@@ -686,8 +718,7 @@ mod parameter_validation_tests {
     #[test]
     fn goal_block_operation_accepted_with_blocker() {
         let args = json!({"task_id": "test-task", "blocker": "dependency conflict"});
-        let result =
-            crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "block");
+        let result = crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "block");
         if let Err(ref err) = result {
             assert!(
                 !err.contains("Missing required argument: blocker"),
@@ -703,9 +734,12 @@ mod parameter_validation_tests {
             "goal": "test goal for cache invalidation",
             "drive_until_done": false
         });
-        let result =
-            crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "start");
-        assert!(result.is_ok(), "start with explicit task_id failed: {:?}", result.err());
+        let result = crate::mcp_stdio_harness::tool_goal_state_manage_test_helper(&args, "start");
+        assert!(
+            result.is_ok(),
+            "start with explicit task_id failed: {:?}",
+            result.err()
+        );
     }
 }
 
@@ -875,7 +909,12 @@ mod json_parse_error_tests {
         let path = unique_test_repo_dir();
         mcp_stdio_test_support::seed_minimal_current_task_layout(&path);
 
-        let response = crate::mcp_stdio_harness::handle_mcp_request("not valid json {", &path, "opencode", "test-session");
+        let response = crate::mcp_stdio_harness::handle_mcp_request(
+            "not valid json {",
+            &path,
+            "opencode",
+            "test-session",
+        );
 
         // Should return an error response
         assert!(
@@ -897,8 +936,12 @@ mod json_parse_error_tests {
         mcp_stdio_test_support::seed_minimal_current_task_layout(&path);
 
         // Missing method field
-        let response =
-            crate::mcp_stdio_harness::handle_mcp_request(r#"{"jsonrpc":"2.0","id":1}"#, &path, "opencode", "test-session");
+        let response = crate::mcp_stdio_harness::handle_mcp_request(
+            r#"{"jsonrpc":"2.0","id":1}"#,
+            &path,
+            "opencode",
+            "test-session",
+        );
 
         assert!(response.is_some());
         let resp = response.unwrap();
@@ -909,7 +952,6 @@ mod json_parse_error_tests {
         let _ = std::fs::remove_dir_all(&path);
     }
 }
-
 
 #[cfg(test)]
 mod claude_desktop_hard_blocking_tests {
@@ -945,7 +987,10 @@ mod claude_desktop_hard_blocking_tests {
         .expect("response");
         assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
         let text = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(text.contains("ADVISORY"), "expected ADVISORY verdict; got {text}");
+        assert!(
+            text.contains("ADVISORY"),
+            "expected ADVISORY verdict; got {text}"
+        );
         let _ = std::fs::remove_dir_all(&repo);
     }
 
@@ -1067,7 +1112,8 @@ mod claude_desktop_hard_blocking_tests {
         )
         .expect("response");
         // Advisory mode: NOT hard-blocked even with review goal and no reviewer evidence
-        assert!(!response["result"]["isError"].as_bool().unwrap_or(false),
+        assert!(
+            !response["result"]["isError"].as_bool().unwrap_or(false),
             "advisory mode should not block; got {:?}",
             response["result"]["content"][0]["text"]
         );
@@ -1101,8 +1147,10 @@ mod claude_desktop_hard_blocking_tests {
         assert!(!response["result"]["isError"].as_bool().unwrap_or(false));
         let text = response["result"]["content"][0]["text"].as_str().unwrap();
         let payload: serde_json::Value = serde_json::from_str(text).expect("json");
-        assert!(payload.get("closeout_allowed").is_some(),
-            "closeout_record_write should return closeout_allowed field; got: {payload}");
+        assert!(
+            payload.get("closeout_allowed").is_some(),
+            "closeout_record_write should return closeout_allowed field; got: {payload}"
+        );
         let _ = std::fs::remove_dir_all(&repo);
     }
 }
@@ -1130,7 +1178,13 @@ mod claude_desktop_stdio_e2e_tests {
             .to_path_buf();
 
         let mut child = Command::new(bin)
-            .args(["host", "agent", "opencode", "--repo-root", repo.to_str().unwrap()])
+            .args([
+                "host",
+                "agent",
+                "opencode",
+                "--repo-root",
+                repo.to_str().unwrap(),
+            ])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

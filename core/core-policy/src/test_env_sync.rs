@@ -55,3 +55,61 @@ pub fn process_env_lock() -> ProcessEnvLockGuard {
         ProcessEnvLockGuard(None)
     }
 }
+
+/// Safe wrapper for `std::env::set_var` — acquires the env mutex first.
+///
+/// # Safety context
+/// Rust 2024 marks `env::set_var` as `unsafe` because concurrent reads/writes
+/// to the process environment are undefined behavior. This wrapper serializes
+/// access via the shared test mutex, making it sound for test code.
+///
+/// # Panics
+/// Panics if `key` contains `=` or NUL, or if `value` contains NUL
+/// (same contract as `std::env::set_var`).
+///
+/// # Usage
+/// ```ignore
+/// use core_policy::test_env_sync::with_env_var;
+/// // Mutex guard held for the scope of the closure; restored on drop.
+/// with_env_var("MY_FLAG", "1", || {
+///     assert!(my_function());
+/// });
+/// ```
+pub fn with_env_var(key: &str, value: &str, f: impl FnOnce()) {
+    let _guard = process_env_lock();
+    let prev = std::env::var(key).ok();
+    // SAFETY: mutex held; no other thread can mutate env concurrently.
+    unsafe { std::env::set_var(key, value) };
+    f();
+    match prev {
+        Some(v) => {
+            // SAFETY: mutex held.
+            unsafe { std::env::set_var(key, v) };
+        }
+        None => {
+            // SAFETY: mutex held.
+            unsafe { std::env::remove_var(key) };
+        }
+    }
+}
+
+/// Safe wrapper for `std::env::remove_var` — acquires the env mutex first.
+///
+/// Restores the previous value (or absence) after `f` returns.
+pub fn with_env_var_removed(key: &str, f: impl FnOnce()) {
+    let _guard = process_env_lock();
+    let prev = std::env::var(key).ok();
+    // SAFETY: mutex held.
+    unsafe { std::env::remove_var(key) };
+    f();
+    match prev {
+        Some(v) => {
+            // SAFETY: mutex held.
+            unsafe { std::env::set_var(key, v) };
+        }
+        None => {
+            // SAFETY: mutex held.
+            unsafe { std::env::remove_var(key) };
+        }
+    }
+}

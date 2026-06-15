@@ -6,7 +6,7 @@
 //! `registry://<server_id>:<tool_name>`. Re-uses the existing FTS5
 //! index so lookups go through `search_symbols` with `kind="mcp_tool"`.
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde_json::Value;
 
 /// Virtual file path used for all MCP tool registry nodes.
@@ -23,7 +23,10 @@ pub const MCP_TOOL_LANGUAGE: &str = "json";
 ///
 /// Returns the number of tools ingested.
 pub fn ingest_mcp_tools(conn: &Connection, registry: &Value) -> rusqlite::Result<usize> {
-    let Some(managed) = registry.get("managed_mcp_servers").and_then(Value::as_object) else {
+    let Some(managed) = registry
+        .get("managed_mcp_servers")
+        .and_then(Value::as_object)
+    else {
         return Ok(0);
     };
 
@@ -75,9 +78,7 @@ pub fn resolve_mcp_tool_server_id(conn: &Connection, tool_name: &str) -> Option<
 
     // Use exact symbol match (not FTS) for O(1) lookup
     let mut stmt = conn
-        .prepare(
-            "SELECT id FROM nodes WHERE symbol = ?1 AND kind = ?2 LIMIT 1",
-        )
+        .prepare("SELECT id FROM nodes WHERE symbol = ?1 AND kind = ?2 LIMIT 1")
         .ok()?;
     let mut rows = stmt.query(params![trimmed, MCP_TOOL_KIND]).ok()?;
     let row = rows.next().ok()??;

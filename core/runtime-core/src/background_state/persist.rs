@@ -1,11 +1,9 @@
 use super::control_plane::normalized_backend_family;
 use super::types::BackgroundStateStore;
 use super::types::*;
-use crate::runtime_storage::{
-    acquire_runtime_path_lock, SQLITE_TABLE_NAME,
-};
-use rusqlite::{params, Connection, OptionalExtension};
-use serde_json::{json, Value};
+use crate::runtime_storage::{SQLITE_TABLE_NAME, acquire_runtime_path_lock};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 

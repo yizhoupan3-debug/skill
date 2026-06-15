@@ -1,7 +1,7 @@
 use crate::runtime_storage::acquire_runtime_path_lock;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Write;
@@ -122,10 +122,7 @@ pub fn record_trace_event(
     event.insert("generation".to_string(), json!(payload.generation));
     event.insert("cursor".to_string(), Value::String(cursor));
     event.insert("ts".to_string(), Value::String(Utc::now().to_rfc3339()));
-    event.insert(
-        "run_id".to_string(),
-        Value::String(payload.run_id.clone()),
-    );
+    event.insert("run_id".to_string(), Value::String(payload.run_id.clone()));
     event.insert(
         "job_id".to_string(),
         payload
@@ -256,10 +253,7 @@ pub fn compact_trace_stream(
     let tail = active_events.last().expect("active events checked");
     let latest_cursor = latest_cursor_from_event(tail).unwrap_or(Value::Null);
     let mut state_payload = Map::new();
-    state_payload.insert(
-        "run_id".to_string(),
-        Value::String(payload.run_id.clone()),
-    );
+    state_payload.insert("run_id".to_string(), Value::String(payload.run_id.clone()));
     state_payload.insert(
         "job_id".to_string(),
         payload
@@ -365,10 +359,7 @@ pub fn compact_trace_stream(
             .cloned()
             .unwrap_or(Value::Null),
     );
-    snapshot.insert(
-        "run_id".to_string(),
-        Value::String(payload.run_id.clone()),
-    );
+    snapshot.insert("run_id".to_string(), Value::String(payload.run_id.clone()));
     snapshot.insert(
         "job_id".to_string(),
         payload
@@ -467,7 +458,8 @@ pub fn compact_trace_stream(
         status: "compacted".to_string(),
         reason: None,
         run_id: manifest
-            .get("run_id").or_else(|| manifest.get("session_id"))
+            .get("run_id")
+            .or_else(|| manifest.get("session_id"))
             .and_then(Value::as_str)
             .unwrap_or_default()
             .to_string(),
@@ -819,9 +811,10 @@ fn append_text(path: &Path, payload: &str) -> Result<(), String> {
             .map_err(|err| format!("create trace parent failed for {}: {err}", parent.display()))?;
     }
     // Within-process serialization (cheap fast path).
-    let _proc_guard = trace_append_lock()
-        .lock()
-        .map_err(|e| { eprintln!("[router-rs] trace append lock poisoned: {e}"); "trace append lock poisoned".to_string() })?;
+    let _proc_guard = trace_append_lock().lock().map_err(|e| {
+        eprintln!("[router-rs] trace append lock poisoned: {e}");
+        "trace append lock poisoned".to_string()
+    })?;
     // Cross-process serialization: prevents JSONL line interleaving when
     // codex, cursor and parallel test harnesses all tail the same trace.
     let _path_lock = acquire_runtime_path_lock(path)?;

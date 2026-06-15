@@ -8,15 +8,14 @@
 //! - Atomic file writes and lock management
 
 use super::{
-    CodexLifecycleHostKind, HooksMergeStat, InstallMode, CODEX_AGENT_POLICY_PATH,
-    CODEX_HOOK_AUTHORITY, CODEX_HOOKS_PATH, CODEX_HOOKS_README_PATH,
-    HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
-    HOST_ENTRYPOINT_SYNC_MANIFEST_PATH, INSTALL_EVENTS,
+    CODEX_AGENT_POLICY_PATH, CODEX_HOOK_AUTHORITY, CODEX_HOOKS_PATH, CODEX_HOOKS_README_PATH,
+    CodexLifecycleHostKind, HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
+    HOST_ENTRYPOINT_SYNC_MANIFEST_PATH, HooksMergeStat, INSTALL_EVENTS, InstallMode,
     PROTECTED_GENERATED_PATHS, ROUTER_RS_HOOK_PROJECTION_VERSION,
 };
 use crate::host_entrypoint_sync::HostEntrypointPayloadProvider;
 use chrono::Utc;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::env;
@@ -25,9 +24,9 @@ use std::fs::OpenOptions;
 use std::io;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
+use std::path::Path;
 #[cfg(unix)]
 use std::path::PathBuf;
-use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -71,7 +70,10 @@ pub(super) fn protected_generated_paths() -> Vec<&'static str> {
     PROTECTED_GENERATED_PATHS.to_vec()
 }
 
-pub(super) fn hook_event_status_message(_host: CodexLifecycleHostKind, event_name: &str) -> &'static str {
+pub(super) fn hook_event_status_message(
+    _host: CodexLifecycleHostKind,
+    event_name: &str,
+) -> &'static str {
     match event_name {
         "SessionStart" => INSTALL_STATUS_SESSION_START,
         "PreToolUse" => INSTALL_STATUS_PRE_TOOL,
@@ -170,8 +172,7 @@ fn acquire_install_lock(codex_home: &Path) -> Result<HooksInstallLock, String> {
                 use std::io::Write as _;
                 file.write_all(stamp.as_bytes())
                     .map_err(CodexHookError::StateLockWrite)?;
-                file.sync_all()
-                    .map_err(CodexHookError::StateLockSync)?;
+                file.sync_all().map_err(CodexHookError::StateLockSync)?;
                 return Ok(HooksInstallLock { path: lock_path });
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
@@ -334,7 +335,9 @@ pub fn codex_host_entrypoint_provider(
     let policy = match fs::read(&policy_path) {
         Ok(bytes) => bytes,
         Err(err) if err.kind() == io::ErrorKind::NotFound => {
-            include_str!("../../../../../AGENTS_CODEX.md").as_bytes().to_vec()
+            include_str!("../../../../../AGENTS_CODEX.md")
+                .as_bytes()
+                .to_vec()
         }
         Err(err) => {
             return Err(format!(
@@ -452,7 +455,12 @@ pub(super) fn merge_hooks_json(
     existing: Option<Value>,
     hook_commands: &BTreeMap<String, String>,
 ) -> Result<(Value, HooksMergeStat), String> {
-    merge_hooks_json_for_events(CodexLifecycleHostKind::CODEX, existing, hook_commands, &INSTALL_EVENTS)
+    merge_hooks_json_for_events(
+        CodexLifecycleHostKind::CODEX,
+        existing,
+        hook_commands,
+        &INSTALL_EVENTS,
+    )
 }
 
 fn merge_hooks_json_for_events(

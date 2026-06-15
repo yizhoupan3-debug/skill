@@ -1,5 +1,5 @@
 use crate::Node;
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 
 pub fn search_symbols(
     conn: &Connection,
@@ -139,7 +139,8 @@ mod tests {
 
     #[test]
     fn search_returns_matching_symbols_via_fts() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed_test_data(&conn);
         let hits = search_symbols(&conn, "search", None, None, 10).expect("search symbols");
         assert!(hits.len() >= 2, "expected multiple search results");
@@ -147,7 +148,8 @@ mod tests {
 
     #[test]
     fn search_filters_by_kind_in_sql() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed_test_data(&conn);
         let hits = search_symbols(&conn, "search", Some("fn"), None, 10).expect("search symbols");
         assert_eq!(hits.len(), 1);
@@ -157,9 +159,11 @@ mod tests {
 
     #[test]
     fn search_filters_by_language_in_sql() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed_test_data(&conn);
-        let hits = search_symbols(&conn, "search", None, Some("python"), 10).expect("search symbols");
+        let hits =
+            search_symbols(&conn, "search", None, Some("python"), 10).expect("search symbols");
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].symbol, "search_py");
     }

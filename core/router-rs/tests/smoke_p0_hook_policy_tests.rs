@@ -2,9 +2,8 @@
 //! (physical module: `core-policy/hook_policy.rs`).
 
 use core_policy::hook_policy::{
-    dangerous_bash_reason, dangerous_mcp_tool_reason, evaluate_hook_policy,
-    hook_policy_contract, HookPolicyEvaluateRequest, HOOK_POLICY_AUTHORITY,
-    HOOK_POLICY_SCHEMA_VERSION,
+    HOOK_POLICY_AUTHORITY, HOOK_POLICY_SCHEMA_VERSION, HookPolicyEvaluateRequest,
+    dangerous_bash_reason, dangerous_mcp_tool_reason, evaluate_hook_policy, hook_policy_contract,
 };
 use serde_json::json;
 
@@ -34,7 +33,10 @@ fn bash_guard_dangerous_bash_smoke() {
         tool_args: None,
     })
     .expect("bash-danger evaluate");
-    assert!(blocked.blocked, "evaluate_hook_policy must surface bash-danger blocks");
+    assert!(
+        blocked.blocked,
+        "evaluate_hook_policy must surface bash-danger blocks"
+    );
     assert!(blocked.reason.is_some());
 
     let allowed = evaluate_hook_policy(HookPolicyEvaluateRequest {
@@ -66,11 +68,7 @@ fn mcp_safety_dangerous_tool_smoke() {
         "session_resume_due is high-risk by name"
     );
     assert!(
-        dangerous_mcp_tool_reason(
-            "browser_click",
-            r#"{"ref":"ref_1"}"#
-        )
-        .is_none(),
+        dangerous_mcp_tool_reason("browser_click", r#"{"ref":"ref_1"}"#).is_none(),
         "benign browser_click must pass"
     );
 

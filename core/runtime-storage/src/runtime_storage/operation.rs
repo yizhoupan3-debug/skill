@@ -1,4 +1,6 @@
-use crate::runtime_envelope_ids::{RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_STORAGE_AUTHORITY, RUNTIME_STORAGE_SCHEMA_VERSION};
+use crate::runtime_envelope_ids::{
+    RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_STORAGE_AUTHORITY, RUNTIME_STORAGE_SCHEMA_VERSION,
+};
 
 type FrameworkResult<T> = Result<T, String>;
 
@@ -7,11 +9,7 @@ fn framework_error(msg: impl Into<String>) -> String {
 }
 
 /// Extract a non-empty trimmed string from a JSON payload (inlined from cli::runtime_ops).
-fn required_non_empty_string(
-    payload: &Value,
-    key: &str,
-    context: &str,
-) -> FrameworkResult<String> {
+fn required_non_empty_string(payload: &Value, key: &str, context: &str) -> FrameworkResult<String> {
     payload
         .get(key)
         .and_then(Value::as_str)
@@ -21,26 +19,26 @@ fn required_non_empty_string(
         .ok_or_else(|| framework_error(format!("{context} requires non-empty {key}")))
 }
 use super::backend::{
-    normalized_backend_family, runtime_backend_capabilities, runtime_backend_capabilities_payload,
+    RUNTIME_CHECKPOINT_CONTROL_PLANE_COMPILER_AUTHORITY, normalized_backend_family,
+    runtime_backend_capabilities, runtime_backend_capabilities_payload,
     runtime_backend_family_catalog_payload, runtime_backend_family_parity_payload,
-    RUNTIME_CHECKPOINT_CONTROL_PLANE_COMPILER_AUTHORITY,
 };
 use super::filesystem::{
-    filesystem_append_text, filesystem_write_text, memory_artifact_path, MEMORY_APPEND_MUTEX,
+    MEMORY_APPEND_MUTEX, filesystem_append_text, filesystem_write_text, memory_artifact_path,
 };
 use super::paths::{
-    effective_storage_root_for_request, normalize_runtime_path,
-    payload_sha256, resolve_runtime_storage_path_with_root, stream_sha256_hex_path,
+    effective_storage_root_for_request, normalize_runtime_path, payload_sha256,
+    resolve_runtime_storage_path_with_root, stream_sha256_hex_path,
 };
 use super::sqlite::{
     env_checkpoint_storage_db_path, runtime_storage_db_name_candidates, sqlite_append_text,
     sqlite_payload_exists, sqlite_read_text, sqlite_write_text,
 };
 use super::{
-    ResolvedStorageBackend, RuntimeStorageRequestPayload, RuntimeStorageResponsePayload,
     DEFAULT_STATE_SERVICE_AUTHORITY, DEFAULT_STATE_SERVICE_PROJECTION, DEFAULT_STATE_SERVICE_ROLE,
+    ResolvedStorageBackend, RuntimeStorageRequestPayload, RuntimeStorageResponsePayload,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 use std::fs;
 use std::fs::OpenOptions;
@@ -573,9 +571,7 @@ fn build_service_projection_for_backend(
     })
 }
 
-pub fn build_checkpoint_control_plane_compiler_payload(
-    payload: Value,
-) -> Result<Value, String> {
+pub fn build_checkpoint_control_plane_compiler_payload(payload: Value) -> Result<Value, String> {
     let control_plane_descriptor = payload.get("control_plane_descriptor");
     let paths = payload
         .get("paths")

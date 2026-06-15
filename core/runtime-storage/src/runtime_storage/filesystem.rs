@@ -142,7 +142,11 @@ pub fn filesystem_atomic_temp_path(
     parent.join(format!(".router-rs.{file_name}.{tag}.tmp"))
 }
 
-pub fn filesystem_write_text_inner(path: &Path, payload_text: &str, nanos: u128) -> Result<(), String> {
+pub fn filesystem_write_text_inner(
+    path: &Path,
+    payload_text: &str,
+    nanos: u128,
+) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
             format!(

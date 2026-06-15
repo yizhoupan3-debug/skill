@@ -110,16 +110,29 @@ fn count_done_when_items(text: &str) -> usize {
     // Fallback: treat an inline list after the heading as multiple items if it contains clear
     // separators.
     const HEADINGS: [&str; 2] = ["Done when", "完成条件"];
-    let numbered_line_re = Regex::new(r"(?m)^\d+\.\s+\S").ok();
-    let re_done = Regex::new(&format!(
-        r"(?im)^\s*{}\s*[:：]\s*(.*)$",
-        regex::escape(HEADINGS[0])
-    ));
-    let re_zh = Regex::new(&format!(
-        r"(?im)^\s*{}\s*[:：]\s*(.*)$",
-        regex::escape(HEADINGS[1])
-    ));
-    let heading_pairs = [(HEADINGS[0], re_done.ok()), (HEADINGS[1], re_zh.ok())];
+    static NUMBERED_LINE_RE: OnceLock<Regex> = OnceLock::new();
+    static RE_DONE: OnceLock<Regex> = OnceLock::new();
+    static RE_ZH: OnceLock<Regex> = OnceLock::new();
+    let numbered_line_re = NUMBERED_LINE_RE
+        .get_or_init(|| Regex::new(r"(?m)^\d+\.\s+\S").expect("invalid numbered line regex"));
+    let re_done = RE_DONE.get_or_init(|| {
+        Regex::new(&format!(
+            r"(?im)^\s*{}\s*[:：]\s*(.*)$",
+            regex::escape(HEADINGS[0])
+        ))
+        .expect("invalid done regex")
+    });
+    let re_zh = RE_ZH.get_or_init(|| {
+        Regex::new(&format!(
+            r"(?im)^\s*{}\s*[:：]\s*(.*)$",
+            regex::escape(HEADINGS[1])
+        ))
+        .expect("invalid zh regex")
+    });
+    let heading_pairs = [
+        (HEADINGS[0], Some(re_done)),
+        (HEADINGS[1], Some(re_zh)),
+    ];
     for (h, maybe_re) in heading_pairs {
         let Some(re) = maybe_re else {
             continue;
@@ -174,7 +187,7 @@ fn count_done_when_items(text: &str) -> usize {
             let is_bullet = line.starts_with("- ")
                 || line.starts_with("* ")
                 || line.starts_with("• ")
-                || numbered_line_re.as_ref().is_some_and(|r| r.is_match(line));
+                || numbered_line_re.is_match(line);
             if is_bullet {
                 count += 1;
             }

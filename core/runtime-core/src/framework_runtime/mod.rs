@@ -1,39 +1,39 @@
 use crate::closeout_enforcement::{
-    evaluate_closeout_record_value, evaluate_closeout_record_value_with_context,
-    CloseoutEvidenceContext,
+    CloseoutEvidenceContext, evaluate_closeout_record_value,
+    evaluate_closeout_record_value_with_context,
 };
 use chrono::{Local, SecondsFormat};
-use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
+use tracing::{debug, instrument};
 use hex;
+use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 mod alias;
 mod codex_hooks_duplicate;
-pub mod evolution_observer;
 mod constants;
+pub mod evolution_observer;
 mod framework_doctor;
+mod json_io;
+pub mod json_value;
+pub mod live_execute;
 pub(crate) mod orchestration_controller;
+mod pre_tool_use_guard;
+mod prompt_compression;
+mod repo_roots;
 pub mod route_manifest_fallback;
 pub mod router_command_dispatch;
+mod runtime_view;
 pub(crate) mod sandbox_control;
-mod json_io;
-pub mod json_payload;
-pub mod live_execute;
-mod json_value;
+mod session_artifacts;
+mod statusline;
 pub mod stdio_dispatch;
 pub mod stdio_op_registry;
 pub mod trace_attach;
 pub mod trace_stream_io;
 pub mod trace_transport;
-mod pre_tool_use_guard;
-mod prompt_compression;
-mod repo_roots;
-mod runtime_view;
-mod session_artifacts;
-mod statusline;
 mod types;
 
 use json_io::{read_json_strict, read_text_if_exists};
@@ -57,61 +57,58 @@ pub use constants::{
     FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
 };
 // DoctorResult is re-exported for external consumers; not referenced within this module.
+pub use crate::stdio_payload_types::*;
 #[allow(unused_imports)]
-pub use framework_doctor::{run_continuity_audit, run_framework_doctor, DoctorResult};
+pub use framework_doctor::{DoctorResult, run_continuity_audit, run_framework_doctor};
+pub use orchestration_controller::{
+    build_background_control_response, build_runtime_control_plane_payload,
+    build_runtime_integrator_payload, build_runtime_metric_record,
+    build_runtime_observability_exporter_descriptor, build_runtime_observability_health_snapshot,
+    build_runtime_observability_metric_catalog_payload, runtime_observability_dashboard_schema,
+};
 #[allow(unused_imports)]
 pub use pre_tool_use_guard::{
-    evaluate_pre_tool_use_guard, evaluate_pre_tool_use_guard_value,
-    host_requires_strict_pre_tool_fallback, pre_tool_use_guard_contract,
-    PreToolUseGuardRequest, PreToolUseGuardResponse, PreToolUseGuardVerdict,
-    PRE_TOOL_USE_GUARD_SCHEMA_VERSION, PRE_TOOL_USE_GUARD_STDIO_OP,
+    PRE_TOOL_USE_GUARD_SCHEMA_VERSION, PRE_TOOL_USE_GUARD_STDIO_OP, PreToolUseGuardRequest,
+    PreToolUseGuardResponse, PreToolUseGuardVerdict, evaluate_pre_tool_use_guard,
+    evaluate_pre_tool_use_guard_value, host_requires_strict_pre_tool_fallback,
+    pre_tool_use_guard_contract,
 };
 pub use prompt_compression::build_framework_prompt_compression_envelope;
 pub use repo_roots::{
     framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,
-};
-pub use session_artifacts::write_framework_session_artifacts;
-pub use statusline::build_framework_statusline;
-pub use types::FrameworkAliasBuildOptions;
-pub use orchestration_controller::{
-    build_background_control_response, build_runtime_control_plane_payload,
-    build_runtime_integrator_payload, build_runtime_metric_record,
-    build_runtime_observability_exporter_descriptor,
-    build_runtime_observability_health_snapshot,
-    build_runtime_observability_metric_catalog_payload,
-    runtime_observability_dashboard_schema,
 };
 pub use route_manifest_fallback::route_task_with_manifest_fallback;
 pub use route_manifest_fallback::{
     manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
 };
 pub use sandbox_control::build_sandbox_control_response;
-pub use crate::stdio_payload_types::*;
+pub use session_artifacts::write_framework_session_artifacts;
+pub use statusline::build_framework_statusline;
 pub use stdio_dispatch::{dispatch_stdio_json_request, dispatch_stdio_json_request_payload};
-pub use stdio_op_registry::{classify_stdio_op, StdioOpDomain};
+pub use stdio_op_registry::{StdioOpDomain, classify_stdio_op};
+pub use types::FrameworkAliasBuildOptions;
 // Public re-exports for browser-mcp crate
 pub use trace_attach::attach_runtime_event_transport;
 pub use trace_stream_io::{inspect_trace_stream, replay_trace_stream};
 // Crate-internal re-exports
-pub use trace_attach::{
-    cleanup_attached_runtime_event_transport, subscribe_attached_runtime_events,
-};
-pub use trace_stream_io::{
-    sha256_hex, write_trace_compaction_delta, write_trace_metadata,
-};
 #[cfg(test)]
 pub use stdio_op_registry::{
     is_framework_stdio_op, is_routing_stdio_op, is_runtime_stdio_op, is_trace_stdio_op,
 };
+pub use trace_attach::{
+    cleanup_attached_runtime_event_transport, subscribe_attached_runtime_events,
+};
+pub use trace_stream_io::{sha256_hex, write_trace_compaction_delta, write_trace_metadata};
 
 use constants::{
     CLOSEOUT_COMPLETION_STATUSES, CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME,
-    EVIDENCE_INDEX_SCHEMA_VERSION,
-    NEXT_ACTIONS_FILENAME, SESSION_SUMMARY_FILENAME,
-    SUPERVISOR_STATE_FILENAME, TASK_POINTERS_FILENAME, TASK_REGISTRY_SCHEMA_VERSION, TRACE_METADATA_FILENAME,
+    EVIDENCE_INDEX_SCHEMA_VERSION, NEXT_ACTIONS_FILENAME, SESSION_SUMMARY_FILENAME,
+    SUPERVISOR_STATE_FILENAME, TASK_POINTERS_FILENAME, TASK_REGISTRY_SCHEMA_VERSION,
+    TRACE_METADATA_FILENAME,
 };
 use types::FrameworkRuntimeView;
 
+#[instrument(level = "debug", skip_all)]
 pub fn build_framework_runtime_snapshot_envelope(
     repo_root: &Path,
     artifact_root_override: Option<&Path>,
@@ -126,6 +123,7 @@ pub fn build_framework_runtime_snapshot_envelope(
 }
 
 /// Detail level for snapshot output: "summary" (compact, default) or "full".
+#[instrument(level = "debug", skip_all, fields(detail_level))]
 pub fn build_framework_runtime_snapshot_envelope_with_level(
     repo_root: &Path,
     artifact_root_override: Option<&Path>,
@@ -317,7 +315,11 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
 /// Compact version of registered_tasks for summary mode:
 /// keeps `status`, `task` (truncated to 80 chars), `updated_at`, and `task_id`.
 fn build_compact_registered_tasks(registered_tasks: &Value) -> Value {
-    let Some(tasks) = registered_tasks.as_object().and_then(|o| o.get("tasks")).and_then(Value::as_array) else {
+    let Some(tasks) = registered_tasks
+        .as_object()
+        .and_then(|o| o.get("tasks"))
+        .and_then(Value::as_array)
+    else {
         return registered_tasks.clone();
     };
     let compact_tasks: Vec<Value> = tasks
@@ -331,10 +333,10 @@ fn build_compact_registered_tasks(registered_tasks: &Value) -> Value {
                 "updated_at": row.get("updated_at"),
             });
             if !truncated.is_empty() {
-                compact.as_object_mut().unwrap().insert(
-                    "task".to_string(),
-                    Value::String(truncated),
-                );
+                compact
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("task".to_string(), Value::String(truncated));
             }
             compact
         })
@@ -385,7 +387,7 @@ fn build_compact_continuity(continuity: &Value) -> Value {
         "paths",
         "summary_fields",
         "recovery_hints",
-        "continuity",  // nested inner continuity block
+        "continuity", // nested inner continuity block
     ];
     let mut compact = serde_json::Map::new();
     for (key, val) in obj {
@@ -428,6 +430,7 @@ fn codegraph_index_snapshot(_repo_root: &Path) -> Value {
     json!({"enabled": false})
 }
 
+#[instrument(level = "debug", skip_all)]
 pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, String> {
     let snapshot = load_framework_runtime_view(repo_root, None, None);
     let continuity = classify_runtime_continuity(&snapshot);
@@ -908,8 +911,6 @@ fn truncate_utf8_chars(input: &str, max_chars: usize) -> String {
 /// Stable task id when no active/focus pointer exists (review-only sessions).
 pub(crate) const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
 
-
-
 /// 带可选 task_id 的版本（用于 Desktop MCP session_checkpoint tool）。
 ///
 /// `repointer_focus`: when true, rewrite active/focus/supervisor (explicit user checkpoint).
@@ -1150,7 +1151,6 @@ pub fn append_evidence_index_merged_row(
         .and_then(Value::as_str)
         .map(str::to_string)
         .unwrap_or_default();
-
 
     let resolved_task_id = resolve_evidence_append_task_id(repo_root, task_id_override);
 
@@ -1429,7 +1429,11 @@ fn detect_and_verify_physical_artifact(repo_root: &Path, command: &str) -> bool 
         return true;
     }
 
-    if c.contains("cargo test") || c.contains("cargo check") || c.contains("cargo clippy") || c.contains("cargo build") {
+    if c.contains("cargo test")
+        || c.contains("cargo check")
+        || c.contains("cargo clippy")
+        || c.contains("cargo build")
+    {
         let target_dir = repo_root.join("target");
         if target_dir.is_dir() {
             if is_modified_recently(&target_dir, max_delta) {
@@ -1475,7 +1479,6 @@ fn is_modified_recently(path: &std::path::Path, max_delta_secs: u64) -> bool {
     false
 }
 
-
 #[cfg(test)]
 mod shell_command_verification_heuristic_tests {
     use super::shell_command_looks_like_verification;
@@ -1515,17 +1518,29 @@ mod shell_command_verification_heuristic_tests {
     #[test]
     fn test_physical_artifact_checks() {
         use super::detect_and_verify_physical_artifact;
-        let temp_dir = std::env::temp_dir().join(format!("router-rs-test-artifact-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis()));
+        let temp_dir = std::env::temp_dir().join(format!(
+            "router-rs-test-artifact-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_millis()
+        ));
         std::fs::create_dir_all(&temp_dir).unwrap();
 
         // 1. Non-verification commands should be bypassed and return true by default
-        assert!(detect_and_verify_physical_artifact(&temp_dir, "python foo.py"));
+        assert!(detect_and_verify_physical_artifact(
+            &temp_dir,
+            "python foo.py"
+        ));
 
         // 2. Pytest should return false when pytest_cache / junit.xml are missing
         assert!(!detect_and_verify_physical_artifact(&temp_dir, "pytest -v"));
 
         // 3. Cargo test should return false when target directory is missing
-        assert!(!detect_and_verify_physical_artifact(&temp_dir, "cargo test"));
+        assert!(!detect_and_verify_physical_artifact(
+            &temp_dir,
+            "cargo test"
+        ));
 
         // 4. Simulate pytest generating .pytest_cache folder -> pytest passes
         let pytest_cache = temp_dir.join(".pytest_cache");
@@ -1678,10 +1693,7 @@ pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
 
 /// Evaluate a materialized closeout record JSON file, attaching an EvidenceContext (R8) when possible.
 /// Shared Stop/closeout guard when assistant or user text claims completion (Cursor/Codex parity).
-pub fn closeout_stop_followup_for_completion_text(
-    repo_root: &Path,
-    text: &str,
-) -> Option<String> {
+pub fn closeout_stop_followup_for_completion_text(repo_root: &Path, text: &str) -> Option<String> {
     if text.trim().is_empty() || !crate::hook_common::contains_completion_claim_token(text) {
         return None;
     }
@@ -1690,7 +1702,9 @@ pub fn closeout_stop_followup_for_completion_text(
         .task_id
         .filter(|s| !s.is_empty())
         .or_else(|| first_task_id_from_registry(repo_root));
-    let Some(tid) = tid else { return None; };
+    let Some(tid) = tid else {
+        return None;
+    };
     if !closeout_programmatic_enforcement_enabled() {
         return None;
     }
@@ -1835,10 +1849,9 @@ fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>
                 &repo_root,
                 &task_id_str,
             );
-        let goal_state =
-            crate::autopilot_goal::read_goal_state(&repo_root, Some(&task_id_str))
-                .ok()
-                .flatten();
+        let goal_state = crate::autopilot_goal::read_goal_state(&repo_root, Some(&task_id_str))
+            .ok()
+            .flatten();
         let goal_prediction = goal_state
             .as_ref()
             .and_then(core_state::goal_prediction::read_goal_prediction);

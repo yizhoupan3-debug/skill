@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! 保证主要叙事面（docs/、skills/、根契约 Markdown）在 git 跟踪下可读且为有效 UTF-8，
 //! 与 `/update` 的「全文档纳管」口径一致（不评价正文正确性；正确性由其它契约测试驱动修改）。
 

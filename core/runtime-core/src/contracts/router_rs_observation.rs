@@ -1,9 +1,9 @@
 //! Structured observation payloads for hook outbound JSON (`router_rs_observation`).
 
 use crate::hook_observation_rules::{
-    classify_additional_context, classify_followup_first_line, shorten_line, GateClassified,
+    GateClassified, classify_additional_context, classify_followup_first_line, shorten_line,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 pub const ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION: &str = "router-rs-hook-observation-v1";
 
@@ -241,7 +241,10 @@ mod tests {
             "continue": false,
             "followup_message": followup,
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
+        let o = build_router_rs_observation_value(
+            &v,
+            HookObservationHost::from_host_id("cursor").unwrap(),
+        );
         assert_eq!(o["gate"]["code"], "review_gate");
         assert_eq!(o["gate"]["blocking"], true);
     }
@@ -252,8 +255,15 @@ mod tests {
             "continue": true,
             "additional_context": "GOAL_CONTINUE: stale\nGoal: x",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
-        assert!(o["gate"].is_null(), "GOAL_CONTINUE hook path removed: {:?}", o);
+        let o = build_router_rs_observation_value(
+            &v,
+            HookObservationHost::from_host_id("cursor").unwrap(),
+        );
+        assert!(
+            o["gate"].is_null(),
+            "GOAL_CONTINUE hook path removed: {:?}",
+            o
+        );
     }
 
     #[test]
@@ -264,7 +274,10 @@ mod tests {
             "task_id": "task-9",
             "additional_context": "GOAL_CONTINUE: x",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
+        let o = build_router_rs_observation_value(
+            &v,
+            HookObservationHost::from_host_id("cursor").unwrap(),
+        );
         assert_eq!(o["correlation"]["session_id"], "sess-1");
         assert_eq!(o["correlation"]["task_id"], "task-9");
     }
@@ -277,7 +290,10 @@ mod tests {
             "tool_input": {"session_id": "nested"},
             "followup_message": "router-rs REVIEW_GATE x",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
+        let o = build_router_rs_observation_value(
+            &v,
+            HookObservationHost::from_host_id("cursor").unwrap(),
+        );
         assert_eq!(o["correlation"]["session_id"], "top");
     }
 
@@ -299,7 +315,10 @@ mod tests {
             "continue": true,
             "followup_message": "router-rs WEIRD_TOKEN hello",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
+        let o = build_router_rs_observation_value(
+            &v,
+            HookObservationHost::from_host_id("cursor").unwrap(),
+        );
         assert_eq!(o["gate"]["code"], "unknown_router_rs");
     }
 
@@ -309,7 +328,10 @@ mod tests {
             "continue": true,
             "followup_message": "router-rs：disk full",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
+        let o = build_router_rs_observation_value(
+            &v,
+            HookObservationHost::from_host_id("cursor").unwrap(),
+        );
         assert_eq!(o["gate"]["code"], "hook_state_degraded");
     }
 
@@ -319,7 +341,10 @@ mod tests {
             "continue": true,
             "additional_context": "CLOSEOUT_FOLLOWUP please\nGOAL_CONTINUE: x",
         });
-        let o = build_router_rs_observation_value(&v, HookObservationHost::from_host_id("cursor").unwrap());
+        let o = build_router_rs_observation_value(
+            &v,
+            HookObservationHost::from_host_id("cursor").unwrap(),
+        );
         assert_eq!(o["gate"]["code"], "closeout_followup");
     }
 }

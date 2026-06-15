@@ -6,8 +6,8 @@ use std::str::FromStr;
 const BLOCKED_HOST_SUFFIXES: &[&str] = &[".localhost", ".local", ".internal"];
 
 pub fn validate_web_fetch_url(url: &str) -> Result<(), String> {
-    let parsed = reqwest::Url::parse(url.trim())
-        .map_err(|_| format!("web_fetch invalid URL: {url}"))?;
+    let parsed =
+        reqwest::Url::parse(url.trim()).map_err(|_| format!("web_fetch invalid URL: {url}"))?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return Err(format!("web_fetch only supports http(s) URLs: {url}"));
     }
@@ -21,25 +21,25 @@ pub fn validate_web_fetch_url(url: &str) -> Result<(), String> {
     Ok(())
 }
 
-
 /// Validates `url` AND resolves+pins DNS in one pass.
 /// Returns the parsed URL and resolved addresses for DNS pinning to prevent rebinding TOCTOU.
-pub fn validate_and_resolve_web_fetch_url(url: &str) -> Result<(reqwest::Url, Vec<std::net::SocketAddr>), String> {
+pub fn validate_and_resolve_web_fetch_url(
+    url: &str,
+) -> Result<(reqwest::Url, Vec<std::net::SocketAddr>), String> {
     validate_web_fetch_url(url)?;
     let parsed = reqwest::Url::parse(url.trim())
         .map_err(|_| format!("web_fetch invalid URL for DNS pin: {url}"))?;
-    let host = parsed.host_str()
+    let host = parsed
+        .host_str()
         .ok_or_else(|| format!("web_fetch URL missing host: {url}"))?;
-    let port = parsed.port()
+    let port = parsed
+        .port()
         .unwrap_or(if parsed.scheme() == "https" { 443 } else { 80 });
     let addrs = resolve_web_fetch_addresses(host, port)?;
     Ok((parsed, addrs))
 }
 
-pub fn resolve_web_fetch_redirect(
-    base: &reqwest::Url,
-    location: &str,
-) -> Result<String, String> {
+pub fn resolve_web_fetch_redirect(base: &reqwest::Url, location: &str) -> Result<String, String> {
     let next = base
         .join(location.trim())
         .map_err(|err| format!("web_fetch invalid redirect location: {err}"))?;
@@ -100,7 +100,9 @@ fn validate_web_fetch_host(host: &str) -> Result<(), String> {
         }
     }
     if !any {
-        return Err(format!("web_fetch DNS lookup returned no addresses for {host}"));
+        return Err(format!(
+            "web_fetch DNS lookup returned no addresses for {host}"
+        ));
     }
     Ok(())
 }
@@ -140,10 +142,12 @@ fn is_forbidden_web_fetch_ipv6(ip: Ipv6Addr) -> bool {
         || ip.to_ipv4_mapped().is_some_and(is_forbidden_web_fetch_ipv4)
 }
 
-
 /// Resolves `host` and returns all `SocketAddr` entries that pass the SSRF guard.
 /// Used to pin DNS results before the HTTP request, preventing DNS rebinding.
-pub fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<std::net::SocketAddr>, String> {
+pub fn resolve_web_fetch_addresses(
+    host: &str,
+    port: u16,
+) -> Result<Vec<std::net::SocketAddr>, String> {
     let lookup_host = host
         .strip_prefix('[')
         .and_then(|h| h.strip_suffix(']'))
@@ -154,7 +158,9 @@ pub fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<std::net
         .map_err(|err| format!("web_fetch DNS lookup failed for {host}: {err}"))?
         .collect();
     if addrs.is_empty() {
-        return Err(format!("web_fetch DNS lookup returned no addresses for {host}"));
+        return Err(format!(
+            "web_fetch DNS lookup returned no addresses for {host}"
+        ));
     }
     for addr in &addrs {
         if is_forbidden_web_fetch_ip(&addr.ip()) {
@@ -179,10 +185,7 @@ pub fn validate_and_resolve_web_fetch_url_as_strings(
     Ok((parsed.to_string(), addr_strs))
 }
 
-pub fn resolve_web_fetch_redirect_as_string(
-    base: &str,
-    location: &str,
-) -> Result<String, String> {
+pub fn resolve_web_fetch_redirect_as_string(base: &str, location: &str) -> Result<String, String> {
     let base_url = reqwest::Url::parse(base)
         .map_err(|e| format!("web_fetch redirect base URL invalid: {e}"))?;
     resolve_web_fetch_redirect(&base_url, location)
@@ -196,14 +199,13 @@ pub fn resolve_web_fetch_addresses_as_strings(
     Ok(addrs.iter().map(|a| a.to_string()).collect())
 }
 
-
 /// Validates URLs for `browser_open` - blocks non-http(s) schemes (`file://`,
 /// `data:`, `javascript:`, etc.) and reuses the web_fetch SSRF guards
 /// (private IPs, metadata endpoints, blocked host suffixes).
 pub fn validate_browser_open_url(url: &str) -> Result<(), String> {
     let trimmed = url.trim();
-    let parsed = reqwest::Url::parse(trimmed)
-        .map_err(|_| format!("browser_open invalid URL: {url}"))?;
+    let parsed =
+        reqwest::Url::parse(trimmed).map_err(|_| format!("browser_open invalid URL: {url}"))?;
     if !matches!(parsed.scheme(), "http" | "https") {
         return Err(format!(
             "browser_open blocked scheme '{}' - only http(s) allowed: {}",
@@ -281,7 +283,6 @@ mod tests {
         assert!(validate_web_fetch_url("http://foo.local/").is_err());
         assert!(validate_web_fetch_url("http://bar.internal/").is_err());
     }
-
 
     #[test]
     fn resolve_addresses_rejects_loopback() {
@@ -416,7 +417,4 @@ mod tests {
         let base = reqwest::Url::parse("https://example.com/").unwrap();
         assert!(resolve_web_fetch_redirect(&base, "http://localhost/").is_err());
     }
-
-
-
 }

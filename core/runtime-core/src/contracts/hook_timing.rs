@@ -2,6 +2,7 @@
 
 use std::cell::Cell;
 use std::time::Instant;
+use tracing::debug;
 
 thread_local! {
     static HOOK_STARTED: Cell<Option<Instant>> = const { Cell::new(None) };
@@ -39,6 +40,13 @@ pub fn emit_hook_timing_line(event: &str) {
         .unwrap_or(0);
     let lock_wait_ms = LOCK_WAIT_MS.with(|c| c.get());
     let cargo_check_ms = CARGO_CHECK_MS.with(|c| c.get());
+    debug!(
+        %event,
+        duration_ms,
+        lock_wait_ms,
+        cargo_check_ms,
+        "hook timing"
+    );
     eprintln!(
         "hook_timing event={event} duration_ms={duration_ms} lock_wait_ms={lock_wait_ms} cargo_check_ms={cargo_check_ms}"
     );
@@ -64,7 +72,7 @@ mod tests {
     #[test]
     fn hook_timing_env_enabled_and_emits_on_stderr() {
         let _g = process_env_lock();
-        std::env::set_var("ROUTER_RS_HOOK_TIMING", "1");
+        unsafe { std::env::set_var("ROUTER_RS_HOOK_TIMING", "1") };
         assert!(crate::router_env_flags::router_rs_hook_timing_enabled());
 
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -85,7 +93,9 @@ mod tests {
                 String::from_utf8_lossy(&out.stderr)
             );
             if combined.contains("moved") || combined.contains("router-rs-cli") {
-                eprintln!("skip: router-rs binary is a redirect shim; hook timing e2e test requires the real binary");
+                eprintln!(
+                    "skip: router-rs binary is a redirect shim; hook timing e2e test requires the real binary"
+                );
                 return;
             }
         }

@@ -13,16 +13,16 @@ use core_policy::review_gate_engine::{
     fork_context_from_values, review_independent_reviewer_evidence,
 };
 use core_policy::{HookReviewDiskCore, HookReviewGateFields};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::os::unix::io::AsRawFd;
 use std::path::{Component, Path, PathBuf};
 #[cfg(not(unix))]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
 
 const CLAUDE_HOOK_STATE_UNREADABLE: &str =
     "router-rs CLAUDE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
@@ -188,10 +188,8 @@ fn repo_relative_slash_path(repo_root: &Path, raw: &str) -> Option<String> {
     Some(joined.to_string_lossy().replace('\\', "/"))
 }
 
-const FRAMEWORK_CHANGED_CONTEXT: &str =
-    "Framework routing/runtime files changed; run the targeted Rust contract tests before finishing.";
-const SETTINGS_CHANGED_CONTEXT: &str =
-    "Hook/settings files changed; validate JSON and run the agent hook contract tests before finishing.";
+const FRAMEWORK_CHANGED_CONTEXT: &str = "Framework routing/runtime files changed; run the targeted Rust contract tests before finishing.";
+const SETTINGS_CHANGED_CONTEXT: &str = "Hook/settings files changed; validate JSON and run the agent hook contract tests before finishing.";
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` 或 legacy `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE`。
 fn agent_review_gate_disabled() -> bool {
     core_policy::env_flags::router_rs_review_gate_disabled_for_host("claude-code")
@@ -300,10 +298,7 @@ const FRAMEWORK_GUARDED_PREFIXES: &[&str] = &[
     "skills/SKILL_TIERS.json",
 ];
 /// PostToolUse提醒 + Stop门禁: framework source code (overlap with GUARDED is intentional defense-in-depth when skip guard is set).
-const FRAMEWORK_SOURCE_PREFIXES: &[&str] = &[
-    "core/router-rs/",
-    "configs/framework/",
-];
+const FRAMEWORK_SOURCE_PREFIXES: &[&str] = &["core/router-rs/", "configs/framework/"];
 
 const SETTINGS_GUARDED_PATHS_CLAUDE: &[&str] =
     &[".claude/settings.json", ".claude/settings.local.json"];
@@ -311,10 +306,7 @@ const GENERATED_ENTRYPOINT_PATHS_CLAUDE: &[&str] = &[".claude/CLAUDE.md"];
 /// Cross-host generated surfaces: active in other hosts, Claude should not directly modify.
 const CROSS_HOST_SURFACES: &[&str] = &[".codex/hooks.json"];
 /// Truly retired surfaces: defense-in-depth against accidental restoration.
-const RETIRED_SURFACES: &[&str] = &[
-    ".agents",
-    "plugins/skill-framework-native/.mcp.json",
-];
+const RETIRED_SURFACES: &[&str] = &[".agents", "plugins/skill-framework-native/.mcp.json"];
 /// Pre-89ece4c the stdio agent hook accepted kebab-case commands only; CLI adds PascalCase aliases
 /// aligned with Codex hook spelling (`PreToolUse`, `Stop`, …)。
 pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String> {
@@ -497,7 +489,9 @@ fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
             warn_contexts.push(format!(
                 "Modifying {path} — this is a cross-host strategy document; ensure consistency across all hosts."
             ));
-        } else if path == "skills/SKILL_ROUTING_RUNTIME.json" || path == "skills/SKILL_MANIFEST.json" {
+        } else if path == "skills/SKILL_ROUTING_RUNTIME.json"
+            || path == "skills/SKILL_MANIFEST.json"
+        {
             warn_contexts.push(format!(
                 "Modifying {path} — framework routing core data source; run `framework skills refresh --validate` after changes."
             ));
@@ -521,7 +515,9 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
     let review_sync = if !agent_review_gate_disabled()
         && should_sync_review_gate_on_user_prompt(repo_root, &prompt)
     {
-        Some(apply_claude_review_gate_user_prompt(repo_root, payload, &prompt))
+        Some(apply_claude_review_gate_user_prompt(
+            repo_root, payload, &prompt,
+        ))
     } else {
         None
     };
@@ -552,12 +548,17 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
     if let Some(Ok(state)) = review_sync {
         if state.review_required
             && !state.review_override
-            && core_policy::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &prompt)
-        {
-            contexts.push(core_policy::registry_review_gate::review_spawn_first_nudge_line(
+            && core_policy::hook_common::should_inject_spawn_first_review_nudge(
                 Some(repo_root),
-                "claude-code",
-            ));
+                &prompt,
+            )
+        {
+            contexts.push(
+                core_policy::registry_review_gate::review_spawn_first_nudge_line(
+                    Some(repo_root),
+                    "claude-code",
+                ),
+            );
         }
     }
     crate::hooks::maybe_append_paper_adversarial_context(
@@ -641,7 +642,10 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
             review_state_path(repo_root, payload).display()
         );
         // Advisory — corrupted state is not a reason to block indefinitely
-        return add_context("Stop", "[advisory] hook-state unreadable; clearing stale files.");
+        return add_context(
+            "Stop",
+            "[advisory] hook-state unreadable; clearing stale files.",
+        );
     }
     if matches!(touch_load, AgentDiskState::Unreadable) {
         eprintln!(
@@ -651,7 +655,10 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
         );
         // Advisory — corrupted state is not a reason to block indefinitely
         clear_touch_state(repo_root, payload);
-        return add_context("Stop", "[advisory] hook-state unreadable; cleared stale files.");
+        return add_context(
+            "Stop",
+            "[advisory] hook-state unreadable; cleared stale files.",
+        );
     }
 
     let stop_signal = claude_stop_signal_text(payload);
@@ -682,15 +689,21 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     if state.settings && !state.settings_validated {
         // Advisory — warn but do not block
         clear_touch_state(repo_root, payload);
-        return add_context("Stop", &format!(
-            "[advisory] {}",
-            active_stdio_agent_hook_host().validate_settings_stop_reason()
-        ));
+        return add_context(
+            "Stop",
+            &format!(
+                "[advisory] {}",
+                active_stdio_agent_hook_host().validate_settings_stop_reason()
+            ),
+        );
     }
     if state.framework && !state.framework_tested {
         // Advisory — warn but do not block
         clear_touch_state(repo_root, payload);
-        return add_context("Stop", "[advisory] Framework source files were modified. Consider running tests.");
+        return add_context(
+            "Stop",
+            "[advisory] Framework source files were modified. Consider running tests.",
+        );
     }
     clear_review_state(repo_root, payload);
     clear_touch_state(repo_root, payload);
@@ -808,9 +821,11 @@ fn legacy_review_gate_hook_state_path(repo_root: &Path, payload: &Value) -> Path
 
 /// `.claude/review_gate_<key>.json` (flat legacy).
 fn legacy_review_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
-    repo_root.join(".claude").join(
-        core_policy::hook_review_gate_legacy_state_basename(&session_key(repo_root, payload)),
-    )
+    repo_root
+        .join(".claude")
+        .join(core_policy::hook_review_gate_legacy_state_basename(
+            &session_key(repo_root, payload),
+        ))
 }
 
 fn read_review_gate_file(path: &Path) -> AgentDiskState<ReviewGateState> {
@@ -923,7 +938,9 @@ fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewSta
                     // Attempt stale lock cleanup before giving up
                     if let Ok(meta) = fs::metadata(&lock_path) {
                         if let Ok(modified) = meta.modified() {
-                            if modified.elapsed().unwrap_or(Duration::ZERO) > Duration::from_secs(60) {
+                            if modified.elapsed().unwrap_or(Duration::ZERO)
+                                > Duration::from_secs(60)
+                            {
                                 let _ = fs::remove_file(&lock_path);
                                 continue;
                             }
@@ -957,9 +974,9 @@ fn migrate_claude_review_gate_state_to_canonical(
     canonical_path: &Path,
     state: &ReviewGateState,
 ) -> AgentDiskState<ReviewGateState> {
-    if let Err(err) =
-        with_claude_review_state_lock(canonical_path, || write_review_state_unlocked(canonical_path, state))
-    {
+    if let Err(err) = with_claude_review_state_lock(canonical_path, || {
+        write_review_state_unlocked(canonical_path, state)
+    }) {
         eprintln!(
             "[router-rs] claude review_gate legacy migrate failed (using in-memory state): {err}"
         );
@@ -1479,7 +1496,6 @@ fn payload_runs_framework_tests(payload: &Value) -> bool {
     .iter()
     .any(|hint| lowered.contains(hint))
 }
-
 
 #[cfg(test)]
 #[path = "claude_code_hooks_tests.rs"]

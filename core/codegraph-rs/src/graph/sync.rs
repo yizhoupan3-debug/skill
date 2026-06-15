@@ -1,11 +1,10 @@
 //! Incremental index sync + filesystem watcher.
 
-use crate::db::index_ops::{
-    ingest_parsed_file_with_stmts, list_indexed_files, set_meta, IndexedFileMeta,
-    IngestStmts,
-};
-use crate::parser::{self, parse_file, skill::parse_skill_manifest, ParsedFile};
 use crate::CodeGraphIndex;
+use crate::db::index_ops::{
+    IndexedFileMeta, IngestStmts, ingest_parsed_file_with_stmts, list_indexed_files, set_meta,
+};
+use crate::parser::{self, ParsedFile, parse_file, skill::parse_skill_manifest};
 use anyhow::Context;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rayon::prelude::*;
@@ -61,7 +60,9 @@ pub fn incremental_sync(
     repo_root: &Path,
     force_all: bool,
 ) -> anyhow::Result<SyncReport> {
-    let repo_root = repo_root.canonicalize().unwrap_or_else(|_| repo_root.to_path_buf());
+    let repo_root = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
     let mut report = SyncReport::default();
     let mut seen = HashSet::new();
     let indexed: HashMap<String, IndexedFileMeta> = list_indexed_files(index.connection())?
@@ -89,18 +90,33 @@ pub fn incremental_sync(
                 if stored.content_hash == content_hash {
                     continue; // mtime changed but content identical
                 }
-                pending.push(FileWorkItem { path, rel, mtime_ns, content_hash });
+                pending.push(FileWorkItem {
+                    path,
+                    rel,
+                    mtime_ns,
+                    content_hash,
+                });
             } else {
                 // New file — always index
                 let mtime_ns = file_mtime_ns(&path)?;
                 let content_hash = file_content_hash(&path)?;
-                pending.push(FileWorkItem { path, rel, mtime_ns, content_hash });
+                pending.push(FileWorkItem {
+                    path,
+                    rel,
+                    mtime_ns,
+                    content_hash,
+                });
             }
         } else {
             // Force-all mode: always read and parse
             let mtime_ns = file_mtime_ns(&path)?;
             let content_hash = file_content_hash(&path)?;
-            pending.push(FileWorkItem { path, rel, mtime_ns, content_hash });
+            pending.push(FileWorkItem {
+                path,
+                rel,
+                mtime_ns,
+                content_hash,
+            });
         }
     }
 
@@ -282,8 +298,8 @@ pub struct IndexWatcher {
 impl IndexWatcher {
     pub fn spawn(repo_root: PathBuf) -> anyhow::Result<Self> {
         let (tx, rx) = mpsc::channel();
-        let mut watcher = RecommendedWatcher::new(tx, Config::default())
-            .context("create filesystem watcher")?;
+        let mut watcher =
+            RecommendedWatcher::new(tx, Config::default()).context("create filesystem watcher")?;
         watcher
             .watch(&repo_root, RecursiveMode::Recursive)
             .with_context(|| format!("watch {}", repo_root.display()))?;
@@ -438,7 +454,9 @@ mod tests {
             "expected re-index when on-disk content hash differs: {:?}",
             report
         );
-        let search = index.search_symbols("gamma", None, None, 10).expect("search symbols");
+        let search = index
+            .search_symbols("gamma", None, None, 10)
+            .expect("search symbols");
         assert!(search.iter().any(|n| n.symbol == "gamma"));
         let _ = fs::remove_dir_all(root);
     }
@@ -472,7 +490,10 @@ mod tests {
             .expect("should succeed");
         }
         let report = build_full_index(&index, &root).expect("build full index");
-        assert!(report.files_updated >= 9, "expected parallel ingest of all modules");
+        assert!(
+            report.files_updated >= 9,
+            "expected parallel ingest of all modules"
+        );
         let stats = index.index_stats().expect("build full index");
         assert!(stats.node_count >= 10);
         let _ = fs::remove_dir_all(root);

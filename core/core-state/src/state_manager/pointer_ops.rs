@@ -2,7 +2,7 @@
 // Extracted from state_manager.rs during module split.
 
 use crate::utils::atomic_write::write_atomic_json;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
@@ -59,7 +59,9 @@ pub fn read_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<Strin
             if let Ok(data) = serde_json::from_str::<Value>(&raw) {
                 let parse = |key: &str| -> Option<String> {
                     let tid = data.get(key)?.as_str()?.trim().to_string();
-                    if tid.is_empty() { return None; }
+                    if tid.is_empty() {
+                        return None;
+                    }
                     crate::utils::path_guard::safe_task_id_component(&tid)?;
                     Some(tid)
                 };
@@ -113,7 +115,10 @@ pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), 
         obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
         obj.insert("active_task_id".to_string(), json!(task_id));
     }
-    write_atomic_json(&repo_root.join("artifacts/current/TASK_POINTERS.json"), &pointers)
+    write_atomic_json(
+        &repo_root.join("artifacts/current/TASK_POINTERS.json"),
+        &pointers,
+    )
 }
 
 fn write_focus_task_pointer_minimal(
@@ -148,14 +153,20 @@ fn write_focus_task_pointer_minimal(
                 }));
             }
         } else {
-            obj.insert("tasks".to_string(), json!([{
-                "task_id": task_id,
-                "task": task_label,
-                "updated_at": updated_at,
-            }]));
+            obj.insert(
+                "tasks".to_string(),
+                json!([{
+                    "task_id": task_id,
+                    "task": task_label,
+                    "updated_at": updated_at,
+                }]),
+            );
         }
     }
-    write_atomic_json(&repo_root.join("artifacts/current/TASK_POINTERS.json"), &pointers)
+    write_atomic_json(
+        &repo_root.join("artifacts/current/TASK_POINTERS.json"),
+        &pointers,
+    )
 }
 
 fn goal_drive_set_focus_from_payload(payload: &Value) -> bool {
@@ -214,7 +225,10 @@ pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Res
     Ok(())
 }
 
-pub fn ensure_task_directory(repo_root: &Path, task_id: &str) -> Result<std::path::PathBuf, String> {
+pub fn ensure_task_directory(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<std::path::PathBuf, String> {
     let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
     let task_dir = repo_root.join("artifacts/current").join(tid);
     if !task_dir.is_dir() {

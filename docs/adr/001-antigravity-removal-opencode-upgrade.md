@@ -1,4 +1,4 @@
-# Spec: Antigravity 移除 + 四宿主一致性 + 注册表驱动
+# Spec: Antigravity 移除 + 五宿主一致性 + 注册表驱动
 
 > **Status**: Executed (2026-06-12) — all items below have been completed.
 > **日期**: 2026-06-12
@@ -34,7 +34,7 @@ OpenCode **不是** anemic host。
 ### 0.3 三大目标
 
 1. **彻底移除 Antigravity**：删除所有代码、配置、文档、投影
-2. **OpenCode 升级为 rich host**：对齐四宿主核心能力
+2. **OpenCode 升级为 rich host**：对齐五宿主核心能力
 3. **注册表驱动**：消除硬编码宿主列表，新增/删除宿主只改 `RUNTIME_REGISTRY.json`
 
 ---
@@ -387,7 +387,7 @@ pub const HARNESS_CAPABILITIES_MINIMAL: &[&str] = &[
 
 ---
 
-## 4. 四宿主一致性矩阵
+## 4. 五宿主一致性矩阵
 
 ### 4.1 核心一致点（全部 ✅）
 
@@ -528,7 +528,7 @@ pub const HARNESS_CAPABILITIES_MINIMAL: &[&str] = &[
 3. `grep -ri antigravity --include='*.rs' --include='*.json' --include='*.md' --include='*.toml' .` → 零结果
 4. `grep -ri "anemic\|MINIMAL"` → 仅 deprecated 注解
 5. 确认 `REGISTRY_SUPPORTED_HOST_IDS` 长度为 4
-6. 确认四宿主能力矩阵一致
+6. 确认五宿主能力矩阵一致
 
 ---
 
@@ -549,11 +549,11 @@ pub const HARNESS_CAPABILITIES_MINIMAL: &[&str] = &[
 - [ ] `grep -ri antigravity` （*.rs *.json *.md *.toml）→ 零结果
 - [ ] `cargo build` 全 feature 组合通过
 - [ ] `cargo test` 全量通过
-- [ ] 四宿主 `has_native_hook == true`
-- [ ] 四宿主 `HARNESS_CAPABILITIES == FULL`
-- [ ] 四宿主 `closeout_evidence_hooks_supported() == true`
-- [ ] 四宿主 `review_gate_router_observable() == true`
-- [ ] 四宿主 `requires_strict_pre_tool_fallback_default() == false`
+- [ ] 五宿主 `has_native_hook == true`
+- [ ] 五宿主 `HARNESS_CAPABILITIES == FULL`
+- [ ] 五宿主 `closeout_evidence_hooks_supported() == true`
+- [ ] 五宿主 `review_gate_router_observable() == true`
+- [ ] 五宿主 `requires_strict_pre_tool_fallback_default() == false`
 - [ ] `REGISTRY_SUPPORTED_HOST_IDS` 长度为 4
 - [ ] CLI alias 从注册表派生（无硬编码宿主名列表）
 - [ ] display label 从 HostProvider trait 获取

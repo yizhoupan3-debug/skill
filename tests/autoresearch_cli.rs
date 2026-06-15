@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod common;
 
 use common::{project_root, run};
@@ -125,15 +126,18 @@ fn rust_autoresearch_full_loop() {
     assert_eq!(state["active_hypothesis"], "rust-loop");
     assert_eq!(state["hypotheses"][0]["status"], "active");
     assert!(root.join("experiments/rust-loop/run-001.md").is_file());
-    assert!(root
-        .join("experiments/rust-loop/run-001-reflection.md")
-        .is_file());
+    assert!(
+        root.join("experiments/rust-loop/run-001-reflection.md")
+            .is_file()
+    );
     let resume = run_ctl_ok(&["resume", "--workspace", root.to_str().unwrap()]);
     assert!(stdout(&resume).contains("latest_direction: DEEPEN"));
     let ledger = std::fs::read_to_string(root.join("run-ledger.jsonl")).unwrap();
-    assert!(ledger
-        .lines()
-        .any(|line| serde_json::from_str::<Value>(line).unwrap()["kind"] == "run.recorded"));
+    assert!(
+        ledger
+            .lines()
+            .any(|line| serde_json::from_str::<Value>(line).unwrap()["kind"] == "run.recorded")
+    );
 }
 
 #[test]
@@ -170,10 +174,12 @@ fn autoresearch_records_external_research_from_arxiv() {
     let state = load_state(&root);
     assert_eq!(state["external_research"].as_sequence().unwrap().len(), 1);
     assert!(state["external_research"][0]["query"].as_str().is_some());
-    assert!(!state["external_research"][0]["results"]
-        .as_sequence()
-        .unwrap()
-        .is_empty());
+    assert!(
+        !state["external_research"][0]["results"]
+            .as_sequence()
+            .unwrap()
+            .is_empty()
+    );
     assert!(
         std::fs::read_to_string(root.join("literature/EXTERNAL_RESEARCH.md"))
             .unwrap()

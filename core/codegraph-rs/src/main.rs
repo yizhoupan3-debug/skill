@@ -3,7 +3,9 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "mcp-codegraph")]
-#[command(about = "CodeGraph MCP server (stdio) — code knowledge graph with symbol search, call graph, and impact analysis")]
+#[command(
+    about = "CodeGraph MCP server (stdio) — code knowledge graph with symbol search, call graph, and impact analysis"
+)]
 struct Cli {
     #[arg(long, default_value = ".")]
     repo_root: PathBuf,

@@ -12,7 +12,7 @@ use super::json_value::{
 use super::types::*;
 
 use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 use std::ops::Not;
 use std::path::{Path, PathBuf};
@@ -44,31 +44,42 @@ pub(super) fn load_framework_runtime_view(
             "TASK_POINTERS.json",
             &mut control_plane_parse_errors,
         );
-        let active_ptr = combined.get("active_task_id").map(|tid| {
-            json!({ "task_id": tid })
-        }).unwrap_or_else(|| Value::Object(Map::new()));
-        let focus_ptr = combined.get("focus_task_id").map(|tid| {
-            json!({ "task_id": tid })
-        }).unwrap_or_else(|| Value::Object(Map::new()));
+        let active_ptr = combined
+            .get("active_task_id")
+            .map(|tid| json!({ "task_id": tid }))
+            .unwrap_or_else(|| Value::Object(Map::new()));
+        let focus_ptr = combined
+            .get("focus_task_id")
+            .map(|tid| json!({ "task_id": tid }))
+            .unwrap_or_else(|| Value::Object(Map::new()));
         (active_ptr, focus_ptr, combined)
     } else {
         let active_path = mirror_root.join("active_task.json");
         let focus_path = mirror_root.join("focus_task.json");
         let registry_path = mirror_root.join("task_registry.json");
         let active = read_json_control_plane_field(
-            &active_path, "active_task.json", &mut control_plane_parse_errors,
+            &active_path,
+            "active_task.json",
+            &mut control_plane_parse_errors,
         );
         let focus = read_json_control_plane_field(
-            &focus_path, "focus_task.json", &mut control_plane_parse_errors,
+            &focus_path,
+            "focus_task.json",
+            &mut control_plane_parse_errors,
         );
         let registry = read_json_control_plane_field(
-            &registry_path, "task_registry.json", &mut control_plane_parse_errors,
+            &registry_path,
+            "task_registry.json",
+            &mut control_plane_parse_errors,
         );
         (active, focus, registry)
     };
-    let _active_task_pointer_present = task_pointers_present || mirror_root.join("active_task.json").is_file();
-    let _focus_task_pointer_present = task_pointers_present || mirror_root.join("focus_task.json").is_file();
-    let task_registry_present = task_pointers_present || mirror_root.join("task_registry.json").is_file();
+    let _active_task_pointer_present =
+        task_pointers_present || mirror_root.join("active_task.json").is_file();
+    let _focus_task_pointer_present =
+        task_pointers_present || mirror_root.join("focus_task.json").is_file();
+    let task_registry_present =
+        task_pointers_present || mirror_root.join("task_registry.json").is_file();
     let (registered_tasks, mut known_task_ids, mut recoverable_task_ids) =
         normalized_task_registry(&registry_payload);
     let registry_task_ids_before_selection = known_task_ids.clone();
@@ -1011,8 +1022,16 @@ fn load_routing_runtime_version(repo_root: &Path) -> u64 {
 
 fn synthesized_status(supervisor_state: &Map<String, Value>) -> String {
     first_nonempty(&[
-        value_text(supervisor_state.get("verification").and_then(|v| v.get("verification_status"))),
-        value_text(supervisor_state.get("continuity").and_then(|v| v.get("story_state"))),
+        value_text(
+            supervisor_state
+                .get("verification")
+                .and_then(|v| v.get("verification_status")),
+        ),
+        value_text(
+            supervisor_state
+                .get("continuity")
+                .and_then(|v| v.get("story_state")),
+        ),
         value_text(supervisor_state.get("active_phase")),
         "in_progress".to_string(),
     ])

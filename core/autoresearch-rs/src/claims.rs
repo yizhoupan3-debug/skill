@@ -1,9 +1,9 @@
 //! Entries management (recent/context/reuse), hypothesis/claim lifecycle:
 //! find, transition, add, record_run, reflect, add_claim_comparison.
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{Result, anyhow, bail};
 use chrono::{DateTime, Utc};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -410,7 +410,10 @@ pub(super) fn choose_backlog_hypothesis(state: &Value) -> Option<&Value> {
     ranked.into_iter().next()
 }
 
-pub(super) fn latest_run_for_hypothesis<'a>(state: &'a Value, hypothesis_id: &str) -> Option<&'a Value> {
+pub(super) fn latest_run_for_hypothesis<'a>(
+    state: &'a Value,
+    hypothesis_id: &str,
+) -> Option<&'a Value> {
     arr(state, "run_history")
         .iter()
         .rev()
@@ -424,7 +427,10 @@ pub(super) fn latest_run_by_id<'a>(state: &'a Value, run_id: &str) -> Option<&'a
         .find(|item| item.get("run_id").and_then(Value::as_str) == Some(run_id))
 }
 
-pub(super) fn latest_decision_for_hypothesis<'a>(state: &'a Value, hypothesis_id: &str) -> Option<&'a Value> {
+pub(super) fn latest_decision_for_hypothesis<'a>(
+    state: &'a Value,
+    hypothesis_id: &str,
+) -> Option<&'a Value> {
     arr(state, "decisions")
         .iter()
         .rev()
@@ -609,7 +615,11 @@ pub(super) fn merge_string_array(existing: &Value, additions: &[String]) -> Valu
     json!(merged)
 }
 
-pub(super) fn annotate_run(state: &Value, run_id: &str, input: RunAnnotationInput<'_>) -> Result<Value> {
+pub(super) fn annotate_run(
+    state: &Value,
+    run_id: &str,
+    input: RunAnnotationInput<'_>,
+) -> Result<Value> {
     let mut next_state = ensure_state_defaults(state);
     let Some(record) = arr_mut(&mut next_state, "run_history")
         .iter_mut()
@@ -695,7 +705,9 @@ pub(super) fn record_run(
         .unwrap_or("queued")
         .to_string();
     if !["active", "queued"].contains(&current_status.as_str()) {
-        bail!("Hypothesis {hypothesis_id} must be active or queued before a run, current status: {current_status}");
+        bail!(
+            "Hypothesis {hypothesis_id} must be active or queued before a run, current status: {current_status}"
+        );
     }
     if current_status == "queued" {
         transition_hypothesis(
@@ -788,7 +800,9 @@ pub(super) fn reflect(
         .and_then(Value::as_str)
         .unwrap_or("-");
     if status != "needs_reflection" {
-        bail!("Hypothesis {hypothesis_id} must be in needs_reflection before reflect, current status: {status}");
+        bail!(
+            "Hypothesis {hypothesis_id} must be in needs_reflection before reflect, current status: {status}"
+        );
     }
     let latest_run = latest_run_for_hypothesis(&next_state, hypothesis_id)
         .ok_or_else(|| anyhow!("Cannot reflect without a recorded run for {hypothesis_id}"))?;
@@ -902,23 +916,26 @@ pub(super) fn add_claim_comparison(
     gate.insert("claim_records".into(), json!(prioritized.clone()));
     gate.insert(
         "claims".into(),
-        json!(prioritized
-            .iter()
-            .map(|item| str_field(item, "claim"))
-            .collect::<Vec<_>>()),
+        json!(
+            prioritized
+                .iter()
+                .map(|item| str_field(item, "claim"))
+                .collect::<Vec<_>>()
+        ),
     );
     gate.insert(
         "overlap_summary".into(),
-        json!(prioritized
-            .iter()
-            .map(|item| format!(
-                "{}={}",
-                str_field(item, "claim_id"),
-                str_field(item, "overlap")
-            ))
-            .collect::<Vec<_>>()
-            .join(", ")),
+        json!(
+            prioritized
+                .iter()
+                .map(|item| format!(
+                    "{}={}",
+                    str_field(item, "claim_id"),
+                    str_field(item, "overlap")
+                ))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     );
     next_state
 }
-

@@ -10,11 +10,13 @@ fn main() -> Result<(), String> {
     if args.len() > 1 {
         if let Some(cmd) = args[1].to_str() {
             let cmd_lower = cmd.trim().to_ascii_lowercase();
-            let is_host_alias = runtime_core::hosts::host_provider_registry().iter().any(|p| {
-                p.host_id() == cmd_lower
-                    || p.install_tool() == cmd_lower
-                    || p.aliases().iter().any(|a| *a == cmd_lower)
-            });
+            let is_host_alias = runtime_core::hosts::host_provider_registry()
+                .iter()
+                .any(|p| {
+                    p.host_id() == cmd_lower
+                        || p.install_tool() == cmd_lower
+                        || p.aliases().iter().any(|a| *a == cmd_lower)
+                });
             if is_host_alias {
                 // Map old-style `router-rs <host> <subcommand>` to registry-driven
                 // `router-rs host <action> <host-id> <subcommand>`.

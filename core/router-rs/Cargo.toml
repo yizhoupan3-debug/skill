@@ -1,7 +1,7 @@
 [package]
 name = "router-rs"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 autotests = false
 default-run = "router-rs-cli"
 
@@ -45,12 +45,14 @@ default = [
     "host-claude-code",
     "host-opencode",
     "host-codex",
+    "host-mimo",
     "codegraph",
 ]
 host-cursor = []
 host-claude-code = []
 host-opencode = []
 host-codex = []
+host-mimo = []
 codegraph = ["runtime-core/codegraph"]
 
 [dev-dependencies]

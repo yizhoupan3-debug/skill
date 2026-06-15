@@ -7,7 +7,7 @@
 //!
 //! This enables O(log n) skill discovery via FTS5 instead of O(n) `fs::read_dir`.
 
-use rusqlite::{params, Connection};
+use rusqlite::{Connection, params};
 use serde_json::Value;
 
 pub const SKILL_MANIFEST_PATH: &str = "manifest://SKILL_MANIFEST.json";
@@ -91,13 +91,7 @@ pub fn ingest_skills(conn: &Connection, manifest: &Value) -> rusqlite::Result<us
         // (file_path is indexed by FTS5 in schema.rs)
         let file_path = format!("manifest://{slug}");
 
-        insert.execute(params![
-            id,
-            slug,
-            SKILL_KIND,
-            SKILL_LANGUAGE,
-            file_path,
-        ])?;
+        insert.execute(params![id, slug, SKILL_KIND, SKILL_LANGUAGE, file_path,])?;
         count += 1;
     }
 

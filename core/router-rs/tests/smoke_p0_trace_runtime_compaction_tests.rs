@@ -1,10 +1,10 @@
 //! independent `trace_runtime` compaction smoke (module-local).
 
 use crate::trace_runtime::{
-    compact_trace_stream, record_trace_event, TraceCompactRequestPayload,
-    TraceRecordEventRequestPayload,
+    TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
+    record_trace_event,
 };
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -100,8 +100,7 @@ fn record_trace_event_compaction_delta_generation_match_smoke() {
     )
     .expect("write manifest");
 
-    let delta_path = root
-        .join("trace_compaction/sess-delta__session.deltas.jsonl");
+    let delta_path = root.join("trace_compaction/sess-delta__session.deltas.jsonl");
     let response = record_trace_event(TraceRecordEventRequestPayload {
         path: None,
         write_outputs: true,
@@ -269,7 +268,10 @@ fn compact_trace_stream_job_id_filters_events_smoke() {
     assert!(response.applied);
     let snapshot_value = response.latest_stable_snapshot.expect("snapshot");
     let snapshot = snapshot_value.as_object().expect("object");
-    assert_eq!(snapshot.get("job_id").and_then(|v| v.as_str()), Some("job-a"));
+    assert_eq!(
+        snapshot.get("job_id").and_then(|v| v.as_str()),
+        Some("job-a")
+    );
     let summary = snapshot
         .get("summary")
         .and_then(|v| v.as_object())
@@ -336,7 +338,10 @@ fn compact_trace_stream_reads_event_stream_from_disk_smoke() {
     let response = compact_trace_stream(payload).expect("compact");
     assert!(response.applied);
     assert_eq!(response.status, "compacted");
-    assert!(root.join("trace_compaction/disk-sess__session.manifest.json").is_file());
+    assert!(
+        root.join("trace_compaction/disk-sess__session.manifest.json")
+            .is_file()
+    );
 
     let _ = fs::remove_dir_all(&root);
 }

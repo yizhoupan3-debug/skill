@@ -1,5 +1,9 @@
 #[cfg(test)]
 mod route_metadata_tests {
+    use crate::route::has_paper_review_judgment_context;
+    use crate::route::normalize_text;
+    use crate::route::{RawSkillRecord, SkillRecord};
+    use crate::route::{filter_records_for_host, route_task, search_skills};
     use crate::route::{
         framework_alias_entrypoints_from_hints, has_explicit_framework_alias_call,
         has_literal_framework_alias_call, skill_record_from_raw,
@@ -8,10 +12,6 @@ mod route_metadata_tests {
         load_records, load_records_cached_for_stdio, load_records_cached_for_stdio_resolved,
         load_records_from_manifest, load_records_from_runtime,
     };
-    use crate::route::{filter_records_for_host, route_task, search_skills};
-    use crate::route::has_paper_review_judgment_context;
-    use crate::route::normalize_text;
-    use crate::route::{RawSkillRecord, SkillRecord};
     use serde_json::json;
     use std::fs;
     use std::path::PathBuf;
@@ -205,9 +205,10 @@ mod route_metadata_tests {
             .iter()
             .find(|record| record.slug == "beta-owner")
             .expect("beta record");
-        assert!(beta
-            .metadata_positive_triggers
-            .contains(&"needle phrase".to_string()));
+        assert!(
+            beta.metadata_positive_triggers
+                .contains(&"needle phrase".to_string())
+        );
         assert!(!beta.primary_allowed);
         assert_eq!(beta.fallback_policy_mode, "explicit-only");
         assert!(!beta.trigger_hints.contains(&"needle phrase".to_string()));
@@ -292,10 +293,12 @@ mod route_metadata_tests {
             trigger_reasons, 1,
             "metadata trigger must not be double-counted"
         );
-        assert!(decision
-            .reasons
-            .iter()
-            .any(|reason| reason.contains("Routing metadata positive trigger matched")));
+        assert!(
+            decision
+                .reasons
+                .iter()
+                .any(|reason| reason.contains("Routing metadata positive trigger matched"))
+        );
 
         fs::remove_dir_all(root).expect("cleanup route root");
     }
@@ -400,11 +403,15 @@ mod route_metadata_tests {
         let filtered_cursor =
             filter_records_for_host(records, Some("cursor")).expect("cursor filter");
         assert!(
-            !filtered_cursor.iter().any(|record| record.slug == "codex-only"),
+            !filtered_cursor
+                .iter()
+                .any(|record| record.slug == "codex-only"),
             "codex-only skill must be filtered out for cursor host"
         );
         assert!(
-            filtered_cursor.iter().any(|record| record.slug == "all-command"),
+            filtered_cursor
+                .iter()
+                .any(|record| record.slug == "all-command"),
             "framework_command must pass through regardless of host"
         );
     }

@@ -4,14 +4,20 @@
 
 use super::*;
 use framework_kernel::skill_repo::skill_routing_runtime_json;
-use serde_json::{json, Map, Value};
-use std::path::Path;
 use routing_engine::route::{
-    filter_record_indices_for_host, load_records_cached_for_stdio,
-    search_skills_subset, build_search_results_payload,
+    build_search_results_payload, filter_record_indices_for_host, load_records_cached_for_stdio,
+    search_skills_subset,
 };
+use serde_json::{Map, Value, json};
+use std::path::Path;
 
-pub(super) fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &Path, host_id: &str, connection_session_id: &str) -> Value {
+pub(super) fn handle_tools_call(
+    id: Option<Value>,
+    request: &Value,
+    repo_root: &Path,
+    host_id: &str,
+    connection_session_id: &str,
+) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
     let tool_name = params.get("name").and_then(Value::as_str).unwrap_or("");
@@ -36,8 +42,7 @@ pub(super) fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &
     }
 
     // HX-5: MCP pre-guard (mcp-tool-safety); panic → allow + log.
-    let pre_guard =
-        crate::hooks::evaluate_mcp_pre_guard_safe(tool_name, arguments, repo_root);
+    let pre_guard = crate::hooks::evaluate_mcp_pre_guard_safe(tool_name, arguments, repo_root);
     if pre_guard.blocked {
         let reason = pre_guard
             .reason
@@ -75,8 +80,6 @@ pub(super) fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &
         _ => Err(format!("Unknown tool: {tool_name}")),
     };
 
-
-
     match result {
         Ok(content) => {
             // Check for anomalies and append warnings if detected
@@ -108,7 +111,10 @@ pub(super) fn handle_tools_call(id: Option<Value>, request: &Value, repo_root: &
     }
 }
 
-pub(super) fn tool_framework_snapshot(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(super) fn tool_framework_snapshot(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, String> {
     let detail_level = arguments
         .get("detail_level")
         .and_then(Value::as_str)
@@ -163,7 +169,11 @@ pub(super) fn invalidate_evidence_caches() {
     }
 }
 
-pub(super) fn tool_skill_route(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
+pub(super) fn tool_skill_route(
+    arguments: &Value,
+    repo_root: &Path,
+    host_id: &str,
+) -> Result<String, String> {
     let query = arguments
         .get("query")
         .and_then(Value::as_str)
@@ -213,7 +223,11 @@ pub(super) fn tool_skill_route(arguments: &Value, repo_root: &Path, host_id: &st
     .to_string())
 }
 
-pub(super) fn tool_skill_search(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
+pub(super) fn tool_skill_search(
+    arguments: &Value,
+    repo_root: &Path,
+    host_id: &str,
+) -> Result<String, String> {
     let query = arguments
         .get("query")
         .and_then(Value::as_str)
@@ -257,8 +271,7 @@ pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<Str
         .clamp(1, 50_000) as usize;
 
     let path = skill_body_path(repo_root, slug)?;
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("{}: {e}", path.display()))?;
+    let content = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let truncated = content.chars().count() > max_chars;
     let truncated_content: String = content.chars().take(max_chars).collect();
 
@@ -459,7 +472,10 @@ pub(super) fn evidence_output_max_chars() -> usize {
     })
 }
 
-pub(super) fn tool_session_checkpoint(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(super) fn tool_session_checkpoint(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, String> {
     let summary = arguments
         .get("summary")
         .and_then(Value::as_str)
@@ -507,9 +523,7 @@ pub(super) fn goal_suggests_review_work(goal_state: &Value) -> bool {
     goal_state
         .get("done_when")
         .and_then(Value::as_array)
-        .is_some_and(|items| {
-            items.iter().filter_map(Value::as_str).any(is_review_prompt)
-        })
+        .is_some_and(|items| items.iter().filter_map(Value::as_str).any(is_review_prompt))
 }
 
 pub(super) fn task_lifecycle_profile(task_view: &core_state::task_state::ResolvedTaskView) -> &str {
@@ -553,10 +567,16 @@ pub(super) fn mcp_closeout_hard_block_metadata(
     if all_clear || lifecycle_profile == "my-light" {
         return false;
     }
-    framework_kernel::runtime_registry::closeout_evidence_hooks_unsupported_on_host(repo_root, host_id)
+    framework_kernel::runtime_registry::closeout_evidence_hooks_unsupported_on_host(
+        repo_root, host_id,
+    )
 }
 
-pub(super) fn desktop_review_evidence_attested(arguments: &Value, repo_root: &Path, task_id: &str) -> bool {
+pub(super) fn desktop_review_evidence_attested(
+    arguments: &Value,
+    repo_root: &Path,
+    task_id: &str,
+) -> bool {
     // 自动扫描 artifacts/current/<task_id>/review-lanes 目录下的 Markdown 证据工件
     let review_lanes_dir = task_artifact_dir(
         repo_root,
@@ -607,10 +627,6 @@ pub struct McpCloseoutGateVerdict {
     pub formatted: String,
 }
 
-
-
-
-
 pub fn evaluate_mcp_closeout_gate(
     arguments: &Value,
     repo_root: &Path,
@@ -626,19 +642,25 @@ pub fn evaluate_mcp_closeout_gate(
     let host_name = mcp_host_display_label(host_id);
     let lifecycle_profile = task_lifecycle_profile(&task_view);
 
-    if let Some(rationale) = framework_kernel::runtime_registry::harness_capability_exception_rationale(
-        repo_root,
-        host_id,
-        "closeout_evidence_hooks",
-    ) {
+    if let Some(rationale) =
+        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+            repo_root,
+            host_id,
+            "closeout_evidence_hooks",
+        )
+    {
         findings.push(format!("harness: closeout_evidence_hooks — {rationale}"));
     }
-    if let Some(rationale) = framework_kernel::runtime_registry::harness_capability_exception_rationale(
-        repo_root,
-        host_id,
-        "review_gate_router_observation",
-    ) {
-        findings.push(format!("harness: review_gate_router_observation — {rationale}"));
+    if let Some(rationale) =
+        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+            repo_root,
+            host_id,
+            "review_gate_router_observation",
+        )
+    {
+        findings.push(format!(
+            "harness: review_gate_router_observation — {rationale}"
+        ));
     }
 
     findings.push(format!(
@@ -664,7 +686,9 @@ pub fn evaluate_mcp_closeout_gate(
     } else {
         findings.push("evidence: successful records present".to_string());
         if !task_id.is_empty()
-            && core_state::state_manager::task_evidence_success_only_self_attested(repo_root, task_id)
+            && core_state::state_manager::task_evidence_success_only_self_attested(
+                repo_root, task_id,
+            )
         {
             findings.push(
                 "WARN: evidence: only self-attested MCP record_evidence rows — verify independently"
@@ -672,8 +696,15 @@ pub fn evaluate_mcp_closeout_gate(
             );
         }
     }
-    let summary_path = task_artifact_dir(repo_root, if task_id.is_empty() { None } else { Some(task_id) })
-        .join("SESSION_SUMMARY.md");
+    let summary_path = task_artifact_dir(
+        repo_root,
+        if task_id.is_empty() {
+            None
+        } else {
+            Some(task_id)
+        },
+    )
+    .join("SESSION_SUMMARY.md");
     let has_summary = summary_path.is_file();
     if !has_summary {
         findings.push(format!(
@@ -717,20 +748,15 @@ pub fn evaluate_mcp_closeout_gate(
         "ADVISORY: closeout gates not satisfied"
     };
 
-    let formatted = format!(
-        "[Closeout Gate] {verdict_label}\n\n{}",
-        findings.join("\n")
-    );
+    let formatted = format!("[Closeout Gate] {verdict_label}\n\n{}", findings.join("\n"));
 
-    let hard_block =
+    let _hard_block =
         mcp_closeout_hard_block_metadata(repo_root, host_id, lifecycle_profile, all_clear);
 
     // §4.1: 持久化 review gate 状态到 artifacts/current/<task_id>/review_gate.json
     persist_review_gate_status(repo_root, task_id, all_clear, &findings, lifecycle_profile);
 
-    Ok(McpCloseoutGateVerdict {
-        formatted,
-    })
+    Ok(McpCloseoutGateVerdict { formatted })
 }
 
 /// §4.1: 持久化 review gate 状态到 task artifact 目录。
@@ -765,11 +791,19 @@ pub(super) fn persist_review_gate_status(
     }
 }
 
-pub fn tool_closeout_gate(arguments: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
+pub fn tool_closeout_gate(
+    arguments: &Value,
+    repo_root: &Path,
+    host_id: &str,
+) -> Result<String, String> {
     Ok(evaluate_mcp_closeout_gate(arguments, repo_root, host_id)?.formatted)
 }
 
-pub(super) fn tool_closeout_record_write(arguments: &Value, repo_root: &Path, _host_id: &str) -> Result<String, String> {
+pub(super) fn tool_closeout_record_write(
+    arguments: &Value,
+    repo_root: &Path,
+    _host_id: &str,
+) -> Result<String, String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -829,15 +863,13 @@ pub(super) fn tool_closeout_record_write(arguments: &Value, repo_root: &Path, _h
     }
 
     // Write the record
-    let content = serde_json::to_string_pretty(&record).map_err(|e| format!("serialize closeout record failed: {e}"))?;
+    let content = serde_json::to_string_pretty(&record)
+        .map_err(|e| format!("serialize closeout record failed: {e}"))?;
     fs::write(&record_path, &content).map_err(|e| format!("write closeout record failed: {e}"))?;
 
     // Evaluate the record
-    let eval_result = crate::hooks::evaluate_closeout_record_file_for_task(
-        repo_root,
-        task_id,
-        &record_path,
-    );
+    let eval_result =
+        crate::hooks::evaluate_closeout_record_file_for_task(repo_root, task_id, &record_path);
     let eval = match eval_result {
         Ok(v) => v,
         Err(e) => json!({"error": e}),
@@ -869,7 +901,8 @@ pub(super) fn tool_closeout_record_write(arguments: &Value, repo_root: &Path, _h
         "violations": violations,
     });
 
-    Ok(serde_json::to_string_pretty(&result).map_err(|e| format!("serialize closeout result failed: {e}"))?)
+    Ok(serde_json::to_string_pretty(&result)
+        .map_err(|e| format!("serialize closeout result failed: {e}"))?)
 }
 
 pub(super) const WEB_FETCH_MAX_REDIRECTS: usize = 5;
@@ -882,7 +915,8 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         .filter(|value| !value.is_empty())
         .ok_or("Missing required argument: url")?;
     // Validate + resolve DNS in one pass to pin results before building client.
-    let (parsed_url_str, initial_addr_strs) = crate::hooks::validate_and_resolve_web_fetch_url(url)?;
+    let (parsed_url_str, initial_addr_strs) =
+        crate::hooks::validate_and_resolve_web_fetch_url(url)?;
     let parsed_url = reqwest::Url::parse(&parsed_url_str)
         .map_err(|e| format!("web_fetch URL parse error: {e}"))?;
     let initial_addrs: Vec<std::net::SocketAddr> = initial_addr_strs
@@ -899,7 +933,13 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
         .redirect(reqwest::redirect::Policy::none())
         .user_agent("router-rs-framework-mcp/0.1");
-    for key in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY"] {
+    for key in [
+        "HTTPS_PROXY",
+        "https_proxy",
+        "HTTP_PROXY",
+        "http_proxy",
+        "ALL_PROXY",
+    ] {
         if let Ok(proxy_url) = std::env::var(key) {
             let trimmed = proxy_url.trim();
             if !trimmed.is_empty() {
@@ -911,7 +951,8 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         }
     }
     // Pin DNS results from validate_and_resolve to prevent rebinding TOCTOU.
-    let pin_host = parsed_url.host_str()
+    let pin_host = parsed_url
+        .host_str()
         .ok_or_else(|| format!("web_fetch URL missing host: {url}"))?;
     for addr in &initial_addrs {
         client_builder = client_builder.resolve(pin_host, *addr);
@@ -948,14 +989,22 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
             // Pin DNS for redirect target to prevent DNS rebinding TOCTOU.
             let redirect_parsed = reqwest::Url::parse(&current_url)
                 .map_err(|err| format!("web_fetch redirect URL parse failed: {err}"))?;
-            let rp_host = redirect_parsed.host_str()
+            let rp_host = redirect_parsed
+                .host_str()
                 .ok_or_else(|| format!("web_fetch redirect URL missing host: {current_url}"))?;
-            let rp_port = redirect_parsed.port()
-                .unwrap_or(if redirect_parsed.scheme() == "https" { 443 } else { 80 });
-            let rp_addrs: Vec<std::net::SocketAddr> = crate::hooks::resolve_web_fetch_addresses(rp_host, rp_port)?
-                .iter()
-                .filter_map(|s| s.parse().ok())
-                .collect();
+            let rp_port =
+                redirect_parsed
+                    .port()
+                    .unwrap_or(if redirect_parsed.scheme() == "https" {
+                        443
+                    } else {
+                        80
+                    });
+            let rp_addrs: Vec<std::net::SocketAddr> =
+                crate::hooks::resolve_web_fetch_addresses(rp_host, rp_port)?
+                    .iter()
+                    .filter_map(|s| s.parse().ok())
+                    .collect();
             // Rebuild client with pinned DNS for redirect target.
             let mut rb = reqwest::blocking::Client::builder()
                 .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
@@ -964,7 +1013,8 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
             for addr in &rp_addrs {
                 rb = rb.resolve(rp_host, *addr);
             }
-            client = rb.build()
+            client = rb
+                .build()
                 .map_err(|err| format!("web_fetch client rebuild failed: {err}"))?;
             continue;
         }
@@ -993,5 +1043,6 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         "truncated": truncated,
         "body": body_text,
     });
-    serde_json::to_string_pretty(&payload).map_err(|err| format!("web_fetch serialize failed: {err}"))
+    serde_json::to_string_pretty(&payload)
+        .map_err(|err| format!("web_fetch serialize failed: {err}"))
 }

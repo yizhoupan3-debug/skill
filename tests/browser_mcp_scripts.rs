@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod common;
 
 use common::{
@@ -367,15 +368,13 @@ fn launcher_leaves_sqlite_attach_discovery_to_rust_runtime() {
 #[test]
 fn browser_mcp_stdio_exposes_browser_and_web_fetch_tools() {
     let repo_root = project_root();
-    let request = [
-        serde_json::to_string(&json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/list",
-            "params": {}
-        }))
-        .unwrap(),
-    ]
+    let request = [serde_json::to_string(&json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list",
+        "params": {}
+    }))
+    .unwrap()]
     .join("\n");
     let mut command = router_rs_command([
         "diagnose",

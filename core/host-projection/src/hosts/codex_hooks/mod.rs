@@ -33,10 +33,8 @@ use std::path::Path;
 // ---------------------------------------------------------------------------
 
 const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
-pub const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str =
-    ".codex/host_entrypoints_sync_manifest.json";
-pub(super) const HOST_ENTRYPOINT_SYNC_HINT: &str =
-    "cargo run --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --host-id codex --repo-root \"$PWD\"";
+pub const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
+pub(super) const HOST_ENTRYPOINT_SYNC_HINT: &str = "cargo run --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --host-id codex --repo-root \"$PWD\"";
 pub const CODEX_AGENT_POLICY_PATH: &str = "AGENTS_CODEX.md";
 pub const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
 pub const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
@@ -153,9 +151,7 @@ impl CodexLifecycleHostKind {
     }
 
     fn paper_prose_hook_host(self) -> hooks::PaperProseHookHost {
-        hooks::PaperProseHookHost::from_codex_lifecycle_state_dir(
-            self.state_dir_leaf,
-        )
+        hooks::PaperProseHookHost::from_codex_lifecycle_state_dir(self.state_dir_leaf)
     }
 }
 

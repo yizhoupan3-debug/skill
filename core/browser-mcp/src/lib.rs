@@ -19,7 +19,9 @@ include!("frag_rest.rs");
 mod tests;
 
 /// Dispatch a browser subcommand (CLI entry point for `router-rs browser ...`).
-pub fn dispatch_browser_command(command: runtime_core::cli::args::BrowserSubcommand) -> Result<(), String> {
+pub fn dispatch_browser_command(
+    command: runtime_core::cli::args::BrowserSubcommand,
+) -> Result<(), String> {
     use runtime_core::cli::args::BrowserSubcommand;
     match command {
         BrowserSubcommand::McpStdio(command) => run_browser_mcp_stdio_loop(
@@ -31,7 +33,9 @@ pub fn dispatch_browser_command(command: runtime_core::cli::args::BrowserSubcomm
             ),
         ),
         BrowserSubcommand::ResolveAttachArtifact(command) => {
-            let repo_root = runtime_core::framework_runtime::resolve_repo_root_arg(command.repo_root.as_deref())?;
+            let repo_root = runtime_core::framework_runtime::resolve_repo_root_arg(
+                command.repo_root.as_deref(),
+            )?;
             let Some(path) =
                 resolve_browser_mcp_attach_artifact(&repo_root, command.search_root.as_deref())
             else {

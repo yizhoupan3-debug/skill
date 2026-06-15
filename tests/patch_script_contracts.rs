@@ -46,11 +46,7 @@ fn patch_permission_mode_requires_account_id() {
 fn patch_permission_mode_merges_config_without_hardcoded_paths() {
     let tmp = tempdir().unwrap();
     let cfg = tmp.path().join("claude_desktop_config.json");
-    fs::write(
-        &cfg,
-        r#"{"preferences":{"epitaxyPrefs":{}}}"#,
-    )
-    .unwrap();
+    fs::write(&cfg, r#"{"preferences":{"epitaxyPrefs":{}}}"#).unwrap();
     let script = framework_root().join("scripts/patch-claude-desktop-permission-mode.sh");
     let output = Command::new("bash")
         .env("CLAUDE_DESKTOP_ACCOUNT_ID", "test-account-uuid")
@@ -74,7 +70,9 @@ fn patch_permission_mode_merges_config_without_hardcoded_paths() {
         .and_then(|v| v.as_object())
         .expect("folder map");
     assert_eq!(
-        folders.get("/tmp/cowork-test-folder").and_then(|v| v.as_str()),
+        folders
+            .get("/tmp/cowork-test-folder")
+            .and_then(|v| v.as_str()),
         Some("acceptEdits")
     );
     assert_eq!(
@@ -90,7 +88,11 @@ fn patch_egress_updates_config_library_fixture() {
     let lib = tmp.path().join("configLibrary");
     fs::create_dir_all(&lib).unwrap();
     let applied_id = "applied-test";
-    fs::write(lib.join("_meta.json"), format!(r#"{{"appliedId":"{applied_id}"}}"#)).unwrap();
+    fs::write(
+        lib.join("_meta.json"),
+        format!(r#"{{"appliedId":"{applied_id}"}}"#),
+    )
+    .unwrap();
     fs::write(lib.join(format!("{applied_id}.json")), r#"{}"#).unwrap();
 
     let script = framework_root().join("scripts/patch-claude-desktop-3p-cowork-egress.sh");

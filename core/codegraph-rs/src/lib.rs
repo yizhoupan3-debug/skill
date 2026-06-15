@@ -51,9 +51,7 @@ pub struct CodeGraphIndex {
 
 impl CodeGraphIndex {
     pub fn open(repo_root: impl AsRef<Path>) -> anyhow::Result<Self> {
-        let db_path = repo_root
-            .as_ref()
-            .join("artifacts/codegraph/index.sqlite");
+        let db_path = repo_root.as_ref().join("artifacts/codegraph/index.sqlite");
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -123,7 +121,9 @@ impl CodeGraphIndex {
         symbol: &str,
         filter: &db::node_ops::SymbolFilter,
     ) -> anyhow::Result<db::node_ops::ResolveOutcome> {
-        Ok(db::node_ops::resolve_symbol_filtered(&self.conn, symbol, filter)?)
+        Ok(db::node_ops::resolve_symbol_filtered(
+            &self.conn, symbol, filter,
+        )?)
     }
 
     pub fn index_stats(&self) -> anyhow::Result<IndexStats> {
@@ -139,7 +139,9 @@ impl CodeGraphIndex {
         language: Option<&str>,
         min_lines: Option<u32>,
     ) -> anyhow::Result<Vec<db::node_ops::DeadCodeNode>> {
-        Ok(db::node_ops::find_dead_code(&self.conn, language, min_lines)?)
+        Ok(db::node_ops::find_dead_code(
+            &self.conn, language, min_lines,
+        )?)
     }
 
     pub fn build_full_index(&self, repo_root: &Path) -> anyhow::Result<graph::SyncReport> {

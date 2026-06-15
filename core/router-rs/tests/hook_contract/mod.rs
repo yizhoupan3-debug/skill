@@ -8,16 +8,16 @@ mod harness;
 mod mcp;
 
 use harness::{
-    closeout_followup_visible, dispatch_closeout_claim_stop, dispatch_independent_reviewer,
-    dispatch_reviewer_with_fork, dispatch_stop, dispatch_user_prompt_submit, fresh_matrix_repo,
-    reject_token_clears_stop, stop_allowed, stop_review_gate_advisory,
-    user_prompt_additional_context,
-    write_matrix_active_task, CanonicalReviewGateDisableGuard, CloseoutEnforcementGuard,
-    CursorModelInheritDisableGuard, ForkInferEnableGuard, LegacyReviewGateDisableGuard, MatrixHost,
-    MyLightOverrideGuard, PaperProseDefaultGuard, ReviewGateActiveGuard,
-    SpawnFirstNudgeDisableGuard, SpawnFirstNudgeEnableGuard, CLOSEOUT_MATRIX_HOSTS,
-    DEEP_REVIEW_PROMPT, MATRIX_HOSTS, MY_LIGHT_IMPLEMENT_PROMPT, MY_LIGHT_STOP_PROMPT,
-    NARROW_REVIEW_PROMPT, PAPER_PROSE_PROMPT, SECOND_DEEP_REVIEW_PROMPT,
+    CLOSEOUT_MATRIX_HOSTS, CanonicalReviewGateDisableGuard, CloseoutEnforcementGuard,
+    CursorModelInheritDisableGuard, DEEP_REVIEW_PROMPT, ForkInferEnableGuard,
+    LegacyReviewGateDisableGuard, MATRIX_HOSTS, MY_LIGHT_IMPLEMENT_PROMPT, MY_LIGHT_STOP_PROMPT,
+    MatrixHost, MyLightOverrideGuard, NARROW_REVIEW_PROMPT, PAPER_PROSE_PROMPT,
+    PaperProseDefaultGuard, ReviewGateActiveGuard, SECOND_DEEP_REVIEW_PROMPT,
+    SpawnFirstNudgeDisableGuard, SpawnFirstNudgeEnableGuard, closeout_followup_visible,
+    dispatch_closeout_claim_stop, dispatch_independent_reviewer, dispatch_reviewer_with_fork,
+    dispatch_stop, dispatch_user_prompt_submit, fresh_matrix_repo, reject_token_clears_stop,
+    stop_allowed, stop_review_gate_advisory, user_prompt_additional_context,
+    write_matrix_active_task,
 };
 
 fn run_for_hosts<F>(label: &str, mut case: F)
@@ -78,9 +78,13 @@ fn matrix_my_light_suppresses_review_gate_on_stop() {
             "{host:?} precondition: review must be armed before my-light stop; out={armed:?}"
         );
 
-        let allowed = dispatch_stop(host, &repo, &sid, MY_LIGHT_STOP_PROMPT, Some(
-            "[P1] scripts/foo.rs:42: missing edge case",
-        ));
+        let allowed = dispatch_stop(
+            host,
+            &repo,
+            &sid,
+            MY_LIGHT_STOP_PROMPT,
+            Some("[P1] scripts/foo.rs:42: missing edge case"),
+        );
         assert!(
             stop_allowed(host, &allowed),
             "{host:?} my-light /implementx stop must suppress REVIEW_GATE; out={allowed:?}"
@@ -118,9 +122,13 @@ fn matrix_narrow_review_skips_arming_and_stop_block() {
         let sid = format!("{}-narrow", harness::host_label(host));
 
         dispatch_user_prompt_submit(host, &repo, &sid, NARROW_REVIEW_PROMPT);
-        let stop = dispatch_stop(host, &repo, &sid, NARROW_REVIEW_PROMPT, Some(
-            "[P1] README.md:1: typo in title",
-        ));
+        let stop = dispatch_stop(
+            host,
+            &repo,
+            &sid,
+            NARROW_REVIEW_PROMPT,
+            Some("[P1] README.md:1: typo in title"),
+        );
         assert!(
             stop_allowed(host, &stop),
             "{host:?} narrow review must not Stop-block; out={stop:?}"

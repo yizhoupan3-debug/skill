@@ -15,8 +15,7 @@ fn workflow_scripts_dir() -> PathBuf {
 }
 
 static META_PHASE_OBJECT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"phases\s*:\s*\[\s*\{[^}]*title\s*:")
-        .expect("workflow meta object phases regex")
+    Regex::new(r"phases\s*:\s*\[\s*\{[^}]*title\s*:").expect("workflow meta object phases regex")
 });
 
 static META_PHASE_STRING: LazyLock<Regex> = LazyLock::new(|| {
@@ -44,7 +43,8 @@ fn workflow_meta_contract_ok(content: &str) -> Result<(), String> {
     }
     if !META_PHASE_OBJECT.is_match(content) && !META_PHASE_STRING.is_match(content) {
         return Err(
-            "meta.phases must be a non-empty array ({ title } objects or string titles)".to_string(),
+            "meta.phases must be a non-empty array ({ title } objects or string titles)"
+                .to_string(),
         );
     }
     Ok(())
@@ -174,7 +174,9 @@ fn top_level_pipeline_assignments(content: &str) -> Vec<&str> {
         .lines()
         .filter(|line| {
             let trimmed = line.trim_start();
-            !line.starts_with(' ') && !line.starts_with('\t') && trimmed.starts_with("const ")
+            !line.starts_with(' ')
+                && !line.starts_with('\t')
+                && trimmed.starts_with("const ")
                 && trimmed.contains("await pipeline(")
         })
         .collect()
@@ -202,7 +204,9 @@ fn workflow_verify_outer_catch_ok(content: &str) -> Result<(), String> {
         return Err("Verify workflow missing top-level pipeline".to_string());
     }
     if !content.contains(").catch(") {
-        return Err("Verify pipeline must end with outer ).catch() per workflow conventions".to_string());
+        return Err(
+            "Verify pipeline must end with outer ).catch() per workflow conventions".to_string(),
+        );
     }
     let handles_null = content.contains("filter(Boolean)")
         || content.contains("!v")
@@ -262,7 +266,9 @@ fn workflow_parallel_pipeline_contract(content: &str) -> Result<(), String> {
         );
     }
     if !has_pipeline {
-        return Err("workflow must use await pipeline(...) for Verify-style serial stages".to_string());
+        return Err(
+            "workflow must use await pipeline(...) for Verify-style serial stages".to_string(),
+        );
     }
     let scan_phase = content.contains("phase('Scan')") || content.contains("phase(\"Scan\")");
     let verify_phase = content.contains("phase('Verify')") || content.contains("phase(\"Verify\")");
@@ -325,12 +331,16 @@ fn workflow_state_isolation_contract(content: &str) -> Result<(), String> {
         ));
     }
     if content.contains("fork_context: true") || content.contains("fork_context:true") {
-        return Err("workflows must not set fork_context:true (breaks inter-phase isolation)".to_string());
+        return Err(
+            "workflows must not set fork_context:true (breaks inter-phase isolation)".to_string(),
+        );
     }
     for cap in PHASE_CALL.captures_iter(content) {
         let title = cap[1].to_string();
         if !meta_titles.contains(&title) {
-            return Err(format!("phase() title '{title}' not declared in meta.phases"));
+            return Err(format!(
+                "phase() title '{title}' not declared in meta.phases"
+            ));
         }
     }
     let phase_markers: Vec<(usize, String)> = PHASE_CALL

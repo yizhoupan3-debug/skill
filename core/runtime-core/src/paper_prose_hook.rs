@@ -4,10 +4,10 @@
 //! - per-host env：**默认开**；`0`/`false`/`off`/`no` 关闭。
 //! - 受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。
 
+use crate::route::{has_paper_prose_edit_context, tokenize_route_text};
 use crate::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
 };
-use crate::route::{has_paper_prose_edit_context, tokenize_route_text};
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
@@ -104,7 +104,9 @@ mod tests {
 
     #[test]
     fn signal_polish_zh() {
-        assert!(prompt_signals_paper_prose_work("帮我把这段引言润色一下，中文正文"));
+        assert!(prompt_signals_paper_prose_work(
+            "帮我把这段引言润色一下，中文正文"
+        ));
     }
 
     #[test]
@@ -157,7 +159,7 @@ mod tests {
         let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let env = PaperProseHookHost::Cursor.env_var();
         let prior_hook = std::env::var(env).ok();
-        std::env::remove_var(env);
+        unsafe { std::env::remove_var(env) };
 
         let tmp = std::env::temp_dir().join("paper-prose-merge-default");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -178,8 +180,8 @@ mod tests {
         assert!(ctx.contains(PREFIX_LINE));
 
         match prior_hook {
-            Some(v) => std::env::set_var(env, v),
-            None => std::env::remove_var(env),
+            Some(v) => unsafe { std::env::set_var(env, v) },
+            None => unsafe { std::env::remove_var(env) },
         }
     }
 
@@ -188,7 +190,7 @@ mod tests {
         let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let env = PaperProseHookHost::Cursor.env_var();
         let prior_hook = std::env::var(env).ok();
-        std::env::set_var(env, "0");
+        unsafe { std::env::set_var(env, "0") };
 
         let tmp = std::env::temp_dir().join("paper-prose-merge-off");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -201,8 +203,8 @@ mod tests {
         assert!(out.get("additional_context").is_none());
 
         match prior_hook {
-            Some(v) => std::env::set_var(env, v),
-            None => std::env::remove_var(env),
+            Some(v) => unsafe { std::env::set_var(env, v) },
+            None => unsafe { std::env::remove_var(env) },
         }
     }
 
@@ -211,7 +213,7 @@ mod tests {
         let _g = crate::harness_operator_nudges::harness_nudges_env_test_lock();
         let env = PaperProseHookHost::Codex.env_var();
         let prior_hook = std::env::var(env).ok();
-        std::env::remove_var(env);
+        unsafe { std::env::remove_var(env) };
 
         let tmp = std::env::temp_dir().join("paper-prose-append-codex");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -233,8 +235,8 @@ mod tests {
         assert!(contexts[0].contains(PREFIX_LINE));
 
         match prior_hook {
-            Some(v) => std::env::set_var(env, v),
-            None => std::env::remove_var(env),
+            Some(v) => unsafe { std::env::set_var(env, v) },
+            None => unsafe { std::env::remove_var(env) },
         }
     }
 }

@@ -6,7 +6,10 @@ use std::process;
 
 /// Search for all occurrences of a TRON address on the blockchain
 #[derive(Parser, Debug)]
-#[command(name = "tron-search", about = "Search TRON blockchain for address occurrences")]
+#[command(
+    name = "tron-search",
+    about = "Search TRON blockchain for address occurrences"
+)]
 struct Cli {
     /// TRON address to search (base58, starts with T)
     address: String,
@@ -29,11 +32,18 @@ async fn main() {
     let cli = Cli::parse();
 
     if !validate_address(&cli.address) {
-        eprintln!("Error: Invalid TRON address '{}'. Must start with 'T' and be 34 characters.", cli.address);
+        eprintln!(
+            "Error: Invalid TRON address '{}'. Must start with 'T' and be 34 characters.",
+            cli.address
+        );
         process::exit(1);
     }
 
-    let network = if cli.testnet { "Shasta Testnet" } else { "Mainnet" };
+    let network = if cli.testnet {
+        "Shasta Testnet"
+    } else {
+        "Mainnet"
+    };
     eprintln!("Searching for address: {} ({})", cli.address, network);
     eprintln!("========================================\n");
 
@@ -98,7 +108,10 @@ fn print_report(report: &types::SearchReport) {
     }
 
     // Transactions
-    println!("\n=== Transactions ({} found) ===", report.transactions.len());
+    println!(
+        "\n=== Transactions ({} found) ===",
+        report.transactions.len()
+    );
     for (i, tx) in report.transactions.iter().enumerate() {
         println!("  {}. Hash: {}", i + 1, tx.hash);
         println!("     Time:     {}", format_timestamp(tx.timestamp));
@@ -112,7 +125,10 @@ fn print_report(report: &types::SearchReport) {
     }
 
     // TRC20 Transfers
-    println!("=== TRC20 Token Transfers ({} found) ===", report.trc20_transfers.len());
+    println!(
+        "=== TRC20 Token Transfers ({} found) ===",
+        report.trc20_transfers.len()
+    );
     for (i, tr) in report.trc20_transfers.iter().enumerate() {
         println!("  {}. Hash: {}", i + 1, tr.transaction_id);
         println!("     Time:     {}", format_timestamp(tr.block_ts));
@@ -127,7 +143,10 @@ fn print_report(report: &types::SearchReport) {
     }
 
     // Internal Transactions
-    println!("=== Internal Transactions ({} found) ===", report.internal_transactions.len());
+    println!(
+        "=== Internal Transactions ({} found) ===",
+        report.internal_transactions.len()
+    );
     for (i, it) in report.internal_transactions.iter().enumerate() {
         println!("  {}. Hash: {}", i + 1, it.hash);
         println!("     From:     {}", it.from);
@@ -140,7 +159,10 @@ fn print_report(report: &types::SearchReport) {
     }
 
     // Blocks Produced
-    println!("=== Blocks Produced ({} found) ===", report.blocks_produced.len());
+    println!(
+        "=== Blocks Produced ({} found) ===",
+        report.blocks_produced.len()
+    );
     for (i, b) in report.blocks_produced.iter().enumerate() {
         println!("  {}. Block #{}", i + 1, b.number);
         println!("     Time:     {}", format_timestamp(b.timestamp));

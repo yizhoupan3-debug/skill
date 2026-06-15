@@ -4,12 +4,7 @@
 
 /// Prefixes compared after `fs::canonicalize` (symlink-safe).
 #[cfg(feature = "dev-exempt")]
-pub const EXEMPT_PATH_PREFIXES: &[&str] = &[
-    "artifacts",
-    "target",
-    ".cursor",
-    ".claude",
-];
+pub const EXEMPT_PATH_PREFIXES: &[&str] = &["artifacts", "target", ".cursor", ".claude"];
 
 #[cfg(not(feature = "dev-exempt"))]
 pub const EXEMPT_PATH_PREFIXES: &[&str] = &[];
@@ -18,14 +13,14 @@ pub const EXEMPT_PATH_PREFIXES: &[&str] = &[];
 const DEV_EXEMPT_ENV: &str = "ROUTER_RS_DEV_EXEMPT";
 
 #[cfg(feature = "dev-exempt")]
-use framework_kernel::{emit_telemetry, TelemetryEvent};
+use framework_kernel::{TelemetryEvent, emit_telemetry};
 #[cfg(feature = "dev-exempt")]
 use std::env;
 #[cfg(feature = "dev-exempt")]
 use std::fs;
+use std::path::Path;
 #[cfg(feature = "dev-exempt")]
 use std::path::PathBuf;
-use std::path::Path;
 
 #[cfg(feature = "dev-exempt")]
 fn dev_exempt_enabled() -> bool {
@@ -53,9 +48,9 @@ fn path_matches_exempt_prefix(canonical: &Path, repo_root: &Path) -> bool {
         return false;
     };
     let rel_norm = rel.to_string_lossy().replace('\\', "/");
-    EXEMPT_PATH_PREFIXES.iter().any(|prefix| {
-        rel_norm == *prefix || rel_norm.starts_with(&format!("{prefix}/"))
-    })
+    EXEMPT_PATH_PREFIXES
+        .iter()
+        .any(|prefix| rel_norm == *prefix || rel_norm.starts_with(&format!("{prefix}/")))
 }
 
 /// Returns true when dev exempt is active and `path` resolves under an exempt prefix.
@@ -87,7 +82,7 @@ pub fn should_dev_exempt(path: &Path, repo_root: &Path) -> bool {
 #[cfg(all(test, feature = "dev-exempt"))]
 mod tests {
     use super::*;
-    use crate::test_env_sync::process_env_lock;
+    use crate::test_env_sync::{process_env_lock, with_env_var, with_env_var_removed};
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -104,36 +99,34 @@ mod tests {
 
     #[test]
     fn exempt_disabled_without_env() {
-        let _lock = process_env_lock();
         let repo = temp_repo();
-        env::remove_var(DEV_EXEMPT_ENV);
-        let path = repo.join("artifacts/current/x.json");
-        assert!(!should_dev_exempt(&path, &repo));
+        with_env_var_removed(DEV_EXEMPT_ENV, || {
+            let path = repo.join("artifacts/current/x.json");
+            assert!(!should_dev_exempt(&path, &repo));
+        });
         let _ = fs::remove_dir_all(&repo);
     }
 
     #[test]
     fn exempt_hits_artifacts_when_enabled() {
-        let _lock = process_env_lock();
         let repo = temp_repo();
-        env::set_var(DEV_EXEMPT_ENV, "1");
-        let path = repo.join("artifacts/current/x.json");
-        fs::write(&path, "{}").unwrap();
-        assert!(should_dev_exempt(&path, &repo));
-        env::remove_var(DEV_EXEMPT_ENV);
+        with_env_var(DEV_EXEMPT_ENV, "1", || {
+            let path = repo.join("artifacts/current/x.json");
+            fs::write(&path, "{}").unwrap();
+            assert!(should_dev_exempt(&path, &repo));
+        });
         let _ = fs::remove_dir_all(&repo);
     }
 
     #[test]
     fn exempt_rejects_outside_prefix_even_when_enabled() {
-        let _lock = process_env_lock();
         let repo = temp_repo();
-        env::set_var(DEV_EXEMPT_ENV, "1");
-        let path = repo.join("src/main.rs");
-        fs::create_dir_all(repo.join("src")).unwrap();
-        fs::write(&path, "fn main() {}").unwrap();
-        assert!(!should_dev_exempt(&path, &repo));
-        env::remove_var(DEV_EXEMPT_ENV);
+        with_env_var(DEV_EXEMPT_ENV, "1", || {
+            let path = repo.join("src/main.rs");
+            fs::create_dir_all(repo.join("src")).unwrap();
+            fs::write(&path, "fn main() {}").unwrap();
+            assert!(!should_dev_exempt(&path, &repo));
+        });
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -142,7 +135,6 @@ mod tests {
         // Safety: if repo_root path contains "artifacts" (e.g. /home/user/artifacts-workspace/),
         // a file like src/main.rs should NOT be exempted. This was a bug before the fix
         // that removed the absolute-path `contains` fallback.
-        let _lock = process_env_lock();
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
@@ -151,13 +143,13 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("src")).unwrap();
         fs::write(repo.join("src/main.rs"), "fn main() {}").unwrap();
-        env::set_var(DEV_EXEMPT_ENV, "1");
-        let path = repo.join("src/main.rs");
-        assert!(
-            !should_dev_exempt(&path, &repo),
-            "src/main.rs must not be exempt just because repo root contains 'artifacts'"
-        );
-        env::remove_var(DEV_EXEMPT_ENV);
+        with_env_var(DEV_EXEMPT_ENV, "1", || {
+            let path = repo.join("src/main.rs");
+            assert!(
+                !should_dev_exempt(&path, &repo),
+                "src/main.rs must not be exempt just because repo root contains 'artifacts'"
+            );
+        });
         let _ = fs::remove_dir_all(&repo);
     }
 }

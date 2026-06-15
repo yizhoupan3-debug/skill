@@ -1,9 +1,9 @@
 //! MCP tool schema + dispatch.
 
-use crate::db::node_ops::{ResolveOutcome, SymbolFilter};
 use crate::CodeGraphIndex;
+use crate::db::node_ops::{ResolveOutcome, SymbolFilter};
 use anyhow::Context;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::time::Instant;
@@ -13,7 +13,9 @@ const SERVER_NAME: &str = "mcp-codegraph";
 const SERVER_VERSION: &str = "0.2.0";
 
 /// Open index, run incremental sync, and spawn filesystem watcher (W3).
-pub fn prepare_index(repo_root: &Path) -> anyhow::Result<(CodeGraphIndex, crate::graph::IndexWatcher)> {
+pub fn prepare_index(
+    repo_root: &Path,
+) -> anyhow::Result<(CodeGraphIndex, crate::graph::IndexWatcher)> {
     let index = CodeGraphIndex::open(repo_root).context("open codegraph index")?;
     index
         .incremental_sync(repo_root, false)
@@ -471,7 +473,10 @@ mod tests {
             assert!(tool.get("inputSchema").is_some());
             assert!(tool.get("outputSchema").is_some());
             // Descriptions should be meaningful (> 50 chars)
-            let desc = tool.get("description").and_then(|v| v.as_str()).expect("should succeed");
+            let desc = tool
+                .get("description")
+                .and_then(|v| v.as_str())
+                .expect("should succeed");
             assert!(desc.len() > 50, "tool {name} description too short: {desc}");
         }
     }
@@ -519,7 +524,9 @@ mod tests {
             &index,
         )
         .expect("should succeed");
-        let nodes = search["structuredContent"]["nodes"].as_array().expect("as_array should succeed");
+        let nodes = search["structuredContent"]["nodes"]
+            .as_array()
+            .expect("as_array should succeed");
         assert!(nodes.iter().any(|n| n["symbol"] == "caller"));
 
         let callers = dispatch_tool_call(
@@ -527,27 +534,24 @@ mod tests {
             &index,
         )
         .expect("should succeed");
-        assert_eq!(
-            callers["structuredContent"]["nodes"][0]["symbol"],
-            "caller"
-        );
+        assert_eq!(callers["structuredContent"]["nodes"][0]["symbol"], "caller");
 
         let callees = dispatch_tool_call(
             &json!({"name": "codegraph_callees", "arguments": {"symbol": "caller"}}),
             &index,
         )
         .expect("should succeed");
-        assert_eq!(
-            callees["structuredContent"]["nodes"][0]["symbol"],
-            "callee"
-        );
+        assert_eq!(callees["structuredContent"]["nodes"][0]["symbol"], "callee");
 
         let impact = dispatch_tool_call(
             &json!({"name": "codegraph_impact", "arguments": {"symbol": "callee", "depth": 1}}),
             &index,
         )
         .expect("should succeed");
-        assert_eq!(impact["structuredContent"]["callers"][0]["symbol"], "caller");
+        assert_eq!(
+            impact["structuredContent"]["callers"][0]["symbol"],
+            "caller"
+        );
 
         let node_id = nodes[0]["id"].as_str().expect("as_str should succeed");
         let node = dispatch_tool_call(
@@ -607,7 +611,9 @@ mod tests {
             &index,
         )
         .expect("should succeed");
-        let structured = result.get("structuredContent").expect("get structuredContent");
+        let structured = result
+            .get("structuredContent")
+            .expect("get structuredContent");
         let dead = structured["dead_functions"]
             .as_array()
             .expect("expected dead_functions array");
@@ -640,7 +646,13 @@ mod tests {
             &index,
         )
         .expect("should succeed");
-        assert_eq!(response["result"]["tools"].as_array().expect("as_array should succeed").len(), 7);
+        assert_eq!(
+            response["result"]["tools"]
+                .as_array()
+                .expect("as_array should succeed")
+                .len(),
+            7
+        );
         let _ = std::fs::remove_dir_all(root);
     }
 
@@ -679,10 +691,16 @@ mod tests {
         // Should fail with structured JSON error
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
-        let parsed: serde_json::Value = serde_json::from_str(&err_msg)
-            .expect("error should be valid JSON");
+        let parsed: serde_json::Value =
+            serde_json::from_str(&err_msg).expect("error should be valid JSON");
         assert_eq!(parsed["error"], "ambiguous_symbol");
-        assert!(parsed["candidates"].as_array().expect("as_array should succeed").len() >= 1);
+        assert!(
+            parsed["candidates"]
+                .as_array()
+                .expect("as_array should succeed")
+                .len()
+                >= 1
+        );
 
         let _ = std::fs::remove_dir_all(root);
     }

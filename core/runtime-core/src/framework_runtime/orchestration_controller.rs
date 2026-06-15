@@ -3,37 +3,36 @@
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::stdio_payload_types::{
-    BackgroundControlEffectPlanPayload, BackgroundControlRequestPayload,
-    BackgroundControlResponsePayload,
-};
 use crate::execution_contract::{
+    EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY, EXECUTION_SCHEMA_VERSION,
     build_execution_kernel_contracts_by_mode, build_execution_kernel_metadata_contract,
-    build_steady_state_execution_kernel_metadata, EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
-    EXECUTION_SCHEMA_VERSION,
+    build_steady_state_execution_kernel_metadata,
 };
 use crate::route::ROUTE_AUTHORITY;
 use crate::runtime_envelope_ids::{
     BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION,
     RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_CONTROL_PLANE_SCHEMA_VERSION,
     RUNTIME_INTEGRATOR_AUTHORITY, RUNTIME_INTEGRATOR_SCHEMA_VERSION,
-    RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION,
-    RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION,
+    RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION, RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_HEALTH_SNAPSHOT_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION,
-    RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION,
-    RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY, SANDBOX_EVENT_SCHEMA_VERSION,
+    RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION, RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
+    SANDBOX_EVENT_SCHEMA_VERSION,
 };
 use crate::runtime_storage::{
     runtime_backend_family_catalog_payload, runtime_backend_family_parity_payload,
 };
+use crate::stdio_payload_types::{
+    BackgroundControlEffectPlanPayload, BackgroundControlRequestPayload,
+    BackgroundControlResponsePayload,
+};
 use crate::stdio_transport::runtime_concurrency_defaults_payload;
 
 use super::constants::FRAMEWORK_RUNTIME_AUTHORITY;
-use super::json_payload::required_non_empty_string;
+use super::json_value::required_non_empty_string;
 
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
     BackgroundControlEffectPlanPayload {
@@ -135,8 +134,7 @@ fn handle_batch_plan(
         resp.strategy_supported = true;
         resp.accepted = Some(false);
         resp.requires_takeover = Some(false);
-        resp.error =
-            Some("enqueue_background_batch requires at least one request.".to_string());
+        resp.error = Some("enqueue_background_batch requires at least one request.".to_string());
         resp.terminal_status = Some("failed".to_string());
         resp.finalize_immediately = Some(true);
         resp.cancel_running_task = Some(false);
@@ -298,18 +296,16 @@ fn handle_interrupt(
         .unwrap_or_else(|| "queued".to_string());
     let task_active = payload.task_active.unwrap_or(false);
     let task_done = payload.task_done.unwrap_or(false);
-    let finalize_immediately =
-        matches!(current_status.as_str(), "queued" | "retry_scheduled")
-            || !task_active
-            || task_done;
+    let finalize_immediately = matches!(current_status.as_str(), "queued" | "retry_scheduled")
+        || !task_active
+        || task_done;
     let mut effect_plan = if finalize_immediately {
         background_effect_plan("finalize_interrupted")
     } else {
         background_effect_plan("request_interrupt")
     };
     effect_plan.finalize_immediately = Some(finalize_immediately);
-    effect_plan.cancel_running_task =
-        Some(!finalize_immediately && task_active && !task_done);
+    effect_plan.cancel_running_task = Some(!finalize_immediately && task_active && !task_done);
     effect_plan.resolved_status = Some("interrupt_requested".to_string());
     effect_plan.terminal_status = Some(if finalize_immediately {
         "interrupted".to_string()
@@ -829,7 +825,9 @@ pub fn build_runtime_integrator_payload() -> Value {
     let runtime_host = control_plane.get("runtime_host").unwrap_or(&Value::Null);
     let services = control_plane.get("services").unwrap_or(&Value::Null);
     let runtime_status = control_plane.get("runtime_status").unwrap_or(&Value::Null);
-    let concurrency_contract = runtime_host.get("concurrency_contract").unwrap_or(&Value::Null);
+    let concurrency_contract = runtime_host
+        .get("concurrency_contract")
+        .unwrap_or(&Value::Null);
     let subagent_limit_contract = services
         .get("middleware")
         .and_then(Value::as_object)

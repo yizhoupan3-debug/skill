@@ -1,22 +1,53 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 pub(crate) const HARNESS_CONTRACT_SCHEMA_VERSION: &str = "router-rs-harness-contract-v1";
-pub(crate) const HARNESS_SKILL_LINT_SCHEMA_VERSION: &str = "router-rs-harness-skill-contract-lint-v1";
+pub(crate) const HARNESS_SKILL_LINT_SCHEMA_VERSION: &str =
+    "router-rs-harness-skill-contract-lint-v1";
 pub(crate) const HARNESS_CONTRACT_AUTHORITY: &str = "rust-harness-contract";
 
 pub(crate) const FAILURE_TAXONOMY: &[(&str, &str)] = &[
-    ("route_miss", "The task routes to the wrong owner/gate or misses an expected owner."),
-    ("owner_drift", "The active owner, goal, or scope changes without explicit contract update intent."),
-    ("context_rot", "Large or irrelevant context accumulates in the parent thread or hot prompt surface."),
-    ("tool_contract_bad", "A tool/skill interface is ambiguous, too verbose, or lacks failure semantics."),
-    ("verification_missing", "A completion/pass claim has no executable verifier or evidence reference."),
-    ("source_stale", "The answer depends on volatile external truth without an attributed current source."),
-    ("side_effect_risk", "A step can mutate external state without explicit approval, idempotency, or recovery notes."),
-    ("subagent_misuse", "A subagent lane is used without isolation, bounded scope, digest, or verification."),
-    ("trace_gap", "The task cannot be reconstructed from trace/evidence artifacts."),
-    ("step_recovery_gap", "A long-running task cannot resume from a step-level durable ledger."),
+    (
+        "route_miss",
+        "The task routes to the wrong owner/gate or misses an expected owner.",
+    ),
+    (
+        "owner_drift",
+        "The active owner, goal, or scope changes without explicit contract update intent.",
+    ),
+    (
+        "context_rot",
+        "Large or irrelevant context accumulates in the parent thread or hot prompt surface.",
+    ),
+    (
+        "tool_contract_bad",
+        "A tool/skill interface is ambiguous, too verbose, or lacks failure semantics.",
+    ),
+    (
+        "verification_missing",
+        "A completion/pass claim has no executable verifier or evidence reference.",
+    ),
+    (
+        "source_stale",
+        "The answer depends on volatile external truth without an attributed current source.",
+    ),
+    (
+        "side_effect_risk",
+        "A step can mutate external state without explicit approval, idempotency, or recovery notes.",
+    ),
+    (
+        "subagent_misuse",
+        "A subagent lane is used without isolation, bounded scope, digest, or verification.",
+    ),
+    (
+        "trace_gap",
+        "The task cannot be reconstructed from trace/evidence artifacts.",
+    ),
+    (
+        "step_recovery_gap",
+        "A long-running task cannot resume from a step-level durable ledger.",
+    ),
 ];
 
 pub fn harness_contract() -> Value {
@@ -149,7 +180,9 @@ fn lint_one_skill(slug: &str, path: &Path, text: &str, findings: &mut Vec<Value>
             "context_rot",
             "minor",
             "frontmatter description is long",
-            format!("description has {description_len} chars; hot routing summaries should stay compact"),
+            format!(
+                "description has {description_len} chars; hot routing summaries should stay compact"
+            ),
             Some(path.display().to_string()),
             "Move optional detail into references/ and keep routing description compact.",
         ));

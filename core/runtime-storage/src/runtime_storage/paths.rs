@@ -1,5 +1,5 @@
-use super::backend::normalized_backend_family;
 use super::RuntimeStorageRequestPayload;
+use super::backend::normalized_backend_family;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::{ErrorKind, Read};
@@ -174,7 +174,9 @@ pub fn resolve_runtime_storage_path_with_root(
 ///      `storage_root` explicitly in the request payload.
 ///   4. otherwise return `None` so the caller falls back to the
 ///      current working directory (legacy default for non-sqlite backends).
-pub fn effective_storage_root_for_request(request: &RuntimeStorageRequestPayload) -> Option<String> {
+pub fn effective_storage_root_for_request(
+    request: &RuntimeStorageRequestPayload,
+) -> Option<String> {
     if let Some(value) = request.storage_root.as_deref() {
         let trimmed = value.trim();
         if !trimmed.is_empty() {

@@ -150,15 +150,15 @@ fn framework_session_artifact_write_allows_completion_without_closeout_when_env_
     impl EnvCloseoutGuard {
         fn set(value: &str) -> Self {
             let prior = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
-            std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", value);
+            unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", value) };
             Self { prior }
         }
     }
     impl Drop for EnvCloseoutGuard {
         fn drop(&mut self) {
             match &self.prior {
-                Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
-                None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+                Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
+                None => unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
             }
         }
     }

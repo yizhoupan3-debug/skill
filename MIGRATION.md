@@ -136,7 +136,7 @@ cd /path/to/project
 | **`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE`** | `0`/`false`/`off`/`no` 关闭 Cursor beforeSubmit model inherit 单行（默认开；与 my-light / REVIEW_GATE 无关） |
 | **Cursor UPS re-arm** | fresh deep-review cycle 调用 `reset_review_cycle_progress(preserve_session_guards=true)`；保留 `review_pending_cap_refused` 与 open subagent 计数；见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md) |
 | **`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE`** | `0`/`false`/`off`/`no` **关闭** beforeSubmit/UPS spawn-first 单行 nudge（**零注入**，无 fallback）；**不** 改变 REVIEW_GATE 清门阈值 |
-| **窄范围** | `review ./path`、`small_task`、不用子代理 → **不武装** `review_required`（四宿主 `is_narrow_review_prompt`） |
+| **窄范围** | `review ./path`、`small_task`、不用子代理 → **不武装** `review_required`（五宿主 `is_narrow_review_prompt`） |
 | **禁止** | `start_count≥2` 清门、缺 `review-lanes` 文件即 Stop block |
 | **细则** | [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)、[`AGENTS.md`](AGENTS.md) |
 

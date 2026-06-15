@@ -1,14 +1,16 @@
 //! Thin telemetry journal emitters.
 
 use core_state::goal_prediction::{GoalStatePrediction, PredictionVerification};
-use framework_kernel::{emit_telemetry, PredictionOutcomeCheck, TelemetryEvent};
-use serde_json::{json, Value};
+use framework_kernel::{PredictionOutcomeCheck, TelemetryEvent, emit_telemetry};
+use serde_json::{Value, json};
 use std::path::Path;
+use tracing::debug;
 
 use crate::autopilot_goal::{framework_goal_drive as goal_drive_inner, read_goal_state};
 use crate::route::RouteDecision;
 
 pub fn emit_route_decision(query: &str, decision: &RouteDecision, reroute: bool) {
+    debug!(query, skill = %decision.selected_skill, score = decision.score, reroute, "route decision emitted");
     emit_telemetry(&TelemetryEvent::RouteDecision {
         task: query.to_string(),
         skill: decision.selected_skill.clone(),
@@ -110,7 +112,10 @@ pub fn emit_hook_timing_telemetry(
     lock_wait_ms: u64,
     cargo_check_ms: u64,
 ) {
-    emit_hook_fired(event, &hook_timing_action(duration_ms, lock_wait_ms, cargo_check_ms));
+    emit_hook_fired(
+        event,
+        &hook_timing_action(duration_ms, lock_wait_ms, cargo_check_ms),
+    );
 }
 
 /// RFV stdio wrapper: ensures bootstrap and emits operation-level `hook_fired` (round detail via `emit_rfv_round`).
@@ -253,7 +258,9 @@ mod tests {
             "已完成 router-rs green",
         );
         assert!(
-            checks.iter().any(|c| c.rule == "prediction_verification_status_mismatch"),
+            checks
+                .iter()
+                .any(|c| c.rule == "prediction_verification_status_mismatch"),
             "expected status mismatch dry-run check"
         );
 

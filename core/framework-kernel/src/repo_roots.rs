@@ -31,10 +31,7 @@ fn is_mcp_placeholder(raw: &str) -> bool {
     let trimmed = raw.trim();
     matches!(
         trimmed,
-        "${workspaceRoot}"
-            | "${CLAUDE_PROJECT_DIR}"
-            | "${CLAUDE_PROJECT_DIR:-.}"
-            | "."
+        "${workspaceRoot}" | "${CLAUDE_PROJECT_DIR}" | "${CLAUDE_PROJECT_DIR:-.}" | "."
     )
 }
 
@@ -78,7 +75,8 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String
     } else if let Ok(value) = std::env::var("CLAUDE_PROJECT_DIR") {
         let value = value.trim();
         if value.is_empty() {
-            std::env::current_dir().map_err(|err| format!("resolve current directory failed: {err}"))?
+            std::env::current_dir()
+                .map_err(|err| format!("resolve current directory failed: {err}"))?
         } else {
             PathBuf::from(value)
         }
@@ -105,7 +103,10 @@ mod repo_root_placeholder_tests {
     #[test]
     fn workspace_root_placeholder_falls_back_to_cwd_without_claude_project_dir() {
         let prior = env::var_os("CLAUDE_PROJECT_DIR");
-        env::remove_var("CLAUDE_PROJECT_DIR");
+        // SAFETY: test-only; no concurrent threads reading env during this block
+        unsafe {
+            unsafe { env::remove_var("CLAUDE_PROJECT_DIR") };
+        }
         let cwd = env::current_dir().expect("cwd");
         let resolved =
             resolve_repo_root_arg(Some(std::path::Path::new("${workspaceRoot}"))).expect("resolve");
@@ -114,10 +115,14 @@ mod repo_root_placeholder_tests {
         assert!(
             cwd.starts_with(&resolved),
             "expected resolved={:?} to be an ancestor of cwd={:?}",
-            resolved, cwd
+            resolved,
+            cwd
         );
         if let Some(value) = prior {
-            env::set_var("CLAUDE_PROJECT_DIR", value);
+            // SAFETY: test-only; restoring original env value
+            unsafe {
+                unsafe { env::set_var("CLAUDE_PROJECT_DIR", value) };
+            }
         }
     }
 }

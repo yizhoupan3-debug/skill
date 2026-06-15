@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use regex::Regex;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
@@ -19,7 +19,6 @@ mod render;
 use render::*;
 mod workspace;
 use workspace::*;
-
 
 const SCHEMA_VERSION: i64 = 4;
 const STAGE_BOOTSTRAP: &str = "bootstrap";
@@ -856,12 +855,26 @@ mod tests {
         let state = minimal_state();
         let state = draft_claims_from_state(&state, None, 3);
         let state = add_claim_comparison(
-            &state, "claim-1", "method", "prior-work", "low",
-            "different enough", "high", "novel", Some("C1"),
+            &state,
+            "claim-1",
+            "method",
+            "prior-work",
+            "low",
+            "different enough",
+            "high",
+            "novel",
+            Some("C1"),
         );
         let mut state = add_claim_comparison(
-            &state, "claim-2", "task", "prior-work-2", "medium",
-            "different scope", "medium", "defensible", Some("C2"),
+            &state,
+            "claim-2",
+            "task",
+            "prior-work-2",
+            "medium",
+            "different scope",
+            "medium",
+            "defensible",
+            Some("C2"),
         );
         // Ensure the gate is explicitly passed
         novelty_gate_mut(&mut state).insert("status".into(), json!("passed"));
@@ -870,18 +883,51 @@ mod tests {
 
     fn state_with_hypothesis_and_run() -> (Value, tempfile::TempDir) {
         let state = state_with_gate_passed();
-        let state = add_hypothesis(&state, HypothesisInput {
-            claim: "c", prediction: None, mechanism: None,
-            falsifiable_prediction: None, success_threshold: None, stop_condition: None,
-            baselines: &[], confounders: &[], negative_signals: &[],
-            minimal_test: None, priority: "medium", hypothesis_id: Some("h1"),
-        }).unwrap();
+        let state = add_hypothesis(
+            &state,
+            HypothesisInput {
+                claim: "c",
+                prediction: None,
+                mechanism: None,
+                falsifiable_prediction: None,
+                success_threshold: None,
+                stop_condition: None,
+                baselines: &[],
+                confounders: &[],
+                negative_signals: &[],
+                minimal_test: None,
+                priority: "medium",
+                hypothesis_id: Some("h1"),
+            },
+        )
+        .unwrap();
         let tmp = tempfile::tempdir().unwrap();
         let state = record_run(
-            &state, "h1", "confirmatory", "test run",
-            None, None, None, None, &[], None, &[], &[], &[], &[],
-            None, None, None, None, &[], &[], false, None, tmp.path(),
-        ).unwrap();
+            &state,
+            "h1",
+            "confirmatory",
+            "test run",
+            None,
+            None,
+            None,
+            None,
+            &[],
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            false,
+            None,
+            tmp.path(),
+        )
+        .unwrap();
         (state, tmp)
     }
 
@@ -1018,7 +1064,10 @@ mod tests {
 
     #[test]
     fn markdown_link_some() {
-        assert_eq!(markdown_link(Some("https://example.com")), "[link](https://example.com)");
+        assert_eq!(
+            markdown_link(Some("https://example.com")),
+            "[link](https://example.com)"
+        );
     }
 
     #[test]
@@ -1100,7 +1149,8 @@ mod tests {
 
     #[test]
     fn upsert_managed_block_inserts_new() {
-        let result = upsert_managed_block("existing content", "<!--START-->", "<!--END-->", "new data");
+        let result =
+            upsert_managed_block("existing content", "<!--START-->", "<!--END-->", "new data");
         assert!(result.contains("<!--START-->"));
         assert!(result.contains("new data"));
         assert!(result.contains("<!--END-->"));
@@ -1156,7 +1206,10 @@ mod tests {
     #[test]
     fn source_covers_exact_match() {
         assert!(source_covers("arxiv", &ExternalSourceArg::Arxiv));
-        assert!(source_covers("semantic-scholar", &ExternalSourceArg::SemanticScholar));
+        assert!(source_covers(
+            "semantic-scholar",
+            &ExternalSourceArg::SemanticScholar
+        ));
         assert!(source_covers("all", &ExternalSourceArg::All));
     }
 
@@ -1194,9 +1247,19 @@ mod tests {
     fn default_state_has_all_required_keys() {
         let state = default_state("proj", "question?", "quick");
         for key in [
-            "schema_version", "project", "question", "mode", "status",
-            "stage", "hypotheses", "run_history", "external_research",
-            "novelty_gate", "next_actions", "created_at", "updated_at",
+            "schema_version",
+            "project",
+            "question",
+            "mode",
+            "status",
+            "stage",
+            "hypotheses",
+            "run_history",
+            "external_research",
+            "novelty_gate",
+            "next_actions",
+            "created_at",
+            "updated_at",
         ] {
             assert!(state.get(key).is_some(), "missing key: {key}");
         }
@@ -1216,7 +1279,10 @@ mod tests {
             "updated_at": "2026-01-01T00:00:00Z"
         });
         let migrated = migrate_state(&old);
-        assert_eq!(migrated.get("schema_version").and_then(Value::as_i64), Some(SCHEMA_VERSION));
+        assert_eq!(
+            migrated.get("schema_version").and_then(Value::as_i64),
+            Some(SCHEMA_VERSION)
+        );
         assert!(migrated.get("external_research").is_some());
     }
 
@@ -1224,7 +1290,10 @@ mod tests {
     fn migrate_state_already_current_is_noop() {
         let state = default_state("p", "q", "quick");
         let migrated = migrate_state(&state);
-        assert_eq!(migrated.get("schema_version").and_then(Value::as_i64), Some(SCHEMA_VERSION));
+        assert_eq!(
+            migrated.get("schema_version").and_then(Value::as_i64),
+            Some(SCHEMA_VERSION)
+        );
     }
 
     // ── ensure_state_defaults ────────────────────────────────────────────
@@ -1236,7 +1305,10 @@ mod tests {
         assert!(filled.get("hypotheses").is_some());
         assert!(filled.get("run_history").is_some());
         assert!(filled.get("novelty_gate").is_some());
-        assert_eq!(filled.get("schema_version").and_then(Value::as_i64), Some(SCHEMA_VERSION));
+        assert_eq!(
+            filled.get("schema_version").and_then(Value::as_i64),
+            Some(SCHEMA_VERSION)
+        );
     }
 
     #[test]
@@ -1282,7 +1354,14 @@ mod tests {
 
     #[test]
     fn expected_baselines_for_axis_all_variants() {
-        for axis in ["method", "task", "setting", "comparison", "framing", "unknown"] {
+        for axis in [
+            "method",
+            "task",
+            "setting",
+            "comparison",
+            "framing",
+            "unknown",
+        ] {
             let baselines = expected_baselines_for_axis(axis);
             assert_eq!(baselines.len(), 3, "axis={axis} should have 3 baselines");
         }
@@ -1307,8 +1386,14 @@ mod tests {
     #[test]
     fn propose_claims_has_claim_ids() {
         let claims = propose_claims_from_question("Does X improve Y?", 2);
-        assert_eq!(claims[0].get("claim_id").and_then(Value::as_str), Some("C1"));
-        assert_eq!(claims[1].get("claim_id").and_then(Value::as_str), Some("C2"));
+        assert_eq!(
+            claims[0].get("claim_id").and_then(Value::as_str),
+            Some("C1")
+        );
+        assert_eq!(
+            claims[1].get("claim_id").and_then(Value::as_str),
+            Some("C2")
+        );
     }
 
     // ── draft_claims_from_state ──────────────────────────────────────────
@@ -1337,27 +1422,59 @@ mod tests {
     fn add_claim_comparison_creates_record() {
         let state = minimal_state();
         let updated = add_claim_comparison(
-            &state, "my claim", "method", "prior work",
-            "low", "different approach", "high", "novel", Some("C1"),
+            &state,
+            "my claim",
+            "method",
+            "prior work",
+            "low",
+            "different approach",
+            "high",
+            "novel",
+            Some("C1"),
         );
         let records = novelty_arr(&updated, "claim_records");
         assert_eq!(records.len(), 1);
-        assert_eq!(records[0].get("claim_id").and_then(Value::as_str), Some("C1"));
-        assert_eq!(records[0].get("verdict").and_then(Value::as_str), Some("novel"));
+        assert_eq!(
+            records[0].get("claim_id").and_then(Value::as_str),
+            Some("C1")
+        );
+        assert_eq!(
+            records[0].get("verdict").and_then(Value::as_str),
+            Some("novel")
+        );
     }
 
     #[test]
     fn add_claim_comparison_updates_existing() {
         let state = minimal_state();
         let updated = add_claim_comparison(
-            &state, "first", "method", "pw", "low", "diff", "high", "novel", Some("C1"),
+            &state,
+            "first",
+            "method",
+            "pw",
+            "low",
+            "diff",
+            "high",
+            "novel",
+            Some("C1"),
         );
         let updated = add_claim_comparison(
-            &updated, "updated", "task", "pw2", "high", "diff2", "low", "risky", Some("C1"),
+            &updated,
+            "updated",
+            "task",
+            "pw2",
+            "high",
+            "diff2",
+            "low",
+            "risky",
+            Some("C1"),
         );
         let records = novelty_arr(&updated, "claim_records");
         assert_eq!(records.len(), 1);
-        assert_eq!(records[0].get("claim").and_then(Value::as_str), Some("updated"));
+        assert_eq!(
+            records[0].get("claim").and_then(Value::as_str),
+            Some("updated")
+        );
     }
 
     #[test]
@@ -1371,7 +1488,8 @@ mod tests {
         );
         let records = novelty_arr(&updated, "claim_records");
         assert_eq!(records.len(), 2);
-        let ids: Vec<&str> = records.iter()
+        let ids: Vec<&str> = records
+            .iter()
             .filter_map(|r| r.get("claim_id").and_then(Value::as_str))
             .collect();
         assert!(ids.contains(&"C1"));
@@ -1389,9 +1507,15 @@ mod tests {
             "verdict": "novel"
         });
         let scored = score_claim_priority(&record);
-        let score = scored.get("priority_score").and_then(Value::as_i64).unwrap();
+        let score = scored
+            .get("priority_score")
+            .and_then(Value::as_i64)
+            .unwrap();
         assert!(score > 15, "expected high score, got {score}");
-        assert_eq!(scored.get("priority_label").and_then(Value::as_str), Some("first"));
+        assert_eq!(
+            scored.get("priority_label").and_then(Value::as_str),
+            Some("first")
+        );
     }
 
     #[test]
@@ -1403,7 +1527,10 @@ mod tests {
             "verdict": "not-novel"
         });
         let scored = score_claim_priority(&record);
-        let score = scored.get("priority_score").and_then(Value::as_i64).unwrap();
+        let score = scored
+            .get("priority_score")
+            .and_then(Value::as_i64)
+            .unwrap();
         assert!(score < 13, "expected low score, got {score}");
     }
 
@@ -1416,8 +1543,16 @@ mod tests {
             json!({"claim_id": "C1", "axis": "method", "overlap": "low", "verdict": "novel", "confidence": "high"}),
         ];
         let prioritized = prioritize_claims(&claims);
-        assert_eq!(prioritized[0].get("claim_id").and_then(Value::as_str), Some("C1"));
-        assert_eq!(prioritized[0].get("recommended_order").and_then(Value::as_i64), Some(1));
+        assert_eq!(
+            prioritized[0].get("claim_id").and_then(Value::as_str),
+            Some("C1")
+        );
+        assert_eq!(
+            prioritized[0]
+                .get("recommended_order")
+                .and_then(Value::as_i64),
+            Some(1)
+        );
     }
 
     // ── overall_novelty_assessment ───────────────────────────────────────
@@ -1438,8 +1573,28 @@ mod tests {
     #[test]
     fn overall_novelty_assessment_weak() {
         let state = minimal_state();
-        let state = add_claim_comparison(&state, "a", "method", "pw", "low", "d", "high", "not-novel", Some("C1"));
-        let state = add_claim_comparison(&state, "b", "task", "pw", "low", "d", "high", "not-novel", Some("C2"));
+        let state = add_claim_comparison(
+            &state,
+            "a",
+            "method",
+            "pw",
+            "low",
+            "d",
+            "high",
+            "not-novel",
+            Some("C1"),
+        );
+        let state = add_claim_comparison(
+            &state,
+            "b",
+            "task",
+            "pw",
+            "low",
+            "d",
+            "high",
+            "not-novel",
+            Some("C2"),
+        );
         assert_eq!(overall_novelty_assessment(&state), "weak");
     }
 
@@ -1479,40 +1634,72 @@ mod tests {
     #[test]
     fn add_hypothesis_basic() {
         let state = state_with_gate_passed();
-        let result = add_hypothesis(&state, HypothesisInput {
-            claim: "test claim",
-            prediction: Some("prediction"),
-            mechanism: Some("mechanism"),
-            falsifiable_prediction: None,
-            success_threshold: None,
-            stop_condition: None,
-            baselines: &[],
-            confounders: &[],
-            negative_signals: &[],
-            minimal_test: None,
-            priority: "high",
-            hypothesis_id: Some("h-1"),
-        });
+        let result = add_hypothesis(
+            &state,
+            HypothesisInput {
+                claim: "test claim",
+                prediction: Some("prediction"),
+                mechanism: Some("mechanism"),
+                falsifiable_prediction: None,
+                success_threshold: None,
+                stop_condition: None,
+                baselines: &[],
+                confounders: &[],
+                negative_signals: &[],
+                minimal_test: None,
+                priority: "high",
+                hypothesis_id: Some("h-1"),
+            },
+        );
         let updated = result.unwrap();
         assert_eq!(arr(&updated, "hypotheses").len(), 1);
-        assert_eq!(find_hypothesis(&updated, "h-1").unwrap().get("claim").and_then(Value::as_str), Some("test claim"));
+        assert_eq!(
+            find_hypothesis(&updated, "h-1")
+                .unwrap()
+                .get("claim")
+                .and_then(Value::as_str),
+            Some("test claim")
+        );
     }
 
     #[test]
     fn add_hypothesis_duplicate_rejected() {
         let state = state_with_gate_passed();
-        let state = add_hypothesis(&state, HypothesisInput {
-            claim: "c", prediction: None, mechanism: None,
-            falsifiable_prediction: None, success_threshold: None, stop_condition: None,
-            baselines: &[], confounders: &[], negative_signals: &[],
-            minimal_test: None, priority: "medium", hypothesis_id: Some("dup"),
-        }).unwrap();
-        let result = add_hypothesis(&state, HypothesisInput {
-            claim: "c2", prediction: None, mechanism: None,
-            falsifiable_prediction: None, success_threshold: None, stop_condition: None,
-            baselines: &[], confounders: &[], negative_signals: &[],
-            minimal_test: None, priority: "medium", hypothesis_id: Some("dup"),
-        });
+        let state = add_hypothesis(
+            &state,
+            HypothesisInput {
+                claim: "c",
+                prediction: None,
+                mechanism: None,
+                falsifiable_prediction: None,
+                success_threshold: None,
+                stop_condition: None,
+                baselines: &[],
+                confounders: &[],
+                negative_signals: &[],
+                minimal_test: None,
+                priority: "medium",
+                hypothesis_id: Some("dup"),
+            },
+        )
+        .unwrap();
+        let result = add_hypothesis(
+            &state,
+            HypothesisInput {
+                claim: "c2",
+                prediction: None,
+                mechanism: None,
+                falsifiable_prediction: None,
+                success_threshold: None,
+                stop_condition: None,
+                baselines: &[],
+                confounders: &[],
+                negative_signals: &[],
+                minimal_test: None,
+                priority: "medium",
+                hypothesis_id: Some("dup"),
+            },
+        );
         assert!(result.is_err());
     }
 
@@ -1528,7 +1715,13 @@ mod tests {
         let index = find_hypothesis_index(&state, "h1").unwrap();
         let result = transition_hypothesis(&mut state, index, "active", Some("activated"));
         assert!(result.is_ok());
-        assert_eq!(find_hypothesis(&state, "h1").unwrap().get("status").and_then(Value::as_str), Some("active"));
+        assert_eq!(
+            find_hypothesis(&state, "h1")
+                .unwrap()
+                .get("status")
+                .and_then(Value::as_str),
+            Some("active")
+        );
     }
 
     #[test]
@@ -1645,17 +1838,49 @@ mod tests {
     #[test]
     fn record_run_requires_passed_gate() {
         let state = state_with_gate_passed();
-        let state = add_hypothesis(&state, HypothesisInput {
-            claim: "c", prediction: None, mechanism: None,
-            falsifiable_prediction: None, success_threshold: None, stop_condition: None,
-            baselines: &[], confounders: &[], negative_signals: &[],
-            minimal_test: None, priority: "medium", hypothesis_id: Some("h1"),
-        }).unwrap();
+        let state = add_hypothesis(
+            &state,
+            HypothesisInput {
+                claim: "c",
+                prediction: None,
+                mechanism: None,
+                falsifiable_prediction: None,
+                success_threshold: None,
+                stop_condition: None,
+                baselines: &[],
+                confounders: &[],
+                negative_signals: &[],
+                minimal_test: None,
+                priority: "medium",
+                hypothesis_id: Some("h1"),
+            },
+        )
+        .unwrap();
         let tmp = tempfile::tempdir().unwrap();
         let result = record_run(
-            &state, "h1", "confirmatory", "test summary",
-            None, None, None, None, &[], None, &[], &[], &[], &[],
-            None, None, None, None, &[], &[], false, None, tmp.path(),
+            &state,
+            "h1",
+            "confirmatory",
+            "test summary",
+            None,
+            None,
+            None,
+            None,
+            &[],
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            false,
+            None,
+            tmp.path(),
         );
         assert!(result.is_ok());
         let updated = result.unwrap();
@@ -1667,9 +1892,29 @@ mod tests {
         let state = state_with_gate_passed();
         let tmp = tempfile::tempdir().unwrap();
         let result = record_run(
-            &state, "nonexistent", "confirmatory", "summary",
-            None, None, None, None, &[], None, &[], &[], &[], &[],
-            None, None, None, None, &[], &[], false, None, tmp.path(),
+            &state,
+            "nonexistent",
+            "confirmatory",
+            "summary",
+            None,
+            None,
+            None,
+            None,
+            &[],
+            None,
+            &[],
+            &[],
+            &[],
+            &[],
+            None,
+            None,
+            None,
+            None,
+            &[],
+            &[],
+            false,
+            None,
+            tmp.path(),
         );
         assert!(result.is_err());
     }
@@ -1681,15 +1926,27 @@ mod tests {
         let result = reflect(&state, "h1", "DEEPEN", "interesting pattern", None, None);
         assert!(result.is_ok());
         let updated = result.unwrap();
-        assert_eq!(updated.get("current_direction").and_then(Value::as_str), Some("DEEPEN"));
-        assert_eq!(find_hypothesis(&updated, "h1").unwrap().get("status").and_then(Value::as_str), Some("active"));
+        assert_eq!(
+            updated.get("current_direction").and_then(Value::as_str),
+            Some("DEEPEN")
+        );
+        assert_eq!(
+            find_hypothesis(&updated, "h1")
+                .unwrap()
+                .get("status")
+                .and_then(Value::as_str),
+            Some("active")
+        );
     }
 
     #[test]
     fn reflect_conclude_sets_status() {
         let (state, _tmp) = state_with_hypothesis_and_run();
         let updated = reflect(&state, "h1", "CONCLUDE", "done", None, None).unwrap();
-        assert_eq!(updated.get("status").and_then(Value::as_str), Some("concluded"));
+        assert_eq!(
+            updated.get("status").and_then(Value::as_str),
+            Some("concluded")
+        );
     }
 
     // ── annotate_run ─────────────────────────────────────────────────────
@@ -1698,24 +1955,39 @@ mod tests {
     fn annotate_run_adds_finding() {
         let (state, _tmp) = state_with_hypothesis_and_run();
         let run_id = str_field(arr(&state, "run_history").last().unwrap(), "run_id");
-        let updated = annotate_run(&state, &run_id, RunAnnotationInput {
-            finding: Some("reusable finding"),
-            decision_delta: Some("changed decision"),
-            reuse_note: Some("note"),
-            applies_to: &["scope-a".into()],
-            does_not_apply_to: &[],
-        }).unwrap();
+        let updated = annotate_run(
+            &state,
+            &run_id,
+            RunAnnotationInput {
+                finding: Some("reusable finding"),
+                decision_delta: Some("changed decision"),
+                reuse_note: Some("note"),
+                applies_to: &["scope-a".into()],
+                does_not_apply_to: &[],
+            },
+        )
+        .unwrap();
         let run = latest_run_by_id(&updated, &run_id).unwrap();
-        assert_eq!(run.get("finding").and_then(Value::as_str), Some("reusable finding"));
+        assert_eq!(
+            run.get("finding").and_then(Value::as_str),
+            Some("reusable finding")
+        );
     }
 
     #[test]
     fn annotate_run_rejects_unknown_id() {
         let state = minimal_state();
-        let result = annotate_run(&state, "nonexistent", RunAnnotationInput {
-            finding: None, decision_delta: None, reuse_note: None,
-            applies_to: &[], does_not_apply_to: &[],
-        });
+        let result = annotate_run(
+            &state,
+            "nonexistent",
+            RunAnnotationInput {
+                finding: None,
+                decision_delta: None,
+                reuse_note: None,
+                applies_to: &[],
+                does_not_apply_to: &[],
+            },
+        );
         assert!(result.is_err());
     }
 
@@ -1735,7 +2007,8 @@ mod tests {
     fn build_search_queries_returns_four() {
         let queries = build_search_queries("neural architecture search efficiency", "method");
         assert_eq!(queries.len(), 4);
-        let labels: Vec<&str> = queries.iter()
+        let labels: Vec<&str> = queries
+            .iter()
             .filter_map(|q| q.get("label").and_then(Value::as_str))
             .collect();
         assert!(labels.contains(&"broad"));
@@ -1779,13 +2052,21 @@ mod tests {
 
     #[test]
     fn default_run_record_path_format() {
-        assert_eq!(default_run_record_path("h1", "run-001"), "experiments/h1/run-001.md");
+        assert_eq!(
+            default_run_record_path("h1", "run-001"),
+            "experiments/h1/run-001.md"
+        );
     }
 
     #[test]
     fn default_reflection_path_format() {
-        assert_eq!(default_reflection_path("h1", Some("run-001")), "experiments/h1/run-001-reflection.md");
-        assert_eq!(default_reflection_path("h1", None), "experiments/h1/reflection-reflection.md");
+        assert_eq!(
+            default_reflection_path("h1", Some("run-001")),
+            "experiments/h1/run-001-reflection.md"
+        );
+        assert_eq!(
+            default_reflection_path("h1", None),
+            "experiments/h1/reflection-reflection.md"
+        );
     }
 }
-

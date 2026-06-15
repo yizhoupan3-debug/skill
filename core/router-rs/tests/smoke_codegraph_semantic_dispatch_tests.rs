@@ -126,18 +126,15 @@ fn codegraph_host_projections_register_mcp_codegraph_smoke() {
             .and_then(Value::as_array)
             .unwrap_or_else(|| panic!("{host_id} missing managed_mcp_server_ids"));
         assert!(
-            managed.iter().any(|id| id.as_str() == Some("mcp-codegraph")),
+            managed
+                .iter()
+                .any(|id| id.as_str() == Some("mcp-codegraph")),
             "{host_id} must list mcp-codegraph in managed_mcp_server_ids"
         );
     }
 }
 
-const CODEGRAPH_SKILL_SLUGS: &[&str] = &[
-    "planx",
-    "implementx",
-    "verifyx",
-    "code-review-deep",
-];
+const CODEGRAPH_SKILL_SLUGS: &[&str] = &["planx", "implementx", "verifyx", "code-review-deep"];
 
 fn assert_manifest_codegraph_tools_resolve(registry: &Value, payload: &Value, slug: &str) {
     let allowed = manifest_allowed_tools_for_slug(payload, slug);

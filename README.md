@@ -1,10 +1,10 @@
-# Skill System — 四宿主共用框架
+# Skill System — 五宿主共用框架
 
 这份仓库是一整套给 Claude Code、Codex、Cursor 和 OpenCode 共用的 skill 系统：包含 `skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。把这个仓库通过 GitHub 分享给别人后，对方可以在 Windows 上克隆、验证，并按本机的宿主全局路径或工作区路径启用；不要依赖某台机器的绝对路径。
 
 **使用者一页纸**（宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检命令）：[`docs/hosts/`](docs/hosts/) + [`AGENTS.md`](AGENTS.md)。
 
-**近期变更（2026-06）**：闭集宿主收敛为 **四宿主**（`codex`、`claude-code`、`cursor`、`opencode`）；`claude-desktop`、`codex-app`、`codex-cli` 已退役 — 见 [`MIGRATION.md`](MIGRATION.md)。历史变更详见 [`MIGRATION.md`](MIGRATION.md)。文档地图：[`docs/README.md`](docs/README.md)。
+**近期变更（2026-06）**：闭集宿主收敛为 **五宿主**（`codex`、`claude-code`、`cursor`、`opencode`、`mimo`）；`claude-desktop`、`codex-app`、`codex-cli` 已退役 — 见 [`MIGRATION.md`](MIGRATION.md)。历史变更详见 [`MIGRATION.md`](MIGRATION.md)。文档地图：[`docs/README.md`](docs/README.md)。
 
 ## 我该怎么入门（两条路径）
 
@@ -22,7 +22,7 @@
 
 ## 这套系统包含什么
 
-- `AGENTS.md`：四宿主（Claude Code、Codex、Cursor、OpenCode）进入本仓库时共同遵守的项目规则。
+- `AGENTS.md`：五宿主（Claude Code、Codex、Cursor、OpenCode、MiMo）进入本仓库时共同遵守的项目规则。
   - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 [`AGENTS_CODEX.md`](AGENTS_CODEX.md) → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
 - `docs/README.md`：文档索引（阅读顺序、主题表）。
 - `docs/spec.md`：统一规约（架构、五层模型、沙箱、路由、Closeout）。

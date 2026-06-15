@@ -159,17 +159,11 @@ const REVIEW_GATE_LINE_CLEAR_MARKERS: &[&str] = &["rg_clear", "/rg_clear"];
 /// - `closeout_enforcement::summary_claims_completion` 直接对 summary 原文扫描；
 /// - `cursor_hooks::completion_claimed_in_text` 先剥离引文 / 代码块 / URL 再扫描；
 /// - 中文用多字短语避免「完成度 / 完成任务拆分」等子串误命中。
-pub const COMPLETION_DETECT_EN: &[&str] =
-    &["done", "finished", "completed", "succeeded", "passed"];
+pub const COMPLETION_DETECT_EN: &[&str] = &["done", "finished", "completed", "succeeded", "passed"];
 
 /// 完成宣称（触发 closeout）：不含「验证通过/测试通过」等，避免与 goal verify 聊天轨打架。
-pub const COMPLETION_DETECT_ZH_PHRASES: &[&str] = &[
-    "已完成",
-    "已经完成",
-    "全部完成",
-    "完成了",
-    "搞定",
-];
+pub const COMPLETION_DETECT_ZH_PHRASES: &[&str] =
+    &["已完成", "已经完成", "全部完成", "完成了", "搞定"];
 
 /// 仅用于无磁盘 GOAL 时的聊天 progress/verify 提示（不进 closeout 词表）。
 pub const GOAL_CHAT_VERIFY_ZH_PHRASES: &[&str] = &["验证通过", "测试通过", "审核通过", "已通过"];
@@ -257,23 +251,17 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
 
 fn framework_goal_drive_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/(?:implementx|verifyx)\b").expect("invalid regex")
-    })
+    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/(?:implementx|verifyx)\b").expect("invalid regex"))
 }
 
 fn framework_implement_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/implementx\b").expect("invalid regex")
-    })
+    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/implementx\b").expect("invalid regex"))
 }
 
 fn my_pre_execution_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/(?:discussx|planx)\b").expect("invalid regex")
-    })
+    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/(?:discussx|planx)\b").expect("invalid regex"))
 }
 
 fn my_lifecycle_entry_re() -> &'static Regex {
@@ -315,10 +303,7 @@ pub const MY_IMPLEMENT_GOAL_DRIVE_HOOK_NUDGE: &str = "My lifecycle implement (/i
 
 fn framework_non_goal_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/(gitx|update)\b")
-            .expect("invalid regex")
-    })
+    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/(gitx|update)\b").expect("invalid regex"))
 }
 
 /// Execution-zone `/implementx|verifyx` — arms goal continuity gates (Cursor hooks).
@@ -413,8 +398,7 @@ pub fn should_inject_spawn_first_review_nudge(
 ) -> bool {
     if my_light_profile_active(repo_root, prompt_text)
         && crate::registry_review_gate::lifecycle_profile_disables_spawn_first_nudge(
-            repo_root,
-            "my-light",
+            repo_root, "my-light",
         )
         .unwrap_or(true)
     {
@@ -423,7 +407,6 @@ pub fn should_inject_spawn_first_review_nudge(
     crate::env_flags::router_rs_review_spawn_first_nudge_enabled()
         && crate::registry_review_gate::review_spawn_first_enabled(repo_root)
 }
-
 
 /// Global posture: REVIEW_GATE at Stop is advisory-only on all hosts (no `continue:false` /
 /// `decision:block` for review incomplete). L4 handlers use [`review_gate_stop_would_nudge`] for
@@ -737,7 +720,7 @@ mod tests {
         let _lock = crate::test_env_sync::process_env_lock();
         let key = "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
         let prev = std::env::var_os(key);
-        std::env::set_var(key, "1");
+        unsafe { std::env::set_var(key, "1") };
         assert!(should_inject_subagent_model_inherit_nudge(
             "/implementx",
             false,
@@ -760,8 +743,8 @@ mod tests {
             true
         ));
         match prev {
-            Some(v) => std::env::set_var(key, v),
-            None => std::env::remove_var(key),
+            Some(v) => unsafe { std::env::set_var(key, v) },
+            None => unsafe { std::env::remove_var(key) },
         }
     }
 
@@ -847,5 +830,4 @@ mod tests {
         assert!(review_gate_hard_block_disabled(None, "random text"));
         set_test_my_light_override(None);
     }
-
 }

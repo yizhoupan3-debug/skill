@@ -197,7 +197,9 @@ fn send_signal_to_pgrp(pid: u32, signal: i32) -> Result<(), String> {
     if err.raw_os_error() == Some(libc::ESRCH) {
         return Ok(());
     }
-    Err(format!("kill(target={target}, signal={signal}) failed: {err}"))
+    Err(format!(
+        "kill(target={target}, signal={signal}) failed: {err}"
+    ))
 }
 
 /// Reap a child that has exited (including zombie). Returns true when the pid is gone.

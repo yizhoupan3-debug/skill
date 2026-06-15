@@ -25,7 +25,13 @@ fn main() {
         .and_then(serde_json::Value::as_array)
         .expect("host_targets.supported must be a non-empty array")
         .iter()
-        .map(|v| v.as_str().map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).expect("non-empty string"))
+        .map(|v| {
+            v.as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .expect("non-empty string")
+        })
         .collect();
 
     let ids_literal = supported
@@ -48,11 +54,11 @@ fn main() {
     let push_lines: Vec<String> = supported
         .iter()
         .filter_map(|id| {
-            host_provider_map.get(id.as_str()).map(|(module, struct_name)| {
-                format!(
-                    "    providers.push(Box::new(super::{module}::{struct_name}));"
-                )
-            })
+            host_provider_map
+                .get(id.as_str())
+                .map(|(module, struct_name)| {
+                    format!("    providers.push(Box::new(super::{module}::{struct_name}));")
+                })
         })
         .collect();
     let push_body = push_lines.join("\n");

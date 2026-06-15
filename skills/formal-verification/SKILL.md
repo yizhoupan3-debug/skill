@@ -60,7 +60,7 @@ trigger_hints:
 ## References
 
 - math-derivation skill：[`../math-derivation/SKILL.md`](../math-derivation/SKILL.md)（推导能力与符号计算知识库）
-- framework math_verify（Rust）：`core/core-math/`（`formal_toolchain`；CAS + SMT 后端，roadmap v5 B0）
+- framework math_verify（Rust）：`core/core-math/`（`formal_toolchain`；CAS + SMT 后端）
 
 ## Integration
 

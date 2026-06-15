@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Cursor alwaysApply rules must keep markdown links to policy canonicals
 //! (drift guard for harness subtraction).
 //!
@@ -147,10 +148,7 @@ fn markdown_link_url_contains(body: &str, needle: &str) -> bool {
 }
 
 fn assert_canonical_markdown_links(path: &Path, text: &str) {
-    let needles = [
-        ("AGENTS.md", "AGENTS.md"),
-        ("spec.md", "spec.md"),
-    ];
+    let needles = [("AGENTS.md", "AGENTS.md"), ("spec.md", "spec.md")];
     for (label, needle) in needles {
         assert!(
             markdown_link_url_contains(text, needle),

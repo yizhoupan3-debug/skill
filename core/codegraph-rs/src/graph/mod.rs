@@ -2,9 +2,9 @@ pub mod sync;
 
 use crate::db::node_ops::SymbolFilter;
 use crate::{ImpactReport, Node};
-use rusqlite::{params, Connection, Statement};
+use rusqlite::{Connection, Statement, params};
 
-pub use sync::{build_full_index, incremental_sync, IndexWatcher, SyncReport};
+pub use sync::{IndexWatcher, SyncReport, build_full_index, incremental_sync};
 
 /// Cached prepared statements for graph traversal queries.
 /// Avoids re-preparing SQL on every BFS hop.
@@ -48,10 +48,9 @@ impl<'conn> GraphStmts<'conn> {
         symbol: &str,
         filter: &SymbolFilter,
     ) -> rusqlite::Result<Vec<Node>> {
-        let rows = self.direct_callers.query_map(
-            params![symbol, filter.file_path, filter.node_id],
-            map_row,
-        )?;
+        let rows = self
+            .direct_callers
+            .query_map(params![symbol, filter.file_path, filter.node_id], map_row)?;
         let result: rusqlite::Result<Vec<Node>> = rows.collect();
         result
     }
@@ -61,10 +60,9 @@ impl<'conn> GraphStmts<'conn> {
         symbol: &str,
         filter: &SymbolFilter,
     ) -> rusqlite::Result<Vec<Node>> {
-        let rows = self.direct_callees.query_map(
-            params![symbol, filter.file_path, filter.node_id],
-            map_row,
-        )?;
+        let rows = self
+            .direct_callees
+            .query_map(params![symbol, filter.file_path, filter.node_id], map_row)?;
         let result: rusqlite::Result<Vec<Node>> = rows.collect();
         result
     }
@@ -163,7 +161,7 @@ fn map_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Node> {
 
 #[cfg(test)]
 mod tests {
-    use super::{find_callers, find_callees, impact_radius};
+    use super::{find_callees, find_callers, impact_radius};
     use crate::db::node_ops::SymbolFilter;
     use crate::db::schema::init_schema;
 
@@ -185,7 +183,8 @@ mod tests {
 
     #[test]
     fn find_callers_returns_direct_caller() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed_graph(&conn);
         let filter = SymbolFilter::from_options(None, None);
         let callers = find_callers(&conn, "target", 1, &filter).expect("find callers");
@@ -195,7 +194,8 @@ mod tests {
 
     #[test]
     fn find_callees_supports_depth() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed_graph(&conn);
         let filter = SymbolFilter::from_options(None, None);
         // depth=2 from "caller" should reach "target" (d1) and "leaf" (d2)
@@ -208,7 +208,8 @@ mod tests {
 
     #[test]
     fn impact_radius_includes_both_directions() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         seed_graph(&conn);
         let filter = SymbolFilter::from_options(None, None);
         let report = impact_radius(&conn, "target", 2, &filter).expect("impact radius");
@@ -220,7 +221,8 @@ mod tests {
 
     #[test]
     fn duplicate_symbol_callers_do_not_cross_files() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         init_schema(&conn).expect("initialize schema");
         for (id, path, caller) in [
             ("a1", "a.rs", "caller_a"),

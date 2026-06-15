@@ -4,7 +4,7 @@ use super::operation::*;
 use super::paths::*;
 use super::sqlite::*;
 use super::*;
-use serde_json::{json, Map};
+use serde_json::{Map, json};
 use serial_test::serial;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -32,9 +32,9 @@ fn effective_storage_root_does_not_silently_consult_codex_or_cursor_home() {
     let prior_router = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
     let prior_codex = std::env::var("CODEX_HOME").ok();
     let prior_cursor = std::env::var("CURSOR_HOME").ok();
-    std::env::remove_var("ROUTER_RS_STORAGE_ROOT");
-    std::env::set_var("CODEX_HOME", "/tmp/router-rs-test-codex-home");
-    std::env::set_var("CURSOR_HOME", "/tmp/router-rs-test-cursor-home");
+    unsafe { std::env::remove_var("ROUTER_RS_STORAGE_ROOT") };
+    unsafe { std::env::set_var("CODEX_HOME", "/tmp/router-rs-test-codex-home") };
+    unsafe { std::env::set_var("CURSOR_HOME", "/tmp/router-rs-test-cursor-home") };
     let request = RuntimeStorageRequestPayload {
         operation: "write_text".to_string(),
         path: "artifacts/x.json".to_string(),
@@ -53,22 +53,22 @@ fn effective_storage_root_does_not_silently_consult_codex_or_cursor_home() {
     );
 
     // Sanity: explicit ROUTER_RS_STORAGE_ROOT IS honored.
-    std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/tmp/router-rs-test-explicit");
+    unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/tmp/router-rs-test-explicit") };
     let resolved = effective_storage_root_for_request(&request);
     assert_eq!(resolved.as_deref(), Some("/tmp/router-rs-test-explicit"));
 
     // Cleanup test env so we don't leak state to other tests.
     match prior_router {
-        Some(v) => std::env::set_var("ROUTER_RS_STORAGE_ROOT", v),
-        None => std::env::remove_var("ROUTER_RS_STORAGE_ROOT"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_STORAGE_ROOT") },
     }
     match prior_codex {
-        Some(v) => std::env::set_var("CODEX_HOME", v),
-        None => std::env::remove_var("CODEX_HOME"),
+        Some(v) => unsafe { std::env::set_var("CODEX_HOME", v) },
+        None => unsafe { std::env::remove_var("CODEX_HOME") },
     }
     match prior_cursor {
-        Some(v) => std::env::set_var("CURSOR_HOME", v),
-        None => std::env::remove_var("CURSOR_HOME"),
+        Some(v) => unsafe { std::env::set_var("CURSOR_HOME", v) },
+        None => unsafe { std::env::remove_var("CURSOR_HOME") },
     }
 }
 
@@ -701,10 +701,10 @@ fn canonicalize_or_clean_absolute_path_cleans_absolute() {
 fn explicit_storage_root_override_returns_none_when_unset() {
     let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
-    std::env::remove_var("ROUTER_RS_STORAGE_ROOT");
+    unsafe { std::env::remove_var("ROUTER_RS_STORAGE_ROOT") };
     assert_eq!(explicit_storage_root_override(), None);
     if let Some(v) = prior {
-        std::env::set_var("ROUTER_RS_STORAGE_ROOT", v);
+        unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", v) };
     }
 }
 
@@ -712,11 +712,11 @@ fn explicit_storage_root_override_returns_none_when_unset() {
 fn explicit_storage_root_override_returns_none_when_empty() {
     let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
-    std::env::set_var("ROUTER_RS_STORAGE_ROOT", "  ");
+    unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", "  ") };
     assert_eq!(explicit_storage_root_override(), None);
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_STORAGE_ROOT", v),
-        None => std::env::remove_var("ROUTER_RS_STORAGE_ROOT"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_STORAGE_ROOT") },
     }
 }
 
@@ -724,14 +724,14 @@ fn explicit_storage_root_override_returns_none_when_empty() {
 fn explicit_storage_root_override_returns_value_when_set() {
     let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
-    std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/my/root");
+    unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/my/root") };
     assert_eq!(
         explicit_storage_root_override(),
         Some("/my/root".to_string())
     );
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_STORAGE_ROOT", v),
-        None => std::env::remove_var("ROUTER_RS_STORAGE_ROOT"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_STORAGE_ROOT") },
     }
 }
 
@@ -741,7 +741,7 @@ fn explicit_storage_root_override_returns_value_when_set() {
 fn effective_storage_root_prefers_explicit_over_env() {
     let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
-    std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/env/root");
+    unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/env/root") };
     let request = RuntimeStorageRequestPayload {
         operation: "exists".to_string(),
         path: "x".to_string(),
@@ -758,8 +758,8 @@ fn effective_storage_root_prefers_explicit_over_env() {
         Some("/explicit/root".to_string())
     );
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_STORAGE_ROOT", v),
-        None => std::env::remove_var("ROUTER_RS_STORAGE_ROOT"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_STORAGE_ROOT") },
     }
 }
 
@@ -769,7 +769,7 @@ fn effective_storage_root_empty_explicit_falls_to_env() {
     // When storage_root is set but empty/whitespace, the function does NOT
     // early-return; it falls through to explicit_storage_root_override().
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
-    std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/env/fallback");
+    unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", "/env/fallback") };
     let request = RuntimeStorageRequestPayload {
         operation: "exists".to_string(),
         path: "x".to_string(),
@@ -786,8 +786,8 @@ fn effective_storage_root_empty_explicit_falls_to_env() {
         Some("/env/fallback".to_string())
     );
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_STORAGE_ROOT", v),
-        None => std::env::remove_var("ROUTER_RS_STORAGE_ROOT"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_STORAGE_ROOT") },
     }
 }
 
@@ -795,7 +795,7 @@ fn effective_storage_root_empty_explicit_falls_to_env() {
 fn effective_storage_root_sqlite_uses_db_parent() {
     let _lock = core_policy::test_env_sync::process_env_lock();
     let prior = std::env::var("ROUTER_RS_STORAGE_ROOT").ok();
-    std::env::remove_var("ROUTER_RS_STORAGE_ROOT");
+    unsafe { std::env::remove_var("ROUTER_RS_STORAGE_ROOT") };
     let request = RuntimeStorageRequestPayload {
         operation: "exists".to_string(),
         path: "data.json".to_string(),
@@ -812,7 +812,7 @@ fn effective_storage_root_sqlite_uses_db_parent() {
         Some("/some/dir".to_string())
     );
     if let Some(v) = prior {
-        std::env::set_var("ROUTER_RS_STORAGE_ROOT", v);
+        unsafe { std::env::set_var("ROUTER_RS_STORAGE_ROOT", v) };
     }
 }
 
@@ -853,11 +853,34 @@ fn backend_capabilities_rejects_unknown() {
 
 #[test]
 fn backend_capabilities_normalizes_aliases() {
-    assert_eq!(runtime_backend_capabilities("file").unwrap().backend_family, "filesystem");
-    assert_eq!(runtime_backend_capabilities("sqlite3").unwrap().backend_family, "sqlite");
-    assert_eq!(runtime_backend_capabilities("in_memory").unwrap().backend_family, "memory");
-    assert_eq!(runtime_backend_capabilities("regression").unwrap().backend_family, "memory");
-    assert_eq!(runtime_backend_capabilities("regression_double").unwrap().backend_family, "memory");
+    assert_eq!(
+        runtime_backend_capabilities("file").unwrap().backend_family,
+        "filesystem"
+    );
+    assert_eq!(
+        runtime_backend_capabilities("sqlite3")
+            .unwrap()
+            .backend_family,
+        "sqlite"
+    );
+    assert_eq!(
+        runtime_backend_capabilities("in_memory")
+            .unwrap()
+            .backend_family,
+        "memory"
+    );
+    assert_eq!(
+        runtime_backend_capabilities("regression")
+            .unwrap()
+            .backend_family,
+        "memory"
+    );
+    assert_eq!(
+        runtime_backend_capabilities("regression_double")
+            .unwrap()
+            .backend_family,
+        "memory"
+    );
 }
 
 // ── runtime_backend_capabilities_payload ──
@@ -869,7 +892,11 @@ fn backend_capabilities_payload_includes_all_fields() {
     assert!(payload["supports_atomic_replace"].as_bool().is_some());
     assert!(payload["supports_compaction"].as_bool().is_some());
     assert!(payload["supports_snapshot_delta"].as_bool().is_some());
-    assert!(payload["supports_remote_event_transport"].as_bool().is_some());
+    assert!(
+        payload["supports_remote_event_transport"]
+            .as_bool()
+            .is_some()
+    );
     assert!(payload["supports_consistent_append"].as_bool().is_some());
     assert!(payload["supports_sqlite_wal"].as_bool().is_some());
 }
@@ -897,13 +924,8 @@ fn backend_family_parity_aligned_when_all_same() {
 
 #[test]
 fn backend_family_parity_defaults_to_store() {
-    let payload = runtime_backend_family_parity_payload(
-        Some("sqlite"),
-        None,
-        None,
-        None,
-    )
-    .expect("parity ok");
+    let payload =
+        runtime_backend_family_parity_payload(Some("sqlite"), None, None, None).expect("parity ok");
     assert_eq!(payload["aligned"], true);
     assert_eq!(payload["store_backend_family"], "sqlite");
     assert_eq!(payload["checkpointer_backend_family"], "sqlite");
@@ -930,7 +952,10 @@ fn backend_family_parity_mismatch() {
 fn normalized_backend_family_lowercases_and_normalizes() {
     assert_eq!(normalized_backend_family("SQLite"), "sqlite");
     assert_eq!(normalized_backend_family("  File-System  "), "file_system");
-    assert_eq!(normalized_backend_family("REGRESSION_DOUBLE"), "regression_double");
+    assert_eq!(
+        normalized_backend_family("REGRESSION_DOUBLE"),
+        "regression_double"
+    );
 }
 
 // ── payload_sha256 ──
@@ -1036,16 +1061,14 @@ fn apply_read_limits_max_bytes_truncates() {
 
 #[test]
 fn apply_read_limits_tail_lines_truncates() {
-    let (text, truncated) =
-        apply_read_limits("a\nb\nc\nd".to_string(), None, Some(2));
+    let (text, truncated) = apply_read_limits("a\nb\nc\nd".to_string(), None, Some(2));
     assert_eq!(text, "c\nd");
     assert!(truncated);
 }
 
 #[test]
 fn apply_read_limits_both_limits_applied() {
-    let (text, truncated) =
-        apply_read_limits("aaa\nbbb\nccc\nddd".to_string(), Some(5), Some(2));
+    let (text, truncated) = apply_read_limits("aaa\nbbb\nccc\nddd".to_string(), Some(5), Some(2));
     // tail_lines=2 => "ccc\nddd", then max_bytes=5 => last 5 bytes => "c\nddd"
     assert_eq!(text, "c\nddd");
     assert!(truncated);
@@ -1067,9 +1090,11 @@ fn resolve_runtime_storage_path_with_root_relative_joined() {
 fn resolve_runtime_storage_path_with_root_absolute_inside() {
     let root = unique_temp_dir("resolve-absolute-inside");
     let target = root.join("sub/file.json");
-    let (resolved, storage_root) =
-        resolve_runtime_storage_path_with_root(&target.display().to_string(), Some(&root.display().to_string()))
-            .expect("should resolve");
+    let (resolved, storage_root) = resolve_runtime_storage_path_with_root(
+        &target.display().to_string(),
+        Some(&root.display().to_string()),
+    )
+    .expect("should resolve");
     assert!(resolved.starts_with(&storage_root));
 }
 
@@ -1623,7 +1648,10 @@ fn sqlite_write_overwrites_existing() {
     let path = root.join("data.json");
     sqlite_write_text(&path, &db_path, &root, "v1").expect("write v1");
     sqlite_write_text(&path, &db_path, &root, "v2").expect("write v2");
-    assert_eq!(sqlite_read_text(&path, &db_path, &root).expect("read"), "v2");
+    assert_eq!(
+        sqlite_read_text(&path, &db_path, &root).expect("read"),
+        "v2"
+    );
 }
 
 #[test]
@@ -1633,7 +1661,10 @@ fn sqlite_append_text_concatenates() {
     let path = root.join("log.jsonl");
     sqlite_write_text(&path, &db_path, &root, "first").expect("write");
     sqlite_append_text(&path, &db_path, &root, "\nsecond").expect("append");
-    assert_eq!(sqlite_read_text(&path, &db_path, &root).expect("read"), "first\nsecond");
+    assert_eq!(
+        sqlite_read_text(&path, &db_path, &root).expect("read"),
+        "first\nsecond"
+    );
 }
 
 #[test]
@@ -1774,10 +1805,10 @@ fn filesystem_reject_symlink_write_target_rejects_symlink() {
 #[serial]
 fn env_checkpoint_storage_db_path_returns_none_when_unset() {
     let prior = std::env::var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE").ok();
-    std::env::remove_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE");
+    unsafe { std::env::remove_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE") };
     assert_eq!(env_checkpoint_storage_db_path(), None);
     if let Some(v) = prior {
-        std::env::set_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", v);
+        unsafe { std::env::set_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", v) };
     }
 }
 
@@ -1785,13 +1816,13 @@ fn env_checkpoint_storage_db_path_returns_none_when_unset() {
 #[serial]
 fn env_checkpoint_storage_db_path_returns_path_when_set() {
     let prior = std::env::var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE").ok();
-    std::env::set_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", "/tmp/test.sqlite3");
+    unsafe { std::env::set_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", "/tmp/test.sqlite3") };
     let result = env_checkpoint_storage_db_path();
     assert!(result.is_some());
     assert!(result.unwrap().ends_with("test.sqlite3"));
     match prior {
-        Some(v) => std::env::set_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", v),
-        None => std::env::remove_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE"),
+        Some(v) => unsafe { std::env::set_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE", v) },
+        None => unsafe { std::env::remove_var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE") },
     }
 }
 

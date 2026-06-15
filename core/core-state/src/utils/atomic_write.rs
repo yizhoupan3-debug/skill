@@ -126,11 +126,13 @@ mod tests {
             .unwrap()
             .filter_map(|e| e.ok())
             .filter(|e| {
-                e.path() != path
-                    && e.path().extension().and_then(|s| s.to_str()) == Some("tmp")
+                e.path() != path && e.path().extension().and_then(|s| s.to_str()) == Some("tmp")
             })
             .collect();
-        assert!(leftovers.is_empty(), "tmp sidecar should be removed: {leftovers:?}");
+        assert!(
+            leftovers.is_empty(),
+            "tmp sidecar should be removed: {leftovers:?}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -179,11 +181,6 @@ pub fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
 
     let text = serde_json::to_string_pretty(value)
         .map_err(|err| format!("serialize JSON failed: {err}"))?;
-    let tmp_path = path.with_extension(format!(
-        "json.tmp-{}-{}-{}",
-        pid,
-        micros,
-        nonce
-    ));
+    let tmp_path = path.with_extension(format!("json.tmp-{}-{}-{}", pid, micros, nonce));
     write_atomic_text_to_temp(path, &text, &tmp_path)
 }

@@ -311,8 +311,8 @@ mod tests {
 
     fn restore_env(key: &str, prior: Option<String>) {
         match prior {
-            Some(v) => std::env::set_var(key, v),
-            None => std::env::remove_var(key),
+            Some(v) => unsafe { std::env::set_var(key, v) },
+            None => unsafe { std::env::remove_var(key) },
         }
     }
 
@@ -323,8 +323,8 @@ mod tests {
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
         let hook_var = PaperProseHookHost::Cursor.adversarial_env_var();
         let prior_hook = std::env::var(hook_var).ok();
-        std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
-        std::env::set_var(hook_var, "1");
+        unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0") };
+        unsafe { std::env::set_var(hook_var, "1") };
         assert!(!cursor_paper_adversarial_hook_requested());
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
         restore_env(hook_var, prior_hook);
@@ -337,8 +337,8 @@ mod tests {
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
         let hook_var = PaperProseHookHost::Cursor.adversarial_env_var();
         let prior_hook = std::env::var(hook_var).ok();
-        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
-        std::env::remove_var(hook_var);
+        unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") };
+        unsafe { std::env::remove_var(hook_var) };
         assert!(!cursor_paper_adversarial_hook_requested());
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
         restore_env(hook_var, prior_hook);
@@ -351,8 +351,8 @@ mod tests {
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
         let hook_var = PaperProseHookHost::Cursor.adversarial_env_var();
         let prior_hook = std::env::var(hook_var).ok();
-        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
-        std::env::set_var(hook_var, "1");
+        unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") };
+        unsafe { std::env::set_var(hook_var, "1") };
 
         let tmp = std::env::temp_dir().join("paper-adv-merge-on");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -388,8 +388,8 @@ mod tests {
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
         let hook_var = PaperProseHookHost::Cursor.adversarial_env_var();
         let prior_hook = std::env::var(hook_var).ok();
-        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
-        std::env::remove_var(hook_var);
+        unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") };
+        unsafe { std::env::remove_var(hook_var) };
 
         let tmp = std::env::temp_dir().join("paper-adv-merge-off");
         let _ = std::fs::remove_dir_all(&tmp);

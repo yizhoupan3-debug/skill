@@ -112,7 +112,7 @@ writing_handoff: surgical | refactor  # 若需多段/全节骨架重组
 | --- | --- | --- |
 | `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt` | `ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` | Cursor `beforeSubmit` |
 | 同上 | `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK` [legacy: CODEX] | Claude Code / Legacy Codex CLI `UserPromptSubmit` |
-| `configs/framework/PAPER_ADVERSARIAL_HOOK.txt` | `ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1`（四宿主对称；**默认关**） | 同上 |
+| `configs/framework/PAPER_ADVERSARIAL_HOOK.txt` | `ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1`（五宿主对称；**默认关**） | 同上 |
 
 触发单真源：`has_paper_prose_edit_context`（hook 与 NL 共用）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束；出站截断保留 `PAPER_*` 前缀行。实现：`core/runtime-core/src/paper_prose_hook.rs`、`core/core-policy/src/hook_common.rs`。
 

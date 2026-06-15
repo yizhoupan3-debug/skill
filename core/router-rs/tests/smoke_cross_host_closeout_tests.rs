@@ -4,22 +4,22 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::closeout_enforcement::{
-    closeout_enforcement_contract, evaluate_closeout_record_value,
-    CLOSEOUT_ENFORCEMENT_AUTHORITY, CLOSEOUT_RECORD_SCHEMA_VERSION,
+    CLOSEOUT_ENFORCEMENT_AUTHORITY, CLOSEOUT_RECORD_SCHEMA_VERSION, closeout_enforcement_contract,
+    evaluate_closeout_record_value,
 };
 use crate::framework_host_targets::host_targets_supported_host_ids;
-use crate::hook_event_routing::{
-    canonical_hook_event, hook_event_routing_contract, routable_lifecycle_events,
-    HOOK_EVENT_ROUTING_AUTHORITY, HOOK_EVENT_ROUTING_SCHEMA_VERSION,
-};
-use crate::framework_runtime::{
-    framework_hook_evidence_append, write_framework_session_artifacts,
-    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
-};
 use crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request;
+use crate::framework_runtime::{
+    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, framework_hook_evidence_append,
+    write_framework_session_artifacts,
+};
+use crate::hook_event_routing::{
+    HOOK_EVENT_ROUTING_AUTHORITY, HOOK_EVENT_ROUTING_SCHEMA_VERSION, canonical_hook_event,
+    hook_event_routing_contract, routable_lifecycle_events,
+};
 use crate::hosts::host_provider_for_id;
 use crate::runtime_registry::load_runtime_registry_json;
 
@@ -83,8 +83,8 @@ fn cross_host_closeout_behavior_consistency_smoke() {
     );
 
     let contract = closeout_enforcement_contract();
-    let stdio_contract =
-        dispatch_stdio_json_request("closeout_contract", json!({})).expect("stdio closeout_contract");
+    let stdio_contract = dispatch_stdio_json_request("closeout_contract", json!({}))
+        .expect("stdio closeout_contract");
     assert_eq!(
         contract, stdio_contract,
         "stdio closeout_contract must match in-process evaluator contract"
@@ -102,14 +102,17 @@ fn cross_host_closeout_behavior_consistency_smoke() {
     let baseline =
         evaluate_closeout_record_value(fixture.clone()).expect("baseline closeout evaluate");
     assert_eq!(
-        baseline["closeout_allowed"], json!(false),
+        baseline["closeout_allowed"],
+        json!(false),
         "fixture must block unverified completion"
     );
-    assert!(baseline["violations"]
-        .as_array()
-        .expect("violations")
-        .iter()
-        .any(|v| v["rule"] == "claimed_done_without_evidence"));
+    assert!(
+        baseline["violations"]
+            .as_array()
+            .expect("violations")
+            .iter()
+            .any(|v| v["rule"] == "claimed_done_without_evidence")
+    );
 
     let stdio_baseline = dispatch_stdio_json_request("closeout_evaluate", fixture.clone())
         .expect("stdio closeout_evaluate");
@@ -255,7 +258,10 @@ fn cross_host_evidence_write_consistency_smoke() {
         }))
         .unwrap_or_else(|err| panic!("evidence append for host {host_id}: {err}"));
         assert_eq!(append["ok"], baseline_append["ok"], "host {host_id}");
-        assert_eq!(append["skipped"], baseline_append["skipped"], "host {host_id}");
+        assert_eq!(
+            append["skipped"], baseline_append["skipped"],
+            "host {host_id}"
+        );
         assert_eq!(
             append["authority"], baseline_append["authority"],
             "authority drift for host {host_id}"
@@ -293,9 +299,7 @@ fn cross_host_evidence_write_consistency_smoke() {
         Some("evidence-index-v2"),
         "EVIDENCE_INDEX schema must not vary by host"
     );
-    let artifacts = evidence["artifacts"]
-        .as_array()
-        .expect("artifacts array");
+    let artifacts = evidence["artifacts"].as_array().expect("artifacts array");
     assert!(
         artifacts.len() >= 1 + host_ids.len() * 2,
         "expected baseline + per-host direct/stdio rows"
@@ -322,9 +326,8 @@ fn cross_host_hook_event_routing_smoke() {
     );
 
     let contract = hook_event_routing_contract();
-    let stdio_contract =
-        dispatch_stdio_json_request("hook_event_routing_contract", json!({}))
-            .expect("stdio hook_event_routing_contract");
+    let stdio_contract = dispatch_stdio_json_request("hook_event_routing_contract", json!({}))
+        .expect("stdio hook_event_routing_contract");
     assert_eq!(
         contract, stdio_contract,
         "stdio hook_event_routing_contract must match in-process contract"

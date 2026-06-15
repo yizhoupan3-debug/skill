@@ -1,6 +1,6 @@
 //! Shared host × event harness for cross-host review-gate contract tests.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -101,7 +101,7 @@ impl ReviewGateActiveGuard {
         let mut restored = Vec::new();
         for key in review_gate_disable_env_keys(host) {
             restored.push((key.to_string(), std::env::var_os(key)));
-            std::env::remove_var(key);
+            unsafe { std::env::remove_var(key) };
         }
         if host == MatrixHost::Cursor {
             crate::cursor_hooks::set_test_review_gate_disable_override(Some(false));
@@ -143,9 +143,9 @@ impl CanonicalReviewGateDisableGuard {
         let mut restored = Vec::new();
         for key in review_gate_disable_env_keys(host) {
             restored.push((key.to_string(), std::env::var_os(key)));
-            std::env::remove_var(key);
+            unsafe { std::env::remove_var(key) };
         }
-        std::env::set_var(CANONICAL_REVIEW_GATE_DISABLE_ENV, "1");
+        unsafe { std::env::set_var(CANONICAL_REVIEW_GATE_DISABLE_ENV, "1") };
         if host == MatrixHost::Cursor {
             crate::cursor_hooks::set_test_review_gate_disable_override(Some(true));
         }
@@ -165,15 +165,15 @@ impl LegacyReviewGateDisableGuard {
         let mut restored = Vec::new();
         for key in review_gate_disable_env_keys(host) {
             restored.push((key.to_string(), std::env::var_os(key)));
-            std::env::remove_var(key);
+            unsafe { std::env::remove_var(key) };
         }
         restored.push((
             CANONICAL_REVIEW_GATE_DISABLE_ENV.to_string(),
             std::env::var_os(CANONICAL_REVIEW_GATE_DISABLE_ENV),
         ));
-        std::env::remove_var(CANONICAL_REVIEW_GATE_DISABLE_ENV);
+        unsafe { std::env::remove_var(CANONICAL_REVIEW_GATE_DISABLE_ENV) };
         let legacy = review_gate_disable_env_keys(host)[1];
-        std::env::set_var(legacy, "1");
+        unsafe { std::env::set_var(legacy, "1") };
         if host == MatrixHost::Cursor {
             crate::cursor_hooks::set_test_review_gate_disable_override(None);
         }
@@ -185,8 +185,8 @@ impl Drop for LegacyReviewGateDisableGuard {
     fn drop(&mut self) {
         for (key, prev) in self.restored.drain(..) {
             match prev {
-                Some(v) => std::env::set_var(&key, v),
-                None => std::env::remove_var(&key),
+                Some(v) => unsafe { std::env::set_var(&key, v) },
+                None => unsafe { std::env::remove_var(&key) },
             }
         }
         crate::cursor_hooks::set_test_review_gate_disable_override(None);
@@ -198,8 +198,8 @@ impl Drop for CanonicalReviewGateDisableGuard {
     fn drop(&mut self) {
         for (key, prev) in self.restored.drain(..) {
             match prev {
-                Some(v) => std::env::set_var(&key, v),
-                None => std::env::remove_var(&key),
+                Some(v) => unsafe { std::env::set_var(&key, v) },
+                None => unsafe { std::env::remove_var(&key) },
             }
         }
         crate::cursor_hooks::set_test_review_gate_disable_override(None);
@@ -211,8 +211,8 @@ impl Drop for ReviewGateActiveGuard {
     fn drop(&mut self) {
         for (key, prev) in self.restored.drain(..) {
             match prev {
-                Some(v) => std::env::set_var(&key, v),
-                None => std::env::remove_var(&key),
+                Some(v) => unsafe { std::env::set_var(&key, v) },
+                None => unsafe { std::env::remove_var(&key) },
             }
         }
         crate::cursor_hooks::set_test_review_gate_disable_override(None);
@@ -244,7 +244,7 @@ pub struct EnvVarGuard {
 impl EnvVarGuard {
     pub fn set(key: &str, value: &str) -> Self {
         let prev = std::env::var_os(key);
-        std::env::set_var(key, value);
+        unsafe { std::env::set_var(key, value) };
         Self {
             key: key.to_string(),
             prev,
@@ -255,8 +255,8 @@ impl EnvVarGuard {
 impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         match self.prev.take() {
-            Some(v) => std::env::set_var(&self.key, v),
-            None => std::env::remove_var(&self.key),
+            Some(v) => unsafe { std::env::set_var(&self.key, v) },
+            None => unsafe { std::env::remove_var(&self.key) },
         }
     }
 }
@@ -324,7 +324,7 @@ impl ForkInferEnableGuard {
             "ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
         ] {
             restored_legacy.push((key.to_string(), std::env::var_os(key)));
-            std::env::remove_var(key);
+            unsafe { std::env::remove_var(key) };
         }
         Self {
             _lock,
@@ -338,8 +338,8 @@ impl Drop for ForkInferEnableGuard {
     fn drop(&mut self) {
         for (key, prev) in self.restored_legacy.drain(..) {
             match prev {
-                Some(v) => std::env::set_var(&key, v),
-                None => std::env::remove_var(&key),
+                Some(v) => unsafe { std::env::set_var(&key, v) },
+                None => unsafe { std::env::remove_var(&key) },
             }
         }
     }
@@ -374,7 +374,7 @@ impl PaperProseDefaultGuard {
         let mut restored = Vec::new();
         for key in [paper_prose_hook_env(host), "ROUTER_RS_OPERATOR_INJECT"] {
             restored.push((key.to_string(), std::env::var_os(key)));
-            std::env::remove_var(key);
+            unsafe { std::env::remove_var(key) };
         }
         Self {
             _nudge_lock,
@@ -388,8 +388,8 @@ impl Drop for PaperProseDefaultGuard {
     fn drop(&mut self) {
         for (key, prev) in self.restored.drain(..) {
             match prev {
-                Some(v) => std::env::set_var(&key, v),
-                None => std::env::remove_var(&key),
+                Some(v) => unsafe { std::env::set_var(&key, v) },
+                None => unsafe { std::env::remove_var(&key) },
             }
         }
     }
@@ -416,8 +416,11 @@ pub fn write_matrix_active_task(repo: &Path, task_id: &str) {
         "focus_task_id": task_id,
         "tasks": [{ "task_id": task_id }]
     });
-    fs::write(&registry_path, serde_json::to_string(&registry).expect("serialize registry"))
-        .expect("write task_registry");
+    fs::write(
+        &registry_path,
+        serde_json::to_string(&registry).expect("serialize registry"),
+    )
+    .expect("write task_registry");
 }
 
 fn session_payload(host: MatrixHost, repo: &Path, session_id: &str, prompt: &str) -> Value {
@@ -658,9 +661,11 @@ fn dispatch_hook(host: MatrixHost, repo: &Path, canonical: &str, payload: &Value
             };
             dispatch_cursor_hook_event(repo, native, payload)
         }
-        MatrixHost::Codex => run_codex_lifecycle_context_hook_for_state_dir(repo, payload, ".codex")
-            .unwrap_or_else(|err| panic!("codex dispatch failed: {err}"))
-            .unwrap_or(json!({})),
+        MatrixHost::Codex => {
+            run_codex_lifecycle_context_hook_for_state_dir(repo, payload, ".codex")
+                .unwrap_or_else(|err| panic!("codex dispatch failed: {err}"))
+                .unwrap_or(json!({}))
+        }
         MatrixHost::Claude => {
             let canonical_event = match canonical {
                 "UserPromptSubmit" => "user-prompt-submit",
@@ -726,9 +731,7 @@ pub fn stop_review_gate_advisory(host: MatrixHost, out: &Value) -> bool {
                     .and_then(Value::as_str)
                     .is_some_and(|s| s.contains("CLAUDE_REVIEW_GATE"))
         }
-        MatrixHost::Opencode => {
-            user_visible_blob(host, out).contains("opencode-review-gate")
-        }
+        MatrixHost::Opencode => user_visible_blob(host, out).contains("opencode-review-gate"),
     }
 }
 

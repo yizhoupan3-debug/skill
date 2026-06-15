@@ -1,10 +1,10 @@
 //! Utility functions: time, paths, templates, JSON accessors, state management,
 //! search plan building, and text processing.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Local, Timelike, Utc};
 use regex::Regex;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -144,11 +144,13 @@ pub(super) fn set_key(value: &mut Value, key: &str, child: Value) {
 }
 
 pub(super) fn string_vec(values: &[String]) -> Value {
-    json!(values
-        .iter()
-        .map(|item| item.trim())
-        .filter(|item| !item.is_empty())
-        .collect::<Vec<_>>())
+    json!(
+        values
+            .iter()
+            .map(|item| item.trim())
+            .filter(|item| !item.is_empty())
+            .collect::<Vec<_>>()
+    )
 }
 
 pub(super) fn optional_string(value: Option<&str>) -> Value {
@@ -207,7 +209,6 @@ pub(super) fn novelty_str(value: &Value, key: &str, default: &str) -> String {
         .unwrap_or(default)
         .to_string()
 }
-
 
 pub(super) fn ensure_state_defaults(state: &Value) -> Value {
     let mut hydrated = state.clone();
@@ -432,7 +433,6 @@ pub(super) fn migrate_state(state: &Value) -> Value {
     migrated
 }
 
-
 pub(super) fn resolve_workspace(path: &Path) -> Result<PathBuf> {
     let candidate = if path.is_absolute() {
         path.to_path_buf()
@@ -459,7 +459,12 @@ pub(super) fn ensure_workspace(path: &Path) -> Result<(PathBuf, PathBuf)> {
     Ok((workspace, state_path))
 }
 
-pub(super) fn init_workspace(project: &str, question: &str, base_dir: &Path, mode: &str) -> Result<PathBuf> {
+pub(super) fn init_workspace(
+    project: &str,
+    question: &str,
+    base_dir: &Path,
+    mode: &str,
+) -> Result<PathBuf> {
     let base = if base_dir.is_absolute() {
         base_dir.to_path_buf()
     } else {
@@ -702,7 +707,11 @@ pub(super) fn append_ledger_event(workspace: &Path, kind: &str, payload: Value) 
     Ok(())
 }
 
-pub(super) fn append_research_log(workspace: &Path, heading: &str, bullets: Vec<String>) -> Result<()> {
+pub(super) fn append_research_log(
+    workspace: &Path,
+    heading: &str,
+    bullets: Vec<String>,
+) -> Result<()> {
     let log_path = workspace.join("research-log.md");
     let mut lines = vec![
         String::new(),
@@ -1197,7 +1206,10 @@ mod tests {
 
     #[test]
     fn markdown_link_some() {
-        assert_eq!(markdown_link(Some("https://example.com")), "[link](https://example.com)");
+        assert_eq!(
+            markdown_link(Some("https://example.com")),
+            "[link](https://example.com)"
+        );
     }
 
     #[test]

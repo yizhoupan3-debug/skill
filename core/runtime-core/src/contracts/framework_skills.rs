@@ -1,6 +1,6 @@
 //! `router-rs framework skills validate|refresh` — replaces retired `skill-compiler-rs`.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -39,12 +39,7 @@ pub fn validate_skills(repo_root: &Path) -> Result<(), String> {
 
     let disk_slugs = discover_skill_md_slugs(&skills_root)?;
     let runtime_slugs = skill_slugs_from_index(&runtime)?;
-    for slug in [
-        "discussx",
-        "planx",
-        "implementx",
-        "verifyx",
-    ] {
+    for slug in ["discussx", "planx", "implementx", "verifyx"] {
         if !runtime_slugs.contains(slug) {
             errors.push(format!(
                 "runtime missing expected my-lifecycle framework_command slug: {slug}"
@@ -84,7 +79,9 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
             "framework skills refresh: wrote skills/SKILL_TIERS.json and routing companion stubs"
         );
     } else {
-        eprintln!("framework skills refresh: wrote skills/SKILL_TIERS.json only (companions unchanged; pass --write-companions to regenerate stubs)");
+        eprintln!(
+            "framework skills refresh: wrote skills/SKILL_TIERS.json only (companions unchanged; pass --write-companions to regenerate stubs)"
+        );
     }
     validate_skills(&cmd.repo_root)
 }
@@ -107,7 +104,12 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
         serde_json::from_str::<Value>(&fs::read_to_string(&reg_path).unwrap_or_default())
             .ok()
             .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
-            .unwrap_or_else(|| json!(["claude-code", "codex", "cursor", "opencode"]).as_array().cloned().unwrap())
+            .unwrap_or_else(|| {
+                json!(["claude-code", "codex", "cursor", "opencode", "mimo"])
+                    .as_array()
+                    .cloned()
+                    .unwrap()
+            })
     };
     all_hosts.sort_by(|a, b| a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or("")));
 
@@ -122,9 +124,10 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
                 .cloned()
                 .unwrap_or_else(|| json!(["supported"]));
             // Expand [supported] wildcard to all registered hosts.
-            let platforms = if raw_platforms.as_array().is_some_and(|a| {
-                a.len() == 1 && a[0].as_str() == Some("supported")
-            }) {
+            let platforms = if raw_platforms
+                .as_array()
+                .is_some_and(|a| a.len() == 1 && a[0].as_str() == Some("supported"))
+            {
                 json!(all_hosts)
             } else {
                 raw_platforms

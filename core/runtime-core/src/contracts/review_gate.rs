@@ -6,11 +6,7 @@ use std::path::Path;
 fn cursor_hook_event_is_critical(event: &str) -> bool {
     matches!(
         event.trim().to_ascii_lowercase().as_str(),
-        "beforesubmitprompt"
-            | "stop"
-            | "subagentstart"
-            | "posttooluse"
-            | "subagentstop"
+        "beforesubmitprompt" | "stop" | "subagentstart" | "posttooluse" | "subagentstop"
     )
 }
 
@@ -67,8 +63,7 @@ pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), 
         }
         let repo_root =
             crate::cursor_hooks::resolve_cursor_hook_repo_root(cli_repo_root, &payload)?;
-        let _registry_guard =
-            crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
+        let _registry_guard = crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
         let mut output =
             crate::cursor_hooks::dispatch_cursor_hook_event(&repo_root, event, &payload);
         crate::telemetry_emit::emit_hook_fired(

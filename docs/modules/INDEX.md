@@ -23,7 +23,7 @@ last_verified: "2026-06-13"
 |------|------|
 | [runtime-core-framework-runtime.md](runtime-core-framework-runtime.md) | `framework_runtime/` 子模块（27 个文件，12,000+ 行） |
 | [host-projection-projection.md](host-projection-projection.md) | `host_integration/projection/` 子模块（4 个文件，3,700 行） |
-| [host-projection-hosts.md](host-projection-hosts.md) | `hosts/` 子模块（四宿主 hook 实现 + 共享抽象） |
+| [host-projection-hosts.md](host-projection-hosts.md) | `hosts/` 子模块（五宿主 hook 实现 + 共享抽象） |
 
 ## 阅读路径
 

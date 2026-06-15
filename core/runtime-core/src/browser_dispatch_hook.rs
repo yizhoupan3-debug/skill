@@ -19,6 +19,9 @@ pub fn set_browser_dispatch(f: BrowserDispatchFn) {
 pub fn dispatch_browser_command(command: BrowserSubcommand) -> Result<(), String> {
     match BROWSER_DISPATCH.get() {
         Some(f) => f(command),
-        None => Err("browser-mcp dispatch not registered; call set_browser_dispatch() at startup".to_string()),
+        None => Err(
+            "browser-mcp dispatch not registered; call set_browser_dispatch() at startup"
+                .to_string(),
+        ),
     }
 }

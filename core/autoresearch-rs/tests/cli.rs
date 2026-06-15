@@ -92,8 +92,10 @@ fn full_loop_records_scientific_sense_fields() {
             .len(),
         4
     );
-    assert!(text(root.join("literature/NOVELTY_SEARCH_PLAN.md"))
-        .contains("recommended first search target"));
+    assert!(
+        text(root.join("literature/NOVELTY_SEARCH_PLAN.md"))
+            .contains("recommended first search target")
+    );
     assert!(text(root.join("literature/EXTERNAL_RESEARCH.md")).contains("research-claim"));
 
     run_ctl(vec![
@@ -135,7 +137,9 @@ fn full_loop_records_scientific_sense_fields() {
         s("--prediction"),
         s("Run and reflection files are materialized"),
         s("--mechanism"),
-        s("A single Rust state transition path should reduce drift between state and markdown projections."),
+        s(
+            "A single Rust state transition path should reduce drift between state and markdown projections.",
+        ),
         s("--falsifiable-prediction"),
         s("If the projection layer diverges, the state and generated files will disagree."),
         s("--success-threshold"),
@@ -184,9 +188,13 @@ fn full_loop_records_scientific_sense_fields() {
         s("--interpretation"),
         s("The result supports the controller mechanism, but only for the single-branch path."),
         s("--finding"),
-        s("For a single active branch, controller-owned transitions preserve state and generated artifacts."),
+        s(
+            "For a single active branch, controller-owned transitions preserve state and generated artifacts.",
+        ),
         s("--decision-delta"),
-        s("Use the Rust controller path for future single-branch run recording instead of manual markdown edits."),
+        s(
+            "Use the Rust controller path for future single-branch run recording instead of manual markdown edits.",
+        ),
         s("--reuse-note"),
         s("Reuse this as a smoke-test expectation for state/projection alignment."),
         s("--applies-to"),
@@ -212,13 +220,16 @@ fn full_loop_records_scientific_sense_fields() {
     assert_eq!(state["active_hypothesis"].as_str(), Some("rust-loop"));
     assert_eq!(state["hypotheses"][0]["status"].as_str(), Some("active"));
     assert!(root.join("experiments/rust-loop/run-001.md").is_file());
-    assert!(root
-        .join("experiments/rust-loop/run-001-reflection.md")
-        .is_file());
-    assert!(state["hypotheses"][0]["mechanism"]
-        .as_str()
-        .unwrap()
-        .starts_with("A single Rust state transition"));
+    assert!(
+        root.join("experiments/rust-loop/run-001-reflection.md")
+            .is_file()
+    );
+    assert!(
+        state["hypotheses"][0]["mechanism"]
+            .as_str()
+            .unwrap()
+            .starts_with("A single Rust state transition")
+    );
     assert_eq!(
         state["run_history"][0]["rules_out"],
         serde_json::json!(["This does not prove multi-branch concurrency safety."])
@@ -240,10 +251,12 @@ fn full_loop_records_scientific_sense_fields() {
     assert!(resume.contains("latest_finding: For a single active branch"));
     assert!(resume.contains("latest_direction: DEEPEN"));
     let ledger = text(root.join("run-ledger.jsonl"));
-    assert!(ledger
-        .lines()
-        .map(|line| serde_json::from_str::<Value>(line).unwrap())
-        .any(|event| event["kind"].as_str() == Some("run.recorded")));
+    assert!(
+        ledger
+            .lines()
+            .map(|line| serde_json::from_str::<Value>(line).unwrap())
+            .any(|event| event["kind"].as_str() == Some("run.recorded"))
+    );
 }
 
 #[test]
@@ -281,13 +294,17 @@ fn arxiv_research_full_e2e_single_claim_and_batch_gate() {
     ]);
     let state = load_state(&root);
     assert_eq!(state["external_research"].as_array().unwrap().len(), 1);
-    assert!(state["external_research"][0]["query"]
-        .as_str()
-        .is_some_and(|query| !query.is_empty()));
-    assert!(!state["external_research"][0]["results"]
-        .as_array()
-        .unwrap()
-        .is_empty());
+    assert!(
+        state["external_research"][0]["query"]
+            .as_str()
+            .is_some_and(|query| !query.is_empty())
+    );
+    assert!(
+        !state["external_research"][0]["results"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
     assert!(
         text(root.join("literature/EXTERNAL_RESEARCH.md")).contains("Managed External Research")
     );
@@ -443,7 +460,9 @@ fn scientific_sense_fields_are_projected() {
         s("--rules-out"),
         s("A metric-only record is sufficient for research synthesis."),
         s("--alternative-explanation"),
-        s("The improvement may come from stricter templates rather than better research reasoning."),
+        s(
+            "The improvement may come from stricter templates rather than better research reasoning.",
+        ),
         s("--threat"),
         s("This is a structural test, not a live scientific experiment."),
         s("--interpretation"),
@@ -463,10 +482,12 @@ fn scientific_sense_fields_are_projected() {
     let state = load_state(&root);
     let hypothesis = &state["hypotheses"][0];
     let run = &state["run_history"][0];
-    assert!(hypothesis["mechanism"]
-        .as_str()
-        .unwrap()
-        .starts_with("Making the causal story explicit"));
+    assert!(
+        hypothesis["mechanism"]
+            .as_str()
+            .unwrap()
+            .starts_with("Making the causal story explicit")
+    );
     assert_eq!(
         hypothesis["baselines"],
         serde_json::json!(["A parameter sweep with no baseline explanation"])
@@ -475,14 +496,18 @@ fn scientific_sense_fields_are_projected() {
         run["rules_in"],
         serde_json::json!(["Explicit mechanisms make run interpretation auditable."])
     );
-    assert!(run["alternative_explanations"][0]
-        .as_str()
-        .unwrap()
-        .starts_with("The improvement may come"));
-    assert!(run["finding"]
-        .as_str()
-        .unwrap()
-        .starts_with("Mechanism-first records are reusable"));
+    assert!(
+        run["alternative_explanations"][0]
+            .as_str()
+            .unwrap()
+            .starts_with("The improvement may come")
+    );
+    assert!(
+        run["finding"]
+            .as_str()
+            .unwrap()
+            .starts_with("Mechanism-first records are reusable")
+    );
 
     let protocol = text(root.join("experiments/mechanism-first/protocol.md"));
     let run_record = text(root.join("experiments/mechanism-first/run-001.md"));

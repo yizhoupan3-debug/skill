@@ -18,6 +18,7 @@
 
 use serde_json::Value;
 use std::path::Path;
+use tracing::debug;
 
 // ────────────────────────────────────────────────────────────────
 // Standard types
@@ -111,9 +112,10 @@ pub trait HostHookDispatcher: HostHookConfig {
     /// Override: Cursor adds goal signals; Claude adds TouchState; Codex adds advisory.
     fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> {
         let completion_text = extract_completion_text(event);
-        if let Some(msg) =
-            crate::hooks::closeout_stop_followup_for_completion_text(event.repo_root, &completion_text)
-        {
+        if let Some(msg) = crate::hooks::closeout_stop_followup_for_completion_text(
+            event.repo_root,
+            &completion_text,
+        ) {
             return Some(HookOutput::Block { reason: msg });
         }
         None
@@ -126,7 +128,11 @@ pub trait HostHookDispatcher: HostHookConfig {
             return None;
         }
         let ctx = format!("Repo: {}", event.repo_root.display());
-        Some(HookOutput::AdditionalContext(truncate_bytes(&ctx, self.additional_context_max_bytes(), "...")))
+        Some(HookOutput::AdditionalContext(truncate_bytes(
+            &ctx,
+            self.additional_context_max_bytes(),
+            "...",
+        )))
     }
 
     // ── (A) Pure shared ────────────────────────────────────────
@@ -144,6 +150,7 @@ pub trait HostHookDispatcher: HostHookConfig {
     /// Unified dispatch entry. All hosts use the same routing logic.
     fn dispatch(&self, event: &HookEvent) -> Option<HookOutput> {
         let normalized = normalize_event_name(event.event_name);
+        debug!(event = %normalized, host = %self.host_id(), "hook dispatch");
         match normalized.as_str() {
             "sessionstart" if self.supports_session_start() => self.handle_session_start(event),
             "userpromptsubmit" | "beforesubmitprompt" => self.handle_user_prompt_submit(event),
@@ -167,12 +174,17 @@ pub fn normalize_event_name(name: &str) -> String {
     // Map common variants to canonical names
     match lower.as_str() {
         "sessionstart" | "session-start" | "session.start" => "sessionstart".into(),
-        "userpromptsubmit" | "user-prompt-submit" | "user.prompt.submit"
-        | "beforesubmitprompt" | "before-submit-prompt" => "userpromptsubmit".into(),
-        "pretooluse" | "pre-tool-use" | "pre.tool.use"
-        | "tool.execute.before" => "pretooluse".into(),
-        "posttooluse" | "post-tool-use" | "post.tool.use"
-        | "tool.execute.after" => "posttooluse".into(),
+        "userpromptsubmit"
+        | "user-prompt-submit"
+        | "user.prompt.submit"
+        | "beforesubmitprompt"
+        | "before-submit-prompt" => "userpromptsubmit".into(),
+        "pretooluse" | "pre-tool-use" | "pre.tool.use" | "tool.execute.before" => {
+            "pretooluse".into()
+        }
+        "posttooluse" | "post-tool-use" | "post.tool.use" | "tool.execute.after" => {
+            "posttooluse".into()
+        }
         "stop" | "session.idle" => "stop".into(),
         "subagentstart" | "subagent-start" | "subagent.start" => "subagentstart".into(),
         "subagentstop" | "subagent-stop" | "subagent.end" => "subagentstop".into(),
@@ -211,7 +223,12 @@ pub fn extract_prompt_text(event: &Value) -> String {
 
 /// Scan nested messages arrays for the last user-role message.
 fn extract_prompt_from_nested_messages(event: &Value) -> String {
-    const MESSAGE_KEYS: &[&str] = &["messages", "conversationMessages", "chatMessages", "history"];
+    const MESSAGE_KEYS: &[&str] = &[
+        "messages",
+        "conversationMessages",
+        "chatMessages",
+        "history",
+    ];
     const NESTED_KEYS: &[&str] = &["hookPayload", "data", "body", "payload", "event"];
 
     if let Some(obj) = event.as_object() {
@@ -319,12 +336,18 @@ pub fn extract_completion_text(event: &HookEvent) -> String {
 }
 
 /// Re-export from core-policy (single source of truth).
-pub use core_policy::subagent::{is_subagent_tool, SUBAGENT_TOOL_NAMES};
+pub use core_policy::subagent::{SUBAGENT_TOOL_NAMES, is_subagent_tool};
 
 /// Recognized subagent type names for review gate tracking.
 pub const SUBAGENT_REVIEW_TYPES: &[&str] = &[
-    "explore", "explorer", "general-purpose", "deep-review-agent", "review",
-    "verifyx-agent", "plan", "claude",
+    "explore",
+    "explorer",
+    "general-purpose",
+    "deep-review-agent",
+    "review",
+    "verifyx-agent",
+    "plan",
+    "claude",
 ];
 
 /// Extract and normalize subagent type from tool input fields.
@@ -348,10 +371,7 @@ pub fn subagent_lane_bits(kind: Option<&str>) -> (bool, bool) {
         return (false, false);
     };
     let review_lane = SUBAGENT_REVIEW_TYPES.contains(&k);
-    let parallel_lane = matches!(
-        k,
-        "general-purpose" | "deep-review-agent" | "claude"
-    );
+    let parallel_lane = matches!(k, "general-purpose" | "deep-review-agent" | "claude");
     (review_lane, parallel_lane)
 }
 
@@ -414,11 +434,7 @@ pub const SESSION_KEY_CWD_FIELDS: &[&str] = &[
 /// This is the canonical session key extraction used by all hosts.
 /// Each host provides `env_var` (via `HostHookConfig::session_namespace_env`)
 /// and `repo_fallback_token` (derived from repo_root).
-pub fn extract_session_key(
-    event: &Value,
-    env_var: &'static str,
-    repo_fallback: &str,
-) -> String {
+pub fn extract_session_key(event: &Value, env_var: &'static str, repo_fallback: &str) -> String {
     core_policy::session_key::session_key_core(
         &core_policy::session_key::SessionKeyConfig { env_var },
         || extract_session_id_from_payload(event),
@@ -429,7 +445,12 @@ pub fn extract_session_key(
 
 /// Extract explicit session id from payload (tries multiple field names).
 fn extract_session_id_from_payload(event: &Value) -> Option<String> {
-    for key in &["session_id", "sessionId", "conversation_id", "conversationId"] {
+    for key in &[
+        "session_id",
+        "sessionId",
+        "conversation_id",
+        "conversationId",
+    ] {
         if let Some(val) = event.get(*key).and_then(Value::as_str) {
             if !val.is_empty() {
                 return Some(val.to_string());
@@ -455,10 +476,7 @@ fn extract_cwd_from_payload(event: &Value) -> Option<String> {
 pub fn short_hash_for_session(input: &str) -> String {
     use sha2::{Digest, Sha256};
     let hash = Sha256::digest(input.as_bytes());
-    hash[..16]
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    hash[..16].iter().map(|b| format!("{b:02x}")).collect()
 }
 
 /// Check if a shell command is a verification/test command.

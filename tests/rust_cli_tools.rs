@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod common;
 
 use common::{assert_success, json_from_output, project_root, read_text, run};
@@ -122,5 +123,3 @@ fn update_audit_runs_on_plain_git_repo_and_preserves_status_columns() {
         "untracked research doc TODO should be scanned: {stale_docs:?}"
     );
 }
-
-

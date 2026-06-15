@@ -3,7 +3,7 @@
 //! Delegates to `core_policy::test_env_sync` so tests share one process-wide mutex.
 
 #[cfg(test)]
-pub use core_policy::test_env_sync::{process_env_lock_held, ProcessEnvLockGuard};
+pub use core_policy::test_env_sync::{ProcessEnvLockGuard, process_env_lock_held};
 
 /// Serialize env / hook test overrides.
 #[cfg(test)]

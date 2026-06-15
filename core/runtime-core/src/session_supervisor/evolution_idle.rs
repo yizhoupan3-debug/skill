@@ -80,8 +80,7 @@ fn cooldown_elapsed(repo_cwd: &Path) -> bool {
 fn stamp_cooldown(repo_cwd: &Path) -> Result<(), String> {
     let path = cooldown_path(repo_cwd);
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("create evolution cooldown dir: {e}"))?;
+        fs::create_dir_all(parent).map_err(|e| format!("create evolution cooldown dir: {e}"))?;
     }
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -166,14 +165,7 @@ mod tests {
             retry_policy: json!({}),
             prompt: None,
             launch_command: build_driver_command(
-                "codex",
-                "/tmp",
-                None,
-                None,
-                "last",
-                false,
-                None,
-                None,
+                "codex", "/tmp", None, None, "last", false, None, None,
             )
             .expect("command"),
             resume_command: None,

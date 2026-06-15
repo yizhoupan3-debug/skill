@@ -195,9 +195,10 @@ verdict: revise before merge";
 [P0] src/main.rs:42 — use-after-free";
         let f = lint_review_output(text);
         assert!(!f.is_empty(), "expected warnings");
-        assert!(f
-            .iter()
-            .any(|fl| fl.message.contains("First non-blank line")));
+        assert!(
+            f.iter()
+                .any(|fl| fl.message.contains("First non-blank line"))
+        );
     }
 
     #[test]
@@ -215,9 +216,10 @@ verdict: revise before merge";
         let text = "blocked: this should not ship
 Also some prose here";
         let f = lint_review_output(text);
-        assert!(f
-            .iter()
-            .any(|fl| fl.message.contains("Verdict appears before")));
+        assert!(
+            f.iter()
+                .any(|fl| fl.message.contains("Verdict appears before"))
+        );
     }
 
     #[test]

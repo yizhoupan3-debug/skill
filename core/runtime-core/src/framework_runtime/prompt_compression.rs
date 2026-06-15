@@ -1,6 +1,6 @@
 //! Framework prompt compression (`build_framework_prompt_compression_envelope`).
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::alias;
 use super::constants::{
@@ -8,7 +8,10 @@ use super::constants::{
 };
 use super::value_text;
 
-pub fn build_framework_prompt_compression_envelope(payload: Value, context_window_size: Option<usize>) -> Result<Value, String> {
+pub fn build_framework_prompt_compression_envelope(
+    payload: Value,
+    context_window_size: Option<usize>,
+) -> Result<Value, String> {
     let prompt = value_text(payload.get("prompt").or_else(|| payload.get("text")));
     let token_budget = payload
         .get("token_budget")
@@ -17,7 +20,8 @@ pub fn build_framework_prompt_compression_envelope(payload: Value, context_windo
         .and_then(|value| usize::try_from(value).ok())
         .or_else(|| context_window_size.filter(|&s| s > 0).map(|s| s / 4))
         .ok_or_else(|| {
-            "framework prompt compression requires token_budget or budget, or context_window_size".to_string()
+            "framework prompt compression requires token_budget or budget, or context_window_size"
+                .to_string()
         })?;
     let result = compress_prompt_with_rust_policy(&prompt, token_budget);
     Ok(json!({

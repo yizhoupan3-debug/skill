@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-09"
+last_verified: "2026-06-15"
 plate: B10
 ---
 
@@ -46,4 +46,3 @@ Skill 集成（CG-5）：`planx` / `implementx` / `verifyx` / `code-review-deep`
 - `core/codegraph-rs/`
 - `core/runtime-core/src/codegraph_mcp/`
 - `configs/framework/RUNTIME_REGISTRY.json` → `mcp-codegraph`
-- `artifacts/current/roadmap-v5-exec/lane-notes/phase-cg-w*.json`

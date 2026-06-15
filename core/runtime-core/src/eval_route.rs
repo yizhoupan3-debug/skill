@@ -1,7 +1,9 @@
-use crate::route::{filter_records_for_host, load_records, ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION};
+use crate::route::{
+    ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, filter_records_for_host, load_records,
+};
 use crate::route_task_with_manifest_fallback;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
 pub const EVAL_ROUTE_REPORT_SCHEMA_VERSION: &str = "routing-eval-report-v1";

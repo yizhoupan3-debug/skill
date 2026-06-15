@@ -1,5 +1,5 @@
 use crate::config::EvolutionConfig;
-use crate::telemetry_journal::{load_telemetry_journal, TelemetryEvent};
+use crate::telemetry_journal::{TelemetryEvent, load_telemetry_journal};
 use anyhow::Context;
 use chrono::Utc;
 use serde_json::json;
@@ -16,12 +16,7 @@ pub fn run_health_score(
     let mut skill_stats: HashMap<String, (u32, u32)> = HashMap::new();
 
     for stamped in &journal_data.events {
-        if let TelemetryEvent::RouteDecision {
-            skill,
-            reroute,
-            ..
-        } = &stamped.event
-        {
+        if let TelemetryEvent::RouteDecision { skill, reroute, .. } = &stamped.event {
             if skill.is_empty() || skill == "none" || skill == "general" {
                 continue;
             }
@@ -94,8 +89,7 @@ pub fn run_health_score(
         },
     });
 
-    fs::create_dir_all(output_dir)
-        .with_context(|| format!("create {}", output_dir.display()))?;
+    fs::create_dir_all(output_dir).with_context(|| format!("create {}", output_dir.display()))?;
     let out_path = output_dir.join("health-score.json");
     fs::write(
         &out_path,

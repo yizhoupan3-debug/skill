@@ -1,25 +1,26 @@
 //! 子命令 `dispatch_*` 实现。
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use super::{
+    inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
+};
+use crate::browser_dispatch_hook;
+use crate::claude_code_hooks::run_claude_hook_cli;
 use crate::cli::args::*;
 use crate::cli::common::{parse_json_input, print_json_value};
-use super::{inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata};
-use crate::browser_dispatch_hook;
+use crate::closeout_enforcement::{
+    CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
+    evaluate_closeout_record_value_with_context,
+};
 #[cfg(feature = "codegraph")]
 use crate::codegraph_mcp::run_codegraph_mcp_stdio_loop;
-use crate::claude_code_hooks::run_claude_hook_cli;
-use crate::closeout_enforcement::{
-    closeout_enforcement_contract, evaluate_closeout_record_value,
-    evaluate_closeout_record_value_with_context, CloseoutEvidenceContext,
-};
-use host_projection::hosts::mimo_hooks::run_mimo_hook;
 use crate::codex_hooks::{
-    build_codex_hook_projection, codex_host_entrypoint_provider, install_codex_cli_hooks,
-    resolve_codex_home, run_codex_audit_hook, InstallMode,
+    InstallMode, build_codex_hook_projection, codex_host_entrypoint_provider,
+    install_codex_cli_hooks, resolve_codex_home, run_codex_audit_hook,
 };
 use crate::eval_route::{eval_route_contract, run_eval_route};
 use crate::framework_profile::{
@@ -27,13 +28,14 @@ use crate::framework_profile::{
     load_framework_profile,
 };
 use crate::framework_runtime::{
-    build_framework_alias_envelope, build_framework_contract_summary_envelope,
-    build_framework_prompt_compression_envelope, build_framework_runtime_snapshot_envelope_with_level,
-    build_framework_statusline, framework_hook_evidence_append, resolve_repo_root_arg,
-    run_framework_doctor, write_framework_session_artifacts, FrameworkAliasBuildOptions,
+    FrameworkAliasBuildOptions, build_framework_alias_envelope,
+    build_framework_contract_summary_envelope, build_framework_prompt_compression_envelope,
+    build_framework_runtime_snapshot_envelope_with_level, build_framework_statusline,
+    framework_hook_evidence_append, resolve_repo_root_arg, run_framework_doctor,
+    write_framework_session_artifacts,
 };
 use crate::harness_contract::{harness_contract, lint_skill_contracts};
-use crate::hook_policy::{evaluate_hook_policy, hook_policy_contract, HookPolicyEvaluateRequest};
+use crate::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
 use crate::host_entrypoint_sync::sync_host_entrypoints;
 use crate::host_integration::run_host_integration_from_args;
 use crate::review_gate::run_review_gate;
@@ -45,9 +47,10 @@ use crate::step_ledger::handle_step_ledger_operation;
 use crate::task_command;
 use crate::task_state;
 use crate::trace_runtime::{
-    compact_trace_stream, record_trace_event, TraceCompactRequestPayload,
-    TraceRecordEventRequestPayload,
+    TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
+    record_trace_event,
 };
+use host_projection::hosts::mimo_hooks::run_mimo_hook;
 
 use crate::runtime_storage::RuntimeStorageRequestPayload;
 
@@ -104,20 +107,21 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
         }
         FrameworkCommand::SyncEntrypoints(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let provider = resolve_host_entrypoint_provider(
-                &repo_root,
-                command.host_id.as_deref(),
-            )?;
+            let provider =
+                resolve_host_entrypoint_provider(&repo_root, command.host_id.as_deref())?;
             print_json_value(&sync_host_entrypoints(&repo_root, true, provider)?)
         }
         FrameworkCommand::PromptCompression(command) => {
             let payload =
                 parse_json_input::<Value>(&command.input_json, "framework prompt compression")?;
             {
-                let ctx_size = payload.get("context_window_size")
+                let ctx_size = payload
+                    .get("context_window_size")
                     .and_then(serde_json::Value::as_u64)
                     .map(|v| v as usize);
-                print_json_value(&build_framework_prompt_compression_envelope(payload, ctx_size)?)
+                print_json_value(&build_framework_prompt_compression_envelope(
+                    payload, ctx_size,
+                )?)
             }
         }
         FrameworkCommand::Statusline(command) => {
@@ -179,8 +183,7 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
             }))
         }
         FrameworkCommand::StepLedger(command) => {
-            let payload =
-                parse_json_input::<Value>(&command.input_json, "framework step ledger")?;
+            let payload = parse_json_input::<Value>(&command.input_json, "framework step ledger")?;
             print_json_value(&handle_step_ledger_operation(payload)?)
         }
         FrameworkCommand::Maint { command } => crate::framework_maint::dispatch(command),
@@ -210,7 +213,7 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
 }
 
 pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String> {
-    use crate::framework_skills::{refresh_skills, validate_skills, SkillsCommand};
+    use crate::framework_skills::{SkillsCommand, refresh_skills, validate_skills};
     match command {
         SkillsSubcommand::Validate(args) => {
             let repo_root = resolve_repo_root_arg(args.framework_root.as_deref())?;
@@ -240,45 +243,68 @@ fn scaffold_host_integration(
     use std::fs;
 
     // Validate host_id
-    if host_id.is_empty() || !host_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
-        return Err(format!("Invalid host_id: {host_id:?}. Use alphanumeric, dash, or underscore."));
+    if host_id.is_empty()
+        || !host_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    {
+        return Err(format!(
+            "Invalid host_id: {host_id:?}. Use alphanumeric, dash, or underscore."
+        ));
     }
 
     // Check host doesn't already exist
     let registry_path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
     let registry: serde_json::Value = fs::read_to_string(&registry_path)
-        .and_then(|s| serde_json::from_str(&s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e)))
+        .and_then(|s| {
+            serde_json::from_str(&s)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        })
         .map_err(|e| format!("Read RUNTIME_REGISTRY.json: {e}"))?;
 
-    if let Some(supported) = registry.get("host_targets").and_then(|v| v.get("supported")).and_then(|v| v.as_array()) {
+    if let Some(supported) = registry
+        .get("host_targets")
+        .and_then(|v| v.get("supported"))
+        .and_then(|v| v.as_array())
+    {
         if supported.iter().any(|v| v.as_str() == Some(host_id)) {
-            return Err(format!("Host {host_id:?} already exists in RUNTIME_REGISTRY.json"));
+            return Err(format!(
+                "Host {host_id:?} already exists in RUNTIME_REGISTRY.json"
+            ));
         }
     }
 
     let host_id_upper = host_id.to_uppercase().replace('-', "_");
     let host_id_camel = host_id.replace('-', "_");
-    let host_name = host_id.split('-').map(|w| {
-        let mut c = w.chars();
-        match c.next() {
-            None => String::new(),
-            Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-        }
-    }).collect::<Vec<_>>().join(" ");
-    let host_name_camel = host_id.split('-').map(|w| {
-        let mut c = w.chars();
-        match c.next() {
-            None => String::new(),
-            Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-        }
-    }).collect::<Vec<_>>().join("");
+    let host_name = host_id
+        .split('-')
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let host_name_camel = host_id
+        .split('-')
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("");
 
     let files = vec![
         // 1. Host provider
         (
             format!("core/host-projection/src/hosts/{host_id_camel}_provider.rs"),
             format!(
-r#"use crate::hosts::host_provider::HostProvider;
+                r#"use crate::hosts::host_provider::HostProvider;
 
 pub struct {hc}HostProvider;
 
@@ -304,17 +330,17 @@ impl HostProvider for {hc}HostProvider {{
     }}
 }}
 "#,
-                    hc = host_name_camel,
-                    hid = host_id,
-                    hcc = host_id_camel,
-                    hiu = host_id_upper,
-                ),
+                hc = host_name_camel,
+                hid = host_id,
+                hcc = host_id_camel,
+                hiu = host_id_upper,
+            ),
         ),
         // 2. AGENTS file
         (
             format!("AGENTS_{hiu}.md", hiu = host_id_upper),
             format!(
-r#"# {hn} Agent Context
+                r#"# {hn} Agent Context
 
 > Generated by `router-rs scaffold --host-id {hid}`
 
@@ -335,15 +361,15 @@ r#"# {hn} Agent Context
 - [ ] Hook 事件映射
 - [ ] 宿主特定行为
 "#,
-                    hn = host_name,
-                    hid = host_id,
-                ),
+                hn = host_name,
+                hid = host_id,
+            ),
         ),
         // 3. Documentation
         (
             format!("docs/hosts/{hid}.md", hid = host_id),
             format!(
-r#"---
+                r#"---
 status: scaffold
 host_id: {hid}
 ---
@@ -365,11 +391,11 @@ host_id: {hid}
 5. 配置 MCP 工具注册
 6. 测试 install/remove/status 流程
 "#,
-                    hn = host_name,
-                    hid = host_id,
-                    hcc = host_id_camel,
-                    hiu = host_id_upper,
-                ),
+                hn = host_name,
+                hid = host_id,
+                hcc = host_id_camel,
+                hiu = host_id_upper,
+            ),
         ),
     ];
 
@@ -385,9 +411,11 @@ host_id: {hid}
             }));
         } else {
             if let Some(parent) = full_path.parent() {
-                fs::create_dir_all(parent).map_err(|e| format!("Create dir {}: {e}", parent.display()))?;
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Create dir {}: {e}", parent.display()))?;
             }
-            fs::write(&full_path, content).map_err(|e| format!("Write {}: {e}", full_path.display()))?;
+            fs::write(&full_path, content)
+                .map_err(|e| format!("Write {}: {e}", full_path.display()))?;
             generated.push(serde_json::json!({
                 "path": path,
                 "action": "created",
@@ -429,17 +457,41 @@ host_id: {hid}
     }))
 }
 
-/// Generic hook dispatch routed by host_id.
+/// Generic hook dispatch routed by host_id via dispatch table.
+#[tracing::instrument(level = "info", skip_all, fields(host_id))]
 pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Result<(), String> {
-    match host_id {
-        "cursor" => run_review_gate(&command.event, command.repo_root.as_deref()),
-        "claude-code" => run_claude_hook_cli(&command.event, command.repo_root.as_deref()),
-        "opencode" => run_opencode_hook_cli(&command.event, command.repo_root.as_deref()),
-        "codex" => dispatch_codex_hook(command.event.as_str(), command.repo_root.as_deref()),
-        "mimo" => run_mimo_hook(&command.event, command.repo_root.as_deref())
-            .map(|_| ()),
-        _ => Err(format!("hook dispatch not implemented for host `{host_id}`")),
+    type HookDispatchFn = fn(&GenericHookCommand) -> Result<(), String>;
+
+    fn dispatch_cursor(cmd: &GenericHookCommand) -> Result<(), String> {
+        run_review_gate(&cmd.event, cmd.repo_root.as_deref())
     }
+    fn dispatch_claude(cmd: &GenericHookCommand) -> Result<(), String> {
+        run_claude_hook_cli(&cmd.event, cmd.repo_root.as_deref())
+    }
+    fn dispatch_opencode(cmd: &GenericHookCommand) -> Result<(), String> {
+        run_opencode_hook_cli(&cmd.event, cmd.repo_root.as_deref())
+    }
+    fn dispatch_codex(cmd: &GenericHookCommand) -> Result<(), String> {
+        dispatch_codex_hook(cmd.event.as_str(), cmd.repo_root.as_deref())
+    }
+    fn dispatch_mimo(cmd: &GenericHookCommand) -> Result<(), String> {
+        run_mimo_hook(&cmd.event, cmd.repo_root.as_deref()).map(|_| ())
+    }
+
+    // Registry-driven dispatch table: add new hosts here.
+    const DISPATCH_TABLE: &[(&str, HookDispatchFn)] = &[
+        ("cursor", dispatch_cursor),
+        ("claude-code", dispatch_claude),
+        ("opencode", dispatch_opencode),
+        ("codex", dispatch_codex),
+        ("mimo", dispatch_mimo),
+    ];
+
+    DISPATCH_TABLE
+        .iter()
+        .find(|(id, _)| *id == host_id)
+        .map(|(_, f)| f(&command))
+        .unwrap_or_else(|| Err(format!("hook dispatch not implemented for host `{host_id}`")))
 }
 
 /// Hook dispatch for Codex via generic `hook` action.
@@ -450,22 +502,39 @@ fn dispatch_codex_hook(event: &str, repo_root: Option<&Path>) -> Result<(), Stri
     std::process::exit(0);
 }
 
-/// Generic agent dispatch routed by host_id.
+/// Generic agent dispatch routed by host_id via dispatch table.
+#[tracing::instrument(level = "info", skip_all, fields(host_id))]
 pub fn dispatch_agent_command(host_id: &str, command: GenericAgentCommand) -> Result<(), String> {
-    match host_id {
-        "claude-code" => {
-            let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            crate::hosts::claude_agent::run_claude_agent_mcp_loop(Some(&root))
-        }
-        "opencode" => {
-            let root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            crate::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
-        }
-        _ => Err(format!("agent dispatch not implemented for host `{host_id}`")),
+    type AgentDispatchFn = fn(&GenericAgentCommand) -> Result<(), String>;
+
+    fn dispatch_claude_agent(cmd: &GenericAgentCommand) -> Result<(), String> {
+        let root = resolve_repo_root_arg(cmd.repo_root.as_deref())?;
+        crate::hosts::claude_agent::run_claude_agent_mcp_loop(Some(&root))
     }
+    fn dispatch_opencode_agent(cmd: &GenericAgentCommand) -> Result<(), String> {
+        let root = resolve_repo_root_arg(cmd.repo_root.as_deref())?;
+        crate::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
+    }
+
+    // Registry-driven dispatch table: add new hosts here.
+    const DISPATCH_TABLE: &[(&str, AgentDispatchFn)] = &[
+        ("claude-code", dispatch_claude_agent),
+        ("opencode", dispatch_opencode_agent),
+    ];
+
+    DISPATCH_TABLE
+        .iter()
+        .find(|(id, _)| *id == host_id)
+        .map(|(_, f)| f(&command))
+        .unwrap_or_else(|| {
+            Err(format!(
+                "agent dispatch not implemented for host `{host_id}`"
+            ))
+        })
 }
 
 /// Unified host command dispatcher (registry-driven: Codex / Hook / Agent).
+#[tracing::instrument(level = "info", skip_all)]
 pub fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
     match command {
         HostCommand::Codex { command } => dispatch_codex_command(command),
@@ -537,8 +606,7 @@ fn run_opencode_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<()
             })
             .or_else(|| std::env::current_dir().ok())
             .ok_or("repo_root required")?;
-        let _registry_guard =
-            crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
+        let _registry_guard = crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
 
         // Dispatch via HostHookDispatcher trait
         use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher};
@@ -745,45 +813,45 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String>
                     (None, None) => {
                         return Err(
                             "closeout evaluate: provide --input-json or --record-path".to_string()
-                        )
+                        );
                     }
                 };
             let record_value: Value = serde_json::from_str(&raw)
                 .map_err(|err| format!("closeout evaluate: invalid JSON: {err}"))?;
-            let response =
-                match (args.repo_root.as_deref(), args.task_id.as_deref(), args.record_path.as_deref()) {
-                    (Some(repo_root), Some(task_id), Some(record_path)) => {
-                        crate::framework_runtime::evaluate_closeout_record_file_for_task(
-                            repo_root,
-                            task_id,
-                            record_path,
-                        )?
-                    }
-                    (Some(repo_root), Some(task_id), None) => {
-                        let (rows_non_empty, has_success) =
-                            crate::autopilot_goal::task_evidence_artifacts_summary_for_task(
-                                repo_root,
-                                task_id,
-                            );
-                        let goal_state = crate::autopilot_goal::read_goal_state(
-                            repo_root,
-                            Some(task_id),
-                        )
-                        .ok()
-                        .flatten();
-                        let goal_prediction = goal_state
-                            .as_ref()
-                            .and_then(core_state::goal_prediction::read_goal_prediction);
-                        let ctx = CloseoutEvidenceContext {
-                            task_id: Some(task_id.trim().to_string()),
-                            evidence_rows_non_empty: rows_non_empty,
-                            has_successful_verification: has_success,
-                            goal_prediction,
-                        };
-                        evaluate_closeout_record_value_with_context(record_value, &ctx)?
-                    }
-                    _ => evaluate_closeout_record_value(record_value)?,
-                };
+            let response = match (
+                args.repo_root.as_deref(),
+                args.task_id.as_deref(),
+                args.record_path.as_deref(),
+            ) {
+                (Some(repo_root), Some(task_id), Some(record_path)) => {
+                    crate::framework_runtime::evaluate_closeout_record_file_for_task(
+                        repo_root,
+                        task_id,
+                        record_path,
+                    )?
+                }
+                (Some(repo_root), Some(task_id), None) => {
+                    let (rows_non_empty, has_success) =
+                        crate::autopilot_goal::task_evidence_artifacts_summary_for_task(
+                            repo_root, task_id,
+                        );
+                    let goal_state =
+                        crate::autopilot_goal::read_goal_state(repo_root, Some(task_id))
+                            .ok()
+                            .flatten();
+                    let goal_prediction = goal_state
+                        .as_ref()
+                        .and_then(core_state::goal_prediction::read_goal_prediction);
+                    let ctx = CloseoutEvidenceContext {
+                        task_id: Some(task_id.trim().to_string()),
+                        evidence_rows_non_empty: rows_non_empty,
+                        has_successful_verification: has_success,
+                        goal_prediction,
+                    };
+                    evaluate_closeout_record_value_with_context(record_value, &ctx)?
+                }
+                _ => evaluate_closeout_record_value(record_value)?,
+            };
             print_json_value(&response)
         }
         CloseoutCommand::Contract => print_json_value(&closeout_enforcement_contract()),

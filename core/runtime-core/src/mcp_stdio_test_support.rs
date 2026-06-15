@@ -24,8 +24,8 @@ pub fn unique_temp_repo(prefix: &str) -> PathBuf {
 pub fn seed_skill_routing_runtime(repo: &Path) {
     let skills = repo.join("skills");
     let _ = std::fs::create_dir_all(&skills);
-    let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+    let src =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
     if src.is_file() {
         let _ = std::fs::copy(src, skills.join("SKILL_ROUTING_RUNTIME.json"));
     }

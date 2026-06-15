@@ -1,14 +1,14 @@
 use crate::utils::path_guard::validate_task_id_component;
-use crate::utils::task_write_lock::router_rs_task_ledger_flock_enabled;
 use crate::utils::task_write_lock::TASK_LEDGER_LOCK_BASENAME;
+use crate::utils::task_write_lock::router_rs_task_ledger_flock_enabled;
 use fs2::FileExt;
-use std::fs::{self, OpenOptions, File};
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 pub const TASK_LEDGER_FILENAME: &str = "TASK_LEDGER.jsonl";
 
@@ -53,7 +53,12 @@ pub fn acquire_task_ledger_lock_with_timeout(
         .read(true)
         .write(true)
         .open(&lock_path)
-        .map_err(|err| format!("task ledger lock: open {} failed: {err}", lock_path.display()))?;
+        .map_err(|err| {
+            format!(
+                "task ledger lock: open {} failed: {err}",
+                lock_path.display()
+            )
+        })?;
 
     let mut delay = Duration::from_millis(10);
     let max_delay = Duration::from_millis(200);
@@ -204,7 +209,7 @@ mod tests {
     #[test]
     fn append_transaction_rejects_unsafe_task_id() {
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
-        std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK");
+        unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") };
         let tmp = unique_tmp("unsafe-id");
         fs::create_dir_all(tmp.join("artifacts/current")).expect("mkdir");
         let tx = LedgerTransaction {
@@ -223,8 +228,8 @@ mod tests {
             );
         }
         match prev {
-            Some(p) => std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", p),
-            None => std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }

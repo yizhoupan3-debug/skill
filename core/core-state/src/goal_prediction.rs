@@ -74,9 +74,7 @@ pub fn verify_prediction_against_closeout(
         .filter(|s| !s.is_empty())
     {
         let expected_lower = expected.to_ascii_lowercase();
-        if ALLOWED_STATUSES.contains(&expected_lower.as_str())
-            && actual_status != expected_lower
-        {
+        if ALLOWED_STATUSES.contains(&expected_lower.as_str()) && actual_status != expected_lower {
             out.push(PredictionVerification {
                 matched: false,
                 rule: "prediction_verification_status_mismatch".to_string(),
@@ -179,10 +177,7 @@ mod tests {
             }
         });
         let pred = read_goal_prediction(&state).expect("prediction");
-        assert_eq!(
-            pred.expected_verification_status.as_deref(),
-            Some("passed")
-        );
+        assert_eq!(pred.expected_verification_status.as_deref(), Some("passed"));
         assert_eq!(pred.hypothesis.as_deref(), Some("router-rs green"));
     }
 
@@ -207,6 +202,10 @@ mod tests {
         };
         let checks =
             verify_prediction_against_closeout(&pred, "passed", "cargo test: 965 pass / 0 fail");
-        assert!(checks.iter().any(|c| c.rule == "prediction_hypothesis_reflected"));
+        assert!(
+            checks
+                .iter()
+                .any(|c| c.rule == "prediction_hypothesis_reflected")
+        );
     }
 }

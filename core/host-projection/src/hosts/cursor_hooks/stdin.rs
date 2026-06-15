@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::Read;
 
 pub fn read_stdin_json_from_reader<R: Read>(reader: &mut R) -> Result<Value, String> {

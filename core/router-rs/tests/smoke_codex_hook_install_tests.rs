@@ -14,7 +14,9 @@ fn router_rs_bin() -> PathBuf {
         candidates.push(PathBuf::from(&d).join("debug/router-rs-cli"));
     }
     // Common /tmp target dir
-    candidates.push(PathBuf::from("/tmp/skill-cargo-target/release/router-rs-cli"));
+    candidates.push(PathBuf::from(
+        "/tmp/skill-cargo-target/release/router-rs-cli",
+    ));
     candidates.push(PathBuf::from("/tmp/skill-cargo-target/debug/router-rs-cli"));
     // In-crate target dir
     candidates.push(manifest_dir.join("target/release/router-rs-cli"));
@@ -29,7 +31,9 @@ fn router_rs_bin() -> PathBuf {
             return candidate.clone();
         }
     }
-    panic!("router-rs binary not found; run cargo build --manifest-path core/router-rs/Cargo.toml --release")
+    panic!(
+        "router-rs binary not found; run cargo build --manifest-path core/router-rs/Cargo.toml --release"
+    )
 }
 
 fn run_installer(codex_home: &std::path::Path) -> std::process::Output {
@@ -68,12 +72,21 @@ fn test_preserves_existing_event_hooks() {
             }]
         }
     });
-    fs::write(&hooks_path, serde_json::to_string_pretty(&existing_hooks).unwrap() + "\n").unwrap();
+    fs::write(
+        &hooks_path,
+        serde_json::to_string_pretty(&existing_hooks).unwrap() + "\n",
+    )
+    .unwrap();
 
     let result = run_installer(codex_home);
-    assert!(result.status.success(), "installer failed: {}", String::from_utf8_lossy(&result.stderr));
+    assert!(
+        result.status.success(),
+        "installer failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
 
-    let data: serde_json::Value = serde_json::from_str(&fs::read_to_string(&hooks_path).unwrap()).unwrap();
+    let data: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&hooks_path).unwrap()).unwrap();
     let stop_entries = data["hooks"]["Stop"].as_array().unwrap();
 
     // Collect all commands from Stop hooks
@@ -93,7 +106,9 @@ fn test_preserves_existing_event_hooks() {
         .collect();
 
     assert!(
-        commands.iter().any(|c| c.contains("/usr/bin/env echo existing")),
+        commands
+            .iter()
+            .any(|c| c.contains("/usr/bin/env echo existing")),
         "existing stop hook should be preserved"
     );
 
@@ -106,7 +121,11 @@ fn test_preserves_existing_event_hooks() {
         })
         .collect();
 
-    assert_eq!(router_hooks.len(), 1, "expected exactly one managed Stop command hook");
+    assert_eq!(
+        router_hooks.len(),
+        1,
+        "expected exactly one managed Stop command hook"
+    );
 
     let gate_cmd = router_hooks[0];
     assert!(
@@ -131,10 +150,23 @@ fn test_updates_features_scoped_codex_hooks_only() {
     .unwrap();
 
     let result = run_installer(codex_home);
-    assert!(result.status.success(), "installer failed: {}", String::from_utf8_lossy(&result.stderr));
+    assert!(
+        result.status.success(),
+        "installer failed: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
 
     let text = fs::read_to_string(&config_path).unwrap();
-    assert!(text.contains("[custom]\ncodex_hooks = false"), "non-features codex_hooks should be untouched");
-    assert!(text.contains("[features]") && text.contains("hooks = true"), "features hooks should be enabled");
-    assert!(!text.contains("codex_hooks = true"), "deprecated features codex_hooks should not be emitted");
+    assert!(
+        text.contains("[custom]\ncodex_hooks = false"),
+        "non-features codex_hooks should be untouched"
+    );
+    assert!(
+        text.contains("[features]") && text.contains("hooks = true"),
+        "features hooks should be enabled"
+    );
+    assert!(
+        !text.contains("codex_hooks = true"),
+        "deprecated features codex_hooks should not be emitted"
+    );
 }

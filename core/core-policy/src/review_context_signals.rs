@@ -87,9 +87,13 @@ pub fn install_test_review_context_probes() {
             return false;
         }
         for start in 0..=(tokens.len() - phrase_tokens.len()) {
-            if phrase_tokens.iter().enumerate().all(|(offset, phrase_token)| {
-                phrase_token_matches(&tokens[start + offset], phrase_token)
-            }) {
+            if phrase_tokens
+                .iter()
+                .enumerate()
+                .all(|(offset, phrase_token)| {
+                    phrase_token_matches(&tokens[start + offset], phrase_token)
+                })
+            {
                 return true;
             }
         }

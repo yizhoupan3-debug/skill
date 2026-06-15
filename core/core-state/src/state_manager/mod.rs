@@ -23,20 +23,35 @@ pub const LEGACY_AUTOPILOT_DRIVE_PARAGRAPH_PREFIX: &str = "AUTOPILOT_DRIVE";
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
 
 // Re-export from validation
-pub use validation::{source_traceable_heuristic, validate_external_research_strict, validate_external_research_structured};
 pub use validation::EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN;
+pub use validation::{
+    source_traceable_heuristic, validate_external_research_strict,
+    validate_external_research_structured,
+};
 
 // Re-export from pointer_ops
-pub use pointer_ops::{ensure_task_directory, neutralize_task_pointers_for_task, read_active_task_id, read_focus_task_id, read_primary_task_id, read_task_pointer_pair, sync_task_pointers_after_goal_drive, write_active_task_pointer};
+pub use pointer_ops::{
+    ensure_task_directory, neutralize_task_pointers_for_task, read_active_task_id,
+    read_focus_task_id, read_primary_task_id, read_task_pointer_pair,
+    sync_task_pointers_after_goal_drive, write_active_task_pointer,
+};
 
 // Re-export from rfv_ops
-pub use rfv_ops::{deactivate_goal_for_conflict_with_rfv, read_rfv_loop_state, rfv_loop_state_path};
+pub use rfv_ops::{
+    deactivate_goal_for_conflict_with_rfv, read_rfv_loop_state, rfv_loop_state_path,
+};
 
 // Re-export from goal_ops
-pub use goal_ops::{framework_autopilot_goal, framework_goal_drive, task_evidence_artifacts_summary_for_task, task_evidence_success_only_self_attested};
+pub use goal_ops::{
+    framework_autopilot_goal, framework_goal_drive, task_evidence_artifacts_summary_for_task,
+    task_evidence_success_only_self_attested,
+};
 
 // Re-export from scrub_ops
-pub use scrub_ops::{merge_hook_nudge_paragraph, scrub_followup_fields_in_hook_output, scrub_spoof_host_followup_lines, strip_followup_paragraphs_with_line_prefix};
+pub use scrub_ops::{
+    merge_hook_nudge_paragraph, scrub_followup_fields_in_hook_output,
+    scrub_spoof_host_followup_lines, strip_followup_paragraphs_with_line_prefix,
+};
 
 // ── Shared helper ──
 pub(crate) fn now_iso() -> String {
@@ -44,7 +59,10 @@ pub(crate) fn now_iso() -> String {
 }
 
 // ── Goal state path ──
-pub fn goal_state_path_for_task(repo_root: &Path, task_id: &str) -> Result<std::path::PathBuf, String> {
+pub fn goal_state_path_for_task(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<std::path::PathBuf, String> {
     let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
     Ok(repo_root
         .join("artifacts/current")
@@ -52,7 +70,10 @@ pub fn goal_state_path_for_task(repo_root: &Path, task_id: &str) -> Result<std::
         .join(GOAL_STATE_FILENAME))
 }
 
-fn goal_state_path_for_nested_under_current(repo_root: &Path, rel: &str) -> Option<std::path::PathBuf> {
+fn goal_state_path_for_nested_under_current(
+    repo_root: &Path,
+    rel: &str,
+) -> Option<std::path::PathBuf> {
     let rel = rel.trim().trim_matches('/');
     if rel.is_empty() {
         return None;
@@ -70,7 +91,11 @@ fn goal_state_path_for_nested_under_current(repo_root: &Path, rel: &str) -> Opti
 
 // ── Session ID / staleness ──
 fn current_env_session_id() -> Option<String> {
-    for env_key in &["CLAUDE_SESSION_ID", "CURSOR_SESSION_ID", "OPENCODE_SESSION_ID"] {
+    for env_key in &[
+        "CLAUDE_SESSION_ID",
+        "CURSOR_SESSION_ID",
+        "OPENCODE_SESSION_ID",
+    ] {
         if let Ok(sid) = std::env::var(env_key) {
             let trimmed = sid.trim().to_string();
             if !trimmed.is_empty() {
@@ -132,9 +157,8 @@ pub fn read_goal_state(
         };
         t
     };
-    crate::utils::path_guard::validate_task_id_component(&task_id).map_err(|e| {
-        format!("framework_goal_drive: invalid task_id for GOAL_STATE path: {e}")
-    })?;
+    crate::utils::path_guard::validate_task_id_component(&task_id)
+        .map_err(|e| format!("framework_goal_drive: invalid task_id for GOAL_STATE path: {e}"))?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     if !path.is_file() {
         return Ok(None);
@@ -343,11 +367,10 @@ pub fn evidence_index_entry_implies_success(entry: &Value) -> bool {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     /// Lock for tests that mutate env vars (CLAUDE_SESSION_ID etc.) to avoid race conditions.
@@ -436,10 +459,7 @@ mod tests {
             "task_id": "t-lite",
         }))
         .expect("status");
-        assert_eq!(
-            st["goal_state"]["lifecycle_profile"],
-            json!("my-light")
-        );
+        assert_eq!(st["goal_state"]["lifecycle_profile"], json!("my-light"));
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -544,7 +564,9 @@ mod tests {
             "task_id": "rs-task",
         }))
         .expect("pause");
-        let paused = read_goal_state(&repo, Some("rs-task")).expect("read").expect("some");
+        let paused = read_goal_state(&repo, Some("rs-task"))
+            .expect("read")
+            .expect("some");
         assert_eq!(paused["drive_until_done"], json!(false));
         assert_eq!(paused[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(true));
         framework_goal_drive(json!({
@@ -553,7 +575,9 @@ mod tests {
             "task_id": "rs-task",
         }))
         .expect("resume");
-        let running = read_goal_state(&repo, Some("rs-task")).expect("read2").expect("some2");
+        let running = read_goal_state(&repo, Some("rs-task"))
+            .expect("read2")
+            .expect("some2");
         assert_eq!(running["status"], json!("running"));
         assert_eq!(
             running["drive_until_done"],
@@ -598,7 +622,9 @@ mod tests {
             "drive_until_done": false,
         }))
         .expect("resume");
-        let running = read_goal_state(&repo, Some("rs-off")).expect("read").expect("some");
+        let running = read_goal_state(&repo, Some("rs-off"))
+            .expect("read")
+            .expect("some");
         assert_eq!(running["status"], json!("running"));
         assert_eq!(running["drive_until_done"], json!(false));
         let _ = fs::remove_dir_all(&repo);
@@ -782,7 +808,10 @@ mod tests {
         .expect("complete without evidence");
         // complete auto-deletes GOAL_STATE.json
         let goal_path = goal_state_path_for_task(&repo, "nogate").expect("goal path");
-        assert!(!goal_path.is_file(), "GOAL_STATE should be deleted after complete");
+        assert!(
+            !goal_path.is_file(),
+            "GOAL_STATE should be deleted after complete"
+        );
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -927,7 +956,10 @@ mod tests {
         .expect("complete ok");
         // complete auto-deletes GOAL_STATE.json
         let goal_path = goal_state_path_for_task(&repo, "gok").expect("goal path");
-        assert!(!goal_path.is_file(), "GOAL_STATE should be deleted after complete");
+        assert!(
+            !goal_path.is_file(),
+            "GOAL_STATE should be deleted after complete"
+        );
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -959,12 +991,13 @@ mod tests {
             .expect("some");
         assert_eq!(via_active["goal"], json!("g"));
 
-        assert!(read_rfv_loop_state(&repo, Some("missing-task"))
-            .expect("read missing")
-            .is_none());
+        assert!(
+            read_rfv_loop_state(&repo, Some("missing-task"))
+                .expect("read missing")
+                .is_none()
+        );
 
-        let err = read_rfv_loop_state(&repo, Some("   "))
-            .expect_err("empty override");
+        let err = read_rfv_loop_state(&repo, Some("   ")).expect_err("empty override");
         assert!(err.contains("empty"));
 
         let _ = fs::remove_dir_all(&repo);
@@ -996,10 +1029,7 @@ mod tests {
             .expect("read")
             .expect("state");
         assert_eq!(st["status"], json!("superseded"));
-        assert_eq!(
-            st["metadata"]["superseded_by"],
-            json!("rfv_loop")
-        );
+        assert_eq!(st["metadata"]["superseded_by"], json!("rfv_loop"));
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1051,7 +1081,10 @@ mod tests {
         }))
         .expect("complete");
         let goal_path = goal_state_path_for_task(&repo, "sess-task").expect("goal path");
-        assert!(!goal_path.is_file(), "GOAL_STATE.json should be deleted after complete");
+        assert!(
+            !goal_path.is_file(),
+            "GOAL_STATE.json should be deleted after complete"
+        );
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1086,16 +1119,21 @@ mod tests {
         crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
 
         // Set a different current session via env var
-        std::env::set_var("CLAUDE_SESSION_ID", "new-session-456");
+        unsafe { std::env::set_var("CLAUDE_SESSION_ID", "new-session-456") };
 
         let st = read_goal_state(&repo, Some("stale-task"))
             .expect("read")
             .expect("state");
         assert_eq!(st["stale"], json!(true));
-        assert!(st["stale_reason"].as_str().unwrap().contains("session_id mismatch"));
+        assert!(
+            st["stale_reason"]
+                .as_str()
+                .unwrap()
+                .contains("session_id mismatch")
+        );
 
         // Clean up env var
-        std::env::remove_var("CLAUDE_SESSION_ID");
+        unsafe { std::env::remove_var("CLAUDE_SESSION_ID") };
         let _ = fs::remove_dir_all(&repo);
     }
 

@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn file_sha256(path: &Path) -> Result<[u8; 32], String> {
-    let bytes = fs::read(path).map_err(|err| format!("read {} for sha256: {err}", path.display()))?;
+    let bytes =
+        fs::read(path).map_err(|err| format!("read {} for sha256: {err}", path.display()))?;
     Ok(Sha256::digest(&bytes).into())
 }
 
@@ -217,10 +218,7 @@ pub fn install_router_rs_for_desktop_mcp_at(home_account: &Path) -> Result<PathB
 
 pub fn validate_router_rs_binary_runnable(path: &Path) -> Result<(), String> {
     if !path.is_file() {
-        return Err(format!(
-            "router-rs binary missing at {}",
-            path.display()
-        ));
+        return Err(format!("router-rs binary missing at {}", path.display()));
     }
     let status = Command::new(path)
         .arg("framework")
@@ -345,7 +343,9 @@ fn run_clean(args: RouterSelfCleanArgs) -> Result<(), String> {
             .parent()
             .and_then(|p| p.parent())
             .map(Path::to_path_buf)
-            .ok_or_else(|| "could not resolve framework root for repo target cleanup".to_string())?;
+            .ok_or_else(|| {
+                "could not resolve framework root for repo target cleanup".to_string()
+            })?;
         remove_dir_if_exists(&manifest.parent().unwrap().join("target"))?;
         remove_dir_if_exists(&framework_root.join("target"))?;
     }
@@ -369,10 +369,7 @@ mod tests {
     fn default_install_paths_use_home_local_bin() {
         let dir = default_router_rs_install_dir();
         assert!(dir.ends_with(".local/bin"));
-        assert_eq!(
-            default_router_rs_install_path(),
-            dir.join("router-rs")
-        );
+        assert_eq!(default_router_rs_install_path(), dir.join("router-rs"));
     }
 
     #[test]
@@ -518,7 +515,9 @@ mod tests {
                 String::from_utf8_lossy(&out.stderr)
             );
             if combined.contains("moved") || combined.contains("router-rs-cli") {
-                eprintln!("skip: router-rs binary is a redirect shim; smoke test requires the real binary");
+                eprintln!(
+                    "skip: router-rs binary is a redirect shim; smoke test requires the real binary"
+                );
                 return;
             }
         }
@@ -589,10 +588,7 @@ mod tests {
         ));
         fs::create_dir_all(&home).unwrap();
         let dest = install_router_rs_for_desktop_mcp_at(&home).expect("desktop mcp install");
-        assert_eq!(
-            dest,
-            router_rs_desktop_mcp_path_for_home(&home)
-        );
+        assert_eq!(dest, router_rs_desktop_mcp_path_for_home(&home));
         assert!(dest.is_file());
         assert!(
             dest.to_string_lossy()

@@ -1,12 +1,14 @@
 use super::types::BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION;
 use crate::runtime_storage::{
-    runtime_backend_capabilities, DEFAULT_STATE_SERVICE_AUTHORITY,
-    DEFAULT_STATE_SERVICE_PROJECTION, DEFAULT_STATE_SERVICE_ROLE,
+    DEFAULT_STATE_SERVICE_AUTHORITY, DEFAULT_STATE_SERVICE_PROJECTION, DEFAULT_STATE_SERVICE_ROLE,
+    runtime_backend_capabilities,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
-pub(super) fn backend_capabilities(backend_family: &str) -> Result<(bool, bool, bool, bool), String> {
+pub(super) fn backend_capabilities(
+    backend_family: &str,
+) -> Result<(bool, bool, bool, bool), String> {
     let capabilities = runtime_backend_capabilities(backend_family)
         .map_err(|err| format!("Unsupported durable background-state backend family: {err}"))?;
     Ok((

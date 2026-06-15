@@ -112,7 +112,11 @@ impl EvolutionObserver {
     }
 
     /// Tail-append new bytes from `journal_path`; `offset` advances on success.
-    pub fn tail_journal_file(&mut self, journal_path: &std::path::Path, offset: &mut u64) -> Result<u32, String> {
+    pub fn tail_journal_file(
+        &mut self,
+        journal_path: &std::path::Path,
+        offset: &mut u64,
+    ) -> Result<u32, String> {
         use std::io::{Read, Seek, SeekFrom};
         let mut file = std::fs::File::open(journal_path)
             .map_err(|e| format!("open journal {}: {e}", journal_path.display()))?;
@@ -193,8 +197,8 @@ impl EvolutionObserver {
                     self.config.reroute_rate_alert,
                 ));
             }
-            let struggle_proxy = self.counters.route_low_confidence as f32
-                / self.counters.route_total as f32;
+            let struggle_proxy =
+                self.counters.route_low_confidence as f32 / self.counters.route_total as f32;
             if struggle_proxy >= self.config.reroute_rate_alert {
                 alerts.push(self.build_alert(
                     "low_confidence_rate_high",
@@ -205,8 +209,7 @@ impl EvolutionObserver {
             }
         }
         if self.counters.tool_total >= 10 {
-            let fail_rate =
-                self.counters.tool_failure as f32 / self.counters.tool_total as f32;
+            let fail_rate = self.counters.tool_failure as f32 / self.counters.tool_total as f32;
             if fail_rate >= self.config.tool_failure_rate_alert {
                 alerts.push(self.build_alert(
                     "tool_failure_rate_high",
@@ -222,13 +225,7 @@ impl EvolutionObserver {
         Ok(())
     }
 
-    fn build_alert(
-        &self,
-        kind: &str,
-        metric: &str,
-        value: f32,
-        threshold: f32,
-    ) -> EvolutionAlert {
+    fn build_alert(&self, kind: &str, metric: &str, value: f32, threshold: f32) -> EvolutionAlert {
         EvolutionAlert {
             ts: rfc3339_now(),
             kind: kind.to_string(),
@@ -350,7 +347,10 @@ mod tests {
             .unwrap();
         }
         let raw = fs::read_to_string(&path).unwrap_or_default();
-        assert!(raw.contains("reroute_rate_high"), "expected alert line: {raw}");
+        assert!(
+            raw.contains("reroute_rate_high"),
+            "expected alert line: {raw}"
+        );
         let _ = fs::remove_file(path);
     }
 

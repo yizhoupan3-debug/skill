@@ -1,6 +1,7 @@
-use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::{self, Read};
+use std::path::{Path, PathBuf};
+use tracing::debug;
 
 /// Cross-host file state lock abstraction.
 ///
@@ -45,9 +46,11 @@ impl HookStateConfig {
         let path = self.state_path(repo_root);
         if let Ok(content) = fs::read_to_string(&path) {
             if let Ok(state) = serde_json::from_str::<T>(&content) {
+                debug!(host = %self.host_id, "hook state loaded");
                 return state;
             }
         }
+        debug!(host = %self.host_id, "hook state default (missing or corrupt)");
         T::default()
     }
 
@@ -59,6 +62,7 @@ impl HookStateConfig {
         }
         if let Ok(json) = serde_json::to_string_pretty(state) {
             let _ = fs::write(&path, json);
+            debug!(host = %self.host_id, "hook state saved");
         }
     }
 
@@ -124,18 +128,13 @@ fn acquire_file_lock(lock_path: &Path) -> Result<FileStateLockGuard, String> {
     // Try flock with retries
     let mut retries = 10;
     loop {
-        let result = unsafe {
-            libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB)
-        };
+        let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
         if result == 0 {
             break;
         }
         retries -= 1;
         if retries == 0 {
-            return Err(format!(
-                "lock_acquisition_failed: {} retries exhausted",
-                10
-            ));
+            return Err(format!("lock_acquisition_failed: {} retries exhausted", 10));
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }
@@ -220,5 +219,7 @@ pub fn resolve_repo_root(
                 .map(PathBuf::from)
         })
         .or_else(|| std::env::current_dir().ok())
-        .ok_or_else(|| "repo_root required (pass --repo-root or include cwd in payload)".to_string())
+        .ok_or_else(|| {
+            "repo_root required (pass --repo-root or include cwd in payload)".to_string()
+        })
 }

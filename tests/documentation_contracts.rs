@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod common;
 
 use common::{project_root, read_text};
@@ -253,10 +254,7 @@ fn runtime_plugin_contract_freezes_plugin_abi_and_health_loop() {
 #[test]
 fn host_and_contract_docs_avoid_stale_codex_and_planx_wording() {
     let root = project_root();
-    let mut paths = vec![
-        "docs/spec.md".to_string(),
-        "AGENTS_CLAUDE.md".to_string(),
-    ];
+    let mut paths = vec!["docs/spec.md".to_string(), "AGENTS_CLAUDE.md".to_string()];
     let hosts_dir = root.join("docs/hosts");
     if hosts_dir.is_dir() {
         for entry in std::fs::read_dir(&hosts_dir).expect("read docs/hosts") {

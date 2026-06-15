@@ -5,8 +5,12 @@
 //! **Writes** serialize via `task_write_lock`
 //! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `CursorContinuityFrame`).
 
-use crate::state_manager::{goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task};
-use crate::state_manager::{read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured};
+use crate::state_manager::{
+    goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task,
+};
+use crate::state_manager::{
+    read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured,
+};
 
 use serde::Serialize;
 use serde_json::Value;
@@ -33,8 +37,7 @@ pub const RESOLUTION_NOTE_DUAL_GOAL_POINTER_CONFLICT: &str =
 
 /// Suffix for [`depth_compliance_refresh_hint`] when `ROUTER_RS_DEPTH_SCORE_MODE` is not `strict`
 /// yet structured external-research rounds are present advisory counters only for the third depth point.
-pub const DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH: &str =
-    " · legacy第三分不含「仅外研结构化轮次」；d3需GOAL checkpoint或RFV对抗轮，或设ROUTER_RS_DEPTH_SCORE_MODE=strict";
+pub const DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH: &str = " · legacy第三分不含「仅外研结构化轮次」；d3需GOAL checkpoint或RFV对抗轮，或设ROUTER_RS_DEPTH_SCORE_MODE=strict";
 
 /// Zh line appended to Codex continuity digest and Cursor SessionStart when
 /// [`task_view_has_active_goal_focus_mismatch_note`] is true (same bytes as legacy digest string).
@@ -378,7 +381,10 @@ pub fn depth_compliance_aggregate(
     let third_legacy = c.goal_checkpoint_count > 0
         || c.rfv_adversarial_round_count > 0
         || (strict_task && c.rfv_external_strict_ok_round_count > 0);
-    let third = if std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").map(|v| v.trim() == "strict").unwrap_or(false) {
+    let third = if std::env::var("ROUTER_RS_DEPTH_SCORE_MODE")
+        .map(|v| v.trim() == "strict")
+        .unwrap_or(false)
+    {
         third_legacy || c.rfv_falsification_test_count > 0
     } else {
         third_legacy
@@ -494,7 +500,9 @@ pub fn read_task_ledger_transactions(
     }
     // Repair any trailing corrupt lines before reading (e.g. truncated crash writes).
     if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path) {
-        eprintln!("[router-rs] truncate_corrupt_tail failed for TASK_LEDGER.jsonl task {task_id}: {e}");
+        eprintln!(
+            "[router-rs] truncate_corrupt_tail failed for TASK_LEDGER.jsonl task {task_id}: {e}"
+        );
     }
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
@@ -527,7 +535,12 @@ pub fn read_task_ledger_transactions(
 pub fn hydrate_task_state_hybrid(
     repo_root: &Path,
     task_id: &str,
-) -> (Option<Value>, Option<Value>, Option<EvidenceRollup>, Vec<String>) {
+) -> (
+    Option<Value>,
+    Option<Value>,
+    Option<EvidenceRollup>,
+    Vec<String>,
+) {
     let mut resolution_notes = Vec::new();
     let mut goal_state: Option<Value> = None;
     let mut rfv_loop_state: Option<Value> = None;
@@ -544,8 +557,14 @@ pub fn hydrate_task_state_hybrid(
                 goal_state = agg.get("goal_state").cloned().filter(|v| !v.is_null());
                 rfv_loop_state = agg.get("rfv_loop_state").cloned().filter(|v| !v.is_null());
                 if let Some(ev) = agg.get("evidence") {
-                    evidence_rows_non_empty = ev.get("evidence_rows_non_empty").and_then(Value::as_bool).unwrap_or(false);
-                    has_successful_verification = ev.get("has_successful_verification").and_then(Value::as_bool).unwrap_or(false);
+                    evidence_rows_non_empty = ev
+                        .get("evidence_rows_non_empty")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
+                    has_successful_verification = ev
+                        .get("has_successful_verification")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false);
                 }
                 last_seq = agg.get("last_seq").and_then(Value::as_u64);
                 base_loaded = true;
@@ -561,7 +580,9 @@ pub fn hydrate_task_state_hybrid(
         }
         match read_rfv_loop_state(repo_root, Some(task_id)) {
             Ok(v) => rfv_loop_state = v,
-            Err(e) => push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e),
+            Err(e) => {
+                push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e)
+            }
         }
         let (rows, ok) = task_evidence_artifacts_summary_for_task(repo_root, task_id);
         evidence_rows_non_empty = rows;
@@ -632,7 +653,7 @@ pub fn resolve_task_view_with_pointers(
             depth_compliance: None,
             control_mode: TaskControlMode::Idle,
             resolution_notes: vec![
-                "no_task_id: override empty and no active/focus pointer".to_string()
+                "no_task_id: override empty and no active/focus pointer".to_string(),
             ],
         };
     };
@@ -641,7 +662,10 @@ pub fn resolve_task_view_with_pointers(
         hydrate_task_state_hybrid(repo_root, task_id.as_str());
     resolution_notes.append(&mut read_notes);
 
-    let evidence_ok = evidence.as_ref().map(|e| e.has_successful_verification).unwrap_or(false);
+    let evidence_ok = evidence
+        .as_ref()
+        .map(|e| e.has_successful_verification)
+        .unwrap_or(false);
 
     let depth_compliance = Some(depth_compliance_aggregate(
         goal_state.as_ref(),
@@ -687,7 +711,10 @@ pub fn resolve_task_view_with_pointers(
 /// One-line hint for continuity digest / Codex SessionStart (`Continuity digest` prompt).
 /// Omitted when no resolved `task_id` (idle). Keeps copy short for ~640-char caps.
 pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> {
-    if !std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").map(|v| v.trim() == "1").unwrap_or(false) {
+    if !std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT")
+        .map(|v| v.trim() == "1")
+        .unwrap_or(false)
+    {
         return None;
     }
     let tid = view.task_id.as_deref()?.trim();
@@ -714,7 +741,11 @@ pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> 
             dc.rfv_external_strict_ok_round_count
         ));
     }
-    if dc.rfv_external_deep_structured_round_count > 0 && !std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").map(|v| v.trim() == "strict").unwrap_or(false) {
+    if dc.rfv_external_deep_structured_round_count > 0
+        && !std::env::var("ROUTER_RS_DEPTH_SCORE_MODE")
+            .map(|v| v.trim() == "strict")
+            .unwrap_or(false)
+    {
         out.push_str(DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH);
     }
     Some(out)
@@ -866,7 +897,7 @@ mod tests {
             .lock()
             .expect("depth score mode env mutex poisoned");
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
-        std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1");
+        unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("goal");
         let tid = "t1";
         write_active(&tmp, tid);
@@ -912,8 +943,8 @@ mod tests {
             v.resolution_notes
         );
         match prior_hint {
-            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p),
-            None => std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1137,7 +1168,7 @@ mod tests {
             .lock()
             .expect("depth score mode env mutex poisoned");
         let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
-        std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict");
+        unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict") };
         let tmp = unique_repo("strict-fals");
         let tid = "t-strict-fals";
         write_active(&tmp, tid);
@@ -1170,8 +1201,8 @@ mod tests {
         let dc = v.depth_compliance.expect("dc");
         assert_eq!(dc.depth_score, 3, "strict third point via falsification");
         match prior {
-            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p),
-            None => std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1183,8 +1214,8 @@ mod tests {
             .expect("depth score mode env mutex poisoned");
         let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
-        std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE");
-        std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1");
+        unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") };
+        unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("ext-deep");
         let tid = "t-ext";
         write_active(&tmp, tid);
@@ -1216,12 +1247,12 @@ mod tests {
         assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
         match prior_depth {
-            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p),
-            None => std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") },
         }
         match prior_hint {
-            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p),
-            None => std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1233,8 +1264,8 @@ mod tests {
             .expect("depth score mode env mutex poisoned");
         let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
-        std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict");
-        std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1");
+        unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict") };
+        unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("ext-deep-strict-note");
         let tid = "t-ext-note";
         write_active(&tmp, tid);
@@ -1262,12 +1293,12 @@ mod tests {
         assert!(!hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
         match prior {
-            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p),
-            None => std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") },
         }
         match prior_hint {
-            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p),
-            None => std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1279,8 +1310,8 @@ mod tests {
             .expect("depth score mode env mutex poisoned");
         let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
-        std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE");
-        std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1");
+        unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") };
+        unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("ext-strict");
         let tid = "t-ext-st";
         write_active(&tmp, tid);
@@ -1329,12 +1360,12 @@ mod tests {
         assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
         match prior_depth {
-            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p),
-            None => std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") },
         }
         match prior_hint {
-            Some(p) => std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p),
-            None => std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1607,10 +1638,7 @@ mod tests {
         )
         .unwrap();
         let pointers = read_task_pointers(&tmp);
-        assert_eq!(
-            pointers.active_task_id.as_deref(),
-            Some("active-from-disk")
-        );
+        assert_eq!(pointers.active_task_id.as_deref(), Some("active-from-disk"));
         assert_eq!(pointers.focus_task_id.as_deref(), Some("focus-from-disk"));
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1647,7 +1675,10 @@ mod tests {
         // With explicit task_id_override, should resolve even though pointers are stubbed.
         let view = resolve_task_view(&tmp, Some(tid));
         assert_eq!(view.task_id.as_deref(), Some(tid));
-        assert!(view.goal_state.is_some(), "goal_state should resolve with explicit override");
+        assert!(
+            view.goal_state.is_some(),
+            "goal_state should resolve with explicit override"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 }

@@ -1,7 +1,7 @@
-use super::{lifecycle_host, CodexLifecycleContextState};
+use super::{CodexLifecycleContextState, lifecycle_host};
 use crate::hooks::router_rs_env_enabled_default_true;
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use serde_json::{json, Value};
 use std::env;
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -11,8 +11,8 @@ use std::os::unix::fs::MetadataExt;
 #[cfg(unix)]
 use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Once;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -306,7 +306,9 @@ pub(super) fn lock_is_stale(path: &Path) -> bool {
 }
 
 #[cfg(unix)]
-pub(super) fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLock, CodexHookError> {
+pub(super) fn acquire_codex_state_lock(
+    state_path: &Path,
+) -> Result<CodexStateLock, CodexHookError> {
     let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
     if let Some(parent) = lock_path.parent() {
         fs::create_dir_all(parent).map_err(CodexHookError::StateDirCreate)?;
@@ -379,7 +381,9 @@ pub(super) fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLo
 }
 
 #[cfg(not(unix))]
-pub(super) fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLock, CodexHookError> {
+pub(super) fn acquire_codex_state_lock(
+    state_path: &Path,
+) -> Result<CodexStateLock, CodexHookError> {
     let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
     let started = SystemTime::now();
     loop {
@@ -397,8 +401,7 @@ pub(super) fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLo
                 use std::io::Write as _;
                 file.write_all(stamp.as_bytes())
                     .map_err(CodexHookError::StateLockWrite)?;
-                file.sync_all()
-                    .map_err(CodexHookError::StateLockSync)?;
+                file.sync_all().map_err(CodexHookError::StateLockSync)?;
                 return Ok(CodexStateLock { path: lock_path });
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
@@ -419,11 +422,18 @@ pub(super) fn acquire_codex_state_lock(state_path: &Path) -> Result<CodexStateLo
     Err(CodexHookError::StateLockTimeout)
 }
 
-pub(crate) fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLifecycleContextState>, CodexHookError> {
+pub(crate) fn codex_load_state_from_path(
+    path: &Path,
+) -> Result<Option<CodexLifecycleContextState>, CodexHookError> {
     let text = match fs::read_to_string(path) {
         Ok(value) => value,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err(CodexHookError::StateReadIo(io::Error::new(io::ErrorKind::Other, "state_read_failed"))),
+        Err(_) => {
+            return Err(CodexHookError::StateReadIo(io::Error::new(
+                io::ErrorKind::Other,
+                "state_read_failed",
+            )));
+        }
     };
     let mut value: Value = match serde_json::from_str(&text) {
         Ok(v) => v,
@@ -436,7 +446,9 @@ pub(crate) fn codex_load_state_from_path(path: &Path) -> Result<Option<CodexLife
             {
                 return Ok(None);
             }
-            return Err(CodexHookError::StateJsonInvalid(format!("JSON parse failed: {err}")));
+            return Err(CodexHookError::StateJsonInvalid(format!(
+                "JSON parse failed: {err}"
+            )));
         }
     };
     if let Some(obj) = value.as_object_mut() {
@@ -478,7 +490,10 @@ pub(crate) fn codex_load_state(
     codex_load_state_from_path(&codex_state_path(repo_root, event))
 }
 
-pub(super) fn codex_save_state_to_path(state_path: &Path, state: &mut CodexLifecycleContextState) -> bool {
+pub(super) fn codex_save_state_to_path(
+    state_path: &Path,
+    state: &mut CodexLifecycleContextState,
+) -> bool {
     state.review_gate.bump_version_for_save();
     let directory = state_path
         .parent()
@@ -588,7 +603,8 @@ pub(super) fn prune_stale_hook_state_files(dir: &Path) {
         .map(|(_, p)| p.clone())
         .collect();
 
-    let to_remove_set: std::collections::HashSet<&Path> = to_remove.iter().map(PathBuf::as_path).collect();
+    let to_remove_set: std::collections::HashSet<&Path> =
+        to_remove.iter().map(PathBuf::as_path).collect();
     let remaining: Vec<_> = with_mtime
         .iter()
         .filter(|(_, p)| !to_remove_set.contains(p.as_path()))
@@ -606,7 +622,11 @@ pub(super) fn prune_stale_hook_state_files(dir: &Path) {
     }
 }
 
-pub(super) fn with_codex_state_lock<T, F>(repo_root: &Path, event: &Value, f: F) -> Result<T, CodexHookError>
+pub(super) fn with_codex_state_lock<T, F>(
+    repo_root: &Path,
+    event: &Value,
+    f: F,
+) -> Result<T, CodexHookError>
 where
     F: FnOnce(
         Option<CodexLifecycleContextState>,
@@ -644,19 +664,28 @@ mod tests {
     #[test]
     fn codex_stable_session_from_session_id() {
         let event = json!({"session_id": "abc-123"});
-        assert_eq!(codex_stable_session_raw(&event), Some("abc-123".to_string()));
+        assert_eq!(
+            codex_stable_session_raw(&event),
+            Some("abc-123".to_string())
+        );
     }
 
     #[test]
     fn codex_stable_session_from_session_id_camel() {
         let event = json!({"sessionId": "camel-case-id"});
-        assert_eq!(codex_stable_session_raw(&event), Some("camel-case-id".to_string()));
+        assert_eq!(
+            codex_stable_session_raw(&event),
+            Some("camel-case-id".to_string())
+        );
     }
 
     #[test]
     fn codex_stable_session_from_conversation_id() {
         let event = json!({"conversation_id": "conv-456"});
-        assert_eq!(codex_stable_session_raw(&event), Some("conv-456".to_string()));
+        assert_eq!(
+            codex_stable_session_raw(&event),
+            Some("conv-456".to_string())
+        );
     }
 
     #[test]
@@ -674,8 +703,8 @@ mod tests {
     #[test]
     fn codex_stable_session_no_key_returns_none() {
         let event = json!({"other": "value"});
-        std::env::remove_var("CODEX_SESSION_ID");
-        std::env::remove_var("CODEX_CONVERSATION_ID");
+        unsafe { std::env::remove_var("CODEX_SESSION_ID") };
+        unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
         assert_eq!(codex_stable_session_raw(&event), None);
     }
 
@@ -708,9 +737,11 @@ mod tests {
 
     #[test]
     fn codex_hook_error_to_string_roundtrip() {
-        let err = CodexHookError::StateDirCreate(std::io::Error::new(std::io::ErrorKind::NotFound, "test"));
+        let err = CodexHookError::StateDirCreate(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "test",
+        ));
         let s: String = err.into();
         assert!(s.contains("state_dir_create_failed"));
     }
 }
-

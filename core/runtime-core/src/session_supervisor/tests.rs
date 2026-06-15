@@ -1,8 +1,8 @@
 use super::driver::{build_driver_command, is_safe_worktree_slug, resolve_worktree_cwd};
 use super::handle_session_supervisor_operation;
-use super::worker::terminate_worker;
 use super::types::WorkerSessionRecord;
-use serde_json::{json, Value};
+use super::worker::terminate_worker;
+use serde_json::{Value, json};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -349,14 +349,7 @@ fn terminate_non_dry_run_without_pid_marks_interrupted() {
         retry_policy: json!({}),
         prompt: None,
         launch_command: build_driver_command(
-            "codex",
-            "/tmp",
-            None,
-            None,
-            "last",
-            false,
-            None,
-            None,
+            "codex", "/tmp", None, None, "last", false, None, None,
         )
         .expect("command"),
         resume_command: None,
@@ -425,17 +418,12 @@ fn subagent_parallel_spawn_close_stability() {
         "now": terminate_now,
     }))
     .expect("list workers");
-    let workers = listed["workers"]
-        .as_array()
-        .expect("workers array");
+    let workers = listed["workers"].as_array().expect("workers array");
     assert_eq!(workers.len(), N, "workers={workers:?}");
 
     let mut worker_ids = std::collections::BTreeSet::new();
     for worker in workers {
-        let worker_id = worker["worker_id"]
-            .as_str()
-            .expect("worker_id")
-            .to_string();
+        let worker_id = worker["worker_id"].as_str().expect("worker_id").to_string();
         worker_ids.insert(worker_id.clone());
         assert_eq!(worker["status"], json!("interrupted"), "worker {worker_id}");
         let event_names = worker["events"]
@@ -614,7 +602,9 @@ fn list_idle_workers_reports_evolution_analyze_dry_run() {
         "now": now,
     }))
     .expect("list idle workers");
-    let evolution_idle = listed["evolution_idle"].as_object().expect("evolution_idle");
+    let evolution_idle = listed["evolution_idle"]
+        .as_object()
+        .expect("evolution_idle");
     assert_eq!(evolution_idle.get("triggered"), Some(&json!(true)));
     assert_eq!(evolution_idle.get("status"), Some(&json!("dry_run")));
 
@@ -648,7 +638,9 @@ fn list_with_running_worker_skips_evolution_idle_trigger() {
         "now": now,
     }))
     .expect("list active workers");
-    let evolution_idle = listed["evolution_idle"].as_object().expect("evolution_idle");
+    let evolution_idle = listed["evolution_idle"]
+        .as_object()
+        .expect("evolution_idle");
     assert_eq!(evolution_idle.get("triggered"), Some(&json!(false)));
     assert_eq!(evolution_idle.get("status"), Some(&json!("workers_active")));
 
@@ -673,14 +665,7 @@ fn sample_worker_for_idle_test(status: &str) -> WorkerSessionRecord {
         retry_policy: json!({}),
         prompt: None,
         launch_command: build_driver_command(
-            "codex",
-            "/tmp",
-            None,
-            None,
-            "last",
-            false,
-            None,
-            None,
+            "codex", "/tmp", None, None, "last", false, None, None,
         )
         .expect("command"),
         resume_command: None,
@@ -719,9 +704,7 @@ fn subagent_spawn_timeout_shutdown_smoke() {
         "stale_after_secs": 3600,
     }))
     .expect("list workers after stale threshold");
-    let workers = listed["workers"]
-        .as_array()
-        .expect("workers array");
+    let workers = listed["workers"].as_array().expect("workers array");
     assert_eq!(workers.len(), 1);
     let worker = &workers[0];
     assert_eq!(worker["worker_id"], json!("timeout-worker"));
@@ -805,9 +788,7 @@ fn subagent_resource_leak_detection() {
         "now": terminate_now,
     }))
     .expect("list workers after shutdown");
-    let workers = listed["workers"]
-        .as_array()
-        .expect("workers array");
+    let workers = listed["workers"].as_array().expect("workers array");
     assert_eq!(workers.len(), N, "workers={workers:?}");
 
     for worker in workers {
@@ -935,7 +916,10 @@ fn classify_rate_limit_generic_claude_code() {
         "claude-code",
         "Error 429: Too Many Requests. Please try again in 60 seconds.",
     );
-    assert!(result.is_ok(), "claude-code should be classified via generic patterns: {result:?}");
+    assert!(
+        result.is_ok(),
+        "claude-code should be classified via generic patterns: {result:?}"
+    );
     let cls = result.unwrap();
     assert_eq!(cls.blocked_reason, "rate_limit");
     assert_eq!(cls.status, "blocked_rate_limit");
@@ -949,7 +933,10 @@ fn classify_rate_limit_generic_cursor() {
         "cursor",
         "Rate limit exceeded. Quota exceeded for this request.",
     );
-    assert!(result.is_ok(), "cursor should be classified via generic patterns: {result:?}");
+    assert!(
+        result.is_ok(),
+        "cursor should be classified via generic patterns: {result:?}"
+    );
     let cls = result.unwrap();
     assert_eq!(cls.blocked_reason, "rate_limit");
     assert_eq!(cls.host, "cursor");
@@ -961,7 +948,10 @@ fn classify_rate_limit_generic_unknown_host() {
         "future-host",
         "Usage limit reached for the current billing period.",
     );
-    assert!(result.is_ok(), "unknown host should fall back to generic patterns: {result:?}");
+    assert!(
+        result.is_ok(),
+        "unknown host should fall back to generic patterns: {result:?}"
+    );
 }
 
 #[test]
@@ -970,7 +960,10 @@ fn classify_rate_limit_non_matching_evidence() {
         "claude-code",
         "Task completed successfully with no errors.",
     );
-    assert!(result.is_err(), "non-rate-limit evidence should fail classification");
+    assert!(
+        result.is_err(),
+        "non-rate-limit evidence should fail classification"
+    );
 }
 
 // ── Process isolation: PID-based lifecycle ───────────────────────────────
@@ -997,9 +990,17 @@ fn process_pid_tracking_lifecycle() {
     )
     .expect("build smoke-shell spec");
 
-    let result = launch_process(&spec, log_dir.to_str().unwrap(), &log_dir.join("worker.log")).expect("launch");
+    let result = launch_process(
+        &spec,
+        log_dir.to_str().unwrap(),
+        &log_dir.join("worker.log"),
+    )
+    .expect("launch");
     let pid = result.pid;
-    assert!(process_is_alive(pid), "process should be alive after launch");
+    assert!(
+        process_is_alive(pid),
+        "process should be alive after launch"
+    );
 
     terminate_process(pid).expect("terminate");
 
@@ -1036,7 +1037,12 @@ fn terminate_process_double_call_is_idempotent() {
     )
     .expect("build smoke-shell spec");
 
-    let result = launch_process(&spec, log_dir.to_str().unwrap(), &log_dir.join("worker.log")).expect("launch");
+    let result = launch_process(
+        &spec,
+        log_dir.to_str().unwrap(),
+        &log_dir.join("worker.log"),
+    )
+    .expect("launch");
     assert!(process_is_alive(result.pid));
 
     terminate_process(result.pid).expect("first terminate");
@@ -1068,7 +1074,12 @@ fn terminate_process_sigkill_fallback() {
         supports_resume: false,
     };
 
-    let result = launch_process(&spec, log_dir.to_str().unwrap(), &log_dir.join("worker.log")).expect("launch");
+    let result = launch_process(
+        &spec,
+        log_dir.to_str().unwrap(),
+        &log_dir.join("worker.log"),
+    )
+    .expect("launch");
     let pid = result.pid;
     assert!(process_is_alive(pid));
 
@@ -1109,15 +1120,13 @@ fn concurrent_save_store_no_corruption() {
             let path = state_path.clone();
             std::thread::spawn(move || {
                 let mut loaded = load_store(&path).unwrap_or_default();
-                loaded.workers.push(
-                    super::types::WorkerSessionRecord {
-                        worker_id: format!("worker-{i}"),
-                        host: "smoke".to_string(),
-                        status: "running".to_string(),
-                        updated_at: chrono::Utc::now().to_rfc3339(),
-                        ..Default::default()
-                    },
-                );
+                loaded.workers.push(super::types::WorkerSessionRecord {
+                    worker_id: format!("worker-{i}"),
+                    host: "smoke".to_string(),
+                    status: "running".to_string(),
+                    updated_at: chrono::Utc::now().to_rfc3339(),
+                    ..Default::default()
+                });
                 save_store(&path, &loaded).ok();
             })
         })
@@ -1128,7 +1137,10 @@ fn concurrent_save_store_no_corruption() {
     }
 
     let final_store = load_store(&state_path);
-    assert!(final_store.is_ok(), "store should be valid JSON after concurrent writes");
+    assert!(
+        final_store.is_ok(),
+        "store should be valid JSON after concurrent writes"
+    );
 
     let _ = fs::remove_file(&state_path);
 }
@@ -1151,7 +1163,10 @@ fn stale_worker_reaped_when_pid_dead() {
 
     reap_stale_workers(&mut workers, now, 600).expect("reap");
 
-    assert_eq!(workers[0].status, "interrupted", "stale worker should be interrupted");
+    assert_eq!(
+        workers[0].status, "interrupted",
+        "stale worker should be interrupted"
+    );
 }
 
 #[test]
@@ -1170,7 +1185,10 @@ fn fresh_worker_not_reaped() {
 
     reap_stale_workers(&mut workers, now, 600).expect("reap");
 
-    assert_eq!(workers[0].status, "running", "recent worker should NOT be reaped");
+    assert_eq!(
+        workers[0].status, "running",
+        "recent worker should NOT be reaped"
+    );
 }
 
 // ── Error-path operations (ported from runtime-core) ─────────────────────
@@ -1190,10 +1208,7 @@ fn inspect_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(
-        err.contains("Unknown supervisor worker_id"),
-        "error: {err}"
-    );
+    assert!(err.contains("Unknown supervisor worker_id"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
@@ -1212,10 +1227,7 @@ fn terminate_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(
-        err.contains("Unknown supervisor worker_id"),
-        "error: {err}"
-    );
+    assert!(err.contains("Unknown supervisor worker_id"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
@@ -1235,10 +1247,7 @@ fn mark_blocked_unknown_worker_returns_error() {
         "now": "2026-06-06T10:00:00Z",
     }))
     .expect_err("should reject unknown worker_id");
-    assert!(
-        err.contains("Unknown supervisor worker_id"),
-        "error: {err}"
-    );
+    assert!(err.contains("Unknown supervisor worker_id"), "error: {err}");
     let _ = fs::remove_file(state_path);
 }
 
@@ -1323,11 +1332,7 @@ fn resume_due_skips_worker_not_yet_due() {
     .expect("resume_due");
 
     let resumed = result["resumed_workers"].as_array().unwrap();
-    assert_eq!(
-        resumed.len(),
-        0,
-        "should not resume before backoff expires"
-    );
+    assert_eq!(resumed.len(), 0, "should not resume before backoff expires");
 
     let _ = fs::remove_file(state_path);
 }

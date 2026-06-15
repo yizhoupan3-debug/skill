@@ -2,13 +2,15 @@
 // Extracted from state_manager.rs during module split.
 
 use crate::utils::atomic_write::write_atomic_json;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::pointer_ops::{ensure_task_directory, neutralize_task_pointers_for_task, sync_task_pointers_after_goal_drive};
+use super::pointer_ops::{
+    ensure_task_directory, neutralize_task_pointers_for_task, sync_task_pointers_after_goal_drive,
+};
 use super::rfv_ops::deactivate_rfv_for_conflict_with_autopilot;
-use super::{goal_state_path_for_task, now_iso, read_goal_state, REQUIRES_COMPLETION_EVIDENCE_KEY};
+use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, now_iso, read_goal_state};
 
 fn resolve_task_id_strict(payload: &Value) -> Result<String, String> {
     payload
@@ -75,7 +77,11 @@ fn resolve_session_id(payload: &Value) -> String {
         return sid.to_string();
     }
     // 2. Environment variables
-    for env_key in &["CLAUDE_SESSION_ID", "CURSOR_SESSION_ID", "OPENCODE_SESSION_ID"] {
+    for env_key in &[
+        "CLAUDE_SESSION_ID",
+        "CURSOR_SESSION_ID",
+        "OPENCODE_SESSION_ID",
+    ] {
         if let Ok(sid) = std::env::var(env_key) {
             let trimmed = sid.trim().to_string();
             if !trimmed.is_empty() {
@@ -295,9 +301,7 @@ pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str)
     if arr.is_empty() {
         return (false, false);
     }
-    let any_ok = arr
-        .iter()
-        .any(super::evidence_index_entry_implies_success);
+    let any_ok = arr.iter().any(super::evidence_index_entry_implies_success);
     (true, any_ok)
 }
 
@@ -363,9 +367,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
-                .ok_or_else(|| {
-                    "framework_goal_drive start requires non-empty goal".to_string()
-                })?;
+                .ok_or_else(|| "framework_goal_drive start requires non-empty goal".to_string())?;
             let drive_until_done = payload
                 .get("drive_until_done")
                 .and_then(Value::as_bool)
@@ -582,10 +584,9 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
 }
 
 fn clear_goal_state(repo_root: &Path, task_id_resolved: Option<String>) -> Result<Value, String> {
-    let task_id = task_id_resolved
-        .ok_or_else(|| {
-            "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
-        })?;
+    let task_id = task_id_resolved.ok_or_else(|| {
+        "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
+    })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let existed = path.is_file();
     if existed {
@@ -609,10 +610,9 @@ fn resume_goal_running(
     drive_until_done: bool,
     payload: &Value,
 ) -> Result<Value, String> {
-    let task_id = task_id_resolved
-        .ok_or_else(|| {
-            "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
-        })?;
+    let task_id = task_id_resolved.ok_or_else(|| {
+        "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
+    })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let mut state = read_goal_state(repo_root, Some(&task_id))?
         .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
@@ -634,8 +634,7 @@ fn resume_goal_running(
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
     invalidate_route_records_cache_on_write();
-    let rfv_loop_superseded =
-        deactivate_rfv_for_conflict_with_autopilot(repo_root, &task_id)?;
+    let rfv_loop_superseded = deactivate_rfv_for_conflict_with_autopilot(repo_root, &task_id)?;
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     let goal_label = state
         .get("goal")
@@ -659,10 +658,9 @@ fn set_terminal_flags(
     drive_until_done: Option<bool>,
     blocker: Option<String>,
 ) -> Result<Value, String> {
-    let task_id = task_id_resolved
-        .ok_or_else(|| {
-            "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
-        })?;
+    let task_id = task_id_resolved.ok_or_else(|| {
+        "goal_state_manage: task_id is required (multi-agent safe mode)".to_string()
+    })?;
     let path = goal_state_path_for_task(repo_root, &task_id)?;
     let mut state = read_goal_state(repo_root, Some(&task_id))?
         .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;

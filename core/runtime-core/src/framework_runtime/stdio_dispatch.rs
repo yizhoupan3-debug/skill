@@ -1,10 +1,15 @@
 //! Stdio JSON request dispatch.
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 
+use super::{
+    attach_runtime_event_transport, cleanup_attached_runtime_event_transport, inspect_trace_stream,
+    replay_trace_stream, subscribe_attached_runtime_events, write_trace_compaction_delta,
+    write_trace_metadata,
+};
 use crate::autopilot_goal;
 use crate::background_state::handle_background_state_operation;
 use crate::cli::common::{manifest_fallback_path, route_task_with_manifest_fallback};
@@ -12,16 +17,10 @@ use crate::cli::runtime_ops::{
     dispatch_runtime_output_mode_stdio, handles_runtime_output_stdio_op,
     write_checkpoint_resume_manifest_payload, write_transport_binding_payload,
 };
-use super::{
-    attach_runtime_event_transport, cleanup_attached_runtime_event_transport,
-    inspect_trace_stream, replay_trace_stream, subscribe_attached_runtime_events,
-    write_trace_compaction_delta, write_trace_metadata,
-};
 use crate::closeout_enforcement::{
-    closeout_enforcement_contract, evaluate_closeout_record_value,
-    evaluate_closeout_record_value_with_context, CloseoutEvidenceContext,
+    CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
+    evaluate_closeout_record_value_with_context,
 };
-use crate::hook_event_routing::hook_event_routing_contract;
 use crate::eval_route::{eval_route_contract, run_eval_route};
 use crate::execution_contract::{
     build_execution_contract_bundle, decode_execution_response_value,
@@ -32,47 +31,49 @@ use crate::framework_profile::{
     build_codex_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
     load_framework_profile,
 };
+use crate::hook_event_routing::hook_event_routing_contract;
 use crate::hook_policy::evaluate_hook_policy_value;
 use crate::route::{
+    ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION, RouteDecision, RouteDecisionSnapshotPayload,
+    RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload, SkillRecord,
     build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
     build_search_results_payload, filter_record_indices_for_host, filter_records_for_host,
     load_inline_records, load_records_cached_for_stdio, load_records_from_manifest, route_task,
-    search_skills_subset, RouteDecision, RouteDecisionSnapshotPayload,
-    RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload, SkillRecord, ROUTE_AUTHORITY,
-    ROUTE_SNAPSHOT_SCHEMA_VERSION,
+    search_skills_subset,
 };
 use crate::runtime_storage::{
-    build_checkpoint_control_plane_compiler_payload, runtime_storage_operation,
-    RuntimeStorageRequestPayload,
+    RuntimeStorageRequestPayload, build_checkpoint_control_plane_compiler_payload,
+    runtime_storage_operation,
 };
 use crate::session_supervisor::handle_session_supervisor_operation;
-use crate::stdio_transport::{runtime_concurrency_defaults_payload, StdioJsonRequestPayload, StdioJsonResponsePayload};
-use crate::task_command;
-use crate::trace_runtime::{
-    compact_trace_stream, record_trace_event, TraceCompactRequestPayload,
-    TraceRecordEventRequestPayload,
-};
 use crate::stdio_payload_types::{
     BackgroundControlRequestPayload, ExecuteRequestPayload, SandboxControlRequestPayload,
     TraceCompactionDeltaWriteRequestPayload, TraceMetadataWriteRequestPayload,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
 };
+use crate::stdio_transport::{
+    StdioJsonRequestPayload, StdioJsonResponsePayload, runtime_concurrency_defaults_payload,
+};
+use crate::task_command;
+use crate::trace_runtime::{
+    TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
+    record_trace_event,
+};
 
-use super::json_payload::{optional_bool, optional_non_empty_string, required_non_empty_string};
+use super::json_value::{optional_bool, optional_non_empty_string, required_non_empty_string};
 use super::live_execute::execute_request;
-use super::stdio_op_registry::{classify_stdio_op, StdioOpDomain};
+use super::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
 use super::trace_transport::{
     build_checkpoint_resume_manifest, build_trace_handoff_descriptor,
     build_trace_transport_descriptor,
 };
 use super::{
-    build_framework_alias_envelope, build_framework_contract_summary_envelope,
-    build_framework_prompt_compression_envelope,
+    FrameworkAliasBuildOptions, build_framework_alias_envelope,
+    build_framework_contract_summary_envelope, build_framework_prompt_compression_envelope,
     build_framework_runtime_snapshot_envelope_with_level,
     build_runtime_observability_health_snapshot, build_sandbox_control_response,
     evaluate_closeout_record_file_for_task, evaluate_pre_tool_use_guard_value,
     framework_hook_evidence_append, resolve_repo_root_arg, write_framework_session_artifacts,
-    FrameworkAliasBuildOptions,
 };
 
 pub fn dispatch_stdio_json_request_payload(
@@ -143,10 +144,16 @@ fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, String> {
             Path::new(record_path),
         )
     } else {
-        let record_value = payload.get("record").cloned().unwrap_or_else(|| payload.clone());
+        let record_value = payload
+            .get("record")
+            .cloned()
+            .unwrap_or_else(|| payload.clone());
         if let (Some(repo_root), Some(task_id)) = (repo_root.as_deref(), task_id.as_deref()) {
             let (rows_non_empty, has_success) =
-                autopilot_goal::task_evidence_artifacts_summary_for_task(Path::new(repo_root), task_id);
+                autopilot_goal::task_evidence_artifacts_summary_for_task(
+                    Path::new(repo_root),
+                    task_id,
+                );
             let goal_state = autopilot_goal::read_goal_state(Path::new(repo_root), Some(task_id))
                 .ok()
                 .flatten();
@@ -384,7 +391,13 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
         records
     };
     let decision = if using_inline_records {
-        route_task(route_records, &query, &session_id, allow_overlay, first_turn)?
+        route_task(
+            route_records,
+            &query,
+            &session_id,
+            allow_overlay,
+            first_turn,
+        )?
     } else {
         route_task_with_manifest_fallback(
             route_records,

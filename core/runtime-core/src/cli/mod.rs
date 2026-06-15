@@ -11,14 +11,14 @@ pub use common::{
 };
 pub use runtime_ops::dispatch_stdio_json_request_payload;
 
+#[cfg(not(test))]
+pub use crate::framework_runtime::stdio_op_registry::StdioOpDomain;
 pub use crate::framework_runtime::stdio_op_registry::classify_stdio_op;
 #[cfg(test)]
 pub use crate::framework_runtime::stdio_op_registry::{
-    is_framework_stdio_op, is_routing_stdio_op, is_runtime_stdio_op, is_trace_stdio_op,
-    StdioOpDomain,
+    StdioOpDomain, is_framework_stdio_op, is_routing_stdio_op, is_runtime_stdio_op,
+    is_trace_stdio_op,
 };
-#[cfg(not(test))]
-pub use crate::framework_runtime::stdio_op_registry::StdioOpDomain;
 
 pub fn run(args: &args::Cli) -> Result<(), String> {
     crate::kernel_bootstrap::ensure_kernel_bootstrap();
@@ -56,7 +56,7 @@ pub fn cli_thin_shell_line_count() -> usize {
 #[cfg(test)]
 mod cli_thin_shell_budget_tests {
     use super::{
-        cli_thin_shell_line_count, CLI_THIN_SHELL_LINE_BUDGET, RUNTIME_OPS_INC_LINE_CEILING,
+        CLI_THIN_SHELL_LINE_BUDGET, RUNTIME_OPS_INC_LINE_CEILING, cli_thin_shell_line_count,
     };
 
     #[test]

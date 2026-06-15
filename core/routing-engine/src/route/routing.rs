@@ -4,10 +4,10 @@ use super::constants::{
     NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN, PROFILE_COMPILE_AUTHORITY, ROUTE_AUTHORITY,
     ROUTE_DECISION_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
 };
-use super::fuzzy::{fuzzy_fallback_score, FUZZY_MIN_SIMILARITY};
+use super::fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score};
 use super::scoring::{
-    compact_route_reasons, pick_overlay, pick_owner, reasons_class, round2,
-    score_bucket, score_route_candidate,
+    compact_route_reasons, pick_overlay, pick_owner, reasons_class, round2, score_bucket,
+    score_route_candidate,
 };
 use super::scoring_config::scoring_weights;
 use super::signals::{build_route_context, is_overlay_record, should_route_to_gh_fix_ci};
@@ -20,10 +20,7 @@ use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
 
-pub fn build_search_results_payload(
-    query: &str,
-    matches: Vec<MatchRow>,
-) -> SearchResultsPayload {
+pub fn build_search_results_payload(query: &str, matches: Vec<MatchRow>) -> SearchResultsPayload {
     SearchResultsPayload {
         search_schema_version: SEARCH_RESULTS_SCHEMA_VERSION.to_string(),
         authority: ROUTE_AUTHORITY.to_string(),
@@ -140,11 +137,7 @@ fn finalize_search_rows(mut rows: Vec<MatchRow>, limit: usize) -> Vec<MatchRow> 
 
 /// Score and rank skills for a query. When `indices` is `Some`, only those
 /// record positions are considered (avoids cloning records for host filtering).
-pub fn search_skills(
-    records: &[SkillRecord],
-    query: &str,
-    limit: usize,
-) -> Vec<MatchRow> {
+pub fn search_skills(records: &[SkillRecord], query: &str, limit: usize) -> Vec<MatchRow> {
     search_skills_subset(records, None, query, limit)
 }
 
@@ -200,10 +193,7 @@ pub fn search_skills_subset(
                 .iter()
                 .filter_map(|&idx| score_record(&records[idx]))
                 .collect::<Vec<_>>(),
-            None => records
-                .iter()
-                .filter_map(score_record)
-                .collect::<Vec<_>>(),
+            None => records.iter().filter_map(score_record).collect::<Vec<_>>(),
         }
     } else {
         match indices {
@@ -220,7 +210,6 @@ pub fn search_skills_subset(
 
     finalize_search_rows(rows, limit)
 }
-
 
 pub fn filter_record_indices_for_host(
     records: &[SkillRecord],
@@ -291,10 +280,8 @@ pub fn route_task(
         return Err("No skill records available for route decision.".to_string());
     }
     if super::aliases::query_invokes_retired_framework_slash_command(query) {
-        let route_context = build_route_context(
-            &normalize_text(query),
-            &tokenize_route_text(query),
-        );
+        let route_context =
+            build_route_context(&normalize_text(query), &tokenize_route_text(query));
         let fallback_reasons = compact_route_reasons(&[
             "Retired framework slash command; native runtime should proceed without loading a skill."
                 .to_string(),
@@ -481,12 +468,21 @@ pub fn route_task(
     }
 
     // Log: all-overlay candidates allowed through by caller
-    if viable.iter().all(|candidate| is_overlay_record(candidate.record)) {
-        eprintln!("[router-rs route] ALL-OVERLAY ALLOWED: query=\"{}\" session_id=\"{}\"",
+    if viable
+        .iter()
+        .all(|candidate| is_overlay_record(candidate.record))
+    {
+        eprintln!(
+            "[router-rs route] ALL-OVERLAY ALLOWED: query=\"{}\" session_id=\"{}\"",
             query, session_id
         );
     }
-    let selected = pick_owner(viable, &normalized_query, &query_token_list, scoring_weights());
+    let selected = pick_owner(
+        viable,
+        &normalized_query,
+        &query_token_list,
+        scoring_weights(),
+    );
     if selected.score < scoring_weights().layer_threshold(&selected.record.layer) {
         // --- Fuzzy fallback: try trigram similarity before giving up ---
         if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {

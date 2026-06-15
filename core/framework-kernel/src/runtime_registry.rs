@@ -187,10 +187,7 @@ pub fn managed_mcp_server_for_tool(registry: &Value, tool_name: &str) -> Option<
     let managed = registry.get("managed_mcp_servers")?.as_object()?;
     for (server_id, entry) in managed {
         let tools = entry.get("tools").and_then(Value::as_array)?;
-        if tools
-            .iter()
-            .any(|tool| tool.as_str() == Some(normalized))
-        {
+        if tools.iter().any(|tool| tool.as_str() == Some(normalized)) {
             return Some(server_id.clone());
         }
     }
@@ -223,15 +220,13 @@ pub fn resolves_managed_mcp_tool(registry: &Value, tool_name_or_fqn: &str) -> bo
         return false;
     }
     if let Some((server_id, tool_name)) = parse_host_mcp_tool_fqn(raw) {
-        return managed_mcp_server_for_tool(registry, &tool_name).as_deref() == Some(server_id.as_str());
+        return managed_mcp_server_for_tool(registry, &tool_name).as_deref()
+            == Some(server_id.as_str());
     }
     managed_mcp_server_for_tool(registry, raw).is_some()
 }
 
-pub fn closeout_evidence_hooks_unsupported_on_host(
-    repo_root: &Path,
-    host_id: &str,
-) -> bool {
+pub fn closeout_evidence_hooks_unsupported_on_host(repo_root: &Path, host_id: &str) -> bool {
     let Ok(registry) = load_runtime_registry_payload(repo_root) else {
         return false;
     };
@@ -251,7 +246,10 @@ mod tests {
 
     #[test]
     fn claude_desktop_projection_maps_to_claude_code() {
-        assert_eq!(registry_projection_host_key("claude-desktop"), "claude-code");
+        assert_eq!(
+            registry_projection_host_key("claude-desktop"),
+            "claude-code"
+        );
     }
 
     #[test]

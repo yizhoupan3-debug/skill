@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 mod common;
 
 use common::{project_root, read_json, read_text};

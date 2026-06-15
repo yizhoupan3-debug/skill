@@ -1,24 +1,23 @@
 use super::constants::{
     CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
-    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
-    FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
+    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
     NEXT_ACTIONS_FILENAME, SESSION_SUMMARY_FILENAME, SUPERVISOR_STATE_FILENAME,
     SUPERVISOR_STATE_SCHEMA_VERSION, TASK_POINTERS_FILENAME, TASK_POINTERS_SCHEMA_VERSION,
-    TERMINAL_STORY_STATES, TERMINAL_VERIFICATION_STATUSES,
-    TRACE_METADATA_FILENAME, TRACE_METADATA_SCHEMA_VERSION,
+    TERMINAL_STORY_STATES, TERMINAL_VERIFICATION_STATUSES, TRACE_METADATA_FILENAME,
+    TRACE_METADATA_SCHEMA_VERSION,
 };
 use super::json_io::{read_json_strict, read_text_if_exists};
 use super::json_value::{
     nonempty_string, safe_slug, value_bool_or_none, value_string_list, value_text,
 };
 use super::types::{
-    ArtifactPaths, ArtifactPayloads, SessionArtifactWritePlan,
-    SupervisorStateInput, TaskRegistryEntry,
+    ArtifactPaths, ArtifactPayloads, SessionArtifactWritePlan, SupervisorStateInput,
+    TaskRegistryEntry,
 };
 use chrono::{Local, SecondsFormat};
-use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use hex;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -229,8 +228,7 @@ fn write_optional_session_mirror(plan: &mut SessionArtifactWritePlan) -> Result<
         }
         let mirror_trace = mirror_root.join(TRACE_METADATA_FILENAME);
         if write_json_if_changed(&mirror_trace, &plan.trace_metadata_payload)? {
-            plan.changed_paths
-                .push(mirror_trace.display().to_string());
+            plan.changed_paths.push(mirror_trace.display().to_string());
         }
     }
     Ok(())
@@ -252,13 +250,10 @@ fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), S
                 task: &plan.task,
                 phase: &plan.phase,
                 status: &plan.status,
-                resume_allowed: Some(!super::is_terminal(
-                    &plan.status,
-                    TERMINAL_VERIFICATION_STATUSES,
-                ) && !super::is_terminal(
-                    &plan.status,
-                    TERMINAL_STORY_STATES,
-                )),
+                resume_allowed: Some(
+                    !super::is_terminal(&plan.status, TERMINAL_VERIFICATION_STATUSES)
+                        && !super::is_terminal(&plan.status, TERMINAL_STORY_STATES),
+                ),
                 updated_at: &updated_at,
                 focus_task_id: if plan.focus {
                     Some(plan.task_id.as_str())
@@ -268,8 +263,12 @@ fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), S
             },
         )?
     {
-        plan.changed_paths
-            .push(mirror_root.join(TASK_POINTERS_FILENAME).display().to_string());
+        plan.changed_paths.push(
+            mirror_root
+                .join(TASK_POINTERS_FILENAME)
+                .display()
+                .to_string(),
+        );
     }
     if plan.focus {
         write_focused_repo_mirrors(plan, &repo_root, &mirror_root, &updated_at)?;
@@ -287,11 +286,7 @@ fn write_supervisor_state_for_non_focus_checkpoint(
 ) -> Result<(), String> {
     let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
     if let Some(expected) = plan.expected_supervisor_state_hash.as_deref() {
-        assert_expected_file_hash(
-            &supervisor_state_path,
-            Some(expected),
-            "supervisor state",
-        )?;
+        assert_expected_file_hash(&supervisor_state_path, Some(expected), "supervisor state")?;
     }
     if write_json_if_changed(&supervisor_state_path, &plan.supervisor_state_payload)? {
         plan.changed_paths
@@ -336,8 +331,7 @@ fn write_focused_repo_mirrors(
             "task": plan.task,
         }),
     )? {
-        plan.changed_paths
-            .push(focus_pointer.display().to_string());
+        plan.changed_paths.push(focus_pointer.display().to_string());
     }
     let registry_path = mirror_root.join("task_registry.json");
     let existing_registry = read_json_strict(&registry_path).unwrap_or_else(|_| json!({}));
@@ -349,7 +343,10 @@ fn write_focused_repo_mirrors(
                 map.insert("task".to_string(), Value::String(plan.task.clone()));
                 map.insert("phase".to_string(), Value::String(plan.phase.clone()));
                 map.insert("status".to_string(), Value::String(plan.status.clone()));
-                map.insert("updated_at".to_string(), Value::String(updated_at.to_string()));
+                map.insert(
+                    "updated_at".to_string(),
+                    Value::String(updated_at.to_string()),
+                );
                 map.insert("resume_allowed".to_string(), Value::Bool(true));
                 found = true;
                 break;
@@ -369,8 +366,7 @@ fn write_focused_repo_mirrors(
     let (normalized_registry, _, _) =
         super::normalize_task_registry_rows(plan.task_id.clone(), registry_rows);
     if write_json_if_changed(&registry_path, &normalized_registry)? {
-        plan.changed_paths
-            .push(registry_path.display().to_string());
+        plan.changed_paths.push(registry_path.display().to_string());
     }
     let supervisor_state_path = repo_root.join(SUPERVISOR_STATE_FILENAME);
     assert_expected_file_hash(
@@ -399,7 +395,8 @@ fn write_task_pointers_entry(
     mirror_root: &Path,
     entry: TaskRegistryEntry<'_>,
 ) -> Result<bool, String> {
-    let existing = read_json_strict(&mirror_root.join(TASK_POINTERS_FILENAME)).unwrap_or_else(|_| json!({}));
+    let existing =
+        read_json_strict(&mirror_root.join(TASK_POINTERS_FILENAME)).unwrap_or_else(|_| json!({}));
     let focus_task = entry.focus_task_id.map_or_else(
         || safe_slug(&value_text(existing.get("focus_task_id"))),
         ToString::to_string,
@@ -479,7 +476,6 @@ fn write_session_artifact_set(
     }
     Ok(())
 }
-
 
 fn session_artifact_payloads(payload: &Value) -> (Vec<String>, Vec<Value>) {
     let next_actions = payload
@@ -649,7 +645,10 @@ fn build_session_supervisor_state_payload(input: SupervisorStateInput<'_>) -> Va
     if let Some(skills) = input.matched_skills {
         let mut trace = serde_json::Map::new();
         trace.insert("matched_skills".to_string(), skills.clone());
-        trace.insert("updated_at".to_string(), Value::String(chrono::Utc::now().to_rfc3339()));
+        trace.insert(
+            "updated_at".to_string(),
+            Value::String(chrono::Utc::now().to_rfc3339()),
+        );
         payload.insert("trace_metadata".to_string(), Value::Object(trace));
     }
     payload.insert(
@@ -724,7 +723,6 @@ fn normalized_string_array(value: Option<&Value>) -> Option<Vec<Value>> {
 fn current_local_timestamp() -> String {
     Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
 }
-
 
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();

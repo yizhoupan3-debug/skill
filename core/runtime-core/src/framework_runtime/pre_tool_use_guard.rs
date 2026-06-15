@@ -10,11 +10,12 @@
 //! No hardcoded host ID list — all host identity is resolved via registry capabilities.
 
 use crate::hook_policy::{
-    dangerous_bash_reason, dangerous_mcp_tool_reason, evaluate_hook_policy, HookPolicyEvaluateRequest,
+    HookPolicyEvaluateRequest, dangerous_bash_reason, dangerous_mcp_tool_reason,
+    evaluate_hook_policy,
 };
 use crate::runtime_registry::load_runtime_registry_json;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
@@ -175,11 +176,8 @@ pub fn evaluate_pre_tool_use_guard(
         });
     let host_id = request.host_id.trim().to_string();
     let tool_name = request.tool_name.trim().to_string();
-    let strict = host_requires_strict_pre_tool_fallback(
-        &host_id,
-        &repo_root,
-        request.has_native_hook,
-    )?;
+    let strict =
+        host_requires_strict_pre_tool_fallback(&host_id, &repo_root, request.has_native_hook)?;
     let phase = request
         .phase
         .as_deref()
@@ -196,7 +194,11 @@ pub fn evaluate_pre_tool_use_guard(
             request.approval_digest.as_deref(),
             &digest,
         );
-        crate::telemetry_emit::emit_tool_call(&tool_name, 0, approved && verdict != PreToolUseGuardVerdict::Block);
+        crate::telemetry_emit::emit_tool_call(
+            &tool_name,
+            0,
+            approved && verdict != PreToolUseGuardVerdict::Block,
+        );
         crate::telemetry_emit::emit_hook_fired(
             "pre_tool_use_guard",
             if approved { "approve" } else { "deny" },
@@ -236,10 +238,13 @@ pub fn evaluate_pre_tool_use_guard(
         ));
     }
 
-    let (verdict, reason, categories) = classify_high_risk(&tool_name, &request.tool_input, &repo_root)?;
+    let (verdict, reason, categories) =
+        classify_high_risk(&tool_name, &request.tool_input, &repo_root)?;
     let final_verdict = match verdict {
         PreToolUseGuardVerdict::Block => PreToolUseGuardVerdict::Block,
-        PreToolUseGuardVerdict::RequiresStdioApproval => PreToolUseGuardVerdict::RequiresStdioApproval,
+        PreToolUseGuardVerdict::RequiresStdioApproval => {
+            PreToolUseGuardVerdict::RequiresStdioApproval
+        }
         PreToolUseGuardVerdict::Allow => PreToolUseGuardVerdict::Allow,
     };
     let needs_digest = final_verdict == PreToolUseGuardVerdict::RequiresStdioApproval;
@@ -256,11 +261,7 @@ pub fn evaluate_pre_tool_use_guard(
         final_verdict,
         reason,
         categories,
-        if needs_digest {
-            Some(digest)
-        } else {
-            None
-        },
+        if needs_digest { Some(digest) } else { None },
     ))
 }
 
@@ -464,7 +465,9 @@ mod tests {
     #[test]
     fn host_provider_override_native_hook_disables_strict_fallback() {
         let root = skill_repo_root();
-        assert!(!host_requires_strict_pre_tool_fallback("unknown-host", &root, Some(true)).unwrap());
+        assert!(
+            !host_requires_strict_pre_tool_fallback("unknown-host", &root, Some(true)).unwrap()
+        );
     }
 
     #[test]
@@ -482,7 +485,10 @@ mod tests {
         })
         .expect("evaluate");
         assert!(evaluate.strict_fallback_active);
-        assert_eq!(evaluate.verdict, PreToolUseGuardVerdict::RequiresStdioApproval);
+        assert_eq!(
+            evaluate.verdict,
+            PreToolUseGuardVerdict::RequiresStdioApproval
+        );
         assert!(evaluate.blocked);
         let digest = evaluate.approval_digest.expect("digest");
 
@@ -586,8 +592,11 @@ mod tests {
             "tool_input": {"command": "git status"},
             "repo_root": root.display().to_string(),
         });
-        let out = crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request("pre_tool_use_guard", payload)
-            .expect("stdio dispatch");
+        let out = crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request(
+            "pre_tool_use_guard",
+            payload,
+        )
+        .expect("stdio dispatch");
         assert_eq!(out["verdict"], "allow");
     }
 

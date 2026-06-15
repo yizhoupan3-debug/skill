@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::env;
 use std::fs;
@@ -233,7 +233,8 @@ fn sync_host_entrypoint_file(
     apply: bool,
     report: &mut SingleSyncReport,
 ) -> Result<(), String> {
-    let destination = core_state::utils::path_guard::join_repo_relative_under_root(target_root, relative)?;
+    let destination =
+        core_state::utils::path_guard::join_repo_relative_under_root(target_root, relative)?;
     let existing = fs::read(&destination).ok();
 
     // 对 JSON 文件进行语义比较，消除格式差异导致的误判
@@ -400,8 +401,8 @@ fn describe_host_entrypoint_path(report_root: &Path, target_root: &Path, path: &
 
 #[cfg(test)]
 mod tests {
-    use serial_test::serial;
     use super::*;
+    use serial_test::serial;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
@@ -427,7 +428,10 @@ mod tests {
         );
 
         let mut files = BTreeMap::new();
-        files.insert("AGENTS_CODEX.md".to_string(), b"fake codex delta\n".to_vec());
+        files.insert(
+            "AGENTS_CODEX.md".to_string(),
+            b"fake codex delta\n".to_vec(),
+        );
         files.insert(".fake/hooks.json".to_string(), b"{\"hooks\":{}}\n".to_vec());
         let provider = HostEntrypointPayloadProvider {
             files,
@@ -525,11 +529,13 @@ mod tests {
             .unwrap_or_else(|_| sibling.to_path_buf())
             .to_string_lossy()
             .into_owned();
-        assert!(report["synced_worktrees"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|item| item.as_str() == Some(sibling_canonical.as_str())));
+        assert!(
+            report["synced_worktrees"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|item| item.as_str() == Some(sibling_canonical.as_str()))
+        );
         assert_eq!(
             fs::read_to_string(sibling.join("AGENTS_CODEX.md")).unwrap(),
             "local sibling codex delta\n"

@@ -1,5 +1,5 @@
 use crate::config::EvolutionConfig;
-use crate::telemetry_journal::{event_within_window, load_telemetry_journal, TelemetryEvent};
+use crate::telemetry_journal::{TelemetryEvent, event_within_window, load_telemetry_journal};
 use anyhow::Context;
 use chrono::{Duration, Utc};
 use serde_json::json;
@@ -100,8 +100,7 @@ pub fn run_analyze(
         },
     });
 
-    fs::create_dir_all(output_dir)
-        .with_context(|| format!("create {}", output_dir.display()))?;
+    fs::create_dir_all(output_dir).with_context(|| format!("create {}", output_dir.display()))?;
     let out_path = output_dir.join("analysis.json");
     fs::write(
         &out_path,
@@ -146,16 +145,8 @@ mod tests {
             r#"{{"kind":"hook_fired","hook_name":"stop","action":"allow"}}"#
         )
         .unwrap();
-        writeln!(
-            f,
-            r#"{{"kind":"rfv_round","round":1,"verdict":"PASS"}}"#
-        )
-        .unwrap();
-        writeln!(
-            f,
-            r#"{{"kind":"rfv_round","round":2,"verdict":"FAIL"}}"#
-        )
-        .unwrap();
+        writeln!(f, r#"{{"kind":"rfv_round","round":1,"verdict":"PASS"}}"#).unwrap();
+        writeln!(f, r#"{{"kind":"rfv_round","round":2,"verdict":"FAIL"}}"#).unwrap();
         let path = run_analyze(&journal, &out, 30, &EvolutionConfig::default()).unwrap();
         let raw = std::fs::read_to_string(path).unwrap();
         assert!(raw.contains("hook_fired_by_name"));

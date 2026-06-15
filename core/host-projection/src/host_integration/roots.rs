@@ -210,7 +210,10 @@ pub fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<Path
     Ok(root)
 }
 
-pub fn resolve_project_root(explicit: Option<&Path>, framework_root: &Path) -> Result<PathBuf, String> {
+pub fn resolve_project_root(
+    explicit: Option<&Path>,
+    framework_root: &Path,
+) -> Result<PathBuf, String> {
     if let Some(path) = explicit {
         return normalize_path(path);
     }
@@ -356,7 +359,9 @@ pub fn mcp_router_rs_command_value(command: &McpRouterRsCommand) -> Value {
     }
 }
 
-pub fn ensure_router_rs_installed_for_mcp_with_roots(roots: &ResolvedProjectionRoots) -> Result<(), String> {
+pub fn ensure_router_rs_installed_for_mcp_with_roots(
+    roots: &ResolvedProjectionRoots,
+) -> Result<(), String> {
     if matches!(
         resolve_mcp_router_rs_command(&roots.framework_root),
         McpRouterRsCommand::CargoBootstrap
@@ -463,10 +468,7 @@ pub fn mcp_codegraph_command_value(command: &McpCodegraphCommand) -> Value {
     }
 }
 
-pub fn codegraph_mcp_cargo_bootstrap_args(
-    framework_root: &Path,
-    repo_root: &str,
-) -> Vec<String> {
+pub fn codegraph_mcp_cargo_bootstrap_args(framework_root: &Path, repo_root: &str) -> Vec<String> {
     vec![
         "run".to_string(),
         "--release".to_string(),
@@ -476,7 +478,10 @@ pub fn codegraph_mcp_cargo_bootstrap_args(
         "--bin".to_string(),
         "mcp-codegraph".to_string(),
         "--manifest-path".to_string(),
-        framework_root.join("Cargo.toml").to_string_lossy().into_owned(),
+        framework_root
+            .join("Cargo.toml")
+            .to_string_lossy()
+            .into_owned(),
         "--".to_string(),
         "--repo-root".to_string(),
         repo_root.to_string(),
@@ -582,4 +587,3 @@ pub fn nearest_marker_root(start: &Path, marker: &str) -> Option<PathBuf> {
         .find(|candidate| candidate.join(marker).exists())
         .map(Path::to_path_buf)
 }
-

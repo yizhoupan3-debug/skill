@@ -55,9 +55,7 @@ fn main() {
 
     for host_id in &supported {
         if !providers.contains_key(host_id) {
-            panic!(
-                "host_targets.host_providers missing entry for supported host `{host_id}`"
-            );
+            panic!("host_targets.host_providers missing entry for supported host `{host_id}`");
         }
     }
     for host_id in providers.keys() {

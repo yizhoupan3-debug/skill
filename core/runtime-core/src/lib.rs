@@ -12,10 +12,10 @@ pub use rt_storage::runtime_storage;
 pub mod trace_runtime;
 
 // ── migrated modules (B3) ──
+pub use contracts::closeout_enforcement;
+pub use contracts::execution_contract;
 pub mod framework_runtime;
 pub mod session_supervisor;
-pub mod closeout_enforcement;
-pub mod execution_contract;
 pub use framework_kernel::framework_profile;
 pub mod rfv_loop;
 pub mod schema_drift;
@@ -23,41 +23,44 @@ pub mod schema_drift;
 // ── browser dispatch hook (decouples runtime-core from browser-mcp crate) ──
 pub mod browser_dispatch_hook;
 
+// ── contracts: zero-dependency modules grouped for clarity ──
+pub mod contracts;
+
 // ── proxy / re-export modules ──
-pub mod autopilot_goal;
-pub mod atomic_write;
-pub mod formal_toolchain;
-pub mod kernel_bootstrap;
-pub mod path_guard;
-pub mod task_state;
-pub mod task_state_aggregate;
-pub mod task_ledger;
-pub mod step_ledger;
-pub mod task_write_lock;
+pub use contracts::atomic_write;
+pub use contracts::autopilot_goal;
+pub use contracts::formal_toolchain;
+pub use contracts::kernel_bootstrap;
+pub use contracts::path_guard;
+pub use contracts::step_ledger;
+pub use contracts::task_ledger;
+pub use contracts::task_state;
+pub use contracts::task_state_aggregate;
+pub use contracts::task_write_lock;
 
 // ── migrated supporting modules ──
 // browser_mcp: physically migrated to core/browser-mcp crate (§2.4)
 // Use browser-mcp crate directly; dispatch via browser_dispatch_hook.
 #[cfg(feature = "codegraph")]
-pub mod codegraph_mcp;
-#[cfg(feature = "codegraph")]
 pub mod cli;
+#[cfg(feature = "codegraph")]
+pub mod codegraph_mcp;
 pub mod eval_route;
 pub use framework_kernel::framework_host_targets;
 pub mod framework_maint;
-pub mod framework_skills;
-pub mod harness_context_signals;
-pub mod harness_contract;
-pub mod hook_event_routing;
-pub mod hook_outbound_protect;
-pub mod hook_timing;
+pub use contracts::framework_skills;
+pub use contracts::harness_context_signals;
+pub use contracts::harness_contract;
+pub use contracts::hook_event_routing;
+pub use contracts::hook_outbound_protect;
+pub use contracts::hook_timing;
 pub use host_projection::host_entrypoint_sync;
 pub use host_projection::host_integration;
 pub mod hosts;
-pub mod mcp_pre_guard;
+pub use contracts::mcp_pre_guard;
 pub mod paper_adversarial_hook;
 pub mod paper_prose_hook;
-pub mod review_gate;
+pub use contracts::review_gate;
 pub mod route;
 pub use framework_kernel::router_self;
 // runtime_registry: re-export from framework-kernel + review gate additions from core-policy
@@ -65,32 +68,32 @@ pub mod runtime_registry {
     pub use framework_kernel::runtime_registry::*;
     // Review gate re-exports that were previously in this module
     pub use core_policy::registry_review_gate::{
-        check_review_gate_registry_snapshot, clear_hook_registry_repo_root,
+        HookRegistryRepoGuard, check_review_gate_registry_snapshot, clear_hook_registry_repo_root,
         is_reviewer_lane_from_registry, lifecycle_profile_disables_spawn_first_nudge,
         review_spawn_first_enabled, review_spawn_first_nudge_line,
         review_subagent_model_inherit_nudge_line, reviewer_lanes_prompt_lines,
         reviewer_lanes_sorted, set_hook_registry_repo_root,
-        spawn_first_includes_model_inherit_for_host, HookRegistryRepoGuard,
+        spawn_first_includes_model_inherit_for_host,
     };
 }
-pub mod session_call_tracker;
+pub use contracts::session_call_tracker;
 pub use framework_kernel::skill_repo;
 pub use framework_kernel::stdio_payload_types;
-pub mod stdio_transport;
-pub mod task_command;
-pub mod telemetry_emit;
-pub mod web_fetch_guard;
-#[cfg(test)]
-pub mod test_env_sync;
-pub mod mcp_stdio_test_support;
 #[allow(unused_imports)]
 pub mod integration_test_prelude;
+pub mod mcp_stdio_test_support;
+pub mod stdio_transport;
+pub use contracts::task_command;
+pub mod telemetry_emit;
+#[cfg(test)]
+pub mod test_env_sync;
+pub use contracts::web_fetch_guard;
 
 // ── modules with transitive deps ──
-pub mod harness_operator_nudges;
-pub mod hook_observation_rules;
-pub mod router_env_flags;
-pub mod router_rs_observation;
+pub use contracts::harness_operator_nudges;
+pub use contracts::hook_observation_rules;
+pub use contracts::router_env_flags;
+pub use contracts::router_rs_observation;
 
 // ── path-qualified module ──
 #[path = "utils/hook_posttool_normalize.rs"]
@@ -105,9 +108,9 @@ pub(crate) use core_policy::review_gate_engine;
 pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;
 
 // ── host submodule re-exports (for `crate::X` path compat) ──
-pub use hosts::cursor_hooks;
-pub use hosts::codex_hooks;
 pub use hosts::claude_code_hooks;
+pub use hosts::codex_hooks;
+pub use hosts::cursor_hooks;
 pub use hosts::mcp_stdio_harness;
 
 // ── routing-engine hook registration ──
@@ -179,8 +182,8 @@ pub fn register_host_projection_hooks() {
         );
 
         host_projection::hooks::register_router_rs_observation(
-            |_output, _host| {},  // attach: no-op (runtime-core handles directly)
-            |_output| {},          // strip: no-op
+            |_output, _host| {}, // attach: no-op (runtime-core handles directly)
+            |_output| {},        // strip: no-op
         );
 
         host_projection::hooks::register_kernel_bootstrap(
@@ -192,13 +195,19 @@ pub fn register_host_projection_hooks() {
                 paper_prose_hook::maybe_append_paper_prose_context(root, prompt, lines, host)
             },
             |root, output, prompt, followup| {
-                paper_prose_hook::maybe_merge_paper_prose_before_submit(root, output, prompt, followup)
+                paper_prose_hook::maybe_merge_paper_prose_before_submit(
+                    root, output, prompt, followup,
+                )
             },
             |root, prompt, lines, host| {
-                paper_adversarial_hook::maybe_append_paper_adversarial_context(root, prompt, lines, host)
+                paper_adversarial_hook::maybe_append_paper_adversarial_context(
+                    root, prompt, lines, host,
+                )
             },
             |root, output, prompt, followup| {
-                paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(root, output, prompt, followup)
+                paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(
+                    root, output, prompt, followup,
+                )
             },
         );
 
@@ -207,14 +216,30 @@ pub fn register_host_projection_hooks() {
             framework_runtime::resolve_repo_root_arg,
             framework_runtime::current_local_timestamp,
             framework_runtime::write_framework_session_artifacts,
-            |records, runtime_path, manifest_path, host_id, query, session_id, allow_overlay, first_turn| {
-                framework_runtime::route_task_with_manifest_fallback(records, runtime_path, manifest_path, host_id, query, session_id, allow_overlay, first_turn)
-                    .map(|d| host_projection::hooks::RouteDecision {
-                        selected_skill: d.selected_skill,
-                        selected_skill_path: d.selected_skill_path,
-                        reasons: d.reasons,
-                        score: d.score,
-                    })
+            |records,
+             runtime_path,
+             manifest_path,
+             host_id,
+             query,
+             session_id,
+             allow_overlay,
+             first_turn| {
+                framework_runtime::route_task_with_manifest_fallback(
+                    records,
+                    runtime_path,
+                    manifest_path,
+                    host_id,
+                    query,
+                    session_id,
+                    allow_overlay,
+                    first_turn,
+                )
+                .map(|d| host_projection::hooks::RouteDecision {
+                    selected_skill: d.selected_skill,
+                    selected_skill_path: d.selected_skill_path,
+                    reasons: d.reasons,
+                    score: d.score,
+                })
             },
             framework_runtime::build_framework_runtime_snapshot_envelope,
             framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
@@ -230,8 +255,9 @@ pub fn register_host_projection_hooks() {
         // web_fetch_guard: convert (Url, Vec<SocketAddr>) → (String, Vec<String>)
         host_projection::hooks::register_web_fetch_guard_extra(
             |url| {
-                web_fetch_guard::validate_and_resolve_web_fetch_url(url)
-                    .map(|(u, addrs)| (u.to_string(), addrs.iter().map(|a| a.to_string()).collect()))
+                web_fetch_guard::validate_and_resolve_web_fetch_url(url).map(|(u, addrs)| {
+                    (u.to_string(), addrs.iter().map(|a| a.to_string()).collect())
+                })
             },
             |base, location| {
                 let base_url = reqwest::Url::parse(base)
@@ -245,15 +271,13 @@ pub fn register_host_projection_hooks() {
             },
         );
 
-        host_projection::hooks::register_mcp_pre_guard_extra(
-            |tool, args, repo_root| {
-                let v = mcp_pre_guard::evaluate_mcp_pre_guard_safe(tool, args, repo_root);
-                host_projection::hooks::McpPreGuardVerdict {
-                    blocked: v.blocked,
-                    reason: v.reason,
-                }
-            },
-        );
+        host_projection::hooks::register_mcp_pre_guard_extra(|tool, args, repo_root| {
+            let v = mcp_pre_guard::evaluate_mcp_pre_guard_safe(tool, args, repo_root);
+            host_projection::hooks::McpPreGuardVerdict {
+                blocked: v.blocked,
+                reason: v.reason,
+            }
+        });
 
         // ── RFV loop full implementation (supports append_round) ──
         host_projection::hooks::register_rfv_loop_drive(rfv_loop::framework_rfv_loop);

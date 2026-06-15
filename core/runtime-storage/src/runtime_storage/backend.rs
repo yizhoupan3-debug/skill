@@ -1,4 +1,4 @@
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const RUNTIME_BACKEND_FAMILY_CATALOG_SCHEMA_VERSION: &str =
     "runtime-persistence-backend-family-catalog-v1";

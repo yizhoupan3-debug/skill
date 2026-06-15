@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn resolve_uses_builtin_when_file_missing() {
         let _g = harness_nudges_env_test_lock();
-        std::env::remove_var(HARNESS_NUDGES_ENV);
+        unsafe { std::env::remove_var(HARNESS_NUDGES_ENV) };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-missing-{}",
             std::time::SystemTime::now()
@@ -176,16 +176,17 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         let n = resolve_harness_operator_nudges(&tmp);
-        assert!(n
-            .rfv_loop_continue_reasoning_depth
-            .contains("EVIDENCE_INDEX"));
+        assert!(
+            n.rfv_loop_continue_reasoning_depth
+                .contains("EVIDENCE_INDEX")
+        );
         assert!(n.autopilot_drive_compact_reasoning_depth.contains("切片"));
     }
 
     #[test]
     fn resolve_overrides_from_json() {
         let _g = harness_nudges_env_test_lock();
-        std::env::remove_var(HARNESS_NUDGES_ENV);
+        unsafe { std::env::remove_var(HARNESS_NUDGES_ENV) };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-override-{}",
             std::time::SystemTime::now()
@@ -212,7 +213,7 @@ mod tests {
     #[test]
     fn resolve_math_line_from_json() {
         let _g = harness_nudges_env_test_lock();
-        std::env::remove_var(HARNESS_NUDGES_ENV);
+        unsafe { std::env::remove_var(HARNESS_NUDGES_ENV) };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-math-{}",
             std::time::SystemTime::now()
@@ -238,7 +239,7 @@ mod tests {
     #[test]
     fn resolve_retrieval_line_from_json() {
         let _g = harness_nudges_env_test_lock();
-        std::env::remove_var(HARNESS_NUDGES_ENV);
+        unsafe { std::env::remove_var(HARNESS_NUDGES_ENV) };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-retrieval-{}",
             std::time::SystemTime::now()
@@ -266,8 +267,8 @@ mod tests {
     #[test]
     fn schema_version_mismatch_falls_back_to_builtin_defaults() {
         let _g = harness_nudges_env_test_lock();
-        std::env::remove_var(HARNESS_NUDGES_ENV);
-        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        unsafe { std::env::remove_var(HARNESS_NUDGES_ENV) };
+        unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-schema-mismatch-{}",
             std::time::SystemTime::now()
@@ -307,8 +308,8 @@ mod tests {
         let _g = harness_nudges_env_test_lock();
         let prior_nudge = std::env::var(HARNESS_NUDGES_ENV).ok();
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
-        std::env::remove_var(HARNESS_NUDGES_ENV);
-        std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+        unsafe { std::env::remove_var(HARNESS_NUDGES_ENV) };
+        unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0") };
         let tmp = std::env::temp_dir().join("harness-nudges-aggregate-off");
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
@@ -322,12 +323,12 @@ mod tests {
         assert!(n.retrieval_trace_harness_line.is_empty());
         assert!(n.rfv_loop_external_struct_hint_line.is_empty());
         match prior_nudge {
-            Some(v) => std::env::set_var(HARNESS_NUDGES_ENV, v),
-            None => std::env::remove_var(HARNESS_NUDGES_ENV),
+            Some(v) => unsafe { std::env::set_var(HARNESS_NUDGES_ENV, v) },
+            None => unsafe { std::env::remove_var(HARNESS_NUDGES_ENV) },
         }
         match prior_inject {
-            Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
-            None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") },
         }
     }
 
@@ -335,7 +336,7 @@ mod tests {
     fn env_off_yields_empty() {
         let _g = harness_nudges_env_test_lock();
         let prior = std::env::var(HARNESS_NUDGES_ENV).ok();
-        std::env::set_var(HARNESS_NUDGES_ENV, "0");
+        unsafe { std::env::set_var(HARNESS_NUDGES_ENV, "0") };
         let tmp = std::env::temp_dir().join("harness-nudges-env-off");
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
@@ -344,8 +345,8 @@ mod tests {
         assert!(n.retrieval_trace_harness_line.is_empty());
         assert!(n.rfv_loop_external_struct_hint_line.is_empty());
         match prior {
-            Some(v) => std::env::set_var(HARNESS_NUDGES_ENV, v),
-            None => std::env::remove_var(HARNESS_NUDGES_ENV),
+            Some(v) => unsafe { std::env::set_var(HARNESS_NUDGES_ENV, v) },
+            None => unsafe { std::env::remove_var(HARNESS_NUDGES_ENV) },
         }
     }
 }

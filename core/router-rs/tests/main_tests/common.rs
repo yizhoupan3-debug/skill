@@ -3,28 +3,18 @@ pub(super) use crate::integration_test_prelude::*;
 
 pub(super) use serde_json::{json, Map, Value};
 
-pub(super) use crate::cli::args::*;
-pub(super) use crate::cli::runtime_ops::LiveExecuteResult;
-pub(super) use crate::route::RouteDecision;
-pub(super) use crate::route::{
-    evaluate_routing_cases, load_records_cached_for_stdio_with_default_runtime_path,
-    load_records_from_manifest, load_routing_eval_cases, read_json, value_to_string,
-    ROUTE_POLICY_SCHEMA_VERSION,
-};
+pub(super) use std::collections::HashSet;
+pub(super) use std::fs;
 pub(super) use std::panic::{catch_unwind, AssertUnwindSafe};
-pub(super) use std::sync::Arc;
+pub(super) use std::path::{Path, PathBuf};
+pub(super) use std::sync::{Arc, Mutex, OnceLock};
 pub(super) use std::thread::{sleep, spawn};
-pub(super) use std::time::{SystemTime, UNIX_EPOCH};
+pub(super) use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 
 // Re-exports from lib.rs test-only scope (these were available via `use super::*`
 // when this file lived at the crate-root test module level).
 pub(super) use crate::cli::route_task_with_manifest_fallback;
-pub(super) use crate::cli::{
-    classify_stdio_op, dispatch_stdio_json_request, is_framework_stdio_op, is_routing_stdio_op,
-    is_runtime_stdio_op, is_trace_stdio_op, StdioOpDomain,
-};
-pub(super) use crate::cli::common::background_control_request_defaults;
 pub(super) use crate::cli::args::{
     BackgroundControlRequestPayload, SandboxControlRequestPayload,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
@@ -39,6 +29,37 @@ pub(super) use crate::execution_contract::{
 pub(super) use crate::framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 pub(super) use crate::route::ROUTE_REPORT_SCHEMA_VERSION;
 pub(super) use crate::hook_status;
+
+pub(super) fn execution_kernel_contract_shape_fields(shape: &Value) -> Vec<String> {
+    let object = shape.as_object().expect("contract shape object");
+    let mut keys: Vec<String> = object.keys().cloned().collect();
+    keys.sort_unstable();
+    keys
+}
+
+pub(super) fn background_control_request_defaults() -> BackgroundControlRequestPayload {
+    BackgroundControlRequestPayload {
+        schema_version: String::new(),
+        operation: String::new(),
+        multitask_strategy: None,
+        current_status: None,
+        task_active: None,
+        task_done: None,
+        active_job_count: None,
+        capacity_limit: None,
+        attempt: None,
+        retry_count: None,
+        max_attempts: None,
+        backoff_base_seconds: None,
+        backoff_multiplier: None,
+        max_backoff_seconds: None,
+        requested_parallel_group_id: None,
+        request_parallel_group_ids: None,
+        request_lane_ids: None,
+        lane_id_prefix: None,
+        batch_size: None,
+    }
+}
 
 pub(super) fn fixture_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/routing_route_fixtures.json")
@@ -181,15 +202,15 @@ where
     let previous = std::env::var_os(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV);
 
     match value {
-        Some(raw) => std::env::set_var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, raw),
-        None => std::env::remove_var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV),
+        Some(raw) => unsafe { std::env::set_var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, raw) },
+        None => unsafe { std::env::remove_var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV) },
     }
 
     let outcome = catch_unwind(AssertUnwindSafe(test_fn));
 
     match previous {
-        Some(raw) => std::env::set_var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, raw),
-        None => std::env::remove_var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV),
+        Some(raw) => unsafe { std::env::set_var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, raw) },
+        None => unsafe { std::env::remove_var(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV) },
     }
 
     if let Err(payload) = outcome {
@@ -206,7 +227,7 @@ impl CloseoutStrictEnvGuard {
     pub(super) fn new() -> Self {
         let prior = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
         // 显式开启硬门禁：本地默认已改为「未设置则软」，测试必须不依赖全局 CI 变量。
-        std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1");
+        unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1") };
         Self { prior }
     }
 }
@@ -214,8 +235,8 @@ impl CloseoutStrictEnvGuard {
 impl Drop for CloseoutStrictEnvGuard {
     fn drop(&mut self) {
         match &self.prior {
-            Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
-            None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }
 }
@@ -233,9 +254,9 @@ impl CiHardUnsetCloseoutEnvGuard {
         let prior_ci = std::env::var("CI").ok();
         let prior_github_actions = std::env::var("GITHUB_ACTIONS").ok();
         let prior_closeout = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
-        std::env::set_var("CI", "true");
-        std::env::remove_var("GITHUB_ACTIONS");
-        std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT");
+        unsafe { std::env::set_var("CI", "true") };
+        unsafe { std::env::remove_var("GITHUB_ACTIONS") };
+        unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") };
         Self {
             prior_ci,
             prior_github_actions,
@@ -247,16 +268,16 @@ impl CiHardUnsetCloseoutEnvGuard {
 impl Drop for CiHardUnsetCloseoutEnvGuard {
     fn drop(&mut self) {
         match &self.prior_ci {
-            Some(v) => std::env::set_var("CI", v),
-            None => std::env::remove_var("CI"),
+            Some(v) => unsafe { std::env::set_var("CI", v) },
+            None => unsafe { std::env::remove_var("CI") },
         }
         match &self.prior_github_actions {
-            Some(v) => std::env::set_var("GITHUB_ACTIONS", v),
-            None => std::env::remove_var("GITHUB_ACTIONS"),
+            Some(v) => unsafe { std::env::set_var("GITHUB_ACTIONS", v) },
+            None => unsafe { std::env::remove_var("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
-            None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }
 }
@@ -274,9 +295,9 @@ impl GithubActionsHardUnsetCloseoutEnvGuard {
         let prior_ci = std::env::var("CI").ok();
         let prior_github_actions = std::env::var("GITHUB_ACTIONS").ok();
         let prior_closeout = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
-        std::env::remove_var("CI");
-        std::env::set_var("GITHUB_ACTIONS", "true");
-        std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT");
+        unsafe { std::env::remove_var("CI") };
+        unsafe { std::env::set_var("GITHUB_ACTIONS", "true") };
+        unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") };
         Self {
             prior_ci,
             prior_github_actions,
@@ -288,16 +309,16 @@ impl GithubActionsHardUnsetCloseoutEnvGuard {
 impl Drop for GithubActionsHardUnsetCloseoutEnvGuard {
     fn drop(&mut self) {
         match &self.prior_ci {
-            Some(v) => std::env::set_var("CI", v),
-            None => std::env::remove_var("CI"),
+            Some(v) => unsafe { std::env::set_var("CI", v) },
+            None => unsafe { std::env::remove_var("CI") },
         }
         match &self.prior_github_actions {
-            Some(v) => std::env::set_var("GITHUB_ACTIONS", v),
-            None => std::env::remove_var("GITHUB_ACTIONS"),
+            Some(v) => unsafe { std::env::set_var("GITHUB_ACTIONS", v) },
+            None => unsafe { std::env::remove_var("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
-            None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }
 }
@@ -314,9 +335,9 @@ impl CiWithCloseoutDisabledEnvGuard {
         let prior_ci = std::env::var("CI").ok();
         let prior_github_actions = std::env::var("GITHUB_ACTIONS").ok();
         let prior_closeout = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
-        std::env::set_var("CI", "true");
-        std::env::remove_var("GITHUB_ACTIONS");
-        std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "0");
+        unsafe { std::env::set_var("CI", "true") };
+        unsafe { std::env::remove_var("GITHUB_ACTIONS") };
+        unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "0") };
         Self {
             prior_ci,
             prior_github_actions,
@@ -328,16 +349,16 @@ impl CiWithCloseoutDisabledEnvGuard {
 impl Drop for CiWithCloseoutDisabledEnvGuard {
     fn drop(&mut self) {
         match &self.prior_ci {
-            Some(v) => std::env::set_var("CI", v),
-            None => std::env::remove_var("CI"),
+            Some(v) => unsafe { std::env::set_var("CI", v) },
+            None => unsafe { std::env::remove_var("CI") },
         }
         match &self.prior_github_actions {
-            Some(v) => std::env::set_var("GITHUB_ACTIONS", v),
-            None => std::env::remove_var("GITHUB_ACTIONS"),
+            Some(v) => unsafe { std::env::set_var("GITHUB_ACTIONS", v) },
+            None => unsafe { std::env::remove_var("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
-            None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }
 }
@@ -354,9 +375,9 @@ impl LocalNonCiEmptyCloseoutEnvGuard {
         let prior_ci = std::env::var("CI").ok();
         let prior_github_actions = std::env::var("GITHUB_ACTIONS").ok();
         let prior_closeout = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
-        std::env::remove_var("CI");
-        std::env::remove_var("GITHUB_ACTIONS");
-        std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "");
+        unsafe { std::env::remove_var("CI") };
+        unsafe { std::env::remove_var("GITHUB_ACTIONS") };
+        unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "") };
         Self {
             prior_ci,
             prior_github_actions,
@@ -368,16 +389,16 @@ impl LocalNonCiEmptyCloseoutEnvGuard {
 impl Drop for LocalNonCiEmptyCloseoutEnvGuard {
     fn drop(&mut self) {
         match &self.prior_ci {
-            Some(v) => std::env::set_var("CI", v),
-            None => std::env::remove_var("CI"),
+            Some(v) => unsafe { std::env::set_var("CI", v) },
+            None => unsafe { std::env::remove_var("CI") },
         }
         match &self.prior_github_actions {
-            Some(v) => std::env::set_var("GITHUB_ACTIONS", v),
-            None => std::env::remove_var("GITHUB_ACTIONS"),
+            Some(v) => unsafe { std::env::set_var("GITHUB_ACTIONS", v) },
+            None => unsafe { std::env::remove_var("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
-            None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }
 }

@@ -11,14 +11,14 @@
 
 // route_task_with_manifest_fallback — not needed in host-projection; skill routing via framework_kernel
 // framework_runtime functions accessed via crate::hooks
-use routing_engine::route::filter_records_for_host;
-use crate::hooks::{
-    check_anomalies, init_tracker, read_tracker_state, record_tool_call,
-};
+use crate::hooks::{check_anomalies, init_tracker, read_tracker_state, record_tool_call};
 use core_policy::hook_common::is_review_prompt;
-use core_policy::review_gate_engine::{fork_context_from_values, review_independent_reviewer_evidence};
+use core_policy::review_gate_engine::{
+    fork_context_from_values, review_independent_reviewer_evidence,
+};
 use core_state::task_state::resolve_task_view;
-use serde_json::{json, Value};
+use routing_engine::route::filter_records_for_host;
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, Write};
@@ -55,7 +55,6 @@ fn reject_retired_claude_desktop_host(host_id: &str) -> Result<(), String> {
     }
     Ok(())
 }
-
 
 fn list_known_task_ids(repo_root: &Path) -> Vec<String> {
     let current = repo_root.join("artifacts/current");
@@ -141,9 +140,7 @@ macro_rules! poison_safe_read_lock {
         match $lock.read() {
             Ok(guard) => Some(guard),
             Err(poisoned) => {
-                eprintln!(
-                    "[router-rs warning] rwlock poisoned (read), recovering"
-                );
+                eprintln!("[router-rs warning] rwlock poisoned (read), recovering");
                 Some(poisoned.into_inner())
             }
         }
@@ -155,9 +152,7 @@ macro_rules! poison_safe_write_lock {
         match $lock.write() {
             Ok(guard) => Some(guard),
             Err(poisoned) => {
-                eprintln!(
-                    "[router-rs warning] rwlock poisoned (write), recovering"
-                );
+                eprintln!("[router-rs warning] rwlock poisoned (write), recovering");
                 Some(poisoned.into_inner())
             }
         }
@@ -186,15 +181,20 @@ fn get_snapshot_cache() -> &'static Arc<std::sync::RwLock<Option<SnapshotCache>>
     SNAPSHOT_CACHE.get_or_init(|| Arc::new(std::sync::RwLock::new(None)))
 }
 
-fn get_task_view_cache(
-) -> &'static Arc<std::sync::RwLock<HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>>> {
+fn get_task_view_cache() -> &'static Arc<
+    std::sync::RwLock<HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>>,
+> {
     TASK_VIEW_CACHE.get_or_init(|| Arc::new(std::sync::RwLock::new(HashMap::new())))
 }
 
 fn get_rate_limiter() -> &'static Arc<std::sync::Mutex<RateLimiter>> {
     RATE_LIMITER.get_or_init(|| {
         // In test mode or when test-support feature is enabled, disable rate limiting
-        let interval = if cfg!(test) || cfg!(feature = "test-support") { 0 } else { 100 };
+        let interval = if cfg!(test) || cfg!(feature = "test-support") {
+            0
+        } else {
+            100
+        };
         Arc::new(std::sync::Mutex::new(RateLimiter::new(interval)))
     })
 }
@@ -262,7 +262,7 @@ fn get_cached_task_view(repo_root: &Path) -> core_state::task_state::ResolvedTas
     {
         let cache = get_task_view_cache();
         if let Some(guard) = poison_safe_read_lock!(cache) {
-            if let Some((ref view, ref expires_at)) = guard.get(&cache_key) {
+            if let Some((view, expires_at)) = guard.get(&cache_key) {
                 if Instant::now() < *expires_at {
                     return view.clone();
                 }
@@ -328,7 +328,9 @@ pub fn run_mcp_stdio<R: BufRead, W: Write>(
     let connection_session_id = generate_connection_session_id(host_id);
     let mut transport_mode = None;
     while let Some(message) = read_mcp_message(&mut input, &mut transport_mode)? {
-        if let Some(response) = handle_mcp_request(&message, repo_root, host_id, &connection_session_id) {
+        if let Some(response) =
+            handle_mcp_request(&message, repo_root, host_id, &connection_session_id)
+        {
             write_mcp_response(
                 &mut output,
                 transport_mode.unwrap_or(McpTransportMode::NewlineDelimited),
@@ -457,7 +459,12 @@ fn generate_connection_session_id(host_id: &str) -> String {
     format!("{host_id}-{nanos}")
 }
 
-pub fn handle_mcp_request(message: &str, repo_root: &Path, host_id: &str, connection_session_id: &str) -> Option<Value> {
+pub fn handle_mcp_request(
+    message: &str,
+    repo_root: &Path,
+    host_id: &str,
+    connection_session_id: &str,
+) -> Option<Value> {
     let request: Value = match serde_json::from_str(message) {
         Ok(v) => v,
         Err(err) => {
@@ -482,7 +489,13 @@ pub fn handle_mcp_request(message: &str, repo_root: &Path, host_id: &str, connec
         "notifications/initialized" => None,
         "notifications/cancelled" => None, // Per JSON-RPC spec, notifications should not receive responses
         "tools/list" => Some(handle_tools_list(id)),
-        "tools/call" => Some(handle_tools_call(id, &request, repo_root, host_id, connection_session_id)),
+        "tools/call" => Some(handle_tools_call(
+            id,
+            &request,
+            repo_root,
+            host_id,
+            connection_session_id,
+        )),
         "prompts/list" => Some(handle_prompts_list(id)),
         "prompts/get" => Some(handle_prompts_get(id, &request, repo_root, host_id)),
         "resources/list" => Some(handle_resources_list(id, repo_root)),
@@ -720,7 +733,6 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
     })
 }
 
-
 fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
     let task_id = arguments.get("task_id").and_then(Value::as_str);
     let state = core_state::state_manager::read_goal_state(repo_root, task_id);
@@ -753,7 +765,12 @@ fn handle_prompts_list(id: Option<Value>) -> Value {
     })
 }
 
-fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path, host_id: &str) -> Value {
+fn handle_prompts_get(
+    id: Option<Value>,
+    request: &Value,
+    repo_root: &Path,
+    host_id: &str,
+) -> Value {
     let default_params = json!({});
     let params = request.get("params").unwrap_or(&default_params);
     let prompt_name = params.get("name").and_then(Value::as_str).unwrap_or("");
@@ -789,7 +806,8 @@ fn handle_prompts_get(id: Option<Value>, request: &Value, repo_root: &Path, host
             let gate_mode =
                 mcp_closeout_gate_mode_narrative(repo_root, host_id, &host_name, lifecycle_profile);
             {
-                let lane_lines = core_policy::registry_review_gate::reviewer_lanes_prompt_lines(Some(repo_root));
+                let lane_lines =
+                    core_policy::registry_review_gate::reviewer_lanes_prompt_lines(Some(repo_root));
                 format!(
                     "[Review Gate -- {host_name} gating]\n\n\
                      This host uses MCP transport; there is no shell hook REVIEW_GATE observation.\n\n\
@@ -988,7 +1006,11 @@ fn parse_rfv_round_argument(value: Option<&Value>) -> Result<u64, String> {
     Err("append_round requires 'round' argument (integer)".to_string())
 }
 
-fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path, connection_session_id: &str) -> Result<String, String> {
+fn tool_rfv_loop_manage(
+    arguments: &Value,
+    repo_root: &Path,
+    connection_session_id: &str,
+) -> Result<String, String> {
     let operation = arguments
         .get("operation")
         .and_then(Value::as_str)
@@ -1053,7 +1075,9 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path, connection_session_
                 .and_then(Value::as_str)
                 .ok_or("append_round requires 'verify_result' argument (string)")?;
             if !matches!(verify_result, "PASS" | "FAIL" | "SKIPPED" | "UNKNOWN") {
-                return Err(format!("verify_result must be one of PASS/FAIL/SKIPPED/UNKNOWN, got: {verify_result}"));
+                return Err(format!(
+                    "verify_result must be one of PASS/FAIL/SKIPPED/UNKNOWN, got: {verify_result}"
+                ));
             }
             payload["verify_result"] = json!(verify_result);
 
@@ -1072,7 +1096,7 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path, connection_session_
         _ => {
             return Err(format!(
                 "Unknown RFV loop operation: {operation}. Valid operations: start, append_round"
-            ))
+            ));
         }
     }
 
@@ -1085,7 +1109,11 @@ fn tool_rfv_loop_manage(arguments: &Value, repo_root: &Path, connection_session_
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
-fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_session_id: &str) -> Result<String, String> {
+fn tool_goal_state_manage(
+    arguments: &Value,
+    repo_root: &Path,
+    connection_session_id: &str,
+) -> Result<String, String> {
     let operation = arguments
         .get("operation")
         .and_then(Value::as_str)
@@ -1133,7 +1161,8 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
                     ]);
                 }
                 if arguments.get("validation_commands").is_none() {
-                    payload["validation_commands"] = json!(["cargo check --workspace", "cargo test --workspace"]);
+                    payload["validation_commands"] =
+                        json!(["cargo check --workspace", "cargo test --workspace"]);
                 }
             }
 
@@ -1193,15 +1222,18 @@ fn tool_goal_state_manage(arguments: &Value, repo_root: &Path, connection_sessio
         "append_round" => {
             // Defensive: not in goal_state_manage schema enum, but prevents confusion
             // if a caller sends it here instead of rfv_loop_manage.
-            return Err(
-                "append_round is not a valid goal_state_manage operation. \
-                 Use rfv_loop_manage with operation=append_round instead.".to_string(),
-            );
+            return Err("append_round is not a valid goal_state_manage operation. \
+                 Use rfv_loop_manage with operation=append_round instead."
+                .to_string());
         }
         "pause" | "resume" | "complete" | "clear" => {
             // No additional required args
         }
-        _ => return Err(format!("Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block")),
+        _ => {
+            return Err(format!(
+                "Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block"
+            ));
+        }
     }
 
     let result = core_state::state_manager::framework_goal_drive(payload)?;
@@ -1364,10 +1396,12 @@ mod tests {
         )
         .expect("error response");
         assert_eq!(response["error"]["code"], -32600);
-        assert!(response["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("claude-desktop"));
+        assert!(
+            response["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("claude-desktop")
+        );
     }
 
     #[test]
@@ -1394,10 +1428,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(response["error"]["code"], -32601);
-        assert!(response["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("nonexistent"));
+        assert!(
+            response["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("nonexistent")
+        );
     }
 
     #[test]
@@ -1407,8 +1443,14 @@ mod tests {
 
     #[test]
     fn parse_content_length_with_crlf() {
-        assert_eq!(parse_content_length("Content-Length: 100
-").unwrap(), 100);
+        assert_eq!(
+            parse_content_length(
+                "Content-Length: 100
+"
+            )
+            .unwrap(),
+            100
+        );
     }
 
     #[test]

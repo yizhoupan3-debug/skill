@@ -2,11 +2,10 @@
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`.
 
 use crate::runtime_registry::{
-    load_runtime_registry_json, HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH,
+    HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH, load_runtime_registry_json,
 };
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::path::Path;
-
 
 /// Canonical agent policy path for Codex (mirrors codex_hooks::CODEX_AGENT_POLICY_PATH).
 const CODEX_AGENT_POLICY_PATH: &str = "AGENTS_CODEX.md";
@@ -51,10 +50,7 @@ fn host_target_metadata<'a>(
 }
 
 /// Logical id in `host_targets.supported` → `framework host-integration --to …` spelling.
-pub fn skills_install_tool_for_host_id(
-    registry: &Value,
-    host_id: &str,
-) -> Result<String, String> {
+pub fn skills_install_tool_for_host_id(registry: &Value, host_id: &str) -> Result<String, String> {
     let id = host_id.trim();
     let tool = host_target_metadata(registry, id)?
         .get("install_tool")
@@ -65,10 +61,7 @@ pub fn skills_install_tool_for_host_id(
     Ok(tool.to_string())
 }
 
-pub fn projection_status_for_host_id(
-    registry: &Value,
-    host_id: &str,
-) -> Result<String, String> {
+pub fn projection_status_for_host_id(registry: &Value, host_id: &str) -> Result<String, String> {
     let id = host_id.trim();
     let status = host_target_metadata(registry, id)?
         .get("projection_status")
@@ -222,9 +215,9 @@ pub fn validate_host_provider_mod_declarations(
         })?;
 
     for (host_id, entry) in manifest {
-        let entry = entry.as_object().ok_or_else(|| {
-            format!("host_providers.{host_id} must be an object")
-        })?;
+        let entry = entry
+            .as_object()
+            .ok_or_else(|| format!("host_providers.{host_id} must be an object"))?;
         let cargo_feature = entry
             .get("cargo_feature")
             .and_then(Value::as_str)
@@ -250,10 +243,7 @@ fn cargo_toml_declares_feature(cargo_toml: &str, feature: &str) -> bool {
         .any(|line| line.trim().starts_with(&needle))
 }
 
-pub fn host_entrypoints_value_for_id(
-    registry: &Value,
-    host_id: &str,
-) -> Result<Value, String> {
+pub fn host_entrypoints_value_for_id(registry: &Value, host_id: &str) -> Result<Value, String> {
     let id = host_id.trim();
     let value = host_target_metadata(registry, id)?
         .get("host_entrypoints")
@@ -356,8 +346,8 @@ mod tests {
         let reg = load_runtime_registry_json(&root).expect("registry");
         let hosts_mod = std::fs::read_to_string(root.join("core/runtime-core/src/hosts/mod.rs"))
             .expect("hosts/mod.rs");
-        let cargo_toml = std::fs::read_to_string(root.join("core/runtime-core/Cargo.toml"))
-            .expect("Cargo.toml");
+        let cargo_toml =
+            std::fs::read_to_string(root.join("core/runtime-core/Cargo.toml")).expect("Cargo.toml");
         validate_host_provider_mod_declarations(&reg, &hosts_mod, &cargo_toml)
             .expect("host_providers vs hosts/mod.rs + Cargo.toml features");
     }

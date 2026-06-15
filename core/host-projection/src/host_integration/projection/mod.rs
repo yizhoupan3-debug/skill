@@ -9,9 +9,7 @@ pub use projection_host_ops::*;
 pub use projection_manifest::*;
 
 /// Load managed MCP server IDs from RUNTIME_REGISTRY.json.
-pub fn registry_managed_mcp_server_ids(
-    framework_root: &Path,
-) -> Result<Vec<String>, String> {
+pub fn registry_managed_mcp_server_ids(framework_root: &Path) -> Result<Vec<String>, String> {
     let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
     Ok(registry
         .get("managed_mcp_servers")
@@ -40,10 +38,7 @@ pub fn host_router_rs_framework_payload(
 }
 
 /// Resolve host install_tool label from RUNTIME_REGISTRY for MCP payload construction.
-pub fn registry_host_install_tool(
-    framework_root: &Path,
-    host_id: &str,
-) -> Result<String, String> {
+pub fn registry_host_install_tool(framework_root: &Path, host_id: &str) -> Result<String, String> {
     let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
     registry
         .get("host_targets")
@@ -52,7 +47,9 @@ pub fn registry_host_install_tool(
         .and_then(|h| h.get("install_tool"))
         .and_then(Value::as_str)
         .map(str::to_string)
-        .ok_or_else(|| format!("host {host_id} not found in RUNTIME_REGISTRY.host_targets.metadata"))
+        .ok_or_else(|| {
+            format!("host {host_id} not found in RUNTIME_REGISTRY.host_targets.metadata")
+        })
 }
 
 /// Shared MCP server binary validation loop.
@@ -75,7 +72,11 @@ pub fn validate_mcp_servers_from_json(
     };
 
     let Some(payload) = config_payload else {
-        return (server_status, false, Some("No MCP config found".to_string()));
+        return (
+            server_status,
+            false,
+            Some("No MCP config found".to_string()),
+        );
     };
     let servers = payload.get(mcp_servers_key).and_then(Value::as_object);
     for server_id in &managed_servers {
@@ -91,14 +92,23 @@ pub fn validate_mcp_servers_from_json(
                             Some(PathBuf::from(cmd))
                         };
                         match resolved.and_then(|path| {
-                            framework_kernel::router_self::validate_router_rs_binary_runnable(&path).ok()
+                            framework_kernel::router_self::validate_router_rs_binary_runnable(&path)
+                                .ok()
                         }) {
-                            Some(()) => { server_status.insert(server_id.to_string(), json!({"binary_valid": true})); }
+                            Some(()) => {
+                                server_status
+                                    .insert(server_id.to_string(), json!({"binary_valid": true}));
+                            }
                             None => {
                                 all_valid = false;
                                 let msg = "router-rs not found or not runnable; run `router-rs self install`".to_string();
-                                if first_error.is_none() { first_error = Some(msg.clone()); }
-                                server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": msg}));
+                                if first_error.is_none() {
+                                    first_error = Some(msg.clone());
+                                }
+                                server_status.insert(
+                                    server_id.to_string(),
+                                    json!({"binary_valid": false, "error": msg}),
+                                );
                             }
                         }
                     } else {
@@ -107,15 +117,25 @@ pub fn validate_mcp_servers_from_json(
                 }
                 Err(err) => {
                     all_valid = false;
-                    if first_error.is_none() { first_error = Some(err.clone()); }
-                    server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": err}));
+                    if first_error.is_none() {
+                        first_error = Some(err.clone());
+                    }
+                    server_status.insert(
+                        server_id.to_string(),
+                        json!({"binary_valid": false, "error": err}),
+                    );
                 }
             }
         } else {
             all_valid = false;
             let msg = format!("missing or incomplete {server_id} payload");
-            if first_error.is_none() { first_error = Some(msg.clone()); }
-            server_status.insert(server_id.to_string(), json!({"binary_valid": false, "error": msg}));
+            if first_error.is_none() {
+                first_error = Some(msg.clone());
+            }
+            server_status.insert(
+                server_id.to_string(),
+                json!({"binary_valid": false, "error": msg}),
+            );
         }
     }
 
@@ -135,10 +155,16 @@ pub enum McpConfigFormat {
 
 impl McpConfigFormat {
     /// Cursor uses `mcp_servers` (underscore).
-    pub const CURSOR: Self = Self::Json { top_level_key: "mcp_servers" };
+    pub const CURSOR: Self = Self::Json {
+        top_level_key: "mcp_servers",
+    };
     /// Claude and OpenCode use `mcpServers` (camelCase).
-    pub const CLAUDE: Self = Self::Json { top_level_key: "mcpServers" };
-    pub const OPENCODE: Self = Self::Json { top_level_key: "mcpServers" };
+    pub const CLAUDE: Self = Self::Json {
+        top_level_key: "mcpServers",
+    };
+    pub const OPENCODE: Self = Self::Json {
+        top_level_key: "mcpServers",
+    };
     /// Codex uses TOML sections with managed-by markers.
     pub const CODEX: Self = Self::Toml;
 }
@@ -301,8 +327,9 @@ pub fn projection_status_command(command: ProjectionStatusCommand) -> Result<Val
         command.home.as_deref(),
     )?;
     let mut results = Map::new();
-    for tool in framework_kernel::framework_host_targets::skills_install_tools_ordered(&roots.framework_root)?
-    {
+    for tool in framework_kernel::framework_host_targets::skills_install_tools_ordered(
+        &roots.framework_root,
+    )? {
         results.insert(tool.to_string(), projection_tool_status(&roots, &tool)?);
     }
     projection_envelope("status", false, &roots, None, results)
@@ -377,7 +404,8 @@ pub fn validate_cleanup_scope(
             "opencode" => command.opencode_home.is_some(),
             _ => false,
         };
-        let explicit_home = command.home.is_some() || host_cli_home_set || std::env::var_os(&env_var).is_some();
+        let explicit_home =
+            command.home.is_some() || host_cli_home_set || std::env::var_os(&env_var).is_some();
         if !explicit_home {
             return Err(format!(
                 "user-scope cleanup for {tool} requires explicit host-home resolution; pass --codex-home/--cursor-home/--claude-home, --home, or the matching host HOME environment variable"
@@ -401,13 +429,14 @@ pub fn projection_envelope(
         framework_kernel::runtime_registry::load_runtime_registry_json(&roots.framework_root)?;
     let mut host_targets_map = serde_json::Map::new();
     for (host_id, tool) in &pairs {
-        let value = if framework_kernel::framework_host_targets::host_is_installable(&registry, host_id)? {
-            results.get(tool.as_str()).cloned().unwrap_or(Value::Null)
-        } else {
-            results.get(host_id.as_str()).cloned().unwrap_or_else(|| {
-                non_installable_projection_result(host_id, scope.unwrap_or("status"))
-            })
-        };
+        let value =
+            if framework_kernel::framework_host_targets::host_is_installable(&registry, host_id)? {
+                results.get(tool.as_str()).cloned().unwrap_or(Value::Null)
+            } else {
+                results.get(host_id.as_str()).cloned().unwrap_or_else(|| {
+                    non_installable_projection_result(host_id, scope.unwrap_or("status"))
+                })
+            };
         host_targets_map.insert(host_id.clone(), value);
     }
     let host_targets = Value::Object(host_targets_map);
@@ -504,19 +533,42 @@ pub struct HostProjectionAdapter {
     pub aliases: &'static [&'static str],
 }
 
-/// Known tool→host_id mappings and retired-host aliases.
-/// `install`/`status`/`remove` are dispatched by match on tool name below.
+/// Known tool→host_id mappings.
+/// Source of truth: RUNTIME_REGISTRY.json → host_targets.metadata.*.install_tool
+/// Retired host aliases (codex-cli, codex-app, claude-desktop) remain hardcoded for backward compat.
 const KNOWN_PROJECTION_TOOLS: &[HostProjectionAdapter] = &[
-    HostProjectionAdapter { tool: "cursor", host_id: "cursor", aliases: &[] },
-    HostProjectionAdapter { tool: "claude", host_id: "claude-code", aliases: &["claude-code"] },
-    HostProjectionAdapter { tool: "opencode", host_id: "opencode", aliases: &[] },
-    HostProjectionAdapter { tool: "codex", host_id: "codex", aliases: &["codex-cli", "codex-app"] },
-    HostProjectionAdapter { tool: "mimo", host_id: "mimo", aliases: &[] },
+    HostProjectionAdapter {
+        tool: "cursor",
+        host_id: "cursor",
+        aliases: &[],
+    },
+    HostProjectionAdapter {
+        tool: "claude",
+        host_id: "claude-code",
+        aliases: &["claude-code"],
+    },
+    HostProjectionAdapter {
+        tool: "opencode",
+        host_id: "opencode",
+        aliases: &[],
+    },
+    HostProjectionAdapter {
+        tool: "codex",
+        host_id: "codex",
+        aliases: &["codex-cli", "codex-app"],
+    },
+    HostProjectionAdapter {
+        tool: "mimo",
+        host_id: "mimo",
+        aliases: &[],
+    },
 ];
 
 pub fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.account_home_root.join(".config/opencode/opencode.json")
+        roots
+            .account_home_root
+            .join(".config/opencode/opencode.json")
     } else {
         roots.project_root.join(".opencode/opencode.json")
     }
@@ -563,7 +615,10 @@ pub fn install_opencode_projection(
 ) -> Result<Value, String> {
     let config_path = opencode_config_path(roots, scope);
     let config_dir = config_path.parent().ok_or_else(|| {
-        format!("cannot determine parent directory of {}", config_path.display())
+        format!(
+            "cannot determine parent directory of {}",
+            config_path.display()
+        )
     })?;
     std::fs::create_dir_all(config_dir)
         .map_err(|err| format!("failed to create {}: {err}", config_dir.display()))?;
@@ -572,7 +627,8 @@ pub fn install_opencode_projection(
     if !payload.is_object() {
         payload = json!({});
     }
-    let servers = payload.as_object_mut()
+    let servers = payload
+        .as_object_mut()
         .ok_or_else(|| "opencode.json root must be an object".to_string())?;
     let mcp_servers = servers
         .entry("mcpServers".to_string())
@@ -580,9 +636,14 @@ pub fn install_opencode_projection(
     if !mcp_servers.is_object() {
         *mcp_servers = json!({});
     }
-    let entries = mcp_servers.as_object_mut()
+    let entries = mcp_servers
+        .as_object_mut()
         .ok_or_else(|| "mcpServers must be an object".to_string())?;
-    let framework_payload = host_router_rs_framework_payload(roots, "opencode", "Framework snapshot, skill routing, goal/closeout gating (MCP advisory for my-light)");
+    let framework_payload = host_router_rs_framework_payload(
+        roots,
+        "opencode",
+        "Framework snapshot, skill routing, goal/closeout gating (MCP advisory for my-light)",
+    );
     let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
     entries.insert("router-rs-framework".to_string(), framework_payload);
     let browser_payload = browser_mcp_server_payload(roots);
@@ -596,7 +657,8 @@ pub fn install_opencode_projection(
     let manifest_dir = opencode_projection_config_dir(roots, scope);
     std::fs::create_dir_all(&manifest_dir)
         .map_err(|err| format!("failed to create {}: {err}", manifest_dir.display()))?;
-    let manifest_key_paths = mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::OPENCODE)?;
+    let manifest_key_paths =
+        mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::OPENCODE)?;
     let manifest_changed = write_projection_manifest(
         roots,
         "opencode",
@@ -628,7 +690,9 @@ pub fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Result<Val
     let user_exists = user_path.is_file();
 
     // Pick the best available config (project first, then user)
-    let config_payload = read_json_if_exists(&project_path).ok().flatten()
+    let config_payload = read_json_if_exists(&project_path)
+        .ok()
+        .flatten()
         .or_else(|| read_json_if_exists(&user_path).ok().flatten());
 
     let (server_status, all_valid, first_error) =
@@ -661,7 +725,11 @@ pub fn remove_opencode_projection(
 
     let mut config_removed = false;
     if config_path.is_file() && !dry_run {
-        config_removed = mcp_json_remove_servers(&config_path, &roots.framework_root, McpConfigFormat::OPENCODE)?;
+        config_removed = mcp_json_remove_servers(
+            &config_path,
+            &roots.framework_root,
+            McpConfigFormat::OPENCODE,
+        )?;
     }
 
     let manifest_path = config_dir.join(FRAMEWORK_PROJECTION_MANIFEST_NAME);
@@ -718,7 +786,8 @@ pub fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, S
 
 pub fn validate_projection_adapters_against_registry(framework_root: &Path) -> Result<(), String> {
     let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
-    let supported = framework_kernel::framework_host_targets::host_targets_supported_host_ids(&registry)?;
+    let supported =
+        framework_kernel::framework_host_targets::host_targets_supported_host_ids(&registry)?;
     for adapter in KNOWN_PROJECTION_TOOLS {
         if !supported.iter().any(|host_id| host_id == adapter.host_id) {
             return Err(format!(
@@ -775,28 +844,62 @@ pub fn install_projection_tool(
         return Err(format!("Unsupported tool: {tool}"));
     }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-    match tool {
-        "cursor" => install_cursor_projection(roots, effective_scope),
-        "claude" => install_claude_projection(roots, effective_scope),
-        "opencode" => install_opencode_projection(roots, effective_scope),
-        "codex" => install_codex_projection(roots, effective_scope),
-        "mimo" => Ok(serde_json::json!({"tool": "mimo", "scope": effective_scope, "status": "installed"})),
-        _ => Err(format!("Unsupported tool: {tool}")),
+
+    type InstallFn = fn(&ResolvedProjectionRoots, &str) -> Result<Value, String>;
+    fn install_cursor(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
+        install_cursor_projection(r, s)
     }
+    fn install_claude(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
+        install_claude_projection(r, s)
+    }
+    fn install_opencode(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
+        install_opencode_projection(r, s)
+    }
+    fn install_codex(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
+        install_codex_projection(r, s)
+    }
+    fn install_mimo(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
+        Ok(serde_json::json!({"tool": "mimo", "scope": s, "status": "installed"}))
+    }
+
+    const TABLE: &[(&str, InstallFn)] = &[
+        ("cursor", install_cursor),
+        ("claude", install_claude),
+        ("opencode", install_opencode),
+        ("codex", install_codex),
+        ("mimo", install_mimo),
+    ];
+
+    TABLE
+        .iter()
+        .find(|(id, _)| *id == tool)
+        .map(|(_, f)| f(roots, effective_scope))
+        .unwrap_or_else(|| Err(format!("Unsupported tool: {tool}")))
 }
 
-pub fn projection_tool_status(roots: &ResolvedProjectionRoots, tool: &str) -> Result<Value, String> {
+pub fn projection_tool_status(
+    roots: &ResolvedProjectionRoots,
+    tool: &str,
+) -> Result<Value, String> {
     if projection_adapter(tool).is_none() {
         return Err(format!("Unsupported tool: {tool}"));
     }
-    match tool {
-        "cursor" => cursor_projection_status(roots),
-        "claude" => claude_projection_status(roots),
-        "opencode" => opencode_projection_status(roots),
-        "codex" => codex_projection_status(roots),
-        "mimo" => Ok(serde_json::json!({"tool": "mimo", "status": "installed"})),
-        _ => Err(format!("Unsupported tool: {tool}")),
-    }
+
+    type StatusFn = fn(&ResolvedProjectionRoots) -> Result<Value, String>;
+
+    const TABLE: &[(&str, StatusFn)] = &[
+        ("cursor", cursor_projection_status),
+        ("claude", claude_projection_status),
+        ("opencode", opencode_projection_status),
+        ("codex", codex_projection_status),
+        ("mimo", |r| Ok(serde_json::json!({"tool": "mimo", "status": "installed"}))),
+    ];
+
+    TABLE
+        .iter()
+        .find(|(id, _)| *id == tool)
+        .map(|(_, f)| f(roots))
+        .unwrap_or_else(|| Err(format!("Unsupported tool: {tool}")))
 }
 
 pub fn remove_projection_tool(
@@ -809,14 +912,24 @@ pub fn remove_projection_tool(
         return Err(format!("Unsupported tool: {tool}"));
     }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-    match tool {
-        "cursor" => remove_cursor_projection(roots, effective_scope, dry_run),
-        "claude" => remove_claude_projection(roots, effective_scope, dry_run),
-        "opencode" => remove_opencode_projection(roots, effective_scope, dry_run),
-        "codex" => remove_codex_projection(roots, effective_scope, dry_run),
-        "mimo" => Ok(serde_json::json!({"tool": "mimo", "scope": effective_scope, "dry_run": dry_run, "status": "installed"})),
-        _ => Err(format!("Unsupported tool: {tool}")),
-    }
+
+    type RemoveFn = fn(&ResolvedProjectionRoots, &str, bool) -> Result<Value, String>;
+
+    const TABLE: &[(&str, RemoveFn)] = &[
+        ("cursor", |r, s, d| remove_cursor_projection(r, s, d)),
+        ("claude", |r, s, d| remove_claude_projection(r, s, d)),
+        ("opencode", |r, s, d| remove_opencode_projection(r, s, d)),
+        ("codex", |r, s, d| remove_codex_projection(r, s, d)),
+        ("mimo", |_r, s, d| {
+            Ok(serde_json::json!({"tool": "mimo", "scope": s, "dry_run": d, "status": "installed"}))
+        }),
+    ];
+
+    TABLE
+        .iter()
+        .find(|(id, _)| *id == tool)
+        .map(|(_, f)| f(roots, effective_scope, dry_run))
+        .unwrap_or_else(|| Err(format!("Unsupported tool: {tool}")))
 }
 
 pub fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
@@ -830,7 +943,6 @@ pub fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
     })
 }
 
-
 #[derive(Debug, Deserialize)]
 pub struct HostProjectionNarrative {
     schema_version: String,
@@ -841,7 +953,10 @@ pub struct HostProjectionNarrative {
     review_findings_only_paragraph: String,
 }
 
-pub fn lifecycle_paragraph_for_host(narrative: &HostProjectionNarrative, host_projection: &str) -> String {
+pub fn lifecycle_paragraph_for_host(
+    narrative: &HostProjectionNarrative,
+    host_projection: &str,
+) -> String {
     narrative
         .lifecycle_by_host
         .get(host_projection)
@@ -857,12 +972,18 @@ pub fn lifecycle_paragraph_for_host(narrative: &HostProjectionNarrative, host_pr
         .unwrap_or_else(|| narrative.default_lifecycle_paragraph.clone())
 }
 
-pub fn load_host_projection_narrative(framework_root: &Path) -> Result<HostProjectionNarrative, String> {
+pub fn load_host_projection_narrative(
+    framework_root: &Path,
+) -> Result<HostProjectionNarrative, String> {
     let path = framework_root.join("configs/framework/host_projection_narrative.json");
     let raw = fs::read_to_string(&path)
         .map_err(|err| format!("read host projection narrative {}: {err}", path.display()))?;
-    let narrative: HostProjectionNarrative = serde_json::from_str(&raw)
-        .map_err(|err| format!("invalid host projection narrative {}: {err}", path.display()))?;
+    let narrative: HostProjectionNarrative = serde_json::from_str(&raw).map_err(|err| {
+        format!(
+            "invalid host projection narrative {}: {err}",
+            path.display()
+        )
+    })?;
     if narrative.schema_version != HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION {
         return Err(format!(
             "unsupported host projection narrative schema_version {:?} at {}; expected {}",
@@ -884,8 +1005,11 @@ fn framework_entrypoint_render_context(
     roots: &ResolvedProjectionRoots,
     host_label: &str,
 ) -> Result<(HostProjectionNarrative, String), String> {
-    let narrative = load_host_projection_narrative(&roots.framework_root)
-        .map_err(|err| format!("host projection narrative must load before rendering {host_label} entrypoint: {err}"))?;
+    let narrative = load_host_projection_narrative(&roots.framework_root).map_err(|err| {
+        format!(
+            "host projection narrative must load before rendering {host_label} entrypoint: {err}"
+        )
+    })?;
     let runtime_rel = skills_runtime_rel_path(&roots.framework_root);
     Ok((narrative, runtime_rel))
 }
@@ -897,8 +1021,11 @@ fn framework_entrypoint_common_footer(runtime_rel: &str, agents_delta_file: &str
 }
 
 pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Result<String, String> {
-    let narrative = load_host_projection_narrative(&roots.framework_root)
-        .map_err(|err| format!("host projection narrative must load before rendering claude project narrative: {err}"))?;
+    let narrative = load_host_projection_narrative(&roots.framework_root).map_err(|err| {
+        format!(
+            "host projection narrative must load before rendering claude project narrative: {err}"
+        )
+    })?;
     Ok(format!(
         r#"<!-- managed_by: skill-framework · claude-code · keep ≤48 lines -->
 <!-- projection_id: claude-code-project-narrative -->
@@ -934,7 +1061,10 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
     ))
 }
 
-pub fn render_claude_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> Result<String, String> {
+pub fn render_claude_framework_entrypoint(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<String, String> {
     let (narrative, runtime_rel) = framework_entrypoint_render_context(roots, "claude")?;
     Ok(format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n{footer}",
@@ -984,7 +1114,6 @@ pub fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
 pub fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
     projection_file_status(path, "claude-code")
 }
-
 
 /// Shared paperplain MCP entry (five-host research harness).
 pub fn paperplain_mcp_server_payload() -> Value {
@@ -1037,7 +1166,11 @@ pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Resu
     let entries = servers
         .as_object_mut()
         .ok_or_else(|| "project .mcp.json mcpServers must be an object".to_string())?;
-    let framework = host_router_rs_framework_payload(roots, "claude-code", "Framework snapshot, skill routing, goal/closeout gating");
+    let framework = host_router_rs_framework_payload(
+        roots,
+        "claude-code",
+        "Framework snapshot, skill routing, goal/closeout gating",
+    );
     let framework_changed = entries.get("router-rs-framework") != Some(&framework);
     entries.insert("router-rs-framework".to_string(), framework);
     let browser = browser_mcp_server_payload(roots);
@@ -1047,8 +1180,13 @@ pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Resu
     let paperplain_changed = entries.get("paperplain") != Some(&plain);
     entries.insert("paperplain".to_string(), plain);
     let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
-    write_json_if_changed(&path, &payload)
-        .map(|file_changed| framework_changed || browser_changed || paperplain_changed || codegraph_changed || file_changed)
+    write_json_if_changed(&path, &payload).map(|file_changed| {
+        framework_changed
+            || browser_changed
+            || paperplain_changed
+            || codegraph_changed
+            || file_changed
+    })
 }
 
 /// Remove all managed MCP entries from project-root `.mcp.json`.
@@ -1101,7 +1239,10 @@ fn upsert_codex_mcp_toml_section(
     args: &[&str],
 ) -> Result<bool, String> {
     let marker = codex_mcp_managed_marker(server_id);
-    let block = format!("{marker}\n{}", render_codex_mcp_toml_section(server_id, command, args));
+    let block = format!(
+        "{marker}\n{}",
+        render_codex_mcp_toml_section(server_id, command, args)
+    );
     let existing = read_text_if_exists(path)?.unwrap_or_default();
     let new_text = if let Some(start) = existing.find(&marker) {
         let after_marker = start + marker.len();
@@ -1142,23 +1283,48 @@ pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result
     }
     let mut changed = false;
     // -- router-rs-framework --
-    let framework = host_router_rs_framework_payload(roots, "codex", "Framework snapshot, skill routing, goal/closeout gating (Codex)");
-    let fw_cmd = framework.get("command").and_then(Value::as_str).unwrap_or("router-rs");
-    let fw_args: Vec<String> = framework.get("args").and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+    let framework = host_router_rs_framework_payload(
+        roots,
+        "codex",
+        "Framework snapshot, skill routing, goal/closeout gating (Codex)",
+    );
+    let fw_cmd = framework
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or("router-rs");
+    let fw_args: Vec<String> = framework
+        .get("args")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
         .unwrap_or_default();
     let fw_arg_refs: Vec<&str> = fw_args.iter().map(String::as_str).collect();
     changed |= upsert_codex_mcp_toml_section(&path, "router-rs-framework", fw_cmd, &fw_arg_refs)?;
     // -- browser-mcp --
     let browser = browser_mcp_server_payload(roots);
-    let br_cmd = browser.get("command").and_then(Value::as_str).unwrap_or("router-rs");
-    let br_args: Vec<String> = browser.get("args").and_then(Value::as_array)
-        .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+    let br_cmd = browser
+        .get("command")
+        .and_then(Value::as_str)
+        .unwrap_or("router-rs");
+    let br_args: Vec<String> = browser
+        .get("args")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
         .unwrap_or_default();
     let br_arg_refs: Vec<&str> = br_args.iter().map(String::as_str).collect();
     changed |= upsert_codex_mcp_toml_section(&path, "browser-mcp", br_cmd, &br_arg_refs)?;
     // -- paperplain --
-    changed |= upsert_codex_mcp_toml_section(&path, "paperplain", "npx", &["-y", "paperplain-mcp"])?;
+    changed |=
+        upsert_codex_mcp_toml_section(&path, "paperplain", "npx", &["-y", "paperplain-mcp"])?;
     // -- mcp-codegraph --
     let codegraph = codegraph_mcp_server_payload(roots);
     let command = codegraph
@@ -1197,7 +1363,11 @@ pub fn remove_codex_mcp_toml_entries(roots: &ResolvedProjectionRoots) -> Result<
                 .map(|idx| after_marker + idx)
                 .unwrap_or(result.len());
             let before = &result[..start];
-            let after = if end < result.len() { &result[end..] } else { "" };
+            let after = if end < result.len() {
+                &result[end..]
+            } else {
+                ""
+            };
             result = format!("{}{}", before, after);
             changed = true;
         }
@@ -1221,5 +1391,3 @@ pub fn codex_prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
         "unchanged": [],
     })
 }
-
-

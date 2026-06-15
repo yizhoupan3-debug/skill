@@ -15,6 +15,12 @@
     "retired"
   ],
   "required_host_metadata_fields": [
+    "display_name",
+    "transport_type",
+    "config_format",
+    "home_env_var",
+    "default_home_dir",
+    "cli_aliases",
     "install_tool",
     "projection_status",
     "installable",
@@ -24,7 +30,8 @@
     "cursor",
     "claude",
     "opencode",
-    "codex"
+    "codex",
+    "mimo"
   ],
   "framework_command_required_fields": [
     "canonical_owner",

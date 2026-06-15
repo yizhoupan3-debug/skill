@@ -1,5 +1,6 @@
 use crate::hook_common::{has_override, is_framework_goal_entry_prompt, is_review_prompt};
 use serde_json::Value;
+use tracing::debug;
 
 /// Cursor `REVIEW_GATE` evidence path: multiset (strict) vs id-only pending vec (lite).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,8 +99,11 @@ pub fn review_independent_reviewer_evidence(review_lane: bool, fork: Option<bool
     review_lane && review_independent_fork(fork, review_lane)
 }
 
+#[tracing::instrument(level = "debug", skip_all, fields(required, override_seen))]
 pub fn review_gate_armed(required: bool, override_seen: bool) -> bool {
-    required && !override_seen
+    let result = required && !override_seen;
+    debug!(result, "review gate armed decision");
+    result
 }
 
 /// Metrics / advisory detection: armed review without independent reviewer evidence.
@@ -163,17 +167,17 @@ mod fork_context_parse_tests {
     fn cursor_review_gate_mode_respects_lite_env() {
         let _lock = crate::test_env_sync::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
-        std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite");
+        unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite") };
         assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Lite);
-        std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "LITE");
+        unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "LITE") };
         assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Lite);
-        std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+        unsafe { std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE") };
         assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Strict);
-        std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "strict");
+        unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "strict") };
         assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Strict);
         match prev {
-            Some(v) => std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v),
-            None => std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"),
+            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE") },
         }
     }
 
@@ -209,7 +213,7 @@ mod fork_context_parse_tests {
     fn review_independent_fork_infers_missing_fork_on_reviewer_lane_when_env_on() {
         let _lock = crate::test_env_sync::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
-        std::env::set_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", "1");
+        unsafe { std::env::set_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", "1") };
         assert!(review_independent_fork(None, true));
         assert!(!review_independent_fork(Some(true), true));
         assert!(
@@ -217,8 +221,12 @@ mod fork_context_parse_tests {
             "explore-class lane must not count even with explicit fork_context false"
         );
         match prev {
-            Some(v) => std::env::set_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v),
-            None => std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
+            Some(v) => unsafe {
+                std::env::set_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v)
+            },
+            None => unsafe {
+                std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
+            },
         }
     }
 
@@ -226,22 +234,26 @@ mod fork_context_parse_tests {
     fn legacy_host_fork_env_still_enables_canonical_infer() {
         let _lock = crate::test_env_sync::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
-        std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
-        std::env::set_var(
-            "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
-            "1",
-        );
+        unsafe { std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE") };
+        unsafe {
+            std::env::set_var(
+                "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+                "1",
+            );
+        }
         assert!(review_independent_fork(None, true));
         assert!(!review_independent_fork(Some(true), true));
         assert!(!review_independent_fork(None, false));
         match prev {
-            Some(v) => std::env::set_var(
-                "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
-                v,
-            ),
-            None => {
+            Some(v) => unsafe {
+                std::env::set_var(
+                    "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+                    v,
+                );
+            },
+            None => unsafe {
                 std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
-            }
+            },
         }
     }
 
@@ -256,8 +268,13 @@ mod fork_context_parse_tests {
     fn review_independent_fork_respects_infer_env_off() {
         let _lock = crate::test_env_sync::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
-        std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
-        std::env::set_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", "0");
+        unsafe { std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE") };
+        unsafe {
+            std::env::set_var(
+                "ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+                "0",
+            );
+        }
         assert!(
             !review_independent_fork(None, true),
             "infer off: missing fork must not count on reviewer lane"
@@ -267,47 +284,29 @@ mod fork_context_parse_tests {
             "explicit fork_context false still counts"
         );
         match prev {
-            Some(v) => std::env::set_var(
-                "ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
-                v,
-            ),
-            None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
+            Some(v) => unsafe {
+                std::env::set_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v)
+            },
+            None => unsafe {
+                std::env::remove_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
+            },
         }
     }
 
     #[test]
     fn codex_wave2_compact_bump_requires_countable_evidence() {
         let finding = "[P1] foo.rs:1 — substantive compact finding for gate";
-        assert!(maybe_bump_codex_review_phase_for_compact_findings(
-            true,
-            false,
-            0,
-            0,
-            false,
-            finding,
-        )
-        .is_none());
         assert!(
-            maybe_bump_codex_review_phase_for_compact_findings(
-                true,
-                false,
-                2,
-                0,
-                false,
-                finding,
-            )
-            .is_none(),
+            maybe_bump_codex_review_phase_for_compact_findings(true, false, 0, 0, false, finding,)
+                .is_none()
+        );
+        assert!(
+            maybe_bump_codex_review_phase_for_compact_findings(true, false, 2, 0, false, finding,)
+                .is_none(),
             "legacy phase>=2 alone must not count as countable evidence"
         );
         assert_eq!(
-            maybe_bump_codex_review_phase_for_compact_findings(
-                true,
-                false,
-                2,
-                1,
-                true,
-                finding,
-            ),
+            maybe_bump_codex_review_phase_for_compact_findings(true, false, 2, 1, true, finding,),
             Some(3)
         );
     }
@@ -323,7 +322,8 @@ mod fork_context_parse_tests {
     #[test]
     fn review_gate_facts_suppresses_review_when_goal_drive_in_same_prompt() {
         install_review_prompt_test_deps();
-        let dual = ReviewGateFacts::from_prompt("请全面review这个仓库 /implementx 修复刚发现的问题");
+        let dual =
+            ReviewGateFacts::from_prompt("请全面review这个仓库 /implementx 修复刚发现的问题");
         assert!(
             !dual.review_required,
             "goal drive entry must suppress review arming in facts"

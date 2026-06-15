@@ -11,14 +11,12 @@ pub mod scoring_config;
 pub mod text;
 pub mod types;
 
-pub use fuzzy::{
-    fuzzy_fallback_score, trigram_similarity, FUZZY_MIN_SIMILARITY,
-};
+pub use fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score, trigram_similarity};
 pub use runtime_watch::{
-    default_skill_routing_runtime_path, routing_runtime_watch, RoutingRuntimeWatch,
-    RoutingTableSnapshot,
+    RoutingRuntimeWatch, RoutingTableSnapshot, default_skill_routing_runtime_path,
+    routing_runtime_watch,
 };
-pub use scoring_config::{scoring_weights, ScoringWeights};
+pub use scoring_config::{ScoringWeights, scoring_weights};
 pub use text::{
     common_route_stop_tokens, read_json, tokenize_query, tokenize_route_text, value_to_string,
 };

@@ -1,9 +1,9 @@
 use chrono::{DateTime, Duration, Utc};
 use clap::{Parser, Subcommand};
 use evolution_rs::{
-    default_config_path, default_evolution_output_dir, default_telemetry_journal_path,
-    load_audit_journal_entries, load_config, run_analyze, run_health_score, AuditJournalEntry,
-    EvolutionConfig,
+    AuditJournalEntry, EvolutionConfig, default_config_path, default_evolution_output_dir,
+    default_telemetry_journal_path, load_audit_journal_entries, load_config, run_analyze,
+    run_health_score,
 };
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
@@ -288,7 +288,8 @@ fn audit_journal(
                             filtered.iter().map(|e| e.final_skill.as_str()).collect();
 
                         for s in skills {
-                            let Some(name) = s.get(idx_slug).and_then(|value| value.as_str()) else {
+                            let Some(name) = s.get(idx_slug).and_then(|value| value.as_str())
+                            else {
                                 continue;
                             };
                             let triggers = row_text(&s[idx_trigger_hints]);
@@ -407,7 +408,8 @@ fn generate_manifest(
                             static_scores.insert(name.to_string(), total as f32);
                         }
                     }
-                } else if let Some(skills) = payload.get("skills").and_then(|value| value.as_object())
+                } else if let Some(skills) =
+                    payload.get("skills").and_then(|value| value.as_object())
                 {
                     for (name, entry) in skills {
                         if let Some(score) = entry
@@ -800,7 +802,8 @@ fn heal_skills(
                 continue;
             };
             // R46: Automatic Pruning of Zero-usage skills
-            if !active_skills.contains(name) && entries.len() >= cfg.thresholds.min_entries_for_heal {
+            if !active_skills.contains(name) && entries.len() >= cfg.thresholds.min_entries_for_heal
+            {
                 let skill_path = skills_root.join(name);
                 if skill_path.exists() {
                     if dry_run {

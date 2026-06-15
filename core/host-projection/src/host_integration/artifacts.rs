@@ -37,11 +37,7 @@ pub fn compatibility_alias_inventory() -> Value {
 
 /// Lightweight summary for `framework doctor` (full manifest regen is expensive).
 pub fn generated_artifacts_status_for_repo(repo_root: &Path) -> Result<Value, String> {
-    generated_artifacts_status(
-        Some(repo_root),
-        Some(&repo_root.join("artifacts")),
-        true,
-    )
+    generated_artifacts_status(Some(repo_root), Some(&repo_root.join("artifacts")), true)
 }
 
 pub fn generated_artifacts_status(
@@ -94,9 +90,7 @@ pub fn generated_artifacts_status(
         let checked_in_path = framework_root.join(&artifact.path);
         let regenerated_path = temp_root.map(|root| root.join(&artifact.path));
         let exists = checked_in_path.is_file();
-        let regenerated_exists = regenerated_path
-            .as_ref()
-            .is_some_and(|path| path.is_file());
+        let regenerated_exists = regenerated_path.as_ref().is_some_and(|path| path.is_file());
         let checked_in = if exists {
             Some(fs::read(&checked_in_path).map_err(|err| err.to_string())?)
         } else {
@@ -738,4 +732,3 @@ pub fn run_router_rs_json(repo_root: &Path, args: &[String]) -> Result<Value, St
         stderr
     })
 }
-

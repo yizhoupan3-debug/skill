@@ -385,7 +385,10 @@ fn to_text_lines_empty_input() {
 
 #[test]
 fn to_text_lines_limits_to_50() {
-    let input = (0..100).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
+    let input = (0..100)
+        .map(|i| format!("line{i}"))
+        .collect::<Vec<_>>()
+        .join("\n");
     let lines = to_text_lines(&input);
     assert_eq!(lines.len(), 50);
 }
@@ -514,12 +517,18 @@ fn json_type_name_all_variants() {
 
 #[test]
 fn parse_content_length_header_valid() {
-    assert_eq!(parse_content_length_header("Content-Length: 42").unwrap(), 42);
+    assert_eq!(
+        parse_content_length_header("Content-Length: 42").unwrap(),
+        42
+    );
 }
 
 #[test]
 fn parse_content_length_header_with_whitespace() {
-    assert_eq!(parse_content_length_header("Content-Length:   100  ").unwrap(), 100);
+    assert_eq!(
+        parse_content_length_header("Content-Length:   100  ").unwrap(),
+        100
+    );
 }
 
 #[test]
@@ -662,7 +671,10 @@ fn descriptor_leaf_nested() {
 #[test]
 fn descriptor_string_extract() {
     let v = json!({"schema_version": "v1"});
-    assert_eq!(descriptor_string(&v, &["schema_version"]), Some("v1".to_string()));
+    assert_eq!(
+        descriptor_string(&v, &["schema_version"]),
+        Some("v1".to_string())
+    );
     assert_eq!(descriptor_string(&v, &["missing"]), None);
 }
 
@@ -928,15 +940,24 @@ fn runtime_diagnostics_zero_sessions() {
 fn tool_definitions_contain_required_browser_tools() {
     let repo_root = temp_root("tool-defs");
     let tools = tool_definitions(&repo_root);
-    let names: Vec<&str> = tools
-        .iter()
-        .filter_map(|t| t["name"].as_str())
-        .collect();
-    for required in &["browser_open", "browser_click", "browser_fill", "browser_press",
-                       "browser_tabs", "browser_close", "browser_get_state",
-                       "browser_screenshot", "browser_diagnostics",
-                       "session_launch", "session_list", "session_terminate",
-                       "background_list", "background_inspect", "background_terminate"] {
+    let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
+    for required in &[
+        "browser_open",
+        "browser_click",
+        "browser_fill",
+        "browser_press",
+        "browser_tabs",
+        "browser_close",
+        "browser_get_state",
+        "browser_screenshot",
+        "browser_diagnostics",
+        "session_launch",
+        "session_list",
+        "session_terminate",
+        "background_list",
+        "background_inspect",
+        "background_terminate",
+    ] {
         assert!(names.contains(required), "missing tool: {required}");
     }
     fs::remove_dir_all(repo_root).unwrap();
@@ -1032,8 +1053,14 @@ fn attach_config_from_cli_explicit_values() {
         Some("/path/to/artifact".to_string()),
         Some("true".to_string()),
     );
-    assert_eq!(config.runtime_attach_descriptor_path, Some("/path/to/descriptor".to_string()));
-    assert_eq!(config.runtime_attach_artifact_path, Some("/path/to/artifact".to_string()));
+    assert_eq!(
+        config.runtime_attach_descriptor_path,
+        Some("/path/to/descriptor".to_string())
+    );
+    assert_eq!(
+        config.runtime_attach_artifact_path,
+        Some("/path/to/artifact".to_string())
+    );
     assert!(config.headless);
 }
 
@@ -1076,7 +1103,9 @@ fn content_length_transport_roundtrip() {
     let framed = format!("Content-Length: {}\r\n\r\n{}", body.len(), body);
     let mut input = Cursor::new(framed);
     let mut mode = None;
-    let message = read_browser_mcp_message(&mut input, &mut mode).unwrap().unwrap();
+    let message = read_browser_mcp_message(&mut input, &mut mode)
+        .unwrap()
+        .unwrap();
     assert_eq!(mode, Some(BrowserMcpTransportMode::ContentLength));
     let parsed: Value = serde_json::from_str(&message).unwrap();
     assert_eq!(parsed["method"], "ping");
@@ -1087,7 +1116,9 @@ fn newline_delimited_transport_roundtrip() {
     let body = json!({"jsonrpc": "2.0", "id": 1, "method": "ping"});
     let mut input = Cursor::new(body.to_string());
     let mut mode = None;
-    let message = read_browser_mcp_message(&mut input, &mut mode).unwrap().unwrap();
+    let message = read_browser_mcp_message(&mut input, &mut mode)
+        .unwrap()
+        .unwrap();
     assert_eq!(mode, Some(BrowserMcpTransportMode::NewlineDelimited));
     let parsed: Value = serde_json::from_str(&message).unwrap();
     assert_eq!(parsed["method"], "ping");
@@ -1423,10 +1454,16 @@ fn network_event_value_contains_expected_fields() {
 #[test]
 fn should_skip_common_dirs() {
     assert!(should_skip_attach_discovery_dir(Path::new("/tmp/.git")));
-    assert!(should_skip_attach_discovery_dir(Path::new("/tmp/node_modules")));
+    assert!(should_skip_attach_discovery_dir(Path::new(
+        "/tmp/node_modules"
+    )));
     assert!(should_skip_attach_discovery_dir(Path::new("/tmp/target")));
-    assert!(!should_skip_attach_discovery_dir(Path::new("/tmp/artifacts")));
-    assert!(!should_skip_attach_discovery_dir(Path::new("/tmp/my-project")));
+    assert!(!should_skip_attach_discovery_dir(Path::new(
+        "/tmp/artifacts"
+    )));
+    assert!(!should_skip_attach_discovery_dir(Path::new(
+        "/tmp/my-project"
+    )));
 }
 
 // ───────────────────────────────────────────────────────────────────

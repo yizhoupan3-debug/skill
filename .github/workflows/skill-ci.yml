@@ -159,6 +159,9 @@ jobs:
       - name: Clippy workspace (no default features)
         run: cargo clippy --workspace --no-default-features -- -D warnings
 
+      - name: Workspace compile check
+        run: cargo test --workspace --no-run 2>&1 | tail -5
+
   feature-matrix:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -172,6 +175,7 @@ jobs:
           - "host-claude-code"
           - "host-codex"
           - "host-opencode"
+          - "host-mimo"
           - "no-default-features"
     steps:
       - uses: actions/checkout@v4

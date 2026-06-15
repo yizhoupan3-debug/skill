@@ -1,6 +1,6 @@
-use super::paths::normalize_runtime_path;
 use super::SQLITE_TABLE_NAME;
-use rusqlite::{params, Connection, OptionalExtension};
+use super::paths::normalize_runtime_path;
+use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -102,7 +102,11 @@ const SQLITE_APPEND_SQL: &str =
      ON CONFLICT(payload_key) DO UPDATE
      SET payload_text = runtime_storage_payloads.payload_text || excluded.payload_text";
 
-pub fn sqlite_payload_exists(path: &Path, db_path: &Path, storage_root: &Path) -> Result<bool, String> {
+pub fn sqlite_payload_exists(
+    path: &Path,
+    db_path: &Path,
+    storage_root: &Path,
+) -> Result<bool, String> {
     let stable_key = sqlite_lookup_key(path, storage_root)?;
     let conn = sqlite_connection(db_path)?;
     let mut stmt = conn
@@ -116,7 +120,11 @@ pub fn sqlite_payload_exists(path: &Path, db_path: &Path, storage_root: &Path) -
     Ok(exists)
 }
 
-pub fn sqlite_read_text(path: &Path, db_path: &Path, storage_root: &Path) -> Result<String, String> {
+pub fn sqlite_read_text(
+    path: &Path,
+    db_path: &Path,
+    storage_root: &Path,
+) -> Result<String, String> {
     let stable_key = sqlite_lookup_key(path, storage_root)?;
     let conn = sqlite_connection(db_path)?;
     let mut stmt = conn
@@ -142,11 +150,8 @@ pub fn sqlite_write_text(
         })?;
     }
     let conn = sqlite_connection(db_path)?;
-    conn.execute(
-        SQLITE_WRITE_SQL,
-        params![stable_key, payload_text],
-    )
-    .map_err(|err| format!("write sqlite payload failed for {}: {err}", path.display()))?;
+    conn.execute(SQLITE_WRITE_SQL, params![stable_key, payload_text])
+        .map_err(|err| format!("write sqlite payload failed for {}: {err}", path.display()))?;
     Ok(())
 }
 
@@ -166,10 +171,7 @@ pub fn sqlite_append_text(
         })?;
     }
     let conn = sqlite_connection(db_path)?;
-    conn.execute(
-        SQLITE_APPEND_SQL,
-        params![stable_key, payload_text],
-    )
-    .map_err(|err| format!("append sqlite payload failed for {}: {err}", path.display()))?;
+    conn.execute(SQLITE_APPEND_SQL, params![stable_key, payload_text])
+        .map_err(|err| format!("append sqlite payload failed for {}: {err}", path.display()))?;
     Ok(())
 }

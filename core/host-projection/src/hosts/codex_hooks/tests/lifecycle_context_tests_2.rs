@@ -1,6 +1,6 @@
-use super::*;
-use super::lifecycle_context_tests::{env_lock, fresh_repo, run_gate, TEST_COMPACT_FINDING};
 use super::lifecycle_context_tests::SEQ;
+use super::lifecycle_context_tests::{TEST_COMPACT_FINDING, env_lock, fresh_repo, run_gate};
+use super::*;
 use serde_json::json;
 use serial_test::serial;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -9,7 +9,7 @@ fn codex_review_gate_disable_env_skips_block() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE");
     core_policy::hook_common::set_test_my_light_override(Some(true));
-    std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1");
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1") };
     let repo = fresh_repo();
     let start = json!({
         "hook_event_name":"UserPromptSubmit",
@@ -27,8 +27,8 @@ fn codex_review_gate_disable_env_skips_block() {
     let out = run_gate(&repo, &stop).unwrap();
     assert!(out.is_none(), "disable env must skip gate: {out:?}");
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
-        None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE") },
     }
     core_policy::hook_common::set_test_my_light_override(None);
 }
@@ -52,7 +52,7 @@ fn codex_review_gate_disable_clears_armed_state_on_userpromptsubmit() {
             .unwrap_or(false)
     );
     core_policy::hook_common::set_test_my_light_override(Some(true));
-    std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1");
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1") };
     let ups_disable = json!({
         "hook_event_name":"UserPromptSubmit",
         "session_id":"sm-disable-clear",
@@ -64,8 +64,8 @@ fn codex_review_gate_disable_clears_armed_state_on_userpromptsubmit() {
     assert_eq!(state.seq, 0, "disable UPS must reset hook-state");
     assert!(!state.review_gate.review_required);
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
-        None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE") },
     }
     core_policy::hook_common::set_test_my_light_override(None);
 }
@@ -83,7 +83,7 @@ fn codex_review_gate_disable_clears_state_on_posttool() {
     });
     let _ = run_gate(&repo, &arm).unwrap();
     core_policy::hook_common::set_test_my_light_override(Some(true));
-    std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1");
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1") };
     let post = json!({
         "hook_event_name":"PostToolUse",
         "session_id":"sm-disable-post",
@@ -97,8 +97,8 @@ fn codex_review_gate_disable_clears_state_on_posttool() {
     assert_eq!(state.seq, 0, "disable PostTool must reset hook-state");
     assert!(!state.review_gate.review_required);
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v),
-        None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE") },
     }
     core_policy::hook_common::set_test_my_light_override(None);
 }
@@ -141,7 +141,12 @@ fn post_tool_delegate_tool_does_not_count_deep_evidence() {
 fn post_tool_gp_missing_fork_codex_infer_off_blocks_at_stop() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
-    std::env::set_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", "0");
+    unsafe {
+        std::env::set_var(
+            "ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+            "0",
+        );
+    }
     let repo = fresh_repo();
     let start = json!({
         "hook_event_name":"UserPromptSubmit",
@@ -173,8 +178,12 @@ fn post_tool_gp_missing_fork_codex_infer_off_blocks_at_stop() {
         .unwrap_or_default();
     assert!(msg.contains("CODEX_REVIEW_GATE"));
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v),
-        None => std::env::remove_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
+        Some(v) => unsafe {
+            std::env::set_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v)
+        },
+        None => unsafe {
+            std::env::remove_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
+        },
     }
 }
 
@@ -191,7 +200,10 @@ fn user_prompt_submit_review_and_implementx_suppresses_review_arming() {
     });
     let _ = run_gate(&repo, &arm).unwrap();
     let armed = codex_load_state(&repo, &arm).unwrap().unwrap();
-    assert!(armed.review_gate.review_required, "review-only UPS should arm; got {armed:?}");
+    assert!(
+        armed.review_gate.review_required,
+        "review-only UPS should arm; got {armed:?}"
+    );
     let dual = json!({
         "hook_event_name":"UserPromptSubmit",
         "session_id": sid,
@@ -344,7 +356,10 @@ fn stop_reject_reason_in_response_clears_gate() {
         "response":"small_task"
     });
     let out = run_gate(&repo, &stop).unwrap();
-    assert!(out.is_none(), "reject token in response must clear: {out:?}");
+    assert!(
+        out.is_none(),
+        "reject token in response must clear: {out:?}"
+    );
 }
 
 #[test]
@@ -412,7 +427,7 @@ fn stop_with_review_explore_fork_false_still_blocks() {
 fn stop_hook_active_bypass_skips_gate_only_when_env_set() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS");
-    std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", "1");
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", "1") };
     let repo = fresh_repo();
     let start = json!({
         "hook_event_name":"UserPromptSubmit",
@@ -429,10 +444,13 @@ fn stop_hook_active_bypass_skips_gate_only_when_env_set() {
         "stop_hook_active": true
     });
     let out = run_gate(&repo, &payload).unwrap();
-    assert!(out.is_none(), "bypass env must skip review gate on replay: {out:?}");
+    assert!(
+        out.is_none(),
+        "bypass env must skip review gate on replay: {out:?}"
+    );
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", v),
-        None => std::env::remove_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS") },
     }
 }
 
@@ -440,7 +458,7 @@ fn stop_hook_active_bypass_skips_gate_only_when_env_set() {
 fn stop_hook_active_still_blocks_review_gate_by_default() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS");
-    std::env::remove_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS") };
     let repo = fresh_repo();
     let start = json!({
         "hook_event_name":"UserPromptSubmit",
@@ -462,7 +480,10 @@ fn stop_hook_active_still_blocks_review_gate_by_default() {
         .and_then(|v| v["followup_message"].as_str())
         .unwrap_or_default();
     assert!(
-        out.as_ref().and_then(|v| v.get("decision")).and_then(Value::as_str) != Some("block"),
+        out.as_ref()
+            .and_then(|v| v.get("decision"))
+            .and_then(Value::as_str)
+            != Some("block"),
         "review gate Stop must be advisory-only: {out:?}"
     );
     assert!(
@@ -470,7 +491,7 @@ fn stop_hook_active_still_blocks_review_gate_by_default() {
         "stop_hook_active without bypass must still nudge review: {out:?}"
     );
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", v),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", v) },
         None => {}
     }
 }
@@ -480,7 +501,7 @@ fn stop_hook_active_still_blocks_review_gate_by_default() {
 fn stop_completion_claim_blocks_with_closeout_followup_when_strict() {
     let _g = env_lock();
     let prev = std::env::var_os("ROUTER_RS_CLOSEOUT_ENFORCEMENT");
-    std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1");
+    unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1") };
     let repo = fresh_repo();
     let tid = "t-codex-closeout";
     fs::create_dir_all(repo.join("artifacts/current").join(tid)).unwrap();
@@ -517,8 +538,8 @@ fn stop_completion_claim_blocks_with_closeout_followup_when_strict() {
         "expected closeout block on Stop; got {out:?}"
     );
     match prev {
-        Some(v) => std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v),
-        None => std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
     }
 }
 
@@ -548,12 +569,16 @@ fn post_tool_state_lock_failure_blocks_like_user_prompt_submit() {
     }
     let out = run_gate(&repo, &event).unwrap();
     assert_eq!(
-        out.as_ref().and_then(|v| v.get("decision")).and_then(Value::as_str),
+        out.as_ref()
+            .and_then(|v| v.get("decision"))
+            .and_then(Value::as_str),
         Some("block"),
         "PostTool lock failure must fail-closed: {out:?}"
     );
     assert_eq!(
-        out.as_ref().and_then(|v| v.get("reason")).and_then(Value::as_str),
+        out.as_ref()
+            .and_then(|v| v.get("reason"))
+            .and_then(Value::as_str),
         Some("Codex hook state could not be persisted under .codex/hook-state.")
     );
 }
@@ -563,7 +588,7 @@ fn no_drift_warn_when_manifest_missing() {
     let repo = fresh_repo();
     let codex_home = repo.join("codex-home");
     fs::create_dir_all(&codex_home).unwrap();
-    std::env::set_var("CODEX_HOME", &codex_home);
+    unsafe { std::env::set_var("CODEX_HOME", &codex_home) };
     let payload = json!({
         "hook_event_name":"UserPromptSubmit",
         "session_id":"sm-drift-1",
@@ -587,7 +612,7 @@ fn no_drift_warn_when_manifest_matches() {
     let repo = fresh_repo();
     let codex_home = repo.join("codex-home");
     fs::create_dir_all(&codex_home).unwrap();
-    std::env::set_var("CODEX_HOME", &codex_home);
+    unsafe { std::env::set_var("CODEX_HOME", &codex_home) };
     let manifest = json!({
         "projection_version": ROUTER_RS_HOOK_PROJECTION_VERSION,
         "command_digest": "abc",
@@ -657,9 +682,9 @@ fn v1_delegation_only_maps_to_phase1() {
 #[test]
 fn codex_session_key_fallback_is_stable_without_identifiers() {
     let _guard = env_lock();
-    std::env::remove_var("CODEX_SESSION_ID");
-    std::env::remove_var("CODEX_CONVERSATION_ID");
-    std::env::remove_var("ROUTER_RS_CODEX_HOOK_STATE_SALT");
+    unsafe { std::env::remove_var("CODEX_SESSION_ID") };
+    unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_HOOK_STATE_SALT") };
     let repo = fresh_repo();
     let event = json!({"cwd": repo.to_string_lossy()});
     let a = codex_session_key(&repo, &event);
@@ -672,8 +697,8 @@ fn codex_session_key_fallback_is_stable_without_identifiers() {
 #[test]
 fn codex_session_key_differs_by_cwd_when_unstable() {
     let _guard = env_lock();
-    std::env::remove_var("CODEX_SESSION_ID");
-    std::env::remove_var("CODEX_CONVERSATION_ID");
+    unsafe { std::env::remove_var("CODEX_SESSION_ID") };
+    unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     let repo = fresh_repo();
     let a = codex_session_key(&repo, &json!({"cwd":"/tmp/a"}));
     let b = codex_session_key(&repo, &json!({"cwd":"/tmp/b"}));
@@ -727,30 +752,28 @@ fn dispatch_unknown_event_blocks_with_message() {
         "session_id":"sm-9",
         "cwd": repo.to_string_lossy().to_string()
     });
-    let out = run_gate(&repo, &payload)
-        .unwrap()
-        .unwrap();
+    let out = run_gate(&repo, &payload).unwrap().unwrap();
     assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
-    assert!(out
-        .get("message")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .contains("unsupported"));
+    assert!(
+        out.get("message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .contains("unsupported")
+    );
 }
 
 #[test]
 fn dispatch_missing_event_blocks_with_message() {
     let repo = fresh_repo();
     let payload = json!({"session_id":"sm-10"});
-    let out = run_gate(&repo, &payload)
-        .unwrap()
-        .unwrap();
+    let out = run_gate(&repo, &payload).unwrap().unwrap();
     assert_eq!(out.get("decision").and_then(Value::as_str), Some("block"));
-    assert!(out
-        .get("message")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .contains("missing"));
+    assert!(
+        out.get("message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .contains("missing")
+    );
 }
 
 #[test]
@@ -905,8 +928,7 @@ fn protected_prefixes_cover_skill_files_and_registry() {
         "SKILL_MANIFEST.json should be protected"
     );
     assert!(
-        classify_protected_generated_path("configs/framework/RUNTIME_REGISTRY.json")
-            .is_some(),
+        classify_protected_generated_path("configs/framework/RUNTIME_REGISTRY.json").is_some(),
         "RUNTIME_REGISTRY.json should be protected"
     );
     assert!(
@@ -927,10 +949,10 @@ fn codex_session_key_uses_codex_session_id_env_when_no_event_fields() {
     );
     let event = json!({});
     let repo = fresh_repo();
-    std::env::set_var("CODEX_SESSION_ID", &unique_id);
+    unsafe { std::env::set_var("CODEX_SESSION_ID", &unique_id) };
     let a = codex_session_key(&repo, &event);
     let b = codex_session_key(&repo, &event);
-    std::env::remove_var("CODEX_SESSION_ID");
+    unsafe { std::env::remove_var("CODEX_SESSION_ID") };
     assert_eq!(a, b, "env var fallback should produce a stable key");
     assert!(
         a.chars().all(|c| c.is_ascii_hexdigit()),
@@ -957,12 +979,12 @@ fn codex_session_key_uses_codex_conversation_id_env_when_no_event_fields() {
         SEQ.fetch_add(1, Ordering::SeqCst)
     );
     let event = json!({});
-    std::env::remove_var("CODEX_SESSION_ID");
+    unsafe { std::env::remove_var("CODEX_SESSION_ID") };
     let repo = fresh_repo();
-    std::env::set_var("CODEX_CONVERSATION_ID", &unique_id);
+    unsafe { std::env::set_var("CODEX_CONVERSATION_ID", &unique_id) };
     let a = codex_session_key(&repo, &event);
     let b = codex_session_key(&repo, &event);
-    std::env::remove_var("CODEX_CONVERSATION_ID");
+    unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     assert_eq!(a, b, "CODEX_CONVERSATION_ID fallback should be stable");
     assert_eq!(a.len(), 32);
 }
@@ -970,9 +992,9 @@ fn codex_session_key_uses_codex_conversation_id_env_when_no_event_fields() {
 #[test]
 fn strict_stable_session_key_blocks_userpromptsubmit_without_identifier() {
     let _guard = env_lock();
-    std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "1");
-    std::env::remove_var("CODEX_SESSION_ID");
-    std::env::remove_var("CODEX_CONVERSATION_ID");
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "1") };
+    unsafe { std::env::remove_var("CODEX_SESSION_ID") };
+    unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     let repo = fresh_repo();
     let event = json!({
         "hook_event_name": "UserPromptSubmit",
@@ -983,15 +1005,15 @@ fn strict_stable_session_key_blocks_userpromptsubmit_without_identifier() {
         .unwrap()
         .unwrap();
     assert_eq!(out["decision"], json!("block"));
-    std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY") };
 }
 
 #[test]
 fn strict_stable_session_key_allows_sessionstart_without_identifier() {
     let _guard = env_lock();
-    std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "1");
-    std::env::remove_var("CODEX_SESSION_ID");
-    std::env::remove_var("CODEX_CONVERSATION_ID");
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "1") };
+    unsafe { std::env::remove_var("CODEX_SESSION_ID") };
+    unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     let repo = fresh_repo();
     let event = json!({
         "hook_event_name": "SessionStart",
@@ -1001,15 +1023,15 @@ fn strict_stable_session_key_allows_sessionstart_without_identifier() {
         .unwrap()
         .expect("sessionstart output");
     assert!(out.get("hookSpecificOutput").is_some());
-    std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY") };
 }
 
 #[test]
 fn strict_stable_session_key_off_allows_userpromptsubmit_without_identifier() {
     let _guard = env_lock();
-    std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "0");
-    std::env::remove_var("CODEX_SESSION_ID");
-    std::env::remove_var("CODEX_CONVERSATION_ID");
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "0") };
+    unsafe { std::env::remove_var("CODEX_SESSION_ID") };
+    unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     let repo = fresh_repo();
     let event = json!({
         "hook_event_name": "UserPromptSubmit",

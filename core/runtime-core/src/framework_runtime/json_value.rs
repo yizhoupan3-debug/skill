@@ -40,11 +40,7 @@ pub(super) fn value_text(value: Option<&Value>) -> String {
 
 pub(super) fn nonempty_string(value: Option<&Value>) -> Option<String> {
     let text = value_text(value);
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
+    if text.is_empty() { None } else { Some(text) }
 }
 
 pub(super) fn value_bool_or_none(value: Option<&Value>) -> Option<bool> {
@@ -91,4 +87,53 @@ pub(super) fn stable_line_items(items: Vec<String>) -> Vec<String> {
         result.push(value);
     }
     result
+}
+
+// ── Payload key-based extractors (merged from json_payload.rs) ──
+
+pub fn required_non_empty_string(
+    payload: &Value,
+    key: &str,
+    context: &str,
+) -> Result<String, String> {
+    payload
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+        .ok_or_else(|| format!("{context} requires non-empty {key}"))
+}
+
+pub fn optional_non_empty_string(payload: &Value, key: &str) -> Option<String> {
+    payload
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+}
+
+pub(crate) fn optional_bool(payload: &Value, key: &str) -> Option<bool> {
+    payload.get(key).and_then(Value::as_bool)
+}
+
+pub(crate) fn nested_value<'a>(payload: &'a Value, path: &[&str]) -> Option<&'a Value> {
+    let mut current = payload;
+    for key in path {
+        current = current.get(*key)?;
+    }
+    Some(current)
+}
+
+pub(crate) fn nested_non_empty_string(payload: &Value, path: &[&str]) -> Option<String> {
+    nested_value(payload, path)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_string())
+}
+
+pub(crate) fn nested_bool(payload: &Value, path: &[&str]) -> Option<bool> {
+    nested_value(payload, path).and_then(Value::as_bool)
 }

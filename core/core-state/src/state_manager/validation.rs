@@ -175,7 +175,6 @@ pub fn validate_external_research_strict(v: &Value) -> Result<(), String> {
     Ok(())
 }
 
-
 /// Validates optional structured external research blob for `append_round`.
 /// Aligns with lane-templates **deep mode** YAML (`claims`, `contradiction_sweep`, `retrieval_trace`, optional `unknowns` / `quantitative_replays`).
 pub fn validate_external_research_structured(v: &Value) -> Result<(), String> {

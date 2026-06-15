@@ -83,10 +83,7 @@ pub fn truncate_corrupt_tail(path: &Path) -> Result<bool, String> {
                     f.sync_all()
                 })
                 .map_err(|err| {
-                    format!(
-                        "truncate_corrupt_tail: set_len {}: {err}",
-                        path.display()
-                    )
+                    format!("truncate_corrupt_tail: set_len {}: {err}", path.display())
                 })?;
             Ok(true)
         }
@@ -143,9 +140,7 @@ pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, St
             .write(true)
             .open(path)
             .and_then(|f| f.set_len(0))
-            .map_err(|err| {
-                format!("compact_jsonl: truncate-all {}: {err}", path.display())
-            })?;
+            .map_err(|err| format!("compact_jsonl: truncate-all {}: {err}", path.display()))?;
         return Ok(true);
     }
 
@@ -222,10 +217,7 @@ fn derive_compact_tmp_path(path: &Path) -> std::path::PathBuf {
         .unwrap_or(0);
     let nonce = NONCE.fetch_add(1, Ordering::Relaxed);
 
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("jsonl");
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("jsonl");
     let new_ext = format!("{ext}.compact.tmp-{pid}-{micros}-{nonce}");
     path.with_extension(new_ext)
 }
@@ -275,18 +267,9 @@ mod tests {
         assert!(truncated, "corrupt tail must be truncated");
 
         let content = fs::read_to_string(&path).unwrap();
-        assert!(
-            content.contains(&valid1),
-            "first valid line must survive"
-        );
-        assert!(
-            content.contains(&valid2),
-            "second valid line must survive"
-        );
-        assert!(
-            !content.contains(corrupt),
-            "corrupt line must be removed"
-        );
+        assert!(content.contains(&valid1), "first valid line must survive");
+        assert!(content.contains(&valid2), "second valid line must survive");
+        assert!(!content.contains(corrupt), "corrupt line must be removed");
         // Verify the file parses as valid JSONL (no corrupt residue).
         for line in content.lines() {
             let trimmed = line.trim();
@@ -307,11 +290,7 @@ mod tests {
         let corrupt1 = "broken1";
         let corrupt2 = "broken2";
         // Pattern: valid, corrupt, corrupt — last valid is line 1.
-        fs::write(
-            &path,
-            format!("{valid1}\n{corrupt1}\n{corrupt2}\n"),
-        )
-        .unwrap();
+        fs::write(&path, format!("{valid1}\n{corrupt1}\n{corrupt2}\n")).unwrap();
 
         let truncated = truncate_corrupt_tail(&path).unwrap();
         assert!(truncated);
@@ -330,7 +309,10 @@ mod tests {
         let truncated = truncate_corrupt_tail(&path).unwrap();
         assert!(truncated, "all-corrupt file must be truncated to zero");
         let content = fs::read_to_string(&path).unwrap();
-        assert!(content.is_empty(), "file should be empty after truncating all corrupt");
+        assert!(
+            content.is_empty(),
+            "file should be empty after truncating all corrupt"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -427,7 +409,10 @@ mod tests {
         assert!(compacted);
         let readback = fs::read_to_string(&path).unwrap();
         let line_count = readback.lines().filter(|l| !l.trim().is_empty()).count();
-        assert_eq!(line_count, 99, "corrupt lines should be stripped during compaction");
+        assert_eq!(
+            line_count, 99,
+            "corrupt lines should be stripped during compaction"
+        );
         // All remaining lines are valid JSON.
         for line in readback.lines() {
             let trimmed = line.trim();

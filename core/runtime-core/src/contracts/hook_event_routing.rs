@@ -1,6 +1,6 @@
 //! Cross-host hook lifecycle event routing contract.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub const HOOK_EVENT_ROUTING_SCHEMA_VERSION: &str = "router-rs-hook-event-routing-v1";
 pub const HOOK_EVENT_ROUTING_AUTHORITY: &str = "rust-hook-event-routing";
@@ -72,8 +72,14 @@ mod tests {
 
     #[test]
     fn canonical_hook_event_maps_cursor_and_codex_spellings() {
-        assert_eq!(canonical_hook_event("beforeSubmitPrompt"), Some("UserPromptSubmit"));
-        assert_eq!(canonical_hook_event("UserPromptSubmit"), Some("UserPromptSubmit"));
+        assert_eq!(
+            canonical_hook_event("beforeSubmitPrompt"),
+            Some("UserPromptSubmit")
+        );
+        assert_eq!(
+            canonical_hook_event("UserPromptSubmit"),
+            Some("UserPromptSubmit")
+        );
         assert_eq!(canonical_hook_event("post-tool-use"), Some("PostToolUse"));
         assert_eq!(canonical_hook_event("sessionEnd"), Some("SessionEnd"));
         assert!(canonical_hook_event("unknown-event").is_none());

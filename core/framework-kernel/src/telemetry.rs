@@ -168,8 +168,7 @@ fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result
             .map_err(|e| format!("open journal {}: {e}", journal_path.display()))?;
         file.write_all(lines.as_bytes())
             .map_err(|e| format!("append journal: {e}"))?;
-        file.sync_all()
-            .map_err(|e| format!("sync journal: {e}"))?;
+        file.sync_all().map_err(|e| format!("sync journal: {e}"))?;
     }
     write_atomic_snapshot(journal_path)?;
     Ok(())
@@ -245,7 +244,11 @@ mod tests {
         }
         handle.shutdown();
         let snapshot = dir.join("snapshot.json");
-        assert!(snapshot.is_file(), "expected atomic snapshot at {}", snapshot.display());
+        assert!(
+            snapshot.is_file(),
+            "expected atomic snapshot at {}",
+            snapshot.display()
+        );
         let raw = fs::read_to_string(&snapshot).unwrap();
         assert!(raw.contains("telemetry-snapshot-v1"));
         assert!(raw.contains("events.jsonl"));

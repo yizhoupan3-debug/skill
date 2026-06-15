@@ -1,16 +1,16 @@
 //! Runtime event attach / subscribe / cleanup.
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use crate::runtime_envelope_ids::ATTACHED_RUNTIME_EVENT_ATTACH_AUTHORITY;
 use crate::runtime_storage::{
-    resolve_storage_backend, storage_artifact_exists, storage_read_text, ResolvedStorageBackend,
+    ResolvedStorageBackend, resolve_storage_backend, storage_artifact_exists, storage_read_text,
 };
 use crate::stdio_payload_types::TraceStreamReplayRequestPayload;
 
-use super::json_payload::{nested_non_empty_string, optional_bool, optional_non_empty_string};
+use super::json_value::{nested_non_empty_string, optional_bool, optional_non_empty_string};
 use super::trace_stream_io::replay_trace_stream;
 
 fn descriptor_mapping<'a>(
@@ -47,7 +47,9 @@ fn merge_attach_path_values(
     match (explicit_value, descriptor_value) {
         (None, descriptor) => Ok(descriptor),
         (Some(explicit), None) => Ok(Some(explicit.to_string())),
-        (Some(explicit), Some(descriptor)) if explicit == descriptor => Ok(Some(explicit.to_string())),
+        (Some(explicit), Some(descriptor)) if explicit == descriptor => {
+            Ok(Some(explicit.to_string()))
+        }
         (Some(_), Some(_)) => Err(format!(
             "External runtime event attach received conflicting {field_name:?} values between direct args and attach_descriptor."
         )),
@@ -587,9 +589,13 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     }
 
     let transport = if let Some(transport_path) = transport_path.as_ref() {
-        load_json_artifact(&Some(transport_path.to_path_buf()), storage_backend.as_ref())?.ok_or_else(
-            || "External runtime event attach could not load a transport descriptor.".to_string(),
+        load_json_artifact(
+            &Some(transport_path.to_path_buf()),
+            storage_backend.as_ref(),
         )?
+        .ok_or_else(|| {
+            "External runtime event attach could not load a transport descriptor.".to_string()
+        })?
     } else {
         handoff
             .as_ref()

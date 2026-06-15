@@ -12,7 +12,7 @@ mod five_host_install_projection {
         host_targets_supported_host_ids, skills_install_tool_for_host_id,
     };
     use crate::host_integration::{
-        install_projection_tool, projection_scope_for_tool, ResolvedProjectionRoots,
+        ResolvedProjectionRoots, install_projection_tool, projection_scope_for_tool,
     };
     use crate::runtime_registry::load_runtime_registry_json;
 
@@ -56,15 +56,16 @@ mod five_host_install_projection {
                 ("cursor".into(), home.join(".cursor")),
                 ("claude-code".into(), home.join(".claude")),
                 ("opencode".into(), home.join(".opencode")),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         };
         (root, roots)
     }
 
     fn read_json(path: &Path) -> Value {
-        let text = fs::read_to_string(path).unwrap_or_else(|err| {
-            panic!("missing projected config {}: {err}", path.display())
-        });
+        let text = fs::read_to_string(path)
+            .unwrap_or_else(|err| panic!("missing projected config {}: {err}", path.display()));
         serde_json::from_str(&text).expect("parse json")
     }
 
@@ -130,19 +131,20 @@ mod five_host_install_projection {
     #[test]
     fn codegraph_five_host_install_projection_smoke() {
         let framework_root = framework_repo_root();
-        let registry =
-            load_runtime_registry_json(&framework_root).expect("load RUNTIME_REGISTRY");
-        let host_ids =
-            host_targets_supported_host_ids(&registry).expect("supported host ids");
-        assert_eq!(host_ids.len(), 5, "closed-set must remain five hosts (codex, claude-code, cursor, opencode, mimo)");
+        let registry = load_runtime_registry_json(&framework_root).expect("load RUNTIME_REGISTRY");
+        let host_ids = host_targets_supported_host_ids(&registry).expect("supported host ids");
+        assert_eq!(
+            host_ids.len(),
+            5,
+            "closed-set must remain five hosts (codex, claude-code, cursor, opencode, mimo)"
+        );
 
         let (cleanup_root, roots) = test_roots(&framework_root);
         let prior_home = std::env::var_os("HOME");
-        std::env::set_var("HOME", &roots.account_home_root);
+        unsafe { std::env::set_var("HOME", &roots.account_home_root) };
 
         for host_id in &host_ids {
-            let tool =
-                skills_install_tool_for_host_id(&registry, host_id).expect("install tool");
+            let tool = skills_install_tool_for_host_id(&registry, host_id).expect("install tool");
             let scope = projection_scope_for_tool(&tool, "project").expect("scope");
             let result = install_projection_tool(&roots, &tool, scope)
                 .unwrap_or_else(|err| panic!("install {host_id} ({tool}): {err}"));
@@ -155,9 +157,9 @@ mod five_host_install_projection {
         }
 
         if let Some(h) = prior_home {
-            std::env::set_var("HOME", h);
+            unsafe { std::env::set_var("HOME", h) };
         } else {
-            std::env::remove_var("HOME");
+            unsafe { std::env::remove_var("HOME") };
         }
         let _ = fs::remove_dir_all(cleanup_root);
     }

@@ -55,7 +55,8 @@ pub fn build_driver_command(
     worktree_name: Option<String>,
     worktree_path: Option<String>,
 ) -> Result<DriverCommandSpec, String> {
-    let effective_cwd = resolve_worktree_cwd(cwd, worktree_name.as_deref(), worktree_path.as_deref());
+    let effective_cwd =
+        resolve_worktree_cwd(cwd, worktree_name.as_deref(), worktree_path.as_deref());
 
     // Try trait-based dispatch via host provider registry.
     if let Some(provider) = crate::hosts::host_provider_for_routing_spelling(host) {

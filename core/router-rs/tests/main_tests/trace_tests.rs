@@ -617,7 +617,7 @@ fn trace_append_preserves_jsonl_records_under_concurrency() {
                 event_schema_version: "runtime-trace-v2".to_string(),
                 generation: 1,
                 seq,
-                session_id: "concurrent-trace".to_string(),
+                run_id: "concurrent-trace".to_string(),
                 job_id: None,
                 kind: "test.event".to_string(),
                 stage: "append".to_string(),

@@ -8,9 +8,7 @@ pub(crate) struct ParseOutput {
 
 pub(crate) fn parse(source: &str) -> ParseOutput {
     let mut parser = tree_sitter::Parser::new();
-    parser
-        .set_language(&tree_sitter_rust::LANGUAGE.into())
-        .ok();
+    parser.set_language(&tree_sitter_rust::LANGUAGE.into()).ok();
     let Some(tree) = parser.parse(source, None) else {
         return ParseOutput {
             symbols: Vec::new(),
@@ -50,7 +48,8 @@ fn collect_all(
     // Collect call edges at this node
     if node.kind() == "call_expression" {
         if let Some(func) = node.child_by_field_name("function") {
-            if let (Some(caller), Some(callee)) = (enclosing_symbol(node, source), callee_name(func, source))
+            if let (Some(caller), Some(callee)) =
+                (enclosing_symbol(node, source), callee_name(func, source))
             {
                 edges.push(ParsedEdge {
                     caller_symbol: caller,
@@ -70,10 +69,9 @@ fn collect_all(
 
 fn callee_name(node: Node<'_>, source: &[u8]) -> Option<String> {
     match node.kind() {
-        "identifier" | "type_identifier" | "field_identifier" => node
-            .utf8_text(source)
-            .ok()
-            .map(|s| s.to_string()),
+        "identifier" | "type_identifier" | "field_identifier" => {
+            node.utf8_text(source).ok().map(|s| s.to_string())
+        }
         "scoped_identifier" => node
             .child_by_field_name("name")
             .and_then(|n| n.utf8_text(source).ok().map(|s| s.to_string())),

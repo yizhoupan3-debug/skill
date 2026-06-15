@@ -1,11 +1,11 @@
 //! `state_manager/rfv_state` coverage at router-rs boundary
 //! (physical module: `core/core-state` → `core_state::state_manager`).
 
+use crate::atomic_write::write_atomic_json;
+use crate::harness_context_signals::rfv_state_signals_math;
 use core_state::state_manager::{
     read_rfv_loop_state, rfv_loop_state_path, write_active_task_pointer,
 };
-use crate::atomic_write::write_atomic_json;
-use crate::harness_context_signals::rfv_state_signals_math;
 use serde_json::json;
 use std::fs;
 use std::path::PathBuf;

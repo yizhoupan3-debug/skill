@@ -5,7 +5,7 @@
 //! - 或 `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1`（未注册时强制 handler，单测/对照）。
 
 use crate::hooks::router_rs_cursor_hook_legacy_subtracted_events_enabled;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
 /// 与 [`.cursor/hooks.json`](../../../../.cursor/hooks.json) / CI parity 一致的注册闭集。
@@ -40,14 +40,14 @@ pub fn cursor_hook_event_is_subtracted(lowered_event: &str) -> bool {
 }
 
 fn hook_entry_has_command(entries: &Value) -> bool {
-    entries
-        .as_array()
-        .is_some_and(|arr| arr.iter().any(|entry| {
+    entries.as_array().is_some_and(|arr| {
+        arr.iter().any(|entry| {
             entry
                 .get("command")
                 .and_then(Value::as_str)
                 .is_some_and(|s| !s.trim().is_empty())
-        }))
+        })
+    })
 }
 
 /// 事件是否在仓库 `.cursor/hooks.json` 中有效注册（键存在且首条 hook 含非空 `command`）。

@@ -255,7 +255,8 @@ fn apply_manifest_route_meta(
 
 /// Expand `["supported"]` / `["all-hosts"]` wildcard in host_platforms to all registered hosts.
 fn expand_supported_host_platforms(records: &mut [SkillRecord], any_sibling_path: &Path) {
-    let is_wildcard = |hp: &[String]| hp.len() == 1 && (hp[0] == "supported" || hp[0] == "all-hosts");
+    let is_wildcard =
+        |hp: &[String]| hp.len() == 1 && (hp[0] == "supported" || hp[0] == "all-hosts");
     if !records.iter().any(|r| is_wildcard(&r.host_platforms)) {
         return;
     }
@@ -266,7 +267,10 @@ fn expand_supported_host_platforms(records: &mut [SkillRecord], any_sibling_path
         .and_then(|reg_path| read_json(&reg_path).ok())
         .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
         .map(|arr| {
-            let mut v: Vec<String> = arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect();
+            let mut v: Vec<String> = arr
+                .iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect();
             v.sort();
             v
         })
@@ -313,7 +317,11 @@ fn apply_manifest_host_platforms(
         .map(|repo| repo.join("configs/framework/RUNTIME_REGISTRY.json"))
         .and_then(|reg_path| read_json(&reg_path).ok())
         .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
 
     let mut hosts_by_slug = HashMap::new();
@@ -475,9 +483,10 @@ fn min_entry_mtime(entry: &RecordsCacheEntry) -> Option<u64> {
 
 /// Invalidate all records cache entries (full flush).
 pub fn invalidate_records_cache() -> Result<(), String> {
-    let mut state = records_cache_state()
-        .write()
-        .map_err(|e| { eprintln!("[router-rs] route records cache lock poisoned: {e}"); "route records cache lock poisoned".to_string() })?;
+    let mut state = records_cache_state().write().map_err(|e| {
+        eprintln!("[router-rs] route records cache lock poisoned: {e}");
+        "route records cache lock poisoned".to_string()
+    })?;
     state.map.clear();
     state.fifo.clear();
     Ok(())
@@ -504,9 +513,10 @@ pub fn load_records_cached_for_stdio_resolved(
     let index_mtime = file_modified_at(runtime_path.and_then(|p| index_sibling_path(p)).as_deref());
 
     {
-        let state = records_cache_state()
-            .read()
-            .map_err(|e| { eprintln!("[router-rs] route records cache lock poisoned: {e}"); "route records cache lock poisoned".to_string() })?;
+        let state = records_cache_state().read().map_err(|e| {
+            eprintln!("[router-rs] route records cache lock poisoned: {e}");
+            "route records cache lock poisoned".to_string()
+        })?;
         if let Some(entry) = state.map.get(&key) {
             if entry.runtime_mtime == runtime_mtime
                 && entry.manifest_mtime == manifest_mtime
@@ -526,9 +536,10 @@ pub fn load_records_cached_for_stdio_resolved(
         index_mtime,
         records: Arc::clone(&records),
     };
-    let mut state = records_cache_state()
-        .write()
-        .map_err(|e| { eprintln!("[router-rs] route records cache lock poisoned: {e}"); "route records cache lock poisoned".to_string() })?;
+    let mut state = records_cache_state().write().map_err(|e| {
+        eprintln!("[router-rs] route records cache lock poisoned: {e}");
+        "route records cache lock poisoned".to_string()
+    })?;
     let is_new_key = !state.map.contains_key(&key);
     state.map.insert(key.clone(), entry);
     if is_new_key {

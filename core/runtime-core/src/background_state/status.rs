@@ -27,7 +27,10 @@ pub(super) fn is_terminal_status(status: &str) -> bool {
     )
 }
 
-pub(super) fn validate_transition(previous_status: Option<&str>, next_status: &str) -> Result<(), String> {
+pub(super) fn validate_transition(
+    previous_status: Option<&str>,
+    next_status: &str,
+) -> Result<(), String> {
     let allowed = match previous_status {
         None => matches!(
             next_status,
@@ -141,7 +144,11 @@ impl BackgroundRunStatus {
 }
 
 impl BackgroundJobStatusMutation {
-    pub(super) fn apply(&self, job_id: &str, existing: Option<&BackgroundRunStatus>) -> BackgroundRunStatus {
+    pub(super) fn apply(
+        &self,
+        job_id: &str,
+        existing: Option<&BackgroundRunStatus>,
+    ) -> BackgroundRunStatus {
         match existing {
             None => BackgroundRunStatus {
                 job_id: job_id.to_string(),

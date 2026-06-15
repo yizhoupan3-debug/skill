@@ -3,7 +3,7 @@
 //! Cache hits avoid repeat `read_dir` scans; callers still receive an owned `Vec` clone per call.
 //! The main win is skipping duplicate directory walks within one hook subprocess (not zero-copy).
 
-use super::{parse_terminal_header, TerminalObservation};
+use super::{TerminalObservation, parse_terminal_header};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Read;

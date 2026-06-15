@@ -1,12 +1,12 @@
 use super::control_plane::{build_state_control_plane, normalized_backend_family};
 use super::persist::{read_persisted_state, write_persisted_state};
-use super::types::{BackgroundJobStatusMutation, BackgroundRunStatus};
 use super::status::{
     is_active_status, is_terminal_status, parse_rfc3339_to_utc, validate_transition,
 };
 use super::types::*;
+use super::types::{BackgroundJobStatusMutation, BackgroundRunStatus};
 use chrono::{DateTime, Utc};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -200,7 +200,10 @@ impl BackgroundStateStore {
         ghost_pairs.len()
     }
 
-    pub(super) fn merge_persisted(&mut self, persisted: PersistedBackgroundState) -> Result<(), String> {
+    pub(super) fn merge_persisted(
+        &mut self,
+        persisted: PersistedBackgroundState,
+    ) -> Result<(), String> {
         if let Some(Value::Object(persisted_control_plane)) = persisted.control_plane {
             if let Value::Object(ref mut current) = self.control_plane {
                 for (key, value) in persisted_control_plane {
@@ -356,11 +359,7 @@ impl BackgroundStateStore {
         let resolved_session_ref = resolved_mutation.session_id.as_deref();
         let updated = resolved_mutation.apply(job_id, existing.as_ref());
         self.jobs.insert(job_id.to_string(), updated.clone());
-        self.release_previous_session(
-            job_id,
-            previous_session_id.as_deref(),
-            resolved_session_ref,
-        );
+        self.release_previous_session(job_id, previous_session_id.as_deref(), resolved_session_ref);
         self.finalize_session(job_id, resolved_session_ref, &mutation.status);
         let persisted_payload_text = self.persist()?;
         Ok((updated, persisted_payload_text))
@@ -412,7 +411,12 @@ impl BackgroundStateStore {
         }
     }
 
-    pub(super) fn finalize_session(&mut self, job_id: &str, session_id: Option<&str>, status: &str) {
+    pub(super) fn finalize_session(
+        &mut self,
+        job_id: &str,
+        session_id: Option<&str>,
+        status: &str,
+    ) {
         let Some(session_id) = session_id else {
             return;
         };
@@ -504,7 +508,10 @@ impl BackgroundStateStore {
         let mut grouped: HashMap<String, Vec<BackgroundRunStatus>> = HashMap::new();
         for job in self.jobs.values() {
             if let Some(ref group_id) = job.parallel_group_id {
-                grouped.entry(group_id.clone()).or_default().push(job.clone());
+                grouped
+                    .entry(group_id.clone())
+                    .or_default()
+                    .push(job.clone());
             }
         }
         let mut group_ids = grouped.keys().cloned().collect::<Vec<_>>();
@@ -608,7 +615,7 @@ impl BackgroundStateStore {
                 return Err(format!(
                     "Unsupported takeover arbitration operation: {:?}",
                     other
-                ))
+                ));
             }
         };
         let persisted_payload_text = if changed { self.persist()? } else { None };

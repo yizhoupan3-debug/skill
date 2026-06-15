@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
+use tracing::debug;
 
 pub const CLOSEOUT_RECORD_SCHEMA_VERSION: &str = "closeout-record-v1";
 pub const CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION: &str =
@@ -120,7 +121,11 @@ pub struct CloseoutViolation {
 
 impl CloseoutViolation {
     /// Create a violation with `category` automatically derived from the rule name.
-    pub fn new(rule: impl Into<String>, severity: impl Into<String>, detail: impl Into<String>) -> Self {
+    pub fn new(
+        rule: impl Into<String>,
+        severity: impl Into<String>,
+        detail: impl Into<String>,
+    ) -> Self {
         let rule = rule.into();
         let category = closeout_rule_category(&rule).to_string();
         Self {
@@ -155,6 +160,7 @@ pub struct CloseoutEnforcementResponse {
     pub prediction_verification: Vec<PredictionVerificationReport>,
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
     // Check raw shape violations FIRST: critical issues like missing schema_version
     // are more actionable than serde's deny_unknown_fields errors, which can mask
@@ -206,9 +212,11 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
                 prediction_verification: Vec::new(),
             };
             append_closeout_violations(&mut response, raw_shape_violations);
-            response
-                .violations
-                .push(CloseoutViolation::new("parse_error", "block", format!("parse closeout record failed: {err}")));
+            response.violations.push(CloseoutViolation::new(
+                "parse_error",
+                "block",
+                format!("parse closeout record failed: {err}"),
+            ));
             serde_json::to_value(response)
                 .map_err(|err| format!("serialize closeout response: {err}"))
         }
@@ -578,12 +586,14 @@ fn append_prediction_verification(
                 &check.detail,
             ));
         }
-        response.prediction_verification.push(PredictionVerificationReport {
-            matched: check.matched,
-            rule: check.rule.clone(),
-            detail: check.detail.clone(),
-            severity: check.severity.clone(),
-        });
+        response
+            .prediction_verification
+            .push(PredictionVerificationReport {
+                matched: check.matched,
+                rule: check.rule.clone(),
+                detail: check.detail.clone(),
+                severity: check.severity.clone(),
+            });
     }
     if !checks.is_empty() {
         crate::telemetry_emit::emit_prediction_outcome(
@@ -649,9 +659,11 @@ pub fn evaluate_closeout_record_value_with_context(
                 prediction_verification: Vec::new(),
             };
             append_closeout_violations(&mut response, raw_shape_violations);
-            response
-                .violations
-                .push(CloseoutViolation::new("parse_error", "block", format!("parse closeout record failed: {err}")));
+            response.violations.push(CloseoutViolation::new(
+                "parse_error",
+                "block",
+                format!("parse closeout record failed: {err}"),
+            ));
             serde_json::to_value(response)
                 .map_err(|err| format!("serialize closeout response: {err}"))
         }
@@ -905,11 +917,13 @@ mod tests {
         }))
         .expect("evaluate closeout");
         assert_eq!(response["closeout_allowed"], json!(false));
-        assert!(response["violations"]
-            .as_array()
-            .expect("violations")
-            .iter()
-            .any(|v| v["rule"] == "schema_version_mismatch"));
+        assert!(
+            response["violations"]
+                .as_array()
+                .expect("violations")
+                .iter()
+                .any(|v| v["rule"] == "schema_version_mismatch")
+        );
     }
 
     #[test]
@@ -923,11 +937,13 @@ mod tests {
         }))
         .expect("evaluate closeout");
         assert_eq!(response["closeout_allowed"], json!(false));
-        assert!(response["violations"]
-            .as_array()
-            .expect("violations")
-            .iter()
-            .any(|v| v["rule"] == "invalid_command_evidence"));
+        assert!(
+            response["violations"]
+                .as_array()
+                .expect("violations")
+                .iter()
+                .any(|v| v["rule"] == "invalid_command_evidence")
+        );
     }
 
     #[test]
@@ -950,11 +966,13 @@ mod tests {
         )
         .expect("evaluate closeout");
         assert_eq!(response["closeout_allowed"], json!(false));
-        assert!(response["violations"]
-            .as_array()
-            .expect("violations")
-            .iter()
-            .any(|v| v["rule"] == "task_id_context_mismatch"));
+        assert!(
+            response["violations"]
+                .as_array()
+                .expect("violations")
+                .iter()
+                .any(|v| v["rule"] == "task_id_context_mismatch")
+        );
     }
 
     #[test]
@@ -970,13 +988,17 @@ mod tests {
         let payload = closeout_enforcement_contract();
         let rules = payload["rules"].as_array().expect("rules array");
         assert!(rules.iter().any(|v| v == "claimed_done_without_evidence"));
-        assert!(rules
-            .iter()
-            .any(|v| v == "verification_passed_with_missing_artifact"));
+        assert!(
+            rules
+                .iter()
+                .any(|v| v == "verification_passed_with_missing_artifact")
+        );
         assert!(rules.iter().any(|v| v == "claimed_passed_without_evidence"));
-        assert!(rules
-            .iter()
-            .any(|v| v == "claimed_passed_without_evidence_index_rows"));
+        assert!(
+            rules
+                .iter()
+                .any(|v| v == "claimed_passed_without_evidence_index_rows")
+        );
         assert_eq!(
             payload["record_schema_version"],
             CLOSEOUT_RECORD_SCHEMA_VERSION
@@ -1037,9 +1059,7 @@ mod tests {
             exit_code: 1,
             ..Default::default()
         });
-        record
-            .risks
-            .push("tests failed unexpectedly".to_string());
+        record.risks.push("tests failed unexpectedly".to_string());
         let ctx = CloseoutEvidenceContext {
             goal_prediction: Some(GoalStatePrediction {
                 expected_verification_status: Some("passed".to_string()),
@@ -1054,10 +1074,11 @@ mod tests {
             resp.violations
         );
         assert!(has_rule(&resp, "prediction_verification_status_mismatch"));
-        assert!(resp
-            .prediction_verification
-            .iter()
-            .any(|p| p.rule == "prediction_hypothesis_reflected"));
+        assert!(
+            resp.prediction_verification
+                .iter()
+                .any(|p| p.rule == "prediction_hypothesis_reflected")
+        );
     }
 
     /// R8 silent when EVIDENCE rollup has at least one successful row.

@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use core_policy::hook_policy::{evaluate_hook_policy, HookPolicyEvaluateRequest};
+use core_policy::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy};
 use core_policy::review_gate_engine::{
     fork_context_from_values, independent_context_fork, review_independent_reviewer_evidence,
 };
@@ -66,8 +66,7 @@ fn subagent_filesystem_isolation_smoke() {
         "repo-relative join must reject parent-dir escape"
     );
     assert!(
-        crate::path_guard::join_repo_relative_under_root(&root, "artifacts/../../outside")
-            .is_err(),
+        crate::path_guard::join_repo_relative_under_root(&root, "artifacts/../../outside").is_err(),
         "repo-relative join must reject embedded traversal"
     );
     let traversal_write = Path::new("artifacts/current/../outside/GOAL_STATE.json");
@@ -91,7 +90,9 @@ fn subagent_filesystem_isolation_smoke() {
     fs::write(&inside, b"// smoke\n").expect("write inside");
     assert!(crate::path_guard::path_is_within_repo_root(&root, &inside));
     let outside = std::env::temp_dir().join("outside-subagent-fs-smoke.txt");
-    assert!(!crate::path_guard::path_is_within_repo_root(&root, &outside));
+    assert!(!crate::path_guard::path_is_within_repo_root(
+        &root, &outside
+    ));
 
     let protected = evaluate_hook_policy(HookPolicyEvaluateRequest {
         operation: "protected-path".to_string(),

@@ -1,16 +1,16 @@
+use crate::hooks;
+use crate::hooks::MAX_CONCURRENT_SUBAGENTS_LIMIT;
+use chrono::{DateTime, Utc};
 use core_policy::hook_common::{
     has_override, is_parallel_delegation_prompt, is_review_prompt, normalize_subagent_type,
     normalize_tool_name, saw_reject_reason, strip_quoted_or_codeblock_or_url,
 };
 use core_policy::review_gate_engine::{fork_context_from_values, review_gate_armed};
-use core_policy::review_output_lint::{lint_review_output, LintSeverity};
-use crate::hooks;
-use crate::hooks::MAX_CONCURRENT_SUBAGENTS_LIMIT;
-use chrono::{DateTime, Utc};
+use core_policy::review_output_lint::{LintSeverity, lint_review_output};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::cell::Cell;
-use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
@@ -85,5 +85,9 @@ mod tests {
         });
     }
 
-    include!("tests.rs");
+    include!("tests_guards.rs");
+    include!("tests_review_gate_part1.rs");
+    include!("tests_review_gate_part2.rs");
+    include!("tests_review_gate_part3.rs");
+    include!("tests_session_terminal.rs");
 }

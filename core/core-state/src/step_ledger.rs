@@ -1,6 +1,6 @@
 use crate::utils::path_guard::{safe_task_id_component, validate_task_id_component};
 use chrono::{SecondsFormat, Utc};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
@@ -143,7 +143,9 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
                 seq: None,
                 schema_version: Some(1),
             };
-            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
+            if let Err(e) =
+                crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+            {
                 eprintln!("[router-rs] failed to append step transaction to TASK_LEDGER: {e}");
             }
             let _ = crate::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id);
@@ -403,18 +405,16 @@ fn scan_jsonl_for_idempotency_key(line: &str, target: &str) -> bool {
 
         // Not the idempotency_key field — skip its value.
         match chars.next() {
-            Some('"') => {
-                loop {
-                    match chars.next() {
-                        None => return false,
-                        Some('"') => break,
-                        Some('\\') => {
-                            let _ = chars.next();
-                        }
-                        _ => {}
+            Some('"') => loop {
+                match chars.next() {
+                    None => return false,
+                    Some('"') => break,
+                    Some('\\') => {
+                        let _ = chars.next();
                     }
+                    _ => {}
                 }
-            }
+            },
             Some('{') | Some('[') => {
                 skip_container_value(&mut chars);
             }
@@ -463,18 +463,16 @@ fn skip_container_value(chars: &mut std::iter::Peekable<std::str::Chars<'_>>) {
                 }
                 depth -= 1;
             }
-            Some('"') => {
-                loop {
-                    match chars.next() {
-                        None => return,
-                        Some('"') => break,
-                        Some('\\') => {
-                            let _ = chars.next();
-                        }
-                        _ => {}
+            Some('"') => loop {
+                match chars.next() {
+                    None => return,
+                    Some('"') => break,
+                    Some('\\') => {
+                        let _ = chars.next();
                     }
+                    _ => {}
                 }
-            }
+            },
             _ => {}
         }
     }
@@ -579,9 +577,10 @@ mod tests {
         assert_eq!(summary["entry_count"], json!(1));
         assert_eq!(summary["status_counts"]["pass"], json!(1));
         assert_eq!(summary["latest"]["step_id"], json!("s1"));
-        assert!(repo
-            .join("artifacts/current/task-a/TASK_STATE.json")
-            .is_file());
+        assert!(
+            repo.join("artifacts/current/task-a/TASK_STATE.json")
+                .is_file()
+        );
         let _ = fs::remove_dir_all(repo);
     }
 
@@ -608,7 +607,10 @@ mod tests {
         // Key not present
         assert!(!scan_jsonl_for_idempotency_key(r#"{"step_id":"s1"}"#, "x"));
         // Null value
-        assert!(!scan_jsonl_for_idempotency_key(r#"{"idempotency_key":null}"#, "x"));
+        assert!(!scan_jsonl_for_idempotency_key(
+            r#"{"idempotency_key":null}"#,
+            "x"
+        ));
         // Nested containers before the key
         assert!(scan_jsonl_for_idempotency_key(
             r#"{"meta":{"a":[1,[2]]},"idempotency_key":"ok"}"#,

@@ -271,9 +271,11 @@ fn install_payload_contains_projection_version_and_digest() {
         payload["projection_version"].as_str(),
         Some(ROUTER_RS_HOOK_PROJECTION_VERSION)
     );
-    assert!(payload["command_digest"]
-        .as_str()
-        .is_some_and(|v| v.len() == 64));
+    assert!(
+        payload["command_digest"]
+            .as_str()
+            .is_some_and(|v| v.len() == 64)
+    );
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -361,10 +363,12 @@ fn install_hooks_symlink_target_handled_safely() {
 #[test]
 fn install_hooks_invalid_root_returns_error() {
     let result = merge_hooks_json(Some(json!([])), &install_hook_commands(Path::new(".")));
-    assert!(result
-        .err()
-        .unwrap_or_default()
-        .contains("root type: expected object"));
+    assert!(
+        result
+            .err()
+            .unwrap_or_default()
+            .contains("root type: expected object")
+    );
 }
 
 #[test]
@@ -373,10 +377,12 @@ fn install_hooks_invalid_hooks_field_returns_error() {
         Some(json!({"hooks":"not-an-object"})),
         &install_hook_commands(Path::new(".")),
     );
-    assert!(result
-        .err()
-        .unwrap_or_default()
-        .contains("`hooks` must be an object"));
+    assert!(
+        result
+            .err()
+            .unwrap_or_default()
+            .contains("`hooks` must be an object")
+    );
 }
 
 #[test]
@@ -385,10 +391,12 @@ fn install_hooks_invalid_event_array_returns_error() {
         Some(json!({"hooks":{"Stop":{"x":1}}})),
         &install_hook_commands(Path::new(".")),
     );
-    assert!(result
-        .err()
-        .unwrap_or_default()
-        .contains("hooks.Stop must be an array"));
+    assert!(
+        result
+            .err()
+            .unwrap_or_default()
+            .contains("hooks.Stop must be an array")
+    );
 }
 
 #[test]

@@ -4,7 +4,7 @@
 //! Host-specific behaviors (e.g. Cursor doesn't block Write tool) are tested
 //! in per-host test files, not here.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::path::Path;
 
 /// Dispatch a hook event to the appropriate host handler and return the JSON response.
@@ -26,9 +26,7 @@ fn dispatch(host_id: &str, event: &str, repo_root: &Path, payload: &Value) -> Va
             )
         }
         "cursor" => {
-            crate::hosts::cursor_hooks::dispatch_cursor_hook_event(
-                repo_root, event, payload,
-            )
+            crate::hosts::cursor_hooks::dispatch_cursor_hook_event(repo_root, event, payload)
         }
         "codex" => {
             // Codex lifecycle hook expects specific event names in payload.
@@ -58,9 +56,7 @@ fn dispatch(host_id: &str, event: &str, repo_root: &Path, payload: &Value) -> Va
             .unwrap_or_else(|| json!({}))
         }
         "opencode" => {
-            crate::hosts::opencode_hooks::dispatch_opencode_hook_event(
-                repo_root, event, payload,
-            )
+            crate::hosts::opencode_hooks::dispatch_opencode_hook_event(repo_root, event, payload)
         }
         _ => panic!("unknown host_id: {host_id}"),
     }
@@ -75,7 +71,10 @@ const PRE_TOOL_USE_HOSTS: &[&str] = &["claude-code", "cursor", "opencode"];
 /// Create a temporary test repo with framework markers.
 fn test_repo(name: &str) -> std::path::PathBuf {
     let mut root = std::env::temp_dir();
-    root.push(format!("router-rs-unified-hooks-{name}-{}", std::process::id()));
+    root.push(format!(
+        "router-rs-unified-hooks-{name}-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("skills")).unwrap();
     std::fs::create_dir_all(root.join("configs/framework")).unwrap();
@@ -109,14 +108,17 @@ fn is_blocked(result: &Value) -> bool {
 
 /// Check if a hook response is a no-op pass-through (suppressOutput without block/deny).
 fn is_pass_through(result: &Value) -> bool {
-    result.get("suppressOutput").and_then(Value::as_bool) == Some(true)
-        && !is_blocked(result)
+    result.get("suppressOutput").and_then(Value::as_bool) == Some(true) && !is_blocked(result)
 }
 
 /// Check if a hook response indicates a block, advisory, or pass-through.
 fn is_blocked_advised_or_passthrough(result: &Value) -> bool {
-    is_blocked(result) || is_pass_through(result)
-        || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some()
+    is_blocked(result)
+        || is_pass_through(result)
+        || result
+            .pointer("/hookSpecificOutput/additionalContext")
+            .and_then(Value::as_str)
+            .is_some()
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -162,7 +164,10 @@ fn pre_tool_use_blocks_own_host_private_settings() {
     // Claude blocks writes under $HOME/.claude/ — only test if HOME is set
     if let Ok(home) = std::env::var("HOME") {
         let claude_repo = test_repo("pre-block-claude");
-        for path in &[format!("{home}/.claude/settings.json"), format!("{home}/.claude/rules/framework.md")] {
+        for path in &[
+            format!("{home}/.claude/settings.json"),
+            format!("{home}/.claude/rules/framework.md"),
+        ] {
             let payload = json!({
                 "tool_name": "Write",
                 "tool_input": { "file_path": path }
@@ -479,10 +484,22 @@ fn review_gate_stop_advisory_without_reviewer() {
             "session_id": "test-session"
         });
         let result = dispatch(host, "Stop", &repo, &stop_payload);
-        let continues = result.get("continue").and_then(Value::as_bool).unwrap_or(true);
-        let has_followup = result.get("followup_message").and_then(Value::as_str).is_some()
-            || result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some();
+        let continues = result
+            .get("continue")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let has_followup = result
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .get("additional_context")
+                .and_then(Value::as_str)
+                .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some();
         let is_passthrough = is_pass_through(&result);
         let is_noop = result == json!({});
         // Without reviewer evidence, Stop should either block, advise, pass through, or no-op
@@ -550,10 +567,22 @@ fn review_gate_explore_does_not_satisfy_deep_reviewer() {
             "session_id": "test-session"
         });
         let result = dispatch(host, "Stop", &repo, &stop_payload);
-        let continues = result.get("continue").and_then(Value::as_bool).unwrap_or(true);
-        let has_followup = result.get("followup_message").and_then(Value::as_str).is_some()
-            || result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some();
+        let continues = result
+            .get("continue")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let has_followup = result
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .get("additional_context")
+                .and_then(Value::as_str)
+                .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some();
         let is_passthrough = is_pass_through(&result) || result == json!({});
         assert!(
             !continues || has_followup || is_passthrough,
@@ -584,10 +613,22 @@ fn review_gate_shared_fork_does_not_satisfy_reviewer() {
             "session_id": "test-session"
         });
         let result = dispatch(host, "Stop", &repo, &stop_payload);
-        let continues = result.get("continue").and_then(Value::as_bool).unwrap_or(true);
-        let has_followup = result.get("followup_message").and_then(Value::as_str).is_some()
-            || result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some();
+        let continues = result
+            .get("continue")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let has_followup = result
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .get("additional_context")
+                .and_then(Value::as_str)
+                .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some();
         let is_passthrough = is_pass_through(&result) || result == json!({});
         assert!(
             !continues || has_followup || is_passthrough,
@@ -765,8 +806,14 @@ fn implementx_injects_context_nudge() {
         let payload = json!({ "prompt": "/implementx fix the authentication bug" });
         let result = dispatch(host, "beforeSubmitPrompt", &repo, &payload);
         // /implementx should produce additional context, pass through, or no-op
-        let has_context = result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some()
+        let has_context = result
+            .get("additional_context")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some()
             || result.get("continue").and_then(Value::as_bool) == Some(true)
             || is_pass_through(&result)
             || result == json!({});
@@ -785,8 +832,14 @@ fn verifyx_injects_goal_context() {
         let repo = test_repo(&format!("ver-nudge-{host}"));
         let payload = json!({ "prompt": "/verifyx validate all changes" });
         let result = dispatch(host, "beforeSubmitPrompt", &repo, &payload);
-        let has_context = result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some()
+        let has_context = result
+            .get("additional_context")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some()
             || result.get("continue").and_then(Value::as_bool) == Some(true)
             || is_pass_through(&result)
             || result == json!({});
@@ -851,7 +904,8 @@ fn non_automation_prompt_is_silent() {
         let payload = json!({ "prompt": "what is the weather today?" });
         let result = dispatch(host, "beforeSubmitPrompt", &repo, &payload);
         // Non-automation prompt should produce empty/minimal output or pass-through
-        let is_silent = result == json!({}) || result == json!(null)
+        let is_silent = result == json!({})
+            || result == json!(null)
             || is_pass_through(&result)
             || (result.get("continue").and_then(Value::as_bool) == Some(true)
                 && result.get("additional_context").is_none()
@@ -1005,10 +1059,10 @@ fn operator_inject_off_skips_ups_context() {
     for &host in ALL_HOSTS {
         let repo = test_repo(&format!("inject-off-{host}"));
         // Set operator inject off
-        std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+        unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0") };
         let payload = json!({ "prompt": "/implementx fix the bug" });
         let result = dispatch(host, "beforeSubmitPrompt", &repo, &payload);
-        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") };
         // Should not panic, should produce minimal or no context
         let _ = result; // Just verify no panic
     }
@@ -1020,10 +1074,10 @@ fn operator_inject_off_skips_ups_context() {
 fn operator_inject_off_skips_session_start() {
     for &host in ALL_HOSTS {
         let repo = test_repo(&format!("ss-inject-off-{host}"));
-        std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+        unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0") };
         let payload = json!({ "session_id": "test-session" });
         let result = dispatch(host, "session.created", &repo, &payload);
-        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") };
         let _ = result; // Just verify no panic
     }
 }
@@ -1244,10 +1298,22 @@ fn review_rearm_resets_independent_evidence() {
             "session_id": "test-session"
         });
         let result = dispatch(host, "Stop", &repo, &stop_payload);
-        let continues = result.get("continue").and_then(Value::as_bool).unwrap_or(true);
-        let has_followup = result.get("followup_message").and_then(Value::as_str).is_some()
-            || result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some();
+        let continues = result
+            .get("continue")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let has_followup = result
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .get("additional_context")
+                .and_then(Value::as_str)
+                .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some();
         let is_passthrough = is_pass_through(&result) || result == json!({});
         assert!(
             !continues || has_followup || is_passthrough,
@@ -1301,10 +1367,22 @@ fn failed_subagent_not_counted_as_reviewer() {
             "session_id": "test-session"
         });
         let result = dispatch(host, "Stop", &repo, &stop_payload);
-        let continues = result.get("continue").and_then(Value::as_bool).unwrap_or(true);
-        let has_followup = result.get("followup_message").and_then(Value::as_str).is_some()
-            || result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some();
+        let continues = result
+            .get("continue")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let has_followup = result
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .get("additional_context")
+                .and_then(Value::as_str)
+                .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some();
         let is_passthrough = is_pass_through(&result) || result == json!({});
         assert!(
             !continues || has_followup || is_passthrough,
@@ -1379,7 +1457,7 @@ fn review_gate_disabled_env_skips_gate() {
             "opencode" => "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE",
             _ => "ROUTER_RS_REVIEW_GATE_DISABLE",
         };
-        std::env::set_var(env_var, "1");
+        unsafe { std::env::set_var(env_var, "1") };
         // Arm review gate
         let ups = json!({ "prompt": "please review the changes" });
         let _ = dispatch(host, "beforeSubmitPrompt", &repo, &ups);
@@ -1389,7 +1467,7 @@ fn review_gate_disabled_env_skips_gate() {
             "session_id": "test-session"
         });
         let result = dispatch(host, "Stop", &repo, &stop_payload);
-        std::env::remove_var(env_var);
+        unsafe { std::env::remove_var(env_var) };
         let blocked = is_blocked(&result);
         assert!(
             !blocked,
@@ -1412,7 +1490,7 @@ fn review_gate_noncanonical_disable_env_does_not_disable() {
             _ => "ROUTER_RS_REVIEW_GATE_DISABLE",
         };
         // Set non-boolean value (should NOT disable)
-        std::env::set_var(env_var, "yes_please");
+        unsafe { std::env::set_var(env_var, "yes_please") };
         let ups = json!({ "prompt": "please review the changes" });
         let _ = dispatch(host, "beforeSubmitPrompt", &repo, &ups);
         let stop_payload = json!({
@@ -1420,12 +1498,24 @@ fn review_gate_noncanonical_disable_env_does_not_disable() {
             "session_id": "test-session"
         });
         let result = dispatch(host, "Stop", &repo, &stop_payload);
-        std::env::remove_var(env_var);
+        unsafe { std::env::remove_var(env_var) };
         // Should still be blocked/advised (non-canonical value doesn't disable)
-        let continues = result.get("continue").and_then(Value::as_bool).unwrap_or(true);
-        let has_followup = result.get("followup_message").and_then(Value::as_str).is_some()
-            || result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some();
+        let continues = result
+            .get("continue")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let has_followup = result
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .get("additional_context")
+                .and_then(Value::as_str)
+                .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some();
         let is_passthrough = is_pass_through(&result) || result == json!({});
         assert!(
             !continues || has_followup || is_passthrough,
@@ -1458,10 +1548,22 @@ fn review_rearm_on_second_review_prompt() {
             "session_id": "test-session"
         });
         let result = dispatch(host, "Stop", &repo, &stop_payload);
-        let continues = result.get("continue").and_then(Value::as_bool).unwrap_or(true);
-        let has_followup = result.get("followup_message").and_then(Value::as_str).is_some()
-            || result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some();
+        let continues = result
+            .get("continue")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let has_followup = result
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .get("additional_context")
+                .and_then(Value::as_str)
+                .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some();
         let is_passthrough = is_pass_through(&result) || result == json!({});
         assert!(
             !continues || has_followup || is_passthrough,
@@ -1570,10 +1672,22 @@ fn compact_alone_does_not_clear_gate() {
             "session_id": "test-session"
         });
         let result = dispatch(host, "Stop", &repo, &stop_payload);
-        let continues = result.get("continue").and_then(Value::as_bool).unwrap_or(true);
-        let has_followup = result.get("followup_message").and_then(Value::as_str).is_some()
-            || result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some();
+        let continues = result
+            .get("continue")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        let has_followup = result
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .get("additional_context")
+                .and_then(Value::as_str)
+                .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some();
         let is_passthrough = is_pass_through(&result) || result == json!({});
         assert!(
             !continues || has_followup || is_passthrough,
@@ -1608,8 +1722,14 @@ fn review_prompt_arms_gate_with_nudge() {
         let payload = json!({ "prompt": "review the authentication module" });
         let result = dispatch(host, "beforeSubmitPrompt", &repo, &payload);
         // Should produce some context (nudge, advisory, or pass-through)
-        let has_context = result.get("additional_context").and_then(Value::as_str).is_some()
-            || result.pointer("/hookSpecificOutput/additionalContext").and_then(Value::as_str).is_some()
+        let has_context = result
+            .get("additional_context")
+            .and_then(Value::as_str)
+            .is_some()
+            || result
+                .pointer("/hookSpecificOutput/additionalContext")
+                .and_then(Value::as_str)
+                .is_some()
             || result.get("continue").and_then(Value::as_bool) == Some(true)
             || is_pass_through(&result)
             || result == json!({});
@@ -1779,10 +1899,10 @@ fn stop_empty_prompt_does_not_block() {
 fn session_start_operator_inject_off_skips_context() {
     for &host in ALL_HOSTS {
         let repo = test_repo(&format!("ss-op-{host}"));
-        std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+        unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0") };
         let payload = json!({ "session_id": "test-ss-op" });
         let result = dispatch(host, "session.created", &repo, &payload);
-        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") };
         // Should not panic, should skip context injection
         let _ = result;
     }
@@ -1856,10 +1976,10 @@ fn planx_persist_failure_is_soft_warning() {
 fn session_start_respects_max_budget() {
     for &host in ALL_HOSTS {
         let repo = test_repo(&format!("ss-budget-{host}"));
-        std::env::set_var("ROUTER_RS_SESSIONSTART_MAX_BYTES", "100");
+        unsafe { std::env::set_var("ROUTER_RS_SESSIONSTART_MAX_BYTES", "100") };
         let payload = json!({ "session_id": "test-budget" });
         let _result = dispatch(host, "session.created", &repo, &payload);
-        std::env::remove_var("ROUTER_RS_SESSIONSTART_MAX_BYTES");
+        unsafe { std::env::remove_var("ROUTER_RS_SESSIONSTART_MAX_BYTES") };
         // Should not panic, should respect budget
     }
 }

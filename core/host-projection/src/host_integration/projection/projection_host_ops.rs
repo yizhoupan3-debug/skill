@@ -4,13 +4,22 @@
 
 use super::*;
 
-pub fn install_codex_projection(roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
+pub fn install_codex_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<Value, String> {
     ensure_router_rs_installed_for_mcp_with_roots(roots)?;
     let target = codex_entrypoint_target(roots, scope);
     let changed = write_text_if_changed(&target, &render_codex_framework_entrypoint(roots, scope))?;
     let prompt_entrypoints =
         codex_prompt_entrypoints_disabled(&codex_prompt_entrypoints_root(roots, scope));
-    let manifest_changed = write_projection_manifest(roots, "codex", scope, &[target.to_string_lossy().into_owned()], &[])?;
+    let manifest_changed = write_projection_manifest(
+        roots,
+        "codex",
+        scope,
+        &[target.to_string_lossy().into_owned()],
+        &[],
+    )?;
     let prompt_entrypoints_changed = prompt_entrypoints
         .get("changed")
         .and_then(Value::as_bool)
@@ -76,7 +85,10 @@ pub fn install_cursor_projection(
         changed |= mcp_install.changed;
         if mcp_install.managed {
             managed_files.push(mcp_path.to_string_lossy().to_string());
-            managed_key_paths.extend(mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::CURSOR)?);
+            managed_key_paths.extend(mcp_json_managed_key_paths(
+                &roots.framework_root,
+                McpConfigFormat::CURSOR,
+            )?);
         }
         mcp = json!({
             "managed": mcp_install.managed,
@@ -112,7 +124,11 @@ pub fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value
     let mcp_path = cursor_mcp_config_path(roots);
     let rules_ready = managed_projection_file_exists(&user_target)?;
     let mcp_exists = mcp_path.is_file();
-    let config_payload = if mcp_exists { read_json_if_exists(&mcp_path).ok().flatten() } else { None };
+    let config_payload = if mcp_exists {
+        read_json_if_exists(&mcp_path).ok().flatten()
+    } else {
+        None
+    };
     let (server_status, mcp_valid, mcp_error) =
         validate_mcp_servers_from_json(roots, config_payload.as_ref(), "mcp_servers");
     let all_valid = mcp_valid;
@@ -264,7 +280,10 @@ pub fn remove_cursor_projection(
 
 pub fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.host_home_root("claude-code").join("rules").join("framework.md")
+        roots
+            .host_home_root("claude-code")
+            .join("rules")
+            .join("framework.md")
     } else {
         roots
             .project_root
@@ -318,20 +337,12 @@ pub fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
 
 /// Core hook events required for all Claude Code projections.
 /// These events are always installed regardless of host version.
-pub(super) const CORE_HOOK_EVENTS: &[&str] = &[
-    "PreToolUse",
-    "UserPromptSubmit",
-    "PostToolUse",
-    "Stop",
-];
+pub(super) const CORE_HOOK_EVENTS: &[&str] =
+    &["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"];
 
 /// Optional hook events that may not be supported by all Claude Code versions.
 /// Installation continues gracefully if these are absent from the host.
-pub(super) const OPTIONAL_HOOK_EVENTS: &[&str] = &[
-    "SessionStart",
-    "SubagentStart",
-    "SubagentStop",
-];
+pub(super) const OPTIONAL_HOOK_EVENTS: &[&str] = &["SessionStart", "SubagentStart", "SubagentStop"];
 
 /// All hook events (core + optional), in canonical order.
 pub(super) const ALL_HOOK_EVENTS: &[&str] = &[
@@ -426,8 +437,17 @@ pub fn install_claude_projection(
             &claude_project_narrative_path(roots),
         ));
     }
-    let manifest_key_paths: Vec<String> = ALL_HOOK_EVENTS.iter().map(|e| format!("hooks.{e}")).collect();
-    let manifest_changed = write_projection_manifest(roots, "claude-code", scope, &manifest_files, &manifest_key_paths)?;
+    let manifest_key_paths: Vec<String> = ALL_HOOK_EVENTS
+        .iter()
+        .map(|e| format!("hooks.{e}"))
+        .collect();
+    let manifest_changed = write_projection_manifest(
+        roots,
+        "claude-code",
+        scope,
+        &manifest_files,
+        &manifest_key_paths,
+    )?;
     Ok(json!({
         "status": "installed",
         "changed": changed || narrative_changed || hooks_changed || env_changed || manifest_changed,

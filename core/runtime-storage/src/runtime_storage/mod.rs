@@ -11,13 +11,13 @@ mod paths;
 mod sqlite;
 
 pub use backend::{
-    runtime_backend_capabilities,
-    runtime_backend_family_catalog_payload, runtime_backend_family_parity_payload,
+    runtime_backend_capabilities, runtime_backend_family_catalog_payload,
+    runtime_backend_family_parity_payload,
 };
 pub use filesystem::acquire_runtime_path_lock;
 pub use operation::{
-    build_checkpoint_control_plane_compiler_payload, resolve_storage_backend, runtime_storage_operation,
-    storage_artifact_exists, storage_read_text,
+    build_checkpoint_control_plane_compiler_payload, resolve_storage_backend,
+    runtime_storage_operation, storage_artifact_exists, storage_read_text,
 };
 
 /// Single source of truth for the durable background-state service identity strings
@@ -70,4 +70,5 @@ pub enum ResolvedStorageBackend {
     },
 }
 
-#[cfg(test)] mod tests;
+#[cfg(test)]
+mod tests;

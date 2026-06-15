@@ -26,7 +26,7 @@ pub use crate::types;
 
 // ── public re-exports (API surface preserved for downstream crates) ──
 
-pub use fuzzy::{fuzzy_fallback_score, trigram_similarity, FUZZY_MIN_SIMILARITY};
+pub use fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score, trigram_similarity};
 pub use scoring_config::scoring_weights;
 
 pub use constants::{
@@ -38,31 +38,33 @@ pub use nl_route_adjustments::nl_route_signal_registry_names_json;
 pub use policy::{build_route_diff_report, build_route_policy, build_route_resolution};
 pub use records::load_records_cached_for_stdio_with_default_runtime_path;
 // Public re-exports for browser-mcp crate
-pub use routing::{build_search_results_payload, filter_record_indices_for_host, search_skills_subset};
 pub use records::load_records_cached_for_stdio;
+pub use routing::{
+    build_search_results_payload, filter_record_indices_for_host, search_skills_subset,
+};
 // Crate-internal re-exports
 pub use records::{
-    invalidate_records_cache, load_inline_records,
-    load_records, load_records_from_manifest,
+    invalidate_records_cache, load_inline_records, load_records, load_records_from_manifest,
 };
 pub use routing::{
     build_route_snapshot, filter_records_for_host, literal_framework_alias_decision, route_task,
     search_skills, should_accept_manifest_fallback, should_retry_with_manifest,
 };
 pub use signals::{
-    has_github_pr_context, has_parallel_review_candidate_context, has_paper_context,
-    has_paper_prose_edit_context, has_paper_writing_context, looks_like_pasted_manuscript_prose,
+    has_github_pr_context, has_paper_context, has_paper_prose_edit_context,
+    has_paper_writing_context, has_parallel_review_candidate_context,
+    looks_like_pasted_manuscript_prose,
 };
 pub use text::{normalize_text, read_json, tokenize_query, tokenize_route_text, value_to_string};
+pub use types::{
+    EvaluatedRoutingCase, RoutingEvalCasePayload, RoutingEvalCasesPayload,
+    RoutingEvalMetricsPayload, RoutingEvalReportPayload, RoutingEvalResultPayload,
+};
 pub use types::{
     MatchRow, RouteContextPayload, RouteDecision, RouteDecisionSnapshotPayload,
     RouteDiffReportPayload, RouteExecutionPolicyPayload, RouteResolutionPayload,
     RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload, SearchMatchPayload,
     SearchMatchRecordPayload, SearchResultsPayload, SkillRecord,
-};
-pub use types::{
-    EvaluatedRoutingCase, RoutingEvalCasePayload, RoutingEvalCasesPayload,
-    RoutingEvalMetricsPayload, RoutingEvalReportPayload, RoutingEvalResultPayload,
 };
 pub use types::{RawSkillRecord, RecordRowIndexes};
 
@@ -77,9 +79,7 @@ pub use aliases::{
     framework_alias_entrypoints_from_hints, has_explicit_framework_alias_call,
     has_literal_framework_alias_call,
 };
-pub use records::{
-    load_records_cached_for_stdio_resolved, load_records_from_runtime,
-};
+pub use records::{load_records_cached_for_stdio_resolved, load_records_from_runtime};
 pub use signals::has_paper_review_judgment_context;
 pub use skill_record::skill_record_from_raw;
 

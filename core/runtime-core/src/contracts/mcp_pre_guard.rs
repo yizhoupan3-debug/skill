@@ -3,7 +3,7 @@
 
 use crate::hook_policy::dangerous_mcp_tool_reason;
 use serde_json::Value;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,7 +28,11 @@ impl McpPreGuardVerdict {
     }
 }
 
-fn evaluate_mcp_pre_guard_inner(tool_name: &str, arguments: &Value, _repo_root: &Path) -> McpPreGuardVerdict {
+fn evaluate_mcp_pre_guard_inner(
+    tool_name: &str,
+    arguments: &Value,
+    _repo_root: &Path,
+) -> McpPreGuardVerdict {
     if tool_name.is_empty() {
         return McpPreGuardVerdict::allow();
     }
@@ -101,11 +105,8 @@ mod tests {
 
     #[test]
     fn allows_benign_tool() {
-        let verdict = evaluate_mcp_pre_guard_safe(
-            "framework_snapshot",
-            &serde_json::json!({}),
-            &repo(),
-        );
+        let verdict =
+            evaluate_mcp_pre_guard_safe("framework_snapshot", &serde_json::json!({}), &repo());
         assert!(!verdict.blocked);
     }
 }

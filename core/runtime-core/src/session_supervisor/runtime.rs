@@ -1,12 +1,13 @@
 use chrono::{DateTime, Duration, Utc};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use super::types::{
-    SessionSupervisorStore, WorkerEvent, WorkerSessionRecord, SESSION_SUPERVISOR_STORE_SCHEMA_VERSION,
+    SESSION_SUPERVISOR_STORE_SCHEMA_VERSION, SessionSupervisorStore, WorkerEvent,
+    WorkerSessionRecord,
 };
 
 pub fn worker_log_path(state_path: &Path, worker_id: &str) -> PathBuf {

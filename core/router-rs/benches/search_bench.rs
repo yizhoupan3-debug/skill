@@ -8,11 +8,10 @@
 //!
 //! Without `SEARCH_BENCH=1` the binary exits immediately (CI-friendly no-op).
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use router_rs::route::{
-    filter_record_indices_for_host, invalidate_records_cache, load_records,
-    load_records_cached_for_stdio, load_records_from_manifest, search_skills,
-    search_skills_subset, SkillRecord,
+    SkillRecord, filter_record_indices_for_host, invalidate_records_cache, load_records,
+    load_records_cached_for_stdio, load_records_from_manifest, search_skills, search_skills_subset,
 };
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -82,14 +81,12 @@ fn bench_record_load(c: &mut Criterion) {
     group.bench_function("cold_load_records", |b| {
         b.iter(|| {
             let _ = invalidate_records_cache();
-            black_box(
-                load_records(Some(&runtime), Some(&manifest)).expect("load records"),
-            );
+            black_box(load_records(Some(&runtime), Some(&manifest)).expect("load records"));
         });
     });
     group.bench_function("warm_load_records_cached", |b| {
-        let _ = load_records_cached_for_stdio(Some(&runtime), Some(&manifest))
-            .expect("prime cache");
+        let _ =
+            load_records_cached_for_stdio(Some(&runtime), Some(&manifest)).expect("prime cache");
         b.iter(|| {
             black_box(
                 load_records_cached_for_stdio(Some(&runtime), Some(&manifest))
@@ -122,7 +119,10 @@ fn bench_search_core(c: &mut Criterion) {
     let queries = [
         ("short", "pdf"),
         ("medium", "DESIGN.md 设计规范 token"),
-        ("long", "需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar workflow orchestration"),
+        (
+            "long",
+            "需要多 agent 执行，先判断是否应该拆 bounded subagent sidecar workflow orchestration",
+        ),
     ];
 
     let mut group = c.benchmark_group("search_skills");
@@ -157,15 +157,18 @@ fn bench_search_core(c: &mut Criterion) {
         parallel.push(start.elapsed());
     }
     report_latency("search_skills/runtime_manifest/medium", &mut serial);
-    report_latency("search_skills_parallel/96_records_medium_query", &mut parallel);
+    report_latency(
+        "search_skills_parallel/96_records_medium_query",
+        &mut parallel,
+    );
 }
 
 fn bench_host_filter_path(c: &mut Criterion) {
     let root = repo_root();
     let runtime = runtime_path(&root);
     let manifest = manifest_path(&root);
-    let records = load_records_cached_for_stdio(Some(&runtime), Some(&manifest))
-        .expect("cached records");
+    let records =
+        load_records_cached_for_stdio(Some(&runtime), Some(&manifest)).expect("cached records");
     let query = "plugin creator";
 
     let mut group = c.benchmark_group("mcp_search_path");

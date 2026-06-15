@@ -10,8 +10,7 @@ use std::sync::{Mutex, OnceLock};
 pub(crate) const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
 
 const DEFAULT_SPAWN_FIRST_NUDGE: &str = "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md";
-const DEFAULT_SUBAGENT_MODEL_INHERIT_NUDGE: &str =
-    "子代理模型：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions";
+const DEFAULT_SUBAGENT_MODEL_INHERIT_NUDGE: &str = "子代理模型：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions";
 
 #[derive(Clone)]
 struct ReviewGateSnapshot {
@@ -141,10 +140,8 @@ fn bool_map_by_host(review_gate: &Value, field: &str) -> HashMap<String, bool> {
 }
 
 fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, String> {
-    let raw =
-        fs::read_to_string(registry_path).map_err(|e| format!("read registry: {e}"))?;
-    let root: Value =
-        serde_json::from_str(&raw).map_err(|e| format!("parse registry: {e}"))?;
+    let raw = fs::read_to_string(registry_path).map_err(|e| format!("read registry: {e}"))?;
+    let root: Value = serde_json::from_str(&raw).map_err(|e| format!("parse registry: {e}"))?;
     let review_gate = root
         .get("review_gate")
         .ok_or_else(|| "RUNTIME_REGISTRY.review_gate missing".to_string())?;
@@ -177,7 +174,10 @@ fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, S
         spawn_first_enabled,
         spawn_first_nudge,
         spawn_first_nudge_template,
-        spawn_first_nudge_host_labels: string_map_by_host(review_gate, "spawn_first_nudge_host_labels"),
+        spawn_first_nudge_host_labels: string_map_by_host(
+            review_gate,
+            "spawn_first_nudge_host_labels",
+        ),
         spawn_first_nudge_by_host: string_map_by_host(review_gate, "spawn_first_nudge_by_host"),
         subagent_model_inherit_nudge,
         subagent_model_inherit_nudge_by_host: string_map_by_host(
@@ -306,7 +306,10 @@ pub fn review_subagent_model_inherit_nudge_line(repo_root: Option<&Path>, host_i
 }
 
 /// Registry-backed: spawn-first line for this host already carries model-inherit guidance.
-pub fn spawn_first_includes_model_inherit_for_host(repo_root: Option<&Path>, host_id: &str) -> bool {
+pub fn spawn_first_includes_model_inherit_for_host(
+    repo_root: Option<&Path>,
+    host_id: &str,
+) -> bool {
     snapshot(repo_root)
         .ok()
         .and_then(|s| {
@@ -348,7 +351,10 @@ pub fn lifecycle_profile_disables_spawn_first_nudge(
 pub fn assert_reviewer_lane_matrix(repo_root: Option<&Path>) {
     assert!(is_reviewer_lane_from_registry("general-purpose", repo_root));
     assert!(is_reviewer_lane_from_registry("generalpurpose", repo_root));
-    assert!(is_reviewer_lane_from_registry("best-of-n-runner", repo_root));
+    assert!(is_reviewer_lane_from_registry(
+        "best-of-n-runner",
+        repo_root
+    ));
     assert!(is_reviewer_lane_from_registry("bestofnrunner", repo_root));
     assert!(is_reviewer_lane_from_registry("deep-reviewer", repo_root));
     assert!(is_reviewer_lane_from_registry("deepreviewer", repo_root));
@@ -357,9 +363,15 @@ pub fn assert_reviewer_lane_matrix(repo_root: Option<&Path>) {
     assert!(is_reviewer_lane_from_registry("critic", repo_root));
     assert!(is_reviewer_lane_from_registry("code-review", repo_root));
     assert!(!is_reviewer_lane_from_registry("explore", repo_root));
-    assert!(!is_reviewer_lane_from_registry("ci-investigator", repo_root));
+    assert!(!is_reviewer_lane_from_registry(
+        "ci-investigator",
+        repo_root
+    ));
     assert!(is_reviewer_lane_from_registry("General_Purpose", repo_root));
-    assert!(is_reviewer_lane_from_registry("Best_Of_N_Runner", repo_root));
+    assert!(is_reviewer_lane_from_registry(
+        "Best_Of_N_Runner",
+        repo_root
+    ));
 }
 
 #[cfg(test)]
@@ -425,8 +437,14 @@ mod tests {
             r#"{"review_gate":{"reviewer_lanes":["probe-lane-only","review"]}}"#,
         )
         .unwrap();
-        assert!(is_reviewer_lane_from_registry("probe-lane-only", Some(&repo)));
-        assert!(!is_reviewer_lane_from_registry("general-purpose", Some(&repo)));
+        assert!(is_reviewer_lane_from_registry(
+            "probe-lane-only",
+            Some(&repo)
+        ));
+        assert!(!is_reviewer_lane_from_registry(
+            "general-purpose",
+            Some(&repo)
+        ));
         let _ = fs::remove_dir_all(&repo);
     }
 }

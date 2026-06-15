@@ -52,13 +52,21 @@ mod tests {
         assert!(ascii_lower_contains_formal_toolchain_tokens(&lc(
             "python -c \"import sympy; print(1)\""
         )));
-        assert!(ascii_lower_contains_formal_toolchain_tokens(&lc("z3 /tmp/proof.smt2")));
-        assert!(ascii_lower_contains_formal_toolchain_tokens(&lc("lean --version")));
+        assert!(ascii_lower_contains_formal_toolchain_tokens(&lc(
+            "z3 /tmp/proof.smt2"
+        )));
+        assert!(ascii_lower_contains_formal_toolchain_tokens(&lc(
+            "lean --version"
+        )));
     }
 
     #[test]
     fn matrix_rejects_benign_substrings() {
-        assert!(!ascii_lower_contains_formal_toolchain_tokens(&lc("echo hello")));
-        assert!(!ascii_lower_contains_formal_toolchain_tokens(&lc("leaning tower")));
+        assert!(!ascii_lower_contains_formal_toolchain_tokens(&lc(
+            "echo hello"
+        )));
+        assert!(!ascii_lower_contains_formal_toolchain_tokens(&lc(
+            "leaning tower"
+        )));
     }
 }

@@ -4,10 +4,10 @@ use crate::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION;
 use crate::cursor_hooks::{CURSOR_HOOKS_REGISTERED_EVENTS, CURSOR_HOOKS_SUBTRACTED_EVENTS};
 use crate::router_rs_observation::ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION;
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 use hex;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -47,7 +47,8 @@ pub fn schema_drift_contract() -> SchemaDriftContract {
             .iter()
             .map(|s| (*s).to_string())
             .collect(),
-        baseline_relative_path: "artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json".to_string(),
+        baseline_relative_path: "artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json"
+            .to_string(),
     }
 }
 
@@ -107,7 +108,10 @@ pub struct SchemaDriftCheckResponse {
     pub drift: Vec<SchemaDriftDriftItem>,
 }
 
-pub fn resolve_task_id_for_schema_drift(_repo_root: &Path, task_id: Option<&str>) -> Result<String, String> {
+pub fn resolve_task_id_for_schema_drift(
+    _repo_root: &Path,
+    task_id: Option<&str>,
+) -> Result<String, String> {
     if let Some(id) = task_id.map(str::trim).filter(|s| !s.is_empty()) {
         crate::path_guard::safe_task_id_component(id)
             .ok_or_else(|| format!("schema-drift: invalid task_id {:?}", id))?;
@@ -139,7 +143,10 @@ fn read_hooks_event_keys(path: &Path) -> Result<Vec<String>, String> {
     Ok(keys)
 }
 
-fn first_hook_entry<'a>(hooks: &'a serde_json::Map<String, Value>, event: &str) -> Option<&'a Value> {
+fn first_hook_entry<'a>(
+    hooks: &'a serde_json::Map<String, Value>,
+    event: &str,
+) -> Option<&'a Value> {
     hooks.get(event)?.as_array()?.first()
 }
 
@@ -147,7 +154,10 @@ fn audit_hooks_doc(label: &str, doc: &Value) -> (Vec<String>, Vec<String>) {
     let mut command_issues = Vec::new();
     let mut timeout_issues = Vec::new();
     let Some(hooks) = doc.get("hooks").and_then(Value::as_object) else {
-        return (vec![format!("{label}: missing hooks object")], timeout_issues);
+        return (
+            vec![format!("{label}: missing hooks object")],
+            timeout_issues,
+        );
     };
     for (ev, want) in GATE_TIMEOUT_SECS {
         let Some(entry) = first_hook_entry(hooks, *ev) else {
@@ -155,7 +165,9 @@ fn audit_hooks_doc(label: &str, doc: &Value) -> (Vec<String>, Vec<String>) {
         };
         let cmd = entry.get("command").and_then(Value::as_str).unwrap_or("");
         if !cmd.contains("cursor-router-rs-hook.sh") {
-            command_issues.push(format!("{label}: {ev} must invoke cursor-router-rs-hook.sh"));
+            command_issues.push(format!(
+                "{label}: {ev} must invoke cursor-router-rs-hook.sh"
+            ));
         }
         let timeout = entry.get("timeout").and_then(Value::as_u64);
         if timeout != Some(*want) {
@@ -188,19 +200,24 @@ fn compare_hooks_template_parity(hooks_doc: &Value, template_doc: &Value) -> Vec
     }
 
     for ev in h_keys.iter().filter(|k| template.contains_key(*k)) {
-        let (Some(he), Some(te)) = (first_hook_entry(hooks, ev), first_hook_entry(template, ev)) else {
+        let (Some(he), Some(te)) = (first_hook_entry(hooks, ev), first_hook_entry(template, ev))
+        else {
             issues.push(format!("{ev}: missing hook entry in hooks or template"));
             continue;
         };
         let hc = he.get("command").and_then(Value::as_str).unwrap_or("");
         let tc = te.get("command").and_then(Value::as_str).unwrap_or("");
         if hc != tc {
-            issues.push(format!("command mismatch on {ev}: hooks={hc:?} template={tc:?}"));
+            issues.push(format!(
+                "command mismatch on {ev}: hooks={hc:?} template={tc:?}"
+            ));
         }
         let ht = he.get("timeout");
         let tt = te.get("timeout");
         if ht != tt {
-            issues.push(format!("timeout mismatch on {ev}: hooks={ht:?} template={tt:?}"));
+            issues.push(format!(
+                "timeout mismatch on {ev}: hooks={ht:?} template={tt:?}"
+            ));
         }
     }
     issues
@@ -223,7 +240,8 @@ pub fn snapshot_cursor_hooks(repo_root: &Path) -> Result<CursorHooksDriftSnapsho
             hooks_template_parity_issues = compare_hooks_template_parity(&hooks_doc, &template_doc);
         }
     } else {
-        hooks_template_parity_issues.push("missing configs/framework/cursor-hooks.workspace-template.json".to_string());
+        hooks_template_parity_issues
+            .push("missing configs/framework/cursor-hooks.workspace-template.json".to_string());
     }
     let missing_required: Vec<String> = CURSOR_HOOKS_REGISTERED_EVENTS
         .iter()
@@ -316,19 +334,26 @@ pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBase
     })
 }
 
-pub fn write_baseline(repo_root: &Path, task_id: &str) -> Result<(SchemaDriftBaseline, PathBuf), String> {
+pub fn write_baseline(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<(SchemaDriftBaseline, PathBuf), String> {
     let baseline = build_baseline(repo_root, task_id)?;
     let path = baseline_path(repo_root, task_id);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
     }
-    let text = serde_json::to_string_pretty(&baseline)
-        .map_err(|e| format!("serialize baseline: {e}"))?;
+    let text =
+        serde_json::to_string_pretty(&baseline).map_err(|e| format!("serialize baseline: {e}"))?;
     fs::write(&path, text).map_err(|e| format!("write {}: {e}", path.display()))?;
     Ok((baseline, path))
 }
 
-fn drift_item(field: &str, baseline: &impl Serialize, current: &impl Serialize) -> Option<SchemaDriftDriftItem> {
+fn drift_item(
+    field: &str,
+    baseline: &impl Serialize,
+    current: &impl Serialize,
+) -> Option<SchemaDriftDriftItem> {
     let b = serde_json::to_value(baseline).ok()?;
     let c = serde_json::to_value(current).ok()?;
     if b == c {
@@ -439,7 +464,11 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     if let Some(item) = drift_item("cursor_hooks", &baseline.cursor_hooks, &current_hooks) {
         drift.push(item);
     }
-    if let Some(item) = drift_item("task_artifacts", &baseline.task_artifacts, &current_artifacts) {
+    if let Some(item) = drift_item(
+        "task_artifacts",
+        &baseline.task_artifacts,
+        &current_artifacts,
+    ) {
         drift.push(item);
     }
     if let Some(item) = drift_item("contracts", &baseline.contracts, &current_contracts) {
@@ -514,7 +543,9 @@ mod tests {
     fn seed_task_artifacts(repo: &Path, task: &str) {
         fs::create_dir_all(repo.join("artifacts/current").join(task)).unwrap();
         fs::write(
-            repo.join("artifacts/current").join(task).join("REQUIREMENTS.md"),
+            repo.join("artifacts/current")
+                .join(task)
+                .join("REQUIREMENTS.md"),
             "## A\n### B\n",
         )
         .unwrap();
@@ -524,7 +555,9 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            repo.join("artifacts/current").join(task).join("EVIDENCE_INDEX.json"),
+            repo.join("artifacts/current")
+                .join(task)
+                .join("EVIDENCE_INDEX.json"),
             r#"{"artifacts":[{"path":"x"}]}"#,
         )
         .unwrap();
@@ -594,9 +627,7 @@ mod tests {
         let resp = check_against_baseline(&repo, task_b);
         assert!(!resp.ok);
         assert!(
-            resp.drift
-                .iter()
-                .any(|d| d.field == "task_id_mismatch"),
+            resp.drift.iter().any(|d| d.field == "task_id_mismatch"),
             "drift={:?}",
             resp.drift
         );

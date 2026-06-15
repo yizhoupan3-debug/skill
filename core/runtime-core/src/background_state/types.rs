@@ -5,7 +5,8 @@ use std::path::PathBuf;
 
 pub const BACKGROUND_STATE_STORE_SCHEMA_VERSION: &str = "router-rs-background-state-store-v1";
 pub const BACKGROUND_STATE_STORE_AUTHORITY: &str = "rust-background-state-store";
-pub(super) const BACKGROUND_STATE_REQUEST_SCHEMA_VERSION: &str = "router-rs-background-state-request-v1";
+pub(super) const BACKGROUND_STATE_REQUEST_SCHEMA_VERSION: &str =
+    "router-rs-background-state-request-v1";
 pub(super) const BACKGROUND_STATE_SCHEMA_VERSION: &str = "runtime-background-state-v5";
 pub(super) const BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION: &str =
     "runtime-background-state-control-plane-v1";

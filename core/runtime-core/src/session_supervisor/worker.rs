@@ -1,19 +1,17 @@
 use chrono::Utc;
 use regex::Regex;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::path::Path;
 use std::sync::OnceLock;
 
 use super::driver::{build_driver_command, default_resume_mode, driver_id_for_host};
 use super::process::{launch_process, process_is_alive, terminate_process};
 use super::runtime::{
-    add_seconds_rfc3339, ensure_lane_contract_metadata, optional_i64,
-    optional_non_empty_string, push_event, required_non_empty_string, sanitize_segment,
-    upsert_worker, worker_log_path,
+    add_seconds_rfc3339, ensure_lane_contract_metadata, optional_i64, optional_non_empty_string,
+    push_event, required_non_empty_string, sanitize_segment, upsert_worker, worker_log_path,
 };
 use super::types::{
-    BlockClassification, SessionSupervisorStore, WorkerSessionRecord,
-    DEFAULT_BACKOFF_SECONDS,
+    BlockClassification, DEFAULT_BACKOFF_SECONDS, SessionSupervisorStore, WorkerSessionRecord,
 };
 
 pub fn launch_worker(
@@ -182,7 +180,11 @@ pub fn mark_worker_blocked(
         Some(format!(
             "next resume scheduled after {} seconds (attempt {})",
             effective_backoff,
-            worker.events.iter().filter(|e| e.event == "blocked").count(),
+            worker
+                .events
+                .iter()
+                .filter(|e| e.event == "blocked")
+                .count(),
         )),
     );
     Ok(classification)

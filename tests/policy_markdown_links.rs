@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Policy docs and skills must keep resolvable relative markdown links.
 //! See path audit 2026-05.
 
@@ -42,7 +43,13 @@ fn should_skip_markdown_link_url(url: &str) -> bool {
     if u.contains(' ') {
         return true;
     }
-    if u.contains('*') || u.contains('{') || u.contains('}') || u.contains('<') || u.contains('|') || u.contains('$') {
+    if u.contains('*')
+        || u.contains('{')
+        || u.contains('}')
+        || u.contains('<')
+        || u.contains('|')
+        || u.contains('$')
+    {
         return true;
     }
     false
@@ -63,7 +70,14 @@ fn normalize_path(path: PathBuf) -> PathBuf {
 }
 
 fn resolve_markdown_link(source: &Path, url: &str, root: &Path) -> PathBuf {
-    let path_part = url.split('#').next().unwrap_or(url).split('?').next().unwrap_or(url).trim();
+    let path_part = url
+        .split('#')
+        .next()
+        .unwrap_or(url)
+        .split('?')
+        .next()
+        .unwrap_or(url)
+        .trim();
     if path_part.is_empty() {
         return root.join("__empty__");
     }
@@ -125,10 +139,10 @@ fn walkdir_light(dir: &Path) -> Vec<PathBuf> {
     for ent in read.flatten() {
         let path = ent.path();
         if path.is_dir() {
-            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if name.starts_with('.') {
-                    continue;
-                }
+            if let Some(name) = path.file_name().and_then(|s| s.to_str())
+                && name.starts_with('.')
+            {
+                continue;
             }
             out.extend(walkdir_light(&path));
         } else {
@@ -139,7 +153,8 @@ fn walkdir_light(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn broken_markdown_links_in_file(source: &Path, root: &Path) -> Vec<(String, PathBuf)> {
-    let text = fs::read_to_string(source).unwrap_or_else(|e| panic!("read {}: {e}", source.display()));
+    let text =
+        fs::read_to_string(source).unwrap_or_else(|e| panic!("read {}: {e}", source.display()));
     let body = strip_triple_backtick_fenced_blocks(&text);
     let mut broken = Vec::new();
     for (idx, _) in body.match_indices("](") {
@@ -161,23 +176,19 @@ fn broken_markdown_links_in_file(source: &Path, root: &Path) -> Vec<(String, Pat
                 }
             }
             if !target.exists() && path_str.contains("/core/router-rs/src/hook_common.rs") {
-                let alt = PathBuf::from(
-                    path_str.replace(
-                        "/core/router-rs/src/hook_common.rs",
-                        "/core/core-policy/src/hook_common.rs",
-                    ),
-                );
+                let alt = PathBuf::from(path_str.replace(
+                    "/core/router-rs/src/hook_common.rs",
+                    "/core/core-policy/src/hook_common.rs",
+                ));
                 if alt.is_file() {
                     target = alt;
                 }
             }
             if !target.exists() && path_str.contains("/core/router-rs/src/review_gate_engine.rs") {
-                let alt = PathBuf::from(
-                    path_str.replace(
-                        "/core/router-rs/src/review_gate_engine.rs",
-                        "/core/core-policy/src/review/gate_engine.rs",
-                    ),
-                );
+                let alt = PathBuf::from(path_str.replace(
+                    "/core/router-rs/src/review_gate_engine.rs",
+                    "/core/core-policy/src/review/gate_engine.rs",
+                ));
                 if alt.is_file() {
                     target = alt;
                 }
@@ -234,8 +245,12 @@ fn policy_markdown_links_resolve_under_docs_skills_and_roots() {
 fn markdown_link_skip_rules_ignore_templates_and_external() {
     assert!(should_skip_markdown_link_url("https://example.com/x"));
     assert!(should_skip_markdown_link_url("#section"));
-    assert!(should_skip_markdown_link_url("runtime verification criteria"));
-    assert!(should_skip_markdown_link_url("${SKILL_FRAMEWORK_ROOT}/RTK.md"));
+    assert!(should_skip_markdown_link_url(
+        "runtime verification criteria"
+    ));
+    assert!(should_skip_markdown_link_url(
+        "${SKILL_FRAMEWORK_ROOT}/RTK.md"
+    ));
     assert!(should_skip_markdown_link_url("skills/*/SKILL.md"));
     assert!(should_skip_markdown_link_url("url"));
     assert!(!should_skip_markdown_link_url("../AGENTS.md"));

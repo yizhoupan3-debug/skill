@@ -8,9 +8,9 @@ use rayon::ThreadPoolBuilder;
 use serde::Serialize;
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 include!("common.inc");

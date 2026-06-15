@@ -4,12 +4,11 @@ pub use core_state::state_manager::read_rfv_loop_state;
 
 use crate::atomic_write::write_atomic_json;
 use crate::autopilot_goal::{
-    validate_external_research_strict,
-    validate_external_research_structured,
+    validate_external_research_strict, validate_external_research_structured,
 };
 use crate::framework_runtime::resolve_repo_root_arg;
 use chrono::Utc;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -378,11 +377,7 @@ fn value_array_or_empty(payload: &Value, key: &str) -> Result<Vec<Value>, String
 
 fn clamp_max_rounds(raw: u64) -> (u64, bool) {
     let cap = crate::router_env_flags::router_rs_rfv_max_rounds_cap();
-    if raw > cap {
-        (cap, true)
-    } else {
-        (raw, false)
-    }
+    if raw > cap { (cap, true) } else { (raw, false) }
 }
 
 fn resolve_framework_rfv_loop_repo(payload: &Value) -> Result<PathBuf, String> {
@@ -472,9 +467,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
     match operation.as_str() {
         "status" => {
             let state = read_rfv_loop_state(&repo_root, task_id_override)?;
-            let tid = task_id_override
-                .map(|s| s.to_string())
-                .unwrap_or_default();
+            let tid = task_id_override.map(|s| s.to_string()).unwrap_or_default();
             let path = if tid.is_empty() {
                 PathBuf::new()
             } else {
@@ -495,12 +488,9 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             Ok(resp)
         }
         "start" | "upsert" => {
-            let task_id = task_id_override
-                .map(|s| s.to_string())
-                .ok_or_else(|| {
-                    "framework_rfv_loop start requires task_id in payload"
-                        .to_string()
-                })?;
+            let task_id = task_id_override.map(|s| s.to_string()).ok_or_else(|| {
+                "framework_rfv_loop start requires task_id in payload".to_string()
+            })?;
             crate::path_guard::validate_task_id_component(&task_id)?;
             let goal = payload
                 .get("goal")
@@ -567,17 +557,21 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             );
             obj.insert(
                 "review_scope".to_string(),
-                json!(payload
-                    .get("review_scope")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")),
+                json!(
+                    payload
+                        .get("review_scope")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                ),
             );
             obj.insert(
                 "fix_scope".to_string(),
-                json!(payload
-                    .get("fix_scope")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")),
+                json!(
+                    payload
+                        .get("fix_scope")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                ),
             );
             obj.insert(
                 "verify_commands".to_string(),
@@ -611,7 +605,9 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 seq: None,
                 schema_version: Some(1),
             };
-            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
+            if let Err(e) =
+                crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+            {
                 eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
             }
             let goal_state_cleared =
@@ -641,10 +637,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
         "append_round" => {
             let task_id = task_id_override
                 .map(|s| s.to_string())
-                .ok_or_else(|| {
-                    "framework_rfv_loop append_round requires task_id"
-                        .to_string()
-                })?;
+                .ok_or_else(|| "framework_rfv_loop append_round requires task_id".to_string())?;
             crate::path_guard::validate_task_id_component(&task_id)?;
             let path = rfv_loop_state_path(&repo_root, &task_id)?;
             let mut state = read_rfv_loop_state(&repo_root, Some(&task_id))?
@@ -781,7 +774,9 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                             "RFV close_gates: internal error resolving closing round".to_string()
                         })?;
                     if let Err(e) = enforce_rfv_close_gates(&repo_root, &task_id, obj, closing, g) {
-                        obj.get_mut("rounds").and_then(|r| r.as_array_mut()).map(|a| a.pop());
+                        obj.get_mut("rounds")
+                            .and_then(|r| r.as_array_mut())
+                            .map(|a| a.pop());
                         return Err(e);
                     }
                 }
@@ -802,7 +797,9 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                                 .to_string()
                         })?;
                     if let Err(e) = enforce_rfv_close_gates(&repo_root, &task_id, obj, closing, g) {
-                        obj.get_mut("rounds").and_then(|r| r.as_array_mut()).map(|a| a.pop());
+                        obj.get_mut("rounds")
+                            .and_then(|r| r.as_array_mut())
+                            .map(|a| a.pop());
                         return Err(e);
                     }
                 }
@@ -824,8 +821,13 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             };
             obj.insert("loop_status".to_string(), json!(loop_status));
 
-            let round_cap_warning = if round_n >= max_rounds && close_gates_cfg.is_none() && !supervisor_closes {
-                Some("RFV loop reached max_rounds without close_gates configuration; closing without gate verification. Consider configuring close_gates for future loops.")
+            let round_cap_warning = if round_n >= max_rounds
+                && close_gates_cfg.is_none()
+                && !supervisor_closes
+            {
+                Some(
+                    "RFV loop reached max_rounds without close_gates configuration; closing without gate verification. Consider configuring close_gates for future loops.",
+                )
             } else {
                 None
             };
@@ -839,7 +841,9 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 seq: None,
                 schema_version: Some(1),
             };
-            if let Err(e) = crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx) {
+            if let Err(e) =
+                crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+            {
                 eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
             }
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
@@ -1102,7 +1106,10 @@ mod tests {
         .expect("rfv start");
         assert_eq!(out["goal_state_cleared"], json!(true));
         // Goal state is now marked superseded rather than deleted (symmetric with goal supersede RFV)
-        assert!(gpath.is_file(), "GOAL_STATE should still exist after RFV supersede");
+        assert!(
+            gpath.is_file(),
+            "GOAL_STATE should still exist after RFV supersede"
+        );
         let goal_state: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&gpath).expect("read goal state"))
                 .expect("parse goal state");
@@ -1296,10 +1303,12 @@ mod tests {
         );
         let st = framework_rfv_loop(json!({"repo_root": rr.clone(), "operation": "status"}))
             .expect("st");
-        assert!(st["rfv_loop_state"]["rounds"]
-            .as_array()
-            .expect("rounds")
-            .is_empty());
+        assert!(
+            st["rfv_loop_state"]["rounds"]
+                .as_array()
+                .expect("rounds")
+                .is_empty()
+        );
 
         framework_rfv_loop(json!({
             "repo_root": rr.clone(),

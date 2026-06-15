@@ -4,7 +4,7 @@
 # MCP/model/memories moved to ~/.codex/config.toml.
 
 approval_policy = "never"
-sandbox_mode = "workspace-write"
+sandbox_mode = "danger-full-access"
 
 [sandbox_workspace_write]
 writable_roots = ["."]

@@ -398,7 +398,10 @@ pub fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> 
         .unwrap_or(false)
 }
 
-pub fn ensure_default_bootstrap(repo_root: &Path, output_dir: Option<&Path>) -> Result<Value, String> {
+pub fn ensure_default_bootstrap(
+    repo_root: &Path,
+    output_dir: Option<&Path>,
+) -> Result<Value, String> {
     let resolved_output_dir = output_dir
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_bootstrap_output_dir(repo_root));
@@ -673,4 +676,3 @@ pub fn symlink_exists(path: &Path) -> bool {
         .map(|metadata| metadata.file_type().is_symlink())
         .unwrap_or(false)
 }
-

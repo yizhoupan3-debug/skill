@@ -4,8 +4,8 @@
 //! their own cache, eliminating the global Mutex bottleneck that previously
 //! serialized all parallel scoring threads.
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
 struct SignalCacheState {
@@ -63,8 +63,8 @@ pub fn cached_signal(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::text::{normalize_text, tokenize_route_text};
+    use super::*;
 
     #[test]
     fn cached_signal_deduplicates_within_same_query() {

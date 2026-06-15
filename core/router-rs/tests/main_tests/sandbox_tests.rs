@@ -222,28 +222,4 @@ fn sandbox_control_request_defaults() -> SandboxControlRequestPayload {
     }
 }
 
-fn background_control_request_defaults() -> BackgroundControlRequestPayload {
-    BackgroundControlRequestPayload {
-        schema_version: String::new(),
-        operation: String::new(),
-        multitask_strategy: None,
-        current_status: None,
-        task_active: None,
-        task_done: None,
-        active_job_count: None,
-        capacity_limit: None,
-        attempt: None,
-        retry_count: None,
-        max_attempts: None,
-        backoff_base_seconds: None,
-        backoff_multiplier: None,
-        max_backoff_seconds: None,
-        requested_parallel_group_id: None,
-        request_parallel_group_ids: None,
-        request_lane_ids: None,
-        lane_id_prefix: None,
-        batch_size: None,
-    }
-}
-
 

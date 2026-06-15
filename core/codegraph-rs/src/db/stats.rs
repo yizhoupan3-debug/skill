@@ -6,15 +6,12 @@ use std::path::Path;
 pub fn index_stats(conn: &Connection, db_path: &Path) -> rusqlite::Result<IndexStats> {
     let node_count: i64 = conn.query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))?;
     let edge_count: i64 = conn.query_row("SELECT COUNT(*) FROM edges", [], |r| r.get(0))?;
-    let file_count: i64 = conn.query_row(
-        "SELECT COUNT(DISTINCT file_path) FROM nodes",
-        [],
-        |r| r.get(0),
-    )?;
+    let file_count: i64 =
+        conn.query_row("SELECT COUNT(DISTINCT file_path) FROM nodes", [], |r| {
+            r.get(0)
+        })?;
     let indexed_at = get_meta(conn, "indexed_at")?;
-    let db_size_bytes = std::fs::metadata(db_path)
-        .ok()
-        .map(|m| m.len());
+    let db_size_bytes = std::fs::metadata(db_path).ok().map(|m| m.len());
     Ok(IndexStats {
         node_count: node_count as u64,
         edge_count: edge_count as u64,
@@ -45,7 +42,8 @@ mod tests {
 
     #[test]
     fn stats_reflect_empty_index() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         init_schema(&conn).expect("initialize schema");
         // Use a temp path for db_path
         let tmp = std::env::temp_dir().join("codegraph-stats-test");

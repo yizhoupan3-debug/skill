@@ -1,5 +1,5 @@
 use crate::parser::ParsedFile;
-use rusqlite::{params, Connection, Statement};
+use rusqlite::{Connection, Statement, params};
 
 pub fn set_meta(conn: &Connection, key: &str, value: &str) -> rusqlite::Result<()> {
     conn.execute(
@@ -130,9 +130,7 @@ pub fn ingest_parsed_file_with_stmts(
                 edge.line
             ])?;
         }
-        stmts
-            .insert_edge
-            .execute(params![caller_id, callee_id])?;
+        stmts.insert_edge.execute(params![caller_id, callee_id])?;
         edge_count += 1;
     }
     stmts.upsert_file.execute(params![
@@ -153,8 +151,7 @@ pub struct IndexedFileMeta {
 }
 
 pub fn list_indexed_files(conn: &Connection) -> rusqlite::Result<Vec<IndexedFileMeta>> {
-    let mut stmt =
-        conn.prepare("SELECT path, mtime_ns, content_hash FROM files ORDER BY path")?;
+    let mut stmt = conn.prepare("SELECT path, mtime_ns, content_hash FROM files ORDER BY path")?;
     let rows = stmt.query_map([], |row| {
         Ok(IndexedFileMeta {
             path: row.get(0)?,
@@ -167,13 +164,14 @@ pub fn list_indexed_files(conn: &Connection) -> rusqlite::Result<Vec<IndexedFile
 
 #[cfg(test)]
 mod tests {
-    use super::{delete_file_index, ingest_parsed_file, IngestStmts};
+    use super::{IngestStmts, delete_file_index, ingest_parsed_file};
     use crate::db::schema::init_schema;
     use crate::parser::{ParsedEdge, ParsedFile, ParsedSymbol};
 
     #[test]
     fn ingest_replaces_prior_file_nodes() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         init_schema(&conn).expect("initialize schema");
         let parsed = ParsedFile {
             path: "src/a.rs".to_string(),
@@ -203,7 +201,8 @@ mod tests {
 
     #[test]
     fn ingest_stmts_reused_across_files() {
-        let conn = rusqlite::Connection::open_in_memory().expect("rusqlite::Connection::open_in_memory should succeed");
+        let conn = rusqlite::Connection::open_in_memory()
+            .expect("rusqlite::Connection::open_in_memory should succeed");
         init_schema(&conn).expect("initialize schema");
         let mut stmts = IngestStmts::prepare(&conn).expect("initialize schema");
         for (path, sym) in [("a.rs", "alpha"), ("b.rs", "beta")] {
@@ -219,7 +218,8 @@ mod tests {
                 }],
                 edges: vec![],
             };
-            super::ingest_parsed_file_with_stmts(&conn, &mut stmts, &parsed).expect("ingest parsed file");
+            super::ingest_parsed_file_with_stmts(&conn, &mut stmts, &parsed)
+                .expect("ingest parsed file");
         }
         let count: i64 = conn
             .query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))

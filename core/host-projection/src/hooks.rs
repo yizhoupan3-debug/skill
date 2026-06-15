@@ -18,6 +18,8 @@ pub enum HookObservationHost {
     Cursor,
     Codex,
     ClaudeCode,
+    OpenCode,
+    MiMo,
 }
 pub type HookObservationHostType = HookObservationHost;
 
@@ -27,6 +29,8 @@ impl HookObservationHost {
             "cursor" => Some(Self::Cursor),
             "codex" => Some(Self::Codex),
             "claude-code" => Some(Self::ClaudeCode),
+            "opencode" => Some(Self::OpenCode),
+            "mimo" => Some(Self::MiMo),
             _ => None,
         }
     }
@@ -36,6 +40,8 @@ impl HookObservationHost {
             Self::Cursor => "cursor",
             Self::Codex => "codex",
             Self::ClaudeCode => "claude-code",
+            Self::OpenCode => "opencode",
+            Self::MiMo => "mimo",
         }
     }
 }
@@ -47,6 +53,7 @@ pub enum PaperProseHookHost {
     Codex,
     Claude,
     OpenCode,
+    MiMo,
 }
 pub type PaperProseHookHostType = PaperProseHookHost;
 
@@ -58,6 +65,7 @@ impl PaperProseHookHost {
             Self::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
             Self::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
             Self::OpenCode => "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK",
+            Self::MiMo => "ROUTER_RS_MIMO_PAPER_PROSE_HOOK",
         }
     }
 
@@ -68,6 +76,7 @@ impl PaperProseHookHost {
             Self::Codex => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
             Self::Claude => "ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK",
             Self::OpenCode => "ROUTER_RS_OPENCODE_PAPER_ADVERSARIAL_HOOK",
+            Self::MiMo => "ROUTER_RS_MIMO_PAPER_ADVERSARIAL_HOOK",
         }
     }
 
@@ -249,7 +258,10 @@ pub fn sweep_stale_hook_state_files(hook_state_dir: &Path) -> usize {
     }
 
     if cleaned > 0 {
-        eprintln!("[router-rs] hook-state sweep: removed {cleaned} stale file(s) from {}", hook_state_dir.display());
+        eprintln!(
+            "[router-rs] hook-state sweep: removed {cleaned} stale file(s) from {}",
+            hook_state_dir.display()
+        );
     }
     cleaned
 }
@@ -259,21 +271,15 @@ pub fn router_rs_cursor_sessionstart_context_max_bytes() -> usize {
 }
 
 fn parse_env_usize(var: &str) -> Option<usize> {
-    std::env::var(var)
-        .ok()
-        .and_then(|v| v.trim().parse().ok())
+    std::env::var(var).ok().and_then(|v| v.trim().parse().ok())
 }
 
 fn parse_env_u32(var: &str) -> Option<u32> {
-    std::env::var(var)
-        .ok()
-        .and_then(|v| v.trim().parse().ok())
+    std::env::var(var).ok().and_then(|v| v.trim().parse().ok())
 }
 
 fn parse_env_u64(var: &str) -> Option<u64> {
-    std::env::var(var)
-        .ok()
-        .and_then(|v| v.trim().parse().ok())
+    std::env::var(var).ok().and_then(|v| v.trim().parse().ok())
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -362,7 +368,8 @@ pub fn emit_hook_timing_line(event: &str) {
 
 static EMIT_HOOK_FIRED: OnceLock<fn(&str, &str)> = OnceLock::new();
 static EMIT_TOOL_CALL: OnceLock<fn(&str, u64, bool)> = OnceLock::new();
-static HOOK_ACTION_FROM_OPTIONAL_OUTPUT: OnceLock<fn(Option<&Value>) -> &'static str> = OnceLock::new();
+static HOOK_ACTION_FROM_OPTIONAL_OUTPUT: OnceLock<fn(Option<&Value>) -> &'static str> =
+    OnceLock::new();
 
 pub fn register_telemetry(
     emit_hook_fired: fn(&str, &str),
@@ -394,7 +401,8 @@ pub fn hook_action_from_optional_output(output: Option<&Value>) -> &'static str 
 // ────────────────────────────────────────────────────────────────
 
 static INIT_TRACKER: OnceLock<fn(&Path) -> Result<(), String>> = OnceLock::new();
-static RECORD_TOOL_CALL: OnceLock<fn(&Path, &str, Option<&Value>) -> Result<(), String>> = OnceLock::new();
+static RECORD_TOOL_CALL: OnceLock<fn(&Path, &str, Option<&Value>) -> Result<(), String>> =
+    OnceLock::new();
 static READ_TRACKER_STATE: OnceLock<fn(&Path) -> Result<Value, String>> = OnceLock::new();
 
 pub fn register_session_call_tracker(
@@ -408,10 +416,7 @@ pub fn register_session_call_tracker(
 }
 
 pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
-    INIT_TRACKER
-        .get()
-        .map(|f| f(repo_root))
-        .unwrap_or(Ok(()))
+    INIT_TRACKER.get().map(|f| f(repo_root)).unwrap_or(Ok(()))
 }
 
 pub fn record_tool_call(
@@ -437,10 +442,12 @@ pub fn read_tracker_state(repo_root: &Path) -> Result<Value, String> {
 // ────────────────────────────────────────────────────────────────
 
 static BUILD_FRAMEWORK_CONTRACT: OnceLock<fn(&Path) -> Result<Value, String>> = OnceLock::new();
-static TRY_APPEND_POST_TOOL_SHELL: OnceLock<fn(&Path, &Value, &str) -> Result<(), String>> = OnceLock::new();
+static TRY_APPEND_POST_TOOL_SHELL: OnceLock<fn(&Path, &Value, &str) -> Result<(), String>> =
+    OnceLock::new();
 static CLOSEOUT_ENFORCEMENT: OnceLock<fn() -> bool> = OnceLock::new();
 static CLOSEOUT_RECORD_PATH: OnceLock<fn(&Path, &str) -> Result<PathBuf, String>> = OnceLock::new();
-static EVALUATE_CLOSEOUT: OnceLock<fn(&Path, &str, &Path) -> Result<Value, String>> = OnceLock::new();
+static EVALUATE_CLOSEOUT: OnceLock<fn(&Path, &str, &Path) -> Result<Value, String>> =
+    OnceLock::new();
 static FIRST_TASK_ID: OnceLock<fn(&Path) -> Option<String>> = OnceLock::new();
 static EVIDENCE_APPEND: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
 static EXTRACT_DURATION: OnceLock<fn(&Value) -> Option<u64>> = OnceLock::new();
@@ -530,11 +537,11 @@ pub fn post_tool_call_succeeded(event: &Value) -> bool {
     POST_TOOL_SUCCEEDED.get().map(|f| f(event)).unwrap_or(true)
 }
 
-pub fn closeout_stop_followup_for_completion_text(
-    repo_root: &Path,
-    text: &str,
-) -> Option<String> {
-    CLOSEOUT_STOP_FOLLOWUP.get().map(|f| f(repo_root, text)).unwrap_or(None)
+pub fn closeout_stop_followup_for_completion_text(repo_root: &Path, text: &str) -> Option<String> {
+    CLOSEOUT_STOP_FOLLOWUP
+        .get()
+        .map(|f| f(repo_root, text))
+        .unwrap_or(None)
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -700,9 +707,11 @@ pub fn goal_stop_followup_line(
 // paper hooks: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-static APPEND_PROSE: OnceLock<fn(&Path, &str, &mut Vec<String>, PaperProseHookHost)> = OnceLock::new();
+static APPEND_PROSE: OnceLock<fn(&Path, &str, &mut Vec<String>, PaperProseHookHost)> =
+    OnceLock::new();
 static MERGE_PROSE: OnceLock<fn(&Path, &mut Value, &str, bool)> = OnceLock::new();
-static APPEND_ADVERSARIAL: OnceLock<fn(&Path, &str, &mut Vec<String>, PaperProseHookHost)> = OnceLock::new();
+static APPEND_ADVERSARIAL: OnceLock<fn(&Path, &str, &mut Vec<String>, PaperProseHookHost)> =
+    OnceLock::new();
 static MERGE_ADVERSARIAL: OnceLock<fn(&Path, &mut Value, &str, bool)> = OnceLock::new();
 
 pub fn register_paper_hooks(
@@ -723,7 +732,9 @@ pub fn maybe_append_paper_prose_context(
     contexts: &mut Vec<String>,
     host: PaperProseHookHost,
 ) {
-    APPEND_PROSE.get().map(|f| f(repo_root, prompt_text, contexts, host));
+    APPEND_PROSE
+        .get()
+        .map(|f| f(repo_root, prompt_text, contexts, host));
 }
 
 pub fn maybe_merge_paper_prose_before_submit(
@@ -732,7 +743,9 @@ pub fn maybe_merge_paper_prose_before_submit(
     prompt_text: &str,
     use_followup_message: bool,
 ) {
-    MERGE_PROSE.get().map(|f| f(repo_root, output, prompt_text, use_followup_message));
+    MERGE_PROSE
+        .get()
+        .map(|f| f(repo_root, output, prompt_text, use_followup_message));
 }
 
 pub fn maybe_append_paper_adversarial_context(
@@ -741,7 +754,9 @@ pub fn maybe_append_paper_adversarial_context(
     contexts: &mut Vec<String>,
     host: PaperProseHookHost,
 ) {
-    APPEND_ADVERSARIAL.get().map(|f| f(repo_root, prompt_text, contexts, host));
+    APPEND_ADVERSARIAL
+        .get()
+        .map(|f| f(repo_root, prompt_text, contexts, host));
 }
 
 pub fn maybe_merge_paper_adversarial_before_submit(
@@ -750,7 +765,9 @@ pub fn maybe_merge_paper_adversarial_before_submit(
     prompt_text: &str,
     use_followup_message: bool,
 ) {
-    MERGE_ADVERSARIAL.get().map(|f| f(repo_root, output, prompt_text, use_followup_message));
+    MERGE_ADVERSARIAL
+        .get()
+        .map(|f| f(repo_root, output, prompt_text, use_followup_message));
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -1084,6 +1101,7 @@ pub fn install_test_deps() {
                 PaperProseHookHost::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
                 PaperProseHookHost::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
                 PaperProseHookHost::OpenCode => "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK",
+                PaperProseHookHost::MiMo => "ROUTER_RS_MIMO_PAPER_PROSE_HOOK",
             };
             if !super::hooks::router_rs_env_enabled_default_true(env_var) {
                 return;
@@ -1208,6 +1226,8 @@ pub fn install_test_deps() {
                 HookObservationHost::Cursor => "cursor",
                 HookObservationHost::Codex => "codex",
                 HookObservationHost::ClaudeCode => "claude-code",
+                HookObservationHost::OpenCode => "opencode",
+                HookObservationHost::MiMo => "mimo",
             };
             // Detect review gate advisory in followup_message.
             let followup = output
@@ -1255,48 +1275,107 @@ pub fn install_test_deps() {
 // ────────────────────────────────────────────────────────────────
 
 // Framework Runtime (additional)
-static RESOLVE_REPO_ROOT_ARG: OnceLock<fn(Option<&Path>) -> Result<PathBuf, String>> = OnceLock::new();
+static RESOLVE_REPO_ROOT_ARG: OnceLock<fn(Option<&Path>) -> Result<PathBuf, String>> =
+    OnceLock::new();
 static CURRENT_LOCAL_TIMESTAMP: OnceLock<fn() -> String> = OnceLock::new();
-static WRITE_FRAMEWORK_SESSION_ARTIFACTS: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
-static ROUTE_TASK_WITH_MANIFEST_FALLBACK: OnceLock<fn(&[routing_engine::route::SkillRecord], Option<&Path>, Option<&Path>, Option<&str>, &str, &str, bool, bool) -> Result<RouteDecision, String>> = OnceLock::new();
-static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>> = OnceLock::new();
-static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL: OnceLock<fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>> = OnceLock::new();
-static BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD: OnceLock<fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value> = OnceLock::new();
-static APPEND_EVIDENCE_INDEX: OnceLock<fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<(), String>> = OnceLock::new();
+static WRITE_FRAMEWORK_SESSION_ARTIFACTS: OnceLock<fn(Value) -> Result<Value, String>> =
+    OnceLock::new();
+static ROUTE_TASK_WITH_MANIFEST_FALLBACK: OnceLock<
+    fn(
+        &[routing_engine::route::SkillRecord],
+        Option<&Path>,
+        Option<&Path>,
+        Option<&str>,
+        &str,
+        &str,
+        bool,
+        bool,
+    ) -> Result<RouteDecision, String>,
+> = OnceLock::new();
+static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<
+    fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>,
+> = OnceLock::new();
+static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL: OnceLock<
+    fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>,
+> = OnceLock::new();
+static BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD: OnceLock<
+    fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value,
+> = OnceLock::new();
+static APPEND_EVIDENCE_INDEX: OnceLock<
+    fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<(), String>,
+> = OnceLock::new();
 static HOOK_ACTION_FROM_OUTPUT: OnceLock<fn(&Value) -> &'static str> = OnceLock::new();
 static CLOSEOUT_RECORD_SCHEMA_VERSION_FN: OnceLock<fn() -> &'static str> = OnceLock::new();
 static CHECK_ANOMALIES: OnceLock<fn(&Path) -> Result<Vec<String>, String>> = OnceLock::new();
 
 // Web Fetch Guard
-static VALIDATE_AND_RESOLVE_WEB_FETCH_URL: OnceLock<fn(&str) -> Result<(String, Vec<String>), String>> = OnceLock::new();
-static RESOLVE_WEB_FETCH_REDIRECT: OnceLock<fn(&str, &str) -> Result<String, String>> = OnceLock::new();
-static RESOLVE_WEB_FETCH_ADDRESSES: OnceLock<fn(&str, u16) -> Result<Vec<String>, String>> = OnceLock::new();
+static VALIDATE_AND_RESOLVE_WEB_FETCH_URL: OnceLock<
+    fn(&str) -> Result<(String, Vec<String>), String>,
+> = OnceLock::new();
+static RESOLVE_WEB_FETCH_REDIRECT: OnceLock<fn(&str, &str) -> Result<String, String>> =
+    OnceLock::new();
+static RESOLVE_WEB_FETCH_ADDRESSES: OnceLock<fn(&str, u16) -> Result<Vec<String>, String>> =
+    OnceLock::new();
 
 // MCP Pre Guard
-static EVALUATE_MCP_PRE_GUARD_SAFE: OnceLock<fn(&str, &Value, &Path) -> McpPreGuardVerdict> = OnceLock::new();
-
+static EVALUATE_MCP_PRE_GUARD_SAFE: OnceLock<fn(&str, &Value, &Path) -> McpPreGuardVerdict> =
+    OnceLock::new();
 
 pub fn register_framework_runtime_extra(
     resolve_repo_root_arg: fn(Option<&Path>) -> Result<PathBuf, String>,
     current_local_timestamp: fn() -> String,
     write_framework_session_artifacts: fn(Value) -> Result<Value, String>,
-    route_task_with_manifest_fallback: fn(&[routing_engine::route::SkillRecord], Option<&Path>, Option<&Path>, Option<&str>, &str, &str, bool, bool) -> Result<RouteDecision, String>,
-    build_framework_runtime_snapshot_envelope: fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>,
-    build_automatic_continuity_checkpoint_payload: fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value,
-    append_evidence_index: fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<(), String>,
+    route_task_with_manifest_fallback: fn(
+        &[routing_engine::route::SkillRecord],
+        Option<&Path>,
+        Option<&Path>,
+        Option<&str>,
+        &str,
+        &str,
+        bool,
+        bool,
+    ) -> Result<RouteDecision, String>,
+    build_framework_runtime_snapshot_envelope: fn(
+        &Path,
+        Option<&Path>,
+        Option<&str>,
+    ) -> Result<Value, String>,
+    build_automatic_continuity_checkpoint_payload: fn(
+        &Path,
+        &str,
+        &str,
+        Option<&str>,
+        bool,
+        bool,
+    ) -> Value,
+    append_evidence_index: fn(
+        &Path,
+        Option<&str>,
+        serde_json::Map<String, Value>,
+    ) -> Result<(), String>,
     hook_action_from_output: fn(&Value) -> &'static str,
     closeout_record_schema_version: fn() -> &'static str,
     check_anomalies: fn(&Path) -> Result<Vec<String>, String>,
 ) {
     RESOLVE_REPO_ROOT_ARG.set(resolve_repo_root_arg).ok();
     CURRENT_LOCAL_TIMESTAMP.set(current_local_timestamp).ok();
-    WRITE_FRAMEWORK_SESSION_ARTIFACTS.set(write_framework_session_artifacts).ok();
-    ROUTE_TASK_WITH_MANIFEST_FALLBACK.set(route_task_with_manifest_fallback).ok();
-    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE.set(build_framework_runtime_snapshot_envelope).ok();
-    BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD.set(build_automatic_continuity_checkpoint_payload).ok();
+    WRITE_FRAMEWORK_SESSION_ARTIFACTS
+        .set(write_framework_session_artifacts)
+        .ok();
+    ROUTE_TASK_WITH_MANIFEST_FALLBACK
+        .set(route_task_with_manifest_fallback)
+        .ok();
+    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE
+        .set(build_framework_runtime_snapshot_envelope)
+        .ok();
+    BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD
+        .set(build_automatic_continuity_checkpoint_payload)
+        .ok();
     APPEND_EVIDENCE_INDEX.set(append_evidence_index).ok();
     HOOK_ACTION_FROM_OUTPUT.set(hook_action_from_output).ok();
-    CLOSEOUT_RECORD_SCHEMA_VERSION_FN.set(closeout_record_schema_version).ok();
+    CLOSEOUT_RECORD_SCHEMA_VERSION_FN
+        .set(closeout_record_schema_version)
+        .ok();
     CHECK_ANOMALIES.set(check_anomalies).ok();
 }
 
@@ -1310,26 +1389,32 @@ pub fn register_web_fetch_guard_extra(
     RESOLVE_WEB_FETCH_ADDRESSES.set(resolve_addresses).ok();
 }
 
-pub fn register_mcp_pre_guard_extra(
-    evaluate: fn(&str, &Value, &Path) -> McpPreGuardVerdict,
-) {
+pub fn register_mcp_pre_guard_extra(evaluate: fn(&str, &Value, &Path) -> McpPreGuardVerdict) {
     EVALUATE_MCP_PRE_GUARD_SAFE.set(evaluate).ok();
 }
 
-
 pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
-    RESOLVE_REPO_ROOT_ARG.get().map(|f| f(repo_root)).unwrap_or_else(|| {
-        // Default: use CARGO_MANIFEST_DIR or current dir
-        std::env::current_dir().map_err(|e| e.to_string())
-    })
+    RESOLVE_REPO_ROOT_ARG
+        .get()
+        .map(|f| f(repo_root))
+        .unwrap_or_else(|| {
+            // Default: use CARGO_MANIFEST_DIR or current dir
+            std::env::current_dir().map_err(|e| e.to_string())
+        })
 }
 
 pub fn current_local_timestamp() -> String {
-    CURRENT_LOCAL_TIMESTAMP.get().map(|f| f()).unwrap_or_else(|| "1970-01-01T00:00:00Z".into())
+    CURRENT_LOCAL_TIMESTAMP
+        .get()
+        .map(|f| f())
+        .unwrap_or_else(|| "1970-01-01T00:00:00Z".into())
 }
 
 pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
-    WRITE_FRAMEWORK_SESSION_ARTIFACTS.get().map(|f| f(payload)).unwrap_or_else(|| Err("hooks not registered".into()))
+    WRITE_FRAMEWORK_SESSION_ARTIFACTS
+        .get()
+        .map(|f| f(payload))
+        .unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
 pub fn route_task_with_manifest_fallback(
@@ -1344,27 +1429,61 @@ pub fn route_task_with_manifest_fallback(
 ) -> Result<RouteDecision, String> {
     ROUTE_TASK_WITH_MANIFEST_FALLBACK
         .get()
-        .map(|f| f(runtime_records, runtime_path, manifest_path, host_id, query, session_id, allow_overlay, first_turn))
+        .map(|f| {
+            f(
+                runtime_records,
+                runtime_path,
+                manifest_path,
+                host_id,
+                query,
+                session_id,
+                allow_overlay,
+                first_turn,
+            )
+        })
         .unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
-pub fn build_framework_runtime_snapshot_envelope(repo_root: &Path, artifact_root_override: Option<&Path>, task_id_override: Option<&str>) -> Result<Value, String> {
-    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE.get().map(|f| f(repo_root, artifact_root_override, task_id_override)).unwrap_or_else(|| Err("hooks not registered".into()))
+pub fn build_framework_runtime_snapshot_envelope(
+    repo_root: &Path,
+    artifact_root_override: Option<&Path>,
+    task_id_override: Option<&str>,
+) -> Result<Value, String> {
+    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE
+        .get()
+        .map(|f| f(repo_root, artifact_root_override, task_id_override))
+        .unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
-pub fn build_framework_runtime_snapshot_envelope_with_level(repo_root: &Path, artifact_root_override: Option<&Path>, task_id_override: Option<&str>, detail_level: &str) -> Result<Value, String> {
+pub fn build_framework_runtime_snapshot_envelope_with_level(
+    repo_root: &Path,
+    artifact_root_override: Option<&Path>,
+    task_id_override: Option<&str>,
+    detail_level: &str,
+) -> Result<Value, String> {
     if let Some(f) = BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL.get() {
-        f(repo_root, artifact_root_override, task_id_override, detail_level)
+        f(
+            repo_root,
+            artifact_root_override,
+            task_id_override,
+            detail_level,
+        )
     } else {
         // Fallback: use old function pointer (ignores detail_level, returns old format)
-        build_framework_runtime_snapshot_envelope(repo_root, artifact_root_override, task_id_override)
+        build_framework_runtime_snapshot_envelope(
+            repo_root,
+            artifact_root_override,
+            task_id_override,
+        )
     }
 }
 
 pub fn register_build_framework_runtime_snapshot_envelope_with_level(
     func: fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>,
 ) {
-    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL.set(func).ok();
+    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL
+        .set(func)
+        .ok();
 }
 
 pub fn build_automatic_continuity_checkpoint_payload(
@@ -1377,42 +1496,85 @@ pub fn build_automatic_continuity_checkpoint_payload(
 ) -> Value {
     BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD
         .get()
-        .map(|f| f(repo_root, task_line, summary_text, task_id, repointer_focus, update_registry_only_if_known))
+        .map(|f| {
+            f(
+                repo_root,
+                task_line,
+                summary_text,
+                task_id,
+                repointer_focus,
+                update_registry_only_if_known,
+            )
+        })
         .unwrap_or(Value::Null)
 }
 
 pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
-    CHECK_ANOMALIES.get().map(|f| f(repo_root)).unwrap_or_else(|| Ok(vec![]))
+    CHECK_ANOMALIES
+        .get()
+        .map(|f| f(repo_root))
+        .unwrap_or_else(|| Ok(vec![]))
 }
 
-pub fn append_evidence_index(repo_root: &Path, task_id: Option<&str>, entry: serde_json::Map<String, Value>) -> Result<(), String> {
-    APPEND_EVIDENCE_INDEX.get().map(|f| f(repo_root, task_id, entry)).unwrap_or_else(|| Err("hooks not registered".into()))
+pub fn append_evidence_index(
+    repo_root: &Path,
+    task_id: Option<&str>,
+    entry: serde_json::Map<String, Value>,
+) -> Result<(), String> {
+    APPEND_EVIDENCE_INDEX
+        .get()
+        .map(|f| f(repo_root, task_id, entry))
+        .unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
 pub fn hook_action_from_output(output: &Value) -> &'static str {
-    HOOK_ACTION_FROM_OUTPUT.get().map(|f| f(output)).unwrap_or("unknown")
+    HOOK_ACTION_FROM_OUTPUT
+        .get()
+        .map(|f| f(output))
+        .unwrap_or("unknown")
 }
 
 pub fn closeout_record_schema_version() -> &'static str {
-    CLOSEOUT_RECORD_SCHEMA_VERSION_FN.get().map(|f| f()).unwrap_or("closeout-record-v1")
+    CLOSEOUT_RECORD_SCHEMA_VERSION_FN
+        .get()
+        .map(|f| f())
+        .unwrap_or("closeout-record-v1")
 }
 
 pub fn validate_and_resolve_web_fetch_url(url: &str) -> Result<(String, Vec<String>), String> {
-    VALIDATE_AND_RESOLVE_WEB_FETCH_URL.get().map(|f| f(url)).unwrap_or_else(|| Err("hooks not registered".into()))
+    VALIDATE_AND_RESOLVE_WEB_FETCH_URL
+        .get()
+        .map(|f| f(url))
+        .unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
 pub fn resolve_web_fetch_redirect(base: &str, location: &str) -> Result<String, String> {
-    RESOLVE_WEB_FETCH_REDIRECT.get().map(|f| f(base, location)).unwrap_or_else(|| Err("hooks not registered".into()))
+    RESOLVE_WEB_FETCH_REDIRECT
+        .get()
+        .map(|f| f(base, location))
+        .unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
 pub fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<String>, String> {
-    RESOLVE_WEB_FETCH_ADDRESSES.get().map(|f| f(host, port)).unwrap_or_else(|| Err("hooks not registered".into()))
+    RESOLVE_WEB_FETCH_ADDRESSES
+        .get()
+        .map(|f| f(host, port))
+        .unwrap_or_else(|| Err("hooks not registered".into()))
 }
 
-pub fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments: &Value, repo_root: &Path) -> McpPreGuardVerdict {
-    EVALUATE_MCP_PRE_GUARD_SAFE.get().map(|f| f(tool_name, arguments, repo_root)).unwrap_or(McpPreGuardVerdict { blocked: false, reason: None })
+pub fn evaluate_mcp_pre_guard_safe(
+    tool_name: &str,
+    arguments: &Value,
+    repo_root: &Path,
+) -> McpPreGuardVerdict {
+    EVALUATE_MCP_PRE_GUARD_SAFE
+        .get()
+        .map(|f| f(tool_name, arguments, repo_root))
+        .unwrap_or(McpPreGuardVerdict {
+            blocked: false,
+            reason: None,
+        })
 }
-
 
 // ── RFV loop full implementation hook (registered by runtime-core) ──
 static RFV_LOOP_DRIVE: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
@@ -1434,38 +1596,38 @@ mod tests {
 
     #[test]
     fn env_enabled_default_true_returns_true_when_unset() {
-        std::env::remove_var("ROUTER_RS_OPERATOR_INJECT");
+        unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") };
         assert!(router_rs_operator_inject_globally_enabled());
     }
 
     #[test]
     fn env_enabled_default_false_returns_false_when_unset() {
-        std::env::remove_var("ROUTER_RS_HOOK_SILENT");
+        unsafe { std::env::remove_var("ROUTER_RS_HOOK_SILENT") };
         assert!(!router_rs_cursor_hook_silent_enabled());
     }
 
     #[test]
     fn outbound_context_max_bytes_default() {
-        std::env::remove_var("ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
-        std::env::remove_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
+        unsafe { std::env::remove_var("ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS") };
+        unsafe { std::env::remove_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS") };
         assert_eq!(router_rs_cursor_hook_outbound_context_max_bytes(), 8192);
     }
 
     #[test]
     fn hook_state_lock_retries_default() {
-        std::env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES");
+        unsafe { std::env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES") };
         assert_eq!(router_rs_cursor_hook_state_lock_retries(), 8);
     }
 
     #[test]
     fn review_pending_cycle_max_default() {
-        std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
+        unsafe { std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX") };
         assert_eq!(router_rs_cursor_review_pending_cycle_max(), 3);
     }
 
     #[test]
     fn stale_sweep_days_default() {
-        std::env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS");
+        unsafe { std::env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS") };
         assert_eq!(router_rs_cursor_hook_state_stale_sweep_days(), 7);
     }
 
@@ -1485,7 +1647,10 @@ mod tests {
     #[test]
     fn truncate_outbound_default_passthrough() {
         let input = "hello world";
-        assert_eq!(truncate_hook_outbound_lines_preserving(input, 5, "..."), input);
+        assert_eq!(
+            truncate_hook_outbound_lines_preserving(input, 5, "..."),
+            input
+        );
     }
 
     #[test]
@@ -1496,7 +1661,8 @@ mod tests {
 
     #[test]
     fn evaluate_goal_readiness_default_all_false() {
-        let r = evaluate_goal_readiness_from_disk(Path::new("/tmp"), &json!({"goal": "test"}), "t1");
+        let r =
+            evaluate_goal_readiness_from_disk(Path::new("/tmp"), &json!({"goal": "test"}), "t1");
         assert!(!r.contract);
         assert!(!r.progress);
         assert!(!r.verification);
@@ -1509,7 +1675,13 @@ mod tests {
 
     #[test]
     fn hook_observation_host_roundtrip() {
-        for host in [HookObservationHost::Cursor, HookObservationHost::Codex, HookObservationHost::ClaudeCode] {
+        for host in [
+            HookObservationHost::Cursor,
+            HookObservationHost::Codex,
+            HookObservationHost::ClaudeCode,
+            HookObservationHost::OpenCode,
+            HookObservationHost::MiMo,
+        ] {
             assert_eq!(HookObservationHost::from_host_id(host.as_str()), Some(host));
         }
         assert_eq!(HookObservationHost::from_host_id("unknown"), None);
@@ -1517,9 +1689,26 @@ mod tests {
 
     #[test]
     fn paper_prose_hook_host_env_var() {
-        assert_eq!(PaperProseHookHost::Cursor.env_var(), "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");
-        assert_eq!(PaperProseHookHost::Codex.env_var(), "ROUTER_RS_CODEX_PAPER_PROSE_HOOK");
-        assert_eq!(PaperProseHookHost::Claude.env_var(), "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK");
+        assert_eq!(
+            PaperProseHookHost::Cursor.env_var(),
+            "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK"
+        );
+        assert_eq!(
+            PaperProseHookHost::Codex.env_var(),
+            "ROUTER_RS_CODEX_PAPER_PROSE_HOOK"
+        );
+        assert_eq!(
+            PaperProseHookHost::Claude.env_var(),
+            "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK"
+        );
+        assert_eq!(
+            PaperProseHookHost::OpenCode.env_var(),
+            "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK"
+        );
+        assert_eq!(
+            PaperProseHookHost::MiMo.env_var(),
+            "ROUTER_RS_MIMO_PAPER_PROSE_HOOK"
+        );
     }
 
     #[test]

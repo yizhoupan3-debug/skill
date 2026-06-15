@@ -1,9 +1,9 @@
 //! Trace stream replay / inspect / metadata I/O.
 
 use chrono::Utc;
-use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
 use hex;
+use serde_json::{Map, Value, json};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,9 +14,7 @@ use crate::runtime_envelope_ids::{
     TRACE_METADATA_WRITE_SCHEMA_VERSION, TRACE_STREAM_INSPECT_SCHEMA_VERSION,
     TRACE_STREAM_IO_AUTHORITY, TRACE_STREAM_REPLAY_SCHEMA_VERSION,
 };
-use crate::runtime_storage::{
-    resolve_storage_backend, storage_artifact_exists, storage_read_text,
-};
+use crate::runtime_storage::{resolve_storage_backend, storage_artifact_exists, storage_read_text};
 use crate::stdio_payload_types::{
     TraceCompactionDeltaWriteRequestPayload, TraceCompactionDeltaWriteResponsePayload,
     TraceMetadataWriteRequestPayload, TraceMetadataWriteResponsePayload,
@@ -25,7 +23,6 @@ use crate::stdio_payload_types::{
     TraceStreamReplayResponsePayload,
 };
 
-
 fn extract_trace_event_payload(payload: Value) -> Result<Value, String> {
     let event_payload = match payload {
         Value::Object(mut object) => match object.remove("event") {
@@ -33,14 +30,14 @@ fn extract_trace_event_payload(payload: Value) -> Result<Value, String> {
             Some(other) => {
                 return Err(format!(
                     "trace stream line contained non-object event wrapper: {other}"
-                ))
+                ));
             }
             None => Value::Object(object),
         },
         other => {
             return Err(format!(
                 "trace stream line must decode to a JSON object: {other}"
-            ))
+            ));
         }
     };
     Ok(event_payload)
@@ -215,10 +212,12 @@ fn compaction_delta_to_trace_event(
 ) -> Result<Map<String, Value>, String> {
     let object = match payload {
         Value::Object(obj) => obj,
-        _ => return Err(format!(
-            "trace compaction delta line {} must decode to a JSON object",
-            line_number
-        )),
+        _ => {
+            return Err(format!(
+                "trace compaction delta line {} must decode to a JSON object",
+                line_number
+            ));
+        }
     };
     let generation = trace_event_usize_field(&object, "generation").unwrap_or(0);
     let seq = trace_event_usize_field(&object, "seq")
@@ -766,9 +765,11 @@ fn build_trace_stream_metadata(
     let mut stream = Map::new();
     stream.insert(
         "generation".to_string(),
-        json!(latest
-            .and_then(|event| trace_event_usize_field(event, "generation"))
-            .unwrap_or(0)),
+        json!(
+            latest
+                .and_then(|event| trace_event_usize_field(event, "generation"))
+                .unwrap_or(0)
+        ),
     );
     stream.insert("replay_supported".to_string(), Value::Bool(true));
     stream.insert("event_stream_supported".to_string(), Value::Bool(true));
@@ -806,9 +807,11 @@ fn build_trace_stream_metadata(
     stream.insert("event_count".to_string(), json!(trace.events.len()));
     stream.insert(
         "latest_seq".to_string(),
-        json!(latest
-            .and_then(|event| trace_event_usize_field(event, "seq"))
-            .unwrap_or(0)),
+        json!(
+            latest
+                .and_then(|event| trace_event_usize_field(event, "seq"))
+                .unwrap_or(0)
+        ),
     );
     stream.insert(
         "latest_event_id".to_string(),
@@ -844,7 +847,6 @@ pub fn write_trace_compaction_delta(
 fn default_trace_metadata_schema_version() -> String {
     "trace-metadata-v2".to_string()
 }
-
 
 fn default_trace_framework_version() -> String {
     "phase1".to_string()
@@ -1051,10 +1053,7 @@ pub fn write_trace_metadata(
             drop(file);
             fs::rename(&tmp_path, &path).map_err(|err| {
                 let _ = fs::remove_file(&tmp_path);
-                format!(
-                    "replace trace metadata {} failed: {err}",
-                    path.display()
-                )
+                format!("replace trace metadata {} failed: {err}", path.display())
             })?;
         }
     }

@@ -24,23 +24,23 @@ pub(super) fn run_gate(repo: &std::path::Path, payload: &Value) -> Result<Option
     run_codex_review_subagent_gate(repo, payload)
 }
 
-pub(super) const TEST_COMPACT_FINDING: &str = "[P1] core/router-rs/src/hosts/codex_hooks/mod.rs:1 — wave-2 compact gate clear evidence line";
+pub(super) const TEST_COMPACT_FINDING: &str =
+    "[P1] core/router-rs/src/hosts/codex_hooks/mod.rs:1 — wave-2 compact gate clear evidence line";
 
 #[test]
 fn operator_inject_off_skips_session_start_additional_context() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_OPERATOR_INJECT");
-    std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+    unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0") };
     let repo = fresh_repo();
-    let out =
-        handlers::handle_codex_session_start(&repo, &json!({"source": "startup"}));
+    let out = handlers::handle_codex_session_start(&repo, &json!({"source": "startup"}));
     assert!(
         out.is_none(),
         "advisory SessionStart must honor ROUTER_RS_OPERATOR_INJECT kill-switch: {out:?}"
     );
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
-        None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") },
     }
 }
 
@@ -48,7 +48,7 @@ fn operator_inject_off_skips_session_start_additional_context() {
 fn operator_inject_off_skips_user_prompt_submit_additional_context() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_OPERATOR_INJECT");
-    std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0");
+    unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0") };
     let repo = fresh_repo();
     let evt = json!({
         "hook_event_name":"UserPromptSubmit",
@@ -62,8 +62,8 @@ fn operator_inject_off_skips_user_prompt_submit_additional_context() {
         "advisory UserPromptSubmit must honor ROUTER_RS_OPERATOR_INJECT kill-switch: {out:?}"
     );
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v),
-        None => std::env::remove_var("ROUTER_RS_OPERATOR_INJECT"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") },
     }
 }
 
@@ -72,7 +72,7 @@ fn operator_inject_off_skips_user_prompt_submit_additional_context() {
 fn user_prompt_submit_injects_paper_prose_hook_by_default() {
     let _g = env_lock();
     let prior_hook = std::env::var_os("ROUTER_RS_CODEX_PAPER_PROSE_HOOK");
-    std::env::remove_var("ROUTER_RS_CODEX_PAPER_PROSE_HOOK");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_PAPER_PROSE_HOOK") };
     let repo = fresh_repo();
     let evt = json!({
         "hook_event_name":"UserPromptSubmit",
@@ -90,8 +90,8 @@ fn user_prompt_submit_injects_paper_prose_hook_by_default() {
         "expected prose hook in UPS context: {ctx}"
     );
     match prior_hook {
-        Some(v) => std::env::set_var("ROUTER_RS_CODEX_PAPER_PROSE_HOOK", v),
-        None => std::env::remove_var("ROUTER_RS_CODEX_PAPER_PROSE_HOOK"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CODEX_PAPER_PROSE_HOOK", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_CODEX_PAPER_PROSE_HOOK") },
     }
 }
 
@@ -195,12 +195,12 @@ fn session_start_compact_context_under_small_budget_without_digest() {
     )
     .expect("write summary");
 
-    std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
-    std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256") };
     let out = handle_codex_session_start(&repo, &json!({"source":"startup"}))
         .expect("session start output");
-    std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX");
-    std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX") };
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
     let ctx = out["hookSpecificOutput"]["additionalContext"]
         .as_str()
         .expect("additionalContext");
@@ -357,7 +357,7 @@ fn delegation_stop_unblocks_after_worker_subagent() {
 #[test]
 fn stop_blocks_when_hook_state_corrupt() {
     let _guard = env_lock();
-    std::env::set_var("ROUTER_RS_HOOK_STATE_FAIL_OPEN", "true");
+    unsafe { std::env::set_var("ROUTER_RS_HOOK_STATE_FAIL_OPEN", "true") };
     let repo = fresh_repo();
     let payload = json!({
         "hook_event_name":"Stop",
@@ -370,18 +370,24 @@ fn stop_blocks_when_hook_state_corrupt() {
     // B-3: corrupted state auto-recovers (backup .bak + reset to fresh)
     let out = handlers::handle_codex_stop(&repo, &payload);
     // Stop with no review_required proceeds normally (None = allow)
-    assert!(out.is_none(), "corrupted state should auto-recover, not block: {out:?}");
+    assert!(
+        out.is_none(),
+        "corrupted state should auto-recover, not block: {out:?}"
+    );
     // Verify backup was created
     let bak_path = path.with_extension("json.bak");
-    assert!(bak_path.exists(), "corrupt file should be backed up to .bak");
+    assert!(
+        bak_path.exists(),
+        "corrupt file should be backed up to .bak"
+    );
 }
 
 #[test]
 fn session_key_without_stable_identifier_is_deterministic() {
     let _g = env_lock();
-    std::env::remove_var("CODEX_SESSION_ID");
-    std::env::remove_var("CODEX_CONVERSATION_ID");
-    std::env::remove_var("ROUTER_RS_CODEX_HOOK_STATE_SALT");
+    unsafe { std::env::remove_var("CODEX_SESSION_ID") };
+    unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_HOOK_STATE_SALT") };
     let repo = fresh_repo();
     let event = json!({"cwd": repo.to_string_lossy()});
     let k1 = state::codex_session_key(&repo, &event);
@@ -394,23 +400,20 @@ fn session_key_without_stable_identifier_is_deterministic() {
 fn codex_session_key_differs_by_payload_session_when_strict_off() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY");
-    std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "0");
-    std::env::remove_var("CODEX_SESSION_ID");
-    std::env::remove_var("CODEX_CONVERSATION_ID");
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "0") };
+    unsafe { std::env::remove_var("CODEX_SESSION_ID") };
+    unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     let repo = fresh_repo();
     let cwd = repo.to_string_lossy().to_string();
-    let k1 = state::codex_session_key(
-        &repo,
-        &json!({"session_id":"sess-a","cwd":cwd}),
+    let k1 = state::codex_session_key(&repo, &json!({"session_id":"sess-a","cwd":cwd}));
+    let k2 = state::codex_session_key(&repo, &json!({"session_id":"sess-b","cwd":cwd}));
+    assert_ne!(
+        k1, k2,
+        "payload session_id must isolate hook-state when strict off"
     );
-    let k2 = state::codex_session_key(
-        &repo,
-        &json!({"session_id":"sess-b","cwd":cwd}),
-    );
-    assert_ne!(k1, k2, "payload session_id must isolate hook-state when strict off");
     match prior {
-        Some(v) => std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", v),
-        None => std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY"),
+        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", v) },
+        None => unsafe { std::env::remove_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY") },
     }
 }
 
@@ -448,14 +451,14 @@ fn additional_context_truncates_on_newline_preference_under_small_budget() {
     // codex_additional_context_max_bytes clamps to [256, 8192]; use the
     // floor so the assertions exercise the real budget rather than a
     // value that the clamp silently rewrites.
-    std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
-    std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256") };
     let line1 = format!("{}{}", "A".repeat(24), ": L1");
     let line2 = format!("{}{}", "C".repeat(24), ": L2");
     let line3 = "B".repeat(240);
     let ctx = codex_compact_contexts(vec![format!("{line1}\n{line2}\n{line3}")]).unwrap();
-    std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX");
-    std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX") };
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
     assert!(ctx.ends_with("..."));
     assert!(
         ctx.matches('\n').count() >= 1,
@@ -486,15 +489,15 @@ fn codex_compact_contexts_dedup_requires_exact_trim_match() {
 #[test]
 #[serial]
 fn codex_compact_contexts_preserves_join_order_under_small_budget() {
-    std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
-    std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
+    unsafe { std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256") };
     let part1 = "CODEX_JOIN_ORDER_MARK_FIRST:alpha";
     let part2 = "CODEX_JOIN_ORDER_MARK_SECOND:beta";
     let part3 = format!("CODEX_JOIN_ORDER_MARK_TAIL:{}", "Z".repeat(280));
     let ctx = codex_compact_contexts(vec![part1.to_string(), part2.to_string(), part3])
         .expect("expected combined contexts");
-    std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX");
-    std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES");
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX") };
+    unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
     assert!(ctx.len() <= 256, "len={}", ctx.len());
     assert!(ctx.ends_with("..."));
     assert!(
@@ -607,7 +610,10 @@ fn post_tool_deep_reviewer_without_review_prompt_does_not_arm_gate() {
     let _ = run_gate(&repo, &post).unwrap();
     let state = codex_load_state(&repo, &post).unwrap().expect("state");
     assert!(state.review_gate.independent_reviewer_seen);
-    assert!(!state.review_gate.review_required, "non-review PostTool must not arm review_required");
+    assert!(
+        !state.review_gate.review_required,
+        "non-review PostTool must not arm review_required"
+    );
     let stop = json!({
         "hook_event_name":"Stop",
         "session_id":"sm-no-review-arm",
@@ -633,12 +639,13 @@ fn lazy_post_tool_deep_reviewer_arms_gate_and_stop_blocks_without_compact() {
         "tool_name":"Task",
         "tool_input":{"subagent_type":"general-purpose","fork_context":false}
     });
-    assert!(run_gate(&repo, &post)
-        .unwrap()
-        .is_none());
+    assert!(run_gate(&repo, &post).unwrap().is_none());
     let loaded = codex_load_state(&repo, &post).unwrap().unwrap();
     assert!(loaded.review_gate.independent_reviewer_seen);
-    assert!(loaded.review_gate.review_required, "deep PostTool must arm review_required");
+    assert!(
+        loaded.review_gate.review_required,
+        "deep PostTool must arm review_required"
+    );
     let stop = json!({
         "hook_event_name":"Stop",
         "session_id":"sm-lazy-stop-contract",
@@ -688,7 +695,7 @@ fn post_tool_use_observes_fork_context_on_event_root() {
 #[test]
 fn post_tool_use_with_invalid_state_blocks_fail_closed() {
     let _guard = env_lock();
-    std::env::set_var("ROUTER_RS_HOOK_STATE_FAIL_OPEN", "true");
+    unsafe { std::env::set_var("ROUTER_RS_HOOK_STATE_FAIL_OPEN", "true") };
     let repo = fresh_repo();
     let start = json!({
         "hook_event_name":"UserPromptSubmit",
@@ -711,12 +718,20 @@ fn post_tool_use_with_invalid_state_blocks_fail_closed() {
     // Fresh state with subagent_type=explore should trigger review gate
     // but not due to corruption block
     assert!(
-        out.is_none() || out.as_ref().and_then(|v| v.get("decision")).and_then(Value::as_str) != Some("block"),
+        out.is_none()
+            || out
+                .as_ref()
+                .and_then(|v| v.get("decision"))
+                .and_then(Value::as_str)
+                != Some("block"),
         "invalid hook-state should auto-recover on PostToolUse, not block: {out:?}"
     );
     // Verify backup was created
     let bak_path = state_path.with_extension("json.bak");
-    assert!(bak_path.exists(), "corrupt file should be backed up to .bak");
+    assert!(
+        bak_path.exists(),
+        "corrupt file should be backed up to .bak"
+    );
 }
 
 #[test]
@@ -966,7 +981,10 @@ fn stop_rg_clear_clears_review_gate() {
         "prompt":"rg_clear"
     });
     let out = run_gate(&repo, &stop).unwrap();
-    assert!(out.is_none(), "rg_clear must clear codex review gate: {out:?}");
+    assert!(
+        out.is_none(),
+        "rg_clear must clear codex review gate: {out:?}"
+    );
 }
 
 #[test]

@@ -1,12 +1,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use super::types::{
-    CAPABILITY_SURFACE_FIELDS, EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID,
-    EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID, DELEGATION_CONTRACT_ARTIFACT_ID,
-    RUNTIME_SURFACE_FIELDS, SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID, FrameworkProfileContract,
+    CAPABILITY_SURFACE_FIELDS, DELEGATION_CONTRACT_ARTIFACT_ID,
+    EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID, EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID,
+    RUNTIME_SURFACE_FIELDS, SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
 };
 
 fn repo_scan_root() -> PathBuf {
@@ -59,7 +59,10 @@ pub fn build_capability_surface(shared_contract: &Map<String, Value>) -> Map<Str
     capability_surface
 }
 
-pub fn complete_host_payload(host_cli: &str, host_fields: Map<String, Value>) -> Map<String, Value> {
+pub fn complete_host_payload(
+    host_cli: &str,
+    host_fields: Map<String, Value>,
+) -> Map<String, Value> {
     let mut completed = Map::new();
     completed.insert("host_cli".to_string(), Value::String(host_cli.to_string()));
     completed.insert("context_files".to_string(), Value::Array(vec![]));
@@ -128,10 +131,16 @@ pub fn build_execution_protocol_contract() -> Map<String, Value> {
         "genesis".to_string(),
         value_object([
             ("engine", Value::String("skill-framework".to_string())),
-            ("framework_profile_version", Value::String("0.1.0".to_string())),
+            (
+                "framework_profile_version",
+                Value::String("0.1.0".to_string()),
+            ),
             ("seed_tool", Value::String("resolve".to_string())),
             ("seed_agent", Value::String("init".to_string())),
-            ("initial_state", Value::String("goal_acquisition".to_string())),
+            (
+                "initial_state",
+                Value::String("goal_acquisition".to_string()),
+            ),
         ]),
     );
     contract.insert(
@@ -139,19 +148,31 @@ pub fn build_execution_protocol_contract() -> Map<String, Value> {
         value_array(vec![
             value_object([
                 ("phase_id", Value::String("resolve".to_string())),
-                ("entry_message", Value::String("planning_contract".to_string())),
+                (
+                    "entry_message",
+                    Value::String("planning_contract".to_string()),
+                ),
             ]),
             value_object([
                 ("phase_id", Value::String("execute".to_string())),
-                ("entry_message", Value::String("execution_contract".to_string())),
+                (
+                    "entry_message",
+                    Value::String("execution_contract".to_string()),
+                ),
             ]),
             value_object([
                 ("phase_id", Value::String("verify".to_string())),
-                ("entry_message", Value::String("verification_report".to_string())),
+                (
+                    "entry_message",
+                    Value::String("verification_report".to_string()),
+                ),
             ]),
             value_object([
                 ("phase_id", Value::String("closeout".to_string())),
-                ("entry_message", Value::String("closeout_record".to_string())),
+                (
+                    "entry_message",
+                    Value::String("closeout_record".to_string()),
+                ),
             ]),
         ]),
     );
@@ -159,10 +180,7 @@ pub fn build_execution_protocol_contract() -> Map<String, Value> {
         "termination".to_string(),
         value_object([
             ("normal", Value::String("phase_complete".to_string())),
-            (
-                "abnormal",
-                Value::String("error_or_interrupt".to_string()),
-            ),
+            ("abnormal", Value::String("error_or_interrupt".to_string())),
         ]),
     );
     contract
@@ -191,10 +209,7 @@ pub fn build_execution_controller_contract() -> Map<String, Value> {
                 value_array(vec![
                     value_object([
                         ("event", Value::String("task_idle".to_string())),
-                        (
-                            "handler",
-                            Value::String("task_timeout_handler".to_string()),
-                        ),
+                        ("handler", Value::String("task_timeout_handler".to_string())),
                     ]),
                     value_object([
                         ("event", Value::String("task_done".to_string())),
@@ -204,20 +219,11 @@ pub fn build_execution_controller_contract() -> Map<String, Value> {
                         ),
                     ]),
                     value_object([
-                        (
-                            "event",
-                            Value::String("sub_task_submitted".to_string()),
-                        ),
-                        (
-                            "handler",
-                            Value::String("sub_task_handler".to_string()),
-                        ),
+                        ("event", Value::String("sub_task_submitted".to_string())),
+                        ("handler", Value::String("sub_task_handler".to_string())),
                     ]),
                     value_object([
-                        (
-                            "event",
-                            Value::String("supervisor_tick".to_string()),
-                        ),
+                        ("event", Value::String("supervisor_tick".to_string())),
                         (
                             "handler",
                             Value::String("supervisor_tick_handler".to_string()),
@@ -250,10 +256,7 @@ pub fn build_delegation_contract() -> Map<String, Value> {
             ("max_sub_agents", json!(5)),
             (
                 "rate_limit",
-                value_object([
-                    ("window_secs", json!(60)),
-                    ("max_spawns", json!(10)),
-                ]),
+                value_object([("window_secs", json!(60)), ("max_spawns", json!(10))]),
             ),
             ("default_timeout_secs", json!(300)),
         ]),
@@ -355,7 +358,10 @@ pub fn build_supervisor_state_contract() -> Map<String, Value> {
         "artifact_id".to_string(),
         Value::String(SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID.to_string()),
     );
-    contract.insert("schema_expectations".to_string(), Value::Object(schema_expectations));
+    contract.insert(
+        "schema_expectations".to_string(),
+        Value::Object(schema_expectations),
+    );
     contract.insert(
         "supervisor_kind".to_string(),
         Value::String("phase-driven".to_string()),

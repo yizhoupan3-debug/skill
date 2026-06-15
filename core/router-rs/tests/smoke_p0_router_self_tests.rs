@@ -101,10 +101,7 @@ fn router_self_desktop_mcp_idempotent_install_smoke() {
     let first_bytes = fs::read(&first).expect("first bytes");
     let second = install_router_rs_for_desktop_mcp_at(&home).expect("second install");
     assert_eq!(first, second);
-    assert_eq!(
-        second,
-        router_rs_desktop_mcp_path_for_home(&home)
-    );
+    assert_eq!(second, router_rs_desktop_mcp_path_for_home(&home));
     assert_eq!(
         fs::read(&second).expect("second bytes"),
         first_bytes,
@@ -120,7 +117,9 @@ fn router_self_ephemeral_vs_repo_build_classification_smoke() {
         "/tmp/skill-cargo-target/debug/router-rs"
     ));
     assert!(is_ephemeral_router_rs_path("/tmp/router-rs-probe"));
-    assert!(!is_ephemeral_router_rs_path("/Users/joe/.local/bin/router-rs"));
+    assert!(!is_ephemeral_router_rs_path(
+        "/Users/joe/.local/bin/router-rs"
+    ));
 
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let framework_root = manifest_dir

@@ -17,6 +17,12 @@
     "shared_system_source": "skills",
     "metadata": {
       "cursor": {
+        "display_name": "Cursor",
+        "transport_type": "hook",
+        "config_format": "mdc",
+        "home_env_var": "CURSOR_HOME",
+        "default_home_dir": ".cursor",
+        "cli_aliases": ["cursor"],
         "install_tool": "cursor",
         "projection_status": "implemented",
         "installable": true,
@@ -27,6 +33,12 @@
         ]
       },
       "claude-code": {
+        "display_name": "Claude Code",
+        "transport_type": "hook",
+        "config_format": "json",
+        "home_env_var": "CLAUDE_HOME",
+        "default_home_dir": ".claude",
+        "cli_aliases": ["claude"],
         "install_tool": "claude",
         "projection_status": "implemented",
         "installable": true,
@@ -38,6 +50,12 @@
         ]
       },
       "opencode": {
+        "display_name": "OpenCode",
+        "transport_type": "native-opencode",
+        "config_format": "json",
+        "home_env_var": "OPENCODE_HOME",
+        "default_home_dir": ".opencode",
+        "cli_aliases": ["opencode"],
         "install_tool": "opencode",
         "projection_status": "implemented",
         "installable": true,
@@ -45,6 +63,12 @@
         "host_entrypoints": ".opencode/opencode.json"
       },
       "codex": {
+        "display_name": "Codex",
+        "transport_type": "hook",
+        "config_format": "json",
+        "home_env_var": "CODEX_HOME",
+        "default_home_dir": ".codex",
+        "cli_aliases": ["codex"],
         "install_tool": "codex",
         "projection_status": "implemented",
         "installable": true,
@@ -52,6 +76,12 @@
         "host_entrypoints": "AGENTS_CODEX.md"
       },
       "mimo": {
+        "display_name": "MiMo",
+        "transport_type": "hook",
+        "config_format": "json",
+        "home_env_var": "MIMO_HOME",
+        "default_home_dir": ".mimo",
+        "cli_aliases": ["mimo"],
         "install_tool": "mimo",
         "projection_status": "implemented",
         "installable": true,

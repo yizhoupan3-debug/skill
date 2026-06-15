@@ -134,7 +134,10 @@ async fn fetch_account_info(
                     let key = t["key"].as_str()?;
                     let value = t["value"].as_i64()?;
                     let mut m = serde_json::Map::new();
-                    m.insert("token_id".into(), serde_json::Value::String(key.to_string()));
+                    m.insert(
+                        "token_id".into(),
+                        serde_json::Value::String(key.to_string()),
+                    );
                     m.insert(
                         "balance".into(),
                         serde_json::Value::String(value.to_string()),
@@ -198,9 +201,7 @@ async fn fetch_transactions(
         let contract = &item["raw_data"]["contract"][0];
         let params = &contract["parameter"]["value"];
 
-        let owner = try_hex_to_base58(params["owner_address"]
-            .as_str()
-            .unwrap_or(""));
+        let owner = try_hex_to_base58(params["owner_address"].as_str().unwrap_or(""));
 
         // For TransferContract, to_address and amount are direct
         // For TriggerSmartContract, extract from data field
@@ -219,19 +220,19 @@ async fn fetch_transactions(
                 (to, amt)
             }
             _ => {
-                let to = try_hex_to_base58(params["to_address"]
-                    .as_str()
-                    .or_else(|| params["contract_address"].as_str())
-                    .unwrap_or(""));
+                let to = try_hex_to_base58(
+                    params["to_address"]
+                        .as_str()
+                        .or_else(|| params["contract_address"].as_str())
+                        .unwrap_or(""),
+                );
                 let amt = params["amount"].as_i64();
                 (to, amt)
             }
         };
 
         let timestamp = item["block_timestamp"].as_i64().unwrap_or(0);
-        let contract_ret = item["ret"][0]["contractRet"]
-            .as_str()
-            .map(String::from);
+        let contract_ret = item["ret"][0]["contractRet"].as_str().map(String::from);
 
         txs.push(Transaction {
             hash,
@@ -279,10 +280,7 @@ async fn fetch_trc20_transfers(
 
     let mut transfers = Vec::new();
     for item in data {
-        let tx_id = item["transaction_id"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
+        let tx_id = item["transaction_id"].as_str().unwrap_or("").to_string();
         let from = item["from"].as_str().unwrap_or("").to_string();
         let to = item["to"].as_str().unwrap_or("").to_string();
         let value = item["value"].as_str().unwrap_or("0").to_string();
@@ -442,10 +440,7 @@ fn base58check_to_hex(address: &str) -> Result<String> {
     }
 
     // Convert to hex string (skip version byte 0x41 for mainnet)
-    let hex_str: String = result[..21]
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
+    let hex_str: String = result[..21].iter().map(|b| format!("{b:02x}")).collect();
     Ok(hex_str)
 }
 
@@ -458,7 +453,10 @@ pub fn hex_to_base58(hex_str: &str) -> Result<String> {
         .map_err(|e| anyhow::anyhow!("Invalid hex: {e}"))?;
 
     if bytes.len() != 21 {
-        anyhow::bail!("Invalid hex address length: expected 21 bytes, got {}", bytes.len());
+        anyhow::bail!(
+            "Invalid hex address length: expected 21 bytes, got {}",
+            bytes.len()
+        );
     }
 
     // Compute double SHA-256 checksum

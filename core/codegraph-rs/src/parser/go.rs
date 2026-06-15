@@ -8,9 +8,7 @@ pub(crate) struct ParseOutput {
 
 pub(crate) fn parse(source: &str) -> ParseOutput {
     let mut parser = tree_sitter::Parser::new();
-    parser
-        .set_language(&tree_sitter_go::LANGUAGE.into())
-        .ok();
+    parser.set_language(&tree_sitter_go::LANGUAGE.into()).ok();
     let Some(tree) = parser.parse(source, None) else {
         return ParseOutput {
             symbols: Vec::new(),

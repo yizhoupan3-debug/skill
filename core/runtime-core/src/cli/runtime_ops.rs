@@ -14,50 +14,50 @@ use crate::runtime_envelope_ids::{
     WRITE_TEXT_PAYLOAD_TEMP_COUNTER,
 };
 
-#[cfg(test)]
-pub use crate::framework_runtime::{
-    attach_runtime_event_transport, cleanup_attached_runtime_event_transport,
-    inspect_trace_stream, replay_trace_stream, sha256_hex, subscribe_attached_runtime_events,
-    write_trace_compaction_delta, write_trace_metadata,
-};
-pub use crate::framework_runtime::json_payload::{
+pub use crate::framework_runtime::json_value::{
     optional_non_empty_string, required_non_empty_string,
 };
 use crate::framework_runtime::trace_transport::{
     build_checkpoint_resume_manifest, build_trace_transport_payload,
 };
+#[cfg(test)]
+pub use crate::framework_runtime::{
+    attach_runtime_event_transport, cleanup_attached_runtime_event_transport, inspect_trace_stream,
+    replay_trace_stream, sha256_hex, subscribe_attached_runtime_events,
+    write_trace_compaction_delta, write_trace_metadata,
+};
 include!("runtime_ops.inc");
 
-pub use crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload;
 #[cfg(test)]
 pub use crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request;
+pub use crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload;
 #[cfg(test)]
 pub use crate::framework_runtime::stdio_op_registry::{
-    classify_stdio_op, is_framework_stdio_op, is_routing_stdio_op, is_runtime_stdio_op,
-    is_trace_stdio_op, StdioOpDomain,
+    StdioOpDomain, classify_stdio_op, is_framework_stdio_op, is_routing_stdio_op,
+    is_runtime_stdio_op, is_trace_stdio_op,
 };
 
-#[cfg(test)]
-pub use crate::framework_runtime::live_execute::{
-    build_live_execute_prompt, build_live_execute_response, execute_request,
-    extract_chat_completion_content, live_execute_http_client,
-    normalize_chat_completions_endpoint, perform_live_execute, perform_live_execute_with_sender,
-    validate_live_execute_aggregator_base_url, LiveExecuteResult,
-    DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS, EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV,
-};
 #[cfg(test)]
 #[allow(unused_imports)]
 pub use crate::framework_runtime::live_execute::payload_text_signals_deep_research;
-
-pub use crate::framework_runtime::{
-    build_runtime_control_plane_payload, build_runtime_integrator_payload,
-    build_runtime_metric_record, build_runtime_observability_exporter_descriptor,
-    build_runtime_observability_metric_catalog_payload, runtime_observability_dashboard_schema,
+#[cfg(test)]
+pub use crate::framework_runtime::live_execute::{
+    DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS, EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV,
+    LiveExecuteResult, build_live_execute_prompt, build_live_execute_response, execute_request,
+    extract_chat_completion_content, live_execute_http_client, normalize_chat_completions_endpoint,
+    perform_live_execute, perform_live_execute_with_sender,
+    validate_live_execute_aggregator_base_url,
 };
+
 #[cfg(test)]
 pub use crate::framework_runtime::{
     build_background_control_response, build_runtime_observability_health_snapshot,
     build_sandbox_control_response,
+};
+pub use crate::framework_runtime::{
+    build_runtime_control_plane_payload, build_runtime_integrator_payload,
+    build_runtime_metric_record, build_runtime_observability_exporter_descriptor,
+    build_runtime_observability_metric_catalog_payload, runtime_observability_dashboard_schema,
 };
 
 // Merged from `cli_modes.rs` (must follow `include!` so builder fns exist; avoids import cycle).

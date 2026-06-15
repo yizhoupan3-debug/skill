@@ -112,9 +112,7 @@ pub fn ensure_kernel_bootstrap() {
 /// Discover the skill policy repository root.
 /// Default: None.
 pub fn discover_skill_repo_root() -> Option<PathBuf> {
-    HOOKS
-        .get()
-        .and_then(|h| (h.discover_skill_repo_root)())
+    HOOKS.get().and_then(|h| (h.discover_skill_repo_root)())
 }
 
 /// Resolve the skill routing runtime JSON path from a repo root.

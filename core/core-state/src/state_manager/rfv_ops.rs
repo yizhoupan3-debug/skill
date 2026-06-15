@@ -2,7 +2,7 @@
 // Extracted from state_manager.rs during module split.
 
 use crate::utils::atomic_write::write_atomic_json;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 

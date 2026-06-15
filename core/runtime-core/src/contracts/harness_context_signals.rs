@@ -201,5 +201,4 @@ mod tests {
         let st3 = serde_json::json!({"goal": "lint only", "verify_commands": ["ruff check"]});
         assert!(!rfv_state_signals_math(&st3));
     }
-
 }

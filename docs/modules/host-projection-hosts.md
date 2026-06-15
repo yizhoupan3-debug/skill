@@ -7,7 +7,7 @@ last_verified: "2026-06-13"
 
 # hosts 子模块详解
 
-四宿主 hook 实现 + 共享抽象层。
+五宿主 hook 实现 + 共享抽象层。
 
 ## 共享抽象
 
@@ -41,7 +41,7 @@ HostHookDispatcher trait
 - `HookStateConfig`: 配置 host_id/state_dir_leaf/state_filename，提供 `with_state_lock` 泛型方法
 - `read_stdin_json`: 带 4 MiB 限制的 stdin JSON 读取
 
-## 四宿主 hook 实现
+## 五宿主 hook 实现
 
 | 宿主 | 文件 | 行数 | 使用共享抽象 |
 |------|------|------|-------------|

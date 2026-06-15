@@ -179,10 +179,7 @@ mod tests {
 
         // Edges should link skill -> keywords
         assert!(parsed.edges.len() >= 2);
-        assert!(parsed
-            .edges
-            .iter()
-            .all(|e| e.caller_symbol == "test-skill"));
+        assert!(parsed.edges.iter().all(|e| e.caller_symbol == "test-skill"));
     }
 
     #[test]

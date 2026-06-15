@@ -1,9 +1,9 @@
 //! Framework command alias envelopes (`/implementx`, `deepinterview`, …).
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use std::fs;
-use std::sync::{LazyLock, Mutex};
 use std::path::Path;
+use std::sync::{LazyLock, Mutex};
 
 use super::constants::{
     FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY, TERMINAL_VERIFICATION_STATUSES,
@@ -178,16 +178,21 @@ struct RegistryCache {
     mtime: std::time::SystemTime,
 }
 
-static REGISTRY_CACHE: LazyLock<Mutex<Option<RegistryCache>>> =
-    LazyLock::new(|| Mutex::new(None));
+static REGISTRY_CACHE: LazyLock<Mutex<Option<RegistryCache>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Load and parse the registry JSON from disk (shared by cache miss paths).
 fn load_and_cache(path: &std::path::Path) -> Result<Value, String> {
     let raw = fs::read_to_string(path).map_err(|err| {
-        format!("framework alias registry unavailable at {}: {err}", path.display())
+        format!(
+            "framework alias registry unavailable at {}: {err}",
+            path.display()
+        )
     })?;
     let parsed: Value = serde_json::from_str(&raw).map_err(|err| {
-        format!("framework alias registry parse failed at {}: {err}", path.display())
+        format!(
+            "framework alias registry parse failed at {}: {err}",
+            path.display()
+        )
     })?;
     Ok(parsed)
 }
@@ -207,12 +212,18 @@ fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Val
                 entry.payload.clone()
             } else {
                 let parsed = load_and_cache(&registry_path)?;
-                *cache = Some(RegistryCache { payload: parsed.clone(), mtime });
+                *cache = Some(RegistryCache {
+                    payload: parsed.clone(),
+                    mtime,
+                });
                 parsed
             }
         } else {
             let parsed = load_and_cache(&registry_path)?;
-            *cache = Some(RegistryCache { payload: parsed.clone(), mtime });
+            *cache = Some(RegistryCache {
+                payload: parsed.clone(),
+                mtime,
+            });
             parsed
         }
     };
@@ -669,18 +680,37 @@ pub(super) fn render_framework_alias_prompt_parts(entry_contract: &Value) -> (St
     if !task.is_empty() || !phase.is_empty() || !status.is_empty() {
         dynamic.push(format!(
             "当前={} / {} / {}",
-            if task.is_empty() { "无" } else { task.as_str() },
-            if phase.is_empty() { "无" } else { phase.as_str() },
-            if status.is_empty() { "无" } else { status.as_str() },
+            if task.is_empty() {
+                "无"
+            } else {
+                task.as_str()
+            },
+            if phase.is_empty() {
+                "无"
+            } else {
+                phase.as_str()
+            },
+            if status.is_empty() {
+                "无"
+            } else {
+                status.as_str()
+            },
         ));
     }
     if !next_actions.is_empty() {
         dynamic.push(format!("下一步={}", next_actions.join(";")));
     }
 
-    (stable.join("
-"), dynamic.join("
-"))
+    (
+        stable.join(
+            "
+",
+        ),
+        dynamic.join(
+            "
+",
+        ),
+    )
 }
 
 pub(super) fn estimate_token_count(text: &str) -> usize {

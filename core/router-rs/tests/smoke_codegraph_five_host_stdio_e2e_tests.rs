@@ -15,7 +15,7 @@ mod five_host_stdio_e2e {
         host_targets_supported_host_ids, skills_install_tool_for_host_id,
     };
     use crate::host_integration::{
-        install_projection_tool, projection_scope_for_tool, ResolvedProjectionRoots,
+        ResolvedProjectionRoots, install_projection_tool, projection_scope_for_tool,
     };
     use crate::runtime_registry::load_runtime_registry_json;
 
@@ -79,15 +79,16 @@ mod five_host_stdio_e2e {
                 ("cursor".into(), home.join(".cursor")),
                 ("claude-code".into(), home.join(".claude")),
                 ("opencode".into(), home.join(".opencode")),
-            ].into_iter().collect(),
+            ]
+            .into_iter()
+            .collect(),
         };
         (root, roots)
     }
 
     fn read_json(path: &Path) -> Value {
-        let text = fs::read_to_string(path).unwrap_or_else(|err| {
-            panic!("missing projected config {}: {err}", path.display())
-        });
+        let text = fs::read_to_string(path)
+            .unwrap_or_else(|err| panic!("missing projected config {}: {err}", path.display()));
         serde_json::from_str(&text).expect("parse json")
     }
 
@@ -96,7 +97,10 @@ mod five_host_stdio_e2e {
         host_id: &str,
     ) -> (PathBuf, &'static str) {
         match host_id {
-            "cursor" => (roots.host_home_root("cursor").join("mcp.json"), "mcp_servers"),
+            "cursor" => (
+                roots.host_home_root("cursor").join("mcp.json"),
+                "mcp_servers",
+            ),
             "claude-code" => (roots.project_root.join(".mcp.json"), "mcpServers"),
             "codex" => (roots.project_root.join(".mcp.json"), "mcpServers"),
             "opencode" => (
@@ -191,9 +195,7 @@ mod five_host_stdio_e2e {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .unwrap_or_else(|err| {
-                panic!("{host_id}: spawn mcp-codegraph ({command}): {err}")
-            });
+            .unwrap_or_else(|err| panic!("{host_id}: spawn mcp-codegraph ({command}): {err}"));
 
         let stdin = child.stdin.as_mut().expect("stdin");
         let requests = [
@@ -234,26 +236,25 @@ mod five_host_stdio_e2e {
     #[test]
     fn codegraph_five_host_stdio_e2e_smoke() {
         if !stdio_e2e_enabled() {
-            eprintln!("skip codegraph_five_host_stdio_e2e_smoke: set ROUTER_RS_CODEGRAPH_STDIO_E2E=1");
+            eprintln!(
+                "skip codegraph_five_host_stdio_e2e_smoke: set ROUTER_RS_CODEGRAPH_STDIO_E2E=1"
+            );
             return;
         }
 
         let framework_root = framework_repo_root();
         let _built_bin = ensure_mcp_codegraph_built(&framework_root);
 
-        let registry =
-            load_runtime_registry_json(&framework_root).expect("load RUNTIME_REGISTRY");
-        let host_ids =
-            host_targets_supported_host_ids(&registry).expect("supported host ids");
+        let registry = load_runtime_registry_json(&framework_root).expect("load RUNTIME_REGISTRY");
+        let host_ids = host_targets_supported_host_ids(&registry).expect("supported host ids");
         assert_eq!(host_ids.len(), 5, "closed-set must remain five hosts");
 
         let (cleanup_root, roots) = test_roots(&framework_root);
         let prior_home = std::env::var_os("HOME");
-        std::env::set_var("HOME", &roots.account_home_root);
+        unsafe { std::env::set_var("HOME", &roots.account_home_root) };
 
         for host_id in &host_ids {
-            let tool =
-                skills_install_tool_for_host_id(&registry, host_id).expect("install tool");
+            let tool = skills_install_tool_for_host_id(&registry, host_id).expect("install tool");
             let scope = projection_scope_for_tool(&tool, "project").expect("scope");
             let result = install_projection_tool(&roots, &tool, scope)
                 .unwrap_or_else(|err| panic!("install {host_id} ({tool}): {err}"));
@@ -269,7 +270,10 @@ mod five_host_stdio_e2e {
                 .get(servers_key)
                 .and_then(|v| v.get("mcp-codegraph"))
                 .unwrap_or_else(|| {
-                    panic!("{host_id}: {servers_key}.mcp-codegraph missing in {}", config_path.display())
+                    panic!(
+                        "{host_id}: {servers_key}.mcp-codegraph missing in {}",
+                        config_path.display()
+                    )
                 });
             let (command, args) = extract_stdio_launch(entry, host_id);
             let stdout = run_stdio_tools_probe(&command, &args, host_id);
@@ -277,9 +281,9 @@ mod five_host_stdio_e2e {
         }
 
         if let Some(h) = prior_home {
-            std::env::set_var("HOME", h);
+            unsafe { std::env::set_var("HOME", h) };
         } else {
-            std::env::remove_var("HOME");
+            unsafe { std::env::remove_var("HOME") };
         }
         let _ = fs::remove_dir_all(cleanup_root);
     }

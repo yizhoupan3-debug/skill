@@ -26,8 +26,8 @@ pub fn router_rs_task_ledger_flock_enabled() -> bool {
 use fs2::FileExt;
 use std::fs::{self, OpenOptions};
 use std::path::Path;
-use std::time::{Duration, Instant};
 use std::thread;
+use std::time::{Duration, Instant};
 
 pub(crate) const TASK_LEDGER_LOCK_BASENAME: &str = ".router-rs.task-ledger.lock";
 
@@ -136,7 +136,7 @@ mod tests {
             .lock()
             .expect("task ledger flock env mutex poisoned");
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
-        std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK");
+        unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") };
         let tmp = unique_tmp();
         fs::create_dir_all(tmp.join("artifacts/current")).expect("mkdir");
         let v = apply_task_ledger_mutation(&tmp, || Ok(7_u8)).expect("apply");
@@ -146,8 +146,8 @@ mod tests {
             "expected lock sentinel file"
         );
         match prev {
-            Some(p) => std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", p),
-            None => std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -158,14 +158,14 @@ mod tests {
             .lock()
             .expect("task ledger flock env mutex poisoned");
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
-        std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", "0");
+        unsafe { std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", "0") };
         let tmp = unique_tmp();
         fs::create_dir_all(tmp.join("artifacts/current")).expect("mkdir");
         let v = apply_task_ledger_mutation(&tmp, || Ok(9_u8)).expect("apply");
         assert_eq!(v, 9);
         match prev {
-            Some(p) => std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", p),
-            None => std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK"),
+            Some(p) => unsafe { std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", p) },
+            None => unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }

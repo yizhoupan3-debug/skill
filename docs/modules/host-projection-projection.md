@@ -13,7 +13,7 @@ last_verified: "2026-06-13"
 
 | 文件 | 行数 | 功能 |
 |------|------|------|
-| `mod.rs` | 1,590 | 核心投影逻辑：`HostProjectionAdapter` trait、四宿主适配器常量、MCP payload 生成、narrative 渲染 |
+| `mod.rs` | 1,590 | 核心投影逻辑：`HostProjectionAdapter` trait、五宿主适配器常量、MCP payload 生成、narrative 渲染 |
 | `projection_bootstrap.rs` | 702 | 默认 bootstrap 生成与验证（`build_default_bootstrap_payload`） |
 | `projection_host_ops.rs` | 659 | 各宿主 install/status/remove 实现 |
 | `projection_manifest.rs` | 747 | 投影 manifest CRUD、entrypoint 渲染、Cursor MCP 服务器管理 |

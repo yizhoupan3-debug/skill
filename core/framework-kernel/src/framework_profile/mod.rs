@@ -6,21 +6,16 @@ use std::path::{Path, PathBuf};
 mod contracts;
 mod types;
 
-pub use types::{
-    CapabilityBundle, FrameworkProfileContract, HostProfileBuildContext, ProfileBundle,
-    EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID, EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID,
-    DELEGATION_CONTRACT_ARTIFACT_ID, REQUIRED_CORE_CAPABILITIES, SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
-};
 pub use contracts::{
-    build_control_plane_contract_descriptors,
-    build_capability_surface,
-    build_delegation_contract,
-    build_execution_controller_contract,
-    build_execution_protocol_contract,
-    build_runtime_surface,
-    build_supervisor_state_contract,
+    build_capability_surface, build_control_plane_contract_descriptors, build_delegation_contract,
+    build_execution_controller_contract, build_execution_protocol_contract,
+    build_host_alias_entrypoints, build_runtime_surface, build_supervisor_state_contract,
     complete_host_payload,
-    build_host_alias_entrypoints,
+};
+pub use types::{
+    CapabilityBundle, DELEGATION_CONTRACT_ARTIFACT_ID, EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID,
+    EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID, FrameworkProfileContract, HostProfileBuildContext,
+    ProfileBundle, REQUIRED_CORE_CAPABILITIES, SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
 };
 
 use types::HOST_SPECIFIC_METADATA_KEYS;
@@ -373,7 +368,10 @@ impl HostProfileSpec {
     fn build_payload(&self) -> Map<String, Value> {
         use contracts::complete_host_payload;
         let mut payload = complete_host_payload(&self.host_cli, Map::new());
-        payload.insert("transport".to_string(), Value::String(self.transport.clone()));
+        payload.insert(
+            "transport".to_string(),
+            Value::String(self.transport.clone()),
+        );
         payload.insert(
             "capabilities".to_string(),
             Value::Array(
@@ -546,10 +544,7 @@ fn resolve_host_capability_requirements(
             Some("workspace_bootstrap") => ctx.workspace_bootstrap.contains_key(key),
             _ => false,
         };
-        profile_map.insert(
-            format!("capability_{key}"),
-            Value::Bool(satisfied),
-        );
+        profile_map.insert(format!("capability_{key}"), Value::Bool(satisfied));
     }
 }
 
@@ -666,7 +661,11 @@ mod tests {
     fn build_profile_bundle_succeeds_for_valid_profile() {
         let profile = sample_profile();
         let result = build_profile_bundle(&profile);
-        assert!(result.is_ok(), "build_profile_bundle failed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "build_profile_bundle failed: {:?}",
+            result.err()
+        );
     }
 
     #[test]

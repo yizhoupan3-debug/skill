@@ -135,7 +135,10 @@ pub trait HostTelemetry: Send + Sync {
     /// Extract followup and additional_context surfaces from hook output JSON.
     /// Default: followup from `followup_message`, additional from
     /// `/hookSpecificOutput/additionalContext` then `additional_context`.
-    fn extract_observation_surfaces(&self, output: &serde_json::Value) -> (Option<String>, Option<String>) {
+    fn extract_observation_surfaces(
+        &self,
+        output: &serde_json::Value,
+    ) -> (Option<String>, Option<String>) {
         let followup = output
             .get("followup_message")
             .and_then(serde_json::Value::as_str)
@@ -167,7 +170,8 @@ pub trait HostProvider: HostLifecycle + HostToolExecutor + HostTelemetry {
 
 /// Closed-set fast path for `pre_tool_use_guard` (no registry disk read).
 pub fn host_provider_strict_pre_tool_fallback_hint(host_id: &str) -> Option<bool> {
-    host_provider_for_id(host_id).map(|provider| provider.requires_strict_pre_tool_fallback_default())
+    host_provider_for_id(host_id)
+        .map(|provider| provider.requires_strict_pre_tool_fallback_default())
 }
 
 include!(concat!(env!("OUT_DIR"), "/generated_host_providers.rs"));
@@ -387,8 +391,20 @@ mod tests {
         let cases: &[(&str, &str, &str, &str, bool)] = &[
             // (host_id, transport_type, config_path_contains, session_supervisor, has_worktree)
             ("cursor", "cursor-agent", "mcp.json", "unsupported", true),
-            ("claude-code", "anthropic-claude-code", ".claude/settings.json", "mcp_bridge", true),
-            ("opencode", "native-opencode", ".opencode/opencode.json", "unsupported", true),
+            (
+                "claude-code",
+                "anthropic-claude-code",
+                ".claude/settings.json",
+                "mcp_bridge",
+                true,
+            ),
+            (
+                "opencode",
+                "native-opencode",
+                ".opencode/opencode.json",
+                "unsupported",
+                true,
+            ),
             ("codex", "native-codex", "config.toml", "codex_driver", true),
         ];
         for &(host_id, transport, config_contains, supervisor, worktree) in cases {
@@ -396,15 +412,34 @@ mod tests {
             let caps = provider.capabilities();
             assert!(caps.has_native_hook, "{host_id}: has_native_hook");
             assert!(caps.supports_subagent, "{host_id}: supports_subagent");
-            assert_eq!(caps.supports_worktree, worktree, "{host_id}: supports_worktree");
+            assert_eq!(
+                caps.supports_worktree, worktree,
+                "{host_id}: supports_worktree"
+            );
             assert_eq!(caps.transport_type, transport, "{host_id}: transport_type");
-            assert!(caps.config_path.contains(config_contains), "{host_id}: config_path");
-            assert_eq!(provider.session_supervisor_driver(), supervisor, "{host_id}: supervisor");
+            assert!(
+                caps.config_path.contains(config_contains),
+                "{host_id}: config_path"
+            );
+            assert_eq!(
+                provider.session_supervisor_driver(),
+                supervisor,
+                "{host_id}: supervisor"
+            );
             // All 4 hosts share these via trait defaults
-            assert!(provider.closeout_evidence_hooks_supported(), "{host_id}: closeout");
+            assert!(
+                provider.closeout_evidence_hooks_supported(),
+                "{host_id}: closeout"
+            );
             assert!(provider.has_hard_gate_hooks(), "{host_id}: hard_gate");
-            assert!(!provider.requires_strict_pre_tool_fallback_default(), "{host_id}: strict_fallback");
-            assert!(provider.review_gate_router_observable(), "{host_id}: review_gate");
+            assert!(
+                !provider.requires_strict_pre_tool_fallback_default(),
+                "{host_id}: strict_fallback"
+            );
+            assert!(
+                provider.review_gate_router_observable(),
+                "{host_id}: review_gate"
+            );
         }
     }
 
@@ -443,18 +478,33 @@ mod tests {
     fn native_hook_glue_surfaces_manifest_and_events() {
         let cases: &[(&str, &str, &[&str])] = &[
             // (host_id, manifest_path, sample_events)
-            ("cursor", ".cursor/hooks.json", &["beforeSubmitPrompt", "stop"]),
+            (
+                "cursor",
+                ".cursor/hooks.json",
+                &["beforeSubmitPrompt", "stop"],
+            ),
             ("codex", ".codex/hooks.json", &["PreToolUse", "Stop"]),
             // opencode: no manifest (native hook via launcher script), events tested separately
         ];
         for &(host_id, manifest, events) in cases {
             let lifecycle = host_lifecycle_for_id(host_id).expect(host_id);
-            assert_eq!(lifecycle.hooks_manifest_path(), Some(manifest), "{host_id}: manifest");
+            assert_eq!(
+                lifecycle.hooks_manifest_path(),
+                Some(manifest),
+                "{host_id}: manifest"
+            );
             for event in events {
-                assert!(lifecycle.registered_hook_events().contains(event), "{host_id}: event {event}");
+                assert!(
+                    lifecycle.registered_hook_events().contains(event),
+                    "{host_id}: event {event}"
+                );
             }
             let telemetry = host_telemetry_for_id(host_id).expect(&format!("{host_id} telemetry"));
-            assert_eq!(telemetry.observation_host_id(), Some(host_id), "{host_id}: observation_host_id");
+            assert_eq!(
+                telemetry.observation_host_id(),
+                Some(host_id),
+                "{host_id}: observation_host_id"
+            );
         }
     }
 

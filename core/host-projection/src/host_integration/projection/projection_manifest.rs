@@ -3,7 +3,11 @@
 //! Extracted from projection.rs to keep file size ≤2000 lines.
 
 use super::*;
-pub fn make_mcp_server_payload(roots: &ResolvedProjectionRoots, host_args: &[&str], description: &str) -> Value {
+pub fn make_mcp_server_payload(
+    roots: &ResolvedProjectionRoots,
+    host_args: &[&str],
+    description: &str,
+) -> Value {
     make_mcp_server_payload_with_env(roots, host_args, description, None)
 }
 
@@ -38,7 +42,6 @@ pub fn make_mcp_server_payload_with_env(
     }
     payload
 }
-
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProjectionManifestOwnership {
@@ -118,7 +121,10 @@ pub fn projection_manifest_payload_is_managed(
     true
 }
 
-pub fn projection_manifest_files_include(manifest_path: &Path, projection_path: &Path) -> Result<bool, String> {
+pub fn projection_manifest_files_include(
+    manifest_path: &Path,
+    projection_path: &Path,
+) -> Result<bool, String> {
     let Some(manifest) = read_json_if_exists(manifest_path)? else {
         return Ok(false);
     };
@@ -174,7 +180,10 @@ pub fn append_mcp_path(paths: &mut Value, include: bool, mcp_path: &Path) {
 
 pub fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.host_home_root("codex").join("prompts").join("framework.md")
+        roots
+            .host_home_root("codex")
+            .join("prompts")
+            .join("framework.md")
     } else {
         roots
             .project_root
@@ -186,7 +195,10 @@ pub fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> 
 
 pub fn cursor_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.host_home_root("cursor").join("rules").join("framework.mdc")
+        roots
+            .host_home_root("cursor")
+            .join("rules")
+            .join("framework.mdc")
     } else {
         roots
             .project_root
@@ -284,7 +296,11 @@ pub fn install_cursor_mcp_server(
     path: &Path,
 ) -> Result<CursorMcpInstallOutcome, String> {
     let browser_server = cursor_mcp_server_payload(roots);
-    let framework_server = host_router_rs_framework_payload(roots, "cursor", "Framework snapshot, skill routing, goal/closeout gating (Cursor)");
+    let framework_server = host_router_rs_framework_payload(
+        roots,
+        "cursor",
+        "Framework snapshot, skill routing, goal/closeout gating (Cursor)",
+    );
     // codegraph 注入走 merge_codegraph_into_mcp_servers_map，无需提前构造
     if let Some(payload) = read_json_if_exists(path)? {
         if let Some(existing) = payload
@@ -309,15 +325,18 @@ pub fn install_cursor_mcp_server(
                 let servers = mcp_servers
                     .as_object_mut()
                     .ok_or_else(|| "cursor mcp_servers must be an object".to_string())?;
-                let framework_changed = servers.get("router-rs-framework") != Some(&framework_server);
+                let framework_changed =
+                    servers.get("router-rs-framework") != Some(&framework_server);
                 if framework_changed {
                     servers.insert("router-rs-framework".to_string(), framework_server);
                 }
-                let paperplain_changed = merge_paperplain_into_mcp_servers_map(servers, "paperplain");
+                let paperplain_changed =
+                    merge_paperplain_into_mcp_servers_map(servers, "paperplain");
                 let codegraph_changed =
                     merge_codegraph_into_mcp_servers_map(servers, roots, "mcp-codegraph");
                 let file_changed = write_json_if_changed(path, &payload)?;
-                let changed = framework_changed || paperplain_changed || codegraph_changed || file_changed;
+                let changed =
+                    framework_changed || paperplain_changed || codegraph_changed || file_changed;
                 return Ok(CursorMcpInstallOutcome {
                     managed: true,
                     changed,
@@ -564,9 +583,9 @@ pub fn cursor_mcp_server_matches_framework(
     let Some(server) = actual else {
         return Ok(None);
     };
-    Ok(Some(
-        cursor_mcp_server_semantically_matches_framework(server, roots),
-    ))
+    Ok(Some(cursor_mcp_server_semantically_matches_framework(
+        server, roots,
+    )))
 }
 
 pub fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
@@ -643,7 +662,11 @@ pub fn canonical_install_skills_command(command: &str) -> String {
     }
 }
 
-pub fn install_skills_projection_tools(command: &str, tools: &[String], to: &[String]) -> Vec<String> {
+pub fn install_skills_projection_tools(
+    command: &str,
+    tools: &[String],
+    to: &[String],
+) -> Vec<String> {
     if !to.is_empty() {
         return to.to_vec();
     }
@@ -683,4 +706,3 @@ pub fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<Stri
     });
     tools
 }
-

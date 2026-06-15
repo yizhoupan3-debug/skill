@@ -1,7 +1,7 @@
 //! Cross-host hook disk review gate core fields, JSON hydration, and Stop orchestration.
 //! Host modules own transport projection (Cursor `followup_message`, Codex `decision:block`, Claude `stopReason`).
 
-use crate::review_gate_engine::{review_gate_blocks_stop, ReviewGateFacts};
+use crate::review_gate_engine::{ReviewGateFacts, review_gate_blocks_stop};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -196,10 +196,7 @@ pub fn hook_review_gate_fields_from_value(value: &Value) -> HookReviewGateFields
 pub fn hook_review_disk_core_from_value(value: &Value) -> HookReviewDiskCore {
     let gate = hook_review_gate_fields_from_value(value);
     HookReviewDiskCore {
-        version: value
-            .get("version")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as u32,
+        version: value.get("version").and_then(Value::as_u64).unwrap_or(0) as u32,
         review_required: gate.review_required,
         review_override: gate.review_override,
         independent_reviewer_seen: gate.independent_reviewer_seen,

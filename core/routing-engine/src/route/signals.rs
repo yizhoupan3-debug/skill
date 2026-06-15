@@ -203,17 +203,12 @@ fn signal_matches(
     markers: &[&str],
 ) -> bool {
     match mode {
-        SignalMatchMode::NormalizeAndToken => {
-            markers.iter().any(|m| {
-                query_text.contains(&normalize_text(m))
-                    || text_matches_phrase(query_token_list, m)
-            })
-        }
-        SignalMatchMode::ContainsOrToken => {
-            markers.iter().any(|m| {
-                query_text.contains(*m) || text_matches_phrase(query_token_list, m)
-            })
-        }
+        SignalMatchMode::NormalizeAndToken => markers.iter().any(|m| {
+            query_text.contains(&normalize_text(m)) || text_matches_phrase(query_token_list, m)
+        }),
+        SignalMatchMode::ContainsOrToken => markers
+            .iter()
+            .any(|m| query_text.contains(*m) || text_matches_phrase(query_token_list, m)),
     }
 }
 
@@ -248,12 +243,12 @@ fn routing_signal_markers_json() -> &'static Value {
 }
 
 fn string_list_field<'a>(root: &'a Value, key: &'static str) -> &'a Vec<Value> {
-    root.get(key)
-        .and_then(Value::as_array)
-        .unwrap_or_else(|| panic!(
+    root.get(key).and_then(Value::as_array).unwrap_or_else(|| {
+        panic!(
             "ROUTING_SIGNAL_MARKERS.json missing required array field `{key}` — \
              check configs/framework/ROUTING_SIGNAL_MARKERS.json schema"
-        ))
+        )
+    })
 }
 
 fn meta_routing_anchors() -> &'static [String] {
@@ -437,10 +432,7 @@ pub fn has_skill_framework_maintenance_context(
         .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
 }
 
-pub fn has_runtime_lightweighting_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_runtime_lightweighting_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("runtime_lightweighting", query_text, query_token_list)
 }
 
@@ -455,10 +447,7 @@ pub fn has_scientific_figure_plotting_context(
     has_signal_by_name("scientific_figure_plotting", query_text, query_token_list)
 }
 
-pub fn has_rendered_visual_evidence_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_rendered_visual_evidence_context(query_text: &str, query_token_list: &[String]) -> bool {
     let direct_evidence = [
         "截图",
         "看图",
@@ -474,10 +463,7 @@ pub fn has_rendered_visual_evidence_context(
     direct_evidence || has_existing_image_file_context(query_text, query_token_list)
 }
 
-pub fn has_existing_image_file_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_existing_image_file_context(query_text: &str, query_token_list: &[String]) -> bool {
     let has_image_extension = [".png", ".jpg", ".jpeg"]
         .iter()
         .any(|marker| query_text.contains(marker))
@@ -505,10 +491,7 @@ pub fn has_existing_image_file_context(
     .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
 }
 
-pub fn has_prose_naturalization_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_prose_naturalization_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("prose_naturalization", query_text, query_token_list)
 }
 
@@ -569,17 +552,11 @@ pub fn has_workflow_negation_context(query_text: &str, query_token_list: &[Strin
     has_signal_by_name("workflow_negation", query_text, query_token_list)
 }
 
-pub fn has_workflow_orchestration_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_workflow_orchestration_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("workflow_orchestration", query_text, query_token_list)
 }
 
-pub fn has_parallel_execution_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_parallel_execution_context(query_text: &str, query_token_list: &[String]) -> bool {
     let explicit_parallel = [
         "并行",
         "同时",
@@ -687,11 +664,7 @@ pub fn paper_skill_requires_context(slug: &str) -> bool {
 }
 
 /// Substring-prone single-token markers must use whole-token match only (e.g. `review` vs `preview`).
-fn paper_route_marker_matches(
-    query_text: &str,
-    query_token_list: &[String],
-    marker: &str,
-) -> bool {
+fn paper_route_marker_matches(query_text: &str, query_token_list: &[String], marker: &str) -> bool {
     let norm = normalize_text(marker);
     let token_only = matches!(norm.as_str(), "review" | "审" | "看" | "检查" | "评估");
     if token_only {
@@ -703,10 +676,7 @@ fn paper_route_marker_matches(
     query_text.contains(&norm) || text_matches_phrase(query_token_list, marker)
 }
 
-pub fn has_paper_prose_negation_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_paper_prose_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
     if query_text.contains("别润色") || query_text.contains("不润色") {
         return true;
     }
@@ -808,10 +778,7 @@ pub fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> 
     phrase_match || query_token_list.iter().any(|token| token == "ci")
 }
 
-pub fn has_non_github_ci_provider_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_non_github_ci_provider_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("non_github_ci_provider", query_text, query_token_list)
 }
 
@@ -821,10 +788,7 @@ pub fn should_route_to_gh_fix_ci(query_text: &str, query_token_list: &[String]) 
             || !has_non_github_ci_provider_context(query_text, query_token_list))
 }
 
-pub fn has_paper_review_revision_intent(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
     }
@@ -836,18 +800,16 @@ pub fn has_paper_review_revision_intent(
         "评审意见",
     ];
     let revise_markers = ["改论文", "修改论文", "改稿", "修改稿", "进入修改", "直接改"];
-    review_markers.iter().any(|marker| {
-        paper_route_marker_matches(query_text, query_token_list, marker)
-    }) && revise_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
-    })
+    review_markers
+        .iter()
+        .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
+        && revise_markers.iter().any(|marker| {
+            query_text.contains(&normalize_text(marker))
+                || text_matches_phrase(query_token_list, marker)
+        })
 }
 
-pub fn has_paper_direct_revision_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_paper_direct_revision_context(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
     }
@@ -921,18 +883,13 @@ fn text_has_manuscript_section(lower: &str, query_text: &str) -> bool {
     ]
     .iter()
     .any(|h| lower.contains(h))
-        || [
-            "摘要", "引言", "相关工作", "方法", "结果", "讨论", "结论",
-        ]
-        .iter()
-        .any(|h| query_text.contains(h))
+        || ["摘要", "引言", "相关工作", "方法", "结果", "讨论", "结论"]
+            .iter()
+            .any(|h| query_text.contains(h))
 }
 
 /// 显式润色/写作 marker（用于审稿+润色并存时不阻断 prose 路径）。
-pub fn has_explicit_prose_polish_marker(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_explicit_prose_polish_marker(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("explicit_prose_polish", query_text, query_token_list)
 }
 
@@ -1041,17 +998,9 @@ pub fn looks_like_pasted_manuscript_prose(text: &str) -> bool {
     {
         return true;
     }
-    if [
-        "摘要",
-        "引言",
-        "相关工作",
-        "方法",
-        "结果",
-        "讨论",
-        "结论",
-    ]
-    .iter()
-    .any(|h| text.contains(h))
+    if ["摘要", "引言", "相关工作", "方法", "结果", "讨论", "结论"]
+        .iter()
+        .any(|h| text.contains(h))
         && text.len() > 80
     {
         return true;
@@ -1068,10 +1017,17 @@ pub fn looks_like_pasted_manuscript_prose(text: &str) -> bool {
         .iter()
         .filter(|m| lower.contains(*m))
         .count();
-        let zh_hits = ["本文", "我们提出", "实验表明", "然而，", "综上所述", "本研究"]
-            .iter()
-            .filter(|m| text.contains(*m))
-            .count();
+        let zh_hits = [
+            "本文",
+            "我们提出",
+            "实验表明",
+            "然而，",
+            "综上所述",
+            "本研究",
+        ]
+        .iter()
+        .filter(|m| text.contains(*m))
+        .count();
         if en_hits >= 2 || zh_hits >= 2 {
             return true;
         }
@@ -1137,10 +1093,7 @@ pub fn has_paper_prose_edit_context(query_text: &str, query_token_list: &[String
     })
 }
 
-pub fn has_paper_review_judgment_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_paper_review_judgment_context(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
     }
@@ -1187,7 +1140,9 @@ pub fn has_paper_figure_layout_review_context(
         "图表", "排版", "figure", "figures", "table", "tables", "layout",
     ];
     let review_markers = ["只看", "审", "review", "检查", "别检查别的维度"];
-    visual_markers.iter().any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
+    visual_markers
+        .iter()
+        .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
         && review_markers
             .iter()
             .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
@@ -1219,10 +1174,7 @@ pub fn has_paper_logic_evidence_review_context(
             .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
 }
 
-pub fn has_paper_ref_first_workflow_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
     }
@@ -1256,10 +1208,7 @@ pub fn has_design_reference_context(query_text: &str, query_token_list: &[String
     has_signal_by_name("design_reference", query_text, query_token_list)
 }
 
-pub fn has_visual_evidence_review_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_visual_evidence_review_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("visual_evidence_review", query_text, query_token_list)
 }
 
@@ -1314,24 +1263,15 @@ pub fn has_design_contract_context(query_text: &str, query_token_list: &[String]
     has_signal_by_name("design_contract", query_text, query_token_list)
 }
 
-pub fn has_design_contract_negation_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_design_contract_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("design_contract_negation", query_text, query_token_list)
 }
 
-pub fn has_design_output_audit_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_design_output_audit_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("design_output_audit", query_text, query_token_list)
 }
 
-pub fn has_design_workflow_protocol_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_design_workflow_protocol_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("design_workflow_protocol", query_text, query_token_list)
 }
 
@@ -1402,10 +1342,7 @@ pub fn has_beamer_slide_context(query_text: &str, query_token_list: &[String]) -
     has_signal_by_name("beamer_slide", query_text, query_token_list)
 }
 
-pub fn has_source_slide_format_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
+pub fn has_source_slide_format_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("source_slide_format", query_text, query_token_list)
 }
 
@@ -1413,10 +1350,7 @@ pub fn has_diagramming_context(query_text: &str, query_token_list: &[String]) ->
     has_signal_by_name("diagramming", query_text, query_token_list)
 }
 
-pub fn build_route_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> RouteContextPayload {
+pub fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteContextPayload {
     let completion_requested = completion_marker_strings().iter().any(|marker| {
         query_text.contains(marker.as_str()) || text_matches_phrase(query_token_list, marker)
     });

@@ -19,8 +19,7 @@ pub struct RoutingTableSnapshot {
 
 /// Default repo-relative path when no override is supplied.
 pub fn default_skill_routing_runtime_path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../skills/SKILL_ROUTING_RUNTIME.json")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json")
 }
 
 fn load_snapshot(path: &Path) -> Result<RoutingTableSnapshot, String> {
@@ -107,15 +106,13 @@ static GLOBAL_WATCH: OnceLock<Arc<RoutingRuntimeWatch>> = OnceLock::new();
 pub fn routing_runtime_watch() -> Arc<RoutingRuntimeWatch> {
     GLOBAL_WATCH
         .get_or_init(|| {
-            Arc::new(
-                RoutingRuntimeWatch::bootstrap(None).unwrap_or_else(|err| {
-                    eprintln!("[routing-engine] WARN: routing runtime watch bootstrap: {err}");
-                    let path = default_skill_routing_runtime_path();
-                    let (tx, rx) = watch::channel(empty_snapshot(path));
-                    drop(tx);
-                    RoutingRuntimeWatch { rx }
-                }),
-            )
+            Arc::new(RoutingRuntimeWatch::bootstrap(None).unwrap_or_else(|err| {
+                eprintln!("[routing-engine] WARN: routing runtime watch bootstrap: {err}");
+                let path = default_skill_routing_runtime_path();
+                let (tx, rx) = watch::channel(empty_snapshot(path));
+                drop(tx);
+                RoutingRuntimeWatch { rx }
+            }))
         })
         .clone()
 }

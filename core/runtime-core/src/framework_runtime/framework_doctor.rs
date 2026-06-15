@@ -2,7 +2,7 @@
 
 use crate::router_env_flags::router_rs_task_ledger_flock_enabled;
 use crate::task_state::resolve_task_view;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
@@ -88,19 +88,26 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     // Build check list dynamically from RUNTIME_REGISTRY.json host_entrypoints.
     let mut host_install_checks: Vec<(String, std::path::PathBuf)> = Vec::new();
     // Always-known non-entrypoint paths (settings, mcp.json per host)
-    let known_extra_checks: &[(&str, std::path::PathBuf)] = &[
-        (".claude/settings.json".into(), repo_root.join(".claude").join("settings.json")),
-    ];
+    let known_extra_checks: &[(&str, std::path::PathBuf)] = &[(
+        ".claude/settings.json".into(),
+        repo_root.join(".claude").join("settings.json"),
+    )];
     for (label, path) in known_extra_checks {
         host_install_checks.push((label.to_string(), path.clone()));
     }
     // Read host_entrypoints from registry for each supported host
     if let Ok(reg) = crate::runtime_registry::load_runtime_registry_json(repo_root) {
-        if let Ok(supported) = crate::framework_host_targets::host_targets_supported_host_ids(&reg) {
+        if let Ok(supported) = crate::framework_host_targets::host_targets_supported_host_ids(&reg)
+        {
             for host_id in &supported {
-                if let Ok(ep_value) = crate::framework_host_targets::host_entrypoints_value_for_id(&reg, host_id) {
+                if let Ok(ep_value) =
+                    crate::framework_host_targets::host_entrypoints_value_for_id(&reg, host_id)
+                {
                     let paths: Vec<String> = match &ep_value {
-                        Value::Array(arr) => arr.iter().filter_map(|v| v.as_str().map(String::from)).collect(),
+                        Value::Array(arr) => arr
+                            .iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect(),
                         Value::String(s) => vec![s.clone()],
                         _ => vec![],
                     };
@@ -172,12 +179,22 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
         "  1) Pick the real task_id (active/focus or GOAL_STATE under artifacts/current/<id>/)."
     );
     println!("  2) Prune stale registry tasks and optional empty cursor-stop-* dirs.");
-    println!("  3) Align artifacts/current/active_task.json, focus_task.json, and .supervisor_state.json.");
+    println!(
+        "  3) Align artifacts/current/active_task.json, focus_task.json, and .supervisor_state.json."
+    );
     println!("  4) Run: router-rs framework task-state-resolve --repo-root <repo>");
-    println!("Solo defaults (2026-05): PostTool evidence / depth hint / journal / TASK_STATE auto-sync are OFF unless env =1.");
-    println!("  Optional: ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1 (Stop checkpoint env is no-op; do not set ROUTER_RS_CONTINUITY_STOP_CHECKPOINT).");
-    println!("  TASK_STATE projection: router-rs framework task-state-aggregate-sync --repo-root <repo>");
-    println!("  Root artifact clutter: router-rs framework maint migrate-current-artifact-clutter --repo-root <repo>");
+    println!(
+        "Solo defaults (2026-05): PostTool evidence / depth hint / journal / TASK_STATE auto-sync are OFF unless env =1."
+    );
+    println!(
+        "  Optional: ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=1 (Stop checkpoint env is no-op; do not set ROUTER_RS_CONTINUITY_STOP_CHECKPOINT)."
+    );
+    println!(
+        "  TASK_STATE projection: router-rs framework task-state-aggregate-sync --repo-root <repo>"
+    );
+    println!(
+        "  Root artifact clutter: router-rs framework maint migrate-current-artifact-clutter --repo-root <repo>"
+    );
 
     println!("\n--- Codex hooks duplication (operator) ---");
     for line in super::codex_hooks_duplicate::collect_codex_hooks_duplicate_warnings(repo_root) {
@@ -217,7 +234,9 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
 
     println!("\n--- continuity ledger ---");
     if router_rs_task_ledger_flock_enabled() {
-        println!("ROUTER_RS_TASK_LEDGER_FLOCK: enabled (default) — cross-process GOAL/RFV/EVIDENCE writes serialize under artifacts/current/.router-rs.task-ledger.lock.");
+        println!(
+            "ROUTER_RS_TASK_LEDGER_FLOCK: enabled (default) — cross-process GOAL/RFV/EVIDENCE writes serialize under artifacts/current/.router-rs.task-ledger.lock."
+        );
     } else {
         let msg = "ROUTER_RS_TASK_LEDGER_FLOCK is disabled — parallel hook subprocesses may interleave writes to artifacts/current/**; treat TASK_STATE.json and rollups as best-effort until flock is re-enabled.".to_string();
         println!("WARN: {msg}");
@@ -225,7 +244,8 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     }
 
     println!("\n--- control plane (supervisor / pointers) ---");
-    match super::build_framework_runtime_snapshot_envelope_with_level(repo_root, None, None, "full") {
+    match super::build_framework_runtime_snapshot_envelope_with_level(repo_root, None, None, "full")
+    {
         Ok(envelope) => {
             let snapshot = &envelope["runtime_snapshot"];
             let state = snapshot
@@ -401,9 +421,7 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
                         }
                     }
 
-                    if let (Some(active_id), Some(focus_id)) =
-                        (&active_task_id, &focus_task_id)
-                    {
+                    if let (Some(active_id), Some(focus_id)) = (&active_task_id, &focus_task_id) {
                         if active_id != focus_id {
                             let active_goal = crate::autopilot_goal::read_goal_state(
                                 repo_root,
@@ -417,12 +435,12 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
                             )
                             .ok()
                             .flatten();
-                            let active_drives = active_goal
-                                .as_ref()
-                                .is_some_and(crate::autopilot_goal::goal_state_requests_continuation);
-                            let focus_drives = focus_goal
-                                .as_ref()
-                                .is_some_and(crate::autopilot_goal::goal_state_requests_continuation);
+                            let active_drives = active_goal.as_ref().is_some_and(
+                                crate::autopilot_goal::goal_state_requests_continuation,
+                            );
+                            let focus_drives = focus_goal.as_ref().is_some_and(
+                                crate::autopilot_goal::goal_state_requests_continuation,
+                            );
                             if active_goal.is_some() && !active_drives && focus_drives {
                                 issues.push(format!(
                                     "ACTIVE_NOT_DRIVING: active '{active_id}' GOAL does not request continuation but focus '{focus_id}' does; align pointers or complete focus GOAL"
@@ -594,11 +612,16 @@ pub fn auto_clean_broken_symlinks(repo_root: &Path) -> Result<(), String> {
             continue;
         }
         if let Err(e) = clean_broken_symlinks_in_dir(&dir_path, &mut cleaned_count) {
-            println!("WARN: failed to clean broken symlinks in {}: {e}", dir_path.display());
+            println!(
+                "WARN: failed to clean broken symlinks in {}: {e}",
+                dir_path.display()
+            );
         }
     }
     if cleaned_count > 0 {
-        println!("INFO: Successfully auto-cleaned {cleaned_count} broken symlink(s) to secure system integrity.");
+        println!(
+            "INFO: Successfully auto-cleaned {cleaned_count} broken symlink(s) to secure system integrity."
+        );
     } else {
         println!("INFO: No broken symlinks detected. Multi-host workspace is healthy.");
     }
@@ -614,7 +637,10 @@ fn clean_broken_symlinks_in_dir(dir: &Path, cleaned_count: &mut usize) -> Result
                     // Check if the symlink target exists
                     if !path.exists() {
                         if let Err(e) = fs::remove_file(&path) {
-                            println!("WARN: failed to remove broken symlink {}: {e}", path.display());
+                            println!(
+                                "WARN: failed to remove broken symlink {}: {e}",
+                                path.display()
+                            );
                         } else {
                             println!("REPAIRED: Removed broken symlink {}", path.display());
                             *cleaned_count += 1;

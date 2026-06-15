@@ -46,7 +46,10 @@ fn collect_all(
                 if let Ok(text) = name.utf8_text(source) {
                     symbols.push(ParsedSymbol {
                         symbol: text.to_string(),
-                        kind: node.kind().replace("_declaration", "").replace("_definition", ""),
+                        kind: node
+                            .kind()
+                            .replace("_declaration", "")
+                            .replace("_definition", ""),
                         line: node.start_position().row as u32 + 1,
                     });
                 }
@@ -91,10 +94,7 @@ fn collect_all(
 
 fn callee_name(node: Node<'_>, source: &[u8]) -> Option<String> {
     match node.kind() {
-        "identifier" | "property_identifier" => node
-            .utf8_text(source)
-            .ok()
-            .map(|s| s.to_string()),
+        "identifier" | "property_identifier" => node.utf8_text(source).ok().map(|s| s.to_string()),
         "member_expression" => node
             .child_by_field_name("property")
             .and_then(|n| n.utf8_text(source).ok().map(|s| s.to_string())),

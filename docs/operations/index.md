@@ -1,15 +1,15 @@
 ---
-last_verified: "2026-06-09"
+last_verified: "2026-06-15"
 scope: modular-ops
 depends_on:
   - ../README.md
   - ../../configs/framework/RUNTIME_REGISTRY.json
-  - ../../artifacts/current/roadmap-v5.md
+  - ../../artifacts/current/roadmap-v7.md
 ---
 
 # 运维手册（按功能模块）
 
-**入口真源**：本目录按 Roadmap v5 **板块架构**（B0–B11）组织运维内容。
+**入口真源**：本目录按 Roadmap v7 **架构治理**（K1–K16）组织运维内容。
 
 **政策与叙事**（生命周期、Closeout、路由规则）仍以仓库根 [`AGENTS.md`](../../AGENTS.md) 为准；本手册只覆盖**操作、配置、排障、路径**。
 
@@ -48,7 +48,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 ---
 
-## 模块索引（Roadmap v5 板块）
+## 模块索引（功能模块）
 
 | 板块 | 文档 | 职责摘要 |
 |------|------|----------|

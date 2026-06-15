@@ -132,9 +132,7 @@ pub fn router_rs_cursor_hook_state_stale_sweep_days() -> u64 {
             match raw.trim().parse::<u64>() {
                 Ok(n) => n,
                 Err(_) => {
-                    eprintln!(
-                        "[router-rs] invalid {env_key}={raw:?}; using default 7"
-                    );
+                    eprintln!("[router-rs] invalid {env_key}={raw:?}; using default 7");
                     7
                 }
             }
@@ -310,7 +308,7 @@ mod tests {
     fn unset_means_enabled_for_default_true() {
         let _g = lock_env();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_UNSET";
-        env::remove_var(key);
+        unsafe { env::remove_var(key) };
         assert!(router_rs_env_enabled_default_true(key));
     }
 
@@ -319,24 +317,24 @@ mod tests {
         let _g = lock_env();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_TOKENS";
         for v in ["0", "false", "off", "no", "FALSE", " Off "] {
-            env::set_var(key, v);
+            unsafe { env::set_var(key, v) };
             assert!(
                 !router_rs_env_enabled_default_true(key),
                 "expected disabled for {v:?}"
             );
         }
-        env::remove_var(key);
+        unsafe { env::remove_var(key) };
     }
 
     #[test]
     fn other_values_enable_default_true() {
         let _g = lock_env();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_OTHER";
-        env::set_var(key, "1");
+        unsafe { env::set_var(key, "1") };
         assert!(router_rs_env_enabled_default_true(key));
-        env::set_var(key, "");
+        unsafe { env::set_var(key, "") };
         assert!(router_rs_env_enabled_default_true(key));
-        env::remove_var(key);
+        unsafe { env::remove_var(key) };
     }
 
     #[test]
@@ -346,23 +344,23 @@ mod tests {
         let key_legacy = "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
         let prev_canon = env::var_os(key_canonical);
         let prev_legacy = env::var_os(key_legacy);
-        env::remove_var(key_canonical);
-        env::remove_var(key_legacy);
+        unsafe { env::remove_var(key_canonical) };
+        unsafe { env::remove_var(key_legacy) };
         assert!(!super::router_rs_cursor_autopilot_pre_goal_enabled());
         // Canonical takes precedence
-        env::set_var(key_canonical, "true");
+        unsafe { env::set_var(key_canonical, "true") };
         assert!(super::router_rs_cursor_autopilot_pre_goal_enabled());
-        env::remove_var(key_canonical);
+        unsafe { env::remove_var(key_canonical) };
         // Legacy fallback works
-        env::set_var(key_legacy, "true");
+        unsafe { env::set_var(key_legacy, "true") };
         assert!(super::router_rs_cursor_autopilot_pre_goal_enabled());
         match prev_canon {
-            Some(v) => env::set_var(key_canonical, v),
-            None => env::remove_var(key_canonical),
+            Some(v) => unsafe { env::set_var(key_canonical, v) },
+            None => unsafe { env::remove_var(key_canonical) },
         }
         match prev_legacy {
-            Some(v) => env::set_var(key_legacy, v),
-            None => env::remove_var(key_legacy),
+            Some(v) => unsafe { env::set_var(key_legacy, v) },
+            None => unsafe { env::remove_var(key_legacy) },
         }
     }
 
@@ -373,23 +371,23 @@ mod tests {
         let key_legacy = "ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK";
         let prev_canon = env::var_os(key_canonical);
         let prev_legacy = env::var_os(key_legacy);
-        env::remove_var(key_canonical);
-        env::remove_var(key_legacy);
+        unsafe { env::remove_var(key_canonical) };
+        unsafe { env::remove_var(key_legacy) };
         assert!(super::router_rs_cursor_pre_goal_strict_disk_enabled());
         // Canonical explicitly set to "0" disables
-        env::set_var(key_canonical, "0");
+        unsafe { env::set_var(key_canonical, "0") };
         assert!(!super::router_rs_cursor_pre_goal_strict_disk_enabled());
-        env::remove_var(key_canonical);
+        unsafe { env::remove_var(key_canonical) };
         // Legacy fallback works when canonical unset
-        env::set_var(key_legacy, "0");
+        unsafe { env::set_var(key_legacy, "0") };
         assert!(!super::router_rs_cursor_pre_goal_strict_disk_enabled());
         match prev_canon {
-            Some(v) => env::set_var(key_canonical, v),
-            None => env::remove_var(key_canonical),
+            Some(v) => unsafe { env::set_var(key_canonical, v) },
+            None => unsafe { env::remove_var(key_canonical) },
         }
         match prev_legacy {
-            Some(v) => env::set_var(key_legacy, v),
-            None => env::remove_var(key_legacy),
+            Some(v) => unsafe { env::set_var(key_legacy, v) },
+            None => unsafe { env::remove_var(key_legacy) },
         }
     }
 
@@ -398,13 +396,13 @@ mod tests {
         let _g = lock_env();
         let key = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
         let prev = env::var_os(key);
-        env::remove_var(key);
+        unsafe { env::remove_var(key) };
         assert!(!super::router_rs_continuity_post_tool_evidence_enabled());
-        env::set_var(key, "1");
+        unsafe { env::set_var(key, "1") };
         assert!(super::router_rs_continuity_post_tool_evidence_enabled());
         match prev {
-            Some(v) => env::set_var(key, v),
-            None => env::remove_var(key),
+            Some(v) => unsafe { env::set_var(key, v) },
+            None => unsafe { env::remove_var(key) },
         }
     }
 
@@ -413,26 +411,26 @@ mod tests {
         let _g = lock_env();
         let key = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
         let prev = env::var_os(key);
-        env::remove_var(key);
+        unsafe { env::remove_var(key) };
         assert!(super::router_rs_cursor_review_gate_stop_max_nudges_cap().is_none());
-        env::set_var(key, "3");
+        unsafe { env::set_var(key, "3") };
         assert_eq!(
             super::router_rs_cursor_review_gate_stop_max_nudges_cap(),
             Some(3)
         );
-        env::set_var(key, "0");
+        unsafe { env::set_var(key, "0") };
         assert!(super::router_rs_cursor_review_gate_stop_max_nudges_cap().is_none());
-        env::remove_var(key);
+        unsafe { env::remove_var(key) };
         // Also verify legacy CURSOR_ name is still honored by core-policy
-        env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES", "5");
+        unsafe { env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES", "5") };
         assert_eq!(
             super::router_rs_cursor_review_gate_stop_max_nudges_cap(),
             Some(5)
         );
-        env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES");
+        unsafe { env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES") };
         match prev {
-            Some(v) => env::set_var(key, v),
-            None => env::remove_var(key),
+            Some(v) => unsafe { env::set_var(key, v) },
+            None => unsafe { env::remove_var(key) },
         }
     }
 
@@ -440,15 +438,15 @@ mod tests {
     fn rfv_max_rounds_cap_defaults_and_clamped() {
         let _g = lock_env();
         let prev = env::var_os("ROUTER_RS_RFV_MAX_ROUNDS_CAP");
-        env::remove_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP");
+        unsafe { env::remove_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP") };
         assert_eq!(super::router_rs_rfv_max_rounds_cap(), 1000);
-        env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", "500");
+        unsafe { env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", "500") };
         assert_eq!(super::router_rs_rfv_max_rounds_cap(), 500);
-        env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", "20000");
+        unsafe { env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", "20000") };
         assert_eq!(super::router_rs_rfv_max_rounds_cap(), 10000);
         match prev {
-            Some(v) => env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", v),
-            None => env::remove_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP"),
+            Some(v) => unsafe { env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", v) },
+            None => unsafe { env::remove_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP") },
         }
     }
 }
