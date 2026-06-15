@@ -187,7 +187,7 @@ pub fn generated_artifacts_status(
     }))
 }
 
-pub fn validate_generated_artifact_entry(
+fn validate_generated_artifact_entry(
     artifact: &GeneratedArtifactManifestEntry,
 ) -> Result<(), String> {
     if Path::new(&artifact.path).is_absolute()

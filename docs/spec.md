@@ -32,22 +32,46 @@ version: "unified-v7"
 ### 1.1 Crate 拓扑 (v7)
 
 ```
-runtime-core (~38K LOC)       ← 核心生命周期/存储/trace/closeout
-├── session_supervisor/       ← 工作进程管理（driver/worker/runtime）
-├── framework_runtime/        ← MCP stdio harness + hooks 注册表
-├── host_integration/         ← projection 安装/移除（re-export shim → host-projection）
-├── closeout_enforcement.rs   ← hard/soft blocker 分级
-├── 396 tests / 13 ignored
+runtime-core (~14K LOC, facade)  ← 核心生命周期/closeout/编排/re-export 子 crate
+├── framework_runtime/            ← MCP stdio dispatch + doctor + session artifacts
+├── cli/                          ← CLI 参数解析
+├── rfv_loop.rs                   ← RFV 循环完整实现
+├── framework_maint.rs            ← 维护命令
+├── stdio_transport.rs            ← stdio 传输层
+├── 396+ tests / 13 ignored
 └── features: codegraph, host-{cursor,claude-code,codex,opencode}
 
-host-projection (~34K LOC)     ← 宿主适配层（从 runtime-core 迁出）
-├── hosts/                    ← 4 宿主 provider + hooks 实现
-│   ├── claude_code_hooks.rs  ← PreToolUse/PostToolUse/Stop/SubagentStart-Stop
-│   ├── codex_hooks/          ← Codex native hooks (5K LOC)
-│   ├── cursor_hooks/         ← Cursor agent hooks
-│   ├── opencode_agent.rs     ← OpenCode MCP stdio
-├── host_integration/         ← projection 安装/移除逻辑
-├── hooks.rs                  ← 函数指针注册表（82 个 OnceLock slots）
+core/framework-runtime (~5K LOC)  ← 框架运行时核心（从 runtime-core 提取）
+├── closeout_enforcement.rs       ← hard/soft blocker 分级
+├── execution_contract.rs         ← 执行契约（前置/后置条件验证）
+├── pre_tool_use_guard.rs         ← PreToolUse 守卫
+├── runtime_view.rs               ← 运行时视图
+├── trace_stream_io.rs / trace_attach.rs / trace_transport.rs
+└── live_execute.rs / sandbox_control.rs / evolution_observer.rs
+
+core/session-supervisor (~5K LOC) ← Worker 生命周期管理（从 runtime-core 提取）
+├── driver.rs                     ← 驱动：codex/cursor/claude
+├── worker.rs                     ← Worker 进程管理
+├── runtime.rs                    ← 运行时管理
+├── process.rs                    ← 原生进程管理
+└── evolution_idle.rs             ← idle 时 evolution 触发
+
+core/runtime-storage (~8K LOC)    ← 状态持久化（从 runtime-core 提取）
+├── runtime_storage/              ← filesystem/sqlite/operation/paths 存储后端
+├── background_state/             ← 后台任务状态管理（control_plane/persist/store/types）
+└── runtime_envelope_ids.rs       ← 运行时信封 ID
+
+core/trace-runtime (~1K LOC)      ← 事件追踪/trace I/O 管道（从 runtime-core 提取）
+└── lib.rs                        ← trace 管道聚合入口
+
+host-projection (~34K LOC)        ← 宿主适配层（已独立）
+├── hosts/                        ← 4 宿主 provider + hooks 实现
+│   ├── claude_code_hooks.rs      ← PreToolUse/PostToolUse/Stop/SubagentStart-Stop
+│   ├── codex_hooks/              ← Codex native hooks (5K LOC)
+│   ├── cursor_hooks/             ← Cursor agent hooks
+│   ├── opencode_hooks.rs         ← OpenCode MCP stdio hooks
+├── host_integration/             ← projection 安装/移除逻辑
+├── hooks.rs                      ← 函数指针注册表（OnceLock slots）
 └── 433 tests
 
 router-rs (~558 LOC src + 6K tests) ← CLI + 集成测试
@@ -55,37 +79,35 @@ router-rs (~558 LOC src + 6K tests) ← CLI + 集成测试
 ├── tests/ (275 passed)
 └── features: codegraph, host-*
 
-routing-engine (~8K LOC)       ← 路由评分/信号缓存
+routing-engine (~8K LOC)          ← 路由评分/信号缓存
 ├── route/{eval,scoring,signal_cache,text}
 └── 63 tests / 12 ignored
 
-core-state (~7K LOC)           ← Goal/RFV/Evidence/TaskState
+core-state (~7K LOC)              ← Goal/RFV/Evidence/TaskState
 ├── state_manager.rs, task_state.rs, step_ledger.rs
 └── 82 tests
 
-core-policy (~4K LOC)          ← Hook 策略/review gate/注册表
+core-policy (~4K LOC)             ← Hook 策略/review gate/注册表
 ├── review_gate_engine.rs, hook_review_disk_state.rs
 └── 含 186 条正则规则
 
-codegraph-rs (~2.5K LOC)       ← 代码图谱（FTS5 + tree-sitter）
+tools/codegraph-rs (~2.5K LOC)    ← 代码图谱（FTS5 + tree-sitter，位于 tools/）
 ├── parser/{rust,typescript,python,go}
 ├── db/{schema,node_ops,edge_ops,fts_ops}
 └── 64 tests (caller bug 已修复)
 
-evolution-rs (~1.8K LOC)       ← 技能进化审计
+tools/evolution-rs (~1.8K LOC)    ← 技能进化审计（位于 tools/）
 ├── 13 tests
 └── ⚠️ 测试密度偏低
 
-autoresearch-rs (~5.4K LOC)    ← 研究工作区控制平面
+tools/autoresearch-rs (~5.4K LOC) ← 研究工作区控制平面（位于 tools/）
 ├── 单文件 main.rs（待拆分）
 └── 🔴 仅 2 测试（严重不足）
 
-browser-mcp (~4.8K LOC)        ← 浏览器 MCP + session supervisor
+browser-mcp (~4.8K LOC)           ← 浏览器 MCP
 ├── session_launch/list/inspect/terminate MCP tools
 ├── browser_* MCP tools
 └── 8 tests（⚠️ 偏低）
-
-framework-profile（已并入 framework-kernel）← 运行时配置 profile
 
 rust_tools/ (6 活跃 MCP crates)
 ├── pdf_tool_rs (mcp-pdf)           ├── citation_tool_rs (mcp-citation)
@@ -115,12 +137,18 @@ router-rs → runtime-core → host-projection → core-state
                          → core-policy
                          → routing-engine
                          → framework-kernel (含 framework_profile)
-                         → codegraph-rs (optional feature)
+                         → framework-runtime (extracted)
+                         → session-supervisor (extracted)
+                         → runtime-storage (extracted)
+                         → trace-runtime (extracted)
+                         → tools/codegraph-rs (optional feature)
                          → browser-mcp (optional)
 ```
 
 - host-projection 包含所有宿主 hooks 实现（从 runtime-core 迁出）
-- runtime-core 通过 re-export shim 向后兼容 `framework_kernel::hosts::*`
+- runtime-core 通过 re-export shim 向后兼容 `framework_runtime::*`、`session_supervisor::*` 等
+- `framework-runtime`、`session-supervisor`、`runtime-storage`、`trace-runtime` 是 v7 从 runtime-core 提取的自洽 crate
+- `codegraph-rs`、`evolution-rs`、`autoresearch-rs` 位于 `tools/` 目录下
 - B0 core crates 不依赖 `router-rs`
 - host 特有逻辑禁止出现在 B0 core crates 中
 

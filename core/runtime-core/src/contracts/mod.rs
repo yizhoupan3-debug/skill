@@ -7,8 +7,6 @@
 
 pub mod atomic_write;
 pub mod autopilot_goal;
-pub mod closeout_enforcement;
-pub mod execution_contract;
 pub mod formal_toolchain;
 pub mod framework_skills;
 pub mod harness_contract;

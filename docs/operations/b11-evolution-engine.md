@@ -42,4 +42,4 @@ Hook 细粒度：`ROUTER_RS_HOOK_TIMING=1` → `HookFired` + timing 字段进 jo
 - `tools/evolution-rs/`
 - `configs/evolution/evolution.toml`
 - `artifacts/telemetry/`（events.jsonl 等，以 runtime 为准）
-- `core/runtime-core/src/session_supervisor/evolution_idle.rs`
+- `core/session-supervisor/src/evolution_idle.rs`（v7 提取至独立 crate）

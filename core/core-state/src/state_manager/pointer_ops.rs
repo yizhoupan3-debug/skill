@@ -99,11 +99,11 @@ fn load_task_pointers_json(repo_root: &Path) -> Result<Value, String> {
     let mirror = repo_root.join("artifacts/current");
     fs::create_dir_all(&mirror).map_err(|e| format!("mkdir {}: {e}", mirror.display()))?;
     let pointers_path = mirror.join("TASK_POINTERS.json");
-    Ok(if pointers_path.is_file() {
-        serde_json::from_str::<Value>(&fs::read_to_string(&pointers_path).unwrap_or_default())
-            .unwrap_or_else(|_| json!({}))
-    } else {
-        json!({})
+    Ok(match fs::read_to_string(&pointers_path) {
+        Ok(raw) => serde_json::from_str::<Value>(&raw)
+            .map_err(|e| format!("parse TASK_POINTERS.json: {e}"))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => json!({}),
+        Err(e) => return Err(format!("read TASK_POINTERS.json: {e}")),
     })
 }
 
@@ -195,32 +195,36 @@ pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Res
     // Update TASK_POINTERS.json (Phase 3C consolidated file)
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
     if pointers_path.is_file() {
-        let raw = fs::read_to_string(&pointers_path).unwrap_or_default();
-        if let Ok(mut data) = serde_json::from_str::<Value>(&raw) {
-            let mut changed = false;
-            if let Some(obj) = data.as_object_mut() {
-                if obj.get("active_task_id").and_then(Value::as_str) == Some(task_id) {
-                    obj.remove("active_task_id");
-                    changed = true;
-                }
-                if obj.get("focus_task_id").and_then(Value::as_str) == Some(task_id) {
-                    obj.remove("focus_task_id");
-                    changed = true;
-                }
+        let raw = fs::read_to_string(&pointers_path)
+            .map_err(|e| format!("read TASK_POINTERS.json: {e}"))?;
+        let mut data: Value = serde_json::from_str(&raw)
+            .map_err(|e| format!("parse TASK_POINTERS.json: {e}"))?;
+        let mut changed = false;
+        if let Some(obj) = data.as_object_mut() {
+            if obj.get("active_task_id").and_then(Value::as_str) == Some(task_id) {
+                obj.remove("active_task_id");
+                changed = true;
             }
-            if changed {
-                let _ = write_atomic_json(&pointers_path, &data);
+            if obj.get("focus_task_id").and_then(Value::as_str) == Some(task_id) {
+                obj.remove("focus_task_id");
+                changed = true;
             }
+        }
+        if changed {
+            write_atomic_json(&pointers_path, &data)
+                .map_err(|e| format!("write TASK_POINTERS.json: {e}"))?;
         }
     }
     // Also clean up legacy files if they exist
     let active_path = repo_root.join("artifacts/current/active_task.json");
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
     if pointer_file_matches_task_id(&active_path, task_id) {
-        let _ = fs::remove_file(&active_path);
+        fs::remove_file(&active_path)
+            .map_err(|e| format!("remove legacy active_task.json: {e}"))?;
     }
     if pointer_file_matches_task_id(&focus_path, task_id) {
-        let _ = fs::remove_file(&focus_path);
+        fs::remove_file(&focus_path)
+            .map_err(|e| format!("remove legacy focus_task.json: {e}"))?;
     }
     Ok(())
 }

@@ -12,39 +12,43 @@ version: unified-v7
 - 核心：`run_browser_mcp_stdio_loop()` — JSON-RPC 2.0 over stdio
 - 30+ MCP 工具：browser_open/click/fill/screenshot/get_state/network/tabs 等
 - Session 管理：session_launch/inspect/terminate/mark_blocked/resume_due
-- 依赖：`background_state`, `session_supervisor`, `tungstenite`, `reqwest`
+- 依赖：`runtime-storage::background_state`, `session-supervisor`, `tungstenite`, `reqwest`
 
-### 9.2 background_state/ — 后台任务状态
+### 9.2 background_state/ — 后台任务状态（位于 core/runtime-storage/src/background_state/）
 
-**功能**：持久化后台作业状态存储（filesystem/sqlite/memory 三后端）。
+**功能**：持久化后台作业状态存储（filesystem/sqlite/memory 三后端）。v7 从 runtime-core 提取至 `runtime-storage` crate。
 
 - 状态机：`queued → running → completed/failed/interrupted`
 - 支持 `retry_scheduled/retry_claimed/retry_exhausted`
 - 过期回收：活跃 1h TTL，终态 24h TTL
 - 入口：`handle_background_state_operation()`
 
-### 9.3 session_supervisor/ — Worker 生命周期
+### 9.3 session_supervisor/ — Worker 生命周期（位于 core/session-supervisor/）
 
 **功能**：Worker 生命周期管理（launch/resume/terminate/mark_blocked/resume_due）。
 
 - 驱动：codex/cursor/claude（`driver.rs`）
-- 原生进程驱动（session_supervisor 主实现位于 `runtime-core`；`router-rs` 为 thin facade 门面）
+- 原生进程驱动（v7 已提取为独立 crate `core/session-supervisor/`；`runtime-core` 通过 re-export facade 兼容）
 - 速率限制检测：正则模式匹配
 - 入口：`handle_session_supervisor_operation()`
 
-### 9.4 framework_runtime/ — 运行时行为
+### 9.4 framework_runtime/ — 运行时行为（runtime-core facade 子模块 + core/framework-runtime/）
 
-**功能**：运行时快照、契约摘要、workspace 初始化、doctor 检查、状态行构建。
+**功能**：运行时快照、契约摘要、workspace 初始化、doctor 检查、状态行构建。v7 将 runtime 核心模块拆分为两部分：
 
-| 子文件 | 功能 |
-|--------|------|
-| `runtime_view.rs` | 运行时视图 + 连续性分类 |
-| `workspace_init.rs` | `router-rs init` |
-| `framework_doctor.rs` | Doctor 健康检查 + 连续性审计 |
-| `session_artifacts.rs` | 会话 artifact 写入 |
-| `statusline.rs` | 状态行构建 |
-| `prompt_compression.rs` | prompt 压缩策略 |
-| `constants.rs` | schema version + authority |
+- **`runtime-core/src/framework_runtime/`**（facade 保留）：stdin dispatch、doctor、session artifacts、alias
+- **`core/framework-runtime/`**（提取）：closeout enforcement、execution contract、pre_tool_use_guard、runtime_view、trace I/O、live_execute、sandbox_control
+
+| 子文件 | 位置 | 功能 |
+|--------|------|------|
+| `runtime_view.rs` | `core/framework-runtime/` | 运行时视图 + 连续性分类 |
+| `framework_doctor.rs` | `runtime-core/framework_runtime/` | Doctor 健康检查 + 连续性审计 |
+| `session_artifacts.rs` | `runtime-core/framework_runtime/` | 会话 artifact 写入 |
+| `statusline.rs` | `runtime-core/framework_runtime/` | 状态行构建 |
+| `prompt_compression.rs` | `runtime-core/framework_runtime/` | prompt 压缩策略 |
+| `closeout_enforcement.rs` | `core/framework-runtime/` | closeout 记录评估与强制执行 |
+| `execution_contract.rs` | `core/framework-runtime/` | 执行契约（前置/后置条件验证） |
+| `pre_tool_use_guard.rs` | `core/framework-runtime/` | PreToolUse 守卫 |
 
 - 快照生成：可以通过 `router-rs framework snapshot` 生成包含完整连续性视图的运行时快照只读模型。
 

@@ -5,6 +5,7 @@ use std::fs;
 use std::io::{ErrorKind, Read};
 use std::path::{Component, Path, PathBuf};
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn normalize_runtime_path(value: &str) -> Result<PathBuf, String> {
     let candidate = PathBuf::from(value.trim());
     if candidate.as_os_str().is_empty() {
@@ -20,6 +21,7 @@ pub fn normalize_runtime_path(value: &str) -> Result<PathBuf, String> {
     canonicalize_or_clean_absolute_path(&absolute)
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn clean_absolute_path(path: &Path) -> Result<PathBuf, String> {
     if !path.is_absolute() {
         return Err(format!(
@@ -47,6 +49,7 @@ pub fn clean_absolute_path(path: &Path) -> Result<PathBuf, String> {
     Ok(cleaned)
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn canonicalize_or_clean_absolute_path(path: &Path) -> Result<PathBuf, String> {
     clean_absolute_path(path)
 }
@@ -56,6 +59,7 @@ pub fn canonicalize_or_clean_absolute_path(path: &Path) -> Result<PathBuf, Strin
 /// real filesystem location after symlink resolution and is suitable for
 /// containment checks against a canonical storage root, even when the final
 /// target (or some intermediate components) does not yet exist.
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, String> {
     if !path.is_absolute() {
         return Err(format!(
@@ -107,6 +111,7 @@ pub fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, String> {
     Ok(result)
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn resolve_runtime_storage_path_with_root(
     request_path: &str,
     request_storage_root: Option<&str>,
@@ -174,6 +179,7 @@ pub fn resolve_runtime_storage_path_with_root(
 ///      `storage_root` explicitly in the request payload.
 ///   4. otherwise return `None` so the caller falls back to the
 ///      current working directory (legacy default for non-sqlite backends).
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn effective_storage_root_for_request(
     request: &RuntimeStorageRequestPayload,
 ) -> Option<String> {
@@ -205,6 +211,7 @@ pub fn effective_storage_root_for_request(
 /// or `CURSOR_HOME`, this env var exists solely to point router-rs at a
 /// storage root and is therefore safe to consult silently. Returns `None`
 /// when the var is unset or empty.
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn explicit_storage_root_override() -> Option<String> {
     match std::env::var("ROUTER_RS_STORAGE_ROOT") {
         Ok(value) => {

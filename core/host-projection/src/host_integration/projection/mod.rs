@@ -4,6 +4,7 @@ use super::*;
 mod projection_bootstrap;
 mod projection_host_ops;
 mod projection_manifest;
+pub mod projection_ops_trait;
 pub use projection_bootstrap::*;
 pub use projection_host_ops::*;
 pub use projection_manifest::*;
@@ -844,37 +845,9 @@ pub fn install_projection_tool(
         return Err(format!("Unsupported tool: {tool}"));
     }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-
-    type InstallFn = fn(&ResolvedProjectionRoots, &str) -> Result<Value, String>;
-    fn install_cursor(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
-        install_cursor_projection(r, s)
-    }
-    fn install_claude(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
-        install_claude_projection(r, s)
-    }
-    fn install_opencode(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
-        install_opencode_projection(r, s)
-    }
-    fn install_codex(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
-        install_codex_projection(r, s)
-    }
-    fn install_mimo(r: &ResolvedProjectionRoots, s: &str) -> Result<Value, String> {
-        Ok(serde_json::json!({"tool": "mimo", "scope": s, "status": "installed"}))
-    }
-
-    const TABLE: &[(&str, InstallFn)] = &[
-        ("cursor", install_cursor),
-        ("claude", install_claude),
-        ("opencode", install_opencode),
-        ("codex", install_codex),
-        ("mimo", install_mimo),
-    ];
-
-    TABLE
-        .iter()
-        .find(|(id, _)| *id == tool)
-        .map(|(_, f)| f(roots, effective_scope))
-        .unwrap_or_else(|| Err(format!("Unsupported tool: {tool}")))
+    projection_ops_trait::projection_ops_for_tool(tool)
+        .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
+        .install(roots, effective_scope)
 }
 
 pub fn projection_tool_status(
@@ -884,22 +857,9 @@ pub fn projection_tool_status(
     if projection_adapter(tool).is_none() {
         return Err(format!("Unsupported tool: {tool}"));
     }
-
-    type StatusFn = fn(&ResolvedProjectionRoots) -> Result<Value, String>;
-
-    const TABLE: &[(&str, StatusFn)] = &[
-        ("cursor", cursor_projection_status),
-        ("claude", claude_projection_status),
-        ("opencode", opencode_projection_status),
-        ("codex", codex_projection_status),
-        ("mimo", |r| Ok(serde_json::json!({"tool": "mimo", "status": "installed"}))),
-    ];
-
-    TABLE
-        .iter()
-        .find(|(id, _)| *id == tool)
-        .map(|(_, f)| f(roots))
-        .unwrap_or_else(|| Err(format!("Unsupported tool: {tool}")))
+    projection_ops_trait::projection_ops_for_tool(tool)
+        .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
+        .status(roots)
 }
 
 pub fn remove_projection_tool(
@@ -912,24 +872,9 @@ pub fn remove_projection_tool(
         return Err(format!("Unsupported tool: {tool}"));
     }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-
-    type RemoveFn = fn(&ResolvedProjectionRoots, &str, bool) -> Result<Value, String>;
-
-    const TABLE: &[(&str, RemoveFn)] = &[
-        ("cursor", |r, s, d| remove_cursor_projection(r, s, d)),
-        ("claude", |r, s, d| remove_claude_projection(r, s, d)),
-        ("opencode", |r, s, d| remove_opencode_projection(r, s, d)),
-        ("codex", |r, s, d| remove_codex_projection(r, s, d)),
-        ("mimo", |_r, s, d| {
-            Ok(serde_json::json!({"tool": "mimo", "scope": s, "dry_run": d, "status": "installed"}))
-        }),
-    ];
-
-    TABLE
-        .iter()
-        .find(|(id, _)| *id == tool)
-        .map(|(_, f)| f(roots, effective_scope, dry_run))
-        .unwrap_or_else(|| Err(format!("Unsupported tool: {tool}")))
+    projection_ops_trait::projection_ops_for_tool(tool)
+        .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
+        .remove(roots, effective_scope, dry_run)
 }
 
 pub fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {

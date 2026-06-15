@@ -830,4 +830,35 @@ mod tests {
         assert!(review_gate_hard_block_disabled(None, "random text"));
         set_test_my_light_override(None);
     }
+
+    #[tokio::test]
+    async fn once_lock_patterns_are_send_safe() {
+        let result = tokio::task::spawn_blocking(|| {
+            (
+                parallel_marker_re().is_match("parallel work"),
+                task_context_re().is_match("implement the feature"),
+                capability_domain_re().is_match("前端开发"),
+                !parallel_marker_re().is_match("hello world"),
+            )
+        })
+            .await
+            .expect("spawn_blocking");
+        assert!(result.0, "parallel_marker_re");
+        assert!(result.1, "task_context_re");
+        assert!(result.2, "capability_domain_re");
+        assert!(result.3, "negative match");
+    }
+
+    #[tokio::test]
+    async fn strip_quoted_or_codeblock_or_url_is_send_safe() {
+        let text = "hello `code` world ```block``` https://example.com".to_string();
+        let result = tokio::task::spawn_blocking(move || strip_quoted_or_codeblock_or_url(&text))
+            .await
+            .expect("spawn_blocking");
+        assert!(result.contains("hello"), "should preserve hello");
+        assert!(result.contains("world"), "should preserve world");
+        assert!(!result.contains("code"), "should strip inline code");
+        assert!(!result.contains("block"), "should strip fenced code");
+        assert!(!result.contains("https://"), "should strip URL");
+    }
 }

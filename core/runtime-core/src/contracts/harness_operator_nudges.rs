@@ -150,11 +150,11 @@ fn merge_nonempty(target: &mut String, incoming: &str) {
 }
 
 /// Serialize tests that touch `ROUTER_RS_HARNESS_OPERATOR_NUDGES` or assume default nudge injection.
+///
+/// Delegates to `core_policy::test_env_sync::harness_nudges_env_test_lock` so that
+/// `host-projection` and `runtime-core` share the same underlying `OnceLock<Mutex<()>>`.
 pub fn harness_nudges_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
-    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
-    LOCK.get_or_init(|| std::sync::Mutex::new(()))
-        .lock()
-        .expect("harness nudges env test lock")
+    core_policy::test_env_sync::harness_nudges_env_test_lock()
 }
 
 #[cfg(test)]

@@ -49,7 +49,7 @@ pub struct HostProfileBuildContext<'a> {
     pub workspace_bootstrap: &'a Map<String, Value>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrameworkProfileContract {
     pub profile_id: String,
     pub display_name: String,

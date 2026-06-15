@@ -183,8 +183,20 @@ pub fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<
     if !path.is_file() {
         return None;
     }
-    let raw = fs::read_to_string(&path).ok()?;
-    let mut value: Value = serde_json::from_str(&raw).ok()?;
+    let raw = match fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("read goal state ({:?}): {e}", path);
+            return None;
+        }
+    };
+    let mut value: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::warn!("parse goal state ({:?}): {e}", path);
+            return None;
+        }
+    };
     // session-scoped goal: annotate staleness
     annotate_goal_staleness(&mut value);
     let tid_out = task_id

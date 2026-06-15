@@ -51,9 +51,9 @@ version: unified-v7
 | `read_bounded.rs` | 有界 UTF-8 前缀读取（hook 热路径优化） |
 | `jsonl_maintenance.rs` | 损坏尾部截断 + 行数压缩 |
 
-### 3.2 codegraph-rs — 代码知识图谱
+### 3.2 tools/codegraph-rs — 代码知识图谱
 
-**功能**：基于 tree-sitter 的代码图谱构建与查询，支持 Rust/TypeScript/JavaScript/Python/Go。入口：`tools/codegraph-rs/src/lib.rs`；增量同步与 watcher：`graph/sync.rs`；MCP 薄壳分发：`core/runtime-core/src/codegraph_mcp/mod.rs`。
+**功能**：基于 tree-sitter 的代码图谱构建与查询，支持 Rust/TypeScript/JavaScript/Python/Go。位于 `tools/codegraph-rs/`（v7 从 `core/` 迁出）。入口：`tools/codegraph-rs/src/lib.rs`；增量同步与 watcher：`graph/sync.rs`；MCP 薄壳分发：`core/runtime-core/src/codegraph_mcp/mod.rs`。
 
 | 模块 | 功能 | 核心 API |
 |------|------|----------|
@@ -71,7 +71,7 @@ version: unified-v7
 
 **CLI**: `index [--force]`, `status`, `query`, `callers`, `callees`, `impact`
 
-### 3.3 evolution-rs — 技能进化审计
+### 3.3 tools/evolution-rs — 技能进化审计
 
 **功能**：从 JSONL 日志审计路由决策、检测模式冲突、生成健康评分、执行自动修复。
 
@@ -83,7 +83,7 @@ version: unified-v7
 | `snapshot_skills` | 版本快照（带排他锁） |
 | `heal_skills` | 自动剪枝零使用技能 |
 
-### 3.4 autoresearch-rs — 研究工作区
+### 3.4 tools/autoresearch-rs — 研究工作区
 
 **功能**：管理工作区生命周期（init → claim → hypothesis → run → reflect），维护 research-state.yaml。
 

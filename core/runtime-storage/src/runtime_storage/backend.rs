@@ -18,6 +18,7 @@ pub struct RuntimeBackendCapabilities {
     pub supports_sqlite_wal: bool,
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn runtime_backend_capabilities(
     backend_family: &str,
 ) -> Result<RuntimeBackendCapabilities, String> {
@@ -55,6 +56,7 @@ pub fn runtime_backend_capabilities(
     }
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn runtime_backend_capabilities_payload(backend_family: &str) -> Result<Value, String> {
     let capabilities = runtime_backend_capabilities(backend_family)?;
     Ok(json!({
@@ -68,6 +70,7 @@ pub fn runtime_backend_capabilities_payload(backend_family: &str) -> Result<Valu
     }))
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn runtime_backend_family_catalog_payload() -> Value {
     let families = ["filesystem", "sqlite"]
         .into_iter()
@@ -86,6 +89,7 @@ pub fn runtime_backend_family_catalog_payload() -> Value {
     })
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn runtime_backend_family_parity_payload(
     store_backend_family: Option<&str>,
     checkpointer_backend_family: Option<&str>,
@@ -131,6 +135,7 @@ pub fn runtime_backend_family_parity_payload(
             && state_capabilities.supports_snapshot_delta,
     }))
 }
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn normalized_backend_family(value: &str) -> String {
     value.trim().to_lowercase().replace('-', "_")
 }

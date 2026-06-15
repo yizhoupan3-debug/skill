@@ -3,6 +3,8 @@
 //! Used by `core-policy` unit tests and `router-rs` hook integration tests (via `test-sync` feature).
 
 use std::cell::Cell;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 thread_local! {
@@ -91,6 +93,31 @@ pub fn with_env_var(key: &str, value: &str, f: impl FnOnce()) {
             unsafe { std::env::remove_var(key) };
         }
     }
+}
+
+/// Allocate a unique directory under the system temp dir.
+/// Shared so that `runtime-core` and `host-projection` don't duplicate this logic.
+pub fn unique_temp_repo(prefix: &str) -> PathBuf {
+    static TEMP_REPO_SEQ: AtomicUsize = AtomicUsize::new(0);
+    let seq = TEMP_REPO_SEQ.fetch_add(1, Ordering::Relaxed);
+    let mut path = std::env::temp_dir();
+    path.push(format!(
+        "router-rs-mcp-stdio-{prefix}-{}-{seq}",
+        std::process::id()
+    ));
+    path
+}
+
+/// Serialize nudge-based tests that depend on env vars (used by harness tests).
+///
+/// Placed here so that `runtime-core` and `host-projection` can share the same lock
+/// without duplicating the `OnceLock<Mutex<()>>` definition.
+pub fn harness_nudges_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static NUDGE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    NUDGE_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Safe wrapper for `std::env::remove_var` — acquires the env mutex first.

@@ -1,6 +1,5 @@
 use super::constants::{
     CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
-    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
     NEXT_ACTIONS_FILENAME, SESSION_SUMMARY_FILENAME, SUPERVISOR_STATE_FILENAME,
     SUPERVISOR_STATE_SCHEMA_VERSION, TASK_POINTERS_FILENAME, TASK_POINTERS_SCHEMA_VERSION,
     TERMINAL_STORY_STATES, TERMINAL_VERIFICATION_STATUSES, TRACE_METADATA_FILENAME,
@@ -20,27 +19,6 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-
-impl SessionArtifactWritePlan {
-    fn into_response(self) -> Value {
-        json!({
-            "ok": true,
-            "schema_version": FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
-            "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
-            "task_id": self.task_id,
-            "focus": self.focus,
-            "task": self.task,
-            "phase": self.phase,
-            "status": self.status,
-            "summary": self.summary,
-            "paths": {
-                "session_summary": self.summary_path.display().to_string(),
-                                "evidence_index": self.evidence_path.display().to_string(),
-                    },
-            "changed_paths": self.changed_paths,
-        })
-    }
-}
 
 fn resolve_session_repo_root_for_task_ledger(payload: &Value) -> Result<Option<PathBuf>, String> {
     let rr = value_text(payload.get("repo_root"));

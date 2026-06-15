@@ -5,19 +5,12 @@
 //! one test's `remove_dir_all` deletes another test's tree.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-
-static TEMP_REPO_SEQ: AtomicU64 = AtomicU64::new(0);
 
 /// Allocate a unique directory under the system temp dir.
+/// Delegates to `core_policy::test_env_sync::unique_temp_repo` to share the same
+/// sequence counter with `host-projection`.
 pub fn unique_temp_repo(prefix: &str) -> PathBuf {
-    let seq = TEMP_REPO_SEQ.fetch_add(1, Ordering::Relaxed);
-    let mut path = std::env::temp_dir();
-    path.push(format!(
-        "router-rs-mcp-stdio-{prefix}-{}-{seq}",
-        std::process::id()
-    ));
-    path
+    core_policy::test_env_sync::unique_temp_repo(prefix)
 }
 
 /// Copy hot routing index into a temp repo for MCP routing tests.

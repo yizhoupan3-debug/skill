@@ -5,17 +5,18 @@
 //! Single source of truth for framework_runtime, session_supervisor, and supporting modules.
 
 // ── original four ──
-pub mod background_state;
+// background_state → extracted to runtime-storage crate
+pub use rt_storage::background_state;
 // runtime_envelope_ids, runtime_storage → extracted to runtime-storage crate
 pub use rt_storage::runtime_envelope_ids;
 pub use rt_storage::runtime_storage;
-pub mod trace_runtime;
+pub use trace_runtime;
 
 // ── migrated modules (B3) ──
-pub use contracts::closeout_enforcement;
-pub use contracts::execution_contract;
+pub use ::framework_runtime::closeout_enforcement;
+pub use ::framework_runtime::execution_contract;
 pub mod framework_runtime;
-pub mod session_supervisor;
+pub use session_supervisor;
 pub use framework_kernel::framework_profile;
 pub mod rfv_loop;
 pub mod schema_drift;

@@ -147,25 +147,55 @@ fn acquire_file_lock(lock_path: &Path) -> Result<FileStateLockGuard, String> {
 
 #[cfg(not(unix))]
 fn acquire_file_lock(lock_path: &Path) -> Result<FileStateLockGuard, String> {
-    // Non-Unix: use exclusive create as a simple lock
-    let file = fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(lock_path)
-        .or_else(|_| {
-            // If file exists, try to remove and recreate
-            fs::remove_file(lock_path).ok();
-            fs::OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(lock_path)
-        })
-        .map_err(|e| format!("lock_create_failed: {e}"))?;
+    // Non-Unix: use exclusive create as a simple lock.
+    //
+    // WARNING: This approach has an inherent TOCTOU (time-of-check-to-time-of-use) race:
+    // between `create_new` succeeding and writing to the file, another process may also
+    // succeed. On Unix the locker can rely on flock(2) kernel lease semantics; non-Unix
+    // platforms (Windows, WASM) do not have equivalent primitives. This implementation
+    // uses a retry loop with exponential backoff to mitigate, but correctness in truly
+    // concurrent scenarios is not guaranteed.
+    //
+    // Stale lock recovery: attempt to remove an existing lock file (left by a crashed
+    // process) before the first retry. If the remove succeeds (file was stale), fall
+    // through to the retry loop which will create the new lock.
+    let _ = fs::remove_file(lock_path);
+    let max_retries: u32 = 10; // 10 attempts, ~51s worst case
+    let mut attempt: u32 = 0;
+    loop {
+        let result = fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(lock_path);
 
-    Ok(FileStateLockGuard {
-        _lock_path: lock_path.to_path_buf(),
-        _file: file,
-    })
+        match result {
+            Ok(file) => {
+                return Ok(FileStateLockGuard {
+                    _lock_path: lock_path.to_path_buf(),
+                    _file: file,
+                });
+            }
+            Err(e) if attempt < max_retries => {
+                tracing::warn!(
+                    "lock_create_failed (attempt {}/{}): {e}",
+                    attempt + 1,
+                    max_retries
+                );
+                std::thread::sleep(std::time::Duration::from_millis(
+                    50u64 * 2u64.pow(attempt),
+                ));
+                attempt += 1;
+            }
+            Err(e) => {
+                let err_msg = format!(
+                    "lock_acquisition_failed: {} retries exhausted, last error: {e}",
+                    max_retries
+                );
+                tracing::warn!("{err_msg}");
+                return Err(err_msg);
+            }
+        }
+    }
 }
 
 impl Drop for FileStateLockGuard {

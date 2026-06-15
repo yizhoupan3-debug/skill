@@ -11,9 +11,13 @@ last_verified: "2026-06-13"
 | 层级 | Crate | 行数 | 文档 |
 |------|-------|------|------|
 | B0 | `framework-kernel` | ~3,900 | [framework-kernel.md](framework-kernel.md) |
-| B1 | `runtime-core` | ~38,000 | [runtime-core.md](runtime-core.md) |
+| B1 | `runtime-core` (facade) | ~14,000 | [runtime-core.md](runtime-core.md) |
 | B1 | `core-policy` | ~4,400 | [core-policy.md](core-policy.md) |
 | B1 | `core-state` | ~6,900 | （薄代理，见 runtime-core） |
+| B1 | `framework-runtime` | ~5,000 | (extracted from runtime-core) |
+| B1 | `session-supervisor` | ~5,000 | (extracted from runtime-core) |
+| B1 | `runtime-storage` | ~8,000 | (extracted from runtime-core) |
+| B1 | `trace-runtime` | ~1,000 | (extracted from runtime-core) |
 | B2 | `host-projection` | ~34,000 | [host-projection.md](host-projection.md) |
 | B2 | `browser-mcp` | ~5,600 | [browser-mcp.md](browser-mcp.md) |
 

@@ -1,9 +1,9 @@
 use serde_json::{Map, Value};
-use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 mod contracts;
+mod profile_validate;
 mod types;
 
 pub use contracts::{
@@ -12,13 +12,12 @@ pub use contracts::{
     build_host_alias_entrypoints, build_runtime_surface, build_supervisor_state_contract,
     complete_host_payload,
 };
+pub use profile_validate::validate_framework_profile;
 pub use types::{
     CapabilityBundle, DELEGATION_CONTRACT_ARTIFACT_ID, EXECUTION_CONTROLLER_CONTRACT_ARTIFACT_ID,
     EXECUTION_PROTOCOL_CONTRACT_ARTIFACT_ID, FrameworkProfileContract, HostProfileBuildContext,
     ProfileBundle, REQUIRED_CORE_CAPABILITIES, SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
 };
-
-use types::HOST_SPECIFIC_METADATA_KEYS;
 
 // ── repo root (build-time only) ──
 
@@ -41,13 +40,13 @@ pub fn load_framework_profile(path: &Path) -> Result<FrameworkProfileContract, S
     Ok(profile)
 }
 
-pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<ProfileBundle, String> {
-    validate_framework_profile(profile)?;
+pub fn build_profile_bundle(profile: FrameworkProfileContract) -> Result<ProfileBundle, String> {
+    validate_framework_profile(&profile)?;
 
     let normalized_mcp_servers = normalize_mcp_servers(&profile.mcp_servers);
-    let workspace_bootstrap = compile_workspace_bootstrap(profile);
+    let workspace_bootstrap = compile_workspace_bootstrap(&profile);
     let shared_contract =
-        build_shared_contract(profile, &normalized_mcp_servers, &workspace_bootstrap);
+        build_shared_contract(&profile, &normalized_mcp_servers, &workspace_bootstrap);
     let host_specs = load_host_profile_specs()?;
     let codex_spec = host_specs
         .iter()
@@ -62,7 +61,7 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         host_payloads.insert(spec.host_key.clone(), Value::Object(spec.build_payload()));
     }
     let codex_profile = build_host_profile(
-        profile,
+        &profile,
         &normalized_mcp_servers,
         &workspace_bootstrap,
         &shared_contract,
@@ -71,7 +70,7 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         false,
     );
     let full_codex_profile = build_host_profile(
-        profile,
+        &profile,
         &normalized_mcp_servers,
         &workspace_bootstrap,
         &shared_contract,
@@ -79,29 +78,53 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
         codex_spec,
         true,
     );
+
+    let FrameworkProfileContract {
+        profile_id,
+        display_name,
+        framework_profile_version,
+        runtime_family,
+        host_family,
+        core_capabilities,
+        optional_capabilities,
+        rules_bundle,
+        skill_bundle,
+        session_policy,
+        tool_policy,
+        approval_policy,
+        loadout_policy,
+        framework_surface_policy,
+        artifact_contract,
+        model_policy,
+        mcp_servers: _,
+        workspace_bootstrap: _,
+        host_capability_requirements,
+        metadata,
+    } = profile;
+
     Ok(ProfileBundle {
-        profile_id: profile.profile_id.clone(),
-        display_name: profile.display_name.clone(),
-        framework_profile_version: profile.framework_profile_version.clone(),
-        runtime_family: profile.runtime_family.clone(),
-        host_family: profile.host_family.clone(),
+        profile_id,
+        display_name,
+        framework_profile_version,
+        runtime_family,
+        host_family,
         capabilities: CapabilityBundle {
-            core: profile.core_capabilities.clone(),
-            optional: profile.optional_capabilities.clone(),
+            core: core_capabilities,
+            optional: optional_capabilities,
         },
-        rules_bundle: profile.rules_bundle.clone(),
-        skill_bundle: profile.skill_bundle.clone(),
-        session_policy: profile.session_policy.clone(),
-        tool_policy: profile.tool_policy.clone(),
-        approval_policy: profile.approval_policy.clone(),
-        loadout_policy: profile.loadout_policy.clone(),
-        framework_surface_policy: profile.framework_surface_policy.clone(),
-        artifact_contract: profile.artifact_contract.clone(),
-        model_policy: profile.model_policy.clone(),
-        mcp_servers: normalized_mcp_servers.clone(),
-        workspace_bootstrap: workspace_bootstrap.clone(),
-        host_capability_requirements: profile.host_capability_requirements.clone(),
-        metadata: profile.metadata.clone(),
+        rules_bundle,
+        skill_bundle,
+        session_policy,
+        tool_policy,
+        approval_policy,
+        loadout_policy,
+        framework_surface_policy,
+        artifact_contract,
+        model_policy,
+        mcp_servers: normalized_mcp_servers,
+        workspace_bootstrap,
+        host_capability_requirements,
+        metadata,
         codex_profile: Value::Object(codex_profile),
         full_codex_profile: Value::Object(full_codex_profile),
         host_payloads,
@@ -109,7 +132,7 @@ pub fn build_profile_bundle(profile: &FrameworkProfileContract) -> Result<Profil
 }
 
 pub fn build_codex_artifact_bundle(
-    profile: &FrameworkProfileContract,
+    profile: FrameworkProfileContract,
     full: bool,
 ) -> Result<Map<String, Value>, String> {
     let bundle = build_profile_bundle(profile)?;
@@ -123,51 +146,6 @@ pub fn build_codex_artifact_bundle(
         },
     );
     Ok(artifacts)
-}
-
-fn validate_framework_profile(profile: &FrameworkProfileContract) -> Result<(), String> {
-    if profile.profile_id.trim().is_empty() {
-        return Err("framework profile missing profile_id".to_string());
-    }
-    if profile.display_name.trim().is_empty() {
-        return Err("framework profile missing display_name".to_string());
-    }
-    if profile.framework_profile_version.trim().is_empty() {
-        return Err("framework profile missing framework_profile_version".to_string());
-    }
-    if profile.host_family.trim() != "shared-rust-core" {
-        return Err("framework core must be pinned to shared-rust-core".to_string());
-    }
-
-    let capability_set = profile
-        .core_capabilities
-        .iter()
-        .map(|value| value.as_str())
-        .collect::<HashSet<_>>();
-    let missing = REQUIRED_CORE_CAPABILITIES
-        .iter()
-        .filter(|cap| !capability_set.contains(**cap))
-        .copied()
-        .collect::<Vec<_>>();
-    if !missing.is_empty() {
-        return Err(format!(
-            "framework profile missing core capabilities: {}",
-            missing.join(", ")
-        ));
-    }
-    let host_specific_metadata = profile
-        .metadata
-        .keys()
-        .filter(|key| HOST_SPECIFIC_METADATA_KEYS.contains(&key.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
-    if !host_specific_metadata.is_empty() {
-        return Err(format!(
-            "framework profile metadata must stay shared-core-only; move host-private keys into explicit host payloads: {}",
-            host_specific_metadata.join(", ")
-        ));
-    }
-    Ok(())
 }
 
 // ── normalization ──
@@ -195,26 +173,39 @@ fn normalize_mcp_servers(mcp_servers: &[Value]) -> Vec<Value> {
 
 fn compile_workspace_bootstrap(profile: &FrameworkProfileContract) -> Map<String, Value> {
     let mut bootstrap = profile.workspace_bootstrap.clone();
-    let mut resources = bootstrap
-        .get("resources")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default();
 
-    if !resources.contains_key("skills") {
-        let skills = bootstrap.get("skills").cloned().unwrap_or_else(|| {
-            value_object([
-                ("project_dir", Value::String("skills".to_string())),
-                (
-                    "user_dir",
-                    Value::String("${CODEX_HOME}/skills".to_string()),
-                ),
-                ("source_dir", Value::String("skills".to_string())),
-            ])
-        });
-        resources.insert("skills".to_string(), skills);
+    let default_skills = || {
+        value_object([
+            ("project_dir", Value::String("skills".to_string())),
+            ("user_dir", Value::String("${CODEX_HOME}/skills".to_string())),
+            ("source_dir", Value::String("skills".to_string())),
+        ])
+    };
+
+    // Check upfront (immutable borrow) to decide if skills need patching;
+    // this avoids a simultaneous mutable borrow on `bootstrap` later.
+    let needs_skills = match bootstrap.get("resources").and_then(Value::as_object) {
+        Some(res) => !res.contains_key("skills"),
+        None => true,
+    };
+
+    if needs_skills {
+        let skills = match bootstrap.remove("skills") {
+            Some(skills_val) => skills_val,
+            None => default_skills(),
+        };
+        match bootstrap.get_mut("resources").and_then(Value::as_object_mut) {
+            Some(res) => {
+                res.insert("skills".to_string(), skills);
+            }
+            None => {
+                let mut resources = Map::new();
+                resources.insert("skills".to_string(), skills);
+                bootstrap.insert("resources".to_string(), Value::Object(resources));
+            }
+        }
     }
-    bootstrap.insert("resources".to_string(), Value::Object(resources));
+
     bootstrap.remove("bridges");
     bootstrap.remove("skill_bridge");
     bootstrap
@@ -223,46 +214,45 @@ fn compile_workspace_bootstrap(profile: &FrameworkProfileContract) -> Map<String
 fn compile_session_mode(session_policy: &Map<String, Value>) -> Value {
     let mut extras = Map::new();
     for (key, value) in session_policy {
-        if matches!(
+        if !matches!(
             key.as_str(),
             "mode" | "approval_mode" | "history_policy" | "takeover"
         ) {
-            continue;
+            extras.insert(key.clone(), value.clone());
         }
-        extras.insert(key.clone(), value.clone());
     }
 
-    value_object([
-        (
-            "mode",
-            session_policy
-                .get("mode")
-                .cloned()
-                .unwrap_or_else(|| Value::String("default".to_string())),
-        ),
-        (
-            "approval_mode",
-            session_policy
-                .get("approval_mode")
-                .cloned()
-                .unwrap_or_else(|| Value::String("inherit".to_string())),
-        ),
-        (
-            "history_policy",
-            session_policy
-                .get("history_policy")
-                .cloned()
-                .unwrap_or_else(|| Value::String("host-managed".to_string())),
-        ),
-        (
-            "takeover",
-            session_policy
-                .get("takeover")
-                .cloned()
-                .unwrap_or(Value::Bool(false)),
-        ),
-        ("extras", Value::Object(extras)),
-    ])
+    if let Value::Object(mut result) = serde_json::json!({
+        "mode": session_policy.get("mode"),
+        "approval_mode": session_policy.get("approval_mode"),
+        "history_policy": session_policy.get("history_policy"),
+        "takeover": session_policy.get("takeover"),
+        "extras": extras,
+    }) {
+        // json! serializes `None` (from .get() for a missing key) as `Value::Null`.
+        // Replace Null entries with the defaults that the old code applied.
+        if matches!(result.get("mode"), Some(Value::Null)) {
+            result.insert("mode".to_string(), Value::String("default".to_string()));
+        }
+        if matches!(result.get("approval_mode"), Some(Value::Null)) {
+            result.insert(
+                "approval_mode".to_string(),
+                Value::String("inherit".to_string()),
+            );
+        }
+        if matches!(result.get("history_policy"), Some(Value::Null)) {
+            result.insert(
+                "history_policy".to_string(),
+                Value::String("host-managed".to_string()),
+            );
+        }
+        if matches!(result.get("takeover"), Some(Value::Null)) {
+            result.insert("takeover".to_string(), Value::Bool(false));
+        }
+        Value::Object(result)
+    } else {
+        unreachable!()
+    }
 }
 
 // ── shared contract ──
@@ -272,84 +262,45 @@ fn build_shared_contract(
     normalized_mcp_servers: &[Value],
     workspace_bootstrap: &Map<String, Value>,
 ) -> Map<String, Value> {
-    let mut shared_contract = Map::new();
-    shared_contract.insert(
-        "routing".to_string(),
-        serde_json::json!({
+    let shared_contract = if let Value::Object(contract) = serde_json::json!({
+        "routing": {
             "mode": profile
                 .session_policy
                 .get("mode")
                 .and_then(Value::as_str)
                 .unwrap_or("default"),
             "session_mode": compile_session_mode(&profile.session_policy),
-        }),
-    );
-    shared_contract.insert(
-        "framework_surface_policy".to_string(),
-        Value::Object(profile.framework_surface_policy.clone()),
-    );
-    shared_contract.insert(
-        "continuity_contract".to_string(),
-        serde_json::json!({
+        },
+        "framework_surface_policy": profile.framework_surface_policy,
+        "continuity_contract": {
             "checkpointing_supported": false,
             "max_continuation_depth": 5,
             "continuation_links": [],
-        }),
-    );
-    shared_contract.insert(
-        "artifact_contract".to_string(),
-        Value::Object(profile.artifact_contract.clone()),
-    );
-    shared_contract.insert(
-        "tool_policy".to_string(),
-        Value::Object(profile.tool_policy.clone()),
-    );
-    shared_contract.insert(
-        "approval_policy".to_string(),
-        Value::Object(profile.approval_policy.clone()),
-    );
-    shared_contract.insert(
-        "loadout_policy".to_string(),
-        Value::Object(profile.loadout_policy.clone()),
-    );
-    shared_contract.insert(
-        "workspace_bootstrap".to_string(),
-        Value::Object(workspace_bootstrap.clone()),
-    );
-    shared_contract.insert(
-        "session_contract".to_string(),
-        serde_json::json!({
+        },
+        "artifact_contract": profile.artifact_contract,
+        "tool_policy": profile.tool_policy,
+        "approval_policy": profile.approval_policy,
+        "loadout_policy": profile.loadout_policy,
+        "workspace_bootstrap": workspace_bootstrap,
+        "session_contract": {
             "session_policy": profile.session_policy,
             "model_policy": profile.model_policy,
-        }),
-    );
-    shared_contract.insert(
-        "execution_protocol_contract".to_string(),
-        Value::Object(build_execution_protocol_contract()),
-    );
-    shared_contract.insert(
-        "execution_controller_contract".to_string(),
-        Value::Object(build_execution_controller_contract()),
-    );
-    shared_contract.insert(
-        "delegation_contract".to_string(),
-        Value::Object(build_delegation_contract()),
-    );
-    shared_contract.insert(
-        "supervisor_state_contract".to_string(),
-        Value::Object(build_supervisor_state_contract()),
-    );
-    shared_contract.insert(
-        "mcp_servers".to_string(),
-        Value::Array(normalized_mcp_servers.to_vec()),
-    );
-    shared_contract.insert(
-        "host_projection".to_string(),
-        serde_json::json!({
+        },
+        "execution_protocol_contract": build_execution_protocol_contract(),
+        "execution_controller_contract": build_execution_controller_contract(),
+        "delegation_contract": build_delegation_contract(),
+        "supervisor_state_contract": build_supervisor_state_contract(),
+        "mcp_servers": normalized_mcp_servers,
+        "host_projection": {
             "mode": "shared-rust-core",
             "metadata": profile.metadata,
-        }),
-    );
+        },
+    }) {
+        contract
+    } else {
+        unreachable!()
+    };
+
     shared_contract
 }
 
@@ -374,17 +325,10 @@ impl HostProfileSpec {
         );
         payload.insert(
             "capabilities".to_string(),
-            Value::Array(
-                self.capabilities
-                    .iter()
-                    .map(|c| Value::String(c.clone()))
-                    .collect(),
-            ),
+            serde_json::to_value(&self.capabilities).unwrap(),
         );
         payload.insert("host_id".to_string(), Value::String(self.host_cli.clone()));
-        for (key, value) in &self.projection {
-            payload.insert(key.clone(), value.clone());
-        }
+        payload.extend(self.projection.clone());
         payload
     }
 }
@@ -469,27 +413,17 @@ fn build_host_profile(
         normalized_mcp_servers,
         workspace_bootstrap,
     };
-    let mut profile_map = Map::new();
-    profile_map.insert(
-        "profile_id".to_string(),
-        Value::String(profile.profile_id.clone()),
-    );
-    profile_map.insert(
-        "display_name".to_string(),
-        Value::String(profile.display_name.clone()),
-    );
-    profile_map.insert(
-        "framework_profile_version".to_string(),
-        Value::String(profile.framework_profile_version.clone()),
-    );
-    profile_map.insert(
-        "runtime_family".to_string(),
-        Value::String(profile.runtime_family.clone()),
-    );
-    profile_map.insert(
-        "host_family".to_string(),
-        Value::String(profile.host_family.clone()),
-    );
+    let mut profile_map = if let Value::Object(map) = serde_json::json!({
+        "profile_id": profile.profile_id,
+        "display_name": profile.display_name,
+        "framework_profile_version": profile.framework_profile_version,
+        "runtime_family": profile.runtime_family,
+        "host_family": profile.host_family,
+    }) {
+        map
+    } else {
+        unreachable!()
+    };
     profile_map.insert(
         "capabilities".to_string(),
         serde_json::json!({
@@ -540,7 +474,7 @@ fn resolve_host_capability_requirements(
             Some("mcp_server") => ctx
                 .normalized_mcp_servers
                 .iter()
-                .any(|server| server.get("server_id") == Some(&Value::String(key.clone()))),
+                .any(|server| server.get("server_id").and_then(Value::as_str) == Some(key.as_str())),
             Some("workspace_bootstrap") => ctx.workspace_bootstrap.contains_key(key),
             _ => false,
         };
@@ -551,9 +485,7 @@ fn resolve_host_capability_requirements(
 // ── merge helpers ──
 
 fn merge_json_maps(target: &mut Map<String, Value>, override_map: &Map<String, Value>) {
-    for (key, value) in override_map {
-        target.insert(key.clone(), value.clone());
-    }
+    target.extend(override_map.clone().into_iter());
 }
 
 // ── tiny helpers ──
@@ -660,7 +592,7 @@ mod tests {
     #[test]
     fn build_profile_bundle_succeeds_for_valid_profile() {
         let profile = sample_profile();
-        let result = build_profile_bundle(&profile);
+        let result = build_profile_bundle(profile);
         assert!(
             result.is_ok(),
             "build_profile_bundle failed: {:?}",
@@ -669,13 +601,54 @@ mod tests {
     }
 
     #[test]
+    fn profile_bundle_serialization_matches_snapshot() {
+        let profile = sample_profile();
+        let bundle = build_profile_bundle(profile).expect("build_profile_bundle");
+        let json = serde_json::to_value(&bundle).expect("serialize");
+        insta::assert_json_snapshot!("profile_bundle_contract", json);
+    }
+
+    #[test]
+    fn shared_contract_serialization_matches_snapshot() {
+        let profile = sample_profile();
+        let mcp = normalize_mcp_servers(&[]);
+        let wb = compile_workspace_bootstrap(&profile);
+        let shared = build_shared_contract(&profile, &mcp, &wb);
+        insta::assert_json_snapshot!("shared_contract", shared);
+    }
+
+    #[test]
     fn validation_rejects_host_specific_metadata_in_framework_truth() {
         let mut profile = sample_profile();
         profile
             .metadata
             .insert("settings_paths".to_string(), json!([".codex/config.toml"]));
-        let error = build_profile_bundle(&profile)
+        let error = build_profile_bundle(profile)
             .expect_err("should reject host-specific metadata in framework truth");
         assert!(error.contains("shared-core-only"));
+    }
+
+    #[tokio::test]
+    async fn build_profile_bundle_is_send_safe() {
+        let profile = sample_profile();
+        let result = tokio::task::spawn_blocking(move || build_profile_bundle(profile))
+            .await
+            .expect("spawn_blocking");
+        assert!(result.is_ok(), "build_profile_bundle in tokio context");
+    }
+
+    #[tokio::test]
+    async fn load_framework_profile_from_path_is_send_safe() {
+        let tmp = std::env::temp_dir();
+        let path = tmp.join("test-framework-profile.json");
+        let profile = sample_profile();
+        let json = serde_json::to_string_pretty(&profile).expect("serialize");
+        std::fs::write(&path, &json).expect("write");
+        let path_clone = path.clone();
+        let result = tokio::task::spawn_blocking(move || load_framework_profile(&path_clone))
+            .await
+            .expect("spawn_blocking");
+        assert!(result.is_ok(), "load_framework_profile in tokio context");
+        let _ = std::fs::remove_file(&path);
     }
 }

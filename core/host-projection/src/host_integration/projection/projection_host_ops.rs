@@ -636,3 +636,79 @@ pub fn remove_claude_settings_hooks(
         removed_events,
     })
 }
+
+// ── HostProjectionOps trait implementations ──
+
+use super::projection_ops_trait::HostProjectionOps;
+
+pub struct CursorProjectionOps;
+
+impl HostProjectionOps for CursorProjectionOps {
+    fn host_id(&self) -> &'static str { "cursor" }
+
+    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
+        install_cursor_projection(roots, scope)
+    }
+
+    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+        cursor_projection_status(roots)
+    }
+
+    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {
+        remove_cursor_projection(roots, scope, dry_run)
+    }
+}
+
+pub struct ClaudeProjectionOps;
+
+impl HostProjectionOps for ClaudeProjectionOps {
+    fn host_id(&self) -> &'static str { "claude" }
+
+    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
+        install_claude_projection(roots, scope)
+    }
+
+    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+        claude_projection_status(roots)
+    }
+
+    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {
+        remove_claude_projection(roots, scope, dry_run)
+    }
+}
+
+pub struct OpencodeProjectionOps;
+
+impl HostProjectionOps for OpencodeProjectionOps {
+    fn host_id(&self) -> &'static str { "opencode" }
+
+    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
+        install_opencode_projection(roots, scope)
+    }
+
+    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+        opencode_projection_status(roots)
+    }
+
+    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {
+        remove_opencode_projection(roots, scope, dry_run)
+    }
+}
+
+pub struct CodexProjectionOps;
+
+impl HostProjectionOps for CodexProjectionOps {
+    fn host_id(&self) -> &'static str { "codex" }
+
+    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
+        install_codex_projection(roots, scope)
+    }
+
+    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+        codex_projection_status(roots)
+    }
+
+    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {
+        remove_codex_projection(roots, scope, dry_run)
+    }
+}

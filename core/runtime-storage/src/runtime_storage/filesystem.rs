@@ -24,6 +24,7 @@ const O_NOFOLLOW_FLAG: i32 = 0x0100;
 /// Serialize `append_text` for the in-memory regression backend (no `flock`); parallel writers
 /// could otherwise interleave bytes on the same logical path.
 pub static MEMORY_APPEND_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn memory_storage_root() -> Result<PathBuf, String> {
     let cwd =
         std::env::current_dir().map_err(|err| format!("resolve current dir failed: {err}"))?;
@@ -35,6 +36,7 @@ pub fn memory_storage_root() -> Result<PathBuf, String> {
         .join(namespace))
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn memory_artifact_path(path: &Path) -> Result<PathBuf, String> {
     let stable_key = stable_memory_key(path)?;
     let mut digest = Sha256::new();
@@ -46,6 +48,7 @@ pub fn memory_artifact_path(path: &Path) -> Result<PathBuf, String> {
 /// reject when the final path already exists as a symlink (`symlink_metadata`).
 /// This avoids following a symlink on append and makes the write target explicit
 /// (callers must write to a normal file path, not an alias).
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn filesystem_reject_symlink_write_target(path: &Path) -> Result<(), String> {
     match fs::symlink_metadata(path) {
         Ok(meta) => {
@@ -82,6 +85,7 @@ pub struct RuntimePathLockGuard {
 /// (`background_state.json`, trace JSONL, supervisor state, etc.) will
 /// serialize through this lock so read-modify-write sequences stay atomic
 /// at the process boundary. The OS releases the lock if the process dies.
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, String> {
     let parent = path.parent().ok_or_else(|| {
         format!(
@@ -226,6 +230,7 @@ pub fn filesystem_write_text_inner(
     Ok(())
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn filesystem_write_text(path: &Path, payload_text: &str) -> Result<(), String> {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -234,6 +239,7 @@ pub fn filesystem_write_text(path: &Path, payload_text: &str) -> Result<(), Stri
     filesystem_write_text_inner(path, payload_text, nanos)
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn filesystem_append_text(path: &Path, payload_text: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| {

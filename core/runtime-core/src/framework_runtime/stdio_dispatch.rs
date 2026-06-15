@@ -12,9 +12,11 @@ use super::{
 };
 use crate::autopilot_goal;
 use crate::background_state::handle_background_state_operation;
-use crate::cli::common::{manifest_fallback_path, route_task_with_manifest_fallback};
-use crate::cli::runtime_ops::{
+use super::route_manifest_fallback::{manifest_fallback_path, route_task_with_manifest_fallback};
+use super::stdio_op_registry::{
     dispatch_runtime_output_mode_stdio, handles_runtime_output_stdio_op,
+};
+use super::trace_transport::{
     write_checkpoint_resume_manifest_payload, write_transport_binding_payload,
 };
 use crate::closeout_enforcement::{
@@ -34,7 +36,7 @@ use crate::framework_profile::{
 use crate::hook_event_routing::hook_event_routing_contract;
 use crate::hook_policy::evaluate_hook_policy_value;
 use crate::route::{
-    ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION, RouteDecision, RouteDecisionSnapshotPayload,
+    ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION, RouteDecision,
     RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload, SkillRecord,
     build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
     build_search_results_payload, filter_record_indices_for_host, filter_records_for_host,
@@ -188,8 +190,7 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "search_skills" => dispatch_stdio_search_skills(payload),
         "hook_policy" => evaluate_hook_policy_value(payload),
         "pre_tool_use_guard" => evaluate_pre_tool_use_guard_value(payload),
-        "concurrency_defaults" => serde_json::to_value(runtime_concurrency_defaults_payload())
-            .map_err(|err| format!("serialize concurrency defaults output failed: {err}")),
+        "concurrency_defaults" => serialize_payload(runtime_concurrency_defaults_payload(), "concurrency defaults"),
         "route_report" => dispatch_stdio_route_report(payload),
         "route_resolution" => dispatch_stdio_route_resolution(payload),
         "route_policy" => dispatch_stdio_route_policy(payload),
@@ -215,9 +216,9 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "execution_contract_bundle" => Ok(Value::Object(build_execution_contract_bundle())),
         "normalize_execution_kernel_metadata_contract" => {
             if payload.as_object().is_some_and(Map::is_empty) || payload.is_null() {
-                normalize_execution_kernel_metadata_contract_value(None)
+                normalize_execution_kernel_metadata_contract_value(None).map_err(Into::into)
             } else {
-                normalize_execution_kernel_metadata_contract_value(Some(&payload))
+                normalize_execution_kernel_metadata_contract_value(Some(&payload)).map_err(Into::into)
             }
         }
         "normalize_execution_kernel_contract" => {
@@ -225,7 +226,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
                 "execution-kernel contract payload is missing kernel_contract.".to_string()
             })?;
             let response_shape = payload.get("response_shape").and_then(Value::as_str);
-            normalize_execution_kernel_contract_value(kernel_contract, response_shape)
+            normalize_execution_kernel_contract_value(kernel_contract, response_shape).map_err(Into::into)
         }
         "validate_execution_kernel_steady_state_metadata" => {
             let metadata = payload.get("metadata").ok_or_else(|| {
@@ -237,7 +238,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
                 metadata,
                 kernel_contract,
                 response_shape,
-            )
+            ).map_err(Into::into)
         }
         "decode_execution_response" => {
             let execution_payload = payload.get("payload").ok_or_else(|| {
@@ -245,7 +246,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
             })?;
             let kernel_contract = payload.get("kernel_contract");
             let dry_run = payload.get("dry_run").and_then(Value::as_bool);
-            decode_execution_response_value(execution_payload, kernel_contract, dry_run)
+            decode_execution_response_value(execution_payload, kernel_contract, dry_run).map_err(Into::into)
         }
         "sandbox_control" => parse_and_dispatch::<SandboxControlRequestPayload, _, _>(
             payload,
@@ -253,9 +254,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
             build_sandbox_control_response,
         ),
         "runtime_observability_health_snapshot" => {
-            serde_json::to_value(build_runtime_observability_health_snapshot()).map_err(|err| {
-                format!("serialize runtime observability health snapshot output failed: {err}")
-            })
+            serialize_payload(build_runtime_observability_health_snapshot(), "runtime observability health snapshot")
         }
         "background_control" => parse_and_dispatch::<BackgroundControlRequestPayload, _, _>(
             payload,
@@ -283,8 +282,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
             runtime_storage_operation,
         ),
         "control_plane_contracts" => {
-            serde_json::to_value(build_control_plane_contract_descriptors())
-                .map_err(|err| format!("serialize control plane contracts output failed: {err}"))
+            serialize_payload(build_control_plane_contract_descriptors(), "control plane contracts")
         }
         _ => Err(format!("unsupported runtime stdio operation: {op}")),
     }
@@ -410,7 +408,7 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
             first_turn,
         )?
     };
-    serde_json::to_value(decision).map_err(|err| format!("serialize route output failed: {err}"))
+    serialize_payload(decision, "route")
 }
 
 fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
@@ -435,7 +433,7 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
     let host_indices = filter_record_indices_for_host(&records, host_id.as_deref())?;
     let matches = search_skills_subset(&records, Some(&host_indices), &query, limit);
     let resolved = build_search_results_payload(&query, matches);
-    serde_json::to_value(resolved).map_err(|err| format!("serialize search output failed: {err}"))
+    serialize_payload(resolved, "search")
 }
 
 fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
@@ -447,8 +445,8 @@ fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
         .map(serde_json::from_value::<RouteDecision>)
         .transpose()
         .map_err(|err| format!("parse route decision contract failed: {err}"))?;
-    let rust_snapshot = match payload.get("rust_route_snapshot").cloned() {
-        Some(raw) if !raw.is_null() => serde_json::from_value::<RouteDecisionSnapshotPayload>(raw)
+    let rust_snapshot = match payload.get("rust_route_snapshot") {
+        Some(raw) if !raw.is_null() => serde_json::from_value(raw.clone())
             .map_err(|err| format!("parse rust route snapshot failed: {err}"))?,
         _ => route_decision
             .as_ref()
@@ -457,12 +455,11 @@ fn dispatch_stdio_route_report(payload: Value) -> Result<Value, String> {
                 "route_report requires rust_route_snapshot or route_decision".to_string()
             })?,
     };
-    serde_json::to_value(build_route_diff_report(
+    serialize_payload(build_route_diff_report(
         &mode,
         rust_snapshot,
         route_decision.as_ref(),
-    )?)
-    .map_err(|err| format!("serialize route report output failed: {err}"))
+    )?, "route report")
 }
 
 fn dispatch_stdio_route_resolution(payload: Value) -> Result<Value, String> {
@@ -473,14 +470,12 @@ fn dispatch_stdio_route_resolution(payload: Value) -> Result<Value, String> {
         .ok_or_else(|| "route_resolution requires route_decision".to_string())?;
     let decision = serde_json::from_value::<RouteDecision>(decision_value)
         .map_err(|err| format!("parse route resolution input failed: {err}"))?;
-    serde_json::to_value(build_route_resolution(&mode, &decision)?)
-        .map_err(|err| format!("serialize route resolution output failed: {err}"))
+    serialize_payload(build_route_resolution(&mode, &decision)?, "route resolution")
 }
 
 fn dispatch_stdio_route_policy(payload: Value) -> Result<Value, String> {
     let mode = required_non_empty_string(&payload, "mode", "stdio route policy")?;
-    serde_json::to_value(build_route_policy(&mode)?)
-        .map_err(|err| format!("serialize route policy output failed: {err}"))
+    serialize_payload(build_route_policy(&mode)?, "route policy")
 }
 
 fn dispatch_stdio_route_snapshot(payload: Value) -> Result<Value, String> {
@@ -494,12 +489,14 @@ fn dispatch_stdio_route_snapshot(payload: Value) -> Result<Value, String> {
         request.score,
         &request.reasons,
     );
-    serde_json::to_value(RouteSnapshotEnvelopePayload {
-        snapshot_schema_version: ROUTE_SNAPSHOT_SCHEMA_VERSION.to_string(),
-        authority: ROUTE_AUTHORITY.to_string(),
-        route_snapshot: snapshot,
-    })
-    .map_err(|err| format!("serialize route snapshot output failed: {err}"))
+    serialize_payload(
+        RouteSnapshotEnvelopePayload {
+            snapshot_schema_version: ROUTE_SNAPSHOT_SCHEMA_VERSION.to_string(),
+            authority: ROUTE_AUTHORITY.to_string(),
+            route_snapshot: snapshot,
+        },
+        "route snapshot",
+    )
 }
 
 fn dispatch_stdio_framework_runtime_snapshot(payload: Value) -> Result<Value, String> {
@@ -510,23 +507,25 @@ fn dispatch_stdio_framework_runtime_snapshot(payload: Value) -> Result<Value, St
     let task_id = optional_non_empty_string(&payload, "task_id");
     let detail_level = optional_non_empty_string(&payload, "detail_level")
         .unwrap_or_else(|| "summary".to_string());
-    serde_json::to_value(build_framework_runtime_snapshot_envelope_with_level(
-        repo_root.as_path(),
-        artifact_root.as_deref().map(Path::new),
-        task_id.as_deref(),
-        &detail_level,
-    )?)
-    .map_err(|err| format!("serialize framework runtime snapshot output failed: {err}"))
+    serialize_payload(
+        build_framework_runtime_snapshot_envelope_with_level(
+            repo_root.as_path(),
+            artifact_root.as_deref().map(Path::new),
+            task_id.as_deref(),
+            &detail_level,
+        )?,
+        "framework runtime snapshot",
+    )
 }
 
 fn dispatch_stdio_framework_contract_summary(payload: Value) -> Result<Value, String> {
     let repo_root =
         required_non_empty_string(&payload, "repo_root", "stdio framework contract summary")?;
     let repo_root = resolve_repo_root_arg(Some(Path::new(&repo_root)))?;
-    serde_json::to_value(build_framework_contract_summary_envelope(
-        repo_root.as_path(),
-    )?)
-    .map_err(|err| format!("serialize framework contract summary output failed: {err}"))
+    serialize_payload(
+        build_framework_contract_summary_envelope(repo_root.as_path())?,
+        "framework contract summary",
+    )
 }
 
 fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, String> {
@@ -543,24 +542,25 @@ fn dispatch_stdio_framework_alias(payload: Value) -> Result<Value, String> {
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let host_id = payload.get("host_id").and_then(Value::as_str);
-    serde_json::to_value(build_framework_alias_envelope(
-        repo_root.as_path(),
-        &alias_name,
-        FrameworkAliasBuildOptions {
-            max_lines,
-            compact,
-            host_id,
-        },
-    )?)
-    .map_err(|err| format!("serialize framework alias output failed: {err}"))
+    serialize_payload(
+        build_framework_alias_envelope(
+            repo_root.as_path(),
+            &alias_name,
+            FrameworkAliasBuildOptions {
+                max_lines,
+                compact,
+                host_id,
+            },
+        )?,
+        "framework alias",
+    )
 }
 
 fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String> {
     let profile_path = required_non_empty_string(&payload, "profile_path", "stdio profile bundle")?;
     let profile = load_framework_profile(Path::new(&profile_path))?;
-    let bundle = build_profile_bundle(&profile)?;
-    serde_json::to_value(bundle)
-        .map_err(|err| format!("serialize profile bundle output failed: {err}"))
+    let bundle = build_profile_bundle(profile)?;
+    serialize_payload(bundle, "profile bundle")
 }
 
 fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Value, String> {
@@ -568,9 +568,8 @@ fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Valu
         required_non_empty_string(&payload, "profile_path", "stdio codex profile artifacts")?;
     let full = optional_bool(&payload, "full").unwrap_or(false);
     let profile = load_framework_profile(Path::new(&profile_path))?;
-    let artifacts = build_codex_artifact_bundle(&profile, full)?;
-    serde_json::to_value(artifacts)
-        .map_err(|err| format!("serialize codex profile artifacts output failed: {err}"))
+    let artifacts = build_codex_artifact_bundle(profile, full)?;
+    serialize_payload(artifacts, "codex profile artifacts")
 }
 
 fn dispatch_stdio_eval_route(payload: Value) -> Result<Value, String> {
@@ -582,5 +581,5 @@ fn dispatch_stdio_eval_route(payload: Value) -> Result<Value, String> {
         runtime.as_deref().map(Path::new),
         manifest.as_deref().map(Path::new),
     )?;
-    serde_json::to_value(report).map_err(|err| format!("serialize eval route report failed: {err}"))
+    serialize_payload(report, "eval route report")
 }

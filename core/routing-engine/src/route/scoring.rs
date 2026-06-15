@@ -35,7 +35,7 @@ fn score_agent_swarm_signals(
         return (0.0, Vec::new());
     }
     let mut delta = w.agent_swarm_boost;
-    let mut reasons = Vec::new();
+    let mut reasons = Vec::with_capacity(4);
     reasons.push(
         "Agent-swarm boost applied: multi-agent delegation or worker orchestration wording detected."
             .to_string(),
@@ -110,7 +110,7 @@ fn score_design_md_signals(
     {
         return (0.0, Vec::new());
     }
-    let mut reasons = Vec::new();
+    let mut reasons = Vec::with_capacity(1);
     if has_quick_artifact_context(query_text, query_token_list) {
         let new_score = current_score * w.design_md_quick_suppression_factor;
         reasons.push(
@@ -138,7 +138,7 @@ fn score_gate_name_token_signals(
     w: &ScoringWeights,
 ) -> (f64, Vec<String>, HashSet<String>) {
     let mut delta = 0.0f64;
-    let mut reasons = Vec::new();
+    let mut reasons = Vec::with_capacity(4);
     let mut matched_query_tokens: HashSet<String> = HashSet::new();
 
     // Exact skill name
@@ -156,12 +156,12 @@ fn score_gate_name_token_signals(
     }
 
     // Gate phrases
-    let matched_gates = record
+    let matched_gates: Vec<&str> = record
         .gate_phrases
         .iter()
         .filter(|phrase| text_matches_phrase(query_token_list, phrase))
-        .cloned()
-        .collect::<Vec<_>>();
+        .map(|s| s.as_str())
+        .collect();
     if !matched_gates.is_empty() {
         delta += w.gate_match_base
             + i32::min(
@@ -176,7 +176,7 @@ fn score_gate_name_token_signals(
             let ptokens = tokenize_route_text(phrase);
             if ptokens.len() == 1 {
                 for t in query_token_list {
-                    if text_matches_phrase(&[t.to_string()], phrase) {
+                    if text_matches_phrase(std::slice::from_ref(t), phrase) {
                         matched_query_tokens.insert(t.clone());
                     }
                 }
@@ -204,7 +204,7 @@ fn score_gate_name_token_signals(
     }
 
     // Trigger hints
-    let matched_trigger_hints = record
+    let matched_trigger_hints: Vec<&str> = record
         .trigger_hints
         .iter()
         .filter(|phrase| {
@@ -212,8 +212,8 @@ fn score_gate_name_token_signals(
                 && !common_route_stop_tokens().contains(&phrase.as_str())
                 && text_matches_phrase(query_token_list, phrase)
         })
-        .cloned()
-        .collect::<Vec<_>>();
+        .map(|s| s.as_str())
+        .collect();
     if !matched_trigger_hints.is_empty() {
         delta += (matched_trigger_hints.len() as f64) * w.trigger_hint_per_match;
         reasons.push(format!(
@@ -224,7 +224,7 @@ fn score_gate_name_token_signals(
             let ptokens = tokenize_route_text(phrase);
             if ptokens.len() == 1 {
                 for t in query_token_list {
-                    if text_matches_phrase(&[t.to_string()], phrase) {
+                    if text_matches_phrase(std::slice::from_ref(t), phrase) {
                         matched_query_tokens.insert(t.clone());
                     }
                 }
@@ -245,11 +245,11 @@ fn score_metadata_trigger_signals(
     w: &ScoringWeights,
 ) -> (f64, Vec<String>, HashSet<String>) {
     let mut delta = 0.0f64;
-    let mut reasons = Vec::new();
+    let mut reasons = Vec::with_capacity(3);
     let mut matched_query_tokens: HashSet<String> = HashSet::new();
 
     // Metadata positive triggers
-    let matched_metadata_triggers = record
+    let matched_metadata_triggers: Vec<&str> = record
         .metadata_positive_triggers
         .iter()
         .filter(|phrase| {
@@ -257,8 +257,8 @@ fn score_metadata_trigger_signals(
                 && !common_route_stop_tokens().contains(&phrase.as_str())
                 && text_matches_phrase(query_token_list, phrase)
         })
-        .cloned()
-        .collect::<Vec<_>>();
+        .map(|s| s.as_str())
+        .collect();
     if !matched_metadata_triggers.is_empty() {
         delta += (matched_metadata_triggers.len() as f64) * w.metadata_trigger_per_match;
         reasons.push(format!(
@@ -269,7 +269,7 @@ fn score_metadata_trigger_signals(
             let ptokens = tokenize_route_text(phrase);
             if ptokens.len() == 1 {
                 for t in query_token_list {
-                    if text_matches_phrase(&[t.to_string()], phrase) {
+                    if text_matches_phrase(std::slice::from_ref(t), phrase) {
                         matched_query_tokens.insert(t.clone());
                     }
                 }
@@ -295,7 +295,7 @@ fn score_metadata_trigger_signals(
             shared_keywords
                 .iter()
                 .take(8)
-                .cloned()
+                .map(|s| s.as_str())
                 .collect::<Vec<_>>()
                 .join(", ")
         ));
@@ -319,7 +319,7 @@ fn score_metadata_trigger_signals(
             alias_hits
                 .iter()
                 .take(8)
-                .cloned()
+                .map(|s| s.as_str())
                 .collect::<Vec<_>>()
                 .join(", ")
         ));
@@ -342,7 +342,7 @@ fn score_session_start_signals(
     w: &ScoringWeights,
 ) -> (f64, Vec<String>) {
     let mut delta = 0.0f64;
-    let mut reasons = Vec::new();
+    let mut reasons = Vec::with_capacity(2);
 
     if first_turn && current_score > 0.0 {
         if record.session_start_lower == "required" {
@@ -531,8 +531,9 @@ pub fn score_route_candidate<'a>(
             reasons.push(format!(
                 "Do-not-use penalty applied: {}.",
                 negative_hits
-                    .into_iter()
+                    .iter()
                     .take(5)
+                    .map(|s| s.as_str())
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
@@ -574,118 +575,129 @@ pub fn score_route_candidate<'a>(
 }
 
 pub fn pick_owner<'a>(
-    candidates: Vec<RouteCandidate<'a>>,
+    mut candidates: Vec<RouteCandidate<'a>>,
     query_text: &str,
     query_token_list: &[String],
     w: &ScoringWeights,
 ) -> RouteCandidate<'a> {
-    let mut owner_candidates = candidates
-        .iter()
-        .filter(|candidate| can_be_primary_owner(candidate.record))
-        .cloned()
-        .collect::<Vec<_>>();
-    owner_candidates.sort_unstable_by(route_candidate_cmp);
-    let top_owner_score = owner_candidates
-        .first()
-        .map(|candidate| candidate.score)
-        .unwrap_or(f64::NEG_INFINITY);
-    let top_gate = candidates
-        .iter()
-        .filter(|candidate| {
-            candidate.record.owner_lower == "gate" || candidate.record.gate_lower != "none"
-        })
-        .min_by(|left, right| route_candidate_cmp(left, right))
-        .cloned();
-    if let Some(mut top_gate) = top_gate
-        .as_ref()
-        .filter(|candidate| {
-            candidate.record.slug == "agent-swarm-orchestration"
-                && candidate.score >= w.agent_swarm_candidate_threshold
-                && !has_plan_mode_owner_context(query_text, query_token_list)
-                && !has_systematic_debug_context(query_text, query_token_list)
-        })
-        .cloned()
-    {
-        top_gate.reasons.push(
-            "Prioritized delegation gate before strong owner for broad parallel-review admission."
-                .to_string(),
-        );
-        return top_gate;
+    let n = candidates.len();
+    if n == 0 {
+        panic!("pick_owner called with empty candidates");
     }
-    if let Some(top_owner) = owner_candidates.first() {
-        if top_owner.score >= w.top_owner_score_threshold {
-            return top_owner.clone();
+
+    // Owner candidate indices
+    let mut owner_idx: Vec<usize> = (0..n)
+        .filter(|&i| can_be_primary_owner(candidates[i].record))
+        .collect();
+    owner_idx.sort_unstable_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
+
+    let top_owner_score = owner_idx
+        .first()
+        .map(|&i| candidates[i].score)
+        .unwrap_or(f64::NEG_INFINITY);
+
+    // Gate index
+    let gate_idx: Option<usize> = (0..n)
+        .filter(|&i| {
+            candidates[i].record.owner_lower == "gate"
+                || candidates[i].record.gate_lower != "none"
+        })
+        .min_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
+
+    // Agent-swarm special case
+    if let Some(idx) = gate_idx {
+        if candidates[idx].record.slug == "agent-swarm-orchestration"
+            && candidates[idx].score >= w.agent_swarm_candidate_threshold
+            && !has_plan_mode_owner_context(query_text, query_token_list)
+            && !has_systematic_debug_context(query_text, query_token_list)
+        {
+            let mut gate = candidates.swap_remove(idx);
+            gate.reasons.push(
+                "Prioritized delegation gate before strong owner for broad parallel-review admission."
+                    .to_string(),
+            );
+            return gate;
         }
     }
-    if let Some(mut top_gate) = top_gate.filter(|candidate| {
-        candidate.score >= w.gate_before_owner_threshold && candidate.score >= top_owner_score
-    }) {
-        top_gate
-            .reasons
-            .push("Prioritized via gate-before-owner precedence.".to_string());
-        return top_gate;
+
+    // Top owner above threshold
+    if let Some(&top_idx) = owner_idx.first() {
+        if candidates[top_idx].score >= w.top_owner_score_threshold {
+            return candidates.swap_remove(top_idx);
+        }
     }
-    let owner_pool = if owner_candidates.is_empty() {
-        candidates
-            .iter()
-            .filter(|candidate| !is_overlay_record(candidate.record))
-            .cloned()
-            .collect::<Vec<_>>()
+
+    // Gate before owner
+    if let Some(idx) = gate_idx {
+        if candidates[idx].score >= w.gate_before_owner_threshold
+            && candidates[idx].score >= top_owner_score
+        {
+            let mut gate = candidates.swap_remove(idx);
+            gate.reasons
+                .push("Prioritized via gate-before-owner precedence.".to_string());
+            return gate;
+        }
+    }
+
+    // Build owner-pool indices (no RouteCandidate clones)
+    let mut pool_indices: Vec<usize> = if owner_idx.is_empty() {
+        (0..candidates.len())
+            .filter(|&i| !is_overlay_record(candidates[i].record))
+            .collect()
     } else {
-        owner_candidates.clone()
-    };
-    let owner_pool = if owner_pool.is_empty() {
-        candidates
-            .iter()
-            .filter(|candidate| can_be_fallback_owner(candidate.record))
-            .cloned()
-            .collect::<Vec<_>>()
-    } else {
-        owner_pool
-    };
-    let owner_pool = if owner_pool.is_empty() {
-        candidates.clone()
-    } else {
-        owner_pool
+        owner_idx
     };
 
-    let mut layers = owner_pool
+    if pool_indices.is_empty() {
+        pool_indices = (0..candidates.len())
+            .filter(|&i| can_be_fallback_owner(candidates[i].record))
+            .collect();
+    }
+    if pool_indices.is_empty() {
+        pool_indices = (0..candidates.len()).collect();
+    }
+
+    // Layer ranking (use &str instead of cloned String)
+    let mut layers: Vec<&str> = pool_indices
         .iter()
-        .map(|candidate| candidate.record.layer.clone())
+        .map(|&i| candidates[i].record.layer.as_str())
         .collect::<HashSet<_>>()
         .into_iter()
-        .collect::<Vec<_>>();
+        .collect();
     layers.sort_unstable_by_key(|layer| layer_rank(layer));
 
     for layer in layers {
-        let mut layer_candidates = owner_pool
+        let mut layer_candidates: Vec<usize> = pool_indices
             .iter()
-            .filter(|candidate| candidate.record.layer == layer)
-            .cloned()
-            .collect::<Vec<_>>();
-        layer_candidates.sort_unstable_by(route_candidate_cmp);
-        if let Some(top) = layer_candidates.first().cloned() {
-            if top.score >= w.layer_threshold(&layer) {
-                return top;
+            .filter(|&&i| candidates[i].record.layer == layer)
+            .copied()
+            .collect();
+        layer_candidates
+            .sort_unstable_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
+        if let Some(&top) = layer_candidates.first() {
+            if candidates[top].score >= w.layer_threshold(layer) {
+                return candidates.swap_remove(top);
             }
         }
     }
 
-    let mut fallback_pool = owner_pool;
-    fallback_pool.sort_unstable_by(|left, right| {
-        layer_rank(&left.record.layer)
-            .cmp(&layer_rank(&right.record.layer))
+    // Fallback: sort pool by layer, score, priority, slug
+    let mut fallback_pool = pool_indices;
+    fallback_pool.sort_unstable_by(|&a, &b| {
+        layer_rank(&candidates[a].record.layer)
+            .cmp(&layer_rank(&candidates[b].record.layer))
             .then_with(|| {
-                finite_route_score(right.score)
-                    .partial_cmp(&finite_route_score(left.score))
+                finite_route_score(candidates[b].score)
+                    .partial_cmp(&finite_route_score(candidates[a].score))
                     .unwrap_or(Ordering::Equal)
             })
             .then_with(|| {
-                priority_rank(&left.record.priority).cmp(&priority_rank(&right.record.priority))
+                priority_rank(&candidates[a].record.priority)
+                    .cmp(&priority_rank(&candidates[b].record.priority))
             })
-            .then_with(|| left.record.slug.cmp(&right.record.slug))
+            .then_with(|| candidates[a].record.slug.cmp(&candidates[b].record.slug))
     });
-    fallback_pool.remove(0)
+    candidates.swap_remove(fallback_pool[0])
 }
 
 pub fn route_candidate_cmp(left: &RouteCandidate<'_>, right: &RouteCandidate<'_>) -> Ordering {
@@ -796,7 +808,7 @@ pub fn score_bucket(score: f64) -> String {
 
 pub fn compact_route_reasons(reasons: &[String]) -> Vec<String> {
     let mut seen = HashSet::new();
-    let mut compact = Vec::new();
+    let mut compact = Vec::with_capacity(reasons.len().min(6));
     for reason in reasons {
         let normalized = normalize_text(reason);
         if normalized.is_empty() || !seen.insert(normalized) {
@@ -954,5 +966,53 @@ mod framework_review_overlay_typo_tests {
             !has_framework_review_overlay_context(q, &tokens),
             "`skill` keyword alone must not imply framework-overlay surface without routing/harness/hook cues"
         );
+    }
+}
+
+#[cfg(test)]
+mod snapshot_scoring_edge_cases {
+    use super::*;
+    use crate::route::load_records;
+    use crate::route::scoring_config::scoring_weights;
+    use std::path::PathBuf;
+
+    #[test]
+    fn snapshot_scoring_empty_query() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let w = scoring_weights();
+        let tokens = tokenize_route_text("");
+        let set: HashSet<String> = tokens.iter().cloned().collect();
+        let results: Vec<_> = records
+            .iter()
+            .map(|r| {
+                let s = score_route_candidate(r, "", &tokens, &set, true, w);
+                (r.slug.clone(), s.score)
+            })
+            .filter(|(_, score)| *score > 0.0)
+            .collect();
+        insta::assert_json_snapshot!("scoring_empty_query", results);
+    }
+
+    #[test]
+    fn snapshot_scoring_chinese_query() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let w = scoring_weights();
+        let q = "帮我写一个单元测试覆盖边界情况";
+        let tokens = tokenize_route_text(q);
+        let set: HashSet<String> = tokens.iter().cloned().collect();
+        let mut scores: Vec<_> = records
+            .iter()
+            .map(|r| {
+                let s = score_route_candidate(r, q, &tokens, &set, true, w);
+                (r.slug.clone(), s.score, s.reasons)
+            })
+            .filter(|(_, score, _)| *score > 0.0)
+            .collect();
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        insta::assert_json_snapshot!("scoring_chinese_query", scores.into_iter().take(3).collect::<Vec<_>>());
     }
 }

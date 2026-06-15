@@ -2,51 +2,41 @@
 module: runtime-core
 lines: ~14000
 layer: B1
-last_verified: "2026-06-13"
+last_verified: "2026-06-15"
 ---
 
-# runtime-core（B1 层）
+# runtime-core（B1 层 — facade crate）
 
-框架运行时核心 crate，包含 CLI、框架运行时、会话管理、closeout 强制、RFV 循环等。
+框架运行时核心 facade crate（v7 拆分后保留 ~14K 行），包含 CLI、RFV 循环、framework_runtime 子模块、维护命令等。提取的子 crate 见新 crate 文档。
 
 ## 职责
 
-提供框架运行时的完整执行引擎：CLI 解析、命令分发、会话监督、closeout 评估、evidence 管理。
+提供框架运行时的完整执行引擎（facade）：CLI 解析、命令分发、RFV 循环、closeout 评估、evidence 管理。从 v6.5 的 ~38K 行拆分为 facade + 4 个子 crate（`framework-runtime`、`session-supervisor`、`runtime-storage`、`trace-runtime`）。
 
 ## 顶层模块索引
 
 | 模块 | 行数 | 功能 |
 |------|------|------|
-| **`framework_runtime/`** | 12,100+ | **核心运行时**（详见 [runtime-core-framework-runtime.md](runtime-core-framework-runtime.md)） |
-| `session_supervisor/` | 2,443 | 会话监督器（driver/worker/process/evolution_idle） |
-| `runtime_storage/` | 3,252 | 存储后端（filesystem/sqlite/operation/paths） |
-| `closeout_enforcement` | 1,119 | closeout 记录评估与强制执行 |
-| `execution_contract` | 1,121 | 执行契约（前置/后置条件验证） |
+| **`framework_runtime/`** | 5,700+ | **核心运行时**（stdin dispatch、doctor、session artifacts、alias 等） |
+| `cli/` | 973 | CLI 参数解析与分发 |
 | `rfv_loop` | 1,800 | RFV（Review-Fix-Verify）循环完整实现 |
 | `framework_maint` | 1,808 | 框架维护 CLI 子命令 |
-| `background_state/` | 1,895 | 后台任务状态管理 |
-| `cli/` | 973 | CLI 参数解析与分发 |
 | `stdio_transport` | 868 | stdio 传输层 |
-| `trace_runtime` | 858 | 运行时 trace 管道 |
-| `web_fetch_guard` | 422 | web fetch URL SSRF 防护 |
-| `paper_adversarial_hook` | 412 | 论文对抗性审查 hook |
-| `eval_route` | 446 | 评估路由 |
-| `router_env_flags` | 454 | `ROUTER_RS_*` 环境变量标志 |
-| `session_call_tracker` | 391 | 会话调用跟踪 |
-| `harness_operator_nudges` | 351 | harness 操作员提示 |
-| `harness_contract` | 336 | harness 契约 |
-| `router_rs_observation` | 325 | router-rs 观测数据附加/剥离 |
-| `framework_skills` | 314 | 框架 skill 管理 |
-| `telemetry_emit` | 280 | 遥测发射 |
-| `hook_observation_rules` | 275 | hook 观测规则 |
-| `paper_prose_hook` | 240 | 论文散文质量 hook |
-| `harness_context_signals` | 205 | harness 上下文信号 |
+| `codegraph_mcp/` | — | codegraph MCP 薄壳 |
 | `schema_drift` | 617 | Schema 版本漂移检测 |
 | `route/` | 703 | 路由元数据 |
-| `hook_event_routing` | 81 | hook 事件路由 |
-| `hook_outbound_protect` | 133 | hook 出站保护 |
-| `hook_timing` | 116 | hook 时序记录 |
-| `mcp_pre_guard` | 111 | MCP 预守卫 |
+| + 其余模块（~2K 行合计） |
+
+### 提取的子 crate（v7）
+
+| crate | 位置 | 行数 | 对应 runtime-core 原模块 |
+|-------|------|------|--------------------------|
+| **framework-runtime** | `core/framework-runtime/` | ~5K | `closeout_enforcement.rs`, `execution_contract.rs`, `pre_tool_use_guard.rs`, `runtime_view.rs`, `trace_stream_io.rs`, `trace_attach.rs`, `trace_transport.rs`, `live_execute.rs`, `sandbox_control.rs`, `evolution_observer.rs` |
+| **session-supervisor** | `core/session-supervisor/` | ~5K | `session_supervisor/`（driver/worker/runtime/process/evolution_idle） |
+| **runtime-storage** | `core/runtime-storage/` | ~8K | `runtime_storage/`, `background_state/` |
+| **trace-runtime** | `core/trace-runtime/` | ~1K | `trace_runtime.rs` |
+
+## 安全/防护机制
 
 ## 安全/防护机制
 
@@ -65,10 +55,13 @@ last_verified: "2026-06-13"
 
 - v6.5: `framework_host_targets` 迁移至 `framework-kernel`，通过 `pub use` 保持兼容
 - v6.5: 新增 `mod_tests.rs`（evidence lock order、resolve_repo_root、truncate_utf8 测试）
+- v7: 拆分为 facade（~14K）+ 4 个子 crate：`framework-runtime`、`session-supervisor`、`runtime-storage`、`trace-runtime`
+- v7: `closeout_enforcement.rs`、`execution_contract.rs`、`pre_tool_use_guard.rs`、`runtime_view.rs` 等移至 `core/framework-runtime/`
+- v7: `background_state/` 移至 `core/runtime-storage/`
+- v7: `session_supervisor/`（driver/worker/runtime/process/evolution_idle）移至 `core/session-supervisor/`
+- v7: `trace_runtime.rs` 移至 `core/trace-runtime/`
 
 ## 已知技术债
 
-- `framework_runtime/` 子模块 12,000+ 行，是仓库最大单一模块
-- `is_terminal` 函数在 `mod.rs` 和 `runtime_view.rs` 中重复定义
+- `framework_runtime/` 子模块 ~5,700 行（提取后缩减，仍为较大模块）
 - `paper_adversarial_hook` 和 `paper_prose_hook` 在文档中未描述
-- `harness_operator_nudges` 和 `hook_observation_rules` 在 AGENTS.md 中无对应描述

@@ -1224,4 +1224,73 @@ mod tests {
         assert_eq!(r1, r2);
         assert!(r1.is_some());
     }
+
+    #[tokio::test]
+    async fn hook_policy_evaluate_concurrent_requests() {
+        let handles: Vec<_> = (0..5)
+            .map(|i| {
+                tokio::spawn(async move {
+                    let request = HookPolicyEvaluateRequest {
+                        operation: "mcp-tool-safety".to_string(),
+                        command: None,
+                        path: None,
+                        repo_root: None,
+                        runtime_root: None,
+                        tool_name: Some(format!("test-tool-{i}")),
+                        tool_args: Some(json!({"prompt": "hello"})),
+                    };
+                    evaluate_hook_policy(request).unwrap()
+                })
+            })
+            .collect();
+        for handle in handles {
+            let response = handle.await.unwrap();
+            assert!(!response.blocked);
+        }
+    }
+
+    #[tokio::test]
+    async fn hook_policy_evaluate_concurrent_safety_tools() {
+        let tool_names = ["list-directory", "read-file", "bash", "write-file", "web-fetch"];
+        let handles: Vec<_> = tool_names
+            .iter()
+            .map(|name| {
+                let n = name.to_string();
+                tokio::spawn(async move {
+                    let request = HookPolicyEvaluateRequest {
+                        operation: "mcp-tool-safety".to_string(),
+                        command: None,
+                        path: None,
+                        repo_root: None,
+                        runtime_root: None,
+                        tool_name: Some(n),
+                        tool_args: Some(json!({"prompt": "hello world"})),
+                    };
+                    evaluate_hook_policy(request).unwrap()
+                })
+            })
+            .collect();
+        for handle in handles {
+            let response = handle.await.unwrap();
+            assert!(!response.blocked);
+        }
+    }
+
+    #[tokio::test]
+    async fn hook_policy_handles_safe_bash_args() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "mcp-tool-safety".to_string(),
+            command: Some("echo hello".to_string()),
+            path: None,
+            repo_root: None,
+            runtime_root: None,
+            tool_name: Some("bash".to_string()),
+            tool_args: Some(json!({"command": "echo hello"})),
+        };
+        let response = tokio::task::spawn_blocking(move || evaluate_hook_policy(request))
+            .await
+            .expect("spawn_blocking")
+            .expect("evaluate_hook_policy");
+        assert!(!response.blocked);
+    }
 }

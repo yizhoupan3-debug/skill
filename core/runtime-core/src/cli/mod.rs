@@ -3,6 +3,7 @@
 pub mod args;
 pub mod common;
 mod dispatch;
+pub mod router_command_dispatch;
 pub mod runtime_ops;
 
 pub use common::{
@@ -20,6 +21,7 @@ pub use crate::framework_runtime::stdio_op_registry::{
     is_trace_stdio_op,
 };
 
+#[tracing::instrument(name = "router-rs", skip_all, ret)]
 pub fn run(args: &args::Cli) -> Result<(), String> {
     crate::kernel_bootstrap::ensure_kernel_bootstrap();
     configure_compute_parallelism(args.compute_threads)?;

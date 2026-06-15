@@ -53,6 +53,7 @@ const DEFAULT_TRACE_SERVICE_AUTHORITY: &str = "rust-runtime-control-plane";
 const DEFAULT_TRACE_SERVICE_ROLE: &str = "trace-and-handoff";
 const DEFAULT_TRACE_SERVICE_PROJECTION: &str = "rust-native-projection";
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn digest_after_append_text(
     path: &Path,
     backend: &ResolvedStorageBackend,
@@ -135,6 +136,7 @@ pub fn apply_read_limits(
     (limited, truncated)
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn storage_artifact_exists(
     path: &Path,
     storage_backend: Option<&ResolvedStorageBackend>,
@@ -155,6 +157,7 @@ pub fn storage_artifact_exists(
     }
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn storage_read_text(
     path: &Path,
     storage_backend: Option<&ResolvedStorageBackend>,
@@ -181,6 +184,7 @@ pub fn storage_read_text(
     }
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStorageBackend> {
     if paths.is_empty() {
         return None;
@@ -283,6 +287,7 @@ pub fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStorageBacke
     None
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn resolve_runtime_storage_backend(
     request: &RuntimeStorageRequestPayload,
     constrained_storage_root: &Path,
@@ -331,6 +336,7 @@ pub fn resolve_runtime_storage_backend(
     }
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn runtime_storage_operation(
     request: RuntimeStorageRequestPayload,
 ) -> Result<RuntimeStorageResponsePayload, String> {
@@ -571,6 +577,7 @@ fn build_service_projection_for_backend(
     })
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn build_checkpoint_control_plane_compiler_payload(payload: Value) -> Result<Value, String> {
     let control_plane_descriptor = payload.get("control_plane_descriptor");
     let paths = payload

@@ -83,11 +83,19 @@ fn find_chrome_binary() -> Result<PathBuf, Value> {
         })
 }
 
-fn allocate_debug_port() -> u16 {
-    // 绑定端口 0 让 OS 分配可用端口，立即释放后返回
-    TcpListener::bind("127.0.0.1:0")
-        .map(|listener| listener.local_addr().map(|addr| addr.port()).unwrap_or(9222))
-        .unwrap_or(9222)
+fn allocate_debug_port() -> Result<(u16, TcpListener), Value> {
+    match TcpListener::bind("127.0.0.1:0") {
+        Ok(listener) => {
+            let port = listener.local_addr().map(|addr| addr.port()).unwrap_or(9222);
+            Ok((port, listener))
+        }
+        Err(err) => Err(browser_error(
+            "BROWSER_LAUNCH_FAILED",
+            &format!("Failed to allocate debug port: {err}"),
+            &["check system network resources"],
+            false,
+        )),
+    }
 }
 
 fn summary_expression() -> &'static str {

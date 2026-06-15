@@ -6,6 +6,7 @@
 use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
 };
+use serde_json::Value;
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OpencodeHostProvider;
@@ -41,6 +42,18 @@ impl HostTelemetry for OpencodeHostProvider {
 
     fn observation_host_id(&self) -> Option<&'static str> {
         Some("opencode")
+    }
+
+    fn extract_observation_surfaces(&self, output: &Value) -> (Option<String>, Option<String>) {
+        let followup = output
+            .get("followup_message")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string());
+        let additional = output
+            .get("additional_context")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string());
+        (followup, additional)
     }
 }
 

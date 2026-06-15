@@ -5,12 +5,14 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn env_checkpoint_storage_db_path() -> Option<PathBuf> {
     std::env::var("CODEX_AGNO_CHECKPOINT_STORAGE_DB_FILE")
         .ok()
         .and_then(|value| normalize_runtime_path(&value).ok())
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn runtime_storage_db_name_candidates() -> Vec<String> {
     let mut ordered = Vec::new();
     let mut seen = HashSet::new();
@@ -28,6 +30,7 @@ pub fn runtime_storage_db_name_candidates() -> Vec<String> {
     ordered
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>, String> {
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -59,6 +62,7 @@ pub fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>, String>
     })
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn ensure_runtime_storage_sqlite_schema(conn: &Connection) -> Result<(), String> {
     conn.execute(
         &format!(
@@ -70,6 +74,7 @@ pub fn ensure_runtime_storage_sqlite_schema(conn: &Connection) -> Result<(), Str
     Ok(())
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn sqlite_lookup_key(path: &Path, storage_root: &Path) -> Result<String, String> {
     let resolved_path = normalize_runtime_path(&path.display().to_string())?;
     let resolved_root = normalize_runtime_path(&storage_root.display().to_string())?;
@@ -102,6 +107,7 @@ const SQLITE_APPEND_SQL: &str =
      ON CONFLICT(payload_key) DO UPDATE
      SET payload_text = runtime_storage_payloads.payload_text || excluded.payload_text";
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn sqlite_payload_exists(
     path: &Path,
     db_path: &Path,
@@ -120,6 +126,7 @@ pub fn sqlite_payload_exists(
     Ok(exists)
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn sqlite_read_text(
     path: &Path,
     db_path: &Path,
@@ -134,6 +141,7 @@ pub fn sqlite_read_text(
         .map_err(|err| format!("read sqlite payload failed for {}: {err}", path.display()))
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn sqlite_write_text(
     path: &Path,
     db_path: &Path,
@@ -155,6 +163,7 @@ pub fn sqlite_write_text(
     Ok(())
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 pub fn sqlite_append_text(
     path: &Path,
     db_path: &Path,

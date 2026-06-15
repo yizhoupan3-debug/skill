@@ -1,0 +1,5 @@
+---
+source: core/routing-engine/src/route/scoring.rs
+expression: "scores.into_iter().take(3).collect::<Vec<_>>()"
+---
+[]

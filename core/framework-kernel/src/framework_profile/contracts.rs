@@ -17,16 +17,6 @@ fn repo_scan_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn value_to_string(value: &Value) -> String {
-    match value {
-        Value::String(text) => text.clone(),
-        Value::Number(number) => number.to_string(),
-        Value::Bool(raw) => raw.to_string(),
-        Value::Null => String::new(),
-        other => other.to_string(),
-    }
-}
-
 fn value_object<const N: usize>(pairs: [(&str, Value); N]) -> Value {
     let mut object = Map::new();
     for (key, value) in pairs {
@@ -93,25 +83,27 @@ pub fn build_host_alias_entrypoints(host_key: &str) -> Value {
         .join("configs")
         .join("framework")
         .join("RUNTIME_REGISTRY.json");
-    let aliases = fs::read_to_string(&registry_path)
+    let registry_value: Option<Value> = fs::read_to_string(&registry_path)
         .ok()
-        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-        .and_then(|payload| payload.get("framework_commands").cloned())
-        .and_then(|aliases| aliases.as_object().cloned());
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
+    let aliases = registry_value
+        .as_ref()
+        .and_then(|payload| payload.get("framework_commands"))
+        .and_then(|aliases| aliases.as_object());
     let mut entrypoints = Map::new();
     if let Some(aliases) = aliases {
-        let mut alias_names = aliases.keys().cloned().collect::<Vec<_>>();
+        let mut alias_names: Vec<&String> = aliases.keys().collect();
         alias_names.sort();
         for alias_name in alias_names {
             let Some(entrypoint) = aliases
-                .get(&alias_name)
+                .get(alias_name)
                 .and_then(|record| record.get("host_entrypoints"))
                 .and_then(|host_entrypoints| host_entrypoints.get(host_key))
                 .and_then(Value::as_str)
             else {
                 continue;
             };
-            entrypoints.insert(alias_name, Value::String(entrypoint.to_string()));
+            entrypoints.insert(alias_name.clone(), Value::String(entrypoint.to_string()));
         }
     }
     Value::Object(entrypoints)

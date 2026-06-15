@@ -95,10 +95,14 @@ fn has_structured_goal_contract(text: &str) -> bool {
 }
 
 fn nonempty_inline_heading_any(text: &str, heading: &str) -> bool {
-    let pattern = format!(r"(?im)^\s*{}\s*[:：]\s*(\S.+)$", regex::escape(heading));
-    let Ok(re) = Regex::new(&pattern) else {
-        return false;
-    };
+    use std::sync::Mutex;
+    static CACHE: OnceLock<Mutex<std::collections::HashMap<String, Regex>>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    let mut map = cache.lock().expect("heading regex cache lock");
+    let re = map.entry(heading.to_string()).or_insert_with(|| {
+        let pattern = format!(r"(?im)^\s*{}\s*[:：]\s*(\S.+)$", regex::escape(heading));
+        Regex::new(&pattern).expect("invalid heading regex")
+    });
     re.captures(text)
         .and_then(|cap| cap.get(1))
         .map(|m| !m.as_str().trim().is_empty())

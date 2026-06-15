@@ -176,3 +176,38 @@ pub fn text_matches_phrase(task_tokens: &[String], phrase: &str) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn tokenize_query_is_send_safe() {
+        let text = "hello world 你好世界".to_string();
+        let result = tokio::task::spawn_blocking(move || tokenize_query(&text))
+            .await
+            .expect("spawn_blocking");
+        assert!(!result.is_empty());
+        assert!(result.contains(&"hello".to_string()));
+        assert!(result.contains(&"你好世界".to_string()));
+    }
+
+    #[tokio::test]
+    async fn token_regex_is_send_safe() {
+        let result = tokio::task::spawn_blocking(|| {
+            token_regex().is_match("hello")
+        })
+            .await
+            .expect("spawn_blocking");
+        assert!(result);
+    }
+
+    #[tokio::test]
+    async fn normalize_text_is_send_safe() {
+        let text = "Hello   World".to_string();
+        let result = tokio::task::spawn_blocking(move || normalize_text(&text))
+            .await
+            .expect("spawn_blocking");
+        assert_eq!(result, "hello world");
+    }
+}

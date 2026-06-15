@@ -1,0 +1,22 @@
+[package]
+name = "session-supervisor"
+version = "0.1.0"
+edition = "2024"
+[lints]
+workspace = true
+
+[lib]
+name = "session_supervisor"
+path = "src/lib.rs"
+
+[dependencies]
+core-state = { path = "../core-state" }
+runtime-storage = { path = "../runtime-storage" }
+chrono.workspace = true
+libc.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]

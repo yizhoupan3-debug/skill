@@ -1120,7 +1120,7 @@ impl BrowserRuntime {
             return Ok(session_id);
         }
         let chrome_path = find_chrome_binary()?;
-        let port = allocate_debug_port();
+        let (port, _keep_alive) = allocate_debug_port()?;
         let session_id = format!("sess_{:03}", self.session_counter + 1);
         self.session_counter += 1;
         let user_data_dir = std::env::temp_dir().join(format!(
@@ -1253,11 +1253,17 @@ impl BrowserRuntime {
 
     fn dispose_session(&mut self, session_id: &str) -> Result<(), Value> {
         if let Some(mut child) = self.browser_processes.remove(session_id) {
-            let _ = child.kill();
-            let _ = child.wait();
+            if let Err(e) = child.kill() {
+                tracing::warn!("failed to kill browser process for session {session_id}: {e}");
+            }
+            if let Err(e) = child.wait() {
+                tracing::warn!("failed to wait on browser process for session {session_id}: {e}");
+            }
         }
         if let Some(session) = self.sessions.remove(session_id) {
-            let _ = fs::remove_dir_all(session.user_data_dir);
+            if let Err(e) = fs::remove_dir_all(session.user_data_dir) {
+                tracing::warn!("failed to remove user data dir for session {session_id}: {e}");
+            }
         }
         Ok(())
     }

@@ -1,10 +1,10 @@
-//! 子命令薄分发壳：解析后的 `RouterCommand` → B3 `router_command_dispatch`。
+//! 子命令薄分发壳：解析后的 `RouterCommand` → `cli::router_command_dispatch`。
 
 use super::args::*;
 use super::common::{manifest_fallback_path, print_json_value, route_task_with_manifest_fallback};
 #[cfg(feature = "codegraph")]
-use crate::framework_runtime::router_command_dispatch::dispatch_codegraph_command;
-use crate::framework_runtime::router_command_dispatch::{
+use super::router_command_dispatch::dispatch_codegraph_command;
+use super::router_command_dispatch::{
     dispatch_browser_command, dispatch_closeout_command, dispatch_diagnose_command,
     dispatch_eval_command, dispatch_framework_command, dispatch_hook_policy_command,
     dispatch_host_command, dispatch_migrate_command, dispatch_schema_drift_command,
@@ -17,6 +17,7 @@ use crate::route::{
 };
 use crate::router_self;
 
+#[tracing::instrument(name = "dispatch", skip_all, ret)]
 pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
     match command {
         RouterCommand::Route(command) => {

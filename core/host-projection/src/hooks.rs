@@ -340,10 +340,10 @@ pub fn register_hook_timing(
     add_cargo: fn(u64),
     emit_line: fn(&str),
 ) {
-    MARK_HOOK_START.set(mark_start).ok();
-    ADD_LOCK_WAIT_MS.set(add_lock_wait).ok();
-    ADD_CARGO_CHECK_MS.set(add_cargo).ok();
-    EMIT_HOOK_TIMING_LINE.set(emit_line).ok();
+    let _ = MARK_HOOK_START.set(mark_start).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = ADD_LOCK_WAIT_MS.set(add_lock_wait).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = ADD_CARGO_CHECK_MS.set(add_cargo).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = EMIT_HOOK_TIMING_LINE.set(emit_line).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn mark_hook_start() {
@@ -376,9 +376,9 @@ pub fn register_telemetry(
     emit_tool_call: fn(&str, u64, bool),
     hook_action: fn(Option<&Value>) -> &'static str,
 ) {
-    EMIT_HOOK_FIRED.set(emit_hook_fired).ok();
-    EMIT_TOOL_CALL.set(emit_tool_call).ok();
-    HOOK_ACTION_FROM_OPTIONAL_OUTPUT.set(hook_action).ok();
+    let _ = EMIT_HOOK_FIRED.set(emit_hook_fired).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = EMIT_TOOL_CALL.set(emit_tool_call).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = HOOK_ACTION_FROM_OPTIONAL_OUTPUT.set(hook_action).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn emit_hook_fired(hook_name: &str, action: &str) {
@@ -410,9 +410,9 @@ pub fn register_session_call_tracker(
     record: fn(&Path, &str, Option<&Value>) -> Result<(), String>,
     read_state: fn(&Path) -> Result<Value, String>,
 ) {
-    INIT_TRACKER.set(init).ok();
-    RECORD_TOOL_CALL.set(record).ok();
-    READ_TRACKER_STATE.set(read_state).ok();
+    let _ = INIT_TRACKER.set(init).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = RECORD_TOOL_CALL.set(record).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = READ_TRACKER_STATE.set(read_state).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
@@ -466,16 +466,16 @@ pub fn register_framework_runtime(
     post_tool_ok: fn(&Value) -> bool,
     closeout_followup: fn(&Path, &str) -> Option<String>,
 ) {
-    BUILD_FRAMEWORK_CONTRACT.set(build_contract).ok();
-    TRY_APPEND_POST_TOOL_SHELL.set(append_shell).ok();
-    CLOSEOUT_ENFORCEMENT.set(enforcement).ok();
-    CLOSEOUT_RECORD_PATH.set(record_path).ok();
-    EVALUATE_CLOSEOUT.set(eval_closeout).ok();
-    FIRST_TASK_ID.set(first_task).ok();
-    EVIDENCE_APPEND.set(evidence_append).ok();
-    EXTRACT_DURATION.set(extract_duration).ok();
-    POST_TOOL_SUCCEEDED.set(post_tool_ok).ok();
-    CLOSEOUT_STOP_FOLLOWUP.set(closeout_followup).ok();
+    let _ = BUILD_FRAMEWORK_CONTRACT.set(build_contract).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = TRY_APPEND_POST_TOOL_SHELL.set(append_shell).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = CLOSEOUT_ENFORCEMENT.set(enforcement).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = CLOSEOUT_RECORD_PATH.set(record_path).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = EVALUATE_CLOSEOUT.set(eval_closeout).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = FIRST_TASK_ID.set(first_task).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = EVIDENCE_APPEND.set(evidence_append).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = EXTRACT_DURATION.set(extract_duration).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = POST_TOOL_SUCCEEDED.set(post_tool_ok).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = CLOSEOUT_STOP_FOLLOWUP.set(closeout_followup).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, String> {
@@ -555,8 +555,8 @@ pub fn register_router_rs_observation(
     attach: fn(&mut Value, HookObservationHost),
     strip: fn(&mut Value),
 ) {
-    ATTACH_OBSERVATION.set(attach).ok();
-    STRIP_OBSERVATION.set(strip).ok();
+    let _ = ATTACH_OBSERVATION.set(attach).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = STRIP_OBSERVATION.set(strip).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn attach_router_rs_observation(output: &mut Value, host: HookObservationHost) {
@@ -596,8 +596,8 @@ pub fn register_hook_outbound_protect(
     is_protected: fn(&str) -> bool,
     truncate: fn(&str, usize, &str) -> String,
 ) {
-    OUTBOUND_PROTECTED.set(is_protected).ok();
-    TRUNCATE_OUTBOUND.set(truncate).ok();
+    let _ = OUTBOUND_PROTECTED.set(is_protected).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = TRUNCATE_OUTBOUND.set(truncate).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 #[cfg(test)]
@@ -630,7 +630,7 @@ static SYNTHETIC_POST_TOOL: OnceLock<fn(&Value) -> Value> = OnceLock::new();
 
 #[cfg(test)]
 pub fn register_hook_posttool_normalize(f: fn(&Value) -> Value) {
-    SYNTHETIC_POST_TOOL.set(f).ok();
+    let _ = SYNTHETIC_POST_TOOL.set(f).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 #[cfg(test)]
@@ -674,8 +674,8 @@ pub fn register_ship_readiness(
     evaluate: fn(&Path, &Value, &str) -> GoalReadiness,
     followup: fn(bool, bool, bool, u32) -> String,
 ) {
-    EVAL_GOAL_READINESS.set(evaluate).ok();
-    GOAL_STOP_FOLLOWUP.set(followup).ok();
+    let _ = EVAL_GOAL_READINESS.set(evaluate).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = GOAL_STOP_FOLLOWUP.set(followup).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 #[cfg(test)]
@@ -720,10 +720,10 @@ pub fn register_paper_hooks(
     append_adversarial: fn(&Path, &str, &mut Vec<String>, PaperProseHookHost),
     merge_adversarial: fn(&Path, &mut Value, &str, bool),
 ) {
-    APPEND_PROSE.set(append_prose).ok();
-    MERGE_PROSE.set(merge_prose).ok();
-    APPEND_ADVERSARIAL.set(append_adversarial).ok();
-    MERGE_ADVERSARIAL.set(merge_adversarial).ok();
+    let _ = APPEND_PROSE.set(append_prose).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = MERGE_PROSE.set(merge_prose).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = APPEND_ADVERSARIAL.set(append_adversarial).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = MERGE_ADVERSARIAL.set(merge_adversarial).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn maybe_append_paper_prose_context(
@@ -777,7 +777,7 @@ pub fn maybe_merge_paper_adversarial_before_submit(
 static ENSURE_KERNEL: OnceLock<fn()> = OnceLock::new();
 
 pub fn register_kernel_bootstrap(f: fn()) {
-    ENSURE_KERNEL.set(f).ok();
+    let _ = ENSURE_KERNEL.set(f).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn ensure_kernel_bootstrap() {
@@ -792,16 +792,10 @@ pub fn ensure_kernel_bootstrap() {
 // harness_operator_nudges: test-only proxy
 // ────────────────────────────────────────────────────────────────
 
-#[cfg(test)]
-static HARNESS_NUDGE_TEST_MUTEX: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
-
-/// Test-only env lock. Replaces `harness_operator_nudges::harness_nudges_env_test_lock`.
+/// Test-only env lock. Shares the same `OnceLock<Mutex<()>>` as `runtime-core` via `core-policy`.
 #[cfg(test)]
 pub fn harness_nudges_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
-    HARNESS_NUDGE_TEST_MUTEX
-        .get_or_init(|| std::sync::Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+    core_policy::test_env_sync::harness_nudges_env_test_lock()
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -1357,26 +1351,26 @@ pub fn register_framework_runtime_extra(
     closeout_record_schema_version: fn() -> &'static str,
     check_anomalies: fn(&Path) -> Result<Vec<String>, String>,
 ) {
-    RESOLVE_REPO_ROOT_ARG.set(resolve_repo_root_arg).ok();
-    CURRENT_LOCAL_TIMESTAMP.set(current_local_timestamp).ok();
-    WRITE_FRAMEWORK_SESSION_ARTIFACTS
+    let _ = RESOLVE_REPO_ROOT_ARG.set(resolve_repo_root_arg).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = CURRENT_LOCAL_TIMESTAMP.set(current_local_timestamp).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = WRITE_FRAMEWORK_SESSION_ARTIFACTS
         .set(write_framework_session_artifacts)
-        .ok();
-    ROUTE_TASK_WITH_MANIFEST_FALLBACK
+        .map_err(|_| tracing::warn!("hook already registered"));
+    let _ = ROUTE_TASK_WITH_MANIFEST_FALLBACK
         .set(route_task_with_manifest_fallback)
-        .ok();
-    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE
+        .map_err(|_| tracing::warn!("hook already registered"));
+    let _ = BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE
         .set(build_framework_runtime_snapshot_envelope)
-        .ok();
-    BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD
+        .map_err(|_| tracing::warn!("hook already registered"));
+    let _ = BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD
         .set(build_automatic_continuity_checkpoint_payload)
-        .ok();
-    APPEND_EVIDENCE_INDEX.set(append_evidence_index).ok();
-    HOOK_ACTION_FROM_OUTPUT.set(hook_action_from_output).ok();
-    CLOSEOUT_RECORD_SCHEMA_VERSION_FN
+        .map_err(|_| tracing::warn!("hook already registered"));
+    let _ = APPEND_EVIDENCE_INDEX.set(append_evidence_index).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = HOOK_ACTION_FROM_OUTPUT.set(hook_action_from_output).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = CLOSEOUT_RECORD_SCHEMA_VERSION_FN
         .set(closeout_record_schema_version)
-        .ok();
-    CHECK_ANOMALIES.set(check_anomalies).ok();
+        .map_err(|_| tracing::warn!("hook already registered"));
+    let _ = CHECK_ANOMALIES.set(check_anomalies).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn register_web_fetch_guard_extra(
@@ -1384,13 +1378,13 @@ pub fn register_web_fetch_guard_extra(
     resolve_redirect: fn(&str, &str) -> Result<String, String>,
     resolve_addresses: fn(&str, u16) -> Result<Vec<String>, String>,
 ) {
-    VALIDATE_AND_RESOLVE_WEB_FETCH_URL.set(validate_url).ok();
-    RESOLVE_WEB_FETCH_REDIRECT.set(resolve_redirect).ok();
-    RESOLVE_WEB_FETCH_ADDRESSES.set(resolve_addresses).ok();
+    let _ = VALIDATE_AND_RESOLVE_WEB_FETCH_URL.set(validate_url).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = RESOLVE_WEB_FETCH_REDIRECT.set(resolve_redirect).map_err(|_| tracing::warn!("hook already registered"));
+    let _ = RESOLVE_WEB_FETCH_ADDRESSES.set(resolve_addresses).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn register_mcp_pre_guard_extra(evaluate: fn(&str, &Value, &Path) -> McpPreGuardVerdict) {
-    EVALUATE_MCP_PRE_GUARD_SAFE.set(evaluate).ok();
+    let _ = EVALUATE_MCP_PRE_GUARD_SAFE.set(evaluate).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
@@ -1481,9 +1475,9 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
 pub fn register_build_framework_runtime_snapshot_envelope_with_level(
     func: fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>,
 ) {
-    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL
+    let _ = BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL
         .set(func)
-        .ok();
+        .map_err(|_| tracing::warn!("hook already registered"));
 }
 
 pub fn build_automatic_continuity_checkpoint_payload(
@@ -1580,7 +1574,7 @@ pub fn evaluate_mcp_pre_guard_safe(
 static RFV_LOOP_DRIVE: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
 
 pub fn register_rfv_loop_drive(func: fn(Value) -> Result<Value, String>) {
-    RFV_LOOP_DRIVE.set(func).ok();
+    let _ = RFV_LOOP_DRIVE.set(func).map_err(|_| tracing::warn!("hook already registered"));
 }
 
 /// Call the registered rfv_loop implementation (runtime-core has append_round support).

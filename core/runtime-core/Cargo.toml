@@ -18,6 +18,8 @@ framework-kernel = { path = "../framework-kernel" }
 host-projection = { path = "../host-projection" }
 routing-engine = { path = "../routing-engine" }
 runtime-storage = { path = "../runtime-storage" }
+session-supervisor = { path = "../session-supervisor" }
+trace-runtime = { path = "../trace-runtime" }
 chrono.workspace = true
 clap.workspace = true
 fs2.workspace = true
@@ -34,7 +36,8 @@ tungstenite.workspace = true
 tracing.workspace = true
 which.workspace = true
 ctor = "0.2"
-codegraph-rs = { path = "../codegraph-rs", optional = true }
+codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
+framework-runtime = { path = "../framework-runtime" }
 
 [build-dependencies]
 serde_json.workspace = true

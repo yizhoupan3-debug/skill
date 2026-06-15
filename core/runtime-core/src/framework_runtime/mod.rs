@@ -3,7 +3,7 @@ use crate::closeout_enforcement::{
     evaluate_closeout_record_value_with_context,
 };
 use chrono::{Local, SecondsFormat};
-use tracing::{debug, instrument};
+use tracing::instrument;
 use hex;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -12,31 +12,33 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 mod alias;
-mod codex_hooks_duplicate;
-mod constants;
-pub mod evolution_observer;
+pub use framework_runtime::codex_hooks_duplicate;
+pub use framework_runtime::constants;
+pub use framework_runtime::evolution_observer;
 mod framework_doctor;
-mod json_io;
-pub mod json_value;
-pub mod live_execute;
+pub use framework_runtime::io_utils;
+pub use framework_runtime::json_io;
+pub use framework_runtime::json_value;
+pub use framework_runtime::live_execute;
 pub(crate) mod orchestration_controller;
-mod pre_tool_use_guard;
+pub use framework_runtime::pre_tool_use_guard;
 mod prompt_compression;
-mod repo_roots;
+pub use framework_runtime::repo_roots;
 pub mod route_manifest_fallback;
-pub mod router_command_dispatch;
-mod runtime_view;
-pub(crate) mod sandbox_control;
+pub use framework_runtime::runtime_view;
+pub use framework_runtime::sandbox_control;
 mod session_artifacts;
 mod statusline;
 pub mod stdio_dispatch;
-pub mod stdio_op_registry;
-pub mod trace_attach;
-pub mod trace_stream_io;
-pub mod trace_transport;
-mod types;
+pub use framework_runtime::stdio_op_registry;
+pub use framework_runtime::trace_attach;
+pub use framework_runtime::trace_stream_io;
+pub use framework_runtime::trace_transport;
+pub use framework_runtime::types;
 
 use json_io::{read_json_strict, read_text_if_exists};
+// Re-export json_io functions needed by cli/common.rs (cycle-breaking extraction).
+pub use json_io::{parse_json_input, print_json_value};
 use json_value::{
     first_nonempty, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,
     value_string_list, value_text,

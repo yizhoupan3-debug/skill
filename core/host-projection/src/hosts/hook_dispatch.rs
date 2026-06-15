@@ -474,9 +474,7 @@ fn extract_cwd_from_payload(event: &Value) -> Option<String> {
 
 /// Session key hash helper (delegates to core-policy crypto_util).
 pub fn short_hash_for_session(input: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let hash = Sha256::digest(input.as_bytes());
-    hash[..16].iter().map(|b| format!("{b:02x}")).collect()
+    core_policy::crypto_util::short_hash(input)
 }
 
 /// Check if a shell command is a verification/test command.
