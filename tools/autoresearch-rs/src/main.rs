@@ -7,6 +7,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::LazyLock;
 
+mod arg_impls;
 mod cli;
 use cli::*;
 mod helpers;
@@ -28,7 +29,7 @@ const STAGE_FINALIZE: &str = "finalize";
 const STALE_STATE_DAYS: i64 = 10;
 const RECENT_ACTIVITY_DAYS: i64 = 14;
 const FALLBACK_ACTIVITY_LIMIT: usize = 3;
-const TEMPLATES_RELATIVE: &str = "core/autoresearch-rs/templates";
+const TEMPLATES_RELATIVE: &str = "tools/autoresearch-rs/templates";
 const DEFAULT_RESEARCH_RESULT_LIMIT: usize = 5;
 const DEFAULT_EXTERNAL_TIMEOUT_SECS: u64 = 20;
 const SEMANTIC_SCHOLAR_BASE_URL: &str = "https://api.semanticscholar.org/graph/v1/paper/search";
@@ -697,98 +698,6 @@ fn main() -> Result<()> {
         }
     }
     Ok(())
-}
-
-impl ModeArg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            ModeArg::Quick => "quick",
-            ModeArg::Full => "full",
-        }
-    }
-}
-
-impl PriorityArg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            PriorityArg::High => "high",
-            PriorityArg::Medium => "medium",
-            PriorityArg::Low => "low",
-        }
-    }
-}
-
-impl OutcomeArg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            OutcomeArg::Confirmatory => "confirmatory",
-            OutcomeArg::Exploratory => "exploratory",
-            OutcomeArg::Failed => "failed",
-            OutcomeArg::Ambiguous => "ambiguous",
-        }
-    }
-}
-
-impl DirectionArg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            DirectionArg::Deepen => "DEEPEN",
-            DirectionArg::Broaden => "BROADEN",
-            DirectionArg::Pivot => "PIVOT",
-            DirectionArg::Conclude => "CONCLUDE",
-        }
-    }
-}
-
-impl GateStatusArg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            GateStatusArg::Pending => "pending",
-            GateStatusArg::Passed => "passed",
-            GateStatusArg::Pivot => "pivot",
-        }
-    }
-}
-
-impl ExternalSourceArg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            ExternalSourceArg::All => "all",
-            ExternalSourceArg::SemanticScholar => "semantic-scholar",
-            ExternalSourceArg::Arxiv => "arxiv",
-        }
-    }
-}
-
-impl OverlapArg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            OverlapArg::Low => "low",
-            OverlapArg::Medium => "medium",
-            OverlapArg::High => "high",
-        }
-    }
-}
-
-impl ConfidenceArg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            ConfidenceArg::Low => "low",
-            ConfidenceArg::Medium => "medium",
-            ConfidenceArg::High => "high",
-        }
-    }
-}
-
-impl VerdictArg {
-    fn as_str(&self) -> &'static str {
-        match self {
-            VerdictArg::Novel => "novel",
-            VerdictArg::Defensible => "defensible",
-            VerdictArg::Risky => "risky",
-            VerdictArg::NotNovel => "not-novel",
-        }
-    }
 }
 
 fn default_state(project: &str, question: &str, mode: &str) -> Value {

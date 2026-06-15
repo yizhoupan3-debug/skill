@@ -19,11 +19,11 @@ jobs:
 
       - name: Run evolution audit
         run: |
-          cargo run --manifest-path core/evolution-rs/Cargo.toml -- manifest \
+          cargo run --manifest-path tools/evolution-rs/Cargo.toml -- manifest \
             --journal skills/.evolution_journal.jsonl \
             --manifest skills/SKILL_MANIFEST.json \
             > skills/SKILL_HEALTH_MANIFEST.json
-          cargo run --manifest-path core/evolution-rs/Cargo.toml -- audit \
+          cargo run --manifest-path tools/evolution-rs/Cargo.toml -- audit \
             --journal skills/.evolution_journal.jsonl \
             --manifest skills/SKILL_MANIFEST.json \
             --json > /tmp/audit.json

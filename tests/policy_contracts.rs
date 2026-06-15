@@ -2170,7 +2170,7 @@ fn framework_runtime_python_package_stays_removed() {
 fn autoresearch_runtime_controller_stays_without_legacy_skill_entrypoint() {
     assert!(
         project_root()
-            .join("core/autoresearch-rs/src/main.rs")
+            .join("tools/autoresearch-rs/src/main.rs")
             .exists()
     );
     assert!(!project_root().join("skills/autoresearch").exists());

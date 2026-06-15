@@ -53,7 +53,7 @@ version: unified-v7
 
 ### 3.2 codegraph-rs — 代码知识图谱
 
-**功能**：基于 tree-sitter 的代码图谱构建与查询，支持 Rust/TypeScript/JavaScript/Python/Go。入口：`core/codegraph-rs/src/lib.rs`；增量同步与 watcher：`graph/sync.rs`；MCP 薄壳分发：`core/runtime-core/src/codegraph_mcp/mod.rs`。
+**功能**：基于 tree-sitter 的代码图谱构建与查询，支持 Rust/TypeScript/JavaScript/Python/Go。入口：`tools/codegraph-rs/src/lib.rs`；增量同步与 watcher：`graph/sync.rs`；MCP 薄壳分发：`core/runtime-core/src/codegraph_mcp/mod.rs`。
 
 | 模块 | 功能 | 核心 API |
 |------|------|----------|

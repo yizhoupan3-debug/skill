@@ -6,6 +6,7 @@ use reqwest::blocking::Client;
 use reqwest::header::{ACCEPT, USER_AGENT};
 use serde_json::{Value, json};
 use std::collections::HashSet;
+use std::sync::OnceLock;
 use std::time::Duration;
 use uuid::Uuid;
 
@@ -596,10 +597,13 @@ pub(super) fn format_gate_recommendation(recommendation: &Value) -> String {
 
 pub(super) fn cleanup_question_text(question: &str) -> String {
     let trimmed = question.trim().trim_end_matches(['?', '.', '!']);
-    let re = Regex::new(
-        r"(?i)^(can|could|does|do|did|is|are|should|would|will|how|why|what|whether)\s+",
-    )
-    .unwrap();
+    static CLEANUP_RE: OnceLock<Regex> = OnceLock::new();
+    let re = CLEANUP_RE.get_or_init(|| {
+        Regex::new(
+            r"(?i)^(can|could|does|do|did|is|are|should|would|will|how|why|what|whether)\s+",
+        )
+        .unwrap()
+    });
     let cleaned = re.replace(trimmed, "").trim().to_string();
     if cleaned.is_empty() {
         question.trim().to_string()
@@ -614,16 +618,20 @@ pub(super) fn extract_question_parts(question: &str) -> (String, String, String)
     let mut focus = cleaned.clone();
     let mut target = "the stated task or setting".to_string();
     let mut effect = "a meaningful measurable improvement".to_string();
-    let main_re = Regex::new(
-        r"(.+?)\s+(improve|improves|reduce|reduces|increase|increases|enable|enables)\s+(.+)",
-    )
-    .unwrap();
+    static MAIN_RE: OnceLock<Regex> = OnceLock::new();
+    let main_re = MAIN_RE.get_or_init(|| {
+        Regex::new(
+            r"(.+?)\s+(improve|improves|reduce|reduces|increase|increases|enable|enables)\s+(.+)",
+        )
+        .unwrap()
+    });
     if let Some(caps) = main_re.captures(&lowered) {
         focus = caps[1].trim().to_string();
         target = caps[3].trim().to_string();
         effect = format!("{} {}", caps[2].trim(), caps[3].trim());
     } else {
-        let using_re = Regex::new(r"using\s+(.+?)\s+for\s+(.+)").unwrap();
+        static USING_RE: OnceLock<Regex> = OnceLock::new();
+        let using_re = USING_RE.get_or_init(|| Regex::new(r"using\s+(.+?)\s+for\s+(.+)").unwrap());
         if let Some(caps) = using_re.captures(&lowered) {
             focus = caps[1].trim().to_string();
             target = caps[2].trim().to_string();

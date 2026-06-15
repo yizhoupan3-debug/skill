@@ -23,12 +23,13 @@ members = [
     "core/router-rs",
     "core/runtime-storage",
     "core/runtime-core",
+    "core/trace-runtime",
     "core/browser-mcp",
     "core/host-projection",
-    "core/autoresearch-rs",
-    "core/evolution-rs",
-    "core/codegraph-rs"
-, "tron-search"]
+    "tools/autoresearch-rs",
+    "tools/evolution-rs",
+    "tools/codegraph-rs",
+    "tron-search"]
 exclude = [
     "codex-aggregator"
 ]

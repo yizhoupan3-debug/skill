@@ -7,7 +7,7 @@ plate: B11
 
 ## 职责
 
-自进化离线分析：**零 crate 级依赖**于 B0/B1/B3；通过 mmap 读取遥测 JSONL。独立 crate：`core/evolution-rs/`。
+自进化离线分析：**零 crate 级依赖**于 B0/B1/B3；通过 mmap 读取遥测 JSONL。独立 crate：`tools/evolution-rs/`。
 
 数据管道：B0 **TelemetryWriter** → journal → `evolution-rs analyze|audit`。
 
@@ -17,8 +17,8 @@ plate: B11
 # 配置真源
 # configs/evolution/evolution.toml
 
-cargo run --manifest-path core/evolution-rs/Cargo.toml -- analyze --help
-cargo run --manifest-path core/evolution-rs/Cargo.toml -- audit --config configs/evolution/evolution.toml
+cargo run --manifest-path tools/evolution-rs/Cargo.toml -- analyze --help
+cargo run --manifest-path tools/evolution-rs/Cargo.toml -- audit --config configs/evolution/evolution.toml
 
 # 环境变量
 export EVOLUTION_RS_CONFIG=configs/evolution/evolution.toml
@@ -39,7 +39,7 @@ Hook 细粒度：`ROUTER_RS_HOOK_TIMING=1` → `HookFired` + timing 字段进 jo
 
 ## 相关路径
 
-- `core/evolution-rs/`
+- `tools/evolution-rs/`
 - `configs/evolution/evolution.toml`
 - `artifacts/telemetry/`（events.jsonl 等，以 runtime 为准）
 - `core/runtime-core/src/session_supervisor/evolution_idle.rs`

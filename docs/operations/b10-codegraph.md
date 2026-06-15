@@ -7,7 +7,7 @@ plate: B10
 
 ## 职责
 
-代码图谱索引与查询：独立 crate `core/codegraph-rs/`，经 `router-rs` 薄壳 `codegraph_mcp` 暴露 **六工具** MCP（`mcp-codegraph`）。能力：search / callers / callees / impact / node / status。
+代码图谱索引与查询：独立 crate `tools/codegraph-rs/`，经 `router-rs` 薄壳 `codegraph_mcp` 暴露 **六工具** MCP（`mcp-codegraph`）。能力：search / callers / callees / impact / node / status。
 
 ## 启动 / 配置
 
@@ -43,6 +43,6 @@ Skill 集成（CG-5）：`planx` / `implementx` / `verifyx` / `code-review-deep`
 
 ## 相关路径
 
-- `core/codegraph-rs/`
+- `tools/codegraph-rs/`
 - `core/runtime-core/src/codegraph_mcp/`
 - `configs/framework/RUNTIME_REGISTRY.json` → `mcp-codegraph`

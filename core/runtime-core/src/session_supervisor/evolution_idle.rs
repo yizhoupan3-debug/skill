@@ -122,7 +122,7 @@ fn spawn_evolution_analyze(repo_cwd: &Path) -> Result<u32, String> {
             "run",
             "--quiet",
             "--manifest-path",
-            "core/evolution-rs/Cargo.toml",
+            "tools/evolution-rs/Cargo.toml",
             "--",
             "analyze",
             "--journal",

@@ -715,7 +715,7 @@ mod tests {
         fs::create_dir_all(&project_root).unwrap();
         write_test_file(
             &framework_root.join("Cargo.toml"),
-            "[workspace]\nmembers = [\"core/codegraph-rs\"]\n",
+            "[workspace]\nmembers = [\"tools/codegraph-rs\"]\n",
         );
 
         let roots = ResolvedProjectionRoots {

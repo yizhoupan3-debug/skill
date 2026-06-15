@@ -10,6 +10,7 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 use uuid::Uuid;
 
 use crate::*;
@@ -84,12 +85,14 @@ pub(super) fn replace_placeholders(template: &str, pairs: &[(&str, &str)]) -> St
 
 pub(super) fn slugify(text: &str) -> String {
     let lowered = text.trim().to_lowercase();
-    let cleaned = Regex::new(r"[^a-z0-9]+")
-        .unwrap()
+    static NON_ALNUM: OnceLock<Regex> = OnceLock::new();
+    let cleaned = NON_ALNUM
+        .get_or_init(|| Regex::new(r"[^a-z0-9]+").unwrap())
         .replace_all(&lowered, "-")
         .to_string();
-    let collapsed = Regex::new(r"-+")
-        .unwrap()
+    static MULTI_DASH: OnceLock<Regex> = OnceLock::new();
+    let collapsed = MULTI_DASH
+        .get_or_init(|| Regex::new(r"-+").unwrap())
         .replace_all(&cleaned, "-")
         .trim_matches('-')
         .to_string();
@@ -741,7 +744,8 @@ pub(super) fn stopwords() -> HashSet<&'static str> {
 }
 
 pub(super) fn compact_words(text: &str, limit: usize) -> Vec<String> {
-    let re = Regex::new(r"[A-Za-z0-9][A-Za-z0-9_-]*").unwrap();
+    static WORD_RE: OnceLock<Regex> = OnceLock::new();
+    let re = WORD_RE.get_or_init(|| Regex::new(r"[A-Za-z0-9][A-Za-z0-9_-]*").unwrap());
     let stops = stopwords();
     let mut filtered = Vec::new();
     for cap in re.find_iter(&text.to_lowercase()) {

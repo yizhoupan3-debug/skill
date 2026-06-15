@@ -56,9 +56,9 @@ fn workspace_has_nine_core_crates() {
         "core/framework-kernel",
         "core/routing-engine",
         "core/router-rs",
-        "core/codegraph-rs",
-        "core/evolution-rs",
-        "core/autoresearch-rs",
+        "tools/codegraph-rs",
+        "tools/evolution-rs",
+        "tools/autoresearch-rs",
     ];
 
     for krate in &expected_crates {
@@ -77,9 +77,9 @@ fn leaf_crates_have_zero_workspace_deps() {
         "core/core-state",
         "core/framework-kernel",
         "core/routing-engine",
-        "core/evolution-rs",
-        "core/codegraph-rs",
-        "core/autoresearch-rs",
+        "tools/evolution-rs",
+        "tools/codegraph-rs",
+        "tools/autoresearch-rs",
     ];
 
     let workspace_core = [
@@ -152,7 +152,7 @@ fn router_rs_deps_are_correct() {
 
 #[test]
 fn b10_codegraph_rs_is_independent() {
-    let content = read_cargo_toml("core/codegraph-rs");
+    let content = read_cargo_toml("tools/codegraph-rs");
     let framework_crates = [
         "core-state",
         "core-policy",
@@ -171,7 +171,7 @@ fn b10_codegraph_rs_is_independent() {
 
 #[test]
 fn b11_evolution_rs_is_independent() {
-    let content = read_cargo_toml("core/evolution-rs");
+    let content = read_cargo_toml("tools/evolution-rs");
     let framework_crates = [
         "core-state",
         "core-policy",

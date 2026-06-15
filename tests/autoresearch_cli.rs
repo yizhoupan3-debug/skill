@@ -280,7 +280,7 @@ fn run_ctl(args: &[&str]) -> Output {
     let mut command = Command::new("cargo");
     command
         .args(["run", "--quiet", "--manifest-path"])
-        .arg(project_root().join("core/autoresearch-rs/Cargo.toml"))
+        .arg(project_root().join("tools/autoresearch-rs/Cargo.toml"))
         .arg("--")
         .args(args)
         .current_dir(project_root());
