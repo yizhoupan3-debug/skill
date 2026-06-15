@@ -9,9 +9,12 @@ pub enum CursorReviewGateMode {
     Lite,
 }
 
-/// `ROUTER_RS_CURSOR_REVIEW_GATE_MODE=lite` enables lite; unset or `strict` → strict.
+/// `ROUTER_RS_REVIEW_GATE_MODE=lite` enables lite; unset or `strict` → strict.
+/// Falls back to legacy `ROUTER_RS_CURSOR_REVIEW_GATE_MODE` for backward compat.
 pub fn cursor_review_gate_mode() -> CursorReviewGateMode {
-    match std::env::var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE") {
+    match std::env::var("ROUTER_RS_REVIEW_GATE_MODE")
+        .or_else(|_| std::env::var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"))
+    {
         Ok(v) if v.trim().eq_ignore_ascii_case("lite") => CursorReviewGateMode::Lite,
         _ => CursorReviewGateMode::Strict,
     }
