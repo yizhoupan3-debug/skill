@@ -15,7 +15,7 @@ const NL_EMBED: &str = include_str!(concat!(
 
 const EXPECTED_SCHEMA: &str = "nl-route-adjustments-v1";
 
-type NlSignalEvalFn = fn(&SkillRecord, &str, &[String], &HashSet<String>) -> bool;
+type NlSignalEvalFn = fn(&SkillRecord, &str, &[String], &HashSet<&str>) -> bool;
 
 #[derive(Debug, Clone, Copy)]
 struct NlSignalEntry {
@@ -40,7 +40,7 @@ macro_rules! nl_signals {
             _record: &SkillRecord,
             query_text: &str,
             query_token_list: &[String],
-            _query_tokens: &HashSet<String>,
+            _query_tokens: &HashSet<&str>,
         ) -> bool {
             cached_signal(stringify!($inner), query_text, query_token_list, || {
                 $inner(query_text, query_token_list)
@@ -52,7 +52,7 @@ macro_rules! nl_signals {
             _record: &SkillRecord,
             query_text: &str,
             _query_token_list: &[String],
-            _query_tokens: &HashSet<String>,
+            _query_tokens: &HashSet<&str>,
         ) -> bool {
             $inner(query_text)
         }
@@ -62,7 +62,7 @@ macro_rules! nl_signals {
             record: &SkillRecord,
             _query_text: &str,
             _query_token_list: &[String],
-            _query_tokens: &HashSet<String>,
+            _query_tokens: &HashSet<&str>,
         ) -> bool {
             $inner(&record.slug)
         }
@@ -72,7 +72,7 @@ macro_rules! nl_signals {
             record: &SkillRecord,
             query_text: &str,
             query_token_list: &[String],
-            _query_tokens: &HashSet<String>,
+            _query_tokens: &HashSet<&str>,
         ) -> bool {
             $inner(record, query_text, query_token_list)
         }
@@ -492,7 +492,7 @@ fn eval_signal(
     record: &SkillRecord,
     query_text: &str,
     query_token_list: &[String],
-    query_tokens: &HashSet<String>,
+    query_tokens: &HashSet<&str>,
 ) -> bool {
     nl_registry_find(name)
         .map(|eval| (eval)(record, query_text, query_token_list, query_tokens))
@@ -504,7 +504,7 @@ fn eval_when_expr(
     record: &SkillRecord,
     query_text: &str,
     query_token_list: &[String],
-    query_tokens: &HashSet<String>,
+    query_tokens: &HashSet<&str>,
     first_turn: bool,
 ) -> bool {
     match expr {
@@ -556,7 +556,7 @@ fn apply_rule_list<'a>(
     record: &'a SkillRecord,
     query_text: &str,
     query_token_list: &[String],
-    query_tokens: &HashSet<String>,
+    query_tokens: &HashSet<&str>,
     first_turn: bool,
     score: &mut f64,
     reasons: &mut Vec<String>,
@@ -608,7 +608,7 @@ pub fn apply_nl_pre_framework_alias_rules<'a>(
     record: &'a SkillRecord,
     query_text: &str,
     query_token_list: &[String],
-    query_tokens: &HashSet<String>,
+    query_tokens: &HashSet<&str>,
     first_turn: bool,
     score: &mut f64,
     reasons: &mut Vec<String>,
@@ -629,7 +629,7 @@ pub fn apply_nl_post_framework_alias_rules<'a>(
     record: &'a SkillRecord,
     query_text: &str,
     query_token_list: &[String],
-    query_tokens: &HashSet<String>,
+    query_tokens: &HashSet<&str>,
     first_turn: bool,
     score: &mut f64,
     reasons: &mut Vec<String>,

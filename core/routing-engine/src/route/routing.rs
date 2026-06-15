@@ -152,11 +152,11 @@ pub fn search_skills_subset(
     }
     let normalized_query = normalize_text(query);
     let query_token_list = tokenize_route_text(query);
-    let query_tokens = query_token_list
+    let query_tokens: HashSet<&str> = query_token_list
         .iter()
         .filter(|token| !common_route_stop_tokens().contains(&token.as_str()))
-        .cloned()
-        .collect::<HashSet<String>>();
+        .map(|s| s.as_str())
+        .collect();
     if query_tokens.is_empty() && query_token_list.is_empty() {
         return Vec::new();
     }
@@ -222,7 +222,7 @@ pub fn filter_record_indices_for_host(
     let aliases = crate::hooks::host_provider_routing_aliases(&host_id);
     let original_len = records.len();
     let mut saw_host = false;
-    let mut indices = Vec::new();
+    let mut indices = Vec::with_capacity(records.len());
     for (idx, record) in records.iter().enumerate() {
         if record.record_kind == "framework_command" {
             saw_host = true;
@@ -283,8 +283,7 @@ pub fn route_task(
         let route_context =
             build_route_context(&normalize_text(query), &tokenize_route_text(query));
         let fallback_reasons = compact_route_reasons(&[
-            "Retired framework slash command; native runtime should proceed without loading a skill."
-                .to_string(),
+            "Retired framework slash command; native runtime should proceed without loading a skill.",
         ]);
         return Ok(RouteDecision {
             decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
@@ -314,11 +313,11 @@ pub fn route_task(
     let primary_query = primary_owner_query_text(query, records, allow_overlay);
     let normalized_query = normalize_text(&primary_query);
     let query_token_list = tokenize_route_text(&primary_query);
-    let query_tokens = query_token_list
+    let query_tokens: HashSet<&str> = query_token_list
         .iter()
         .filter(|token| !common_route_stop_tokens().contains(&token.as_str()))
-        .cloned()
-        .collect::<HashSet<String>>();
+        .map(|s| s.as_str())
+        .collect();
     let route_context = build_route_context(&normalized_query, &query_token_list);
     let overlay_normalized_query = normalize_text(query);
     let overlay_query_tokens = tokenize_route_text(query);
@@ -328,7 +327,7 @@ pub fn route_task(
         .find(|record| has_literal_framework_alias_call(&normalized_query, record))
     {
         let reasons =
-            compact_route_reasons(&["Framework alias entrypoint matched explicitly.".to_string()]);
+            compact_route_reasons(&["Framework alias entrypoint matched explicitly."]);
         return Ok(RouteDecision {
             decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
             authority: ROUTE_AUTHORITY.to_string(),
@@ -402,8 +401,7 @@ pub fn route_task(
             query, session_id
         );
         let fallback_reasons = compact_route_reasons(&[
-            "No explicit skill hit; native runtime should proceed without loading a skill."
-                .to_string(),
+            "No explicit skill hit; native runtime should proceed without loading a skill.",
         ]);
         return Ok(RouteDecision {
             decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
@@ -438,8 +436,7 @@ pub fn route_task(
         && !allow_overlay
     {
         let fallback_reasons = compact_route_reasons(&[
-            "Only overlay signals matched; native runtime should proceed without loading a primary skill."
-                .to_string(),
+            "Only overlay signals matched; native runtime should proceed without loading a primary skill.",
         ]);
         return Ok(RouteDecision {
             decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
@@ -481,9 +478,9 @@ pub fn route_task(
         viable,
         &normalized_query,
         &query_token_list,
-        scoring_weights(),
+        w,
     );
-    if selected.score < scoring_weights().layer_threshold(&selected.record.layer) {
+    if selected.score < w.layer_threshold(&selected.record.layer) {
         // --- Fuzzy fallback: try trigram similarity before giving up ---
         if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {
             return Ok(build_fuzzy_rescue_decision(
@@ -508,11 +505,10 @@ pub fn route_task(
             query,
             selected.record.slug,
             selected.score,
-            scoring_weights().layer_threshold(&selected.record.layer)
+            w.layer_threshold(&selected.record.layer)
         );
         let fallback_reasons = compact_route_reasons(&[
-            "No explicit skill hit; native runtime should proceed without loading a skill."
-                .to_string(),
+            "No explicit skill hit; native runtime should proceed without loading a skill.",
         ]);
         return Ok(RouteDecision {
             decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
@@ -554,7 +550,9 @@ pub fn route_task(
         .as_ref()
         .filter(|item| *item != &selected.record.slug)
         .cloned();
-    let compact_reasons = compact_route_reasons(&selected.reasons);
+    let compact_reasons = compact_route_reasons(
+        &selected.reasons.iter().map(|s| s.as_str()).collect::<Vec<_>>()
+    );
 
     Ok(RouteDecision {
         decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
@@ -602,7 +600,13 @@ fn primary_owner_query_text(query: &str, records: &[SkillRecord], allow_overlay:
             }
         }
     }
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
+    text.split_whitespace().fold(String::new(), |mut acc, s| {
+        if !acc.is_empty() {
+            acc.push(' ');
+        }
+        acc.push_str(s);
+        acc
+    })
 }
 
 /// Layer-based penalty applied during fuzzy rescue to discourage
@@ -687,7 +691,7 @@ fn build_fuzzy_rescue_decision(
         .as_ref()
         .filter(|item| *item != &record.slug)
         .cloned();
-    let fuzzy_reasons = compact_route_reasons(&[reason_line.to_string()]);
+    let fuzzy_reasons = compact_route_reasons(&[reason_line]);
     RouteDecision {
         decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
         authority: ROUTE_AUTHORITY.to_string(),
@@ -728,7 +732,7 @@ pub fn literal_framework_alias_decision(
         .iter()
         .find(|record| has_literal_framework_alias_call(&normalized_query, record))?;
     let reasons =
-        compact_route_reasons(&["Framework alias entrypoint matched explicitly.".to_string()]);
+        compact_route_reasons(&["Framework alias entrypoint matched explicitly."]);
     Some(RouteDecision {
         decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
         authority: ROUTE_AUTHORITY.to_string(),

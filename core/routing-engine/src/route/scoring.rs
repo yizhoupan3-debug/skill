@@ -134,7 +134,7 @@ fn score_gate_name_token_signals(
     record: &SkillRecord,
     query_text: &str,
     query_token_list: &[String],
-    query_tokens: &HashSet<String>,
+    query_tokens: &HashSet<&str>,
     w: &ScoringWeights,
 ) -> (f64, Vec<String>, HashSet<String>) {
     let mut delta = 0.0f64;
@@ -188,7 +188,7 @@ fn score_gate_name_token_signals(
     let mut shared_name_tokens = record
         .name_tokens
         .iter()
-        .filter(|token| query_tokens.contains(*token))
+        .filter(|token| query_tokens.contains(token.as_str()))
         .cloned()
         .collect::<Vec<_>>();
     shared_name_tokens.sort();
@@ -240,7 +240,7 @@ fn score_gate_name_token_signals(
 #[inline]
 fn score_metadata_trigger_signals(
     record: &SkillRecord,
-    query_tokens: &HashSet<String>,
+    query_tokens: &HashSet<&str>,
     query_token_list: &[String],
     w: &ScoringWeights,
 ) -> (f64, Vec<String>, HashSet<String>) {
@@ -281,7 +281,7 @@ fn score_metadata_trigger_signals(
     let mut shared_keywords = record
         .keyword_tokens
         .iter()
-        .filter(|token| query_tokens.contains(*token))
+        .filter(|token| query_tokens.contains(token.as_str()))
         .cloned()
         .collect::<Vec<_>>();
     shared_keywords.sort();
@@ -308,7 +308,7 @@ fn score_metadata_trigger_signals(
     let mut alias_hits = record
         .alias_tokens
         .iter()
-        .filter(|token| query_tokens.contains(*token))
+        .filter(|token| query_tokens.contains(token.as_str()))
         .cloned()
         .collect::<Vec<_>>();
     alias_hits.sort();
@@ -379,7 +379,7 @@ pub fn score_route_candidate<'a>(
     record: &'a SkillRecord,
     query_text: &'a str,
     query_token_list: &'a [String],
-    query_tokens: &'a HashSet<String>,
+    query_tokens: &'a HashSet<&'a str>,
     first_turn: bool,
     w: &ScoringWeights,
 ) -> RouteCandidate<'a> {
@@ -519,7 +519,7 @@ pub fn score_route_candidate<'a>(
         let negative_hits = record
             .do_not_use_tokens
             .iter()
-            .filter(|token| query_tokens.contains(*token))
+            .filter(|token| query_tokens.contains(token.as_str()))
             .cloned()
             .collect::<Vec<_>>();
         if !negative_hits.is_empty() {
@@ -800,13 +800,18 @@ pub fn round2(value: f64) -> f64 {
     (value * 100.0).round() / 100.0
 }
 
+const SCORE_BUCKETS: [&str; 11] = [
+    "00-09", "10-19", "20-29", "30-39", "40-49", "50-59", "60-69", "70-79", "80-89", "90-99",
+    "100-100",
+];
+
 pub fn score_bucket(score: f64) -> String {
     let clamped = score.max(0.0).min(100.0);
-    let floor = ((clamped / 10.0).floor() as i32) * 10;
-    format!("{:02}-{:02}", floor, (floor + 9).min(100))
+    let bucket = ((clamped / 10.0).floor() as usize).min(10);
+    SCORE_BUCKETS[bucket].to_string()
 }
 
-pub fn compact_route_reasons(reasons: &[String]) -> Vec<String> {
+pub fn compact_route_reasons(reasons: &[&str]) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut compact = Vec::with_capacity(reasons.len().min(6));
     for reason in reasons {
@@ -814,7 +819,7 @@ pub fn compact_route_reasons(reasons: &[String]) -> Vec<String> {
         if normalized.is_empty() || !seen.insert(normalized) {
             continue;
         }
-        compact.push(reason.clone());
+        compact.push((*reason).to_string());
         if compact.len() >= 6 {
             break;
         }
@@ -880,7 +885,7 @@ mod paper_prose_routing_score_tests {
             .find(|r| r.slug == "documentation-engineering");
         let q = "SCI润色 abstract";
         let tokens = tokenize_route_text(q);
-        let set: HashSet<String> = tokens.iter().cloned().collect();
+        let set: HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();
         let w = scoring_weights();
         let wb = score_route_candidate(workbench, q, &tokens, &set, true, w);
         assert!(
@@ -918,7 +923,7 @@ mod paper_prose_routing_score_tests {
         let mut results = Vec::new();
         for q in queries {
             let tokens = tokenize_route_text(q);
-            let set: HashSet<String> = tokens.iter().cloned().collect();
+            let set: HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();
             let mut scores: Vec<_> = records
                 .iter()
                 .map(|r| {
@@ -983,7 +988,7 @@ mod snapshot_scoring_edge_cases {
         let records = load_records(Some(&runtime_path), None).expect("load runtime");
         let w = scoring_weights();
         let tokens = tokenize_route_text("");
-        let set: HashSet<String> = tokens.iter().cloned().collect();
+        let set: HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();
         let results: Vec<_> = records
             .iter()
             .map(|r| {
@@ -1003,7 +1008,7 @@ mod snapshot_scoring_edge_cases {
         let w = scoring_weights();
         let q = "帮我写一个单元测试覆盖边界情况";
         let tokens = tokenize_route_text(q);
-        let set: HashSet<String> = tokens.iter().cloned().collect();
+        let set: HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();
         let mut scores: Vec<_> = records
             .iter()
             .map(|r| {
