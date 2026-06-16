@@ -11,6 +11,7 @@ pub fn install_codex_projection(
     ensure_router_rs_installed_for_mcp_with_roots(roots)?;
     let target = codex_entrypoint_target(roots, scope);
     let changed = write_text_if_changed(&target, &render_codex_framework_entrypoint(roots, scope))?;
+    let mcp_changed = ensure_codex_research_mcp_toml(roots)?;
     let prompt_entrypoints =
         codex_prompt_entrypoints_disabled(&codex_prompt_entrypoints_root(roots, scope));
     let manifest_changed = write_projection_manifest(
@@ -26,8 +27,12 @@ pub fn install_codex_projection(
         .unwrap_or(false);
     Ok(json!({
         "status": "installed",
-        "changed": changed || manifest_changed || prompt_entrypoints_changed,
+        "changed": changed || mcp_changed || manifest_changed || prompt_entrypoints_changed,
         "scope": scope,
+        "mcp": {
+            "changed": mcp_changed,
+            "config": ".codex/config.toml",
+        },
         "prompts": {
             "framework": {
                 "scope": scope,
@@ -163,6 +168,166 @@ pub fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value
     }))
 }
 
+// ── Mimo Projection Ops ────────────────────────────────────────────────────
+
+pub fn mimo_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots.host_home_roots.get("mimo")
+            .cloned()
+            .unwrap_or_else(|| roots.account_home_root.join(".mimo")).join("settings.json")
+    } else {
+        roots.project_root.join(".mimo/settings.json")
+    }
+}
+
+pub fn install_mimo_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+) -> Result<Value, String> {
+    let config_path = mimo_config_path(roots, scope);
+    let config_dir = config_path.parent().ok_or_else(|| {
+        format!("cannot determine parent directory of {}", config_path.display())
+    })?;
+    std::fs::create_dir_all(config_dir)
+        .map_err(|err| format!("failed to create {}: {err}", config_dir.display()))?;
+
+    let mut payload = read_json_if_exists(&config_path)?.unwrap_or_else(|| json!({}));
+    if !payload.is_object() {
+        payload = json!({});
+    }
+    let servers = payload
+        .as_object_mut()
+        .ok_or_else(|| "settings.json root must be an object".to_string())?;
+    let mcp_servers = servers
+        .entry("mcpServers".to_string())
+        .or_insert_with(|| json!({}));
+    if !mcp_servers.is_object() {
+        *mcp_servers = json!({});
+    }
+    let entries = mcp_servers
+        .as_object_mut()
+        .ok_or_else(|| "mcpServers must be an object".to_string())?;
+    let framework_payload = host_router_rs_framework_payload(
+        roots,
+        "mimo",
+        "Framework snapshot, skill routing, goal/closeout gating (MCP advisory for my-light)",
+    );
+    let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
+    entries.insert("router-rs-framework".to_string(), framework_payload);
+    let browser_payload = browser_mcp_server_payload(roots);
+    let browser_changed = entries.get("browser-mcp") != Some(&browser_payload);
+    entries.insert("browser-mcp".to_string(), browser_payload);
+    let paperplain_changed = merge_paperplain_into_mcp_servers_map(entries, "paperplain");
+    let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
+    write_json_if_changed(&config_path, &payload)?;
+    let changed = framework_changed || browser_changed || paperplain_changed || codegraph_changed;
+
+    let manifest_changed = write_projection_manifest(
+        roots,
+        "mimo",
+        scope,
+        &[projection_manifest_file_ref(roots, &config_path)],
+        &mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::OPENCODE)?,
+    )?;
+
+    Ok(json!({
+        "status": "installed",
+        "changed": changed || manifest_changed,
+        "scope": scope,
+        "mcp_config": {
+            "scope": scope,
+            "path": config_path.to_string_lossy(),
+            "changed": changed,
+        },
+        "projection_manifest": {
+            "path": projection_manifest_path(roots, "mimo", scope).to_string_lossy(),
+            "changed": manifest_changed,
+        },
+    }))
+}
+
+pub fn mimo_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+    let project_path = mimo_config_path(roots, "project");
+    let user_path = mimo_config_path(roots, "user");
+    let project_exists = project_path.is_file();
+    let user_exists = user_path.is_file();
+
+    let config_payload = read_json_if_exists(&project_path)
+        .ok()
+        .flatten()
+        .or_else(|| read_json_if_exists(&user_path).ok().flatten());
+
+    let (server_status, all_valid, first_error) =
+        validate_mcp_servers_from_json(roots, config_payload.as_ref(), "mcpServers");
+
+    Ok(json!({
+        "ready": (project_exists || user_exists) && all_valid,
+        "status": "projection-status",
+        "error": first_error,
+        "mcp_config": {
+            "project_scope": project_exists,
+            "user_scope": user_exists,
+            "all_binaries_valid": all_valid,
+            "servers": server_status,
+        },
+        "projection_manifest": {
+            "project_scope": projection_manifest_path(roots, "mimo", "project").exists(),
+            "user_scope": projection_manifest_path(roots, "mimo", "user").exists(),
+        },
+    }))
+}
+
+pub fn remove_mimo_projection(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    dry_run: bool,
+) -> Result<Value, String> {
+    let config_path = mimo_config_path(roots, scope);
+    let manifest_path = projection_manifest_path(roots, "mimo", scope);
+
+    let mut config_removed = false;
+    if config_path.is_file() && !dry_run {
+        config_removed = mcp_json_remove_servers(
+            &config_path,
+            &roots.framework_root,
+            McpConfigFormat::OPENCODE,
+        )?;
+    }
+
+    let manifest_removed = if manifest_path.is_file() && !dry_run {
+        std::fs::remove_file(&manifest_path).is_ok()
+    } else {
+        false
+    };
+
+    Ok(json!({
+        "status": if config_removed || manifest_removed { "removed" } else { "not-found" },
+        "changed": config_removed || manifest_removed,
+        "scope": scope,
+        "dry_run": dry_run,
+        "mcp_framework_entry_removed": config_removed,
+        "projection_manifest_removed": manifest_removed,
+    }))
+}
+
+pub struct MimoProjectionOps;
+
+impl HostProjectionOps for MimoProjectionOps {
+    fn host_id(&self) -> &'static str { "mimo" }
+
+    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
+        install_mimo_projection(roots, scope)
+    }
+
+    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {
+        mimo_projection_status(roots)
+    }
+
+    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {
+        remove_mimo_projection(roots, scope, dry_run)
+    }
+}
+
 pub fn remove_codex_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
@@ -282,6 +447,7 @@ pub fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) ->
     if scope == "user" {
         roots
             .host_home_root("claude-code")
+            .expect("claude-code host must be registered in projection roots")
             .join("rules")
             .join("framework.md")
     } else {
@@ -299,7 +465,10 @@ pub fn claude_project_narrative_path(roots: &ResolvedProjectionRoots) -> PathBuf
 
 pub fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.host_home_root("claude-code").join("settings.json")
+        roots
+            .host_home_root("claude-code")
+            .expect("claude-code host must be registered in projection roots")
+            .join("settings.json")
     } else {
         roots.project_root.join(".claude").join("settings.json")
     }
@@ -531,22 +700,20 @@ pub fn remove_claude_projection(
         would_remove_projection || would_remove_manifest || settings_removal.would_change;
     let mut removed_paths =
         removed_projection_paths(changed, &target, manifest_removed, &manifest_path);
-    if settings_removal.removed_file {
-        if let Some(paths) = removed_paths.as_array_mut() {
+    if settings_removal.removed_file
+        && let Some(paths) = removed_paths.as_array_mut() {
             paths.push(Value::String(settings_path.to_string_lossy().into_owned()));
         }
-    }
     let mut would_remove_paths = removed_projection_paths(
         would_remove_projection,
         &target,
         would_remove_manifest,
         &manifest_path,
     );
-    if settings_removal.would_remove_file {
-        if let Some(paths) = would_remove_paths.as_array_mut() {
+    if settings_removal.would_remove_file
+        && let Some(paths) = would_remove_paths.as_array_mut() {
             paths.push(Value::String(settings_path.to_string_lossy().into_owned()));
         }
-    }
     Ok(json!({
         "status": if dry_run && would_remove_any { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
         "changed": any_changed,

@@ -383,7 +383,9 @@ pub(super) fn migrate_state(state: &Value) -> Value {
         let latest_decision = decisions.iter().rev().find(|item| {
             item.get("hypothesis_id").and_then(Value::as_str) == Some(hypothesis_id.as_str())
         });
-        let item = hypothesis.as_object_mut().unwrap();
+        let Some(item) = hypothesis.as_object_mut() else {
+            continue;
+        };
         item.entry("mechanism").or_insert(Value::Null);
         item.entry("falsifiable_prediction").or_insert(Value::Null);
         item.entry("success_threshold").or_insert(Value::Null);
@@ -409,7 +411,9 @@ pub(super) fn migrate_state(state: &Value) -> Value {
         item.entry("status_updated_at").or_insert(status_updated_at);
     }
     for record in arr_mut(&mut migrated, "run_history") {
-        let item = record.as_object_mut().unwrap();
+        let Some(item) = record.as_object_mut() else {
+            continue;
+        };
         item.entry("novelty_gate_status_at_run")
             .or_insert(Value::Null);
         item.entry("novelty_gate_override").or_insert(json!(false));

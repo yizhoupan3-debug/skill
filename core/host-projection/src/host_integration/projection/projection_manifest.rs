@@ -35,11 +35,10 @@ pub fn make_mcp_server_payload_with_env(
             "description": description.to_string(),
         }),
     };
-    if let Some(env) = env {
-        if let Some(obj) = payload.as_object_mut() {
+    if let Some(env) = env
+        && let Some(obj) = payload.as_object_mut() {
             obj.insert("env".to_string(), env);
         }
-    }
     payload
 }
 
@@ -108,16 +107,14 @@ pub fn projection_manifest_payload_is_managed(
     {
         return false;
     }
-    if let Some(expected) = host_projection {
-        if manifest.get("host_projection").and_then(Value::as_str) != Some(expected) {
+    if let Some(expected) = host_projection
+        && manifest.get("host_projection").and_then(Value::as_str) != Some(expected) {
             return false;
         }
-    }
-    if let Some(expected) = scope {
-        if manifest.get("scope").and_then(Value::as_str) != Some(expected) {
+    if let Some(expected) = scope
+        && manifest.get("scope").and_then(Value::as_str) != Some(expected) {
             return false;
         }
-    }
     true
 }
 
@@ -182,6 +179,7 @@ pub fn codex_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> 
     if scope == "user" {
         roots
             .host_home_root("codex")
+            .expect("codex host must be registered in projection roots")
             .join("prompts")
             .join("framework.md")
     } else {
@@ -197,6 +195,7 @@ pub fn cursor_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) ->
     if scope == "user" {
         roots
             .host_home_root("cursor")
+            .expect("cursor host must be registered in projection roots")
             .join("rules")
             .join("framework.mdc")
     } else {
@@ -210,7 +209,10 @@ pub fn cursor_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) ->
 
 pub fn codex_prompt_entrypoints_root(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.host_home_root("codex").clone()
+        roots
+            .host_home_root("codex")
+            .expect("codex host must be registered in projection roots")
+            .clone()
     } else {
         roots.project_root.join(".codex")
     }
@@ -223,7 +225,15 @@ pub fn projection_manifest_path(
 ) -> PathBuf {
     let manifest_name = FRAMEWORK_PROJECTION_MANIFEST_NAME;
     if scope == "user" {
-        return roots.host_home_root(host_projection).join(manifest_name);
+        return roots
+            .host_home_root(host_projection)
+            .unwrap_or_else(|| {
+                panic!(
+                    "host '{}' must be registered in projection roots",
+                    host_projection
+                )
+            })
+            .join(manifest_name);
     }
     // Project scope: use .<host_dir> under project_root.
     // Host dir mapping: host_id -> dotfile name (e.g. "claude-code" -> ".claude")
@@ -272,7 +282,10 @@ pub fn render_codex_framework_entrypoint(roots: &ResolvedProjectionRoots, scope:
 }
 
 pub fn cursor_mcp_config_path(roots: &ResolvedProjectionRoots) -> PathBuf {
-    roots.host_home_root("cursor").join("mcp.json")
+    roots
+        .host_home_root("cursor")
+        .expect("cursor host must be registered in projection roots")
+        .join("mcp.json")
 }
 
 pub fn cursor_mcp_server_key_path() -> &'static str {
@@ -302,8 +315,8 @@ pub fn install_cursor_mcp_server(
         "Framework snapshot, skill routing, goal/closeout gating (Cursor)",
     );
     // codegraph 注入走 merge_codegraph_into_mcp_servers_map，无需提前构造
-    if let Some(payload) = read_json_if_exists(path)? {
-        if let Some(existing) = payload
+    if let Some(payload) = read_json_if_exists(path)?
+        && let Some(existing) = payload
             .get("mcp_servers")
             .and_then(Value::as_object)
             .and_then(|servers| servers.get("browser-mcp"))
@@ -357,7 +370,6 @@ pub fn install_cursor_mcp_server(
                 });
             }
         }
-    }
 
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
     if !payload.is_object() {
@@ -461,7 +473,7 @@ pub fn cursor_browser_mcp_is_cargo_bootstrap_shaped(server: &Value) -> bool {
         return false;
     };
     let str_args: Vec<&str> = args.iter().filter_map(Value::as_str).collect();
-    str_args.iter().any(|arg| *arg == "mcp-stdio")
+    str_args.contains(&"mcp-stdio")
         && cursor_browser_mcp_repo_root_from_args(args).is_some()
 }
 
@@ -696,13 +708,13 @@ pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, S
 }
 
 pub fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {
-    let tools = registry_projection_tools(framework_root).unwrap_or_else(|_| {
+    
+    registry_projection_tools(framework_root).unwrap_or_else(|_| {
         vec![
             "cursor".to_string(),
             "claude".to_string(),
             "opencode".to_string(),
             "codex".to_string(),
         ]
-    });
-    tools
+    })
 }

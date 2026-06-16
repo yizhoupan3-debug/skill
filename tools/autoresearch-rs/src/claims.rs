@@ -30,11 +30,10 @@ pub(super) fn recent_entries(
 ) -> Vec<Value> {
     let mut filtered = Vec::new();
     for entry in sort_entries_by_recency(entries, timestamp_field) {
-        if let Some(hypothesis_id) = hypothesis_id {
-            if entry.get("hypothesis_id").and_then(Value::as_str) != Some(hypothesis_id) {
+        if let Some(hypothesis_id) = hypothesis_id
+            && entry.get("hypothesis_id").and_then(Value::as_str) != Some(hypothesis_id) {
                 continue;
             }
-        }
         let age = days_since(&str_field(&entry, timestamp_field));
         if age.is_none() || age.unwrap() > max_age_days {
             continue;
@@ -381,11 +380,10 @@ pub(super) fn choose_backlog_hypothesis(state: &Value) -> Option<&Value> {
         .iter()
         .filter_map(Value::as_str)
     {
-        if let Some(candidate) = find_hypothesis(state, id) {
-            if candidate.get("status").and_then(Value::as_str) != Some("concluded") {
+        if let Some(candidate) = find_hypothesis(state, id)
+            && candidate.get("status").and_then(Value::as_str) != Some("concluded") {
                 return Some(candidate);
             }
-        }
     }
     let priority_order = HashMap::from([("high", 0), ("medium", 1), ("low", 2)]);
     let mut ranked = arr(state, "hypotheses").iter().collect::<Vec<_>>();
@@ -487,7 +485,9 @@ pub(super) fn transition_hypothesis(
         );
     }
     let hypothesis_id = str_field(hypothesis, "id");
-    let item = hypothesis.as_object_mut().unwrap();
+    let item = hypothesis
+        .as_object_mut()
+        .ok_or_else(|| anyhow!("hypothesis '{}' is not a JSON object", hypothesis_id))?;
     item.insert("status".into(), json!(new_status));
     item.insert(
         "status_reason".into(),
@@ -806,14 +806,13 @@ pub(super) fn reflect(
     }
     let latest_run = latest_run_for_hypothesis(&next_state, hypothesis_id)
         .ok_or_else(|| anyhow!("Cannot reflect without a recorded run for {hypothesis_id}"))?;
-    if let Some(latest_decision) = latest_decision_for_hypothesis(&next_state, hypothesis_id) {
-        if latest_decision.get("run_id") == latest_run.get("run_id") {
+    if let Some(latest_decision) = latest_decision_for_hypothesis(&next_state, hypothesis_id)
+        && latest_decision.get("run_id") == latest_run.get("run_id") {
             bail!(
                 "Run {} already has a reflection",
                 str_field(latest_run, "run_id")
             );
         }
-    }
     let run_id = str_field(latest_run, "run_id");
     let decision = json!({
         "hypothesis_id": hypothesis_id,
