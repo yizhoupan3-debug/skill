@@ -266,13 +266,11 @@ fn scaffold_host_integration(
         .get("host_targets")
         .and_then(|v| v.get("supported"))
         .and_then(|v| v.as_array())
-    {
-        if supported.iter().any(|v| v.as_str() == Some(host_id)) {
+        && supported.iter().any(|v| v.as_str() == Some(host_id)) {
             return Err(format!(
                 "Host {host_id:?} already exists in RUNTIME_REGISTRY.json"
             ));
         }
-    }
 
     let host_id_upper = host_id.to_uppercase().replace('-', "_");
     let host_id_camel = host_id.replace('-', "_");
@@ -909,6 +907,81 @@ pub fn dispatch_schema_drift_command(command: SchemaDriftCommand) -> Result<(), 
                 ));
             }
             Ok(())
+        }
+    }
+}
+
+pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
+    match command {
+        LoopCommand::Run(args) => {
+            let repo_root = std::env::current_dir()
+                .map_err(|e| format!("get current dir: {e}"))?;
+            let registry_path = repo_root.join("configs/framework/LOOP_REGISTRY.json");
+            let raw = fs::read_to_string(&registry_path)
+                .map_err(|e| format!("read LOOP_REGISTRY.json: {e}"))?;
+            let registry: loop_engine::LoopRegistryRoot = serde_json::from_str(&raw)
+                .map_err(|e| format!("parse LOOP_REGISTRY.json: {e}"))?;
+            let entry = registry.loops.iter()
+                .find(|e| e.loop_id == args.loop_id)
+                .ok_or_else(|| format!("loop '{}' not found in LOOP_REGISTRY.json", args.loop_id))?;
+            let timeout = std::time::Duration::from_secs(args.timeout);
+            let ctx = loop_engine::runner::RunContext {
+                repo_root: &repo_root,
+                entry,
+                dry_run: args.dry_run,
+                timeout: Some(timeout),
+            };
+            let aggregate = loop_engine::runner::run_loop(&ctx)
+                .map_err(|e| format!("loop run failed: {e}"))?;
+            print_json_value(&serde_json::json!({
+                "ok": true,
+                "loop_id": args.loop_id,
+                "overall_status": aggregate.overall_status,
+                "actions": aggregate.actions.len(),
+                "partial": aggregate.partial,
+            }))
+        }
+        LoopCommand::Status(args) => {
+            let repo_root = std::env::current_dir()
+                .map_err(|e| format!("get current dir: {e}"))?;
+            match loop_engine::runner::run_loop_status(&repo_root, &args.loop_id)
+                .map_err(|e| format!("loop status failed: {e}"))? {
+                Some(state) => print_json_value(&serde_json::json!({
+                    "ok": true,
+                    "loop_id": args.loop_id,
+                    "phase": state.phase,
+                    "profile": state.profile,
+                    "last_heartbeat": state.last_heartbeat,
+                    "circuit_breaker": state.circuit_breaker,
+                    "history_count": state.history.len(),
+                })),
+                None => print_json_value(&serde_json::json!({
+                    "ok": true,
+                    "loop_id": args.loop_id,
+                    "phase": "no_state",
+                    "message": "No LOOP_RUN_STATE.json found for this loop",
+                })),
+            }
+        }
+        LoopCommand::Kill(args) => {
+            let repo_root = std::env::current_dir()
+                .map_err(|e| format!("get current dir: {e}"))?;
+            if args.all {
+                loop_engine::runner::run_loop_kill_all(&repo_root)
+                    .map_err(|e| format!("loop kill --all failed: {e}"))?;
+                print_json_value(&serde_json::json!({
+                    "ok": true,
+                    "message": "All kill signals sent",
+                }))
+            } else {
+                loop_engine::runner::run_loop_kill(&repo_root, &args.loop_id)
+                    .map_err(|e| format!("loop kill failed: {e}"))?;
+                print_json_value(&serde_json::json!({
+                    "ok": true,
+                    "loop_id": args.loop_id,
+                    "message": "Kill signal sent",
+                }))
+            }
         }
     }
 }

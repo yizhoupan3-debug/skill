@@ -1,0 +1,30 @@
+{
+  "schema_version": "loop-registry-v1",
+  "loops": [
+    {
+      "loop_id": "daily-triage",
+      "profile": "loop-auto",
+      "trigger": {
+        "type": "cron",
+        "schedule": "0 */6 * * *",
+        "timezone": "UTC"
+      },
+      "skill": "loop-daily-triage",
+      "scope_based_safety": {
+        "src/**/*.rs": "L2-assisted-fix",
+        "*.md": "L3-unattended",
+        "Cargo.toml": "L1-report-only"
+      },
+      "default_safety": "L1-report-only",
+      "scope_conflict_resolution": "split",
+      "cost_budget": {
+        "tokens_per_run": 200000,
+        "daily_tokens": 1000000
+      },
+      "notification": {
+        "on_escalation": "issue",
+        "on_completion_L3": "commit-only"
+      }
+    }
+  ]
+}

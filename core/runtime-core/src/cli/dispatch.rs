@@ -7,8 +7,8 @@ use super::router_command_dispatch::dispatch_codegraph_command;
 use super::router_command_dispatch::{
     dispatch_browser_command, dispatch_closeout_command, dispatch_diagnose_command,
     dispatch_eval_command, dispatch_framework_command, dispatch_hook_policy_command,
-    dispatch_host_command, dispatch_migrate_command, dispatch_schema_drift_command,
-    dispatch_storage_command, dispatch_trace_command,
+    dispatch_host_command, dispatch_loop_command, dispatch_migrate_command,
+    dispatch_schema_drift_command, dispatch_storage_command, dispatch_trace_command,
 };
 use crate::route::{
     MatchRow, SearchResultsPayload, build_search_results_payload, filter_record_indices_for_host,
@@ -70,6 +70,7 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         RouterCommand::Migrate { command } => dispatch_migrate_command(command),
         RouterCommand::HookPolicy { command } => dispatch_hook_policy_command(command),
         RouterCommand::Closeout { command } => dispatch_closeout_command(command),
+        RouterCommand::Loop { command } => dispatch_loop_command(command),
         RouterCommand::Eval { command } => dispatch_eval_command(command),
         RouterCommand::SchemaDrift { command } => dispatch_schema_drift_command(command),
         RouterCommand::RouterSelf { command } => router_self::dispatch(command),

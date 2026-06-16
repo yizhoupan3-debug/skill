@@ -52,6 +52,11 @@ pub enum RouterCommand {
         #[command(subcommand)]
         command: CloseoutCommand,
     },
+    /// Loop scheduler: run, status, kill
+    Loop {
+        #[command(subcommand)]
+        command: LoopCommand,
+    },
     Eval {
         #[command(subcommand)]
         command: EvalCommand,
@@ -394,6 +399,46 @@ pub enum CloseoutCommand {
     Evaluate(CloseoutEvaluateCommand),
     /// Print the closeout enforcement contract (rules, schema versions, statuses).
     Contract,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum LoopCommand {
+    /// Run a loop by ID (full execution or dry-run)
+    Run(LoopRunCommand),
+    /// Show loop status and recent runs
+    Status(LoopStatusCommand),
+    /// Send kill signal to a running loop
+    Kill(LoopKillCommand),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct LoopRunCommand {
+    /// Loop ID to run (must exist in LOOP_REGISTRY.json)
+    #[arg(long)]
+    pub loop_id: String,
+    /// Dry-run mode: discover and report without executing
+    #[arg(long, default_value_t = false)]
+    pub dry_run: bool,
+    /// Action timeout in seconds (default: 600)
+    #[arg(long, default_value_t = 600)]
+    pub timeout: u64,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct LoopStatusCommand {
+    /// Loop ID to check status for
+    #[arg(long)]
+    pub loop_id: String,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct LoopKillCommand {
+    /// Loop ID to send kill signal to
+    #[arg(long)]
+    pub loop_id: String,
+    /// Kill all running loops
+    #[arg(long, default_value_t = false)]
+    pub all: bool,
 }
 
 #[derive(Subcommand, Debug, Clone)]

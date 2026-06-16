@@ -38,6 +38,7 @@ which.workspace = true
 ctor = "0.2"
 codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
 framework-runtime = { path = "../framework-runtime" }
+loop-engine = { path = "../loop-engine" }
 
 [build-dependencies]
 serde_json.workspace = true
