@@ -2,8 +2,6 @@ use serde::{Deserialize, Serialize};
 
 /// Core exploration log entry — maps to `exploration_logs` DB table and text file.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// Core exploration log entry — maps to `exploration_logs` DB table and text file.
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExplorationLog {
     pub id: String,
     pub direction: String,
@@ -18,8 +16,6 @@ pub struct ExplorationLog {
 
 /// How this exploration was initiated.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// How this exploration was initiated.
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EntryPoint {
     Manual,
     BarrierEscalation,
@@ -29,23 +25,20 @@ pub enum EntryPoint {
 impl EntryPoint {
     pub fn as_str(&self) -> &'static str {
         match self {
-            EntryPoint::Manual => "manual",
-            EntryPoint::BarrierEscalation => "barrier_escalation",
-            EntryPoint::Loop => "loop",
+            Self::Manual => "manual",
+            Self::BarrierEscalation => "barrier_escalation",
+            Self::Loop => "loop",
         }
     }
-
     pub fn from_str(s: &str) -> Self {
         match s {
-            "barrier_escalation" => EntryPoint::BarrierEscalation,
-            "loop" => EntryPoint::Loop,
-            _ => EntryPoint::Manual,
+            "barrier_escalation" => Self::BarrierEscalation,
+            "loop" => Self::Loop,
+            _ => Self::Manual,
         }
     }
 }
 
-/// A decision or branch point during exploration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
 /// A decision or branch point during exploration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExplorationDecision {
@@ -59,8 +52,6 @@ pub struct ExplorationDecision {
 
 /// A key insight or discovery.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-/// A key insight or discovery.
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExplorationInsight {
     pub id: String,
     pub log_id: String,
@@ -70,7 +61,6 @@ pub struct ExplorationInsight {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
 /// Confidence level of an insight.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Confidence {
@@ -82,23 +72,20 @@ pub enum Confidence {
 impl Confidence {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Confidence::High => "high",
-            Confidence::Medium => "medium",
-            Confidence::Low => "low",
+            Self::High => "high",
+            Self::Medium => "medium",
+            Self::Low => "low",
         }
     }
-
     pub fn from_str(s: &str) -> Self {
         match s {
-            "high" => Confidence::High,
-            "low" => Confidence::Low,
-            _ => Confidence::Medium,
+            "high" => Self::High,
+            "low" => Self::Low,
+            _ => Self::Medium,
         }
     }
 }
 
-/// Barrier escalation report linked to a loop.
-#[derive(Debug, Clone, Serialize, Deserialize)]
 /// Barrier escalation report linked to a loop.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BarrierReport {
@@ -110,8 +97,6 @@ pub struct BarrierReport {
     pub created_at: String,
 }
 
-/// FTS5 search result.
-#[derive(Debug, Clone, Serialize, Deserialize)]
 /// FTS5 search result with snippet and relevance score.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchResult {

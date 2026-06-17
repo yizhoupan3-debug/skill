@@ -4,7 +4,10 @@ use std::path::Path;
 
 use crate::models::*;
 
-/// Initialize the SQLite database with FTS5 schema.
+/// Initialize the SQLite database with FTS5 schema (4 tables + 1 FTS5 virtual table).
+///
+/// Schema: exploration_logs, exploration_decisions, exploration_insights,
+/// barrier_reports, and exploration_fts (FTS5 external content on exploration_logs).
 pub fn init_database(db_path: &Path) -> Result<Connection> {
     let conn = Connection::open(db_path)
         .with_context(|| format!("open database: {}", db_path.display()))?;
