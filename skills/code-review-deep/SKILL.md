@@ -57,7 +57,7 @@ allowed_tools:
 
 ## Quick Ref
 - **Purpose**: 深度对抗式代码审查（review-only），默认输出 severity-sorted findings 紧凑列表
-- **Key Rules**: 默认只审不改；hostile-but-fair 立场；P0/P1 须有 evidence；lens 可扩展目录选型；broad review ≥2 spawned reviewer lane
+- **Key Rules**: 默认只审不改；hostile-but-fair 立场；P0/P1 须有 evidence；lens 可扩展目录选型；broad review a single serial spawned reviewer lane
 - **Trigger**: "review"、"代码审查"、"帮我 review"、"deep code review"、"$code-review-deep"
 <!-- full content below; load on demand -->
 
@@ -95,7 +95,7 @@ Then: preamble (Scope / Lenses / Omitted), verdict, findings grouped by lens, te
 
 ### Spawn-first pairing
 
-For broad/deep/PR-level review, spawn **at least one** parallel read-only reviewer (`fork_context=false`, lane in `reviewer_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`). Explore lanes **do not count** as review evidence. For breadth/PR/cross-module prompts, prefer **>=2** lanes split by disjoint lens bundles, before main-thread compact synthesis.
+For broad/deep/PR-level review, spawn **a single serial** read-only reviewer (`fork_context=false`, lane in `reviewer_lanes`; Cursor 可选 `Task` + `subagent_type=deep-reviewer`). Explore lanes **do not count** as review evidence. For breadth/PR/cross-module prompts that require disparate-domain coverage, use `pipeline()` or `for...of` to run reviewers serially; only use `parallel()` when the user explicitly requests cross-domain broad review across clearly disjoint scope paths.
 
 **Narrow scope** (single-file, `small_task`, or explicit「不用子代理」): no multi-lane requirement; hosts skip arming `review_required`.
 

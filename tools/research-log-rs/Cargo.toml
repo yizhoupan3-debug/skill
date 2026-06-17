@@ -1,0 +1,18 @@
+[package]
+name = "research-log-rs"
+version = "0.1.0"
+edition = "2024"
+description = "Research layered logging — text layer + SQLite FTS5"
+
+[dependencies]
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+regex.workspace = true
+uuid = { version = "1.0", features = ["v4"] }
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,6 +1,6 @@
-import { agent, parallel, pipeline, phase, log } from 'workflow'
+import { agent, pipeline, phase, log } from 'workflow'
 import {
-  FINDINGS_SCHEMA, VERDICT_SCHEMA, FACTCHECK_VERDICT_SCHEMA,
+  FINDINGS_SCHEMA, BATCH_VERDICT_SCHEMA, FACTCHECK_VERDICT_SCHEMA,
   normalizeFile, normalizeLine, lineOverlap, conservativeMerge,
 } from './workflow-helpers.js'
 
@@ -8,7 +8,7 @@ export const meta = {
   name: 'deep-review-template',
   description: '通用多 agent 深度审查模板：Scan → Merge → Verify → Synthesize 四阶段',
   phases: [
-    { title: 'Scan', detail: '多维度并行扫描' },
+    { title: 'Scan', detail: '多维度串行扫描' },
     { title: 'Merge', detail: '保守去重合并' },
     { title: 'Verify', detail: '对抗性验证' },
     { title: 'Synthesize', detail: '结构化报告' },
@@ -44,8 +44,10 @@ const LENSES = [
 
 phase('Scan')
 
-const scanResults = await parallel(
-  LENSES.map(cfg => () => agent(
+// 串行扫描：用 pipeline 逐个 lens 审查，不加并发
+const scanResults = await pipeline(
+  LENSES,
+  (cfg, orig, i) => agent(
     `面向用户的可见输出使用简体中文。
 
 你是 ${cfg.label} 审查专家。
@@ -62,8 +64,8 @@ const scanResults = await parallel(
 请使用 Bash 工具的 cat 命令读取文件。
 返回 JSON，每个 finding 包含 severity(P0/P1/P2)、title、file、line number range、description、evidence（具体代码片段）、fix_suggestion、lens="${cfg.lens}"。`,
     { label: `scan:${cfg.label}`, phase: 'Scan', schema: FINDINGS_SCHEMA }
-  ))
-)
+  )
+).catch(() => LENSES.map(() => null))
 
 const failedAgents = scanResults.filter(r => !r).length
 const allFindings = scanResults.filter(Boolean).flatMap(r => r.findings || [])
@@ -80,30 +82,55 @@ log(`Merge: ${allFindings.length} → ${merged.length} (conservative, lens-aware
 
 phase('Verify')
 
-const verified = await pipeline(
-  merged,
-  (f, _orig, i) => agent(
-    `面向用户的可见输出使用简体中文。
+// 批量验证：所有 findings 打包给一个 agent，避免 N 个 finding → N 个 agent
+// findings 较多时自动追加分段；替换逐条 pipeline 以减少 token 和 agent 数量
+const findingsForVerify = merged.map((f, i) => ({
+  index: i,
+  severity: f.severity,
+  title: f.title,
+  file: f.file,
+  line: f.line,
+  lens: f.lens,
+  description: f.description,
+  evidence: f.evidence,
+  fix_suggestion: f.fix_suggestion || '未提供',
+}))
 
-你是对立验证员。反驳以下 finding，只有证据充分且无法反驳时才确认。
+const verifyListing = findingsForVerify.map(f =>
+  `[#${f.index}] ${f.severity} | ${f.file}:${f.line} | ${f.lens}
+  标题: ${f.title}
+  描述: ${f.description}
+  证据: ${f.evidence}
+  修复建议: ${f.fix_suggestion}`
+).join('\n\n---\n\n')
 
-**Finding #${i + 1}**: ${JSON.stringify({ severity: f.severity, title: f.title, file: f.file, line: f.line, lens: f.lens })}
+const verifiedBatch = await agent(
+  `面向用户的可见输出使用简体中文。
 
-**描述**: ${f.description}
-**证据**: ${f.evidence}
-**修复建议**: ${f.fix_suggestion || '未提供'}
+你是对立验证员。以下共 ${findingsForVerify.length} 个发现，请对每个独立判断是真问题还是误报。
+
+逐一审核：
+
+${verifyListing}
 
 **验证步骤**：
 1. 读取源代码，确认 evidence 存在且引用正确
 2. 分析上下文和设计意图
 3. 判断：真实问题 or 有意设计？
-4. 确认则给出根因分析 + 修复建议；误报则说明理由
+4. 真实问题给出根因 + 修复建议；误报说明理由
 
-请使用 Bash 工具的 cat 命令读取文件。
-返回 JSON：is_real(boolean)、confirmed_severity、root_cause、reasoning、fix_suggestion。`,
-    { label: `verify:${i}`, phase: 'Verify', schema: VERDICT_SCHEMA }
-  )
-).catch(() => merged.map(() => null))
+请使用 Bash 工具的 cat 命令读取文件验证证据。
+返回 JSON: { verdicts: [{ finding_index, is_real, confirmed_severity, root_cause, reasoning, fix_suggestion }] }`,
+  { label: 'verify:batch', phase: 'Verify', schema: BATCH_VERDICT_SCHEMA }
+)
+
+const verdictMap = {}
+if (verifiedBatch?.verdicts) {
+  for (const v of verifiedBatch.verdicts) {
+    verdictMap[v.finding_index] = v
+  }
+}
+const verified = merged.map((f, i) => verdictMap[i] || null)
 
 // ── Phase 4: Synthesize ──────────────────────────────────────────────────────
 

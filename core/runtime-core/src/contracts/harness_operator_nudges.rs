@@ -9,6 +9,8 @@ use crate::router_env_flags::{
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 const NUDGES_REL_PATH: &str = "configs/framework/HARNESS_OPERATOR_NUDGES.json";
 const HARNESS_NUDGES_ENV: &str = "ROUTER_RS_HARNESS_OPERATOR_NUDGES";
@@ -88,13 +90,31 @@ fn builtin_defaults() -> ResolvedHarnessNudges {
     }
 }
 
+struct CachedNudges {
+    content: ResolvedHarnessNudges,
+    mtime: Option<SystemTime>,
+}
+
+static NUDGES_CACHE: Mutex<Option<CachedNudges>> = Mutex::new(None);
+
 /// Merge repo JSON over compiled defaults. If the env disables nudges, returns empty strings.
 pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudges {
     if !harness_operator_nudges_globally_enabled() {
         return ResolvedHarnessNudges::disabled();
     }
-    let mut out = builtin_defaults();
     let path = repo_root.join(NUDGES_REL_PATH);
+    let mtime = fs::metadata(&path)
+        .ok()
+        .and_then(|m| m.modified().ok());
+    {
+        let guard = NUDGES_CACHE.lock().expect("nudges cache");
+        if let Some(ref cached) = *guard {
+            if cached.mtime == mtime {
+                return cached.content.clone();
+            }
+        }
+    }
+    let mut out = builtin_defaults();
     let Ok(text) = fs::read_to_string(&path) else {
         return out;
     };
@@ -106,9 +126,6 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
         return out;
     };
     if !file.schema_version.is_empty() && file.schema_version != EXPECTED_SCHEMA_VERSION {
-        // Safety over tolerance: an unknown shape might mean v2 introduced new semantics for
-        // the same key names. Falling back to compiled defaults keeps the model-facing prompt
-        // predictable; an explicit upgrade of `EXPECTED_SCHEMA_VERSION` is required to merge.
         eprintln!(
             "[router-rs] harness operator nudges: expected schema_version={EXPECTED_SCHEMA_VERSION}, got {:?} — falling back to compiled defaults (no partial merge)",
             file.schema_version
@@ -139,6 +156,10 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
         &mut out.rfv_loop_external_struct_hint_line,
         &file.nudges.rfv_loop_external_struct_hint_line,
     );
+    {
+        let mut guard = NUDGES_CACHE.lock().expect("nudges cache");
+        *guard = Some(CachedNudges { content: out.clone(), mtime });
+    }
     out
 }
 

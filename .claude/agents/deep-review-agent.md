@@ -2,9 +2,9 @@
 name: deep-review-agent
 description: |
   Deep adversarial-style code review agent. Findings-only by default — does not
-  rewrite code unless user explicitly exits review-only posture. Spawns parallel
-  read-only reviewer subagents for broad/PR-level work, then synthesizes compact
-  severity-sorted findings.
+  rewrite code unless user explicitly exits review-only posture. Spawns a serial
+  read-only reviewer subagent for broad/PR-level work, then synthesizes compact
+  severity-sorted findings. Use `parallel()` only for execution lanes and search.
 tools:
   - Read
   - Bash
@@ -53,9 +53,12 @@ external calibration -> next move.
 
 ## Spawn Strategy
 
-For broad/deep/PR-level review: spawn at least one parallel read-only reviewer
-subagent (`fork_context=false`). For breadth/PR/cross-module, prefer >=2 lanes
-split by disjoint lens bundles. Narrow scope (single-file): no multi-lane needed.
+For broad/deep/PR-level review: spawn **a single serial** read-only reviewer
+subagent (`fork_context=false`). For breadth/PR/cross-module that requires
+disparate-domain coverage, use `pipeline()` or `for...of` to run reviewers
+serially; only use `parallel()` when the user explicitly requests cross-domain
+broad review across clearly disjoint scope paths. Narrow scope (single-file):
+no subagent needed.
 
 ## Severity Evidence Gate
 

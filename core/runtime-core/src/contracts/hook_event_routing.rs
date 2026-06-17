@@ -1,6 +1,7 @@
 //! Cross-host hook lifecycle event routing contract.
 
 use serde_json::{Value, json};
+use std::borrow::Cow;
 
 pub const HOOK_EVENT_ROUTING_SCHEMA_VERSION: &str = "router-rs-hook-event-routing-v1";
 pub const HOOK_EVENT_ROUTING_AUTHORITY: &str = "rust-hook-event-routing";
@@ -34,16 +35,22 @@ pub fn hook_event_routing_contract() -> Value {
     })
 }
 
-fn normalized_event_key(raw: &str) -> String {
-    raw.chars()
-        .filter(|c| c.is_ascii_alphanumeric())
-        .map(|c| c.to_ascii_lowercase())
-        .collect()
+fn normalized_event_key(raw: &str) -> Cow<'_, str> {
+    if raw.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        Cow::Owned(raw.to_ascii_lowercase())
+    } else {
+        Cow::Owned(
+            raw.chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .map(|c| c.to_ascii_lowercase())
+                .collect(),
+        )
+    }
 }
 
 /// Map a host-native hook event name to the shared canonical (or extended) lifecycle id.
 pub fn canonical_hook_event(raw: &str) -> Option<&'static str> {
-    match normalized_event_key(raw).as_str() {
+    match &*normalized_event_key(raw) {
         "sessionstart" => Some("SessionStart"),
         "pretooluse" | "toolexecutebefore" => Some("PreToolUse"),
         "toolexecuteafter" | "posttooluse" => Some("PostToolUse"),

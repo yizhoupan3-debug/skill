@@ -66,6 +66,32 @@ export const VERDICT_SCHEMA = {
   required: ['is_real', 'reasoning'],
 }
 
+/**
+ * 批量验证 schema：一个 agent 审查所有 findings，返回按 index 对应的裁决数组。
+ * 替代 pipeline 逐条验证，减少 token 消耗和 agent 数量。
+ */
+export const BATCH_VERDICT_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdicts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          finding_index: { type: 'integer' },
+          is_real: { type: 'boolean' },
+          confirmed_severity: { type: 'string', enum: ['P0', 'P1', 'P2'] },
+          root_cause: { type: 'string' },
+          reasoning: { type: 'string' },
+          fix_suggestion: { type: 'string' },
+        },
+        required: ['finding_index', 'is_real', 'reasoning'],
+      },
+    },
+  },
+  required: ['verdicts'],
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 export const READ_INSTRUCTION = `请使用 Bash 工具的 cat 命令读取文件（不要用 Read 工具，因为框架保护了这些文件）。`

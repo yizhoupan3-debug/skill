@@ -9,7 +9,7 @@ use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 static SCAN_COUNT: AtomicU64 = AtomicU64::new(0);
@@ -22,7 +22,7 @@ struct CacheEntry {
     observations: Arc<Vec<TerminalObservation>>,
 }
 
-static CACHE: Mutex<Option<HashMap<PathBuf, CacheEntry>>> = Mutex::new(None);
+static CACHE: RwLock<Option<HashMap<PathBuf, CacheEntry>>> = RwLock::new(None);
 
 fn dir_mtime(path: &Path) -> Option<SystemTime> {
     fs::metadata(path).ok().and_then(|m| m.modified().ok())
@@ -63,14 +63,23 @@ fn scan_terminals_dir(terminals_dir: &Path) -> Vec<TerminalObservation> {
 
 pub fn collect_terminal_observations_cached(terminals_dir: &Path) -> Vec<TerminalObservation> {
     let mtime = dir_mtime(terminals_dir);
-    let mut guard = CACHE.lock().expect("terminal cache mutex");
+    {
+        let guard = CACHE.read().expect("terminal cache rwlock");
+        if let Some(map) = guard.as_ref() {
+            if let Some(entry) = map.get(terminals_dir)
+                && entry.dir_mtime == mtime {
+                    return (*entry.observations).clone();
+                }
+        }
+    }
+    let observations = scan_terminals_dir(terminals_dir);
+    let shared = Arc::new(observations);
+    let mut guard = CACHE.write().expect("terminal cache rwlock");
     let map = guard.get_or_insert_with(HashMap::new);
     if let Some(entry) = map.get(terminals_dir)
         && entry.dir_mtime == mtime {
             return (*entry.observations).clone();
         }
-    let observations = scan_terminals_dir(terminals_dir);
-    let shared = Arc::new(observations);
     if map.len() >= MAX_TERMINAL_CACHE_DIRS {
         map.clear();
     }
@@ -92,6 +101,6 @@ pub fn terminal_scan_count_for_tests() -> u64 {
 #[cfg(test)]
 pub fn reset_terminal_cache_for_tests() {
     SCAN_COUNT.store(0, Ordering::Relaxed);
-    let mut guard = CACHE.lock().expect("terminal cache mutex");
+    let mut guard = CACHE.write().expect("terminal cache rwlock");
     guard.take();
 }

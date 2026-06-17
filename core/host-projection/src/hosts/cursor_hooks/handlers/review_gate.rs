@@ -289,7 +289,6 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
                     use std::io::Seek;
                     let _ = owned.seek(std::io::SeekFrom::Start(0));
                     let _ = owned.write_all(lock_text.as_bytes());
-                    let _ = owned.sync_all();
 
                     hooks::add_lock_wait_ms(wait_start.elapsed().as_millis() as u64);
                     return Some(LockGuard {

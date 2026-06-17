@@ -7,21 +7,22 @@
 
 | 阶段 | 职责 | 模式 |
 |------|------|------|
-| **Scan** | 多维度并行只读扫描 | `parallel([() => agent(...)])` |
+| **Scan** | 多维度串行只读扫描 | `pipeline([...], stage)` 或 `for...of agent()` |
 | **Merge** | 保守去重合并 | 主线程纯代码（不调 agent） |
-| **Verify** | 对抗性逐条验证 | `pipeline(items, ...)` |
+| **Verify** | 批量审定 | 单 `agent()` 打包全部 findings |
 | **Synthesize** | 排序、覆盖度分析、报告 | 主线程纯代码 |
 
 单阶段（只有 Scan）或两阶段（Scan → Verify 跳过 Merge）均为不完整结构。
 
 ## Scan 阶段约定
 
-1. 每个 agent 只负责一个审查维度（lens），prompt 中明确 `lens="xxx"`
-2. 并行 agent 数 ≤ 16（运行时上限）
+1. 默认**串行**执行，每个 lens 逐个审查。仅在**执行（implementx wave lane）**和**并行搜索（deep-research Search 阶段）**等明确有并发收益的场景使用 `parallel()`。
+2. 每个 agent 只负责一个审查维度（lens），prompt 中明确 `lens="xxx"`
 3. 所有 agent 使用同一个 `FINDINGS_SCHEMA`，schema 中 `required` 字段不可省略 `evidence`
 4. Prompt 首行写 `面向用户的可见输出使用简体中文`
 5. 每个 agent 的 prompt 末尾追加质量要求：「仅报告你有充分证据的问题，不要猜测」
 6. agent 失败用 `scanResults.filter(Boolean)` 处理，记录 `failedAgents` 数量
+7. 若使用 `parallel()`，并发 agent 数 ≤ 16（运行时上限）
 
 ## Merge 阶段约定
 
@@ -34,11 +35,11 @@
 
 ## Verify 阶段约定
 
-- 使用 `pipeline(items, ...)` 逐条验证（非并行），每条 finding 独立验证 agent
-- Prompt 以「反驳以下 finding」开头（对抗性而非确认性）
-- 要求验证 agent 读取实际代码确认 evidence 存在
-- `VERDICT_SCHEMA` 必须包含 `is_real`（boolean）和 `reasoning`（string）
-- 对 `pipeline` 外层包 `.catch()`，防止单个 agent 异常导致整条链崩溃
+- 使用单 `agent()` 打包所有 findings 批量验证，**不** N 个 finding → N 个 agent
+- findings 打包后按 index 组织，agent 返回 `{ verdicts: [{ finding_index, is_real, reasoning }] }`
+- `BATCH_VERDICT_SCHEMA` 定义在 `workflow-helpers.js`，要求每个 verdict 绑定 `finding_index`
+- 验证 agent 的 prompt 列出所有 findings 并逐一审核，同一 agent 内可读文件交叉验证
+- 若 findings 过多（>50），按文件或 lens 拆为 2-3 批，每批一个 agent（而非逐条）
 
 ## Synthesize 阶段约定
 
@@ -50,7 +51,7 @@
 ## Schema 设计
 
 - Finding 核心字段：`severity`, `title`, `file`, `line`, `description`, `evidence`, `fix_suggestion`, `lens`
-- Verdict 核心字段：`is_real`, `reasoning`；可选 `confirmed_severity`, `root_cause`, `fix_suggestion`
+- Batch verdict 核心字段：`finding_index`, `is_real`, `reasoning`；可选 `confirmed_severity`, `root_cause`, `fix_suggestion`
 - `evidence` 必须是 `required`（不允许无证据断言）
 
 ## Budget 感知
@@ -66,9 +67,9 @@
 |--------|-----------|
 | 仅基于 title+file 精确去重 | 不同措辞的同一发现会被误删 |
 | Scan 和 Verify 合并到同一 agent | 违反「执行者不自评」原则 |
-| Verify 用 `parallel` 而非 `pipeline` | 验证需要统一上下文，且并行消耗过多 token |
+| N 个 finding → N 个 Verify agent | token 消耗线性增长，每个 agent 重复读同一文件浪费上下文 |
 | 无证据的 finding 通过验证 | schema 中 `evidence` 不是 required 的后果 |
-| pipeline 内无 `.catch()` | 一个 agent 失败导致整条链中断 |
+| findings 不打包直接逐个发送 | agent 间无交叉引用，容易漏掉关联问题 |
 | 只有 Scan+Verify，无 Merge | 24 个原始 findings 可能被 Verify 过滤为 0 |
 
 ---
@@ -78,7 +79,7 @@
 ## 核心 API 语法对比
 
 ### `parallel(thunks)` — 并行执行多个任务
-**用途**：多个 agent 同时工作（如 Scan 阶段的多维度审查）
+**用途**：多个 agent 同时工作（如执行 wave 的并行 lane、搜索阶段的多源并发）
 
 ```javascript
 // ✅ 正确：传入 thunk 数组
@@ -104,21 +105,21 @@ await parallel(
 ---
 
 ### `pipeline(items, ...stages)` — 串行多阶段处理
-**用途**：item 经过多个处理阶段（如 Verify 阶段的逐条验证）
+**用途**：item 经过多个串行处理阶段（如 Scan 阶段逐个 lens 审查）
 
 ```javascript
 // ✅ 正确：items 数组 + 各阶段回调
-const verified = await pipeline(
-  findings,                          // 要处理的 items
-  (item, origItem, i) => agent(     // 第1阶段：验证
-    `验证 ${item.title}`,
-    { schema: VERDICT_SCHEMA }
+const processed = await pipeline(
+  lenses,                            // 要处理的 items
+  (lens, origItem, i) => agent(     // 第1阶段：逐个 lens 审查
+    `审查 ${lens.name}`,
+    { schema: FINDINGS_SCHEMA }
   ),
-  (verdict, origItem, i) => transform(verdict) // 第2阶段：转换
-).catch(() => findings.map(() => null))
+  (result, origItem, i) => transform(result) // 第2阶段：转换
+).catch(() => lenses.map(() => null))
 
 // ❌ 错误：items 是单个值
-await pipeline(findings[0], ...)  // ❌ 不支持单个 item
+await pipeline(lenses[0], ...)  // ❌ 不支持单个 item
 ```
 
 **要点**：
@@ -357,13 +358,23 @@ const FINDINGS_SCHEMA = {
   required: ['findings']
 }
 
-const VERDICT_SCHEMA = {
+const BATCH_VERDICT_SCHEMA = {
   type: 'object',
   properties: {
-    is_real: { type: 'boolean' },
-    reasoning: { type: 'string' }
+    verdicts: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          finding_index: { type: 'integer' },
+          is_real: { type: 'boolean' },
+          reasoning: { type: 'string' },
+        },
+        required: ['finding_index', 'is_real', 'reasoning'],
+      },
+    },
   },
-  required: ['is_real', 'reasoning']
+  required: ['verdicts'],
 }
 
 // ── Scan ──
@@ -374,13 +385,14 @@ const LENSES = [
   { label: 'security', lens: 'security', prompt: '审查安全漏洞' }
 ]
 
-const scanResults = await parallel(
-  LENSES.map(cfg => () => agent(
+const scanResults = await pipeline(
+  LENSES,
+  (cfg) => agent(
     `面向用户的可见输出使用简体中文。
     ${cfg.prompt}。返回 JSON { findings: [...] }`,
     { label: `scan:${cfg.label}`, phase: 'Scan', schema: FINDINGS_SCHEMA }
-  ))
-)
+  )
+).catch(() => LENSES.map(() => ({ findings: [] })))
 
 const allFindings = scanResults.filter(Boolean).flatMap(r => r.findings || [])
 log(`Scan: ${allFindings.length} findings`)
@@ -414,16 +426,22 @@ log(`Merge: ${allFindings.length} → ${merged.length}`)
 // ── Verify ──
 phase('Verify')
 
-const verified = await pipeline(
-  merged,
-  (f, orig, i) => agent(
-    `反驳以下 finding，只有证据充分时才确认。
-    Finding: ${JSON.stringify({ title: f.title, file: f.file })}
-    Evidence: ${f.evidence}
-    返回 JSON: { is_real: boolean, reasoning: string }`,
-    { label: `verify:${i}`, phase: 'Verify', schema: VERDICT_SCHEMA }
-  )
-).catch(() => merged.map(() => null))
+const findingsForVerify = merged.map((f, i) => ({
+  index: i, title: f.title, file: f.file, evidence: f.evidence,
+}))
+
+const verifiedBatch = await agent(
+  `反驳以下 ${findingsForVerify.length} 个发现，只对有充分证据的确认。
+  ${findingsForVerify.map(f => `[#${f.index}] ${f.file}: ${f.title}\n证据: ${f.evidence}`).join('\n\n')}
+  返回 JSON: { verdicts: [{ finding_index, is_real, reasoning }] }`,
+  { label: 'verify:batch', phase: 'Verify', schema: BATCH_VERDICT_SCHEMA }
+)
+
+const verdictMap = {}
+if (verifiedBatch?.verdicts) {
+  for (const v of verifiedBatch.verdicts) verdictMap[v.finding_index] = v
+}
+const verified = merged.map((f, i) => verdictMap[i] || null)
 
 // ── Synthesize ──
 phase('Synthesize')
@@ -481,9 +499,9 @@ log(`Debug output: ${JSON.stringify(debugResult)}`)
 
 - [ ] parallel() 传入 thunk 数组，不是多个参数
 - [ ] pipeline() 传入 items 数组 + stages 回调，不是单个值
-- [ ] 每个 pipeline 末尾加 `.catch()` 处理失败
-- [ ] schema 中 `required` 字段必须有合理默认值或 prompt 要求
-- [ ] Scan 阶段用 parallel()，Verify 阶段用 pipeline()
+- [ ] Verify 阶段用 `BATCH_VERDICT_SCHEMA` 批量验证，不逐条启动 agent
+- [ ] findings 打包时保留 index，用于 batch verdict 回映射
+- [ ] Scan 阶段默认用串行（`pipeline()`/`for...of`），仅在执行和搜索场景用 `parallel()`
 - [ ] 用 `phase()` 标记阶段进度
 - [ ] 用 `log()` 输出关键信息供调试
 - [ ] 追踪 `budget.remaining()` 防止 token 超支

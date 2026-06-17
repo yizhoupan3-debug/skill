@@ -32,8 +32,8 @@ orchestration: { mode: local|sidecar|workflow_native|workflow_supervisor, trigge
 | 模式 | 示例 |
 |------|------|
 | ≥3 命名阶段 | 「Phase1 扫描 / Phase2 合并 / Phase3 验证」；「第一步…第二步…第三步…」 |
-| 管道型 | `Scan → Merge → Verify`；「先并行审查，再逐条验证，最后出报告」 |
-| 串并行混合 | 「多 lens 并行扫描后 pipeline 验证」 |
+| 管道型 | `Scan → Merge → Verify`；「先串行审查，再批量验证，最后出报告」 |
+| 串并行混合 | 「多 lens 串行扫描后批量验证」（执行/搜索场景可用 `parallel`） |
 
 **不触发**：仅「全面审查」但无阶段结构 → 走 `multi-lens-review` sidecar，非 workflow。
 

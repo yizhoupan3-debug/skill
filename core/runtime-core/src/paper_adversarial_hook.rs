@@ -12,6 +12,8 @@ use crate::router_env_flags::{
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 const REL_PATH: &str = "configs/framework/PAPER_ADVERSARIAL_HOOK.txt";
 /// 首行须与 `merge_hook_nudge_paragraph` strip 前缀、`apply_cursor_hook_output_policy` SILENT 放行子串一致。
@@ -21,8 +23,11 @@ pub const PREFIX_LINE: &str = "**PAPER_ADVERSARIAL_HOOK**";
 /// 文件缺失 / 空 / 仅标题时启用，确保 hook 永远能注入一段一致的对抗审稿提示。
 const BUILTIN_TXT: &str = include_str!("../../../configs/framework/PAPER_ADVERSARIAL_HOOK.txt");
 
+static BUILTIN_BLOCK: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| BUILTIN_TXT.trim().to_string());
+
 fn builtin_block() -> String {
-    BUILTIN_TXT.trim().to_string()
+    BUILTIN_BLOCK.clone()
 }
 
 fn adversarial_env_for_host(host: PaperProseHookHost) -> &'static str {
@@ -140,26 +145,49 @@ pub fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
     weak_count >= 5
 }
 
+struct CachedBlock {
+    content: String,
+    mtime: Option<SystemTime>,
+}
+
+static BLOCK_CACHE: Mutex<Option<CachedBlock>> = Mutex::new(None);
+
 pub fn resolve_paper_adversarial_block(repo_root: &Path) -> String {
     let path = repo_root.join(REL_PATH);
-    match fs::read_to_string(&path) {
+    let mtime = fs::metadata(&path)
+        .ok()
+        .and_then(|m| m.modified().ok());
+    {
+        let guard = BLOCK_CACHE.lock().expect("paper adversarial block cache");
+        if let Some(ref cached) = *guard {
+            if cached.mtime == mtime {
+                return cached.content.clone();
+            }
+        }
+    }
+    let content = match fs::read_to_string(&path) {
         Ok(t) => {
             let trimmed = t.trim();
             if trimmed.is_empty() {
-                return builtin_block();
-            }
-            // 真源已带首行 PREFIX：整段采用；若用户只写了单行标题、无正文，回退内置（避免 PREFIX 双写）。
-            if let Some(after) = trimmed.strip_prefix(PREFIX_LINE) {
+                builtin_block()
+            } else if let Some(after) = trimmed.strip_prefix(PREFIX_LINE) {
                 let after = after.trim();
                 if after.is_empty() {
-                    return builtin_block();
+                    builtin_block()
+                } else {
+                    trimmed.to_string()
                 }
-                return trimmed.to_string();
+            } else {
+                format!("{PREFIX_LINE}\n\n{trimmed}")
             }
-            format!("{PREFIX_LINE}\n\n{trimmed}")
         }
         Err(_) => builtin_block(),
+    };
+    {
+        let mut guard = BLOCK_CACHE.lock().expect("paper adversarial block cache");
+        *guard = Some(CachedBlock { content: content.clone(), mtime });
     }
+    content
 }
 
 pub fn maybe_append_paper_adversarial_context(

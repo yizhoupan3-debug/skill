@@ -10,6 +10,8 @@ use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 mod alias;
 pub use framework_runtime::codex_hooks_duplicate;
@@ -243,7 +245,7 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
             .and_then(Value::as_array)
             .map(|rows| rows.len())
             .unwrap_or(0),
-        "evidence_count": normalize_evidence_index(&snapshot.evidence_index).len(),
+        "evidence_count": count_evidence_rows(&snapshot.evidence_index),
         "trace_skill_count": continuity.get("route").and_then(Value::as_array).map(|a| a.len()).unwrap_or(0),
         "continuity": continuity_value,
         "supervisor_state": {
@@ -512,7 +514,7 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
         Vec::<String>::new()
     };
     let session_summary: Map<String, Value> = parse_session_summary(&snapshot.session_summary_text);
-    let evidence_count = normalize_evidence_index(&snapshot.evidence_index).len();
+    let evidence_count = count_evidence_rows(&snapshot.evidence_index);
     let contract_digest_input = json!({
         "workspace": workspace.clone(),
         "continuity_state": continuity.get("state").cloned().unwrap_or(Value::Null),
@@ -588,6 +590,13 @@ fn stable_json_sha256(value: &Value) -> Result<String, String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
+struct CachedRegistry {
+    content: Value,
+    mtime: Option<SystemTime>,
+}
+
+static REGISTRY_CACHE: Mutex<Option<CachedRegistry>> = Mutex::new(None);
+
 /// Machine-readable per-host harness surface from `RUNTIME_REGISTRY.json` (for contract-summary / audits).
 fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String> {
     let path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
@@ -596,6 +605,17 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String
             "RUNTIME_REGISTRY missing at {} — cannot build host_harness fragment",
             path.display()
         ));
+    }
+    let mtime = fs::metadata(&path)
+        .ok()
+        .and_then(|m| m.modified().ok());
+    {
+        let guard = REGISTRY_CACHE.lock().expect("registry cache");
+        if let Some(ref cached) = *guard {
+            if cached.mtime == mtime {
+                return Ok(cached.content.clone());
+            }
+        }
     }
     let v = read_json_strict(&path)?;
     let projections = v
@@ -618,7 +638,12 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String
             }),
         );
     }
-    Ok(Value::Object(out))
+    let result = Value::Object(out);
+    {
+        let mut guard = REGISTRY_CACHE.lock().expect("registry cache");
+        *guard = Some(CachedRegistry { content: result.clone(), mtime });
+    }
+    Ok(result)
 }
 
 fn build_contract_guard_prompt_lines(
@@ -703,7 +728,13 @@ fn compact_contract_value_line(label: &str, value: Option<&Value>) -> String {
 }
 
 fn compact_contract_text(text: &str, max_chars: usize) -> String {
-    let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let normalized = text.split_whitespace().fold(String::new(), |mut acc, w| {
+        if !acc.is_empty() {
+            acc.push(' ');
+        }
+        acc.push_str(w);
+        acc
+    });
     if normalized.chars().count() <= max_chars {
         return normalized;
     }
@@ -1033,20 +1064,20 @@ fn coerce_duration_ms_value(value: Option<&Value>) -> Option<u64> {
 
 /// PostToolUse journal: tool execution duration when the host payload carries it.
 pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
-    let candidates: Vec<Option<&Value>> = vec![
-        event.get("duration_ms"),
-        event.get("durationMs"),
-        event.get("tool_duration_ms"),
-        event.get("toolDurationMs"),
-        event.get("execution_time_ms"),
-        event.get("executionTimeMs"),
-        event.get("tool_output").and_then(|v| v.get("duration_ms")),
-        event.get("tool_output").and_then(|v| v.get("durationMs")),
-        event
+    let candidates: [&Option<&Value>; 10] = [
+        &event.get("duration_ms"),
+        &event.get("durationMs"),
+        &event.get("tool_duration_ms"),
+        &event.get("toolDurationMs"),
+        &event.get("execution_time_ms"),
+        &event.get("executionTimeMs"),
+        &event.get("tool_output").and_then(|v| v.get("duration_ms")),
+        &event.get("tool_output").and_then(|v| v.get("durationMs")),
+        &event
             .get("tool_output")
             .and_then(|v| v.get("metadata"))
             .and_then(|m| m.get("duration_ms")),
-        event.get("result").and_then(|v| v.get("duration_ms")),
+        &event.get("result").and_then(|v| v.get("duration_ms")),
     ];
     if let Some(to) = event.get("tool_output")
         && let Some(text) = to.as_str()
@@ -1059,7 +1090,7 @@ pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
                 }
             }
     for candidate in candidates {
-        if let Some(ms) = coerce_duration_ms_value(candidate) {
+        if let Some(ms) = coerce_duration_ms_value(*candidate) {
             return Some(ms);
         }
     }
@@ -1087,17 +1118,17 @@ pub fn post_tool_call_succeeded(event: &Value) -> bool {
 
 /// 从 Codex `PostToolUse` 载荷中提取退出码（兼容嵌套 `tool_output` / JSON 字符串）。
 fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
-    let candidates: Vec<Option<&Value>> = vec![
-        event.get("exit_code"),
-        event.get("exitCode"),
-        event.get("tool_output").and_then(|v| v.get("exit_code")),
-        event.get("tool_output").and_then(|v| v.get("exitCode")),
-        event
+    let candidates: [&Option<&Value>; 7] = [
+        &event.get("exit_code"),
+        &event.get("exitCode"),
+        &event.get("tool_output").and_then(|v| v.get("exit_code")),
+        &event.get("tool_output").and_then(|v| v.get("exitCode")),
+        &event
             .get("tool_output")
             .and_then(|v| v.get("metadata"))
             .and_then(|m| m.get("exit_code")),
-        event.get("result").and_then(|v| v.get("exit_code")),
-        event.get("response").and_then(|v| v.get("exit_code")),
+        &event.get("result").and_then(|v| v.get("exit_code")),
+        &event.get("response").and_then(|v| v.get("exit_code")),
     ];
     if let Some(to) = event.get("tool_output")
         && let Some(text) = to.as_str()
@@ -1110,7 +1141,7 @@ fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
                 }
             }
     for candidate in candidates {
-        if let Some(code) = coerce_exit_code_value(candidate) {
+        if let Some(code) = coerce_exit_code_value(*candidate) {
             return Some(code);
         }
     }
@@ -1662,13 +1693,38 @@ pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<
     Ok(path)
 }
 
+struct CachedTaskRegistry {
+    content: Value,
+    mtime: Option<SystemTime>,
+}
+
+static TASK_REGISTRY_CACHE: Mutex<Option<CachedTaskRegistry>> = Mutex::new(None);
+
 /// 从 task_registry.json 中读取 task_id（pointer 机制移除后的回退）。
 /// 优先返回 focus_task_id，再返回 tasks 数组中第一个。
 pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
     let registry_path = repo_root.join("artifacts/current/task_registry.json");
-    let raw = std::fs::read_to_string(&registry_path).ok()?;
+    let mtime = fs::metadata(&registry_path)
+        .ok()
+        .and_then(|m| m.modified().ok());
+    {
+        let guard = TASK_REGISTRY_CACHE.lock().expect("task registry cache");
+        if let Some(ref cached) = *guard {
+            if cached.mtime == mtime {
+                return extract_first_task_id_from_value(&cached.content);
+            }
+        }
+    }
+    let raw = fs::read_to_string(&registry_path).ok()?;
     let data: Value = serde_json::from_str(&raw).ok()?;
-    // 优先使用 focus_task_id
+    {
+        let mut guard = TASK_REGISTRY_CACHE.lock().expect("task registry cache");
+        *guard = Some(CachedTaskRegistry { content: data.clone(), mtime });
+    }
+    extract_first_task_id_from_value(&data)
+}
+
+fn extract_first_task_id_from_value(data: &Value) -> Option<String> {
     if let Some(focus) = data.get("focus_task_id").and_then(Value::as_str) {
         let focus = focus.trim();
         if !focus.is_empty() {
@@ -1685,6 +1741,15 @@ pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
         }
     }
     None
+}
+
+fn count_evidence_rows(evidence_index: &Value) -> usize {
+    evidence_index
+        .get("artifacts")
+        .or_else(|| evidence_index.get("evidence"))
+        .and_then(Value::as_array)
+        .map(|rows| rows.len())
+        .unwrap_or(0)
 }
 
 /// Evaluate a materialized closeout record JSON file, attaching an EvidenceContext (R8) when possible.

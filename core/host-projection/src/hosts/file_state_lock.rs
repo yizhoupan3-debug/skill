@@ -136,8 +136,9 @@ fn acquire_file_lock(lock_path: &Path) -> Result<FileStateLockGuard, String> {
         .open(lock_path)
         .map_err(|e| format!("lock_open_failed: {e}"))?;
 
-    // Try flock with retries
+    // Try flock with exponential backoff
     let mut retries = 10;
+    let mut backoff_ms: u64 = 10;
     loop {
         // SAFETY: libc::flock operates on a valid file descriptor from OpenOptions.
         // LOCK_EX | LOCK_NB is a well-defined POSIX operation on regular files.
@@ -150,7 +151,8 @@ fn acquire_file_lock(lock_path: &Path) -> Result<FileStateLockGuard, String> {
         if retries == 0 {
             return Err(format!("lock_acquisition_failed: {} retries exhausted", 10));
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
+        std::thread::sleep(std::time::Duration::from_millis(backoff_ms));
+        backoff_ms = (backoff_ms * 2).min(500);
     }
 
     Ok(FileStateLockGuard {

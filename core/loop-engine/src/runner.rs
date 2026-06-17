@@ -88,6 +88,22 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
             let _ = release_lock(ctx.repo_root);
             Ok(agg)
         }
+        Err(LoopError::ResearchEscalation(msg)) => {
+            // Research completed with candidates: restart the loop to consume them
+            eprintln!("[loop-engine] {msg}");
+            state.circuit_breaker.consecutive_failures = 0;
+            let _ = write_loop_state(ctx.repo_root, loop_id, &state);
+            let _ = release_lock(ctx.repo_root);
+
+            // Recursively restart with a new run — candidates become the new action set
+            let new_ctx = RunContext {
+                entry,
+                repo_root: ctx.repo_root,
+                dry_run: ctx.dry_run,
+                timeout: ctx.timeout,
+            };
+            run_loop(&new_ctx)
+        }
         Err(e) => {
             transition_phase(&mut state, LoopPhase::Escalated);
             finish_run(&mut state, "escalated");
@@ -197,14 +213,118 @@ fn run_loop_inner(
         state.circuit_breaker.consecutive_failures = 0;
     } else if aggregate.overall_status == "fail" || aggregate.overall_status == "partial" {
         state.circuit_breaker.consecutive_failures += 1;
-        if state.circuit_breaker.consecutive_failures >= 3 {
-            return Err(LoopError::ActionFailed(
-                "circuit breaker: 3 consecutive failures. Loop suspended.".to_string(),
-            ));
+        let threshold = entry.research.as_ref().map(|r| r.barrier_threshold).unwrap_or(3);
+        if state.circuit_breaker.consecutive_failures >= threshold {
+            if entry.research_enabled {
+                let escalation = barrier_escalation(entry, &entry.loop_id, run_id, ctx.repo_root)?;
+                if escalation.should_resume() {
+                    return Err(LoopError::ResearchEscalation(
+                        format!("barrier={} candidates={}: research complete, auto-resume loop",
+                            escalation.candidates.first().map(|s| s.as_str()).unwrap_or("?"),
+                            escalation.candidates.len()),
+                    ));
+                } else {
+                    transition_phase(state, LoopPhase::Escalated);
+                    return Err(LoopError::ActionFailed(
+                        "circuit breaker: escalated to research; awaiting human approval.".to_string(),
+                    ));
+                }
+            } else {
+                return Err(LoopError::ActionFailed(
+                    "circuit breaker: 3 consecutive failures. Loop suspended.".to_string(),
+                ));
+            }
         }
     }
 
     Ok(aggregate)
+}
+
+/// Result of a barrier escalation attempt.
+struct BarrierResult {
+    candidates: Vec<String>,
+    will_resume: bool,
+}
+
+impl BarrierResult {
+    fn should_resume(&self) -> bool {
+        self.will_resume && !self.candidates.is_empty()
+    }
+}
+
+/// Execute barrier escalation: shell out to `autoresearch barrier --problem <desc>`.
+fn barrier_escalation(
+    entry: &LoopRegistryEntry,
+    loop_id: &str,
+    run_id: &str,
+    repo_root: &Path,
+) -> Result<BarrierResult, LoopError> {
+    let threshold = entry.research.as_ref().map(|r| r.barrier_threshold).unwrap_or(3);
+    let problem = format!(
+        "loop={} run={} consecutive_failures={} skill={}",
+        loop_id, run_id, threshold,
+        entry.skill.as_deref().unwrap_or("none"),
+    );
+
+    // Shell out to autoresearch barrier CLI with proper --problem flag
+    let output = std::process::Command::new("cargo")
+        .args([
+            "run", "-p", "autoresearch-rs", "--", "barrier",
+            "--problem", &problem,
+            "--loop-id", loop_id,
+            "--run-id", run_id,
+        ])
+        .current_dir(repo_root)
+        .output()
+        .map_err(|e| LoopError::ActionFailed(format!("barrier escalation failed: {e}")))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("[loop-engine] autoresearch barrier failed: {stderr}");
+        return Ok(BarrierResult { candidates: vec![], will_resume: false });
+    }
+
+    let escalation_target = entry.research.as_ref()
+        .map(|r| r.escalation_target.as_str())
+        .unwrap_or("autoresearch");
+    let auto_resume = entry.research.as_ref().map(|r| r.auto_resume).unwrap_or(true);
+    let candidates = discover_barrier_candidates(repo_root);
+
+    eprintln!(
+        "[loop-engine] barrier escalation to {escalation_target}: {} candidates, auto_resume={auto_resume}",
+        candidates.len()
+    );
+
+    Ok(BarrierResult { candidates, will_resume: auto_resume })
+}
+
+/// Scan artifacts/research-barrier/ for the most recent BARRIER_REPORT.json.
+fn discover_barrier_candidates(repo_root: &Path) -> Vec<String> {
+    let barrier_dir = repo_root.join("artifacts").join("research-barrier");
+    if !barrier_dir.exists() {
+        return vec![];
+    }
+    // Find most recent barrier directory
+    let mut entries: Vec<_> = match std::fs::read_dir(&barrier_dir) {
+        Ok(rd) => rd.filter_map(|e| e.ok()).collect(),
+        Err(_) => return vec![],
+    };
+    entries.sort_by_key(|e| e.path());
+    if let Some(latest) = entries.last() {
+        let report_path = latest.path().join("BARRIER_REPORT.json");
+        if report_path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&report_path) {
+                if let Ok(report) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if let Some(candidates) = report.get("candidates").and_then(|c| c.as_array()) {
+                        return candidates.iter()
+                            .filter_map(|c| c.as_str().map(|s| s.to_string()))
+                            .collect();
+                    }
+                }
+            }
+        }
+    }
+    vec![]
 }
 
 fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> Result<Vec<LoopAction>, LoopError> {
@@ -452,6 +572,8 @@ mod tests {
             scope_conflict_resolution: None,
             cost_budget: None,
             notification: None,
+            research_enabled: false,
+            research: None,
         }
     }
 

@@ -30,7 +30,7 @@ pub enum LoopPhase {
 
 impl LoopPhase {
     pub fn is_terminal(&self) -> bool {
-        matches!(self, LoopPhase::Completed | LoopPhase::Escalated | LoopPhase::Interrupted)
+        matches!(self, LoopPhase::Completed | LoopPhase::Interrupted)
     }
 
     pub fn as_str(&self) -> &'static str {
@@ -187,7 +187,31 @@ pub struct LoopRegistryEntry {
     pub cost_budget: Option<CostBudgetConfig>,
     #[serde(default)]
     pub notification: Option<serde_json::Value>,
+    #[serde(default)]
+    pub research_enabled: bool,
+    #[serde(default)]
+    pub research: Option<ResearchConfig>,
 }
+
+/// 科研配置 — barrier escalation 与 research-aware loop 的注册信息（§19.9）。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchConfig {
+    #[serde(default = "default_barrier_threshold")]
+    pub barrier_threshold: u32,
+    #[serde(default = "default_escalation_target")]
+    pub escalation_target: String,
+    #[serde(default = "default_max_research_time_min")]
+    pub max_research_time_min: u32,
+    #[serde(default = "default_auto_resume")]
+    pub auto_resume: bool,
+    #[serde(default)]
+    pub require_human_approval: bool,
+}
+
+fn default_barrier_threshold() -> u32 { 3 }
+fn default_escalation_target() -> String { "autoresearch".to_string() }
+fn default_max_research_time_min() -> u32 { 30 }
+fn default_auto_resume() -> bool { true }
 
 /// 循环触发器配置。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -380,6 +404,9 @@ pub enum LoopError {
 
     #[error("Action failed: {0}")]
     ActionFailed(String),
+
+    #[error("Research escalation: {0}")]
+    ResearchEscalation(String),
 }
 
 impl From<serde_json::Error> for LoopError {
@@ -397,7 +424,7 @@ mod tests {
     #[test]
     fn test_loop_phase_terminal() {
         assert!(LoopPhase::Completed.is_terminal());
-        assert!(LoopPhase::Escalated.is_terminal());
+        assert!(!LoopPhase::Escalated.is_terminal(), "Escalated is no longer terminal: auto-resume may transition back to Dispatching");
         assert!(LoopPhase::Interrupted.is_terminal());
         assert!(!LoopPhase::Pending.is_terminal());
         assert!(!LoopPhase::Running.is_terminal());

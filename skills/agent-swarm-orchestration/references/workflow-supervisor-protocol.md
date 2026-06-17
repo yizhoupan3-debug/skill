@@ -1,6 +1,6 @@
 # Workflow supervisor 协议（非 Claude Code 宿主）
 
-当 `orchestration.mode = workflow_supervisor` 时，主线程 **不** 运行 `import 'workflow'`，但 **必须** 与目标 JS 脚本的 `meta.phases` 与 `parallel`/`pipeline` 结构 **同构** 执行。
+当 `orchestration.mode = workflow_supervisor` 时，主线程 **不** 运行 `import 'workflow'`，但 **必须** 与目标 JS 脚本的 `meta.phases` 与 `parallel`/`pipeline`/`agent` 结构 **同构** 执行。
 
 真源脚本：仓库 [`.claude/workflows/`](../../../.claude/workflows/)（优先已有模板；可当场生成后保存）。
 
@@ -14,9 +14,9 @@
 
 | JS 构造 | Supervisor 动作 |
 |---------|-----------------|
-| `phase('Scan')` + `parallel([() => agent(...)])` | 并行 spawn **只读** Task（每 thunk 一路）；`fork_context=false`；prompt 首行简体中文；schema 对齐 `FINDINGS_SCHEMA` |
+| `phase('Scan')` + `pipeline([() => agent(...)])` | **串行** spawn **只读** Task，每个 lens 一路；`fork_context=false`；prompt 首行简体中文；schema 对齐 `FINDINGS_SCHEMA` |
 | `phase('Merge')` | **主线程** 跑 `conservativeMerge` 或等价逻辑（读 lane 输出 JSON），**不** spawn |
-| `phase('Verify')` + `pipeline(items, …)` | **串行** spawn Task，每条 finding 一路；对抗性「反驳」prompt；`.catch` 语义 = 单路失败不中断 |
+| `phase('Verify')` + `agent(...)` | **单 agent** 批量验证所有 findings；`BATCH_VERDICT_SCHEMA` 含 `finding_index` 回映射 |
 | `phase('Synthesize')` | **主线程** 排序、分 confirmed/rejected、写报告路径；findings-first |
 
 ## Phase 产物（HARD）
@@ -58,9 +58,9 @@ JSON 形状见 `configs/framework/WORKFLOW_LANE_NOTES_SCHEMA.json` (removed)（`
 ## 自检清单（supervisor 审 JS 脚本时用）
 
 1. 四阶段齐全：Scan、Merge、Verify、Synthesize  
-2. `parallel` 为 thunk **数组**；Scan 每路独立 `lens`  
+2. `parallel` 仅用于执行/搜索（plan/review 不用）；Scan 串行 pipeline  
 3. Merge 主线程；保守去重（file+lens+行重叠）  
-4. Verify 用 `pipeline` + `.catch()`；`is_real` + `reasoning` required  
+4. Verify 用单 `agent()` + `BATCH_VERDICT_SCHEMA`；`finding_index` + `is_real` + `reasoning` required  
 5. Synthesize 含 `coverage` 或等价计数  
 6. findings 必含 `evidence`  
 

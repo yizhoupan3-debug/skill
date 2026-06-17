@@ -1002,8 +1002,6 @@ fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewSta
                 let stamp = format!("pid={} ts={now_ms}\n", std::process::id());
                 file.write_all(stamp.as_bytes())
                     .map_err(|e| format!("claude_state_lock_write_failed: {e}"))?;
-                file.sync_all()
-                    .map_err(|e| format!("claude_state_lock_sync_failed: {e}"))?;
                 return Ok(ClaudeReviewStateLock { path: lock_path });
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {

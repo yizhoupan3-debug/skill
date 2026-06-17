@@ -253,67 +253,6 @@ fn workflow_error_isolation_smoke() {
     );
 }
 
-fn workflow_parallel_pipeline_contract(content: &str) -> Result<(), String> {
-    if !content.contains("export const meta") {
-        return Err("missing export const meta".to_string());
-    }
-    let has_parallel = content.contains("await parallel(") || content.contains("Promise.all(");
-    let has_pipeline = content.contains("await pipeline(");
-    if !has_parallel {
-        return Err(
-            "workflow must use await parallel(...) or Promise.all(...) for Scan-style concurrency"
-                .to_string(),
-        );
-    }
-    if !has_pipeline {
-        return Err(
-            "workflow must use await pipeline(...) for Verify-style serial stages".to_string(),
-        );
-    }
-    let scan_phase = content.contains("phase('Scan')") || content.contains("phase(\"Scan\")");
-    let verify_phase = content.contains("phase('Verify')") || content.contains("phase(\"Verify\")");
-    if !scan_phase || !verify_phase {
-        return Err("parallel+pipeline workflow must declare Scan and Verify phases".to_string());
-    }
-    let parallel_pos = content
-        .find("await parallel(")
-        .or_else(|| content.find("Promise.all("))
-        .ok_or_else(|| "missing parallel invocation".to_string())?;
-    let pipeline_pos = content
-        .find("await pipeline(")
-        .ok_or_else(|| "missing pipeline invocation".to_string())?;
-    if parallel_pos >= pipeline_pos {
-        return Err(
-            "parallel/Scan concurrency must precede pipeline/Verify serial stages in script order"
-                .to_string(),
-        );
-    }
-    Ok(())
-}
-
-/// at least one workflow combines Scan `parallel` with Verify `pipeline` (static).
-#[test]
-fn workflow_parallel_pipeline_smoke() {
-    let workflow_dir = workflow_scripts_dir();
-    let mut matched = Vec::new();
-    for entry in fs::read_dir(&workflow_dir).expect("read workflow dir") {
-        let entry = entry.expect("workflow dir entry");
-        let path = entry.path();
-        if path.extension().and_then(|ext| ext.to_str()) != Some("js") {
-            continue;
-        }
-        let content = fs::read_to_string(&path).expect("read workflow script");
-        if workflow_parallel_pipeline_contract(&content).is_ok() {
-            matched.push(path.file_name().unwrap().to_string_lossy().into_owned());
-        }
-    }
-    assert!(
-        !matched.is_empty(),
-        "expected at least one Scan parallel + Verify pipeline workflow under {} (e.g. deep-review-template.js); matched={matched:?}",
-        workflow_dir.display()
-    );
-}
-
 /// Phase-tagged agents must run under the nearest preceding `phase()` boundary (static isolation).
 fn workflow_state_isolation_contract(content: &str) -> Result<(), String> {
     if !content.contains("export const meta") {

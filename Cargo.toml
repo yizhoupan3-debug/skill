@@ -32,6 +32,7 @@ members = [
     "tools/autoresearch-rs",
     "tools/evolution-rs",
     "tools/codegraph-rs",
+    "tools/research-log-rs",
     "tron-search"]
 exclude = [
     "codex-aggregator"
@@ -73,6 +74,7 @@ tokio = { version = "1.44", features = ["sync", "rt", "macros", "time"] }
 mockall = "0.13"
 tracing = "0.1"
 tungstenite = "0.24"
+uuid = "1.0"
 which = "8"
 
 [profile.release]

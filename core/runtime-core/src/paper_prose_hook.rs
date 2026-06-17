@@ -11,6 +11,8 @@ use crate::router_env_flags::{
 use serde_json::Value;
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
+use std::time::SystemTime;
 
 const REL_PATH: &str = "configs/framework/PAPER_PROSE_QUALITY_HOOK.txt";
 pub const PREFIX_LINE: &str = "**PAPER_PROSE_QUALITY_HOOK**";
@@ -20,8 +22,11 @@ const BUILTIN_TXT: &str = include_str!("../../../configs/framework/PAPER_PROSE_Q
 /// Single source of truth: re-export from host-projection.
 pub use host_projection::hooks::PaperProseHookHost;
 
+static BUILTIN_BLOCK: std::sync::LazyLock<String> =
+    std::sync::LazyLock::new(|| BUILTIN_TXT.trim().to_string());
+
 fn builtin_block() -> String {
-    BUILTIN_TXT.trim().to_string()
+    BUILTIN_BLOCK.clone()
 }
 
 pub fn paper_prose_hook_requested(host: PaperProseHookHost) -> bool {
@@ -39,25 +44,49 @@ pub fn prompt_signals_paper_prose_work(text: &str) -> bool {
     has_paper_prose_edit_context(text, &tokens)
 }
 
+struct CachedBlock {
+    content: String,
+    mtime: Option<SystemTime>,
+}
+
+static BLOCK_CACHE: Mutex<Option<CachedBlock>> = Mutex::new(None);
+
 pub fn resolve_paper_prose_block(repo_root: &Path) -> String {
     let path = repo_root.join(REL_PATH);
-    match fs::read_to_string(&path) {
+    let mtime = fs::metadata(&path)
+        .ok()
+        .and_then(|m| m.modified().ok());
+    {
+        let guard = BLOCK_CACHE.lock().expect("paper prose block cache");
+        if let Some(ref cached) = *guard {
+            if cached.mtime == mtime {
+                return cached.content.clone();
+            }
+        }
+    }
+    let content = match fs::read_to_string(&path) {
         Ok(t) => {
             let trimmed = t.trim();
             if trimmed.is_empty() {
-                return builtin_block();
-            }
-            if let Some(after) = trimmed.strip_prefix(PREFIX_LINE) {
+                builtin_block()
+            } else if let Some(after) = trimmed.strip_prefix(PREFIX_LINE) {
                 let after = after.trim();
                 if after.is_empty() {
-                    return builtin_block();
+                    builtin_block()
+                } else {
+                    trimmed.to_string()
                 }
-                return trimmed.to_string();
+            } else {
+                format!("{PREFIX_LINE}\n\n{trimmed}")
             }
-            format!("{PREFIX_LINE}\n\n{trimmed}")
         }
         Err(_) => builtin_block(),
+    };
+    {
+        let mut guard = BLOCK_CACHE.lock().expect("paper prose block cache");
+        *guard = Some(CachedBlock { content: content.clone(), mtime });
     }
+    content
 }
 
 pub fn maybe_append_paper_prose_context(
