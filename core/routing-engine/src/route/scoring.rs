@@ -3,6 +3,13 @@ use super::aliases::{framework_alias_requires_explicit_call, has_explicit_framew
 use super::scoring_config::ScoringWeights;
 use super::signal_cache::cached_signal;
 use super::signals::*;
+
+/// Cheap single-token check: true if phrase contains no space or CJK punctuation separator.
+/// Replaces `tokenize_route_text(phrase).len() == 1` to avoid regex + Vec allocation.
+#[inline]
+fn is_single_token_phrase(phrase: &str) -> bool {
+    !phrase.contains(|c: char| c == ' ' || c == ',' || c == '\n' || c == '/' || c == '|' || c == '，')
+}
 use tracing::debug;
 use super::text::{
     common_route_stop_tokens, text_matches_phrase, tokenize_route_text,
@@ -173,8 +180,7 @@ fn score_gate_name_token_signals(
             matched_gates.join(", ")
         ));
         for phrase in &matched_gates {
-            let ptokens = tokenize_route_text(phrase);
-            if ptokens.len() == 1 {
+            if is_single_token_phrase(phrase) {
                 for t in query_token_list {
                     if text_matches_phrase(std::slice::from_ref(t), phrase) {
                         matched_count += 1;
@@ -223,8 +229,7 @@ fn score_gate_name_token_signals(
             matched_trigger_hints.join(", ")
         ));
         for phrase in &matched_trigger_hints {
-            let ptokens = tokenize_route_text(phrase);
-            if ptokens.len() == 1 {
+            if is_single_token_phrase(phrase) {
                 for t in query_token_list {
                     if text_matches_phrase(std::slice::from_ref(t), phrase) {
                         matched_count += 1;
@@ -268,8 +273,7 @@ fn score_metadata_trigger_signals(
             matched_metadata_triggers.join(", ")
         ));
         for phrase in &matched_metadata_triggers {
-            let ptokens = tokenize_route_text(phrase);
-            if ptokens.len() == 1 {
+            if is_single_token_phrase(phrase) {
                 for t in query_token_list {
                     if text_matches_phrase(std::slice::from_ref(t), phrase) {
                         matched_count += 1;
@@ -681,7 +685,8 @@ pub fn pick_owner<'a>(
             })
             .then_with(|| candidates[a].record.slug.cmp(&candidates[b].record.slug))
     });
-    candidates.swap_remove(fallback_pool[0])
+    let winner_idx = *fallback_pool.first().expect("pick_owner: fallback_pool is empty — invariant violation");
+    candidates.swap_remove(winner_idx)
 }
 
 pub fn route_candidate_cmp(left: &RouteCandidate<'_>, right: &RouteCandidate<'_>) -> Ordering {

@@ -552,15 +552,21 @@ where
     let input_tokens = active_usage
         .and_then(|usage| usage.get("prompt_tokens"))
         .and_then(Value::as_u64)
-        .unwrap_or_else(|| estimate_tokens(&content) as u64) as usize;
+        .unwrap_or_else(|| estimate_tokens(&content) as u64)
+        .try_into()
+        .unwrap_or(usize::MAX);
     let output_tokens = active_usage
         .and_then(|usage| usage.get("completion_tokens"))
         .and_then(Value::as_u64)
-        .unwrap_or_else(|| estimate_tokens(&content) as u64) as usize;
+        .unwrap_or_else(|| estimate_tokens(&content) as u64)
+        .try_into()
+        .unwrap_or(usize::MAX);
     let total_tokens = active_usage
         .and_then(|usage| usage.get("total_tokens"))
         .and_then(Value::as_u64)
-        .unwrap_or((input_tokens + output_tokens) as u64) as usize;
+        .unwrap_or((input_tokens as u64).saturating_add(output_tokens as u64))
+        .try_into()
+        .unwrap_or(usize::MAX);
     Ok(LiveExecuteResult {
         content,
         model_id: response_payload
