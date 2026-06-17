@@ -69,7 +69,7 @@ pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), 
             event,
             crate::telemetry_emit::hook_action_from_output(&output),
         );
-        crate::autopilot_goal::scrub_followup_fields_in_hook_output(&mut output);
+        crate::goal_drive::scrub_followup_fields_in_hook_output(&mut output);
         crate::cursor_hooks::apply_cursor_hook_output_policy(&mut output);
         crate::cursor_hooks::apply_cursor_hook_silent_policy(&mut output);
         let mut stdout = std::io::stdout();

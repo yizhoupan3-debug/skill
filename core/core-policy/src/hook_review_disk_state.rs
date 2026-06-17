@@ -30,7 +30,6 @@ pub struct HookReviewDiskCore {
     pub review_required: bool,
     #[serde(default)]
     pub review_override: bool,
-    #[serde(default, alias = "independent_review_subagent_seen")]
     pub independent_reviewer_seen: bool,
     #[serde(default)]
     pub reject_reason_seen: bool,

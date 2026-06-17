@@ -6,7 +6,7 @@
 //! - host_integration/: install/status/remove/roots/artifacts
 //! - host_entrypoint_sync.rs: host entrypoint sync
 
-// mcp_stdio_harness_dir/mod.rs 的 tools/list 响应使用深度嵌套的 json!() 宏，默认 128 层不够。
+// mcp_stdio_harness/mod.rs 的 tools/list 响应使用深度嵌套的 json!() 宏，默认 128 层不够。
 #![recursion_limit = "256"]
 
 pub mod hooks;

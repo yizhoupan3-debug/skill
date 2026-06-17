@@ -16,10 +16,10 @@ use std::time::SystemTime;
 
 // ── Constants ──
 pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
-pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-autopilot-goal-v1";
+pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-goal-v1";
 pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
 pub const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
-pub const LEGACY_AUTOPILOT_DRIVE_PARAGRAPH_PREFIX: &str = "AUTOPILOT_DRIVE";
+pub const LEGACY_GOAL_DRIVE_PARAGRAPH_PREFIX: &str = "GOAL_DRIVE";
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
 
 // Re-export from validation
@@ -43,7 +43,7 @@ pub use rfv_ops::{
 
 // Re-export from goal_ops
 pub use goal_ops::{
-    framework_autopilot_goal, framework_goal_drive, task_evidence_artifacts_summary_for_task,
+    framework_goal_drive, task_evidence_artifacts_summary_for_task,
     task_evidence_success_only_self_attested,
 };
 
@@ -367,7 +367,7 @@ pub fn read_goal_state_for_diagnostics_scan(
 
 /// 单一来源：`EVIDENCE_INDEX.json` 单条 artifact 是否计作「成功验证」。
 /// 规则：`success == true` **或** `exit_code` 取 0（i64 或 u64 皆可）。
-/// `rfv_loop` 与 `autopilot_goal` 都走这里，防止两路证据口径分叉。
+/// `rfv_loop` 与 `goal_drive` 都走这里，防止两路证据口径分叉。
 pub fn evidence_index_entry_implies_success(entry: &Value) -> bool {
     if entry.get("success").and_then(Value::as_bool) == Some(true) {
         return true;
@@ -393,7 +393,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let repo = std::env::temp_dir().join(format!("router-rs-autopilot-goal-{suffix}"));
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
 
@@ -480,7 +480,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let repo = std::env::temp_dir().join(format!("router-rs-autopilot-start-bad-{suffix}"));
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-start-bad-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
         let rr = repo.display().to_string();
@@ -519,7 +519,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let repo = std::env::temp_dir().join(format!("router-rs-autopilot-clear-{suffix}"));
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-clear-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/cl-task")).expect("mkdir");
         let rr = repo.display().to_string();
@@ -554,7 +554,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let repo = std::env::temp_dir().join(format!("router-rs-autopilot-resume-{suffix}"));
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-resume-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/rs-task")).expect("mkdir");
         let rr = repo.display().to_string();
@@ -605,7 +605,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        let repo = std::env::temp_dir().join(format!("router-rs-autopilot-resume-off-{suffix}"));
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-resume-off-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/rs-off")).expect("mkdir");
         let rr = repo.display().to_string();
@@ -770,7 +770,7 @@ mod tests {
         .expect("ptr");
         fs::write(
             repo.join("artifacts/current/legacy/GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"legacy","status":"running","drive_until_done":false,"done_when":["d1"],"validation_commands":["cargo test -q"],"checkpoints":[]}"#,
+            r#"{"schema_version":"router-rs-goal-v1","goal":"legacy","status":"running","drive_until_done":false,"done_when":["d1"],"validation_commands":["cargo test -q"],"checkpoints":[]}"#,
         )
         .expect("legacy goal");
         let err = framework_goal_drive(json!({
@@ -826,9 +826,9 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
-    /// GOAL 与 RFV 同 task 互斥：autopilot start 应将活跃 RFV 标为 superseded。
+    /// GOAL 与 RFV 同 task 互斥：goal_drive start 应将活跃 RFV 标为 superseded。
     #[test]
-    fn autopilot_start_supersedes_active_rfv_same_task() {
+    fn goal_drive_start_supersedes_active_rfv_same_task() {
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -851,7 +851,7 @@ mod tests {
             "repo_root": rr,
             "operation": "start",
             "task_id": "mx-task",
-            "goal": "autopilot phase",
+            "goal": "goal_drive phase",
             "non_goals": ["n"],
             "done_when": ["d1", "d2"],
             "validation_commands": ["cargo test -q"],
@@ -864,7 +864,7 @@ mod tests {
         let raw = fs::read_to_string(&rfv_path).expect("read rfv");
         let v: Value = serde_json::from_str(&raw).expect("parse rfv");
         assert_eq!(v["loop_status"], json!("superseded"));
-        assert_eq!(v["superseded_by"], json!("autopilot_goal"));
+        assert_eq!(v["superseded_by"], json!("goal_drive"));
 
         let _ = fs::remove_dir_all(&repo);
     }

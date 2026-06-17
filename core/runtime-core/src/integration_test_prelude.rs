@@ -12,7 +12,7 @@ pub(crate) use std::sync::{Mutex, OnceLock};
 pub(crate) use std::time::Duration;
 
 pub(crate) use crate::background_state::handle_background_state_operation;
-pub(crate) use crate::cli::common::resolve_runtime_declared_manifest_fallback;
+pub(crate) use crate::framework_runtime::resolve_runtime_declared_manifest_fallback;
 pub(crate) use crate::cli::runtime_ops::write_text_payload;
 pub(crate) use crate::execution_contract::{
     EXECUTION_AUTHORITY, EXECUTION_MODEL_ID_SOURCE, EXECUTION_RESPONSE_SHAPE_DRY_RUN,

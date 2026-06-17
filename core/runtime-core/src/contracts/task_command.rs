@@ -1,4 +1,4 @@
-//! Named **task ledger** mutations (phase 2.5): single dispatch surface over autopilot goal, RFV loop,
+//! Named **task ledger** mutations (phase 2.5): single dispatch surface over goal drive, RFV loop,
 //! session artifact batch write, and hook evidence append.
 //!
 //! Writers serialize through **repo-root `flock`** on `artifacts/current/.router-rs.task-ledger.lock`
@@ -12,7 +12,7 @@ pub const TASK_LEDGER_COMMAND_ENVELOPE_SCHEMA: &str = "router-rs-task-ledger-com
 
 #[derive(Debug, Clone)]
 pub enum TaskLedgerCommand {
-    AutopilotGoal(Value),
+    GoalDrive(Value),
     RfvLoop(Value),
     SessionArtifacts(Value),
     HookEvidenceAppend(Value),
@@ -43,7 +43,7 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
         .ok_or_else(|| "task_ledger_command: missing payload".to_string())?;
 
     match kind.to_ascii_lowercase().as_str() {
-        "autopilot_goal" => Ok(TaskLedgerCommand::AutopilotGoal(payload)),
+        "goal_drive" => Ok(TaskLedgerCommand::GoalDrive(payload)),
         "rfv_loop" => Ok(TaskLedgerCommand::RfvLoop(payload)),
         "session_artifacts" => Ok(TaskLedgerCommand::SessionArtifacts(payload)),
         "hook_evidence_append" => Ok(TaskLedgerCommand::HookEvidenceAppend(payload)),
@@ -54,7 +54,7 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
 /// Dispatch without taking an extra outer lock (`apply_task_ledger_mutation` is invoked inside handlers where needed).
 pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, String> {
     match cmd {
-        TaskLedgerCommand::AutopilotGoal(p) => crate::telemetry_emit::framework_goal_drive(p),
+        TaskLedgerCommand::GoalDrive(p) => crate::telemetry_emit::framework_goal_drive(p),
         TaskLedgerCommand::RfvLoop(p) => crate::telemetry_emit::framework_rfv_loop(p),
         TaskLedgerCommand::SessionArtifacts(p) => {
             crate::framework_runtime::write_framework_session_artifacts(p)
@@ -89,14 +89,14 @@ mod tests {
     fn parse_rejects_wrong_schema() {
         let e = json!({
             "schema_version": "wrong",
-            "kind": "autopilot_goal",
+            "kind": "goal_drive",
             "payload": {}
         });
         assert!(parse_task_ledger_command_envelope(&e).is_err());
     }
 
     #[test]
-    fn dispatch_autopilot_goal_status_roundtrip() {
+    fn dispatch_goal_drive_status_roundtrip() {
         let repo = tmp_repo("ag");
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/ag")).expect("mkdir");
@@ -108,7 +108,7 @@ mod tests {
         let rr = repo.display().to_string();
         let out = dispatch_task_ledger_command_envelope(json!({
             "schema_version": TASK_LEDGER_COMMAND_ENVELOPE_SCHEMA,
-            "kind": "autopilot_goal",
+            "kind": "goal_drive",
             "payload": {
                 "repo_root": rr,
                 "operation": "status",

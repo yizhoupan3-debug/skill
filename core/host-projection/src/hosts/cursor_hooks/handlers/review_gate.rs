@@ -4,13 +4,10 @@ pub struct ReviewGateState {
     pub version: u32,
     pub phase: u32,
     pub review_required: bool,
-    /// Legacy serde field; beforeSubmit/Stop always clear to `false` (no active delegation gate).
-    pub delegation_required: bool,
     pub review_override: bool,
     pub delegation_override: bool,
     pub reject_reason_seen: bool,
     /// Claude canonical: independent reviewer evidence (`fork_context=false` on countable lane).
-    #[serde(default, alias = "independent_review_subagent_seen")]
     pub independent_reviewer_seen: bool,
     #[serde(default)]
     pub active_subagent_count: u32,
@@ -440,7 +437,6 @@ fn empty_state() -> ReviewGateState {
         version: STATE_VERSION,
         phase: 0,
         review_required: false,
-        delegation_required: false,
         review_override: false,
         delegation_override: false,
         reject_reason_seen: false,
@@ -509,10 +505,6 @@ fn hydrate_review_gate_fields_from_disk(raw: &Value, state: &mut ReviewGateState
 fn migrate_v1(raw: &Value) -> ReviewGateState {
     let mut state = empty_state();
     hydrate_review_gate_fields_from_disk(raw, &mut state);
-    state.delegation_required = raw
-        .get("delegation_required")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
     state.delegation_override = raw
         .get("delegation_override")
         .and_then(Value::as_bool)
@@ -523,7 +515,12 @@ fn migrate_v1(raw: &Value) -> ReviewGateState {
         .unwrap_or(false)
     {
         state.phase = 2;
-    } else if state.review_required || state.delegation_required {
+    } else if state.review_required
+        || raw
+            .get("delegation_required")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+    {
         state.phase = 1;
     }
     state.followup_count = raw
@@ -568,9 +565,6 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
         }
         if let Some(v) = obj.get("review_required").and_then(Value::as_bool) {
             base.review_required = v;
-        }
-        if let Some(v) = obj.get("delegation_required").and_then(Value::as_bool) {
-            base.delegation_required = v;
         }
         if let Some(v) = obj.get("review_override").and_then(Value::as_bool) {
             base.review_override = v;
@@ -705,7 +699,7 @@ fn save_state(repo_root: &Path, event: &Value, state: &mut ReviewGateState) -> b
     true
 }
 
-/// 仅 **review** 路径的硬门控（独立上下文 subagent 证据链）；**不包含** `delegation_required`。
+/// 仅 **review** 路径的硬门控（独立上下文 subagent 证据链）。
 fn review_hard_armed(state: &ReviewGateState) -> bool {
     review_gate_armed(state.review_required, state.review_override)
 }
@@ -845,8 +839,8 @@ fn my_pre_goal_followup_message() -> String {
 /// 连续 pre-goal 提示上限（**仅**显式 env 启用）：beforeSubmit 每轮在仍缺 pre-goal 时累加计数，达到后自动 `pre_goal_review_satisfied=true`。
 /// - **未设置** / `0` / `false` / `off` / `no`：**不**自动放行（默认严格，P1-1）。
 /// - 正整数：自定义上限（运维 opt-in）。
-fn cursor_autopilot_pre_goal_max_nudges_cap() -> Option<u32> {
-    let Ok(raw) = std::env::var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES") else {
+fn pre_goal_max_nudges_cap() -> Option<u32> {
+    let Ok(raw) = std::env::var("ROUTER_RS_PRE_GOAL_MAX_NUDGES") else {
         return None;
     };
     let t = raw.trim().to_ascii_lowercase();
@@ -856,8 +850,8 @@ fn cursor_autopilot_pre_goal_max_nudges_cap() -> Option<u32> {
     t.parse::<u32>().ok().filter(|v| *v >= 1)
 }
 
-fn maybe_autopilot_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Option<&'static str> {
-    if !hooks::router_rs_cursor_autopilot_pre_goal_enabled() {
+fn maybe_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Option<&'static str> {
+    if !hooks::router_rs_pre_goal_enabled() {
         return None;
     }
     if !tracks_goal_or_drive_entry(state)
@@ -867,7 +861,7 @@ fn maybe_autopilot_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Opti
     {
         return None;
     }
-    let cap = cursor_autopilot_pre_goal_max_nudges_cap()?;
+    let cap = pre_goal_max_nudges_cap()?;
     state.pre_goal_nag_count = state.pre_goal_nag_count.saturating_add(1);
     if state.pre_goal_nag_count < cap {
         return None;
@@ -875,7 +869,7 @@ fn maybe_autopilot_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Opti
     state.pre_goal_review_satisfied = true;
     state.pre_goal_nag_count = 0;
     clear_review_gate_escalation_counters(state);
-    Some("router-rs：pre-goal 提示已达上限，已自动放行以便继续执行（需要严格不自动放行请设 `ROUTER_RS_AUTOPILOT_PRE_GOAL_MAX_NUDGES=0`）。仍可在用户消息单独一行写 `small_task` 主动清门。")
+    Some("router-rs：pre-goal 提示已达上限，已自动放行以便继续执行（需要严格不自动放行请设 `ROUTER_RS_PRE_GOAL_MAX_NUDGES=0`）。仍可在用户消息单独一行写 `small_task` 主动清门。")
 }
 
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` or legacy `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE`.

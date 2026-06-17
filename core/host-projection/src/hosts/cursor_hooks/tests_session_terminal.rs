@@ -357,7 +357,7 @@ fn session_start_repo_only_no_continuity_hints() {
     fs::write(
         focus_dir.join("GOAL_STATE.json"),
         serde_json::to_string_pretty(&json!({
-            "schema_version": "router-rs-autopilot-goal-v1",
+            "schema_version": "router-rs-goal-v1",
             "drive_until_done": true,
             "status": "running",
             "goal": "from-focus",

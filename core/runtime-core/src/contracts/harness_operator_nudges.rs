@@ -1,4 +1,4 @@
-//! Operator-facing nudge lines for RFV / Autopilot hooks.
+//! Operator-facing nudge lines for RFV / Goal hooks.
 //!
 //! Truth source: `configs/framework/HARNESS_OPERATOR_NUDGES.json` under repo root.
 //! Disable all injected nudges: `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` (same soft-off tokens as other `ROUTER_RS_*` defaults).
@@ -38,9 +38,9 @@ struct NudgesBody {
     #[serde(default)]
     rfv_loop_continue_reasoning_depth: String,
     #[serde(default)]
-    autopilot_drive_verbose_reasoning_depth: String,
+    goal_drive_verbose_reasoning_depth: String,
     #[serde(default)]
-    autopilot_drive_compact_reasoning_depth: String,
+    goal_drive_compact_reasoning_depth: String,
     /// Optional second line after reasoning-depth nudges: STEM / witness + checker reminder.
     #[serde(default)]
     math_reasoning_harness_line: String,
@@ -54,8 +54,8 @@ struct NudgesBody {
 #[derive(Debug, Clone)]
 pub struct ResolvedHarnessNudges {
     pub rfv_loop_continue_reasoning_depth: String,
-    pub autopilot_drive_verbose_reasoning_depth: String,
-    pub autopilot_drive_compact_reasoning_depth: String,
+    pub goal_drive_verbose_reasoning_depth: String,
+    pub goal_drive_compact_reasoning_depth: String,
     pub math_reasoning_harness_line: String,
     pub retrieval_trace_harness_line: String,
     pub rfv_loop_external_struct_hint_line: String,
@@ -65,8 +65,8 @@ impl ResolvedHarnessNudges {
     fn disabled() -> Self {
         Self {
             rfv_loop_continue_reasoning_depth: String::new(),
-            autopilot_drive_verbose_reasoning_depth: String::new(),
-            autopilot_drive_compact_reasoning_depth: String::new(),
+            goal_drive_verbose_reasoning_depth: String::new(),
+            goal_drive_compact_reasoning_depth: String::new(),
             math_reasoning_harness_line: String::new(),
             retrieval_trace_harness_line: String::new(),
             rfv_loop_external_struct_hint_line: String::new(),
@@ -78,9 +78,9 @@ fn builtin_defaults() -> ResolvedHarnessNudges {
     ResolvedHarnessNudges {
         rfv_loop_continue_reasoning_depth: "推理深度：不靠单模型拉长 CoT；靠 review∥external→fix→verify 分工 + EVIDENCE_INDEX 可审计链。"
             .to_string(),
-        autopilot_drive_verbose_reasoning_depth: "推理深度：不靠单模型拉长 CoT；靠地平线切片 + 可执行验证写入 EVIDENCE_INDEX/检查点，形成可审计链。"
+        goal_drive_verbose_reasoning_depth: "推理深度：不靠单模型拉长 CoT；靠地平线切片 + 可执行验证写入 EVIDENCE_INDEX/检查点，形成可审计链。"
             .to_string(),
-        autopilot_drive_compact_reasoning_depth: "深度：切片+验证证据链，非单模型堆长推理。"
+        goal_drive_compact_reasoning_depth: "深度：切片+验证证据链，非单模型堆长推理。"
             .to_string(),
         math_reasoning_harness_line: String::new(),
         retrieval_trace_harness_line: String::new(),
@@ -120,12 +120,12 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
         &file.nudges.rfv_loop_continue_reasoning_depth,
     );
     merge_nonempty(
-        &mut out.autopilot_drive_verbose_reasoning_depth,
-        &file.nudges.autopilot_drive_verbose_reasoning_depth,
+        &mut out.goal_drive_verbose_reasoning_depth,
+        &file.nudges.goal_drive_verbose_reasoning_depth,
     );
     merge_nonempty(
-        &mut out.autopilot_drive_compact_reasoning_depth,
-        &file.nudges.autopilot_drive_compact_reasoning_depth,
+        &mut out.goal_drive_compact_reasoning_depth,
+        &file.nudges.goal_drive_compact_reasoning_depth,
     );
     merge_nonempty(
         &mut out.math_reasoning_harness_line,
@@ -180,7 +180,7 @@ mod tests {
             n.rfv_loop_continue_reasoning_depth
                 .contains("EVIDENCE_INDEX")
         );
-        assert!(n.autopilot_drive_compact_reasoning_depth.contains("切片"));
+        assert!(n.goal_drive_compact_reasoning_depth.contains("切片"));
     }
 
     #[test]
@@ -206,7 +206,7 @@ mod tests {
         drop(f);
         let n = resolve_harness_operator_nudges(&tmp);
         assert_eq!(n.rfv_loop_continue_reasoning_depth, "CUSTOM_RFV_NUDGE");
-        assert!(n.autopilot_drive_verbose_reasoning_depth.contains("地平线"));
+        assert!(n.goal_drive_verbose_reasoning_depth.contains("地平线"));
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
@@ -318,7 +318,7 @@ mod tests {
             n.rfv_loop_continue_reasoning_depth.is_empty(),
             "aggregate kill-switch must zero out nudges"
         );
-        assert!(n.autopilot_drive_compact_reasoning_depth.is_empty());
+        assert!(n.goal_drive_compact_reasoning_depth.is_empty());
         assert!(n.math_reasoning_harness_line.is_empty());
         assert!(n.retrieval_trace_harness_line.is_empty());
         assert!(n.rfv_loop_external_struct_hint_line.is_empty());

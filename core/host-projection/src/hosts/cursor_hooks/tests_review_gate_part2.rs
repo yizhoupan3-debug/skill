@@ -1,5 +1,5 @@
 #[test]
-fn review_gate_disabled_stop_still_merges_autopilot_drive() {
+fn review_gate_disabled_stop_still_merges_goal_drive() {
     let repo = fresh_repo();
     fs::create_dir_all(repo.join("artifacts/current/gl-rgoff")).expect("mkdir goal");
     fs::write(
@@ -54,7 +54,7 @@ fn stop_goal_and_rfv_do_not_emit_continuity_followups() {
                 .join("artifacts/current")
                 .join(tid)
                 .join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"goal-line","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
+            r#"{"schema_version":"router-rs-goal-v1","goal":"goal-line","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
         )
         .expect("goal");
     fs::write(
@@ -105,7 +105,7 @@ fn stop_goal_and_rfv_do_not_merge_schema_hint_into_continue() {
             .join("artifacts/current")
             .join(tid)
             .join("GOAL_STATE.json"),
-        r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"goal-line","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
+        r#"{"schema_version":"router-rs-goal-v1","goal":"goal-line","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
     )
     .expect("goal");
     fs::write(
@@ -146,7 +146,7 @@ fn cursor_hook_output_policy_truncates_additional_context_under_env_budget() {
     unsafe { env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", "1500") };
     let pad = "Z".repeat(8000);
     let mut out = json!({
-        "additional_context": format!("AUTOPILOT_HEAD\nAUTOPILOT_DRIVE_MARKER\n{}", pad),
+        "additional_context": format!("GOAL_HEAD\nGOAL_DRIVE_MARKER\n{}", pad),
     });
     apply_cursor_hook_output_policy(&mut out);
     unsafe { env::remove_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS") };
@@ -162,8 +162,8 @@ fn cursor_hook_output_policy_truncates_additional_context_under_env_budget() {
         &s[..s.len().min(80)]
     );
     assert!(
-        s.starts_with("AUTOPILOT_HEAD")
-            && s.contains("AUTOPILOT_DRIVE_MARKER")
+        s.starts_with("GOAL_HEAD")
+            && s.contains("GOAL_DRIVE_MARKER")
             && s.ends_with(super::CURSOR_HOOK_OUTBOUND_TRUNC_SUFFIX),
         "prefer prefix preservation: {s:?}"
     );

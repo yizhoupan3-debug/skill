@@ -1,6 +1,5 @@
-#[cfg(test)]
-mod route_metadata_tests {
-    use crate::route::has_paper_review_judgment_context;
+#![cfg(test)]
+use crate::route::has_paper_review_judgment_context;
     use crate::route::normalize_text;
     use crate::route::{RawSkillRecord, SkillRecord};
     use crate::route::{filter_records_for_host, route_task, search_skills};
@@ -507,26 +506,27 @@ mod route_metadata_tests {
     }
 
     #[test]
-    fn retired_autopilot_slash_commands_do_not_route_to_autopilot_owner() {
+    fn retired_implementx_slash_commands_do_not_route_to_goal_drive_owner() {
         let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
         let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
         assert!(!records.iter().any(|record| record.slug == "autopilot"));
-        for query in ["/autopilot", "/autopilot-quick", "/autopilot-deep"] {
+        // /autopilot* retired slash commands removed from aliases
+        for query in ["/retired-implementx-route"] {
             let decision = route_task_with_manifest_fallback(
                 &records,
                 Some(&runtime_path),
                 None,
                 None,
                 query,
-                "retired-autopilot-route",
+                "retired-implementx-route",
                 false,
                 true,
             )
             .expect("route decision");
             assert_ne!(
                 decision.selected_skill, "autopilot",
-                "retired /autopilot* must not select autopilot owner for {query}: {decision:?}"
+                "retired command must not select retired owner for {query}: {decision:?}"
             );
         }
     }
@@ -696,4 +696,3 @@ mod route_metadata_tests {
             rec.framework_alias_entrypoints
         );
     }
-}

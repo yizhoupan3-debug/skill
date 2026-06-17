@@ -51,7 +51,7 @@ fn before_submit_review_prompt_compact_nudge_has_no_second_breadth_paragraph() {
 }
 
 #[test]
-fn parallel_delegation_does_not_latch_delegation_required() {
+fn parallel_delegation_does_not_latch_delegation() {
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -59,10 +59,6 @@ fn parallel_delegation_does_not_latch_delegation_required() {
         &event("s2", "请前端后端测试并行分头执行"),
     );
     let state = load_state_for(&repo, "s2");
-    assert!(
-        !state.delegation_required,
-        "delegation heuristic must not persist into hook-state"
-    );
     assert_eq!(state.phase, 0);
 }
 
@@ -80,10 +76,6 @@ fn my_implement_entry_does_not_arm_delegation_or_review_from_fix_copy() {
     );
     let state = load_state_for(&repo, "ap-del");
     assert!(
-        !state.delegation_required,
-        "My implement must not stack delegation_required (was: framework_entrypoint)"
-    );
-    assert!(
         !state.review_required,
         "My implement turn must not re-arm review from findings wording"
     );
@@ -94,12 +86,12 @@ fn my_implement_entry_does_not_arm_delegation_or_review_from_fix_copy() {
 }
 
 #[test]
-fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
+fn before_submit_review_and_goal_drive_same_prompt_merges_mixing_hint() {
     let _lock = core_policy::test_env_sync::process_env_lock();
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     core_policy::hook_common::set_test_my_light_override(None);
     let repo = fresh_repo();
-    let sid = "s-dual-review-autopilot-hint";
+    let sid = "s-dual-review-pre-goal-hint";
     let prompt = "请全面review这个仓库 /implementx 修复刚发现的问题";
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &event(sid, prompt));
     assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
@@ -114,7 +106,7 @@ fn before_submit_review_and_autopilot_same_prompt_merges_mixing_hint() {
     let state = load_state_for(&repo, sid);
     assert!(
         !state.review_required,
-        "same-submit autopilot must suppress review arming; got {state:?}"
+        "same-submit goal_drive must suppress review arming; got {state:?}"
     );
     assert!(
         !state.goal_required,
@@ -490,12 +482,12 @@ fn stop_closeout_uses_hydration_task_when_active_completed_and_focus_running() {
     .expect("task registry");
     fs::write(
         repo.join("artifacts/current/done-active/GOAL_STATE.json"),
-        r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"done","status":"completed","drive_until_done":false,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
+        r#"{"schema_version":"router-rs-goal-v1","goal":"done","status":"completed","drive_until_done":false,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
     )
     .expect("active goal");
     fs::write(
         repo.join("artifacts/current/drive-focus/GOAL_STATE.json"),
-        r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"drive","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
+        r#"{"schema_version":"router-rs-goal-v1","goal":"drive","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test"]}"#,
     )
     .expect("focus goal");
 
@@ -865,7 +857,7 @@ fn stop_hydrates_when_active_task_missing_but_goal_on_disk() {
     fs::create_dir_all(repo.join("artifacts/current/t-orph")).expect("mkdir");
     fs::write(
             repo.join("artifacts/current/t-orph/GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"no active_task json","status":"running","non_goals":["n"],"checkpoints":[{"note":"step"}],"done_when":["ship","review checklist cleared"],"validation_commands":["cargo test -q"]}"#,
+            r#"{"schema_version":"router-rs-goal-v1","goal":"no active_task json","status":"running","non_goals":["n"],"checkpoints":[{"note":"step"}],"done_when":["ship","review checklist cleared"],"validation_commands":["cargo test -q"]}"#,
         )
         .expect("goal");
     fs::write(
@@ -953,7 +945,7 @@ fn stop_disarms_goal_drive_when_active_task_pointer_missing() {
     fs::create_dir_all(repo.join("artifacts/current/t-noptr")).expect("mkdir");
     fs::write(
         repo.join("artifacts/current/t-noptr/GOAL_STATE.json"),
-        r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"orphan goal on disk","status":"running","non_goals":["n"],"checkpoints":[{"at":"t","note":"c"}],"done_when":["d1","d2"],"validation_commands":["cargo test -q"],"drive_until_done":true}"#,
+        r#"{"schema_version":"router-rs-goal-v1","goal":"orphan goal on disk","status":"running","non_goals":["n"],"checkpoints":[{"at":"t","note":"c"}],"done_when":["d1","d2"],"validation_commands":["cargo test -q"],"drive_until_done":true}"#,
     )
     .expect("goal");
     let _ = dispatch_cursor_hook_event(
@@ -1027,7 +1019,7 @@ fn stop_goal_gate_hydrates_when_goal_state_omits_status_field() {
     .expect("active");
     fs::write(
             repo.join("artifacts/current/t-nost/GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"hand-written without status","non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
+            r#"{"schema_version":"router-rs-goal-v1","goal":"hand-written without status","non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
         )
         .expect("goal json");
     fs::write(
@@ -1408,7 +1400,7 @@ fn stop_load_state_invalid_json_fail_closed_review_gate() {
 }
 
 #[test]
-fn stop_lock_failure_still_surfaces_autopilot_drive() {
+fn stop_lock_failure_still_surfaces_goal_drive() {
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let _guard = ForceHookStateLockFailureGuard::new();
     let repo = fresh_repo();
@@ -1462,7 +1454,7 @@ fn stop_with_active_goal_does_not_inject_goal_continue() {
                 .join("artifacts/current")
                 .join(tid)
                 .join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"drive while hard message exists","status":"running","drive_until_done":true,"non_goals":["n"],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
+            r#"{"schema_version":"router-rs-goal-v1","goal":"drive while hard message exists","status":"running","drive_until_done":true,"non_goals":["n"],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
         )
         .expect("goal");
     let out = dispatch_cursor_hook_event(&repo, "stop", &event("existing-followup", "hi"));
@@ -1488,7 +1480,7 @@ fn before_submit_does_not_merge_goal_or_rfv_continuity() {
                 .join("artifacts/current")
                 .join(tid)
                 .join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","goal":"goal-line","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
+            r#"{"schema_version":"router-rs-goal-v1","goal":"goal-line","status":"running","drive_until_done":true,"non_goals":["n"],"checkpoints":[],"done_when":["d1","d2"],"validation_commands":["cargo test -q"]}"#,
         )
         .expect("goal");
     fs::write(

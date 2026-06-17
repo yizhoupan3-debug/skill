@@ -17,7 +17,7 @@ pub fn rfv_loop_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, S
         .join("RFV_LOOP_STATE.json"))
 }
 
-pub(crate) fn deactivate_rfv_for_conflict_with_autopilot(
+pub(crate) fn deactivate_rfv_for_conflict_with_goal_drive(
     repo_root: &Path,
     task_id: &str,
 ) -> Result<bool, String> {
@@ -44,7 +44,7 @@ pub(crate) fn deactivate_rfv_for_conflict_with_autopilot(
         return Ok(false);
     }
     obj.insert("loop_status".to_string(), json!("superseded"));
-    obj.insert("superseded_by".to_string(), json!("autopilot_goal"));
+    obj.insert("superseded_by".to_string(), json!("goal_drive"));
     obj.insert(
         "updated_at".to_string(),
         json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),

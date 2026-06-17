@@ -112,14 +112,14 @@ impl Drop for ReviewGateActiveGuard {
     }
 }
 
-/// Opt-in My implement pre-goal nudge (`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` — legacy env name).
+/// Opt-in My implement pre-goal nudge (`ROUTER_RS_PRE_GOAL_ENABLED` — legacy env name).
 struct MyPreGoalOptInEnvGuard {
     prev: Option<std::ffi::OsString>,
 }
 
 impl MyPreGoalOptInEnvGuard {
     fn enable() -> Self {
-        let key = "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
+        let key = "ROUTER_RS_PRE_GOAL_ENABLED";
         let prev = env::var_os(key);
         unsafe { env::set_var(key, "1") };
         Self { prev }
@@ -128,7 +128,7 @@ impl MyPreGoalOptInEnvGuard {
 
 impl Drop for MyPreGoalOptInEnvGuard {
     fn drop(&mut self) {
-        let key = "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
+        let key = "ROUTER_RS_PRE_GOAL_ENABLED";
         match self.prev.take() {
             Some(v) => unsafe { env::set_var(key, v) },
             None => unsafe { env::remove_var(key) },
@@ -625,7 +625,7 @@ fn write_goal_state_completed(repo: &Path, task_id: &str) {
             .join("GOAL_STATE.json"),
         format!(
             r#"{{
-  "schema_version": "router-rs-autopilot-goal-v1",
+  "schema_version": "router-rs-goal-v1",
   "task_id": "{task_id}",
   "drive_until_done": true,
   "status": "completed",

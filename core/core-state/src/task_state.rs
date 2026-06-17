@@ -92,7 +92,7 @@ pub const CONTINUITY_ACTIVE_NOT_DRIVING_FOCUS_DRIVES_HINT_ZH: &str = concat!(
 
 /// Pushes [`RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL`] when appropriate. Active may still
 /// have RFV or other task-scoped state with no readable GOAL; the note is about pointers vs
-/// hydration, not "autopilot-only".
+/// hydration, not "goal_drive-only".
 fn maybe_note_active_goal_missing_focus_has_goal(
     repo_root: &Path,
     pointers: &TaskPointers,
@@ -450,7 +450,7 @@ pub fn depth_compliance_aggregate(
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum TaskControlMode {
     Idle,
-    Autopilot,
+    GoalDrive,
     RfvLoop,
     Conflict { reason: String },
 }
@@ -504,10 +504,10 @@ fn classify_control_mode(
                     .to_string(),
             );
             TaskControlMode::Conflict {
-                reason: "autopilot_goal_and_rfv_loop_both_active".to_string(),
+                reason: "goal_drive_and_rfv_loop_both_active".to_string(),
             }
         }
-        (true, false) => TaskControlMode::Autopilot,
+        (true, false) => TaskControlMode::GoalDrive,
         (false, true) => TaskControlMode::RfvLoop,
         (false, false) => TaskControlMode::Idle,
     }
@@ -790,7 +790,7 @@ pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> 
     Some(out)
 }
 
-/// Optional hard gates for `framework_autopilot_goal` **`operation=complete`** (stored on `GOAL_STATE`).
+/// Optional hard gates for `framework_goal_drive` **`operation=complete`** (stored on `GOAL_STATE`).
 #[derive(Debug, Clone)]
 pub struct GoalCompletionGates {
     pub enabled: bool,
@@ -930,7 +930,7 @@ mod tests {
     }
 
     #[test]
-    fn active_only_goal_autopilot() {
+    fn active_only_goal_drive() {
         let _env_guard = DEPTH_SCORE_MODE_ENV_TEST_MUTEX
             .lock()
             .expect("depth score mode env mutex poisoned");
@@ -944,7 +944,7 @@ mod tests {
         fs::write(
             task_dir.join("GOAL_STATE.json"),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-autopilot-goal-v1",
+                "schema_version": "router-rs-goal-v1",
                 "drive_until_done": true,
                 "status": "running",
                 "goal": "ship feature",
@@ -967,7 +967,7 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         assert_eq!(v.task_id.as_deref(), Some(tid));
-        assert!(matches!(v.control_mode, TaskControlMode::Autopilot));
+        assert!(matches!(v.control_mode, TaskControlMode::GoalDrive));
         let ev = v.evidence.as_ref().expect("evidence");
         assert!(!ev.evidence_rows_non_empty);
         assert!(!ev.has_successful_verification);
@@ -1026,7 +1026,7 @@ mod tests {
         fs::write(
             focus_dir.join("GOAL_STATE.json"),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-autopilot-goal-v1",
+                "schema_version": "router-rs-goal-v1",
                 "drive_until_done": true,
                 "status": "running",
                 "goal": "from focus",
@@ -1492,7 +1492,7 @@ mod tests {
         fs::write(
             task_dir.join("GOAL_STATE.json"),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-autopilot-goal-v1",
+                "schema_version": "router-rs-goal-v1",
                 "drive_until_done": true,
                 "status": "running",
                 "goal": "ship",

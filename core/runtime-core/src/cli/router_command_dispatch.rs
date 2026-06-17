@@ -11,7 +11,7 @@ use crate::framework_runtime::trace_stream_io::{
 use crate::browser_dispatch_hook;
 use crate::claude_code_hooks::run_claude_hook_cli;
 use super::args::*;
-use super::common::{parse_json_input, print_json_value};
+use crate::framework_runtime::json_io::{parse_json_input, print_json_value};
 use crate::closeout_enforcement::{
     CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
@@ -830,11 +830,11 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String>
                 }
                 (Some(repo_root), Some(task_id), None) => {
                     let (rows_non_empty, has_success) =
-                        crate::autopilot_goal::task_evidence_artifacts_summary_for_task(
+                        crate::goal_drive::task_evidence_artifacts_summary_for_task(
                             repo_root, task_id,
                         );
                     let goal_state =
-                        crate::autopilot_goal::read_goal_state(repo_root, Some(task_id))
+                        crate::goal_drive::read_goal_state(repo_root, Some(task_id))
                             .ok()
                             .flatten();
                     let goal_prediction = goal_state

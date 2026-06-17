@@ -29,7 +29,7 @@ pub mod contracts;
 
 // ── proxy / re-export modules ──
 pub use contracts::atomic_write;
-pub use contracts::autopilot_goal;
+pub use contracts::goal_drive;
 pub use contracts::formal_toolchain;
 pub use contracts::kernel_bootstrap;
 pub use contracts::path_guard;
@@ -57,12 +57,14 @@ pub use contracts::hook_outbound_protect;
 pub use contracts::hook_timing;
 pub use host_projection::host_entrypoint_sync;
 pub use host_projection::host_integration;
-pub mod hosts;
+pub use host_projection::hosts;
 pub use contracts::mcp_pre_guard;
 pub mod paper_adversarial_hook;
 pub mod paper_prose_hook;
 pub use contracts::review_gate;
-pub mod route;
+pub use routing_engine::route;
+#[cfg(test)]
+mod route_metadata_tests;
 pub use framework_kernel::router_self;
 // runtime_registry: re-export from framework-kernel + review gate additions from core-policy
 pub mod runtime_registry {

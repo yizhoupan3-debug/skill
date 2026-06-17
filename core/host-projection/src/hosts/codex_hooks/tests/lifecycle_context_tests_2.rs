@@ -672,7 +672,7 @@ fn v1_delegation_only_maps_to_phase1() {
     let state_path = codex_state_path(&repo, &event);
     fs::write(
         state_path,
-        r#"{"schema_version":1,"delegation_required":true,"review_subagent_seen":false}"#,
+        r#"{"schema_version":1,"review_subagent_seen":false}"#,
     )
     .unwrap();
     let state = codex_load_state(&repo, &event).unwrap().unwrap();

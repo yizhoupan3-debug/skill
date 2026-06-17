@@ -887,9 +887,7 @@ pub fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
 #[derive(Debug, Deserialize)]
 pub struct HostProjectionNarrative {
     schema_version: String,
-    #[serde(default, alias = "gsd_default_lifecycle_paragraph")]
     default_lifecycle_paragraph: String,
-    #[serde(default, alias = "gsd_lifecycle_by_host")]
     lifecycle_by_host: BTreeMap<String, String>,
     review_findings_only_paragraph: String,
 }
@@ -994,7 +992,7 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
 
 ## MCP（可选）
 
-项目 `.claude/mcp.json` 可注册 `browser-mcp` 等；历史 Desktop 配置见 **`mcp.README.md`**（`claude-desktop` 已退役，勿作真源）。
+项目 `.claude/mcp.json` 可注册 `browser-mcp` 等（`claude-desktop` 已退役，勿作真源）。
 
 路由：`skills/SKILL_ROUTING_RUNTIME.json` · 产物：`artifacts/current/`。
 "#,

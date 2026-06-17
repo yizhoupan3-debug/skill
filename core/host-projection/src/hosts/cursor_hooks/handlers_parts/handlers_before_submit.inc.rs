@@ -27,8 +27,6 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     }
     let mut state = state_load.ok().flatten().unwrap_or_else(empty_state);
     let _stale_reset = apply_subagent_stale_hygiene(&mut state);
-    // `delegation_required` is legacy serde only; always cleared (see ReviewGateState rustdoc).
-    state.delegation_required = false;
     let review = is_review_prompt(&text);
     let goal_drive_entrypoint = is_framework_goal_drive_entry_prompt(&text, &signal_text);
     let review_arms_for_gate = review && !goal_drive_entrypoint;
@@ -71,7 +69,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         state.goal_verify_or_block_seen = state.goal_verify_or_block_seen
             || has_goal_verify_or_block_signal(&signal_text);
     }
-    // 用户在本轮提交里写出 reject_reason token 时须即时生效；否则仅能在助手回复或 Stop 里识别，导致 autopilot pre-goal 与 AG_FOLLOWUP 循环。
+    // 用户在本轮提交里写出 reject_reason token 时须即时生效；否则仅能在助手回复或 Stop 里识别，导致 pre-goal 与 AG_FOLLOWUP 循环。
     // `signal_text` 含整树字符串，覆盖仅出现在 `messages[].content` 等深层路径的 token。
     if saw_reject_reason(&signal_text, &text) {
         state.reject_reason_seen = true;
@@ -91,13 +89,13 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         state.last_prompt = Some(text.chars().take(500).collect());
     }
 
-    let pre_goal_auto_release_note = maybe_autopilot_pre_goal_nag_cap_release(&mut state);
+    let pre_goal_auto_release_note = maybe_pre_goal_nag_cap_release(&mut state);
 
     let persisted = save_state(repo_root, event, &mut state);
 
     // Review：首次武装门控时注入默认「深度+广度」契约指针（短）；相位仍只靠 subagent/PostToolUse（仅 review_hard_armed）。
-    let needs_autopilot_pre_goal =
-        hooks::router_rs_cursor_autopilot_pre_goal_enabled()
+    let needs_pre_goal =
+        hooks::router_rs_pre_goal_enabled()
             && tracks_goal_or_drive_entry(&state)
             && !state.pre_goal_review_satisfied
             && !is_overridden(&state)
@@ -142,7 +140,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         );
         merge_additional_context(&mut output, &model_nudge);
     }
-    if needs_autopilot_pre_goal {
+    if needs_pre_goal {
         // 仅计入总 follow-up 次数；不要把 goal_followup_count 算进去，否则首次 stop 会误判成「非首条」而跳过完整 goal 提示。
         state.followup_count += 1;
         let pre = my_pre_goal_followup_message();
@@ -177,14 +175,14 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         &text,
         false,
     );
-    let persisted_after_followup = if needs_autopilot_pre_goal {
+    let persisted_after_followup = if needs_pre_goal {
         save_state(repo_root, event, &mut state)
     } else {
         persisted
     };
     let gate_needs_persist = review_arms_for_gate
         || state.goal_required
-        || needs_autopilot_pre_goal;
+        || needs_pre_goal;
     if !persisted || !persisted_after_followup {
         if gate_needs_persist
             && !hooks::router_rs_cursor_hook_state_fail_open_enabled()

@@ -37,10 +37,9 @@ pub use core_policy::env_flags::{
 };
 
 /// My implement **pre-goal** nudge.
-/// Canonical `ROUTER_RS_AUTOPILOT_PRE_GOAL_ENABLED`; legacy `ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED` still honored.
-pub fn router_rs_cursor_autopilot_pre_goal_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_AUTOPILOT_PRE_GOAL_ENABLED")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED")
+/// Canonical `ROUTER_RS_PRE_GOAL_ENABLED`; .
+pub fn router_rs_pre_goal_enabled() -> bool {
+    router_rs_env_enabled_default_false("ROUTER_RS_PRE_GOAL_ENABLED")
 }
 
 /// Hook-state: 是否对 `.cursor/hook-state/` 做**历史全目录前缀清扫**。
@@ -140,12 +139,6 @@ pub fn router_rs_cursor_hook_state_stale_sweep_days() -> u64 {
     }
 }
 
-/// Deprecated name; canonical env `ROUTER_RS_REVIEW_PENDING_CYCLE_MAX`.
-/// Delegates to `core_policy::env_flags::router_rs_review_pending_cycle_max()`.
-pub fn router_rs_cursor_review_pending_cycle_max() -> usize {
-    router_rs_review_pending_cycle_max()
-}
-
 pub fn router_rs_session_call_tracker_tool_keys_max() -> usize {
     parse_router_rs_usize_clamped(
         ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV,
@@ -196,31 +189,6 @@ pub fn router_rs_cursor_hook_outbound_context_max_bytes() -> usize {
                         "[router-rs] invalid {key_canonical} (or legacy {key_legacy})={raw:?}; using default 8192 (clamp 1024..65536)"
                     );
                     8192
-                }
-            }
-        }
-    }
-}
-
-/// Canonical `ROUTER_RS_SESSIONSTART_CONTEXT_MAX_CHARS`; legacy `ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS` still honored.
-pub fn router_rs_cursor_sessionstart_context_max_bytes() -> usize {
-    let key_canonical = "ROUTER_RS_SESSIONSTART_CONTEXT_MAX_CHARS";
-    let key_legacy = "ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_CHARS";
-    let raw = env::var(key_canonical)
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| env::var(key_legacy).ok().filter(|s| !s.trim().is_empty()));
-    match raw {
-        None => 1200,
-        Some(raw) => {
-            let trimmed = raw.trim();
-            match trimmed.parse::<usize>() {
-                Ok(n) => n.clamp(256, 8192),
-                Err(_) => {
-                    eprintln!(
-                        "[router-rs] invalid {key_canonical} (or legacy {key_legacy})={raw:?}; using default 1200 (clamp 256..8192)"
-                    );
-                    1200
                 }
             }
         }
@@ -338,22 +306,22 @@ mod tests {
     }
 
     #[test]
-    fn autopilot_pre_goal_enabled_opt_in_only() {
+    fn pre_goal_enabled_opt_in_only() {
         let _g = lock_env();
-        let key_canonical = "ROUTER_RS_AUTOPILOT_PRE_GOAL_ENABLED";
-        let key_legacy = "ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED";
+        let key_canonical = "ROUTER_RS_PRE_GOAL_ENABLED";
+        let key_legacy = "ROUTER_RS_CURSOR_PRE_GOAL_ENABLED";
         let prev_canon = env::var_os(key_canonical);
         let prev_legacy = env::var_os(key_legacy);
         unsafe { env::remove_var(key_canonical) };
         unsafe { env::remove_var(key_legacy) };
-        assert!(!super::router_rs_cursor_autopilot_pre_goal_enabled());
+        assert!(!super::router_rs_pre_goal_enabled());
         // Canonical takes precedence
         unsafe { env::set_var(key_canonical, "true") };
-        assert!(super::router_rs_cursor_autopilot_pre_goal_enabled());
+        assert!(super::router_rs_pre_goal_enabled());
         unsafe { env::remove_var(key_canonical) };
         // Legacy fallback works
         unsafe { env::set_var(key_legacy, "true") };
-        assert!(super::router_rs_cursor_autopilot_pre_goal_enabled());
+        assert!(super::router_rs_pre_goal_enabled());
         match prev_canon {
             Some(v) => unsafe { env::set_var(key_canonical, v) },
             None => unsafe { env::remove_var(key_canonical) },

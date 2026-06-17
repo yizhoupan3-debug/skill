@@ -50,7 +50,7 @@ fn goal_chat_verify_zh_signal(text: &str) -> bool {
         .any(|p| text.contains(p))
 }
 
-/// Task/subagent 调用里明示 `fork_context: true` 时视为与主会话共享上下文，不满足 autopilot 要求的「独立上下文」预检。
+/// Task/subagent 调用里明示 `fork_context: true` 时视为与主会话共享上下文，不满足 goal_drive 要求的「独立上下文」预检。
 /// 部分宿主以字符串 `"true"` / `"false"` 下发，需与 JSON bool 同等解析。
 fn fork_context_from_tool(event: &Value, tool_input: &Value) -> Option<bool> {
     fork_context_from_values(tool_input, Some(event))
@@ -236,7 +236,7 @@ fn cursor_subagent_type_pair(tool_input: &Value, event: &Value) -> (String, Stri
     )
 }
 
-/// My implement pre-goal（`ROUTER_RS_AUTOPILOT_PRE_GOAL_ENABLED`）：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
+/// My implement pre-goal（`ROUTER_RS_PRE_GOAL_ENABLED`）：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
 /// `ROUTER_RS_REVIEW_GATE_DISABLE` 应急开启时退化为「任一带名 lane/agent 字段」以免应急路径过严。
 fn pre_goal_subagent_kind_ok(sub_type: &str, agent_type: &str) -> bool {
     if cursor_review_gate_disabled_by_env() {

@@ -198,7 +198,6 @@ pub struct InlineSkillRecordPayload {
     pub session_start: String,
     #[serde(default)]
     pub tags: Vec<String>,
-    #[serde(default, alias = "trigger_phrases")]
     pub trigger_hints: Vec<String>,
 }
 

@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use super::pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, sync_task_pointers_after_goal_drive,
 };
-use super::rfv_ops::deactivate_rfv_for_conflict_with_autopilot;
+use super::rfv_ops::deactivate_rfv_for_conflict_with_goal_drive;
 use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, now_iso, read_goal_state};
 
 fn resolve_task_id_strict(payload: &Value) -> Result<String, String> {
@@ -55,11 +55,6 @@ pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
             framework_goal_drive_impl(payload)
         })
     }
-}
-
-/// ADR-008 one-version compat stdio op alias.
-pub fn framework_autopilot_goal(payload: Value) -> Result<Value, String> {
-    framework_goal_drive(payload)
 }
 
 fn invalidate_route_records_cache_on_write() {
@@ -442,7 +437,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
             invalidate_route_records_cache_on_write();
             let rfv_loop_superseded =
-                deactivate_rfv_for_conflict_with_autopilot(&repo_root, &task_id)?;
+                deactivate_rfv_for_conflict_with_goal_drive(&repo_root, &task_id)?;
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
@@ -629,7 +624,7 @@ fn resume_goal_running(
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
     invalidate_route_records_cache_on_write();
-    let rfv_loop_superseded = deactivate_rfv_for_conflict_with_autopilot(repo_root, &task_id)?;
+    let rfv_loop_superseded = deactivate_rfv_for_conflict_with_goal_drive(repo_root, &task_id)?;
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     let goal_label = state
         .get("goal")

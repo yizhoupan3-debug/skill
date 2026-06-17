@@ -102,8 +102,8 @@ fn strict_disk_stop_pre_goal_not_satisfied_from_goal_file_alone() {
     let _my_light = MyLightOverrideGuard::force_non_my_light();
     let _env = core_policy::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
-    let prev_pre = env::var_os("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED");
-    unsafe { env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", "1") };
+    let prev_pre = env::var_os("ROUTER_RS_PRE_GOAL_ENABLED");
+    unsafe { env::set_var("ROUTER_RS_PRE_GOAL_ENABLED", "1") };
     let prev = env::var_os("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK");
     unsafe { env::set_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK", "1") };
 
@@ -157,8 +157,8 @@ fn strict_disk_stop_pre_goal_not_satisfied_from_goal_file_alone() {
         None => unsafe { env::remove_var("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK") },
     }
     match prev_pre {
-        Some(v) => unsafe { env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED", v) },
-        None => unsafe { env::remove_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED") },
+        Some(v) => unsafe { env::set_var("ROUTER_RS_PRE_GOAL_ENABLED", v) },
+        None => unsafe { env::remove_var("ROUTER_RS_PRE_GOAL_ENABLED") },
     }
 }
 
@@ -1015,7 +1015,7 @@ fn goal_stop_followup_is_short_code_only() {
         "Stop uses short goal hint only; msg={first_msg:?}"
     );
     assert!(
-        !first_msg.contains("Autopilot goal mode:"),
+        !first_msg.contains("Goal drive mode:"),
         "Stop must not dump full goal contract prose; msg={first_msg:?}"
     );
     let second = dispatch_cursor_hook_event(&repo, "stop", &hook_ev("s17", "继续"));
@@ -1028,7 +1028,7 @@ fn goal_stop_followup_is_short_code_only() {
             "expected short code when non-empty; second_msg={second_msg:?} second={second:?}"
         );
         assert!(
-            !second_msg.contains("Autopilot goal mode:"),
+            !second_msg.contains("Goal drive mode:"),
             "Stop must not dump full goal contract prose; second_msg={second_msg:?}"
         );
     }
@@ -1108,9 +1108,9 @@ fn my_pre_goal_auto_releases_when_nag_cap_reached() {
     let _env = core_policy::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
     let _my_light = MyLightOverrideGuard::force_non_my_light();
-    let prev_cap = env::var_os("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES");
+    let prev_cap = env::var_os("ROUTER_RS_PRE_GOAL_MAX_NUDGES");
     let _pre_goal = MyPreGoalOptInEnvGuard::enable();
-    unsafe { env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES", "2") };
+    unsafe { env::set_var("ROUTER_RS_PRE_GOAL_MAX_NUDGES", "2") };
     let repo = fresh_repo();
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -1128,8 +1128,8 @@ fn my_pre_goal_auto_releases_when_nag_cap_reached() {
     let blob = hook_user_visible_blob(&out);
     assert!(blob.contains("pre-goal 提示已达上限"), "blob={blob:?}");
     match prev_cap {
-        Some(v) => unsafe { env::set_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES", v) },
-        None => unsafe { env::remove_var("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_MAX_NUDGES") },
+        Some(v) => unsafe { env::set_var("ROUTER_RS_PRE_GOAL_MAX_NUDGES", v) },
+        None => unsafe { env::remove_var("ROUTER_RS_PRE_GOAL_MAX_NUDGES") },
     }
 }
 

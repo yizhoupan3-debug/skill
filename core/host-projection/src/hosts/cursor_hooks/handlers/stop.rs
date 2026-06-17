@@ -57,7 +57,6 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         }
         Ok(Some(mut state)) => {
             let _stale_reset = apply_subagent_stale_hygiene(&mut state);
-            state.delegation_required = false;
             // Override 句式仅承认用户本轮 prompt（与 beforeSubmit 一致）；勿用含助手输出的
             // `signal_text`，避免助手复述「不要用子代理」类话术误清空 REVIEW_GATE。
             if has_override(&text) {
@@ -136,7 +135,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 state.followup_count += 1;
                 state.goal_followup_count += 1;
                 let _ = save_state(repo_root, event, &mut state);
-                // Stop 只给短码，避免把整段 Autopilot 契约说明塞进会话收尾（细则见 beforeSubmit / AGENTS）。
+                // Stop 只给短码，避免把整段 Goal drive 契约说明塞进会话收尾（细则见 beforeSubmit / AGENTS）。
                 let message = goal_stop_followup_line(&state);
                 (
                     json!({ "followup_message": message }),
@@ -203,10 +202,9 @@ fn handle_pre_compact(repo_root: &Path, event: &Value) -> Value {
     let mut out = match load_state(repo_root, event) {
         Ok(Some(state)) => {
             let summary = format!(
-                "router-rs 门控快照：phase={} review={} delegation={} override={} reject={} pre_goal_ok={} subagentStart_n={} subagent_stop={}",
+                "router-rs 门控快照：phase={} review={} override={} reject={} pre_goal_ok={} subagentStart_n={} subagent_stop={}",
                 state.phase,
                 state.review_required,
-                state.delegation_required,
                 is_overridden(&state),
                 state.reject_reason_seen,
                 state.pre_goal_review_satisfied,

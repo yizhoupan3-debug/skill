@@ -32,7 +32,6 @@ pub struct TraceRecordEventRequestPayload {
     pub event_schema_version: String,
     pub generation: usize,
     pub seq: usize,
-    #[serde(alias = "session_id")]
     pub run_id: String,
     pub job_id: Option<String>,
     pub kind: String,
@@ -63,7 +62,6 @@ pub struct TraceCompactRequestPayload {
     pub root_path: String,
     pub event_stream_path: Option<String>,
     pub output_path: Option<String>,
-    #[serde(alias = "session_id")]
     pub run_id: String,
     pub job_id: Option<String>,
     pub backend_family: Option<String>,
@@ -88,7 +86,6 @@ pub struct TraceCompactResponsePayload {
     pub applied: bool,
     pub status: String,
     pub reason: Option<String>,
-    #[serde(alias = "session_id")]
     pub run_id: String,
     pub job_id: Option<String>,
     pub backend_family: Option<String>,

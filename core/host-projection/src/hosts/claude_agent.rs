@@ -7,7 +7,7 @@
 use std::io;
 use std::path::Path;
 
-use crate::hosts::mcp_stdio_harness_dir::run_mcp_stdio;
+use crate::hosts::mcp_stdio_harness::run_mcp_stdio;
 use framework_kernel::repo_roots::resolve_repo_root_arg;
 
 /// Run the MCP stdio agent loop for Claude Code host.

@@ -45,8 +45,6 @@ pub enum CodexHookError {
     StateWriteFailed,
     /// Failed to serialize payload to JSON.
     PayloadSerialization(serde_json::Error),
-    /// Generic error for install/sync operations.
-    InstallSync(String),
 }
 
 impl std::fmt::Display for CodexHookError {
@@ -63,26 +61,11 @@ impl std::fmt::Display for CodexHookError {
             Self::StateJsonInvalid(msg) => write!(f, "state_json_invalid: {msg}"),
             Self::StateWriteFailed => write!(f, "state_write_failed"),
             Self::PayloadSerialization(e) => write!(f, "payload_serialization_failed: {e}"),
-            Self::InstallSync(msg) => write!(f, "{msg}"),
         }
     }
 }
 
 impl std::error::Error for CodexHookError {}
-
-/// Backward compatibility: convert CodexHookError to String for callers
-/// that still use `Result<_, String>`.
-impl From<String> for CodexHookError {
-    fn from(msg: String) -> Self {
-        CodexHookError::InstallSync(msg)
-    }
-}
-
-impl From<CodexHookError> for String {
-    fn from(err: CodexHookError) -> String {
-        err.to_string()
-    }
-}
 
 pub(super) fn codex_merge_legacy_subagent_gate_evidence(state: &mut CodexLifecycleContextState) {
     if state.review_subagent_seen
@@ -712,8 +695,6 @@ mod tests {
         let err = CodexHookError::StateJsonInvalid("bad field".to_string());
         assert!(format!("{err}").contains("bad field"));
 
-        let err = CodexHookError::InstallSync("msg".to_string());
-        assert_eq!(format!("{err}"), "msg");
     }
 
     #[test]
@@ -722,19 +703,4 @@ mod tests {
         assert!(err.to_string().contains("state_lock_timeout"));
     }
 
-    #[test]
-    fn codex_hook_error_from_string() {
-        let err: CodexHookError = "test error".to_string().into();
-        assert!(matches!(err, CodexHookError::InstallSync(_)));
-    }
-
-    #[test]
-    fn codex_hook_error_to_string_roundtrip() {
-        let err = CodexHookError::StateDirCreate(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            "test",
-        ));
-        let s: String = err.into();
-        assert!(s.contains("state_dir_create_failed"));
-    }
 }

@@ -246,7 +246,7 @@ fn apply_claude_review_gate_user_prompt(
     repo_root: &Path,
     payload: &Value,
     prompt: &str,
-) -> Result<ReviewGateState, String> {
+) -> Result<HookReviewDiskCore, String> {
     let path = review_state_path(repo_root, payload);
     let my_light = core_policy::hook_common::my_light_profile_active(Some(repo_root), prompt);
     let narrow = is_narrow_review_prompt(prompt);
@@ -263,7 +263,7 @@ fn apply_claude_review_gate_user_prompt(
                 );
                 return Err("review_gate_unreadable".to_string());
             }
-            AgentDiskState::Absent => ReviewGateState::default(),
+            AgentDiskState::Absent => HookReviewDiskCore::default(),
             AgentDiskState::Ok(s) => s,
         };
         if my_light || goal_drive || narrow {
@@ -660,7 +660,7 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     let reject_now = saw_reject_reason(&stop_signal, &prompt);
 
     let mut review_state = match review_load {
-        AgentDiskState::Absent => ReviewGateState::default(),
+        AgentDiskState::Absent => HookReviewDiskCore::default(),
         AgentDiskState::Ok(s) => s,
         AgentDiskState::Unreadable => unreachable!("Unreadable already returned above"),
     };
@@ -711,7 +711,6 @@ struct TouchState {
     framework_tested: bool,
 }
 
-type ReviewGateState = HookReviewDiskCore;
 
 fn try_extract_session_string(payload: &Value) -> Option<String> {
     let map = payload.as_object()?;
@@ -821,7 +820,7 @@ fn legacy_review_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
         ))
 }
 
-fn read_review_gate_file(path: &Path) -> AgentDiskState<ReviewGateState> {
+fn read_review_gate_file(path: &Path) -> AgentDiskState<HookReviewDiskCore> {
     if !path.is_file() {
         return AgentDiskState::Absent;
     }
@@ -965,8 +964,8 @@ enum AgentDiskState<T> {
 
 fn migrate_claude_review_gate_state_to_canonical(
     canonical_path: &Path,
-    state: &ReviewGateState,
-) -> AgentDiskState<ReviewGateState> {
+    state: &HookReviewDiskCore,
+) -> AgentDiskState<HookReviewDiskCore> {
     if let Err(err) = with_claude_review_state_lock(canonical_path, || {
         write_review_state_unlocked(canonical_path, state)
     }) {
@@ -977,7 +976,7 @@ fn migrate_claude_review_gate_state_to_canonical(
     AgentDiskState::Ok(state.clone())
 }
 
-fn load_review_gate_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<ReviewGateState> {
+fn load_review_gate_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<HookReviewDiskCore> {
     let path = review_state_path(repo_root, payload);
     match read_review_gate_file(&path) {
         AgentDiskState::Ok(state) => return AgentDiskState::Ok(state),
@@ -1035,7 +1034,7 @@ fn load_touch_state_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<To
     })
 }
 
-fn write_review_state_unlocked(path: &Path, state: &ReviewGateState) -> Result<(), String> {
+fn write_review_state_unlocked(path: &Path, state: &HookReviewDiskCore) -> Result<(), String> {
     let mut to_write = state.clone();
     to_write.bump_version_for_save();
     let value = serde_json::to_value(&to_write).map_err(|e| e.to_string())?;
@@ -1102,7 +1101,7 @@ fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
                 );
                 return Err("review_gate_unreadable".to_string());
             }
-            AgentDiskState::Absent => ReviewGateState::default(),
+            AgentDiskState::Absent => HookReviewDiskCore::default(),
             AgentDiskState::Ok(s) => s,
         };
         if !state.review_required || state.review_override {

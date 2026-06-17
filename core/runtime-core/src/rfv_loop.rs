@@ -3,7 +3,7 @@
 pub use core_state::state_manager::read_rfv_loop_state;
 
 use crate::atomic_write::write_atomic_json;
-use crate::autopilot_goal::{
+use crate::goal_drive::{
     validate_external_research_strict, validate_external_research_structured,
 };
 use crate::framework_runtime::resolve_repo_root_arg;
@@ -156,8 +156,8 @@ fn enforce_rfv_close_gates(
         }
     }
     let (_, evidence_ok) =
-        crate::autopilot_goal::task_evidence_artifacts_summary_for_task(repo_root, task_id);
-    let goal_opt = crate::autopilot_goal::read_goal_state(repo_root, Some(task_id))
+        crate::goal_drive::task_evidence_artifacts_summary_for_task(repo_root, task_id);
+    let goal_opt = crate::goal_drive::read_goal_state(repo_root, Some(task_id))
         .ok()
         .flatten();
     let preview_val = Value::Object(preview_rfv.clone());
@@ -183,10 +183,10 @@ fn enforce_rfv_close_gates(
 }
 
 /// EVIDENCE_INDEX 行视为「成功验证」：`success==true` 或 `exit_code==0`。
-/// 实际规则下沉到 [`crate::hook_common::evidence_index_entry_implies_success`]，与 `autopilot_goal`
+/// 实际规则下沉到 [`crate::hook_common::evidence_index_entry_implies_success`]，与 `goal_drive`
 /// 共用一份口径（避免历史上的两套独立判定函数）。
 fn evidence_row_is_success(row: &Value) -> bool {
-    crate::autopilot_goal::evidence_index_entry_implies_success(row)
+    crate::goal_drive::evidence_index_entry_implies_success(row)
 }
 
 /// 读取同任务目录下的 `EVIDENCE_INDEX.json`。
@@ -604,7 +604,7 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
             }
             let goal_state_cleared =
-                crate::autopilot_goal::deactivate_goal_for_conflict_with_rfv(&repo_root, &task_id)?;
+                crate::goal_drive::deactivate_goal_for_conflict_with_rfv(&repo_root, &task_id)?;
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
@@ -1070,7 +1070,7 @@ mod tests {
         .expect("pointer");
         let rr = repo.display().to_string();
 
-        crate::autopilot_goal::framework_goal_drive(json!({
+        crate::goal_drive::framework_goal_drive(json!({
             "repo_root": rr.clone(),
             "operation": "start",
             "task_id": "rfv-mx",
@@ -1082,7 +1082,7 @@ mod tests {
         }))
         .expect("goal start");
         let gpath =
-            crate::autopilot_goal::goal_state_path_for_task(&repo, "rfv-mx").expect("gpath");
+            crate::goal_drive::goal_state_path_for_task(&repo, "rfv-mx").expect("gpath");
         assert!(gpath.is_file());
 
         let out = framework_rfv_loop(json!({
