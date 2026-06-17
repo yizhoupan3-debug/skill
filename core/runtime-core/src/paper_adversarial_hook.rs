@@ -66,7 +66,7 @@ pub fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
 
     // 纯 ML/CS 技术讨论过滤（不含论文关键词时）
     let tech_ml_noise = {
-        let tech_tokens = [
+        static TECH_TOKENS: &[&str] = &[
             "training",
             "model architecture",
             "loss function",
@@ -76,7 +76,7 @@ pub fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
             "dataset",
             "inference",
         ];
-        tech_tokens.iter().filter(|k| lower.contains(*k)).count() >= 2
+        TECH_TOKENS.iter().filter(|k| lower.contains(*k)).count() >= 2
             && !has_paper_signal
             && !text.contains("审稿")
             && !text.contains("投稿")
@@ -86,7 +86,7 @@ pub fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
         return false;
     }
 
-    let strong_zh = [
+    static STRONG_ZH: &[&str] = &[
         "审稿",
         "审稿人",
         "审稿意见",
@@ -101,11 +101,11 @@ pub fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
         "rebuttal",
         "response letter",
     ];
-    if strong_zh.iter().any(|k| text.contains(k)) {
+    if STRONG_ZH.iter().any(|k| text.contains(k)) {
         return true;
     }
 
-    let strong_en = [
+    static STRONG_EN: &[&str] = &[
         "manuscript",
         "revise and resubmit",
         "meta-review",
@@ -116,18 +116,18 @@ pub fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
         "\\begin{abstract}",
         "supplementary material",
     ];
-    if strong_en.iter().any(|k| lower.contains(k)) {
+    if STRONG_EN.iter().any(|k| lower.contains(*k)) {
         return true;
     }
 
     // 不用泛词 `paper`（易与 white paper / 产品文档误触）；弱信号须凑满条数才放行，减少纯工程/ML 代码聊天误注入。
-    let weak = [
+    static WEAK: &[&str] = &[
         "latex", "appendix", "theorem", "lemma", "baseline", "ablation", "novelty", "claim",
     ];
-    let mut weak_count = weak.iter().filter(|k| lower.contains(*k)).count() as isize;
+    let mut weak_count = WEAK.iter().filter(|k| lower.contains(*k)).count() as isize;
 
     // Anti-signal: ML/CS 行话在无强信号时降权，减少纯技术讨论误触发
-    let anti_signals = [
+    static ANTI_SIGNALS: &[&str] = &[
         "transformer",
         "attention",
         "convolution",
@@ -137,7 +137,7 @@ pub fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
         "batch size",
         "learning rate",
     ];
-    let anti_hits = anti_signals.iter().filter(|k| lower.contains(*k)).count();
+    let anti_hits = ANTI_SIGNALS.iter().filter(|k| lower.contains(*k)).count();
     if anti_hits >= 2 && !has_paper_signal && !text.contains("审稿") {
         weak_count -= 2;
     }

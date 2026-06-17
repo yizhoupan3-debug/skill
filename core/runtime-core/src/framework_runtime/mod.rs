@@ -1062,6 +1062,16 @@ fn coerce_duration_ms_value(value: Option<&Value>) -> Option<u64> {
     None
 }
 
+/// Parse `tool_output` JSON string once; returns `None` when the field is missing, not a string,
+/// or fails to parse. Used by `extract_post_tool_duration_ms` and `extract_codex_tool_exit_hint`
+/// to avoid double-parsing the same payload.
+fn parse_tool_output_json(event: &Value) -> Option<&'static Value> {
+    // Leak the parsed Value so it lives for 'static — small one-shot objects in hook path.
+    let text = event.get("tool_output").and_then(Value::as_str)?;
+    let parsed: Value = serde_json::from_str(text).ok()?;
+    Some(Box::leak(Box::new(parsed)))
+}
+
 /// PostToolUse journal: tool execution duration when the host payload carries it.
 pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
     let candidates: [&Option<&Value>; 10] = [
@@ -1079,16 +1089,14 @@ pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
             .and_then(|m| m.get("duration_ms")),
         &event.get("result").and_then(|v| v.get("duration_ms")),
     ];
-    if let Some(to) = event.get("tool_output")
-        && let Some(text) = to.as_str()
-            && let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                if let Some(ms) = coerce_duration_ms_value(parsed.get("duration_ms")) {
-                    return Some(ms);
-                }
-                if let Some(ms) = coerce_duration_ms_value(parsed.get("durationMs")) {
-                    return Some(ms);
-                }
-            }
+    if let Some(parsed) = parse_tool_output_json(event) {
+        if let Some(ms) = coerce_duration_ms_value(parsed.get("duration_ms")) {
+            return Some(ms);
+        }
+        if let Some(ms) = coerce_duration_ms_value(parsed.get("durationMs")) {
+            return Some(ms);
+        }
+    }
     for candidate in candidates {
         if let Some(ms) = coerce_duration_ms_value(*candidate) {
             return Some(ms);
@@ -1130,16 +1138,14 @@ fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
         &event.get("result").and_then(|v| v.get("exit_code")),
         &event.get("response").and_then(|v| v.get("exit_code")),
     ];
-    if let Some(to) = event.get("tool_output")
-        && let Some(text) = to.as_str()
-            && let Ok(parsed) = serde_json::from_str::<Value>(text) {
-                if let Some(code) = coerce_exit_code_value(parsed.get("exit_code")) {
-                    return Some(code);
-                }
-                if let Some(code) = coerce_exit_code_value(parsed.get("exitCode")) {
-                    return Some(code);
-                }
-            }
+    if let Some(parsed) = parse_tool_output_json(event) {
+        if let Some(code) = coerce_exit_code_value(parsed.get("exit_code")) {
+            return Some(code);
+        }
+        if let Some(code) = coerce_exit_code_value(parsed.get("exitCode")) {
+            return Some(code);
+        }
+    }
     for candidate in candidates {
         if let Some(code) = coerce_exit_code_value(*candidate) {
             return Some(code);
@@ -1301,7 +1307,8 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
         .and_then(|v| coerce_exit_code_value(Some(v)));
 
     let cursor_hook = source.trim().to_ascii_lowercase().starts_with("cursor_");
-    if !cursor_hook && !shell_command_looks_like_verification(preview_trim) {
+    let preview_lower = preview_trim.to_ascii_lowercase();
+    if !cursor_hook && !shell_command_looks_like_verification(&preview_lower) {
         crate::telemetry_emit::emit_hook_fired("hook_evidence_append", "skip");
         return Ok(json!({
             "ok": true,
@@ -1320,7 +1327,7 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
     entry.insert("recorded_at".to_string(), json!(current_local_timestamp()));
 
     // Programmatic verification of physical artifact association (L1 Truthfulness)
-    let artifact_ok = detect_and_verify_physical_artifact(&repo_root, preview_trim);
+    let artifact_ok = detect_and_verify_physical_artifact(&repo_root, &preview_lower);
     if !artifact_ok {
         entry.insert("artifact_verification_failed".to_string(), json!(true));
     }
@@ -1369,83 +1376,130 @@ fn tool_name_is_shell_like(name: &str) -> bool {
         || n == "pwsh"
 }
 
-fn shell_command_looks_like_verification(command: &str) -> bool {
-    let c = command.to_ascii_lowercase();
+fn shell_command_looks_like_verification(command_lower: &str) -> bool {
+    // Fast reject: skip 50+ contains checks when no seed keyword is present.
+    if !command_lower.contains("cargo")
+        && !command_lower.contains("test")
+        && !command_lower.contains("check")
+        && !command_lower.contains("make")
+        && !command_lower.contains("npm")
+        && !command_lower.contains("pytest")
+        && !command_lower.contains("yarn")
+        && !command_lower.contains("pnpm")
+        && !command_lower.contains("bun")
+        && !command_lower.contains("vitest")
+        && !command_lower.contains("jest")
+        && !command_lower.contains("rake")
+        && !command_lower.contains("go ")
+        && !command_lower.contains("dotnet")
+        && !command_lower.contains("maturin")
+        && !command_lower.contains("tox")
+        && !command_lower.contains("uv run")
+        && !command_lower.contains("just")
+        && !command_lower.contains("ruff")
+        && !command_lower.contains("mypy")
+        && !command_lower.contains("deno")
+        && !command_lower.contains("lint")
+        && !command_lower.contains("tsc")
+        && !command_lower.contains("eslint")
+        && !command_lower.contains("prettier")
+        && !command_lower.contains("biome")
+        && !command_lower.contains("gradle")
+        && !command_lower.contains("mvn")
+        && !command_lower.contains("flutter")
+        && !command_lower.contains("swift")
+        && !command_lower.contains("dart")
+        && !command_lower.contains("playwright")
+        && !command_lower.contains("nx ")
+        && !command_lower.contains("scripts/verify")
+        && !command_lower.contains("verify.sh")
+        && !command_lower.contains("nextest")
+        && !command_lower.contains("policy")
+        && !command_lower.contains("verify_cursor")
+        && !command_lower.contains("python")
+        && !command_lower.contains("lean")
+        && !command_lower.contains("coq")
+        && !command_lower.contains("isabelle")
+        && !command_lower.contains("lake ")
+        && !command_lower.contains("z3 ")
+    {
+        return false;
+    }
+
     // Original (Rust / Python / JS test runners + lint).
-    c.contains("cargo test")
-        || c.contains("cargo check")
-        || c.contains("cargo clippy")
-        || c.contains("cargo build")
-        || c.contains("cargo fmt")
-        || c.contains("cargo nextest")
-        || c.contains("cargo hack")
-        || c.contains("nextest")
-        || c.contains("pytest")
-        || c.contains("npm test")
-        || c.contains("pnpm test")
-        || c.contains("yarn test")
-        || c.contains("make test")
-        || c.contains("make check")
-        || c.contains("make ci")
-        || c.contains("make verify")
-        || c.contains("go test")
-        || c.contains("go vet")
-        || c.contains("dotnet test")
-        || c.contains("maturin")
-        || c.contains("tox")
-        || c.contains("uv run")
-        || c.contains("just test")
-        || c.contains("just check")
-        || c.contains("vitest")
-        || c.contains("jest")
-        || c.contains("ruby test")
-        || c.contains("rake test")
-        || c.contains("verify_cursor_hooks")
-        || c.contains("policy_contracts")
-        || c.contains("ruff check")
-        || c.contains("ruff format")
-        || c.contains("mypy")
-        || c.contains("deno test")
-        || c.contains("bun test")
+    command_lower.contains("cargo test")
+        || command_lower.contains("cargo check")
+        || command_lower.contains("cargo clippy")
+        || command_lower.contains("cargo build")
+        || command_lower.contains("cargo fmt")
+        || command_lower.contains("cargo nextest")
+        || command_lower.contains("cargo hack")
+        || command_lower.contains("nextest")
+        || command_lower.contains("pytest")
+        || command_lower.contains("npm test")
+        || command_lower.contains("pnpm test")
+        || command_lower.contains("yarn test")
+        || command_lower.contains("make test")
+        || command_lower.contains("make check")
+        || command_lower.contains("make ci")
+        || command_lower.contains("make verify")
+        || command_lower.contains("go test")
+        || command_lower.contains("go vet")
+        || command_lower.contains("dotnet test")
+        || command_lower.contains("maturin")
+        || command_lower.contains("tox")
+        || command_lower.contains("uv run")
+        || command_lower.contains("just test")
+        || command_lower.contains("just check")
+        || command_lower.contains("vitest")
+        || command_lower.contains("jest")
+        || command_lower.contains("ruby test")
+        || command_lower.contains("rake test")
+        || command_lower.contains("verify_cursor_hooks")
+        || command_lower.contains("policy_contracts")
+        || command_lower.contains("ruff check")
+        || command_lower.contains("ruff format")
+        || command_lower.contains("mypy")
+        || command_lower.contains("deno test")
+        || command_lower.contains("bun test")
         // pnpm / bun tooling.
-        || c.contains("pnpm lint")
-        || c.contains("pnpm check")
-        || c.contains("bun lint")
+        || command_lower.contains("pnpm lint")
+        || command_lower.contains("pnpm check")
+        || command_lower.contains("bun lint")
         // TypeScript / JS tooling (no `test` keyword).
-        || c.contains("tsc --noemit")
-        || c.contains("tsc -p")
-        || c.contains("eslint")
-        || c.contains("prettier --check")
-        || c.contains("biome check")
-        || c.contains("biome ci")
+        || command_lower.contains("tsc --noemit")
+        || command_lower.contains("tsc -p")
+        || command_lower.contains("eslint")
+        || command_lower.contains("prettier --check")
+        || command_lower.contains("biome check")
+        || command_lower.contains("biome ci")
         // JVM ecosystems.
-        || c.contains("gradle test")
-        || c.contains("gradlew test")
-        || c.contains("gradle check")
-        || c.contains("mvn test")
-        || c.contains("mvn verify")
-        || c.contains("mvn package")
+        || command_lower.contains("gradle test")
+        || command_lower.contains("gradlew test")
+        || command_lower.contains("gradle check")
+        || command_lower.contains("mvn test")
+        || command_lower.contains("mvn verify")
+        || command_lower.contains("mvn package")
         // Mobile / Dart / Swift tooling.
-        || c.contains("flutter test")
-        || c.contains("swift test")
-        || c.contains("swift build")
-        || c.contains("dart analyze")
+        || command_lower.contains("flutter test")
+        || command_lower.contains("swift test")
+        || command_lower.contains("swift build")
+        || command_lower.contains("dart analyze")
         // E2E / cross-runner test frameworks.
-        || c.contains("playwright test")
-        || c.contains("nx test")
-        || c.contains("nx affected")
+        || command_lower.contains("playwright test")
+        || command_lower.contains("nx test")
+        || command_lower.contains("nx affected")
         // Repo-local verifier scripts (any path under scripts/ ending with verify*).
-        || c.contains("scripts/verify")
-        || c.contains("/verify.sh")
-        || c.contains("./verify.sh")
-        || c.contains("task test")
-        || c.contains("task check")
+        || command_lower.contains("scripts/verify")
+        || command_lower.contains("/verify.sh")
+        || command_lower.contains("./verify.sh")
+        || command_lower.contains("task test")
+        || command_lower.contains("task check")
         // Formal / math toolchains: shared with `harness_context_signals` (`formal_toolchain`).
-        || crate::formal_toolchain::ascii_lower_contains_formal_toolchain_tokens(&c)
+        || crate::formal_toolchain::ascii_lower_contains_formal_toolchain_tokens(command_lower)
 }
 
-fn detect_and_verify_physical_artifact(repo_root: &Path, command: &str) -> bool {
-    let c = command.to_ascii_lowercase();
+fn detect_and_verify_physical_artifact(repo_root: &Path, command_lower: &str) -> bool {
     let max_delta = 15; // 15s safe time window for mtime verification to accommodate slow disks
 
     // Dynamic bypass: Skip physical filesystem assertions during Rust target integration tests
@@ -1457,10 +1511,10 @@ fn detect_and_verify_physical_artifact(repo_root: &Path, command: &str) -> bool 
         return true;
     }
 
-    if c.contains("cargo test")
-        || c.contains("cargo check")
-        || c.contains("cargo clippy")
-        || c.contains("cargo build")
+    if command_lower.contains("cargo test")
+        || command_lower.contains("cargo check")
+        || command_lower.contains("cargo clippy")
+        || command_lower.contains("cargo build")
     {
         let target_dir = repo_root.join("target");
         if target_dir.is_dir() {
@@ -1476,7 +1530,7 @@ fn detect_and_verify_physical_artifact(repo_root: &Path, command: &str) -> bool 
         return false;
     }
 
-    if c.contains("pytest") {
+    if command_lower.contains("pytest") {
         let py_cache = repo_root.join(".pytest_cache");
         if py_cache.is_dir() && is_modified_recently(&py_cache, max_delta) {
             return true;
@@ -1510,36 +1564,32 @@ fn is_modified_recently(path: &std::path::Path, max_delta_secs: u64) -> bool {
 mod shell_command_verification_heuristic_tests {
     use super::shell_command_looks_like_verification;
 
+    fn check(cmd: &str) -> bool {
+        shell_command_looks_like_verification(&cmd.to_ascii_lowercase())
+    }
+
     #[test]
     fn matrix_math_formal_and_build_tools() {
-        assert!(shell_command_looks_like_verification(
+        assert!(check(
             "python -c \"import sympy; print(sympy.simplify(1))\""
         ));
-        assert!(shell_command_looks_like_verification("z3 /tmp/proof.smt2"));
-        assert!(shell_command_looks_like_verification("  z3  /tmp/x.smt2"));
-        assert!(shell_command_looks_like_verification("lean --version"));
-        assert!(shell_command_looks_like_verification(
-            "lake build && lake test"
-        ));
-        assert!(shell_command_looks_like_verification(
-            "coqc -Q theories Foo.v"
-        ));
-        assert!(shell_command_looks_like_verification(
-            "coqchk -silent Foo.vo"
-        ));
-        assert!(shell_command_looks_like_verification("isabelle build -D ."));
-        assert!(shell_command_looks_like_verification("cargo test -q"));
-        assert!(shell_command_looks_like_verification("pytest -q"));
+        assert!(check("z3 /tmp/proof.smt2"));
+        assert!(check("  z3  /tmp/x.smt2"));
+        assert!(check("lean --version"));
+        assert!(check("lake build && lake test"));
+        assert!(check("coqc -Q theories Foo.v"));
+        assert!(check("coqchk -silent Foo.vo"));
+        assert!(check("isabelle build -D ."));
+        assert!(check("cargo test -q"));
+        assert!(check("pytest -q"));
     }
 
     #[test]
     fn matrix_rejects_bare_python_and_random_strings() {
-        assert!(!shell_command_looks_like_verification("python foo.py"));
-        assert!(!shell_command_looks_like_verification(
-            "python -c \"print(1)\""
-        ));
-        assert!(!shell_command_looks_like_verification("echo hello"));
-        assert!(!shell_command_looks_like_verification("leaning tower")); // not `lean ` token
+        assert!(!check("python foo.py"));
+        assert!(!check("python -c \"print(1)\""));
+        assert!(!check("echo hello"));
+        assert!(!check("leaning tower")); // not `lean ` token
     }
 
     #[test]
@@ -1603,7 +1653,8 @@ pub fn try_append_post_tool_shell_evidence(
     let Some(command_preview) = extract_codex_shell_command_preview(event) else {
         return Ok(());
     };
-    if !shell_command_looks_like_verification(&command_preview) {
+    let command_lower = command_preview.to_ascii_lowercase();
+    if !shell_command_looks_like_verification(&command_lower) {
         return Ok(());
     }
 
@@ -1623,7 +1674,7 @@ pub fn try_append_post_tool_shell_evidence(
     }
 
     // Programmatic verification of physical artifact association (L1 Truthfulness)
-    let artifact_ok = detect_and_verify_physical_artifact(repo_root, &command_preview);
+    let artifact_ok = detect_and_verify_physical_artifact(repo_root, &command_lower);
     if !artifact_ok {
         entry.insert("artifact_verification_failed".to_string(), json!(true));
     }

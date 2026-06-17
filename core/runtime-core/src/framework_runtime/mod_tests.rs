@@ -211,7 +211,7 @@ mod detect_verify_tests {
         fs::write(&file, "test").unwrap();
         assert!(detect_and_verify_physical_artifact(
             &dir,
-            &format!("cat {}", file.display()),
+            &format!("cat {}", file.display()).to_ascii_lowercase(),
         ));
         let _ = fs::remove_dir_all(&dir);
     }

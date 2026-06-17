@@ -95,14 +95,38 @@ fn has_structured_goal_contract(text: &str) -> bool {
 }
 
 fn nonempty_inline_heading_any(text: &str, heading: &str) -> bool {
-    use std::sync::Mutex;
-    static CACHE: OnceLock<Mutex<std::collections::HashMap<String, Regex>>> = OnceLock::new();
-    let cache = CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
-    let mut map = cache.lock().expect("heading regex cache lock");
-    let re = map.entry(heading.to_string()).or_insert_with(|| {
-        let pattern = format!(r"(?im)^\s*{}\s*[:：]\s*(\S.+)$", regex::escape(heading));
-        Regex::new(&pattern).expect("invalid heading regex")
+    use std::sync::LazyLock;
+
+    static GOAL_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*Goal\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
     });
+    static NON_GOALS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*Non-goals\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+    static VALIDATION_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*Validation commands\s*[:：]\s*(\S.+)$")
+            .expect("invalid heading regex")
+    });
+    static GOAL_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*目标\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+    static NON_GOALS_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*非目标\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+    static VALIDATION_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*验证命令\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+
+    let re = match heading {
+        "Goal" => &*GOAL_RE,
+        "Non-goals" => &*NON_GOALS_RE,
+        "Validation commands" => &*VALIDATION_RE,
+        "目标" => &*GOAL_ZH_RE,
+        "非目标" => &*NON_GOALS_ZH_RE,
+        "验证命令" => &*VALIDATION_ZH_RE,
+        _ => return false,
+    };
+
     re.captures(text)
         .and_then(|cap| cap.get(1))
         .map(|m| !m.as_str().trim().is_empty())
@@ -161,6 +185,7 @@ fn count_done_when_items(text: &str) -> usize {
         // line or a blank-only tail. This is intentionally conservative.
         let mut in_section = false;
         let mut count = 0usize;
+        let h_lower = h.to_ascii_lowercase();
         for raw in text.lines() {
             let line = raw.trim();
             if line.is_empty() {
@@ -172,8 +197,7 @@ fn count_done_when_items(text: &str) -> usize {
             }
             if !in_section {
                 let lowered = line.to_ascii_lowercase();
-                let target = h.to_ascii_lowercase();
-                if lowered.starts_with(&target) && (lowered.contains(':') || line.contains('：')) {
+                if lowered.starts_with(&h_lower) && (lowered.contains(':') || line.contains('：')) {
                     in_section = true;
                 }
                 continue;
@@ -183,7 +207,7 @@ fn count_done_when_items(text: &str) -> usize {
             if goal_contract_re().is_match(line)
                 && !line
                     .to_ascii_lowercase()
-                    .starts_with(&h.to_ascii_lowercase())
+                    .starts_with(&h_lower)
             {
                 break;
             }
@@ -607,13 +631,17 @@ fn hook_event_all_text(event: &Value) -> String {
 }
 
 fn cursor_full_json_scrape_enabled() -> bool {
-    std::env::var(CURSOR_FULL_JSON_SCRAPE_ENV)
-        .ok()
-        .map(|raw| {
-            let value = raw.trim().to_ascii_lowercase();
-            matches!(value.as_str(), "1" | "true" | "yes" | "on")
-        })
-        .unwrap_or(false)
+    use std::sync::OnceLock;
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        std::env::var(CURSOR_FULL_JSON_SCRAPE_ENV)
+            .ok()
+            .map(|raw| {
+                let value = raw.trim().to_ascii_lowercase();
+                matches!(value.as_str(), "1" | "true" | "yes" | "on")
+            })
+            .unwrap_or(false)
+    })
 }
 
 fn hook_event_signal_text_with_scrape_mode(
@@ -973,9 +1001,19 @@ fn save_session_terminal_ledger(repo_root: &Path, event: &Value, ledger: &Sessio
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let mut ledger = ledger.clone();
-    prune_session_terminal_ledger(&mut ledger);
-    if let Ok(text) = serde_json::to_string_pretty(&ledger) {
+    // Prune owned_pids in-place for serialization without cloning the entire ledger.
+    let pruned = SessionTerminalLedger {
+        version: ledger.version,
+        baseline_pids: ledger.baseline_pids.clone(),
+        owned_pids: ledger
+            .owned_pids
+            .iter()
+            .copied()
+            .filter(|pid| is_process_alive(*pid))
+            .collect(),
+        pending_shells: ledger.pending_shells.clone(),
+    };
+    if let Ok(text) = serde_json::to_string_pretty(&pruned) {
         let _ = core_state::utils::atomic_write::write_atomic_text(&path, &text);
     }
     // §1.3: session end 时清理过期 hook-state 文件

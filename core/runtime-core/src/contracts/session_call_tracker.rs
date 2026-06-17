@@ -3,11 +3,17 @@
 //! Stores an accumulator in `artifacts/current/SESSION_CALL_TRACKER.json`
 //! to detect anomalous usage patterns, especially in Desktop MCP mode
 //! where PreToolUse/Stop hooks are unavailable.
+//!
+//! **Performance optimization**: `record_tool_call` uses in-memory `AtomicU64`
+//! counters and only persists to disk periodically (every `FLUSH_INTERVAL_SECS`
+//! seconds), avoiding the previous 5-step sync I/O chain on every tool call.
 
 use crate::task_write_lock::apply_task_ledger_mutation;
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{BufWriter, Write};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 #[derive(Debug, Clone, Default)]
 pub struct CacheStats {
@@ -21,11 +27,15 @@ pub struct CacheStats {
     pub output_tokens: u64,
 }
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const TRACKER_FILE: &str = "SESSION_CALL_TRACKER.json";
 const SCHEMA_VERSION: &str = "fw-session-call-tracker-v1";
+
+/// Minimum interval between disk flushes (seconds). Tool calls within this
+/// window are accumulated in memory only.
+const FLUSH_INTERVAL_SECS: u64 = 5;
 
 fn cap_per_tool_keys(per_tool: &mut serde_json::Map<String, Value>) {
     let max_keys = crate::router_env_flags::router_rs_session_call_tracker_tool_keys_max();
@@ -48,11 +58,114 @@ fn cap_per_tool_keys(per_tool: &mut serde_json::Map<String, Value>) {
 }
 
 /// Global write lock for atomic file operations.
-static TRACKER_WRITE_LOCK: OnceLock<std::sync::Mutex<()>> = OnceLock::new();
+static TRACKER_WRITE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
-fn get_tracker_lock() -> &'static std::sync::Mutex<()> {
-    TRACKER_WRITE_LOCK.get_or_init(|| std::sync::Mutex::new(()))
+fn get_tracker_lock() -> &'static Mutex<()> {
+    TRACKER_WRITE_LOCK.get_or_init(|| Mutex::new(()))
 }
+
+// ── In-memory accumulator ────────────────────────────────────────────
+static TOTAL_CALLS: AtomicU64 = AtomicU64::new(0);
+static FLUSH_NEEDED: AtomicBool = AtomicBool::new(false);
+
+/// Per-tool call counts accumulated in memory.
+static PER_TOOL: OnceLock<Mutex<HashMap<String, u64>>> = OnceLock::new();
+static PER_TOOL_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+/// Accumulated token usage (input, output, cache_read, cache_creation).
+static TOKEN_INPUT: AtomicU64 = AtomicU64::new(0);
+static TOKEN_OUTPUT: AtomicU64 = AtomicU64::new(0);
+static TOKEN_CACHE_READ: AtomicU64 = AtomicU64::new(0);
+static TOKEN_CACHE_CREATION: AtomicU64 = AtomicU64::new(0);
+
+/// Last time `flush_to_disk` actually wrote.
+static LAST_FLUSH: OnceLock<Mutex<Option<Instant>>> = OnceLock::new();
+
+fn last_flush() -> &'static Mutex<Option<Instant>> {
+    LAST_FLUSH.get_or_init(|| Mutex::new(None))
+}
+
+fn should_flush() -> bool {
+    let guard = last_flush().lock().expect("last_flush lock");
+    match *guard {
+        Some(t) => t.elapsed() >= Duration::from_secs(FLUSH_INTERVAL_SECS),
+        None => true,
+    }
+}
+
+/// Drain in-memory accumulators and persist to disk. Called periodically
+/// from `record_tool_call` and on-demand from `check_anomalies` / `read_tracker_state`.
+fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
+    if !FLUSH_NEEDED.load(Ordering::Relaxed) && !should_flush() {
+        return Ok(());
+    }
+
+    let path = tracker_path(repo_root);
+
+    // Drain per-tool counts
+    let tool_drain = {
+        let lock = PER_TOOL_LOCK.get_or_init(|| Mutex::new(()));
+        let _guard = lock.lock().expect("per_tool lock");
+        let map = PER_TOOL.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut map = map.lock().expect("per_tool map lock");
+        std::mem::take(&mut *map)
+    };
+
+    // Drain atomic counters
+    let total = TOTAL_CALLS.swap(0, Ordering::Relaxed);
+    let in_tok = TOKEN_INPUT.swap(0, Ordering::Relaxed);
+    let out_tok = TOKEN_OUTPUT.swap(0, Ordering::Relaxed);
+    let cr_tok = TOKEN_CACHE_READ.swap(0, Ordering::Relaxed);
+    let cc_tok = TOKEN_CACHE_CREATION.swap(0, Ordering::Relaxed);
+    FLUSH_NEEDED.store(false, Ordering::Relaxed);
+
+    if total == 0 && tool_drain.is_empty() && in_tok == 0 && out_tok == 0 {
+        return Ok(());
+    }
+
+    apply_task_ledger_mutation(repo_root, || {
+        let mut payload = load_or_init_tracker(&path)?;
+
+        payload["total_calls"] = json!(
+            payload["total_calls"].as_u64().unwrap_or(0) + total
+        );
+
+        let per_tool = payload["per_tool"]
+            .as_object_mut()
+            .ok_or_else(|| "per_tool not an object".to_string())?;
+        for (tool, count) in &tool_drain {
+            let cur = per_tool.get(tool).and_then(Value::as_u64).unwrap_or(0);
+            per_tool.insert(tool.clone(), json!(cur + count));
+        }
+        cap_per_tool_keys(per_tool);
+
+        // Token usage accumulation
+        let tu = payload["token_usage"]
+            .as_object_mut()
+            .ok_or_else(|| "token_usage not an object".to_string())?;
+        let cur_in = tu.get("input").and_then(Value::as_u64).unwrap_or(0);
+        let cur_out = tu.get("output").and_then(Value::as_u64).unwrap_or(0);
+        let cur_cr = tu.get("cache_read").and_then(Value::as_u64).unwrap_or(0);
+        let cur_cc = tu.get("cache_creation").and_then(Value::as_u64).unwrap_or(0);
+        tu.insert("input".to_string(), json!(cur_in + in_tok));
+        tu.insert("output".to_string(), json!(cur_out + out_tok));
+        tu.insert("cache_read".to_string(), json!(cur_cr + cr_tok));
+        tu.insert("cache_creation".to_string(), json!(cur_cc + cc_tok));
+        tu.insert(
+            "total".to_string(),
+            json!(cur_in + in_tok + cur_out + out_tok),
+        );
+
+        write_tracker(&path, &payload)?;
+
+        let mut guard = last_flush().lock().expect("last_flush lock");
+        *guard = Some(Instant::now());
+
+        Ok(())
+    })
+}
+
+// ── Public API ───────────────────────────────────────────────────────
 
 /// Initialize or reset the session tracker.
 pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
@@ -63,59 +176,45 @@ pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
 }
 
 /// Record a tool call in the session tracker.
+///
+/// Hot path: increments in-memory atomics only. Disk persistence happens
+/// periodically (every `FLUSH_INTERVAL_SECS` seconds) or on demand.
 pub fn record_tool_call(
     repo_root: &Path,
     tool_name: &str,
     cache_stats: Option<CacheStats>,
 ) -> Result<(), String> {
-    apply_task_ledger_mutation(repo_root, || {
-        let path = tracker_path(repo_root);
-        let mut payload = load_or_init_tracker(&path)?;
+    TOTAL_CALLS.fetch_add(1, Ordering::Relaxed);
+    FLUSH_NEEDED.store(true, Ordering::Relaxed);
 
-        payload["total_calls"] = json!(payload["total_calls"].as_u64().unwrap_or(0) + 1);
+    {
+        let lock = PER_TOOL_LOCK.get_or_init(|| Mutex::new(()));
+        let _guard = lock.lock().expect("per_tool lock");
+        let map = PER_TOOL.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut map = map.lock().expect("per_tool map lock");
+        *map.entry(tool_name.to_string()).or_insert(0) += 1;
+    }
 
-        let per_tool = payload["per_tool"]
-            .as_object_mut()
-            .ok_or_else(|| "per_tool not an object".to_string())?;
-        let count = per_tool.get(tool_name).and_then(Value::as_u64).unwrap_or(0);
-        per_tool.insert(tool_name.to_string(), json!(count + 1));
-        cap_per_tool_keys(per_tool);
+    if let Some(stats) = cache_stats {
+        TOKEN_INPUT.fetch_add(stats.input_tokens, Ordering::Relaxed);
+        TOKEN_OUTPUT.fetch_add(stats.output_tokens, Ordering::Relaxed);
+        TOKEN_CACHE_READ
+            .fetch_add(stats.cache_read_input_tokens, Ordering::Relaxed);
+        TOKEN_CACHE_CREATION
+            .fetch_add(stats.cache_creation_input_tokens, Ordering::Relaxed);
+    }
 
-        // Token usage accumulation
-        if let Some(stats) = cache_stats {
-            let tu = payload["token_usage"]
-                .as_object_mut()
-                .ok_or_else(|| "token_usage not an object".to_string())?;
-            let cur_in = tu.get("input").and_then(Value::as_u64).unwrap_or(0);
-            let cur_out = tu.get("output").and_then(Value::as_u64).unwrap_or(0);
-            let cur_cr = tu.get("cache_read").and_then(Value::as_u64).unwrap_or(0);
-            let cur_cc = tu
-                .get("cache_creation")
-                .and_then(Value::as_u64)
-                .unwrap_or(0);
-            tu.insert("input".to_string(), json!(cur_in + stats.input_tokens));
-            tu.insert("output".to_string(), json!(cur_out + stats.output_tokens));
-            tu.insert(
-                "cache_read".to_string(),
-                json!(cur_cr + stats.cache_read_input_tokens),
-            );
-            tu.insert(
-                "cache_creation".to_string(),
-                json!(cur_cc + stats.cache_creation_input_tokens),
-            );
-            // total = input + output; cache tokens are subsets of input, reported in separate fields
-            tu.insert(
-                "total".to_string(),
-                json!(cur_in + stats.input_tokens + cur_out + stats.output_tokens),
-            );
-        }
+    // Periodic flush
+    let _ = flush_to_disk(repo_root);
 
-        write_tracker(&path, &payload)
-    })
+    Ok(())
 }
 
 /// Check for anomalies. Returns a list of human-readable warning strings.
 pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
+    // Flush in-memory accumulators so anomaly check sees up-to-date data.
+    flush_to_disk(repo_root)?;
+
     apply_task_ledger_mutation(repo_root, || {
         let path = tracker_path(repo_root);
         let mut payload = load_or_init_tracker(&path)?;
@@ -174,6 +273,9 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
 
 /// Read the current tracker state as JSON (for MCP resource).
 pub fn read_tracker_state(repo_root: &Path) -> Result<Value, String> {
+    // Flush in-memory accumulators so readers see up-to-date data.
+    flush_to_disk(repo_root)?;
+
     let path = tracker_path(repo_root);
     load_or_init_tracker(&path)
 }
