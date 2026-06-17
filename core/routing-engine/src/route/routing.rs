@@ -527,19 +527,37 @@ fn primary_owner_query_text(query: &str, records: &[SkillRecord], allow_overlay:
     if !allow_overlay {
         return query.to_string();
     }
-    let mut text = query.to_string();
+    // Collect all overlay patterns to replace in a single pass
+    let mut patterns: Vec<&str> = Vec::new();
     for record in records.iter().filter(|record| is_overlay_record(record)) {
         for hint in &record.trigger_hints {
-            if hint.chars().count() > 3 {
-                text = text.replace(hint, " ");
+            if hint.len() > 3 {
+                patterns.push(hint.as_str());
             }
+        }
+        if record.slug.len() > 3 {
+            patterns.push(&record.slug);
         }
         let slug_spaced = record.slug.replace('-', " ");
-        for token in [record.slug.as_str(), slug_spaced.as_str()] {
-            if token.chars().count() > 3 {
-                text = text.replace(token, " ");
+        if slug_spaced.len() > 3 {
+            // Can't push reference to local; handle inline
+            let mut text = query.to_string();
+            for pattern in &patterns {
+                text = text.replace(pattern, " ");
             }
+            text = text.replace(&slug_spaced, " ");
+            return text.split_whitespace().fold(String::new(), |mut acc, s| {
+                if !acc.is_empty() {
+                    acc.push(' ');
+                }
+                acc.push_str(s);
+                acc
+            });
         }
+    }
+    let mut text = query.to_string();
+    for pattern in &patterns {
+        text = text.replace(pattern, " ");
     }
     text.split_whitespace().fold(String::new(), |mut acc, s| {
         if !acc.is_empty() {

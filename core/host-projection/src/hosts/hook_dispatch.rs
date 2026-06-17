@@ -151,7 +151,7 @@ pub trait HostHookDispatcher: HostHookConfig {
     fn dispatch(&self, event: &HookEvent) -> Option<HookOutput> {
         let normalized = normalize_event_name(event.event_name);
         debug!(event = %normalized, host = %self.host_id(), "hook dispatch");
-        match normalized.as_str() {
+        match normalized.as_ref() {
             "sessionstart" if self.supports_session_start() => self.handle_session_start(event),
             "userpromptsubmit" | "beforesubmitprompt" => self.handle_user_prompt_submit(event),
             "pretooluse" => self.handle_pre_tool_use(event),
@@ -169,26 +169,31 @@ pub trait HostHookDispatcher: HostHookConfig {
 // ────────────────────────────────────────────────────────────────
 
 /// Normalize event name from various host formats (PascalCase, camelCase, kebab-case).
-pub fn normalize_event_name(name: &str) -> String {
+/// Returns Cow<str> to avoid allocation for already-canonical names.
+pub fn normalize_event_name(name: &str) -> std::borrow::Cow<'_, str> {
+    // Fast path: check if already lowercase with no separators (most common case)
+    if name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()) {
+        return std::borrow::Cow::Borrowed(name);
+    }
     let lower = name.to_lowercase();
     // Map common variants to canonical names
     match lower.as_str() {
-        "sessionstart" | "session-start" | "session.start" => "sessionstart".into(),
+        "sessionstart" | "session-start" | "session.start" => std::borrow::Cow::Borrowed("sessionstart"),
         "userpromptsubmit"
         | "user-prompt-submit"
         | "user.prompt.submit"
         | "beforesubmitprompt"
-        | "before-submit-prompt" => "userpromptsubmit".into(),
+        | "before-submit-prompt" => std::borrow::Cow::Borrowed("userpromptsubmit"),
         "pretooluse" | "pre-tool-use" | "pre.tool.use" | "tool.execute.before" => {
-            "pretooluse".into()
+            std::borrow::Cow::Borrowed("pretooluse")
         }
         "posttooluse" | "post-tool-use" | "post.tool.use" | "tool.execute.after" => {
-            "posttooluse".into()
+            std::borrow::Cow::Borrowed("posttooluse")
         }
-        "stop" | "session.idle" => "stop".into(),
-        "subagentstart" | "subagent-start" | "subagent.start" => "subagentstart".into(),
-        "subagentstop" | "subagent-stop" | "subagent.end" => "subagentstop".into(),
-        other => other.to_string(),
+        "stop" | "session.idle" => std::borrow::Cow::Borrowed("stop"),
+        "subagentstart" | "subagent-start" | "subagent.start" => std::borrow::Cow::Borrowed("subagentstart"),
+        "subagentstop" | "subagent-stop" | "subagent.end" => std::borrow::Cow::Borrowed("subagentstop"),
+        other => std::borrow::Cow::Owned(other.to_string()),
     }
 }
 
@@ -483,25 +488,25 @@ pub fn short_hash_for_session(input: &str) -> String {
 /// Check if a shell command is a verification/test command.
 /// Shared across all hosts for PostToolUse evidence collection.
 pub fn is_verification_command(tool_name: &str, command: &str) -> bool {
-    let name = tool_name.to_lowercase();
-    if !name.contains("bash")
-        && !name.contains("shell")
-        && !name.contains("exec")
-        && !name.contains("terminal")
+    let name_lower = tool_name.to_ascii_lowercase();
+    if !name_lower.contains("bash")
+        && !name_lower.contains("shell")
+        && !name_lower.contains("exec")
+        && !name_lower.contains("terminal")
     {
         return false;
     }
-    let cmd = command.to_lowercase();
-    cmd.contains("cargo test")
-        || cmd.contains("cargo check")
-        || cmd.contains("cargo build")
-        || cmd.contains("cargo clippy")
-        || cmd.contains("cargo fmt")
-        || cmd.contains("npm test")
-        || cmd.contains("pytest")
-        || cmd.contains("make test")
-        || cmd.contains("make check")
-        || cmd.contains("go test")
-        || cmd.contains("git diff")
-        || cmd.contains("git log")
+    let cmd_lower = command.to_ascii_lowercase();
+    cmd_lower.contains("cargo test")
+        || cmd_lower.contains("cargo check")
+        || cmd_lower.contains("cargo build")
+        || cmd_lower.contains("cargo clippy")
+        || cmd_lower.contains("cargo fmt")
+        || cmd_lower.contains("npm test")
+        || cmd_lower.contains("pytest")
+        || cmd_lower.contains("make test")
+        || cmd_lower.contains("make check")
+        || cmd_lower.contains("go test")
+        || cmd_lower.contains("git diff")
+        || cmd_lower.contains("git log")
 }

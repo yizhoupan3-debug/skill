@@ -190,20 +190,17 @@ fn score_gate_name_token_signals(
         }
     }
 
-    // Name tokens
-    let shared_name_tokens: usize = record
-        .name_tokens
-        .iter()
-        .filter(|token| query_tokens.contains(token.as_str()))
-        .count();
+    // Name tokens (single-pass: count + collect matched names)
+    let mut shared_name_tokens: usize = 0;
+    let mut matched_names: Vec<&str> = Vec::new();
+    for token in &record.name_tokens {
+        if query_tokens.contains(token.as_str()) {
+            shared_name_tokens += 1;
+            matched_names.push(token.as_str());
+        }
+    }
     if shared_name_tokens > 0 {
         delta += w.name_tokens_base + (shared_name_tokens as f64) * w.name_tokens_per_token;
-        let matched_names: Vec<&str> = record
-            .name_tokens
-            .iter()
-            .filter(|token| query_tokens.contains(token.as_str()))
-            .map(|s| s.as_str())
-            .collect();
         reasons.push(format!(
             "Name tokens matched: {}.",
             matched_names.join(", ")
@@ -508,12 +505,12 @@ pub fn score_route_candidate<'a>(
     }
 
     if !record.do_not_use_tokens.is_empty() && score > 0.0 {
-        let negative_hits = record
+        let negative_hits: Vec<&str> = record
             .do_not_use_tokens
             .iter()
             .filter(|token| query_tokens.contains(token.as_str()))
-            .cloned()
-            .collect::<Vec<_>>();
+            .map(|s| s.as_str())
+            .collect();
         if !negative_hits.is_empty() {
             let penalty = f64::min(
                 score * w.do_not_use_penalty_max_ratio,
@@ -522,12 +519,7 @@ pub fn score_route_candidate<'a>(
             score = f64::max(0.0, score - penalty);
             reasons.push(format!(
                 "Do-not-use penalty applied: {}.",
-                negative_hits
-                    .iter()
-                    .take(5)
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                negative_hits.iter().take(5).copied().collect::<Vec<_>>().join(", ")
             ));
         }
     }
