@@ -699,6 +699,123 @@
       "record": {
         "slug": "design-md"
       }
+    },
+    {
+      "when": {
+        "query_contains": "瓶颈"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Research-discovery barrier boost: hard barrier wording detected."
+      },
+      "record": {
+        "slug": "research-discovery"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "卡住了"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 40.0,
+        "reason": "Research-discovery barrier boost: stuck wording detected."
+      },
+      "record": {
+        "slug": "research-discovery"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "突破不了"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 50.0,
+        "reason": "Research-discovery barrier boost: cannot-break-through wording detected."
+      },
+      "record": {
+        "slug": "research-discovery"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "文献综述"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Research-discovery literature boost: literature survey wording detected."
+      },
+      "record": {
+        "slug": "research-discovery"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "查论文"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 30.0,
+        "reason": "Research-discovery literature boost: paper search wording detected."
+      },
+      "record": {
+        "slug": "research-discovery"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "研究方向"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 25.0,
+        "reason": "Research-discovery scope boost: research direction wording detected."
+      },
+      "record": {
+        "slug": "research-discovery"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "自动研究"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 50.0,
+        "reason": "Autoresearch boost: auto-research wording detected."
+      },
+      "record": {
+        "slug": "autoresearch"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "研究工作区"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 50.0,
+        "reason": "Autoresearch boost: research workspace wording detected."
+      },
+      "record": {
+        "slug": "autoresearch"
+      }
+    },
+    {
+      "when": {
+        "query_contains": "瓶颈研究"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 50.0,
+        "reason": "Autoresearch boost: barrier research wording detected."
+      },
+      "record": {
+        "slug": "autoresearch"
+      }
     }
   ],
   "visual_evidence_markers": [

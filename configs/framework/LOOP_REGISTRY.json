@@ -24,6 +24,14 @@
       "notification": {
         "on_escalation": "issue",
         "on_completion_L3": "commit-only"
+      },
+      "research_enabled": true,
+      "research": {
+        "barrier_threshold": 3,
+        "escalation_target": "autoresearch",
+        "max_research_time_min": 30,
+        "auto_resume": true,
+        "require_human_approval": false
       }
     }
   ]
