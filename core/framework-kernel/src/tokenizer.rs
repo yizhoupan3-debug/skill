@@ -12,15 +12,16 @@ pub trait TokenizerProvider: Send + Sync {
 struct PanicTokenizer;
 
 impl TokenizerProvider for PanicTokenizer {
-    fn tokenize_query(&self, text: &str) -> Vec<String> {
+    fn tokenize_query(&self, _text: &str) -> Vec<String> {
         panic!(
-            "TokenizerProvider not installed; call install_tokenizer_provider before routing/policy tokenization (query_len={})",
-            text.len()
+            "TokenizerProvider not installed — call install_tokenizer_provider() during kernel bootstrap"
         );
     }
 
     fn has_parallel_review_candidate_context(&self, _query: &str, _tokens: &[String]) -> bool {
-        panic!("TokenizerProvider not installed; call install_tokenizer_provider first");
+        panic!(
+            "TokenizerProvider not installed — call install_tokenizer_provider() during kernel bootstrap"
+        );
     }
 }
 
