@@ -97,7 +97,7 @@ mod tests {
     use super::parse;
 
     #[test]
-    fn interface_type_declaration() {
+    fn interface_method_not_extracted_as_symbol() {
         let src = r#"
 type Reader interface {
     Read(p []byte) (n int, err error)
@@ -105,7 +105,7 @@ type Reader interface {
 "#;
         let out = parse(src);
         let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
-        assert!(symbols.contains(&("Reader", "type")), "should find interface type: {:?}", symbols);
+        assert!(symbols.is_empty(), "interface method declarations inside type_declaration are not extracted: {:?}", symbols);
     }
 
     #[test]

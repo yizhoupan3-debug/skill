@@ -34,7 +34,7 @@ Skill 集成（CG-5）：`planx` / `implementx` / `verifyx` / `code-review-deep`
 | MCP 工具不可用 | 确认 `--features codegraph` 构建；重装 host projection |
 | 索引空 / stale | 跑 sync + watcher；查 DB schema v1→v2 迁移日志 |
 | 性能问题 | W4：rayon 并行 parse + prepared stmt（见 roadmap CG-4） |
-| 测试失败 | `cargo test -p codegraph-rs`（当前基线 56 passed） |
+| 测试失败 | `cargo test -p codegraph-rs`（当前基线 74 passed） |
 | 启动报 UNIQUE constraint | 检查 SKILL_MANIFEST.json slug/hint 是否重名（已修复） |
 
 ## 索引失效与 symbol 消歧（v3）

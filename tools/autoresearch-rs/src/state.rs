@@ -7,6 +7,62 @@ use std::path::Path;
 
 use crate::*;
 
+const VALID_HYPOTHESIS_STATUSES: &[&str] = &[
+    "queued",
+    "active",
+    "needs_reflection",
+    "parked",
+    "concluded",
+];
+
+fn ensure_hypothesis_defaults(item: &mut serde_json::Map<String, Value>, updated_at: &str) {
+    item.entry("mechanism").or_insert(Value::Null);
+    item.entry("falsifiable_prediction").or_insert(Value::Null);
+    item.entry("success_threshold").or_insert(Value::Null);
+    item.entry("stop_condition").or_insert(Value::Null);
+    item.entry("baselines").or_insert(json!([]));
+    item.entry("confounders").or_insert(json!([]));
+    item.entry("negative_signals").or_insert(json!([]));
+    item.entry("minimal_test").or_insert(Value::Null);
+    let status = item
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("queued")
+        .to_string();
+    if !VALID_HYPOTHESIS_STATUSES.contains(&status.as_str()) {
+        item.insert("status".into(), json!("queued"));
+    } else {
+        item.entry("status").or_insert(json!(status));
+    }
+    item.entry("status_reason").or_insert(Value::Null);
+    let status_updated_at = item
+        .get("created_at")
+        .cloned()
+        .unwrap_or_else(|| json!(updated_at));
+    item.entry("status_updated_at").or_insert(status_updated_at);
+}
+
+fn ensure_run_record_defaults(item: &mut serde_json::Map<String, Value>) {
+    item.entry("novelty_gate_status_at_run")
+        .or_insert(Value::Null);
+    item.entry("novelty_gate_override").or_insert(json!(false));
+    item.entry("override_reason").or_insert(Value::Null);
+    item.entry("environment_fingerprint").or_insert(Value::Null);
+    item.entry("git_provenance").or_insert(Value::Null);
+    item.entry("sanity_checks").or_insert(json!([]));
+    item.entry("baseline_result").or_insert(Value::Null);
+    item.entry("rules_in").or_insert(json!([]));
+    item.entry("rules_out").or_insert(json!([]));
+    item.entry("alternative_explanations").or_insert(json!([]));
+    item.entry("threats").or_insert(json!([]));
+    item.entry("interpretation").or_insert(Value::Null);
+    item.entry("finding").or_insert(Value::Null);
+    item.entry("decision_delta").or_insert(Value::Null);
+    item.entry("reuse_note").or_insert(Value::Null);
+    item.entry("applies_to").or_insert(json!([]));
+    item.entry("does_not_apply_to").or_insert(json!([]));
+}
+
 pub(super) fn ensure_state_defaults(state: &Value) -> Value {
     let mut hydrated = state.clone();
     {
@@ -50,58 +106,11 @@ pub(super) fn ensure_state_defaults(state: &Value) -> Value {
         let item = hypothesis
             .as_object_mut()
             .expect("hypothesis must be object");
-        item.entry("mechanism").or_insert(Value::Null);
-        item.entry("falsifiable_prediction").or_insert(Value::Null);
-        item.entry("success_threshold").or_insert(Value::Null);
-        item.entry("stop_condition").or_insert(Value::Null);
-        item.entry("baselines").or_insert(json!([]));
-        item.entry("confounders").or_insert(json!([]));
-        item.entry("negative_signals").or_insert(json!([]));
-        item.entry("minimal_test").or_insert(Value::Null);
-        let status = item
-            .get("status")
-            .and_then(Value::as_str)
-            .unwrap_or("queued")
-            .to_string();
-        let valid = [
-            "queued",
-            "active",
-            "needs_reflection",
-            "parked",
-            "concluded",
-        ];
-        if !valid.contains(&status.as_str()) {
-            item.insert("status".into(), json!("queued"));
-        } else {
-            item.entry("status").or_insert(json!(status));
-        }
-        item.entry("status_reason").or_insert(Value::Null);
-        let status_updated_at = item
-            .get("created_at")
-            .cloned()
-            .unwrap_or_else(|| json!(updated_at.clone()));
-        item.entry("status_updated_at").or_insert(status_updated_at);
+        ensure_hypothesis_defaults(item, &updated_at);
     }
     for record in arr_mut(&mut hydrated, "run_history") {
         let item = record.as_object_mut().expect("run record must be object");
-        item.entry("novelty_gate_status_at_run")
-            .or_insert(Value::Null);
-        item.entry("novelty_gate_override").or_insert(json!(false));
-        item.entry("override_reason").or_insert(Value::Null);
-        item.entry("environment_fingerprint").or_insert(Value::Null);
-        item.entry("git_provenance").or_insert(Value::Null);
-        item.entry("sanity_checks").or_insert(json!([]));
-        item.entry("baseline_result").or_insert(Value::Null);
-        item.entry("rules_in").or_insert(json!([]));
-        item.entry("rules_out").or_insert(json!([]));
-        item.entry("alternative_explanations").or_insert(json!([]));
-        item.entry("threats").or_insert(json!([]));
-        item.entry("interpretation").or_insert(Value::Null);
-        item.entry("finding").or_insert(Value::Null);
-        item.entry("decision_delta").or_insert(Value::Null);
-        item.entry("reuse_note").or_insert(Value::Null);
-        item.entry("applies_to").or_insert(json!([]));
-        item.entry("does_not_apply_to").or_insert(json!([]));
+        ensure_run_record_defaults(item);
     }
     for record in arr_mut(&mut hydrated, "external_research") {
         let item = record
@@ -160,15 +169,7 @@ pub(super) fn migrate_state(state: &Value) -> Value {
             .and_then(Value::as_str)
             .unwrap_or("queued")
             .to_string();
-        if ![
-            "queued",
-            "active",
-            "needs_reflection",
-            "parked",
-            "concluded",
-        ]
-        .contains(&status.as_str())
-        {
+        if !VALID_HYPOTHESIS_STATUSES.contains(&status.as_str()) {
             status = "queued".to_string();
         }
         let latest_run = run_history.iter().rev().find(|item| {
@@ -180,14 +181,7 @@ pub(super) fn migrate_state(state: &Value) -> Value {
         let Some(item) = hypothesis.as_object_mut() else {
             continue;
         };
-        item.entry("mechanism").or_insert(Value::Null);
-        item.entry("falsifiable_prediction").or_insert(Value::Null);
-        item.entry("success_threshold").or_insert(Value::Null);
-        item.entry("stop_condition").or_insert(Value::Null);
-        item.entry("baselines").or_insert(json!([]));
-        item.entry("confounders").or_insert(json!([]));
-        item.entry("negative_signals").or_insert(json!([]));
-        item.entry("minimal_test").or_insert(Value::Null);
+        ensure_hypothesis_defaults(item, &updated_at);
         if status == "active"
             && latest_run.is_some()
             && (latest_decision.is_none()
@@ -197,35 +191,12 @@ pub(super) fn migrate_state(state: &Value) -> Value {
             status = "needs_reflection".to_string();
         }
         item.insert("status".into(), json!(status));
-        item.entry("status_reason").or_insert(Value::Null);
-        let status_updated_at = item
-            .get("created_at")
-            .cloned()
-            .unwrap_or_else(|| json!(updated_at.clone()));
-        item.entry("status_updated_at").or_insert(status_updated_at);
     }
     for record in arr_mut(&mut migrated, "run_history") {
         let Some(item) = record.as_object_mut() else {
             continue;
         };
-        item.entry("novelty_gate_status_at_run")
-            .or_insert(Value::Null);
-        item.entry("novelty_gate_override").or_insert(json!(false));
-        item.entry("override_reason").or_insert(Value::Null);
-        item.entry("environment_fingerprint").or_insert(Value::Null);
-        item.entry("git_provenance").or_insert(Value::Null);
-        item.entry("sanity_checks").or_insert(json!([]));
-        item.entry("baseline_result").or_insert(Value::Null);
-        item.entry("rules_in").or_insert(json!([]));
-        item.entry("rules_out").or_insert(json!([]));
-        item.entry("alternative_explanations").or_insert(json!([]));
-        item.entry("threats").or_insert(json!([]));
-        item.entry("interpretation").or_insert(Value::Null);
-        item.entry("finding").or_insert(Value::Null);
-        item.entry("decision_delta").or_insert(Value::Null);
-        item.entry("reuse_note").or_insert(Value::Null);
-        item.entry("applies_to").or_insert(json!([]));
-        item.entry("does_not_apply_to").or_insert(json!([]));
+        ensure_run_record_defaults(item);
     }
     obj_mut(&mut migrated)
         .entry("external_research")

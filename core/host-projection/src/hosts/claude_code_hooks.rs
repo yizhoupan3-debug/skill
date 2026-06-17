@@ -14,6 +14,7 @@ use core_policy::review_gate_engine::{
 };
 use core_policy::{HookReviewDiskCore, HookReviewGateFields};
 use serde_json::{Map, Value, json};
+use super::hook_dispatch::{HookEvent, HookOutput, HostHookConfig, HostHookDispatcher};
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::fs;
@@ -300,8 +301,6 @@ const SETTINGS_GUARDED_PATHS_CLAUDE: &[&str] =
 const GENERATED_ENTRYPOINT_PATHS_CLAUDE: &[&str] = &[".claude/CLAUDE.md"];
 /// Cross-host generated surfaces: active in other hosts, Claude should not directly modify.
 const CROSS_HOST_SURFACES: &[&str] = &[".codex/hooks.json"];
-/// Truly retired surfaces: defense-in-depth against accidental restoration.
-const RETIRED_SURFACES: &[&str] = &[".agents", "plugins/skill-framework-native/.mcp.json"];
 /// Pre-89ece4c the stdio agent hook accepted kebab-case commands only; CLI adds PascalCase aliases
 /// aligned with Codex hook spelling (`PreToolUse`, `Stop`, …)。
 pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String> {
@@ -312,9 +311,9 @@ pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String>
     let _registry_guard = core_policy::registry_review_gate::HookRegistryRepoGuard::new(repo_root);
     let result = with_stdio_agent_hook_host(StdioAgentHookHost::ClaudeCode, || {
         let payload = read_stdin_payload()?;
-        Ok(dispatch_stdio_agent_hook_payload(
-            canonical, repo_root, &payload,
-        ))
+        let event = HookEvent { repo_root, event_name: canonical, payload: &payload };
+        let output = ClaudeHookDispatcher.dispatch(&event);
+        Ok(hook_output_to_claude_value(canonical, output))
     });
     match &result {
         Ok(output) => crate::hooks::emit_hook_fired(
@@ -353,6 +352,86 @@ fn canonical_stdio_agent_hook_command(command: &str) -> Result<&'static str, Str
     }
 }
 
+// ── HostHookDispatcher implementation (unified with opencode/cursor/codex) ──
+
+pub struct ClaudeHookDispatcher;
+
+impl HostHookConfig for ClaudeHookDispatcher {
+    fn host_id(&self) -> &'static str { "claude-code" }
+    fn state_dir_leaf(&self) -> &'static str { ".claude" }
+    fn hook_state_unreadable_tag(&self) -> &'static str { CLAUDE_HOOK_STATE_UNREADABLE }
+    fn session_namespace_env(&self) -> &'static str { "ROUTER_RS_CLAUDE_SESSION_NAMESPACE" }
+    fn log_label(&self) -> &'static str { "claude" }
+}
+
+/// Convert Claude-specific hook JSON to unified HookOutput.
+fn claude_value_to_hook_output(val: &Value) -> Option<HookOutput> {
+    if val.get("suppressOutput") != Some(&json!(true)) {
+        return Some(HookOutput::Raw(val.clone()));
+    }
+    let Some(hso) = val.get("hookSpecificOutput") else {
+        return Some(HookOutput::Raw(val.clone()));
+    };
+    if hso.get("permissionDecision").and_then(Value::as_str) == Some("deny") {
+        let reason = hso
+            .get("permissionDecisionReason")
+            .and_then(Value::as_str)
+            .unwrap_or("denied");
+        return Some(HookOutput::Deny { reason: reason.to_string() });
+    }
+    if let Some(ctx) = hso.get("additionalContext").and_then(Value::as_str) {
+        if !ctx.is_empty() {
+            return Some(HookOutput::AdditionalContext(ctx.to_string()));
+        }
+    }
+    None
+}
+
+/// Convert unified HookOutput to Claude-specific hook JSON.
+fn hook_output_to_claude_value(event_name: &str, output: Option<HookOutput>) -> Value {
+    match output {
+        None | Some(HookOutput::None) => silent_success(),
+        Some(HookOutput::Deny { reason }) => {
+            deny_pre_tool_use(reason).unwrap_or_else(silent_success)
+        }
+        Some(HookOutput::AdditionalContext(ctx)) => {
+            add_context(event_name, &ctx).unwrap_or_else(silent_success)
+        }
+        Some(HookOutput::Block { reason }) => {
+            add_context(event_name, &format!("[advisory] {reason}")).unwrap_or_else(silent_success)
+        }
+        Some(HookOutput::Advisory { message }) => {
+            add_context("Stop", &message).unwrap_or_else(silent_success)
+        }
+        Some(HookOutput::Warn { message }) => {
+            add_context("PreToolUse", &message).unwrap_or_else(silent_success)
+        }
+        Some(HookOutput::Raw(val)) => val,
+    }
+}
+
+impl HostHookDispatcher for ClaudeHookDispatcher {
+    fn handle_pre_tool_use(&self, event: &HookEvent) -> Option<HookOutput> {
+        let val = run_pre_tool_use(event.repo_root, event.payload);
+        val.and_then(|v| claude_value_to_hook_output(&v))
+    }
+
+    fn handle_user_prompt_submit(&self, event: &HookEvent) -> Option<HookOutput> {
+        let val = run_user_prompt_submit(event.repo_root, event.payload);
+        val.and_then(|v| claude_value_to_hook_output(&v))
+    }
+
+    fn handle_post_tool_use(&self, event: &HookEvent) -> Option<HookOutput> {
+        let val = run_post_tool_use(event.repo_root, event.payload);
+        val.and_then(|v| claude_value_to_hook_output(&v))
+    }
+
+    fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> {
+        let val = run_stop(event.repo_root, event.payload);
+        val.and_then(|v| claude_value_to_hook_output(&v))
+    }
+}
+
 /// Cross-host hook contract matrix: dispatch lifecycle hooks without stdin (test-only).
 #[cfg(any(test, feature = "test-support"))]
 pub fn dispatch_claude_hook_payload_for_test(
@@ -362,7 +441,9 @@ pub fn dispatch_claude_hook_payload_for_test(
 ) -> Value {
     crate::hooks::ensure_kernel_bootstrap();
     with_stdio_agent_hook_host(StdioAgentHookHost::ClaudeCode, || {
-        dispatch_stdio_agent_hook_payload(canonical_event, repo_root, payload)
+        let event = HookEvent { repo_root, event_name: canonical_event, payload };
+        let output = ClaudeHookDispatcher.dispatch(&event);
+        hook_output_to_claude_value(canonical_event, output)
     })
 }
 
@@ -1342,7 +1423,6 @@ fn bash_command(payload: &Value) -> Option<&str> {
 fn is_cross_host_or_retired_surface(path: &str) -> bool {
     CROSS_HOST_SURFACES
         .iter()
-        .chain(RETIRED_SURFACES.iter())
         .any(|surface| path == *surface || path.starts_with(&format!("{surface}/")))
 }
 

@@ -624,7 +624,7 @@ where
     }
     let _guard = acquire_codex_state_lock(&state_path)?;
     let loaded = codex_load_state_from_path(&state_path)?;
-    let (next_state, output) = f(loaded)?;
+    let (next_state, output) = f(loaded).map_err(CodexHookError::StateLockAcquire)?;
     if let Some(mut state) = next_state
         && !codex_save_state_to_path(&state_path, &mut state) {
             return Err(CodexHookError::StateWriteFailed);

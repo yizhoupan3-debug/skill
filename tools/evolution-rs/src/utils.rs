@@ -112,16 +112,24 @@ pub fn row_terms(value: &serde_json::Value) -> HashSet<&str> {
     }
 }
 
-pub fn manifest_skill_columns(
-    manifest: &serde_json::Value,
-) -> Option<(&Vec<serde_json::Value>, usize, usize)> {
+pub struct ManifestColumns<'a> {
+    pub skills: &'a Vec<serde_json::Value>,
+    pub idx_slug: usize,
+    pub idx_trigger_hints: usize,
+}
+
+pub fn manifest_skill_columns(manifest: &serde_json::Value) -> Option<ManifestColumns<'_>> {
     let skills = manifest.get("skills")?.as_array()?;
     let keys = manifest.get("keys")?.as_array()?;
     let idx_slug = keys.iter().position(|key| key.as_str() == Some("slug"))?;
     let idx_trigger_hints = keys
         .iter()
         .position(|key| matches!(key.as_str(), Some("trigger_hints" | "triggers")))?;
-    Some((skills, idx_slug, idx_trigger_hints))
+    Some(ManifestColumns {
+        skills,
+        idx_slug,
+        idx_trigger_hints,
+    })
 }
 
 pub fn manifest_skill_slug_column(

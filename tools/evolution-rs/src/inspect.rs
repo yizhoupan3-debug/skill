@@ -38,12 +38,13 @@ pub fn detect_boundary_collisions(
     if let Some(path) = manifest_path {
         let content = std::fs::read_to_string(path)?;
         let manifest: serde_json::Value = serde_json::from_str(&content)?;
-        if let Some((skills, idx_slug, idx_trigger_hints)) = manifest_skill_columns(&manifest) {
-            let skill_terms: Vec<(&str, HashSet<&str>)> = skills
+        if let Some(cols) = manifest_skill_columns(&manifest) {
+            let skill_terms: Vec<(&str, HashSet<&str>)> = cols
+                .skills
                 .iter()
                 .filter_map(|s| {
-                    let slug = s.get(idx_slug)?.as_str()?;
-                    let hints = s.get(idx_trigger_hints)?;
+                    let slug = s.get(cols.idx_slug)?.as_str()?;
+                    let hints = s.get(cols.idx_trigger_hints)?;
                     Some((slug, row_terms(hints)))
                 })
                 .collect();
@@ -131,6 +132,124 @@ pub fn calculate_dir_hash(path: &PathBuf) -> anyhow::Result<String> {
     let mut hasher = Sha256::new();
     hash_dir_recursive(path, &mut hasher)?;
     Ok(hex::encode(hasher.finalize()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "evo-inspect-{}-{}",
+            name,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn detect_boundary_collisions_no_overlap() {
+        let dir = temp_dir("no-overlap");
+        let manifest_path = dir.join("manifest.json");
+        let manifest = serde_json::json!({
+            "keys": ["slug", "trigger_hints"],
+            "skills": [
+                ["skill-a", "alpha bravo charlie"],
+                ["skill-b", "delta echo foxtrot"]
+            ]
+        });
+        std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
+        let cfg = EvolutionConfig::default();
+        let collisions =
+            detect_boundary_collisions(Some(manifest_path), &cfg).unwrap();
+        assert!(collisions.is_empty());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn detect_boundary_collisions_with_overlap() {
+        let dir = temp_dir("overlap");
+        let manifest_path = dir.join("manifest.json");
+        let manifest = serde_json::json!({
+            "keys": ["slug", "trigger_hints"],
+            "skills": [
+                ["skill-a", "alpha bravo charlie delta echo"],
+                ["skill-b", "bravo charlie delta echo foxtrot"]
+            ]
+        });
+        std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest).unwrap()).unwrap();
+        let cfg = EvolutionConfig::default();
+        let collisions =
+            detect_boundary_collisions(Some(manifest_path), &cfg).unwrap();
+        assert!(!collisions.is_empty());
+        assert!(collisions[0].contains("overlap"));
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn detect_boundary_collisions_none_path() {
+        let cfg = EvolutionConfig::default();
+        let collisions = detect_boundary_collisions(None, &cfg).unwrap();
+        assert!(collisions.is_empty());
+    }
+
+    #[test]
+    fn sanitize_path_rejects_parent_traversal() {
+        let result = sanitize_path(Path::new("../etc/passwd"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Security violation"));
+    }
+
+    #[test]
+    fn sanitize_path_rejects_absolute_path() {
+        let result = sanitize_path(Path::new("/etc/passwd"));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Security violation"));
+    }
+
+    #[test]
+    fn sanitize_path_accepts_relative_within_cwd() {
+        let dir = temp_dir("sanitize-ok");
+        let sub = dir.join("subdir");
+        std::fs::create_dir_all(&sub).unwrap();
+        let saved = std::env::current_dir().ok();
+        let _ = std::env::set_current_dir(&dir);
+        let result = sanitize_path(Path::new("subdir"));
+        if let Some(old) = saved {
+            let _ = std::env::set_current_dir(old);
+        }
+        assert!(result.is_ok());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn calculate_dir_hash_is_deterministic() {
+        let dir = temp_dir("hash-det");
+        std::fs::write(dir.join("a.txt"), "hello").unwrap();
+        std::fs::write(dir.join("b.txt"), "world").unwrap();
+        let h1 = calculate_dir_hash(&dir).unwrap();
+        let h2 = calculate_dir_hash(&dir).unwrap();
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 64);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn calculate_dir_hash_changes_with_content() {
+        let dir1 = temp_dir("hash-chg1");
+        let dir2 = temp_dir("hash-chg2");
+        std::fs::write(dir1.join("f.txt"), "aaa").unwrap();
+        std::fs::write(dir2.join("f.txt"), "bbb").unwrap();
+        let h1 = calculate_dir_hash(&dir1).unwrap();
+        let h2 = calculate_dir_hash(&dir2).unwrap();
+        assert_ne!(h1, h2);
+        let _ = std::fs::remove_dir_all(dir1);
+        let _ = std::fs::remove_dir_all(dir2);
+    }
 }
 
 fn hash_dir_recursive(path: &Path, hasher: &mut Sha256) -> anyhow::Result<()> {

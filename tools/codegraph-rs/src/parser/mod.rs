@@ -55,6 +55,8 @@ pub fn parse_file(path: &Path, contents: &str, mtime_ns: i64) -> Option<ParsedFi
         }
         _ => return None,
     };
+    // Note: content_hash is computed during incremental_sync, not here.
+    // The parser only produces symbols and edges; hash is computed from raw content.
     Some(ParsedFile {
         path: rel_path,
         language: language.to_string(),

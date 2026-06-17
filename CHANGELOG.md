@@ -19,7 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `thiserror` 2.0 workspace dependency
 - host-projection tracing: `hook_dispatch::dispatch()` + `file_state_lock` load/save debug spans
 - runtime-core tracing: `telemetry_emit` route decision + `closeout_enforcement` evaluate + `execution_contract` bundle + `session_supervisor` operation + `hook_timing` emit + `framework_runtime` snapshot/contract spans
-- Final deep review: clippy 0 errors, 1888 tests pass, 0 backup files, 0 stale references
+- Final deep review: clippy 0 errors, 1966 tests pass, 0 backup files, 0 stale references
 
 ### Changed
 - OpenCode `transport_type`: `"opencode-plugin"` → `"native-opencode"`

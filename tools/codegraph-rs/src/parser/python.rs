@@ -129,7 +129,7 @@ class Service:
 "#;
         let out = parse(src);
         let edge = out.edges.iter().find(|e| e.callee_symbol == "helper").expect("helper edge");
-        assert_eq!(edge.caller_symbol, "Service");
+        assert_eq!(edge.caller_symbol, "run", "self.method() attributed to enclosing fn");
     }
 
     #[test]

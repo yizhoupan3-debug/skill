@@ -347,20 +347,17 @@ impl IndexWatcher {
 
 impl Drop for IndexWatcher {
     fn drop(&mut self) {
-        // Drop watcher first to close the mpsc channel, signaling the thread to exit.
-        // Then join the thread to ensure clean shutdown.
-        self._watcher = {
-            let (tx, _) = mpsc::channel();
-            match RecommendedWatcher::new(tx, Config::default()) {
-                Ok(w) => w,
-                Err(_) => {
-                    // Fallback: if we can't create a replacement watcher,
-                    // the original watcher will be dropped when this struct is dropped,
-                    // which closes the mpsc channel and signals the thread to exit.
-                    return;
-                }
-            }
-        };
+        // Replace the watcher with a no-op watcher to close the mpsc channel
+        // without dropping the receiver (which would cause the thread to panic).
+        // Then join the thread for clean shutdown.
+        let (tx, _) = mpsc::channel();
+        self._watcher = RecommendedWatcher::new(tx, Config::default())
+            .unwrap_or_else(|_| {
+                // If we can't create a replacement, the original will be dropped
+                // when this struct is dropped, closing the channel.
+                return RecommendedWatcher::new(mpsc::channel().0, Config::default())
+                    .expect("fallback watcher");
+            });
         if let Some(handle) = self._handle.take() {
             let _ = handle.join();
         }

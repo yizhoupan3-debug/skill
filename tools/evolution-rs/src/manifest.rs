@@ -1,5 +1,5 @@
 use chrono::{Duration, Utc};
-use evolution_rs::EvolutionConfig;
+use evolution_rs::{EvolutionConfig, blended_health_score};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -93,11 +93,12 @@ pub fn generate_manifest(
         let static_score = *static_scores
             .get(&skill)
             .unwrap_or(&cfg.thresholds.default_static_score);
-        let blended = (((dynamic_base * cfg.weights.dynamic_blend)
-            + (static_score * cfg.weights.static_blend))
-            * 10.0)
-            .round()
-            / 10.0;
+        let blended = blended_health_score(
+            dynamic_base,
+            static_score,
+            cfg.weights.dynamic_blend,
+            cfg.weights.static_blend,
+        );
 
         let status = if blended >= cfg.thresholds.healthy_score {
             "Healthy"

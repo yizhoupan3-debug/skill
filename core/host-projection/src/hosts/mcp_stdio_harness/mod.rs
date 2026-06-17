@@ -1,4 +1,4 @@
-//! MCP stdio harness: Opencode 共用 stdio transport（`claude-desktop` 已退役，入口 fail-closed）。
+//! MCP stdio harness: Opencode 共用 stdio transport。
 //!
 //! MCP 服务器（stdio transport），提供 tools / prompts / resources 三类端点，
 //! 替代 shell hook 协议（PreToolUse / UserPromptSubmit / PostToolUse / Stop）。
@@ -294,14 +294,6 @@ const MAX_MCP_CONTENT_LENGTH: usize = 4 * 1024 * 1024;
 pub enum McpTransportMode {
     ContentLength,
     NewlineDelimited,
-}
-
-pub fn run_claude_desktop_mcp_loop(repo_root_arg: Option<&Path>) -> Result<(), String> {
-    let _ = crate::hooks::resolve_repo_root_arg(repo_root_arg)?;
-    eprintln!(
-        "[router-rs] deprecate: `claude-desktop agent` retired 2026-06; use claude-code (`router-rs claude hook` + install-claude.sh)"
-    );
-    reject_retired_claude_desktop_host("claude-desktop")
 }
 
 pub fn run_mcp_stdio<R: BufRead, W: Write>(
@@ -1373,13 +1365,6 @@ mod tests {
         assert!(names.contains(&"framework_routing"));
         assert!(names.contains(&"review_gate"));
         assert!(names.contains(&"closeout_checklist"));
-    }
-
-    #[test]
-    fn claude_desktop_mcp_loop_is_retired() {
-        let err = run_claude_desktop_mcp_loop(None).expect_err("retired host");
-        assert!(err.contains("claude-desktop"));
-        assert!(err.contains("claude-code"));
     }
 
     #[test]

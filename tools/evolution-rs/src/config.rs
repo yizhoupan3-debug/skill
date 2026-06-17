@@ -3,8 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct EvolutionConfig {
     #[serde(default)]
     pub evolution: EvolutionSection,
@@ -167,6 +166,15 @@ pub fn load_config(path: Option<&Path>) -> anyhow::Result<EvolutionConfig> {
     Ok(cfg)
 }
 
+pub fn blended_health_score(
+    dynamic_base: f32,
+    static_score: f32,
+    dynamic_blend: f32,
+    static_blend: f32,
+) -> f32 {
+    (((dynamic_base * dynamic_blend) + (static_score * static_blend)) * 10.0).round() / 10.0
+}
+
 pub fn default_config_path() -> &'static str {
     "configs/evolution/evolution.toml"
 }
@@ -222,5 +230,23 @@ healthy_score = 90.0
         assert_eq!(cfg.thresholds.healthy_score, 90.0);
         assert_eq!(cfg.thresholds.stable_score, 60.0);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn blended_health_score_rounds_to_one_decimal() {
+        let score = blended_health_score(80.0, 90.0, 0.6, 0.4);
+        assert_eq!(score, 84.0);
+    }
+
+    #[test]
+    fn blended_health_score_full_dynamic() {
+        let score = blended_health_score(100.0, 0.0, 0.6, 0.4);
+        assert_eq!(score, 60.0);
+    }
+
+    #[test]
+    fn blended_health_score_full_static() {
+        let score = blended_health_score(0.0, 100.0, 0.6, 0.4);
+        assert_eq!(score, 40.0);
     }
 }

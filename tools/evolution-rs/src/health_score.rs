@@ -1,4 +1,4 @@
-use crate::config::EvolutionConfig;
+use crate::config::{EvolutionConfig, blended_health_score};
 use crate::telemetry_journal::{TelemetryEvent, event_within_window, load_telemetry_journal};
 use anyhow::Context;
 use chrono::{Duration, Utc};
@@ -43,11 +43,12 @@ pub fn run_health_score(
             100.0
         };
         let static_score = cfg.thresholds.default_static_score;
-        let blended = (((dynamic_base * cfg.weights.dynamic_blend)
-            + (static_score * cfg.weights.static_blend))
-            * 10.0)
-            .round()
-            / 10.0;
+        let blended = blended_health_score(
+            dynamic_base,
+            static_score,
+            cfg.weights.dynamic_blend,
+            cfg.weights.static_blend,
+        );
         let status = if blended >= cfg.thresholds.healthy_score {
             "Healthy"
         } else if blended >= cfg.thresholds.stable_score {

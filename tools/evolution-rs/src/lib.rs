@@ -4,7 +4,7 @@ pub mod health_score;
 pub mod telemetry_journal;
 
 pub use analyze::run_analyze;
-pub use config::{EvolutionConfig, default_config_path, load_config};
+pub use config::{EvolutionConfig, blended_health_score, default_config_path, load_config};
 pub use health_score::run_health_score;
 pub use telemetry_journal::{
     AuditJournalEntry, TelemetryEvent, TelemetryJournal, TimestampedTelemetryEvent,

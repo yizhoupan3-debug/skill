@@ -108,8 +108,7 @@ pub fn audit_journal(
         if let Some(path) = manifest_path
             && let Ok(content) = std::fs::read_to_string(path)
                 && let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content)
-                    && let Some((skills, idx_slug, idx_trigger_hints)) =
-                        manifest_skill_columns(&manifest)
+                    && let Some(cols) = manifest_skill_columns(&manifest)
                     {
                         let active_skills: HashSet<_> =
                             filtered.iter().map(|e| e.final_skill.as_str()).collect();
@@ -119,12 +118,12 @@ pub fn audit_journal(
                             .filter(|e| e.init == "none" || e.init == "general")
                             .collect();
 
-                        for s in skills {
-                            let Some(name) = s.get(idx_slug).and_then(|value| value.as_str())
+                        for s in cols.skills {
+                            let Some(name) = s.get(cols.idx_slug).and_then(|value| value.as_str())
                             else {
                                 continue;
                             };
-                            let triggers = row_text(&s[idx_trigger_hints]);
+                            let triggers = row_text(&s[cols.idx_trigger_hints]);
 
                             // R33: Pruning Suggestion (Zero usage)
                             if !active_skills.contains(name)
@@ -184,4 +183,115 @@ pub fn audit_journal(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "evo-audit-{}-{}",
+            name,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn make_entry(ts: &str, task: &str, init: &str, skill: &str, reroute: bool, struggle: i32) -> String {
+        serde_json::json!({
+            "t": ts,
+            "tk": task,
+            "i": init,
+            "f": skill,
+            "r": reroute,
+            "s": struggle,
+            "re": ""
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn audit_journal_runs_with_no_entries() {
+        let dir = temp_dir("empty");
+        let journal = dir.join("journal.jsonl");
+        std::fs::write(&journal, "").unwrap();
+        let cfg = EvolutionConfig::default();
+        audit_journal(journal, 30, false, None, &cfg).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn audit_journal_ngram_extraction() {
+        let dir = temp_dir("ngram");
+        let journal = dir.join("journal.jsonl");
+        let ts = chrono::Utc::now().to_rfc3339();
+        let mut lines = Vec::new();
+        for _ in 0..5 {
+            lines.push(make_entry(&ts, "convert pdf to csv", "none", "pdf", true, 0));
+        }
+        std::fs::write(&journal, lines.join("\n")).unwrap();
+        let cfg = EvolutionConfig::default();
+        audit_journal(journal, 30, true, None, &cfg).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn audit_journal_correlation_analysis() {
+        let dir = temp_dir("corr");
+        let journal = dir.join("journal.jsonl");
+        let ts = chrono::Utc::now().to_rfc3339();
+        let mut lines = Vec::new();
+        for _ in 0..5 {
+            lines.push(make_entry(&ts, "test task", "skill-a", "skill-b", true, 0));
+        }
+        std::fs::write(&journal, lines.join("\n")).unwrap();
+        let cfg = EvolutionConfig::default();
+        audit_journal(journal, 30, true, None, &cfg).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn audit_journal_struggle_count() {
+        let dir = temp_dir("struggle");
+        let journal = dir.join("journal.jsonl");
+        let ts = chrono::Utc::now().to_rfc3339();
+        let mut lines = Vec::new();
+        lines.push(make_entry(&ts, "task1", "none", "pdf", false, 3));
+        lines.push(make_entry(&ts, "task2", "none", "csv", false, 0));
+        lines.push(make_entry(&ts, "task3", "none", "pdf", true, 1));
+        std::fs::write(&journal, lines.join("\n")).unwrap();
+        let cfg = EvolutionConfig::default();
+        audit_journal(journal, 30, true, None, &cfg).unwrap();
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn stem_reduces_words() {
+        assert_eq!(crate::utils::stem("running"), "run");
+        assert_eq!(crate::utils::stem("created"), "creat");
+        assert_eq!(crate::utils::stem("assessment"), "assess");
+        assert_eq!(crate::utils::stem("cats"), "cat");
+        assert_eq!(crate::utils::stem("ab"), "ab");
+        assert_eq!(crate::utils::stem("the"), "the");
+    }
+
+    #[test]
+    fn jaccard_similar_strings_high_score() {
+        let score = crate::utils::calculate_jaccard(
+            "convert pdf to csv",
+            "convert pdf to csv format",
+        );
+        assert!(score > 0.5);
+    }
+
+    #[test]
+    fn jaccard_different_strings_low_score() {
+        let score = crate::utils::calculate_jaccard("hello world", "foo bar baz");
+        assert!(score < 0.1);
+    }
 }

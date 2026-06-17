@@ -155,7 +155,6 @@ impl Drop for HooksInstallLock {
 }
 
 fn acquire_install_lock(codex_home: &Path) -> Result<HooksInstallLock, String> {
-    use super::state::CodexHookError;
     let lock_path = codex_home.join(".install.lock");
     for _ in 0..30 {
         match OpenOptions::new()
@@ -170,9 +169,8 @@ fn acquire_install_lock(codex_home: &Path) -> Result<HooksInstallLock, String> {
                     .unwrap_or(0);
                 let stamp = format!("pid={} ts={now_ms}\n", std::process::id());
                 use std::io::Write as _;
-                file.write_all(stamp.as_bytes())
-                    .map_err(CodexHookError::StateLockWrite)?;
-                file.sync_all().map_err(CodexHookError::StateLockSync)?;
+                file.write_all(stamp.as_bytes()).map_err(|e| e.to_string())?;
+                file.sync_all().map_err(|e| e.to_string())?;
                 return Ok(HooksInstallLock { path: lock_path });
             }
             Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {

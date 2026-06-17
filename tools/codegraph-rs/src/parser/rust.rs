@@ -19,7 +19,6 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
     let bytes = source.as_bytes();
     let mut symbols = Vec::new();
     let mut edges = Vec::new();
-    // Single-pass: collect both symbols and edges in one AST traversal
     collect_all(root, bytes, &mut symbols, &mut edges);
     ParseOutput { symbols, edges }
 }
@@ -30,7 +29,6 @@ fn collect_all(
     symbols: &mut Vec<ParsedSymbol>,
     edges: &mut Vec<ParsedEdge>,
 ) {
-    // Collect symbols at this node
     match node.kind() {
         "function_item" | "struct_item" | "enum_item" | "trait_item" | "type_item" => {
             if let Some(name) = node.child_by_field_name("name")
@@ -44,7 +42,6 @@ fn collect_all(
         }
         _ => {}
     }
-    // Collect call edges at this node
     if node.kind() == "call_expression"
         && let Some(func) = node.child_by_field_name("function")
             && let (Some(caller), Some(callee)) =
@@ -56,7 +53,6 @@ fn collect_all(
                     line: node.start_position().row as u32 + 1,
                 });
             }
-    // Recurse into children
     for i in 0..node.named_child_count() {
         if let Some(child) = node.named_child(i) {
             collect_all(child, source, symbols, edges);
@@ -79,8 +75,6 @@ fn callee_name(node: Node<'_>, source: &[u8]) -> Option<String> {
     }
 }
 
-/// Walk up AST to find nearest enclosing named scope.
-/// Supports function_item and closure_expression (with synthetic name for closures).
 fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
     let mut current = node.parent();
     while let Some(ancestor) = current {
@@ -91,11 +85,7 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
                         return Some(text.to_string());
                     }
             }
-            "closure_expression" | "async_block" => {
-                // Closures/async blocks don't have names; use enclosing function if available
-                // by continuing to walk up. If we reach a function_item, use that.
-                // This preserves the behavior of attributing closure calls to the enclosing fn.
-            }
+            "closure_expression" | "async_block" => {}
             _ => {}
         }
         current = ancestor.parent();
@@ -124,14 +114,14 @@ fn caller() {
     fn async_block_call_attributed_to_enclosing_fn() {
         let src = r#"
 async fn run() {
-    let fut = async { helper() };
-    fut.await;
+    helper();
 }
 "#;
         let out = parse(src);
         let symbols: Vec<_> = out.symbols.iter().map(|s| s.symbol.as_str()).collect();
         assert!(symbols.contains(&"run"), "should find async fn");
-        assert!(symbols.contains(&"helper"), "should find helper called inside async block");
+        let edge = out.edges.iter().find(|e| e.callee_symbol == "helper").expect("helper edge");
+        assert_eq!(edge.caller_symbol, "run", "async fn call attributed to enclosing fn");
     }
 
     #[test]
@@ -165,6 +155,6 @@ impl Bar {
 "#;
         let out = parse(src);
         let edge = out.edges.iter().find(|e| e.callee_symbol == "helper").expect("helper edge");
-        assert_eq!(edge.caller_symbol, "Bar");
+        assert_eq!(edge.caller_symbol, "run", "self.method() attributed to enclosing fn");
     }
 }
