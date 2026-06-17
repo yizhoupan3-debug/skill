@@ -178,7 +178,7 @@ pub struct LoopRegistryEntry {
     pub trigger: LoopTriggerConfig,
     pub skill: Option<String>,
     #[serde(default)]
-    pub scope_based_safety: Option<std::collections::HashMap<String, String>>,
+    pub scope_based_safety: Option<std::collections::BTreeMap<String, String>>,
     #[serde(default)]
     pub default_safety: Option<String>,
     #[serde(default)]

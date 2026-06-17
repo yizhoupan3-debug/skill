@@ -73,12 +73,9 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
 
     let result = run_loop_inner(ctx, &mut state, &run_id, entry);
 
-    let lock_secs = lock_start.elapsed().as_secs();
-    let _ = release_lock(ctx.repo_root);
-
     match result {
         Ok(agg) => {
-            let report_text = report::render_loop_report(&state, &agg, &state.current_run.as_ref().map(|r| r.unconsumed_findings.clone()).unwrap_or_default(), Some(lock_secs));
+            let report_text = report::render_loop_report(&state, &agg, &state.current_run.as_ref().map(|r| r.unconsumed_findings.clone()).unwrap_or_default(), Some(lock_start.elapsed().as_secs()));
             let report_path = report::write_loop_report(ctx.repo_root, loop_id, &run_id, &report_text)
                 .ok();
             if let Some(ref mut r) = state.current_run {
@@ -88,12 +85,14 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
             transition_phase(&mut state, LoopPhase::Completed);
             finish_run(&mut state, &agg.overall_status);
             let _ = write_loop_state(ctx.repo_root, loop_id, &state);
+            let _ = release_lock(ctx.repo_root);
             Ok(agg)
         }
         Err(e) => {
             transition_phase(&mut state, LoopPhase::Escalated);
             finish_run(&mut state, "escalated");
             let _ = write_loop_state(ctx.repo_root, loop_id, &state);
+            let _ = release_lock(ctx.repo_root);
             Err(e)
         }
     }
@@ -245,6 +244,7 @@ fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> R
                     repo_root,
                     &entry.loop_id,
                 ) {
+                    let _ = crate::kill_switch::clear_kill_signal(repo_root, &entry.loop_id);
                     child.kill().map_err(|e| LoopError::Io(format!("discovery kill: {e}")))?;
                     child.wait().map_err(|e| LoopError::Io(format!("discovery wait: {e}")))?;
                     return Err(LoopError::KillSignaled(format!(

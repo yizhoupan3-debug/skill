@@ -822,14 +822,14 @@ pub fn reasons_class(reasons: &[String]) -> String {
     let mut indices: Vec<usize> = (0..reasons.len()).collect();
     indices.sort_by_key(|&i| reasons[i].to_ascii_lowercase());
     let mut out = Vec::with_capacity(reasons.len());
-    let mut prev = "";
+    let mut prev = String::new();
     for &i in &indices {
         let lower = reasons[i].to_ascii_lowercase();
         if lower.is_empty() || lower == prev {
             continue;
         }
         out.push(reasons[i].as_str());
-        prev = &reasons[i];
+        prev = lower;
     }
     if out.is_empty() {
         return "none".to_string();

@@ -1,5 +1,5 @@
 use crate::types::{LoopAction, LoopRegistryEntry, SafetyLevel};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub fn parse_safety_level(raw: &str) -> Option<SafetyLevel> {
     match raw {
@@ -12,7 +12,7 @@ pub fn parse_safety_level(raw: &str) -> Option<SafetyLevel> {
 
 pub fn assign_safety_for_file(
     file_path: &str,
-    scope_rules: &HashMap<String, String>,
+    scope_rules: &BTreeMap<String, String>,
     default: &str,
 ) -> SafetyLevel {
     let path = std::path::Path::new(file_path);
@@ -141,7 +141,7 @@ fn match_single_star_ext(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     #[test]
     fn test_parse_safety_level() {
@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_assign_safety_for_file() {
-        let mut rules = HashMap::new();
+        let mut rules = BTreeMap::new();
         rules.insert("src/**/*.rs".to_string(), "L2-assisted-fix".to_string());
         rules.insert("*.md".to_string(), "L3-unattended".to_string());
 

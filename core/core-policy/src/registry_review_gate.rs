@@ -217,11 +217,11 @@ pub fn is_reviewer_lane_from_registry(lane: &str, repo_root: Option<&Path>) -> b
         .unwrap_or(false)
 }
 
-/// Spawn-first pairing reviewer nudge enabled (registry default true).
+/// Spawn-first pairing reviewer nudge enabled (registry default false for fail-closed).
 pub fn review_spawn_first_enabled(repo_root: Option<&Path>) -> bool {
     snapshot(repo_root)
         .map(|s| s.spawn_first_enabled)
-        .unwrap_or(true)
+        .unwrap_or(false)
 }
 
 /// Sorted lane spellings from `review_gate.reviewer_lanes` (MCP prompts / stop nudges).

@@ -222,6 +222,15 @@ pub fn extract_prompt_text(event: &Value) -> String {
 
 /// Scan nested messages arrays for the last user-role message.
 fn extract_prompt_from_nested_messages(event: &Value) -> String {
+    extract_prompt_from_nested_messages_inner(event, 0)
+}
+
+const MAX_NESTING_DEPTH: usize = 4;
+
+fn extract_prompt_from_nested_messages_inner(event: &Value, depth: usize) -> String {
+    if depth > MAX_NESTING_DEPTH {
+        return String::new();
+    }
     const MESSAGE_KEYS: &[&str] = &[
         "messages",
         "conversationMessages",
@@ -243,10 +252,10 @@ fn extract_prompt_from_nested_messages(event: &Value) -> String {
                 }
             }
         }
-        // Recurse into nested containers
+        // Recurse into nested containers (with depth limit)
         for key in NESTED_KEYS {
             if let Some(nested) = obj.get(*key) {
-                let s = extract_prompt_from_nested_messages(nested);
+                let s = extract_prompt_from_nested_messages_inner(nested, depth + 1);
                 if !s.trim().is_empty() {
                     return s;
                 }
