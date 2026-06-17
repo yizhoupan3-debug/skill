@@ -157,9 +157,8 @@ fn tool_ooxml_parse(args: &Value) -> Result<Value, anyhow::Error> {
             let canonical_path = structure.path.clone();
 
             if as_json {
-                let text = crate::pptx_read_text_string(&structure);
                 Ok(json!({
-                    "content": [{"type": "text", "text": text}],
+                    "content": [{"type": "text", "text": serde_json::to_string_pretty(&structure)?}],
                     "metadata": {
                         "path": canonical_path,
                         "sha256": sha,

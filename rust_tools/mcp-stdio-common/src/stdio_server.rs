@@ -57,11 +57,7 @@ pub fn run_stdio_mcp(
                     .get("arguments")
                     .cloned()
                     .unwrap_or(Value::Object(Default::default()));
-                dispatch(tool_name, &args).map(|result| {
-                    json!({
-                        "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_else(|_| result.to_string()) }]
-                    })
-                })
+                dispatch(tool_name, &args)
             }
             "ping" => Ok(json!({})),
             _ => {

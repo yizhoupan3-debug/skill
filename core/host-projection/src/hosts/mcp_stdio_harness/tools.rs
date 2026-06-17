@@ -75,6 +75,7 @@ pub(super) fn handle_tools_call(
         "goal_state_manage" => tool_goal_state_manage(arguments, repo_root, connection_session_id),
         "goal_state_read" => tool_goal_state_read(arguments, repo_root),
         "closeout_record_write" => tool_closeout_record_write(arguments, repo_root, host_id),
+        "routing_evolution" => tool_routing_evolution(arguments, repo_root),
         "web_fetch" => tool_web_fetch(arguments),
         _ => Err(format!("Unknown tool: {tool_name}")),
     };
@@ -118,6 +119,11 @@ pub(super) fn tool_framework_snapshot(
         .get("detail_level")
         .and_then(Value::as_str)
         .unwrap_or("summary");
+    if detail_level != "summary" && detail_level != "full" {
+        return Err(format!(
+            "Invalid detail_level: {detail_level}. Must be 'summary' or 'full'."
+        ));
+    }
     let is_full = detail_level == "full";
     let ttl_secs = snapshot_cache_ttl_secs();
     // Try to read from cache (configurable TTL, default 30 seconds)
@@ -812,6 +818,12 @@ pub(super) fn tool_closeout_record_write(
         .get("verification_status")
         .and_then(Value::as_str)
         .ok_or("Missing required argument: verification_status")?;
+    match verification_status {
+        "passed" | "failed" | "partial" | "not_run" => {},
+        _ => return Err(format!(
+            "Invalid verification_status: {verification_status}. Must be one of: passed, failed, partial, not_run"
+        )),
+    }
 
     let mut record = Map::new();
     record.insert(
@@ -1037,4 +1049,361 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
     });
     serde_json::to_string_pretty(&payload)
         .map_err(|err| format!("web_fetch serialize failed: {err}"))
+}
+
+// ---------------------------------------------------------------------------
+// Routing evolution: read telemetry log, aggregate, suggest improvements
+// ---------------------------------------------------------------------------
+
+#[derive(serde::Deserialize)]
+struct RouteLogEntry {
+    ts: Option<String>,
+    #[allow(dead_code)]
+    kind: Option<String>,
+    task: Option<String>,
+    skill: Option<String>,
+    confidence: Option<f32>,
+    reroute: Option<bool>,
+    #[allow(dead_code)]
+    latency_ms: Option<u64>,
+    parity_gate: Option<String>,
+    #[serde(default)]
+    reasons: Vec<String>,
+    #[allow(dead_code)]
+    matched_tokens: Option<usize>,
+}
+
+/// Aggregate routing stats from telemetry journal.
+pub(super) fn tool_routing_evolution(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, String> {
+    let operation = arguments
+        .get("operation")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: operation (stats|analyze|extract|calibrate)")?;
+    let skill_filter = arguments.get("skill").and_then(Value::as_str);
+    let lookback_days = arguments.get("days").and_then(Value::as_u64).unwrap_or(0);
+
+    let journal_path = repo_root.join("artifacts/telemetry/events.jsonl");
+    if !journal_path.exists() {
+        return Err(format!(
+            "Telemetry journal not found at {}",
+            journal_path.display()
+        ));
+    }
+
+    let file = fs::File::open(&journal_path)
+        .map_err(|e| format!("open journal: {e}"))?;
+    let reader = std::io::BufReader::new(file);
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let cutoff = if lookback_days > 0 {
+        now.saturating_sub(lookback_days * 86400)
+    } else {
+        0
+    };
+
+    let mut entries: Vec<RouteLogEntry> = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.map_err(|e| format!("read journal line: {e}"))?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry: RouteLogEntry =
+            serde_json::from_str(&line).map_err(|e| format!("parse journal line: {e}"))?;
+        if entry.kind.as_deref() != Some("route_decision") {
+            continue;
+        }
+
+        if cutoff > 0
+            && let Some(ts) = &entry.ts
+                && let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(ts)
+                    && parsed.timestamp() < cutoff as i64 {
+                        continue;
+                    }
+
+        if let Some(filter) = skill_filter
+            && entry.skill.as_deref() != Some(filter) {
+                continue;
+            }
+
+        entries.push(entry);
+    }
+
+    match operation {
+        "stats" => Ok(routing_stats(&entries)),
+        "analyze" => Ok(routing_analyze(&entries)),
+        "extract" => Ok(routing_extract(&entries)),
+        "calibrate" => Ok(routing_calibrate(&entries)),
+        _ => Err(format!(
+            "Unknown operation: {operation}. Use stats|analyze|extract|calibrate"
+        )),
+    }
+}
+
+fn routing_stats(entries: &[RouteLogEntry]) -> String {
+    use std::collections::HashMap;
+
+    let total = entries.len();
+    let mut per_skill: HashMap<&str, (u64, f64, u64)> = HashMap::new(); // count, sum_conf, reroute_count
+    let mut gate_counts: HashMap<&str, u64> = HashMap::new();
+    let mut total_reroute = 0u64;
+
+    for e in entries {
+        let skill = e.skill.as_deref().unwrap_or("none");
+        let (count, sum, reroute) =
+            per_skill.entry(skill).or_insert((0, 0.0, 0));
+        *count += 1;
+        *sum += e.confidence.unwrap_or(0.0) as f64;
+        if e.reroute.unwrap_or(false) {
+            *reroute += 1;
+            total_reroute += 1;
+        }
+        let gate = e.parity_gate.as_deref().unwrap_or("unknown");
+        *gate_counts.entry(gate).or_insert(0) += 1;
+    }
+
+    let mut skills: Vec<serde_json::Value> = per_skill
+        .iter()
+        .map(|(slug, (count, sum, reroute))| {
+            json!({
+                "skill": slug,
+                "count": count,
+                "avg_confidence": format!("{:.2}", sum / *count as f64),
+                "reroutes": reroute,
+            })
+        })
+        .collect();
+    skills.sort_by(|a, b| b["count"].as_u64().cmp(&a["count"].as_u64()));
+
+    let mut gates: Vec<serde_json::Value> = gate_counts
+        .iter()
+        .map(|(mode, count)| json!({"mode": mode, "count": count}))
+        .collect();
+    gates.sort_by(|a, b| b["count"].as_u64().cmp(&a["count"].as_u64()));
+
+    let total_with_candidates = entries
+        .iter()
+        .filter(|e| !e.reasons.is_empty())
+        .count();
+
+    json!({
+        "total_routes": total,
+        "timespan_days": "...",  // caller can compute from first/last ts
+        "skills_with_logs": per_skill.len(),
+        "total_reroute": total_reroute,
+        "reroute_rate": format!("{:.1}%", total_reroute as f64 / total.max(1) as f64 * 100.0),
+        "entries_with_reasons": total_with_candidates,
+        "gate_breakdown": gates,
+        "per_skill": skills,
+    })
+    .to_string()
+}
+
+fn routing_analyze(entries: &[RouteLogEntry]) -> String {
+    use std::collections::HashMap;
+
+    let total = entries.len();
+    if total == 0 {
+        return json!({"error": "No routing entries to analyze", "suggestions": ["使用一段时间后再运行 analyze"]}).to_string();
+    }
+
+    // Per-skill: avg confidence progression and gate rate
+    let mut skill_data: HashMap<&str, Vec<(f32, bool, &str)>> = HashMap::new();
+    for e in entries {
+        let skill = e.skill.as_deref().unwrap_or("none");
+        skill_data
+            .entry(skill)
+            .or_default()
+            .push((e.confidence.unwrap_or(0.0), e.reroute.unwrap_or(false), e.parity_gate.as_deref().unwrap_or("direct")));
+    }
+
+    let mut analysis: Vec<serde_json::Value> = skill_data
+        .iter()
+        .map(|(slug, data)| {
+            let n = data.len();
+            let avg_conf = data.iter().map(|(c, _, _)| *c as f64).sum::<f64>() / n.max(1) as f64;
+            let reroutes = data.iter().filter(|(_, r, _)| *r).count();
+            let gate_count = data.iter().filter(|(_, _, g)| *g != "direct").count();
+            let gate_rate = gate_count as f64 / n.max(1) as f64;
+
+            json!({
+                "skill": slug,
+                "count": n,
+                "avg_confidence": format!("{:.2}", avg_conf),
+                "reroute_rate": format!("{:.1}%", reroutes as f64 / n.max(1) as f64 * 100.0),
+                "gate_rate": format!("{:.1}%", gate_rate * 100.0),
+            })
+        })
+        .collect();
+    analysis.sort_by(|a, b| b["count"].as_u64().cmp(&a["count"].as_u64()));
+
+    // Find skills with high reroute rate (potential confusion)
+    let high_reroute: Vec<&serde_json::Value> = analysis
+        .iter()
+        .filter(|a| {
+            a["reroute_rate"].as_str().and_then(|r| {
+                r.trim_end_matches('%').parse::<f64>().ok()
+            }).unwrap_or(0.0) > 10.0
+        })
+        .collect();
+
+    json!({
+        "total_routes": total,
+        "skills_analyzed": analysis.len(),
+        "per_skill": analysis,
+        "alerts": {
+            "high_confusion_skills": high_reroute.iter().map(|a| a["skill"].as_str().unwrap_or("?")).collect::<Vec<_>>(),
+            "note": "reroute_rate > 10% suggests embedding confusion or ambiguous utterances"
+        },
+        "suggestions": [
+            if high_reroute.len() > 2 {
+                format!("{} skills have >10% reroute rate — consider adding more utterances for these", high_reroute.len())
+            } else {
+                "Reroute rates look healthy".to_string()
+            },
+            "Run `calibrate` to get threshold tuning suggestions"
+        ]
+    })
+    .to_string()
+}
+
+fn routing_extract(entries: &[RouteLogEntry]) -> String {
+    let mut extracted: Vec<serde_json::Value> = entries
+        .iter()
+        .filter(|e| {
+            let conf = e.confidence.unwrap_or(0.0);
+            let skill = e.skill.as_deref().unwrap_or("");
+            conf >= 0.7
+                && !skill.is_empty()
+                && skill != "none"
+                && !e.reroute.unwrap_or(false)
+                && e.task.as_ref().is_some_and(|t| t.len() > 4)
+        })
+        .map(|e| {
+            json!({
+                "query": e.task.as_deref().unwrap_or(""),
+                "skill": e.skill.as_deref().unwrap_or(""),
+                "confidence": e.confidence.unwrap_or(0.0),
+                "parity_gate": e.parity_gate.as_deref().unwrap_or("direct"),
+            })
+        })
+        .collect();
+
+    // Deduplicate by (query, skill)
+    let mut seen = std::collections::HashSet::new();
+    extracted.retain(|e| {
+        let key = format!(
+            "{}/{}",
+            e["query"].as_str().unwrap_or(""),
+            e["skill"].as_str().unwrap_or("")
+        );
+        seen.insert(key)
+    });
+
+    // Sort by confidence desc, limit to top 100
+    extracted.sort_by(|a, b| {
+        b["confidence"]
+            .as_f64()
+            .partial_cmp(&a["confidence"].as_f64())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    extracted.truncate(100);
+
+    let by_skill: std::collections::BTreeMap<&str, Vec<&serde_json::Value>> =
+        extracted.iter().filter_map(|e| {
+            e["skill"].as_str().map(|s| (s, e))
+        }).fold(std::collections::BTreeMap::new(), |mut map, (skill, entry)| {
+            map.entry(skill).or_default().push(entry);
+            map
+        });
+
+    let mut summary: Vec<serde_json::Value> = by_skill
+        .iter()
+        .map(|(skill, items)| {
+            json!({
+                "skill": skill,
+                "utterance_count": items.len(),
+                "queries": items.iter().map(|e| e["query"].as_str().unwrap_or("")).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    summary.sort_by(|a, b| {
+        b["utterance_count"]
+            .as_u64()
+            .cmp(&a["utterance_count"].as_u64())
+    });
+
+    json!({
+        "total_extracted": extracted.len(),
+        "by_skill": summary,
+        "note": "Confidence >= 0.7, no reroute. Add these to utterences and re-run centroid calibration.",
+    })
+    .to_string()
+}
+
+fn routing_calibrate(entries: &[RouteLogEntry]) -> String {
+    use std::collections::HashMap;
+
+    if entries.len() < 10 {
+        return json!({
+            "suggestions": [],
+            "note": "Need at least 10 entries for calibration. Run more queries first."
+        }).to_string();
+    }
+
+    // Per-skill stats for threshold suggestions
+    let mut skill_data: HashMap<&str, Vec<f32>> = HashMap::new();
+    for e in entries {
+        let skill = e.skill.as_deref().unwrap_or("none");
+        skill_data.entry(skill).or_default().push(e.confidence.unwrap_or(0.0));
+    }
+
+    let mut suggestions: Vec<serde_json::Value> = Vec::new();
+    for (skill, confs) in &skill_data {
+        if confs.len() < 5 {
+            continue;
+        }
+        let n = confs.len();
+        let mut sorted = confs.clone();
+        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let median = sorted[n / 2];
+        let p90_idx = ((n as f64 * 0.9) as usize).min(n - 1);
+        let p90 = sorted[p90_idx];
+
+        // If median confidence is high, τ_auto can be raised
+        if median > 0.72 {
+            suggestions.push(json!({
+                "skill": skill,
+                "metric": "confidence distribution",
+                "median": format!("{:.2}", median),
+                "p90": format!("{:.2}", p90),
+                "suggestion": format!("τ_auto can be raised (current 0.65). Median confidence for {skill} is {median:.2}"),
+                "action": "edit SRC_CONFIG.json thresholds"
+            }));
+        }
+        // If median confidence is low, add more utterances
+        if median < 0.45 && n > 20 {
+            suggestions.push(json!({
+                "skill": skill,
+                "metric": "low confidence",
+                "median": format!("{:.2}", median),
+                "suggestion": format!("Median confidence for {skill} is {median:.2}. Add more seed utterances to distinguish it."),
+                "action": "run `routing_evolution extract` for candidate utterances"
+            }));
+        }
+    }
+
+    json!({
+        "total_entries": entries.len(),
+        "skills_with_enough_data": skill_data.len(),
+        "suggestions": suggestions,
+        "note": "Thresholds are per-embedding-model. Adjust in thresholds_per_model.<model_name> in scoring config.",
+    })
+    .to_string()
 }

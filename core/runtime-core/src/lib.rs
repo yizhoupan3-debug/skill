@@ -180,7 +180,12 @@ pub fn register_host_projection_hooks() {
 
         host_projection::hooks::register_session_call_tracker(
             session_call_tracker::init_tracker,
-            |_root, _name, _stats_json| Ok(()), // record_tool_call: callers always pass None
+            |root, name, stats_json| {
+                let stats = stats_json.and_then(|v| {
+                    serde_json::from_value::<session_call_tracker::CacheStats>(v.clone()).ok()
+                });
+                session_call_tracker::record_tool_call(root, name, stats)
+            },
             session_call_tracker::read_tracker_state,
         );
 

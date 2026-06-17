@@ -86,6 +86,7 @@ fn tool_citation_audit(args: &Value) -> Result<Value, anyhow::Error> {
     let cluster_threshold = args
         .get("cluster_threshold")
         .and_then(Value::as_u64)
+        .filter(|&v| v >= 1)
         .unwrap_or(3) as usize;
 
     let entries = parse_bibtex(&read_text(Path::new(bib_path))?)?;
@@ -96,7 +97,7 @@ fn tool_citation_audit(args: &Value) -> Result<Value, anyhow::Error> {
     let report = make_report(&entries, manuscript_text.as_deref(), cluster_threshold)?;
 
     let text = match format_str {
-        "markdown" | "md" => audit_report_to_markdown(&report),
+        "markdown" => audit_report_to_markdown(&report),
         _ => serde_json::to_string_pretty(&report)?,
     };
 
@@ -119,6 +120,7 @@ fn tool_citation_lint(args: &Value) -> Result<Value, anyhow::Error> {
     let threshold = args
         .get("threshold")
         .and_then(Value::as_u64)
+        .filter(|&v| v >= 1)
         .unwrap_or(3) as usize;
 
     let text = read_text(Path::new(manuscript_path))?;

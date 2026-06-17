@@ -258,6 +258,9 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
 
         // Record tool call
         hooks::emit_tool_call(&normalized, duration_ms, succeeded);
+        if let Err(e) = hooks::record_tool_call(event.repo_root, &normalized, None) {
+            eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
+        }
 
         // Check if review gate is suppressed
         let prompt = extract_prompt_text(event.payload);

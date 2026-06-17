@@ -153,19 +153,19 @@
   },
   "review_gate": {
     "spawn_first_enabled": true,
-    "spawn_first_nudge": "\u914d\u5bf9\u5ba1\u7a3f\uff1a\u9996\u8f6e\u5de5\u5177\u524d\u5148 spawn \u53ea\u8bfb reviewer\uff08reviewer_lanes \u95ed\u96c6\uff0cfork_context=false\uff09\uff1b\u4e3b\u7ebf\u7a0b\u505a\u8c03\u7814\u987b\u53e6\u5f00\u72ec\u7acb reviewer\uff0cexplore \u4e0d\u8ba1\u5165\u8bc1\u636e\u3002\u7ec6\u5219 skills/code-review-deep/SKILL.md",
-    "subagent_model_inherit_nudge": "\u5b50\u4ee3\u7406\u6a21\u578b\uff1a\u7ee7\u627f\u4e3b\u4f1a\u8bdd\uff1bTask \u7701\u7565 model\uff1b\u7981\u6b62\u9ed8\u8ba4 claude/sonnet\uff0c\u9664\u975e\u4e3b\u4f1a\u8bdd\u5df2\u9009 Anthropic\u3002\u5730\u533a\u4e0d\u53ef\u7528\u89c1 cursor.com/docs/account/regions",
+    "spawn_first_nudge": "配对审稿：首轮工具前先 spawn 只读 reviewer（reviewer_lanes 闭集，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
+    "subagent_model_inherit_nudge": "子代理模型：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions",
     "subagent_model_inherit_nudge_by_host": {
-      "cursor": "\u5b50\u4ee3\u7406\u6a21\u578b\uff08Cursor\uff09\uff1a\u7ee7\u627f\u4e3b\u4f1a\u8bdd\uff1bTask \u7701\u7565 model\uff1b\u7981\u6b62\u9ed8\u8ba4 claude/sonnet\uff0c\u9664\u975e\u4e3b\u4f1a\u8bdd\u5df2\u9009 Anthropic\u3002\u5730\u533a\u4e0d\u53ef\u7528\u89c1 cursor.com/docs/account/regions"
+      "cursor": "子代理模型（Cursor）：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions"
     },
-    "spawn_first_nudge_template": "\u914d\u5bf9\u5ba1\u7a3f\uff08{host_label}\uff09\uff1a\u9996\u8f6e\u5de5\u5177\u524d\u5148 spawn \u53ea\u8bfb reviewer\uff08reviewer_lanes \u95ed\u96c6\uff0cfork_context=false\uff09\uff1b\u4e3b\u7ebf\u7a0b\u8c03\u7814\u987b\u53e6\u5f00\u72ec\u7acb reviewer\uff0cexplore \u4e0d\u8ba1\u5165\u8bc1\u636e\u3002\u7ec6\u5219 skills/code-review-deep/SKILL.md",
+    "spawn_first_nudge_template": "配对审稿（{host_label}）：首轮工具前先 spawn 只读 reviewer（reviewer_lanes 闭集，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
     "spawn_first_nudge_host_labels": {
       "claude-code": "Claude Code",
       "codex": "Codex"
     },
     "spawn_first_nudge_by_host": {
-      "cursor": "\u914d\u5bf9\u5ba1\u7a3f\uff08Cursor\uff09\uff1a\u9996\u8f6e\u5de5\u5177\u524d\u5148 spawn \u53ea\u8bfb reviewer\uff08reviewer_lanes \u95ed\u96c6\uff0cfork_context=false\uff09\uff1b\u4e3b\u7ebf\u7a0b\u8c03\u7814\u987b\u53e6\u5f00\u72ec\u7acb reviewer\uff0cexplore \u4e0d\u8ba1\u5165\u8bc1\u636e\uff1bTask \u7701\u7565 model\u3001\u7ee7\u627f\u4e3b\u4f1a\u8bdd\uff0c\u7981\u6b62\u9ed8\u8ba4 claude/sonnet\u3002\u7ec6\u5219 skills/code-review-deep/SKILL.md",
-      "opencode": "\u914d\u5bf9\u5ba1\u7a3f\uff08Opencode\uff09\uff1a\u65e0 hook \u6ce8\u5165\uff1b\u987b\u4e3b\u52a8 spawn \u53ea\u8bfb reviewer\uff08reviewer_lanes\uff09\u5e76\u5199 review-lanes/*.md\u3002closeout/complete \u5728 MCP \u5de5\u5177\u5c42\u540c Claude Code\u3002\u7ec6\u5219 skills/code-review-deep/SKILL.md"
+      "cursor": "配对审稿（Cursor）：首轮工具前先 spawn 只读 reviewer（reviewer_lanes 闭集，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据；Task 省略 model、继承主会话，禁止默认 claude/sonnet。细则 skills/code-review-deep/SKILL.md",
+      "opencode": "配对审稿（Opencode）：无 hook 注入；须主动 spawn 只读 reviewer（reviewer_lanes）并写 review-lanes/*.md。closeout/complete 在 MCP 工具层同 Claude Code。细则 skills/code-review-deep/SKILL.md"
     },
     "spawn_first_includes_model_inherit_by_host": {
       "cursor": true
@@ -183,12 +183,12 @@
       "code-review"
     ]
   },
-    "lifecycle_profiles": {
+  "lifecycle_profiles": {
     "my-light": {
       "disable_spawn_first_nudge": true,
       "closeout_enforcement": "advisory",
       "loop_capable": false,
-      "comment": "deprecated \u2014 use interactive instead"
+      "comment": "deprecated — use interactive instead"
     },
     "interactive": {
       "disable_spawn_first_nudge": true,
@@ -368,11 +368,11 @@
       },
       "trigger_hints": [
         "/update",
-        "\u66f4\u65b0\u5173\u952e\u6587\u6863",
-        "\u79d1\u7814\u6587\u6863\u66f4\u65b0",
-        "git \u8ddf\u8e2a\u6587\u4ef6",
-        "\u6b7b\u4ee3\u7801\u6e05\u7406",
-        "\u65e7\u6587\u6863\u6e05\u7406",
+        "更新关键文档",
+        "科研文档更新",
+        "git 跟踪文件",
+        "死代码清理",
+        "旧文档清理",
         "stale files",
         "dead code"
       ]
@@ -398,6 +398,7 @@
         "session_checkpoint",
         "rfv_loop_manage",
         "rfv_loop_status",
+        "routing_evolution",
         "web_fetch"
       ],
       "host_config_keys": {
@@ -440,6 +441,7 @@
         "browser_wait_for",
         "browser_save_session",
         "browser_restore_session",
+        "browser_get_attached_runtime_events",
         "runtime_heartbeat",
         "session_launch",
         "session_list",
@@ -509,8 +511,9 @@
         "paperplain-mcp"
       ],
       "tools": [
-        "paper_metadata",
-        "paper_search"
+        "search_research",
+        "fetch_paper",
+        "find_paper_by_title"
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.paperplain",
@@ -560,8 +563,8 @@
         "rationale": "Cursor host does not expose external process supervision or auto-resume. session_supervisor currently supports codex and claude-code drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process."
       },
       "resume_command_examples": [
-        "\u5728 Cursor \u4e2d\u7ee7\u7eed\u5f53\u524d\u4f1a\u8bdd",
-        "\u5728\u540c\u4e00\u5de5\u4f5c\u533a\u91cd\u65b0\u6253\u5f00 Agent \u5bf9\u8bdd"
+        "在 Cursor 中继续当前会话",
+        "在同一工作区重新打开 Agent 对话"
       ],
       "harness_capabilities": [
         "hot_runtime_routing",

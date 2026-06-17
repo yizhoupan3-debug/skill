@@ -79,7 +79,7 @@ fn dev_exempt_fast_tunnel(path: Option<&str>, repo_root: Option<&Path>) -> bool 
     #[cfg(not(feature = "dev-exempt"))]
     {
         let _ = (path, repo_root);
-        return false;
+        false
     }
     #[cfg(feature = "dev-exempt")]
     {
@@ -596,6 +596,14 @@ const HIGH_RISK_MCP_TOOLS: &[(&str, &str)] = &[
         r"^session_resume_due$",
         "session_resume_due may re-trigger blocked workers with stale state.",
     ),
+    (
+        r"^session_terminate$",
+        "session_terminate can forcibly terminate running session workers, equivalent to process-level kill.",
+    ),
+    (
+        r"^background_terminate$",
+        "background_terminate can interrupt background jobs in durable state.",
+    ),
 ];
 
 /// MCP-specific arg-level risk patterns.
@@ -632,10 +640,34 @@ const MCP_ARG_RISK_PATTERNS: &[(&str, &str, &str, &str)] = &[
         "session_launch host targets a cloud metadata endpoint, which may exfiltrate credentials.",
     ),
     (
+        r"^session_launch$",
+        "cwd",
+        r"(?i)(configs/framework|\.claude|AGENTS)",
+        "session_launch cwd points to framework-protected paths, may bypass routing/safety checks.",
+    ),
+    (
         r"^session_mark_blocked$",
         "evidenceText",
         r"(?i)(password|token|secret|api.?key|credential)",
         "evidenceText in session_mark_blocked may persist sensitive data to durable state.",
+    ),
+    (
+        r"^web_fetch$",
+        "url",
+        r"(?i)(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|metadata\.google\.internal)",
+        "web_fetch URL targets private/internal IP ranges — SSRF risk (tool description: bypasses Bash sandbox).",
+    ),
+    (
+        r"^browser_save_session$",
+        "sessionPath",
+        r"(?i)(\.\./|~|/etc|/var|/tmp|/dev)",
+        "browser_save_session sessionPath with path-traversal-like pattern may write browser state to arbitrary locations.",
+    ),
+    (
+        r"^browser_restore_session$",
+        "sessionPath",
+        r"(?i)(\.\./|~|/etc|/var|/tmp|/dev)",
+        "browser_restore_session sessionPath with path-traversal-like pattern may load browser state from unexpected locations.",
     ),
 ];
 
@@ -643,7 +675,7 @@ const MCP_ARG_RISK_PATTERNS: &[(&str, &str, &str, &str)] = &[
 /// shell commands (e.g., browser-mcp JS eval, session prompts).
 const SHELL_INJECTION_PATTERNS: &[(&str, &str)] = &[
     (
-        r"\b(curl|wget)\b[^;&|]*\|\s*(sh|bash)\b",
+        r"\b(curl|wget)\b[^;&|]*\|\s*(?:/?(?:usr/)?bin/)?(?:sh|bash)\b",
         "Blocked remote script pipe into shell (via MCP tool args).",
     ),
     (
@@ -713,8 +745,8 @@ pub fn hook_policy_contract() -> Value {
         ],
         "provider_registry_policy": "configs/framework/RUNTIME_PROVIDER_REGISTRY.json is document-only and does not drive hook execution ranking.",
         "mcp_safety_details": {
-            "high_risk_tools": ["session_launch", "session_resume_due"],
-            "arg_risk_coverage": ["browser_get_network", "browser_fill", "session_launch", "session_mark_blocked"],
+            "high_risk_tools": ["session_launch", "session_resume_due", "session_terminate", "background_terminate"],
+            "arg_risk_coverage": ["browser_get_network", "browser_fill", "session_launch", "session_mark_blocked", "web_fetch", "browser_save_session", "browser_restore_session"],
             "shell_injection_in_args": true
         },
         "protected_path_kinds": [

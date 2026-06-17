@@ -320,7 +320,7 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
         tool_definition(
             "browser_tabs",
             "List Or Select Tabs",
-            "List current tabs or switch the active tab.",
+            "List current tabs or switch the active tab. tabId is required when action='select'.",
             json!({"type": "object", "properties": {"action": {"type": "string", "enum": ["list", "select"]}, "tabId": {"type": "string"}}, "required": ["action"]}),
             empty_output.clone(),
         ),
@@ -342,7 +342,7 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
             "browser_get_elements",
             "Get Interactive Elements",
             "Return filtered interactive elements using role and text query.",
-            json!({"type": "object", "properties": {"tabId": {"type": "string"}, "role": {"type": "string"}, "query": {"type": "string"}, "scopeRef": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}}),
+            json!({"type": "object", "properties": {"tabId": {"type": "string"}, "role": {"type": "string"}, "query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": 100}}}),
             empty_output.clone(),
         ),
         tool_definition(
@@ -426,7 +426,7 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
             "session_launch",
             "Launch Session Worker",
             "Launch one long-running worker session through the Rust session supervisor.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "cwd": {"type": "string"}, "prompt": {"type": "string"}, "resumeTarget": {"type": "string"}, "resumeMode": {"type": "string"}, "workerId": {"type": "string"}, "dryRun": {"type": "boolean"}, "worktreeName": {"type": "string", "description": "git worktree branch name; supervisor creates the worktree before launching"}, "worktreePath": {"type": "string", "description": "explicit worktree directory path (overrides worktreeName)"}}, "required": ["host", "cwd"]}),
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "cwd": {"type": "string"}, "prompt": {"type": "string"}, "resumeTarget": {"type": "string"}, "resumeMode": {"type": "string"}, "workerId": {"type": "string"}, "dryRun": {"type": "boolean"}, "worktreeName": {"type": "string", "description": "git worktree branch name; supervisor creates the worktree before launching"}, "worktreePath": {"type": "string", "description": "explicit worktree directory path (overrides worktreeName)"}}, "required": ["workerId"]}),
             session_supervisor_worker_output_schema(),
         ),
         tool_definition(
@@ -454,7 +454,7 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
             "session_mark_blocked",
             "Mark Session Blocked",
             "Mark a worker blocked with evidence so resume policy can back off.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}, "host": {"type": "string"}, "blockedReason": {"type": "string"}, "evidenceText": {"type": "string"}, "backoffSeconds": {"type": "integer"}}, "required": ["workerId", "host", "evidenceText"]}),
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}, "host": {"type": "string"}, "blockedReason": {"type": "string"}, "evidenceText": {"type": "string"}, "backoffSeconds": {"type": "integer"}}, "required": ["workerId"]}),
             empty_output.clone(),
         ),
         tool_definition(
@@ -468,7 +468,7 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
             "session_classify_block",
             "Classify Session Block",
             "Classify a rate-limit/block signal from host evidence text.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "evidenceText": {"type": "string"}}, "required": ["host", "evidenceText"]}),
+            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "evidenceText": {"type": "string"}}, "required": []}),
             empty_output.clone(),
         ),
         tool_definition(

@@ -53,7 +53,7 @@ fn tool_gh_source_gate(args: &Value) -> Result<Value, anyhow::Error> {
     let url = args
         .get("url")
         .and_then(Value::as_str)
-        .unwrap_or(".");
+        .ok_or_else(|| anyhow::anyhow!("Missing required argument: url"))?;
     let action = args
         .get("action")
         .and_then(Value::as_str)

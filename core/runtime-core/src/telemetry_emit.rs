@@ -9,13 +9,24 @@ use tracing::debug;
 use crate::goal_drive::{framework_goal_drive as goal_drive_inner, read_goal_state};
 use crate::route::RouteDecision;
 
-pub fn emit_route_decision(query: &str, decision: &RouteDecision, reroute: bool) {
+pub fn emit_route_decision(
+    query: &str,
+    decision: &RouteDecision,
+    reroute: bool,
+    latency_ms: u64,
+    parity_gate: &str,
+) {
     debug!(query, skill = %decision.selected_skill, score = decision.score, reroute, "route decision emitted");
     emit_telemetry(&TelemetryEvent::RouteDecision {
         task: query.to_string(),
         skill: decision.selected_skill.clone(),
         confidence: decision.score as f32,
         reroute,
+        latency_ms,
+        reasons: decision.reasons.clone(),
+        matched_tokens: decision.matched_token_count,
+        parity_gate: parity_gate.to_string(),
+        candidates: vec![],
     });
 }
 
@@ -27,6 +38,7 @@ pub fn emit_hook_fired(hook_name: &str, action: &str) {
 }
 
 pub fn emit_tool_call(tool: &str, duration_ms: u64, success: bool) {
+    crate::kernel_bootstrap::ensure_kernel_bootstrap();
     emit_telemetry(&TelemetryEvent::ToolCall {
         tool: tool.to_string(),
         duration_ms,
@@ -243,7 +255,7 @@ mod tests {
 
     #[test]
     fn prediction_mismatch_writes_prediction_outcome_journal_line() {
-        use core_state::goal_prediction::{GoalStatePrediction, PredictionVerification};
+        use core_state::goal_prediction::GoalStatePrediction;
         use framework_kernel::{LogAggregator, TelemetryWriter};
         use std::fs;
         use std::time::SystemTime;

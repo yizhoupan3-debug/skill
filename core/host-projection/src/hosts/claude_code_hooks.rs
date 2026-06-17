@@ -326,6 +326,7 @@ pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String>
     result
 }
 
+#[allow(dead_code)]
 fn dispatch_stdio_agent_hook_payload(canonical: &str, repo_root: &Path, payload: &Value) -> Value {
     crate::hooks::ensure_kernel_bootstrap();
     if payload_looks_like_cursor_hook_stdin(payload) {
@@ -379,11 +380,10 @@ fn claude_value_to_hook_output(val: &Value) -> Option<HookOutput> {
             .unwrap_or("denied");
         return Some(HookOutput::Deny { reason: reason.to_string() });
     }
-    if let Some(ctx) = hso.get("additionalContext").and_then(Value::as_str) {
-        if !ctx.is_empty() {
+    if let Some(ctx) = hso.get("additionalContext").and_then(Value::as_str)
+        && !ctx.is_empty() {
             return Some(HookOutput::AdditionalContext(ctx.to_string()));
         }
-    }
     None
 }
 
@@ -491,6 +491,7 @@ fn silent_success() -> Value {
 ///
 /// 刻意不使用嵌套字符串中的 `/.cursor/` 匹配，否则合法 stdio agent 工具载荷可能被整条静默。
 /// 另要求 `hook_event_name` / `hookEventName`，降低仅凭顶造 `cursor_version`+`workspace_roots` 整条静默的面。
+#[allow(dead_code)]
 fn payload_looks_like_cursor_hook_stdin(payload: &Value) -> bool {
     let Value::Object(map) = payload else {
         return false;
@@ -667,6 +668,9 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
         crate::hooks::extract_post_tool_duration_ms(payload).unwrap_or(0),
         crate::hooks::post_tool_call_succeeded(payload),
     );
+    if let Err(e) = crate::hooks::record_tool_call(repo_root, &tool_name, None) {
+        eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
+    }
     record_reviewer_evidence(repo_root, payload);
     // §4.4: 自动 evidence 采集 — Bash 验证类命令自动记录到 EVIDENCE_INDEX
     auto_record_verification_evidence(repo_root, payload);

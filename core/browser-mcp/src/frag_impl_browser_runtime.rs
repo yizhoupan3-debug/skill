@@ -383,6 +383,8 @@ impl BrowserRuntime {
                 "diff".to_string(),
             ]
         });
+        let valid_includes = ["summary", "interactive_elements", "diff"];
+        let include: Vec<_> = include.into_iter().filter(|v| valid_includes.contains(&v.as_str())).collect();
         let max_elements = optional_usize(input, "maxElements", DEFAULT_MAX_ELEMENTS)?;
         let text_budget = optional_usize(input, "textBudget", DEFAULT_TEXT_BUDGET)?;
         let since_revision = optional_u64(input, "sinceRevision")?;

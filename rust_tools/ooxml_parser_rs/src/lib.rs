@@ -1543,14 +1543,14 @@ pub fn read_xlsx(input: &str, max_rows: usize, sheets: &[String], as_json: bool,
 // PPTX content reading (for batch delegation)
 // ---------------------------------------------------------------------------
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct PptxReadOutput {
     pub path: String,
     pub slide_count: u32,
     pub slides: Vec<PptxSlideText>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct PptxSlideText {
     pub slide_number: u32,
     pub text: String,

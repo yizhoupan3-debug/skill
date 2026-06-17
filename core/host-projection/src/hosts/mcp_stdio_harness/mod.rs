@@ -617,6 +617,9 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                                 "type": "string",
                                 "description": "task id，默认当前 active task",
                             },
+                            "reviewer_lane": {"type": "string", "description": "Reviewer lane for evidence attestation (optional)"},
+                            "subagent_type": {"type": "string", "description": "Subagent type for evidence attestation (optional)"},
+                            "agent_type": {"type": "string", "description": "Agent type for evidence attestation (optional)"}
                         },
                     },
                 },
@@ -642,7 +645,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "rfv_loop_manage",
-                    "description": "管理 RFV 循环：start / append_round。",
+                    "description": "管理 RFV 循环：start / append_round。operation=start 时需要 goal、max_rounds、allow_external_research。operation=append_round 时需要 round、review_summary、fix_summary、verify_result。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -693,8 +696,31 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                     },
                 },
                 {
+                    "name": "routing_evolution",
+                    "description": "读取路由日志并分析/校准/提取 utterances。operations: stats | analyze | extract | calibrate",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "operation": {
+                                "type": "string",
+                                "enum": ["stats", "analyze", "extract", "calibrate"],
+                                "description": "stats=概览, analyze=深度分析, extract=提取 high-conf utterances, calibrate=阈值建议"
+                            },
+                            "skill": {
+                                "type": "string",
+                                "description": "按 skill 过滤（可选）"
+                            },
+                            "days": {
+                                "type": "integer",
+                                "description": "只分析最近 N 天（可选，默认全部）"
+                            },
+                        },
+                        "required": ["operation"],
+                    },
+                },
+                {
                     "name": "goal_state_manage",
-                    "description": "管理 Goal 状态：start / checkpoint / pause / resume / complete / clear / block。",
+                    "description": "管理 Goal 状态：start / checkpoint / pause / resume / complete / clear / block。operation=start 时需要 goal。operation=checkpoint 时需要 note。operation=block 时需要 blocker。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -1177,7 +1203,14 @@ fn tool_goal_state_manage(
             payload["session_id"] = json!(session_id);
             // pass-through: downstream state_manager consumes these for start
             if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {
-                payload["lifecycle_profile"] = json!(lp);
+                match lp {
+                    "my" | "my-light" | "interactive" | "loop-auto" => {
+                        payload["lifecycle_profile"] = json!(lp);
+                    },
+                    _ => return Err(format!(
+                        "Invalid lifecycle_profile: {lp}. Must be one of: my, my-light, interactive, loop-auto"
+                    )),
+                }
             }
             if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {
                 payload["current_horizon"] = json!(ch);
@@ -1331,7 +1364,7 @@ mod tests {
         let response = handle_tools_list(Some(json!(1)));
         let tools = response["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 14, "expected 14 tools, got: {:?}", names);
+        assert_eq!(names.len(), 15, "expected 15 tools, got: {:?}", names);
         for tool in &[
             "framework_snapshot",
             "skill_route",
@@ -1342,6 +1375,7 @@ mod tests {
             "session_checkpoint",
             "closeout_gate",
             "closeout_record_write",
+            "routing_evolution",
             "web_fetch",
             "goal_state_read",
             "rfv_loop_status",

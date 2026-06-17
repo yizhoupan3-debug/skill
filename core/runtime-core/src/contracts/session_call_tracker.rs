@@ -15,7 +15,7 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct CacheStats {
     /// Anthropic API 返回的 cache 命中 token 数（cache_read_input_tokens）。
     pub cache_read_input_tokens: u64,
@@ -245,20 +245,28 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
         // Desktop MCP sessions typically end at 10-20 calls. The 15-call threshold
         // catches unverified Desktop sessions before they grow too long.
         if total >= 15 {
-            let has_closeout = payload["per_tool"].get("closeout_gate").is_some();
+            let has_closeout = payload["per_tool"].as_object().map_or(false, |obj| {
+                obj.keys().any(|k| k.eq_ignore_ascii_case("closeout_gate"))
+            });
             if !has_closeout {
                 warnings.push("Session has 15+ tool calls but closeout_gate was never called -- session may end without verification.".to_string());
             }
         }
 
         // Rule 4: Bash dominates
-        if let Some(bash_count) = payload["per_tool"].get("Bash").and_then(Value::as_u64)
+        let bash_count = payload["per_tool"].as_object()
+            .and_then(|obj| obj.iter().find(|(k, _)| k.eq_ignore_ascii_case("Bash")))
+            .and_then(|(_, v)| v.as_u64());
+        if let Some(bash_count) = bash_count
             && total > 0 && bash_count > total / 2 {
                 warnings.push(format!("Bash calls ({bash_count}) exceed 50% of total ({total}) -- possible unsafe automation."));
             }
 
         // Rule 5: Write dominates
-        if let Some(write_count) = payload["per_tool"].get("Write").and_then(Value::as_u64)
+        let write_count = payload["per_tool"].as_object()
+            .and_then(|obj| obj.iter().find(|(k, _)| k.eq_ignore_ascii_case("Write")))
+            .and_then(|(_, v)| v.as_u64());
+        if let Some(write_count) = write_count
             && total > 0 && write_count > total * 3 / 10 {
                 warnings.push(format!("Write calls ({write_count}) exceed 30% of total ({total}) -- possible blind overwriting."));
             }
