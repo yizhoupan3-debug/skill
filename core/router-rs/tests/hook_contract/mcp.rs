@@ -62,7 +62,7 @@ fn mcp_closeout_gate_review_goal_without_evidence_advisory() {
         std::fs::create_dir_all(&task_dir).unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
+            r#"{"schema_version":"router-rs-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
         )
         .unwrap();
 
@@ -104,7 +104,7 @@ fn mcp_closeout_gate_review_lanes_clear_review_warn() {
         std::fs::create_dir_all(&review_lanes).unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
+            r#"{"schema_version":"router-rs-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
         )
         .unwrap();
         std::fs::write(review_lanes.join("lane-a.md"), "[P2] example — ok").unwrap();

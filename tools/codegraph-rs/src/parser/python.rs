@@ -97,3 +97,71 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    #[test]
+    fn class_methods_are_functions() {
+        let src = r#"
+class MyClass:
+    def method(self):
+        pass
+    def other(self):
+        self.method()
+"#;
+        let out = parse(src);
+        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
+        assert!(symbols.contains(&("MyClass", "class")), "should find class: {:?}", symbols);
+        assert!(symbols.contains(&("method", "function")), "should find method: {:?}", symbols);
+        assert!(symbols.contains(&("other", "function")), "should find other: {:?}", symbols);
+    }
+
+    #[test]
+    fn method_call_inside_class() {
+        let src = r#"
+class Service:
+    def run(self):
+        self.helper()
+    def helper(self):
+        pass
+"#;
+        let out = parse(src);
+        let edge = out.edges.iter().find(|e| e.callee_symbol == "helper").expect("helper edge");
+        assert_eq!(edge.caller_symbol, "Service");
+    }
+
+    #[test]
+    fn decorator_does_not_create_symbol() {
+        let src = r#"
+class MyClass:
+    @staticmethod
+    def decorated():
+        pass
+"#;
+        let out = parse(src);
+        let decorated_syms: Vec<_> = out.symbols.iter()
+            .filter(|s| s.symbol.contains("decorator") || s.kind == "decorator")
+            .collect();
+        assert!(decorated_syms.is_empty(), "decorators should not produce symbols");
+        let symbols: Vec<_> = out.symbols.iter().map(|s| s.symbol.as_str()).collect();
+        assert!(symbols.contains(&"decorated"), "decorated fn should still be extracted");
+    }
+
+    #[test]
+    fn nested_function_call() {
+        let src = r#"
+def outer():
+    def inner():
+        pass
+    inner()
+"#;
+        let out = parse(src);
+        let symbols: Vec<_> = out.symbols.iter().map(|s| s.symbol.as_str()).collect();
+        assert!(symbols.contains(&"outer"));
+        assert!(symbols.contains(&"inner"));
+        let edge = out.edges.iter().find(|e| e.callee_symbol == "inner").expect("inner edge");
+        assert_eq!(edge.caller_symbol, "outer");
+    }
+}

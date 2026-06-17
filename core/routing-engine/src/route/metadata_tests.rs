@@ -505,7 +505,7 @@ mod route_metadata_tests {
         fs::remove_dir_all(root).expect("cleanup route root");
     }
 
-    // NOTE: retired_autopilot_slash_commands_do_not_route_to_autopilot_owner test
+    // NOTE: retired_implementx_slash_commands_do_not_route_to_goal_drive_owner test
     // remains in runtime-core because it depends on route_task_with_manifest_fallback
     // which is defined in runtime-core's framework_runtime module.
 

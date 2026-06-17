@@ -119,7 +119,7 @@ fn parse_skill_manifest_content(content: &str, manifest_path: &Path) -> Option<P
     // Compute content hash from the raw JSON bytes
     use sha2::{Digest, Sha256};
     let digest = Sha256::digest(content.as_bytes());
-    let hash = hex_encode(digest.as_slice());
+    let hash = super::common::hex_encode(digest.as_slice());
 
     Some(ParsedFile {
         path: path_str,
@@ -137,17 +137,6 @@ fn make_keyword_id(skill_path: &str, keyword: &str) -> String {
     skill_path.hash(&mut hasher);
     keyword.hash(&mut hasher);
     format!("kw:{:016x}", hasher.finish())
-}
-
-/// Encode bytes as hex string (matching graph::sync::hex_encode).
-fn hex_encode(bytes: &[u8]) -> String {
-    const HEX_TABLE: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for &b in bytes {
-        out.push(HEX_TABLE[(b >> 4) as usize] as char);
-        out.push(HEX_TABLE[(b & 0x0f) as usize] as char);
-    }
-    out
 }
 
 #[cfg(test)]

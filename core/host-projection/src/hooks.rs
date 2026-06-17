@@ -158,9 +158,8 @@ pub fn router_rs_cursor_review_fork_context_missing_infer_false_enabled() -> boo
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
 }
 
-pub fn router_rs_cursor_autopilot_pre_goal_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_AUTOPILOT_PRE_GOAL_ENABLED")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED")
+pub fn router_rs_pre_goal_enabled() -> bool {
+    router_rs_env_enabled_default_false("ROUTER_RS_PRE_GOAL_ENABLED")
 }
 
 pub fn router_rs_cursor_hook_state_lock_retries() -> u32 {

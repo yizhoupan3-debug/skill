@@ -420,23 +420,23 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
 
                     if let (Some(active_id), Some(focus_id)) = (&active_task_id, &focus_task_id)
                         && active_id != focus_id {
-                            let active_goal = crate::autopilot_goal::read_goal_state(
+                            let active_goal = crate::goal_drive::read_goal_state(
                                 repo_root,
                                 Some(active_id.as_str()),
                             )
                             .ok()
                             .flatten();
-                            let focus_goal = crate::autopilot_goal::read_goal_state(
+                            let focus_goal = crate::goal_drive::read_goal_state(
                                 repo_root,
                                 Some(focus_id.as_str()),
                             )
                             .ok()
                             .flatten();
                             let active_drives = active_goal.as_ref().is_some_and(
-                                crate::autopilot_goal::goal_state_requests_continuation,
+                                crate::goal_drive::goal_state_requests_continuation,
                             );
                             let focus_drives = focus_goal.as_ref().is_some_and(
-                                crate::autopilot_goal::goal_state_requests_continuation,
+                                crate::goal_drive::goal_state_requests_continuation,
                             );
                             if active_goal.is_some() && !active_drives && focus_drives {
                                 issues.push(format!(

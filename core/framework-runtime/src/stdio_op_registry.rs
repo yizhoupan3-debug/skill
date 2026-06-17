@@ -69,7 +69,6 @@ const FRAMEWORK_STDIO_OPS: &[&str] = &[
     "framework_prompt_compression",
     "framework_session_artifact_write",
     "framework_hook_evidence_append",
-    "framework_autopilot_goal",
     "framework_goal_drive",
     "framework_rfv_loop",
     "framework_alias",

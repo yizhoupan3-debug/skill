@@ -839,3 +839,352 @@ pub(super) fn strongest_current_claim(state: &Value) -> String {
         }
     "_No strong claim recorded yet._".to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn dedupe_research_results_removes_duplicates_by_source_and_title() {
+        let results = vec![
+            json!({"source": "Semantic Scholar", "title": "Paper A"}),
+            json!({"source": "Semantic Scholar", "title": "Paper A"}),
+            json!({"source": "arXiv", "title": "Paper B"}),
+            json!({"source": "Semantic Scholar", "title": "paper a"}),
+        ];
+        let deduped = dedupe_research_results(results);
+        assert_eq!(deduped.len(), 2);
+        assert_eq!(deduped[0]["source"], "Semantic Scholar");
+        assert_eq!(deduped[1]["source"], "arXiv");
+    }
+
+    #[test]
+    fn dedupe_research_results_empty_input() {
+        let results = vec![];
+        let deduped = dedupe_research_results(results);
+        assert!(deduped.is_empty());
+    }
+
+    #[test]
+    fn source_covers_all_matches_all() {
+        assert!(source_covers("all", &ExternalSourceArg::All));
+        assert!(source_covers("all", &ExternalSourceArg::SemanticScholar));
+        assert!(source_covers("all", &ExternalSourceArg::Arxiv));
+    }
+
+    #[test]
+    fn source_covers_specific_matches_only_own_or_all() {
+        assert!(source_covers("semantic-scholar", &ExternalSourceArg::SemanticScholar));
+        assert!(!source_covers("semantic-scholar", &ExternalSourceArg::Arxiv));
+        assert!(!source_covers("semantic-scholar", &ExternalSourceArg::All));
+        assert!(source_covers("arxiv", &ExternalSourceArg::Arxiv));
+        assert!(!source_covers("arxiv", &ExternalSourceArg::SemanticScholar));
+    }
+
+    #[test]
+    fn cleanup_question_text_removes_question_prefix() {
+        assert_eq!(cleanup_question_text("Can you improve performance?"), "you improve performance");
+        assert_eq!(cleanup_question_text("How does this work?"), "does this work");
+        assert_eq!(cleanup_question_text("What is the best approach?"), "is the best approach");
+    }
+
+    #[test]
+    fn cleanup_question_text_removes_punctuation() {
+        assert_eq!(cleanup_question_text("improve performance."), "improve performance");
+        assert_eq!(cleanup_question_text("improve performance!"), "improve performance");
+    }
+
+    #[test]
+    fn cleanup_question_text_preserves_original_when_cleaned_empty() {
+        // When the entire question is a prefix word + punctuation, the prefix is stripped
+        // and the remaining is empty, so the original is returned
+        assert_eq!(cleanup_question_text("Can?"), "Can");
+        assert_eq!(cleanup_question_text("Is?"), "Is");
+    }
+
+    #[test]
+    fn extract_question_parts_with_improve() {
+        let (focus, target, effect) =
+            extract_question_parts("How can we improve model accuracy on CIFAR?");
+        assert!(focus.contains("can we") || focus.contains("we"));
+        assert!(target.contains("model accuracy") || target.contains("cifar"));
+        assert!(effect.contains("improve"));
+    }
+
+    #[test]
+    fn extract_question_parts_with_using_for() {
+        let (focus, target, effect) =
+            extract_question_parts("Using attention for image classification");
+        assert_eq!(focus, "attention");
+        assert_eq!(target, "image classification");
+        assert!(effect.contains("improve"));
+    }
+
+    #[test]
+    fn default_draft_claim_evidence_method_axis() {
+        let evidence = default_draft_claim_evidence("method", "transformer", "NLP");
+        assert_eq!(evidence.len(), 3);
+        assert!(evidence[0].contains("transformer"));
+    }
+
+    #[test]
+    fn default_draft_claim_evidence_task_axis() {
+        let evidence = default_draft_claim_evidence("task", "attention", "classification");
+        assert_eq!(evidence.len(), 3);
+        assert!(evidence[0].contains("attention"));
+        assert!(evidence[0].contains("classification"));
+    }
+
+    #[test]
+    fn default_draft_claim_evidence_unknown_axis() {
+        let evidence = default_draft_claim_evidence("unknown", "foo", "bar");
+        assert_eq!(evidence.len(), 3);
+        assert!(evidence[0].contains("contribution claim"));
+    }
+
+    #[test]
+    fn propose_claims_from_question_returns_requested_count() {
+        let claims = propose_claims_from_question("How to improve model accuracy?", 3);
+        assert_eq!(claims.len(), 3);
+        assert_eq!(claims[0]["claim_id"], "C1");
+        assert_eq!(claims[1]["claim_id"], "C2");
+        assert_eq!(claims[2]["claim_id"], "C3");
+    }
+
+    #[test]
+    fn propose_claims_from_question_clamps_to_max() {
+        let claims = propose_claims_from_question("test question", 10);
+        assert_eq!(claims.len(), 5);
+    }
+
+    #[test]
+    fn propose_claims_from_question_clamps_to_min() {
+        let claims = propose_claims_from_question("test question", 0);
+        assert_eq!(claims.len(), 1);
+    }
+
+    #[test]
+    fn overall_novelty_assessment_empty_records() {
+        let state = ensure_state_defaults(&json!({}));
+        assert_eq!(overall_novelty_assessment(&state), "insufficient");
+    }
+
+    #[test]
+    fn overall_novelty_assessment_all_novel() {
+        let mut state = ensure_state_defaults(&json!({}));
+        novelty_gate_mut(&mut state).insert(
+            "claim_records".into(),
+            json!([{"verdict": "novel"}, {"verdict": "novel"}]),
+        );
+        assert_eq!(overall_novelty_assessment(&state), "strong");
+    }
+
+    #[test]
+    fn overall_novelty_assessment_one_not_novel() {
+        let mut state = ensure_state_defaults(&json!({}));
+        novelty_gate_mut(&mut state).insert(
+            "claim_records".into(),
+            json!([{"verdict": "novel"}, {"verdict": "not-novel"}]),
+        );
+        assert_eq!(overall_novelty_assessment(&state), "moderate");
+    }
+
+    #[test]
+    fn overall_novelty_assessment_two_not_novel() {
+        let mut state = ensure_state_defaults(&json!({}));
+        novelty_gate_mut(&mut state).insert(
+            "claim_records".into(),
+            json!([{"verdict": "not-novel"}, {"verdict": "not-novel"}]),
+        );
+        assert_eq!(overall_novelty_assessment(&state), "weak");
+    }
+
+    #[test]
+    fn overall_novelty_assessment_one_risky() {
+        let mut state = ensure_state_defaults(&json!({}));
+        novelty_gate_mut(&mut state)
+            .insert("claim_records".into(), json!([{"verdict": "risky"}]));
+        assert_eq!(overall_novelty_assessment(&state), "moderate");
+    }
+
+    #[test]
+    fn overall_novelty_assessment_one_defensible() {
+        let mut state = ensure_state_defaults(&json!({}));
+        novelty_gate_mut(&mut state)
+            .insert("claim_records".into(), json!([{"verdict": "defensible"}]));
+        assert_eq!(overall_novelty_assessment(&state), "moderate");
+    }
+
+    #[test]
+    fn claim_ids_for_gate_collects_from_claim_records() {
+        let mut state = ensure_state_defaults(&json!({}));
+        novelty_gate_mut(&mut state).insert(
+            "claim_records".into(),
+            json!([{"claim_id": "C1"}, {"claim_id": "C2"}]),
+        );
+        let ids = claim_ids_for_gate(&state);
+        assert_eq!(ids.len(), 2);
+        assert!(ids.contains(&"C1".to_string()));
+        assert!(ids.contains(&"C2".to_string()));
+    }
+
+    #[test]
+    fn claim_ids_for_gate_collects_from_draft_claims() {
+        let mut state = ensure_state_defaults(&json!({}));
+        novelty_gate_mut(&mut state)
+            .insert("draft_claims".into(), json!([{"claim_id": "D1"}]));
+        let ids = claim_ids_for_gate(&state);
+        assert_eq!(ids.len(), 1);
+        assert!(ids.contains(&"D1".to_string()));
+    }
+
+    #[test]
+    fn claim_ids_for_gate_deduplicates() {
+        let mut state = ensure_state_defaults(&json!({}));
+        novelty_gate_mut(&mut state).insert(
+            "claim_records".into(),
+            json!([{"claim_id": "C1"}]),
+        );
+        novelty_gate_mut(&mut state)
+            .insert("draft_claims".into(), json!([{"claim_id": "C1"}]));
+        let ids = claim_ids_for_gate(&state);
+        assert_eq!(ids.len(), 1);
+    }
+
+    #[test]
+    fn external_research_result_count_returns_count() {
+        let entry = json!({
+            "results": [
+                {"title": "A"},
+                {"title": "B"},
+                {"title": "C"}
+            ]
+        });
+        assert_eq!(external_research_result_count(&entry), 3);
+    }
+
+    #[test]
+    fn external_research_result_count_missing_results() {
+        let entry = json!({});
+        assert_eq!(external_research_result_count(&entry), 0);
+    }
+
+    #[test]
+    fn external_research_entries_for_claim_filters_by_id() {
+        let state = json!({
+            "external_research": [
+                {"claim_id": "C1", "query": "q1"},
+                {"claim_id": "C2", "query": "q2"},
+                {"claim_id": "C1", "query": "q3"}
+            ]
+        });
+        let entries = external_research_entries_for_claim(&state, "C1");
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn strongest_current_claim_returns_novel_highest() {
+        let mut state = ensure_state_defaults(&json!({}));
+        novelty_gate_mut(&mut state).insert(
+            "claim_records".into(),
+            json!([
+                {"claim_id": "C1", "verdict": "not-novel", "confidence": "high", "claim": "weak claim"},
+                {"claim_id": "C2", "verdict": "novel", "confidence": "high", "claim": "strong claim"},
+                {"claim_id": "C3", "verdict": "novel", "confidence": "low", "claim": "medium claim"}
+            ]),
+        );
+        assert_eq!(strongest_current_claim(&state), "strong claim");
+    }
+
+    #[test]
+    fn strongest_current_claim_falls_back_to_hypothesis() {
+        let state = ensure_state_defaults(&json!({
+            "active_hypothesis": "H1",
+            "hypotheses": [
+                {"id": "H1", "claim": "hypothesis claim"}
+            ]
+        }));
+        assert_eq!(strongest_current_claim(&state), "hypothesis claim");
+    }
+
+    #[test]
+    fn strongest_current_claim_falls_back_to_default() {
+        let state = ensure_state_defaults(&json!({}));
+        assert_eq!(strongest_current_claim(&state), "_No strong claim recorded yet._");
+    }
+
+    #[test]
+    fn has_matching_external_research_finds_match() {
+        let state = json!({
+            "external_research": [
+                {"claim_id": "C1", "query": "test query", "source": "semantic-scholar", "results": [{"title": "A"}]}
+            ]
+        });
+        assert!(has_matching_external_research(&state, Some("C1"), "test query", &ExternalSourceArg::SemanticScholar));
+    }
+
+    #[test]
+    fn has_matching_external_research_no_match_wrong_query() {
+        let state = json!({
+            "external_research": [
+                {"claim_id": "C1", "query": "test query", "source": "semantic-scholar", "results": [{"title": "A"}]}
+            ]
+        });
+        assert!(!has_matching_external_research(&state, Some("C1"), "different query", &ExternalSourceArg::SemanticScholar));
+    }
+
+    #[test]
+    fn has_matching_external_research_no_match_empty_results() {
+        let state = json!({
+            "external_research": [
+                {"claim_id": "C1", "query": "test query", "source": "semantic-scholar", "results": []}
+            ]
+        });
+        assert!(!has_matching_external_research(&state, Some("C1"), "test query", &ExternalSourceArg::SemanticScholar));
+    }
+
+    #[test]
+    fn has_matching_external_research_no_claim_id() {
+        let state = json!({});
+        assert!(!has_matching_external_research(&state, None, "query", &ExternalSourceArg::All));
+    }
+
+    #[test]
+    fn default_research_query_uses_explicit_query() {
+        let result = default_research_query(None, Some("explicit query"));
+        assert_eq!(result.unwrap(), "explicit query");
+    }
+
+    #[test]
+    fn default_research_query_uses_explicit_query_trimmed() {
+        let result = default_research_query(None, Some("  explicit query  "));
+        assert_eq!(result.unwrap(), "explicit query");
+    }
+
+    #[test]
+    fn default_research_query_fails_without_record_or_query() {
+        let result = default_research_query(None, None);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn format_gate_recommendation_basic() {
+        let rec = json!({
+            "recommended_status": "passed",
+            "decision": "All claims reviewed",
+            "claim_comparisons": 3,
+            "reviewed_claims": [
+                {"claim_id": "C1", "results": 10},
+                {"claim_id": "C2", "results": 5}
+            ],
+            "missing_claims": [],
+            "uncompared_claims": []
+        });
+        let formatted = format_gate_recommendation(&rec);
+        assert!(formatted.contains("recommended_status: passed"));
+        assert!(formatted.contains("decision: All claims reviewed"));
+        assert!(formatted.contains("C1: 10 results"));
+        assert!(formatted.contains("C2: 5 results"));
+    }
+}

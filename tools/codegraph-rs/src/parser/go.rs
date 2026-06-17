@@ -91,3 +91,61 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    #[test]
+    fn interface_type_declaration() {
+        let src = r#"
+type Reader interface {
+    Read(p []byte) (n int, err error)
+}
+"#;
+        let out = parse(src);
+        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
+        assert!(symbols.contains(&("Reader", "type")), "should find interface type: {:?}", symbols);
+    }
+
+    #[test]
+    fn method_declaration_on_type() {
+        let src = r#"
+type Foo struct{}
+func (f Foo) Bar() { f.Baz() }
+func (f Foo) Baz() {}
+"#;
+        let out = parse(src);
+        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
+        assert!(symbols.contains(&("Bar", "method")), "should find method: {:?}", symbols);
+        assert!(symbols.contains(&("Baz", "method")), "should find method: {:?}", symbols);
+    }
+
+    #[test]
+    fn method_call_inside_method() {
+        let src = r#"
+type Svc struct{}
+func (s Svc) Run() { s.helper() }
+func (s Svc) helper() {}
+"#;
+        let out = parse(src);
+        let edge = out.edges.iter().find(|e| e.callee_symbol == "helper").expect("helper edge");
+        assert_eq!(edge.caller_symbol, "Run");
+    }
+
+    #[test]
+    fn goroutine_call() {
+        let src = r#"
+func worker() {}
+func main() {
+    go worker()
+}
+"#;
+        let out = parse(src);
+        let symbols: Vec<_> = out.symbols.iter().map(|s| s.symbol.as_str()).collect();
+        assert!(symbols.contains(&"worker"));
+        assert!(symbols.contains(&"main"));
+        let edge = out.edges.iter().find(|e| e.callee_symbol == "worker").expect("worker edge");
+        assert_eq!(edge.caller_symbol, "main");
+    }
+}

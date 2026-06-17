@@ -4,7 +4,7 @@
 //! works transparently for all `#[path = "../tests/…"] mod tests;` imports.
 
 pub use runtime_core::{
-    autopilot_goal, background_state, closeout_enforcement, eval_route, execution_contract,
+    goal_drive, background_state, closeout_enforcement, eval_route, execution_contract,
     formal_toolchain, framework_host_targets, framework_maint, framework_profile,
     framework_runtime, framework_skills, harness_context_signals, harness_contract,
     harness_operator_nudges, hook_event_routing, hook_observation_rules, hook_outbound_protect,

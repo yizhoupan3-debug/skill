@@ -2,6 +2,9 @@
 //!
 //! Subscribes to `TelemetryEvent` via a fan-out `TelemetryWriter`, maintains sliding-window
 //! counters, and appends threshold alerts to `artifacts/evolution/alerts.jsonl`.
+//!
+//! **Config relationship**: Default thresholds match `configs/evolution/evolution.toml [observer]`.
+//! The observer reads from the same toml at runtime if available; otherwise uses these defaults.
 
 use framework_kernel::{MpscTelemetryWriter, TelemetryEvent, TelemetryWriter};
 use serde::{Deserialize, Serialize};
@@ -10,6 +13,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+// Defaults match configs/evolution/evolution.toml [observer] section
 const DEFAULT_WINDOW_CAPACITY: usize = 256;
 const DEFAULT_REROUTE_RATE_ALERT: f32 = 0.35;
 const DEFAULT_TOOL_FAILURE_RATE_ALERT: f32 = 0.25;
@@ -164,6 +168,7 @@ impl EvolutionObserver {
 
     fn push_route_event(&mut self, reroute: bool, confidence: f32) {
         if self.counters.route_total as usize >= self.config.window_capacity {
+            // FIFO reset: when window is full, reset all counters to start fresh
             self.counters = WindowCounters::default();
         }
         self.counters.route_total += 1;

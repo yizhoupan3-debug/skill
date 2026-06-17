@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-16"
+last_verified: "2026-06-18"
 version: "unified-v7"
 ---
 
@@ -38,7 +38,7 @@ runtime-core (~14K LOC, facade)  ← 核心生命周期/closeout/编排/re-expor
 ├── rfv_loop.rs                   ← RFV 循环完整实现
 ├── framework_maint.rs            ← 维护命令
 ├── stdio_transport.rs            ← stdio 传输层
-├── 396+ tests / 13 ignored
+├── 184 tests
 └── features: codegraph, host-{cursor,claude-code,codex,opencode}
 
 core/framework-runtime (~5K LOC)  ← 框架运行时核心（从 runtime-core 提取）
@@ -72,16 +72,16 @@ host-projection (~34K LOC)        ← 宿主适配层（已独立）
 │   ├── opencode_hooks.rs         ← OpenCode MCP stdio hooks
 ├── host_integration/             ← projection 安装/移除逻辑
 ├── hooks.rs                      ← 函数指针注册表（OnceLock slots）
-└── 433 tests
+└── 536 tests
 
-router-rs (~558 LOC src + 6K tests) ← CLI + 集成测试
+router-rs (~558 LOC src)         ← CLI + 集成测试
 ├── CLI (clap): framework/host-integration/schema-drift
 ├── tests/ (275 passed)
 └── features: codegraph, host-*
 
 routing-engine (~8K LOC)          ← 路由评分/信号缓存
 ├── route/{eval,scoring,signal_cache,text}
-└── 63 tests / 12 ignored
+└── 78 tests
 
 core-state (~7K LOC)              ← Goal/RFV/Evidence/TaskState
 ├── state_manager.rs, task_state.rs, step_ledger.rs
@@ -89,25 +89,25 @@ core-state (~7K LOC)              ← Goal/RFV/Evidence/TaskState
 
 core-policy (~4K LOC)             ← Hook 策略/review gate/注册表
 ├── review_gate_engine.rs, hook_review_disk_state.rs
-└── 含 186 条正则规则
+├── 含 186 条正则规则
+└── 96 tests
 
 tools/codegraph-rs (~2.5K LOC)    ← 代码图谱（FTS5 + tree-sitter，位于 tools/）
 ├── parser/{rust,typescript,python,go}
 ├── db/{schema,node_ops,edge_ops,fts_ops}
-└── 64 tests (caller bug 已修复)
+└── 56 tests
 
 tools/evolution-rs (~1.8K LOC)    ← 技能进化审计（位于 tools/）
-├── 13 tests
-└── ⚠️ 测试密度偏低
+└── 28 tests
 
 tools/autoresearch-rs (~5.4K LOC) ← 研究工作区控制平面（位于 tools/）
 ├── 单文件 main.rs（待拆分）
-└── 🔴 仅 2 测试（严重不足）
+└── 127 tests
 
 browser-mcp (~4.8K LOC)           ← 浏览器 MCP
 ├── session_launch/list/inspect/terminate MCP tools
 ├── browser_* MCP tools
-└── 8 tests（⚠️ 偏低）
+└── 118 tests
 
 rust_tools/ (6 活跃 MCP crates)
 ├── pdf_tool_rs (mcp-pdf)           ├── citation_tool_rs (mcp-citation)

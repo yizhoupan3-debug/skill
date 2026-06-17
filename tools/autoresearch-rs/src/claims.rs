@@ -660,53 +660,57 @@ pub(super) fn annotate_run(
     Ok(next_state)
 }
 
-#[allow(clippy::too_many_arguments)]
+pub(super) struct RecordRunInput<'a> {
+    pub(super) hypothesis_id: &'a str,
+    pub(super) outcome: &'a str,
+    pub(super) summary: &'a str,
+    pub(super) metric_name: Option<&'a str>,
+    pub(super) metric_value: Option<&'a str>,
+    pub(super) command: Option<&'a str>,
+    pub(super) evidence_path: Option<&'a str>,
+    pub(super) sanity_checks: &'a [String],
+    pub(super) baseline_result: Option<&'a str>,
+    pub(super) rules_in: &'a [String],
+    pub(super) rules_out: &'a [String],
+    pub(super) alternative_explanations: &'a [String],
+    pub(super) threats: &'a [String],
+    pub(super) interpretation: Option<&'a str>,
+    pub(super) finding: Option<&'a str>,
+    pub(super) decision_delta: Option<&'a str>,
+    pub(super) reuse_note: Option<&'a str>,
+    pub(super) applies_to: &'a [String],
+    pub(super) does_not_apply_to: &'a [String],
+    pub(super) override_novelty_gate: bool,
+    pub(super) override_reason: Option<&'a str>,
+}
+
 pub(super) fn record_run(
     state: &Value,
-    hypothesis_id: &str,
-    outcome: &str,
-    summary: &str,
-    metric_name: Option<&str>,
-    metric_value: Option<&str>,
-    command: Option<&str>,
-    evidence_path: Option<&str>,
-    sanity_checks: &[String],
-    baseline_result: Option<&str>,
-    rules_in: &[String],
-    rules_out: &[String],
-    alternative_explanations: &[String],
-    threats: &[String],
-    interpretation: Option<&str>,
-    finding: Option<&str>,
-    decision_delta: Option<&str>,
-    reuse_note: Option<&str>,
-    applies_to: &[String],
-    does_not_apply_to: &[String],
-    override_novelty_gate: bool,
-    override_reason: Option<&str>,
+    input: &RecordRunInput<'_>,
     workspace: &Path,
 ) -> Result<Value> {
     let mut next_state = ensure_state_defaults(state);
-    let Some(index) = find_hypothesis_index(&next_state, hypothesis_id) else {
-        bail!("Unknown hypothesis: {hypothesis_id}");
+    let Some(index) = find_hypothesis_index(&next_state, input.hypothesis_id) else {
+        bail!("Unknown hypothesis: {}", input.hypothesis_id);
     };
     let gate_status = novelty_str(&next_state, "status", "pending");
     if gate_status != "passed" {
-        if !override_novelty_gate {
+        if !input.override_novelty_gate {
             bail!("Novelty gate must pass before recording runs (current: {gate_status})");
         }
-        if override_reason.unwrap_or("").trim().is_empty() {
+        if input.override_reason.unwrap_or("").trim().is_empty() {
             bail!("Novelty gate override requires --override-reason");
         }
     }
-    let current_status = find_hypothesis(&next_state, hypothesis_id)
+    let current_status = find_hypothesis(&next_state, input.hypothesis_id)
         .and_then(|item| item.get("status"))
         .and_then(Value::as_str)
         .unwrap_or("queued")
         .to_string();
     if !["active", "queued"].contains(&current_status.as_str()) {
         bail!(
-            "Hypothesis {hypothesis_id} must be active or queued before a run, current status: {current_status}"
+            "Hypothesis {} must be active or queued before a run, current status: {current_status}",
+            input.hypothesis_id
         );
     }
     if current_status == "queued" {
@@ -719,7 +723,7 @@ pub(super) fn record_run(
     }
     let run_id = next_run_id(&next_state);
     set_key(&mut next_state, "stage", json!(STAGE_OUTER_LOOP));
-    set_key(&mut next_state, "active_hypothesis", json!(hypothesis_id));
+    set_key(&mut next_state, "active_hypothesis", json!(input.hypothesis_id));
     let environment = if workspace.join("research-state.yaml").exists() {
         next_state
             .get("environment")
@@ -742,28 +746,28 @@ pub(super) fn record_run(
     set_key(&mut next_state, "git", provenance.clone());
     let record = json!({
         "run_id": run_id,
-        "hypothesis_id": hypothesis_id,
-        "outcome": outcome,
-        "summary": summary,
-        "metric_name": metric_name,
-        "metric_value": metric_value,
-        "command": command,
-        "evidence_path": evidence_path.map(ToString::to_string).unwrap_or_else(|| default_run_record_path(hypothesis_id, &run_id)),
-        "sanity_checks": string_vec(sanity_checks),
-        "baseline_result": optional_string(baseline_result),
-        "rules_in": string_vec(rules_in),
-        "rules_out": string_vec(rules_out),
-        "alternative_explanations": string_vec(alternative_explanations),
-        "threats": string_vec(threats),
-        "interpretation": optional_string(interpretation),
-        "finding": optional_string(finding),
-        "decision_delta": optional_string(decision_delta),
-        "reuse_note": optional_string(reuse_note),
-        "applies_to": string_vec(applies_to),
-        "does_not_apply_to": string_vec(does_not_apply_to),
+        "hypothesis_id": input.hypothesis_id,
+        "outcome": input.outcome,
+        "summary": input.summary,
+        "metric_name": input.metric_name,
+        "metric_value": input.metric_value,
+        "command": input.command,
+        "evidence_path": input.evidence_path.map(ToString::to_string).unwrap_or_else(|| default_run_record_path(input.hypothesis_id, &run_id)),
+        "sanity_checks": string_vec(input.sanity_checks),
+        "baseline_result": optional_string(input.baseline_result),
+        "rules_in": string_vec(input.rules_in),
+        "rules_out": string_vec(input.rules_out),
+        "alternative_explanations": string_vec(input.alternative_explanations),
+        "threats": string_vec(input.threats),
+        "interpretation": optional_string(input.interpretation),
+        "finding": optional_string(input.finding),
+        "decision_delta": optional_string(input.decision_delta),
+        "reuse_note": optional_string(input.reuse_note),
+        "applies_to": string_vec(input.applies_to),
+        "does_not_apply_to": string_vec(input.does_not_apply_to),
         "novelty_gate_status_at_run": gate_status,
-        "novelty_gate_override": override_novelty_gate,
-        "override_reason": override_reason,
+        "novelty_gate_override": input.override_novelty_gate,
+        "override_reason": input.override_reason,
         "environment_fingerprint": environment,
         "git_provenance": provenance,
         "recorded_at": now_iso(),

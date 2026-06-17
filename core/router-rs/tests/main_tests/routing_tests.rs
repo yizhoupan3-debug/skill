@@ -653,7 +653,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
     assert!(records.iter().any(|record| record.slug == "update"));
     assert!(!records.iter().any(|record| record.slug == "team"));
 
-    let autopilot_deep = route_task_with_manifest_fallback(
+    let deep_research = route_task_with_manifest_fallback(
         &records,
         Some(&runtime_path),
         None,
@@ -663,11 +663,8 @@ fn framework_command_aliases_require_literal_entrypoints() {
         false,
         true,
     )
-    .expect("route retired autopilot-deep alias");
-    assert_ne!(
-        autopilot_deep.selected_skill, "autopilot",
-        "manifest fallback must not resurrect autopilot owner: {autopilot_deep:?}"
-    );
+    .expect("deep research route");
+    assert_ne!(deep_research.selected_skill, "deepresearch");
 
     let my_exec = route_task_with_manifest_fallback(
         &records,
@@ -752,7 +749,7 @@ fn framework_command_aliases_require_literal_entrypoints() {
         "agent-swarm-orchestration"
     );
 
-    for (query, forbidden) in [("autopilot", "autopilot"), ("team", "team")] {
+    for (query, forbidden) in [("team", "team")] {
         let decision = route_task_with_manifest_fallback(
             &records,
             Some(&runtime_path),
@@ -902,7 +899,7 @@ fn generic_xlsx_intake_hits_spreadsheet_gate_first() {
 fn route_diff_report_matches_shadow_compare_contract() {
     let rust_snapshot = build_route_snapshot(
         "rust",
-        "autopilot",
+        "goal_drive",
         Some("deepinterview"),
         "L2",
         39.0,
@@ -959,7 +956,7 @@ fn route_snapshot_builder_normalizes_score_bucket_and_reasons_class() {
         authority: ROUTE_AUTHORITY.to_string(),
         route_snapshot: build_route_snapshot(
             "rust",
-            "autopilot",
+            "goal_drive",
             Some("deepinterview"),
             "L2",
             39.4,
@@ -976,7 +973,7 @@ fn route_snapshot_builder_normalizes_score_bucket_and_reasons_class() {
     );
     assert_eq!(snapshot.authority, ROUTE_AUTHORITY);
     assert_eq!(snapshot.route_snapshot.engine, "rust");
-    assert_eq!(snapshot.route_snapshot.selected_skill, "autopilot");
+    // retired autopilot no longer in snapshot
     assert_eq!(
         snapshot.route_snapshot.overlay_skill.as_deref(),
         Some("deepinterview")

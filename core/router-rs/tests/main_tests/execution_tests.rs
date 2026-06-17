@@ -69,7 +69,7 @@ fn execute_request_dry_run_returns_rust_owned_contract() {
     assert_eq!(response.execution_schema_version, EXECUTION_SCHEMA_VERSION);
     assert_eq!(response.authority, EXECUTION_AUTHORITY);
     assert!(!response.live_run);
-    assert_eq!(response.skill, "autopilot");
+    assert_eq!(response.skill, "goal_drive");
     assert_eq!(response.overlay, None);
     assert_eq!(response.usage.mode, "estimated");
     assert_eq!(response.model_id, None);
@@ -106,7 +106,7 @@ fn live_execute_prompt_builder_produces_rust_owned_contract_prompt() {
     let prompt = build_live_execute_prompt(&payload);
 
     assert!(prompt.contains("Help with the user's request directly."));
-    assert!(prompt.contains("Primary focus: autopilot"));
+    assert!(prompt.contains("Primary focus: goal_drive"));
     assert!(!prompt.contains("Extra guidance:"));
     assert!(prompt.contains("How to reply:"));
     assert!(prompt.contains("Lead with the answer or result."));
@@ -190,7 +190,7 @@ fn live_execute_prompt_builder_uses_deep_mode_contract_when_requested() {
     let mut payload = sample_execute_request();
     payload.dry_run = false;
     payload.prompt_preview = None;
-    payload.task = "/autopilot deep 深度调研联网能力".to_string();
+    payload.task = "/goal_drive deep 深度调研联网能力".to_string();
 
     let prompt = build_live_execute_prompt(&payload);
 

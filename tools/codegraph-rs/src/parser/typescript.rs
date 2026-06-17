@@ -127,3 +127,60 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    #[test]
+    fn arrow_function_is_const_symbol() {
+        let src = r#"
+const greet = (name: string) => { console.log(name); };
+"#;
+        let out = parse(src, false);
+        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
+        assert!(symbols.contains(&("greet", "const")), "arrow fn should be const: {:?}", symbols);
+    }
+
+    #[test]
+    fn arrow_function_call_edge() {
+        let src = r#"
+const compute = (x: number) => { return x * 2; };
+function run() {
+    compute(5);
+}
+"#;
+        let out = parse(src, false);
+        let edge = out.edges.iter().find(|e| e.callee_symbol == "compute").expect("compute edge");
+        assert_eq!(edge.caller_symbol, "run");
+    }
+
+    #[test]
+    fn interface_declaration() {
+        let src = r#"
+interface Config {
+    name: string;
+    debug: boolean;
+}
+"#;
+        let out = parse(src, false);
+        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
+        assert!(symbols.contains(&("Config", "interface")), "should find interface: {:?}", symbols);
+    }
+
+    #[test]
+    fn interface_methods_not_extracted() {
+        let src = r#"
+interface Logger {
+    log(msg: string): void;
+    error(msg: string): void;
+}
+"#;
+        let out = parse(src, false);
+        let method_symbols: Vec<_> = out.symbols.iter()
+            .filter(|s| s.kind == "method")
+            .map(|s| s.symbol.as_str())
+            .collect();
+        assert!(method_symbols.is_empty(), "interface methods should not be extracted as symbols: {:?}", method_symbols);
+    }
+}

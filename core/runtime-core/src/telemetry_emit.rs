@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::path::Path;
 use tracing::debug;
 
-use crate::autopilot_goal::{framework_goal_drive as goal_drive_inner, read_goal_state};
+use crate::goal_drive::{framework_goal_drive as goal_drive_inner, read_goal_state};
 use crate::route::RouteDecision;
 
 pub fn emit_route_decision(query: &str, decision: &RouteDecision, reroute: bool) {

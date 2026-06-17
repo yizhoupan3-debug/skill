@@ -159,18 +159,31 @@ pub fn load_telemetry_journal(path: &Path) -> anyhow::Result<TelemetryJournal> {
     };
     let reader = BufReader::new(file);
     let mut events = Vec::new();
+    let mut parse_errors = 0u32;
     for line in reader.lines() {
         let line = line.with_context(|| format!("read {}", path.display()))?;
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
-        if let Ok(parsed) = serde_json::from_str::<JournalLine>(trimmed) {
-            events.push(TimestampedTelemetryEvent {
-                ts: parsed.ts,
-                event: parsed.event,
-            });
+        match serde_json::from_str::<JournalLine>(trimmed) {
+            Ok(parsed) => {
+                events.push(TimestampedTelemetryEvent {
+                    ts: parsed.ts,
+                    event: parsed.event,
+                });
+            }
+            Err(_) => {
+                parse_errors += 1;
+            }
         }
+    }
+    if parse_errors > 0 {
+        eprintln!(
+            "Warning: {} lines in {} failed to parse as TelemetryEvent",
+            parse_errors,
+            path.display()
+        );
     }
     Ok(TelemetryJournal { events })
 }
@@ -258,8 +271,8 @@ pub fn event_within_window(ts: Option<&str>, cutoff: DateTime<Utc>) -> bool {
     match ts {
         Some(raw) if !raw.is_empty() => DateTime::parse_from_rfc3339(raw)
             .map(|parsed| parsed.with_timezone(&Utc) >= cutoff)
-            .unwrap_or(true),
-        _ => true,
+            .unwrap_or(false), // Reject malformed timestamps
+        _ => true, // Events without timestamps are included (backward compat)
     }
 }
 

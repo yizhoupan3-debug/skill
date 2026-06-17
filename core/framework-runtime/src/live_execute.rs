@@ -282,8 +282,8 @@ fn normalize_research_mode_token(value: &str) -> Option<ResearchMode> {
         return None;
     }
     match lowered.as_str() {
-        "quick" | "fast" | "lite" | "shallow" | "autopilot-quick" => Some(ResearchMode::Quick),
-        "deep" | "deep_research" | "deep-research" | "autopilot-deep" => Some(ResearchMode::Deep),
+        "quick" | "fast" | "lite" | "shallow" => Some(ResearchMode::Quick),
+        "deep" | "deep_research" | "deep-research" => Some(ResearchMode::Deep),
         _ => None,
     }
 }

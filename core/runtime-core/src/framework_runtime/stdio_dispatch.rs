@@ -10,7 +10,7 @@ use super::{
     replay_trace_stream, subscribe_attached_runtime_events, write_trace_compaction_delta,
     write_trace_metadata,
 };
-use crate::autopilot_goal;
+use crate::goal_drive;
 use crate::background_state::handle_background_state_operation;
 use super::route_manifest_fallback::{manifest_fallback_path, route_task_with_manifest_fallback};
 use super::stdio_op_registry::{
@@ -152,11 +152,11 @@ fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, String> {
             .unwrap_or_else(|| payload.clone());
         if let (Some(repo_root), Some(task_id)) = (repo_root.as_deref(), task_id.as_deref()) {
             let (rows_non_empty, has_success) =
-                autopilot_goal::task_evidence_artifacts_summary_for_task(
+                goal_drive::task_evidence_artifacts_summary_for_task(
                     Path::new(repo_root),
                     task_id,
                 );
-            let goal_state = autopilot_goal::read_goal_state(Path::new(repo_root), Some(task_id))
+            let goal_state = goal_drive::read_goal_state(Path::new(repo_root), Some(task_id))
                 .ok()
                 .flatten();
             let goal_prediction = goal_state
@@ -339,7 +339,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
         }
         "framework_session_artifact_write" => write_framework_session_artifacts(payload),
         "framework_hook_evidence_append" => framework_hook_evidence_append(payload),
-        "framework_autopilot_goal" | "framework_goal_drive" => {
+        "framework_goal_drive" => {
             crate::telemetry_emit::framework_goal_drive(payload)
         }
         "framework_rfv_loop" => crate::telemetry_emit::framework_rfv_loop(payload),

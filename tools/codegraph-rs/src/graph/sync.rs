@@ -4,7 +4,7 @@ use crate::CodeGraphIndex;
 use crate::db::index_ops::{
     IndexedFileMeta, IngestStmts, ingest_parsed_file_with_stmts, list_indexed_files, set_meta,
 };
-use crate::parser::{self, ParsedFile, parse_file, skill::parse_skill_manifest};
+use crate::parser::{self, ParsedFile, common::hex_encode, parse_file, skill::parse_skill_manifest};
 use anyhow::Context;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rayon::prelude::*;
@@ -226,17 +226,6 @@ fn file_content_hash(path: &Path) -> anyhow::Result<String> {
     let bytes = fs::read(path).with_context(|| format!("read file for hash {}", path.display()))?;
     let digest = Sha256::digest(bytes);
     Ok(hex_encode(digest.as_slice()))
-}
-
-/// Encode bytes as hex string using a lookup table (zero intermediate allocations).
-fn hex_encode(bytes: &[u8]) -> String {
-    const HEX_TABLE: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for &b in bytes {
-        out.push(HEX_TABLE[(b >> 4) as usize] as char);
-        out.push(HEX_TABLE[(b & 0x0f) as usize] as char);
-    }
-    out
 }
 
 fn discover_source_files(repo_root: &Path) -> anyhow::Result<Vec<PathBuf>> {

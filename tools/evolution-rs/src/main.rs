@@ -1,17 +1,30 @@
-use chrono::{DateTime, Duration, Utc};
+mod audit;
+mod heal;
+mod inspect;
+mod manifest;
+mod sync;
+mod utils;
+
 use clap::{Parser, Subcommand};
 use evolution_rs::{
-    AuditJournalEntry, EvolutionConfig, default_config_path, default_evolution_output_dir,
-    default_telemetry_journal_path, load_audit_journal_entries, load_config, run_analyze,
-    run_health_score,
+    default_config_path, default_evolution_output_dir, default_telemetry_journal_path, load_config,
+    run_analyze, run_health_score,
 };
-use fs2::FileExt;
-use sha2::{Digest, Sha256};
-use std::collections::{HashMap, HashSet};
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Instant;
+
+use audit::audit_journal;
+use heal::heal_skills;
+use inspect::{calculate_dir_hash, dump_skill, snapshot_skills};
+use manifest::generate_manifest;
+use sync::sync_feedback;
+#[allow(unused_imports)]
+use utils::{
+    calculate_jaccard, canonical_skill_name, entry_is_recent, load_entries, stem,
+    truncate_ts_chars,
+};
+
+use evolution_rs::EvolutionConfig;
 
 #[derive(Parser)]
 #[command(name = "evolution-rs")]
@@ -106,581 +119,11 @@ enum Commands {
     },
 }
 
-fn stem(word: &str) -> String {
-    let mut s = word.to_string();
-    if s.len() <= 4 {
-        return s;
-    }
-    if s.ends_with("ing") {
-        s.truncate(s.len() - 3);
-    } else if s.ends_with("ed") {
-        s.truncate(s.len() - 2);
-    } else if s.ends_with("ment") {
-        s.truncate(s.len() - 4);
-    } else if s.ends_with("s") && !s.ends_with("ss") {
-        s.truncate(s.len() - 1);
-    }
-    s
-}
-
-fn load_entries_parallel(path: &Path) -> anyhow::Result<Vec<AuditJournalEntry>> {
-    load_audit_journal_entries(path)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn missing_journal_loads_as_empty_entries() {
-        let missing = std::env::temp_dir().join(format!(
-            "evolution-rs-missing-journal-{}-{}.jsonl",
-            std::process::id(),
-            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        ));
-
-        let entries = load_entries_parallel(&missing).expect("missing journal should be empty");
-
-        assert!(entries.is_empty());
-    }
-
-    #[test]
-    fn truncate_ts_chars_handles_short_and_utf8() {
-        assert_eq!(truncate_ts_chars("abc", 19), "abc");
-        let s = "α".repeat(8);
-        assert_eq!(truncate_ts_chars(&s, 3), "ααα");
-    }
-}
-
-fn entry_is_recent(entry: &AuditJournalEntry, cutoff: DateTime<Utc>) -> bool {
-    DateTime::parse_from_rfc3339(&entry.ts)
-        .map(|ts| ts.with_timezone(&Utc) >= cutoff)
-        .unwrap_or(true)
-}
-
-fn canonical_skill_name(raw: &str, known_skills: &HashSet<String>) -> Option<String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() || trimmed == "none" || trimmed == "general" {
-        return None;
-    }
-    if known_skills.contains(trimmed) {
-        return Some(trimmed.to_string());
-    }
-
-    trimmed
-        .split(&['+', ',', '/', '|'][..])
-        .map(str::trim)
-        .find(|part| known_skills.contains(*part))
-        .map(str::to_string)
-}
-
-fn audit_journal(
-    path: PathBuf,
-    days: i64,
-    json: bool,
-    manifest_path: Option<PathBuf>,
-    cfg: &EvolutionConfig,
-) -> anyhow::Result<()> {
-    let entries = load_entries_parallel(&path)?;
-    let cutoff = Utc::now() - Duration::days(days);
-
-    let filtered: Vec<_> = entries
-        .iter()
-        .filter(|e| {
-            if let Ok(ts) = DateTime::parse_from_rfc3339(&e.ts) {
-                ts.with_timezone(&Utc) >= cutoff
-            } else {
-                true
-            } // Accept if date parsing fails for legacy
-        })
-        .collect();
-
-    let total = filtered.len();
-    let reroutes: Vec<_> = filtered.iter().filter(|e| e.reroute).collect();
-    let struggles: Vec<_> = filtered.iter().filter(|e| e.struggle > 0).collect();
-
-    if !json {
-        println!("Evolution Audit (R21 Parallel) - Core-RS");
-        println!("========================================");
-        println!("Total Decisions: {}", total);
-        println!("Reroutes: {}", reroutes.len());
-        println!("Struggles: {}", struggles.len());
-    }
-
-    // Pattern Detection (R11/R12)
-    let mut ngrams: HashMap<String, i32> = HashMap::new();
-    let stop_words: HashSet<&str> = [
-        "the", "and", "for", "with", "this", "help", "how", "give", "can", "you",
-    ]
-    .iter()
-    .cloned()
-    .collect();
-
-    for e in filtered
-        .iter()
-        .filter(|e| e.init == "none" || e.init == "general")
-    {
-        let task_lower = e.task.to_lowercase();
-        let words: Vec<String> = task_lower
-            .split_whitespace()
-            .map(|w| {
-                w.chars()
-                    .filter(|c| c.is_alphanumeric())
-                    .collect::<String>()
-            })
-            .filter(|w| {
-                w.len() >= cfg.thresholds.min_word_length && !stop_words.contains(w.as_str())
-            })
-            .map(|w| stem(&w))
-            .collect();
-
-        for i in 0..words.len().saturating_sub(1) {
-            let bi = format!("{} {}", words[i], words[i + 1]);
-            *ngrams.entry(bi).or_insert(0) += 1;
-        }
-    }
-
-    let mut common: Vec<_> = ngrams.into_iter().collect();
-    common.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
-
-    let mut new_skill_candidates = Vec::new();
-    for (phrase, count) in common.iter().take(cfg.audit.top_ngram_candidates) {
-        if *count >= cfg.evolution.min_candidate_frequency {
-            new_skill_candidates.push(serde_json::json!({
-                "phrase": phrase,
-                "count": count,
-                "suggested_name": format!("skill-{}", phrase.replace(" ", "-")),
-                "reason": format!("Pattern '{}' repeated {}x.", phrase, count)
-            }));
-        }
-    }
-
-    if json {
-        let collisions = detect_boundary_collisions(manifest_path.clone(), cfg)?;
-        let mut repair_suggestions = Vec::new();
-        for col in &collisions {
-            repair_suggestions.push(format!("Boundary conflict: {}", col));
-        }
-
-        // R29: Correlation Analysis (A -> B Reroutes)
-        let mut correlations: HashMap<(String, String), i32> = HashMap::new();
-        for e in reroutes.iter() {
-            if !e.init.is_empty() && e.init != "none" && e.init != e.final_skill {
-                *correlations
-                    .entry((e.init.clone(), e.final_skill.clone()))
-                    .or_insert(0) += 1;
-            }
-        }
-        for ((from, to), count) in correlations {
-            if count >= cfg.thresholds.min_correlation_count {
-                repair_suggestions.push(format!("High correlation: `{}` frequently reroutes to `{}` ({}x). Consider merging or adjusting triggers.", from, to, count));
-            }
-        }
-
-        // R31-33: Advanced Refactoring Suggestions
-        if let Some(path) = manifest_path
-            && let Ok(content) = std::fs::read_to_string(path)
-                && let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content)
-                    && let Some((skills, idx_slug, idx_trigger_hints)) =
-                        manifest_skill_columns(&manifest)
-                    {
-                        let active_skills: HashSet<_> =
-                            filtered.iter().map(|e| e.final_skill.as_str()).collect();
-
-                        for s in skills {
-                            let Some(name) = s.get(idx_slug).and_then(|value| value.as_str())
-                            else {
-                                continue;
-                            };
-                            let triggers = row_text(&s[idx_trigger_hints]);
-
-                            // R33: Pruning Suggestion (Zero usage)
-                            if !active_skills.contains(name)
-                                && total >= cfg.thresholds.min_usage_for_pruning_hint
-                            {
-                                repair_suggestions.push(format!("Pruning: Skill `{}` has zero usage in last {} days. Consider deleting.", name, days));
-                            }
-
-                            for e in filtered
-                                .iter()
-                                .filter(|e| e.init == "none" || e.init == "general")
-                            {
-                                let score = calculate_jaccard(&e.task, &triggers);
-                                if score > cfg.thresholds.jaccard_near_match {
-                                    repair_suggestions.push(format!("Near-miss: Task '{}' likely belongs to `{}`, but trigger missed (Jaccard={:.2})", e.task, name, score));
-                                    let task_lower = e.task.to_lowercase();
-                                    let triggers_lower = triggers.to_lowercase();
-                                    let keywords: Vec<_> = task_lower
-                                        .split_whitespace()
-                                        .filter(|w| w.len() > 4 && !triggers_lower.contains(w))
-                                        .collect();
-                                    if !keywords.is_empty() {
-                                        repair_suggestions.push(format!(
-                                            "Learning: Consider adding triggers {:?} to `{}`",
-                                            keywords, name
-                                        ));
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-        // R28: TF-IDF pseudo-logic (Simple frequency / diversity)
-        let total_docs = filtered.len() as f32;
-        let mut tf_idf_candidates = new_skill_candidates;
-        for c in &mut tf_idf_candidates {
-            let count = c["count"].as_f64().unwrap_or(1.0) as f32;
-            let tf = count / total_docs;
-            let idf = (total_docs / (1.0 + count)).ln();
-            c["tf_idf"] = serde_json::json!(tf * idf);
-        }
-        tf_idf_candidates.sort_by(|a, b| {
-            b["tf_idf"]
-                .as_f64()
-                .unwrap_or(0.0)
-                .total_cmp(&a["tf_idf"].as_f64().unwrap_or(0.0))
-        });
-
-        let report = serde_json::json!({
-            "total_decisions": total,
-            "reroute_count": reroutes.len(),
-            "struggle_count": struggles.len(),
-            "new_skill_candidates": tf_idf_candidates,
-            "repair_suggestions": repair_suggestions,
-            "boundary_collisions": collisions,
-        });
-        println!("{}", serde_json::to_string_pretty(&report)?);
-    }
-
-    Ok(())
-}
-
-fn sanitize_path(path: &Path) -> anyhow::Result<()> {
-    if path.to_string_lossy().contains("..") {
-        anyhow::bail!("Security violation: Path contains parent directory traversal '..'");
-    }
-    Ok(())
-}
-
-fn snapshot_skills(manifest_path: PathBuf, registry_path: PathBuf) -> anyhow::Result<()> {
-    sanitize_path(&manifest_path)?;
-    sanitize_path(&registry_path)?;
-    let lock_file = File::open(&manifest_path)?;
-    lock_file.lock_exclusive()?; // R38: Sync Lock
-
-    let backup_dir = PathBuf::from(".backups");
-    if !backup_dir.exists() {
-        std::fs::create_dir(&backup_dir)?;
-    }
-    let ts = Utc::now().format("%Y%m%d_%H%M%S").to_string();
-
-    let m_dest = backup_dir.join(format!("manifest_{}.json", ts));
-    let r_dest = backup_dir.join(format!("registry_{}.md", ts));
-
-    std::fs::copy(&manifest_path, m_dest)?;
-    std::fs::copy(&registry_path, r_dest)?;
-    println!("Snapshot created in .backups/ at {}", ts);
-    Ok(())
-}
-
-fn generate_manifest(
-    journal: PathBuf,
-    scores_json: Option<PathBuf>,
-    manifest_path: Option<PathBuf>,
-    days: i64,
-    cfg: &EvolutionConfig,
-) -> anyhow::Result<()> {
-    let entries = load_entries_parallel(&journal)?;
-    let cutoff = Utc::now() - Duration::days(days);
-
-    let mut static_scores: HashMap<String, f32> = HashMap::new();
-    if let Some(path) = scores_json
-        && let Ok(content) = std::fs::read_to_string(path)
-            && let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
-                    for entry in skills {
-                        if let (Some(name), Some(total)) =
-                            (entry["name"].as_str(), entry["total"].as_f64())
-                        {
-                            static_scores.insert(name.to_string(), total as f32);
-                        }
-                    }
-                } else if let Some(skills) =
-                    payload.get("skills").and_then(|value| value.as_object())
-                {
-                    for (name, entry) in skills {
-                        if let Some(score) = entry
-                            .get("static_score")
-                            .or_else(|| entry.get("dynamic_score"))
-                            .and_then(|value| value.as_f64())
-                        {
-                            static_scores.insert(name.clone(), score as f32);
-                        }
-                    }
-                } else if let Some(obj) = payload.as_object() {
-                    for (name, value) in obj {
-                        if let Some(score) = value.as_f64() {
-                            static_scores.insert(name.clone(), score as f32);
-                        }
-                    }
-                }
-            }
-
-    let mut all_skills = HashSet::new();
-    if let Some(path) = manifest_path
-        && let Ok(content) = std::fs::read_to_string(path)
-            && let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content)
-                && let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
-                    for row in skills {
-                        if let Some(name) = row.get(0).and_then(|value| value.as_str()) {
-                            all_skills.insert(name.to_string());
-                        }
-                    }
-                }
-
-    if all_skills.is_empty() {
-        all_skills.extend(static_scores.keys().cloned());
-    }
-
-    let mut skill_stats: HashMap<String, (i32, i32)> = HashMap::new();
-    for e in entries
-        .iter()
-        .filter(|entry| entry_is_recent(entry, cutoff))
-    {
-        let Some(skill) = canonical_skill_name(&e.final_skill, &all_skills) else {
-            continue;
-        };
-        let stats = skill_stats.entry(skill).or_insert((0, 0));
-        stats.0 += 1;
-        if e.reroute {
-            stats.1 += 1;
-        }
-    }
-
-    let mut skills_map = HashMap::new();
-    let mut critical_outliers = Vec::new();
-    let mut blended_scores = Vec::new();
-
-    for skill in all_skills {
-        let (total, reroutes) = skill_stats.get(&skill).cloned().unwrap_or((0, 0));
-        let dynamic_base = if total > 0 {
-            100.0 * (1.0 - (reroutes as f32 / total as f32))
-        } else {
-            100.0
-        };
-        let static_score = *static_scores
-            .get(&skill)
-            .unwrap_or(&cfg.thresholds.default_static_score);
-        let blended = (((dynamic_base * cfg.weights.dynamic_blend)
-            + (static_score * cfg.weights.static_blend))
-            * 10.0)
-            .round()
-            / 10.0;
-
-        let status = if blended >= cfg.thresholds.healthy_score {
-            "Healthy"
-        } else if blended >= cfg.thresholds.stable_score {
-            "Stable"
-        } else {
-            "Critical"
-        };
-        if blended < cfg.thresholds.stable_score {
-            critical_outliers.push(skill.clone());
-        }
-        blended_scores.push(blended);
-
-        skills_map.insert(
-            skill,
-            serde_json::json!({
-                "dynamic_score": blended,
-                "static_score": (static_score * 10.0).round() / 10.0,
-                "usage_30d": total,
-                "reroutes_30d": reroutes,
-                "health_status": status
-            }),
-        );
-    }
-
-    let avg_health = if !blended_scores.is_empty() {
-        (blended_scores.iter().sum::<f32>() / blended_scores.len() as f32 * 10.0).round() / 10.0
+fn resolve_window(days: i64, cfg: &EvolutionConfig) -> i64 {
+    if days == 30 {
+        cfg.evolution.audit_window_days
     } else {
-        0.0
-    };
-
-    let manifest = serde_json::json!({
-        "ts": Utc::now().to_rfc3339(),
-        "summary": {
-            "total_skills": skills_map.len(),
-            "critical_skills": critical_outliers.len(),
-            "avg_health": avg_health,
-        },
-        "skills": skills_map,
-        "critical_outliers": critical_outliers,
-    });
-
-    println!("{}", serde_json::to_string_pretty(&manifest)?);
-    Ok(())
-}
-
-fn truncate_ts_chars(ts: &str, max_chars: usize) -> String {
-    ts.chars().take(max_chars).collect()
-}
-
-fn dump_skill(journal: PathBuf, skill: String) -> anyhow::Result<()> {
-    let entries = load_entries_parallel(&journal)?;
-    println!("--- Evolution Path for Skill: `{}` ---", skill);
-    let mut count = 0;
-    for e in entries {
-        if e.final_skill == skill {
-            count += 1;
-            println!(
-                "[{}] R={:5} S={} | Task: {}",
-                truncate_ts_chars(&e.ts, 19),
-                e.reroute,
-                e.struggle,
-                e.task
-            );
-        }
-    }
-    println!("--- End of Path (Found {} entries) ---", count);
-    Ok(())
-}
-
-fn detect_boundary_collisions(
-    manifest_path: Option<PathBuf>,
-    cfg: &EvolutionConfig,
-) -> anyhow::Result<Vec<String>> {
-    let mut collisions = Vec::new();
-    if let Some(path) = manifest_path {
-        let content = std::fs::read_to_string(path)?;
-        let manifest: serde_json::Value = serde_json::from_str(&content)?;
-        if let Some((skills, idx_slug, idx_trigger_hints)) = manifest_skill_columns(&manifest) {
-            for i in 0..skills.len() {
-                for j in i + 1..skills.len() {
-                    let s1 = &skills[i];
-                    let s2 = &skills[j];
-                    let Some(s1_slug) = s1.get(idx_slug).and_then(|value| value.as_str()) else {
-                        continue;
-                    };
-                    let Some(s2_slug) = s2.get(idx_slug).and_then(|value| value.as_str()) else {
-                        continue;
-                    };
-                    let Some(s1_hints) = s1.get(idx_trigger_hints) else {
-                        continue;
-                    };
-                    let Some(s2_hints) = s2.get(idx_trigger_hints) else {
-                        continue;
-                    };
-                    let t1: HashSet<_> = row_terms(s1_hints);
-                    let t2: HashSet<_> = row_terms(s2_hints);
-                    let intersection: HashSet<_> = t1.intersection(&t2).cloned().collect();
-                    if intersection.len() >= cfg.thresholds.boundary_collision_min_overlap {
-                        collisions.push(format!(
-                            "`{}` & `{}` overlap: {:?}",
-                            s1_slug, s2_slug, intersection
-                        ));
-                    }
-                }
-            }
-        }
-    }
-    Ok(collisions)
-}
-
-fn manifest_skill_columns(
-    manifest: &serde_json::Value,
-) -> Option<(&Vec<serde_json::Value>, usize, usize)> {
-    let skills = manifest.get("skills")?.as_array()?;
-    let keys = manifest.get("keys")?.as_array()?;
-    let idx_slug = keys.iter().position(|key| key.as_str() == Some("slug"))?;
-    let idx_trigger_hints = keys
-        .iter()
-        .position(|key| matches!(key.as_str(), Some("trigger_hints" | "triggers")))?;
-    Some((skills, idx_slug, idx_trigger_hints))
-}
-
-fn manifest_skill_slug_column(
-    manifest: &serde_json::Value,
-) -> Option<(&Vec<serde_json::Value>, usize)> {
-    let skills = manifest.get("skills")?.as_array()?;
-    let keys = manifest.get("keys")?.as_array()?;
-    let idx_slug = keys.iter().position(|key| key.as_str() == Some("slug"))?;
-    Some((skills, idx_slug))
-}
-
-fn sync_feedback(journal: PathBuf, feedback: PathBuf, dry_run: bool) -> anyhow::Result<()> {
-    let entries = load_entries_parallel(&journal)?;
-
-    // R51: Load existing to deduplicate
-    let mut seen = HashSet::new();
-    if feedback.exists() {
-        let reader = BufReader::new(File::open(&feedback)?);
-        for l in reader.lines().map_while(Result::ok) {
-            if l.starts_with("|") {
-                seen.insert(l);
-            }
-        }
-    }
-
-    let mut output = if !dry_run {
-        Some(
-            OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&feedback)?,
-        )
-    } else {
-        None
-    };
-
-    for e in entries.iter().filter(|e| e.reroute || e.struggle > 0) {
-        let line = format!(
-            "| {} | `{}` | `{}` | {} |",
-            truncate_ts_chars(&e.ts, 10),
-            e.final_skill,
-            e.init,
-            e.reason
-        );
-        if seen.insert(line.clone()) {
-            if let Some(ref mut out) = output {
-                writeln!(out, "{}", line)?;
-            } else {
-                println!("Dry-Run: Would sync `{}`", line);
-            }
-        }
-    }
-    Ok(())
-}
-
-fn calculate_jaccard(s1: &str, s2: &str) -> f32 {
-    let t1: HashSet<&str> = s1.split_whitespace().collect();
-    let t2: HashSet<&str> = s2.split_whitespace().collect();
-    if t1.is_empty() || t2.is_empty() {
-        return 0.0;
-    }
-
-    let intersection = t1.iter().filter(|&&w| t2.contains(w)).count() as f32;
-    let union = (t1.len() + t2.len()) as f32 - intersection;
-    intersection / union
-}
-
-fn row_text(value: &serde_json::Value) -> String {
-    match value {
-        serde_json::Value::Array(items) => items
-            .iter()
-            .filter_map(|item| item.as_str())
-            .collect::<Vec<_>>()
-            .join(" "),
-        serde_json::Value::String(text) => text.clone(),
-        _ => String::new(),
-    }
-}
-
-fn row_terms(value: &serde_json::Value) -> HashSet<&str> {
-    match value {
-        serde_json::Value::Array(items) => items.iter().filter_map(|item| item.as_str()).collect(),
-        serde_json::Value::String(text) => text.split_whitespace().collect(),
-        _ => HashSet::new(),
+        days
     }
 }
 
@@ -712,11 +155,7 @@ fn main() -> anyhow::Result<()> {
             json,
             manifest,
         } => {
-            let window = if days == 30 {
-                cfg.evolution.audit_window_days
-            } else {
-                days
-            };
+            let window = resolve_window(days, &cfg);
             audit_journal(journal, window, json, manifest, &cfg)?;
         }
         Commands::Manifest {
@@ -725,11 +164,7 @@ fn main() -> anyhow::Result<()> {
             manifest,
             days,
         } => {
-            let window = if days == 30 {
-                cfg.evolution.audit_window_days
-            } else {
-                days
-            };
+            let window = resolve_window(days, &cfg);
             generate_manifest(journal, scores, manifest, window, &cfg)?;
         }
         Commands::Dump { journal, skill } => dump_skill(journal, skill)?,
@@ -754,11 +189,7 @@ fn main() -> anyhow::Result<()> {
             output_dir,
             days,
         } => {
-            let window = if days == 30 {
-                cfg.evolution.audit_window_days
-            } else {
-                days
-            };
+            let window = resolve_window(days, &cfg);
             let out = run_analyze(&journal, &output_dir, window, &cfg)?;
             println!("Wrote {}", out.display());
         }
@@ -775,65 +206,150 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn heal_skills(
-    journal: PathBuf,
-    manifest: PathBuf,
-    skills_root: PathBuf,
-    dry_run: bool,
-    cfg: &EvolutionConfig,
-) -> anyhow::Result<()> {
-    let entries = load_entries_parallel(&journal)?;
-    let active_skills: HashSet<&str> = entries.iter().map(|e| e.final_skill.as_str()).collect();
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use std::collections::HashSet;
 
-    let content = std::fs::read_to_string(&manifest)?;
-    let manifest_val: serde_json::Value = serde_json::from_str(&content)?;
+    #[test]
+    fn missing_journal_loads_as_empty_entries() {
+        let missing = std::env::temp_dir().join(format!(
+            "evolution-rs-missing-journal-{}-{}.jsonl",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ));
 
-    if let Some((skills, idx_slug)) = manifest_skill_slug_column(&manifest_val) {
-        for s in skills {
-            let Some(name) = s.get(idx_slug).and_then(|value| value.as_str()) else {
-                continue;
-            };
-            // R46: Automatic Pruning of Zero-usage skills
-            if !active_skills.contains(name) && entries.len() >= cfg.thresholds.min_entries_for_heal
-            {
-                let skill_path = skills_root.join(name);
-                if skill_path.exists() {
-                    if dry_run {
-                        println!("Dry-Run: Would prune inactive skill `{}`", name);
-                    } else {
-                        let backup_path = PathBuf::from(".backups").join("pruned").join(name);
-                        let backup_parent = backup_path
-                            .parent()
-                            .ok_or_else(|| anyhow::anyhow!("backup path has no parent"))?;
-                        std::fs::create_dir_all(backup_parent)?;
-                        std::fs::rename(skill_path, backup_path)?;
-                        println!("Auto-Heal: Pruned inactive skill `{}`", name);
-                    }
-                }
-            }
-        }
+        let entries = load_entries(&missing).expect("missing journal should be empty");
+
+        assert!(entries.is_empty());
     }
-    Ok(())
-}
 
-fn calculate_dir_hash(path: &PathBuf) -> anyhow::Result<String> {
-    let mut hasher = Sha256::new();
-    let entries = std::fs::read_dir(path)?;
-    let mut files: Vec<_> = entries.filter_map(|e| e.ok()).collect();
-    files.sort_by_key(|e| e.path());
-
-    for entry in files {
-        if entry.file_type()?.is_file() {
-            let mut file = File::open(entry.path())?;
-            let mut buffer = [0u8; 8192];
-            loop {
-                let bytes_read = file.read(&mut buffer)?;
-                if bytes_read == 0 {
-                    break;
-                }
-                hasher.update(&buffer[..bytes_read]);
-            }
-        }
+    #[test]
+    fn truncate_ts_chars_handles_short_and_utf8() {
+        assert_eq!(truncate_ts_chars("abc", 19), "abc");
+        let s = "α".repeat(8);
+        assert_eq!(truncate_ts_chars(&s, 3), "ααα");
     }
-    Ok(hex::encode(hasher.finalize()))
+
+    #[test]
+    fn stem_basic_suffixes() {
+        assert_eq!(stem("running"), "run");
+        assert_eq!(stem("testing"), "test");
+        assert_eq!(stem("building"), "build");
+        assert_eq!(stem("refactored"), "refactor");
+        assert_eq!(stem("experiment"), "experi");
+        assert_eq!(stem("cats"), "cat");
+        assert_eq!(stem("glass"), "glass");
+    }
+
+    #[test]
+    fn stem_short_words_unchanged() {
+        assert_eq!(stem("the"), "the");
+        assert_eq!(stem("ab"), "ab");
+        assert_eq!(stem("a"), "a");
+    }
+
+    #[test]
+    fn stem_minimum_root_length() {
+        assert_eq!(stem("zing"), "zing");
+        assert_eq!(stem("test"), "test");
+    }
+
+    #[test]
+    fn canonical_skill_name_filters_invalid() {
+        let known: HashSet<String> = ["pdf".into(), "csv".into()].into_iter().collect();
+        assert_eq!(canonical_skill_name("", &known), None);
+        assert_eq!(canonical_skill_name("none", &known), None);
+        assert_eq!(canonical_skill_name("general", &known), None);
+        assert_eq!(canonical_skill_name("  ", &known), None);
+    }
+
+    #[test]
+    fn canonical_skill_name_exact_match() {
+        let known: HashSet<String> = ["pdf".into(), "csv".into()].into_iter().collect();
+        assert_eq!(canonical_skill_name("pdf", &known), Some("pdf".into()));
+    }
+
+    #[test]
+    fn canonical_skill_name_multi_delimiter() {
+        let known: HashSet<String> = ["pdf".into(), "csv".into()].into_iter().collect();
+        assert_eq!(
+            canonical_skill_name("pdf+csv+other", &known),
+            Some("pdf".into())
+        );
+        assert_eq!(
+            canonical_skill_name("other,pdf,more", &known),
+            Some("pdf".into())
+        );
+        assert_eq!(
+            canonical_skill_name("csv|pdf", &known),
+            Some("csv".into())
+        );
+    }
+
+    #[test]
+    fn calculate_jaccard_case_insensitive() {
+        let score = calculate_jaccard("PDF task", "pdf task");
+        assert!((score - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn calculate_jaccard_empty_strings() {
+        assert_eq!(calculate_jaccard("", "hello"), 0.0);
+        assert_eq!(calculate_jaccard("hello", ""), 0.0);
+        assert_eq!(calculate_jaccard("", ""), 0.0);
+    }
+
+    #[test]
+    fn calculate_jaccard_identical() {
+        assert!((calculate_jaccard("hello world", "hello world") - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn calculate_jaccard_disjoint() {
+        assert_eq!(calculate_jaccard("abc def", "xyz uvw"), 0.0);
+    }
+
+    #[test]
+    fn calculate_jaccard_partial_overlap() {
+        let score = calculate_jaccard("a b c", "b c d");
+        assert!((score - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn calculate_jaccard_punctuation_normalized() {
+        let score = calculate_jaccard("hello, world", "hello world");
+        assert!((score - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn entry_is_recent_rejects_malformed_ts() {
+        let entry = evolution_rs::AuditJournalEntry {
+            ts: "not-a-date".into(),
+            ..Default::default()
+        };
+        let cutoff = Utc::now() - chrono::Duration::days(30);
+        assert!(!entry_is_recent(&entry, cutoff));
+    }
+
+    #[test]
+    fn entry_is_recent_accepts_recent_entry() {
+        let entry = evolution_rs::AuditJournalEntry {
+            ts: Utc::now().to_rfc3339(),
+            ..Default::default()
+        };
+        let cutoff = Utc::now() - chrono::Duration::days(30);
+        assert!(entry_is_recent(&entry, cutoff));
+    }
+
+    #[test]
+    fn entry_is_recent_rejects_old_entry() {
+        let entry = evolution_rs::AuditJournalEntry {
+            ts: (Utc::now() - chrono::Duration::days(60)).to_rfc3339(),
+            ..Default::default()
+        };
+        let cutoff = Utc::now() - chrono::Duration::days(30);
+        assert!(!entry_is_recent(&entry, cutoff));
+    }
 }

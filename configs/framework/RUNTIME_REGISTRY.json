@@ -794,6 +794,7 @@
     "antigravity": "2026-06: product line discontinued",
     "antigravity-app": "2026-06: merged into antigravity",
     "antigravity-cli": "2026-06: replaced by antigravity MCP",
-    "codex-cli": "2026-06: merged into codex"
+    "codex-cli": "2026-06: merged into codex",
+    "codex-app": "2026-06: merged into codex"
   }
 }

@@ -3,7 +3,7 @@
 //! 文案真源：`configs/framework/PAPER_ADVERSARIAL_HOOK.txt`。**单真源**：`builtin_block()`
 //! 通过 `include_str!` 在编译期嵌入同一份 txt，避免「磁盘文案 vs Rust 硬编码」双轨漂移
 //! （review P0-1 修复）。环境变量 per-host：`1`/`true`/`yes`/`on` 启用；未设置或其它值视为关闭。
-//! - 受 `ROUTER_RS_OPERATOR_INJECT` 聚合闸约束（与 AUTOPILOT/RFV nudge 一致）。
+//! - 受 `ROUTER_RS_OPERATOR_INJECT` 聚合闸约束（与 GOAL/RFV nudge 一致）。
 
 use crate::paper_prose_hook::PaperProseHookHost;
 use crate::router_env_flags::{
@@ -194,7 +194,7 @@ pub fn maybe_merge_paper_adversarial_before_submit(
     if msg.trim().is_empty() {
         return;
     }
-    crate::autopilot_goal::merge_hook_nudge_paragraph(
+    crate::goal_drive::merge_hook_nudge_paragraph(
         output,
         &msg,
         PREFIX_LINE,

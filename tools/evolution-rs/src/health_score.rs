@@ -1,7 +1,7 @@
 use crate::config::EvolutionConfig;
-use crate::telemetry_journal::{TelemetryEvent, load_telemetry_journal};
+use crate::telemetry_journal::{TelemetryEvent, event_within_window, load_telemetry_journal};
 use anyhow::Context;
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use serde_json::json;
 use std::collections::HashMap;
 use std::fs;
@@ -13,9 +13,13 @@ pub fn run_health_score(
     cfg: &EvolutionConfig,
 ) -> anyhow::Result<PathBuf> {
     let journal_data = load_telemetry_journal(journal)?;
+    let cutoff = Utc::now() - Duration::days(cfg.evolution.audit_window_days);
     let mut skill_stats: HashMap<String, (u32, u32)> = HashMap::new();
 
     for stamped in &journal_data.events {
+        if !event_within_window(stamped.ts.as_deref(), cutoff) {
+            continue;
+        }
         if let TelemetryEvent::RouteDecision { skill, reroute, .. } = &stamped.event {
             if skill.is_empty() || skill == "none" || skill == "general" {
                 continue;
@@ -76,6 +80,7 @@ pub fn run_health_score(
     let manifest = json!({
         "ts": Utc::now().to_rfc3339(),
         "source_journal": journal.display().to_string(),
+        "window_days": cfg.evolution.audit_window_days,
         "summary": {
             "total_skills": skills_map.len(),
             "critical_skills": critical_outliers.len(),

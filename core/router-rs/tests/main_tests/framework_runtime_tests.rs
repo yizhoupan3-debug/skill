@@ -24,7 +24,7 @@ fn framework_statusline_uses_rust_runtime_view() {
     );
     write_text_fixture(
         &task_root.join("TRACE_METADATA.json"),
-        &json!({"matched_skills": ["autopilot", "skill-framework-developer"]}).to_string(),
+        &json!({"matched_skills": ["goal_drive", "skill-framework-developer"]}).to_string(),
     );
     write_text_fixture(
         &repo_root
@@ -77,7 +77,7 @@ fn framework_statusline_uses_rust_runtime_view() {
     assert!(statusline.contains("task=Validate status line"));
     assert!(statusline.contains("next=NEXT_ACTIONS"));
     assert!(statusline.contains("integration/in_progress"));
-    assert!(statusline.contains("route=autopilot+1"));
+    assert!(statusline.contains("route=goal_drive+1"));
     assert!(statusline.contains("others=0"));
     assert!(statusline.contains("resumable=0"));
     assert!(
@@ -132,7 +132,7 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
         "focus": true,
         "next_actions": ["Run targeted tests"],
         "evidence": [],
-        "matched_skills": ["autopilot"],
+        "matched_skills": ["goal_drive"],
         "execution_contract": {
             "goal": "Improve continuity artifacts",
             "acceptance_criteria": ["writer emits all recovery anchors"]
@@ -176,7 +176,7 @@ fn framework_session_writer_materializes_complete_focus_continuity() {
     );
     assert_eq!(
         supervisor["trace_metadata"]["matched_skills"],
-        json!(["autopilot"])
+        json!(["goal_drive"])
     );
     assert_eq!(
         supervisor["artifact_refs"]["task_root"],
@@ -513,15 +513,15 @@ fn stdio_framework_hook_evidence_append_dispatches() {
 
 
 #[test]
-fn hook_evidence_append_allows_autopilot_goal_complete() {
-    let repo_root = temp_dir_path("hook-evidence-autopilot-complete");
+fn hook_evidence_append_allows_goal_drive_complete() {
+    let repo_root = temp_dir_path("hook-evidence-goal-drive-complete");
     fs::create_dir_all(repo_root.join("artifacts/current")).expect("mkdir current");
     fs::write(
         repo_root.join("artifacts/current/active_task.json"),
         r#"{"task_id":"hook-goal"}"#,
     )
     .expect("active pointer");
-    crate::autopilot_goal::framework_goal_drive(json!({
+    crate::goal_drive::framework_goal_drive(json!({
         "repo_root": repo_root,
         "operation": "start",
         "task_id": "hook-goal",
@@ -542,7 +542,7 @@ fn hook_evidence_append_allows_autopilot_goal_complete() {
     }))
     .expect("append evidence");
 
-    let done = crate::autopilot_goal::framework_goal_drive(json!({
+    let done = crate::goal_drive::framework_goal_drive(json!({
         "repo_root": repo_root,
         "operation": "complete",
         "task_id": "hook-goal",
@@ -1237,7 +1237,7 @@ fn framework_snapshot_reconciles_stale_supervisor_against_current_pointers() {
     );
     write_text_fixture(
         &fresh_root.join("TRACE_METADATA.json"),
-        r#"{"task":"fresh task","matched_skills":["autopilot"]}"#,
+        r#"{"task":"fresh task","matched_skills":["goal_drive"]}"#,
     );
     write_text_fixture(
         &stale_root.join("SESSION_SUMMARY.md"),
@@ -1309,14 +1309,14 @@ fn framework_runtime_snapshot_surfaces_invalid_task_registry_json() {
 
 #[test]
 fn stdio_framework_goal_drive_roundtrip() {
-    let repo_root = temp_dir_path("stdio-autopilot-goal");
+    let repo_root = temp_dir_path("stdio-goal-drive");
     let _ = fs::remove_dir_all(&repo_root);
     let output_dir = repo_root.join("artifacts").join("current");
     write_framework_session_artifacts(json!({
         "repo_root": repo_root,
         "output_dir": output_dir,
         "task_id": "ag-stdio-task",
-        "task": "autopilot goal stdio",
+        "task": "goal drive stdio",
         "phase": "implementation",
         "status": "in_progress",
         "summary": "seed",
@@ -1848,7 +1848,7 @@ fn framework_snapshot_summary_mode_is_smaller_than_full() {
     );
     write_text_fixture(
         &task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"detail level test","matched_skills":["autopilot"]}"#,
+        r#"{"task":"detail level test","matched_skills":["goal_drive"]}"#,
     );
     fs::create_dir_all(repo_root.join("artifacts/current")).expect("mkdir");
     write_text_fixture(

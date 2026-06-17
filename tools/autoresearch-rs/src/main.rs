@@ -12,6 +12,14 @@ mod cli;
 use cli::*;
 mod helpers;
 use helpers::*;
+mod text;
+use text::*;
+mod state;
+use state::*;
+mod search;
+use search::*;
+mod provenance;
+use provenance::*;
 mod research;
 use research::*;
 mod claims;
@@ -56,6 +64,668 @@ const CONTEXT_BLOCK_END: &str = "<!-- autoresearch:context:end -->";
 const REUSE_INDEX_BLOCK_START: &str = "<!-- autoresearch:reuse-index:start -->";
 const REUSE_INDEX_BLOCK_END: &str = "<!-- autoresearch:reuse-index:end -->";
 
+fn cmd_init(project: &str, question: &str, dir: &Path, mode: &str) -> Result<()> {
+    let root = init_workspace(project, question, dir, mode)?;
+    append_ledger_event(
+        &root,
+        "workspace.initialized",
+        json!({ "project": project, "question": question, "mode": mode }),
+    )?;
+    println!("Initialized autoresearch workspace at {}", root.display());
+    Ok(())
+}
+
+fn cmd_status(workspace: &Path) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let mut state = load_state(&state_path)?;
+    set_key(
+        &mut state,
+        "environment",
+        capture_environment_fingerprint(&workspace),
+    );
+    set_key(&mut state, "git", capture_git_provenance(&workspace));
+    println!("{}", format_status(&state));
+    Ok(())
+}
+
+fn cmd_next(workspace: &Path) -> Result<()> {
+    let (_, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    for action in recommend_next_actions(&state) {
+        println!("- {action}");
+    }
+    Ok(())
+}
+
+fn cmd_resume(workspace: &Path) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let mut state = load_state(&state_path)?;
+    set_key(
+        &mut state,
+        "environment",
+        capture_environment_fingerprint(&workspace),
+    );
+    set_key(&mut state, "git", capture_git_provenance(&workspace));
+    println!("{}", format_resume(&state));
+    Ok(())
+}
+
+fn cmd_sync(workspace: &Path) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    sync_workspace_files(&workspace, &state)?;
+    append_ledger_event(
+        &workspace,
+        "workspace.synced",
+        json!({ "runs": arr(&state, "run_history").len() }),
+    )?;
+    println!("Synchronized workspace files for {}", workspace.display());
+    Ok(())
+}
+
+fn cmd_draft_claims(workspace: &Path, question: Option<String>, count: usize) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let updated = draft_claims_from_state(&state, question.as_deref(), count);
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    append_research_log(
+        &workspace,
+        "Draft claims generated",
+        vec![
+            format!("claims: {}", novelty_arr(&updated, "draft_claims").len()),
+            format!(
+                "question: {}",
+                question.unwrap_or_else(|| str_key(&updated, "question"))
+            ),
+        ],
+    )?;
+    append_ledger_event(
+        &workspace,
+        "novelty_gate.draft_claims",
+        json!({ "count": novelty_arr(&updated, "draft_claims").len() }),
+    )?;
+    println!("Generated draft claims for {}", workspace.display());
+    Ok(())
+}
+
+fn cmd_plan_search(workspace: &Path) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let updated = ensure_state_defaults(&state);
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    append_research_log(
+        &workspace,
+        "Novelty search view refreshed",
+        vec![
+            format!("entries: {}", current_search_plan(&updated).len()),
+            "source priority: Semantic Scholar -> arXiv -> Google Scholar".to_string(),
+        ],
+    )?;
+    append_ledger_event(
+        &workspace,
+        "novelty_gate.search_plan_refreshed",
+        json!({ "entries": current_search_plan(&updated).len() }),
+    )?;
+    println!("Refreshed novelty search plan for {}", workspace.display());
+    Ok(())
+}
+
+fn cmd_research_claim(
+    workspace: &Path,
+    claim_id: Option<String>,
+    query: Option<String>,
+    source: &ExternalSourceArg,
+    limit: usize,
+    timeout_secs: u64,
+) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let research = research_claim(
+        &state,
+        claim_id.as_deref(),
+        query.as_deref(),
+        source,
+        limit,
+        timeout_secs,
+    )?;
+    let updated = add_external_research(&state, research);
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    if let Some(entry) = latest_external_research(&updated) {
+        append_research_log(
+            &workspace,
+            &format!(
+                "External research recorded ({})",
+                str_field(entry, "research_id")
+            ),
+            vec![
+                format!("claim: {}", str_field_default(entry, "claim_id", "custom")),
+                format!("query: {}", str_field(entry, "query")),
+                format!("results: {}", external_research_result_count(entry)),
+            ],
+        )?;
+        append_ledger_event(
+            &workspace,
+            "external_research.recorded",
+            json!({
+                "research_id": entry.get("research_id").cloned().unwrap_or(Value::Null),
+                "claim_id": entry.get("claim_id").cloned().unwrap_or(Value::Null),
+                "query": entry.get("query").cloned().unwrap_or(Value::Null),
+                "source": entry.get("source").cloned().unwrap_or(Value::Null),
+                "results": external_research_result_count(entry),
+            }),
+        )?;
+    }
+    println!("Recorded external research for {}", workspace.display());
+    Ok(())
+}
+
+fn cmd_research_all(
+    workspace: &Path,
+    source: &ExternalSourceArg,
+    limit: usize,
+    max_claims: usize,
+    timeout_secs: u64,
+) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let updated = research_all_claims(&state, source, limit, max_claims, timeout_secs)?;
+    let added = arr(&updated, "external_research")
+        .len()
+        .saturating_sub(arr(&ensure_state_defaults(&state), "external_research").len());
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    append_research_log(
+        &workspace,
+        "External research batch recorded",
+        vec![
+            format!("claims searched: {added}"),
+            format!("source: {}", source.as_str()),
+        ],
+    )?;
+    append_ledger_event(
+        &workspace,
+        "external_research.batch_recorded",
+        json!({ "claims": added, "source": source.as_str() }),
+    )?;
+    println!(
+        "Recorded {added} external research entries for {}",
+        workspace.display()
+    );
+    Ok(())
+}
+
+fn cmd_gate_from_research(workspace: &Path, min_results: usize, apply: bool) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let recommendation = novelty_gate_recommendation_from_research(&state, min_results);
+    if apply {
+        let updated = apply_novelty_gate_recommendation(&state, &recommendation);
+        dump_state(&state_path, &updated)?;
+        sync_workspace_files(&workspace, &updated)?;
+        append_research_log(
+            &workspace,
+            "Novelty gate recommendation applied",
+            vec![
+                format!(
+                    "status: {}",
+                    str_field(&recommendation, "recommended_status")
+                ),
+                format!("decision: {}", str_field(&recommendation, "decision")),
+            ],
+        )?;
+        append_ledger_event(
+            &workspace,
+            "novelty_gate.recommended_from_external_research",
+            recommendation.clone(),
+        )?;
+        println!("{}", format_gate_recommendation(&recommendation));
+    } else {
+        println!("{}", format_gate_recommendation(&recommendation));
+    }
+    Ok(())
+}
+
+fn cmd_brief_first_claim(workspace: &Path) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let updated = ensure_state_defaults(&state);
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    let brief = current_brief(&updated);
+    append_research_log(
+        &workspace,
+        "Novelty brief refreshed",
+        vec![
+            format!(
+                "claim: {}",
+                brief
+                    .as_ref()
+                    .and_then(|item| item.get("claim_id"))
+                    .and_then(Value::as_str)
+                    .unwrap_or("_not set_")
+            ),
+            "scope: top-priority novelty claim".to_string(),
+        ],
+    )?;
+    append_ledger_event(
+        &workspace,
+        "novelty_gate.brief_refreshed",
+        json!({ "claim_id": brief.and_then(|item| item.get("claim_id").cloned()) }),
+    )?;
+    println!("Refreshed novelty brief for {}", workspace.display());
+    Ok(())
+}
+
+fn cmd_compare_claim(
+    workspace: &Path,
+    claim: &str,
+    axis: &str,
+    closest_prior_work: &str,
+    overlap: &OverlapArg,
+    difference: &str,
+    confidence: &ConfidenceArg,
+    verdict: &VerdictArg,
+    claim_id: Option<String>,
+) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let updated = add_claim_comparison(
+        &state,
+        claim,
+        axis,
+        closest_prior_work,
+        overlap.as_str(),
+        difference,
+        confidence.as_str(),
+        verdict.as_str(),
+        claim_id.as_deref(),
+    );
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    append_research_log(
+        &workspace,
+        &format!(
+            "Novelty claim compared ({})",
+            claim_id.as_deref().unwrap_or("auto")
+        ),
+        vec![
+            format!("claim: {claim}"),
+            format!("overlap: {}", overlap.as_str()),
+            format!("verdict: {}", verdict.as_str()),
+        ],
+    )?;
+    append_ledger_event(
+        &workspace,
+        "novelty_gate.updated",
+        json!({
+            "claim_id": claim_id,
+            "claim": claim,
+            "overlap": overlap.as_str(),
+            "verdict": verdict.as_str(),
+        }),
+    )?;
+    println!(
+        "Recorded novelty claim comparison for {}",
+        workspace.display()
+    );
+    Ok(())
+}
+
+fn cmd_add_hypothesis(
+    workspace: &Path,
+    claim: &str,
+    prediction: Option<String>,
+    mechanism: Option<String>,
+    falsifiable_prediction: Option<String>,
+    success_threshold: Option<String>,
+    stop_condition: Option<String>,
+    baselines: &Vec<String>,
+    confounders: &Vec<String>,
+    negative_signals: &Vec<String>,
+    minimal_test: Option<String>,
+    priority: &PriorityArg,
+    id: Option<String>,
+) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let updated = add_hypothesis(
+        &state,
+        HypothesisInput {
+            claim,
+            prediction: prediction.as_deref(),
+            mechanism: mechanism.as_deref(),
+            falsifiable_prediction: falsifiable_prediction.as_deref(),
+            success_threshold: success_threshold.as_deref(),
+            stop_condition: stop_condition.as_deref(),
+            baselines,
+            confounders,
+            negative_signals,
+            minimal_test: minimal_test.as_deref(),
+            priority: priority.as_str(),
+            hypothesis_id: id.as_deref(),
+        },
+    )?;
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    let resolved_id = id.unwrap_or_else(|| slugify(claim).chars().take(40).collect());
+    if let Some(hypothesis) = find_hypothesis(&updated, &resolved_id) {
+        append_research_log(
+            &workspace,
+            &format!("Hypothesis added ({resolved_id})"),
+            vec![
+                format!("claim: {}", str_field(hypothesis, "claim")),
+                format!("priority: {}", str_field(hypothesis, "priority")),
+            ],
+        )?;
+        append_ledger_event(
+            &workspace,
+            "hypothesis.added",
+            json!({
+                "hypothesis_id": resolved_id,
+                "status": hypothesis.get("status").cloned().unwrap_or(Value::Null),
+                "priority": hypothesis.get("priority").cloned().unwrap_or(Value::Null),
+            }),
+        )?;
+    }
+    println!("Added hypothesis in {}", workspace.display());
+    Ok(())
+}
+
+fn cmd_record_run(
+    workspace: &Path,
+    hypothesis_id: &str,
+    outcome: &OutcomeArg,
+    summary: &str,
+    metric_name: Option<String>,
+    metric_value: Option<String>,
+    entry_command: Option<String>,
+    evidence_path: Option<String>,
+    sanity_checks: &Vec<String>,
+    baseline_result: Option<String>,
+    rules_in: &Vec<String>,
+    rules_out: &Vec<String>,
+    alternative_explanations: &Vec<String>,
+    threats: &Vec<String>,
+    interpretation: Option<String>,
+    finding: Option<String>,
+    decision_delta: Option<String>,
+    reuse_note: Option<String>,
+    applies_to: &Vec<String>,
+    does_not_apply_to: &Vec<String>,
+    override_novelty_gate: bool,
+    override_reason: Option<String>,
+) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let updated = record_run(
+        &state,
+        &RecordRunInput {
+            hypothesis_id,
+            outcome: outcome.as_str(),
+            summary,
+            metric_name: metric_name.as_deref(),
+            metric_value: metric_value.as_deref(),
+            command: entry_command.as_deref(),
+            evidence_path: evidence_path.as_deref(),
+            sanity_checks,
+            baseline_result: baseline_result.as_deref(),
+            rules_in,
+            rules_out,
+            alternative_explanations,
+            threats,
+            interpretation: interpretation.as_deref(),
+            finding: finding.as_deref(),
+            decision_delta: decision_delta.as_deref(),
+            reuse_note: reuse_note.as_deref(),
+            applies_to,
+            does_not_apply_to,
+            override_novelty_gate,
+            override_reason: override_reason.as_deref(),
+        },
+        &workspace,
+    )?;
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    if let Some(record) = latest_run_for_hypothesis(&updated, hypothesis_id) {
+        append_research_log(
+            &workspace,
+            &format!("Run recorded ({})", str_field(record, "run_id")),
+            vec![
+                format!("hypothesis: {}", str_field(record, "hypothesis_id")),
+                format!("outcome: {}", str_field(record, "outcome")),
+                format!("summary: {}", str_field(record, "summary")),
+            ],
+        )?;
+        append_ledger_event(
+            &workspace,
+            "run.recorded",
+            json!({
+                "run_id": record.get("run_id").cloned().unwrap_or(Value::Null),
+                "hypothesis_id": record.get("hypothesis_id").cloned().unwrap_or(Value::Null),
+                "outcome": record.get("outcome").cloned().unwrap_or(Value::Null),
+                "metric_name": record.get("metric_name").cloned().unwrap_or(Value::Null),
+                "metric_value": record.get("metric_value").cloned().unwrap_or(Value::Null),
+                "command": record.get("command").cloned().unwrap_or(Value::Null),
+                "evidence_path": record.get("evidence_path").cloned().unwrap_or(Value::Null),
+                "sanity_checks": record.get("sanity_checks").cloned().unwrap_or(Value::Null),
+                "baseline_result": record.get("baseline_result").cloned().unwrap_or(Value::Null),
+                "rules_in": record.get("rules_in").cloned().unwrap_or(Value::Null),
+                "rules_out": record.get("rules_out").cloned().unwrap_or(Value::Null),
+                "alternative_explanations": record.get("alternative_explanations").cloned().unwrap_or(Value::Null),
+                "threats": record.get("threats").cloned().unwrap_or(Value::Null),
+                "interpretation": record.get("interpretation").cloned().unwrap_or(Value::Null),
+                "finding": record.get("finding").cloned().unwrap_or(Value::Null),
+                "decision_delta": record.get("decision_delta").cloned().unwrap_or(Value::Null),
+                "reuse_note": record.get("reuse_note").cloned().unwrap_or(Value::Null),
+                "applies_to": record.get("applies_to").cloned().unwrap_or(Value::Null),
+                "does_not_apply_to": record.get("does_not_apply_to").cloned().unwrap_or(Value::Null),
+                "novelty_gate_status_at_run": record.get("novelty_gate_status_at_run").cloned().unwrap_or(Value::Null),
+                "novelty_gate_override": record.get("novelty_gate_override").cloned().unwrap_or(Value::Null),
+                "override_reason": record.get("override_reason").cloned().unwrap_or(Value::Null),
+                "environment_fingerprint": record.get("environment_fingerprint").cloned().unwrap_or(Value::Null),
+                "git_provenance": record.get("git_provenance").cloned().unwrap_or(Value::Null),
+            }),
+        )?;
+    }
+    if let Some(hypothesis) = find_hypothesis(&updated, hypothesis_id) {
+        append_ledger_event(
+            &workspace,
+            "hypothesis.status_changed",
+            json!({
+                "hypothesis_id": hypothesis_id,
+                "status": hypothesis.get("status").cloned().unwrap_or(Value::Null),
+                "reason": hypothesis.get("status_reason").cloned().unwrap_or(Value::Null),
+            }),
+        )?;
+    }
+    println!("Recorded run for {hypothesis_id}");
+    Ok(())
+}
+
+fn cmd_annotate_run(
+    workspace: &Path,
+    run_id: &str,
+    finding: Option<String>,
+    decision_delta: Option<String>,
+    reuse_note: Option<String>,
+    applies_to: &Vec<String>,
+    does_not_apply_to: &Vec<String>,
+) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let updated = annotate_run(
+        &state,
+        run_id,
+        RunAnnotationInput {
+            finding: finding.as_deref(),
+            decision_delta: decision_delta.as_deref(),
+            reuse_note: reuse_note.as_deref(),
+            applies_to,
+            does_not_apply_to,
+        },
+    )?;
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    append_research_log(
+        &workspace,
+        &format!("Run annotated for reuse ({run_id})"),
+        vec![
+            format!("finding: {}", finding.unwrap_or_else(|| "-".into())),
+            format!(
+                "decision_delta: {}",
+                decision_delta.unwrap_or_else(|| "-".into())
+            ),
+        ],
+    )?;
+    append_ledger_event(
+        &workspace,
+        "run.annotated",
+        json!({
+            "run_id": run_id,
+            "finding": latest_run_by_id(&updated, run_id).and_then(|run| run.get("finding")).cloned().unwrap_or(Value::Null),
+            "decision_delta": latest_run_by_id(&updated, run_id).and_then(|run| run.get("decision_delta")).cloned().unwrap_or(Value::Null),
+            "reuse_note": latest_run_by_id(&updated, run_id).and_then(|run| run.get("reuse_note")).cloned().unwrap_or(Value::Null),
+        }),
+    )?;
+    println!("Annotated {run_id} for reuse");
+    Ok(())
+}
+
+fn cmd_audit_reuse(workspace: &Path, apply: bool) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let audit = reuse_audit(&state);
+    if apply {
+        sync_managed_file(
+            &workspace.join("findings-reuse-index.md"),
+            "# Findings Reuse Index\n\n",
+            REUSE_INDEX_BLOCK_START,
+            REUSE_INDEX_BLOCK_END,
+            render_reuse_index_summary(&state),
+        )?;
+        append_research_log(
+            &workspace,
+            "Reuse audit refreshed",
+            vec![
+                format!("reusable: {}", audit["reusable_runs"]),
+                format!("missing: {}", audit["missing_annotations"]),
+            ],
+        )?;
+        append_ledger_event(&workspace, "reuse.audit_refreshed", audit.clone())?;
+        dump_state(&state_path, &state)?;
+    }
+    println!("{}", format_reuse_audit(&audit));
+    Ok(())
+}
+
+fn cmd_reflect(
+    workspace: &Path,
+    hypothesis_id: &str,
+    direction: &DirectionArg,
+    reason: &str,
+    next_step: Option<String>,
+    activate_hypothesis: Option<String>,
+) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let state = load_state(&state_path)?;
+    let updated = reflect(
+        &state,
+        hypothesis_id,
+        direction.as_str(),
+        reason,
+        next_step.as_deref(),
+        activate_hypothesis.as_deref(),
+    )?;
+    dump_state(&state_path, &updated)?;
+    sync_workspace_files(&workspace, &updated)?;
+    if let Some(decision) = latest_decision_for_hypothesis(&updated, hypothesis_id) {
+        append_research_log(
+            &workspace,
+            &format!(
+                "Reflection recorded ({})",
+                str_field_default(decision, "run_id", "no-run")
+            ),
+            vec![
+                format!("hypothesis: {}", str_field(decision, "hypothesis_id")),
+                format!("direction: {}", str_field(decision, "direction")),
+                format!("reason: {}", str_field(decision, "reason")),
+            ],
+        )?;
+        append_ledger_event(
+            &workspace,
+            "reflection.recorded",
+            json!({
+                "hypothesis_id": decision.get("hypothesis_id").cloned().unwrap_or(Value::Null),
+                "run_id": decision.get("run_id").cloned().unwrap_or(Value::Null),
+                "direction": decision.get("direction").cloned().unwrap_or(Value::Null),
+                "reason": decision.get("reason").cloned().unwrap_or(Value::Null),
+            }),
+        )?;
+    }
+    if let Some(hypothesis) = find_hypothesis(&updated, hypothesis_id) {
+        append_ledger_event(
+            &workspace,
+            "hypothesis.status_changed",
+            json!({
+                "hypothesis_id": hypothesis_id,
+                "status": hypothesis.get("status").cloned().unwrap_or(Value::Null),
+                "reason": hypothesis.get("status_reason").cloned().unwrap_or(Value::Null),
+            }),
+        )?;
+    }
+    println!("Recorded reflection for {hypothesis_id}");
+    Ok(())
+}
+
+fn cmd_set_novelty_gate(
+    workspace: &Path,
+    status: &GateStatusArg,
+    decision: Option<String>,
+    overlap_summary: Option<String>,
+    differentiation_strategy: Option<String>,
+    claims: &Vec<String>,
+) -> Result<()> {
+    let (workspace, state_path) = ensure_workspace(workspace)?;
+    let mut state = load_state(&state_path)?;
+    let gate = novelty_gate_mut(&mut state);
+    gate.insert("status".to_string(), json!(status.as_str()));
+    if let Some(decision) = decision {
+        gate.insert("decision".to_string(), json!(decision));
+    }
+    if let Some(overlap_summary) = overlap_summary {
+        gate.insert("overlap_summary".to_string(), json!(overlap_summary));
+    }
+    if let Some(strategy) = differentiation_strategy {
+        gate.insert("differentiation_strategy".to_string(), json!(strategy));
+    }
+    if !claims.is_empty() {
+        gate.insert("claims".to_string(), json!(claims));
+    }
+    dump_state(&state_path, &state)?;
+    sync_workspace_files(&workspace, &state)?;
+    append_research_log(
+        &workspace,
+        "Novelty gate updated",
+        vec![
+            format!("status: {}", novelty_str(&state, "status", "pending")),
+            format!("decision: {}", novelty_str(&state, "decision", "_not set_")),
+        ],
+    )?;
+    append_ledger_event(
+        &workspace,
+        "novelty_gate.updated",
+        json!({
+            "status": novelty_str(&state, "status", "pending"),
+            "decision": novelty_value(&state, "decision"),
+        }),
+    )?;
+    println!("Updated novelty gate for {}", workspace.display());
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -64,104 +734,17 @@ fn main() -> Result<()> {
             question,
             dir,
             mode,
-        } => {
-            let root = init_workspace(&project, &question, &dir, mode.as_str())?;
-            append_ledger_event(
-                &root,
-                "workspace.initialized",
-                json!({ "project": project, "question": question, "mode": mode.as_str() }),
-            )?;
-            println!("Initialized autoresearch workspace at {}", root.display());
-        }
-        Commands::Status { workspace } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let mut state = load_state(&state_path)?;
-            set_key(
-                &mut state,
-                "environment",
-                capture_environment_fingerprint(&workspace),
-            );
-            set_key(&mut state, "git", capture_git_provenance(&workspace));
-            println!("{}", format_status(&state));
-        }
-        Commands::Next { workspace } => {
-            let (_, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            for action in recommend_next_actions(&state) {
-                println!("- {action}");
-            }
-        }
-        Commands::Resume { workspace } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let mut state = load_state(&state_path)?;
-            set_key(
-                &mut state,
-                "environment",
-                capture_environment_fingerprint(&workspace),
-            );
-            set_key(&mut state, "git", capture_git_provenance(&workspace));
-            println!("{}", format_resume(&state));
-        }
-        Commands::Sync { workspace } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            sync_workspace_files(&workspace, &state)?;
-            append_ledger_event(
-                &workspace,
-                "workspace.synced",
-                json!({ "runs": arr(&state, "run_history").len() }),
-            )?;
-            println!("Synchronized workspace files for {}", workspace.display());
-        }
+        } => cmd_init(&project, &question, &dir, &mode.as_str())?,
+        Commands::Status { workspace } => cmd_status(&workspace)?,
+        Commands::Next { workspace } => cmd_next(&workspace)?,
+        Commands::Resume { workspace } => cmd_resume(&workspace)?,
+        Commands::Sync { workspace } => cmd_sync(&workspace)?,
         Commands::DraftClaims {
             workspace,
             question,
             count,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let updated = draft_claims_from_state(&state, question.as_deref(), count);
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            append_research_log(
-                &workspace,
-                "Draft claims generated",
-                vec![
-                    format!("claims: {}", novelty_arr(&updated, "draft_claims").len()),
-                    format!(
-                        "question: {}",
-                        question.unwrap_or_else(|| str_key(&updated, "question"))
-                    ),
-                ],
-            )?;
-            append_ledger_event(
-                &workspace,
-                "novelty_gate.draft_claims",
-                json!({ "count": novelty_arr(&updated, "draft_claims").len() }),
-            )?;
-            println!("Generated draft claims for {}", workspace.display());
-        }
-        Commands::PlanSearch { workspace } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let updated = ensure_state_defaults(&state);
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            append_research_log(
-                &workspace,
-                "Novelty search view refreshed",
-                vec![
-                    format!("entries: {}", current_search_plan(&updated).len()),
-                    "source priority: Semantic Scholar -> arXiv -> Google Scholar".to_string(),
-                ],
-            )?;
-            append_ledger_event(
-                &workspace,
-                "novelty_gate.search_plan_refreshed",
-                json!({ "entries": current_search_plan(&updated).len() }),
-            )?;
-            println!("Refreshed novelty search plan for {}", workspace.display());
-        }
+        } => cmd_draft_claims(&workspace, question, count)?,
+        Commands::PlanSearch { workspace } => cmd_plan_search(&workspace)?,
         Commands::ResearchClaim {
             workspace,
             claim_id,
@@ -169,142 +752,20 @@ fn main() -> Result<()> {
             source,
             limit,
             timeout_secs,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let research = research_claim(
-                &state,
-                claim_id.as_deref(),
-                query.as_deref(),
-                &source,
-                limit,
-                timeout_secs,
-            )?;
-            let updated = add_external_research(&state, research);
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            if let Some(entry) = latest_external_research(&updated) {
-                append_research_log(
-                    &workspace,
-                    &format!(
-                        "External research recorded ({})",
-                        str_field(entry, "research_id")
-                    ),
-                    vec![
-                        format!("claim: {}", str_field_default(entry, "claim_id", "custom")),
-                        format!("query: {}", str_field(entry, "query")),
-                        format!("results: {}", external_research_result_count(entry)),
-                    ],
-                )?;
-                append_ledger_event(
-                    &workspace,
-                    "external_research.recorded",
-                    json!({
-                        "research_id": entry.get("research_id").cloned().unwrap_or(Value::Null),
-                        "claim_id": entry.get("claim_id").cloned().unwrap_or(Value::Null),
-                        "query": entry.get("query").cloned().unwrap_or(Value::Null),
-                        "source": entry.get("source").cloned().unwrap_or(Value::Null),
-                        "results": external_research_result_count(entry),
-                    }),
-                )?;
-            }
-            println!("Recorded external research for {}", workspace.display());
-        }
+        } => cmd_research_claim(&workspace, claim_id, query, &source, limit, timeout_secs)?,
         Commands::ResearchAll {
             workspace,
             source,
             limit,
             max_claims,
             timeout_secs,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let updated = research_all_claims(&state, &source, limit, max_claims, timeout_secs)?;
-            let added = arr(&updated, "external_research")
-                .len()
-                .saturating_sub(arr(&ensure_state_defaults(&state), "external_research").len());
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            append_research_log(
-                &workspace,
-                "External research batch recorded",
-                vec![
-                    format!("claims searched: {added}"),
-                    format!("source: {}", source.as_str()),
-                ],
-            )?;
-            append_ledger_event(
-                &workspace,
-                "external_research.batch_recorded",
-                json!({ "claims": added, "source": source.as_str() }),
-            )?;
-            println!(
-                "Recorded {added} external research entries for {}",
-                workspace.display()
-            );
-        }
+        } => cmd_research_all(&workspace, &source, limit, max_claims, timeout_secs)?,
         Commands::GateFromResearch {
             workspace,
             min_results,
             apply,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let recommendation = novelty_gate_recommendation_from_research(&state, min_results);
-            if apply {
-                let updated = apply_novelty_gate_recommendation(&state, &recommendation);
-                dump_state(&state_path, &updated)?;
-                sync_workspace_files(&workspace, &updated)?;
-                append_research_log(
-                    &workspace,
-                    "Novelty gate recommendation applied",
-                    vec![
-                        format!(
-                            "status: {}",
-                            str_field(&recommendation, "recommended_status")
-                        ),
-                        format!("decision: {}", str_field(&recommendation, "decision")),
-                    ],
-                )?;
-                append_ledger_event(
-                    &workspace,
-                    "novelty_gate.recommended_from_external_research",
-                    recommendation.clone(),
-                )?;
-                println!("{}", format_gate_recommendation(&recommendation));
-            } else {
-                println!("{}", format_gate_recommendation(&recommendation));
-            }
-        }
-        Commands::BriefFirstClaim { workspace } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let updated = ensure_state_defaults(&state);
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            let brief = current_brief(&updated);
-            append_research_log(
-                &workspace,
-                "Novelty brief refreshed",
-                vec![
-                    format!(
-                        "claim: {}",
-                        brief
-                            .as_ref()
-                            .and_then(|item| item.get("claim_id"))
-                            .and_then(Value::as_str)
-                            .unwrap_or("_not set_")
-                    ),
-                    "scope: top-priority novelty claim".to_string(),
-                ],
-            )?;
-            append_ledger_event(
-                &workspace,
-                "novelty_gate.brief_refreshed",
-                json!({ "claim_id": brief.and_then(|item| item.get("claim_id").cloned()) }),
-            )?;
-            println!("Refreshed novelty brief for {}", workspace.display());
-        }
+        } => cmd_gate_from_research(&workspace, min_results, apply)?,
+        Commands::BriefFirstClaim { workspace } => cmd_brief_first_claim(&workspace)?,
         Commands::CompareClaim {
             workspace,
             claim,
@@ -315,49 +776,17 @@ fn main() -> Result<()> {
             confidence,
             verdict,
             claim_id,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let updated = add_claim_comparison(
-                &state,
-                &claim,
-                &axis,
-                &closest_prior_work,
-                overlap.as_str(),
-                &difference,
-                confidence.as_str(),
-                verdict.as_str(),
-                claim_id.as_deref(),
-            );
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            append_research_log(
-                &workspace,
-                &format!(
-                    "Novelty claim compared ({})",
-                    claim_id.as_deref().unwrap_or("auto")
-                ),
-                vec![
-                    format!("claim: {claim}"),
-                    format!("overlap: {}", overlap.as_str()),
-                    format!("verdict: {}", verdict.as_str()),
-                ],
-            )?;
-            append_ledger_event(
-                &workspace,
-                "novelty_gate.updated",
-                json!({
-                    "claim_id": claim_id,
-                    "claim": claim,
-                    "overlap": overlap.as_str(),
-                    "verdict": verdict.as_str(),
-                }),
-            )?;
-            println!(
-                "Recorded novelty claim comparison for {}",
-                workspace.display()
-            );
-        }
+        } => cmd_compare_claim(
+            &workspace,
+            &claim,
+            &axis,
+            &closest_prior_work,
+            &overlap,
+            &difference,
+            &confidence,
+            &verdict,
+            claim_id,
+        )?,
         Commands::AddHypothesis {
             workspace,
             claim,
@@ -372,50 +801,21 @@ fn main() -> Result<()> {
             minimal_test,
             priority,
             id,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let updated = add_hypothesis(
-                &state,
-                HypothesisInput {
-                    claim: &claim,
-                    prediction: prediction.as_deref(),
-                    mechanism: mechanism.as_deref(),
-                    falsifiable_prediction: falsifiable_prediction.as_deref(),
-                    success_threshold: success_threshold.as_deref(),
-                    stop_condition: stop_condition.as_deref(),
-                    baselines: &baselines,
-                    confounders: &confounders,
-                    negative_signals: &negative_signals,
-                    minimal_test: minimal_test.as_deref(),
-                    priority: priority.as_str(),
-                    hypothesis_id: id.as_deref(),
-                },
-            )?;
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            let resolved_id = id.unwrap_or_else(|| slugify(&claim).chars().take(40).collect());
-            if let Some(hypothesis) = find_hypothesis(&updated, &resolved_id) {
-                append_research_log(
-                    &workspace,
-                    &format!("Hypothesis added ({resolved_id})"),
-                    vec![
-                        format!("claim: {}", str_field(hypothesis, "claim")),
-                        format!("priority: {}", str_field(hypothesis, "priority")),
-                    ],
-                )?;
-                append_ledger_event(
-                    &workspace,
-                    "hypothesis.added",
-                    json!({
-                        "hypothesis_id": resolved_id,
-                        "status": hypothesis.get("status").cloned().unwrap_or(Value::Null),
-                        "priority": hypothesis.get("priority").cloned().unwrap_or(Value::Null),
-                    }),
-                )?;
-            }
-            println!("Added hypothesis in {}", workspace.display());
-        }
+        } => cmd_add_hypothesis(
+            &workspace,
+            &claim,
+            prediction,
+            mechanism,
+            falsifiable_prediction,
+            success_threshold,
+            stop_condition,
+            &baselines,
+            &confounders,
+            &negative_signals,
+            minimal_test,
+            &priority,
+            id,
+        )?,
         Commands::RecordRun {
             workspace,
             hypothesis_id,
@@ -439,90 +839,30 @@ fn main() -> Result<()> {
             does_not_apply_to,
             override_novelty_gate,
             override_reason,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let updated = record_run(
-                &state,
-                &hypothesis_id,
-                outcome.as_str(),
-                &summary,
-                metric_name.as_deref(),
-                metric_value.as_deref(),
-                entry_command.as_deref(),
-                evidence_path.as_deref(),
-                &sanity_checks,
-                baseline_result.as_deref(),
-                &rules_in,
-                &rules_out,
-                &alternative_explanations,
-                &threats,
-                interpretation.as_deref(),
-                finding.as_deref(),
-                decision_delta.as_deref(),
-                reuse_note.as_deref(),
-                &applies_to,
-                &does_not_apply_to,
-                override_novelty_gate,
-                override_reason.as_deref(),
-                &workspace,
-            )?;
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            if let Some(record) = latest_run_for_hypothesis(&updated, &hypothesis_id) {
-                append_research_log(
-                    &workspace,
-                    &format!("Run recorded ({})", str_field(record, "run_id")),
-                    vec![
-                        format!("hypothesis: {}", str_field(record, "hypothesis_id")),
-                        format!("outcome: {}", str_field(record, "outcome")),
-                        format!("summary: {}", str_field(record, "summary")),
-                    ],
-                )?;
-                append_ledger_event(
-                    &workspace,
-                    "run.recorded",
-                    json!({
-                        "run_id": record.get("run_id").cloned().unwrap_or(Value::Null),
-                        "hypothesis_id": record.get("hypothesis_id").cloned().unwrap_or(Value::Null),
-                        "outcome": record.get("outcome").cloned().unwrap_or(Value::Null),
-                        "metric_name": record.get("metric_name").cloned().unwrap_or(Value::Null),
-                        "metric_value": record.get("metric_value").cloned().unwrap_or(Value::Null),
-                        "command": record.get("command").cloned().unwrap_or(Value::Null),
-                        "evidence_path": record.get("evidence_path").cloned().unwrap_or(Value::Null),
-                        "sanity_checks": record.get("sanity_checks").cloned().unwrap_or(Value::Null),
-                        "baseline_result": record.get("baseline_result").cloned().unwrap_or(Value::Null),
-                        "rules_in": record.get("rules_in").cloned().unwrap_or(Value::Null),
-                        "rules_out": record.get("rules_out").cloned().unwrap_or(Value::Null),
-                        "alternative_explanations": record.get("alternative_explanations").cloned().unwrap_or(Value::Null),
-                        "threats": record.get("threats").cloned().unwrap_or(Value::Null),
-                        "interpretation": record.get("interpretation").cloned().unwrap_or(Value::Null),
-                        "finding": record.get("finding").cloned().unwrap_or(Value::Null),
-                        "decision_delta": record.get("decision_delta").cloned().unwrap_or(Value::Null),
-                        "reuse_note": record.get("reuse_note").cloned().unwrap_or(Value::Null),
-                        "applies_to": record.get("applies_to").cloned().unwrap_or(Value::Null),
-                        "does_not_apply_to": record.get("does_not_apply_to").cloned().unwrap_or(Value::Null),
-                        "novelty_gate_status_at_run": record.get("novelty_gate_status_at_run").cloned().unwrap_or(Value::Null),
-                        "novelty_gate_override": record.get("novelty_gate_override").cloned().unwrap_or(Value::Null),
-                        "override_reason": record.get("override_reason").cloned().unwrap_or(Value::Null),
-                        "environment_fingerprint": record.get("environment_fingerprint").cloned().unwrap_or(Value::Null),
-                        "git_provenance": record.get("git_provenance").cloned().unwrap_or(Value::Null),
-                    }),
-                )?;
-            }
-            if let Some(hypothesis) = find_hypothesis(&updated, &hypothesis_id) {
-                append_ledger_event(
-                    &workspace,
-                    "hypothesis.status_changed",
-                    json!({
-                        "hypothesis_id": hypothesis_id,
-                        "status": hypothesis.get("status").cloned().unwrap_or(Value::Null),
-                        "reason": hypothesis.get("status_reason").cloned().unwrap_or(Value::Null),
-                    }),
-                )?;
-            }
-            println!("Recorded run for {hypothesis_id}");
-        }
+        } => cmd_record_run(
+            &workspace,
+            &hypothesis_id,
+            &outcome,
+            &summary,
+            metric_name,
+            metric_value,
+            entry_command,
+            evidence_path,
+            &sanity_checks,
+            baseline_result,
+            &rules_in,
+            &rules_out,
+            &alternative_explanations,
+            &threats,
+            interpretation,
+            finding,
+            decision_delta,
+            reuse_note,
+            &applies_to,
+            &does_not_apply_to,
+            override_novelty_gate,
+            override_reason,
+        )?,
         Commands::AnnotateRun {
             workspace,
             run_id,
@@ -531,70 +871,16 @@ fn main() -> Result<()> {
             reuse_note,
             applies_to,
             does_not_apply_to,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let updated = annotate_run(
-                &state,
-                &run_id,
-                RunAnnotationInput {
-                    finding: finding.as_deref(),
-                    decision_delta: decision_delta.as_deref(),
-                    reuse_note: reuse_note.as_deref(),
-                    applies_to: &applies_to,
-                    does_not_apply_to: &does_not_apply_to,
-                },
-            )?;
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            append_research_log(
-                &workspace,
-                &format!("Run annotated for reuse ({run_id})"),
-                vec![
-                    format!("finding: {}", finding.unwrap_or_else(|| "-".into())),
-                    format!(
-                        "decision_delta: {}",
-                        decision_delta.unwrap_or_else(|| "-".into())
-                    ),
-                ],
-            )?;
-            append_ledger_event(
-                &workspace,
-                "run.annotated",
-                json!({
-                    "run_id": run_id,
-                    "finding": latest_run_by_id(&updated, &run_id).and_then(|run| run.get("finding")).cloned().unwrap_or(Value::Null),
-                    "decision_delta": latest_run_by_id(&updated, &run_id).and_then(|run| run.get("decision_delta")).cloned().unwrap_or(Value::Null),
-                    "reuse_note": latest_run_by_id(&updated, &run_id).and_then(|run| run.get("reuse_note")).cloned().unwrap_or(Value::Null),
-                }),
-            )?;
-            println!("Annotated {run_id} for reuse");
-        }
-        Commands::AuditReuse { workspace, apply } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let audit = reuse_audit(&state);
-            if apply {
-                sync_managed_file(
-                    &workspace.join("findings-reuse-index.md"),
-                    "# Findings Reuse Index\n\n",
-                    REUSE_INDEX_BLOCK_START,
-                    REUSE_INDEX_BLOCK_END,
-                    render_reuse_index_summary(&state),
-                )?;
-                append_research_log(
-                    &workspace,
-                    "Reuse audit refreshed",
-                    vec![
-                        format!("reusable: {}", audit["reusable_runs"]),
-                        format!("missing: {}", audit["missing_annotations"]),
-                    ],
-                )?;
-                append_ledger_event(&workspace, "reuse.audit_refreshed", audit.clone())?;
-                dump_state(&state_path, &state)?;
-            }
-            println!("{}", format_reuse_audit(&audit));
-        }
+        } => cmd_annotate_run(
+            &workspace,
+            &run_id,
+            finding,
+            decision_delta,
+            reuse_note,
+            &applies_to,
+            &does_not_apply_to,
+        )?,
+        Commands::AuditReuse { workspace, apply } => cmd_audit_reuse(&workspace, apply)?,
         Commands::Reflect {
             workspace,
             hypothesis_id,
@@ -602,56 +888,14 @@ fn main() -> Result<()> {
             reason,
             next_step,
             activate_hypothesis,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let state = load_state(&state_path)?;
-            let updated = reflect(
-                &state,
-                &hypothesis_id,
-                direction.as_str(),
-                &reason,
-                next_step.as_deref(),
-                activate_hypothesis.as_deref(),
-            )?;
-            dump_state(&state_path, &updated)?;
-            sync_workspace_files(&workspace, &updated)?;
-            if let Some(decision) = latest_decision_for_hypothesis(&updated, &hypothesis_id) {
-                append_research_log(
-                    &workspace,
-                    &format!(
-                        "Reflection recorded ({})",
-                        str_field_default(decision, "run_id", "no-run")
-                    ),
-                    vec![
-                        format!("hypothesis: {}", str_field(decision, "hypothesis_id")),
-                        format!("direction: {}", str_field(decision, "direction")),
-                        format!("reason: {}", str_field(decision, "reason")),
-                    ],
-                )?;
-                append_ledger_event(
-                    &workspace,
-                    "reflection.recorded",
-                    json!({
-                        "hypothesis_id": decision.get("hypothesis_id").cloned().unwrap_or(Value::Null),
-                        "run_id": decision.get("run_id").cloned().unwrap_or(Value::Null),
-                        "direction": decision.get("direction").cloned().unwrap_or(Value::Null),
-                        "reason": decision.get("reason").cloned().unwrap_or(Value::Null),
-                    }),
-                )?;
-            }
-            if let Some(hypothesis) = find_hypothesis(&updated, &hypothesis_id) {
-                append_ledger_event(
-                    &workspace,
-                    "hypothesis.status_changed",
-                    json!({
-                        "hypothesis_id": hypothesis_id,
-                        "status": hypothesis.get("status").cloned().unwrap_or(Value::Null),
-                        "reason": hypothesis.get("status_reason").cloned().unwrap_or(Value::Null),
-                    }),
-                )?;
-            }
-            println!("Recorded reflection for {hypothesis_id}");
-        }
+        } => cmd_reflect(
+            &workspace,
+            &hypothesis_id,
+            &direction,
+            &reason,
+            next_step,
+            activate_hypothesis,
+        )?,
         Commands::SetNoveltyGate {
             workspace,
             status,
@@ -659,43 +903,14 @@ fn main() -> Result<()> {
             overlap_summary,
             differentiation_strategy,
             claims,
-        } => {
-            let (workspace, state_path) = ensure_workspace(&workspace)?;
-            let mut state = load_state(&state_path)?;
-            let gate = novelty_gate_mut(&mut state);
-            gate.insert("status".to_string(), json!(status.as_str()));
-            if let Some(decision) = decision {
-                gate.insert("decision".to_string(), json!(decision));
-            }
-            if let Some(overlap_summary) = overlap_summary {
-                gate.insert("overlap_summary".to_string(), json!(overlap_summary));
-            }
-            if let Some(strategy) = differentiation_strategy {
-                gate.insert("differentiation_strategy".to_string(), json!(strategy));
-            }
-            if !claims.is_empty() {
-                gate.insert("claims".to_string(), json!(claims));
-            }
-            dump_state(&state_path, &state)?;
-            sync_workspace_files(&workspace, &state)?;
-            append_research_log(
-                &workspace,
-                "Novelty gate updated",
-                vec![
-                    format!("status: {}", novelty_str(&state, "status", "pending")),
-                    format!("decision: {}", novelty_str(&state, "decision", "_not set_")),
-                ],
-            )?;
-            append_ledger_event(
-                &workspace,
-                "novelty_gate.updated",
-                json!({
-                    "status": novelty_str(&state, "status", "pending"),
-                    "decision": novelty_value(&state, "decision"),
-                }),
-            )?;
-            println!("Updated novelty gate for {}", workspace.display());
-        }
+        } => cmd_set_novelty_gate(
+            &workspace,
+            &status,
+            decision,
+            overlap_summary,
+            differentiation_strategy,
+            &claims,
+        )?,
     }
     Ok(())
 }
@@ -813,27 +1028,29 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let state = record_run(
             &state,
-            "h1",
-            "confirmatory",
-            "test run",
-            None,
-            None,
-            None,
-            None,
-            &[],
-            None,
-            &[],
-            &[],
-            &[],
-            &[],
-            None,
-            None,
-            None,
-            None,
-            &[],
-            &[],
-            false,
-            None,
+            &RecordRunInput {
+                hypothesis_id: "h1",
+                outcome: "confirmatory",
+                summary: "test run",
+                metric_name: None,
+                metric_value: None,
+                command: None,
+                evidence_path: None,
+                sanity_checks: &[],
+                baseline_result: None,
+                rules_in: &[],
+                rules_out: &[],
+                alternative_explanations: &[],
+                threats: &[],
+                interpretation: None,
+                finding: None,
+                decision_delta: None,
+                reuse_note: None,
+                applies_to: &[],
+                does_not_apply_to: &[],
+                override_novelty_gate: false,
+                override_reason: None,
+            },
             tmp.path(),
         )
         .unwrap();
@@ -1768,27 +1985,29 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let result = record_run(
             &state,
-            "h1",
-            "confirmatory",
-            "test summary",
-            None,
-            None,
-            None,
-            None,
-            &[],
-            None,
-            &[],
-            &[],
-            &[],
-            &[],
-            None,
-            None,
-            None,
-            None,
-            &[],
-            &[],
-            false,
-            None,
+            &RecordRunInput {
+                hypothesis_id: "h1",
+                outcome: "confirmatory",
+                summary: "test summary",
+                metric_name: None,
+                metric_value: None,
+                command: None,
+                evidence_path: None,
+                sanity_checks: &[],
+                baseline_result: None,
+                rules_in: &[],
+                rules_out: &[],
+                alternative_explanations: &[],
+                threats: &[],
+                interpretation: None,
+                finding: None,
+                decision_delta: None,
+                reuse_note: None,
+                applies_to: &[],
+                does_not_apply_to: &[],
+                override_novelty_gate: false,
+                override_reason: None,
+            },
             tmp.path(),
         );
         assert!(result.is_ok());
@@ -1802,27 +2021,29 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let result = record_run(
             &state,
-            "nonexistent",
-            "confirmatory",
-            "summary",
-            None,
-            None,
-            None,
-            None,
-            &[],
-            None,
-            &[],
-            &[],
-            &[],
-            &[],
-            None,
-            None,
-            None,
-            None,
-            &[],
-            &[],
-            false,
-            None,
+            &RecordRunInput {
+                hypothesis_id: "nonexistent",
+                outcome: "confirmatory",
+                summary: "summary",
+                metric_name: None,
+                metric_value: None,
+                command: None,
+                evidence_path: None,
+                sanity_checks: &[],
+                baseline_result: None,
+                rules_in: &[],
+                rules_out: &[],
+                alternative_explanations: &[],
+                threats: &[],
+                interpretation: None,
+                finding: None,
+                decision_delta: None,
+                reuse_note: None,
+                applies_to: &[],
+                does_not_apply_to: &[],
+                override_novelty_gate: false,
+                override_reason: None,
+            },
             tmp.path(),
         );
         assert!(result.is_err());

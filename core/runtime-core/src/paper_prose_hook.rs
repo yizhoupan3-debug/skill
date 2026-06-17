@@ -89,7 +89,7 @@ pub fn maybe_merge_paper_prose_before_submit(
     if msg.trim().is_empty() {
         return;
     }
-    crate::autopilot_goal::merge_hook_nudge_paragraph(
+    crate::goal_drive::merge_hook_nudge_paragraph(
         output,
         &msg,
         PREFIX_LINE,

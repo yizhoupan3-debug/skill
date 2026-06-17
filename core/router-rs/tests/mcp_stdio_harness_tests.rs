@@ -300,7 +300,7 @@ mod desktop_mcp_tests {
         std::fs::create_dir_all(&task_dir).unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
+            r#"{"schema_version":"router-rs-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
         )
         .unwrap();
 
@@ -331,7 +331,7 @@ mod desktop_mcp_tests {
         std::fs::create_dir_all(&review_lanes).unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
+            r#"{"schema_version":"router-rs-goal-v1","status":"running","goal":"深度 review 这个 PR"}"#,
         )
         .unwrap();
         std::fs::write(review_lanes.join("lane-a.md"), "[P2] example — ok").unwrap();
@@ -367,7 +367,7 @@ mod desktop_mcp_tests {
         .unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","goal":"test"}"#,
+            r#"{"schema_version":"router-rs-goal-v1","status":"running","goal":"test"}"#,
         )
         .unwrap();
 
@@ -1007,7 +1007,7 @@ mod claude_desktop_hard_blocking_tests {
         std::fs::create_dir_all(&task_dir).unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-autopilot-goal-v1","status":"running","lifecycle_profile":"my-light","goal":"x"}"#,
+            r#"{"schema_version":"router-rs-goal-v1","status":"running","lifecycle_profile":"my-light","goal":"x"}"#,
         )
         .unwrap();
         let req = json!({
@@ -1078,7 +1078,7 @@ mod claude_desktop_hard_blocking_tests {
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
             r#"{
-                "schema_version": "router-rs-autopilot-goal-v1",
+                "schema_version": "router-rs-goal-v1",
                 "status": "running",
                 "lifecycle_profile": "strict",
                 "goal": "深度 review 这个 PR",

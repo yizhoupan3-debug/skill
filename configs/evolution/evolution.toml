@@ -1,5 +1,6 @@
 # evolution-rs 阈值真源（Roadmap v5 §2.9 EV-3）
 # CLI: evolution-rs audit --config configs/evolution/evolution.toml
+# Online observer (EvolutionObserver) also uses low_confidence_threshold from here.
 
 [evolution]
 audit_window_days = 30
@@ -23,3 +24,10 @@ static_blend = 0.4
 
 [audit]
 top_ngram_candidates = 10
+
+# Online observer thresholds (EvolutionObserver in framework-runtime)
+# These are also used as defaults in evolution_observer.rs
+[observer]
+window_capacity = 256
+reroute_rate_alert = 0.35
+tool_failure_rate_alert = 0.25

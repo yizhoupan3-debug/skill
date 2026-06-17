@@ -358,20 +358,6 @@
       "first_turn": true
     },
     {
-      "id": "autopilot-deep-explicit-alias",
-      "category": "retired-framework-command",
-      "task": "请用 /autopilot-deep 深度调研这个系统",
-      "focus_skill": null,
-      "expected_owner": "none",
-      "expected_overlay": null,
-      "forbidden_owners": [
-        "skill-framework-developer",
-        "deepinterview"
-      ],
-      "notes": "/autopilot* retired; slash 命令不再路由到 autopilot（manifest 已移除）",
-      "first_turn": true
-    },
-    {
       "id": "route-001-ppt-deck",
       "category": "should-trigger",
       "task": "帮我做一个演示文稿，关于河川修复的",

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# RETIRED 2026-06: claude-desktop host removed from closed set. Use install-claude.sh for claude-code.
 # Persist Claude Desktop permission mode (Cowork + Code composer).
 # Desktop ignores ~/.claude/settings.json defaultMode; it reads epitaxy prefs + LevelDB.
 #

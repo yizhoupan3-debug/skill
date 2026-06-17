@@ -1746,8 +1746,8 @@ pub fn evaluate_closeout_record_file_for_task(
         )
     })?;
     let (rows_non_empty, has_success) =
-        crate::autopilot_goal::task_evidence_artifacts_summary_for_task(repo_root, tid);
-    let goal_state = crate::autopilot_goal::read_goal_state(repo_root, Some(tid))
+        crate::goal_drive::task_evidence_artifacts_summary_for_task(repo_root, tid);
+    let goal_state = crate::goal_drive::read_goal_state(repo_root, Some(tid))
         .ok()
         .flatten();
     let goal_prediction = goal_state
@@ -1839,11 +1839,11 @@ fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Option<Value>
     let evaluation = if !repo_root_str.is_empty() && !task_id_str.is_empty() {
         let repo_root = PathBuf::from(&repo_root_str);
         let (rows_non_empty, has_success) =
-            crate::autopilot_goal::task_evidence_artifacts_summary_for_task(
+            crate::goal_drive::task_evidence_artifacts_summary_for_task(
                 &repo_root,
                 &task_id_str,
             );
-        let goal_state = crate::autopilot_goal::read_goal_state(&repo_root, Some(&task_id_str))
+        let goal_state = crate::goal_drive::read_goal_state(&repo_root, Some(&task_id_str))
             .ok()
             .flatten();
         let goal_prediction = goal_state

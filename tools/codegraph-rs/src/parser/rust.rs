@@ -102,3 +102,69 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    #[test]
+    fn closure_call_attributed_to_enclosing_fn() {
+        let src = r#"
+fn caller() {
+    let add = |a, b| a + b;
+    add(1, 2);
+}
+"#;
+        let out = parse(src);
+        let edge = out.edges.iter().find(|e| e.callee_symbol == "add").expect("add edge");
+        assert_eq!(edge.caller_symbol, "caller");
+    }
+
+    #[test]
+    fn async_block_call_attributed_to_enclosing_fn() {
+        let src = r#"
+async fn run() {
+    let fut = async { helper() };
+    fut.await;
+}
+"#;
+        let out = parse(src);
+        let symbols: Vec<_> = out.symbols.iter().map(|s| s.symbol.as_str()).collect();
+        assert!(symbols.contains(&"run"), "should find async fn");
+        assert!(symbols.contains(&"helper"), "should find helper called inside async block");
+    }
+
+    #[test]
+    fn impl_block_methods() {
+        let src = r#"
+struct Foo;
+impl Foo {
+    fn new() -> Self { Foo }
+    fn method(&self) { self.other(); }
+    fn other(&self) {}
+}
+"#;
+        let out = parse(src);
+        let symbols: Vec<_> = out.symbols.iter().map(|s| (s.symbol.as_str(), s.kind.as_str())).collect();
+        assert!(symbols.contains(&("Foo", "struct")));
+        assert!(symbols.contains(&("new", "function")));
+        assert!(symbols.contains(&("method", "function")));
+        assert!(symbols.contains(&("other", "function")));
+    }
+
+    #[test]
+    fn method_call_inside_impl() {
+        let src = r#"
+struct Bar;
+impl Bar {
+    fn run(&self) {
+        self/helper();
+    }
+    fn helper(&self) {}
+}
+"#;
+        let out = parse(src);
+        let edge = out.edges.iter().find(|e| e.callee_symbol == "helper").expect("helper edge");
+        assert_eq!(edge.caller_symbol, "Bar");
+    }
+}

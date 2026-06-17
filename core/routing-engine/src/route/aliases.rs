@@ -117,7 +117,7 @@ pub fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool 
 
 /// Retired framework slash commands must fail-closed to native runtime (no skill owner).
 const RETIRED_FRAMEWORK_SLASH_COMMANDS: &[&str] =
-    &["/autopilot", "/autopilot-quick", "/autopilot-deep", "/team"];
+    &["/team"];
 
 pub fn query_invokes_retired_framework_slash_command(query_text: &str) -> bool {
     let normalized = normalize_text(query_text);

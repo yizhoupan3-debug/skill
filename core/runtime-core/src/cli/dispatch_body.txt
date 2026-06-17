@@ -462,7 +462,7 @@ fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String> {
                     }
                     (Some(repo_root), Some(task_id), None) => {
                         let (rows_non_empty, has_success) =
-                            crate::autopilot_goal::task_evidence_artifacts_summary_for_task(
+                            crate::goal_drive::task_evidence_artifacts_summary_for_task(
                                 repo_root,
                                 task_id,
                             );

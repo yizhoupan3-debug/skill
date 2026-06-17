@@ -680,8 +680,8 @@ fn write_trace_metadata_persists_primary_and_mirror_outputs() {
         mirror_paths: vec![mirror_path.display().to_string()],
         write_outputs: true,
         task: "trace metadata rustification".to_string(),
-        matched_skills: vec!["autopilot".to_string()],
-        owner: "autopilot".to_string(),
+        matched_skills: vec!["goal_drive".to_string()],
+        owner: "goal_drive".to_string(),
         gate: "none".to_string(),
         overlay: None,
         reroute_count: Some(0),
@@ -740,7 +740,7 @@ fn write_trace_metadata_persists_primary_and_mirror_outputs() {
 fn stdio_request_dispatches_write_trace_metadata_payload() {
     let output_path = temp_json_path("trace-metadata-write-stdio");
     let response = handle_stdio_json_line(&format!(
-            "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"autopilot\"],\"owner\":\"autopilot\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
+            "{{\"id\":3,\"op\":\"write_trace_metadata\",\"payload\":{{\"output_path\":\"{}\",\"task\":\"trace metadata stdio\",\"matched_skills\":[\"goal_drive\"],\"owner\":\"goal_drive\",\"gate\":\"none\",\"overlay\":null,\"reroute_count\":0,\"retry_count\":0,\"artifact_paths\":[],\"verification_status\":\"passed\",\"metadata_schema_version\":\"trace-metadata-v2\",\"routing_runtime_version\":11}}}}",
             output_path.display()
         ));
     assert!(response.ok);
@@ -765,7 +765,7 @@ fn write_trace_metadata_fails_closed_for_explicit_bad_trace_source() {
         write_outputs: true,
         task: "trace metadata missing source".to_string(),
         matched_skills: Vec::new(),
-        owner: "autopilot".to_string(),
+        owner: "goal_drive".to_string(),
         gate: "none".to_string(),
         overlay: None,
         reroute_count: Some(0),

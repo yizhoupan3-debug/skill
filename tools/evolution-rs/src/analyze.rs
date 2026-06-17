@@ -115,9 +115,10 @@ fn normalize_rfv_verdict_bucket(verdict: &str) -> String {
         "PASS" => "pass".to_string(),
         "FAIL" => "fail".to_string(),
         "SKIPPED" => "skipped".to_string(),
-        "UNKNOWN" => "unknown".to_string(),
-        "" => "unknown".to_string(),
-        other => other.to_ascii_lowercase(),
+        "UNKNOWN" | "" => "unknown".to_string(),
+        // Truncate unknown verdicts to prevent bucket explosion
+        other if other.len() <= 32 => other.to_ascii_lowercase(),
+        other => format!("unknown_{}", &other[..32.min(other.len())]),
     }
 }
 

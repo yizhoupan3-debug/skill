@@ -41,8 +41,7 @@ Cursor 官方说明：计划默认保存在**用户目录**，需**「Save to wo
 
 Cursor Plan Build **不**自动武装 lifecycle goal 门控。连续执行仅由用户显式 **`/implementx`**（及 `/verifyx`）启动。
 
-- Pre-goal 提示见 **`ROUTER_RS_CURSOR_AUTOPILOT_PRE_GOAL_ENABLED`**。
-- `AUTOPILOT_*` 仅为 env 遗留名；`/autopilot` 斜杠已退役。
+- Pre-goal 提示见 **`ROUTER_RS_PRE_GOAL_ENABLED`**。
 
 ---
 

@@ -158,7 +158,7 @@ pub(super) fn sample_execute_request() -> ExecuteRequestPayload {
         task: "帮我继续推进 Rust kernel".to_string(),
         session_id: "execute-session".to_string(),
         user_id: "tester".to_string(),
-        selected_skill: "autopilot".to_string(),
+        selected_skill: "goal_drive".to_string(),
         overlay_skill: None,
         layer: "L2".to_string(),
         route_engine: Some("rust".to_string()),
