@@ -975,6 +975,35 @@
       "skill",
       "L3",
       "gate"
+    ],
+    [
+      "autoresearch",
+      "none",
+      "Research workspace CLI — claims, hy",
+      [
+        "研究工作区",
+        "科研工作区",
+        "research workspace",
+        "claim 管理",
+        "新颖性声明",
+        "novelty gate",
+        "假设管理",
+        "实验假设",
+        "实验记录",
+        "实验反思",
+        "科研回顾",
+        "研究日志",
+        "自动研究",
+        "loop 研究",
+        "barrier research",
+        "瓶颈研究",
+        "突破方向",
+        "自动突破"
+      ],
+      "skills/autoresearch/SKILL.md",
+      "skill",
+      "L2",
+      "owner"
     ]
   ]
 }

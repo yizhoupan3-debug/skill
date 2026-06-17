@@ -1,10 +1,10 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 use regex::Regex;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
 mod arg_impls;
@@ -680,6 +680,100 @@ fn cmd_reflect(
     Ok(())
 }
 
+fn cmd_barrier(
+    workspace: &Path,
+    problem: &str,
+    loop_id: Option<&str>,
+    run_id: Option<&str>,
+    action_id: Option<&str>,
+    consecutive_failures: u32,
+) -> Result<()> {
+    let barrier_id = format!("br-{}", chrono::Utc::now().format("%Y%m%d%H%M%S"));
+    let repo_root = repo_root()?;
+    let barrier_root = if workspace.as_os_str() == "." {
+        repo_root.join("artifacts").join("research-barrier").join(&barrier_id)
+    } else {
+        workspace.to_path_buf()
+    };
+    fs::create_dir_all(&barrier_root)
+        .with_context(|| format!("create barrier dir: {}", barrier_root.display()))?;
+
+    let project_name = loop_id.unwrap_or("barrier-research");
+    let ws_root = init_workspace(project_name, problem, &barrier_root, "full")
+        .with_context(|| "barrier workspace init failed")?;
+    let state_path = ws_root.join("research-state.yaml");
+
+    // Load state and set current_direction
+    let mut state = load_state(&state_path)?;
+    set_key(&mut state, "current_direction", json!({
+        "original_question": problem,
+        "last_reaffirmed": now_iso(),
+        "deviation_warning_count": 0,
+    }));
+    state = ensure_state_defaults(&state);
+    dump_state(&state_path, &state)?;
+
+    // Draft claims from barrier problem
+    let updated = draft_claims_from_state(&state, Some(problem), 3);
+    dump_state(&state_path, &updated)?;
+
+    // Quick external research on top draft claims
+    for claim in novelty_arr(&updated, "draft_claims").iter().take(2) {
+        let claim_text = str_field(claim, "claim");
+        if let Ok(research) = research_claim(
+            &updated, None, Some(&claim_text), &crate::ExternalSourceArg::All, 3, 20,
+        ) {
+            let _ = add_external_research(&updated, research);
+        }
+    }
+
+    // Build BARRIER_REPORT.json
+    let candidates: Vec<Value> = novelty_arr(&updated, "draft_claims").iter().map(|c| json!({
+        "id": c.get("id"),
+        "hypothesis": c.get("claim"),
+        "confidence": "medium",
+        "evidence": [],
+        "expected_effort": "unknown",
+        "risk": "unknown",
+    })).collect();
+
+    let barrier_report = json!({
+        "schema_version": "barrier-report-v1",
+        "barrier_id": barrier_id,
+        "barrier": problem,
+        "context": {
+            "loop_id": loop_id,
+            "run_id": run_id,
+            "action_id": action_id,
+            "consecutive_failures": consecutive_failures,
+        },
+        "candidates": candidates,
+        "recommended": novelty_arr(&updated, "draft_claims").first()
+            .and_then(|c| c.get("id")),
+        "generated_at": now_iso(),
+    });
+
+    let report_path = barrier_root.join("BARRIER_REPORT.json");
+    fs::write(&report_path, serde_json::to_string_pretty(&barrier_report)?)
+        .with_context(|| format!("write BARRIER_REPORT: {}", report_path.display()))?;
+
+    sync_workspace_files(&ws_root, &updated)?;
+
+    append_ledger_event(&ws_root, "barrier.escalated", json!({
+        "barrier_id": barrier_id,
+        "problem": problem,
+        "loop_id": loop_id,
+        "run_id": run_id,
+        "action_id": action_id,
+        "consecutive_failures": consecutive_failures,
+    }))?;
+
+    // Output barrier report JSON to stdout for loop runner
+    println!("{}", serde_json::to_string_pretty(&barrier_report)?);
+    eprintln!("BARRIER_REPORT: {}", report_path.display());
+    Ok(())
+}
+
 fn cmd_set_novelty_gate(
     workspace: &Path,
     status: &GateStatusArg,
@@ -895,6 +989,21 @@ fn main() -> Result<()> {
             &reason,
             next_step,
             activate_hypothesis,
+        )?,
+        Commands::Barrier {
+            workspace,
+            problem,
+            loop_id,
+            run_id,
+            action_id,
+            consecutive_failures,
+        } => cmd_barrier(
+            &workspace.unwrap_or_else(|| PathBuf::from(".")),
+            &problem,
+            loop_id.as_deref(),
+            run_id.as_deref(),
+            action_id.as_deref(),
+            consecutive_failures,
         )?,
         Commands::SetNoveltyGate {
             workspace,

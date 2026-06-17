@@ -238,6 +238,27 @@ pub(crate) enum Commands {
         #[arg(long = "claim")]
         claims: Vec<String>,
     },
+    /// Loop barrier escalation: init workspace → research → BARRIER_REPORT.json
+    Barrier {
+        /// The hard barrier problem description (from loop runner or manual)
+        #[arg(long)]
+        problem: String,
+        /// Optional workspace dir (created if not exists)
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        /// Loop ID context (from loop runner)
+        #[arg(long = "loop-id")]
+        loop_id: Option<String>,
+        /// Run ID context (from loop runner)
+        #[arg(long = "run-id")]
+        run_id: Option<String>,
+        /// Action ID context (from loop runner)
+        #[arg(long = "action-id")]
+        action_id: Option<String>,
+        /// Consecutive failure count (from loop runner)
+        #[arg(long = "consecutive-failures", default_value_t = 0)]
+        consecutive_failures: u32,
+    },
 }
 
 #[derive(Clone, ValueEnum)]

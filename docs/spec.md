@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-18"
+last_verified: "2026-06-19"
 version: "unified-v7"
 ---
 
@@ -92,17 +92,24 @@ core-policy (~4K LOC)             ← Hook 策略/review gate/注册表
 ├── 含 186 条正则规则
 └── 96 tests
 
-tools/codegraph-rs (~2.5K LOC)    ← 代码图谱（FTS5 + tree-sitter，位于 tools/）
+core/loop-engine (~2.4K LOC)     ← 循环调度引擎（9 模块，v8 loop-auto）
+├── runner.rs / dispatcher.rs    ← 主循环 + opencode 子进程
+├── state.rs / safety.rs         ← LOOP_RUN_STATE 持久化 + L1/L2/L3 安全门控
+├── kill_switch.rs / closeout.rs ← .loop-active 锁 + 验证聚合
+├── report.rs                    ← LOOP_REPORT.md 渲染
+└── 44 tests
+
+tools/codegraph-rs (~4.1K LOC)    ← 代码图谱（FTS5 + tree-sitter，位于 tools/）
 ├── parser/{rust,typescript,python,go}
 ├── db/{schema,node_ops,edge_ops,fts_ops}
-└── 56 tests
+└── 74 tests
 
-tools/evolution-rs (~1.8K LOC)    ← 技能进化审计（位于 tools/）
-└── 28 tests
+tools/evolution-rs (~2K LOC)      ← 技能进化审计（位于 tools/）
+└── 53 tests
 
-tools/autoresearch-rs (~5.4K LOC) ← 研究工作区控制平面（位于 tools/）
-├── 单文件 main.rs（待拆分）
-└── 127 tests
+tools/autoresearch-rs (~5K LOC)   ← 研究工作区控制平面（位于 tools/）
+├── 模块化架构（state/search/text/provenance）
+└── 164 tests
 
 browser-mcp (~4.8K LOC)           ← 浏览器 MCP
 ├── session_launch/list/inspect/terminate MCP tools
@@ -180,6 +187,8 @@ router-rs → runtime-core → host-projection → core-state
 | [spec-security-lifecycle.md](spec-security-lifecycle.md) | §11 安全守卫 + §12 Closeout 与生命周期 |
 | [spec-auxiliary.md](spec-auxiliary.md) | §14 辅助模块 |
 | [spec-observability-testing.md](spec-observability-testing.md) | §15 可观测性 + §16 存储压缩 + §17 测试契约 + §18 Schema 索引 |
+| [spec-research-harness.md](spec-research-harness.md) | §19 科研 Harness 系统 |
+| [spec-loop-architecture.md](spec-loop-architecture.md) | Loop Architecture（v8，loop-auto 调度引擎） |
 
 ---
 

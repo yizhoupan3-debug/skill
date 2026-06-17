@@ -12,7 +12,7 @@ routing_gate: none
 routing_priority: P2
 session_start: preferred
 user-invocable: false
-disable-model-invocation: true
+disable-model-invocation: false
 short_description: Research discovery, literature survey, and theory-background router
 trigger_hints:
   - 调研方向
@@ -39,6 +39,26 @@ trigger_hints:
   - related work
   - knowledge gap
   - closest work
+  # 日常用语扩展
+  - 查论文
+  - 找文献
+  - 有哪些论文
+  - 这个方向
+  - 学术调研
+  - 学术搜索
+  - 最新进展
+  - paper search
+  - literature
+  - state of the art
+  # barrier 信号扩展（loop escalation 入口）
+  - 突破不了
+  - 硬指标
+  - 无法突破
+  - 瓶颈
+  - 卡住了
+  - roadblock
+  - stuck
+  - 这个方向走不通
 trigger_hints_long: references/trigger-hints-long.md
 metadata:
   version: "1.0.0"

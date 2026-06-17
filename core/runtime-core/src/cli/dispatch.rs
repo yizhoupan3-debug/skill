@@ -1,7 +1,10 @@
 //! 子命令薄分发壳：解析后的 `RouterCommand` → `cli::router_command_dispatch`。
 
 use super::args::*;
-use super::common::{manifest_fallback_path, print_json_value, route_task_with_manifest_fallback};
+use crate::framework_runtime::print_json_value;
+use crate::framework_runtime::route_manifest_fallback::{
+    manifest_fallback_path, route_task_with_manifest_fallback,
+};
 #[cfg(feature = "codegraph")]
 use super::router_command_dispatch::dispatch_codegraph_command;
 use super::router_command_dispatch::{

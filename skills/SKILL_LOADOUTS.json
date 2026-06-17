@@ -8,11 +8,12 @@
       "hot_first_turn_owners_from_policy": true
     },
     "research_loadout": {
-      "description": "Explicit opt-in research harness: non-manuscript + manuscript + citation + stats + repro + deep research.",
-      "tier_activation": "explicit_opt_in",
+      "description": "Default research harness: discovery + execution + workspace + manuscript + citation + stats + repro + deep research.",
+      "tier_activation": "default",
       "skill_slugs": [
         "research-discovery",
         "research-execution",
+        "autoresearch",
         "paper-workbench",
         "citation-management",
         "statistical-analysis",

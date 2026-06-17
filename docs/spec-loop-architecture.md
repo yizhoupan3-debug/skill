@@ -1,18 +1,20 @@
 ---
 parent: docs/spec.md
 version: loop-architecture-v3.1
-status: implementing
+status: implemented
 x-do-not-delete: |
   ╔══════════════════════════════════════════════════════════════╗
-  ║  本文件为设计规约，代码尚未实现。                            ║
-  ║  DO NOT DELETE — 另一 agent 处理技术债，此 spec 是唯一设计  ║
-  ║  文档。实施前必须读此文件。                                  ║
+  ║  本文件为 Loop Architecture 的**实现规约**。                   ║
+  ║  core/loop-engine/ 已实现（~2420 LOC, 9 modules），          ║
+  ║  LOOP_REGISTRY.json 已创建。                                 ║
+  ║  与科研 Harness 的桥接见 docs/spec-research-harness.md §19.9。║
   ╚══════════════════════════════════════════════════════════════╝
 ---
 
-> **⚠️ 本文件是设计规约，代码尚未实现。** 另一条 agent 线程处理技术债，
-> 本 spec 是唯一的设计锚点。禁止删除。实施前必须读此文件并更新
-> `status` → `implementing`。
+> **✅ loop-engine crate 已实现**：`core/loop-engine/` ~2420 LOC，9 模块。
+> LOOP_REGISTRY.json 已创建（`configs/framework/LOOP_REGISTRY.json`）。
+> `router-rs loop <subcommand>` CLI 入口见 §4.6。
+> 与科研 Harness 的桥接（research-aware loop）见 `docs/spec-research-harness.md` §19.9。
 
 # Loop Architecture — Framework v8 重构规约
 
@@ -167,16 +169,64 @@ passthrough 逻辑。closeout enforcement 的"强制"不存在于宿主 hook 中
 └──────────────────────────────────────────────────────────┘
 ```
 
-### 3.2 Crate 拓扑
+### 3.2 Crate 拓扑（已实现）
 
 ```
-core/loop-engine/ (~2500 LOC, NEW)           ← 循环调度引擎
-├── runner.rs                               ← 主运行循环 + phase 状态机
-├── dispatcher.rs                           ← opencode CLI 直接调用
-│                                             v8.0 硬编码单宿主
-│                                             v8.1 抽象为 SubagentExecutor trait
-├── state.rs                                ← LOOP_RUN_STATE 读/写/同步
-├── safety.rs                               ← scope-based L1/L2/L3 门控
+core/loop-engine/ (~2420 LOC, 9 modules)   ← 已实现并编译
+├── runner.rs                               ← 主运行循环 + phase 状态机（495 LOC）
+│   ├── preflight_profile_check()           ← profile 校验（interactive/my-light 拒绝调度）
+│   ├── run_loop()                          ← 入口：acquire lock → run_loop_inner → release
+│   └── run_loop_inner()                    ← Discovering → Preflight → Dispatching → Running → Verifying
+├── types.rs                                ← 全部核心类型定义（485 LOC）
+│   ├── LoopPhase enum                      ← Pending/Discovering/Preflight/Dispatching/Running/Verifying/Completed/Escalated/Interrupted
+│   ├── SafetyLevel enum                    ← L1ReportOnly/L2AssistedFix/L3Unattended
+│   ├── LoopProfileConfig                   ← 从 RUNTIME_REGISTRY.json 加载
+│   ├── LoopRegistryEntry / LoopRegistryRoot ← LOOP_REGISTRY.json 反序列化
+│   ├── LoopAction / LoopActionRecord
+│   ├── LoopCloseoutAggregate / AggregateActionEntry
+│   └── LoopRunState / CurrentRun / DiscoveryResult / CircuitBreaker
+├── state.rs                                ← 状态持久化（208 LOC）
+│   ├── read_loop_state / write_loop_state  ← 原子写入 LOOP_RUN_STATE.json
+│   ├── create_initial_state / start_new_run / finish_run
+│   ├── transition_phase / update_heartbeat
+│   └── loop_state_path / lock_path / kill_signal_path / closeout_path
+├── safety.rs                               ← scope-based safety 分配（212 LOC）
+│   ├── parse_safety_level / assign_safety_for_file / assign_safety_for_action
+│   ├── resolve_conflict
+│   └── path_matches（支持 **/ 和 * 通配符）
+├── kill_switch.rs                          ← 锁 + kill 信号（206 LOC）
+│   ├── acquire_lock / release_lock / read_lock_info
+│   ├── write_kill_signal / clear_kill_signal / is_kill_signal_active
+│   └── LoopLock / LockInfo types
+├── dispatcher.rs                           ← action 执行（229 LOC）
+│   ├── build_handoff                       ← 模板渲染
+│   ├── resolve_subagent_binary             ← ROUTER_RS_SUBAGENT_BIN / which opencode
+│   ├── run_action_sync / run_action_dry_run
+│   └── check_scope_compliance              ← git diff 越界检测
+├── closeout.rs                             ← 验证门控（364 LOC）
+│   ├── verify_closeout_value / verify_closeout_with_evidence
+│   ├── verify_evidence_index / read_action_record
+│   └── build_aggregate
+├── report.rs                               ← 报告渲染（195 LOC）
+│   ├── render_loop_report / write_loop_report
+│   └── render_action_section
+└── lib.rs                                  ← pub 导出全部 API（26 LOC）
+```
+
+**依赖关系**：
+
+```
+router-rs → runtime-core → core/loop-engine
+                            └── 无外部依赖（仅 serde, chrono, std）
+                            └── 不依赖 host-projection（无 MCP tool 注册）
+                            └── 不依赖 core-state（LoopActionRecord 自包含）
+```
+
+**未实现的 v8 设计项**（标记 deferred）：
+- `loop-supervised` profile（v8.1+）
+- OTel 映射与核心指标计数器（v8+）
+- 多机器锁（v8.1+）
+- `loop report` 子命令的 `--json` 与 `--html` 格式输出
 │                                            + scope 冲突仲裁
 │                                            + git diff 越界检测（仅报告）
 ├── kill_switch.rs                          ← 紧急停止（poll loop，无独立线程）
@@ -233,30 +283,32 @@ router-rs → runtime-core → core/loop-engine → framework-runtime
 分配阶段的 bug，不是锁来掩盖的问题。action 间偶发的 git 冲突成本
 （需手动解决）远低于一个 SQLite TTL 锁系统的维护成本。
 
-### 3.5 Subagent 执行：v8.0 硬编码 opencode CLI
+### 3.5 Subagent 执行（已实现，`core/loop-engine/src/dispatcher.rs`）
 
-v8.0 不对 SubagentSpawner 做 trait 抽象。单宿主硬编码：
+v8.0 硬编码 opencode CLI（`resolve_subagent_binary`）：
 
 ```rust
-// core/loop-engine/src/dispatcher.rs
+// core/loop-engine/src/dispatcher.rs — 实际代码
 
-fn run_action(action: &LoopAction) -> Result<SubagentResult> {
-    let handoff = build_handoff(action);
+pub fn resolve_subagent_binary() -> Result<String, LoopError> {
+    // 1. ROUTER_RS_SUBAGENT_BIN 环境变量
+    // 2. which opencode
+}
 
-    let mut child = Command::new("opencode")
-        .args(["-p", &handoff])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| SpawnerError::BinaryNotFound {
-            binary: "opencode".into(),
-            detail: format!("{e}. Ensure opencode CLI is installed and in PATH."),
-        })?;
+pub fn run_action_sync(repo_root, loop_id, run_id, action, timeout) -> Result<SubagentResult> {
+    let handoff = build_handoff(action, loop_id, run_id);
+    let child = Command::new(binary).args(["-p", &handoff])...;
+    // 同步等待，5s 轮询 kill 信号
+    // timeout 后 child.kill()
+}
 
-    // 同步等待，5s 间隔轮询 kill 信号
-    let timeout = Duration::from_secs(600);
-    let deadline = Instant::now() + timeout;
-    let status = loop {
+pub fn check_scope_compliance(repo_root, action) -> Vec<String> {
+    // git diff --name-only --diff-filter=ACMR
+    // 过滤 scope_paths 外的文件
+}
+```
+
+**越界检测只报告不做恢复**（已实现）：发现越界后记录到 SubagentResult，不 `git reset --hard`。
         match child.wait_timeout(Duration::from_secs(5))? {
             Some(status) => break status,
             None => {
@@ -403,34 +455,61 @@ fn run_action(action: &LoopAction) -> Result<SubagentResult> {
 **去重**：每个 finding 携带 `finding_hash`（SHA256），Runner 在聚合时跳过
 已出现的 hash，避免同一 finding 每轮重复报告。去重缓存存活期为一次运行周期。
 
-### 4.3 执行模型
+### 4.3 执行模型（已实现 — `runner.rs:run_loop()`）
 
 ```
-Loop Runner（每次 cron 触发后完整运行退出的单次模式）
+Loop Runner（router-rs loop run / 直接调用 run_loop）
 
-  1. router-rs loop run --loop-id daily-triage --dry-run
-     → DISCOVERING → PREFLIGHT → 输出报告
+  1. preflight_profile_check(entry)
+     → 拒绝 interactive/my-light 调度
+     → 加载 LoopProfileConfig
 
-  2. router-rs loop run --loop-id daily-triage
-     → PENDING: 写入 .loop-active
-     → DISCOVERING: spawn opencode discovery subagent
-     → PREFLIGHT: profile 校验、scope 分配
-     → DISPATCHING:
-        每个 L2/L3 action → opencode CLI 同步调用
-        每个 L1 action → skipped + report
+  2. run_loop(ctx: RunContext)
+     → PENDING: acquire_lock (.loop-active 原子创建)
+     → DISCOVERING: discover_actions(entry, repo_root)
+        生成 Vec<LoopAction>（含 scope_paths + safety 级别）
+     → PREFLIGHT: assign_safety_levels + check_budget_preflight
+     → DISPATCHING: 遍历 action 列表
+        每个 L2/L3 action → run_action_sync(opencode CLI, 超时, kill 轮询)
+        每个 L1 action → AggregateActionResult::Skipped
+     → RUNNING: 过渡阶段
      → VERIFYING:
-        检查每个 action 的 closeout record
-        聚合判定 → LoopCloseoutAggregate
-     → COMPLETED/ESCALATED/INTERRUPTED:
-        渲染 LOOP_REPORT.md
-        删除 .loop-active
+        read_action_record → verify_closeout_with_evidence → build_aggregate
+        断路器逻辑：consecutive_failures ≥ 3 → 暂停
+     → COMPLETED/ESCALATED:
+        render_loop_report → write_loop_report
+        release_lock (.loop-active 删除)
 
-  3. router-rs loop status --loop-id daily-triage
-     → 当前 phase + 最近 N 次运行
+  3. router-rs loop status --loop-id <id>    [见 §4.6]
+     → 读取 LOOP_RUN_STATE.json
 
-  4. router-rs loop kill --loop-id daily-triage
-     → 写入 kill 信号文件 → 下次 poll 循环检测后终止
+  4. router-rs loop kill --loop-id <id>      [见 §4.6]
+     → write_kill_signal → 下次 poll 检测后终止
 ```
+
+### 4.6 router-rs CLI 接入点
+
+`router-rs` 的 `loop` 子命令组（注册在 `core/router-rs/src/`）：
+
+```
+router-rs loop run --loop-id <id> [--dry-run] [--timeout <secs>]
+    → 调用 core/loop-engine::runner::run_loop()
+
+router-rs loop status --loop-id <id>
+    → 读取并展示 LOOP_RUN_STATE.json
+
+router-rs loop kill --loop-id <id>
+    → write_kill_signal
+    → 触发下次 poll 中断
+
+router-rs loop list
+    → 列出 LOOP_REGISTRY.json + 每个 loop 的当前状态
+```
+
+**CLI 输入的必经校验**：
+1. `loop_id` 必须非空，匹配 `^[a-z0-9_-]+$`
+2. `--timeout` 取值范围 [30, 3600] 秒
+3. `--dry-run` 时跳过 acquire_lock
 
 ### 4.4 DISPATCHING Handoff 模板
 
@@ -793,6 +872,45 @@ loop:
 | loop-post-merge-cleanup | 1d | L2 | 清理 TODO/FIXME |
 | loop-issue-triage | 2h-1d | L1 | 分类 + 分配建议 |
 | loop-stale-cleanup | 1w | L1 | 过期分支报告 |
+| **loop-research-barrier** | **按需（on escalation）** | **L2** | **barrier report + candidate list（§19.9.1, spec-research-harness.md）** |
+| **loop-hypothesis-test** | **按配置** | **L2** | **hypothesis verification result（§19.9.1, spec-research-harness.md）** |
+| **loop-literature-watch** | **1w** | **L1** | **new papers digest（§19.9.1, spec-research-harness.md）** |
+| **loop-claim-refresh** | **1w-2w** | **L1** | **drift detection report（§19.9.1, spec-research-harness.md）** |
+
+**research-aware loop 详细契约**（与 `docs/spec-research-harness.md` §19.9 共享真源）：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `research_enabled` | bool | 是否启用 barrier → research escalation |
+| `research.barrier_threshold` | u64 | 连续失败 N 次后触发 |
+| `research.escalation_target` | string | 固定为 "autoresearch" |
+| `research.max_research_time_min` | u64 | 研究阶段最长耗时 |
+| `research.auto_resume` | bool | 研究产出候选后是否自动恢复循环 |
+| `research.require_human_approval` | bool | 是否需要在候选方案上人工确认 |
+
+**LOOP_REGISTRY.json 扩展示例**：
+
+```json
+{
+  "loop_id": "my-experiment",
+  "profile": "loop-auto",
+  "research_enabled": true,
+  "research": {
+    "barrier_threshold": 3,
+    "escalation_target": "autoresearch",
+    "max_research_time_min": 30,
+    "auto_resume": true,
+    "require_human_approval": false
+  },
+  "trigger": {
+    "type": "manual"
+  },
+  "scope_based_safety": {
+    "src/**/*.rs": "L2-assisted-fix"
+  },
+  "default_safety": "L1"
+}
+```
 
 ---
 
@@ -857,27 +975,27 @@ Branch（L2）：`loop/<loop-id>/<run-id>/<action-id>`。
 
 ## 12. 迁移路径
 
-### v8.0（当前阶段）
+### ✅ v8.0（已完成）
 
-- 新增 `core/loop-engine/` crate（空壳 + 类型 + 测试框架）
-- 保留 `my-light` 为 deprecated 别名（不删除）
+- 新增 `core/loop-engine/` crate（~2420 LOC, 9 模块，全部已实现）
+- `my-light` 保留为 deprecated 别名（不删除）
 - 新增 `interactive` + `loop-auto` profile
 - `RUNTIME_REGISTRY.json` 新增 `lifecycle_profiles` 条目
 - 各宿主 hook `"my-light"` → `is_interactive_profile()` 封装
 - Loop Runner 拒绝 interactive 调度
-- **无功能变更，只做更名和新增 schema**
+- `LOOP_REGISTRY.json` 已创建
 
-### v8.1
+### ✅ v8.1（已完成）
 
-- 实现全部调度状态机
-- runner.rs + dispatcher.rs（硬编码 opencode CLI）
-- `.loop-active` 锁 + kill switch poll loop
-- LoopActionRecord + closeout 聚合
-- `router-rs loop` CLI 子命令
-- opencode CLI 启动时 `.loop-active` 检测 → 只读模式
-- 越界 git diff 检测 + LOOP_REPORT.md 渲染
+- 全部调度状态机已实现（runner.rs: run_loop / run_loop_inner）
+- dispatcher.rs：build_handoff + run_action_sync（硬编码 opencode CLI）
+- state.rs：原子写入 LOOP_RUN_STATE.json
+- safety.rs：scope-based L1/L2/L3 分配 + glob 路径匹配
+- kill_switch.rs：`.loop-active` 锁 + kill signal poll loop
+- closeout.rs：LoopActionRecord + verify_closeout_with_evidence + build_aggregate
+- report.rs：LOOP_REPORT.md 渲染与写入
 
-### v8.2
+### v8.2（待实现）
 
 - skills/ 开箱 loop 模式
 - SubagentExecutor trait + 多宿主
@@ -900,7 +1018,20 @@ Branch（L2）：`loop/<loop-id>/<run-id>/<action-id>`。
 
 ---
 
-## 14. 未解决的问题
+## 14. 未解决的问题 & 已解决的问题
+
+### ✅ 已解决
+
+| 问题 | 解决方案 | 位置 |
+|------|---------|------|
+| runner.rs + dispatcher.rs（opencode 集成） | 已实现 | `core/loop-engine/src/runner.rs`, `dispatcher.rs` |
+| `.loop-active` 锁 + kill switch poll loop | 已实现 | `core/loop-engine/src/kill_switch.rs` |
+| LoopActionRecord + closeout 聚合 | 已实现 | `core/loop-engine/src/closeout.rs`, `types.rs` |
+| 越界 git diff 检测 + LOOP_REPORT.md 渲染 | 已实现 | `core/loop-engine/src/dispatcher.rs` (`check_scope_compliance`), `report.rs` |
+| 断路器（连续 N 次失败暂停） | 已实现 | `core/loop-engine/src/runner.rs` (`consecutive_failures ≥ 3`) |
+| Research-aware loop 模式（barrier escalation） | 已设计 | `docs/spec-research-harness.md` §19.9 |
+
+### 待解决
 
 1. **多机器协调**：`.loop-active` 仅单机。跨 NFS 场景未实现。
 2. **跨 Repo 循环**：每个 repo 独立 cron job。无统一调度器。
@@ -913,7 +1044,6 @@ Branch（L2）：`loop/<loop-id>/<run-id>/<action-id>`。
 
 ---
 
-*本规约是 `docs/spec.md` 的 §17 延伸。实施前须更新 `spec.md` 的目录和
-extends 表。*
+*本规约是 `docs/spec.md` 的延伸文档。科研 Harness 桥接见 `docs/spec-research-harness.md` §19.9。*
 
 *复杂度分析见 `docs/spec-loop-complexity-tradeoff.md`。*

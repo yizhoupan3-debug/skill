@@ -12,7 +12,7 @@ routing_gate: none
 routing_priority: P2
 session_start: preferred
 user-invocable: false
-disable-model-invocation: true
+disable-model-invocation: false
 short_description: Research execution lanes — experiment design, math, code, reproducibility
 trigger_hints:
   - 实验设计

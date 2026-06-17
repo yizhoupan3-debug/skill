@@ -7,8 +7,11 @@ pub mod router_command_dispatch;
 pub mod runtime_ops;
 
 pub use common::{
-    configure_compute_parallelism, env_usize, manifest_fallback_path,
-    resolve_runtime_declared_manifest_fallback, route_task_with_manifest_fallback,
+    configure_compute_parallelism, env_usize,
+};
+pub use crate::framework_runtime::route_manifest_fallback::{
+    manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
+    route_task_with_manifest_fallback,
 };
 pub use runtime_ops::dispatch_stdio_json_request_payload;
 
