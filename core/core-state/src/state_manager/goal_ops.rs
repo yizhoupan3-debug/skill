@@ -5,6 +5,7 @@ use crate::utils::atomic_write::write_atomic_json;
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
+use tracing::warn;
 
 use super::pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, sync_task_pointers_after_goal_drive,
@@ -545,7 +546,9 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             // Auto-delete GOAL_STATE.json after successful completion (session-scoped goal)
             let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
             if goal_path.is_file() {
-                let _ = fs::remove_file(&goal_path);
+                if let Err(e) = fs::remove_file(&goal_path) {
+                    warn!("failed to remove completed GOAL_STATE.json: {e}");
+                }
             }
             Ok(out)
         }

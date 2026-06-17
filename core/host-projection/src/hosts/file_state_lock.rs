@@ -58,11 +58,21 @@ impl HookStateConfig {
     pub fn save_state<T: serde::Serialize>(&self, repo_root: &Path, state: &T) {
         let path = self.state_path(repo_root);
         if let Some(parent) = path.parent() {
-            let _ = fs::create_dir_all(parent);
+            if let Err(e) = fs::create_dir_all(parent) {
+                tracing::warn!(host = %self.host_id, "failed to create hook state dir: {e}");
+                return;
+            }
         }
-        if let Ok(json) = serde_json::to_string_pretty(state) {
-            if write_atomic_text(&path, &json).is_ok() {
-                debug!(host = %self.host_id, "hook state saved");
+        match serde_json::to_string_pretty(state) {
+            Ok(json) => {
+                if let Err(e) = write_atomic_text(&path, &json) {
+                    tracing::warn!(host = %self.host_id, "failed to save hook state: {e}");
+                } else {
+                    debug!(host = %self.host_id, "hook state saved");
+                }
+            }
+            Err(e) => {
+                tracing::warn!(host = %self.host_id, "failed to serialize hook state: {e}");
             }
         }
     }
@@ -129,6 +139,9 @@ fn acquire_file_lock(lock_path: &Path) -> Result<FileStateLockGuard, String> {
     // Try flock with retries
     let mut retries = 10;
     loop {
+        // SAFETY: libc::flock operates on a valid file descriptor from OpenOptions.
+        // LOCK_EX | LOCK_NB is a well-defined POSIX operation on regular files.
+        // The fd is valid for the duration of this scope (file is not closed until drop).
         let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
         if result == 0 {
             break;
