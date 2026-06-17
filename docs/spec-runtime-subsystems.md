@@ -62,7 +62,7 @@ version: unified-v7
 
 **功能**：框架 Profile 编译、artifact 打包和控制平面契约描述符。
 
-- `FrameworkProfileContract` — profile_id/capabilities/mcp_servers 等 20+ 字段
+- `FrameworkProfileContract` — profile_id/capabilities/mcp_servers 等 20 个字段
 - `ProfileBundle` + `CapabilityBundle`
 - 控制平面：`build_control_plane_contract_descriptors()`
 
@@ -74,7 +74,7 @@ version: unified-v7
 
 **功能**：跨宿主 hook 共享逻辑（路径守卫、证据追加、信号检测、lane 归一化）。
 
-- 28 个 pub fn
+- 33 个 pub fn
 - 子模块：`path_guard.rs`, `evidence.rs`, `lane_normalize.rs`, `hook_observation_rules.rs`
 
 ### 10.2 hook_policy/ — Hook 策略
@@ -90,16 +90,16 @@ version: unified-v7
 
 ### 10.3 review/ — Review 引擎
 
-**功能**：Review gate 执行、异构对抗审稿路由、输出格式 lint。
+**功能**：Review gate 执行、输出格式 lint、路由信号。
+
+真源：`core/core-policy/src/`
 
 | 子模块 | 功能 |
 |--------|------|
-| `engine.rs` | Review gate 核心（Strict/Lite 模式） |
-| `heterogeneous.rs` | 异构对抗审稿（ModelFamily 检测 + 跨族验证） |
-| `output_lint.rs` | Review 输出格式 lint |
-| `routing_signals.rs` | Review 路由信号 |
-
-**ModelFamily**: Claude/Gpt/Gemini/Llama/Mistral/Deepseek
+| `review_gate_engine.rs` | Review gate 核心（Strict/Lite 模式） |
+| `review_output_lint.rs` | Review 输出格式 lint |
+| `review_routing_signals.rs` | Review 路由信号 |
+| `review_context_signals.rs` | Review 上下文信号采集 |
 
 ---
 
@@ -136,7 +136,8 @@ version: unified-v7
 **功能**：通用 sync engine + Codex provider。
 
 - `full_sync`（root）vs `partial_sync`（worktree）
-- `HostProjectionAdapter` — 薄 adapter 表
+- `HostProjectionAdapter` — 投影适配表（位于 `host_integration/projection/mod.rs`）
+- `HostProjectionOps` trait — 安装/状态/移除操作（位于 `host_integration/projection/projection_ops_trait.rs`）
 
 ### 13.5 host_integration/ — 安装/投影
 

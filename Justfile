@@ -44,7 +44,8 @@ coverage:
     cargo llvm-cov --workspace --lcov --output-path lcov.info
 
 memory-profile:
-    bash scripts/bench-memory.sh
+    @echo "TODO: implement bench-memory.sh — memory profiling not yet available" >&2
+    exit 1
 
 audit:
     cargo deny --manifest-path core/router-rs/Cargo.toml check
@@ -87,4 +88,4 @@ clean:
     cargo clean --manifest-path core/router-rs/Cargo.toml
     rm -rf target target-router-rs-subagent
 
-ci: validate-skills test-all
+ci: validate-skills test-all test-workspace

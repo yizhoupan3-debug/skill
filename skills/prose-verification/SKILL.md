@@ -2,7 +2,7 @@
 name: prose-verification
 description: |
   无状态内部 skill：验证论文/申请书文稿的术语一致性、风格合规、claim drift、
-  语言注册和 hedging 适度性。由 paper-workbench、grant-workbench 内联调用。
+  语言注册和 hedging 适度性。  由 paper-workbench 内联调用。
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
@@ -35,6 +35,20 @@ trigger_hints:
 - 需要检测 claim 是否在文稿传播中发生漂移
 - 需要验证语言注册（formal / technical / accessible）是否匹配目标受众
 - 需要检查 hedging 用语是否适度
+
+## Do not use
+
+- 论文结构、LaTeX 编译、格式检查 → 使用 `$structure-verification`
+- 文献引用可靠性验证 → 使用 `$literature-verification`
+- 统计结果审计 → 使用 `$statistical-verification`
+
+## Hard constraints
+
+- 术语不一致（同一概念使用不同名称）为 FAIL——读者混淆风险
+- Claim drift 检测到语义偏差为 P0 blocker——论文声称必须与 claim ledger 一致
+- 过度断言（"proven"、"definitively" 在非证明性论文中）为 FAIL，必须降级为 hedged 表述
+- 语言注册不匹配为 WARN，但若跨注册混用（同一段落 formal + accessible 混杂）为 FAIL
+- hedging 检查仅做格式检测（关键词匹配），不做语义判断——需声明此局限性
 
 ## Input / Output
 
@@ -69,6 +83,5 @@ trigger_hints:
 前门 skill 在以下时机内联调用本 skill：
 
 - **paper-workbench**：初稿完成后、投稿前的文稿质量门禁
-- **grant-workbench**：申请书定稿前的文风检查
 
 调用方式：按验证清单逐项执行，FAIL 项回写前门 skill 供 writer lane 修正。

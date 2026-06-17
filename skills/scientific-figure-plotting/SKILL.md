@@ -65,6 +65,14 @@ produce reproducible scripts, not one-off screenshots.
 - Export publication assets with explicit size, DPI, and vector/raster choice.
 - Do not imply statistical significance without validated test outputs.
 
+## Hard constraints
+
+- 出版级图表最低 DPI 为 300（print）或 150（screen），不得低于此值
+- 每张图必须可独立理解——不依赖正文才能解读坐标轴和图例
+- 统计显著性标注必须附带检验方法和 p 值来源，不得仅标星号无依据
+- 颜色方案必须通过色盲友好检查（deuteranopia/protanopia），不得仅用红绿区分
+- 导出路径必须是确定性的（非临时文件），脚本可重复生成同一输出
+
 ## Workflow
 
 1. Identify claim, variables, audience, journal/context, and output format.

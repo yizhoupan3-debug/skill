@@ -79,7 +79,9 @@ version: unified-v7
 |--------|------|----------|
 | `runtime-sandbox-contract-v1` | §4 | 沙箱生命周期 |
 | `multi-agent-orchestration-contract-v1` | §5 | 编排单元 |
-| `framework-runtime-registry-v1` | §6 | 注册表 |
+| `framework-runtime-registry-v2` | §6 | 注册表 |
+| `skill-routing-runtime-v3` | routing | 路由运行时 |
+| `skill-manifest-v2` | routing | Skill manifest |
 | `router-rs-route-decision-v1` | §8 | 路由决策 |
 | `router-rs-execute-response-v1` | §9 | 执行响应 |
 | `router-rs-hook-policy-v1` | §10 | Hook 策略 |
@@ -90,5 +92,9 @@ version: unified-v7
 | `router-rs-rfv-loop-v1` | §12 | RFV 循环 |
 | `router-rs-hook-observation-v1` | §14 | Hook 观测 |
 | `schema-drift-baseline-v1` | §14 | Schema 漂移 |
+| `loop-registry-v1` | loop | 循环注册表 |
+| `loop-run-state-v1` | loop | 循环运行状态 |
+| `nl-route-adjustments-v1` | routing | NL 路由调整 |
+| `closeout-record-v1` | §12 | Closeout 记录 |
 
 ---

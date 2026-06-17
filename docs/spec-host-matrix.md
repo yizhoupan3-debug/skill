@@ -9,30 +9,31 @@ version: unified-v7
 
 ### 6.1 宿主闭集
 
-权威真源：`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`（四 id 闭集）。
+权威真源：`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`（五 id 闭集）。
 
 | 宿主 ID | install_tool | 运输模式 |
 |---------|-------------|---------|
 | `claude-code` | `claude` | `anthropic-claude-code` |
 | `cursor` | `cursor` | `cursor-agent` |
 | `codex` | `codex` | `native-codex` |
-| `opencode` | `opencode` | `opencode-plugin` |
+| `opencode` | `opencode` | `native-opencode` |
+| `mimo` | `mimo` | `native-mimo` |
 
 > **退役 id** 不在闭集内；迁移指引见 [`MIGRATION.md`](../MIGRATION.md)。
 
 ### 6.2 Hook 事件矩阵
 
-| 事件 | claude-code | cursor | codex | opencode |
-|------|:-----------:|:------:|:-----:|:--------:|
-| PreToolUse | ✅ core | — | ✅ | ✅ ⁴ |
-| UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | ✅ ⁴ |
-| PostToolUse | ✅ core | ✅ | ✅ | ✅ ⁴ |
-| Stop | ✅ core | ✅ | ✅ | ✅ ⁴ |
-| SessionStart | optional | ✅ | ✅ | ✅ ⁴ |
-| SubagentStart | optional | ✅ | ✅ ² | ✅ ⁴ |
-| SubagentStop | optional | ✅ | ✅ ² | ✅ ⁴ |
+| 事件 | claude-code | cursor | codex | opencode | mimo |
+|------|:-----------:|:------:|:-----:|:--------:|:----:|
+| PreToolUse | ✅ core | — | ✅ | ✅ ⁴ | ✅ ⁵ |
+| UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | ✅ ⁴ | ✅ ⁵ |
+| PostToolUse | ✅ core | ✅ | ✅ | ✅ ⁴ | ✅ ⁵ |
+| Stop | ✅ core | ✅ | ✅ | ✅ ⁴ | ✅ ⁵ |
+| SessionStart | optional | ✅ | ✅ | ✅ ⁴ | ✅ ⁵ |
+| SubagentStart | optional | ✅ | ✅ ² | ✅ ⁴ | ✅ ⁵ |
+| SubagentStop | optional | ✅ | ✅ ² | ✅ ⁴ | ✅ ⁵ |
 
-¹ `beforeSubmitPrompt` 映射 · ² v0.133.0+ · ⁴ 通过 `router-rs opencode agent` Rust 统一后端（JS 插件 bridge → `tool.execute.before/after` / `session.idle`）
+¹ `beforeSubmitPrompt` 映射 · ² v0.133.0+ · ⁴ 通过 `router-rs opencode agent` Rust 统一后端（JS 插件 bridge → `tool.execute.before/after` / `session.idle`） · ⁵ MiMo hook 统一后端
 
 ### 6.3 MCP 配置差异
 
@@ -42,6 +43,7 @@ version: unified-v7
 | cursor | `mcpServers` | `stdio` | `~/.cursor/mcp.json` |
 | opencode | `mcp` | `local` | `~/.config/opencode/opencode.json` |
 | codex | `mcp_servers` (TOML) | `stdio` | `~/.codex/config.toml` |
+| mimo | `mcpServers` | `stdio` | `~/.mimo/mcp.json` |
 
 **§14.7 Schema Drift 三道闸**：写盘前 validate → 写盘后 readback → manifest 路径存在性
 
@@ -51,7 +53,7 @@ version: unified-v7
 |------|------|-------------|-------------------|---------------------|
 | **S 档** | codex | 11 | codex_driver | 4 项 |
 | **A 档** | claude-code, cursor | 6 | mcp_bridge / unsupported | 4 项 |
-| **B 档** | opencode | 5 | unsupported | 4 项 |
+| **B 档** | opencode, mimo | 5 | unsupported | 4 项 |
 
 ### 6.5 编译嵌入矩阵
 
@@ -61,6 +63,7 @@ version: unified-v7
 | cursor | hooks.json + .mdc | `host_integration/projection` |
 | codex | AGENTS.md + AGENTS_CODEX.md | `policy_embed.rs` |
 | opencode | opencode.json 投影 | `host_integration/projection` |
+| mimo | mimo.json 投影 | `host_integration/projection` |
 
 ---
 
@@ -74,20 +77,41 @@ version: unified-v7
 | 2 | `core/host-projection/src/hosts/<host>_hooks.rs` | 宿主 hook 实现 |
 | 3 | `core/host-projection/src/hosts/<host>_hooks/` | 事件 handler 目录 |
 
-### 7.2 HostHook trait
+### 7.2 Hook Trait 体系
+
+真源：`core/host-projection/src/hosts/hook_dispatch.rs`
 
 ```rust
-pub trait HostHook {
-    fn host_id(&self) -> &str;
-    fn canonical_event(&self, raw: &str) -> Option<String>;
-    fn critical_events(&self) -> &[&str];
-    fn handle_pre_tool_use(&self, ctx: &HookContext) -> HookResult;
-    fn handle_post_tool_use(&self, ctx: &HookContext) -> HookResult;
-    fn handle_stop(&self, ctx: &HookContext) -> HookResult;
-    fn handle_user_prompt_submit(&self, ctx: &HookContext) -> HookResult;
-    fn handle_custom_event(&self, event: &str, ctx: &HookContext) -> Option<HookResult> { None }
+/// 宿主配置参数（host_id、state_dir、session namespace 等）
+pub trait HostHookConfig: Send + Sync {
+    fn host_id(&self) -> &'static str;
+    fn state_dir_leaf(&self) -> &'static str;
+    fn hook_state_unreadable_tag(&self) -> &'static str;
+    fn session_namespace_env(&self) -> &'static str;
+    fn log_label(&self) -> &'static str;
+    fn additional_context_max_bytes(&self) -> usize { 640 }
+    fn supports_session_start(&self) -> bool { false }
+    fn supports_subagent_start(&self) -> bool { false }
+    fn supports_subagent_stop(&self) -> bool { false }
+}
+
+/// 核心 trait：统一 hook 分发（ABC 三类方法）
+pub trait HostHookDispatcher: HostHookConfig {
+    // (C) Must implement:
+    fn handle_pre_tool_use(&self, event: &HookEvent) -> Option<HookOutput>;
+    fn handle_user_prompt_submit(&self, event: &HookEvent) -> Option<HookOutput>;
+    fn handle_post_tool_use(&self, event: &HookEvent) -> Option<HookOutput>;
+    // (B) Shared + extension（有默认实现，宿主可覆盖）:
+    fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> { ... }
+    fn handle_session_start(&self, event: &HookEvent) -> Option<HookOutput> { ... }
+    fn handle_subagent_start/stop(...) { ... }
+    // (A) Pure shared（无需覆盖）:
+    fn canonical_event(&self, raw: &str) -> Option<String> { ... }
+    fn critical_events(&self) -> &[&str] { ... }
 }
 ```
+
+另有 `HostProvider` 复合 trait（`HostLifecycle + HostToolExecutor + HostTelemetry`），位于 `host_provider.rs`。
 
 ### 7.3 接入 Checklist
 
@@ -105,7 +129,7 @@ pub trait HostHook {
 |------|------|------|
 | `framework_maint/mod.rs` | refresh_host_projections 遍历 | → registry 驱动 |
 | `session_supervisor/mod.rs` | Codex driver only | → registry 标记 |
-| `mcp_common/host.rs` | hard_closeout 列表 | → registry 数据驱动 |
+| `cursor_hooks/handlers/stop_closeout.rs` | hard_closeout 列表 | → registry 数据驱动 |
 
 ---
 

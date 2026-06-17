@@ -36,6 +36,20 @@ trigger_hints:
 - 需要检查多重比较是否做了适当校正
 - 需要确认正态性、方差齐性等前提假设
 
+## Do not use
+
+- 选择统计检验方法或设计实验 → 使用 `$statistical-analysis`
+- 数学推导验证 → 使用 `$formal-verification`
+- 纯代码实现 without 统计语境 → 在当前 coding context 直接回答
+
+## Hard constraints
+
+- p 值重算偏差 > 1e-2 必须标记为 FAIL（疑似计算错误），偏差 1e-4 ~ 1e-2 标记为 WARN
+- GRIM test 失败一律为 P0 blocker——均值与 N 不兼容意味着数据报告有误
+- 效应量缺失不自动降级为 FAIL，但必须在报告中显式标注 "效应量未报告"
+- 多重比较 ≥ 3 次未校正为 FAIL，不得以 "探索性分析" 为由豁免
+- 无原始数据时，只能做格式/完整性检查，不能做重算——必须声明覆盖范围受限
+
 ## Input / Output
 
 | 输入 | 输出 |

@@ -37,6 +37,20 @@ trigger_hints:
 - 需要检查数据版本化是否到位
 - 需要验证 checkpoint 可恢复性
 
+## Do not use
+
+- 实验设计、数据收集规划 → 使用 `$research-execution`
+- 统计结果审计 → 使用 `$statistical-verification`
+- 纯代码实现 without 实验语境 → 在当前 coding context 直接回答
+
+## Hard constraints
+
+- 种子未设置或为随机值为 P0 blocker——无法复现的实验不可接受
+- 确定性重跑 hash 不一致为 FAIL，不得以 "浮点精度" 为由自动豁免（需显式证明是浮点问题）
+- lock file 缺失为 FAIL——不可复现的环境依赖是系统性风险
+- checkpoint 恢复失败为 P0 blocker——长流程实验的 checkpoint 是唯一恢复手段
+- 数据版本化缺失为 WARN（非所有项目都需要 DVC/LFS），但必须在报告中显式标注
+
 ## Input / Output
 
 | 输入 | 输出 |

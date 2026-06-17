@@ -9,7 +9,7 @@
         "schedule": "0 */6 * * *",
         "timezone": "UTC"
       },
-      "skill": "loop-daily-triage",
+      "skill": "systematic-debugging",
       "scope_based_safety": {
         "src/**/*.rs": "L2-assisted-fix",
         "*.md": "L3-unattended",

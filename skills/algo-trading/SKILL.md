@@ -82,6 +82,14 @@ This skill does **not** own:
 - Warn about look-ahead bias, survivorship bias, and overfitting.
 - Use out-of-sample or walk-forward validation.
 
+## Hard constraints
+
+- 实盘部署建议必须经过 paper trading 阶段——不得跳过纸上交易直接推荐实盘
+- 回测报告必须包含 fees、slippage、realistic execution assumptions——不得使用理想化假设
+- 过拟合警告必须在回测结果 > 3 个显著策略指标时自动触发
+- 风控规则（最大回撤限制、仓位上限）必须在策略定义中显式声明，不得隐含
+- 数据质量声明：回测数据来源、时间范围、存活偏差处理必须在报告中标注
+
 ## Required workflow
 
 1. Clarify asset class, horizon, capital/risk constraints, and objective.

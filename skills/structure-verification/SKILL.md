@@ -37,6 +37,20 @@ trigger_hints:
 - 需要验证符号定义在各 section 中的一致性
 - 需要确认方程编号连续无跳号
 
+## Do not use
+
+- 文稿语言质量、术语一致性 → 使用 `$prose-verification`
+- 文献引用验证 → 使用 `$literature-verification`
+- 数学推导验证 → 使用 `$formal-verification`
+
+## Hard constraints
+
+- LaTeX 编译失败（exit non-zero）为 P0 blocker——文稿必须可编译
+- 悬空引用（\ref 无对应 \label）为 FAIL，每处必须修复或删除
+- 方程编号跳号为 FAIL——读者无法定位特定方程
+- 符号歧义（同一符号在不同 section 有不同含义）为 FAIL——必须统一或加下标区分
+- Claim-evidence 检查仅在提供了 claim ledger 时执行；无 ledger 时声明跳过此检查
+
 ## Input / Output
 
 | 输入 | 输出 |

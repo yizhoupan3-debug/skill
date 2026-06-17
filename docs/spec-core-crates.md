@@ -7,39 +7,36 @@ version: unified-v7
 
 ### 3.1 B0 core crates — 领域模型（原 framework-core 已拆分）
 
-**功能**：任务状态管理、Goal 驱动、RFV 循环、验证边界、步进账本、数学验证后端。
+**功能**：任务状态管理、Goal 驱动、RFV 循环、步进账本、Goal 预测。
 
 #### 3.1.1 state_manager/
 
 | 子模块 | 功能 | 核心 API |
 |--------|------|----------|
-| **goal_state.rs** | Goal 生命周期（start/checkpoint/pause/resume/complete/block/clear） | `framework_goal_drive()`, `read_goal_state()`, `goal_state_requests_continuation()`, `deactivate_goal_for_conflict_with_rfv()` |
-| **rfv_state.rs** | RFV 状态 + 外部研究验证 | `read_rfv_loop_state()`, `validate_external_research_structured/strict()`, `validate_adversarial_findings_structured()`, `validate_falsification_tests_structured()` |
-| **task_pointers.rs** | active_task.json / focus_task.json 管理 | `read_active_task_id()`, `read_task_pointer_pair()`, `write_active_task_pointer()`, `neutralize_task_pointers_for_task()` |
-| **evidence.rs** | EVIDENCE_INDEX.json + 可信度标注 | `annotate_evidence_row()`, `task_evidence_success_only_self_attested()`, `enrich_falsification_tests_with_execution()` |
-| **verification_boundary.rs** | I8 验证边界 + I6 关键任务检测 | `default_verification_boundary()`, `is_key_task_goal()` |
-| **hook_text_utils.rs** | 防欺骗、段落合并 | `scrub_spoof_host_followup_lines()`, `merge_hook_nudge_paragraph()` |
+| **mod.rs** (goal_state) | Goal 生命周期（start/checkpoint/pause/resume/complete/block/clear） + 证据摘要 | `framework_goal_drive()`, `read_goal_state()`, `goal_state_requests_continuation()`, `task_evidence_success_only_self_attested()` |
+| **rfv_ops.rs** | RFV 状态管理 + 冲突消解 | `read_rfv_loop_state()`, `deactivate_rfv_for_conflict_with_goal_drive()`, `deactivate_goal_for_conflict_with_rfv()` |
+| **pointer_ops.rs** | active_task.json / focus_task.json 管理 | `read_active_task_id()`, `read_task_pointer_pair()`, `write_active_task_pointer()`, `neutralize_task_pointers_for_task()` |
+| **scrub_ops.rs** | 防欺骗、段落合并、hook 输出清理 | `scrub_spoof_host_followup_lines()`, `merge_hook_nudge_paragraph()`, `scrub_followup_fields_in_hook_output()` |
+| **validation.rs** | 外部研究验证 | `validate_external_research_structured()`, `validate_external_research_strict()`, `source_traceable_heuristic()` |
 
 #### 3.1.2 task_state.rs — 统一读模型
 
 - `resolve_task_view()` — 单次磁盘快照
-- `resolve_continuity_frame()` — beforeSubmit/Stop 入口
+- `resolve_cursor_continuity_frame()` — beforeSubmit/Stop 入口
 - `hydrate_task_state_hybrid()` — TASK_STATE.json 聚合优先，回退物理文件
 - `depth_compliance_aggregate()` — 跨 GOAL/RFV/EVIDENCE 深度评分（score 0-3）
 
-**TaskControlMode**: `Idle` / `Goal` / `RfvLoop` / `Conflict`
+**TaskControlMode**: `Idle` / `GoalDrive` / `RfvLoop` / `Conflict { reason: String }`
 
 #### 3.1.3 task_ledger.rs + step_ledger.rs
 
 - **task_ledger**: TASK_LEDGER.jsonl 事务追加（L1 flock 保护），幂等去重
 - **step_ledger**: STEP_LEDGER.jsonl 步进恢复账本，sha256 派生 idempotency key
 
-#### 3.1.4 math_verify/ — 数学验证引擎
+#### 3.1.4 goal_prediction.rs — Goal 状态预测
 
-- `DimensionChecker::check_equal()` — 纯 Rust 量纲检查
-- `FormalVerifier` — SymPy/Z3/Lean4 子进程调用
-- `StepVerifier::verify()` — 步进证明验证
-- `rollup_formal_depth_signal_from_goal()` — 形式化深度信号聚合
+- `GoalStatePrediction` — 基于当前状态预测 Goal 最终结果
+- `PredictionVerification` — 预测验证
 
 #### 3.1.5 utils/
 
@@ -51,7 +48,25 @@ version: unified-v7
 | `read_bounded.rs` | 有界 UTF-8 前缀读取（hook 热路径优化） |
 | `jsonl_maintenance.rs` | 损坏尾部截断 + 行数压缩 |
 
-### 3.2 tools/codegraph-rs — 代码知识图谱
+### 3.2 loop-engine — 循环引擎
+
+**功能**：loop-auto profile 的状态机实现，管理 discover→preflight→dispatch→verify→report 全流程。
+
+| 模块 | 功能 |
+|------|------|
+| `runner.rs` | 循环主循环、phase 转换、kill signal 轮询 |
+| `types.rs` | `LoopPhase` 枚举（9 阶段）、`LoopRunState`、serde roundtrip |
+| `safety.rs` | 基于 scope 的 L1/L2/L3 安全等级分配、glob 模式匹配 |
+| `kill_switch.rs` | 文件级 kill signal（`.loop-kill/<loop-id>`）、stale 检测 |
+| `closeout.rs` | closeout 验证（task_id/summary/verification_status/changed_files） |
+| `dispatcher.rs` | opencode CLI 子进程派发、5s kill-poll loop、600s 超时 |
+| `report.rs` | `LOOP_REPORT.md` 渲染（summary + per-action + unconsumed findings） |
+| `state.rs` | 原子写入 `LOOP_RUN_STATE.json`、run history、circuit breaker |
+| `lib.rs` | crate 入口、公共 API re-export |
+
+**状态**：v8.0 scope 内已实质完成（44 测试通过），budget enforcement 为 soft no-op，SubagentExecutor trait 延迟到 v8.2。
+
+### 3.3 tools/codegraph-rs — 代码知识图谱
 
 **功能**：基于 tree-sitter 的代码图谱构建与查询，支持 Rust/TypeScript/JavaScript/Python/Go。位于 `tools/codegraph-rs/`（v7 从 `core/` 迁出）。入口：`tools/codegraph-rs/src/lib.rs`；增量同步与 watcher：`graph/sync.rs`；MCP 薄壳分发：`core/runtime-core/src/codegraph_mcp/mod.rs`。
 

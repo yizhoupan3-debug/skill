@@ -2,7 +2,7 @@
 name: literature-verification
 description: |
   无状态内部 skill：验证文献引用的可靠性、claim-文献对齐度和覆盖完整性。
-  由 research-discovery、paper-workbench、grant-workbench 内联调用，不由用户直接触发。
+  由 research-discovery、paper-workbench 内联调用，不由用户直接触发。
 routing_layer: L4
 routing_owner: owner
 routing_gate: none
@@ -34,6 +34,20 @@ trigger_hints:
 - 需要检查 DOI 可达性与元数据完整性
 - 需要扫描文献集中的未解决矛盾
 - 需要识别 closest prior work 并评估覆盖度
+
+## Do not use
+
+- 文献检索、理论背景调研 → 使用 `$research-discovery`
+- 引用格式化、BibTeX 清理 → 使用 `$citation-management`
+- 论文写作、文稿审查 → 使用 `$paper-workbench`
+
+## Hard constraints
+
+- DOI 可达性检查失败（HTTP 4xx/5xx）必须标记为 FAIL，不得以 "DOI 迁移" 为由豁免
+- 单条 claim 无任何引用支持为 P0 blocker——无源声称不得出现在论文主体
+- Contradiction sweep 发现未解决矛盾时，必须在报告中列出双方文献，不得选择性忽略
+- 覆盖度评分 < 70 时必须警告用户存在显著文献缺口
+- paperplain MCP 不可用时，降级为 DOI curl 检查，不得假装完成完整验证
 
 ## Input / Output
 
@@ -67,6 +81,5 @@ trigger_hints:
 
 - **research-discovery**：文献综述完成后，验证引用可靠性与覆盖度
 - **paper-workbench**：投稿前对参考文献做完整性审查
-- **grant-workbench**：申请书文献综述章节的引用验证
 
 调用方式：将验证清单逐项执行，结果回写前门 skill 的验证报告区段。

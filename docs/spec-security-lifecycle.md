@@ -74,10 +74,13 @@ version: unified-v7
 
 ### 12.6 生命周期 Profile
 
-| Profile | REVIEW_GATE | AG_FOLLOWUP | closeout |
-|---------|:-----------:|:-----------:|:--------:|
-| my-light | advisory（suppress nudge） | advisory | advisory |
-| full | advisory（nudge） | advisory | fail-closed |
+真源：`configs/framework/RUNTIME_REGISTRY.json` → `lifecycle_profiles`
+
+| Profile | REVIEW_GATE | AG_FOLLOWUP | closeout | loop_capable | 备注 |
+|---------|:-----------:|:-----------:|:--------:|:------------:|------|
+| my-light | suppressed | advisory | advisory | false | 默认轻量模式 |
+| interactive | suppressed | advisory | advisory | false | 手动看板模式 |
+| loop-auto | **mandatory** | advisory | **hard-block** | true | 自动循环模式，含 cost_budget + kill_switch |
 
 ---
 

@@ -112,3 +112,11 @@ For detailed workflow, examples, and implementation guidance, see [references/de
 - 所有 reviewer comments 已逐条回复（resolved 或 replied）
 - PR 状态已更新（comment 已 post 或 commit 已 push）
 - 用户确认回复策略（直接修改 / 解释说明 / 标记 wontfix）
+
+## Hard constraints
+
+- 必须使用 `gh-source-gate` CLI 获取评论源数据，不得凭记忆判断评论内容
+- 评论优先级排序必须基于严重度（blocker > nit），不得按时间顺序处理
+- 每条评论的处理结果必须显式标注（fixed / explained / wontfix），不得遗漏
+- git push 前必须经过用户确认（`approval_required_tools: git push`）
+- 超出当前 PR 范围的评论（如跨仓库建议），必须标注为 out-of-scope

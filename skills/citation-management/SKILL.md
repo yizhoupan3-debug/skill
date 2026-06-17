@@ -68,6 +68,14 @@ Manuscript workflow context: [`../paper-workbench/references/RESEARCH_PAPER_STAC
 - Treat publisher metadata and DOI records as stronger than copied reference text.
 - Keep unresolved ambiguity visible in the output.
 
+## Hard constraints
+
+- 不得发明缺失的作者、标题、年份、DOI 等字段——必须标记为 unverifiable
+- 疑似重复条目必须显式列出并由用户确认合并，不得自动丢弃
+- 风格格式化与事实元数据必须分开处理——不得在验证阶段修改格式
+- paperplain MCP 不可用时，必须降级到 Crossref/PMID fallback 并声明覆盖范围受限
+- 诚信红线违规（伪造引用、篡改数据来源）为 P0 blocker，不得豁免
+
 ## Tools
 
 **Rust CLI（本仓库真源，无 Python 脚本）**

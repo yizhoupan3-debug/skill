@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # RETIRED 2026-06: claude-desktop host removed from closed set. Use install-claude.sh for claude-code.
-# Merge coworkEgressAllowedHosts into Claude Desktop 3P configLibrary (Cowork VM egress).
-set -euo pipefail
+echo "RETIRED: claude-desktop is no longer supported. Use install-claude.sh instead." >&2
+exit 1
 
 CONFIG_LIB="${CLAUDE_3P_CONFIG_LIBRARY:-$HOME/Library/Application Support/Claude-3p/configLibrary}"
 HOSTS_JSON='["*"]'

@@ -115,3 +115,12 @@ approval_required_tools: []
 - 用本仓 review skill 和验证证据解释结论。
 - 不在不同 host 上分叉 `deepinterview` 的意义。
 - 用户看到的是本仓原生 `deepinterview`，不是外部兼容层。
+
+## Hard constraints
+
+- 每轮只问一个问题——不得批量追问或将多个问题混在同一轮
+- 模糊度评分必须在每轮回答后更新，不得跳过评分直接进入下一问
+- brownfield 场景必须先查仓库证据再问用户，不得让用户替系统补代码上下文
+- handoff 给执行前，模糊度必须低于阈值——需求不清时不得强制推进
+- findings 必须按严重度排序（blocker > warning > nit），不得混排
+- 引用具体文件/函数/测试证据，不得给空泛评价

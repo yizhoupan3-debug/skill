@@ -101,3 +101,11 @@ Follow the shared artifact rules in
 ## Reference
 
 For detailed workflow, examples, and implementation guidance, see [references/detailed-guide.md](./references/detailed-guide.md).
+
+## Hard constraints
+
+- PDF 修复前必须先做 render-aware 检查（非仅文本提取），确认渲染层问题
+- 使用 Rust `pdf` CLI 优先于 Python 工具，除非 Rust 工具不支持特定操作
+- 覆盖写入 PDF 前必须确认用户授权（`approval_required_tools: file overwrite`）
+- PDF 生成必须指定显式输出路径，不得写入临时目录后遗忘
+- 损坏 PDF 的恢复必须保留原始文件副本，不得原地修复

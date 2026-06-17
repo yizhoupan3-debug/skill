@@ -145,8 +145,8 @@ Minimal structure:
 ```
 
 For research-grade or multi-round math work, align with
-[`../../docs/spec.md):
-witnesses, checker-backed PASS/FAIL, dependency graph, counterexample probes, and (when exploring new structures) §D discovery → promotion → STEM falsify via [`lane-templates.md`](../../docs/spec.md).
+[docs/spec.md](../../docs/spec.md):
+witnesses, checker-backed PASS/FAIL, dependency graph, counterexample probes, and (when exploring new structures) §D discovery → promotion → STEM falsify via [lane-templates.md](../../docs/spec.md).
 
 ## Common pitfalls
 

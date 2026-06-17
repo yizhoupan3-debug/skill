@@ -37,6 +37,21 @@ trigger_hints:
 - 需要检查物理量纲一致性
 - 需要验证推导步骤依赖图无断裂
 
+## Do not use
+
+- 推导新公式或做数学证明 → 使用 `$math-derivation`
+- 选择统计检验方法 → 使用 `$statistical-analysis`
+- 纯符号化简无需验证 → 在当前 coding context 直接回答
+- 需要文献调研或理论背景 → 使用 `$research-discovery`
+
+## Hard constraints
+
+- 每个 PASS 必须附带具体数值证据（化简残差、sat 模型、特例值），不得仅标记 PASS 无依据
+- FAIL 必须标注为 blocker 并给出修复建议，不得静默降级为 WARN
+- 量纲检查失败一律为 P0 blocker，不得豁免
+- 不得跳过步骤依赖图检查——断裂依赖意味着推导链不完整
+- CAS 后端不可用时（SymPy/Z3 未安装），必须显式声明降级为人工审查，不得假装通过
+
 ## Input / Output
 
 | 输入 | 输出 |
@@ -60,7 +75,7 @@ trigger_hints:
 ## References
 
 - math-derivation skill：[`../math-derivation/SKILL.md`](../math-derivation/SKILL.md)（推导能力与符号计算知识库）
-- framework math_verify（Rust）：`core/core-math/`（`formal_toolchain`；CAS + SMT 后端）
+- framework formal_toolchain（Rust）：`core/runtime-core/src/contracts/formal_toolchain.rs`（CAS/SMT token 检测）
 
 ## Integration
 

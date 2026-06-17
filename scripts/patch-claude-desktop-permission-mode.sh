@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 # RETIRED 2026-06: claude-desktop host removed from closed set. Use install-claude.sh for claude-code.
-# Persist Claude Desktop permission mode (Cowork + Code composer).
-# Desktop ignores ~/.claude/settings.json defaultMode; it reads epitaxy prefs + LevelDB.
-#
-# IMPORTANT: Run with real HOME (Desktop fully quit / Cmd+Q first):
-#   HOME="$HOME" ./scripts/patch-claude-desktop-permission-mode.sh
-set -euo pipefail
+echo "RETIRED: claude-desktop is no longer supported. Use install-claude.sh instead." >&2
+exit 1
 
 MODE="${1:-bypassPermissions}"
 if [[ -z "${CLAUDE_DESKTOP_ACCOUNT_ID:-}" ]]; then

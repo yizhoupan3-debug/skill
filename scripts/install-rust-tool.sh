@@ -3,19 +3,38 @@
 # Usage: install-rust-tool.sh --crate <dir> --bin <name> [--env-prefix <PREFIX>]
 set -euo pipefail
 
+usage() {
+  cat <<'EOF'
+Usage: install-rust-tool.sh --crate <dir> --bin <name> [--env-prefix <PREFIX>]
+
+Install a Rust binary from the rust_tools/ workspace to ~/.local/bin.
+
+Options:
+  --crate <dir>       Crate directory name under rust_tools/
+  --bin <name>        Binary name to install
+  --env-prefix <PREFIX>  Env prefix for custom BIN_DIR (e.g. PDF → PDF_BIN_DIR)
+EOF
+  exit 1
+}
+
+if ! command -v cargo &>/dev/null; then
+  echo "error: cargo not found — install Rust first: https://rustup.rs" >&2
+  exit 1
+fi
+
 CRATE="" BIN="" ENV_PREFIX=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --crate)     CRATE="$2"; shift 2 ;;
     --bin)       BIN="$2"; shift 2 ;;
     --env-prefix) ENV_PREFIX="$2"; shift 2 ;;
-    *) echo "Unknown arg: $1" >&2; exit 1 ;;
+    -h|--help)   usage ;;
+    *) echo "Unknown arg: $1" >&2; usage ;;
   esac
 done
 
 if [[ -z "${CRATE}" || -z "${BIN}" ]]; then
-  echo "Usage: install-rust-tool.sh --crate <dir> --bin <name> [--env-prefix <PREFIX>]" >&2
-  exit 1
+  usage
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

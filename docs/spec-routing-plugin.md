@@ -17,8 +17,8 @@ version: unified-v7
 
 ### 8.2 路由评分
 
-- `route_task()` → `score_route_candidate()`（815 行硬编码，可插拔性 **2.0/5**）
-- `signals/`：5 个子模块（design_artifact/devtools/markers/orchestration/paper）
+- `route_task()` → `score_route_candidate()`（~1019 行硬编码，可插拔性 **2.0/5**）
+- `signals.rs`：单一文件（~1520 行），含路由信号检测（design_artifact/devtools/markers/orchestration/paper 等类别）
 - `nl_route_adjustments.rs`：NL suppress/boost 调整
 
 ### 8.3 路由引擎模块

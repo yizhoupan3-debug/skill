@@ -101,3 +101,11 @@ For detailed workflow, examples, and implementation guidance, see [references/de
 - CI 状态从红变绿（或已确认为 flaky/infra issue）
 - 失败原因已根因分析并记录
 - fix 已 push 并通过 CI 验证
+
+## Hard constraints
+
+- 必须使用 `gh-source-gate` CLI 获取 CI 证据，不得凭记忆或截图判断失败原因
+- flaky test 不得自动豁免——必须标记为 flaky 并给出证据（多次重跑结果）
+- fix 必须经过本地验证后再 push，不得直接 push 未验证的修复
+- CI 日志过长时（>500 行），必须先摘要再分析，不得将原始日志全部呈现
+- 超出当前仓库范围的 CI 问题（如 GitHub Actions 平台故障），必须明确标注为外部依赖并建议等待
