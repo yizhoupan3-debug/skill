@@ -5,7 +5,7 @@ use super::signal_cache::cached_signal;
 use super::signals::*;
 use tracing::debug;
 use super::text::{
-    common_route_stop_tokens, normalize_text, text_matches_phrase, tokenize_route_text,
+    common_route_stop_tokens, text_matches_phrase, tokenize_route_text,
 };
 use super::types::{RouteCandidate, SkillRecord};
 use crate::hooks::is_review_prompt;
@@ -796,11 +796,14 @@ pub fn score_bucket(score: f64) -> String {
 }
 
 pub fn compact_route_reasons(reasons: &[&str]) -> Vec<String> {
-    let mut seen = HashSet::new();
     let mut compact = Vec::with_capacity(reasons.len().min(6));
     for reason in reasons {
-        let normalized = normalize_text(reason);
-        if normalized.is_empty() || !seen.insert(normalized) {
+        if reason.trim().is_empty() {
+            continue;
+        }
+        // Reasons from signal checks are already unique per record; skip
+        // normalize_text allocation for dedup — direct string comparison suffices.
+        if compact.iter().any(|existing: &String| existing.as_str() == *reason) {
             continue;
         }
         compact.push((*reason).to_string());
@@ -812,17 +815,26 @@ pub fn compact_route_reasons(reasons: &[&str]) -> Vec<String> {
 }
 
 pub fn reasons_class(reasons: &[String]) -> String {
-    let mut normalized = reasons
-        .iter()
-        .map(|reason| normalize_text(reason))
-        .filter(|reason| !reason.is_empty())
-        .collect::<Vec<_>>();
-    if normalized.is_empty() {
+    if reasons.is_empty() {
         return "none".to_string();
     }
-    normalized.sort();
-    normalized.dedup();
-    normalized.join("|")
+    // Sort by lowercase form without allocating normalized copies.
+    let mut indices: Vec<usize> = (0..reasons.len()).collect();
+    indices.sort_by_key(|&i| reasons[i].to_ascii_lowercase());
+    let mut out = Vec::with_capacity(reasons.len());
+    let mut prev = "";
+    for &i in &indices {
+        let lower = reasons[i].to_ascii_lowercase();
+        if lower.is_empty() || lower == prev {
+            continue;
+        }
+        out.push(reasons[i].as_str());
+        prev = &reasons[i];
+    }
+    if out.is_empty() {
+        return "none".to_string();
+    }
+    out.join("|")
 }
 
 pub fn layer_rank(layer: &str) -> i32 {
