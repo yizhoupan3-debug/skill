@@ -180,14 +180,13 @@ pub(super) fn format_resume(state: &Value) -> String {
             summarize_environment_fingerprint(state.get("environment"))
         ),
     ];
-    if let Some(active_id) = active_id {
-        if let Some(hypothesis) = find_hypothesis(state, active_id) {
+    if let Some(active_id) = active_id
+        && let Some(hypothesis) = find_hypothesis(state, active_id) {
             lines.push(format!(
                 "active_claim: {}",
                 str_field_default(hypothesis, "claim", "-")
             ));
         }
-    }
     if let Some(run) = latest_run {
         lines.push(format!(
             "latest_run: {} ({})",

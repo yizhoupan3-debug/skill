@@ -157,11 +157,7 @@ fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
                         .map(|s| json!(s))
                         .collect(),
                 )
-            } else if let Some(s) = v.as_str() {
-                Some(vec![json!(s)])
-            } else {
-                None
-            }
+            } else { v.as_str().map(|s| vec![json!(s)]) }
         })
         .unwrap_or_default()
 }
@@ -424,11 +420,10 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             if let Some(extra) = payload.get("metadata").cloned() {
                 obj.insert("metadata".to_string(), extra);
             }
-            if let Some(cg) = payload.get("completion_gates") {
-                if !cg.is_null() {
+            if let Some(cg) = payload.get("completion_gates")
+                && !cg.is_null() {
                     obj.insert("completion_gates".to_string(), cg.clone());
                 }
-            }
             apply_optional_goal_fields_from_payload(&mut obj, &payload);
             // Ensure task directory exists before writing GOAL_STATE
             ensure_task_directory(&repo_root, &task_id)?;

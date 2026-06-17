@@ -123,7 +123,7 @@ fn stem(word: &str) -> String {
     s
 }
 
-fn load_entries_parallel(path: &PathBuf) -> anyhow::Result<Vec<AuditJournalEntry>> {
+fn load_entries_parallel(path: &Path) -> anyhow::Result<Vec<AuditJournalEntry>> {
     load_audit_journal_entries(path)
 }
 
@@ -241,7 +241,7 @@ fn audit_journal(
     }
 
     let mut common: Vec<_> = ngrams.into_iter().collect();
-    common.sort_by(|a, b| b.1.cmp(&a.1));
+    common.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
 
     let mut new_skill_candidates = Vec::new();
     for (phrase, count) in common.iter().take(cfg.audit.top_ngram_candidates) {
@@ -278,10 +278,10 @@ fn audit_journal(
         }
 
         // R31-33: Advanced Refactoring Suggestions
-        if let Some(path) = manifest_path {
-            if let Ok(content) = std::fs::read_to_string(path) {
-                if let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some((skills, idx_slug, idx_trigger_hints)) =
+        if let Some(path) = manifest_path
+            && let Ok(content) = std::fs::read_to_string(path)
+                && let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&content)
+                    && let Some((skills, idx_slug, idx_trigger_hints)) =
                         manifest_skill_columns(&manifest)
                     {
                         let active_skills: HashSet<_> =
@@ -324,9 +324,6 @@ fn audit_journal(
                             }
                         }
                     }
-                }
-            }
-        }
 
         // R28: TF-IDF pseudo-logic (Simple frequency / diversity)
         let total_docs = filtered.len() as f32;
@@ -397,9 +394,9 @@ fn generate_manifest(
     let cutoff = Utc::now() - Duration::days(days);
 
     let mut static_scores: HashMap<String, f32> = HashMap::new();
-    if let Some(path) = scores_json {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content) {
+    if let Some(path) = scores_json
+        && let Ok(content) = std::fs::read_to_string(path)
+            && let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content) {
                 if let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
                     for entry in skills {
                         if let (Some(name), Some(total)) =
@@ -428,23 +425,18 @@ fn generate_manifest(
                     }
                 }
             }
-        }
-    }
 
     let mut all_skills = HashSet::new();
-    if let Some(path) = manifest_path {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
+    if let Some(path) = manifest_path
+        && let Ok(content) = std::fs::read_to_string(path)
+            && let Ok(payload) = serde_json::from_str::<serde_json::Value>(&content)
+                && let Some(skills) = payload.get("skills").and_then(|value| value.as_array()) {
                     for row in skills {
                         if let Some(name) = row.get(0).and_then(|value| value.as_str()) {
                             all_skills.insert(name.to_string());
                         }
                     }
                 }
-            }
-        }
-    }
 
     if all_skills.is_empty() {
         all_skills.extend(static_scores.keys().cloned());

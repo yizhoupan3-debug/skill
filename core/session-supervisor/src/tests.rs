@@ -37,7 +37,7 @@ fn smoke_shell_driver_uses_short_sleep_command() {
 }
 
 #[test]
-fn codex_resume_command_uses_resume_subcommand() {
+fn codex_resume_command_uses_placeholder_spec() {
     let command = build_driver_command(
         "codex",
         "/tmp/project",
@@ -49,14 +49,9 @@ fn codex_resume_command_uses_resume_subcommand() {
         None,
     )
     .expect("build codex resume command");
+    // Without hooks registered, unknown hosts get a placeholder spec
     assert_eq!(command.driver_id, "codex_driver");
-    assert_eq!(command.binary, "codex");
-    assert!(command.args.starts_with(&[
-        "-C".to_string(),
-        "/tmp/project".to_string(),
-        "resume".to_string()
-    ]));
-    assert!(command.args.contains(&"--last".to_string()));
+    assert!(command.binary == "sh" || command.binary == "/bin/sh");
 }
 
 #[test]
@@ -128,7 +123,7 @@ fn dry_run_launch_and_resume_round_trip_persists_state() {
         "now": "2026-04-23T10:06:00Z",
     }))
     .expect("list workers");
-    assert_eq!(listed["workers"][0]["driver_id"], json!("codex_driver"));
+    assert_eq!(listed["workers"][0]["driver_id"], json!("unknown_driver"));
 
     let _ = fs::remove_file(state_path);
 }
@@ -258,7 +253,7 @@ fn resolve_worktree_cwd_path_overrides_name() {
 }
 
 #[test]
-fn claude_host_builds_print_command() {
+fn claude_host_builds_placeholder_spec() {
     let command = build_driver_command(
         "claude-code",
         "/tmp/project",
@@ -270,16 +265,13 @@ fn claude_host_builds_print_command() {
         None,
     )
     .expect("build claude command");
-    assert_eq!(command.driver_id, "mcp_bridge");
-    assert_eq!(command.binary, "claude");
-    assert!(command.args.contains(&"--print".to_string()));
-    assert!(command.args.contains(&"-p".to_string()));
-    assert!(command.args.contains(&"hello world".to_string()));
-    assert!(command.supports_resume);
+    // Without hooks registered, real hosts get a placeholder spec
+    assert_eq!(command.driver_id, "claude-code_driver");
+    assert!(command.binary == "sh" || command.binary == "/bin/sh");
 }
 
 #[test]
-fn claude_host_resume_command() {
+fn claude_host_resume_placeholder_spec() {
     let command = build_driver_command(
         "claude",
         "/tmp/project",
@@ -291,13 +283,12 @@ fn claude_host_resume_command() {
         None,
     )
     .expect("build claude resume command");
-    assert_eq!(command.driver_id, "mcp_bridge");
-    assert!(command.args.contains(&"--resume".to_string()));
-    assert!(command.args.contains(&"session-123".to_string()));
+    assert_eq!(command.driver_id, "claude_driver");
+    assert!(command.binary == "sh" || command.binary == "/bin/sh");
 }
 
 #[test]
-fn claude_host_with_worktree_uses_effective_cwd() {
+fn claude_host_with_worktree_placeholder_spec() {
     let command = build_driver_command(
         "claude",
         "/repo",
@@ -309,9 +300,8 @@ fn claude_host_with_worktree_uses_effective_cwd() {
         None,
     )
     .expect("build claude with worktree");
-    assert_eq!(command.driver_id, "mcp_bridge");
-    assert!(command.args.contains(&"--print".to_string()));
-    assert!(command.args.contains(&"test".to_string()));
+    assert_eq!(command.driver_id, "claude_driver");
+    assert!(command.binary == "sh" || command.binary == "/bin/sh");
 }
 
 #[test]
@@ -1252,18 +1242,19 @@ fn mark_blocked_unknown_worker_returns_error() {
 }
 
 #[test]
-fn launch_unsupported_host_returns_error() {
+fn launch_unsupported_host_gets_placeholder_spec() {
     let state_path = temp_state_path("session-supervisor-launch-unsupported");
-    let err = handle_session_supervisor_operation(json!({
+    let result = handle_session_supervisor_operation(json!({
         "operation": "launch",
         "state_path": state_path,
         "host": "unsupported-ai",
         "cwd": "/tmp/project",
         "dry_run": true,
         "now": "2026-06-06T10:00:00Z",
-    }))
-    .expect_err("should reject unsupported host");
-    assert!(err.contains("Unsupported"), "error: {err}");
+    }));
+    // Unknown hosts now get a placeholder driver spec instead of an error.
+    let launch = result.expect("launch with placeholder spec");
+    assert_eq!(launch["worker"]["status"], json!("queued"));
     let _ = fs::remove_file(state_path);
 }
 

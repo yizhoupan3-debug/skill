@@ -26,49 +26,6 @@ pub trait HostProjectionOps: Send + Sync {
     ) -> Result<Value, String>;
 }
 
-/// Fallback for hosts without custom projection ops.
-struct NoopProjectionOps {
-    host_id: &'static str,
-}
-
-impl HostProjectionOps for NoopProjectionOps {
-    fn host_id(&self) -> &'static str {
-        self.host_id
-    }
-
-    fn install(&self, _roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
-        Ok(serde_json::json!({
-            "tool": self.host_id,
-            "scope": scope,
-            "status": "installed",
-            "note": "default noop projection"
-        }))
-    }
-
-    fn status(&self, _roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-        Ok(serde_json::json!({
-            "tool": self.host_id,
-            "status": "installed",
-            "note": "default noop projection"
-        }))
-    }
-
-    fn remove(
-        &self,
-        _roots: &ResolvedProjectionRoots,
-        scope: &str,
-        dry_run: bool,
-    ) -> Result<Value, String> {
-        Ok(serde_json::json!({
-            "tool": self.host_id,
-            "scope": scope,
-            "dry_run": dry_run,
-            "status": "installed",
-            "note": "default noop projection"
-        }))
-    }
-}
-
 static PROJECTION_OPS_REGISTRY: OnceLock<HashMap<&'static str, Box<dyn HostProjectionOps>>> =
     OnceLock::new();
 
@@ -93,12 +50,10 @@ fn build_projection_ops_registry() -> HashMap<&'static str, Box<dyn HostProjecti
         Box::new(super::projection_host_ops::CodexProjectionOps),
     );
 
-    // Register noop fallbacks for hosts without custom ops
-    for host_id in &["mimo"] {
-        m.entry(host_id).or_insert_with(|| {
-            Box::new(NoopProjectionOps { host_id })
-        });
-    }
+    m.insert(
+        "mimo",
+        Box::new(super::projection_host_ops::MimoProjectionOps),
+    );
 
     m
 }

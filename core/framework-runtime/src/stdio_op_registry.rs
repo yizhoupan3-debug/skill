@@ -109,21 +109,24 @@ pub fn is_trace_stdio_op(op: &str) -> bool {
 pub fn is_framework_stdio_op(op: &str) -> bool {
     op_in_domain(op, FRAMEWORK_STDIO_OPS)
 }
-
-/// ── Runtime output mode dispatch ──
-// (moved from `cli/runtime_ops.rs` to break cli ↔ framework_runtime cycle)
-//
-// The RuntimeOutputMode dispatch relies on functions defined in
-// `orchestration_controller.rs` which stays in `runtime-core`. The dispatch
-// is exposed through the RuntimeCoreHooks for runtime output mode operations.
-
+/// ── Runtime output mode dispatch (stub) ──
+///
+/// These functions are intentionally stubbed here. The real implementation
+/// lives in `runtime-core::framework_runtime::orchestration_controller` and is
+/// registered via host-projection hooks at runtime. The stubs break the
+/// `cli ↔ framework-runtime` circular dependency — the framework-runtime crate
+/// cannot depend on `runtime-core`.
+///
+/// `handles_runtime_output_stdio_op` returns `false`, so the dispatch branch
+/// is never entered. If someone re-enables it, the `None` from dispatch is
+/// caught by the caller in `stdio_dispatch.rs` and returns an error.
 pub fn dispatch_runtime_output_mode_stdio(
-    op: &str,
-    payload: Value,
+    _op: &str,
+    _payload: Value,
 ) -> Option<Result<Value, String>> {
     None
 }
 
-pub fn handles_runtime_output_stdio_op(op: &str) -> bool {
+pub fn handles_runtime_output_stdio_op(_op: &str) -> bool {
     false
 }

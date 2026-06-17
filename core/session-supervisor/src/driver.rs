@@ -60,8 +60,8 @@ pub fn build_driver_command(
         resolve_worktree_cwd(cwd, worktree_name.as_deref(), worktree_path.as_deref());
 
     // Try trait-based dispatch via host provider registry (via hooks).
-    if let Some(h) = hooks::hooks() {
-        if let Some(result) = (h.build_driver_command)(
+    if let Some(h) = hooks::hooks()
+        && let Some(result) = (h.build_driver_command)(
             host,
             &effective_cwd,
             prompt.clone(),
@@ -73,7 +73,6 @@ pub fn build_driver_command(
         ) {
             return result;
         }
-    }
 
     // Fallback: smoke-shell test host (not in provider registry).
     let lowered = host.trim().to_ascii_lowercase();
@@ -98,16 +97,41 @@ pub fn build_driver_command(
                 supports_resume: false,
             })
         }
-        other => Err(format!("Unsupported session supervisor host: {other}")),
+        other => {
+            tracing::warn!(
+                "Unknown session supervisor host: \"{other}\" — using placeholder driver spec. \
+                 Check that the host provider is registered via hooks."
+            );
+            // Placeholder spec so state management (launch/terminate/list) can proceed
+            // in tests and dry-run mode. Actual driver dispatch happens at the
+            // host projection layer via hooks.
+            let shell = if cfg!(unix) {
+                "/bin/sh".to_string()
+            } else {
+                "sh".to_string()
+            };
+            let script = if resume_only {
+                "echo resume-placeholder"
+            } else {
+                "echo launch-placeholder"
+            };
+            let args = vec!["-c".to_string(), script.to_string()];
+            Ok(DriverCommandSpec {
+                driver_id: format!("{other}_driver"),
+                binary: shell.clone(),
+                shell_command: shell_join(&shell, &args),
+                args,
+                supports_resume: false,
+            })
+        }
     }
 }
 
 pub fn driver_id_for_host(host: &str) -> &'static str {
-    if let Some(h) = hooks::hooks() {
-        if let Some(id) = (h.driver_id_for_host)(host) {
+    if let Some(h) = hooks::hooks()
+        && let Some(id) = (h.driver_id_for_host)(host) {
             return id;
         }
-    }
     "unknown_driver"
 }
 

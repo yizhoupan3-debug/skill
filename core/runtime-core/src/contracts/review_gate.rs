@@ -55,12 +55,11 @@ pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), 
             }
             Err(_) => serde_json::json!({}),
         };
-        if !payload.is_object() {
-            if cursor_hook_event_is_critical(event) {
+        if !payload.is_object()
+            && cursor_hook_event_is_critical(event) {
                 emit_cursor_hook_fail_closed_stdout(event)?;
                 return Err("stdin_json_not_object".to_string());
             }
-        }
         let repo_root =
             crate::cursor_hooks::resolve_cursor_hook_repo_root(cli_repo_root, &payload)?;
         let _registry_guard = crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);

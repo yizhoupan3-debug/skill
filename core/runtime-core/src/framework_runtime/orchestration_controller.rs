@@ -178,9 +178,9 @@ fn handle_batch_plan(
         resp.effect_plan = effect_plan;
         return Ok(resp);
     }
-    if let Some(requested) = requested_group_id.as_ref() {
-        if let Some(existing) = request_group_ids.iter().next() {
-            if existing != requested {
+    if let Some(requested) = requested_group_id.as_ref()
+        && let Some(existing) = request_group_ids.iter().next()
+            && existing != requested {
                 let mut effect_plan = background_effect_plan("reject");
                 effect_plan.terminal_status = Some("failed".to_string());
                 let mut resp = base_response("batch-plan", supported_multitask_strategies);
@@ -197,8 +197,6 @@ fn handle_batch_plan(
                 resp.effect_plan = effect_plan;
                 return Ok(resp);
             }
-        }
-    }
 
     let resolved_parallel_group_id = requested_group_id
         .or_else(|| request_group_ids.into_iter().next())
@@ -965,12 +963,11 @@ pub fn build_runtime_observability_metric_catalog_payload() -> Value {
         .into_iter()
         .map(|metric| {
             let mut metric_object = metric;
-            if let Some(base_dimensions) = metric_object.get("base_dimensions").cloned() {
-                if let Some(object) = metric_object.as_object_mut() {
+            if let Some(base_dimensions) = metric_object.get("base_dimensions").cloned()
+                && let Some(object) = metric_object.as_object_mut() {
                     object.remove("base_dimensions");
                     object.insert("dimensions".to_string(), base_dimensions);
                 }
-            }
             metric_object
         })
         .collect::<Vec<Value>>();

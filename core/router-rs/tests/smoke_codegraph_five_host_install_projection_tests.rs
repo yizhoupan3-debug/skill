@@ -7,6 +7,7 @@ mod five_host_install_projection {
     use std::path::{Path, PathBuf};
 
     use serde_json::Value;
+    use serial_test::serial;
 
     use crate::framework_host_targets::{
         host_targets_supported_host_ids, skills_install_tool_for_host_id,
@@ -56,6 +57,7 @@ mod five_host_install_projection {
                 ("cursor".into(), home.join(".cursor")),
                 ("claude-code".into(), home.join(".claude")),
                 ("opencode".into(), home.join(".opencode")),
+                ("mimo".into(), home.join(".mimo")),
             ]
             .into_iter()
             .collect(),
@@ -104,17 +106,30 @@ mod five_host_install_projection {
     fn assert_host_projected_codegraph(roots: &ResolvedProjectionRoots, host_id: &str) {
         match host_id {
             "cursor" => {
-                let path = roots.host_home_root("cursor").join("mcp.json");
+                let cursor_home = roots.host_home_root("cursor")
+                    .unwrap_or_else(|| panic!("cursor host home not found"));
+                let path = cursor_home.join("mcp.json");
                 assert!(path.is_file(), "cursor user mcp.json must exist");
                 assert_mcp_servers_codegraph(&read_json(&path), host_id);
             }
             "claude-code" => {
-                // §1.1: MCP 配置统一到 user-level，不再写 project .mcp.json。
-                // claude-code 的 MCP 由 .claude/mcp.json (user-level) 管理。
+                let path = roots.project_root.join(".mcp.json");
+                assert!(path.is_file(), "claude-code project .mcp.json must exist");
+                assert_mcp_servers_camel_codegraph(&read_json(&path), host_id);
             }
             "codex" => {
-                // §1.1: MCP 配置统一到 user-level，不再写 project .mcp.json。
-                // codex config.toml 仍由 codex install 路径单独写入（非 research_mcp 路径）。
+                let path = roots.project_root.join(".codex/config.toml");
+                assert!(path.is_file(), "codex config.toml must exist");
+                let text = fs::read_to_string(&path)
+                    .unwrap_or_else(|e| panic!("read codex config.toml: {e}"));
+                assert!(
+                    text.contains("[mcp_servers.mcp-codegraph]"),
+                    "codex config.toml must include mcp-codegraph section"
+                );
+                assert!(
+                    text.contains("--repo-root"),
+                    "codex mcp-codegraph section must pass --repo-root"
+                );
             }
             "opencode" => {
                 let path = roots.project_root.join(".opencode/opencode.json");
@@ -122,12 +137,15 @@ mod five_host_install_projection {
                 assert_mcp_servers_camel_codegraph(&read_json(&path), host_id);
             }
             "mimo" => {
-                // mimo 没有独立的 host projection (native MCP only)。
+                let path = roots.project_root.join(".mimo/settings.json");
+                assert!(path.is_file(), "mimo project settings.json must exist");
+                assert_mcp_servers_camel_codegraph(&read_json(&path), host_id);
             }
             other => panic!("unexpected host_id {other}"),
         }
     }
 
+    #[serial]
     #[test]
     fn codegraph_five_host_install_projection_smoke() {
         let framework_root = framework_repo_root();

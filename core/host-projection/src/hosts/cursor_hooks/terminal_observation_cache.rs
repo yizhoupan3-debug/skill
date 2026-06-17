@@ -65,11 +65,10 @@ pub fn collect_terminal_observations_cached(terminals_dir: &Path) -> Vec<Termina
     let mtime = dir_mtime(terminals_dir);
     let mut guard = CACHE.lock().expect("terminal cache mutex");
     let map = guard.get_or_insert_with(HashMap::new);
-    if let Some(entry) = map.get(terminals_dir) {
-        if entry.dir_mtime == mtime {
+    if let Some(entry) = map.get(terminals_dir)
+        && entry.dir_mtime == mtime {
             return (*entry.observations).clone();
         }
-    }
     let observations = scan_terminals_dir(terminals_dir);
     let shared = Arc::new(observations);
     if map.len() >= MAX_TERMINAL_CACHE_DIRS {

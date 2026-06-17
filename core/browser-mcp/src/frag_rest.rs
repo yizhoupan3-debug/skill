@@ -321,7 +321,7 @@ fn base_attached_runtime_diagnostics(configured_source: &ConfiguredAttachSource)
     })
 }
 
-fn select_fields<'a>(source: &'a Value, fields: &[&str]) -> Value {
+fn select_fields(source: &Value, fields: &[&str]) -> Value {
     let mut map = serde_json::Map::new();
     for field in fields {
         map.insert(
@@ -495,42 +495,37 @@ fn assert_attach_descriptor_contract(descriptor: &Value) -> Result<(), String> {
         ("cleanup_method", RUNTIME_ATTACH_CLEANUP_METHOD),
         ("resume_mode", RUNTIME_ATTACH_RESUME_MODE),
     ] {
-        if let Some(value) = descriptor_string(descriptor, &[field]) {
-            if value != expected {
+        if let Some(value) = descriptor_string(descriptor, &[field])
+            && value != expected {
                 return Err(format!(
                     "runtime attach descriptor must use {field}={expected}"
                 ));
             }
-        }
     }
-    if let Some(value) = descriptor_bool(descriptor, &["attach_capabilities", "artifact_replay"]) {
-        if !value {
+    if let Some(value) = descriptor_bool(descriptor, &["attach_capabilities", "artifact_replay"])
+        && !value {
             return Err(
                 "runtime attach descriptor must advertise attach_capabilities.artifact_replay=true"
                     .to_string(),
             );
         }
-    }
     if let Some(value) = descriptor_bool(
         descriptor,
         &["attach_capabilities", "cleanup_preserves_replay"],
-    ) {
-        if !value {
+    )
+        && !value {
             return Err(
                 "runtime attach descriptor must advertise attach_capabilities.cleanup_preserves_replay=true"
                     .to_string(),
             );
         }
-    }
     if let Some(value) = descriptor_bool(descriptor, &["attach_capabilities", "live_remote_stream"])
-    {
-        if value {
+        && value {
             return Err(
                 "runtime attach descriptor must advertise attach_capabilities.live_remote_stream=false"
                     .to_string(),
             );
         }
-    }
     Ok(())
 }
 

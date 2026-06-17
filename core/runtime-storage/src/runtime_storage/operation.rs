@@ -231,11 +231,10 @@ pub fn resolve_storage_backend(paths: &[PathBuf]) -> Option<ResolvedStorageBacke
                 candidates.push(root.to_path_buf());
             }
         }
-        if grandparent_name == Some("trace_compaction") {
-            if let Some(root) = grandparent.and_then(Path::parent) {
+        if grandparent_name == Some("trace_compaction")
+            && let Some(root) = grandparent.and_then(Path::parent) {
                 candidates.push(root.to_path_buf());
             }
-        }
         if let Some(parent) = path.parent() {
             candidates.push(parent.to_path_buf());
         }

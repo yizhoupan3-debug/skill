@@ -2,7 +2,7 @@
 module: browser-mcp
 lines: ~6100
 layer: B2
-last_verified: "2026-06-13"
+last_verified: "2026-06-16"
 ---
 
 # browser-mcp（B2 层）

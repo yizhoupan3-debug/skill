@@ -64,7 +64,7 @@ fn handle_post_tool_use_with_lock(
     let independent_fork_pre_goal =
         core_policy::review_gate_engine::review_independent_fork(fork, pre_goal_kind);
     let mut mutated = false;
-    if tool_name_matches_subagent_lane(&name)
+    if tool_name_matches_subagent_lane(name)
         && pre_goal_kind
         && tracks_goal_or_drive_entry(&state)
         && independent_fork_pre_goal
@@ -73,7 +73,7 @@ fn handle_post_tool_use_with_lock(
         state.pre_goal_nag_count = 0;
         mutated = true;
     }
-    if tool_name_matches_subagent_lane(&name) && review_kind && armed && independent_fork_review {
+    if tool_name_matches_subagent_lane(name) && review_kind && armed && independent_fork_review {
         if let Some(limit) = cursor_max_open_subagents() {
             let pending_open = state
                 .review_subagent_pending_cycle_keys

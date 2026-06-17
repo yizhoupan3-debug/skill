@@ -38,11 +38,10 @@ pub fn apply_cursor_hook_output_policy(output: &mut Value) {
         hooks::router_rs_cursor_hook_outbound_context_max_bytes()
             .saturating_mul(4)
             .max(32 * 1024);
-    if let Some(Value::String(s)) = output.get_mut("followup_message") {
-        if s.len() > absurd_followup_threshold {
+    if let Some(Value::String(s)) = output.get_mut("followup_message")
+        && s.len() > absurd_followup_threshold {
             *s = truncate_cursor_hook_followup_preserving_review_gate(s.as_str(), max_out);
         }
-    }
 }
 
 /// Cursor outbound truncation: UTF-8 byte cap; prefix retained; **fixed suffix** so operators can
@@ -70,11 +69,10 @@ fn truncate_cursor_hook_outbound_context(combined: &str, max_bytes: usize) -> St
     while cut > 0 && !combined.is_char_boundary(cut) {
         cut -= 1;
     }
-    if let Some(pos) = combined[..cut].rfind('\n') {
-        if pos > 0 {
+    if let Some(pos) = combined[..cut].rfind('\n')
+        && pos > 0 {
             cut = pos;
         }
-    }
     while cut > 0 && !combined.is_char_boundary(cut) {
         cut -= 1;
     }

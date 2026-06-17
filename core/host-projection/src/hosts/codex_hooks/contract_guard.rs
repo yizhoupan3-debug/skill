@@ -85,11 +85,9 @@ fn detect_contract_drift(summary: &Value, payload: &Value) -> Vec<String> {
         .unwrap_or_default();
     if let Some(proposed_owner) = payload_string(payload, "proposed_primary_owner")
         .or_else(|| payload_string(payload, "primary_owner"))
-    {
-        if !live_owner.is_empty() && proposed_owner != live_owner {
+        && !live_owner.is_empty() && proposed_owner != live_owner {
             flags.push("owner_drift".to_string());
         }
-    }
 
     let contract_active = summary
         .get("contract_guard")
@@ -104,20 +102,16 @@ fn detect_contract_drift(summary: &Value, payload: &Value) -> Vec<String> {
             .unwrap_or_default();
         if let Some(proposed_task) =
             payload_string(payload, "proposed_task").or_else(|| payload_string(payload, "task"))
-        {
-            if !live_task.is_empty() && proposed_task != live_task {
+            && !live_task.is_empty() && proposed_task != live_task {
                 flags.push("scope_drift".to_string());
             }
-        }
 
         let live_goal = scalar_contract_text(summary.get("goal"));
         if let Some(proposed_goal) =
             payload_string(payload, "proposed_goal").or_else(|| payload_string(payload, "goal"))
-        {
-            if !live_goal.is_empty() && proposed_goal != live_goal {
+            && !live_goal.is_empty() && proposed_goal != live_goal {
                 flags.push("scope_drift".to_string());
             }
-        }
 
         let live_evidence = string_array(summary.get("evidence_required"));
         let proposed_evidence_exists = payload.get("proposed_evidence_required").is_some();

@@ -4,6 +4,7 @@
 //! that need host-provider lookups. Functions that need hooks handle the unregistered
 //! case gracefully (falling back to built-in logic) rather than panicking.
 
+#![allow(clippy::type_complexity)]
 use std::sync::OnceLock;
 
 static HOOKS: OnceLock<SessionSupervisorHooks> = OnceLock::new();

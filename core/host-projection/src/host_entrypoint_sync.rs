@@ -124,11 +124,10 @@ pub fn sync_host_entrypoints(
     sort_report_array(&mut report, "created_dirs")?;
     sort_report_array(&mut report, "synced_worktrees")?;
     sort_report_array(&mut report, "skipped_worktrees")?;
-    if apply {
-        if let Some(after_apply) = desired_files.provider.after_apply {
+    if apply
+        && let Some(after_apply) = desired_files.provider.after_apply {
             after_apply(&root)?;
         }
-    }
     Ok(report)
 }
 

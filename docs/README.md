@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-12"
+last_verified: "2026-06-16"
 depends_on:
   - spec.md
   - ../AGENTS.md
@@ -33,7 +33,7 @@ depends_on:
 | REVIEW_GATE ADR | [adr/ADR-review-gate-lite.md](adr/ADR-review-gate-lite.md) |
 | Review 流程 | [references/review-protocol.md](references/review-protocol.md) |
 | Office CLI 工具 | [references/office-document-clis.md](references/office-document-clis.md) |
-| Worktree 指南 | [workflow-worktree-guide.md](workflow-worktree-guide.md) |
+| Worktree 指南 | [`git_hygiene.md`](git_hygiene.md) §主分支切片 |
 | 安全策略（SSRF、MCP） | [operations/security.md](operations/security.md) |
 | 备份 / 恢复 | [operations/backup-restore.md](operations/backup-restore.md) |
 | 历史迁移 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |

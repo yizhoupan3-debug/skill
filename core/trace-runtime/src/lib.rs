@@ -151,11 +151,10 @@ pub fn record_trace_event(
     }))
     .map_err(|err| format!("serialize trace event sink line failed: {err}"))?
         + "\n";
-    if payload.write_outputs {
-        if let Some(path) = payload.path.as_deref() {
+    if payload.write_outputs
+        && let Some(path) = payload.path.as_deref() {
             append_text(Path::new(path), &sink_line)?;
         }
-    }
 
     let (delta_path, delta_line, delta_bytes_written) = maybe_append_compaction_delta(
         &event_value,
@@ -622,11 +621,10 @@ fn trace_event_matches_scope(
             return false;
         }
     }
-    if let Some(expected_job_id) = job_id {
-        if trace_event_string_field(payload, "job_id").as_deref() != Some(expected_job_id) {
+    if let Some(expected_job_id) = job_id
+        && trace_event_string_field(payload, "job_id").as_deref() != Some(expected_job_id) {
             return false;
         }
-    }
     true
 }
 

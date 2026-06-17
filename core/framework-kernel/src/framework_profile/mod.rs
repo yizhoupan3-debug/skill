@@ -262,7 +262,9 @@ fn build_shared_contract(
     normalized_mcp_servers: &[Value],
     workspace_bootstrap: &Map<String, Value>,
 ) -> Map<String, Value> {
-    let shared_contract = if let Value::Object(contract) = serde_json::json!({
+    
+
+    if let Value::Object(contract) = serde_json::json!({
         "routing": {
             "mode": profile
                 .session_policy
@@ -299,9 +301,7 @@ fn build_shared_contract(
         contract
     } else {
         unreachable!()
-    };
-
-    shared_contract
+    }
 }
 
 // ── HostProfileSpec ──
@@ -485,7 +485,7 @@ fn resolve_host_capability_requirements(
 // ── merge helpers ──
 
 fn merge_json_maps(target: &mut Map<String, Value>, override_map: &Map<String, Value>) {
-    target.extend(override_map.clone().into_iter());
+    target.extend(override_map.clone());
 }
 
 // ── tiny helpers ──

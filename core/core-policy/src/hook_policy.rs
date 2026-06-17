@@ -273,15 +273,14 @@ pub fn classify_protected_path<'a>(
 
 pub fn relative_candidate_path(path: &str, repo_root: Option<&Path>) -> String {
     let candidate = PathBuf::from(path);
-    if candidate.is_absolute() {
-        if let Some(root) = repo_root {
+    if candidate.is_absolute()
+        && let Some(root) = repo_root {
             let normalized_candidate = candidate.canonicalize().unwrap_or(candidate.clone());
             let normalized_root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
             if let Ok(rel) = normalized_candidate.strip_prefix(normalized_root) {
                 return normalize_repo_relative_path(&rel.to_string_lossy());
             }
         }
-    }
     normalize_repo_relative_path(path)
 }
 

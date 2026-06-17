@@ -68,17 +68,15 @@ pub(super) fn build_state_control_plane(
         "supports_sqlite_wal": runtime_backend_capabilities(&normalized_backend)?.supports_sqlite_wal,
         "state_path": state_path.to_string_lossy(),
     });
-    if let Some(Value::Object(descriptor)) = control_plane_descriptor {
-        if let Some(Value::Object(services)) = descriptor.get("services") {
-            if let Some(Value::Object(service)) = services.get("state") {
+    if let Some(Value::Object(descriptor)) = control_plane_descriptor
+        && let Some(Value::Object(services)) = descriptor.get("services")
+            && let Some(Value::Object(service)) = services.get("state") {
                 for field in ["authority", "role", "projection", "delegate_kind"] {
                     if let Some(value) = service.get(field) {
                         payload[field] = value.clone();
                     }
                 }
             }
-        }
-    }
     if payload.get("delegate_kind").and_then(Value::as_str) == Some("filesystem-state-store")
         && normalized_backend != "filesystem"
     {

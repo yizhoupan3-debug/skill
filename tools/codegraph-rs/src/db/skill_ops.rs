@@ -69,14 +69,13 @@ pub fn ingest_skills(conn: &Connection, manifest: &Value) -> rusqlite::Result<us
 
         // Build a searchable text blob from description + trigger_hints
         let mut search_text = String::from(slug);
-        if let Some(idx) = desc_idx {
-            if let Some(desc) = row.get(idx).and_then(Value::as_str) {
+        if let Some(idx) = desc_idx
+            && let Some(desc) = row.get(idx).and_then(Value::as_str) {
                 search_text.push(' ');
                 search_text.push_str(desc);
             }
-        }
-        if let Some(idx) = hints_idx {
-            if let Some(hints) = row.get(idx).and_then(Value::as_array) {
+        if let Some(idx) = hints_idx
+            && let Some(hints) = row.get(idx).and_then(Value::as_array) {
                 for hint in hints {
                     if let Some(s) = hint.as_str() {
                         search_text.push(' ');
@@ -84,7 +83,6 @@ pub fn ingest_skills(conn: &Connection, manifest: &Value) -> rusqlite::Result<us
                     }
                 }
             }
-        }
 
         let id = format!("skill://{slug}");
         // Store the search text in file_path so FTS5 can index it

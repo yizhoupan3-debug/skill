@@ -117,9 +117,7 @@ impl CodexLifecycleHostKind {
     };
 
     fn strings(self) -> &'static HostStrings {
-        match self.state_dir_leaf {
-            _ => &CODEX_STRINGS,
-        }
+        &CODEX_STRINGS
     }
 
     fn review_gate_tag(self) -> &'static str {

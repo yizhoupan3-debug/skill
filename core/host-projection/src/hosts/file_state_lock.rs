@@ -12,7 +12,7 @@ use tracing::debug;
 /// 4. Execute closure with mutable state
 /// 5. Save state back to JSON
 /// 6. Release lock
-
+///
 /// Guard that holds a file lock until dropped.
 pub struct FileStateLockGuard {
     _lock_path: PathBuf,
@@ -44,12 +44,11 @@ impl HookStateConfig {
     /// Load state from disk, returning default if missing or corrupt.
     pub fn load_state<T: Default + serde::de::DeserializeOwned>(&self, repo_root: &Path) -> T {
         let path = self.state_path(repo_root);
-        if let Ok(content) = fs::read_to_string(&path) {
-            if let Ok(state) = serde_json::from_str::<T>(&content) {
+        if let Ok(content) = fs::read_to_string(&path)
+            && let Ok(state) = serde_json::from_str::<T>(&content) {
                 debug!(host = %self.host_id, "hook state loaded");
                 return state;
             }
-        }
         debug!(host = %self.host_id, "hook state default (missing or corrupt)");
         T::default()
     }

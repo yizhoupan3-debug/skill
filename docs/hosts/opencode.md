@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-12"
+last_verified: "2026-06-16"
 depends_on:
   - ../spec.md
 ---
@@ -100,7 +100,7 @@ OpenCode 的 hook 处理层在 **TS/JS 插件系统**中执行，而非 Rust 侧
 | Stop | `Stop` 事件 | `session.idle` 插件事件 |
 | 权限守卫 | Rust 侧实现 | `permission.asked` / `permission.replied` 插件事件 |
 | Rust 侧 dispatch | ✅ 数千行 | ❌ 不需要（插件层处理） |
-| Provider trait | 完整实现 | 完整实现（v6.5 已对齐） |
+| Provider trait | 完整实现 | 完整实现（v7 已对齐） |
 | `has_native_hook` | `true` | `true` |
 | `harness_capabilities` | FULL | FULL |
 

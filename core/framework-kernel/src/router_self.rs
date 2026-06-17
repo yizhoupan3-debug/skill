@@ -96,11 +96,10 @@ pub fn install_router_rs_to_bin_dir(bin_dir: Option<PathBuf>) -> Result<PathBuf,
 }
 
 pub fn ensure_router_rs_installed_for_runtime() -> Result<PathBuf, String> {
-    if let Ok(path) = which::which("router-rs") {
-        if path.is_file() && !is_ephemeral_router_rs_path(&path.to_string_lossy()) {
+    if let Ok(path) = which::which("router-rs")
+        && path.is_file() && !is_ephemeral_router_rs_path(&path.to_string_lossy()) {
             return Ok(path);
         }
-    }
     let installed = default_router_rs_install_path();
     if installed.is_file() {
         return Ok(installed);
@@ -143,11 +142,10 @@ fn pick_router_rs_copy_source() -> Result<PathBuf, String> {
             return Ok(path);
         }
     }
-    if let Ok(current) = std::env::current_exe() {
-        if current.is_file() && !is_ephemeral_router_rs_path(&current.to_string_lossy()) {
+    if let Ok(current) = std::env::current_exe()
+        && current.is_file() && !is_ephemeral_router_rs_path(&current.to_string_lossy()) {
             return Ok(current);
         }
-    }
     if let Ok(path) = which::which("router-rs") {
         let text = path.to_string_lossy();
         if path.is_file() && !is_ephemeral_router_rs_path(&text) {
@@ -181,20 +179,18 @@ pub fn install_router_rs_for_desktop_mcp_at(home_account: &Path) -> Result<PathB
         let dest = router_rs_desktop_mcp_path_for_home(home_account);
         let needs_copy = match (fs::metadata(&source), fs::metadata(&dest)) {
             (Ok(src_meta), Ok(dest_meta)) => {
-                if src_meta.len() != dest_meta.len() {
-                    true
-                } else if src_meta
-                    .modified()
-                    .ok()
-                    .zip(dest_meta.modified().ok())
-                    .is_some_and(|(src, dest)| src > dest)
+                if src_meta.len() != dest_meta.len()
+                    || src_meta
+                        .modified()
+                        .ok()
+                        .zip(dest_meta.modified().ok())
+                        .is_some_and(|(src, dest)| src > dest)
                 {
                     true
                 } else {
                     file_sha256(&source).ok() != file_sha256(&dest).ok()
                 }
             }
-            (Ok(_), Err(_)) => true,
             _ => true,
         };
         if needs_copy {
@@ -306,15 +302,14 @@ pub fn is_repo_build_router_rs_path(path: &str, framework_root: &Path) -> bool {
     if !(path.contains("/target/release/router-rs") || path.contains("/target/debug/router-rs")) {
         return false;
     }
-    if let Ok(root) = framework_root.canonicalize() {
-        if let Ok(path_buf) = Path::new(path).canonicalize() {
+    if let Ok(root) = framework_root.canonicalize()
+        && let Ok(path_buf) = Path::new(path).canonicalize() {
             for suffix in ["core/router-rs/target", "target"] {
                 if path_buf.starts_with(root.join(suffix)) {
                     return true;
                 }
             }
         }
-    }
     let root_text = framework_root.to_string_lossy();
     path.starts_with(root_text.as_ref())
         && (path.contains("/target/release/router-rs") || path.contains("/target/debug/router-rs"))

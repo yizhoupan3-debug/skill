@@ -315,8 +315,8 @@ fn visit_goal_state_dirs(
         return Ok(());
     }
     let goal_path = dir.join(GOAL_STATE_FILENAME);
-    if goal_path.is_file() {
-        if let Ok(rel) = dir.strip_prefix(current_root) {
+    if goal_path.is_file()
+        && let Ok(rel) = dir.strip_prefix(current_root) {
             let tid_norm = rel
                 .to_str()
                 .map(|s| s.trim().replace('\\', "/"))
@@ -328,7 +328,6 @@ fn visit_goal_state_dirs(
                 out.push((tid_norm, mtime));
             }
         }
-    }
     if !dir.is_dir() {
         return Ok(());
     }
@@ -355,7 +354,7 @@ pub fn read_goal_state_for_diagnostics_scan(
     if candidates.is_empty() {
         return Ok(None);
     }
-    candidates.sort_by(|a, b| b.1.cmp(&a.1));
+    candidates.sort_by_key(|(_, score)| std::cmp::Reverse(*score));
     for (tid, _) in candidates {
         if let Some(pair) = read_goal_state_pair_if_valid(repo_root, &tid) {
             return Ok(Some(pair));

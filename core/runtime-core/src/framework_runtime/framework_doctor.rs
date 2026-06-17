@@ -89,15 +89,15 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     let mut host_install_checks: Vec<(String, std::path::PathBuf)> = Vec::new();
     // Always-known non-entrypoint paths (settings, mcp.json per host)
     let known_extra_checks: &[(&str, std::path::PathBuf)] = &[(
-        ".claude/settings.json".into(),
+        ".claude/settings.json",
         repo_root.join(".claude").join("settings.json"),
     )];
     for (label, path) in known_extra_checks {
         host_install_checks.push((label.to_string(), path.clone()));
     }
     // Read host_entrypoints from registry for each supported host
-    if let Ok(reg) = crate::runtime_registry::load_runtime_registry_json(repo_root) {
-        if let Ok(supported) = crate::framework_host_targets::host_targets_supported_host_ids(&reg)
+    if let Ok(reg) = crate::runtime_registry::load_runtime_registry_json(repo_root)
+        && let Ok(supported) = crate::framework_host_targets::host_targets_supported_host_ids(&reg)
         {
             for host_id in &supported {
                 if let Ok(ep_value) =
@@ -120,7 +120,6 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
                 }
             }
         }
-    }
     let mut host_install_missing = 0usize;
     for (label, path) in &host_install_checks {
         let status = if path.is_file() {
@@ -298,17 +297,15 @@ fn read_local_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<Str
     let current = repo_root.join("artifacts/current");
     // Phase 3C consolidated file
     let pointers_path = current.join("TASK_POINTERS.json");
-    if pointers_path.is_file() {
-        if let Ok(raw) = fs::read_to_string(&pointers_path) {
-            if let Ok(data) = serde_json::from_str::<Value>(&raw) {
+    if pointers_path.is_file()
+        && let Ok(raw) = fs::read_to_string(&pointers_path)
+            && let Ok(data) = serde_json::from_str::<Value>(&raw) {
                 let active = parse_pointer_task_id(data.get("active_task_id"));
                 let focus = parse_pointer_task_id(data.get("focus_task_id"));
                 if active.is_some() || focus.is_some() {
                     return (active, focus);
                 }
             }
-        }
-    }
     // Legacy individual files
     let active = read_single_pointer(&current.join("active_task.json"));
     let focus = read_single_pointer(&current.join("focus_task.json"));
@@ -377,16 +374,16 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
     // Check for dangling focus pointer
     if let (Some(focus_id), false) = (
         &focus_task_id,
-        focus_dir.as_ref().map_or(true, |d| d.is_dir()),
+        focus_dir.as_ref().is_none_or(|d| d.is_dir()),
     ) {
         issues.push(format!(
             "DANGLING POINTER: focus_task.json references '{}' but directory does not exist",
             focus_id
         ));
-        if active_task_id.is_some() {
+        if let Some(task_id) = &active_task_id {
             warnings.push(format!(
                 "Suggested fix: set focus_task.json to '{}' or clear it",
-                active_task_id.as_ref().unwrap()
+                task_id
             ));
         } else {
             warnings.push(
@@ -421,8 +418,8 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
                         }
                     }
 
-                    if let (Some(active_id), Some(focus_id)) = (&active_task_id, &focus_task_id) {
-                        if active_id != focus_id {
+                    if let (Some(active_id), Some(focus_id)) = (&active_task_id, &focus_task_id)
+                        && active_id != focus_id {
                             let active_goal = crate::autopilot_goal::read_goal_state(
                                 repo_root,
                                 Some(active_id.as_str()),
@@ -447,7 +444,6 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
                                 ));
                             }
                         }
-                    }
 
                     // Check for orphan task directories
                     if let Some(tasks) = registry.get("tasks").and_then(|v| v.as_array()) {
@@ -582,7 +578,7 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
         "summary": {
             "issue_count": issues.len(),
             "warning_count": warnings.len(),
-            "has_dangling_focus_pointer": focus_dir.as_ref().map_or(false, |d| !d.is_dir()),
+            "has_dangling_focus_pointer": focus_dir.as_ref().is_some_and(|d| !d.is_dir()),
             "active_task_id": active_task_id,
             "focus_task_id": focus_task_id,
         }

@@ -36,11 +36,10 @@ fn truncate_hook_outbound_bytes(combined: &str, max_bytes: usize, suffix: &str) 
     while cut > 0 && !combined.is_char_boundary(cut) {
         cut -= 1;
     }
-    if let Some(pos) = combined[..cut].rfind('\n') {
-        if pos > 0 {
+    if let Some(pos) = combined[..cut].rfind('\n')
+        && pos > 0 {
             cut = pos;
         }
-    }
     while cut > 0 && !combined.is_char_boundary(cut) {
         cut -= 1;
     }

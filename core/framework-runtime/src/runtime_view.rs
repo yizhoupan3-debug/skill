@@ -160,13 +160,12 @@ pub fn load_framework_runtime_view(
             recoverable_task_ids.push(task_id.clone());
         }
     }
-    if let Some(ref task_id) = focus_task_id {
-        if !known_task_ids.iter().any(|existing| existing == task_id) {
+    if let Some(ref task_id) = focus_task_id
+        && !known_task_ids.iter().any(|existing| existing == task_id) {
             known_task_ids.push(task_id.clone());
         }
-    }
-    if task_id_override.is_none() {
-        if let Some(task_id) = active_task_id.as_ref() {
+    if task_id_override.is_none()
+        && let Some(task_id) = active_task_id.as_ref() {
             let task_dir = mirror_root.join(task_id);
             if task_registry_present
                 && task_dir.is_dir()
@@ -179,7 +178,6 @@ pub fn load_framework_runtime_view(
                 ));
             }
         }
-    }
     let task_root = active_task_id
         .as_ref()
         .map_or_else(|| mirror_root.clone(), |task_id| mirror_root.join(task_id));
@@ -815,11 +813,10 @@ fn normalize_supervisor_state(payload: &Value) -> Map<String, Value> {
         "active_lease_expires_at",
         "state_reason",
     ] {
-        if !continuity.contains_key(key) {
-            if let Some(value) = source.get(key) {
+        if !continuity.contains_key(key)
+            && let Some(value) = source.get(key) {
                 continuity.insert(key.to_string(), value.clone());
             }
-        }
     }
     normalized.insert("continuity".to_string(), Value::Object(continuity));
 
@@ -909,11 +906,10 @@ fn authoritative_next_actions(
                     .collect(),
             )
         });
-    if let Some(actions) = from_supervisor {
-        if !actions.is_empty() {
+    if let Some(actions) = from_supervisor
+        && !actions.is_empty() {
             return actions;
         }
-    }
     snapshot_payload
         .get("next_actions")
         .and_then(Value::as_array)
@@ -966,11 +962,9 @@ fn trace_payload_identity_matches(
     if let Some(version) = payload
         .get("routing_runtime_version")
         .and_then(Value::as_u64)
-    {
-        if version != current_routing_runtime_version {
+        && version != current_routing_runtime_version {
             return false;
         }
-    }
     true
 }
 

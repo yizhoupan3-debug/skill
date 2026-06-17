@@ -4,6 +4,7 @@ use std::fs;
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub struct EvolutionConfig {
     #[serde(default)]
     pub evolution: EvolutionSection,
@@ -61,16 +62,6 @@ pub struct AuditSection {
     pub top_ngram_candidates: usize,
 }
 
-impl Default for EvolutionConfig {
-    fn default() -> Self {
-        Self {
-            evolution: EvolutionSection::default(),
-            thresholds: ThresholdSection::default(),
-            weights: WeightSection::default(),
-            audit: AuditSection::default(),
-        }
-    }
-}
 
 impl Default for EvolutionSection {
     fn default() -> Self {

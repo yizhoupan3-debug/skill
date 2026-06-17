@@ -2,7 +2,7 @@
 module: host-projection::host_integration::projection
 lines: ~3700
 layer: B2
-last_verified: "2026-06-13"
+last_verified: "2026-06-16"
 ---
 
 # projection 子模块详解

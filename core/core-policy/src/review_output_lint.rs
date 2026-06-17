@@ -124,8 +124,8 @@ pub fn lint_review_output(text: &str) -> Vec<LintFinding> {
         .copied();
 
     if let Some(limit) = first_finding_idx {
-        for i in 0..limit {
-            if TABLE_ROW.is_match(lines[i]) {
+        for line in lines.iter().take(limit) {
+            if TABLE_ROW.is_match(line) {
                 findings.push(LintFinding {
                     severity: LintSeverity::Warning,
                     message: "Markdown table detected before first `[P*]`/`Caveat:` line. Tables before findings violate the compact envelope.".to_string(),

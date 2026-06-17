@@ -281,11 +281,10 @@ pub fn build_checkpoint_resume_manifest(payload: Value) -> Result<Value, String>
         "supervisor_projection": payload.get("supervisor_projection").cloned().unwrap_or(Value::Null),
         "control_plane": payload.get("control_plane").cloned().unwrap_or(Value::Null),
     });
-    if let Some(updated_at) = optional_non_empty_string(&payload, "updated_at") {
-        if let Some(map) = resume_manifest.as_object_mut() {
+    if let Some(updated_at) = optional_non_empty_string(&payload, "updated_at")
+        && let Some(map) = resume_manifest.as_object_mut() {
             map.insert("updated_at".to_string(), Value::String(updated_at));
         }
-    }
     Ok(json!({
         "schema_version": CHECKPOINT_RESUME_MANIFEST_SCHEMA_VERSION,
         "authority": CHECKPOINT_RESUME_MANIFEST_AUTHORITY,

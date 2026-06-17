@@ -65,11 +65,10 @@ impl RoutingRuntimeWatch {
                         event.kind,
                         EventKind::Modify(_) | EventKind::Create(_) | EventKind::Any
                     );
-                    if reload {
-                        if let Ok(snapshot) = load_snapshot(&watch_path) {
+                    if reload
+                        && let Ok(snapshot) = load_snapshot(&watch_path) {
                             let _ = tx.send(snapshot);
                         }
-                    }
                 },
                 Config::default(),
             ) else {

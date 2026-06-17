@@ -42,8 +42,8 @@ fn collect_all(
         | "class_declaration"
         | "interface_declaration"
         | "type_alias_declaration" => {
-            if let Some(name) = node.child_by_field_name("name") {
-                if let Ok(text) = name.utf8_text(source) {
+            if let Some(name) = node.child_by_field_name("name")
+                && let Ok(text) = name.utf8_text(source) {
                     symbols.push(ParsedSymbol {
                         symbol: text.to_string(),
                         kind: node
@@ -53,27 +53,24 @@ fn collect_all(
                         line: node.start_position().row as u32 + 1,
                     });
                 }
-            }
         }
         "lexical_declaration" | "variable_declarator" => {
-            if let Some(name) = node.child_by_field_name("name") {
-                if name.kind() == "identifier" {
-                    if let Ok(text) = name.utf8_text(source) {
+            if let Some(name) = node.child_by_field_name("name")
+                && name.kind() == "identifier"
+                    && let Ok(text) = name.utf8_text(source) {
                         symbols.push(ParsedSymbol {
                             symbol: text.to_string(),
                             kind: "const".to_string(),
                             line: node.start_position().row as u32 + 1,
                         });
                     }
-                }
-            }
         }
         _ => {}
     }
     // Collect call edges at this node
-    if node.kind() == "call_expression" {
-        if let Some(func) = node.child_by_field_name("function") {
-            if let (Some(caller), Some(callee)) =
+    if node.kind() == "call_expression"
+        && let Some(func) = node.child_by_field_name("function")
+            && let (Some(caller), Some(callee)) =
                 (enclosing_symbol(node, source), callee_name(func, source))
             {
                 edges.push(ParsedEdge {
@@ -82,8 +79,6 @@ fn collect_all(
                     line: node.start_position().row as u32 + 1,
                 });
             }
-        }
-    }
     // Recurse into children
     for i in 0..node.named_child_count() {
         if let Some(child) = node.named_child(i) {
@@ -109,25 +104,21 @@ fn enclosing_symbol(node: Node<'_>, source: &[u8]) -> Option<String> {
     while let Some(ancestor) = current {
         match ancestor.kind() {
             "function_declaration" | "method_definition" | "class_declaration" => {
-                if let Some(name) = ancestor.child_by_field_name("name") {
-                    if let Ok(text) = name.utf8_text(source) {
+                if let Some(name) = ancestor.child_by_field_name("name")
+                    && let Ok(text) = name.utf8_text(source) {
                         return Some(text.to_string());
                     }
-                }
             }
             // Arrow functions: const foo = () => { ... }
             "lexical_declaration" => {
                 // Look for the variable_declarator child to get the name
                 for i in 0..ancestor.named_child_count() {
-                    if let Some(child) = ancestor.named_child(i) {
-                        if child.kind() == "variable_declarator" {
-                            if let Some(name) = child.child_by_field_name("name") {
-                                if let Ok(text) = name.utf8_text(source) {
+                    if let Some(child) = ancestor.named_child(i)
+                        && child.kind() == "variable_declarator"
+                            && let Some(name) = child.child_by_field_name("name")
+                                && let Ok(text) = name.utf8_text(source) {
                                     return Some(text.to_string());
                                 }
-                            }
-                        }
-                    }
                 }
             }
             _ => {}

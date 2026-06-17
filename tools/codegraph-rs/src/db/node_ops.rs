@@ -124,11 +124,10 @@ pub fn find_dead_code(
     let mut result: Vec<DeadCodeNode> = Vec::new();
     for row in rows {
         let node = row?;
-        if let Some(min) = min_lines {
-            if node.line < min {
+        if let Some(min) = min_lines
+            && node.line < min {
                 continue;
             }
-        }
         result.push(node);
     }
     Ok(result)

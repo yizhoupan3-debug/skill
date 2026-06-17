@@ -15,7 +15,7 @@ struct SignalCacheState {
 
 thread_local! {
     static SIGNAL_CACHE: std::cell::RefCell<Option<SignalCacheState>> =
-        std::cell::RefCell::new(None);
+        const { std::cell::RefCell::new(None) };
 }
 
 fn query_fingerprint(query_text: &str, query_token_list: &[String]) -> u64 {

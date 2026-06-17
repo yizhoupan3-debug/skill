@@ -74,14 +74,13 @@ fn maybe_track_shell_owned_terminals(
         if baseline.contains(&obs.pid) {
             continue;
         }
-        if let Some(t0) = matched_after_ms {
-            if let Some(sa) = obs.started_at_ms {
+        if let Some(t0) = matched_after_ms
+            && let Some(sa) = obs.started_at_ms {
                 let floor = t0.saturating_sub(SHELL_TERMINAL_TIME_MATCH_SLACK_MS);
                 if sa < floor {
                     continue;
                 }
             }
-        }
         if !obs.cwd.is_absolute() {
             continue;
         }
@@ -298,7 +297,7 @@ fn hook_state_lock_removable_for_sweep(lock_path: &Path) -> bool {
         return true;
     };
     if days > 0 {
-        let cutoff_ms = now_millis().saturating_sub((days as u64).saturating_mul(86_400 * 1000));
+        let cutoff_ms = now_millis().saturating_sub(days.saturating_mul(86_400 * 1000));
         if ts_ms < cutoff_ms {
             return true;
         }
@@ -612,22 +611,19 @@ fn parse_terminal_header(text: &str) -> Option<TerminalHeader> {
         let val = val.trim().trim_matches('"').trim();
         match key {
             "pid" => header.pid = val.parse().ok(),
-            "cwd" => {
-                if !val.is_empty() {
+            "cwd"
+                if !val.is_empty() => {
                     header.cwd = Some(PathBuf::from(val));
                 }
-            }
             "running_for_ms" => header.is_active = val.parse::<u64>().map_or(!val.is_empty(), |ms| ms > 0),
-            "active_command" => {
-                if !val.is_empty() {
+            "active_command"
+                if !val.is_empty() => {
                     header.active_command = Some(val.to_string());
                 }
-            }
-            "last_command" => {
-                if !val.is_empty() {
+            "last_command"
+                if !val.is_empty() => {
                     header.last_command = Some(val.to_string());
                 }
-            }
             "started_at" => {
                 header.started_at_ms = parse_terminal_started_at_unix_ms(val);
             }
@@ -799,11 +795,10 @@ fn terminate_stale_terminal_processes_in_dir(
         if !name.ends_with(".txt") {
             continue;
         }
-        if let Ok(ft) = entry.file_type() {
-            if !ft.is_file() {
+        if let Ok(ft) = entry.file_type()
+            && !ft.is_file() {
                 continue;
             }
-        }
         let path = entry.path();
         report.scanned += 1;
         // header 在前 ~4KB 内，避免读整个 terminal 输出文件。
@@ -858,12 +853,11 @@ fn terminate_stale_terminal_processes_in_dir(
             report.skipped_dead += 1;
             continue;
         }
-        if let Some(owned) = owned_pids {
-            if !owned.contains(&pid) {
+        if let Some(owned) = owned_pids
+            && !owned.contains(&pid) {
                 report.skipped_not_owned += 1;
                 continue;
             }
-        }
         kill_targets.push(TerminalKillTarget {
             pid,
             pgid: process_pgid(pid),
@@ -922,15 +916,11 @@ pub fn dispatch_cursor_hook_event(
     let dispatch_text = prompt_text(payload);
     let disabled = cursor_review_gate_suppressed(repo_root, &dispatch_text);
 
-    if disabled {
-        if matches!(lowered, "sessionstart") {
-            clear_review_gate_hook_state(repo_root, payload);
-        } else if matches!(
-            lowered,
-            "posttooluse" | "subagentstart" | "subagentstop"
-        ) {
-            clear_review_gate_hook_state(repo_root, payload);
-        }
+    if disabled && matches!(
+        lowered,
+        "sessionstart" | "posttooluse" | "subagentstart" | "subagentstop"
+    ) {
+        clear_review_gate_hook_state(repo_root, payload);
     }
 
     // my-light suppresses REVIEW_GATE Stop nudge inside handlers; do not skip beforeSubmit

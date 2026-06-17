@@ -59,16 +59,14 @@ fn extract_observation_correlation(output: &Value) -> Option<Value> {
         m.insert("task_id".to_string(), Value::String(s));
     }
     if let Some(ti) = output.get("tool_input").and_then(Value::as_object) {
-        if !m.contains_key("session_id") {
-            if let Some(s) = nonempty_trimmed_str(ti.get("session_id")) {
+        if !m.contains_key("session_id")
+            && let Some(s) = nonempty_trimmed_str(ti.get("session_id")) {
                 m.insert("session_id".to_string(), Value::String(s));
             }
-        }
-        if !m.contains_key("task_id") {
-            if let Some(s) = nonempty_trimmed_str(ti.get("task_id")) {
+        if !m.contains_key("task_id")
+            && let Some(s) = nonempty_trimmed_str(ti.get("task_id")) {
                 m.insert("task_id".to_string(), Value::String(s));
             }
-        }
     }
     if m.is_empty() {
         None

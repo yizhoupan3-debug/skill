@@ -156,11 +156,10 @@ pub fn try_framework_root_from_workspace_env() -> Option<PathBuf> {
             continue;
         };
         let candidate = PathBuf::from(raw);
-        if let Ok(root) = normalize_path(&candidate) {
-            if is_framework_root(&root) {
+        if let Ok(root) = normalize_path(&candidate)
+            && is_framework_root(&root) {
                 return Some(root);
             }
-        }
     }
     None
 }

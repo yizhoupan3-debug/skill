@@ -173,13 +173,12 @@ impl BrowserRuntime {
                 Some(RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION)
                     | Some(RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION)
                     | Some(TRACE_RESUME_MANIFEST_SCHEMA_VERSION)
-            ) {
-                if let Ok(loaded) =
+            )
+                && let Ok(loaded) =
                     self.try_hydrate_runtime_attach_descriptor_from_artifact_path(&resolved_path)
                 {
                     return Ok(loaded);
                 }
-            }
             if schema.as_deref() == Some(RUNTIME_ATTACH_DESCRIPTOR_SCHEMA_VERSION) {
                 return self.canonicalize_attach_descriptor_if_possible(parsed);
             }

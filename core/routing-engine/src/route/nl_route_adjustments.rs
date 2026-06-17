@@ -468,22 +468,20 @@ pub fn visual_evidence_markers() -> &'static [String] {
 }
 
 fn matches_record_filter(filter: &RecordFilter, record: &SkillRecord) -> bool {
-    if let Some(s) = &filter.slug {
-        if record.slug != *s {
+    if let Some(s) = &filter.slug
+        && record.slug != *s {
             return false;
         }
-    }
     if let Some(arr) = &filter.slugs {
         let ok = arr.iter().any(|s| s == record.slug.as_str());
         if !ok {
             return false;
         }
     }
-    if let Some(g) = &filter.gate_lower {
-        if record.gate_lower != *g {
+    if let Some(g) = &filter.gate_lower
+        && record.gate_lower != *g {
             return false;
         }
-    }
     true
 }
 

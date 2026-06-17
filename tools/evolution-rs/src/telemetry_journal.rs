@@ -190,12 +190,11 @@ pub fn load_audit_journal_entries(path: &Path) -> anyhow::Result<Vec<AuditJourna
         if trimmed.is_empty() {
             continue;
         }
-        if let Ok(parsed) = serde_json::from_str::<JournalLine>(trimmed) {
-            if let Some(entry) = audit_entry_from_telemetry(&parsed) {
+        if let Ok(parsed) = serde_json::from_str::<JournalLine>(trimmed)
+            && let Some(entry) = audit_entry_from_telemetry(&parsed) {
                 entries.push(entry);
                 continue;
             }
-        }
         if let Ok(legacy) = serde_json::from_str::<LegacyShortKeyEntry>(trimmed) {
             entries.push(AuditJournalEntry {
                 ts: legacy.ts,

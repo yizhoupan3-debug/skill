@@ -28,21 +28,18 @@ const ALLOWED_STATUSES: &[&str] = &["passed", "failed", "partial", "not_run"];
 
 /// Read prediction from `extra.prediction`, then `metadata.prediction`, then top-level `prediction`.
 pub fn read_goal_prediction(goal_state: &Value) -> Option<GoalStatePrediction> {
-    for pointer in [
+    for pred in [
         goal_state.get("extra").and_then(|e| e.get("prediction")),
         goal_state.get("metadata").and_then(|m| m.get("prediction")),
         goal_state.get("prediction"),
-    ] {
-        if let Some(pred) = pointer {
-            if pred.is_null() {
-                continue;
-            }
-            if let Ok(parsed) = serde_json::from_value::<GoalStatePrediction>(pred.clone()) {
-                if prediction_is_nonempty(&parsed) {
-                    return Some(parsed);
-                }
-            }
+    ].into_iter().flatten() {
+        if pred.is_null() {
+            continue;
         }
+        if let Ok(parsed) = serde_json::from_value::<GoalStatePrediction>(pred.clone())
+            && prediction_is_nonempty(&parsed) {
+                return Some(parsed);
+            }
     }
     None
 }
@@ -128,8 +125,8 @@ pub fn merge_prediction_from_payload(obj: &mut serde_json::Map<String, Value>, p
         .and_then(|e| e.get("prediction"))
         .or_else(|| payload.get("prediction"));
     let Some(pred) = prediction_value else {
-        if let Some(extra) = payload.get("extra").and_then(Value::as_object) {
-            if !extra.is_empty() {
+        if let Some(extra) = payload.get("extra").and_then(Value::as_object)
+            && !extra.is_empty() {
                 let entry = obj
                     .entry("extra".to_string())
                     .or_insert_with(|| Value::Object(serde_json::Map::new()));
@@ -141,7 +138,6 @@ pub fn merge_prediction_from_payload(obj: &mut serde_json::Map<String, Value>, p
                     }
                 }
             }
-        }
         return;
     };
     let entry = obj
@@ -150,15 +146,14 @@ pub fn merge_prediction_from_payload(obj: &mut serde_json::Map<String, Value>, p
     if let Some(extra) = entry.as_object_mut() {
         extra.insert("prediction".to_string(), pred.clone());
     }
-    if let Some(extra) = payload.get("extra").and_then(Value::as_object) {
-        if let Some(target) = obj.get_mut("extra").and_then(Value::as_object_mut) {
+    if let Some(extra) = payload.get("extra").and_then(Value::as_object)
+        && let Some(target) = obj.get_mut("extra").and_then(Value::as_object_mut) {
             for (k, v) in extra {
                 if k != "prediction" {
                     target.insert(k.clone(), v.clone());
                 }
             }
         }
-    }
 }
 
 #[cfg(test)]

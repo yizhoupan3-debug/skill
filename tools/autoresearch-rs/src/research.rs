@@ -164,8 +164,8 @@ pub(super) fn default_research_query(
     {
         return Ok(query.to_string());
     }
-    if let Some(record) = record {
-        if let Some(query) = build_search_queries(
+    if let Some(record) = record
+        && let Some(query) = build_search_queries(
             &str_field_default(record, "claim", ""),
             &str_field_default(record, "axis", "claim"),
         )
@@ -178,7 +178,6 @@ pub(super) fn default_research_query(
         }) {
             return Ok(query);
         }
-    }
     bail!("No query available. Run draft-claims first or pass --query.");
 }
 
@@ -248,11 +247,10 @@ pub(super) fn research_claim_with_client(
 
 pub(super) fn claim_records_for_batch(state: &Value, max_claims: usize) -> Vec<Value> {
     let mut records = current_search_plan(state);
-    if records.is_empty() {
-        if let Some(top) = top_priority_claim(state) {
+    if records.is_empty()
+        && let Some(top) = top_priority_claim(state) {
             records.push(build_search_plan_entry(&top));
         }
-    }
     records.into_iter().take(max_claims.clamp(1, 10)).collect()
 }
 
@@ -286,7 +284,7 @@ pub(super) fn research_all_claims(
     let client = Arc::new(http_client(timeout_secs)?);
     let state_ref = Arc::new(next_state.clone());
     let source = source.clone();
-    let worker_count = to_process.len().min(4).max(1);
+    let worker_count = to_process.len().clamp(1, 4);
     let (result_tx, result_rx) = mpsc::channel();
     let tasks = Arc::new(to_process);
     let next_idx = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -307,7 +305,7 @@ pub(super) fn research_all_claims(
                 }
                 let record = &tasks[idx];
                 let claim_id = record.get("claim_id").and_then(Value::as_str);
-                let query = match default_research_query(Some(&record), None) {
+                let query = match default_research_query(Some(record), None) {
                     Ok(q) => q,
                     Err(e) => {
                         let _ = result_tx.send(Err(format!("query extraction: {e}")));
@@ -418,11 +416,10 @@ pub(super) fn claim_ids_for_gate(state: &Value) -> Vec<String> {
             .into_iter()
             .flatten()
         {
-            if let Some(id) = claim.get("claim_id").and_then(Value::as_str) {
-                if !ids.iter().any(|item| item == id) {
+            if let Some(id) = claim.get("claim_id").and_then(Value::as_str)
+                && !ids.iter().any(|item| item == id) {
                     ids.push(id.to_string());
                 }
-            }
         }
     }
     ids
@@ -836,10 +833,9 @@ pub(super) fn strongest_current_claim(state: &Value) -> String {
         });
         return str_field_default(&ranked[0], "claim", "_No strong claim recorded yet._");
     }
-    if let Some(active_id) = state.get("active_hypothesis").and_then(Value::as_str) {
-        if let Some(active) = find_hypothesis(state, active_id) {
+    if let Some(active_id) = state.get("active_hypothesis").and_then(Value::as_str)
+        && let Some(active) = find_hypothesis(state, active_id) {
             return str_field_default(active, "claim", "_No strong claim recorded yet._");
         }
-    }
     "_No strong claim recorded yet._".to_string()
 }

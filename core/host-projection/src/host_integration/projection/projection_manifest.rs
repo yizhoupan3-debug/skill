@@ -611,6 +611,67 @@ pub fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
         .is_some())
 }
 
+// ── Claude Code MCP Server ──────────────────────────────────────────────────
+
+pub fn claude_mcp_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+    if scope == "user" {
+        roots
+            .account_home_root
+            .join(".claude/mcp.json")
+    } else {
+        roots.project_root.join(".mcp.json")
+    }
+}
+
+pub fn install_claude_mcp_server(
+    roots: &ResolvedProjectionRoots,
+    path: &Path,
+    _scope: &str,
+) -> Result<bool, String> {
+    let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
+    if !payload.is_object() {
+        payload = json!({});
+    }
+    let root = payload
+        .as_object_mut()
+        .ok_or_else(|| "claude mcp.json root must be an object".to_string())?;
+    let mcp_servers = root
+        .entry("mcpServers".to_string())
+        .or_insert_with(|| json!({}));
+    if !mcp_servers.is_object() {
+        *mcp_servers = json!({});
+    }
+    let entries = mcp_servers
+        .as_object_mut()
+        .ok_or_else(|| "mcpServers must be an object".to_string())?;
+
+    let framework_payload = host_router_rs_framework_payload(
+        roots,
+        "claude-code",
+        "Framework snapshot, skill routing, goal/closeout gating",
+    );
+    let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
+    if framework_changed {
+        entries.insert("router-rs-framework".to_string(), framework_payload);
+    }
+
+    let browser_payload = browser_mcp_server_payload(roots);
+    let browser_changed = entries.get("browser-mcp") != Some(&browser_payload);
+    if browser_changed {
+        entries.insert("browser-mcp".to_string(), browser_payload);
+    }
+
+    let paperplain_changed = merge_paperplain_into_mcp_servers_map(entries, "paperplain");
+    let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
+
+    let file_changed = write_json_if_changed(path, &payload)?;
+    Ok(framework_changed || browser_changed || paperplain_changed || codegraph_changed || file_changed)
+}
+
+pub fn remove_claude_mcp_server(path: &Path, framework_root: &Path) -> Result<bool, String> {
+    mcp_json_remove_servers(path, framework_root, McpConfigFormat::CLAUDE)
+}
+
 pub fn render_cursor_framework_entrypoint(roots: &ResolvedProjectionRoots, scope: &str) -> String {
     let narrative = load_host_projection_narrative(&roots.framework_root)
         .expect("host projection narrative must load before rendering cursor entrypoint");

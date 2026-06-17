@@ -45,11 +45,10 @@ impl BrowserRuntime {
         }
 
         // 使用缓存的代理配置（env 在进程生命周期内不变）
-        if let Some(proxy_url) = cached_proxy_url() {
-            if let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
+        if let Some(proxy_url) = cached_proxy_url()
+            && let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
                 client_builder = client_builder.proxy(proxy);
             }
-        }
 
         let client = client_builder
             .build()
@@ -1260,11 +1259,10 @@ impl BrowserRuntime {
                 tracing::warn!("failed to wait on browser process for session {session_id}: {e}");
             }
         }
-        if let Some(session) = self.sessions.remove(session_id) {
-            if let Err(e) = fs::remove_dir_all(session.user_data_dir) {
+        if let Some(session) = self.sessions.remove(session_id)
+            && let Err(e) = fs::remove_dir_all(session.user_data_dir) {
                 tracing::warn!("failed to remove user data dir for session {session_id}: {e}");
             }
-        }
         Ok(())
     }
 

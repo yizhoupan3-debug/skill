@@ -128,11 +128,10 @@ pub fn append_transaction_assuming_l1_held(
                 if !line.contains(new_key.as_str()) {
                     continue;
                 }
-                if let Ok(existing_tx) = serde_json::from_str::<LedgerTransaction>(line) {
-                    if existing_tx.idempotency_key.as_deref() == Some(new_key.as_str()) {
+                if let Ok(existing_tx) = serde_json::from_str::<LedgerTransaction>(line)
+                    && existing_tx.idempotency_key.as_deref() == Some(new_key.as_str()) {
                         return Ok(());
                     }
-                }
             }
         }
 

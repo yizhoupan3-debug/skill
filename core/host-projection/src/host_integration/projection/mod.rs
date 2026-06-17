@@ -469,7 +469,9 @@ pub fn resolved_roots_payload(
             continue;
         }
         let _ = tool; // tool not needed for home_root; host_id suffices
-        let home = roots.host_home_root(host_id).to_string_lossy().into_owned();
+        let home = roots.host_home_root(host_id)
+            .ok_or_else(|| format!("host_home_root: host_id {host_id:?} not found"))?
+            .to_string_lossy().into_owned();
         host_home_roots.insert(host_id.clone(), json!(home));
     }
     Ok(json!({
@@ -575,14 +577,6 @@ pub fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> Pat
     }
 }
 
-pub fn opencode_projection_config_dir(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        roots.account_home_root.join(".config/opencode")
-    } else {
-        roots.project_root.join(".opencode")
-    }
-}
-
 /// Shared browser-mcp stdio payload (all hosts). Uses framework_root as repo-root.
 pub fn browser_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     let args = vec![
@@ -614,6 +608,7 @@ pub fn install_opencode_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
+    ensure_router_rs_installed_for_mcp_with_roots(roots)?;
     let config_path = opencode_config_path(roots, scope);
     let config_dir = config_path.parent().ok_or_else(|| {
         format!(
@@ -655,9 +650,11 @@ pub fn install_opencode_projection(
     write_json_if_changed(&config_path, &payload)?;
     let changed = framework_changed || browser_changed || paperplain_changed || codegraph_changed;
 
-    let manifest_dir = opencode_projection_config_dir(roots, scope);
-    std::fs::create_dir_all(&manifest_dir)
-        .map_err(|err| format!("failed to create {}: {err}", manifest_dir.display()))?;
+    let manifest_dir = projection_manifest_path(roots, "opencode", scope);
+    if let Some(parent) = manifest_dir.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
+    }
     let manifest_key_paths =
         mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::OPENCODE)?;
     let manifest_changed = write_projection_manifest(
@@ -710,8 +707,8 @@ pub fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Result<Val
             "servers": server_status,
         },
         "projection_manifest": {
-            "project_scope": opencode_projection_config_dir(roots, "project").join(FRAMEWORK_PROJECTION_MANIFEST_NAME).exists(),
-            "user_scope": opencode_projection_config_dir(roots, "user").join(FRAMEWORK_PROJECTION_MANIFEST_NAME).exists(),
+            "project_scope": projection_manifest_path(roots, "opencode", "project").exists(),
+            "user_scope": projection_manifest_path(roots, "opencode", "user").exists(),
         },
     }))
 }
@@ -722,7 +719,6 @@ pub fn remove_opencode_projection(
     dry_run: bool,
 ) -> Result<Value, String> {
     let config_path = opencode_config_path(roots, scope);
-    let config_dir = opencode_projection_config_dir(roots, scope);
 
     let mut config_removed = false;
     if config_path.is_file() && !dry_run {
@@ -733,7 +729,7 @@ pub fn remove_opencode_projection(
         )?;
     }
 
-    let manifest_path = config_dir.join(FRAMEWORK_PROJECTION_MANIFEST_NAME);
+    let manifest_path = projection_manifest_path(roots, "opencode", scope);
     let manifest_removed = if manifest_path.is_file() && !dry_run {
         std::fs::remove_file(&manifest_path).is_ok()
     } else {
@@ -1028,8 +1024,8 @@ pub fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path
 pub fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
     let payload = read_json_if_exists(path)?;
     let mut managed_events = Vec::new();
-    if let Some(Value::Object(root)) = payload.as_ref() {
-        if let Some(Value::Object(hooks)) = root.get("hooks") {
+    if let Some(Value::Object(root)) = payload.as_ref()
+        && let Some(Value::Object(hooks)) = root.get("hooks") {
             for event in ALL_HOOK_EVENTS {
                 if hooks
                     .get(*event)
@@ -1040,7 +1036,6 @@ pub fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
                 }
             }
         }
-    }
     // Core events are mandatory; optional events are advisory.
     // At minimum all core events must be present for "managed" status.
     let managed_set: std::collections::HashSet<&str> = managed_events.iter().copied().collect();

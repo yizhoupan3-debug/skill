@@ -160,7 +160,7 @@ fn audit_hooks_doc(label: &str, doc: &Value) -> (Vec<String>, Vec<String>) {
         );
     };
     for (ev, want) in GATE_TIMEOUT_SECS {
-        let Some(entry) = first_hook_entry(hooks, *ev) else {
+        let Some(entry) = first_hook_entry(hooks, ev) else {
             continue;
         };
         let cmd = entry.get("command").and_then(Value::as_str).unwrap_or("");

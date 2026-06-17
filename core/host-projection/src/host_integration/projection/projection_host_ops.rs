@@ -172,9 +172,10 @@ pub fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value
 
 pub fn mimo_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
-        roots.host_home_roots.get("mimo")
-            .cloned()
-            .unwrap_or_else(|| roots.account_home_root.join(".mimo")).join("settings.json")
+        roots
+            .host_home_root("mimo")
+            .expect("mimo host must be registered in projection roots")
+            .join("settings.json")
     } else {
         roots.project_root.join(".mimo/settings.json")
     }
@@ -184,6 +185,7 @@ pub fn install_mimo_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<Value, String> {
+    ensure_router_rs_installed_for_mcp_with_roots(roots)?;
     let config_path = mimo_config_path(roots, scope);
     let config_dir = config_path.parent().ok_or_else(|| {
         format!("cannot determine parent directory of {}", config_path.display())
@@ -596,6 +598,16 @@ pub fn install_claude_projection(
     };
     let hooks_changed = install_claude_settings_hooks(&settings_path)?;
     let env_changed = install_claude_hook_env_if_absent(roots)?;
+
+    // MCP injection: write router-rs-framework + browser-mcp + paperplain + codegraph
+    let mcp_path = claude_mcp_config_path(roots, scope);
+    let mcp_dir = mcp_path.parent().ok_or_else(|| {
+        format!("cannot determine parent directory of {}", mcp_path.display())
+    })?;
+    std::fs::create_dir_all(mcp_dir)
+        .map_err(|err| format!("failed to create {}: {err}", mcp_dir.display()))?;
+    let mcp_changed = install_claude_mcp_server(roots, &mcp_path, scope)?;
+
     let mut manifest_files = vec![
         projection_manifest_file_ref(roots, &target),
         projection_manifest_file_ref(roots, &settings_path),
@@ -606,10 +618,15 @@ pub fn install_claude_projection(
             &claude_project_narrative_path(roots),
         ));
     }
-    let manifest_key_paths: Vec<String> = ALL_HOOK_EVENTS
+    manifest_files.push(projection_manifest_file_ref(roots, &mcp_path));
+    let mut manifest_key_paths: Vec<String> = ALL_HOOK_EVENTS
         .iter()
         .map(|e| format!("hooks.{e}"))
         .collect();
+    manifest_key_paths.extend(mcp_json_managed_key_paths(
+        &roots.framework_root,
+        McpConfigFormat::CLAUDE,
+    )?);
     let manifest_changed = write_projection_manifest(
         roots,
         "claude-code",
@@ -619,7 +636,7 @@ pub fn install_claude_projection(
     )?;
     Ok(json!({
         "status": "installed",
-        "changed": changed || narrative_changed || hooks_changed || env_changed || manifest_changed,
+        "changed": changed || narrative_changed || hooks_changed || env_changed || mcp_changed || manifest_changed,
         "scope": scope,
         "prompts": {
             "framework": {
@@ -634,6 +651,11 @@ pub fn install_claude_projection(
             "path": settings_path.to_string_lossy(),
             "changed": hooks_changed,
             "events": ALL_HOOK_EVENTS.to_vec(),
+        },
+        "mcp": {
+            "managed": true,
+            "path": mcp_path.to_string_lossy(),
+            "changed": mcp_changed,
         },
         "aliases": {"managed": false, "reason": "compatibility-aliases-not-managed-by-default-projection"},
     }))

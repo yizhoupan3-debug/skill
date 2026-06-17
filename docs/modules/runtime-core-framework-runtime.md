@@ -2,7 +2,7 @@
 module: runtime-core::framework_runtime
 lines: ~5700
 layer: B1
-last_verified: "2026-06-15"
+last_verified: "2026-06-16"
 ---
 
 # framework_runtime 子模块详解

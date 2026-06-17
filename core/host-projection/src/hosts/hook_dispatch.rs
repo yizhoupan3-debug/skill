@@ -211,11 +211,10 @@ pub fn extract_prompt_text(event: &Value) -> String {
         "editorText",
     ];
     for key in KEYS {
-        if let Some(value) = event.get(*key).and_then(Value::as_str) {
-            if !value.trim().is_empty() {
+        if let Some(value) = event.get(*key).and_then(Value::as_str)
+            && !value.trim().is_empty() {
                 return value.to_string();
             }
-        }
     }
     // Fallback: scan nested messages arrays for last user message
     extract_prompt_from_nested_messages(event)
@@ -236,13 +235,11 @@ fn extract_prompt_from_nested_messages(event: &Value) -> String {
         for key in MESSAGE_KEYS {
             if let Some(Value::Array(arr)) = obj.get(*key) {
                 for item in arr.iter().rev() {
-                    if let Some(msg) = item.as_object() {
-                        if is_user_message_role(msg) {
-                            if let Some(text) = message_body_text(msg) {
+                    if let Some(msg) = item.as_object()
+                        && is_user_message_role(msg)
+                            && let Some(text) = message_body_text(msg) {
                                 return text;
                             }
-                        }
-                    }
                 }
             }
         }
@@ -276,11 +273,10 @@ fn is_user_message_role(obj: &serde_json::Map<String, Value>) -> bool {
 fn message_body_text(msg: &serde_json::Map<String, Value>) -> Option<String> {
     for key in &["content", "text", "body", "message"] {
         if let Some(val) = msg.get(*key) {
-            if let Some(s) = val.as_str() {
-                if !s.trim().is_empty() {
+            if let Some(s) = val.as_str()
+                && !s.trim().is_empty() {
                     return Some(s.to_string());
                 }
-            }
             // Handle content as array of parts (Claude/OpenAI format)
             if let Some(arr) = val.as_array() {
                 let text: String = arr
@@ -451,11 +447,10 @@ fn extract_session_id_from_payload(event: &Value) -> Option<String> {
         "conversation_id",
         "conversationId",
     ] {
-        if let Some(val) = event.get(*key).and_then(Value::as_str) {
-            if !val.is_empty() {
+        if let Some(val) = event.get(*key).and_then(Value::as_str)
+            && !val.is_empty() {
                 return Some(val.to_string());
             }
-        }
     }
     None
 }
@@ -463,11 +458,10 @@ fn extract_session_id_from_payload(event: &Value) -> Option<String> {
 /// Extract cwd from payload using standard field names.
 fn extract_cwd_from_payload(event: &Value) -> Option<String> {
     for key in SESSION_KEY_CWD_FIELDS {
-        if let Some(val) = event.get(*key).and_then(Value::as_str) {
-            if !val.is_empty() {
+        if let Some(val) = event.get(*key).and_then(Value::as_str)
+            && !val.is_empty() {
                 return Some(val.to_string());
             }
-        }
     }
     None
 }

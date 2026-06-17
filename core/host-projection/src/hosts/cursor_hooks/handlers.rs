@@ -348,20 +348,18 @@ const HOOK_EVENT_NESTED: &[&str] = &["payload", "hookPayload", "data", "body", "
 fn first_nonempty_event_str(event: &Value, keys: &[&str]) -> String {
     if let Some(obj) = event.as_object() {
         for key in keys {
-            if let Some(value) = obj.get(*key).and_then(Value::as_str) {
-                if !value.trim().is_empty() {
+            if let Some(value) = obj.get(*key).and_then(Value::as_str)
+                && !value.trim().is_empty() {
                     return value.to_string();
                 }
-            }
         }
         for nest in HOOK_EVENT_NESTED {
             if let Some(nobj) = obj.get(*nest).and_then(Value::as_object) {
                 for key in keys {
-                    if let Some(value) = nobj.get(*key).and_then(Value::as_str) {
-                        if !value.trim().is_empty() {
+                    if let Some(value) = nobj.get(*key).and_then(Value::as_str)
+                        && !value.trim().is_empty() {
                             return value.to_string();
                         }
-                    }
                 }
             }
         }
@@ -672,11 +670,10 @@ pub fn tool_name_of(event: &Value) -> String {
             return s;
         }
         for nest in HOOK_EVENT_NESTED {
-            if let Some(nobj) = obj.get(*nest).and_then(Value::as_object) {
-                if let Some(s) = grab_tool_name_from_object(nobj) {
+            if let Some(nobj) = obj.get(*nest).and_then(Value::as_object)
+                && let Some(s) = grab_tool_name_from_object(nobj) {
                     return s;
                 }
-            }
         }
     }
     String::new()
@@ -688,19 +685,16 @@ fn grab_tool_input_from_object(obj: &serde_json::Map<String, Value>) -> Option<V
 
 pub fn tool_input_of(event: &Value) -> Value {
     if let Some(obj) = event.as_object() {
-        if let Some(v) = grab_tool_input_from_object(obj) {
-            if v.is_object() {
+        if let Some(v) = grab_tool_input_from_object(obj)
+            && v.is_object() {
                 return v;
             }
-        }
         for nest in HOOK_EVENT_NESTED {
-            if let Some(nobj) = obj.get(*nest).and_then(Value::as_object) {
-                if let Some(v) = grab_tool_input_from_object(nobj) {
-                    if v.is_object() {
+            if let Some(nobj) = obj.get(*nest).and_then(Value::as_object)
+                && let Some(v) = grab_tool_input_from_object(nobj)
+                    && v.is_object() {
                         return v;
                     }
-                }
-            }
         }
     }
     json!({})
@@ -792,8 +786,7 @@ fn min_priority_session_identity_from_hook_json(event: &Value) -> Option<String>
                     if let Some(pi) = SESSION_HOOK_IDENTITY_FIELDS_DEEP_PRIORITY
                         .iter()
                         .position(|k| *k == field)
-                    {
-                        if let Some(s) = child.as_str() {
+                        && let Some(s) = child.as_str() {
                             let t = s.trim();
                             if !t.is_empty() {
                                 *ties += 1;
@@ -806,7 +799,6 @@ fn min_priority_session_identity_from_hook_json(event: &Value) -> Option<String>
                                 }
                             }
                         }
-                    }
                     visit(child, depth + 1, nodes, ties, pick);
                 }
             }
@@ -833,11 +825,10 @@ pub fn extract_first_session_string(event: &Value) -> Option<String> {
         return Some(s);
     }
     for nest in HOOK_EVENT_NESTED {
-        if let Some(nobj) = root.get(*nest).and_then(Value::as_object) {
-            if let Some(s) = try_extract_session_from_object(nobj) {
+        if let Some(nobj) = root.get(*nest).and_then(Value::as_object)
+            && let Some(s) = try_extract_session_from_object(nobj) {
                 return Some(s);
             }
-        }
     }
     None
 }
@@ -875,11 +866,10 @@ fn try_extract_parent_session_from_tool_json(tool: &Value) -> Option<String> {
 }
 
 fn extract_first_session_string_including_tool_input(event: &Value) -> Option<String> {
-    if let Some(root) = event.as_object() {
-        if let Some(s) = try_extract_session_from_object(root) {
+    if let Some(root) = event.as_object()
+        && let Some(s) = try_extract_session_from_object(root) {
             return Some(s);
         }
-    }
     // Parent session in tool_input must win over nested `hookPayload.conversation_id` (subagent threads).
     if let Some(s) = try_extract_parent_session_from_tool_json(&tool_input_of(event)) {
         return Some(s);

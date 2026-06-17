@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-15"
+last_verified: "2026-06-16"
 scope: modular-ops
 depends_on:
   - ../README.md

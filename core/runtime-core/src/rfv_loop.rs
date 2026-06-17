@@ -166,14 +166,13 @@ fn enforce_rfv_close_gates(
         Some(&preview_val),
         evidence_ok,
     );
-    if let Some(min) = gates.min_depth_score {
-        if dc.depth_score < min {
+    if let Some(min) = gates.min_depth_score
+        && dc.depth_score < min {
             return Err(format!(
                 "RFV close_gates: depth_score={} < min_depth_score={}",
                 dc.depth_score, min
             ));
         }
-    }
     if gates.block_on_rfv_pass_without_evidence && dc.rfv_pass_without_evidence_count > 0 {
         return Err(format!(
             "RFV close_gates: block_on_rfv_pass_without_evidence but rfv_pass_without_evidence_count={}",
@@ -244,11 +243,10 @@ fn read_evidence_index_artifacts(repo_root: &Path, task_id: &str) -> Vec<Value> 
 /// 取上一轮 `at`；若无上一轮则取 RFV state 的 `updated_at`；都无则返回 None。
 fn previous_round_window_start(state_obj: &Map<String, Value>) -> Option<String> {
     let rounds = state_obj.get("rounds").and_then(Value::as_array)?;
-    if let Some(last) = rounds.last() {
-        if let Some(at) = last.get("at").and_then(Value::as_str) {
+    if let Some(last) = rounds.last()
+        && let Some(at) = last.get("at").and_then(Value::as_str) {
             return Some(at.to_string());
         }
-    }
     state_obj
         .get("updated_at")
         .and_then(Value::as_str)
@@ -353,11 +351,7 @@ fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
                         .map(|s| json!(s))
                         .collect(),
                 )
-            } else if let Some(s) = v.as_str() {
-                Some(vec![json!(s)])
-            } else {
-                None
-            }
+            } else { v.as_str().map(|s| vec![json!(s)]) }
         })
         .unwrap_or_default()
 }
@@ -588,11 +582,10 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             if let Some(extra) = payload.get("metadata").cloned() {
                 obj.insert("metadata".to_string(), extra);
             }
-            if let Some(cg) = payload.get("close_gates") {
-                if !cg.is_null() {
+            if let Some(cg) = payload.get("close_gates")
+                && !cg.is_null() {
                     obj.insert("close_gates".to_string(), cg.clone());
                 }
-            }
 
             let path = rfv_loop_state_path(&repo_root, &task_id)?;
             let value = Value::Object(obj);
@@ -698,14 +691,13 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             let falsification_tests = value_array_or_empty(&payload, "falsification_tests")?;
 
             let external_research_strict = external_research_strict_from_loaded_state(obj);
-            if let Some(er) = payload.get("external_research") {
-                if !er.is_null() {
+            if let Some(er) = payload.get("external_research")
+                && !er.is_null() {
                     validate_external_research_structured(er)?;
                     if external_research_strict {
                         validate_external_research_strict(er)?;
                     }
                 }
-            }
 
             // Cross-link this round's verify claim against EVIDENCE_INDEX successful rows
             // recorded since the previous round (audit trail; not a hard block — supervisor
@@ -744,11 +736,10 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
             if let Some(label) = cross_check_label {
                 entry_map.insert("cross_check".to_string(), json!(label));
             }
-            if let Some(er) = payload.get("external_research") {
-                if !er.is_null() {
+            if let Some(er) = payload.get("external_research")
+                && !er.is_null() {
                     entry_map.insert("external_research".to_string(), er.clone());
                 }
-            }
             let entry = Value::Object(entry_map);
 
             let supervisor_closes = matches!(supervisor_decision.as_str(), "close" | "closed");
@@ -763,8 +754,8 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 rounds.push(entry);
             }
 
-            if supervisor_closes {
-                if let Some(ref g) = close_gates_cfg {
+            if supervisor_closes
+                && let Some(ref g) = close_gates_cfg {
                     let closing = obj
                         .get("rounds")
                         .and_then(|r| r.as_array())
@@ -780,13 +771,12 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                         return Err(e);
                     }
                 }
-            }
 
             let closes_due_to_round_cap = !supervisor_closes
                 && !matches!(supervisor_decision.as_str(), "block" | "blocked")
                 && round_n >= max_rounds;
-            if closes_due_to_round_cap {
-                if let Some(ref g) = close_gates_cfg {
+            if closes_due_to_round_cap
+                && let Some(ref g) = close_gates_cfg {
                     let closing = obj
                         .get("rounds")
                         .and_then(|r| r.as_array())
@@ -803,7 +793,6 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                         return Err(e);
                     }
                 }
-            }
 
             obj.insert("current_round".to_string(), json!(round_n));
             obj.insert("updated_at".to_string(), json!(now_iso()));

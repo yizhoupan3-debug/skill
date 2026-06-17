@@ -47,18 +47,16 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
         write_optional_session_mirror(&mut plan)?;
         write_repo_session_focus(&mut plan)?;
         let mut response = plan.into_response();
-        if let Some(ref root) = sync_repo {
-            if let Ok(resolved) = super::resolve_repo_root_arg(Some(root.as_path())) {
+        if let Some(ref root) = sync_repo
+            && let Ok(resolved) = super::resolve_repo_root_arg(Some(root.as_path())) {
                 crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                     &resolved, &sync_tid,
                 );
             }
-        }
-        if let Some(eval) = closeout_evaluation {
-            if let Some(obj) = response.as_object_mut() {
+        if let Some(eval) = closeout_evaluation
+            && let Some(obj) = response.as_object_mut() {
                 obj.insert("closeout_evaluation".to_string(), eval);
             }
-        }
         Ok(response)
     };
     match resolve_session_repo_root_for_task_ledger(&payload)? {
@@ -316,8 +314,8 @@ fn write_focused_repo_mirrors(
     let mut registry_rows = super::registry_rows_from_payload(&existing_registry);
     let mut found = false;
     for row in &mut registry_rows {
-        if let Some(map) = row.as_object_mut() {
-            if safe_slug(&value_text(map.get("task_id"))) == plan.task_id {
+        if let Some(map) = row.as_object_mut()
+            && safe_slug(&value_text(map.get("task_id"))) == plan.task_id {
                 map.insert("task".to_string(), Value::String(plan.task.clone()));
                 map.insert("phase".to_string(), Value::String(plan.phase.clone()));
                 map.insert("status".to_string(), Value::String(plan.status.clone()));
@@ -329,7 +327,6 @@ fn write_focused_repo_mirrors(
                 found = true;
                 break;
             }
-        }
     }
     if !found {
         registry_rows.push(json!({

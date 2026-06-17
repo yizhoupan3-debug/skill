@@ -129,11 +129,10 @@ fn classify_router_rs_after_leader_line(line: &str, rules: &ParsedRules) -> Opti
 }
 
 fn followup_rule_matches(line: &str, rule: &Value) -> bool {
-    if let Some(s) = rule.get("starts_with").and_then(Value::as_str) {
-        if line.starts_with(s) {
+    if let Some(s) = rule.get("starts_with").and_then(Value::as_str)
+        && line.starts_with(s) {
             return true;
         }
-    }
     if let Some(arr) = rule.get("starts_with_any").and_then(Value::as_array) {
         return arr
             .iter()

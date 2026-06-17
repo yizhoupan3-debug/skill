@@ -133,11 +133,10 @@ pub fn terminate_process(pid: u32) -> Result<(), String> {
         // Phase 1: SIGTERM with 500ms budget (5 × 100ms)
         send_signal_to_pgrp(pid, libc::SIGTERM)?;
         for _ in 0..5 {
-            if !kill_pid_alive(pid) || reap_child_if_exited(pid) {
-                if !kill_pid_alive(pid) {
+            if (!kill_pid_alive(pid) || reap_child_if_exited(pid))
+                && !kill_pid_alive(pid) {
                     return Ok(());
                 }
-            }
             thread::sleep(Duration::from_millis(100));
         }
         if !kill_pid_alive(pid) {
@@ -146,11 +145,10 @@ pub fn terminate_process(pid: u32) -> Result<(), String> {
         // Phase 2: SIGKILL with 1.5s budget (15 × 100ms)
         send_signal_to_pgrp(pid, libc::SIGKILL)?;
         for _ in 0..15 {
-            if !kill_pid_alive(pid) || reap_child_if_exited(pid) {
-                if !kill_pid_alive(pid) {
+            if (!kill_pid_alive(pid) || reap_child_if_exited(pid))
+                && !kill_pid_alive(pid) {
                     return Ok(());
                 }
-            }
             thread::sleep(Duration::from_millis(100));
         }
         // Last resort: non-blocking reap attempt so kill(0) won't see a zombie.

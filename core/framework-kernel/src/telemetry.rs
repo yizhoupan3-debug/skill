@@ -94,11 +94,10 @@ impl LogAggregatorHandle {
     /// All [`MpscTelemetryWriter`] clones must be dropped before calling this.
     pub fn shutdown(self) {
         drop(self.sender);
-        if let Ok(mut join) = self.join.lock() {
-            if let Some(handle) = join.take() {
+        if let Ok(mut join) = self.join.lock()
+            && let Some(handle) = join.take() {
                 let _ = handle.join();
             }
-        }
     }
 }
 

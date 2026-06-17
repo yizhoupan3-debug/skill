@@ -10,6 +10,7 @@
 //! runtime_core_hooks::register(hooks);
 //! ```
 
+#![allow(clippy::type_complexity)]
 use serde_json::Value;
 use std::path::Path;
 use std::sync::OnceLock;

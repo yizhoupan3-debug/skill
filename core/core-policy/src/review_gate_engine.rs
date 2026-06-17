@@ -94,7 +94,7 @@ pub fn review_independent_fork(fork: Option<bool>, reviewer_lane: bool) -> bool 
     if !crate::env_flags::router_rs_review_fork_context_missing_infer_false_enabled() {
         return false;
     }
-    matches!(fork, None)
+    fork.is_none()
 }
 
 /// Canonical cross-host independent reviewer evidence (Claude Code semantics).

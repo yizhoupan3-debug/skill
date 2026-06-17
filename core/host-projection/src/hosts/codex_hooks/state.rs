@@ -157,11 +157,10 @@ pub(super) fn codex_stable_session_raw(event: &Value) -> Option<String> {
     }
     let env_keys: &[&str] = &["CODEX_SESSION_ID", "CODEX_CONVERSATION_ID"];
     for env_key in env_keys {
-        if let Ok(v) = env::var(env_key) {
-            if let Some(s) = trimmed_nonempty(&v) {
+        if let Ok(v) = env::var(env_key)
+            && let Some(s) = trimmed_nonempty(&v) {
                 return Some(s);
             }
-        }
     }
     None
 }
@@ -193,7 +192,7 @@ pub(super) fn codex_unstable_session_key_raw(repo_root: &Path, event: &Value) ->
     let cwd_key = if cwd.is_empty() {
         "<empty-cwd>"
     } else {
-        cwd.as_ref()
+        cwd
     };
     if salt.is_empty() {
         format!("unstable:repo={repo}|cwd={cwd_key}|payload_session={payload_session}")
@@ -279,8 +278,8 @@ pub(super) fn lock_is_stale(path: &Path) -> bool {
                 .duration_since(UNIX_EPOCH)
                 .map(|d| d.as_millis() as u64)
                 .unwrap_or(0);
-            if let Ok(meta) = fs::metadata(path) {
-                if let Ok(modified) = meta.modified() {
+            if let Ok(meta) = fs::metadata(path)
+                && let Ok(modified) = meta.modified() {
                     let modified_ms = modified
                         .duration_since(UNIX_EPOCH)
                         .map(|d| d.as_millis() as u64)
@@ -289,7 +288,6 @@ pub(super) fn lock_is_stale(path: &Path) -> bool {
                         return false;
                     }
                 }
-            }
         }
         return true;
     }
@@ -297,11 +295,10 @@ pub(super) fn lock_is_stale(path: &Path) -> bool {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
-    if let Some(process_id) = pid {
-        if process_is_alive(process_id) {
+    if let Some(process_id) = pid
+        && process_is_alive(process_id) {
             return false;
         }
-    }
     ts.is_none_or(|t| now_ms.saturating_sub(t) > 30_000)
 }
 
@@ -366,8 +363,7 @@ pub(super) fn acquire_codex_state_lock(
                 drop(file);
                 inode_mismatch_retries += 1;
                 if inode_mismatch_retries >= MAX_INODE_RETRIES {
-                    return Err(CodexHookError::StateLockFlock(io::Error::new(
-                        io::ErrorKind::Other,
+                    return Err(CodexHookError::StateLockFlock(io::Error::other(
                         format!(
                             "inode verification failed after {MAX_INODE_RETRIES} retries; possible lock-file TOCTOU race on {}",
                             lock_path.display()
@@ -429,8 +425,7 @@ pub(crate) fn codex_load_state_from_path(
         Ok(value) => value,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(_) => {
-            return Err(CodexHookError::StateReadIo(io::Error::new(
-                io::ErrorKind::Other,
+            return Err(CodexHookError::StateReadIo(io::Error::other(
                 "state_read_failed",
             )));
         }
@@ -480,7 +475,7 @@ pub(crate) fn codex_load_state_from_path(
             let _ = fs::rename(path, path.with_extension("json.bak"));
             CodexHookError::StateJsonInvalid(err.to_string())
         })
-        .or_else(|_| Ok(None))
+        .or(Ok(None))
 }
 
 pub(crate) fn codex_load_state(
@@ -552,11 +547,10 @@ pub(super) fn codex_save_state_to_path(
         return false;
     }
     #[cfg(unix)]
-    if let Some(parent) = target.parent() {
-        if let Ok(dir) = OpenOptions::new().read(true).open(parent) {
+    if let Some(parent) = target.parent()
+        && let Ok(dir) = OpenOptions::new().read(true).open(parent) {
             let _ = dir.sync_all();
         }
-    }
     true
 }
 
@@ -648,11 +642,10 @@ where
     let _guard = acquire_codex_state_lock(&state_path)?;
     let loaded = codex_load_state_from_path(&state_path)?;
     let (next_state, output) = f(loaded)?;
-    if let Some(mut state) = next_state {
-        if !codex_save_state_to_path(&state_path, &mut state) {
+    if let Some(mut state) = next_state
+        && !codex_save_state_to_path(&state_path, &mut state) {
             return Err(CodexHookError::StateWriteFailed);
         }
-    }
     Ok(output)
 }
 

@@ -39,11 +39,10 @@ pub fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>, String>
     }
     CACHED.with(|cell| {
         let mut slot = cell.borrow_mut();
-        if let Some((ref cached_path, ref cached_conn)) = *slot {
-            if cached_path == path {
+        if let Some((ref cached_path, ref cached_conn)) = *slot
+            && cached_path == path {
                 return Ok(Rc::clone(cached_conn));
             }
-        }
         let conn = Connection::open(path).map_err(|err| {
             format!(
                 "open sqlite runtime storage failed for {}: {err}",

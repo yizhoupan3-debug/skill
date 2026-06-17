@@ -79,3 +79,9 @@ impl From<FrameworkError> for String {
         e.to_string()
     }
 }
+
+impl From<String> for FrameworkError {
+    fn from(message: String) -> Self {
+        Self::Validation { message }
+    }
+}

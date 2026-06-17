@@ -169,11 +169,10 @@ pub(super) fn open_sqlite_connection(db_path: &Path) -> Result<std::rc::Rc<Conne
     }
     CACHED.with(|cell| {
         let mut slot = cell.borrow_mut();
-        if let Some((ref cached_path, ref cached_conn)) = *slot {
-            if cached_path == db_path {
+        if let Some((ref cached_path, ref cached_conn)) = *slot
+            && cached_path == db_path {
                 return Ok(Rc::clone(cached_conn));
             }
-        }
         if let Some(parent) = db_path.parent() {
             fs::create_dir_all(parent).map_err(|err| err.to_string())?;
         }

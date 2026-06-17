@@ -125,7 +125,7 @@ pub fn host_requires_strict_pre_tool_fallback(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    if capabilities.iter().any(|cap| *cap == "hard_gate_hooks") {
+    if capabilities.contains(&"hard_gate_hooks") {
         return Ok(false);
     }
     let harness_caps = projection
@@ -151,9 +151,7 @@ pub fn host_requires_strict_pre_tool_fallback(
     if closeout_unsupported {
         return Ok(true);
     }
-    if harness_caps
-        .iter()
-        .any(|cap| *cap == "closeout_evidence_hooks")
+    if harness_caps.contains(&"closeout_evidence_hooks")
     {
         return Ok(false);
     }
@@ -240,13 +238,7 @@ pub fn evaluate_pre_tool_use_guard(
 
     let (verdict, reason, categories) =
         classify_high_risk(&tool_name, &request.tool_input, &repo_root)?;
-    let final_verdict = match verdict {
-        PreToolUseGuardVerdict::Block => PreToolUseGuardVerdict::Block,
-        PreToolUseGuardVerdict::RequiresStdioApproval => {
-            PreToolUseGuardVerdict::RequiresStdioApproval
-        }
-        PreToolUseGuardVerdict::Allow => PreToolUseGuardVerdict::Allow,
-    };
+    let final_verdict = verdict;
     let needs_digest = final_verdict == PreToolUseGuardVerdict::RequiresStdioApproval;
     let action = match final_verdict {
         PreToolUseGuardVerdict::Allow => "allow",
@@ -336,19 +328,17 @@ fn classify_high_risk(
     repo_root: &Path,
 ) -> Result<(PreToolUseGuardVerdict, Option<String>, Vec<String>), String> {
     let lowered = tool_name.to_ascii_lowercase();
-    if is_shell_tool(&lowered) {
-        if let Some(command) = extract_shell_command(tool_input) {
-            if let Some(reason) = dangerous_bash_reason(&command) {
+    if is_shell_tool(&lowered)
+        && let Some(command) = extract_shell_command(tool_input)
+            && let Some(reason) = dangerous_bash_reason(&command) {
                 return Ok((
                     PreToolUseGuardVerdict::RequiresStdioApproval,
                     Some(reason),
                     vec!["shell".to_string()],
                 ));
             }
-        }
-    }
-    if is_file_write_tool(&lowered) {
-        if let Some(path) = extract_file_path(tool_input) {
+    if is_file_write_tool(&lowered)
+        && let Some(path) = extract_file_path(tool_input) {
             let repo_root_str = repo_root.display().to_string();
             let response = evaluate_hook_policy(HookPolicyEvaluateRequest {
                 operation: "protected-path".to_string(),
@@ -367,7 +357,6 @@ fn classify_high_risk(
                 ));
             }
         }
-    }
     let args_str = serde_json::to_string(tool_input).unwrap_or_default();
     if let Some(reason) = dangerous_mcp_tool_reason(tool_name, &args_str) {
         return Ok((
@@ -622,33 +611,6 @@ mod tests {
         // Dispatch goes through runtime-core; test the guard directly.
         let result = evaluate_pre_tool_use_guard_value(payload);
         assert!(result.is_ok(), "pre_tool_use_guard should succeed: {:?}", result.err());
-    }
-
-    /// P3 integration: HostProvider closed-set hints drive strict fallback without registry disk I/O.
-    #[ignore = "needs live hooks registration from runtime-core"]
-    #[test]
-    fn host_provider_registry_drives_strict_fallback_integration() {
-        let root = skill_repo_root();
-        let cases: [(&str, bool); 4] = [
-            ("cursor", false),
-            ("codex", false),
-            ("claude-code", false),
-            ("opencode", false),
-        ];
-        for (host_id, expect_strict) in cases {
-            let strict =
-                host_requires_strict_pre_tool_fallback(host_id, &root, None).expect(host_id);
-            assert_eq!(
-                strict, expect_strict,
-                "HostProvider hint mismatch for {host_id}"
-            );
-            let hint = crate::hooks::hooks().host_provider_strict_pre_tool_fallback_hint(host_id);
-            assert_eq!(
-                hint,
-                Some(expect_strict),
-                "provider hint must match guard for {host_id}"
-            );
-        }
     }
 
     #[test]

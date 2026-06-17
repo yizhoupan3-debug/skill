@@ -178,11 +178,10 @@ fn codex_agent_response_text(event: &Value) -> String {
         "output",
     ];
     for key in KEYS {
-        if let Some(value) = event.get(key).and_then(Value::as_str) {
-            if !value.trim().is_empty() {
+        if let Some(value) = event.get(key).and_then(Value::as_str)
+            && !value.trim().is_empty() {
                 return value.to_string();
             }
-        }
     }
     String::new()
 }
@@ -685,8 +684,8 @@ fn run_codex_lifecycle_context_hook_inner(
         .unwrap_or_default();
     if super::state::codex_require_stable_session_key_enabled() {
         match event_name.as_str() {
-            "userpromptsubmit" | "posttooluse" | "stop" => {
-                if super::state::codex_stable_session_raw(payload).is_none() {
+            "userpromptsubmit" | "posttooluse" | "stop"
+                if super::state::codex_stable_session_raw(payload).is_none() => {
                     return Ok(Some(codex_lifecycle_input_error(&format!(
                         "{} lifecycle hook blocked: stable session key required ({} defaults on). Add session_id / conversation_id / thread_id (snake_case or camelCase) to hook JSON, or set session env fallbacks. Review gate ({}) cannot run without per-session hook-state.",
                         host.lifecycle_label(),
@@ -694,7 +693,6 @@ fn run_codex_lifecycle_context_hook_inner(
                         host.review_gate_tag()
                     ))));
                 }
-            }
             _ => {}
         }
     }
@@ -818,14 +816,13 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
             return Err(err);
         }
     };
-    if let Some(event_name) = codex_lifecycle_event_name(command) {
-        if payload.is_object()
+    if let Some(event_name) = codex_lifecycle_event_name(command)
+        && payload.is_object()
             && payload.get("hook_event_name").is_none()
             && payload.get("event").is_none()
         {
             payload["hook_event_name"] = json!(event_name);
         }
-    }
     let result = match canonical {
         "pre-tool-use" => Ok(attach_codex_hook_observation(
             super::pretool::run_codex_pre_tool_use(repo_root, &payload)?,

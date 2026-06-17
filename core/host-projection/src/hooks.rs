@@ -4,6 +4,7 @@
 //! function-pointer slots for runtime-core functionality that cursor_hooks / codex_hooks need.
 //! The host application registers real implementations at startup via `register_*` functions.
 
+#![allow(clippy::type_complexity)]
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
@@ -226,7 +227,7 @@ pub fn sweep_stale_hook_state_files(hook_state_dir: &Path) -> usize {
             .as_nanos();
         let mut hasher = DefaultHasher::new();
         nanos.hash(&mut hasher);
-        if hasher.finish() % 10 != 0 {
+        if !hasher.finish().is_multiple_of(10) {
             return 0;
         }
     }
@@ -250,11 +251,10 @@ pub fn sweep_stale_hook_state_files(hook_state_dir: &Path) -> usize {
             Ok(t) => t,
             Err(_) => continue,
         };
-        if now.duration_since(modified).unwrap_or_default() > cutoff {
-            if std::fs::remove_file(&path).is_ok() {
+        if now.duration_since(modified).unwrap_or_default() > cutoff
+            && std::fs::remove_file(&path).is_ok() {
                 cleaned += 1;
             }
-        }
     }
 
     if cleaned > 0 {
@@ -347,19 +347,19 @@ pub fn register_hook_timing(
 }
 
 pub fn mark_hook_start() {
-    MARK_HOOK_START.get().map(|f| f());
+    if let Some(f) = MARK_HOOK_START.get() { f() }
 }
 
 pub fn add_lock_wait_ms(ms: u64) {
-    ADD_LOCK_WAIT_MS.get().map(|f| f(ms));
+    if let Some(f) = ADD_LOCK_WAIT_MS.get() { f(ms) }
 }
 
 pub fn add_cargo_check_ms(ms: u64) {
-    ADD_CARGO_CHECK_MS.get().map(|f| f(ms));
+    if let Some(f) = ADD_CARGO_CHECK_MS.get() { f(ms) }
 }
 
 pub fn emit_hook_timing_line(event: &str) {
-    EMIT_HOOK_TIMING_LINE.get().map(|f| f(event));
+    if let Some(f) = EMIT_HOOK_TIMING_LINE.get() { f(event) }
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -382,11 +382,11 @@ pub fn register_telemetry(
 }
 
 pub fn emit_hook_fired(hook_name: &str, action: &str) {
-    EMIT_HOOK_FIRED.get().map(|f| f(hook_name, action));
+    if let Some(f) = EMIT_HOOK_FIRED.get() { f(hook_name, action) }
 }
 
 pub fn emit_tool_call(tool: &str, duration_ms: u64, success: bool) {
-    EMIT_TOOL_CALL.get().map(|f| f(tool, duration_ms, success));
+    if let Some(f) = EMIT_TOOL_CALL.get() { f(tool, duration_ms, success) }
 }
 
 pub fn hook_action_from_optional_output(output: Option<&Value>) -> &'static str {
@@ -454,6 +454,7 @@ static EXTRACT_DURATION: OnceLock<fn(&Value) -> Option<u64>> = OnceLock::new();
 static POST_TOOL_SUCCEEDED: OnceLock<fn(&Value) -> bool> = OnceLock::new();
 static CLOSEOUT_STOP_FOLLOWUP: OnceLock<fn(&Path, &str) -> Option<String>> = OnceLock::new();
 
+#[allow(clippy::too_many_arguments)]
 pub fn register_framework_runtime(
     build_contract: fn(&Path) -> Result<Value, String>,
     append_shell: fn(&Path, &Value, &str) -> Result<(), String>,
@@ -560,11 +561,11 @@ pub fn register_router_rs_observation(
 }
 
 pub fn attach_router_rs_observation(output: &mut Value, host: HookObservationHost) {
-    ATTACH_OBSERVATION.get().map(|f| f(output, host));
+    if let Some(f) = ATTACH_OBSERVATION.get() { f(output, host) }
 }
 
 pub fn strip_router_rs_observation(output: &mut Value) {
-    STRIP_OBSERVATION.get().map(|f| f(output));
+    if let Some(f) = STRIP_OBSERVATION.get() { f(output) }
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -732,9 +733,8 @@ pub fn maybe_append_paper_prose_context(
     contexts: &mut Vec<String>,
     host: PaperProseHookHost,
 ) {
-    APPEND_PROSE
-        .get()
-        .map(|f| f(repo_root, prompt_text, contexts, host));
+    if let Some(f) = APPEND_PROSE
+        .get() { f(repo_root, prompt_text, contexts, host) }
 }
 
 pub fn maybe_merge_paper_prose_before_submit(
@@ -743,9 +743,8 @@ pub fn maybe_merge_paper_prose_before_submit(
     prompt_text: &str,
     use_followup_message: bool,
 ) {
-    MERGE_PROSE
-        .get()
-        .map(|f| f(repo_root, output, prompt_text, use_followup_message));
+    if let Some(f) = MERGE_PROSE
+        .get() { f(repo_root, output, prompt_text, use_followup_message) }
 }
 
 pub fn maybe_append_paper_adversarial_context(
@@ -754,9 +753,8 @@ pub fn maybe_append_paper_adversarial_context(
     contexts: &mut Vec<String>,
     host: PaperProseHookHost,
 ) {
-    APPEND_ADVERSARIAL
-        .get()
-        .map(|f| f(repo_root, prompt_text, contexts, host));
+    if let Some(f) = APPEND_ADVERSARIAL
+        .get() { f(repo_root, prompt_text, contexts, host) }
 }
 
 pub fn maybe_merge_paper_adversarial_before_submit(
@@ -765,9 +763,8 @@ pub fn maybe_merge_paper_adversarial_before_submit(
     prompt_text: &str,
     use_followup_message: bool,
 ) {
-    MERGE_ADVERSARIAL
-        .get()
-        .map(|f| f(repo_root, output, prompt_text, use_followup_message));
+    if let Some(f) = MERGE_ADVERSARIAL
+        .get() { f(repo_root, output, prompt_text, use_followup_message) }
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -781,7 +778,7 @@ pub fn register_kernel_bootstrap(f: fn()) {
 }
 
 pub fn ensure_kernel_bootstrap() {
-    ENSURE_KERNEL.get().map(|f| f());
+    if let Some(f) = ENSURE_KERNEL.get() { f() }
     // In test builds, install the test deps (tokenizer, review context probes)
     // as a fallback when no real kernel bootstrap is registered.
     #[cfg(test)]
@@ -1315,6 +1312,7 @@ static RESOLVE_WEB_FETCH_ADDRESSES: OnceLock<fn(&str, u16) -> Result<Vec<String>
 static EVALUATE_MCP_PRE_GUARD_SAFE: OnceLock<fn(&str, &Value, &Path) -> McpPreGuardVerdict> =
     OnceLock::new();
 
+#[allow(clippy::too_many_arguments)]
 pub fn register_framework_runtime_extra(
     resolve_repo_root_arg: fn(Option<&Path>) -> Result<PathBuf, String>,
     current_local_timestamp: fn() -> String,

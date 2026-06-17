@@ -154,14 +154,13 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     if let Some(hot) = policy["default_surface"]["hot_first_turn_owners"].as_array() {
         for slug in hot.iter().filter_map(|v| v.as_str()) {
-            if let Some(entry) = metadata_skills.get_mut(slug) {
-                if let Some(obj) = entry.as_object_mut() {
+            if let Some(entry) = metadata_skills.get_mut(slug)
+                && let Some(obj) = entry.as_object_mut() {
                     obj.insert(
                         "selection_reason".to_string(),
                         Value::String("allowlisted first-turn owner".to_string()),
                     );
                 }
-            }
         }
     }
     let stubs: [(&str, Value); 6] = [
@@ -292,26 +291,24 @@ fn skill_slugs_from_index(doc: &Value) -> Result<HashSet<String>, String> {
 
 fn discover_skill_md_slugs(skills_root: &Path) -> Result<BTreeSet<String>, String> {
     let mut slugs = BTreeSet::new();
-    walk_skill_md(skills_root, skills_root, &mut slugs)?;
+    walk_skill_md(skills_root, &mut slugs)?;
     Ok(slugs)
 }
 
-fn walk_skill_md(base: &Path, dir: &Path, slugs: &mut BTreeSet<String>) -> Result<(), String> {
+fn walk_skill_md(dir: &Path, slugs: &mut BTreeSet<String>) -> Result<(), String> {
     for entry in fs::read_dir(dir).map_err(|e| e.to_string())? {
         let entry = entry.map_err(|e| e.to_string())?;
         let path = entry.path();
         if path.is_dir() {
-            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if name.starts_with('.') {
+            if let Some(name) = path.file_name().and_then(|s| s.to_str())
+                && name.starts_with('.') {
                     continue;
                 }
-            }
-            walk_skill_md(base, &path, slugs)?;
-        } else if path.file_name().and_then(|s| s.to_str()) == Some("SKILL.md") {
-            if let Some(name) = parse_skill_name(&path)? {
+            walk_skill_md(&path, slugs)?;
+        } else if path.file_name().and_then(|s| s.to_str()) == Some("SKILL.md")
+            && let Some(name) = parse_skill_name(&path)? {
                 slugs.insert(name);
             }
-        }
     }
     Ok(())
 }

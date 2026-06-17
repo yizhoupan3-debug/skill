@@ -232,11 +232,9 @@ pub struct ResolvedProjectionRoots {
 }
 
 impl ResolvedProjectionRoots {
-    /// Get the home root for a specific host. Panics if host_id not found.
-    pub fn host_home_root(&self, host_id: &str) -> &PathBuf {
-        self.host_home_roots.get(host_id).unwrap_or_else(|| {
-            panic!("host_home_root: host_id {host_id:?} not found in resolved roots")
-        })
+    /// Get the home root for a specific host. Returns None if host_id not found.
+    pub fn host_home_root(&self, host_id: &str) -> Option<&PathBuf> {
+        self.host_home_roots.get(host_id)
     }
 }
 
@@ -637,11 +635,11 @@ mod tests {
         .expect("resolve roots");
         assert_eq!(roots.account_home_root, os_home);
         assert_eq!(
-            roots.host_home_root("claude-code").as_path(),
+            roots.host_home_root("claude-code").unwrap().as_path(),
             custom_claude.as_path()
         );
         assert_eq!(
-            roots.host_home_root("opencode").as_path(),
+            roots.host_home_root("opencode").unwrap().as_path(),
             os_home.join(".opencode").as_path()
         );
 
@@ -666,10 +664,6 @@ mod tests {
         let project_root = root.join("project");
         fs::create_dir_all(&framework_root).unwrap();
         fs::create_dir_all(&project_root).unwrap();
-        write_test_file(
-            &framework_root.join("core/router-rs/Cargo.toml"),
-            "[package]\nname = \"router-rs\"\n",
-        );
 
         let roots = ResolvedProjectionRoots {
             framework_root: framework_root.clone(),

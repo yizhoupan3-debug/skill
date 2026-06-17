@@ -113,22 +113,18 @@ fn trace_event_matches_scope(
     let job_scoped = stream_scope_fields
         .map(|fields| fields.iter().any(|field| field == "job_id"))
         .unwrap_or(true);
-    if session_scoped {
-        if let Some(expected_session_id) = session_id {
-            if trace_event_string_field(payload, "session_id").as_deref()
+    if session_scoped
+        && let Some(expected_session_id) = session_id
+            && trace_event_string_field(payload, "session_id").as_deref()
                 != Some(expected_session_id)
             {
                 return false;
             }
-        }
-    }
-    if job_scoped {
-        if let Some(expected_job_id) = job_id {
-            if trace_event_string_field(payload, "job_id").as_deref() != Some(expected_job_id) {
+    if job_scoped
+        && let Some(expected_job_id) = job_id
+            && trace_event_string_field(payload, "job_id").as_deref() != Some(expected_job_id) {
                 return false;
             }
-        }
-    }
     true
 }
 

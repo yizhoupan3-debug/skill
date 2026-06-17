@@ -954,11 +954,10 @@ pub fn build_automatic_continuity_checkpoint_payload_with_task_id(
             "checkpoint_kind": "automatic_stop_hook",
         }
     });
-    if let Some(tid) = task_id.filter(|s| !s.is_empty()) {
-        if let Some(obj) = payload.as_object_mut() {
+    if let Some(tid) = task_id.filter(|s| !s.is_empty())
+        && let Some(obj) = payload.as_object_mut() {
             obj.insert("task_id".to_string(), serde_json::json!(tid));
         }
-    }
     payload
 }
 
@@ -1049,9 +1048,9 @@ pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
             .and_then(|m| m.get("duration_ms")),
         event.get("result").and_then(|v| v.get("duration_ms")),
     ];
-    if let Some(to) = event.get("tool_output") {
-        if let Some(text) = to.as_str() {
-            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+    if let Some(to) = event.get("tool_output")
+        && let Some(text) = to.as_str()
+            && let Ok(parsed) = serde_json::from_str::<Value>(text) {
                 if let Some(ms) = coerce_duration_ms_value(parsed.get("duration_ms")) {
                     return Some(ms);
                 }
@@ -1059,8 +1058,6 @@ pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
                     return Some(ms);
                 }
             }
-        }
-    }
     for candidate in candidates {
         if let Some(ms) = coerce_duration_ms_value(candidate) {
             return Some(ms);
@@ -1102,9 +1099,9 @@ fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
         event.get("result").and_then(|v| v.get("exit_code")),
         event.get("response").and_then(|v| v.get("exit_code")),
     ];
-    if let Some(to) = event.get("tool_output") {
-        if let Some(text) = to.as_str() {
-            if let Ok(parsed) = serde_json::from_str::<Value>(text) {
+    if let Some(to) = event.get("tool_output")
+        && let Some(text) = to.as_str()
+            && let Ok(parsed) = serde_json::from_str::<Value>(text) {
                 if let Some(code) = coerce_exit_code_value(parsed.get("exit_code")) {
                     return Some(code);
                 }
@@ -1112,8 +1109,6 @@ fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
                     return Some(code);
                 }
             }
-        }
-    }
     for candidate in candidates {
         if let Some(code) = coerce_exit_code_value(candidate) {
             return Some(code);
@@ -1467,8 +1462,8 @@ fn detect_and_verify_physical_artifact(repo_root: &Path, command: &str) -> bool 
 
 fn is_modified_recently(path: &std::path::Path, max_delta_secs: u64) -> bool {
     use std::time::SystemTime;
-    if let Ok(metadata) = std::fs::metadata(path) {
-        if let Ok(modified) = metadata.modified() {
+    if let Ok(metadata) = std::fs::metadata(path)
+        && let Ok(modified) = metadata.modified() {
             let now = SystemTime::now();
             if let Ok(elapsed) = now.duration_since(modified) {
                 return elapsed.as_secs() <= max_delta_secs;
@@ -1477,7 +1472,6 @@ fn is_modified_recently(path: &std::path::Path, max_delta_secs: u64) -> bool {
                 return elapsed.as_secs() <= max_delta_secs;
             }
         }
-    }
     false
 }
 
@@ -1704,9 +1698,7 @@ pub fn closeout_stop_followup_for_completion_text(repo_root: &Path, text: &str) 
         .task_id
         .filter(|s| !s.is_empty())
         .or_else(|| first_task_id_from_registry(repo_root));
-    let Some(tid) = tid else {
-        return None;
-    };
+    let tid = tid?;
     if !closeout_programmatic_enforcement_enabled() {
         return None;
     }

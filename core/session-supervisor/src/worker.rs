@@ -214,11 +214,10 @@ pub fn resume_worker(
         return Ok("dry_run".to_string());
     }
 
-    if let Some(pid) = worker.pid {
-        if process_is_alive(pid) {
+    if let Some(pid) = worker.pid
+        && process_is_alive(pid) {
             terminate_process(pid)?;
         }
-    }
 
     let process_cwd = worker.worktree_path.as_deref().unwrap_or(&worker.cwd);
     let log_path = worker_log_path(state_path, &worker.worker_id);
@@ -257,11 +256,10 @@ pub fn terminate_worker(
         return Ok(true);
     }
 
-    if let Some(pid) = worker.pid {
-        if process_is_alive(pid) {
+    if let Some(pid) = worker.pid
+        && process_is_alive(pid) {
             terminate_process(pid)?;
         }
-    }
     worker.status = "interrupted".to_string();
     worker.updated_at = now.to_string();
     push_event(
@@ -291,11 +289,10 @@ pub fn reap_stale_workers(
         ) {
             continue;
         }
-        if let Some(pid) = worker.pid {
-            if process_is_alive(pid) {
+        if let Some(pid) = worker.pid
+            && process_is_alive(pid) {
                 continue;
             }
-        }
         let updated = crate::runtime::parse_rfc3339(&worker.updated_at)?;
         let age = now_dt.signed_duration_since(updated).num_seconds();
         if age <= stale_after_secs {

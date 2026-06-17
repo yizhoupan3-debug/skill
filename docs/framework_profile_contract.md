@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-13"
+last_verified: "2026-06-16"
 depends_on:
   - spec.md
   - README.md

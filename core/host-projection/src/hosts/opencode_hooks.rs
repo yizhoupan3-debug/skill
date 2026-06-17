@@ -457,11 +457,10 @@ fn extract_paths_from_tool_input(tool_input: &Value, _tool_name: &str) -> Vec<St
 
     // Common path field names
     for key in &["path", "file_path", "filePath", "filename", "target"] {
-        if let Some(val) = tool_input.get(*key).and_then(Value::as_str) {
-            if !val.is_empty() {
+        if let Some(val) = tool_input.get(*key).and_then(Value::as_str)
+            && !val.is_empty() {
                 paths.push(val.to_string());
             }
-        }
     }
 
     paths

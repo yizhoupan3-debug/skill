@@ -9,12 +9,11 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
         .unwrap_or_else(empty_state);
     let tool_input = tool_input_of(event);
     let stale_reset = apply_subagent_stale_hygiene(&mut state);
-    if let Some(limit) = cursor_max_open_subagents() {
-        if state.active_subagent_count >= limit {
+    if let Some(limit) = cursor_max_open_subagents()
+        && state.active_subagent_count >= limit {
             release_state_lock(&mut lock);
             return subagent_limit_denial(state.active_subagent_count, limit);
         }
-    }
     let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
     let fork = cursor_fork_context_from_tool(event, &tool_input, &sub_type, &agent_type);
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
@@ -39,7 +38,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
             let _ = save_state(repo_root, event, &mut state);
             release_state_lock(&mut lock);
             return review_pending_cycle_cap_denial(
-                hooks::router_rs_cursor_review_pending_cycle_max() as usize,
+                hooks::router_rs_cursor_review_pending_cycle_max(),
             );
         }
         match push_review_pending_cycle_key(&mut state, cycle_key, false, lite_stable_id) {
@@ -67,7 +66,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
             let _ = save_state(repo_root, event, &mut state);
             release_state_lock(&mut lock);
             return review_pending_cycle_cap_denial(
-                hooks::router_rs_cursor_review_pending_cycle_max() as usize,
+                hooks::router_rs_cursor_review_pending_cycle_max(),
             );
             }
         }
@@ -149,21 +148,18 @@ fn post_tool_use_needs_work(
     if name.eq_ignore_ascii_case("shell") {
         return true;
     }
-    if tool_name_is_rust_file_write_tool(name) {
-        if let Some(path) = payload_tool_path(event) {
-            if path.extension().and_then(|e| e.to_str()) == Some("rs")
+    if tool_name_is_rust_file_write_tool(name)
+        && let Some(path) = payload_tool_path(event)
+            && path.extension().and_then(|e| e.to_str()) == Some("rs")
                 && path.is_file()
                 && core_state::utils::path_guard::path_is_within_repo_root(repo_root, &path)
             {
                 return true;
             }
-        }
-    }
-    if let Some(state) = state {
-        if review_hard_armed(state) {
+    if let Some(state) = state
+        && review_hard_armed(state) {
             return review_armed_posttool_requires_l3(state, name);
         }
-    }
     false
 }
 

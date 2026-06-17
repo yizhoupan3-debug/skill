@@ -3,201 +3,6 @@ mod common;
 
 use common::{project_root, read_text};
 use regex::Regex;
-use serde_json::Value;
-
-#[test]
-#[ignore = "compaction contract content removed from spec.md in v6.5 consolidation"]
-fn compaction_contract_freezes_required_sections() {
-    let text = runtime_compaction_contract();
-    for heading in [
-        "# Runtime Compaction Contract",
-        "## Contract 1: Snapshot Schema",
-        "## Contract 2: Delta Replay Contract",
-        "## Contract 3: Generation Rollover Policy",
-        "## Contract 4: Artifact Ref Strategy",
-        "## Contract 5: Consistency Invariants",
-        "## Current Minimal Implementation Status",
-    ] {
-        assert!(text.contains(heading), "missing heading: {heading}");
-    }
-}
-
-#[test]
-#[ignore = "compaction contract content removed from spec.md in v6.5 consolidation"]
-fn compaction_contract_snapshot_and_delta_fields_are_explicit() {
-    let text = runtime_compaction_contract();
-    for field in [
-        "schema_version",
-        "generation",
-        "snapshot_id",
-        "parent_generation",
-        "parent_snapshot_id",
-        "session_id",
-        "job_id",
-        "created_at",
-        "watermark_event_id",
-        "state_digest",
-        "artifact_index_ref",
-        "state_ref",
-        "delta_cursor",
-        "summary",
-        "delta_id",
-        "seq",
-        "ts",
-        "kind",
-        "payload",
-        "artifact_refs",
-        "applies_to",
-        "artifact_id",
-        "uri",
-        "digest",
-        "size_bytes",
-        "producer",
-    ] {
-        assert!(
-            text.contains(&format!("`{field}:")) || text.contains(&format!("`{field}`")),
-            "missing field: {field}"
-        );
-    }
-}
-
-#[test]
-#[ignore = "compaction contract content removed from spec.md in v6.5 consolidation"]
-fn compaction_contract_generation_rules_cover_inheritance_and_recovery() {
-    let text = runtime_compaction_contract();
-    for rule in [
-        "new generation inherits only the minimal necessary state",
-        "session identity",
-        "job identity",
-        "old generation must remain readable for audit and recovery",
-        "one rollover produces exactly one successor generation",
-        "generation numbers must be monotonic",
-        "parent_snapshot_id",
-        "latest stable snapshot",
-        "artifact refs",
-        "must not require scanning the full historical stream",
-    ] {
-        assert!(text.contains(rule), "missing rule: {rule}");
-    }
-}
-
-#[test]
-#[ignore = "compaction contract content removed from spec.md in v6.5 consolidation"]
-fn compaction_contract_consistency_rules_are_non_negotiable() {
-    let text = runtime_compaction_contract();
-    for marker in [
-        "replay must be deterministic",
-        "idempotent",
-        "fail closed",
-        "cross-generation mutable aliasing",
-        "state_digest",
-    ] {
-        assert!(text.contains(marker), "missing marker: {marker}");
-    }
-}
-
-#[test]
-#[ignore = "compaction contract content removed from spec.md in v6.5 consolidation"]
-fn compaction_contract_minimal_implementation_status_is_explicit() {
-    let text = runtime_compaction_contract();
-    for marker in [
-        "supports_compaction",
-        "supports_snapshot_delta",
-        "capability catalog",
-        "payload SHA-256 digest",
-        "`verify_text`",
-        "`verified`",
-        "consistent append",
-        "WAL-backed durability",
-        "one `backend_family`",
-        "`aligned` / `compaction_eligible`",
-        "one stable snapshot for the old generation",
-        "exactly one successor generation",
-        "latest stable snapshot plus generation-local deltas",
-        "fail-closed / no-op",
-    ] {
-        assert!(text.contains(marker), "missing marker: {marker}");
-    }
-}
-
-#[test]
-#[ignore = "sandbox contract content removed from spec.md in v6.5 consolidation"]
-fn runtime_sandbox_contract_schema_freezes_control_plane_semantics() {
-    let schema = load_sandbox_contract_schema();
-    assert_eq!(schema["schema_version"], "runtime-sandbox-contract-v1");
-    assert_eq!(
-        schema["lifecycle_states"],
-        serde_json::json!(["created", "warm", "busy", "draining", "recycled", "failed"])
-    );
-    assert_eq!(
-        schema["allowed_transitions"],
-        serde_json::json!([
-            ["created", "warm"],
-            ["warm", "busy"],
-            ["busy", "draining"],
-            ["draining", "recycled"],
-            ["draining", "failed"],
-            ["warm", "failed"],
-            ["busy", "failed"],
-            ["recycled", "warm"]
-        ])
-    );
-    assert_eq!(
-        schema["tool_capability_categories"],
-        serde_json::json!(["read_only", "workspace_mutating", "networked", "high_risk"])
-    );
-    assert_eq!(
-        schema["resource_budgets"],
-        serde_json::json!(["cpu", "memory", "wall_clock", "output_size"])
-    );
-    assert_eq!(
-        schema["recoverability_boundary"],
-        serde_json::json!({
-            "recoverable": [
-                "transient timeout",
-                "transient kill request",
-                "cleanup retry after a failed async cleanup attempt",
-                "takeover after control-plane interruption when policy-compliant"
-            ],
-            "non_recoverable": [
-                "repeated cleanup failure",
-                "policy violation that invalidates the sandbox profile",
-                "contamination of sandbox-local state that cannot be deterministically cleared",
-                "any state where reuse would require privilege expansion or hidden host repair"
-            ]
-        })
-    );
-}
-
-#[test]
-#[ignore = "sandbox contract content removed from spec.md in v6.5 consolidation"]
-fn runtime_sandbox_contract_text_mentions_required_policy_boundaries() {
-    let text = read_text(&project_root().join("docs/runtime_unified_spec.md")).to_lowercase();
-    for phrase in [
-        "async cleanup",
-        "failure isolation",
-        "recoverability boundary",
-        "deny-by-default",
-        "high-risk tools must use a dedicated sandbox profile",
-        "budgets are part of the contract",
-    ] {
-        assert!(text.contains(phrase), "missing phrase: {phrase}");
-    }
-}
-
-#[test]
-#[ignore = "status ledger content removed from spec.md in v6.5 consolidation"]
-fn rust_contracts_doc_keeps_the_three_part_status_ledger() {
-    let text = rust_contracts_doc();
-    for heading in [
-        "## Current Status Ledger",
-        "### 当前真源",
-        "### 默认面边界",
-        "### 下一 safe slice",
-    ] {
-        assert!(text.contains(heading), "missing heading: {heading}");
-    }
-}
 
 #[test]
 fn rust_contracts_doc_no_longer_uses_stale_transition_wording() {
@@ -211,42 +16,6 @@ fn rust_contracts_doc_no_longer_uses_stale_transition_wording() {
         assert!(
             !text.contains(stale_phrase),
             "stale phrase present: {stale_phrase}"
-        );
-    }
-}
-
-#[test]
-#[ignore = "implementation truth content removed from spec.md in v6.5 consolidation"]
-fn rust_contracts_doc_records_current_minimal_implementation_truth() {
-    let text = rust_contracts_doc();
-    for required_phrase in [
-        "Routing authority is Rust",
-        "Live execution and dry-run preview use Rust stdio",
-        "SQLite is the strongest local backend for WAL",
-        "Sandbox lifecycle contract is frozen",
-        "Any alternate runtime, routing, artifact, hook, or host-integration implementation is a regression",
-    ] {
-        assert!(
-            text.contains(required_phrase),
-            "missing phrase: {required_phrase}"
-        );
-    }
-}
-
-#[test]
-#[ignore = "plugin contract content removed from spec.md in v6.5 consolidation"]
-fn runtime_plugin_contract_freezes_plugin_abi_and_health_loop() {
-    let text = rust_contracts_doc();
-    for required_phrase in [
-        "The Rust runtime remains the control-plane authority.",
-        "Unknown capability classes must fail closed.",
-        "skills/SKILL_PLUGIN_CATALOG.json",
-        "configs/framework/RUNTIME_PROVIDER_REGISTRY.json",
-        "SKILL_ROUTING_RUNTIME.json` stays a minimal hot index",
-    ] {
-        assert!(
-            text.contains(required_phrase),
-            "missing plugin contract phrase: {required_phrase}"
         );
     }
 }
@@ -297,7 +66,6 @@ fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
     let scoped_docs = [
         "docs/spec.md",
         "docs/framework_profile_contract.md",
-        "docs/runtime_unified_spec.md",
     ];
     let joined = scoped_docs
         .iter()
@@ -321,10 +89,6 @@ fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
     }
 }
 
-fn runtime_compaction_contract() -> String {
-    read_text(&project_root().join("docs/runtime_unified_spec.md"))
-}
-
 fn rust_contracts_doc() -> String {
     // Content merged into spec.md after v6.5 consolidation
     read_text(&project_root().join("docs/spec.md"))
@@ -338,13 +102,4 @@ fn harness_policy_map_documents_ship_readiness_stop_orchestration() {
         spec.contains("ship_readiness") || spec.contains("Stop") || spec.contains("closeout"),
         "spec.md must document Stop/closeout orchestration"
     );
-}
-
-fn load_sandbox_contract_schema() -> Value {
-    let text = read_text(&project_root().join("docs/runtime_unified_spec.md"));
-    let pattern = Regex::new(r"(?s)```json sandbox-contract-v1\n(.*?)\n```").unwrap();
-    let captures = pattern
-        .captures(&text)
-        .expect("sandbox contract schema block is missing");
-    serde_json::from_str(captures.get(1).unwrap().as_str()).unwrap()
 }

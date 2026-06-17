@@ -54,9 +54,9 @@ fn read_pointer_task_id(repo_root: &Path, key: &str, legacy_filename: &str) -> O
 pub fn read_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<String>) {
     // Try TASK_POINTERS.json first (Phase 3C consolidated file)
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
-    if pointers_path.is_file() {
-        if let Ok(raw) = fs::read_to_string(&pointers_path) {
-            if let Ok(data) = serde_json::from_str::<Value>(&raw) {
+    if pointers_path.is_file()
+        && let Ok(raw) = fs::read_to_string(&pointers_path)
+            && let Ok(data) = serde_json::from_str::<Value>(&raw) {
                 let parse = |key: &str| -> Option<String> {
                     let tid = data.get(key)?.as_str()?.trim().to_string();
                     if tid.is_empty() {
@@ -71,8 +71,6 @@ pub fn read_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<Strin
                     return (active, focus);
                 }
             }
-        }
-    }
     // Fallback: legacy 3-file format
     let active_path = repo_root.join("artifacts/current/active_task.json");
     let focus_path = repo_root.join("artifacts/current/focus_task.json");

@@ -172,11 +172,10 @@ fn summarize_step_ledger_operation(payload: Value) -> Result<Value, String> {
 pub fn summarize_step_ledger_for_task(repo_root: &Path, task_id: &str) -> Value {
     let path = step_ledger_path_for_task(repo_root, task_id);
     // Repair corrupt tail before summarising.
-    if path.is_file() {
-        if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path) {
+    if path.is_file()
+        && let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path) {
             eprintln!("[router-rs] truncate_corrupt_tail failed for STEP_LEDGER summary: {e}");
         }
-    }
     let mut status_counts = BTreeMap::<String, u64>::new();
     let mut entry_count = 0_u64;
     let mut invalid_line_count = 0_u64;
@@ -241,11 +240,10 @@ fn append_jsonl_entry(
         fs::create_dir_all(parent)
             .map_err(|err| format!("create step ledger parent failed: {err}"))?;
     }
-    if let Some(key) = idempotency_key {
-        if step_ledger_contains_idempotency_key(path, key)? {
+    if let Some(key) = idempotency_key
+        && step_ledger_contains_idempotency_key(path, key)? {
             return Ok(false);
         }
-    }
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)

@@ -2,7 +2,7 @@
 module: host-projection::hosts
 lines: ~15700
 layer: B2
-last_verified: "2026-06-13"
+last_verified: "2026-06-16"
 ---
 
 # hosts 子模块详解

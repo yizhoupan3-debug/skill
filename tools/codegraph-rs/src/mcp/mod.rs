@@ -453,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    fn exposes_six_mcp_tools_with_schemas() {
+    fn exposes_seven_mcp_tools_with_schemas() {
         let tools = tool_definitions();
         assert_eq!(tools.len(), 7);
         let expected = [

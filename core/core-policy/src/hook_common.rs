@@ -277,7 +277,25 @@ pub fn is_my_lifecycle_entry_prompt(text: &str) -> bool {
 }
 
 /// `GOAL_STATE.lifecycle_profile` or active my-* prompt → my-light harness behavior.
+///
+/// **Deprecated**: prefer [`is_interactive_profile`] for new code.
+/// Internally delegates to `is_interactive_profile()` for identical behavior.
 pub fn my_light_profile_active(repo_root: Option<&std::path::Path>, text: &str) -> bool {
+    is_interactive_profile(repo_root, text)
+}
+
+/// True when the current session is in an interactive profile (my-light or interactive).
+///
+/// Interactive profiles (my-light / interactive) suppress review-gate hard block,
+/// disable spawn-first nudge, and reject being scheduled by the Loop Engine.
+///
+/// Detection (in priority order):
+/// 1. Thread-local `TEST_MY_LIGHT_OVERRIDE` (testing only)
+/// 2. Prompt matches `/discussx|planx|implementx|verifyx`
+/// 3. (Future) GOAL_STATE.lifecycle_profile == "interactive" | "my-light" via repo_root
+///
+/// Cf. docs/spec-loop-architecture.md §2.1
+pub fn is_interactive_profile(repo_root: Option<&std::path::Path>, text: &str) -> bool {
     if let Some(v) = TEST_MY_LIGHT_OVERRIDE.with(|c| c.get()) {
         return v;
     }
@@ -289,6 +307,7 @@ pub fn my_light_profile_active(repo_root: Option<&std::path::Path>, text: &str) 
     };
     // Single-conversation mode: no pointer fallback for goal state lookup.
     // lifecycle_profile is detected from prompt patterns above.
+    // (Future: check GOAL_STATE.lifecycle_profile for "interactive" or "my-light")
     false
 }
 
@@ -331,6 +350,8 @@ pub fn my_goal_drive_hook_nudge_for_prompt(text: &str) -> &'static str {
     if is_framework_implement_entry_prompt(text) {
         MY_IMPLEMENT_GOAL_DRIVE_HOOK_NUDGE
     } else if is_my_verify_entry_prompt(text) {
+        // Currently same text as the generic goal-drive nudge, but kept as a
+        // separate branch so verifyx can get a distinct nudge in the future.
         MY_GOAL_DRIVE_HOOK_NUDGE
     } else {
         MY_GOAL_DRIVE_HOOK_NUDGE
@@ -396,12 +417,11 @@ pub fn should_inject_spawn_first_review_nudge(
     repo_root: Option<&std::path::Path>,
     prompt_text: &str,
 ) -> bool {
-    if my_light_profile_active(repo_root, prompt_text)
-        && crate::registry_review_gate::lifecycle_profile_disables_spawn_first_nudge(
-            repo_root, "my-light",
-        )
-        .unwrap_or(true)
+    if is_interactive_profile(repo_root, prompt_text)
     {
+        // Interactive profiles suppress spawn-first nudge.
+        // The "interactive" profile entry in RUNTIME_REGISTRY.json always
+        // has disable_spawn_first_nudge: true (same as deprecated my-light).
         return false;
     }
     crate::env_flags::router_rs_review_spawn_first_nudge_enabled()
@@ -419,7 +439,7 @@ pub fn review_gate_advisory_only() -> bool {
 /// `*_review_gate_suppressed`): skips arming **and** Stop nudges, not merely hard block.
 /// When [`review_gate_advisory_only`] is true, non-suppressed hosts still inject advisory text.
 pub fn review_gate_hard_block_disabled(repo_root: Option<&std::path::Path>, text: &str) -> bool {
-    my_light_profile_active(repo_root, text)
+    is_interactive_profile(repo_root, text)
 }
 
 /// True when an armed review gate would inject a Stop nudge (metrics / advisory detection).
@@ -434,6 +454,16 @@ pub fn review_gate_stop_would_nudge(
         review_override,
         independent_reviewer_seen,
     })
+}
+
+/// True when the lifecycle_profile is "loop-auto" (loop-capable).
+///
+/// Reads from LOOP_REGISTRY.json (not GOAL_STATE). Loop Runner in PREFLIGHT
+/// phase calls this to confirm the entry profile is schedulable.
+///
+/// Cf. docs/spec-loop-architecture.md §2.1, §4.2
+pub fn lifecycle_profile_is_loop_capable(profile: &str) -> bool {
+    profile == "loop-auto"
 }
 
 fn strong_code_review_anchor(sanitized: &str, tokens: &[String]) -> bool {

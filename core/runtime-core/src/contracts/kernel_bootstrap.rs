@@ -29,8 +29,8 @@ pub fn ensure_kernel_bootstrap() {
     BOOTSTRAP_ONCE.call_once(|| {
         install_tokenizer_provider(Box::new(RouteTokenizerProvider));
         core_policy::review_context_signals::install_review_context_probes(
-            |text, tokens| crate::route::has_paper_context(text, tokens),
-            |text, tokens| crate::route::has_github_pr_context(text, tokens),
+            crate::route::has_paper_context,
+            crate::route::has_github_pr_context,
         );
         let journal = PathBuf::from("artifacts/telemetry/events.jsonl");
         let handle = LogAggregator::start(&journal);

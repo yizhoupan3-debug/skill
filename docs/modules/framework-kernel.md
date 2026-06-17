@@ -2,7 +2,7 @@
 module: framework-kernel
 lines: ~1400
 layer: B0
-last_verified: "2026-06-13"
+last_verified: "2026-06-16"
 ---
 
 # framework-kernel（B0 层）

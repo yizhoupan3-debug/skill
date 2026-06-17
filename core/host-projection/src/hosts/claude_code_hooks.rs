@@ -168,11 +168,9 @@ fn repo_relative_slash_path(repo_root: &Path, raw: &str) -> Option<String> {
     if candidate.is_absolute() {
         if let (Ok(canon_file), Ok(canon_repo)) =
             (candidate.canonicalize(), repo_root.canonicalize())
-        {
-            if let Ok(rel) = canon_file.strip_prefix(&canon_repo) {
+            && let Ok(rel) = canon_file.strip_prefix(&canon_repo) {
                 return Some(rel.to_string_lossy().replace('\\', "/"));
             }
-        }
         let abs_lex = normalize_path_lexical(&candidate);
         if let Ok(rel) = abs_lex.strip_prefix(&repo_lex) {
             return Some(rel.to_string_lossy().replace('\\', "/"));
@@ -268,10 +266,7 @@ fn apply_claude_review_gate_user_prompt(
             AgentDiskState::Absent => ReviewGateState::default(),
             AgentDiskState::Ok(s) => s,
         };
-        if my_light || goal_drive {
-            state.review_required = false;
-            state.independent_reviewer_seen = false;
-        } else if narrow {
+        if my_light || goal_drive || narrow {
             state.review_required = false;
             state.independent_reviewer_seen = false;
         } else {
@@ -428,11 +423,11 @@ fn payload_looks_like_cursor_hook_stdin(payload: &Value) -> bool {
     if !matches!(map.get("workspace_roots"), Some(Value::Array(_))) {
         return false;
     }
-    let hook_ok = [map.get("hook_event_name"), map.get("hookEventName")]
+    
+    [map.get("hook_event_name"), map.get("hookEventName")]
         .into_iter()
         .flatten()
-        .any(|v| v.as_str().is_some_and(|s| !s.trim().is_empty()));
-    hook_ok
+        .any(|v| v.as_str().is_some_and(|s| !s.trim().is_empty()))
 }
 
 fn deny_pre_tool_use(reason: String) -> Option<Value> {
@@ -545,8 +540,8 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
         );
     }
     let mut contexts: Vec<String> = Vec::new();
-    if let Some(Ok(state)) = review_sync {
-        if state.review_required
+    if let Some(Ok(state)) = review_sync
+        && state.review_required
             && !state.review_override
             && core_policy::hook_common::should_inject_spawn_first_review_nudge(
                 Some(repo_root),
@@ -560,7 +555,6 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
                 ),
             );
         }
-    }
     crate::hooks::maybe_append_paper_adversarial_context(
         repo_root,
         &prompt,
@@ -675,12 +669,11 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
         let path = review_state_path(repo_root, payload);
         let _ = write_review_state_unlocked(&path, &review_state);
     }
-    if !claude_review_gate_suppressed(repo_root, &prompt) {
-        if let Some(reason) = claude_review_gate_incomplete_stop_reason(&review_state.gate_fields())
+    if !claude_review_gate_suppressed(repo_root, &prompt)
+        && let Some(reason) = claude_review_gate_incomplete_stop_reason(&review_state.gate_fields())
         {
             return add_context("Stop", &reason);
         }
-    }
     let state = match touch_load {
         AgentDiskState::Absent => TouchState::default(),
         AgentDiskState::Ok(s) => s,
@@ -1125,14 +1118,13 @@ fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
             write_review_state_unlocked(&path, &state)?;
         }
         Ok(())
-    }) {
-        if err != "review_gate_unreadable" {
+    })
+        && err != "review_gate_unreadable" {
             eprintln!(
                 "[router-rs] {} review_gate evidence record failed: {err}",
                 active_stdio_agent_hook_host().log_label()
             );
         }
-    }
 }
 
 /// §4.4: 自动 evidence 采集。当 Bash 运行验证类命令时，自动记录到 EVIDENCE_INDEX。
@@ -1140,7 +1132,7 @@ fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
 /// - `cargo test*`, `cargo check*`, `cargo build*` → exit_code + 输出摘要
 /// - `git diff*`, `git log*` → 变更统计
 /// - `npm test*`, `pytest*`, `make test*` → exit_code + 输出摘要
-/// 防重复：同一命令在同一 task 目录下不重复记录（检查最近 5 条）。
+// 同一命令在同一 task 目录下不重复记录（检查最近 5 条）。
 fn auto_record_verification_evidence(repo_root: &Path, payload: &Value) {
     if payload.get("tool_name").and_then(Value::as_str) != Some("Bash") {
         return;
@@ -1266,14 +1258,13 @@ fn persist_touch_state(
             crate::hooks::sweep_stale_hook_state_files(hook_state_dir);
         }
         Ok(())
-    }) {
-        if err != "hook_state_unreadable" {
+    })
+        && err != "hook_state_unreadable" {
             eprintln!(
                 "[router-rs] {} hook state write failed (hook_state): {err}",
                 active_stdio_agent_hook_host().log_label()
             );
         }
-    }
 }
 
 fn clear_touch_state(repo_root: &Path, payload: &Value) {

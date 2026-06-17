@@ -191,15 +191,14 @@ pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, St
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;
-        if let Some(parent_dir) = path.parent() {
-            if let Ok(dir) = fs::OpenOptions::new()
+        if let Some(parent_dir) = path.parent()
+            && let Ok(dir) = fs::OpenOptions::new()
                 .read(true)
                 .custom_flags(libc::O_RDONLY)
                 .open(parent_dir)
             {
                 let _ = dir.sync_all();
             }
-        }
     }
 
     Ok(true)

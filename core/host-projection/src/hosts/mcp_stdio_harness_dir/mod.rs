@@ -11,6 +11,7 @@
 
 // route_task_with_manifest_fallback — not needed in host-projection; skill routing via framework_kernel
 // framework_runtime functions accessed via crate::hooks
+#![allow(clippy::type_complexity)]
 use crate::hooks::{check_anomalies, init_tracker, read_tracker_state, record_tool_call};
 use core_policy::hook_common::is_review_prompt;
 use core_policy::review_gate_engine::{
@@ -112,15 +113,14 @@ impl RateLimiter {
 
     pub fn check_and_record(&mut self, tool_name: &str) -> Result<(), String> {
         let now = Instant::now();
-        if let Some(last) = self.last_call.get(tool_name) {
-            if now.duration_since(*last) < self.min_interval {
+        if let Some(last) = self.last_call.get(tool_name)
+            && now.duration_since(*last) < self.min_interval {
                 return Err(format!(
                     "Rate limit exceeded for {}. Wait {}ms between calls.",
                     tool_name,
                     self.min_interval.as_millis()
                 ));
             }
-        }
         self.last_call.insert(tool_name.to_string(), now);
         Ok(())
     }
@@ -201,11 +201,10 @@ fn get_rate_limiter() -> &'static Arc<std::sync::Mutex<RateLimiter>> {
 
 /// Reset rate limiter state for integration tests (clears all recorded timestamps).
 pub fn reset_rate_limiter_for_test() {
-    if let Some(limiter) = RATE_LIMITER.get() {
-        if let Ok(mut guard) = limiter.lock() {
+    if let Some(limiter) = RATE_LIMITER.get()
+        && let Ok(mut guard) = limiter.lock() {
             guard.last_call.clear();
         }
-    }
 }
 
 /// Get snapshot cache TTL from environment variable.
@@ -261,13 +260,11 @@ fn get_cached_task_view(repo_root: &Path) -> core_state::task_state::ResolvedTas
     let cache_key = repo_root.to_path_buf();
     {
         let cache = get_task_view_cache();
-        if let Some(guard) = poison_safe_read_lock!(cache) {
-            if let Some((view, expires_at)) = guard.get(&cache_key) {
-                if Instant::now() < *expires_at {
+        if let Some(guard) = poison_safe_read_lock!(cache)
+            && let Some((view, expires_at)) = guard.get(&cache_key)
+                && Instant::now() < *expires_at {
                     return view.clone();
                 }
-            }
-        }
     }
 
     // Cache miss: recompute
@@ -719,7 +716,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             "done_when": {"type": "array", "items": {"type": "string"}},
                             "validation_commands": {"type": "array", "items": {"type": "string"}},
                             "drive_until_done": {"type": "boolean"},
-                            "lifecycle_profile": {"type": "string", "enum": ["my", "my-light"]},
+                            "lifecycle_profile": {"type": "string", "enum": ["my", "my-light", "interactive", "loop-auto"]},
                             "current_horizon": {"type": "string"},
                             "completion_gates": {"type": "object"},
                             "metadata": {"type": "object"},
@@ -998,11 +995,10 @@ fn parse_rfv_round_argument(value: Option<&Value>) -> Result<u64, String> {
     if let Some(n) = v.as_u64() {
         return Ok(n);
     }
-    if let Some(n) = v.as_i64() {
-        if n >= 0 {
+    if let Some(n) = v.as_i64()
+        && n >= 0 {
             return Ok(n as u64);
         }
-    }
     Err("append_round requires 'round' argument (integer)".to_string())
 }
 

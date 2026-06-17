@@ -268,7 +268,7 @@ fn concurrent_close_safety_smoke() {
             "operation": "launch",
             "state_path": state_path.as_ref(),
             "worker_id": format!("close-{idx}"),
-            "host": "codex",
+            "host": "smoke",
             "cwd": "/tmp/project",
             "prompt": format!("concurrent close lane {idx}"),
             "dry_run": true,

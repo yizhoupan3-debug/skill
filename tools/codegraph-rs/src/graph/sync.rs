@@ -175,8 +175,8 @@ fn sync_skill_manifest(
         .into_iter()
         .find(|m| m.path == rel_path);
 
-    if !force_all {
-        if let Some(ref stored) = indexed {
+    if !force_all
+        && let Some(ref stored) = indexed {
             let mtime_ns = file_mtime_ns(&manifest_path)?;
             if stored.mtime_ns == mtime_ns {
                 return Ok(()); // mtime unchanged, skip
@@ -186,7 +186,6 @@ fn sync_skill_manifest(
                 return Ok(()); // content unchanged
             }
         }
-    }
 
     // Parse the manifest
     let Some(parsed) = parse_skill_manifest(repo_root) else {

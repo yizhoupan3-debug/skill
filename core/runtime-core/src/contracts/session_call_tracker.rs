@@ -153,18 +153,16 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
         }
 
         // Rule 4: Bash dominates
-        if let Some(bash_count) = payload["per_tool"].get("Bash").and_then(Value::as_u64) {
-            if total > 0 && bash_count > total / 2 {
+        if let Some(bash_count) = payload["per_tool"].get("Bash").and_then(Value::as_u64)
+            && total > 0 && bash_count > total / 2 {
                 warnings.push(format!("Bash calls ({bash_count}) exceed 50% of total ({total}) -- possible unsafe automation."));
             }
-        }
 
         // Rule 5: Write dominates
-        if let Some(write_count) = payload["per_tool"].get("Write").and_then(Value::as_u64) {
-            if total > 0 && write_count > total * 3 / 10 {
+        if let Some(write_count) = payload["per_tool"].get("Write").and_then(Value::as_u64)
+            && total > 0 && write_count > total * 3 / 10 {
                 warnings.push(format!("Write calls ({write_count}) exceed 30% of total ({total}) -- possible blind overwriting."));
             }
-        }
 
         // Update anomaly_flags in the tracker (always write, clearing stale flags)
         payload["anomaly_flags"] = json!(warnings);

@@ -2,7 +2,7 @@
 module: core-policy
 lines: ~4400
 layer: B1
-last_verified: "2026-06-13"
+last_verified: "2026-06-16"
 ---
 
 # core-policy（B1 层）

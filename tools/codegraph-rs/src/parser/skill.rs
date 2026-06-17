@@ -91,6 +91,11 @@ fn parse_skill_manifest_content(content: &str, manifest_path: &Path) -> Option<P
                     Some(s) if !s.is_empty() => s,
                     _ => continue,
                 };
+                // Skip hints that collide with the skill slug — the skill node
+                // already provides FTS coverage for the slug name.
+                if kw == slug {
+                    continue;
+                }
                 let _kw_id = make_keyword_id(skill_path, kw);
                 symbols.push(ParsedSymbol {
                     symbol: kw.to_string(),

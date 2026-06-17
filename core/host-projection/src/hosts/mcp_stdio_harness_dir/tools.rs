@@ -27,8 +27,8 @@ pub(super) fn handle_tools_call(
     // Check rate limit before processing
     {
         let limiter = get_rate_limiter();
-        if let Some(mut guard) = poison_safe_lock!(limiter) {
-            if let Err(e) = guard.check_and_record(tool_name) {
+        if let Some(mut guard) = poison_safe_lock!(limiter)
+            && let Err(e) = guard.check_and_record(tool_name) {
                 return json!({
                     "jsonrpc": "2.0",
                     "id": id,
@@ -38,7 +38,6 @@ pub(super) fn handle_tools_call(
                     },
                 });
             }
-        }
     }
 
     // HX-5: MCP pre-guard (mcp-tool-safety); panic → allow + log.
@@ -125,13 +124,11 @@ pub(super) fn tool_framework_snapshot(
     // Only use cache for summary mode; full mode always recomputes
     if !is_full {
         let cache = get_snapshot_cache();
-        if let Some(guard) = poison_safe_read_lock!(cache) {
-            if let Some(ref cached) = *guard {
-                if cached.is_valid() {
+        if let Some(guard) = poison_safe_read_lock!(cache)
+            && let Some(ref cached) = *guard
+                && cached.is_valid() {
                     return Ok(cached.content.clone());
                 }
-            }
-        }
     }
 
     // Cache miss: recompute
@@ -218,7 +215,7 @@ pub(super) fn tool_skill_route(
         "routed": true,
         "skill_slug": decision.selected_skill,
         "skill_path": decision.selected_skill_path,
-        "match_reason": decision.reasons.get(0).cloned().unwrap_or_default(),
+        "match_reason": decision.reasons.first().cloned().unwrap_or_default(),
     })
     .to_string())
 }
@@ -254,8 +251,8 @@ pub(super) fn tool_skill_search(
     }
     let records = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))?;
     let host_indices = filter_record_indices_for_host(records.as_ref(), Some(effective_host))?;
-    let rows = search_skills_subset(records.as_ref(), Some(&host_indices), &query, limit);
-    let results = build_search_results_payload(&query, rows);
+    let rows = search_skills_subset(records.as_ref(), Some(&host_indices), query, limit);
+    let results = build_search_results_payload(query, rows);
     serde_json::to_string(&results).map_err(|e| e.to_string())
 }
 
@@ -306,11 +303,10 @@ fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
     }
 
     let manifest_path = skill_manifest_path(repo_root);
-    if manifest_path.is_file() {
-        if let Some(path) = skill_body_path_from_manifest(repo_root, &manifest_path, clean)? {
+    if manifest_path.is_file()
+        && let Some(path) = skill_body_path_from_manifest(repo_root, &manifest_path, clean)? {
             return Ok(path);
         }
-    }
 
     let path = repo_root.join("skills").join(clean).join("SKILL.md");
     if !path.is_file() {
@@ -535,16 +531,20 @@ pub(super) fn task_lifecycle_profile(task_view: &core_state::task_state::Resolve
         .unwrap_or("my-light")
 }
 
+/// Returns true when the lifecycle_profile string represents an interactive profile
+/// (either "my-light" — deprecated alias — or "interactive").
+pub(super) fn is_interactive_lifecycle_profile(profile: &str) -> bool {
+    profile == "my-light" || profile == "interactive"
+}
+
 pub(super) fn mcp_closeout_gate_mode_narrative(
     repo_root: &Path,
     host_id: &str,
     host_name: &str,
     lifecycle_profile: &str,
 ) -> String {
-    if lifecycle_profile == "my-light" {
-        return format!(
-            "my-light: MCP hard block disabled — closeout_gate reports findings only (advisory)."
-        );
+    if is_interactive_lifecycle_profile(lifecycle_profile) {
+        return "interactive/my-light: MCP hard block disabled — closeout_gate reports findings only (advisory).".to_string();
     }
     framework_kernel::runtime_registry::harness_capability_exception_rationale(
         repo_root,
@@ -564,7 +564,7 @@ pub(super) fn mcp_closeout_hard_block_metadata(
     lifecycle_profile: &str,
     all_clear: bool,
 ) -> bool {
-    if all_clear || lifecycle_profile == "my-light" {
+    if all_clear || is_interactive_lifecycle_profile(lifecycle_profile) {
         return false;
     }
     framework_kernel::runtime_registry::closeout_evidence_hooks_unsupported_on_host(
@@ -588,25 +588,22 @@ pub(super) fn desktop_review_evidence_attested(
     )
     .join("review-lanes");
 
-    if review_lanes_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&review_lanes_dir) {
+    if review_lanes_dir.is_dir()
+        && let Ok(entries) = std::fs::read_dir(&review_lanes_dir) {
             let mut valid_findings_found = false;
             for entry in entries.filter_map(Result::ok) {
                 let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("md") {
-                    if let Ok(content) = std::fs::read_to_string(&path) {
-                        if !content.trim().is_empty() {
+                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("md")
+                    && let Ok(content) = std::fs::read_to_string(&path)
+                        && !content.trim().is_empty() {
                             valid_findings_found = true;
                             break;
                         }
-                    }
-                }
             }
             if valid_findings_found {
                 return true;
             }
         }
-    }
 
     let lane = arguments
         .get("reviewer_lane")
@@ -784,11 +781,10 @@ pub(super) fn persist_review_gate_status(
         "findings": findings,
         "recorded_at": crate::hooks::current_local_timestamp(),
     });
-    if let Ok(text) = serde_json::to_string_pretty(&payload) {
-        if let Err(e) = std::fs::write(&path, format!("{text}\n")) {
+    if let Ok(text) = serde_json::to_string_pretty(&payload)
+        && let Err(e) = std::fs::write(&path, format!("{text}\n")) {
             eprintln!("[router-rs] review_gate persist: write failed: {e}");
         }
-    }
 }
 
 pub fn tool_closeout_gate(
@@ -839,21 +835,18 @@ pub(super) fn tool_closeout_record_write(
     if let Some(cmds) = arguments.get("commands_run").and_then(Value::as_array) {
         record.insert("commands_run".to_string(), json!(cmds));
     }
-    if let Some(blockers) = arguments.get("blockers").and_then(Value::as_array) {
-        if !blockers.is_empty() {
+    if let Some(blockers) = arguments.get("blockers").and_then(Value::as_array)
+        && !blockers.is_empty() {
             record.insert("blockers".to_string(), json!(blockers));
         }
-    }
-    if let Some(risks) = arguments.get("risks").and_then(Value::as_array) {
-        if !risks.is_empty() {
+    if let Some(risks) = arguments.get("risks").and_then(Value::as_array)
+        && !risks.is_empty() {
             record.insert("risks".to_string(), json!(risks));
         }
-    }
-    if let Some(notes) = arguments.get("notes").and_then(Value::as_str) {
-        if !notes.is_empty() {
+    if let Some(notes) = arguments.get("notes").and_then(Value::as_str)
+        && !notes.is_empty() {
             record.insert("notes".to_string(), json!(notes));
         }
-    }
 
     // Ensure parent directory exists
     let record_path = crate::hooks::closeout_record_path_for_task(repo_root, task_id)
@@ -901,8 +894,8 @@ pub(super) fn tool_closeout_record_write(
         "violations": violations,
     });
 
-    Ok(serde_json::to_string_pretty(&result)
-        .map_err(|e| format!("serialize closeout result failed: {e}"))?)
+    serde_json::to_string_pretty(&result)
+        .map_err(|e| format!("serialize closeout result failed: {e}"))
 }
 
 pub(super) const WEB_FETCH_MAX_REDIRECTS: usize = 5;
@@ -942,12 +935,11 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
     ] {
         if let Ok(proxy_url) = std::env::var(key) {
             let trimmed = proxy_url.trim();
-            if !trimmed.is_empty() {
-                if let Ok(proxy) = reqwest::Proxy::all(trimmed) {
+            if !trimmed.is_empty()
+                && let Ok(proxy) = reqwest::Proxy::all(trimmed) {
                     client_builder = client_builder.proxy(proxy);
                     break;
                 }
-            }
         }
     }
     // Pin DNS results from validate_and_resolve to prevent rebinding TOCTOU.

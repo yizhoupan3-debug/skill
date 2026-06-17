@@ -798,15 +798,14 @@ fn codex_hook_smoke_expect(
 }
 
 fn resolve_router_rs_binary(repo_root: &Path) -> Result<PathBuf, String> {
-    if let Ok(p) = std::env::current_exe() {
-        if p.file_name()
+    if let Ok(p) = std::env::current_exe()
+        && p.file_name()
             .and_then(|s| s.to_str())
             .map(|n| n == "router-rs" || n.contains("router-rs"))
             .unwrap_or(false)
         {
             return Ok(p);
         }
-    }
     cargo_router_rs_executable(repo_root)
         .or_else(|| which::which("router-rs").ok())
         .ok_or_else(|| {
@@ -1537,19 +1536,16 @@ fn clean_orphan_directories(repo_root: &Path, dry_run: bool, ttl_days: u64) -> R
 
     // From task_registry.json
     let registry_path = current_dir.join("task_registry.json");
-    if registry_path.is_file() {
-        if let Ok(raw) = fs::read_to_string(&registry_path) {
-            if let Ok(registry) = serde_json::from_str::<serde_json::Value>(&raw) {
-                if let Some(tasks) = registry.get("tasks").and_then(|t| t.as_array()) {
+    if registry_path.is_file()
+        && let Ok(raw) = fs::read_to_string(&registry_path)
+            && let Ok(registry) = serde_json::from_str::<serde_json::Value>(&raw)
+                && let Some(tasks) = registry.get("tasks").and_then(|t| t.as_array()) {
                     for task in tasks {
                         if let Some(id) = task.get("task_id").and_then(|v| v.as_str()) {
                             referenced_ids.insert(id.to_string());
                         }
                     }
                 }
-            }
-        }
-    }
 
     // Find orphan directories
     let cutoff = std::time::SystemTime::now()

@@ -10,6 +10,7 @@ mod five_host_stdio_e2e {
     use std::process::{Command, Stdio};
 
     use serde_json::Value;
+    use serial_test::serial;
 
     use crate::framework_host_targets::{
         host_targets_supported_host_ids, skills_install_tool_for_host_id,
@@ -92,17 +93,44 @@ mod five_host_stdio_e2e {
         serde_json::from_str(&text).expect("parse json")
     }
 
+    /// Read command and args from codex TOML config for a given MCP server section.
+    fn extract_codex_mcp_config(path: &Path, server_id: &str) -> (String, Vec<String>) {
+        let text = fs::read_to_string(path)
+            .unwrap_or_else(|err| panic!("missing codex config {}: {err}", path.display()));
+        let section_header = format!("[mcp_servers.{}]", server_id);
+        let section_start = text.find(&section_header)
+            .unwrap_or_else(|| panic!("section {section_header} not found in {}", path.display()));
+        let section = &text[section_start..];
+        let section_end = section.find("\n# managed_by:").unwrap_or(section.len());
+        let section_body = &section[..section_end];
+
+        let command = section_body.lines()
+            .find_map(|l| l.strip_prefix("command = "))
+            .map(|v| v.trim_matches('"').to_string())
+            .unwrap_or_else(|| panic!("{server_id}: command not found in {}", path.display()));
+        let args_line = section_body.lines()
+            .find_map(|l| l.strip_prefix("args = "))
+            .unwrap_or_default();
+        let args: Vec<String> = serde_json::from_str(args_line)
+            .unwrap_or_else(|_| Vec::new());
+        (command, args)
+    }
+
     fn projected_codegraph_config(
         roots: &ResolvedProjectionRoots,
         host_id: &str,
     ) -> (PathBuf, &'static str) {
         match host_id {
-            "cursor" => (
-                roots.host_home_root("cursor").join("mcp.json"),
+            "cursor" => {
+                let cursor_home = roots.host_home_root("cursor")
+                    .unwrap_or_else(|| panic!("cursor host home not found"));
+                (cursor_home.join("mcp.json"), "mcp_servers")
+            }
+            "claude-code" => (roots.project_root.join(".mcp.json"), "mcpServers"),
+            "codex" => (
+                roots.project_root.join(".codex/config.toml"),
                 "mcp_servers",
             ),
-            "claude-code" => (roots.project_root.join(".mcp.json"), "mcpServers"),
-            "codex" => (roots.project_root.join(".mcp.json"), "mcpServers"),
             "opencode" => (
                 roots.project_root.join(".opencode/opencode.json"),
                 "mcpServers",
@@ -233,6 +261,7 @@ mod five_host_stdio_e2e {
         );
     }
 
+    #[serial]
     #[test]
     fn codegraph_five_host_stdio_e2e_smoke() {
         if !stdio_e2e_enabled() {
@@ -265,17 +294,21 @@ mod five_host_stdio_e2e {
             );
 
             let (config_path, servers_key) = projected_codegraph_config(&roots, host_id);
-            let payload = read_json(&config_path);
-            let entry = payload
-                .get(servers_key)
-                .and_then(|v| v.get("mcp-codegraph"))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "{host_id}: {servers_key}.mcp-codegraph missing in {}",
-                        config_path.display()
-                    )
-                });
-            let (command, args) = extract_stdio_launch(entry, host_id);
+            let (command, args) = if host_id == "codex" {
+                extract_codex_mcp_config(&config_path, "mcp-codegraph")
+            } else {
+                let payload = read_json(&config_path);
+                let entry = payload
+                    .get(servers_key)
+                    .and_then(|v| v.get("mcp-codegraph"))
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "{host_id}: {servers_key}.mcp-codegraph missing in {}",
+                            config_path.display()
+                        )
+                    });
+                extract_stdio_launch(entry, host_id)
+            };
             let stdout = run_stdio_tools_probe(&command, &args, host_id);
             assert_codegraph_tools_visible(&stdout, host_id);
         }

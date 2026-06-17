@@ -273,9 +273,9 @@ fn default_host_label(host_id: &str) -> String {
 pub fn review_spawn_first_nudge_line(repo_root: Option<&Path>, host_id: &str) -> String {
     snapshot(repo_root)
         .ok()
-        .and_then(|s| {
+        .map(|s| {
             if let Some(line) = s.spawn_first_nudge_by_host.get(host_id) {
-                return Some(line.clone());
+                return line.clone();
             }
             if let Some(template) = s.spawn_first_nudge_template.as_deref() {
                 let label = s
@@ -284,10 +284,10 @@ pub fn review_spawn_first_nudge_line(repo_root: Option<&Path>, host_id: &str) ->
                     .cloned()
                     .unwrap_or_else(|| default_host_label(host_id));
                 if !label.is_empty() {
-                    return Some(spawn_first_nudge_from_template(template, &label));
+                    return spawn_first_nudge_from_template(template, &label);
                 }
             }
-            Some(s.spawn_first_nudge.clone())
+            s.spawn_first_nudge.clone()
         })
         .unwrap_or_else(|| DEFAULT_SPAWN_FIRST_NUDGE.to_string())
 }
