@@ -8,7 +8,7 @@
 //!
 //! Without `SEARCH_BENCH=1` the binary exits immediately (CI-friendly no-op).
 
-use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group};
 use router_rs::route::{
     SkillRecord, filter_record_indices_for_host, invalidate_records_cache, load_records,
     load_records_cached_for_stdio, load_records_from_manifest, search_skills, search_skills_subset,
@@ -209,5 +209,9 @@ fn main() {
         eprintln!("skip search_bench (set SEARCH_BENCH=1 to run)");
         return;
     }
-    criterion_main!(benches);
+    let mut criterion = criterion::Criterion::default();
+    bench_record_load(&mut criterion);
+    bench_search_core(&mut criterion);
+    bench_host_filter_path(&mut criterion);
+    criterion.final_summary();
 }

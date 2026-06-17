@@ -30,7 +30,14 @@ pub fn safe_slug(value: &str) -> String {
 
 pub fn value_text(value: Option<&Value>) -> String {
     match value {
-        Some(Value::String(text)) => text.trim().to_string(),
+        Some(Value::String(text)) => {
+            let trimmed = text.trim();
+            if trimmed.len() == text.len() {
+                text.clone()
+            } else {
+                trimmed.to_string()
+            }
+        }
         Some(Value::Number(number)) => number.to_string(),
         Some(Value::Bool(flag)) => flag.to_string(),
         Some(Value::Null) | None => String::new(),
@@ -96,22 +103,25 @@ pub fn required_non_empty_string(
     key: &str,
     context: &str,
 ) -> Result<String, String> {
-    payload
+    let text = payload
         .get(key)
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
-        .ok_or_else(|| format!("{context} requires non-empty {key}"))
+        .ok_or_else(|| format!("{context} requires non-empty {key}"))?;
+    Ok(text.to_string())
 }
 
 pub fn optional_non_empty_string(payload: &Value, key: &str) -> Option<String> {
-    payload
+    let text = payload
         .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
+        .and_then(Value::as_str)?
+        .trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text.to_string())
+    }
 }
 
 pub fn optional_bool(payload: &Value, key: &str) -> Option<bool> {
@@ -127,11 +137,14 @@ pub(crate) fn nested_value<'a>(payload: &'a Value, path: &[&str]) -> Option<&'a 
 }
 
 pub(crate) fn nested_non_empty_string(payload: &Value, path: &[&str]) -> Option<String> {
-    nested_value(payload, path)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
+    let text = nested_value(payload, path)
+        .and_then(Value::as_str)?
+        .trim();
+    if text.is_empty() {
+        None
+    } else {
+        Some(text.to_string())
+    }
 }
 
 pub(crate) fn nested_bool(payload: &Value, path: &[&str]) -> Option<bool> {

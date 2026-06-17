@@ -187,7 +187,12 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
         return serde_json::to_value(response)
             .map_err(|err| format!("serialize closeout response: {err}"));
     }
-    match serde_json::from_value::<CloseoutRecord>(payload.clone()) {
+    let task_id_for_error = payload
+        .get("task_id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    match serde_json::from_value::<CloseoutRecord>(payload) {
         Ok(record) => {
             let mut response = evaluate_closeout_record(&record);
             append_closeout_violations(&mut response, raw_shape_violations);
@@ -198,11 +203,7 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
             let mut response = CloseoutEnforcementResponse {
                 schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
                 authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
-                task_id: payload
-                    .get("task_id")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string(),
+                task_id: task_id_for_error,
                 closeout_allowed: false,
                 can_proceed: false,
                 claimed_completion: false,
@@ -312,8 +313,8 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     }
 
     // R3: verification_status=passed but a command failed.
-    if status_lower == "passed" {
-        if let Some(failed) = record.commands_run.iter().find(|c| c.exit_code != 0) {
+    if status_lower == "passed"
+        && let Some(failed) = record.commands_run.iter().find(|c| c.exit_code != 0) {
             violations.push(CloseoutViolation::new(
                 "verification_passed_with_failed_command",
                 "block",
@@ -323,7 +324,6 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
                 ),
             ));
         }
-    }
 
     // R3b: command evidence must be auditable; serde defaults must not turn `{}` into success.
     if let Some(invalid) = record
@@ -343,8 +343,8 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     }
 
     // R4: verification_status=passed but artifact missing.
-    if status_lower == "passed" {
-        if let Some(missing_artifact) = record.artifacts_checked.iter().find(|a| !a.exists) {
+    if status_lower == "passed"
+        && let Some(missing_artifact) = record.artifacts_checked.iter().find(|a| !a.exists) {
             violations.push(CloseoutViolation::new(
                 "verification_passed_with_missing_artifact",
                 "block",
@@ -354,7 +354,6 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
                 ),
             ));
         }
-    }
 
     // R5: not_run without blockers or risks.
     if status_lower == "not_run" && record.blockers.is_empty() && record.risks.is_empty() {
@@ -516,8 +515,7 @@ pub fn evaluate_closeout_record_with_context(
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
-    {
-        if record.task_id.trim() != expected {
+        && record.task_id.trim() != expected {
             response.violations.push(CloseoutViolation::new(
                 "task_id_context_mismatch",
                 "block",
@@ -531,7 +529,6 @@ pub fn evaluate_closeout_record_with_context(
                 .push("matching_task_id".to_string());
             response.closeout_allowed = false;
         }
-    }
     let status_lower = record.verification_status.trim().to_ascii_lowercase();
     if status_lower == "passed"
         && record.commands_run.is_empty()
@@ -634,7 +631,12 @@ pub fn evaluate_closeout_record_value_with_context(
         return serde_json::to_value(response)
             .map_err(|err| format!("serialize closeout response: {err}"));
     }
-    match serde_json::from_value::<CloseoutRecord>(payload.clone()) {
+    let task_id_for_error = payload
+        .get("task_id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    match serde_json::from_value::<CloseoutRecord>(payload) {
         Ok(record) => {
             let mut response = evaluate_closeout_record_with_context(&record, ctx);
             append_closeout_violations(&mut response, raw_shape_violations);
@@ -645,11 +647,7 @@ pub fn evaluate_closeout_record_value_with_context(
             let mut response = CloseoutEnforcementResponse {
                 schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
                 authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
-                task_id: payload
-                    .get("task_id")
-                    .and_then(Value::as_str)
-                    .unwrap_or("")
-                    .to_string(),
+                task_id: task_id_for_error,
                 closeout_allowed: false,
                 can_proceed: false,
                 claimed_completion: false,

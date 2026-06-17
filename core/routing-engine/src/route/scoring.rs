@@ -128,7 +128,7 @@ fn score_design_md_signals(
 }
 
 /// Score gate phrases, exact skill name, name tokens, and trigger hints.
-/// Returns `(delta, reasons, matched_query_tokens)`.
+/// Returns `(delta, reasons, matched_query_token_count)`.
 #[inline]
 fn score_gate_name_token_signals(
     record: &SkillRecord,
@@ -136,10 +136,10 @@ fn score_gate_name_token_signals(
     query_token_list: &[String],
     query_tokens: &HashSet<&str>,
     w: &ScoringWeights,
-) -> (f64, Vec<String>, HashSet<String>) {
+) -> (f64, Vec<String>, usize) {
     let mut delta = 0.0f64;
     let mut reasons = Vec::with_capacity(4);
-    let mut matched_query_tokens: HashSet<String> = HashSet::new();
+    let mut matched_count = 0usize;
 
     // Exact skill name
     if !record.slug_lower.is_empty()
@@ -150,7 +150,7 @@ fn score_gate_name_token_signals(
         reasons.push(format!("Exact skill name matched: {}.", record.slug));
         for slug_tok in tokenize_route_text(&record.slug_lower) {
             if query_tokens.contains(slug_tok.as_str()) {
-                matched_query_tokens.insert(slug_tok.clone());
+                matched_count += 1;
             }
         }
     }
@@ -177,7 +177,7 @@ fn score_gate_name_token_signals(
             if ptokens.len() == 1 {
                 for t in query_token_list {
                     if text_matches_phrase(std::slice::from_ref(t), phrase) {
-                        matched_query_tokens.insert(t.clone());
+                        matched_count += 1;
                     }
                 }
             }
@@ -185,22 +185,24 @@ fn score_gate_name_token_signals(
     }
 
     // Name tokens
-    let mut shared_name_tokens = record
+    let shared_name_tokens: usize = record
         .name_tokens
         .iter()
         .filter(|token| query_tokens.contains(token.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
-    shared_name_tokens.sort();
-    if !shared_name_tokens.is_empty() {
-        delta += w.name_tokens_base + (shared_name_tokens.len() as f64) * w.name_tokens_per_token;
+        .count();
+    if shared_name_tokens > 0 {
+        delta += w.name_tokens_base + (shared_name_tokens as f64) * w.name_tokens_per_token;
+        let matched_names: Vec<&str> = record
+            .name_tokens
+            .iter()
+            .filter(|token| query_tokens.contains(token.as_str()))
+            .map(|s| s.as_str())
+            .collect();
         reasons.push(format!(
             "Name tokens matched: {}.",
-            shared_name_tokens.join(", ")
+            matched_names.join(", ")
         ));
-        for tok in &shared_name_tokens {
-            matched_query_tokens.insert(tok.clone());
-        }
+        matched_count += shared_name_tokens;
     }
 
     // Trigger hints
@@ -225,28 +227,28 @@ fn score_gate_name_token_signals(
             if ptokens.len() == 1 {
                 for t in query_token_list {
                     if text_matches_phrase(std::slice::from_ref(t), phrase) {
-                        matched_query_tokens.insert(t.clone());
+                        matched_count += 1;
                     }
                 }
             }
         }
     }
 
-    (delta, reasons, matched_query_tokens)
+    (delta, reasons, matched_count)
 }
 
 /// Score metadata positive triggers, keyword tokens, and alias tokens.
-/// Returns `(delta, reasons, matched_query_tokens)`.
+/// Returns `(delta, reasons, matched_query_token_count)`.
 #[inline]
 fn score_metadata_trigger_signals(
     record: &SkillRecord,
     query_tokens: &HashSet<&str>,
     query_token_list: &[String],
     w: &ScoringWeights,
-) -> (f64, Vec<String>, HashSet<String>) {
+) -> (f64, Vec<String>, usize) {
     let mut delta = 0.0f64;
     let mut reasons = Vec::with_capacity(3);
-    let mut matched_query_tokens: HashSet<String> = HashSet::new();
+    let mut matched_count = 0usize;
 
     // Metadata positive triggers
     let matched_metadata_triggers: Vec<&str> = record
@@ -270,7 +272,7 @@ fn score_metadata_trigger_signals(
             if ptokens.len() == 1 {
                 for t in query_token_list {
                     if text_matches_phrase(std::slice::from_ref(t), phrase) {
-                        matched_query_tokens.insert(t.clone());
+                        matched_count += 1;
                     }
                 }
             }
@@ -278,13 +280,12 @@ fn score_metadata_trigger_signals(
     }
 
     // Keyword tokens
-    let mut shared_keywords = record
+    let shared_keywords: Vec<&str> = record
         .keyword_tokens
         .iter()
         .filter(|token| query_tokens.contains(token.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
-    shared_keywords.sort();
+        .map(|s| s.as_str())
+        .collect();
     if !shared_keywords.is_empty() {
         delta += f64::min(
             w.keywords_max,
@@ -292,43 +293,28 @@ fn score_metadata_trigger_signals(
         );
         reasons.push(format!(
             "Description keywords matched: {}.",
-            shared_keywords
-                .iter()
-                .take(8)
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
+            shared_keywords.iter().take(8).copied().collect::<Vec<_>>().join(", ")
         ));
-        for tok in &shared_keywords {
-            matched_query_tokens.insert(tok.clone());
-        }
+        matched_count += shared_keywords.len();
     }
 
     // Alias tokens
-    let mut alias_hits = record
+    let alias_hits: Vec<&str> = record
         .alias_tokens
         .iter()
         .filter(|token| query_tokens.contains(token.as_str()))
-        .cloned()
-        .collect::<Vec<_>>();
-    alias_hits.sort();
+        .map(|s| s.as_str())
+        .collect();
     if !alias_hits.is_empty() {
         delta += w.alias_hits_base + (alias_hits.len() as f64) * w.alias_hits_per_hit;
         reasons.push(format!(
             "Skill alias hints matched: {}.",
-            alias_hits
-                .iter()
-                .take(8)
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>()
-                .join(", ")
+            alias_hits.iter().take(8).copied().collect::<Vec<_>>().join(", ")
         ));
-        for tok in &alias_hits {
-            matched_query_tokens.insert(tok.clone());
-        }
+        matched_count += alias_hits.len();
     }
 
-    (delta, reasons, matched_query_tokens)
+    (delta, reasons, matched_count)
 }
 
 /// Score session-start and code-review-deep signals. Returns `(delta, reasons)`.
@@ -385,7 +371,7 @@ pub fn score_route_candidate<'a>(
 ) -> RouteCandidate<'a> {
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
-    let mut matched_query_tokens: HashSet<String> = HashSet::new();
+    let mut matched_token_count = 0usize;
 
     if let Some(done) = super::nl_route_adjustments::apply_nl_pre_framework_alias_rules(
         record,
@@ -461,18 +447,18 @@ pub fn score_route_candidate<'a>(
     }
 
     // --- gate / name-token / trigger-hint signals ---
-    let (gate_delta, gate_reasons, gate_tokens) =
+    let (gate_delta, gate_reasons, gate_count) =
         score_gate_name_token_signals(record, query_text, query_token_list, query_tokens, w);
     score += gate_delta;
     reasons.extend(gate_reasons);
-    matched_query_tokens.extend(gate_tokens);
+    matched_token_count += gate_count;
 
     // --- metadata-trigger / keyword / alias signals ---
-    let (meta_delta, meta_reasons, meta_tokens) =
+    let (meta_delta, meta_reasons, meta_count) =
         score_metadata_trigger_signals(record, query_tokens, query_token_list, w);
     score += meta_delta;
     reasons.extend(meta_reasons);
-    matched_query_tokens.extend(meta_tokens);
+    matched_token_count += meta_count;
 
     // --- session-start / code-review-deep signals ---
     let (start_delta, start_reasons) =
@@ -561,7 +547,7 @@ pub fn score_route_candidate<'a>(
         record,
         score,
         reasons,
-        matched_token_count: matched_query_tokens.len(),
+        matched_token_count,
     };
     if score > 0.0 {
         debug!(
@@ -582,7 +568,7 @@ pub fn pick_owner<'a>(
 ) -> RouteCandidate<'a> {
     let n = candidates.len();
     if n == 0 {
-        panic!("pick_owner called with empty candidates");
+        unreachable!("pick_owner called with empty candidates — caller must ensure non-empty input");
     }
 
     // Owner candidate indices
@@ -605,8 +591,8 @@ pub fn pick_owner<'a>(
         .min_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
 
     // Agent-swarm special case
-    if let Some(idx) = gate_idx {
-        if candidates[idx].record.slug == "agent-swarm-orchestration"
+    if let Some(idx) = gate_idx
+        && candidates[idx].record.slug == "agent-swarm-orchestration"
             && candidates[idx].score >= w.agent_swarm_candidate_threshold
             && !has_plan_mode_owner_context(query_text, query_token_list)
             && !has_systematic_debug_context(query_text, query_token_list)
@@ -618,18 +604,16 @@ pub fn pick_owner<'a>(
             );
             return gate;
         }
-    }
 
     // Top owner above threshold
-    if let Some(&top_idx) = owner_idx.first() {
-        if candidates[top_idx].score >= w.top_owner_score_threshold {
+    if let Some(&top_idx) = owner_idx.first()
+        && candidates[top_idx].score >= w.top_owner_score_threshold {
             return candidates.swap_remove(top_idx);
         }
-    }
 
     // Gate before owner
-    if let Some(idx) = gate_idx {
-        if candidates[idx].score >= w.gate_before_owner_threshold
+    if let Some(idx) = gate_idx
+        && candidates[idx].score >= w.gate_before_owner_threshold
             && candidates[idx].score >= top_owner_score
         {
             let mut gate = candidates.swap_remove(idx);
@@ -637,7 +621,6 @@ pub fn pick_owner<'a>(
                 .push("Prioritized via gate-before-owner precedence.".to_string());
             return gate;
         }
-    }
 
     // Build owner-pool indices (no RouteCandidate clones)
     let mut pool_indices: Vec<usize> = if owner_idx.is_empty() {
@@ -674,11 +657,10 @@ pub fn pick_owner<'a>(
             .collect();
         layer_candidates
             .sort_unstable_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
-        if let Some(&top) = layer_candidates.first() {
-            if candidates[top].score >= w.layer_threshold(layer) {
+        if let Some(&top) = layer_candidates.first()
+            && candidates[top].score >= w.layer_threshold(layer) {
                 return candidates.swap_remove(top);
             }
-        }
     }
 
     // Fallback: sort pool by layer, score, priority, slug
@@ -806,7 +788,7 @@ const SCORE_BUCKETS: [&str; 11] = [
 ];
 
 pub fn score_bucket(score: f64) -> String {
-    let clamped = score.max(0.0).min(100.0);
+    let clamped = score.clamp(0.0, 100.0);
     let bucket = ((clamped / 10.0).floor() as usize).min(10);
     SCORE_BUCKETS[bucket].to_string()
 }

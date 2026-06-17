@@ -21,33 +21,30 @@ pub fn load_records(
 ) -> Result<Vec<SkillRecord>, String> {
     let default_runtime_path = default_runtime_path();
     let runtime_path = runtime_path.or(default_runtime_path.as_deref());
-    if let Some(path) = runtime_path {
-        if path.exists() {
+    if let Some(path) = runtime_path
+        && path.exists() {
             // Try lightweight index first; fall back to full runtime on failure.
             let mut records = load_records_from_index_or_runtime(path)?;
-            if let Some(manifest) = manifest_path {
-                if manifest.exists() {
+            if let Some(manifest) = manifest_path
+                && manifest.exists() {
                     let meta = load_manifest_route_meta(manifest)?;
                     apply_manifest_route_meta(&mut records, &meta);
                     apply_manifest_host_platforms(&mut records, manifest)?;
                 }
-            }
             return Ok(records);
         }
-    }
-    if let Some(path) = manifest_path {
-        if path.exists() {
+    if let Some(path) = manifest_path
+        && path.exists() {
             return load_records_from_manifest(path);
         }
-    }
     Err("No routing index found.".to_string())
 }
 
 /// Try loading from `SKILL_ROUTING_INDEX.json` (sibling of runtime file).
 /// Falls back to the full runtime file if the index is missing or unparseable.
 fn load_records_from_index_or_runtime(runtime_path: &Path) -> Result<Vec<SkillRecord>, String> {
-    if let Some(index_path) = index_sibling_path(runtime_path) {
-        if index_path.is_file() {
+    if let Some(index_path) = index_sibling_path(runtime_path)
+        && index_path.is_file() {
             match load_records_from_index(&index_path) {
                 Ok(records) if !records.is_empty() => return Ok(records),
                 Ok(_) => eprintln!("[router-rs] index file empty, falling back to full runtime"),
@@ -57,7 +54,6 @@ fn load_records_from_index_or_runtime(runtime_path: &Path) -> Result<Vec<SkillRe
                 ),
             }
         }
-    }
     load_records_from_runtime(runtime_path)
 }
 
@@ -153,8 +149,28 @@ pub fn load_inline_records(payload: &Value) -> Result<Vec<SkillRecord>, String> 
 }
 
 fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
-    let skill = serde_json::from_value::<InlineSkillRecordPayload>(row.clone())
-        .map_err(|err| format!("parse inline skill payload failed: {err}"))?;
+    let name = row
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    if name.is_empty() {
+        return Err("inline skill payload missing name".to_string());
+    }
+    let skill = InlineSkillRecordPayload {
+        name,
+        description: optional_string_value(row, "description"),
+        short_description: optional_string_value(row, "short_description"),
+        when_to_use: optional_string_value(row, "when_to_use"),
+        do_not_use: optional_string_value(row, "do_not_use"),
+        routing_layer: optional_string_value(row, "routing_layer"),
+        routing_owner: optional_string_value(row, "routing_owner"),
+        routing_gate: optional_string_value(row, "routing_gate"),
+        routing_priority: optional_string_value(row, "routing_priority"),
+        session_start: optional_string_value(row, "session_start"),
+        tags: optional_string_list_value(row, "tags"),
+        trigger_hints: optional_string_list_value(row, "trigger_hints"),
+    };
     Ok(skill_record_from_raw(RawSkillRecord {
         slug: skill.name,
         skill_path: None,
@@ -172,6 +188,26 @@ fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
         host_platforms: Vec::new(),
         record_kind: "skill".to_string(),
     }))
+}
+
+fn optional_string_value(row: &Value, key: &str) -> String {
+    row.get(key)
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string()
+}
+
+fn optional_string_list_value(row: &Value, key: &str) -> Vec<String> {
+    row.get(key)
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes) -> SkillRecord {
@@ -510,22 +546,21 @@ pub fn load_records_cached_for_stdio_resolved(
     let manifest_mtime = file_modified_at(manifest_path);
     let metadata_sidecar = route_metadata_sidecar(runtime_path, manifest_path);
     let metadata_mtime = file_modified_at(metadata_sidecar.as_deref());
-    let index_mtime = file_modified_at(runtime_path.and_then(|p| index_sibling_path(p)).as_deref());
+    let index_mtime = file_modified_at(runtime_path.and_then(index_sibling_path).as_deref());
 
     {
         let state = records_cache_state().read().map_err(|e| {
             eprintln!("[router-rs] route records cache lock poisoned: {e}");
             "route records cache lock poisoned".to_string()
         })?;
-        if let Some(entry) = state.map.get(&key) {
-            if entry.runtime_mtime == runtime_mtime
+        if let Some(entry) = state.map.get(&key)
+            && entry.runtime_mtime == runtime_mtime
                 && entry.manifest_mtime == manifest_mtime
                 && entry.metadata_mtime == metadata_mtime
                 && entry.index_mtime == index_mtime
             {
                 return Ok(Arc::clone(&entry.records));
             }
-        }
     }
 
     let records = Arc::new(load_records(runtime_path, manifest_path)?);
@@ -656,8 +691,8 @@ fn merge_route_metadata_payload(
             .and_then(|policy| policy.get("mode"))
             .and_then(Value::as_str)
             .map(str::to_string);
-        if let Some(mode) = fallback_policy_mode.as_deref() {
-            if !matches!(
+        if let Some(mode) = fallback_policy_mode.as_deref()
+            && !matches!(
                 mode,
                 "eligible-in-runtime" | "explicit-or-fallback" | "explicit-only" | "never"
             ) {
@@ -665,7 +700,6 @@ fn merge_route_metadata_payload(
                     "unsupported fallback_policy.mode `{mode}` for skill `{slug}`"
                 ));
             }
-        }
         if positive_triggers.is_empty()
             && negative_triggers.is_empty()
             && primary_allowed.is_none()

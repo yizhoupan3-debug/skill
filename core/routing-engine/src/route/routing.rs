@@ -16,6 +16,40 @@ use super::types::{
     MatchRow, RouteContextPayload, RouteDecision, RouteDecisionSnapshotPayload, SearchMatchPayload,
     SearchMatchRecordPayload, SearchResultsPayload, SkillRecord,
 };
+
+/// Shared shell for every RouteDecision — avoids 3 repeated `.to_string()` on static constants
+/// per construction site (saves ~21 String allocs across 7 call sites).
+fn make_no_hit_decision(
+    query: &str,
+    session_id: &str,
+    route_context: RouteContextPayload,
+    reasons: Vec<String>,
+) -> RouteDecision {
+    RouteDecision {
+        decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
+        authority: ROUTE_AUTHORITY.to_string(),
+        compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
+        task: query.to_string(),
+        session_id: session_id.to_string(),
+        selected_skill: NO_SKILL_SELECTED.to_string(),
+        selected_skill_path: None,
+        overlay_skill: None,
+        route_context,
+        layer: "runtime".to_string(),
+        score: 0.0,
+        reasons: reasons.clone(),
+        matched_token_count: 0,
+        fuzzy_match: false,
+        route_snapshot: build_route_snapshot(
+            "rust",
+            NO_SKILL_SELECTED,
+            None,
+            "runtime",
+            0.0,
+            &reasons,
+        ),
+    }
+}
 use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashSet};
@@ -120,12 +154,11 @@ fn finalize_search_rows(mut rows: Vec<MatchRow>, limit: usize) -> Vec<MatchRow> 
             heap.push(SearchHeapEntry { key, idx });
             continue;
         }
-        if let Some(worst) = heap.peek() {
-            if key > worst.key {
+        if let Some(worst) = heap.peek()
+            && key > worst.key {
                 heap.pop();
                 heap.push(SearchHeapEntry { key, idx });
             }
-        }
     }
     let mut out = heap
         .into_iter()
@@ -285,30 +318,7 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "Retired framework slash command; native runtime should proceed without loading a skill.",
         ]);
-        return Ok(RouteDecision {
-            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-            authority: ROUTE_AUTHORITY.to_string(),
-            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
-            task: query.to_string(),
-            session_id: session_id.to_string(),
-            selected_skill: NO_SKILL_SELECTED.to_string(),
-            selected_skill_path: None,
-            overlay_skill: None,
-            route_context,
-            layer: "runtime".to_string(),
-            score: 0.0,
-            reasons: fallback_reasons.clone(),
-            matched_token_count: 0,
-            fuzzy_match: false,
-            route_snapshot: build_route_snapshot(
-                "rust",
-                NO_SKILL_SELECTED,
-                None,
-                "runtime",
-                0.0,
-                &fallback_reasons,
-            ),
-        });
+        return Ok(make_no_hit_decision(query, session_id, route_context, fallback_reasons));
     }
     let primary_query = primary_owner_query_text(query, records, allow_overlay);
     let normalized_query = normalize_text(&primary_query);
@@ -403,30 +413,7 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill.",
         ]);
-        return Ok(RouteDecision {
-            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-            authority: ROUTE_AUTHORITY.to_string(),
-            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
-            task: query.to_string(),
-            session_id: session_id.to_string(),
-            selected_skill: NO_SKILL_SELECTED.to_string(),
-            selected_skill_path: None,
-            overlay_skill: None,
-            route_context,
-            layer: "runtime".to_string(),
-            score: 0.0,
-            reasons: fallback_reasons.clone(),
-            matched_token_count: 0,
-            fuzzy_match: false,
-            route_snapshot: build_route_snapshot(
-                "rust",
-                NO_SKILL_SELECTED,
-                None,
-                "runtime",
-                0.0,
-                &fallback_reasons,
-            ),
-        });
+        return Ok(make_no_hit_decision(query, session_id, route_context, fallback_reasons));
     }
     // 所有候选（含仅 1 个）全部是 overlay 且 caller 未允许 overlay 时返回 no-hit
     if !viable.is_empty()
@@ -438,30 +425,7 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "Only overlay signals matched; native runtime should proceed without loading a primary skill.",
         ]);
-        return Ok(RouteDecision {
-            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-            authority: ROUTE_AUTHORITY.to_string(),
-            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
-            task: query.to_string(),
-            session_id: session_id.to_string(),
-            selected_skill: NO_SKILL_SELECTED.to_string(),
-            selected_skill_path: None,
-            overlay_skill: None,
-            route_context,
-            layer: "runtime".to_string(),
-            score: 0.0,
-            reasons: fallback_reasons.clone(),
-            matched_token_count: 0,
-            fuzzy_match: false,
-            route_snapshot: build_route_snapshot(
-                "rust",
-                NO_SKILL_SELECTED,
-                None,
-                "runtime",
-                0.0,
-                &fallback_reasons,
-            ),
-        });
+        return Ok(make_no_hit_decision(query, session_id, route_context, fallback_reasons));
     }
 
     // Log: all-overlay candidates allowed through by caller
@@ -510,30 +474,7 @@ pub fn route_task(
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill.",
         ]);
-        return Ok(RouteDecision {
-            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-            authority: ROUTE_AUTHORITY.to_string(),
-            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
-            task: query.to_string(),
-            session_id: session_id.to_string(),
-            selected_skill: NO_SKILL_SELECTED.to_string(),
-            selected_skill_path: None,
-            overlay_skill: None,
-            route_context,
-            layer: "runtime".to_string(),
-            score: 0.0,
-            reasons: fallback_reasons.clone(),
-            matched_token_count: 0,
-            fuzzy_match: false,
-            route_snapshot: build_route_snapshot(
-                "rust",
-                NO_SKILL_SELECTED,
-                None,
-                "runtime",
-                0.0,
-                &fallback_reasons,
-            ),
-        });
+        return Ok(make_no_hit_decision(query, session_id, route_context, fallback_reasons));
     }
     let overlay = if allow_overlay {
         pick_overlay(
@@ -634,7 +575,7 @@ fn fuzzy_rescue_best_match<'a>(
         })
         .filter(|(_, sim)| *sim >= FUZZY_MIN_SIMILARITY)
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(Ordering::Equal))
-        .map(|(record, sim)| (record, sim))
+        
 }
 
 fn fuzzy_rescue_primary_record<'a>(
@@ -658,6 +599,7 @@ fn fuzzy_rescue_primary_record<'a>(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_fuzzy_rescue_decision(
     records: &[SkillRecord],
     record: &SkillRecord,

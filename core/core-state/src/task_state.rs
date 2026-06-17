@@ -13,8 +13,47 @@ use crate::state_manager::{
 };
 
 use serde::Serialize;
+use std::sync::OnceLock;
 use serde_json::Value;
 use std::path::Path;
+
+// Cached env var lookups — avoid repeated OS syscalls in hot paths.
+// Disabled in test builds so tests can set env vars per-test.
+fn depth_score_mode_is_strict() -> bool {
+    #[cfg(not(test))]
+    {
+        static CACHED: OnceLock<bool> = OnceLock::new();
+        *CACHED.get_or_init(|| {
+            std::env::var("ROUTER_RS_DEPTH_SCORE_MODE")
+                .map(|v| v.trim() == "strict")
+                .unwrap_or(false)
+        })
+    }
+    #[cfg(test)]
+    {
+        std::env::var("ROUTER_RS_DEPTH_SCORE_MODE")
+            .map(|v| v.trim() == "strict")
+            .unwrap_or(false)
+    }
+}
+
+fn depth_compliance_hint_enabled() -> bool {
+    #[cfg(not(test))]
+    {
+        static CACHED: OnceLock<bool> = OnceLock::new();
+        *CACHED.get_or_init(|| {
+            std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT")
+                .map(|v| v.trim() == "1")
+                .unwrap_or(false)
+        })
+    }
+    #[cfg(test)]
+    {
+        std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT")
+            .map(|v| v.trim() == "1")
+            .unwrap_or(false)
+    }
+}
 
 pub const RESOLVED_TASK_VIEW_SCHEMA_VERSION: &str = "router-rs-resolved-task-view-v1";
 
@@ -227,12 +266,28 @@ fn goal_hydration_diagnostics_scan_fallback(repo_root: &Path) -> Option<(Value, 
 }
 
 fn goal_diagnostics_scan_hydrate_enabled() -> bool {
-    match std::env::var("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE") {
-        Ok(v) => {
-            let t = v.trim().to_lowercase();
-            matches!(t.as_str(), "1" | "true" | "yes" | "on")
+    #[cfg(not(test))]
+    {
+        static CACHED: OnceLock<bool> = OnceLock::new();
+        *CACHED.get_or_init(|| {
+            match std::env::var("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE") {
+                Ok(v) => {
+                    let t = v.trim().to_lowercase();
+                    matches!(t.as_str(), "1" | "true" | "yes" | "on")
+                }
+                Err(_) => false,
+            }
+        })
+    }
+    #[cfg(test)]
+    {
+        match std::env::var("ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE") {
+            Ok(v) => {
+                let t = v.trim().to_lowercase();
+                matches!(t.as_str(), "1" | "true" | "yes" | "on")
+            }
+            Err(_) => false,
         }
-        Err(_) => false,
     }
 }
 
@@ -305,11 +360,10 @@ pub fn depth_compliance_aggregate(
 ) -> DepthCompliance {
     let mut c = DepthCompliance::default();
 
-    if let Some(g) = goal {
-        if let Some(arr) = g.get("checkpoints").and_then(Value::as_array) {
+    if let Some(g) = goal
+        && let Some(arr) = g.get("checkpoints").and_then(Value::as_array) {
             c.goal_checkpoint_count = arr.len() as u64;
         }
-    }
 
     let mut strict_task = false;
     if let Some(r) = rfv {
@@ -354,15 +408,13 @@ pub fn depth_compliance_aggregate(
                     .is_some_and(|v| !v.is_null() && v.is_object())
                 {
                     c.rfv_external_deep_structured_round_count += 1;
-                    if strict_task {
-                        if let Some(er) = round.get("external_research") {
-                            if validate_external_research_structured(er).is_ok()
+                    if strict_task
+                        && let Some(er) = round.get("external_research")
+                            && validate_external_research_structured(er).is_ok()
                                 && validate_external_research_strict(er).is_ok()
                             {
                                 c.rfv_external_strict_ok_round_count += 1;
                             }
-                        }
-                    }
                 }
             }
         }
@@ -381,10 +433,7 @@ pub fn depth_compliance_aggregate(
     let third_legacy = c.goal_checkpoint_count > 0
         || c.rfv_adversarial_round_count > 0
         || (strict_task && c.rfv_external_strict_ok_round_count > 0);
-    let third = if std::env::var("ROUTER_RS_DEPTH_SCORE_MODE")
-        .map(|v| v.trim() == "strict")
-        .unwrap_or(false)
-    {
+    let third = if depth_score_mode_is_strict() {
         third_legacy || c.rfv_falsification_test_count > 0
     } else {
         third_legacy
@@ -551,9 +600,9 @@ pub fn hydrate_task_state_hybrid(
 
     // 1. Try to load from TASK_STATE.json
     let agg_path = crate::task_state_aggregate::task_state_aggregate_path(repo_root, task_id);
-    if agg_path.is_file() {
-        if let Ok(raw) = std::fs::read_to_string(&agg_path) {
-            if let Ok(agg) = serde_json::from_str::<Value>(&raw) {
+    if agg_path.is_file()
+        && let Ok(raw) = std::fs::read_to_string(&agg_path)
+            && let Ok(agg) = serde_json::from_str::<Value>(&raw) {
                 goal_state = agg.get("goal_state").cloned().filter(|v| !v.is_null());
                 rfv_loop_state = agg.get("rfv_loop_state").cloned().filter(|v| !v.is_null());
                 if let Some(ev) = agg.get("evidence") {
@@ -569,8 +618,6 @@ pub fn hydrate_task_state_hybrid(
                 last_seq = agg.get("last_seq").and_then(Value::as_u64);
                 base_loaded = true;
             }
-        }
-    }
 
     // 2. If TASK_STATE.json not found or failed, fall back to raw physical files
     if !base_loaded {
@@ -592,13 +639,11 @@ pub fn hydrate_task_state_hybrid(
     // 3. Read TASK_LEDGER.jsonl and replay transactions beyond last_seq
     let txs = read_task_ledger_transactions(repo_root, task_id);
     for tx in txs {
-        if let Some(seq) = tx.seq {
-            if let Some(l_seq) = last_seq {
-                if seq <= l_seq {
+        if let Some(seq) = tx.seq
+            && let Some(l_seq) = last_seq
+                && seq <= l_seq {
                     continue;
                 }
-            }
-        }
         // Replay
         match tx.tx_type.as_str() {
             "goal_state" => {
@@ -711,9 +756,7 @@ pub fn resolve_task_view_with_pointers(
 /// One-line hint for continuity digest / Codex SessionStart (`Continuity digest` prompt).
 /// Omitted when no resolved `task_id` (idle). Keeps copy short for ~640-char caps.
 pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> {
-    if !std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT")
-        .map(|v| v.trim() == "1")
-        .unwrap_or(false)
+    if !depth_compliance_hint_enabled()
     {
         return None;
     }
@@ -741,11 +784,7 @@ pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> 
             dc.rfv_external_strict_ok_round_count
         ));
     }
-    if dc.rfv_external_deep_structured_round_count > 0
-        && !std::env::var("ROUTER_RS_DEPTH_SCORE_MODE")
-            .map(|v| v.trim() == "strict")
-            .unwrap_or(false)
-    {
+    if dc.rfv_external_deep_structured_round_count > 0 && !depth_score_mode_is_strict() {
         out.push_str(DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH);
     }
     Some(out)
@@ -806,14 +845,13 @@ pub fn validate_goal_completion_gates(
                 .to_string(),
         );
     };
-    if let Some(min) = gates.min_depth_score {
-        if dc.depth_score < min {
+    if let Some(min) = gates.min_depth_score
+        && dc.depth_score < min {
             return Err(format!(
                 "GOAL completion_gates: depth_score={} < min_depth_score={} (fix RFV/EVIDENCE/checkpoints or lower the gate; rollup from resolve_task_view)",
                 dc.depth_score, min
             ));
         }
-    }
     if gates.require_successful_evidence_row {
         let ok = view
             .evidence

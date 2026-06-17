@@ -151,14 +151,19 @@ pub fn phrase_token_matches(task_token: &str, phrase_token: &str) -> bool {
 }
 
 pub fn text_matches_phrase(task_tokens: &[String], phrase: &str) -> bool {
-    let phrase_tokens = tokenize_route_text(phrase);
+    let normalized = normalize_text(phrase);
+    let phrase_tokens: Vec<&str> = token_regex()
+        .find_iter(&normalized)
+        .map(|m| m.as_str())
+        .collect();
     if phrase_tokens.is_empty() {
         return false;
     }
+    // Single-token fast path: zero extra heap allocation beyond normalize_text.
     if phrase_tokens.len() == 1 {
         return task_tokens
             .iter()
-            .any(|task_token| phrase_token_matches(task_token, &phrase_tokens[0]));
+            .any(|task_token| phrase_token_matches(task_token, phrase_tokens[0]));
     }
     if phrase_tokens.len() > task_tokens.len() {
         return false;
@@ -167,7 +172,7 @@ pub fn text_matches_phrase(task_tokens: &[String], phrase: &str) -> bool {
         if phrase_tokens
             .iter()
             .enumerate()
-            .all(|(offset, phrase_token)| {
+            .all(|(offset, &phrase_token)| {
                 phrase_token_matches(&task_tokens[start + offset], phrase_token)
             })
         {
