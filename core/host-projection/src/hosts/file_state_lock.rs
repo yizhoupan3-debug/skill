@@ -107,9 +107,9 @@ impl HookStateConfig {
         // Execute closure
         let result = f(&mut state)?;
 
-        // Save state
+        // Save state atomically (temp + fsync + rename)
         let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
-        fs::write(&state_path, json).map_err(|e| e.to_string())?;
+        write_atomic_text(&state_path, &json).map_err(|e| e.to_string())?;
 
         Ok(result)
     }

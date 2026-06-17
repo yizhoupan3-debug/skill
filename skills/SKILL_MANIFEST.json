@@ -202,7 +202,8 @@
         "claude-code",
         "codex",
         "cursor",
-        "opencode"
+        "opencode",
+        "mimo"
       ],
       "skill",
       null,
