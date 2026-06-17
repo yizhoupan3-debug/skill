@@ -1,3 +1,4 @@
+use core_state::utils::atomic_write::write_atomic_text;
 use std::fs;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
@@ -53,15 +54,16 @@ impl HookStateConfig {
         T::default()
     }
 
-    /// Save state to disk, creating parent directories as needed.
+    /// Save state to disk atomically (temp + fsync + rename), creating parent directories as needed.
     pub fn save_state<T: serde::Serialize>(&self, repo_root: &Path, state: &T) {
         let path = self.state_path(repo_root);
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
         if let Ok(json) = serde_json::to_string_pretty(state) {
-            let _ = fs::write(&path, json);
-            debug!(host = %self.host_id, "hook state saved");
+            if write_atomic_text(&path, &json).is_ok() {
+                debug!(host = %self.host_id, "hook state saved");
+            }
         }
     }
 
