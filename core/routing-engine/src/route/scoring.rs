@@ -280,12 +280,13 @@ fn score_metadata_trigger_signals(
     }
 
     // Keyword tokens
-    let shared_keywords: Vec<&str> = record
+    let mut shared_keywords: Vec<&str> = record
         .keyword_tokens
         .iter()
         .filter(|token| query_tokens.contains(token.as_str()))
         .map(|s| s.as_str())
         .collect();
+    shared_keywords.sort();
     if !shared_keywords.is_empty() {
         delta += f64::min(
             w.keywords_max,
@@ -299,12 +300,13 @@ fn score_metadata_trigger_signals(
     }
 
     // Alias tokens
-    let alias_hits: Vec<&str> = record
+    let mut alias_hits: Vec<&str> = record
         .alias_tokens
         .iter()
         .filter(|token| query_tokens.contains(token.as_str()))
         .map(|s| s.as_str())
         .collect();
+    alias_hits.sort();
     if !alias_hits.is_empty() {
         delta += w.alias_hits_base + (alias_hits.len() as f64) * w.alias_hits_per_hit;
         reasons.push(format!(
