@@ -205,39 +205,37 @@ fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Val
     let mtime = std::fs::metadata(&registry_path)
         .and_then(|m| m.modified())
         .unwrap_or(std::time::SystemTime::UNIX_EPOCH);
-    let payload = {
+    // Hold the lock only long enough to extract the sub-record — avoids cloning the
+    // entire registry Value tree (can be hundreds of KB).
+    let result = {
         let mut cache = REGISTRY_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(ref entry) = *cache {
-            if entry.mtime == mtime {
-                entry.payload.clone()
-            } else {
-                let parsed = load_and_cache(&registry_path)?;
-                *cache = Some(RegistryCache {
-                    payload: parsed.clone(),
-                    mtime,
-                });
-                parsed
-            }
-        } else {
-            let parsed = load_and_cache(&registry_path)?;
-            *cache = Some(RegistryCache {
+        let entry = cache.get_or_insert_with(|| {
+            let parsed = load_and_cache(&registry_path).expect("registry load failed");
+            RegistryCache {
                 payload: parsed.clone(),
                 mtime,
-            });
-            parsed
+            }
+        });
+        if entry.mtime != mtime {
+            let parsed = load_and_cache(&registry_path)?;
+            *entry = RegistryCache {
+                payload: parsed.clone(),
+                mtime,
+            };
         }
+        entry
+            .payload
+            .get("framework_commands")
+            .and_then(Value::as_object)
+            .and_then(|aliases| aliases.get(alias_name))
+            .cloned()
     };
-    payload
-        .get("framework_commands")
-        .and_then(Value::as_object)
-        .and_then(|aliases| aliases.get(alias_name))
-        .cloned()
-        .ok_or_else(|| {
-            format!(
-                "Unknown framework alias `{alias_name}` in {}",
-                registry_path.display()
-            )
-        })
+    result.ok_or_else(|| {
+        format!(
+            "Unknown framework alias `{alias_name}` in {}",
+            registry_path.display()
+        )
+    })
 }
 
 fn alias_value_at_path<'a>(value: &'a Value, path: &[&str]) -> Option<&'a Value> {

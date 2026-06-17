@@ -451,11 +451,9 @@ where
         return Err(last_error);
     }
     let mut content = extract_chat_completion_content(&response_payload)?;
-    let first_usage = response_payload
+    let first_usage_ref = response_payload
         .get("usage")
-        .and_then(Value::as_object)
-        .cloned();
-    let mut usage = first_usage.clone();
+        .and_then(Value::as_object);
     let mut finish_reason = response_payload
         .get("choices")
         .and_then(Value::as_array)
@@ -466,6 +464,7 @@ where
     let mut continuation_attempted = false;
     let mut continuation_status = None;
     let mut continuation_error = None;
+    let mut usage_merged: Option<serde_json::Map<String, Value>> = None;
     if research_mode == ResearchMode::Deep && finish_reason.as_deref() == Some("length") {
         continuation_attempted = true;
         let system_anchor = build_compact_anchor(prompt_preview, DEEP_CONTINUATION_ANCHOR_CHARS);
@@ -508,12 +507,12 @@ where
                                             continuation_content.trim_start()
                                         );
                                     }
-                                    usage = merge_usage_totals(
-                                        first_usage.as_ref(),
+                                    usage_merged = Some(merge_usage_totals(
+                                        first_usage_ref,
                                         continuation_payload
                                             .get("usage")
                                             .and_then(Value::as_object),
-                                    );
+                                    ).unwrap_or_default());
                                     finish_reason = continuation_payload
                                         .get("choices")
                                         .and_then(Value::as_array)
@@ -549,18 +548,16 @@ where
             }
         }
     }
-    let input_tokens = usage
-        .as_ref()
+    let active_usage = usage_merged.as_ref().or(first_usage_ref);
+    let input_tokens = active_usage
         .and_then(|usage| usage.get("prompt_tokens"))
         .and_then(Value::as_u64)
         .unwrap_or_else(|| estimate_tokens(&content) as u64) as usize;
-    let output_tokens = usage
-        .as_ref()
+    let output_tokens = active_usage
         .and_then(|usage| usage.get("completion_tokens"))
         .and_then(Value::as_u64)
         .unwrap_or_else(|| estimate_tokens(&content) as u64) as usize;
-    let total_tokens = usage
-        .as_ref()
+    let total_tokens = active_usage
         .and_then(|usage| usage.get("total_tokens"))
         .and_then(Value::as_u64)
         .unwrap_or((input_tokens + output_tokens) as u64) as usize;

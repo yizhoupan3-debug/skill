@@ -203,12 +203,13 @@ fn signal_matches(
     markers: &[&str],
 ) -> bool {
     match mode {
-        SignalMatchMode::NormalizeAndToken => markers.iter().any(|m| {
-            query_text.contains(&normalize_text(m)) || text_matches_phrase(query_token_list, m)
-        }),
-        SignalMatchMode::ContainsOrToken => markers
-            .iter()
-            .any(|m| query_text.contains(*m) || text_matches_phrase(query_token_list, m)),
+        // query_text is already normalized at routing entry; markers are static lowercase ASCII.
+        // Skip per-marker normalize_text allocation — direct contains is sufficient.
+        SignalMatchMode::NormalizeAndToken | SignalMatchMode::ContainsOrToken => {
+            markers
+                .iter()
+                .any(|m| query_text.contains(*m) || text_matches_phrase(query_token_list, m))
+        }
     }
 }
 
@@ -577,8 +578,7 @@ pub fn has_parallel_execution_context(query_text: &str, query_token_list: &[Stri
     ]
     .iter()
     .any(|marker| {
-        query_text.contains(&normalize_text(marker))
-            || text_matches_phrase(query_token_list, marker)
+        query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
     });
     if !explicit_parallel {
         return false;
@@ -617,7 +617,7 @@ pub fn has_parallel_execution_context(query_text: &str, query_token_list: &[Stri
     ]
     .iter()
     .filter(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     })
     .count();
@@ -635,7 +635,7 @@ pub fn has_parallel_review_candidate_context(
         if marker.as_str() == "review" {
             return text_matches_phrase(query_token_list, "review");
         }
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(marker.as_str())
             || text_matches_phrase(query_token_list, marker)
     });
     if !review_requested {
@@ -643,7 +643,7 @@ pub fn has_parallel_review_candidate_context(
     }
 
     let broad_or_independent = markers.breadth_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(marker.as_str())
             || text_matches_phrase(query_token_list, marker)
     });
     if !broad_or_independent {
@@ -651,7 +651,7 @@ pub fn has_parallel_review_candidate_context(
     }
 
     markers.scope_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(marker.as_str())
             || text_matches_phrase(query_token_list, marker)
     })
 }
@@ -665,15 +665,14 @@ pub fn paper_skill_requires_context(slug: &str) -> bool {
 
 /// Substring-prone single-token markers must use whole-token match only (e.g. `review` vs `preview`).
 fn paper_route_marker_matches(query_text: &str, query_token_list: &[String], marker: &str) -> bool {
-    let norm = normalize_text(marker);
-    let token_only = matches!(norm.as_str(), "review" | "审" | "看" | "检查" | "评估");
+    let token_only = matches!(marker, "review" | "审" | "看" | "检查" | "评估");
     if token_only {
         return text_matches_phrase(query_token_list, marker);
     }
-    if norm.split_whitespace().count() > 1 {
-        return query_text.contains(&norm) || text_matches_phrase(query_token_list, marker);
+    if marker.split_whitespace().count() > 1 {
+        return query_text.contains(marker) || text_matches_phrase(query_token_list, marker);
     }
-    query_text.contains(&norm) || text_matches_phrase(query_token_list, marker)
+    query_text.contains(marker) || text_matches_phrase(query_token_list, marker)
 }
 
 pub fn has_paper_prose_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -694,7 +693,7 @@ pub fn has_paper_prose_negation_context(query_text: &str, query_token_list: &[St
     ]
     .iter()
     .any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     })
 }
@@ -722,7 +721,7 @@ pub fn has_math_review_context(query_text: &str, query_token_list: &[String]) ->
         "证明审查",
     ];
     let has_math_review = math_review_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     });
     if !has_math_review {
@@ -733,10 +732,10 @@ pub fn has_math_review_context(query_text: &str, query_token_list: &[String]) ->
 }
 
 pub fn has_github_pr_context(query_text: &str, query_token_list: &[String]) -> bool {
-    query_text.contains(&normalize_text("github"))
+    query_text.contains("github")
         || text_matches_phrase(query_token_list, "github")
         || text_matches_phrase(query_token_list, "gh")
-        || query_text.contains(&normalize_text("pull request"))
+        || query_text.contains("pull request")
         || text_matches_phrase(query_token_list, "pull request")
         || github_pr_standalone_token_regex().is_match(query_text)
         || text_matches_phrase(query_token_list, "pr")
@@ -772,7 +771,7 @@ pub fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> 
     ]
     .iter()
     .any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     });
     phrase_match || query_token_list.iter().any(|token| token == "ci")
@@ -804,8 +803,8 @@ pub fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[St
         .iter()
         .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
         && revise_markers.iter().any(|marker| {
-            query_text.contains(&normalize_text(marker))
-                || text_matches_phrase(query_token_list, marker)
+        query_text.contains(*marker)
+            || text_matches_phrase(query_token_list, marker)
         })
 }
 
@@ -822,7 +821,7 @@ pub fn has_paper_direct_revision_context(query_text: &str, query_token_list: &[S
     ]
     .iter()
     .any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     }) {
         return false;
@@ -836,7 +835,7 @@ pub fn has_paper_direct_revision_context(query_text: &str, query_token_list: &[S
     ]
     .iter()
     .any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     })
 }
@@ -866,7 +865,7 @@ pub fn has_paper_workbench_frontdoor_context(
     ]
     .iter()
     .any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     })
 }
@@ -902,7 +901,6 @@ pub fn has_standalone_academic_polish_context(
         return false;
     }
     let lower = query_text.to_ascii_lowercase();
-    let normalized_query = normalize_text(query_text);
     if [
         "SCI润色",
         "SCI 润色",
@@ -914,7 +912,6 @@ pub fn has_standalone_academic_polish_context(
     .iter()
     .any(|marker| {
         query_text.contains(marker)
-            || normalized_query.contains(&normalize_text(marker))
             || text_matches_phrase(query_token_list, marker)
     }) {
         return true;
@@ -968,7 +965,7 @@ pub fn has_paper_writing_context(query_text: &str, query_token_list: &[String]) 
     ]
     .iter()
     .any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     })
 }
@@ -1088,7 +1085,7 @@ pub fn has_paper_prose_edit_context(query_text: &str, query_token_list: &[String
     ]
     .iter()
     .any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     })
 }
@@ -1124,7 +1121,7 @@ pub fn has_paper_review_judgment_context(query_text: &str, query_token_list: &[S
     ]
     .iter()
     .any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     })
 }
@@ -1196,10 +1193,10 @@ pub fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: 
         "再帮我重写",
     ];
     ref_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     }) && story_or_write_markers.iter().any(|marker| {
-        query_text.contains(&normalize_text(marker))
+        query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     })
 }
