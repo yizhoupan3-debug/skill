@@ -62,15 +62,23 @@ trigger_hints:
 
 ## Verification Checklist
 
-> **Note**: verify commands below are pattern templates. Actual commands depend on project setup and available tools.
+可执行脚本：[`scripts/verify/formal.sh`](../../scripts/verify/formal.sh)
 
-| # | 检查名 | PASS 条件 | verify command |
-|---|--------|-----------|----------------|
-| 1 | CAS identity 化简 | SymPy simplify(expr) == 0 | `python -c "from sympy import simplify; assert simplify(expr) == 0"` |
-| 2 | SMT 预期一致性 | Z3 check() == sat | `python -c "from z3 import *; s = Solver(); s.add(...); assert s.check() == sat"` |
-| 3 | Witness 一致性 | 代入特例值后左右两边一致 | `python -c "from sympy import symbols; ...; assert lhs.subs(vals) == rhs.subs(vals)"` |
-| 4 | 量纲检查 | 每步方程左右两侧量纲相同 | `grep -c 'DIMENSION_MISMATCH' dimension_report.txt` → exit 0 = 0 条不匹配 |
-| 5 | 步骤依赖图完整性 | 无悬空引用（每步的前置步骤已定义） | `python -c "import networkx as G; ...; assert len(orphans) == 0"` |
+```bash
+# 检查 SymPy 表达式恒等性：
+EXPR="sin(x)**2 + cos(x)**2 - 1" scripts/verify/formal.sh
+
+# 检查量纲报告：
+DIMENSION_FILE=dimension_report.txt scripts/verify/formal.sh
+```
+
+| # | 检查名 | PASS 条件 |
+|---|--------|-----------|
+| 1 | CAS identity 化简 | SymPy simplify(expr) == 0 |
+| 2 | SMT 预期一致性 | Z3 check() == sat |
+| 3 | Witness 一致性 | 代入特例值后左右两边一致 |
+| 4 | 量纲检查 | 每步方程左右两侧量纲相同 |
+| 5 | 步骤依赖图完整性 | 无悬空引用（每步的前置步骤已定义） |
 
 ## References
 

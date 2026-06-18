@@ -18,7 +18,7 @@ fn runtime_registry_review_gate_spawn_first_fields() {
     let labels = rg["spawn_first_nudge_host_labels"]
         .as_object()
         .expect("spawn_first_nudge_host_labels object");
-    assert!(labels.contains_key("claude-code"));
+    assert!(labels.contains_key("claude"));
     let by_host = rg["spawn_first_nudge_by_host"]
         .as_object()
         .expect("spawn_first_nudge_by_host object");
@@ -33,39 +33,39 @@ fn runtime_registry_review_gate_spawn_first_fields() {
         !cursor_line.contains("claude_reviewer_lanes"),
         "cursor spawn nudge must not mention Claude-only lanes"
     );
-    let claude_label = labels["claude-code"].as_str().expect("claude-code label");
+    let claude_label = labels["claude"].as_str().expect("claude label");
     let claude_line = template.replace("{host_label}", claude_label);
     assert!(
         claude_line.contains("review") || claude_line.contains("Claude"),
-        "claude-code template nudge should mention Claude"
+        "claude template nudge should mention Claude"
     );
 }
 
 #[test]
 fn codex_docs_document_review_gate_env_and_session() {
     let root = project_root();
-    let codex_doc = read_text(&root.join("docs/hosts/codex.md"));
+    let codex_doc = read_text(&root.join("docs/hosts/hook-hosts.md"));
     assert!(
         codex_doc.contains("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
-        "codex.md must document Codex fork infer env"
+        "hook-hosts.md must document Codex fork infer env"
     );
     assert!(
         codex_doc.contains("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY"),
-        "codex.md must document stable session key"
+        "hook-hosts.md must document stable session key"
     );
-    let operator = read_text(&root.join("docs/hosts/codex.md"));
+    let operator = read_text(&root.join("docs/hosts/hook-hosts.md"));
     assert!(
         operator.contains("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
-        "codex.md must list Codex review gate disable"
+        "hook-hosts.md must list Codex review gate disable"
     );
-    let codex_doc = read_text(&root.join("docs/hosts/codex.md"));
+    let codex_doc = read_text(&root.join("docs/hosts/hook-hosts.md"));
     assert!(
         codex_doc.contains("ROUTER_RS_CODEX_HOOK_STATE_SALT"),
-        "codex.md must document hook-state salt"
+        "hook-hosts.md must document hook-state salt"
     );
     assert!(
         codex_doc.contains("re-arm") || codex_doc.contains("rearm") || codex_doc.contains("重新武装"),
-        "codex.md must document UPS re-arm behavior"
+        "hook-hosts.md must document UPS re-arm behavior"
     );
 }
 

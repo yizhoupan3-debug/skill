@@ -1,8 +1,6 @@
 use super::*;
-use crate::integration_test_prelude::*;
 use clap::Parser;
 
-use serde_json::{Map, Value, json};
 
 use crate::route::RouteDecision;
 use crate::route::{
@@ -10,13 +8,6 @@ use crate::route::{
     load_records_cached_for_stdio_with_default_runtime_path, load_records_from_manifest,
     load_routing_eval_cases, read_json, value_to_string,
 };
-use std::collections::HashSet;
-use std::fs;
-use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::thread::{sleep, spawn};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[path = "main_tests/common.rs"]
 pub mod common;

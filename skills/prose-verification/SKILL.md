@@ -61,15 +61,23 @@ trigger_hints:
 
 ## Verification Checklist
 
-> **Note**: verify commands below are pattern templates. Actual commands depend on project setup and available tools.
+可执行脚本：[`scripts/verify/prose.sh`](../../scripts/verify/prose.sh)
 
-| # | 检查名 | PASS 条件 | verify command |
-|---|--------|-----------|----------------|
-| 1 | 术语一致性 | 全文同一概念使用同一术语（与术语表匹配） | `grep -onE '(算法|方法|模型|框架)' draft.tex \| sort \| uniq -c` → 无别名冲突 |
-| 2 | 风格指南合规 | 页数/字号/引用格式符合 venue 要求 | `grep -cE '\\cite|\\ref' draft.tex` → 引用格式与 venue guide 一致 |
-| 3 | Claim drift 检查 | 论文中每条 claim 与 claim ledger 语义一致 | `diff <(grep -oP 'claim:.*' draft.tex) claim_ledger.md` → 无语义偏差 |
-| 4 | 语言注册适配 | 全文注册（formal/technical/accessible）与目标匹配 | `grep -cE '(we show|it is shown|results indicate)' draft.tex` → 注册一致 |
-| 5 | Hedging 适度性 | 关键发现有适度 hedging，过度断言 ≤ 5 处 | `grep -cE '(证明了|确定地|无疑)' draft.tex` → ≤ 5 |
+```bash
+# 基本用法（提供文稿文件）：
+FILE=draft.tex scripts/verify/prose.sh
+
+# 含术语表 + claim ledger：
+FILE=draft.tex GLOSSARY=glossary.txt CLAIM_LEDGER=claim_ledger.md scripts/verify/prose.sh
+```
+
+| # | 检查名 | PASS 条件 |
+|---|--------|-----------|
+| 1 | 术语一致性 | 全文同一概念使用同一术语（与术语表匹配） |
+| 2 | 风格指南合规 | 引用格式与 venue 要求一致 |
+| 3 | Claim drift 检查 | 论文中每条 claim 与 claim ledger 语义一致 |
+| 4 | 语言注册适配 | 全文注册（formal/technical/accessible）与目标匹配 |
+| 5 | Hedging 适度性 | 关键发现有适度 hedging，过度断言 ≤ 5 处 |
 
 ## References
 

@@ -55,7 +55,7 @@ mod five_host_install_projection {
             host_home_roots: [
                 ("codex".into(), home.join(".codex")),
                 ("cursor".into(), home.join(".cursor")),
-                ("claude-code".into(), home.join(".claude")),
+                ("claude".into(), home.join(".claude")),
                 ("opencode".into(), home.join(".opencode")),
                 ("mimo".into(), home.join(".mimo")),
             ]
@@ -112,9 +112,9 @@ mod five_host_install_projection {
                 assert!(path.is_file(), "cursor user mcp.json must exist");
                 assert_mcp_servers_codegraph(&read_json(&path), host_id);
             }
-            "claude-code" => {
+            "claude" => {
                 let path = roots.project_root.join(".mcp.json");
-                assert!(path.is_file(), "claude-code project .mcp.json must exist");
+                assert!(path.is_file(), "claude project .mcp.json must exist");
                 assert_mcp_servers_camel_codegraph(&read_json(&path), host_id);
             }
             "codex" => {
@@ -154,7 +154,7 @@ mod five_host_install_projection {
         assert_eq!(
             host_ids.len(),
             5,
-            "closed-set must remain five hosts (codex, claude-code, cursor, opencode, mimo)"
+            "closed-set must remain five hosts (codex, claude, cursor, opencode, mimo)"
         );
 
         let (cleanup_root, roots) = test_roots(&framework_root);

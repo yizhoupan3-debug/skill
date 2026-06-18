@@ -544,12 +544,13 @@ fn eval_when_expr(
     }
 }
 
-/// Maximum cumulative NL boost that can be applied to a single skill.
-/// Prevents multiple boost rules from stacking to unbeatable 100+ scores.
+/// Maximum cumulative NL boost per apply_rule_list invocation.
+/// Pre- and post-framework-alias phases each call apply_rule_list independently,
+/// so a single skill may receive up to MAX_NL_BOOST_ACCUMULATION × 2 (90 pre + 90 post).
+/// Prevents multiple boost rules within one phase from stacking to unbeatable 100+ scores.
 /// Suppress rules are not affected by this cap.
 const MAX_NL_BOOST_ACCUMULATION: f64 = 90.0;
 
-#[allow(clippy::too_many_arguments)]
 fn apply_rule_list<'a>(
     rules: &[CompiledRule],
     record: &'a SkillRecord,
@@ -647,7 +648,7 @@ pub fn apply_nl_post_framework_alias_rules<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::super::text::tokenize_route_text;
+    
     use super::*;
 
     #[test]

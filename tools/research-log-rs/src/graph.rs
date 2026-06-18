@@ -1,0 +1,594 @@
+//! In-memory Knowledge Graph traversal for research entries.
+//!
+//! Builds an adjacency map from the `connections` table and provides
+//! BFS/DFS shortest-path, neighborhood, statistics, and barrier-route tracing.
+//! No external graph database — pure `HashMap` + `VecDeque`.
+
+use std::collections::{HashMap, HashSet, VecDeque};
+
+use rusqlite::Connection;
+
+use crate::db;
+use crate::models::*;
+
+/// In-memory adjacency structure loaded from the `connections` table.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct KnowledgeGraph {
+    /// entry_id → Vec<(neighbor_id, relation_type, weight, confidence)>
+    pub adjacency: HashMap<String, Vec<(String, Option<String>, f64, Option<f64>)>>,
+    /// All entry IDs appearing as either side of at least one connection.
+    pub nodes: HashSet<String>,
+}
+
+/// Graph statistics.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct GraphStats {
+    pub node_count: usize,
+    pub edge_count: usize,
+    pub avg_degree: f64,
+    pub density: f64,
+    pub isolated_nodes: usize,
+    pub relation_counts: HashMap<String, usize>,
+}
+
+/// Full barrier-route trace: the barrier report, its associated entries, and the subgraph.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct BarrierRoute {
+    pub barrier: BarrierReport,
+    pub root_entries: Vec<EntryWithFindings>,
+    pub subgraph: KnowledgeGraph,
+}
+
+/// An entry bundled with its findings, tags, and connections.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct EntryWithFindings {
+    pub entry: Entry,
+    pub findings: Vec<Finding>,
+    pub tags: Vec<String>,
+    pub connections: Vec<LogConnection>,
+}
+
+// ── Graph loading ──
+
+/// Load the full graph from all connections in the database.
+pub fn load_full_graph(conn: &Connection) -> Result<KnowledgeGraph, anyhow::Error> {
+    let connections = db::get_all_connections(conn)?;
+    build_graph(&connections)
+}
+
+/// Load a subgraph centered on `entry_id` up to `max_depth` hops.
+pub fn load_subgraph(
+    conn: &Connection,
+    center: &str,
+    max_depth: usize,
+) -> Result<KnowledgeGraph, anyhow::Error> {
+    let all_connections = db::get_all_connections(conn)?;
+    // Find reachable node IDs via BFS
+    let reachable = bfs_node_set(&all_connections, center, max_depth);
+    // Filter connections to only those where both ends are reachable
+    let filtered: Vec<LogConnection> = all_connections
+        .into_iter()
+        .filter(|c| reachable.contains(&c.entry_id_a) && reachable.contains(&c.entry_id_b))
+        .collect();
+    build_graph(&filtered)
+}
+
+/// Build a KnowledgeGraph from a list of connections.
+fn build_graph(connections: &[LogConnection]) -> Result<KnowledgeGraph, anyhow::Error> {
+    let mut adjacency: HashMap<String, Vec<(String, Option<String>, f64, Option<f64>)>> =
+        HashMap::new();
+    let mut nodes = HashSet::new();
+
+    for c in connections {
+        nodes.insert(c.entry_id_a.clone());
+        nodes.insert(c.entry_id_b.clone());
+
+        // A → B
+        adjacency
+            .entry(c.entry_id_a.clone())
+            .or_default()
+            .push((
+                c.entry_id_b.clone(),
+                c.relation.clone(),
+                c.weight,
+                c.confidence,
+            ));
+
+        // B → A (undirected traversal)
+        adjacency
+            .entry(c.entry_id_b.clone())
+            .or_default()
+            .push((
+                c.entry_id_a.clone(),
+                c.relation.clone(),
+                c.weight,
+                c.confidence,
+            ));
+    }
+
+    Ok(KnowledgeGraph { adjacency, nodes })
+}
+
+// ── BFS helpers ──
+
+/// BFS to find all node IDs reachable within `max_depth` from `start`.
+fn bfs_node_set(
+    connections: &[LogConnection],
+    start: &str,
+    max_depth: usize,
+) -> HashSet<String> {
+    // Build temporary adjacency for BFS
+    let mut adj: HashMap<&str, Vec<&str>> = HashMap::new();
+    for c in connections {
+        adj.entry(c.entry_id_a.as_str())
+            .or_default()
+            .push(c.entry_id_b.as_str());
+        adj.entry(c.entry_id_b.as_str())
+            .or_default()
+            .push(c.entry_id_a.as_str());
+    }
+
+    let mut visited = HashSet::new();
+    let mut queue = VecDeque::new();
+    visited.insert(start.to_string());
+    queue.push_back((start, 0usize));
+
+    while let Some((node, depth)) = queue.pop_front() {
+        if depth >= max_depth {
+            continue;
+        }
+        if let Some(neighbors) = adj.get(node) {
+            for &nbor in neighbors {
+                if visited.insert(nbor.to_string()) {
+                    queue.push_back((nbor, depth + 1));
+                }
+            }
+        }
+    }
+    visited
+}
+
+// ── Query API ──
+
+/// Get direct neighbors of an entry, optionally filtered by relation type.
+pub fn get_neighbors<'a>(
+    graph: &'a KnowledgeGraph,
+    entry_id: &str,
+    relation_filter: Option<&[&str]>,
+) -> Vec<(&'a String, Option<&'a str>, f64, Option<f64>)> {
+    let Some(edges) = graph.adjacency.get(entry_id) else {
+        return vec![];
+    };
+
+    edges
+        .iter()
+        .filter(|(_, rel, _, _)| {
+            relation_filter.map_or(true, |allowed| {
+                rel.as_deref().map_or(false, |r| allowed.contains(&r))
+            })
+        })
+        .map(|(nid, rel, w, conf)| (nid, rel.as_deref(), *w, *conf))
+        .collect()
+}
+
+/// BFS shortest path between two entries.
+/// Returns `Some(vec![(node, relation_from_parent, weight), ...])` or `None`.
+pub fn find_path(
+    graph: &KnowledgeGraph,
+    from: &str,
+    to: &str,
+    max_depth: usize,
+) -> Option<Vec<(String, Option<String>, f64)>> {
+    if from == to {
+        return Some(vec![(from.to_string(), None, 1.0)]);
+    }
+
+    let mut visited: HashSet<&str> = HashSet::new();
+    // parent map: child → (parent, relation, weight, depth)
+    let mut parent: HashMap<&str, (&str, Option<String>, f64, usize)> = HashMap::new();
+    let mut queue = VecDeque::new();
+
+    visited.insert(from);
+    queue.push_back((from, 0usize));
+
+    while let Some((current, depth)) = queue.pop_front() {
+        if current == to {
+            break;
+        }
+        if depth >= max_depth {
+            continue;
+        }
+        if let Some(edges) = graph.adjacency.get(current) {
+            for (nbor, rel, w, _) in edges {
+                if visited.insert(nbor.as_str()) {
+                    parent.insert(
+                        nbor.as_str(),
+                        (current, rel.clone(), *w, depth + 1),
+                    );
+                    queue.push_back((nbor.as_str(), depth + 1));
+                }
+            }
+        }
+    }
+
+    if !parent.contains_key(to) && from != to {
+        return None;
+    }
+
+    // Reconstruct path backwards
+    let mut path = Vec::new();
+    let mut current = to;
+    while let Some(&(par, ref rel, w, _)) = parent.get(current) {
+        path.push((current.to_string(), rel.clone(), w));
+        current = par;
+    }
+    path.push((from.to_string(), None, 1.0));
+    path.reverse();
+    Some(path)
+}
+
+/// BFS traversal from `start` with depth limit.
+pub fn bfs_traverse(
+    graph: &KnowledgeGraph,
+    start: &str,
+    max_depth: usize,
+    relation_filter: Option<&[&str]>,
+) -> Vec<(String, Option<String>, f64, usize)> {
+    let mut visited: HashSet<String> = HashSet::new();
+    let mut result = Vec::new();
+    let mut queue = VecDeque::new();
+
+    visited.insert(start.to_string());
+    queue.push_back((start.to_string(), 0usize));
+
+    while let Some((node, depth)) = queue.pop_front() {
+        if depth > 0 {
+            // We already entered parent info; add entry for each edge later
+        }
+        if depth >= max_depth {
+            continue;
+        }
+        if let Some(edges) = graph.adjacency.get(&node) {
+            for (nbor, rel, w, _) in edges {
+                let filtered = relation_filter.map_or(true, |allowed| {
+                    rel.as_deref().map_or(false, |r| allowed.contains(&r))
+                });
+                if !filtered {
+                    continue;
+                }
+                if visited.insert(nbor.clone()) {
+                    result.push((nbor.clone(), rel.clone(), *w, depth + 1));
+                    queue.push_back((nbor.clone(), depth + 1));
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// DFS traversal (pre-order) from `start` with depth limit.
+pub fn dfs_traverse(
+    graph: &KnowledgeGraph,
+    start: &str,
+    max_depth: usize,
+) -> Vec<String> {
+    let mut visited = HashSet::new();
+    let mut result = Vec::new();
+    let mut stack = vec![(start.to_string(), 0usize)];
+
+    while let Some((node, depth)) = stack.pop() {
+        if !visited.insert(node.clone()) {
+            continue;
+        }
+        result.push(node.clone());
+        if depth >= max_depth {
+            continue;
+        }
+        if let Some(edges) = graph.adjacency.get(&node) {
+            for (nbor, _, _, _) in edges.iter().rev() {
+                if !visited.contains(nbor.as_str()) {
+                    stack.push((nbor.clone(), depth + 1));
+                }
+            }
+        }
+    }
+
+    result
+}
+
+/// Compute graph statistics.
+pub fn get_graph_stats(graph: &KnowledgeGraph) -> GraphStats {
+    let node_count = graph.nodes.len();
+    let edge_count: usize = graph.adjacency.values().map(|v| v.len()).sum::<usize>() / 2; // undirected
+    let avg_degree = if node_count > 0 {
+        (edge_count as f64 * 2.0) / node_count as f64
+    } else {
+        0.0
+    };
+    let max_possible_edges = if node_count > 1 {
+        node_count * (node_count - 1) / 2
+    } else {
+        1
+    };
+    let density = if max_possible_edges > 0 {
+        edge_count as f64 / max_possible_edges as f64
+    } else {
+        0.0
+    };
+
+    let mut isolated_nodes = 0;
+    for node in &graph.nodes {
+        let deg = graph
+            .adjacency
+            .get(node)
+            .map_or(0, |v| v.len());
+        if deg == 0 {
+            isolated_nodes += 1;
+        }
+    }
+
+    let mut relation_counts: HashMap<String, usize> = HashMap::new();
+    for (node, edges) in &graph.adjacency {
+        for (nbor, rel, _, _) in edges {
+            // 只统计 node < nbor 方向的边，避免双向存储造成的双倍计数
+            if node < nbor {
+                if let Some(r) = rel {
+                    *relation_counts.entry(r.clone()).or_insert(0) += 1;
+                }
+            }
+        }
+    }
+
+    GraphStats {
+        node_count,
+        edge_count,
+        avg_degree,
+        density,
+        isolated_nodes,
+        relation_counts,
+    }
+}
+
+/// Trace the full research path from a barrier report.
+///
+/// Returns the barrier report, all entries associated with it, and the
+/// subgraph centered on those entries.
+pub fn trace_barrier_route(
+    conn: &Connection,
+    barrier_id: &str,
+    max_depth: usize,
+) -> Result<BarrierRoute, anyhow::Error> {
+    // Find the barrier report
+    let mut stmt = conn.prepare_cached(
+        "SELECT barrier_id, entry_id, loop_id, report, created_at
+         FROM barrier_reports WHERE barrier_id=?1",
+    )?;
+    let mut rows = stmt.query(rusqlite::params![barrier_id])?;
+    let barrier = match rows.next()? {
+        Some(row) => BarrierReport {
+            barrier_id: row.get(0)?,
+            entry_id: row.get(1)?,
+            loop_id: row.get(2)?,
+            report: row.get(3)?,
+            created_at: row.get(4)?,
+        },
+        None => anyhow::bail!("Barrier report not found: {}", barrier_id),
+    };
+
+    // Collect root entries associated with this barrier
+    let mut root_entry_ids = Vec::new();
+    if let Some(ref eid) = barrier.entry_id {
+        root_entry_ids.push(eid.clone());
+    }
+    // Also search for entries whose barrier_id matches
+    {
+        let mut stmt2 = conn.prepare_cached(
+            "SELECT id FROM entries WHERE barrier_id=?1 AND id != ?2",
+        )?;
+        let barrier_entry = barrier.entry_id.as_deref().unwrap_or("");
+        let mut rows2 = stmt2.query(rusqlite::params![barrier_id, barrier_entry])?;
+        while let Some(row) = rows2.next()? {
+            root_entry_ids.push(row.get::<_, String>(0)?);
+        }
+    }
+
+    // Load the subgraph rooted at the barrier entries
+    let all_connections = db::get_all_connections(conn)?;
+    let mut all_reachable = HashSet::new();
+    for rid in &root_entry_ids {
+        let reachable = bfs_node_set(&all_connections, rid, max_depth);
+        all_reachable.extend(reachable);
+    }
+    // Also include the barrier's own entry
+    if let Some(ref eid) = barrier.entry_id {
+        all_reachable.insert(eid.clone());
+    }
+
+    let filtered: Vec<LogConnection> = all_connections
+        .into_iter()
+        .filter(|c| all_reachable.contains(&c.entry_id_a) && all_reachable.contains(&c.entry_id_b))
+        .collect();
+    let subgraph = build_graph(&filtered)?;
+
+    // Load full entry data for root entries
+    let mut root_entries = Vec::new();
+    for rid in root_entry_ids {
+        if let Some(entry) = db::get_entry(conn, &rid)? {
+            let findings = db::get_findings(conn, &rid)?;
+            let tags = db::get_tags(conn, &rid)?;
+            let connections = db::get_connections_for_entry(conn, &rid)?;
+            root_entries.push(EntryWithFindings {
+                entry,
+                findings,
+                tags,
+                connections,
+            });
+        }
+    }
+
+    Ok(BarrierRoute {
+        barrier,
+        root_entries,
+        subgraph,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+    use std::path::Path;
+
+    fn graph_db() -> (Connection, KnowledgeGraph) {
+        let conn = db::init_database(Path::new(":memory:")).unwrap();
+        insert_test_entries(&conn);
+        let g = load_full_graph(&conn).unwrap();
+        (conn, g)
+    }
+
+    fn insert_test_entries(conn: &Connection) {
+        for id in &["n0", "n1", "n2", "n3", "n4"] {
+            db::insert_entry(
+                conn,
+                &Entry {
+                    id: id.to_string(),
+                    direction: "test".into(),
+                    question: format!("question_{}", id),
+                    context: None,
+                    entry_point: ENTRY_POINT_MANUAL.into(),
+                    barrier_id: None,
+                    importance: 0,
+                    status: STATUS_ACTIVE.into(),
+                    created_at: "now".into(),
+                    updated_at: "now".into(),
+                },
+            )
+            .unwrap();
+        }
+        // Graph: n0 --supports--> n1 --extends--> n2 --contradicts--> n3
+        //         n0 --supports--> n4
+        for (a, b, rel) in &[
+            ("n0", "n1", RELATION_SUPPORTS),
+            ("n1", "n2", RELATION_EXTENDS),
+            ("n2", "n3", RELATION_CONTRADICTS),
+            ("n0", "n4", RELATION_SUPPORTS),
+        ] {
+            db::insert_connection(
+                conn,
+                &LogConnection {
+                    id: 0,
+                    entry_id_a: a.to_string(),
+                    entry_id_b: b.to_string(),
+                    relation: Some(rel.to_string()),
+                    weight: 1.0,
+                    confidence: None,
+                    notes: None,
+                    created_at: "now".into(),
+                },
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    fn test_load_full_graph() {
+        let (_, g) = graph_db();
+        assert_eq!(g.nodes.len(), 5);
+        assert!(g.adjacency.contains_key("n0"));
+        assert_eq!(g.adjacency["n0"].len(), 2); // n1 and n4
+        assert_eq!(g.adjacency["n3"].len(), 1); // only n2
+    }
+
+    #[test]
+    fn test_get_neighbors_no_filter() {
+        let (_, g) = graph_db();
+        let neighbors = get_neighbors(&g, "n0", None);
+        assert_eq!(neighbors.len(), 2);
+        let ids: Vec<&String> = neighbors.iter().map(|(id, _, _, _)| *id).collect();
+        assert!(ids.contains(&&"n1".to_string()));
+        assert!(ids.contains(&&"n4".to_string()));
+    }
+
+    #[test]
+    fn test_get_neighbors_with_filter() {
+        let (_, g) = graph_db();
+        let neighbors = get_neighbors(&g, "n1", Some(&[RELATION_EXTENDS]));
+        assert_eq!(neighbors.len(), 1);
+        assert_eq!(neighbors[0].0, "n2");
+    }
+
+    #[test]
+    fn test_find_path_direct() {
+        let (_, g) = graph_db();
+        let path = find_path(&g, "n0", "n1", 10);
+        assert!(path.is_some());
+        let p = path.unwrap();
+        assert_eq!(p.len(), 2);
+        assert_eq!(p[0].0, "n0");
+        assert_eq!(p[1].0, "n1");
+    }
+
+    #[test]
+    fn test_find_path_via_intermediary() {
+        let (_, g) = graph_db();
+        let path = find_path(&g, "n0", "n2", 10);
+        assert!(path.is_some());
+        let p = path.unwrap();
+        // n0 -> n1 -> n2 or n0 -> n4 -> ? but n4 has no edge to n2
+        assert_eq!(p.len(), 3);
+        assert_eq!(p[0].0, "n0");
+        assert_eq!(p[2].0, "n2");
+    }
+
+    #[test]
+    fn test_find_path_none() {
+        let (_, g) = graph_db();
+        // n4 is only connected to n0, path from n4 to n3 exists via n0-n1-n2-n3
+        let path = find_path(&g, "n4", "n3", 10);
+        assert!(path.is_some()); // n4 -> n0 -> n1 -> n2 -> n3
+        let p = path.unwrap();
+        assert_eq!(p[0].0, "n4");
+        assert_eq!(p.last().unwrap().0, "n3");
+    }
+
+    #[test]
+    fn test_bfs_traverse() {
+        let (_, g) = graph_db();
+        let result = bfs_traverse(&g, "n0", 2, None);
+        let ids: Vec<&str> = result.iter().map(|(id, _, _, _)| id.as_str()).collect();
+        assert!(ids.contains(&"n1"));
+        assert!(ids.contains(&"n4"));
+        // Depth 2 from n0 reaches n2
+        assert!(ids.contains(&"n2"));
+        // Depth 3 would be n3, not in max_depth=2
+        assert!(!ids.contains(&"n3"));
+    }
+
+    #[test]
+    fn test_dfs_traverse() {
+        let (_, g) = graph_db();
+        let result = dfs_traverse(&g, "n0", 3);
+        assert!(result.len() >= 4);
+        assert!(result.iter().any(|s| s == "n0"));
+    }
+
+    #[test]
+    fn test_graph_stats() {
+        let (_, g) = graph_db();
+        let stats = get_graph_stats(&g);
+        assert_eq!(stats.node_count, 5);
+        assert_eq!(stats.edge_count, 4);
+        assert!(stats.density > 0.0);
+        assert!(stats.relation_counts.contains_key(RELATION_SUPPORTS));
+    }
+
+    #[test]
+    fn test_subgraph_loading() {
+        let (conn, _) = graph_db();
+        let sub = load_subgraph(&conn, "n0", 1).unwrap();
+        assert_eq!(sub.nodes.len(), 3); // n0, n1, n4
+        let sub2 = load_subgraph(&conn, "n0", 2).unwrap();
+        assert_eq!(sub2.nodes.len(), 4); // n0, n1, n2, n4
+    }
+}

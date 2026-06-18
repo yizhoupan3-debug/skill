@@ -104,9 +104,7 @@ mod repo_root_placeholder_tests {
     fn workspace_root_placeholder_falls_back_to_cwd_without_claude_project_dir() {
         let prior = env::var_os("CLAUDE_PROJECT_DIR");
         // SAFETY: test-only; no concurrent threads reading env during this block
-        unsafe {
-            unsafe { env::remove_var("CLAUDE_PROJECT_DIR") };
-        }
+        unsafe { env::remove_var("CLAUDE_PROJECT_DIR") };
         let cwd = env::current_dir().expect("cwd");
         let resolved =
             resolve_repo_root_arg(Some(std::path::Path::new("${workspaceRoot}"))).expect("resolve");
@@ -120,9 +118,7 @@ mod repo_root_placeholder_tests {
         );
         if let Some(value) = prior {
             // SAFETY: test-only; restoring original env value
-            unsafe {
-                unsafe { env::set_var("CLAUDE_PROJECT_DIR", value) };
-            }
+            unsafe { env::set_var("CLAUDE_PROJECT_DIR", value) };
         }
     }
 }

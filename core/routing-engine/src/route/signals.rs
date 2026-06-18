@@ -197,6 +197,13 @@ const SIGNAL_DEFS: &[SignalDef] = &[
     sig!("quick_artifact", normalize => &[
         "快速", "普通", "简单", "临时", "quick", "simple", "draft", "utility",
     ]),
+    sig!("codegraph_index_ready", normalize => &[
+        "codegraph", "调用链", "影响半径", "call graph", "callers",
+        "callees", "impact analysis", "死代码", "dead code",
+        "重构影响", "refactor impact", "rename symbol",
+        "symbol search", "代码搜索", "调用者", "被调用者",
+        "影响范围", "函数调用", "符号定义", "符号引用",
+    ]),
 ];
 
 /// Generic engine: check whether `query_text` / `query_token_list` matches
@@ -1309,6 +1316,10 @@ pub fn has_design_workflow_protocol_context(query_text: &str, query_token_list: 
 
 pub fn has_quick_artifact_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("quick_artifact", query_text, query_token_list)
+}
+
+pub fn has_codegraph_index_context(query_text: &str, query_token_list: &[String]) -> bool {
+    has_signal_by_name("codegraph_index_ready", query_text, query_token_list)
 }
 
 pub fn should_defer_to_artifact_gate(

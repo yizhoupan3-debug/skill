@@ -523,49 +523,42 @@ pub fn route_task(
     })
 }
 
+/// Strip overlay-related trigger terms from the query text so the
+/// remaining text can be matched against primary (non-overlay) skill
+/// records.  Only performs work when `allow_overlay` is true; otherwise
+/// returns the query unchanged.
+///
+/// Overlay records (`owner_lower == "overlay"`) carry trigger hints and
+/// slugs that users may include in prompts, but that should not affect
+/// primary-owner scoring.  This function collects all such terms and
+/// replaces each with a single space, then collapses runs of whitespace.
 fn primary_owner_query_text(query: &str, records: &[SkillRecord], allow_overlay: bool) -> String {
     if !allow_overlay {
         return query.to_string();
     }
-    // Collect all overlay patterns to replace in a single pass
-    let mut patterns: Vec<&str> = Vec::new();
+    // Collect overlay trigger hints and slug forms (minimum length > 3
+    // to avoid stripping very short tokens that could be legitimate
+    // query words).
+    let mut patterns: Vec<String> = Vec::new();
     for record in records.iter().filter(|record| is_overlay_record(record)) {
         for hint in &record.trigger_hints {
             if hint.len() > 3 {
-                patterns.push(hint.as_str());
+                patterns.push(hint.clone());
             }
         }
         if record.slug.len() > 3 {
-            patterns.push(&record.slug);
+            patterns.push(record.slug.clone());
         }
         let slug_spaced = record.slug.replace('-', " ");
         if slug_spaced.len() > 3 {
-            // Can't push reference to local; handle inline
-            let mut text = query.to_string();
-            for pattern in &patterns {
-                text = text.replace(pattern, " ");
-            }
-            text = text.replace(&slug_spaced, " ");
-            return text.split_whitespace().fold(String::new(), |mut acc, s| {
-                if !acc.is_empty() {
-                    acc.push(' ');
-                }
-                acc.push_str(s);
-                acc
-            });
+            patterns.push(slug_spaced);
         }
     }
     let mut text = query.to_string();
     for pattern in &patterns {
-        text = text.replace(pattern, " ");
+        text = text.replace(pattern.as_str(), " ");
     }
-    text.split_whitespace().fold(String::new(), |mut acc, s| {
-        if !acc.is_empty() {
-            acc.push(' ');
-        }
-        acc.push_str(s);
-        acc
-    })
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 /// Layer-based penalty applied during fuzzy rescue to discourage
@@ -617,6 +610,10 @@ fn fuzzy_rescue_primary_record<'a>(
     )
 }
 
+// 11 params — above threshold=8, OK to keep.
+// Params span three distinct concerns (records, query, route context);
+// no single natural group for struct extraction without introducing
+// intermediate types that would also be > threshold.
 #[allow(clippy::too_many_arguments)]
 fn build_fuzzy_rescue_decision(
     records: &[SkillRecord],
@@ -854,6 +851,12 @@ pub fn should_accept_manifest_fallback(
 
     let low_score_review_fallback = full_decision.score >= 20.0
         && matches!(full_decision.selected_skill.as_str(), "deepinterview");
+
+    // 当 hot 触发 retry（no-hit 或低分）时：即使 full 分数 <= 10，
+    // 只要比 hot 好就应该接受，避免 hot no-hit 时静默丢弃 manifest 结果
+    if should_retry && full_decision.score > hot_decision.score {
+        return true;
+    }
 
     if full_decision.score <= 10.0
         && !matches!(full_decision.selected_skill.as_str(), "deepinterview")

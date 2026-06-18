@@ -71,3 +71,94 @@ pub fn parse_range(spec: &str, total: u64) -> Result<Vec<u64>> {
     }
     Ok(indices)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    #[test]
+    fn test_parse_range_all() {
+        let result = parse_range("all", 10).unwrap();
+        assert_eq!(result, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    }
+
+    #[test]
+    fn test_parse_range_empty_returns_all() {
+        let result = parse_range("", 10).unwrap();
+        assert_eq!(result, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    }
+
+    #[test]
+    fn test_parse_range_single() {
+        let result = parse_range("3", 10).unwrap();
+        assert_eq!(result, vec![3]);
+    }
+
+    #[test]
+    fn test_parse_range_range() {
+        let result = parse_range("2-5", 10).unwrap();
+        assert_eq!(result, vec![2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_parse_range_comma_separated() {
+        let result = parse_range("1,3,5", 10).unwrap();
+        assert_eq!(result, vec![1, 3, 5]);
+    }
+
+    #[test]
+    fn test_parse_range_mixed() {
+        let result = parse_range("1,3-5,9", 10).unwrap();
+        assert_eq!(result, vec![1, 3, 4, 5, 9]);
+    }
+
+    #[test]
+    fn test_parse_range_dedup_and_sort() {
+        let result = parse_range("5,3,5,1", 10).unwrap();
+        assert_eq!(result, vec![1, 3, 5]);
+    }
+
+    #[test]
+    fn test_parse_range_out_of_bounds() {
+        assert!(parse_range("0", 10).is_err());
+        assert!(parse_range("11", 10).is_err());
+        assert!(parse_range("1-11", 10).is_err());
+        assert!(parse_range("6-3", 10).is_err());
+    }
+
+    #[test]
+    fn test_parse_range_invalid_format() {
+        assert!(parse_range("abc", 10).is_err());
+        assert!(parse_range("1-a", 10).is_err());
+    }
+
+    #[test]
+    fn test_has_extension() {
+        assert!(has_extension(Path::new("foo.txt"), "txt"));
+        assert!(has_extension(Path::new("foo.TXT"), "txt"));
+        assert!(has_extension(Path::new("foo.Txt"), "TXT"));
+        assert!(!has_extension(Path::new("foo.pdf"), "txt"));
+        assert!(!has_extension(Path::new("foo"), "txt"));
+        assert!(has_extension(Path::new("foo.docx"), "DOCX"));
+    }
+
+    #[test]
+    fn test_expand_path_relative_stays() {
+        assert_eq!(expand_path("relative/path"), Path::new("relative/path"));
+    }
+
+    #[test]
+    fn test_expand_path_absolute_stays() {
+        assert_eq!(expand_path("/absolute/path"), Path::new("/absolute/path"));
+    }
+
+    #[test]
+    fn test_expand_path_tilde() {
+        if let Ok(home) = std::env::var("HOME") {
+            let expanded = expand_path("~/documents");
+            assert!(expanded.starts_with(&home));
+            assert!(expanded.ends_with("documents"));
+        }
+    }
+}

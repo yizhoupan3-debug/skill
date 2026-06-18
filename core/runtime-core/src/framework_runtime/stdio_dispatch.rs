@@ -71,12 +71,14 @@ use super::trace_transport::{
 };
 use super::{
     FrameworkAliasBuildOptions, build_framework_alias_envelope,
-    build_framework_contract_summary_envelope, build_framework_prompt_compression_envelope,
-    build_framework_runtime_snapshot_envelope_with_level,
+    build_framework_prompt_compression_envelope,
     build_runtime_observability_health_snapshot, build_sandbox_control_response,
-    evaluate_closeout_record_file_for_task, evaluate_pre_tool_use_guard_value,
-    framework_hook_evidence_append, resolve_repo_root_arg, write_framework_session_artifacts,
+    evaluate_pre_tool_use_guard_value, resolve_repo_root_arg, write_framework_session_artifacts,
 };
+use super::contract_summary::build_framework_contract_summary_envelope;
+use super::snapshot::build_framework_runtime_snapshot_envelope_with_level;
+use super::closeout::evaluate_closeout_record_file_for_task;
+use super::evidence::framework_hook_evidence_append;
 
 pub fn dispatch_stdio_json_request_payload(
     request: StdioJsonRequestPayload,

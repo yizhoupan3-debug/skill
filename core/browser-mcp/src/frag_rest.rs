@@ -1,6 +1,38 @@
 // CDP/Chrome 助手、Attach 候选、skill 路由与 MCP 收尾工具函数。
 use std::net::TcpListener;
-use std::sync::OnceLock;
+
+/// RAII guard: kills a Chrome child process and removes its temp dir on drop (unless consumed).
+struct CleanupGuard<'a> {
+    child: Option<Child>,
+    user_data_dir: &'a Path,
+}
+
+impl Drop for CleanupGuard<'_> {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        let _ = fs::remove_dir_all(self.user_data_dir);
+    }
+}
+
+/// 保留目录中最新的 N 个 `.png` 文件，删除更旧的（尽力而为，不传播错误）。
+fn purge_old_screenshots(dir: &Path, keep: usize) {
+    let Ok(mut entries) = fs::read_dir(dir)
+        .map(|iter| iter.filter_map(Result::ok).collect::<Vec<_>>())
+    else {
+        return;
+    };
+    if entries.len() <= keep {
+        return;
+    }
+    entries.sort_by_key(|e| e.path().metadata().and_then(|m| m.modified()).ok());
+    let remove_count = entries.len() - keep;
+    for entry in entries.into_iter().take(remove_count) {
+        let _ = fs::remove_file(entry.path());
+    }
+}
 
 fn wait_for_cdp(port: u16) -> Result<(), Value> {
     let deadline = SystemTime::now() + Duration::from_secs(8);
@@ -34,24 +66,6 @@ fn cdp_http_json(port: u16, path: &str) -> Result<Value, Value> {
                 true,
             )
         })
-}
-
-/// 缓存的代理 URL（进程生命周期内 env 不变），避免每次 web_fetch 重复查找 5 个环境变量。
-fn cached_proxy_url() -> Option<&'static str> {
-    static PROXY: OnceLock<Option<String>> = OnceLock::new();
-    PROXY
-        .get_or_init(|| {
-            for key in ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY"] {
-                if let Ok(url) = std::env::var(key) {
-                    let trimmed = url.trim().to_string();
-                    if !trimmed.is_empty() {
-                        return Some(trimmed);
-                    }
-                }
-            }
-            None
-        })
-        .as_deref()
 }
 
 fn find_chrome_binary() -> Result<PathBuf, Value> {
@@ -1066,26 +1080,13 @@ fn json_string_literal(value: &str) -> String {
 }
 
 fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
-    let mut output = Vec::new();
-    let mut buffer = 0u32;
-    let mut bits = 0u8;
-    for ch in input.bytes() {
-        let value = match ch {
-            b'A'..=b'Z' => ch - b'A',
-            b'a'..=b'z' => ch - b'a' + 26,
-            b'0'..=b'9' => ch - b'0' + 52,
-            b'+' => 62,
-            b'/' => 63,
-            b'=' => break,
-            b'\r' | b'\n' | b'\t' | b' ' => continue,
-            other => return Err(format!("invalid base64 byte {other}")),
-        } as u32;
-        buffer = (buffer << 6) | value;
-        bits += 6;
-        if bits >= 8 {
-            bits -= 8;
-            output.push(((buffer >> bits) & 0xff) as u8);
-        }
+    use base64::Engine as _;
+    let engine = base64::engine::general_purpose::STANDARD;
+    // Fast path: no whitespace (common for screenshots from Chrome CDP)
+    if input.bytes().any(|b| b.is_ascii_whitespace()) {
+        let cleaned: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
+        engine.decode(cleaned.as_bytes()).map_err(|e| format!("decode base64 failed: {e}"))
+    } else {
+        engine.decode(input.as_bytes()).map_err(|e| format!("decode base64 failed: {e}"))
     }
-    Ok(output)
 }

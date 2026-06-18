@@ -907,6 +907,43 @@ fn backend_capabilities_payload_rejects_unknown() {
     assert!(result.is_err());
 }
 
+#[test]
+fn backend_capabilities_payload_filesystem_snapshot() {
+    let payload = runtime_backend_capabilities_payload("filesystem").expect("payload ok");
+    insta::assert_debug_snapshot!(payload);
+}
+
+#[test]
+fn backend_capabilities_payload_sqlite_snapshot() {
+    let payload = runtime_backend_capabilities_payload("sqlite").expect("payload ok");
+    insta::assert_debug_snapshot!(payload);
+}
+
+#[test]
+fn backend_capabilities_payload_memory_snapshot() {
+    let payload = runtime_backend_capabilities_payload("memory").expect("payload ok");
+    insta::assert_debug_snapshot!(payload);
+}
+
+#[test]
+fn backend_capabilities_payload_all_families_snapshot() {
+    let payloads = ["filesystem", "sqlite", "memory"]
+        .iter()
+        .filter_map(|f| {
+            runtime_backend_capabilities_payload(f)
+                .ok()
+                .map(|p| (*f, p))
+        })
+        .collect::<Vec<_>>();
+    insta::assert_debug_snapshot!(payloads);
+}
+
+#[test]
+fn backend_family_catalog_snapshot() {
+    let catalog = runtime_backend_family_catalog_payload();
+    insta::assert_debug_snapshot!(catalog);
+}
+
 // ── runtime_backend_family_parity_payload ──
 
 #[test]

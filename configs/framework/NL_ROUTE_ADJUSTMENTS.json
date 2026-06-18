@@ -173,14 +173,28 @@
     },
     {
       "when": {
+        "signal": "has_skill_installer_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 50.0,
+        "reason": "Skill-installer boost applied: install/curate/github-import skill wording detected."
+      },
+      "record": {
+        "slug": "skill-framework-developer"
+      }
+    },
+    {
+      "when": {
         "signal": "has_copywriting_context"
       },
       "action": {
-        "type": "suppress",
-        "reason": "Placeholder rule for has_copywriting_context to satisfy policy contract completeness check."
+        "type": "boost",
+        "delta": 36.0,
+        "reason": "Copywriting boost applied: general copywriting wording detected."
       },
       "record": {
-        "slug": "__placeholder_no_record__"
+        "slug": "paper-workbench"
       }
     },
     {
@@ -188,23 +202,12 @@
         "signal": "has_skill_creator_context"
       },
       "action": {
-        "type": "suppress",
-        "reason": "Placeholder rule for has_skill_creator_context to satisfy policy contract completeness check."
+        "type": "boost",
+        "delta": 50.0,
+        "reason": "Skill-creator boost applied: create/scaffold/revise skill wording detected."
       },
       "record": {
-        "slug": "__placeholder_no_record__"
-      }
-    },
-    {
-      "when": {
-        "signal": "has_skill_installer_context"
-      },
-      "action": {
-        "type": "suppress",
-        "reason": "Placeholder rule for has_skill_installer_context to satisfy policy contract completeness check."
-      },
-      "record": {
-        "slug": "__placeholder_no_record__"
+        "slug": "skill-framework-developer"
       }
     }
   ],

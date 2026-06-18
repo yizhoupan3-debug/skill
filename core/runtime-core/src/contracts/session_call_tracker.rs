@@ -139,6 +139,24 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
         }
         cap_per_tool_keys(per_tool);
 
+        // §CodeGraph usage breakdown: collect from per_tool
+        let total_codegraph_calls: u64 = per_tool
+            .iter()
+            .filter(|(k, _)| k.starts_with("codegraph_"))
+            .map(|(_, v)| v.as_u64().unwrap_or(0))
+            .sum();
+        let codegraph_per_tool: Value = per_tool
+            .iter()
+            .filter(|(k, _)| k.starts_with("codegraph_"))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        if total_codegraph_calls > 0 {
+            payload["codegraph_usage"] = json!({
+                "total_calls": total_codegraph_calls,
+                "per_tool": codegraph_per_tool,
+            });
+        }
+
         // Token usage accumulation
         let tu = payload["token_usage"]
             .as_object_mut()
@@ -245,7 +263,7 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
         // Desktop MCP sessions typically end at 10-20 calls. The 15-call threshold
         // catches unverified Desktop sessions before they grow too long.
         if total >= 15 {
-            let has_closeout = payload["per_tool"].as_object().map_or(false, |obj| {
+            let has_closeout = payload["per_tool"].as_object().is_some_and(|obj| {
                 obj.keys().any(|k| k.eq_ignore_ascii_case("closeout_gate"))
             });
             if !has_closeout {
@@ -270,6 +288,22 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
             && total > 0 && write_count > total * 3 / 10 {
                 warnings.push(format!("Write calls ({write_count}) exceed 30% of total ({total}) -- possible blind overwriting."));
             }
+
+        // Rule 6: CodeGraph index exists but no codegraph tools used (after 20+ calls)
+        if total >= 20 {
+            let codegraph_total = payload["codegraph_usage"]
+                .as_object()
+                .and_then(|cg| cg.get("total_calls"))
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            if codegraph_total == 0 {
+                // Check if the index file exists (don't warn if codegraph isn't set up)
+                let index_path = repo_root.join("artifacts/codegraph/index.sqlite");
+                if index_path.exists() {
+                    warnings.push("CodeGraph index exists but no codegraph tools have been called in this session. Consider using codegraph_search/codegraph_impact for code-aware work.".to_string());
+                }
+            }
+        }
 
         // Update anomaly_flags in the tracker (always write, clearing stale flags)
         payload["anomaly_flags"] = json!(warnings);
@@ -512,5 +546,27 @@ mod tests {
         assert_eq!(state["token_usage"]["input"], 0);
         assert_eq!(state["token_usage"]["output"], 0);
         assert_eq!(state["token_usage"]["cache_read"], 0);
+    }
+
+    #[test]
+    fn debug_default_payload() {
+        // Use a fixed timestamp so the snapshot is deterministic.
+        insta::assert_debug_snapshot!(super::default_payload(1234567890));
+    }
+
+    #[test]
+    fn debug_cache_stats_debug() {
+        let stats = CacheStats {
+            cache_read_input_tokens: 500,
+            cache_creation_input_tokens: 200,
+            input_tokens: 1000,
+            output_tokens: 300,
+        };
+        insta::assert_debug_snapshot!(stats);
+    }
+
+    #[test]
+    fn debug_schema_constants() {
+        insta::assert_debug_snapshot!((super::SCHEMA_VERSION, super::TRACKER_FILE));
     }
 }

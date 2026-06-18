@@ -21,6 +21,8 @@ allowed_tools:
   - mcp__mcp-codegraph__codegraph_impact
   - mcp__mcp-codegraph__codegraph_node
   - mcp__mcp-codegraph__codegraph_status
+  - mcp__mcp-codegraph__codegraph_dead_code
+  - mcp__mcp-codegraph__codegraph_goto_definition
 metadata:
   version: "0.2.0"
   platforms: [supported]
@@ -115,12 +117,16 @@ Pointer cleanup：遵循 [../my-lifecycle-common/GOAL_STATE_CONTRACT.md](../my-l
 
 ≤5 lines: PASS/FAIL, closeout path, purge status (purged / deferred-24h / skipped-by-flag). No command dumps.
 
-## CodeGraph 场景
+## CodeGraph 验证项
 
-验证收口阶段的只读交叉检查；结论写入 `EVIDENCE_INDEX` 或 `VERIFY_REPORT.md` 一行摘要。
+在 Verify 阶段，**必须**将以下 codegraph 检查加入 evidence（写入 `EVIDENCE_INDEX` 的 `artifacts[]` 行，含 command_preview + exit_code）：
 
-> 工具与场景表：见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
-> 何时：涉及符号/调用链断言前确认索引覆盖改动文件；核对 ROADMAP 中 symbol 仍存在于预期路径；refactor 后确认无意外 orphan caller；公共 API 变更的 residual risk 一行记录。
+1. **索引新鲜度**：调 `codegraph_status`，确认 `indexed_at` 在本次 session 内更新过。
+2. **符号路径校验**：对 ROADMAP 中标记的核心 symbol，调 `codegraph_node` 确认路径无漂移。
+3. **breaking change 检查**：对已修改的公共 API 符号，调 `codegraph_callers[depth=3]` 确认无意外 breaking change。
+4. **死代码确认**（可选）：调 `codegraph_dead_code[language=rust, min_lines=10]` 验证无新增 orphan 函数。
+
+> 详细场景与参数示例见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
 
 ## Pre-conditions
 

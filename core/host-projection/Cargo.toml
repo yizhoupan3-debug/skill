@@ -12,8 +12,11 @@ path = "src/lib.rs"
 [features]
 default = []
 test-support = []
+codegraph = ["dep:codegraph-rs"]
 
 [dependencies]
+codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
+http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
@@ -35,4 +38,5 @@ serde_json.workspace = true
 
 [dev-dependencies]
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
+insta.workspace = true
 serial_test = "3"

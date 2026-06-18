@@ -6,7 +6,7 @@ pub mod parser;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const SCHEMA_VERSION: &str = "codegraph-rs-v3";
+pub const SCHEMA_VERSION: &str = "codegraph-rs-v4";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Node {
@@ -142,6 +142,30 @@ impl CodeGraphIndex {
         Ok(db::node_ops::find_dead_code(
             &self.conn, language, min_lines,
         )?)
+    }
+
+    /// Lightweight dead code count (COUNT(*) only, no row data).
+    /// Preferred for hot-path queries that only need the number.
+    pub fn count_dead_code_only(
+        &self,
+        language: Option<&str>,
+    ) -> anyhow::Result<usize> {
+        Ok(db::node_ops::count_dead_code_only(
+            &self.conn, language,
+        )?)
+    }
+
+    pub fn find_definition(
+        &self,
+        symbol: &str,
+        file_path: Option<&str>,
+    ) -> anyhow::Result<Vec<db::node_ops::DefinitionResult>> {
+        Ok(db::node_ops::find_definition(&self.conn, symbol, file_path)?)
+    }
+
+    /// Find all indexed symbols in a specific file.
+    pub fn find_symbols_by_file(&self, file_path: &str) -> anyhow::Result<Vec<Node>> {
+        Ok(db::node_ops::find_symbols_by_file(&self.conn, file_path)?)
     }
 
     pub fn build_full_index(&self, repo_root: &Path) -> anyhow::Result<graph::SyncReport> {

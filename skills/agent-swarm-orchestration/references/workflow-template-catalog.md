@@ -6,7 +6,7 @@
 |------|-------------|----------|----------|
 | `deep-review-template.js` | deep-review-template | Scan → Merge → Verify → Synthesize | **复制起点**；多 lens 深度审查 |
 | `claude-chain-deep-review.js` | claude-chain-deep-review | 四阶段 | Claude 全链路 hooks/安装/文档 |
-| `claude-code-cli-audit.js` | claude-code-cli-audit | 并行审计 → 综合报告 | CLI 使用问题 |
+| `claude-cli-audit.js` | claude-cli-audit | 并行审计 → 综合报告 | CLI 使用问题 |
 | `hook-route-deep-audit.js` | hook-route-deep-audit | Audit → Verify → Plan → Fix → Clean | hook/路由深度审计+修复 |
 | `hook-guard-audit.js` | hook-guard-audit | Investigate → Cross-ref → Test → Plan → Review | PreToolUse guard |
 | `full-audit-closeout.js` | full-audit-closeout | 11 阶段大规模审计 | 全仓收口 |

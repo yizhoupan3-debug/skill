@@ -39,7 +39,7 @@ fn resolve_session_repo_root_for_task_ledger(payload: &Value) -> Result<Option<P
 
 pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
     let run = || -> Result<Value, String> {
-        let closeout_evaluation = super::enforce_closeout_for_session_payload(&payload)?;
+        let closeout_evaluation = super::closeout::enforce_closeout_for_session_payload(&payload)?;
         let mut plan = build_session_artifact_write_plan(&payload)?;
         let sync_repo = plan.repo_root.clone();
         let sync_tid = plan.task_id.clone();
@@ -311,7 +311,7 @@ fn write_focused_repo_mirrors(
     }
     let registry_path = mirror_root.join("task_registry.json");
     let existing_registry = read_json_strict(&registry_path).unwrap_or_else(|_| json!({}));
-    let mut registry_rows = super::registry_rows_from_payload(&existing_registry);
+    let mut registry_rows = super::util::registry_rows_from_payload(&existing_registry);
     let mut found = false;
     for row in &mut registry_rows {
         if let Some(map) = row.as_object_mut()
@@ -339,7 +339,7 @@ fn write_focused_repo_mirrors(
         }));
     }
     let (normalized_registry, _, _) =
-        super::normalize_task_registry_rows(plan.task_id.clone(), registry_rows);
+        super::util::normalize_task_registry_rows(plan.task_id.clone(), registry_rows);
     if write_json_if_changed(&registry_path, &normalized_registry)? {
         plan.changed_paths.push(registry_path.display().to_string());
     }
@@ -361,7 +361,7 @@ fn task_id_known_in_task_pointers(mirror_root: &Path, task_id: &str) -> bool {
     let Ok(existing) = read_json_strict(&registry_path) else {
         return false;
     };
-    super::registry_rows_from_payload(&existing)
+    super::util::registry_rows_from_payload(&existing)
         .iter()
         .any(|row| safe_slug(&value_text(row.get("task_id"))) == task_id)
 }
@@ -376,7 +376,7 @@ fn write_task_pointers_entry(
         || safe_slug(&value_text(existing.get("focus_task_id"))),
         ToString::to_string,
     );
-    let mut rows = super::registry_rows_from_payload(&existing);
+    let mut rows = super::util::registry_rows_from_payload(&existing);
     let mut replaced = false;
     for row in &mut rows {
         let Some(map) = row.as_object_mut() else {
@@ -416,7 +416,7 @@ fn write_task_pointers_entry(
             "resume_allowed": entry.resume_allowed,
         }));
     }
-    let compacted = super::normalize_task_registry_rows(focus_task, rows).0;
+    let compacted = super::util::normalize_task_registry_rows(focus_task, rows).0;
     // Merge compacted registry back into TASK_POINTERS.json
     let mut out = json!({
         "schema_version": TASK_POINTERS_SCHEMA_VERSION,
@@ -590,7 +590,7 @@ fn build_session_supervisor_state_payload(input: SupervisorStateInput<'_>) -> Va
             .cloned()
             .unwrap_or_else(|| Value::Array(Vec::new())),
     );
-    let evidence_rows = super::normalize_evidence_index(input.evidence_payload);
+    let evidence_rows = super::evidence::normalize_evidence_index(input.evidence_payload);
     let evidence_success_count = evidence_rows
         .iter()
         .filter(|row| {

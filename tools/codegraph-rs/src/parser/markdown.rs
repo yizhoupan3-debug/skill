@@ -93,6 +93,9 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
                         symbol: clean.to_string(),
                         kind: kind.to_string(),
                         line: (prev_idx + 1) as u32,
+                        start_col: 0,
+                        end_line: 0,
+                        end_col: 0,
                     });
                 }
             }
@@ -111,6 +114,9 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
                     symbol: rest.to_string(),
                     kind: kind.to_string(),
                     line: (idx + 1) as u32,
+                    start_col: 0,
+                    end_line: 0,
+                    end_col: 0,
                 });
             }
             prev_line = None;
@@ -134,6 +140,9 @@ pub(crate) fn parse(source: &str) -> ParseOutput {
                 symbol: title,
                 kind: "section".to_string(),
                 line: 1,
+                start_col: 0,
+                end_line: 0,
+                end_col: 0,
             });
         }
     }

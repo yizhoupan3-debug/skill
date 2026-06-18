@@ -24,6 +24,7 @@ allowed_tools:
   - mcp__mcp-codegraph__codegraph_impact
   - mcp__mcp-codegraph__codegraph_node
   - mcp__mcp-codegraph__codegraph_status
+  - mcp__mcp-codegraph__codegraph_goto_definition
 metadata:
   version: "0.1.0"
   platforms: [supported]
@@ -117,12 +118,15 @@ Topology fields (schema id **`my-wave-state-v1`**; field manifest [`configs/fram
 
 At most **one** read-only reviewer on `ROADMAP.md` → compact `lane-notes/` only (no mandatory RFV).
 
-## CodeGraph 场景
+## CodeGraph 集成
 
-只读；用于 wave/lane 拆分与影响面评估（doc-only，不写索引）。
+在以下步骤中 **必须** 使用 codegraph 工具：
 
-> 工具与场景表：见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
-> 何时：计划前确认图谱非空、文件数合理（MCP 启动时自动 incremental sync）；拆 scope 前解析 FQN、确认 owner 模块；评估改动是否会波及其他 lane；高风险 refactor 前写入 ROADMAP 验证项。
+1. **拆 lane 前**：对候选核心符号调 `codegraph_impact["符号名", depth=2]`，确认 lane scope 间调用链断开、无隐匿依赖。将结果写入 PLAN_TRACE.md。
+2. **模块归属评估**：调 `codegraph_callers["符号名", depth=1]` 确认待改函数/类的调用者模块归属。
+3. **索引验证**：计划产出前调 `codegraph_status` 确认索引覆盖所有待改文件。索引不完整时在 plan 中标注风险。
+
+> 详细场景与参数示例见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
 
 ## Next
 

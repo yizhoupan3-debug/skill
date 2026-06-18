@@ -60,15 +60,20 @@ trigger_hints:
 
 ## Verification Checklist
 
-> **Note**: verify commands below are pattern templates. Actual commands depend on project setup and available tools.
+可执行脚本：[`scripts/verify/statistical.sh`](../../scripts/verify/statistical.sh)
 
-| # | 检查名 | PASS 条件 | verify command |
-|---|--------|-----------|----------------|
-| 1 | p 值重跑 | 重算 p 与报告 p 偏差 < 1e-4 | `python -c "from scipy.stats import ttest_ind; ..."` 或对应检验函数 |
-| 2 | GRIM test | 均值的最后一位整数粒度可恢复 | `python -c "from math import floor; ..."` 检查 round(mean*N) == sum |
-| 3 | 效应量报告 | 每项检验均报告效应量（d / eta2 / r） | `grep -c 'effect.size' results.md` → 等于检验数量 |
-| 4 | 多重比较校正 | ≥ 3 次比较时使用了 Bonferroni / BH / Tukey | `grep -E 'correct|adjust|FDR|Bonferroni' methods.md` → 非空 |
-| 5 | 前提假设检查 | 正态性（Shapiro-Wilk p > .05）且方差齐性（Levene p > .05） | `python -c "from scipy.stats import shapiro, levene; ..."` |
+```bash
+# 含数据 + 方法文件：
+DATA=results.csv METHODS=methods.md scripts/verify/statistical.sh
+```
+
+| # | 检查名 | PASS 条件 |
+|---|--------|-----------|
+| 1 | p 值重跑 | 重算 p 与报告 p 偏差 < 1e-4（需 Python + scipy + 原始数据） |
+| 2 | GRIM test | 均值的最后一位整数粒度可恢复 |
+| 3 | 效应量报告 | 每项检验均报告效应量（d / eta2 / r） |
+| 4 | 多重比较校正 | ≥ 3 次比较时使用了 Bonferroni / BH / Tukey |
+| 5 | 前提假设检查 | 正态性（Shapiro-Wilk p > .05）且方差齐性（Levene p > .05） |
 
 ## References
 

@@ -326,7 +326,7 @@ pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String>
     result
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(test), allow(dead_code))]
 fn dispatch_stdio_agent_hook_payload(canonical: &str, repo_root: &Path, payload: &Value) -> Value {
     crate::hooks::ensure_kernel_bootstrap();
     if payload_looks_like_cursor_hook_stdin(payload) {
@@ -491,7 +491,7 @@ fn silent_success() -> Value {
 ///
 /// 刻意不使用嵌套字符串中的 `/.cursor/` 匹配，否则合法 stdio agent 工具载荷可能被整条静默。
 /// 另要求 `hook_event_name` / `hookEventName`，降低仅凭顶造 `cursor_version`+`workspace_roots` 整条静默的面。
-#[allow(dead_code)]
+#[cfg_attr(not(test), allow(dead_code))]
 fn payload_looks_like_cursor_hook_stdin(payload: &Value) -> bool {
     let Value::Object(map) = payload else {
         return false;
@@ -572,6 +572,25 @@ fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
             warn_contexts.push(format!(
                 "Modifying {path} — framework routing core data source; run `framework skills refresh --validate` after changes."
             ));
+        }
+    }
+
+    // §CodeGraph: soft warning when modifying files that contain indexed symbols
+    // Only triggers on write operations (Write/Edit/Bash) to avoid noise from reads.
+    #[cfg(feature = "codegraph")]
+    {
+        let tool_name = payload
+            .get("tool_name")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let is_write_op = matches!(tool_name, "Write" | "Edit" | "Bash");
+        if is_write_op {
+            let affected_paths: Vec<String> = payload_relative_paths(repo_root, payload);
+            for p in &affected_paths {
+                if let Some(warning) = codegraph_pre_modify_warning(repo_root, p) {
+                    warn_contexts.push(warning);
+                }
+            }
         }
     }
     if !warn_contexts.is_empty() {
@@ -1513,6 +1532,65 @@ fn is_settings_path(path: &str) -> bool {
     active_stdio_agent_hook_host()
         .settings_guarded_paths()
         .contains(&path)
+}
+
+/// Cached codegraph index handle to avoid re-opening SQLite on every PreToolUse.
+#[cfg(feature = "codegraph")]
+static CODEGRAPH_INDEX: std::sync::OnceLock<std::sync::Mutex<Option<codegraph_rs::CodeGraphIndex>>> =
+    std::sync::OnceLock::new();
+
+/// Check codegraph index for a file being modified: if the file contains
+/// indexed symbols that have upstream callers, return a soft warning.
+/// Only compiled when `feature = "codegraph"` is enabled (default).
+///
+/// Uses a cached index handle (OnceLock) — first call opens the DB, subsequent
+/// calls reuse the same connection to avoid repeated ~30ms SQLite open+check.
+#[cfg(feature = "codegraph")]
+fn codegraph_pre_modify_warning(repo_root: &Path, file_rel_path: &str) -> Option<String> {
+    use std::time::Instant;
+    let start = Instant::now();
+
+    // Get or initialize the cached index handle (session-scoped, repo_root stable)
+    let mut guard = CODEGRAPH_INDEX
+        .get_or_init(|| std::sync::Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|e| {
+            eprintln!("[CodeGraph] index mutex poisoned, recovering");
+            e.into_inner()
+        });
+    if guard.is_none() {
+        *guard = codegraph_rs::CodeGraphIndex::open(repo_root).ok();
+    }
+    let index = guard.as_ref()?;
+
+    // Query symbols defined in the modified file
+    let symbols = index.find_symbols_by_file(file_rel_path).ok()?;
+    if symbols.is_empty() {
+        return None;
+    }
+    // Check if any of these symbols have callers
+    // Use both file_path and node_id for precise matching,
+    // avoiding inflated counts from cross-file name collisions.
+    let mut caller_count = 0usize;
+    for sym in &symbols {
+        let filter = codegraph_rs::db::node_ops::SymbolFilter::from_options(
+            Some(&sym.file_path),
+            Some(&sym.id),
+        );
+        if let Ok(callers) = index.find_callers(&sym.symbol, 1, &filter) {
+            caller_count += callers.len();
+        }
+    }
+    if caller_count == 0 {
+        return None;
+    }
+    let elapsed = start.elapsed().as_millis();
+    let symbols_str: Vec<&str> = symbols.iter().map(|s| s.symbol.as_str()).collect();
+    Some(format!(
+        "[CodeGraph] {file_rel_path} symbols ({count}: {names}) have {caller_count} upstream caller(s) — verify all references before deleting/renaming. (analysis took {elapsed}ms)",
+        count = symbols.len(),
+        names = symbols_str.join(", "),
+    ))
 }
 
 fn is_framework_guarded_path(path: &str) -> bool {

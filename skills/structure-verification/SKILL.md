@@ -61,16 +61,24 @@ trigger_hints:
 
 ## Verification Checklist
 
-> **Note**: verify commands below are pattern templates. Actual commands depend on project setup and available tools.
+可执行脚本：[`scripts/verify/structure.sh`](../../scripts/verify/structure.sh)
 
-| # | 检查名 | PASS 条件 | verify command |
-|---|--------|-----------|----------------|
-| 1 | LaTeX 编译 | latexmk exit 0，无 error | `latexmk -pdf -interaction=nonstopmode main.tex && echo PASS \|\| echo FAIL` |
-| 2 | 图表引用一致 | 每个 \ref 有对应 \label，无 ?? 输出 | `grep -oP '\\\\ref\{[^}]+\}' main.tex \| sort -u` vs `grep -oP '\\\\label\{[^}]+\}' main.tex \| sort -u` → 无差集 |
-| 3 | Claim-evidence 对齐 | 每条 claim ≥ 1 条 evidence | `python scripts/check_claim_evidence.py claim_ledger.md` → exit 0 |
-| 4 | 格式合规 | 页数、字号、边距符合 venue 要求 | `pdftk main.pdf dump_data \| grep NumberOfPages` → 在 venue 页数范围内 |
-| 5 | 符号一致性 | 同一符号在所有 section 中含义相同 | `grep -oP '\\$[^$]+\\$' main.tex \| sort \| uniq -d` → 无歧义重复 |
-| 6 | 方程编号连续 | 方程编号无跳号 | `grep -oP '\\\\tag\{[^}]+\}' main.tex \| sort -t{ -k2 -n` → 连续递增 |
+```bash
+# 基本用法（默认查找 main.tex）：
+TEXDIR=/path/to/paper scripts/verify/structure.sh
+
+# 指定主文件：
+TEXDIR=/path/to/paper MAIN=paper.tex scripts/verify/structure.sh
+```
+
+| # | 检查名 | PASS 条件 |
+|---|--------|-----------|
+| 1 | LaTeX 编译 | latexmk exit 0，无 error |
+| 2 | 图表引用一致 | 每个 \ref 有对应 \label |
+| 3 | Claim-evidence 对齐 | 每条 claim ≥ 1 条 evidence（需提供 claim ledger） |
+| 4 | 格式合规 | 页数、字号、边距符合 venue 要求 |
+| 5 | 符号一致性 | 同一符号在所有 section 中含义相同 |
+| 6 | 方程编号连续 | 方程编号无跳号 |
 
 ## References
 

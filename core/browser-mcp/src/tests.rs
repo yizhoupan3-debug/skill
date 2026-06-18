@@ -370,6 +370,12 @@ fn truncate_text_zero_max_returns_ellipsis() {
     assert_eq!(truncate_text("hello", 0), "...");
 }
 
+#[test]
+fn truncate_text_max_chars_one_returns_ellipsis() {
+    // max_chars=1 -> keep 0 chars + "..." = "..."
+    assert_eq!(truncate_text("hello", 1), "...");
+}
+
 // ───────────────────────────────────────────────────────────────────
 // 纯函数测试：to_text_lines
 // ───────────────────────────────────────────────────────────────────
@@ -464,6 +470,11 @@ fn decode_base64_with_whitespace() {
 #[test]
 fn decode_base64_invalid_byte() {
     assert!(decode_base64("SGVs!bG8=").is_err());
+}
+
+#[test]
+fn decode_base64_whitespace_only() {
+    assert_eq!(decode_base64("   \n  \t  ").unwrap(), b"");
 }
 
 // ───────────────────────────────────────────────────────────────────
@@ -1448,6 +1459,27 @@ fn network_event_value_contains_expected_fields() {
     assert_eq!(v["ok"], true);
     assert_eq!(v["durationMs"], 50);
     assert!(v["errorText"].is_null());
+}
+
+#[test]
+fn network_event_value_error_state() {
+    let event = NetworkEvent {
+        id: "req_err".to_string(),
+        method: String::new(),
+        url: String::new(),
+        status: None,
+        content_type: None,
+        resource_type: "XHR".to_string(),
+        timestamp: 2000,
+        ok: false,
+        error_text: Some("net::ERR_CONNECTION_RESET".to_string()),
+        duration_ms: None,
+    };
+    let v = network_event_value(&event);
+    assert_eq!(v["ok"], false);
+    assert_eq!(v["errorText"], "net::ERR_CONNECTION_RESET");
+    assert!(v["durationMs"].is_null());
+    assert!(v["status"].is_null());
 }
 
 // ───────────────────────────────────────────────────────────────────

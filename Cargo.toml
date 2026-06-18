@@ -23,6 +23,7 @@ members = [
     "core/router-rs",
     "core/runtime-storage",
     "core/runtime-core",
+    "core/runtime-core-contracts",
     "core/session-supervisor",
     "core/trace-runtime",
     "core/browser-mcp",
@@ -50,6 +51,7 @@ rust-version = "1.85"
 # --- 统一版本管理 (2026-06-09 技术债清理) ---
 anyhow = "1.0"
 thiserror = "2.0"
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 clap = { version = "4.5", features = ["derive"] }
 criterion = { version = "0.5", features = ["html_reports"] }

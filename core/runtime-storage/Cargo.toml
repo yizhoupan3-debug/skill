@@ -22,4 +22,5 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
+insta.workspace = true
 serial_test = "3"

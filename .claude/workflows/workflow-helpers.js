@@ -1,6 +1,6 @@
 /**
  * Workflow shared helpers — schemas, dedup, merge utilities.
- * Extracted from claude-chain-deep-review, claude-code-cli-audit, deep-review-template.
+ * Extracted from claude-chain-deep-review, claude-cli-audit, deep-review-template.
  */
 
 // ── Schemas ──────────────────────────────────────────────────────────────────

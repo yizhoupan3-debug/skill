@@ -154,13 +154,13 @@ pub trait HostTelemetry: Send + Sync {
 
 /// Object-safe provider contract; implementors register via [`host_provider_registry`].
 pub trait HostProvider: HostLifecycle + HostToolExecutor + HostTelemetry {
-    /// `RUNTIME_REGISTRY.host_targets.supported` id (e.g. `cursor`, `claude-code`).
+    /// `RUNTIME_REGISTRY.host_targets.supported` id (e.g. `cursor`, `claude`).
     fn host_id(&self) -> &'static str;
 
     /// `host_targets.metadata.<id>.install_tool` spelling (e.g. `cursor`, `claude`).
     fn install_tool(&self) -> &'static str;
 
-    /// Alternate CLI / `--to` spellings (`claude-code` → `claude`, etc.).
+    /// Alternate CLI / `--to` spellings (`claude` → `claude`, etc.).
     fn aliases(&self) -> &'static [&'static str] {
         &[]
     }
@@ -392,7 +392,7 @@ mod tests {
         );
         assert_eq!(
             host_provider_for_install_tool("claude")
-                .expect("claude-code alias")
+                .expect("claude alias")
                 .host_id(),
             "claude"
         );
@@ -530,7 +530,7 @@ mod tests {
                     "{host_id}: event {event}"
                 );
             }
-            let telemetry = host_telemetry_for_id(host_id).expect(&format!("{host_id} telemetry"));
+            let telemetry = host_telemetry_for_id(host_id).unwrap_or_else(|| panic!("{host_id} telemetry"));
             assert_eq!(
                 telemetry.observation_host_id(),
                 Some(host_id),

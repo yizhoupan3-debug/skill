@@ -65,7 +65,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 ### B10 — codegraph
 
-代码图谱索引（`tools/codegraph-rs/`），MCP 七工具：search / callers / callees / impact / node / status / dead_code。
+代码图谱索引（`tools/codegraph-rs/`），MCP 八工具：search / callers / callees / impact / node / status / dead_code / goto_definition。
 
 ```bash
 cargo build --release --manifest-path core/router-rs/Cargo.toml --features codegraph

@@ -61,6 +61,7 @@ pub struct ScoringWeights {
     pub do_not_use_penalty_max_ratio: f64,
     pub do_not_use_penalty_per_hit: f64,
     pub paper_workbench_boost: f64,
+    pub codegraph_boost: f64,
     pub overlay_suppression_factor: f64,
 
     // -- pick_owner thresholds --
@@ -70,13 +71,10 @@ pub struct ScoringWeights {
 
     // -- layer thresholds (pick_owner / routing.rs) --
     #[serde(rename = "layer_threshold_L0")]
-    #[allow(non_snake_case)]
     pub layer_threshold_l0: f64,
     #[serde(rename = "layer_threshold_L1")]
-    #[allow(non_snake_case)]
     pub layer_threshold_l1: f64,
     #[serde(rename = "layer_threshold_L2_L3")]
-    #[allow(non_snake_case)]
     pub layer_threshold_l2_l3: f64,
     pub layer_threshold_default: f64,
 }

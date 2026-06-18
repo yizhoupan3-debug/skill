@@ -9,9 +9,8 @@ fn framework_root() -> PathBuf {
 
 #[test]
 fn patch_scripts_pass_bash_syntax_check() {
-    for name in [
-        "install-claude.sh",
-    ] {
+    {
+        let name = "install-claude.sh";
         let path = framework_root().join("scripts").join(name);
         let status = Command::new("bash")
             .args(["-n", path.to_str().unwrap()])

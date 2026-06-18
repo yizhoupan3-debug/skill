@@ -477,6 +477,13 @@ fn fresh_repo() -> PathBuf {
             .as_micros()
     ));
     fs::create_dir_all(root.join(".cursor/hooks")).expect("mkdir hooks");
+    fs::create_dir_all(root.join("configs/framework")).expect("mkdir configs");
+    // Copy the real RUNTIME_REGISTRY.json into the test repo so review gate
+    // snapshot loading (spawn_first_enabled, nudge templates) works correctly.
+    let registry_src = Path::new(FRAMEWORK_HARNESS_TEST_CWD)
+        .join("../../configs/framework/RUNTIME_REGISTRY.json");
+    let registry_dst = root.join("configs/framework/RUNTIME_REGISTRY.json");
+    let _ = fs::copy(&registry_src, &registry_dst);
     fs::write(root.join(".cursor/hooks.json"), b"{\"version\":1}\n").expect("hooks.json");
     fs::write(
         root.join(".cursor/hooks/review_subagent_gate.py"),

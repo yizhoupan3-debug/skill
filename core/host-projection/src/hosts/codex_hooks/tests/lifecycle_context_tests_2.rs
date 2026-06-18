@@ -3,7 +3,7 @@ use super::lifecycle_context_tests::{TEST_COMPACT_FINDING, env_lock, fresh_repo,
 use super::*;
 use serde_json::json;
 use serial_test::serial;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 
 #[test]
 fn codex_review_gate_disable_clears_armed_state_on_userpromptsubmit() {
@@ -462,10 +462,7 @@ fn stop_hook_active_still_blocks_review_gate_by_default() {
         msg.contains("CODEX_REVIEW_GATE"),
         "stop_hook_active without bypass must still nudge review: {out:?}"
     );
-    match prior {
-        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", v) },
-        None => {}
-    }
+    if let Some(v) = prior { unsafe { std::env::set_var("ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS", v) } }
 }
 
 #[test]
@@ -644,7 +641,7 @@ fn v1_delegation_only_maps_to_phase1() {
     let state_path = codex_state_path(&repo, &event);
     fs::write(
         state_path,
-        r#"{"schema_version":1,"review_subagent_seen":false}"#,
+        r#"{"schema_version":1,"delegation_required":true,"review_subagent_seen":false}"#,
     )
     .unwrap();
     let state = codex_load_state(&repo, &event).unwrap().unwrap();

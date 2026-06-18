@@ -11,7 +11,6 @@
 
 // route_task_with_manifest_fallback — not needed in host-projection; skill routing via framework_kernel
 // framework_runtime functions accessed via crate::hooks
-#![allow(clippy::type_complexity)]
 use crate::hooks::{check_anomalies, init_tracker, read_tracker_state, record_tool_call};
 use core_policy::hook_common::is_review_prompt;
 use core_policy::review_gate_engine::{
@@ -1383,7 +1382,6 @@ mod tests {
         assert!(names.contains(&"closeout_checklist"));
     }
 
-    #[test]
     #[test]
     fn ping_returns_empty_result() {
         let response = handle_mcp_request(

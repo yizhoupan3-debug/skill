@@ -342,4 +342,117 @@ mod tests {
         assert_eq!(range.max_row, 9);
         assert_eq!(format_dimension(range), "C2:F9");
     }
+
+    #[test]
+    fn detect_ooxml_kind_by_extension() {
+        use std::path::Path;
+        assert_eq!(detect_ooxml_kind(Path::new("test.docx")), OoxmlKind::Docx);
+        assert_eq!(detect_ooxml_kind(Path::new("test.xlsx")), OoxmlKind::Xlsx);
+        assert_eq!(detect_ooxml_kind(Path::new("test.pptx")), OoxmlKind::Pptx);
+        assert_eq!(detect_ooxml_kind(Path::new("test.pdf")), OoxmlKind::Unsupported);
+        assert_eq!(detect_ooxml_kind(Path::new("test")), OoxmlKind::Unsupported);
+        assert_eq!(detect_ooxml_kind(Path::new("test.DOCX")), OoxmlKind::Docx);
+    }
+
+    #[test]
+    fn column_label_index_roundtrip() {
+        let test_cases = vec![
+            ("A", 1),
+            ("Z", 26),
+            ("AA", 27),
+            ("AZ", 52),
+            ("BA", 53),
+            ("ZZ", 702),
+            ("AAA", 703),
+        ];
+        for (label, index) in test_cases {
+            assert_eq!(column_label_to_index(label), Some(index));
+            assert_eq!(column_index_to_label(index), label);
+        }
+    }
+
+    #[test]
+    fn parse_cell_ref_various_formats() {
+        let (row, col) = parse_cell_ref("A1").unwrap();
+        assert_eq!(row, 1);
+        assert_eq!(col, 1);
+
+        let (row, col) = parse_cell_ref("$B$3").unwrap();
+        assert_eq!(row, 3);
+        assert_eq!(col, 2);
+
+        let (row, col) = parse_cell_ref("AA100").unwrap();
+        assert_eq!(row, 100);
+        assert_eq!(col, 27);
+
+        assert!(parse_cell_ref("").is_none());
+        assert!(parse_cell_ref("1A").is_none());
+    }
+
+    #[test]
+    fn parse_dimension_single_cell() {
+        let bounds = parse_dimension("B3").unwrap();
+        assert_eq!(bounds.min_row, 3);
+        assert_eq!(bounds.max_row, 3);
+        assert_eq!(bounds.min_col, 2);
+        assert_eq!(bounds.max_col, 2);
+        assert_eq!(format_dimension(bounds), "B3");
+    }
+
+    #[test]
+    fn resolve_zip_path_resolves_relative() {
+        assert_eq!(resolve_zip_path("xl/workbook.xml", "worksheets/sheet1.xml"), "xl/worksheets/sheet1.xml");
+        assert_eq!(resolve_zip_path("xl/workbook.xml", "../media/image.png"), "media/image.png");
+        assert_eq!(resolve_zip_path("xl/workbook.xml", "./foo"), "xl/foo");
+    }
+
+    #[test]
+    fn parse_bool_flag_values() {
+        assert!(parse_bool_flag("1"));
+        assert!(parse_bool_flag("true"));
+        assert!(parse_bool_flag("TRUE"));
+        assert!(!parse_bool_flag("0"));
+        assert!(!parse_bool_flag("false"));
+        assert!(!parse_bool_flag(""));
+    }
+
+    #[test]
+    fn parse_docx_heading_level_various() {
+        assert_eq!(parse_docx_heading_level("Heading1"), Some(1));
+        assert_eq!(parse_docx_heading_level("Heading2"), Some(2));
+        assert_eq!(parse_docx_heading_level("heading3"), Some(3));
+        assert_eq!(parse_docx_heading_level("Heading 1"), Some(1));
+        assert_eq!(parse_docx_heading_level("heading-1"), Some(1));
+        assert_eq!(parse_docx_heading_level("Normal"), None);
+        assert_eq!(parse_docx_heading_level("Title"), None);
+        assert_eq!(parse_docx_heading_level("heading0"), None);
+    }
+
+    #[test]
+    fn format_size_index_output() {
+        let bounds = SheetBounds { min_row: 1, max_row: 10, min_col: 1, max_col: 5 };
+        assert_eq!(format_size_index(bounds), "1:10 x 1:5");
+    }
+
+    #[test]
+    fn parse_relationships_empty_xml() {
+        let rels = parse_relationships(
+            r#"<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>"#
+        ).unwrap();
+        assert!(rels.is_empty());
+    }
+
+    #[test]
+    fn parse_relationships_single() {
+        let rels = parse_relationships(
+            r#"<?xml version="1.0"?>
+            <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+              <Relationship Id="rId1" Type="http://example.com/type" Target="target.xml"/>
+            </Relationships>"#
+        ).unwrap();
+        assert_eq!(rels.len(), 1);
+        assert_eq!(rels[0].id, "rId1");
+        assert_eq!(rels[0].target, "target.xml");
+        assert_eq!(rels[0].kind.as_deref(), Some("http://example.com/type"));
+    }
 }

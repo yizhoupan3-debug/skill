@@ -3,7 +3,7 @@
   "scope": "execution-critical-fields-only",
   "host_ids": [
     "cursor",
-    "claude-code",
+    "claude",
     "opencode",
     "codex",
     "mimo"
@@ -24,7 +24,8 @@
     "install_tool",
     "projection_status",
     "installable",
-    "host_entrypoints"
+    "host_entrypoints",
+    "default_framework_command"
   ],
   "install_tools": [
     "cursor",

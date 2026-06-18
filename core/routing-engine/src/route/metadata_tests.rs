@@ -2,10 +2,10 @@
 mod route_metadata_tests {
     use crate::route::has_paper_review_judgment_context;
     use crate::route::normalize_text;
-    use crate::route::{RawSkillRecord, SkillRecord};
+    use crate::route::RawSkillRecord;
     use crate::route::{filter_records_for_host, route_task, search_skills};
     use crate::route::{
-        framework_alias_entrypoints_from_hints, has_explicit_framework_alias_call,
+        has_explicit_framework_alias_call,
         has_literal_framework_alias_call, skill_record_from_raw,
     };
     use crate::route::{

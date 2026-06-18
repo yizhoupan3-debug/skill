@@ -399,7 +399,6 @@ fn load_host_profile_specs() -> Result<Vec<HostProfileSpec>, String> {
     Ok(specs)
 }
 
-#[allow(clippy::too_many_arguments)]
 fn build_host_profile(
     profile: &FrameworkProfileContract,
     normalized_mcp_servers: &[Value],

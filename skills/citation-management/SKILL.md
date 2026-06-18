@@ -1,7 +1,7 @@
 ---
 name: citation-management
 description: Verify and format academic citations and bibliographies.
-routing_layer: L1
+routing_layer: L2
 routing_owner: owner
 routing_gate: none
 routing_priority: P2

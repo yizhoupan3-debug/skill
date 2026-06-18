@@ -10,6 +10,8 @@ name = "browser_mcp"
 path = "src/lib.rs"
 
 [dependencies]
+http-util = { path = "../http-util" }
+base64.workspace = true
 runtime-core = { path = "../runtime-core" }
 routing-engine = { path = "../routing-engine" }
 chrono.workspace = true

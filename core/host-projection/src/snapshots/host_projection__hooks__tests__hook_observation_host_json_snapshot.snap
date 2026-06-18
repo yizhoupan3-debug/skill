@@ -1,0 +1,11 @@
+---
+source: core/host-projection/src/hooks.rs
+expression: variants
+---
+[
+    Cursor,
+    Codex,
+    Claude,
+    OpenCode,
+    MiMo,
+]

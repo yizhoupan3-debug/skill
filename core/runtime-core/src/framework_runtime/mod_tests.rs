@@ -47,9 +47,9 @@ mod evidence_lock_order_tests {
 
     #[test]
     fn append_evidence_index_merged_row_does_not_use_task_ledger_flock() {
-        let src = include_str!("mod.rs");
+        let src = include_str!("evidence.rs");
         let start = src
-            .find("fn append_evidence_index_merged_row")
+            .find("pub fn append_evidence_index_merged_row")
             .expect("append_evidence_index_merged_row");
         let rest = &src[start..];
         let end = rest
@@ -68,9 +68,9 @@ mod evidence_lock_order_tests {
 
     #[test]
     fn append_evidence_index_merged_row_does_not_call_append_transaction_under_l2() {
-        let src = include_str!("mod.rs");
+        let src = include_str!("evidence.rs");
         let start = src
-            .find("fn append_evidence_index_merged_row")
+            .find("pub fn append_evidence_index_merged_row")
             .expect("append_evidence_index_merged_row");
         let rest = &src[start..];
         let end = rest
@@ -165,7 +165,7 @@ mod resolve_repo_root_tests {
 
 #[cfg(test)]
 mod truncate_utf8_tests {
-    use super::truncate_utf8_chars;
+    use super::util::truncate_utf8_chars;
 
     #[test]
     fn truncate_short_string_unchanged() {
@@ -199,9 +199,9 @@ mod truncate_utf8_tests {
 
 #[cfg(test)]
 mod detect_verify_tests {
-    use super::detect_and_verify_physical_artifact;
+    use super::evidence::detect_and_verify_physical_artifact;
     use std::fs;
-    use std::path::Path;
+    
 
     #[test]
     fn detect_file_path_returns_true() {

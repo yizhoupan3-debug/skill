@@ -622,8 +622,14 @@ pub fn live_execute_http_client() -> Result<&'static reqwest::blocking::Client, 
     if let Some(client) = CLIENT.get() {
         return Ok(client);
     }
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
+    let mut builder = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30));
+    // Inherit proxy configuration from environment (cached at process level).
+    if let Some(proxy_url) = http_util::cached_proxy_url()
+        && let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
+            builder = builder.proxy(proxy);
+        }
+    let client = builder
         .build()
         .map_err(|err| format!("build reqwest client failed: {err}"))?;
     let _ = CLIENT.set(client);

@@ -16,7 +16,12 @@ fn shell_segment_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"\s*(?:&&|\|\||;|\|)\s*").expect("valid regex"))
 }
 
+/// Schema version string for the hook policy evaluation protocol.
+/// Used to identify the wire format of evaluate requests and responses.
 pub const HOOK_POLICY_SCHEMA_VERSION: &str = "router-rs-hook-policy-v1";
+/// Authority identifier that declares hook_policy as the evaluation source.
+/// Included in every evaluate response to allow downstream consumers to
+/// distinguish responses issued by this module from other policy sources.
 pub const HOOK_POLICY_AUTHORITY: &str = "rust-hook-policy";
 
 const RETIRED_PROTECTED_GLOBS: &[&str] = &["plugins/skill-framework-native/**"];
@@ -29,6 +34,9 @@ const CODEX_PROTECTED_GENERATED_PATHS: &[&str] = &[
     ".codex/host_entrypoints_sync_manifest.json",
 ];
 
+/// Input payload for a hook policy evaluation.
+/// Describes the host operation being performed (bash command, file path,
+/// MCP tool call, etc.) and provides the contextual data needed to assess it.
 #[derive(Debug, Clone, Deserialize)]
 pub struct HookPolicyEvaluateRequest {
     pub operation: String,
@@ -46,6 +54,9 @@ pub struct HookPolicyEvaluateRequest {
     pub tool_args: Option<Value>,
 }
 
+/// Result of a hook policy evaluation.
+/// Encodes whether the operation is blocked, any human-readable reason,
+/// category classifications, and protection details.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct HookPolicyEvaluateResponse {
     pub schema_version: String,
@@ -90,6 +101,9 @@ fn dev_exempt_fast_tunnel(path: Option<&str>, repo_root: Option<&Path>) -> bool 
     }
 }
 
+/// Evaluate a single hook policy request against all built-in rules.
+/// Returns a `HookPolicyEvaluateResponse` indicating whether the
+/// operation should be blocked and why.
 pub fn evaluate_hook_policy(
     request: HookPolicyEvaluateRequest,
 ) -> Result<HookPolicyEvaluateResponse, String> {
@@ -179,6 +193,9 @@ pub fn evaluate_hook_policy(
     Ok(response)
 }
 
+/// JSON entry point for hook policy evaluation.
+/// Deserializes a `Value` into a `HookPolicyEvaluateRequest`, runs
+/// `evaluate_hook_policy`, and serializes the response back to `Value`.
 pub fn evaluate_hook_policy_value(payload: Value) -> Result<Value, String> {
     let request = serde_json::from_value::<HookPolicyEvaluateRequest>(payload)
         .map_err(|err| format!("parse hook policy input failed: {err}"))?;
@@ -186,6 +203,9 @@ pub fn evaluate_hook_policy_value(payload: Value) -> Result<Value, String> {
         .map_err(|err| format!("serialize hook policy output failed: {err}"))
 }
 
+/// Check a shell command against the dangerous-bash rule set.
+/// Returns `Some(reason)` if the command matches a destructive or unsafe
+/// pattern (e.g., recursive `rm`, force push, remote pipe into shell).
 pub fn dangerous_bash_reason(command: &str) -> Option<String> {
     let raw = command;
     let normalized = compact_space(raw);
@@ -201,6 +221,8 @@ pub fn dangerous_bash_reason(command: &str) -> Option<String> {
         .find_map(|(regex, reason)| regex.is_match(&normalized).then(|| (*reason).to_string()))
 }
 
+/// Classify a shell command into validation categories (e.g., "rust", "python").
+/// Used by host hooks to determine what kind of validation to run after a save.
 pub fn classify_validation(command: &str) -> Vec<String> {
     let normalized = compact_space(command);
     let lower = normalized.to_ascii_lowercase();
@@ -231,6 +253,8 @@ pub fn classify_validation(command: &str) -> Vec<String> {
     categories
 }
 
+/// Categorize a file path by its extension (e.g., "rust", "json", "docs").
+/// Returns "other" for unrecognized extensions.
 pub fn file_category(path: &str) -> String {
     let suffix = Path::new(path)
         .extension()
@@ -249,6 +273,9 @@ pub fn file_category(path: &str) -> String {
     .to_string()
 }
 
+/// Check whether a file path matches a protected path (generated host
+/// entrypoint or retired native plugin surface).
+/// Returns `Some(kind)` when the path is protected, `None` otherwise.
 pub fn classify_protected_path<'a>(
     path: &str,
     repo_root: Option<&Path>,
@@ -271,6 +298,8 @@ pub fn classify_protected_path<'a>(
     None
 }
 
+/// Resolve a path to a repo-relative form by stripping the repo root prefix
+/// when the path is absolute and falls inside the repository.
 pub fn relative_candidate_path(path: &str, repo_root: Option<&Path>) -> String {
     let candidate = PathBuf::from(path);
     if candidate.is_absolute()
@@ -284,6 +313,8 @@ pub fn relative_candidate_path(path: &str, repo_root: Option<&Path>) -> String {
     normalize_repo_relative_path(path)
 }
 
+/// Normalize a potentially absolute or mixed-separator path to a clean
+/// forward-slash repo-relative form, resolving `.` and `..` segments.
 pub fn normalize_repo_relative_path(path: &str) -> String {
     let normalized = path.replace('\\', "/");
     let mut parts: Vec<&str> = Vec::new();
@@ -654,7 +685,7 @@ const MCP_ARG_RISK_PATTERNS: &[(&str, &str, &str, &str)] = &[
     (
         r"^web_fetch$",
         "url",
-        r"(?i)(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|metadata\.google\.internal)",
+        r"(?i)(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3}|metadata\.google\.internal\.?)",
         "web_fetch URL targets private/internal IP ranges — SSRF risk (tool description: bypasses Bash sandbox).",
     ),
     (
@@ -730,6 +761,8 @@ pub fn dangerous_mcp_tool_reason(tool_name: &str, tool_args_str: &str) -> Option
     None
 }
 
+/// Return the hook policy contract as a JSON value, advertising all
+/// supported operations, safety details, and protected path kinds.
 pub fn hook_policy_contract() -> Value {
     json!({
         "schema_version": HOOK_POLICY_SCHEMA_VERSION,
@@ -1323,5 +1356,40 @@ mod tests {
             .expect("spawn_blocking")
             .expect("evaluate_hook_policy");
         assert!(!response.blocked);
+    }
+
+    #[test]
+    fn hook_policy_evaluate_bash_danger_snapshot() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "bash-danger".to_string(),
+            command: Some("rm -rf /".to_string()),
+            path: None,
+            repo_root: None,
+            runtime_root: None,
+            tool_name: None,
+            tool_args: None,
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        insta::assert_debug_snapshot!(response);
+    }
+
+    #[test]
+    fn hook_policy_contract_snapshot() {
+        insta::assert_debug_snapshot!(hook_policy_contract());
+    }
+
+    #[test]
+    fn hook_policy_evaluate_validation_categories_snapshot() {
+        let request = HookPolicyEvaluateRequest {
+            operation: "validation-categories".to_string(),
+            command: Some("cargo check".to_string()),
+            path: None,
+            repo_root: None,
+            runtime_root: None,
+            tool_name: None,
+            tool_args: None,
+        };
+        let response = evaluate_hook_policy(request).unwrap();
+        insta::assert_debug_snapshot!(response);
     }
 }

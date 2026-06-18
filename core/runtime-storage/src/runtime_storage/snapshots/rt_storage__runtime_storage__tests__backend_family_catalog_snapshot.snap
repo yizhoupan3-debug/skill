@@ -1,0 +1,35 @@
+---
+source: core/runtime-storage/src/runtime_storage/tests.rs
+expression: catalog
+---
+Object {
+    "authority": String("rust-runtime-checkpoint-control-plane"),
+    "default_backend_family": String("filesystem"),
+    "families": Array [
+        Object {
+            "backend_family": String("filesystem"),
+            "supports_atomic_replace": Bool(true),
+            "supports_compaction": Bool(false),
+            "supports_consistent_append": Bool(true),
+            "supports_remote_event_transport": Bool(true),
+            "supports_snapshot_delta": Bool(false),
+            "supports_sqlite_wal": Bool(false),
+        },
+        Object {
+            "backend_family": String("sqlite"),
+            "supports_atomic_replace": Bool(true),
+            "supports_compaction": Bool(true),
+            "supports_consistent_append": Bool(true),
+            "supports_remote_event_transport": Bool(true),
+            "supports_snapshot_delta": Bool(true),
+            "supports_sqlite_wal": Bool(true),
+        },
+    ],
+    "owner": String("rust-runtime-checkpoint-control-plane"),
+    "schema_version": String("runtime-persistence-backend-family-catalog-v1"),
+    "selection_rule": String("store and checkpointer must resolve to one normalized backend_family before persistence operations"),
+    "strongest_local_backend_family": String("sqlite"),
+    "test_only_backend_families": Array [
+        String("memory"),
+    ],
+}

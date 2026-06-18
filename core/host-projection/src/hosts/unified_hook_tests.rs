@@ -181,7 +181,7 @@ fn pre_tool_use_blocks_own_host_private_settings() {
             let result = dispatch("claude", "tool.execute.before", &claude_repo, &payload);
             assert!(
                 is_blocked_advised_or_passthrough(&result),
-                "host=claude-code: write to {path} was NOT blocked or advised: {result}"
+                "host=claude: write to {path} was NOT blocked or advised: {result}"
             );
         }
     }
@@ -230,7 +230,7 @@ fn pre_tool_use_blocks_cross_host_settings() {
             let result = dispatch("claude", "tool.execute.before", &claude_repo, &payload);
             assert!(
                 is_blocked_advised_or_passthrough(&result),
-                "host=claude-code: write to {path} was NOT blocked or advised: {result}"
+                "host=claude: write to {path} was NOT blocked or advised: {result}"
             );
         }
     }
@@ -1817,7 +1817,7 @@ fn pretool_allows_agents_md() {
     let blocked = is_blocked(&result);
     assert!(
         !blocked,
-        "host=claude-code: writing AGENTS.md should be allowed: {result}"
+        "host=claude: writing AGENTS.md should be allowed: {result}"
     );
 }
 

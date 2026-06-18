@@ -58,11 +58,10 @@ pub fn resolve_paper_prose_block(repo_root: &Path) -> String {
         .and_then(|m| m.modified().ok());
     {
         let guard = BLOCK_CACHE.lock().expect("paper prose block cache");
-        if let Some(ref cached) = *guard {
-            if cached.mtime == mtime {
+        if let Some(ref cached) = *guard
+            && cached.mtime == mtime {
                 return cached.content.clone();
             }
-        }
     }
     let content = match fs::read_to_string(&path) {
         Ok(t) => {

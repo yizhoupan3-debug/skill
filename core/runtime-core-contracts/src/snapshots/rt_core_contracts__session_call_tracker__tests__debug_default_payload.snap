@@ -1,0 +1,19 @@
+---
+source: core/runtime-core-contracts/src/session_call_tracker.rs
+expression: "super::default_payload(1234567890)"
+---
+Object {
+    "anomaly_flags": Array [],
+    "host_id": Null,
+    "per_tool": Object {},
+    "schema_version": String("fw-session-call-tracker-v1"),
+    "started_at": Number(1234567890),
+    "token_usage": Object {
+        "cache_creation": Number(0),
+        "cache_read": Number(0),
+        "input": Number(0),
+        "output": Number(0),
+        "total": Number(0),
+    },
+    "total_calls": Number(0),
+}

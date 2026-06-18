@@ -71,6 +71,9 @@ fn parse_manifest_content(content: &str, mtime_ns: i64, content_hash: String) ->
             symbol: slug.to_string(),
             kind: "skill".to_string(),
             line: 0,
+            start_col: 0,
+            end_line: 0,
+            end_col: 0,
         });
 
         if let Some(hints) = arr[KEY_TRIGGER_HINTS].as_array() {
@@ -86,6 +89,9 @@ fn parse_manifest_content(content: &str, mtime_ns: i64, content_hash: String) ->
                     symbol: kw.to_string(),
                     kind: "keyword".to_string(),
                     line: 0,
+                    start_col: 0,
+                    end_line: 0,
+                    end_col: 0,
                 });
                 edges.push(ParsedEdge {
                     caller_symbol: slug.to_string(),

@@ -61,7 +61,7 @@ pub fn cli_thin_shell_line_count() -> usize {
 #[cfg(test)]
 mod cli_thin_shell_budget_tests {
     use super::{
-        CLI_THIN_SHELL_LINE_BUDGET, RUNTIME_OPS_INC_LINE_CEILING, cli_thin_shell_line_count,
+        CLI_THIN_SHELL_LINE_BUDGET, cli_thin_shell_line_count,
     };
 
     #[test]

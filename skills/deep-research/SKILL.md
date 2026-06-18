@@ -91,6 +91,11 @@ If the question is underspecified (e.g., "what car to buy" without budget, use c
 
 ## Execution workflow
 
+**必须先调用 workflow**：在 Claude 宿主上，优先使用 `Workflow` 工具运行
+`.claude/workflows/deep-research.js`（并行搜索 + schema 校验 + 自动去重 + 对抗验证 +
+recovery trace）。仅当 workflow 不可用（非 Claude 宿主或未加载 workflow 模块）
+时才按以下手工阶段执行。
+
 The harness runs as a workflow using `browser-mcp` tools (web search + web fetch)
 or the native `.claude/workflows/deep-research.js` pipeline.
 
@@ -165,6 +170,7 @@ Return:
 
 ## Hard constraints
 
+- **必须先调用 workflow**：在 Claude 宿主上 Workflow 工具可用时，用 `.claude/workflows/deep-research.js` 而非手工逐阶段执行。
 - Do not fabricate claims or citations. Every factual assertion in the report must trace to a fetched source.
 - Do not present unverified or single-source claims as established facts; label them clearly.
 - Do not skip the adversarial verification phase — every claim must pass cross-reference before appearing in the report body.

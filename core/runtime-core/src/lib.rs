@@ -83,8 +83,6 @@ pub mod runtime_registry {
 pub use contracts::session_call_tracker;
 pub use framework_kernel::skill_repo;
 pub use framework_kernel::stdio_payload_types;
-#[allow(unused_imports)]
-pub mod integration_test_prelude;
 pub mod mcp_stdio_test_support;
 pub mod stdio_transport;
 pub use contracts::task_command;

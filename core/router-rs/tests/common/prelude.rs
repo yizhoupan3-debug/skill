@@ -4,22 +4,14 @@
 //! works transparently for all `#[path = "../tests/…"] mod tests;` imports.
 
 pub use runtime_core::{
-    goal_drive, background_state, closeout_enforcement, eval_route, execution_contract,
-    formal_toolchain, framework_host_targets, framework_maint, framework_profile,
-    framework_runtime, framework_skills, harness_context_signals, harness_contract,
-    harness_operator_nudges, hook_event_routing, hook_observation_rules, hook_outbound_protect,
-    hook_posttool_normalize, hook_timing, host_entrypoint_sync, host_integration, hosts,
-    integration_test_prelude, kernel_bootstrap, mcp_pre_guard, mcp_stdio_test_support,
-    paper_adversarial_hook, paper_prose_hook, review_gate, rfv_loop, router_env_flags,
-    router_rs_observation, router_self, runtime_envelope_ids, runtime_registry, runtime_storage,
-    schema_drift, session_call_tracker, session_supervisor, skill_repo, stdio_payload_types,
-    stdio_transport, task_command, telemetry_emit, trace_runtime, web_fetch_guard, step_ledger,
-    task_ledger, task_state, task_state_aggregate,
+    goal_drive, closeout_enforcement, execution_contract, framework_host_targets,
+    framework_runtime, harness_context_signals,
+    harness_operator_nudges, hook_event_routing, host_integration, hosts, kernel_bootstrap, mcp_stdio_test_support, router_self, runtime_envelope_ids, runtime_registry, session_call_tracker, session_supervisor, stdio_payload_types, trace_runtime, task_state,
 };
 
 // host submodule re-exports
 pub use runtime_core::hosts::{
-    claude_hooks, codex_hooks, cursor_hooks, mcp_stdio_harness, opencode_hooks,
+    cursor_hooks, mcp_stdio_harness, opencode_hooks,
 };
 
 // specific function / constant re-exports
@@ -27,21 +19,17 @@ pub use runtime_core::{
     background_state::handle_background_state_operation,
     cli::runtime_ops::write_text_payload,
     execution_contract::{
-        EXECUTION_AUTHORITY, EXECUTION_KERNEL_FALLBACK_POLICY, EXECUTION_KERNEL_KIND,
-        EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION, EXECUTION_METADATA_SCHEMA_VERSION,
-        EXECUTION_MODEL_ID_SOURCE, EXECUTION_PROMPT_PREVIEW_OWNER, EXECUTION_SCHEMA_VERSION,
+        EXECUTION_AUTHORITY,
+        EXECUTION_MODEL_ID_SOURCE, EXECUTION_SCHEMA_VERSION,
         EXECUTION_RESPONSE_SHAPE_DRY_RUN, EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY,
         build_execution_kernel_contracts_by_mode, build_execution_kernel_metadata_contract,
     },
     framework_runtime::{
-        FRAMEWORK_ALIAS_SCHEMA_VERSION, FrameworkAliasBuildOptions,
+        FrameworkAliasBuildOptions,
         build_background_control_response, build_framework_alias_envelope,
         build_framework_runtime_snapshot_envelope, build_framework_statusline,
         build_sandbox_control_response, framework_hook_evidence_append,
         run_continuity_audit, write_framework_session_artifacts,
-    },
-    framework_runtime::json_value::{
-        optional_non_empty_string, required_non_empty_string,
     },
     framework_runtime::live_execute::{
         DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS, EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV,
@@ -58,22 +46,12 @@ pub use runtime_core::{
         inspect_trace_stream, replay_trace_stream, sha256_hex, write_trace_compaction_delta,
         write_trace_metadata,
     },
-    harness_operator_nudges::harness_nudges_env_test_lock,
-    hosts::claude_hooks::dispatch_claude_hook_payload_for_test,
-    hosts::cursor_hooks::set_test_review_gate_disable_override,
-    hosts::mcp_stdio_harness::{
-        get_snapshot_ttl_for_test, get_task_view_ttl_for_test, init_tracker_for_test,
-        read_mcp_message_test_helper, tool_closeout_record_write_for_test,
-        tool_goal_state_manage_test_helper, tool_rfv_loop_manage_test_helper,
-    },
-    hosts::opencode_hooks::dispatch_opencode_hook_event,
     route::{
-        ROUTE_AUTHORITY, ROUTE_REPORT_SCHEMA_VERSION, ROUTE_SNAPSHOT_SCHEMA_VERSION,
+        ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
         RouteSnapshotEnvelopePayload, build_route_diff_report, build_route_policy,
         build_route_snapshot, load_records_cached_for_stdio, load_records, route_task,
         search_skills,
     },
-    router_self::resolve_router_rs_test_bin,
     runtime_envelope_ids::{
         BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION,
         DEFAULT_MAX_BACKGROUND_JOBS, DEFAULT_MAX_CONCURRENT_SUBAGENTS,
@@ -95,32 +73,23 @@ pub use runtime_core::{
         RuntimeStorageRequestPayload, build_checkpoint_control_plane_compiler_payload,
         runtime_storage_operation,
     },
-    session_call_tracker::test_lock_roundtrip,
     stdio_payload_types::{
-        BackgroundControlRequestPayload, ExecuteRequestPayload, SandboxControlRequestPayload,
+        ExecuteRequestPayload,
         TraceCompactionDeltaWriteRequestPayload, TraceMetadataWriteRequestPayload,
-        TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
     },
     stdio_transport::{
         DEFAULT_ROUTER_STDIO_POOL_SIZE, MAX_ROUTER_STDIO_POOL_SIZE, handle_stdio_json_line,
     },
     task_state::resolve_task_view,
     trace_runtime::{TraceRecordEventRequestPayload, record_trace_event},
-    cli::args::{Cli, CodexSubcommand, HostCommand, RouterCommand},
     framework_runtime::{
-        StdioOpDomain, build_runtime_control_plane_payload,
-        build_runtime_integrator_payload, build_runtime_metric_record,
+        build_runtime_control_plane_payload, build_runtime_metric_record,
         build_runtime_observability_exporter_descriptor,
         build_runtime_observability_health_snapshot,
         build_runtime_observability_metric_catalog_payload,
-        classify_stdio_op, dispatch_stdio_json_request,
         runtime_observability_dashboard_schema,
     },
 };
 
-pub use core_policy::{
-    hook_common, hook_policy, lane_normalize, review_gate_engine, review_output_lint,
-    review_routing_signals,
-};
+pub use core_policy::hook_common;
 
-pub use routing_engine;

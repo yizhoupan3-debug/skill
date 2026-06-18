@@ -19,10 +19,22 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::Path;
 
+/// Schema version string for the pre-tool-use guard protocol.
+/// Use to validate response schema compatibility in callers.
 pub const PRE_TOOL_USE_GUARD_SCHEMA_VERSION: &str = "router-rs-pre-tool-use-guard-v1";
+
+/// Authority identifier for the pre-tool-use guard.
+/// Identifies `rust-framework-runtime` as the source of the guard verdict.
 pub const PRE_TOOL_USE_GUARD_AUTHORITY: &str = "rust-framework-runtime";
+
+/// Stdio operation name for the pre-tool-use guard.
+/// Use as the routing key when dispatching via `stdio_dispatch`.
 pub const PRE_TOOL_USE_GUARD_STDIO_OP: &str = "pre_tool_use_guard";
 
+/// Request payload for the pre-tool-use guard evaluation or approval phase.
+///
+/// Fields identify the host, tool, input, and optionally provide approval credentials for the
+/// `approve` phase. Use via [`evaluate_pre_tool_use_guard`].
 #[derive(Debug, Clone, Deserialize)]
 pub struct PreToolUseGuardRequest {
     pub host_id: String,
@@ -43,6 +55,10 @@ pub struct PreToolUseGuardRequest {
     pub has_native_hook: Option<bool>,
 }
 
+/// Verdict returned by the pre-tool-use guard.
+///
+/// `Allow` permits execution, `Block` denies it unconditionally, and `RequiresStdioApproval`
+/// requests human approval via the stdio approval flow with a matching approval digest.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PreToolUseGuardVerdict {
@@ -51,6 +67,11 @@ pub enum PreToolUseGuardVerdict {
     RequiresStdioApproval,
 }
 
+/// Response from the pre-tool-use guard.
+///
+/// Contains the verdict, whether strict fallback is active, the blocking reason, approval digest,
+/// and risk categories. Use to determine whether a tool invocation may proceed and, if blocked,
+/// what approval is required.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PreToolUseGuardResponse {
     pub schema_version: String,
@@ -66,6 +87,11 @@ pub struct PreToolUseGuardResponse {
     pub categories: Vec<String>,
 }
 
+/// Return the execution contract for the pre-tool-use guard as a JSON value.
+///
+/// The contract declares the schema version, authority, supported phases (`evaluate`, `approve`),
+/// registry signals, high-risk tool families, and the approval flow. Use by the contract bundle
+/// to advertise guard capabilities to callers.
 pub fn pre_tool_use_guard_contract() -> Value {
     json!({
         "schema_version": PRE_TOOL_USE_GUARD_SCHEMA_VERSION,
@@ -90,6 +116,11 @@ pub fn pre_tool_use_guard_contract() -> Value {
     })
 }
 
+/// Determine whether the given host ID requires strict PreToolUse fallback.
+///
+/// Checks, in order: HostProvider hints, explicit override from the request payload, registry
+/// capability `hard_gate_hooks`, and `closeout_evidence_hooks` support. Unknown hosts default to
+/// `true` (fail-closed). Use at startup to configure per-host guard behavior.
 pub fn host_requires_strict_pre_tool_fallback(
     host_id: &str,
     repo_root: &Path,
@@ -158,6 +189,14 @@ pub fn host_requires_strict_pre_tool_fallback(
     Ok(true)
 }
 
+/// Evaluate a PreToolUse guard request and return a verdict.
+///
+/// Supports two phases:
+/// - `evaluate` (default): check risk level and return `Allow`, `Block`, or `RequiresStdioApproval`.
+/// - `approve`: verify the approval digest matches and return the final verdict.
+///
+/// Use as the main entry point for tool-use gating. When `strict_fallback` is active, dangerous
+/// shell commands and protected-path file writes produce `RequiresStdioApproval`.
 pub fn evaluate_pre_tool_use_guard(
     request: PreToolUseGuardRequest,
 ) -> Result<PreToolUseGuardResponse, String> {
@@ -257,6 +296,10 @@ pub fn evaluate_pre_tool_use_guard(
     ))
 }
 
+/// Wrapper around [`evaluate_pre_tool_use_guard`] that accepts a raw JSON value payload.
+///
+/// Parses the payload into [`PreToolUseGuardRequest`], evaluates, and returns the response as JSON.
+/// Use from stdio dispatch where the input is already a `serde_json::Value`.
 pub fn evaluate_pre_tool_use_guard_value(payload: Value) -> Result<Value, String> {
     let request = serde_json::from_value::<PreToolUseGuardRequest>(payload)
         .map_err(|err| format!("parse pre_tool_use_guard input failed: {err}"))?;

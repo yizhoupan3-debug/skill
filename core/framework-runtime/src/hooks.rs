@@ -10,7 +10,6 @@
 //! runtime_core_hooks::register(hooks);
 //! ```
 
-#![allow(clippy::type_complexity)]
 use serde_json::Value;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -76,6 +75,7 @@ pub struct RuntimeCoreHooks {
 
     // ── 路由评估 ──
     pub eval_route_contract: fn() -> Value,
+    #[allow(clippy::type_complexity)]
     pub run_eval_route: fn(cases_path: &Path, runtime: Option<&Path>, manifest: Option<&Path>) -> Result<Value, String>,
 
     // ── 诊断 ──

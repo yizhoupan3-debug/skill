@@ -1,7 +1,6 @@
 use super::*;
-pub(super) use crate::integration_test_prelude::*;
 
-pub(super) use serde_json::{json, Map, Value};
+pub(super) use serde_json::{json, Value};
 
 pub(super) use std::collections::HashSet;
 pub(super) use std::fs;
@@ -21,12 +20,6 @@ pub(super) use crate::cli::args::{
     RouterCommand, HostCommand, CodexSubcommand,
 };
 pub(super) use crate::cli::Cli;
-pub(super) use crate::execution_contract::{
-    EXECUTION_KERNEL_AUTHORITY, EXECUTION_KERNEL_FALLBACK_POLICY, EXECUTION_KERNEL_KIND,
-    EXECUTION_METADATA_CONTRACT_SCHEMA_VERSION, EXECUTION_METADATA_SCHEMA_VERSION,
-    EXECUTION_PROMPT_PREVIEW_OWNER,
-};
-pub(super) use crate::framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 pub(super) use crate::route::ROUTE_REPORT_SCHEMA_VERSION;
 pub(super) use crate::hook_status;
 
@@ -107,14 +100,13 @@ where
         )
         .unwrap_or_else(|err| panic!("route eval {label}/{id} failed: {err}"));
 
-        if let Some(expected_owner) = case.get("expected_owner").and_then(Value::as_str) {
-            if decision.selected_skill != expected_owner {
+        if let Some(expected_owner) = case.get("expected_owner").and_then(Value::as_str)
+            && decision.selected_skill != expected_owner {
                 failures.push(format!(
                     "{id}: expected owner {expected_owner}, got {} (score {})",
                     decision.selected_skill, decision.score
                 ));
             }
-        }
 
         let expected_overlay = case
             .get("expected_overlay")

@@ -864,4 +864,35 @@ mod tests {
             .expect("receive call succeeds");
         assert!(late.is_none());
     }
+
+    #[test]
+    fn resolve_max_concurrency_is_send() {
+        let _env_lock = ENV_GUARD
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let result = std::thread::spawn(move || resolve_stdio_max_concurrency(None))
+            .join()
+            .expect("thread panicked");
+        assert_eq!(result, DEFAULT_ROUTER_STDIO_POOL_SIZE);
+        assert_eq!(resolve_stdio_max_concurrency(Some(4)), 4);
+    }
+
+    #[test]
+    fn concurrency_defaults_payload_is_send() {
+        let _env_lock = ENV_GUARD
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let result =
+            std::thread::spawn(move || runtime_concurrency_defaults_payload())
+                .join()
+                .expect("thread panicked");
+        assert_eq!(
+            result.router_stdio.default_pool_size,
+            DEFAULT_ROUTER_STDIO_POOL_SIZE
+        );
+        assert_eq!(
+            result.compute.max_threads,
+            MAX_COMPUTE_THREADS
+        );
+    }
 }

@@ -129,11 +129,11 @@ fn router_self_ephemeral_vs_repo_build_classification_smoke() {
     let repo_debug = framework_root.join("target/debug/router-rs");
     assert!(is_repo_build_router_rs_path(
         &repo_debug.to_string_lossy(),
-        &framework_root
+        framework_root
     ));
     assert!(!is_repo_build_router_rs_path(
         "/tmp/other/target/debug/router-rs",
-        &framework_root
+        framework_root
     ));
 }
 

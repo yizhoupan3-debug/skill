@@ -240,6 +240,42 @@ pub fn tool_definitions() -> Vec<Value> {
                 }
             }),
         ),
+        tool_def(
+            "codegraph_goto_definition",
+            "Find the definition location of a symbol in the codebase. Returns the file path, line number, and column range for each definition found. Prioritizes definition-kind nodes (function, struct, class, enum, trait, interface, type) over usage/reference nodes. Use file_path to disambiguate when multiple files define the same symbol.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string", "description": "Symbol name to find definition of"},
+                    "file_path": {"type": "string", "description": "Restrict search to this file"}
+                },
+                "required": ["symbol"]
+            }),
+            json!({
+                "type": "object",
+                "properties": {
+                    "symbol": {"type": "string"},
+                    "definitions": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "symbol": {"type": "string"},
+                                "kind": {"type": "string"},
+                                "language": {"type": "string"},
+                                "file_path": {"type": "string"},
+                                "line": {"type": "integer"},
+                                "start_col": {"type": "integer"},
+                                "end_line": {"type": "integer"},
+                                "end_col": {"type": "integer"}
+                            }
+                        }
+                    },
+                    "count": {"type": "integer"}
+                }
+            }),
+        ),
     ]
 }
 
@@ -364,6 +400,12 @@ pub fn dispatch_tool_call(params: &Value, index: &CodeGraphIndex) -> anyhow::Res
             let nodes = index.find_dead_code(language, min_lines)?;
             json!({"dead_functions": nodes, "count": nodes.len()})
         }
+        "codegraph_goto_definition" => {
+            let symbol = require_str(&args, "symbol")?;
+            let file_path = optional_str(&args, "file_path");
+            let defs = index.find_definition(symbol, file_path)?;
+            json!({"symbol": symbol, "definitions": defs, "count": defs.len()})
+        }
         other => anyhow::bail!("unknown tool: {other}"),
     };
     let elapsed_ms = start.elapsed().as_millis();
@@ -453,9 +495,9 @@ mod tests {
     }
 
     #[test]
-    fn exposes_seven_mcp_tools_with_schemas() {
+    fn exposes_eight_mcp_tools_with_schemas() {
         let tools = tool_definitions();
-        assert_eq!(tools.len(), 7);
+        assert_eq!(tools.len(), 8);
         let expected = [
             "codegraph_search",
             "codegraph_callers",
@@ -464,6 +506,7 @@ mod tests {
             "codegraph_node",
             "codegraph_status",
             "codegraph_dead_code",
+            "codegraph_goto_definition",
         ];
         for name in expected {
             let tool = tools
@@ -633,13 +676,13 @@ mod tests {
         let filtered_dead = filtered["structuredContent"]["dead_functions"]
             .as_array()
             .expect("expected array");
-        assert!(filtered_dead.len() >= 1);
+        assert!(!filtered_dead.is_empty());
 
         let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]
-    fn handle_request_tools_list_returns_seven_tools() {
+    fn handle_request_tools_list_returns_eight_tools() {
         let (root, index) = temp_index();
         let response = super::handle_request(
             &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
@@ -651,7 +694,7 @@ mod tests {
                 .as_array()
                 .expect("as_array should succeed")
                 .len(),
-            7
+            8
         );
         let _ = std::fs::remove_dir_all(root);
     }
@@ -695,12 +738,39 @@ mod tests {
             serde_json::from_str(&err_msg).expect("error should be valid JSON");
         assert_eq!(parsed["error"], "ambiguous_symbol");
         assert!(
-            parsed["candidates"]
+            !parsed["candidates"]
                 .as_array()
-                .expect("as_array should succeed")
-                .len()
-                >= 1
+                .expect("as_array should succeed").is_empty()
         );
+
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dispatch_goto_definition_returns_definitions() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time since epoch")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("codegraph-goto-{suffix}"));
+        std::fs::create_dir_all(&root).expect("create temp directory");
+        std::fs::write(root.join("lib.rs"), "fn target() {}\n").expect("write test file");
+        let index = crate::CodeGraphIndex::open(&root).expect("open index");
+        index.build_full_index(&root).expect("build index");
+
+        let result = dispatch_tool_call(
+            &json!({"name": "codegraph_goto_definition", "arguments": {"symbol": "target"}}),
+            &index,
+        )
+        .expect("should succeed");
+        let defs = result["structuredContent"]["definitions"]
+            .as_array()
+            .expect("expected definitions array");
+        assert_eq!(defs.len(), 1, "should find 1 definition");
+        assert_eq!(defs[0]["symbol"], "target");
+        assert_eq!(defs[0]["kind"], "function");
+        assert_eq!(defs[0]["file_path"], "lib.rs");
+        assert!(defs[0]["line"].as_u64().unwrap_or(0) >= 1);
 
         let _ = std::fs::remove_dir_all(root);
     }

@@ -1,13 +1,18 @@
 use super::*;
 use serde_json::json;
+use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub(crate) static SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// CARGO_MANIFEST_DIR for host-projection crate, used to locate the real registry.
+const HARNESS_CWD: &str = env!("CARGO_MANIFEST_DIR");
 
 pub(super) fn env_lock() -> core_policy::test_env_sync::ProcessEnvLockGuard {
     core_policy::test_env_sync::process_env_lock()
 }
 
+/// Create temp repo + copy RUNTIME_REGISTRY.json so review gate config loads.
 pub(super) fn fresh_repo() -> std::path::PathBuf {
     super::ensure_test_deps();
     let dir = std::env::temp_dir().join(format!(
@@ -16,6 +21,10 @@ pub(super) fn fresh_repo() -> std::path::PathBuf {
         SEQ.fetch_add(1, Ordering::SeqCst)
     ));
     std::fs::create_dir_all(dir.join(".codex/hook-state")).unwrap();
+    std::fs::create_dir_all(dir.join("configs/framework")).unwrap();
+    let registry_src = Path::new(HARNESS_CWD)
+        .join("../../configs/framework/RUNTIME_REGISTRY.json");
+    let _ = std::fs::copy(&registry_src, dir.join("configs/framework/RUNTIME_REGISTRY.json"));
     dir
 }
 
@@ -114,7 +123,7 @@ fn user_prompt_submit_review_emits_subagent_gate_context() {
         "spawn-first nudge: {ctx}"
     );
     assert!(ctx.contains("fork_context=false"));
-    assert!(ctx.contains("general-purpose") || ctx.contains("best-of-n-runner"));
+    // The nudge references "reviewer_lanes 闭集" without enumerating lane names.
     if !ctx.is_empty() {
         assert!(ctx.len() <= codex_additional_context_max_bytes());
     }

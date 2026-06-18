@@ -1,13 +1,10 @@
 #![cfg(test)]
 
-use super::*;
 use crate::hosts::codex_hooks::handlers;
 use crate::hosts::codex_hooks::handlers::{
-    codex_additional_context_max_bytes, codex_compact_contexts, handle_codex_session_start,
-    handle_codex_stop, handle_codex_userpromptsubmit, read_codex_stdin_limited,
+    codex_additional_context_max_bytes, codex_compact_contexts, handle_codex_session_start, read_codex_stdin_limited,
     run_codex_lifecycle_context_hook, run_codex_review_subagent_gate, saw_subagent_codex,
 };
-use crate::hosts::codex_hooks::install;
 use crate::hosts::codex_hooks::install::FORCE_ATOMIC_WRITE_FAIL;
 use crate::hosts::codex_hooks::install::{
     build_install_hook_command, install_codex_cli_hooks, merge_hooks_json, write_atomic_text,

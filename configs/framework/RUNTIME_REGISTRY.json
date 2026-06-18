@@ -492,7 +492,8 @@
         "codegraph_impact",
         "codegraph_node",
         "codegraph_status",
-        "codegraph_dead_code"
+        "codegraph_dead_code",
+        "codegraph_goto_definition"
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.mcp-codegraph",

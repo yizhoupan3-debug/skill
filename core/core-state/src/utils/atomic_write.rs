@@ -96,6 +96,23 @@ pub fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
     write_atomic_text_to_temp(path, content, &tmp_path)
 }
 
+pub fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NONCE: AtomicU64 = AtomicU64::new(0);
+
+    let pid = std::process::id();
+    let micros = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_micros())
+        .unwrap_or(0);
+    let nonce = NONCE.fetch_add(1, Ordering::Relaxed);
+
+    let text = serde_json::to_string_pretty(value)
+        .map_err(|err| format!("serialize JSON failed: {err}"))?;
+    let tmp_path = path.with_extension(format!("json.tmp-{}-{}-{}", pid, micros, nonce));
+    write_atomic_text_to_temp(path, &text, &tmp_path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,21 +183,4 @@ mod tests {
         assert!(!tmp_path.exists());
         let _ = std::fs::remove_dir_all(&base);
     }
-}
-
-pub fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NONCE: AtomicU64 = AtomicU64::new(0);
-
-    let pid = std::process::id();
-    let micros = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_micros())
-        .unwrap_or(0);
-    let nonce = NONCE.fetch_add(1, Ordering::Relaxed);
-
-    let text = serde_json::to_string_pretty(value)
-        .map_err(|err| format!("serialize JSON failed: {err}"))?;
-    let tmp_path = path.with_extension(format!("json.tmp-{}-{}-{}", pid, micros, nonce));
-    write_atomic_text_to_temp(path, &text, &tmp_path)
 }

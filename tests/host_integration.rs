@@ -1419,7 +1419,7 @@ fn generated_artifacts_status_fails_when_manifest_omits_checked_in_projection() 
     );
     write_text(
         &framework_root.join(".claude/rules/framework.md"),
-        "---\ndescription: test\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: framework-host-projection-v1 -->\n<!-- install_scope: project -->\n\nprojection\n",
+        "---\ndescription: test\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: framework-host-projection-v1 -->\n<!-- install_scope: project -->\n\nprojection\n",
     );
 
     let status = router_rs_json(&[

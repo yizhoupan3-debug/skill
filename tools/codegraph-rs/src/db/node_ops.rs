@@ -1,6 +1,7 @@
 use crate::Node;
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolFilter {
@@ -133,6 +134,35 @@ pub fn find_dead_code(
     Ok(result)
 }
 
+/// Lightweight dead code count — fetches only COUNT(*), no node data.
+/// Used by framework_snapshot hot path to avoid full row transfer.
+pub fn count_dead_code_only(
+    conn: &Connection,
+    language: Option<&str>,
+) -> rusqlite::Result<usize> {
+    let mut sql = String::from(
+        "SELECT COUNT(*)
+         FROM nodes n
+         LEFT JOIN (
+             SELECT callee_id, COUNT(*) AS callers
+             FROM edges GROUP BY callee_id
+         ) cnt ON cnt.callee_id = n.id
+         WHERE n.kind IN ('fn', 'function', 'method')
+           AND COALESCE(cnt.callers, 0) = 0",
+    );
+    if language.is_some() {
+        sql.push_str("\n           AND n.language = ?1");
+    }
+    let mut stmt = conn.prepare(&sql)?;
+    if let Some(lang) = language {
+        stmt.query_row(params![lang], |row| row.get::<_, i64>(0))
+            .map(|c| c as usize)
+    } else {
+        stmt.query_row([], |row| row.get::<_, i64>(0))
+            .map(|c| c as usize)
+    }
+}
+
 fn row_to_dead_code_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<DeadCodeNode> {
     Ok(DeadCodeNode {
         id: row.get(0)?,
@@ -156,10 +186,113 @@ fn row_to_node(row: &rusqlite::Row<'_>) -> rusqlite::Result<Node> {
     })
 }
 
+/// Result of a definition lookup.
+#[derive(Debug, Clone, Serialize)]
+pub struct DefinitionResult {
+    pub id: String,
+    pub symbol: String,
+    pub kind: String,
+    pub language: String,
+    pub file_path: String,
+    pub line: u32,
+    pub start_col: u32,
+    pub end_line: u32,
+    pub end_col: u32,
+}
+
+/// Find symbol definitions by exact symbol name.
+///
+/// Prioritizes definitions (fn, function, method, class, struct, enum,
+/// trait, interface, type) over usage/reference nodes.
+pub fn find_definition(
+    conn: &Connection,
+    symbol: &str,
+    file_path: Option<&str>,
+) -> rusqlite::Result<Vec<DefinitionResult>> {
+    let (where_clause, params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) =
+        if let Some(fp) = file_path {
+            (
+                "WHERE symbol = ?1 AND file_path = ?2".to_string(),
+                vec![Box::new(symbol.to_string()), Box::new(fp.to_string())],
+            )
+        } else {
+            (
+                "WHERE symbol = ?1".to_string(),
+                vec![Box::new(symbol.to_string())],
+            )
+        };
+    let sql = format!(
+        "SELECT id, symbol, kind, language, file_path, line, extra
+         FROM nodes {}
+         ORDER BY
+           CASE WHEN kind IN ('fn','function','method','class','struct','enum','trait','interface','type') THEN 0 ELSE 1 END,
+           file_path, line
+         LIMIT 10",
+        where_clause
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let rows = stmt.query_map(param_refs.as_slice(), |row| {
+        let extra_str: String = row.get(6)?;
+        let (sc, el, ec) = parse_extra_position(&extra_str);
+        Ok(DefinitionResult {
+            id: row.get(0)?,
+            symbol: row.get(1)?,
+            kind: row.get(2)?,
+            language: row.get(3)?,
+            file_path: row.get(4)?,
+            line: row.get::<_, i64>(5)? as u32,
+            start_col: sc,
+            end_line: el,
+            end_col: ec,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Parse the `extra` column JSON blob into (start_col, end_line, end_col).
+/// Returns (0, 0, 0) when the blob is empty or unparseable.
+fn parse_extra_position(extra: &str) -> (u32, u32, u32) {
+    if extra.is_empty() || extra == "{}" {
+        return (0, 0, 0);
+    }
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(extra) {
+        let sc = v.get("sc").and_then(Value::as_u64).unwrap_or(0) as u32;
+        let el = v.get("el").and_then(Value::as_u64).unwrap_or(0) as u32;
+        let ec = v.get("ec").and_then(Value::as_u64).unwrap_or(0) as u32;
+        return (sc, el, ec);
+    }
+    (0, 0, 0)
+}
+
+/// Find all symbols defined in a specific file.
+pub fn find_symbols_by_file(
+    conn: &Connection,
+    file_path: &str,
+) -> rusqlite::Result<Vec<Node>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, symbol, kind, language, file_path, line
+         FROM nodes WHERE file_path = ?1
+         ORDER BY line"
+    )?;
+    let rows = stmt.query_map([file_path], |row| {
+        Ok(Node {
+            id: row.get(0)?,
+            symbol: row.get(1)?,
+            kind: row.get(2)?,
+            language: row.get(3)?,
+            file_path: row.get(4)?,
+            line: row.get::<_, i64>(5)? as u32,
+        })
+    })?;
+    rows.collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        ResolveOutcome, SymbolFilter, find_dead_code, get_node_by_id, resolve_symbol,
+        ResolveOutcome, SymbolFilter, count_dead_code_only, find_dead_code,
+        find_definition, find_symbols_by_file, get_node_by_id, resolve_symbol,
         resolve_symbol_filtered,
     };
     use crate::db::schema::init_schema;
@@ -352,5 +485,84 @@ mod tests {
             dead.is_empty(),
             "structs and traits should not appear in dead code"
         );
+    }
+
+    #[test]
+    fn find_definition_returns_function_kinds_first() {
+        let conn = rusqlite::Connection::open_in_memory().expect("should succeed");
+        init_schema(&conn).expect("initialize schema");
+        conn.execute_batch(
+            "INSERT INTO nodes (id, symbol, kind, language, file_path, line, extra) VALUES ('n1', 'doWork', 'fn', 'typescript', 'src/work.ts', 10, '{\"sc\":1,\"el\":15,\"ec\":1}');
+             INSERT INTO nodes (id, symbol, kind, language, file_path, line, extra) VALUES ('n2', 'doWork', 'ref', 'typescript', 'src/test.ts', 5, '');"
+        ).expect("should succeed");
+
+        let defs = find_definition(&conn, "doWork", None).expect("find definition");
+        assert_eq!(defs.len(), 2, "should find both fn and ref nodes");
+        // fn kind should come first (ORDER BY CASE WHEN kind IN ('fn',...) THEN 0 ELSE 1 END)
+        assert_eq!(defs[0].kind, "fn", "definition-kind should be sorted first");
+        assert_eq!(defs[0].line, 10);
+        assert_eq!(defs[0].start_col, 1);
+        assert_eq!(defs[0].end_line, 15);
+        assert_eq!(defs[0].end_col, 1);
+        // ref kind should be second and have column defaults (0,0,0) from empty extra
+        assert_eq!(defs[1].kind, "ref");
+        assert_eq!(defs[1].start_col, 0);
+    }
+
+    #[test]
+    fn find_definition_respects_file_path_filter() {
+        let conn = rusqlite::Connection::open_in_memory().expect("should succeed");
+        init_schema(&conn).expect("initialize schema");
+        conn.execute_batch(
+            "INSERT INTO nodes (id, symbol, kind, language, file_path, line, extra) VALUES ('n1', 'helper', 'fn', 'go', 'a.go', 5, '');
+             INSERT INTO nodes (id, symbol, kind, language, file_path, line, extra) VALUES ('n2', 'helper', 'fn', 'go', 'b.go', 3, '');"
+        ).expect("should succeed");
+
+        let all = find_definition(&conn, "helper", None).expect("find all");
+        assert_eq!(all.len(), 2);
+
+        let filtered = find_definition(&conn, "helper", Some("a.go")).expect("find filtered");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].file_path, "a.go");
+    }
+
+    #[test]
+    fn find_symbols_by_file_returns_all_symbols_in_file() {
+        let conn = rusqlite::Connection::open_in_memory().expect("should succeed");
+        init_schema(&conn).expect("initialize schema");
+        conn.execute_batch(
+            "INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES ('n1', 'Config', 'struct', 'rust', 'config.rs', 3);
+             INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES ('n2', 'build', 'fn', 'rust', 'config.rs', 10);
+             INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES ('n3', 'other', 'fn', 'rust', 'other.rs', 1);"
+        ).expect("should succeed");
+
+        let symbols = find_symbols_by_file(&conn, "config.rs").expect("find symbols by file");
+        assert_eq!(symbols.len(), 2);
+        assert_eq!(symbols[0].symbol, "Config");
+        assert_eq!(symbols[1].symbol, "build");
+    }
+
+    #[test]
+    fn find_symbols_by_file_empty_when_no_match() {
+        let conn = rusqlite::Connection::open_in_memory().expect("should succeed");
+        init_schema(&conn).expect("initialize schema");
+        let symbols = find_symbols_by_file(&conn, "nonexistent.rs")
+            .expect("should return empty vec, not error");
+        assert!(symbols.is_empty());
+    }
+
+    #[test]
+    fn count_dead_code_only_matches_find_dead_code() {
+        let conn = rusqlite::Connection::open_in_memory().expect("should succeed");
+        init_schema(&conn).expect("initialize schema");
+        conn.execute_batch(
+            "INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES ('n1', 'orphan', 'fn', 'rust', 'lib.rs', 1);
+             INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES ('n2', 'caller', 'fn', 'rust', 'lib.rs', 5);
+             INSERT INTO edges (caller_id, callee_id) VALUES ('n2', 'n1');"
+        ).expect("should succeed");
+
+        let full = find_dead_code(&conn, None, None).expect("find dead code");
+        let count = count_dead_code_only(&conn, None).expect("count dead code only");
+        assert_eq!(count, full.len(), "count should match find_dead_code result length");
     }
 }

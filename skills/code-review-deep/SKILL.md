@@ -53,6 +53,9 @@ allowed_tools:
   - mcp__mcp-codegraph__codegraph_impact
   - mcp__mcp-codegraph__codegraph_node
   - mcp__mcp-codegraph__codegraph_status
+  - mcp__mcp-codegraph__codegraph_callees
+  - mcp__mcp-codegraph__codegraph_dead_code
+  - mcp__mcp-codegraph__codegraph_goto_definition
 ---
 
 ## Quick Ref
@@ -123,6 +126,17 @@ Deep review workflow（`claude-chain-deep-review`、`deep-review-template`）在
 - **独立性**：Factcheck agent 与 Scan agent 必须是不同的 agent 实例（pipeline 自动保证）。Factcheck 不复用 Scan 的上下文，避免循环确认。
 - **输出 schema**：`FACTCHECK_VERDICT_SCHEMA`（定义在 `workflow-helpers.js`），包含 `code_exists`、`evidence_accurate`、`line_accurate`、`behavior_accurate`、`hallucination_type`、`actual_code`、`actual_behavior`。
 - **Skill 层 spawn**：非 workflow 上下文（如主会话直接 spawn review subagent）可使用 `factcheck-verifier` agent 定义（`.claude/agents/factcheck-verifier.md`），工具限制为 Read + Bash（只读）。
+
+## CodeGraph 增强分析
+
+在代码审查中，以下场景使用 codegraph 获取深层上下文：
+
+- **死代码审查**：调 `codegraph_dead_code[min_lines=5]` 得到候选列表；对候选调 `codegraph_callers` 验证是否真为 orphan。
+- **数据流追溯**：对 diff 中可疑符号，调 `codegraph_callers[depth=8]` 完整追溯上下游调用链。
+- **PR 影响评估**：PR 删除公共函数/接口时，调 `codegraph_impact[depth=3]` 评估下游破坏。
+- **符号定位**：diff 中符号名不在当前文件时，调 `codegraph_search` 定位定义位置。
+
+> 详细场景与参数示例见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
 
 ## I7: heterogeneous adversarial review (model-family diversity)
 

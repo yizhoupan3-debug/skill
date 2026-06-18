@@ -70,6 +70,10 @@ pub struct LogConnection {
     pub entry_id_b: String,
     /// extends | contradicts | supports | supersedes
     pub relation: Option<String>,
+    /// Edge weight 0.0-1.0 for graph traversal priority (default 1.0)
+    pub weight: f64,
+    /// Confidence in this relationship 0.0-1.0, None = unrated
+    pub confidence: Option<f64>,
     pub notes: Option<String>,
     pub created_at: String,
 }
@@ -159,3 +163,64 @@ pub const REF_TYPE_PAPER: &str = "paper";
 pub const REF_TYPE_CODE: &str = "code";
 pub const REF_TYPE_DATASET: &str = "dataset";
 pub const REF_TYPE_URL: &str = "url";
+
+// ── Entity / Knowledge Graph ──
+
+/// Entity kind constants.
+pub const ENTITY_KIND_METHOD: &str = "method";
+pub const ENTITY_KIND_DATASET: &str = "dataset";
+pub const ENTITY_KIND_THEOREM: &str = "theorem";
+pub const ENTITY_KIND_METRIC: &str = "metric";
+pub const ENTITY_KIND_CONCEPT: &str = "concept";
+pub const ENTITY_KIND_TOOL: &str = "tool";
+pub const ENTITY_KIND_AUTHOR: &str = "author";
+pub const ENTITY_KIND_MODEL: &str = "model";
+pub const ENTITY_KIND_OTHER: &str = "other";
+
+/// Entity relation constants.
+pub const ENTITY_REL_USES: &str = "uses";
+pub const ENTITY_REL_TRAINS_ON: &str = "trains-on";
+pub const ENTITY_REL_EVALUATES: &str = "evaluates";
+pub const ENTITY_REL_IMPROVES: &str = "improves";
+pub const ENTITY_REL_DEPENDS_ON: &str = "depends-on";
+pub const ENTITY_REL_CONTRADICTS: &str = "contradicts";
+pub const ENTITY_REL_IS_A: &str = "is-a";
+pub const ENTITY_REL_PART_OF: &str = "part-of";
+
+/// Entry-entity role constants.
+pub const ENTRY_ENTITY_ROLE_PRIMARY: &str = "primary";
+pub const ENTRY_ENTITY_ROLE_MENTIONED: &str = "mentioned";
+pub const ENTRY_ENTITY_ROLE_DERIVED: &str = "derived";
+pub const ENTRY_ENTITY_ROLE_COMPARED: &str = "compared";
+
+/// A knowledge entity — a research concept, method, dataset, theorem, etc.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Entity {
+    pub id: i64,
+    pub name: String,
+    pub kind: String,
+    pub description: Option<String>,
+    pub metadata: Option<String>,
+    pub created_at: String,
+}
+
+/// Typed relation between two entities, with provenance to an entry.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityRelation {
+    pub id: i64,
+    pub entity_id_a: i64,
+    pub entity_id_b: i64,
+    pub relation: String,
+    pub entry_id: Option<String>,
+    pub confidence: Option<f64>,
+    pub metadata: Option<String>,
+    pub created_at: String,
+}
+
+/// Maps an entry to an entity with a role.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntryEntity {
+    pub entry_id: String,
+    pub entity_id: i64,
+    pub role: String,
+}

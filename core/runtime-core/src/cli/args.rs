@@ -285,13 +285,13 @@ pub enum HostCommand {
         #[command(subcommand)]
         command: CodexSubcommand,
     },
-    /// Run a hook event for any hook-capable host (cursor, claude-code, opencode, codex, mimo).
+    /// Run a hook event for any hook-capable host (cursor, claude, opencode, codex, mimo).
     Hook {
         host_id: String,
         #[command(flatten)]
         command: GenericHookCommand,
     },
-    /// Run an MCP stdio agent loop (opencode, claude-code, mimo).
+    /// Run an MCP stdio agent loop (opencode, claude, mimo).
     Agent {
         host_id: String,
         #[command(flatten)]

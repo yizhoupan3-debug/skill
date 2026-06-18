@@ -390,11 +390,11 @@ mod tests {
         let debug = framework_root.join("target/debug/router-rs");
         assert!(is_repo_build_router_rs_path(
             &debug.to_string_lossy(),
-            &framework_root
+            framework_root
         ));
         assert!(!is_repo_build_router_rs_path(
             "/other/repo/target/debug/router-rs",
-            &framework_root
+            framework_root
         ));
     }
 
@@ -437,7 +437,7 @@ mod tests {
         let release = framework_root.join("target/release/router-rs");
         assert!(is_repo_build_router_rs_path(
             &release.to_string_lossy(),
-            &framework_root
+            framework_root
         ));
     }
 
@@ -567,7 +567,7 @@ mod tests {
         let crate_target = manifest_dir.join("target/debug/router-rs");
         assert!(is_repo_build_router_rs_path(
             &crate_target.to_string_lossy(),
-            &framework_root
+            framework_root
         ));
     }
 

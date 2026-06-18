@@ -228,7 +228,54 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     let mut violations: Vec<CloseoutViolation> = Vec::new();
     let mut missing: Vec<String> = Vec::new();
 
-    // 0. schema_version sanity (block: refuse evaluation of missing or unknown shape).
+    validate_schema_version(record, &mut violations, &mut missing);
+    validate_task_id(record, &mut violations, &mut missing);
+    let (_summary_trimmed, claimed_completion) =
+        validate_summary(record, &mut violations, &mut missing);
+    let (status_lower, _status_recognized) =
+        validate_verification_status(record, &mut violations, &mut missing);
+
+    validate_r1_claimed_done_without_evidence(
+        record,
+        &status_lower,
+        claimed_completion,
+        &mut violations,
+        &mut missing,
+    );
+    validate_r2_changed_files_without_command(record, &mut violations, &mut missing);
+    validate_r3_verification_passed_with_failed_command(record, &status_lower, &mut violations);
+    validate_r3b_invalid_command_evidence(record, &mut violations, &mut missing);
+    validate_r4_verification_passed_with_missing_artifact(record, &status_lower, &mut violations);
+    validate_r5_not_run_without_blockers_or_risks(record, &status_lower, &mut violations, &mut missing);
+    validate_r6_claimed_done_with_failed_verification(
+        record,
+        &status_lower,
+        claimed_completion,
+        &mut violations,
+    );
+
+    // TODO: task-scoped depth / `GOAL_STATE.completion_gates` alignment
+    // Phase 3 pointer consolidation (3B/3C) completed 2026-06-02.
+    // Next: re-evaluate closeout vs completion_gates alignment -- state model simplified
+    //   (5 files -> 2 control-plane anchors), closeout gate should align with
+    //   GOAL_STATE.completion_gates.min_depth_score against depth_compliance_aggregate output.
+
+    // R7 (depth review P0-B): verification_status=passed but record carries no command evidence
+    // and the optional EvidenceContext (when supplied by orchestrator) shows no successful
+    // EVIDENCE_INDEX rows either. Pure self-attestation should not be enough to claim "passed".
+    // The context-aware overload `evaluate_closeout_record_with_context` enforces this; here we
+    // emit only the record-internal half so the rule is documented and `commands_run`-empty
+    // claims at least surface a violation when no risks are acknowledged.
+    validate_r7_claimed_passed_without_evidence(record, &status_lower, &mut violations, &mut missing);
+
+    build_closeout_response(record, &status_lower, claimed_completion, violations, missing)
+}
+
+fn validate_schema_version(
+    record: &CloseoutRecord,
+    violations: &mut Vec<CloseoutViolation>,
+    _missing: &mut Vec<String>,
+) {
     if record.schema_version.trim().is_empty()
         || record.schema_version != CLOSEOUT_RECORD_SCHEMA_VERSION
     {
@@ -241,7 +288,13 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
             ),
         ));
     }
+}
 
+fn validate_task_id(
+    record: &CloseoutRecord,
+    violations: &mut Vec<CloseoutViolation>,
+    missing: &mut Vec<String>,
+) {
     if record.task_id.trim().is_empty() {
         violations.push(CloseoutViolation::new(
             "task_id_missing",
@@ -250,7 +303,13 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         ));
         missing.push("task_id".to_string());
     }
+}
 
+fn validate_summary(
+    record: &CloseoutRecord,
+    violations: &mut Vec<CloseoutViolation>,
+    missing: &mut Vec<String>,
+) -> (String, bool) {
     let summary_trimmed = record.summary.trim();
     if summary_trimmed.is_empty() {
         violations.push(CloseoutViolation::new(
@@ -262,7 +321,14 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
     }
 
     let claimed_completion = summary_claims_completion(summary_trimmed);
+    (summary_trimmed.to_string(), claimed_completion)
+}
 
+fn validate_verification_status(
+    record: &CloseoutRecord,
+    violations: &mut Vec<CloseoutViolation>,
+    missing: &mut Vec<String>,
+) -> (String, bool) {
     let status_lower = record.verification_status.trim().to_ascii_lowercase();
     let status_recognized = ALLOWED_VERIFICATION_STATUSES.contains(&status_lower.as_str());
     if !status_lower.is_empty() && !status_recognized {
@@ -283,8 +349,16 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         ));
         missing.push("verification_status".to_string());
     }
+    (status_lower, status_recognized)
+}
 
-    // R1: claimed completion but no evidence and no acknowledged risk.
+fn validate_r1_claimed_done_without_evidence(
+    record: &CloseoutRecord,
+    status_lower: &str,
+    claimed_completion: bool,
+    violations: &mut Vec<CloseoutViolation>,
+    missing: &mut Vec<String>,
+) {
     if claimed_completion
         && status_lower == "not_run"
         && record.risks.is_empty()
@@ -297,10 +371,14 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         ));
         missing.push("validation_command_or_risk_acknowledgement".to_string());
     }
+}
 
-    // R2: changed files but no commands_run and no risks recorded.
-    if !record.changed_files.is_empty() && record.commands_run.is_empty() && record.risks.is_empty()
-    {
+fn validate_r2_changed_files_without_command(
+    record: &CloseoutRecord,
+    violations: &mut Vec<CloseoutViolation>,
+    missing: &mut Vec<String>,
+) {
+    if !record.changed_files.is_empty() && record.commands_run.is_empty() && record.risks.is_empty() {
         violations.push(CloseoutViolation::new(
             "changed_files_without_command_or_risk",
             "block",
@@ -311,8 +389,13 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         ));
         missing.push("validation_command".to_string());
     }
+}
 
-    // R3: verification_status=passed but a command failed.
+fn validate_r3_verification_passed_with_failed_command(
+    record: &CloseoutRecord,
+    status_lower: &str,
+    violations: &mut Vec<CloseoutViolation>,
+) {
     if status_lower == "passed"
         && let Some(failed) = record.commands_run.iter().find(|c| c.exit_code != 0) {
             violations.push(CloseoutViolation::new(
@@ -324,8 +407,13 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
                 ),
             ));
         }
+}
 
-    // R3b: command evidence must be auditable; serde defaults must not turn `{}` into success.
+fn validate_r3b_invalid_command_evidence(
+    record: &CloseoutRecord,
+    violations: &mut Vec<CloseoutViolation>,
+    missing: &mut Vec<String>,
+) {
     if let Some(invalid) = record
         .commands_run
         .iter()
@@ -341,8 +429,13 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         ));
         missing.push("command".to_string());
     }
+}
 
-    // R4: verification_status=passed but artifact missing.
+fn validate_r4_verification_passed_with_missing_artifact(
+    record: &CloseoutRecord,
+    status_lower: &str,
+    violations: &mut Vec<CloseoutViolation>,
+) {
     if status_lower == "passed"
         && let Some(missing_artifact) = record.artifacts_checked.iter().find(|a| !a.exists) {
             violations.push(CloseoutViolation::new(
@@ -354,8 +447,14 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
                 ),
             ));
         }
+}
 
-    // R5: not_run without blockers or risks.
+fn validate_r5_not_run_without_blockers_or_risks(
+    record: &CloseoutRecord,
+    status_lower: &str,
+    violations: &mut Vec<CloseoutViolation>,
+    missing: &mut Vec<String>,
+) {
     if status_lower == "not_run" && record.blockers.is_empty() && record.risks.is_empty() {
         // Only emit if not already covered by R1.
         let already_covered = violations
@@ -370,8 +469,14 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
             missing.push("blocker_or_risk".to_string());
         }
     }
+}
 
-    // R6: failed verification but summary still claims completion without acknowledged risks.
+fn validate_r6_claimed_done_with_failed_verification(
+    record: &CloseoutRecord,
+    status_lower: &str,
+    claimed_completion: bool,
+    violations: &mut Vec<CloseoutViolation>,
+) {
     if status_lower == "failed"
         && claimed_completion
         && record.risks.is_empty()
@@ -383,19 +488,14 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
             "summary claims completion but verification_status=failed without recorded risks or blockers",
         ));
     }
+}
 
-    // TODO: task-scoped depth / `GOAL_STATE.completion_gates` alignment
-    // Phase 3 pointer consolidation (3B/3C) completed 2026-06-02.
-    // Next: re-evaluate closeout vs completion_gates alignment — state model simplified
-    //   (5 files → 2 control-plane anchors), closeout gate should align with
-    //   GOAL_STATE.completion_gates.min_depth_score against depth_compliance_aggregate output.
-
-    // R7 (depth review P0-B): verification_status=passed but record carries no command evidence
-    // and the optional EvidenceContext (when supplied by orchestrator) shows no successful
-    // EVIDENCE_INDEX rows either. Pure self-attestation should not be enough to claim "passed".
-    // The context-aware overload `evaluate_closeout_record_with_context` enforces this; here we
-    // emit only the record-internal half so the rule is documented and `commands_run`-empty
-    // claims at least surface a violation when no risks are acknowledged.
+fn validate_r7_claimed_passed_without_evidence(
+    record: &CloseoutRecord,
+    status_lower: &str,
+    violations: &mut Vec<CloseoutViolation>,
+    missing: &mut Vec<String>,
+) {
     if status_lower == "passed"
         && record.commands_run.is_empty()
         && record.artifacts_checked.is_empty()
@@ -409,7 +509,15 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         ));
         missing.push("evidence_or_acknowledgement".to_string());
     }
+}
 
+fn build_closeout_response(
+    record: &CloseoutRecord,
+    status_lower: &str,
+    claimed_completion: bool,
+    violations: Vec<CloseoutViolation>,
+    missing: Vec<String>,
+) -> CloseoutEnforcementResponse {
     let blocking = violations.iter().any(|v| v.severity == "block");
     let has_hard_blocker = violations.iter().any(|v| v.category == "hard");
 
@@ -422,7 +530,7 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         claimed_completion,
         violations,
         missing_evidence: missing,
-        verification_status: status_lower,
+        verification_status: status_lower.to_string(),
         prediction_verification: Vec::new(),
     }
 }
@@ -784,6 +892,13 @@ mod tests {
             resp.violations
         );
         assert!(resp.claimed_completion);
+    }
+
+    #[test]
+    fn closeout_record_schema_snapshot() {
+        // Snapshot default CloseoutRecord structure for schema regression detection.
+        let record = CloseoutRecord::default();
+        insta::assert_debug_snapshot!(record);
     }
 
     #[test]

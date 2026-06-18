@@ -484,6 +484,10 @@ fn trace_stream_resolution(
     Ok(None)
 }
 
+/// Load and validate runtime event transport artifacts (binding artifact, handoff manifest, or
+/// resume manifest) from the given payload. Returns a normalized attach descriptor with resolved
+/// paths, transport metadata, and alignment verification. Use when replaying external runtime
+/// events from artifact-based session data.
 pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     let normalized_request = normalize_attach_request(&payload)?;
     let binding_artifact_path = normalized_request.binding_artifact_path;
@@ -708,6 +712,9 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     }))
 }
 
+/// Replay trace events from an attached runtime event transport. Applies a hard cap on the event
+/// count (max 10,000) and supports pagination via `after_event_id`. Use after
+/// `attach_runtime_event_transport` to consume the event stream.
 pub fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, String> {
     let attached = attach_runtime_event_transport(payload.clone())?;
     let transport = attached
@@ -774,6 +781,9 @@ pub fn subscribe_attached_runtime_events(payload: Value) -> Result<Value, String
     }))
 }
 
+/// Acknowledge cleanup of an attached runtime event transport. Returns a confirmation payload
+/// indicating no persisted state to clean up and that replay data is preserved. Use when the
+/// runtime session no longer needs the attached transport.
 pub fn cleanup_attached_runtime_event_transport(payload: Value) -> Result<Value, String> {
     let attached = attach_runtime_event_transport(payload)?;
     Ok(json!({

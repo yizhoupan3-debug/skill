@@ -203,7 +203,7 @@ fn handle_browser_mcp_line(line: &str, runtime: &mut BrowserRuntime) -> Option<V
 fn handle_browser_mcp_request(request: &Value, runtime: &mut BrowserRuntime) -> Option<Value> {
     let request_id = request.get("id").cloned().unwrap_or(Value::Null);
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
-    let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
+    let params = request.get("params").unwrap_or(&Value::Null);
     if method == "notifications/initialized" {
         return None;
     }
@@ -215,7 +215,7 @@ fn handle_browser_mcp_request(request: &Value, runtime: &mut BrowserRuntime) -> 
         })),
         "ping" => Ok(json!({})),
         "tools/list" => Ok(json!({"tools": tool_definitions(&runtime.repo_root)})),
-        "tools/call" => handle_tools_call(&params, runtime),
+        "tools/call" => handle_tools_call(params, runtime),
         _ => Err(browser_error(
             "UNSUPPORTED_OPERATION",
             &format!("Unsupported JSON-RPC method: {method}"),
@@ -497,7 +497,7 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
         "web_fetch",
         "Fetch URL",
         "Read-only HTTP GET to fetch external URL content (bypasses Bash sandbox). Returns status and body summary.",
-        json!({"type": "object", "properties": {"url": {"type": "string", "description": "http(s) URL"}, "max_bytes": {"type": "integer", "description": "Max response body bytes (default 50000)", "minimum": 1}}, "required": ["url"]}),
+        json!({"type": "object", "properties": {"url": {"type": "string", "description": "http(s) URL"}, "max_bytes": {"type": "integer", "description": "Max response body bytes (default 50000, clamped to [1, 50000])", "minimum": 1}}, "required": ["url"]}),
         json!({"type": "object", "properties": {"url": {"type": "string"}, "status": {"type": "integer"}, "content_type": {"type": "string"}, "content_length": {"type": "integer"}, "truncated": {"type": "boolean"}, "body": {"type": "string"}}, "additionalProperties": true}),
     ));
     tools.push(tool_definition(
@@ -622,6 +622,8 @@ struct SessionRecord {
     viewport: ViewportSize,
     current_tab_id: Option<String>,
     tabs: HashMap<String, TabRecord>,
+    /// CDP session ID → tab ID 的 O(1) 反向映射
+    cdp_session_to_tab: HashMap<String, String>,
     user_data_dir: PathBuf,
     cdp: CdpClient,
 }

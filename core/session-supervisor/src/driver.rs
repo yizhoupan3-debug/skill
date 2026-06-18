@@ -45,7 +45,6 @@ pub fn resolve_worktree_cwd(
     cwd.to_string()
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn build_driver_command(
     host: &str,
     cwd: &str,

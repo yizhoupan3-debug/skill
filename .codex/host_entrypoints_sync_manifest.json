@@ -20,7 +20,7 @@
   "shared_system": {
     "agent_policy_entrypoint": "AGENTS_CODEX.md",
     "host_entrypoints": {
-      "claude-code": [
+      "claude": [
         "AGENTS_CLAUDE.md",
         ".claude/rules/framework.md",
         ".claude/settings.json"
@@ -36,7 +36,7 @@
     "routing_source_of_truth": "skills/",
     "supported_hosts": [
       "cursor",
-      "claude-code",
+      "claude",
       "opencode",
       "codex"
     ]

@@ -1,0 +1,13 @@
+---
+source: core/runtime-storage/src/runtime_storage/tests.rs
+expression: payload
+---
+Object {
+    "backend_family": String("sqlite"),
+    "supports_atomic_replace": Bool(true),
+    "supports_compaction": Bool(true),
+    "supports_consistent_append": Bool(true),
+    "supports_remote_event_transport": Bool(true),
+    "supports_snapshot_delta": Bool(true),
+    "supports_sqlite_wal": Bool(true),
+}

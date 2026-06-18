@@ -1081,6 +1081,10 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir_all(path.join(".claude").join("hook-state")).unwrap();
+        fs::create_dir_all(path.join("configs/framework")).unwrap();
+        let registry_src = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../configs/framework/RUNTIME_REGISTRY.json");
+        let _ = fs::copy(&registry_src, path.join("configs/framework/RUNTIME_REGISTRY.json"));
         path
     }
 }

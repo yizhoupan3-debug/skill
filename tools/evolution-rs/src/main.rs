@@ -18,11 +18,12 @@ use heal::heal_skills;
 use inspect::{calculate_dir_hash, dump_skill, snapshot_skills};
 use manifest::generate_manifest;
 use sync::sync_feedback;
-#[allow(unused_imports)]
+#[cfg(test)]
 use utils::{
     calculate_jaccard, canonical_skill_name, entry_is_recent, load_entries, stem,
     truncate_ts_chars,
 };
+
 
 use evolution_rs::EvolutionConfig;
 

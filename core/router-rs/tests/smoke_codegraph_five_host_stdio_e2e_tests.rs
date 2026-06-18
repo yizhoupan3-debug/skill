@@ -78,7 +78,7 @@ mod five_host_stdio_e2e {
             host_home_roots: [
                 ("codex".into(), home.join(".codex")),
                 ("cursor".into(), home.join(".cursor")),
-                ("claude-code".into(), home.join(".claude")),
+                ("claude".into(), home.join(".claude")),
                 ("opencode".into(), home.join(".opencode")),
             ]
             .into_iter()
@@ -126,7 +126,7 @@ mod five_host_stdio_e2e {
                     .unwrap_or_else(|| panic!("cursor host home not found"));
                 (cursor_home.join("mcp.json"), "mcp_servers")
             }
-            "claude-code" => (roots.project_root.join(".mcp.json"), "mcpServers"),
+            "claude" => (roots.project_root.join(".mcp.json"), "mcpServers"),
             "codex" => (
                 roots.project_root.join(".codex/config.toml"),
                 "mcp_servers",

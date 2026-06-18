@@ -12,8 +12,52 @@ use std::path::Path;
 
 use crate::models::*;
 
-/// 数据库 schema 版本号，用于未来迁移。
-const SCHEMA_VERSION: i32 = 2;
+/// Schema version number, bumped for each migration.
+const SCHEMA_VERSION: i32 = 3;
+
+/// Migration registry: (from_version, migration_fn).
+/// Each function must be idempotent (safe to retry on partial failure).
+/// **Must be sorted by from_version ascending with no gaps** — validated by test.
+const MIGRATIONS: &[(i32, fn(&Connection) -> Result<()>)] = &[
+    (2, migrate_v2_to_v3),
+];
+
+fn run_migrations(conn: &Connection, existing_version: i32) -> Result<()> {
+    // 运行时防御：验证 MIGRATIONS 已排序
+    for i in 1..MIGRATIONS.len() {
+        assert!(
+            MIGRATIONS[i].0 > MIGRATIONS[i - 1].0,
+            "MIGRATIONS ordering violation at index {}: v{} <= v{}",
+            i, MIGRATIONS[i].0, MIGRATIONS[i - 1].0
+        );
+    }
+
+    let mut version = existing_version;
+    for (from_ver, migration_fn) in MIGRATIONS {
+        if version == *from_ver {
+            migration_fn(&conn).context(format!("migration v{} -> v{}", from_ver, from_ver + 1))?;
+            version = *from_ver + 1;
+        }
+    }
+    Ok(())
+}
+
+fn migrate_v2_to_v3(conn: &Connection) -> Result<()> {
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    // 幂等检查：只有列不存在时才 ALTER
+    let has_weight: bool = conn.query_row(
+        "SELECT COUNT(*) > 0 FROM pragma_table_info('connections') WHERE name='weight'",
+        [],
+        |row| row.get(0),
+    ).unwrap_or(false);
+    if !has_weight {
+        conn.execute_batch(SCHEMA_ALTER_V2_TO_V3)?;
+    }
+    // 创建新表（幂等：IF NOT EXISTS）
+    conn.execute_batch(SCHEMA_CREATE_V3)?;
+    conn.execute_batch("COMMIT")?;
+    Ok(())
+}
 
 /// 初始化数据库：创建所有表、索引、triggers、启用 WAL。
 pub fn init_database(db_path: &Path) -> Result<Connection> {
@@ -46,13 +90,15 @@ pub fn init_database(db_path: &Path) -> Result<Connection> {
 
     if existing_version == 0 {
         // 首次创建或从旧版迁移 — 新版 schema 不兼容旧版
-        conn.execute_batch(SCHEMA_SQL)?;
+        conn.execute_batch(SCHEMA_SQL).context("init: execute SCHEMA_SQL")?;
         conn.execute(
             "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?1)",
             params![SCHEMA_VERSION],
         )?;
     } else if existing_version < SCHEMA_VERSION {
-        // 未来迁移逻辑写在这里
+        // 遍历从 existing_version 到 SCHEMA_VERSION 之间的所有迁移
+        run_migrations(&conn, existing_version)
+            .context(format!("run migrations from v{} to v{}", existing_version, SCHEMA_VERSION))?;
         conn.execute(
             "UPDATE meta SET value = ?1 WHERE key = 'schema_version'",
             params![SCHEMA_VERSION],
@@ -78,6 +124,15 @@ struct Stmts<'a> {
     get_tags_by_entry: rusqlite::CachedStatement<'a>,
     search_entries: rusqlite::CachedStatement<'a>,
     search_findings: rusqlite::CachedStatement<'a>,
+    // Entity / KG
+    upsert_entity: rusqlite::CachedStatement<'a>,
+    insert_entity_relation: rusqlite::CachedStatement<'a>,
+    insert_entry_entity: rusqlite::CachedStatement<'a>,
+    get_entity_by_name: rusqlite::CachedStatement<'a>,
+    search_entities: rusqlite::CachedStatement<'a>,
+    get_entry_entities: rusqlite::CachedStatement<'a>,
+    get_all_connections: rusqlite::CachedStatement<'a>,
+    get_connections_for_entry: rusqlite::CachedStatement<'a>,
 }
 
 impl<'a> Stmts<'a> {
@@ -99,8 +154,8 @@ impl<'a> Stmts<'a> {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?,
             insert_connection: conn.prepare_cached(
-                "INSERT INTO connections (entry_id_a, entry_id_b, relation, notes, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO connections (entry_id_a, entry_id_b, relation, weight, confidence, notes, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?,
             insert_barrier_report: conn.prepare_cached(
                 "INSERT OR REPLACE INTO barrier_reports (barrier_id, entry_id, loop_id, report, created_at)
@@ -145,13 +200,58 @@ impl<'a> Stmts<'a> {
             search_findings: conn.prepare_cached(
                 "SELECT f.id, f.entry_id, f.kind, f.content,
                         snippet(findings_fts, 1, '<mark>', '</mark>', '...', 64) as snippet,
-                        rank, f.created_at
+                        rank, f.confidence, f.metadata, f.created_at
                  FROM findings_fts
                  JOIN findings f ON f.rowid = findings_fts.rowid
                  WHERE findings_fts MATCH ?1
                    AND (?2 IS NULL OR f.kind = ?2)
                  ORDER BY rank
                  LIMIT ?3",
+            )?,
+            // Entity / KG
+            upsert_entity: conn.prepare_cached(
+                "INSERT INTO entities (name, kind, description, metadata, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(name) DO UPDATE SET
+                   kind = COALESCE(NULLIF(?2, 'concept'), kind),
+                   description = COALESCE(?3, description),
+                   metadata = COALESCE(?4, metadata)",
+            )?,
+            insert_entity_relation: conn.prepare_cached(
+                "INSERT OR IGNORE INTO entity_relations (entity_id_a, entity_id_b, relation, entry_id, confidence, metadata, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            )?,
+            insert_entry_entity: conn.prepare_cached(
+                "INSERT OR IGNORE INTO entry_entities (entry_id, entity_id, role)
+                 VALUES (?1, ?2, ?3)",
+            )?,
+            get_entity_by_name: conn.prepare_cached(
+                "SELECT id, name, kind, description, metadata, created_at
+                 FROM entities WHERE name=?1",
+            )?,
+            search_entities: conn.prepare_cached(
+                "SELECT e.id, e.name, e.kind, e.description, e.metadata, e.created_at
+                 FROM entities_fts
+                 JOIN entities e ON e.rowid = entities_fts.rowid
+                 WHERE entities_fts MATCH ?1
+                 ORDER BY rank
+                 LIMIT ?2",
+            )?,
+            get_entry_entities: conn.prepare_cached(
+                "SELECT e.id, e.name, e.kind, e.description, e.metadata, e.created_at, ee.role
+                 FROM entry_entities ee
+                 JOIN entities e ON e.id = ee.entity_id
+                 WHERE ee.entry_id=?1
+                 ORDER BY e.name",
+            )?,
+            get_all_connections: conn.prepare_cached(
+                "SELECT id, entry_id_a, entry_id_b, relation, weight, confidence, notes, created_at
+                 FROM connections ORDER BY created_at",
+            )?,
+            get_connections_for_entry: conn.prepare_cached(
+                "SELECT id, entry_id_a, entry_id_b, relation, weight, confidence, notes, created_at
+                 FROM connections WHERE entry_id_a=?1 OR entry_id_b=?1
+                 ORDER BY created_at",
             )?,
         })
     }
@@ -223,6 +323,8 @@ pub fn insert_connection(conn: &Connection, c: &crate::models::LogConnection) ->
         c.entry_id_a,
         c.entry_id_b,
         c.relation,
+        c.weight,
+        c.confidence,
         c.notes,
         c.created_at,
     ])?;
@@ -376,6 +478,7 @@ pub fn search_entries(
 }
 
 /// FTS5 搜索 findings。支持 kind 过滤。
+/// 注意：FTS5 将 hyphen 解析为列排除前缀，须转义为空格。
 pub fn search_findings(
     conn: &Connection,
     query: &str,
@@ -383,7 +486,8 @@ pub fn search_findings(
     limit: usize,
 ) -> Result<Vec<Finding>> {
     let mut stmts = Stmts::new(conn)?;
-    let mut rows = stmts.search_findings.query(params![query, kind_filter, limit as i64])?;
+    let fts_query = query.replace('-', " ");
+    let mut rows = stmts.search_findings.query(params![fts_query, kind_filter, limit as i64])?;
     let mut results = Vec::new();
     while let Some(row) = rows.next()? {
         results.push(Finding {
@@ -391,9 +495,9 @@ pub fn search_findings(
             entry_id: row.get(1)?,
             kind: row.get(2)?,
             content: row.get::<_, String>(3).unwrap_or_default(),
-            confidence: None,
-            metadata: None,
-            created_at: row.get::<_, String>(6).unwrap_or_default(),
+            confidence: row.get::<_, Option<f64>>(6).ok().flatten(),
+            metadata: row.get::<_, Option<String>>(7).ok().flatten(),
+            created_at: row.get::<_, String>(8).unwrap_or_default(),
         });
     }
     Ok(results)
@@ -403,7 +507,8 @@ pub fn search_findings(
 pub fn rebuild_fts_index(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "INSERT INTO entries_fts(entries_fts) VALUES('rebuild');
-         INSERT INTO findings_fts(findings_fts) VALUES('rebuild');",
+         INSERT INTO findings_fts(findings_fts) VALUES('rebuild');
+         INSERT INTO entities_fts(entities_fts) VALUES('rebuild');",
     )
     .context("rebuild FTS5 indexes")?;
     Ok(())
@@ -454,6 +559,156 @@ pub fn db_stats(conn: &Connection) -> Result<Vec<(String, i64)>> {
         stats.push((row.get::<_, String>(0)?, row.get::<_, i64>(1)?));
     }
     Ok(stats)
+}
+
+// ── Entity / Knowledge Graph API ──
+
+/// Upsert an entity by name (INSERT or UPDATE on conflict).
+pub fn upsert_entity(
+    conn: &Connection,
+    name: &str,
+    kind: &str,
+    description: Option<&str>,
+    metadata: Option<&str>,
+) -> Result<i64> {
+    let mut stmts = Stmts::new(conn)?;
+    stmts.upsert_entity.execute(params![name, kind, description, metadata, chrono::Utc::now().to_rfc3339()])?;
+    // Return entity ID via a fresh query
+    let mut q = stmts.get_entity_by_name.query(params![name])?;
+    match q.next()? {
+        Some(row) => Ok(row.get(0)?),
+        None => anyhow::bail!("Entity not found after upsert: {name}"),
+    }
+}
+
+/// Link two entities with a relation type.
+pub fn insert_entity_relation(
+    conn: &Connection,
+    entity_id_a: i64,
+    entity_id_b: i64,
+    relation: &str,
+    entry_id: Option<&str>,
+    confidence: Option<f64>,
+    metadata: Option<&str>,
+) -> Result<()> {
+    let mut stmts = Stmts::new(conn)?;
+    stmts.insert_entity_relation.execute(params![
+        entity_id_a,
+        entity_id_b,
+        relation,
+        entry_id,
+        confidence,
+        metadata,
+        chrono::Utc::now().to_rfc3339(),
+    ])?;
+    Ok(())
+}
+
+/// Associate an entry with an entity.
+pub fn insert_entry_entity(
+    conn: &Connection,
+    entry_id: &str,
+    entity_id: i64,
+    role: &str,
+) -> Result<()> {
+    let mut stmts = Stmts::new(conn)?;
+    stmts.insert_entry_entity.execute(params![entry_id, entity_id, role])?;
+    Ok(())
+}
+
+/// Get entity by name.
+pub fn get_entity_by_name(conn: &Connection, name: &str) -> Result<Option<Entity>> {
+    let mut stmts = Stmts::new(conn)?;
+    let mut rows = stmts.get_entity_by_name.query(params![name])?;
+    match rows.next()? {
+        Some(row) => Ok(Some(Entity {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            kind: row.get(2)?,
+            description: row.get(3)?,
+            metadata: row.get(4)?,
+            created_at: row.get(5)?,
+        })),
+        None => Ok(None),
+    }
+}
+
+/// FTS5 search entities by name/description.
+pub fn search_entities(conn: &Connection, query: &str, limit: usize) -> Result<Vec<Entity>> {
+    let mut stmts = Stmts::new(conn)?;
+    let mut rows = stmts.search_entities.query(params![query, limit as i64])?;
+    let mut results = Vec::new();
+    while let Some(row) = rows.next()? {
+        results.push(Entity {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            kind: row.get(2)?,
+            description: row.get(3)?,
+            metadata: row.get(4)?,
+            created_at: row.get(5)?,
+        });
+    }
+    Ok(results)
+}
+
+/// Get all entities associated with an entry (with roles).
+pub fn get_entry_entities(conn: &Connection, entry_id: &str) -> Result<Vec<(Entity, String)>> {
+    let mut stmts = Stmts::new(conn)?;
+    let mut rows = stmts.get_entry_entities.query(params![entry_id])?;
+    let mut results = Vec::new();
+    while let Some(row) = rows.next()? {
+        let entity = Entity {
+            id: row.get(0)?,
+            name: row.get(1)?,
+            kind: row.get(2)?,
+            description: row.get(3)?,
+            metadata: row.get(4)?,
+            created_at: row.get(5)?,
+        };
+        let role: String = row.get(6)?;
+        results.push((entity, role));
+    }
+    Ok(results)
+}
+
+/// Get all connections (for graph loading).
+pub fn get_all_connections(conn: &Connection) -> Result<Vec<LogConnection>> {
+    let mut stmts = Stmts::new(conn)?;
+    let mut rows = stmts.get_all_connections.query([])?;
+    let mut results = Vec::new();
+    while let Some(row) = rows.next()? {
+        results.push(LogConnection {
+            id: row.get(0)?,
+            entry_id_a: row.get(1)?,
+            entry_id_b: row.get(2)?,
+            relation: row.get(3)?,
+            weight: row.get(4)?,
+            confidence: row.get(5)?,
+            notes: row.get(6)?,
+            created_at: row.get(7)?,
+        });
+    }
+    Ok(results)
+}
+
+/// Get connections where a given entry appears as A or B.
+pub fn get_connections_for_entry(conn: &Connection, entry_id: &str) -> Result<Vec<LogConnection>> {
+    let mut stmts = Stmts::new(conn)?;
+    let mut rows = stmts.get_connections_for_entry.query(params![entry_id])?;
+    let mut results = Vec::new();
+    while let Some(row) = rows.next()? {
+        results.push(LogConnection {
+            id: row.get(0)?,
+            entry_id_a: row.get(1)?,
+            entry_id_b: row.get(2)?,
+            relation: row.get(3)?,
+            weight: row.get(4)?,
+            confidence: row.get(5)?,
+            notes: row.get(6)?,
+            created_at: row.get(7)?,
+        });
+    }
+    Ok(results)
 }
 
 // ── Schema ──
@@ -518,6 +773,8 @@ CREATE TABLE IF NOT EXISTS connections (
     entry_id_a TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
     entry_id_b TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
     relation TEXT,
+    weight REAL DEFAULT 1.0,
+    confidence REAL,
     notes TEXT,
     created_at TEXT NOT NULL
 );
@@ -608,15 +865,134 @@ CREATE TRIGGER IF NOT EXISTS findings_au AFTER UPDATE ON findings BEGIN
     INSERT INTO findings_fts(rowid, content, metadata)
     VALUES (new.rowid, new.content, '');
 END;
+
+-- ═══ Entity / Knowledge Graph (v3) ═══
+
+CREATE TABLE IF NOT EXISTS entities (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL DEFAULT 'concept',
+    description TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_entities_kind ON entities(kind);
+CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
+    name, description,
+    tokenize='unicode61'
+);
+
+CREATE TABLE IF NOT EXISTS entity_relations (
+    id INTEGER PRIMARY KEY,
+    entity_id_a INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    entity_id_b INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    relation TEXT NOT NULL,
+    entry_id TEXT REFERENCES entries(id) ON DELETE SET NULL,
+    confidence REAL,
+    metadata TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(entity_id_a, entity_id_b, relation)
+);
+CREATE INDEX IF NOT EXISTS idx_entity_rel_a ON entity_relations(entity_id_a);
+CREATE INDEX IF NOT EXISTS idx_entity_rel_b ON entity_relations(entity_id_b);
+
+CREATE TABLE IF NOT EXISTS entry_entities (
+    entry_id TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+    entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'mentioned',
+    PRIMARY KEY (entry_id, entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_entry_entities_entity ON entry_entities(entity_id);
+
+-- Entities FTS triggers
+CREATE TRIGGER IF NOT EXISTS entities_ai AFTER INSERT ON entities BEGIN
+    INSERT INTO entities_fts(rowid, name, description)
+    VALUES (new.rowid, new.name, COALESCE(new.description, ''));
+END;
+CREATE TRIGGER IF NOT EXISTS entities_ad AFTER DELETE ON entities BEGIN
+    INSERT INTO entities_fts(entities_fts, rowid, name, description)
+    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''));
+END;
+CREATE TRIGGER IF NOT EXISTS entities_au AFTER UPDATE ON entities BEGIN
+    INSERT INTO entities_fts(entities_fts, rowid, name, description)
+    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''));
+    INSERT INTO entities_fts(rowid, name, description)
+    VALUES (new.rowid, new.name, COALESCE(new.description, ''));
+END;
+";
+
+/// Schema migration ALTER only: v2 → v3 safe ALTER TABLE operations
+const SCHEMA_ALTER_V2_TO_V3: &str = "
+ALTER TABLE connections ADD COLUMN weight REAL DEFAULT 1.0;
+ALTER TABLE connections ADD COLUMN confidence REAL;
+";
+
+/// Schema migration CREATE only: new v3 tables / indexes / triggers
+const SCHEMA_CREATE_V3: &str = "
+CREATE TABLE IF NOT EXISTS entities (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL DEFAULT 'concept',
+    description TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_entities_kind ON entities(kind);
+CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
+    name, description,
+    tokenize='unicode61'
+);
+
+CREATE TABLE IF NOT EXISTS entity_relations (
+    id INTEGER PRIMARY KEY,
+    entity_id_a INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    entity_id_b INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    relation TEXT NOT NULL,
+    entry_id TEXT REFERENCES entries(id) ON DELETE SET NULL,
+    confidence REAL,
+    metadata TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(entity_id_a, entity_id_b, relation)
+);
+CREATE INDEX IF NOT EXISTS idx_entity_rel_a ON entity_relations(entity_id_a);
+CREATE INDEX IF NOT EXISTS idx_entity_rel_b ON entity_relations(entity_id_b);
+
+CREATE TABLE IF NOT EXISTS entry_entities (
+    entry_id TEXT NOT NULL REFERENCES entries(id) ON DELETE CASCADE,
+    entity_id INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'mentioned',
+    PRIMARY KEY (entry_id, entity_id)
+);
+CREATE INDEX IF NOT EXISTS idx_entry_entities_entity ON entry_entities(entity_id);
+
+-- FTS triggers for existing tables
+CREATE TRIGGER IF NOT EXISTS entities_ai AFTER INSERT ON entities BEGIN
+    INSERT INTO entities_fts(rowid, name, description)
+    VALUES (new.rowid, new.name, COALESCE(new.description, ''));
+END;
+CREATE TRIGGER IF NOT EXISTS entities_ad AFTER DELETE ON entities BEGIN
+    INSERT INTO entities_fts(entities_fts, rowid, name, description)
+    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''));
+END;
+CREATE TRIGGER IF NOT EXISTS entities_au AFTER UPDATE ON entities BEGIN
+    INSERT INTO entities_fts(entities_fts, rowid, name, description)
+    VALUES ('delete', old.rowid, old.name, COALESCE(old.description, ''));
+    INSERT INTO entities_fts(rowid, name, description)
+    VALUES (new.rowid, new.name, COALESCE(new.description, ''));
+END;
 ";
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::*;
+    
 
     fn test_db() -> Connection {
-        init_database(&Path::new(":memory:")).unwrap()
+        init_database(Path::new(":memory:")).unwrap()
     }
 
     #[test]
@@ -827,6 +1203,8 @@ mod tests {
             entry_id_a: "ea".into(),
             entry_id_b: "eb".into(),
             relation: Some(RELATION_SUPPORTS.into()),
+            weight: 1.0,
+            confidence: None,
             notes: Some("结果一致".into()),
             created_at: "now".into(),
         };
@@ -1016,5 +1394,39 @@ mod tests {
         // Should no longer appear in search
         let r = search_entries(&conn, "deleted", None, None, None, None, 10).unwrap();
         assert_eq!(r.len(), 0, "FTS should NOT find deleted entry");
+    }
+
+    /// 验证 MIGRATIONS 已按版本升序排列且无间隙
+    #[test]
+    fn test_migrations_ordering() {
+        for i in 1..MIGRATIONS.len() {
+            assert!(
+                MIGRATIONS[i].0 > MIGRATIONS[i - 1].0,
+                "MIGRATIONS[{}] from_ver={} must be > MIGRATIONS[{}] from_ver={}",
+                i, MIGRATIONS[i].0, i - 1, MIGRATIONS[i - 1].0
+            );
+        }
+        // 验证迁移序列无 gap：每个 from_ver 必须递增 +1
+        if !MIGRATIONS.is_empty() {
+            assert!(
+                MIGRATIONS[0].0 >= 1,
+                "first migration must be for v1 or later, got v{}",
+                MIGRATIONS[0].0
+            );
+            for i in 1..MIGRATIONS.len() {
+                assert_eq!(
+                    MIGRATIONS[i].0, MIGRATIONS[i - 1].0 + 1,
+                    "MIGRATIONS must have no gaps; gap at index {}: v{} -> v{}",
+                    i, MIGRATIONS[i - 1].0, MIGRATIONS[i].0
+                );
+            }
+            assert!(
+                MIGRATIONS.last().unwrap().0 + 1 <= SCHEMA_VERSION,
+                "last migration v{} +1 = v{} > SCHEMA_VERSION v{}",
+                MIGRATIONS.last().unwrap().0,
+                MIGRATIONS.last().unwrap().0 + 1,
+                SCHEMA_VERSION
+            );
+        }
     }
 }

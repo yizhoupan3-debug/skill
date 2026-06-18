@@ -58,7 +58,7 @@ This skill is the one front door for paper work.
 
 与本立场冲突的捷径（降口径逃难、rebuttal-only、代码空诺、数学直觉化、`surgical` 全局乱改等）一律以 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)、[`references/edit-scope-gate.md`](references/edit-scope-gate.md) 为硬闸。
 
-启用外研时，审稿/校准产出须满足 [`docs/spec.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`@lane:reviewer`** 的 External lane shape 约定。
+启用外研时，审稿/校准产出须满足 [`docs/spec.md`](../../docs/spec.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`@lane:reviewer`** 的 External lane shape 约定。
 
 **宿主 hook（L4 短码）**：`router-rs` 在 **Cursor `beforeSubmit`** 与 **Claude `UserPromptSubmit`** 命中写作/润色语境时合并 **`PAPER_PROSE_QUALITY_HOOK`**（真源 `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt`，**默认开**）；手稿审稿/改稿语境可另合并 **`PAPER_ADVERSARIAL_HOOK`**（opt-in）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。Prose 子开关：`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK` / `ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK`（unset=开，`0`=关）。Adversarial：`ROUTER_RS_*_PAPER_ADVERSARIAL_HOOK=1` 启用。见 [`references/prose-chain-contract.md`](references/prose-chain-contract.md) §L4。
 
@@ -160,18 +160,15 @@ separate "known blocker" from "uncertainty that needs lookup".
 
 ## Prose quality intake（自动触发，勿等用户声明）
 
-**硬规则**：只要将触达手稿正文句子（含用户只贴一段、说「改这段/不通顺/帮我看看文字」、或粘贴 LaTeX/摘要/引言），**立即**走 prose chain——**不得**等用户写 `language_register` / `writing_mode` / `prose_qc`。
+只要将触达手稿正文句子，**立即**走 prose chain——**不得**等用户写 `language_register` / `writing_mode` / `prose_qc`。
 
 自动执行：
+1. **推断** `language_register`（见 prose-quality-gate.md §Language register）
+2. **默认** `edit_scope: surgical` + 从用户粘贴/点名推断 `scope_items`
+3. **默认** `writing_mode: ladder-full` + 极简 Claim card
+4. 若 claim/evidence 未冻结且用户要「能不能投」→ 先 reviewer；**纯改文字**则 Claim card 后直写
 
-1. **推断** `language_register`（见 [`references/prose-quality-gate.md`](references/prose-quality-gate.md) §Language register）
-2. **默认** `edit_scope: surgical` + 从用户粘贴/点名推断 `scope_items`（模糊时**一问** surgical vs refactor，**不问** register）
-3. **默认** `writing_mode: ladder-full` + 极简 Claim card（四槽可短，不可省略）
-4. 若 claim/evidence 明显未冻结且用户要「能不能投」→ 先 reviewer；**纯改文字**则 Claim card 后直写
-
-转发 `@lane:writer` 时**自带**上述默认值，用户无 token 也须完整交付 `tone_audit` + `prose_qc` + Stage B（或 Stage A-only 若 ladder_blocked）。
-
-**全链路真源**：[`references/prose-chain-contract.md`](references/prose-chain-contract.md)（路由 → intake → reviewer language findings → reviser → inline writing → 可选 `PROSE_QC_LOG`）。多轮改稿建议维护 [`references/templates/PROSE_QC_LOG.template.md`](references/templates/PROSE_QC_LOG.template.md)。
+全链路真源：[`references/prose-chain-contract.md`](references/prose-chain-contract.md)。
 
 ## Prose quality chain（默认开启）
 
@@ -202,7 +199,8 @@ separate "known blocker" from "uncertainty that needs lookup".
 
 ## What this skill should deliver
 
-本前门转发或收口 **`@lane:writer`** 的改稿时，**统一输出顺序**须先回声门控与叙事契约，再贴正文块：**`edit_scope` → `scope_items`/`non_goals` 或 `refactor_intent`/`risk_note` → Claim card（四槽）→ `language_register` →（可选 Stage A 提纲）→ `tone_audit` → `prose_qc` → prose/hunks → `change_id` 账本（`surgical`）或 `sections_touched` + `claim_ledger_touch_statement`/`claim_ledger_delta`（`refactor`）**；细则见 [`references/prose-quality-gate.md`](references/prose-quality-gate.md) 与 [`references/edit-scope-gate.md`](references/edit-scope-gate.md)。
+本前门转发或收口 **`@lane:writer`** 的改稿时，统一输出顺序须先回声门控与叙事契约，再贴正文块。
+详细规格见 [`references/prose-quality-gate.md`](references/prose-quality-gate.md) 与 [`references/edit-scope-gate.md`](references/edit-scope-gate.md)。
 
 Keep the user-facing output simple:
 
@@ -221,16 +219,6 @@ external_calibration_needed:
 top_tier_bar:
 claim_lock_status:
 ```
-
-Behind the scenes, this skill may switch lanes. The user should not need to.
-
-For multi-turn work, the front door should maintain a compact claim ledger and
-evidence anchors as stable artifacts:
-
-- `paper_story/CLAIM_LEDGER.md`
-- `paper_story/EVIDENCE_ANCHOR_MAP.md`
-
-These artifacts are required before repeated local polishing passes.
 
 ## Verification and closeout
 
@@ -260,16 +248,9 @@ In filesystem-backed work, the stable artifacts are:
 
 ## 审稿意见 / R&R：禁止逃避（硬约束）
 
-与前门 **Anti-bad-output**、[`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md) §审稿意见 / R&R、[`references/research-language-norms.md`](references/research-language-norms.md) 叠加；**优先于**「少惹事、快过关」的模型默认。可核验关停与 repair 优先级以 **claim-evidence-ladder** 为单真源，本节只强调审稿语境下易逃逸的禁令。
-
-- **禁止「降 claim / 缩口径」当主手逃避**：在仍属 B 类可闭合、且存在合理 **evidence-first** 路径时，不得把本轮主策略做成「改弱提法 + 加长 limitation」却对证据结构不动（见阶梯文与后门 **Hard rules** 已有条目；本条是审稿场景的显式复述）。
-- **禁止「防御口径」顶替改稿**：不得用连环 hedge、冗长免责声明、叠叠乐的 `but/not/rather than`（辩论腔 prose）填满回复或正文，**代替**审稿人点名的对照/消融/协议澄清/图表修正/披露与复现条目。
-- **禁止 rebuttal-only**：意见客观要求手稿、图表、方法、统计或结构化补充材料变更时，**不得**只交 response letter；须并排交付可追溯的 **手稿改动（或等价 hunk/diff）** 与「意见 → 改动」映射。
-- **逐条关停**：每条审稿意见须有 **point_id → (manuscript_delta | 已落地的补证与分析 | `cannot_fix_because`）**之一；不得以「我们已经温和表述」「理解审稿人关切」等话述冒充关闭。
-- **默认正面硬修**：可先判可行性与优先级，但一旦进入改稿链路，应以 **repair**（补证、重写、重画、补强比较公平性）为第一默认，而非嘴上认错、手稿不动。
-- **代码/实现类意见（硬）**：审稿人追问复现性、复杂度、对齐伪代码 vs 源码、默认值/随机种子、潜在 bug——须交付 **可查证的复现与对齐物**（如版本化的 artifact、环境与入口命令、方法与正文/框图一致的对照），或 **修正文中的错误陈述**并说明影响。**禁止**用「将开源」「已向期刊说明」一类**不可立即核对**的承诺当关停件；若暂不发布，须提供 **minimal reproduction bundle**（或等价：独立伪代码补丁 + synthetic sanity + 审稿人可操作的最小脚本）并接受 `cannot_fix_because` 须极严格。
-- **数学/推导类意见（硬）**：质疑证明步骤、条件、常量/阶、可测性与交换极限等——须 **手写可检查的补证或勘误**（附录引理链、条件修正、反例后范围收窄），或显式把错误结论改为 **较弱但可证** 的表述并登记 claim。**禁止**仅做「更谦虚的 English」或把定理悄悄改成 prose 直觉而不声明 **推理变更**。
-- **双高危默认归类**：未见用户显式「只改文风」豁免时，将 **code-skeptic** 与 **math-skeptic** 类意见默认标为 **`repair` 主轴**（narrow 仅能附 `narrowing_is_primary_because` 走阶梯）。
+与前门 **Anti-bad-output** 叠加。详见 [`references/review-hard-rules.md`](references/review-hard-rules.md)。
+**核心原则**：禁止降 claim 逃避、禁止防御口径顶替改稿、禁止 rebuttal-only、逐条关停、默认正面硬修。
+代码与数学类意见默认归入 `repair` 主轴。
 
 ## Hard rules
 

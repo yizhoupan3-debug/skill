@@ -22,6 +22,7 @@ allowed_tools:
   - mcp__mcp-codegraph__codegraph_impact
   - mcp__mcp-codegraph__codegraph_node
   - mcp__mcp-codegraph__codegraph_status
+  - mcp__mcp-codegraph__codegraph_goto_definition
 metadata:
   version: "0.2.0"
   platforms: [supported]
@@ -235,7 +236,25 @@ coordinator **不得**将 subagent 全量 output 注入主 context；只读 lane
 
 ---
 
-## 6. External Research Lane (OPTIONAL)
+## 7. CodeGraph 集成
+
+以下高风险操作 **coordinator 必须在 spawn subagent 前**调用 codegraph 工具：
+
+| 操作 | 必调工具 | 产出 |
+|------|---------|------|
+| 删除/重命名公共符号 | `codegraph_callers["符号名", depth=1]` | 确认无遗漏调用者 |
+| 重构核心函数/类型 | `codegraph_impact["符号名", depth=2]` | 写入 lane scope 的调用链清单 |
+| 跨模块修改 | `codegraph_callees["符号名", depth=2]` | 确认下游模块无破坏 |
+| `scope_paths` 含 `core/` 或 `tools/` | `codegraph_impact["符号名", depth=3]` | 完整影响面报告 |
+
+**subagent lane prompt 模板**中，在 Tools 段追加：
+> 修改 `target_symbol` 前，调 `codegraph_impact["target_symbol"]` 获取影响半径，将结果写入 lane-notes。
+
+> 详细场景见 [`codegraph-scenarios.md`](../shared-references/codegraph-scenarios.md)。
+
+---
+
+## 8. External Research Lane (OPTIONAL)
 
 当 wave 包含 review / research 子任务时，可与 implementation 并行 spawn：
 
@@ -288,7 +307,7 @@ printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start
 | [`skills/agent-swarm-orchestration/SKILL.md`](../agent-swarm-orchestration/SKILL.md) | spawn admission 判定 / reject reason |
 | [`skills/planx/SKILL.md`](../planx/SKILL.md) | WAVE_STATE schema / lane 拆分规则 |
 | [`skills/verifyx/SKILL.md`](../verifyx/SKILL.md) | 验证收口 |
-| [`docs/hosts/codex.md` § 多代理编排](../../docs/hosts/codex.md) | Codex 端并行执行指引 |
+| [`docs/hosts/hook-hosts.md` § 多代理编排](../../docs/hosts/hook-hosts.md) | Codex 端并行执行指引 |
 | [`docs/references/EXECUTION_LADDER.md`](../../AGENTS.md) | 完整执行阶梯规则 |
 | [`references/orchestration-contract.md`](references/orchestration-contract.md) | 外部权威证据表 |
 

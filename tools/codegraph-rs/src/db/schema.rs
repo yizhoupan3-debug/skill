@@ -5,6 +5,7 @@ use rusqlite::Connection;
 pub const META_SCHEMA_VERSION_KEY: &str = "schema_version";
 const LEGACY_SCHEMA_V1: &str = "codegraph-rs-v1";
 const LEGACY_SCHEMA_V2: &str = "codegraph-rs-v2";
+const LEGACY_SCHEMA_V3: &str = "codegraph-rs-v3";
 
 pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
     conn.execute_batch(
@@ -26,7 +27,8 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             kind TEXT NOT NULL,
             language TEXT NOT NULL,
             file_path TEXT NOT NULL,
-            line INTEGER NOT NULL DEFAULT 0
+            line INTEGER NOT NULL DEFAULT 0,
+            extra TEXT NOT NULL DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS idx_nodes_symbol ON nodes(symbol);
         CREATE INDEX IF NOT EXISTS idx_nodes_file ON nodes(file_path);
@@ -70,15 +72,22 @@ pub fn migrate_schema(conn: &Connection) -> rusqlite::Result<()> {
         None => {
             migrate_v1_to_v2(conn)?;
             migrate_v2_to_v3(conn)?;
+            migrate_v3_to_v4(conn)?;
             set_meta(conn, META_SCHEMA_VERSION_KEY, SCHEMA_VERSION)?;
         }
         Some(LEGACY_SCHEMA_V1) => {
             migrate_v1_to_v2(conn)?;
             migrate_v2_to_v3(conn)?;
+            migrate_v3_to_v4(conn)?;
             set_meta(conn, META_SCHEMA_VERSION_KEY, SCHEMA_VERSION)?;
         }
         Some(LEGACY_SCHEMA_V2) => {
             migrate_v2_to_v3(conn)?;
+            migrate_v3_to_v4(conn)?;
+            set_meta(conn, META_SCHEMA_VERSION_KEY, SCHEMA_VERSION)?;
+        }
+        Some(LEGACY_SCHEMA_V3) => {
+            migrate_v3_to_v4(conn)?;
             set_meta(conn, META_SCHEMA_VERSION_KEY, SCHEMA_VERSION)?;
         }
         Some(v) if v == SCHEMA_VERSION => {}
@@ -109,6 +118,31 @@ fn migrate_v2_to_v3(conn: &Connection) -> rusqlite::Result<()> {
             "ALTER TABLE files ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''",
             [],
         )?;
+    }
+    Ok(())
+}
+
+fn migrate_v3_to_v4(conn: &Connection) -> rusqlite::Result<()> {
+    let has_column: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('nodes') WHERE name = 'extra'",
+        [],
+        |row| row.get(0),
+    )?;
+    if has_column == 0 {
+        conn.execute(
+            "ALTER TABLE nodes ADD COLUMN extra TEXT NOT NULL DEFAULT ''",
+            [],
+        )?;
+        // Check if there are existing nodes that need backfill
+        let existing: i64 = conn
+            .query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))
+            .unwrap_or(0);
+        if existing > 0 {
+            eprintln!(
+                "[codegraph] schema v4: added extra column for {existing} existing nodes. \
+                 Run `build_full_index` to populate column-precision position data."
+            );
+        }
     }
     Ok(())
 }

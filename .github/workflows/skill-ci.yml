@@ -265,6 +265,30 @@ jobs:
         run: cargo install cargo-llvm-cov
       - name: Generate coverage report
         run: cargo llvm-cov --workspace --lcov --output-path lcov.info
+      - name: Check coverage threshold (≥60%)
+        run: |
+          if command -v lcov &>/dev/null; then
+            LINES_TOTAL=$(lcov --summary lcov.info 2>&1 | grep 'lines......' | awk '{print $2}' | tr -d '%')
+            echo "Line coverage: ${LINES_TOTAL}%"
+            if (( $(echo "$LINES_TOTAL < 60" | bc -l) )); then
+              echo "❌ Coverage ${LINES_TOTAL}% < 60% threshold"
+              exit 1
+            fi
+            echo "✅ Coverage ${LINES_TOTAL}% meets ≥60% threshold"
+          else
+            # Fallback: parse lcov.info directly
+            LF=$(grep '^LF:' lcov.info | awk -F: '{s+=$2} END {print s}')
+            LH=$(grep '^LH:' lcov.info | awk -F: '{s+=$2} END {print s}')
+            if [ -n "$LF" ] && [ "$LF" -gt 0 ]; then
+              PERCENT=$(echo "scale=1; $LH * 100 / $LF" | bc)
+              echo "Line coverage: ${PERCENT}%"
+              if (( $(echo "$PERCENT < 60" | bc -l) )); then
+                echo "❌ Coverage ${PERCENT}% < 60% threshold"
+                exit 1
+              fi
+              echo "✅ Coverage ${PERCENT}% meets ≥60% threshold"
+            fi
+          fi
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:

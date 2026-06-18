@@ -6,3 +6,7 @@
 
 [features]
 cursor_hooks = true
+
+[mcpServers.mcp-codegraph]
+command = "cargo"
+args = ["run", "--release", "--quiet", "-p", "codegraph-rs", "--bin", "mcp-codegraph", "--manifest-path", "/Users/joe/Developer/skill/Cargo.toml", "--", "--repo-root", "/Users/joe/Developer/skill"]

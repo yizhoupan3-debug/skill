@@ -32,7 +32,9 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     let mut warns: Vec<String> = Vec::new();
 
     println!("\n--- auto self-healing: cleaning broken symlinks ---");
-    let _ = auto_clean_broken_symlinks(repo_root);
+    if let Err(e) = auto_clean_broken_symlinks(repo_root) {
+        eprintln!("warn: failed to auto-clean broken symlinks: {e}");
+    }
 
     let checks = [
         ("AGENTS.md", repo_root.join("AGENTS.md")),
@@ -146,7 +148,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
             .join("router-rs-hook.sh");
         if deprecated_shim.is_file() {
             let msg = format!(
-                "deprecated shim still present at {} — prefer .claude/settings.json hooks (see docs/hosts/claude.md)",
+                "deprecated shim still present at {} — prefer .claude/settings.json hooks (see docs/hosts/hook-hosts.md)",
                 deprecated_shim.display()
             );
             println!("WARN: {msg}");
@@ -243,7 +245,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     }
 
     println!("\n--- control plane (supervisor / pointers) ---");
-    match super::build_framework_runtime_snapshot_envelope_with_level(repo_root, None, None, "full")
+    match super::snapshot::build_framework_runtime_snapshot_envelope_with_level(repo_root, None, None, "full")
     {
         Ok(envelope) => {
             let snapshot = &envelope["runtime_snapshot"];
@@ -643,7 +645,9 @@ fn clean_broken_symlinks_in_dir(dir: &Path, cleaned_count: &mut usize) -> Result
                         }
                     }
                 } else if metadata.is_dir() {
-                    let _ = clean_broken_symlinks_in_dir(&path, cleaned_count);
+                    if let Err(e) = clean_broken_symlinks_in_dir(&path, cleaned_count) {
+                        eprintln!("warn: failed to clean broken symlinks in {}: {e}", path.display());
+                    }
                 }
             }
         }

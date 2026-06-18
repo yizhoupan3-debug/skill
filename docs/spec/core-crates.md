@@ -82,7 +82,7 @@ version: unified-v7
 | `graph/build.rs` | 全量索引构建 | `build_full_index(repo_root, conn)`（两遍插入 + 跨文件边解析） |
 | `graph/sync.rs` | 增量 sync + filesystem watcher | `incremental_sync`, `spawn_watcher` |
 | `graph/mod.rs` | 图查询 API | `impact_radius(symbol, max_depth)` |
-| `mcp/mod.rs` | 六工具 MCP schema + dispatch | `codegraph_search`, `codegraph_callers`, … |
+| `mcp/mod.rs` | 八工具 MCP schema + dispatch | `codegraph_search`, `codegraph_callers`, …, `codegraph_goto_definition` |
 
 **CLI**: `index [--force]`, `status`, `query`, `callers`, `callees`, `impact`
 

@@ -312,3 +312,15 @@ fn state_persistence_roundtrip_via_memory_backend() {
         .unwrap();
     assert_eq!(sessions.len(), 1);
 }
+
+#[test]
+fn background_state_default_schema_snapshot() {
+    // Snapshot the background state schema for regression detection.
+    let persisted = json!({
+        "schema_version": BACKGROUND_STATE_SCHEMA_VERSION,
+        "jobs": [],
+        "active_sessions": [],
+        "pending_session_takeovers": []
+    });
+    insta::assert_json_snapshot!(persisted);
+}

@@ -249,7 +249,6 @@ pub fn mcp_json_managed_key_paths(
         .collect())
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn install_native_integration(
     repo_root: &Path,
     home_config_path: &Path,
@@ -964,14 +963,14 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
         )
     })?;
     Ok(format!(
-        r#"<!-- managed_by: skill-framework · claude-code · keep ≤48 lines -->
-<!-- projection_id: claude-code-project-narrative -->
-<!-- host_projection: claude-code -->
+        r#"<!-- managed_by: skill-framework · claude · keep ≤48 lines -->
+<!-- projection_id: claude-project-narrative -->
+<!-- host_projection: claude -->
 <!-- install_scope: project -->
 
 # Claude Code（本项目）
 
-跨宿主 **`AGENTS.md`**；宿主差异 **`AGENTS_CLAUDE.md`**；手册 **`docs/hosts/claude.md`**。
+跨宿主 **`AGENTS.md`**；宿主差异 **`AGENTS_CLAUDE.md`**；手册 **`docs/hosts/_common.md`** / **`docs/hosts/hook-hosts.md`**。
 
 ## 语言（硬约束）
 
@@ -1004,7 +1003,7 @@ pub fn render_claude_framework_entrypoint(
 ) -> Result<String, String> {
     let (narrative, runtime_rel) = framework_entrypoint_render_context(roots, "claude")?;
     Ok(format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n{footer}",
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n{footer}",
         gsd = lifecycle_paragraph_for_host(&narrative, "claude"),
         review = narrative.review_findings_only_paragraph,
         footer = framework_entrypoint_common_footer(&runtime_rel, "AGENTS_CLAUDE.md"),

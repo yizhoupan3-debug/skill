@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_doc": "各事件 stdin → `configs/framework/cursor-router-rs-hook.sh`；launcher 优先 repo release，再 /tmp 与 debug。关键门控事件缺 binary fail-closed。见 `.cursor/router-rs-hook.env` 与本仓 docs/hosts/cursor.md。",
+  "_doc": "各事件 stdin → `configs/framework/cursor-router-rs-hook.sh`；launcher 优先 repo release，再 /tmp 与 debug。关键门控事件缺 binary fail-closed。见 `.cursor/router-rs-hook.env` 与本仓 docs/hosts/hook-hosts.md。",
   "hooks": {
     "beforeSubmitPrompt": [
       {
@@ -32,7 +32,7 @@
     ],
     "postToolUse": [
       {
-        "_doc": "PostToolUse 门控（subagent multiset / shell 账本）；非门控工具由 router-rs fast-path 跳过。timeout 20s：慢盘/高负载时避免 hook 子进程挂死；见 docs/hosts/cursor.md。",
+        "_doc": "PostToolUse 门控（subagent multiset / shell 账本）；非门控工具由 router-rs fast-path 跳过。timeout 20s：慢盘/高负载时避免 hook 子进程挂死；见 docs/hosts/hook-hosts.md。",
         "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" PostToolUse",
         "timeout": 20
       }

@@ -58,7 +58,7 @@ pub fn should_dev_exempt(path: &Path, repo_root: &Path) -> bool {
     #[cfg(not(feature = "dev-exempt"))]
     {
         let _ = (path, repo_root);
-        return false;
+        false
     }
     #[cfg(feature = "dev-exempt")]
     {

@@ -1,0 +1,34 @@
+[package]
+name = "runtime-core-contracts"
+version = "0.1.0"
+edition = "2024"
+[lints]
+workspace = true
+
+[features]
+default = []
+test-support = []
+
+[lib]
+name = "rt_core_contracts"
+path = "src/lib.rs"
+
+[dependencies]
+core-state = { path = "../core-state" }
+core-policy = { path = "../core-policy", features = ["test-sync"] }
+framework-kernel = { path = "../framework-kernel" }
+framework-runtime = { path = "../framework-runtime" }
+host-projection = { path = "../host-projection" }
+routing-engine = { path = "../routing-engine" }
+serde.workspace = true
+serde_json.workspace = true
+chrono = { workspace = true }
+tracing.workspace = true
+regex.workspace = true
+sha2.workspace = true
+fs2.workspace = true
+reqwest.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+serial_test = "3"

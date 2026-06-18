@@ -21,4 +21,6 @@ thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+insta.workspace = true
+mockall.workspace = true
 tokio.workspace = true

@@ -30,7 +30,7 @@ mod atomic_write {
 }
 #[cfg(test)]
 mod task_write_lock {
-    pub use runtime_core::task_write_lock::*;
+    
 }
 
 // ── hook_status (inline, test-only) ──
@@ -42,8 +42,6 @@ pub(crate) mod hook_status {
 }
 
 // ── crate-level re-exports ──
-#[cfg(test)]
-pub(crate) use cli::route_task_with_manifest_fallback;
 
 // ── cli re-exports (from framework_runtime public API, not cli cfg(test) items) ──
 #[cfg(test)]
@@ -74,8 +72,6 @@ use execution_contract::{
 };
 #[cfg(test)]
 use framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION;
-#[cfg(test)]
-use route::ROUTE_REPORT_SCHEMA_VERSION;
 
 #[cfg(test)]
 #[ctor::ctor]

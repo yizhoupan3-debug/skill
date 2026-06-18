@@ -449,7 +449,7 @@ pub fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) ->
     if scope == "user" {
         roots
             .host_home_root("claude")
-            .expect("claude-code host must be registered in projection roots")
+            .expect("claude host must be registered in projection roots")
             .join("rules")
             .join("framework.md")
     } else {
@@ -469,7 +469,7 @@ pub fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> P
     if scope == "user" {
         roots
             .host_home_root("claude")
-            .expect("claude-code host must be registered in projection roots")
+            .expect("claude host must be registered in projection roots")
             .join("settings.json")
     } else {
         roots.project_root.join(".claude").join("settings.json")

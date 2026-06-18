@@ -13,6 +13,19 @@ pub struct ParsedSymbol {
     pub symbol: String,
     pub kind: String,
     pub line: u32,
+    pub start_col: u32,
+    pub end_line: u32,
+    pub end_col: u32,
+}
+
+impl ParsedSymbol {
+    /// Encode position as JSON blob for the `extra` column.
+    pub fn extra_json(&self) -> String {
+        format!(
+            r#"{{"sc":{},"el":{},"ec":{}}}"#,
+            self.start_col, self.end_line, self.end_col
+        )
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -23,11 +23,11 @@ fn repo_root() -> PathBuf {
         .expect("canonical repo root")
 }
 
-fn runtime_path(root: &PathBuf) -> PathBuf {
+fn runtime_path(root: &Path) -> PathBuf {
     root.join("skills/SKILL_ROUTING_RUNTIME.json")
 }
 
-fn manifest_path(root: &PathBuf) -> PathBuf {
+fn manifest_path(root: &Path) -> PathBuf {
     root.join("skills/SKILL_MANIFEST.json")
 }
 

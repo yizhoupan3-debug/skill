@@ -61,10 +61,10 @@ impl<'conn> IngestStmts<'conn> {
     pub fn prepare(conn: &'conn Connection) -> rusqlite::Result<Self> {
         Ok(Self {
             insert_node: conn.prepare(
-                "INSERT INTO nodes (id, symbol, kind, language, file_path, line) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO nodes (id, symbol, kind, language, file_path, line, extra) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?,
             insert_node_ignore: conn.prepare(
-                "INSERT OR IGNORE INTO nodes (id, symbol, kind, language, file_path, line) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT OR IGNORE INTO nodes (id, symbol, kind, language, file_path, line, extra) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )?,
             insert_edge: conn.prepare(
                 "INSERT INTO edges (caller_id, callee_id) VALUES (?1, ?2)",
@@ -107,7 +107,8 @@ pub fn ingest_parsed_file_with_stmts(
             sym.kind,
             parsed.language,
             parsed.path,
-            sym.line
+            sym.line,
+            sym.extra_json()
         ])?;
         node_ids.insert(sym.symbol.clone(), id);
     }
@@ -127,7 +128,8 @@ pub fn ingest_parsed_file_with_stmts(
                 "ref",
                 parsed.language,
                 parsed.path,
-                edge.line
+                edge.line,
+                ""
             ])?;
         }
         stmts.insert_edge.execute(params![caller_id, callee_id])?;
@@ -182,6 +184,9 @@ mod tests {
                 symbol: "foo".to_string(),
                 kind: "fn".to_string(),
                 line: 3,
+                start_col: 0,
+                end_line: 0,
+                end_col: 0,
             }],
             edges: vec![ParsedEdge {
                 caller_symbol: "foo".to_string(),
@@ -215,6 +220,9 @@ mod tests {
                     symbol: sym.to_string(),
                     kind: "fn".to_string(),
                     line: 1,
+                    start_col: 1,
+                    end_line: 1,
+                    end_col: 5,
                 }],
                 edges: vec![],
             };

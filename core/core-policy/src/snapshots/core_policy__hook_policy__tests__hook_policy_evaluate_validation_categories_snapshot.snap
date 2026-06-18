@@ -1,0 +1,17 @@
+---
+source: core/core-policy/src/hook_policy.rs
+expression: response
+---
+HookPolicyEvaluateResponse {
+    schema_version: "router-rs-hook-policy-v1",
+    authority: "rust-hook-policy",
+    operation: "validation-categories",
+    blocked: false,
+    reason: None,
+    categories: [
+        "rust",
+    ],
+    category: None,
+    protected: false,
+    protection_kind: None,
+}

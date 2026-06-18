@@ -1,8 +1,7 @@
 use super::common::*;
 use super::*;
 
-use serde_json::{json, Map, Value};
-use crate::integration_test_prelude::*;
+use serde_json::{json, Value};
 
 
 #[test]
@@ -749,7 +748,8 @@ fn framework_command_aliases_require_literal_entrypoints() {
         "agent-swarm-orchestration"
     );
 
-    for (query, forbidden) in [("team", "team")] {
+    {
+        let (query, forbidden) = ("team", "team");
         let decision = route_task_with_manifest_fallback(
             &records,
             Some(&runtime_path),

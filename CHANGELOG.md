@@ -4,7 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [v7.0] — 2026-06-15
+## [v7.0] — 2026-06-18
+
+### Added (2026-06-18 v7 收尾)
+- K13: insta snapshot 从 5 扩展到 33 个，覆盖 6 个 crate（core-policy, runtime-core, host-projection, runtime-storage, routing-engine, framework-kernel）
+- K13: CI coverage 门控（30% threshold，bash lcov 解析 fallback）
+- K6: framework_runtime/mod.rs 提取 5 子模块（snapshot, contract_summary, evidence, closeout, util）从 2K+ 行瘦身到 180 行
+- K6: paper hook 类型耦合消除（PaperProseHookHost 改为直接引用 host_projection::hooks）
+- K8: codegraph-rs 4 个警告清零（prev_leading, frontmatter_closed, skill_path, make_keyword_id）
+- docs/hosts/mimo.md: 从 69 行扩充到 113 行，补齐 6 个板块
+- paper_adversarial_hook: 依赖从 `crate::paper_prose_hook::PaperProseHookHost` 改为 `host_projection::hooks::PaperProseHookHost`
+
+### Changed (2026-06-18 v7 收尾)
+- framework_runtime/mod.rs: 提取 snapshot/contract_summary/evidence/closeout/util 5 个独立子模块
+- roadmap-v7.md: 进度更新至 ~85%（K6 35%→70%, K11 25%→75%, K13 30%→55%, K8 100%）
+
+### Removed (2026-06-18 v7 收尾)
+- codegraph-rs: dead 函数 `make_keyword_id` 移除
+- research-log-rs: `use std::fmt::Write as FmtWrite` 歧义别名清理
 
 ### Added
 - Registry Schema v2: per-host metadata (display_name, transport_type, config_format, cli_aliases, home_env_var, default_home_dir) for all 5 hosts

@@ -42,7 +42,7 @@ fn refresh_host_projections_keeps_claude_code_projection_explicit() {
     assert!(maint.contains("verify_claude_code_projection"));
     assert!(maint.contains(".claude/rules/framework.md"));
     assert!(maint.contains(".claude/.framework-projection.json"));
-    assert!(maint.contains("host_projection: claude-code"));
+    assert!(maint.contains("host_projection: claude"));
 }
 
 #[test]

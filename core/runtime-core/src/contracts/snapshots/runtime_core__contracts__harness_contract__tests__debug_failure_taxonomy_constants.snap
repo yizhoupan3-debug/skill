@@ -1,0 +1,46 @@
+---
+source: core/runtime-core/src/contracts/harness_contract.rs
+expression: FAILURE_TAXONOMY
+---
+[
+    (
+        "route_miss",
+        "The task routes to the wrong owner/gate or misses an expected owner.",
+    ),
+    (
+        "owner_drift",
+        "The active owner, goal, or scope changes without explicit contract update intent.",
+    ),
+    (
+        "context_rot",
+        "Large or irrelevant context accumulates in the parent thread or hot prompt surface.",
+    ),
+    (
+        "tool_contract_bad",
+        "A tool/skill interface is ambiguous, too verbose, or lacks failure semantics.",
+    ),
+    (
+        "verification_missing",
+        "A completion/pass claim has no executable verifier or evidence reference.",
+    ),
+    (
+        "source_stale",
+        "The answer depends on volatile external truth without an attributed current source.",
+    ),
+    (
+        "side_effect_risk",
+        "A step can mutate external state without explicit approval, idempotency, or recovery notes.",
+    ),
+    (
+        "subagent_misuse",
+        "A subagent lane is used without isolation, bounded scope, digest, or verification.",
+    ),
+    (
+        "trace_gap",
+        "The task cannot be reconstructed from trace/evidence artifacts.",
+    ),
+    (
+        "step_recovery_gap",
+        "A long-running task cannot resume from a step-level durable ledger.",
+    ),
+]

@@ -534,6 +534,15 @@ pub fn score_route_candidate<'a>(
         );
     }
 
+    // --- codegraph readiness signal ---
+    if has_codegraph_index_context(query_text, query_token_list) {
+        score += w.codegraph_boost;
+        reasons.push(
+            "CodeGraph boost applied: query references codegraph-indexed symbols or call-graph analysis."
+                .to_string(),
+        );
+    }
+
     if is_overlay_record(record) && score > 0.0 {
         score *= w.overlay_suppression_factor;
         reasons.push(format!(
@@ -566,7 +575,8 @@ pub fn pick_owner<'a>(
 ) -> RouteCandidate<'a> {
     let n = candidates.len();
     if n == 0 {
-        unreachable!("pick_owner called with empty candidates — caller must ensure non-empty input");
+        panic!("pick_owner called with empty candidates — caller ({}) must ensure non-empty input",
+               std::panic::Location::caller());
     }
 
     // Owner candidate indices
@@ -677,7 +687,10 @@ pub fn pick_owner<'a>(
             })
             .then_with(|| candidates[a].record.slug.cmp(&candidates[b].record.slug))
     });
-    let winner_idx = *fallback_pool.first().expect("pick_owner: fallback_pool is empty — invariant violation");
+    let winner_idx = *fallback_pool.first().unwrap_or_else(|| {
+        panic!("pick_owner: fallback_pool is empty after exhaustive fallbacks — {}",
+               "this should be unreachable because pool_indices always includes at least one fallback from lines 624-639")
+    });
     candidates.swap_remove(winner_idx)
 }
 
@@ -1012,5 +1025,35 @@ mod snapshot_scoring_edge_cases {
             .collect();
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
         insta::assert_json_snapshot!("scoring_chinese_query", scores.into_iter().take(3).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn codegraph_index_keywords_add_boost() {
+        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let q = "分析这个函数的调用链和影响半径";
+        let tokens = tokenize_route_text(q);
+        let set: HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();
+        let w = scoring_weights();
+
+        // Query without codegraph keywords should not get the boost
+        let q_plain = "写一个工具函数";
+        let tokens_plain = tokenize_route_text(q_plain);
+        let set_plain: HashSet<&str> = tokens_plain.iter().map(|s| s.as_str()).collect();
+
+        for rec in &records {
+            let r = score_route_candidate(rec, q, &tokens, &set, true, w);
+            let r_plain = score_route_candidate(rec, q_plain, &tokens_plain, &set_plain, true, w);
+            // Codegraph query should score at least codegraph_boost (12.0) higher
+            let has_codegraph_reason = r.reasons.iter().any(|s| s.contains("CodeGraph boost"));
+            if has_codegraph_reason {
+                assert!(
+                    (r.score - r_plain.score) >= 12.0,
+                    "codegraph boost missing for {}: codegraph={:.1} plain={:.1}",
+                    rec.slug, r.score, r_plain.score
+                );
+            }
+        }
     }
 }

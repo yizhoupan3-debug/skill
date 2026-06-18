@@ -1,0 +1,11 @@
+---
+source: core/core-policy/src/hook_review_disk_state.rs
+expression: core
+---
+HookReviewDiskCore {
+    version: 1,
+    review_required: true,
+    review_override: false,
+    independent_reviewer_seen: true,
+    reject_reason_seen: false,
+}

@@ -19,6 +19,6 @@ mod tests {
     #[test]
     fn exposes_codegraph_tool_catalog() {
         let tools = tool_definitions();
-        assert_eq!(tools.len(), 7);
+        assert_eq!(tools.len(), 8);
     }
 }

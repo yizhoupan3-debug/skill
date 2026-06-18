@@ -301,7 +301,7 @@ fn cross_host_evidence_write_consistency_smoke() {
     );
     let artifacts = evidence["artifacts"].as_array().expect("artifacts array");
     assert!(
-        artifacts.len() >= 1 + host_ids.len() * 2,
+        artifacts.len() > host_ids.len() * 2,
         "expected baseline + per-host direct/stdio rows"
     );
     for row in artifacts {

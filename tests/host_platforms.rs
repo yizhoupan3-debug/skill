@@ -1,9 +1,9 @@
 //! Normalize `SKILL.md` `metadata.platforms` tokens to the closed host ids in
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`
-//! (`cursor`, `claude-code`, `opencode`, `codex`, `mimo`).
+//! (`cursor`, `claude`, `opencode`, `codex`, `mimo`).
 //!
 //! Legacy tokens:
-//! - `claude` → `claude-code`
+//! - `claude` → `claude`
 //! - `codex-cli` → `codex` (deprecated alias)
 //! - `codex-app` → retired (rejected)
 //! - `supported` / `all-hosts` → every supported host id
@@ -38,18 +38,18 @@ pub fn normalize_skill_host_platforms(
             }
             "codex-app" => {
                 return Err(format!(
-                    "retired host platform token `{t}` (closed-set ids: codex, cursor, claude-code, opencode)"
+                    "retired host platform token `{t}` (closed-set ids: codex, cursor, claude, opencode)"
                 ));
             }
             "claude" => {
-                out.insert("claude-code".to_string());
+                out.insert("claude".to_string());
             }
-            "cursor" | "claude-code" | "opencode" | "mimo" => {
+            "cursor" | "opencode" | "mimo" => {
                 out.insert(t);
             }
             other => {
                 return Err(format!(
-                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, cursor, claude, claude-code, opencode, mimo)"
+                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, cursor, claude, opencode, mimo)"
                 ));
             }
         }

@@ -13,6 +13,7 @@ use crate::state_manager::{
 };
 
 use serde::Serialize;
+#[cfg(not(test))]
 use std::sync::OnceLock;
 use serde_json::Value;
 use std::path::Path;

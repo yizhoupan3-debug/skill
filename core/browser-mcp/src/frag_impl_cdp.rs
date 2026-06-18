@@ -127,7 +127,10 @@ impl CdpClient {
                         )
                     });
                 }
-                Ok(Message::Binary(_)) | Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
+                Ok(Message::Binary(_)) | Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {
+                    // Yield briefly to avoid busy-spinning on non-Text frames
+                    std::thread::sleep(Duration::from_millis(10));
+                }
                 Ok(Message::Close(_)) => {
                     return Err(browser_error(
                         "CDP_CALL_FAILED",
@@ -136,7 +139,9 @@ impl CdpClient {
                         true,
                     ))
                 }
-                Ok(Message::Frame(_)) => {}
+                Ok(Message::Frame(_)) => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
                 Err(err) => {
                     return Err(browser_error(
                         "CDP_CALL_FAILED",
@@ -150,18 +155,16 @@ impl CdpClient {
     }
 
     fn set_read_timeout(&mut self, timeout: Duration) -> Result<(), Value> {
-        match self.socket.get_mut() {
-            MaybeTlsStream::Plain(stream) => {
-                stream.set_read_timeout(Some(timeout)).map_err(|err| {
-                    browser_error(
-                        "CDP_CALL_FAILED",
-                        &format!("set CDP timeout failed: {err}"),
-                        &["retry browser_open"],
-                        true,
-                    )
-                })
-            }
-            _ => Ok(()),
+        if let MaybeTlsStream::Plain(tcp) = self.socket.get_mut() {
+            tcp.set_read_timeout(Some(timeout)).map_err(|err| {
+                browser_error(
+                    "CDP_CALL_FAILED",
+                    &format!("set CDP timeout failed: {err}"),
+                    &["retry browser_open"],
+                    true,
+                )
+            })?;
         }
+        Ok(())
     }
 }

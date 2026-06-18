@@ -1,10 +1,7 @@
 //! RuntimeCore hooks: callback-based indirection for host-provider dependencies.
 //!
 //! The runtime-core crate must call `register()` before any session-supervisor operations
-//! that need host-provider lookups. Functions that need hooks handle the unregistered
-//! case gracefully (falling back to built-in logic) rather than panicking.
 
-#![allow(clippy::type_complexity)]
 use std::sync::OnceLock;
 
 static HOOKS: OnceLock<SessionSupervisorHooks> = OnceLock::new();
@@ -30,6 +27,7 @@ pub struct SessionSupervisorHooks {
     /// `cwd` is the **effective** working directory (worktree-resolved).
     /// Return `Some(Ok(spec))` for known hosts, `Some(Err(e))` for errors,
     /// or `None` to fall through to the built-in fallback logic (smoke-shell).
+    #[allow(clippy::type_complexity)]
     pub build_driver_command: fn(
         host: &str,
         effective_cwd: &str,

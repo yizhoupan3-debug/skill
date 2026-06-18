@@ -21,7 +21,7 @@ fn cli_backward_compat_top_level_commands_smoke() {
             "router-rs",
             "host",
             "hook",
-            "claude-code",
+            "claude",
             "--event",
             "PreToolUse",
         ],

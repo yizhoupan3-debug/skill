@@ -1,8 +1,12 @@
 pub mod cli;
 pub mod db;
 pub mod export;
+pub mod extract;
+pub mod graph;
+pub mod hub;
 pub mod models;
 pub mod text_layer;
+pub mod verify;
 
 use anyhow::Result;
 use serde_json::Value;

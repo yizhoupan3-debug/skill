@@ -84,7 +84,6 @@ pub fn resolve_runtime_declared_manifest_fallback(
     Ok(Some(resolved))
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn route_task_with_manifest_fallback(
     runtime_records: &[SkillRecord],
     runtime_path: Option<&Path>,

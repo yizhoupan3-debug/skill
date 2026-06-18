@@ -30,6 +30,8 @@ pub struct HookReviewDiskCore {
     pub review_required: bool,
     #[serde(default)]
     pub review_override: bool,
+    /// Must have #[serde(default)] for backward compat with v1 disk state without this field.
+    #[serde(default)]
     pub independent_reviewer_seen: bool,
     #[serde(default)]
     pub reject_reason_seen: bool,
@@ -252,6 +254,22 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    mockall::mock! {
+        pub ReviewDiskState {}
+        impl HookReviewDiskVersion for ReviewDiskState {
+            const STATE_VERSION: u32 = 0;
+            fn disk_version(&self) -> u32;
+        }
+    }
+
+    #[test]
+    fn mock_hook_review_disk_version() {
+        let mut mock = MockReviewDiskState::new();
+        mock.expect_disk_version()
+            .returning(|| 42u32);
+        assert_eq!(mock.disk_version(), 42);
+    }
+
     #[test]
     fn hook_review_gate_fields_from_value_defaults_v0() {
         let fields = hook_review_gate_fields_from_value(&json!({}));
@@ -366,5 +384,34 @@ mod tests {
             hook_review_gate_legacy_state_basename("abc123"),
             "review_gate_abc123.json"
         );
+    }
+
+    #[test]
+    fn hook_review_disk_core_populated_snapshot() {
+        let core = HookReviewDiskCore {
+            version: 1,
+            review_required: true,
+            review_override: false,
+            independent_reviewer_seen: true,
+            reject_reason_seen: false,
+        };
+        insta::assert_debug_snapshot!(core);
+    }
+
+    #[test]
+    fn hook_review_gate_fields_default_snapshot() {
+        insta::assert_debug_snapshot!(HookReviewGateFields::default());
+    }
+
+    #[test]
+    fn hook_review_stop_advisory_needed_snapshot() {
+        let armed = HookReviewGateFields {
+            review_required: true,
+            review_override: false,
+            independent_reviewer_seen: false,
+            reject_reason_seen: false,
+        };
+        let line = hook_review_stop_advisory_needed(&armed, "CLAUDE_REVIEW_GATE");
+        insta::assert_debug_snapshot!(line);
     }
 }

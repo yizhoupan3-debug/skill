@@ -61,15 +61,23 @@ trigger_hints:
 
 ## Verification Checklist
 
-> **Note**: verify commands below are pattern templates. Actual commands depend on project setup and available tools.
+可执行脚本：[`scripts/verify/reproducibility.sh`](../../scripts/verify/reproducibility.sh)
 
-| # | 检查名 | PASS 条件 | verify command |
-|---|--------|-----------|----------------|
-| 1 | 种子已设置 | 代码中存在 seed 设置且非 None/随机 | `grep -rnE 'seed\s*=\s*[0-9]+' src/` → 匹配 ≥ 1 处 |
-| 2 | 确定性重跑 | 两次运行的输出 hash 一致 | `sha256sum run1_output.json run2_output.json` → hash 相同 |
-| 3 | 环境可复现 | lock file 存在且与代码同步 | `test -f uv.lock && uv lock --check` → exit 0 |
-| 4 | 数据版本化 | 输入数据有 DVC tracking 或 Git LFS | `test -f .dvc || git lfs track --list` → 非空 |
-| 5 | Checkpoint 可恢复 | checkpoint 文件存在且 load 无报错 | `python -c "import torch; torch.load('ckpt.pt')"` → exit 0 |
+```bash
+# 自动检测 lock file + source 目录：
+SRCDIR=src/ scripts/verify/reproducibility.sh
+
+# 指定 checkpoint 文件：
+CKPT=checkpoints/latest.pt scripts/verify/reproducibility.sh
+```
+
+| # | 检查名 | PASS 条件 |
+|---|--------|-----------|
+| 1 | 种子已设置 | 代码中存在 seed 设置且非 None/随机 |
+| 2 | 确定性重跑 | 两次运行的输出 hash 一致 |
+| 3 | 环境可复现 | lock file 存在且与代码同步 |
+| 4 | 数据版本化 | 输入数据有 DVC tracking 或 Git LFS |
+| 5 | Checkpoint 可恢复 | checkpoint 文件存在且 load 无报错 |
 
 ## References
 

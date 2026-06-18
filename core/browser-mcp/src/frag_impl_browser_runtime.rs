@@ -1,4 +1,6 @@
 // `impl BrowserRuntime`（与 `frag_01_through_types.rs` 中类型同模块拼接）。
+use http_util::cached_proxy_url;
+
 impl BrowserRuntime {
     #[cfg(test)]
     fn new(repo_root: PathBuf) -> Self {
@@ -30,7 +32,6 @@ impl BrowserRuntime {
             runtime_core::web_fetch_guard::validate_and_resolve_web_fetch_url(&url)
                 .map_err(|e| runtime_error("SSRF_BLOCKED", &e))?;
 
-        let parsed_url_str = parsed_url.to_string();
         let pin_host = parsed_url.host_str()
             .ok_or_else(|| runtime_error("URL_PARSE_ERROR", &format!("web_fetch URL missing host: {url}")))?;
 
@@ -55,7 +56,7 @@ impl BrowserRuntime {
             .map_err(|err| runtime_error("CLIENT_BUILD_FAILED", &format!("web_fetch client build failed: {err}")))?;
 
         let response = client
-            .get(&parsed_url_str)
+            .get(parsed_url.as_str())
             .send()
             .map_err(|err| runtime_error("FETCH_FAILED", &format!("web_fetch request failed: {err}")))?;
 
@@ -76,7 +77,7 @@ impl BrowserRuntime {
         let body_text = String::from_utf8_lossy(slice).into_owned();
 
         Ok(json!({
-            "url": parsed_url_str,
+            "url": parsed_url.to_string(),
             "status": status,
             "content_type": content_type,
             "content_length": body.len(),
@@ -358,6 +359,7 @@ impl BrowserRuntime {
         let _ = cdp.call(None, "Target.closeTarget", json!({"targetId": target_id}));
         if let Some(session) = self.sessions.get_mut(&session_id) {
             session.tabs.remove(&tab_id);
+            session.cdp_session_to_tab.retain(|_, v| v != &tab_id);
             session.current_tab_id = session.tabs.keys().next().cloned();
             let remaining = session.tabs.len();
             if remaining == 0 {
@@ -564,6 +566,9 @@ impl BrowserRuntime {
                 true,
             )
         })?;
+        // Purge old screenshots: keep at most 50 most recent files.
+        const MAX_SCREENSHOTS: usize = 50;
+        purge_old_screenshots(&screenshot_dir, MAX_SCREENSHOTS);
         let path = screenshot_dir.join(format!("{image_id}.png"));
         let mut params = Map::new();
         params.insert("format".to_string(), Value::String("png".to_string()));
@@ -1161,8 +1166,20 @@ impl BrowserRuntime {
                     false,
                 )
             })?;
+
+        // 确保 wait_for_cdp / CdpClient::connect 失败时清理 Chrome 进程和临时目录
+        let cleanup = CleanupGuard {
+            child: Some(child),
+            user_data_dir: &user_data_dir,
+        };
+
         wait_for_cdp(port)?;
-        self.browser_processes.insert(session_id.clone(), child);
+        let cdp = CdpClient::connect(port)?;
+
+        // 所有前置操作成功后才注册到 session 状态
+        let mut cleanup = std::mem::ManuallyDrop::new(cleanup);
+        self.browser_processes
+            .insert(session_id.clone(), cleanup.child.take().unwrap());
         self.sessions.insert(
             session_id.clone(),
             SessionRecord {
@@ -1174,8 +1191,9 @@ impl BrowserRuntime {
                 },
                 current_tab_id: None,
                 tabs: HashMap::new(),
+                cdp_session_to_tab: HashMap::new(),
                 user_data_dir,
-                cdp: CdpClient::connect(port)?,
+                cdp,
             },
         );
         Ok(session_id)
@@ -1235,7 +1253,7 @@ impl BrowserRuntime {
                 TabRecord {
                     id: tab_id.clone(),
                     target_id,
-                    session_id: session_cdp_id,
+                    session_id: session_cdp_id.clone(),
                     url: "about:blank".to_string(),
                     title: "Untitled".to_string(),
                     page_revision: 0,
@@ -1247,6 +1265,8 @@ impl BrowserRuntime {
                     network_events: Vec::new(),
                 },
             );
+            // O(1) CDP session → tab lookup
+            session.cdp_session_to_tab.insert(session_cdp_id.clone(), tab_id.clone());
             session.current_tab_id = Some(tab_id.clone());
         }
         Ok(tab_id)
@@ -1379,13 +1399,16 @@ impl BrowserRuntime {
         timeout_ms: u64,
     ) -> Result<(), Value> {
         let deadline = SystemTime::now() + Duration::from_millis(timeout_ms);
+        let mut delay_ms = 50u64;
         while SystemTime::now() < deadline {
-            self.drain_cdp_events(session_id, 100)?;
+            self.drain_cdp_events(session_id, delay_ms)?;
             let state = self.evaluate_string(session_id, tab_id, "document.readyState")?;
             if state == "complete" || state == "interactive" {
                 self.drain_cdp_events(session_id, 250)?;
                 return Ok(());
             }
+            // Exponential backoff: 50ms → 100ms → 200ms → 400ms → cap at 500ms
+            delay_ms = (delay_ms * 2).min(500);
         }
         Err(browser_error(
             "BROWSER_PAGE_NOT_READY",
@@ -1746,22 +1769,25 @@ impl BrowserRuntime {
             let cdp = self.cdp_mut(session_id)?;
             cdp.drain_events(Duration::from_millis(timeout_ms))?
         };
-        for event in events {
+        for event in &events {
             self.handle_cdp_event(session_id, event);
         }
         Ok(())
     }
 
-    fn handle_cdp_event(&mut self, session_id: &str, event: Value) {
+    fn handle_cdp_event(&mut self, session_id: &str, event: &Value) {
         let method = event.get("method").and_then(Value::as_str).unwrap_or("");
         let cdp_session_id = event.get("sessionId").and_then(Value::as_str).unwrap_or("");
-        let params = event.get("params").cloned().unwrap_or_else(|| json!({}));
         let Some(tab_id) = self.tab_id_by_cdp_session(session_id, cdp_session_id) else {
             return;
         };
+        let params = match event.get("params") {
+            Some(p) => p,
+            None => return,
+        };
         if method == "Network.responseReceived" {
-            let response = params.get("response").cloned().unwrap_or_else(|| json!({}));
-            let request = params.get("request").cloned().unwrap_or_else(|| json!({}));
+            let response = params.get("response").unwrap_or(&Value::Null);
+            let request = params.get("request").unwrap_or(&Value::Null);
             let event = NetworkEvent {
                 id: format!("req_{}", self.request_counter + 1),
                 method: value_str(request.get("method")).to_string(),
@@ -1805,13 +1831,10 @@ impl BrowserRuntime {
     }
 
     fn tab_id_by_cdp_session(&self, session_id: &str, cdp_session_id: &str) -> Option<String> {
-        self.sessions.get(session_id).and_then(|session| {
-            session
-                .tabs
-                .iter()
-                .find(|(_, tab)| tab.session_id == cdp_session_id)
-                .map(|(tab_id, _)| tab_id.clone())
-        })
+        self.sessions
+            .get(session_id)
+            .and_then(|session| session.cdp_session_to_tab.get(cdp_session_id))
+            .cloned()
     }
 
     fn push_network_event(&mut self, session_id: &str, tab_id: &str, event: NetworkEvent) {

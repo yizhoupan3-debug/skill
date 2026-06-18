@@ -4,6 +4,8 @@ use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Loop execution lock persisted as `.loop-active` in the repo root.
+/// Guards against concurrent loop runs by storing the active loop and run IDs.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LoopLock {
     pub loop_id: String,
@@ -11,17 +13,20 @@ pub struct LoopLock {
     pub acquired_at: String,
 }
 
+/// Lock information combining the LoopLock with its acquisition epoch for staleness checks.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct LockInfo {
     pub lock: LoopLock,
     pub acquired_epoch: u64,
 }
 
-pub fn is_kill_signal_active(repo_root: &Path, loop_id: &str) -> bool {
+/// Check whether a kill signal file exists for the given loop.
+/// Returns `true` if the file `.loop-kill/{loop_id}` is present on disk.
     kill_signal_path(repo_root, loop_id).is_file()
 }
 
-pub fn write_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopError> {
+/// Write a kill signal file for the given loop to request graceful termination.
+/// The file is stored at `.loop-kill/{loop_id}` with a JSON payload containing the loop ID and timestamp.
     let path = kill_signal_path(repo_root, loop_id);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -39,7 +44,8 @@ pub fn write_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopErro
     Ok(())
 }
 
-pub fn clear_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopError> {
+/// Remove the kill signal file for a specific loop.
+/// Safe to call even if no signal file exists (no-op in that case).
     let path = kill_signal_path(repo_root, loop_id);
     if path.is_file() {
         fs::remove_file(&path)
@@ -48,7 +54,8 @@ pub fn clear_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopErro
     Ok(())
 }
 
-pub fn clear_all_kill_signals(repo_root: &Path) -> Result<(), LoopError> {
+/// Remove all kill signal files by deleting the entire `.loop-kill/` directory.
+/// Use during loop runner shutdown cleanup.
     let kill_dir = repo_root.join(".loop-kill");
     if kill_dir.is_dir() {
         fs::remove_dir_all(&kill_dir)
@@ -57,7 +64,8 @@ pub fn clear_all_kill_signals(repo_root: &Path) -> Result<(), LoopError> {
     Ok(())
 }
 
-pub fn read_lock_info(repo_root: &Path) -> Result<Option<LockInfo>, LoopError> {
+/// Read the current lock file and return its content if it exists.
+/// Returns `Ok(None)` when no lock file is present.
     let path = lock_path(repo_root);
     if !path.is_file() {
         return Ok(None);
@@ -70,7 +78,9 @@ pub fn read_lock_info(repo_root: &Path) -> Result<Option<LockInfo>, LoopError> {
     Ok(Some(LockInfo { lock, acquired_epoch: epoch }))
 }
 
-pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(), LoopError> {
+/// Acquire an exclusive loop lock for the given loop and run.
+/// Fails if an active (non-stale) lock already exists. Stale locks older than
+/// `LOOP_LOCK_MAX_AGE_SECS` are automatically overridden.
     let path = lock_path(repo_root);
     if path.is_file() {
         let info = read_lock_info(repo_root)?;
@@ -133,7 +143,8 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
     Ok(())
 }
 
-pub fn release_lock(repo_root: &Path) -> Result<(), LoopError> {
+/// Release the exclusive loop lock by deleting the lock file.
+/// Safe to call even when no lock file exists (no-op in that case).
     let path = lock_path(repo_root);
     if path.is_file() {
         fs::remove_file(&path)

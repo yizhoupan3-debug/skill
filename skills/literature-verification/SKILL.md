@@ -59,15 +59,26 @@ trigger_hints:
 
 ## Verification Checklist
 
-> **Note**: verify commands below are pattern templates. Actual commands depend on project setup and available tools.
+可执行脚本：[`scripts/verify/literature.sh`](../../scripts/verify/literature.sh)
 
-| # | 检查名 | PASS 条件 | verify command |
-|---|--------|-----------|----------------|
-| 1 | DOI 可达性 | 每条 DOI HTTP 200 或 3xx | `for doi in $DOIS; do curl -sIL -o /dev/null -w '%{http_code}' "https://doi.org/$doi"; done` |
-| 2 | 引用-claim 对齐 | 每条 claim 至少 1 篇引用明确支持 | `grep -c 'UNSUPPORTED' claim_matrix.txt` → exit 0 = 0 条未支持 |
-| 3 | Contradiction sweep | 无未解决的文献间矛盾 | `grep -c 'CONTRADICTION' contradiction_report.txt` → exit 0 = 0 条矛盾 |
-| 4 | Closest work 识别 | 已识别 top-3 相关先验工作 | `test -s closest_work.md && grep -c '^|' closest_work.md` → ≥ 3 行 |
-| 5 | 覆盖度评分 | 覆盖度 ≥ 70 / 100 | `awk -F: '/score/{print $2}' coverage.json` → ≥ 70 |
+```bash
+# 完整运行（需提供 DOIs + claim 矩阵文件）：
+scripts/verify/literature.sh \
+  --dois "10.1234/abc 10.5678/def" \
+  --claims claim_matrix.txt \
+  --contradictions contradiction_report.txt \
+  --closest closest_work.md
+
+# 仅检查 DOI 可达性：
+DOIS="10.1234/abc 10.5678/def" scripts/verify/literature.sh
+```
+
+| # | 检查名 | PASS 条件 |
+|---|--------|-----------|
+| 1 | DOI 可达性 | 每条 DOI HTTP 200 或 3xx |
+| 2 | 引用-claim 对齐 | 0 条 UNSUPPORTED |
+| 3 | Contradiction sweep | 0 条未解决矛盾 |
+| 4 | Closest work 识别 | ≥ 3 行优先级表 |
 
 ## References
 

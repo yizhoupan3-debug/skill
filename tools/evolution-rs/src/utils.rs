@@ -145,6 +145,7 @@ pub fn truncate_ts_chars(ts: &str, max_chars: usize) -> String {
     ts.chars().take(max_chars).collect()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn load_entries(path: &std::path::Path) -> anyhow::Result<Vec<AuditJournalEntry>> {
     evolution_rs::load_audit_journal_entries(path)
 }

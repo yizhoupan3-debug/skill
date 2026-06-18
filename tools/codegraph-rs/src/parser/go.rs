@@ -39,6 +39,9 @@ fn collect_all(
                         symbol: text.to_string(),
                         kind: node.kind().trim_end_matches("_declaration").to_string(),
                         line: node.start_position().row as u32 + 1,
+                        start_col: node.start_position().column as u32 + 1,
+                        end_line: node.end_position().row as u32 + 1,
+                        end_col: node.end_position().column as u32 + 1,
                     });
                 }
         }

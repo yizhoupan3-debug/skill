@@ -51,6 +51,9 @@ fn collect_all(
                             .replace("_declaration", "")
                             .replace("_definition", ""),
                         line: node.start_position().row as u32 + 1,
+                        start_col: node.start_position().column as u32 + 1,
+                        end_line: node.end_position().row as u32 + 1,
+                        end_col: node.end_position().column as u32 + 1,
                     });
                 }
         }
@@ -62,6 +65,9 @@ fn collect_all(
                             symbol: text.to_string(),
                             kind: "const".to_string(),
                             line: node.start_position().row as u32 + 1,
+                            start_col: node.start_position().column as u32 + 1,
+                            end_line: node.end_position().row as u32 + 1,
+                            end_col: node.end_position().column as u32 + 1,
                         });
                     }
         }

@@ -5,7 +5,7 @@
     "agent-swarm-orchestration": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -18,7 +18,7 @@
     "algo-trading": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -31,7 +31,7 @@
     "citation-management": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -44,7 +44,7 @@
     "code-review-deep": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -57,7 +57,7 @@
     "deepinterview": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -70,7 +70,7 @@
     "design-md": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -83,7 +83,7 @@
     "diagramming": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -96,7 +96,7 @@
     "discussx": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -109,7 +109,7 @@
     "doc": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -122,7 +122,7 @@
     "email-template": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -135,7 +135,7 @@
     "experiment-reproducibility": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -148,7 +148,7 @@
     "formal-verification": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -161,7 +161,7 @@
     "gh-address-comments": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -174,7 +174,7 @@
     "gh-fix-ci": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -187,7 +187,7 @@
     "gitx": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -200,7 +200,7 @@
     "implementx": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -213,7 +213,7 @@
     "infographic": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -226,7 +226,7 @@
     "literature-verification": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -239,7 +239,7 @@
     "math-derivation": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -252,7 +252,7 @@
     "mcp-server-management": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -265,7 +265,7 @@
     "paper-workbench": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -278,7 +278,7 @@
     "paper-writing": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -291,7 +291,7 @@
     "pdf": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -304,7 +304,7 @@
     "plan-mode": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -317,7 +317,7 @@
     "planx": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -330,7 +330,7 @@
     "prose-verification": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -343,7 +343,7 @@
     "python-env-management": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -356,7 +356,7 @@
     "reproducibility-verification": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -369,7 +369,7 @@
     "research-discovery": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -382,7 +382,7 @@
     "research-execution": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -395,7 +395,7 @@
     "scientific-figure-plotting": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -408,7 +408,7 @@
     "sentry": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -421,7 +421,7 @@
     "simplify": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -434,7 +434,7 @@
     "skill-framework-developer": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -447,7 +447,7 @@
     "slides": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -460,7 +460,7 @@
     "spreadsheets": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -473,7 +473,7 @@
     "statistical-analysis": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -486,7 +486,7 @@
     "statistical-verification": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -499,7 +499,7 @@
     "structure-verification": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -512,7 +512,7 @@
     "systematic-debugging": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -525,7 +525,7 @@
     "tikz-paper-figure": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -538,7 +538,7 @@
     "update": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -551,7 +551,7 @@
     "verifyx": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",
@@ -564,7 +564,7 @@
     "visual-review": {
       "host_support": {
         "platforms": [
-          "claude-code",
+          "claude",
           "codex",
           "cursor",
           "opencode",

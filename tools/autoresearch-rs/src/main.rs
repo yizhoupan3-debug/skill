@@ -726,16 +726,46 @@ fn cmd_barrier(
             let _ = add_external_research(&updated, research);
         }
     }
+    // Persist external research results into state before building report
+    dump_state(&state_path, &updated)?;
 
-    // Build BARRIER_REPORT.json
-    let candidates: Vec<Value> = novelty_arr(&updated, "draft_claims").iter().map(|c| json!({
-        "id": c.get("id"),
-        "hypothesis": c.get("claim"),
-        "confidence": "medium",
-        "evidence": [],
-        "expected_effort": "unknown",
-        "risk": "unknown",
-    })).collect();
+    // Build candidates with evidence from external research
+    let draft_claims = novelty_arr(&updated, "draft_claims");
+    let candidates: Vec<Value> = draft_claims.iter().map(|c| {
+        let claim_id = c.get("id").and_then(Value::as_str).unwrap_or("");
+        let claim_text = str_field(c, "claim");
+
+        // Gather evidence from external research entries for this claim
+        let research_entries = external_research_entries_for_claim(&updated, claim_id);
+        let mut evidence: Vec<Value> = Vec::new();
+        for entry in research_entries {
+            let results = entry.get("results").and_then(Value::as_array);
+            if let Some(papers) = results {
+                for paper in papers.iter().take(5) {
+                    let title = str_field(paper, "title");
+                    let url = str_field(paper, "url");
+                    let authors = str_field(paper, "authors");
+                    let source = str_field(entry, "source");
+                    evidence.push(json!({
+                        "title": if title.is_empty() { "_untitled_" } else { &title },
+                        "url": url,
+                        "authors": authors,
+                        "source": source,
+                    }));
+                }
+            }
+        }
+
+        json!({
+            "id": c.get("id"),
+            "hypothesis": claim_text,
+            "confidence": c.get("confidence").or(Some(&json!("medium"))),
+            "evidence": evidence,
+            "evidence_count": evidence.len(),
+            "expected_effort": "unknown",
+            "risk": "unknown",
+        })
+    }).collect();
 
     let barrier_report = json!({
         "schema_version": "barrier-report-v1",
@@ -884,7 +914,7 @@ fn cmd_log_insight(workspace: &Path, log_id: &str, text: &str, confidence: &str)
     Ok(())
 }
 
-fn cmd_log_connect(workspace: &Path, log_id_a: &str, log_id_b: &str) -> Result<()> {
+fn cmd_log_connect(workspace: &Path, log_id_a: &str, log_id_b: &str, relation: Option<String>) -> Result<()> {
     let (workspace, _) = ensure_workspace(workspace)?;
     let log_root = workspace.join("research-log");
     let db_path = log_root.join("research-log.db");
@@ -894,12 +924,166 @@ fn cmd_log_connect(workspace: &Path, log_id_a: &str, log_id_b: &str) -> Result<(
         id: 0,
         entry_id_a: log_id_a.to_string(),
         entry_id_b: log_id_b.to_string(),
-        relation: None,
+        relation,
+        weight: 1.0,
+        confidence: None,
         notes: None,
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     research_log_rs::db::insert_connection(&conn, &log_conn)?;
     println!("Connected log entries: {} <-> {}", log_id_a, log_id_b);
+    Ok(())
+}
+
+fn cmd_log_neighbors(workspace: &Path, entry_id: &str, relation_filter: Option<&str>, limit: usize) -> Result<()> {
+    let (workspace, _) = ensure_workspace(workspace)?;
+    let log_root = workspace.join("research-log");
+    let db_path = log_root.join("research-log.db");
+    let conn = research_log_rs::db::init_database(&db_path)?;
+    let g = research_log_rs::graph::load_full_graph(&conn)?;
+
+    match research_log_rs::db::get_entry(&conn, entry_id)? {
+        Some(ref entry) => {
+            let filter: Option<Vec<&str>> = relation_filter
+                .map(|r| r.split(',').map(|s| s.trim()).collect());
+            let neighbors = research_log_rs::graph::get_neighbors(&g, entry_id, filter.as_deref());
+            println!("Neighbors of [{}] {}: {}", entry.id, entry.direction, entry.question);
+            println!("  ({} connection(s))", neighbors.len());
+            for (nid, rel, _w, conf) in neighbors.iter().take(limit) {
+                match research_log_rs::db::get_entry(&conn, nid)? {
+                    Some(e) => println!("  {} --[{}{}]--> [{}] {}",
+                        entry_id,
+                        rel.unwrap_or("related"),
+                        conf.map(|c| format!(" conf={}", c)).unwrap_or_default(),
+                        e.id,
+                        e.question.chars().take(60).collect::<String>(),
+                    ),
+                    None => println!("  {} --[{}]--> {}", entry_id, rel.unwrap_or("related"), nid),
+                }
+            }
+        }
+        None => println!("Entry not found: {}", entry_id),
+    }
+    Ok(())
+}
+
+fn cmd_log_viz(workspace: &Path, entry_id: Option<&str>, max_depth: usize, format: &str) -> Result<()> {
+    if format != "text" {
+        eprintln!("Warning: only 'text' format is supported in autoresearch viz; defaulting to ASCII output");
+    }
+    let (workspace, _) = ensure_workspace(workspace)?;
+    let log_root = workspace.join("research-log");
+    let db_path = log_root.join("research-log.db");
+    let conn = research_log_rs::db::init_database(&db_path)?;
+    let g = match entry_id {
+        Some(eid) => research_log_rs::graph::load_subgraph(&conn, eid, max_depth)?,
+        None => research_log_rs::graph::load_full_graph(&conn)?,
+    };
+
+    let mut labels = std::collections::HashMap::new();
+    for node in &g.nodes {
+        if let Some(entry) = research_log_rs::db::get_entry(&conn, node)? {
+            labels.insert(node.clone(), format!("{}:{}", entry.direction, entry.question.chars().take(40).collect::<String>()));
+        }
+    }
+
+    let stats = research_log_rs::graph::get_graph_stats(&g);
+    println!("Knowledge Graph: {} nodes, {} edges, density {:.4}", stats.node_count, stats.edge_count, stats.density);
+    println!();
+
+    // Deduplicate edges for ASCII (each connection appears twice in adjacency)
+    let mut seen_edges = std::collections::HashSet::new();
+    for node in &g.nodes {
+        let label = labels.get(node).map(|s| s.as_str()).unwrap_or(node);
+        println!("  [{}] {}", node, label);
+        if let Some(edges) = g.adjacency.get(node) {
+            for (nbor, rel, w, _) in edges {
+                let edge_key = if node.as_str() < nbor.as_str() {
+                    format!("{}->{}", node, nbor)
+                } else {
+                    format!("{}->{}", nbor, node)
+                };
+                if !seen_edges.insert(edge_key) {
+                    continue;
+                }
+                if g.nodes.contains(nbor) {
+                    println!("   └──[{} w={:.1}]──> [{}]", rel.as_deref().unwrap_or("related"), w, nbor);
+                }
+            }
+        }
+        println!();
+    }
+    Ok(())
+}
+
+fn cmd_log_route(workspace: &Path, barrier_id: &str, max_depth: usize) -> Result<()> {
+    let (workspace, _) = ensure_workspace(workspace)?;
+    let log_root = workspace.join("research-log");
+    let db_path = log_root.join("research-log.db");
+    let conn = research_log_rs::db::init_database(&db_path)?;
+    let route = research_log_rs::graph::trace_barrier_route(&conn, barrier_id, max_depth)?;
+
+    println!("Barrier Route: {}", route.barrier.barrier_id);
+    println!("  Loop: {:?}, Created: {}", route.barrier.loop_id, route.barrier.created_at);
+    for ewf in &route.root_entries {
+        println!("  Entry: [{}] {}", ewf.entry.id, ewf.entry.question);
+    }
+    let stats = research_log_rs::graph::get_graph_stats(&route.subgraph);
+    println!("  Subgraph: {} nodes, {} edges", stats.node_count, stats.edge_count);
+    Ok(())
+}
+
+fn cmd_log_extract(workspace: &Path, entry_id: &str) -> Result<()> {
+    let (workspace, _) = ensure_workspace(workspace)?;
+    let log_root = workspace.join("research-log");
+    let db_path = log_root.join("research-log.db");
+    let conn = research_log_rs::db::init_database(&db_path)?;
+
+    let entry = match research_log_rs::db::get_entry(&conn, entry_id)? {
+        Some(e) => e,
+        None => {
+            println!("Entry not found: {}", entry_id);
+            return Ok(());
+        }
+    };
+
+    let mut text = entry.question.clone();
+    for finding in research_log_rs::db::get_findings(&conn, entry_id)? {
+        text.push(' ');
+        text.push_str(&finding.content);
+    }
+    for tag in research_log_rs::db::get_tags(&conn, entry_id)? {
+        text.push(' ');
+        text.push_str(&tag);
+    }
+
+    let found = research_log_rs::extract::extract_entities_from_text(&text);
+    if found.is_empty() {
+        println!("No entities found in entry [{}].", entry_id);
+        return Ok(());
+    }
+    for (name, kind) in &found {
+        let eid = research_log_rs::db::upsert_entity(&conn, name, kind, None, None)?;
+        research_log_rs::db::insert_entry_entity(&conn, entry_id, eid, research_log_rs::models::ENTRY_ENTITY_ROLE_MENTIONED)?;
+    }
+    println!("Extracted {} entities from [{}]:", found.len(), entry_id);
+    for (name, kind) in &found {
+        println!("  [{}] {}", kind, name);
+    }
+    Ok(())
+}
+
+fn cmd_log_search_entities(workspace: &Path, query: &str, limit: usize) -> Result<()> {
+    let (workspace, _) = ensure_workspace(workspace)?;
+    let log_root = workspace.join("research-log");
+    let db_path = log_root.join("research-log.db");
+    let conn = research_log_rs::db::init_database(&db_path)?;
+    let results = research_log_rs::db::search_entities(&conn, query, limit)?;
+
+    println!("Entity search results for \"{}\" ({} found):", query, results.len());
+    for e in &results {
+        println!("  [{}] {} (id={})", e.kind, e.name, e.id);
+    }
     Ok(())
 }
 
@@ -1177,8 +1361,34 @@ fn main() -> Result<()> {
             workspace,
             log_id_a,
             log_id_b,
-            relation: _,
-        } => cmd_log_connect(&workspace, &log_id_a, &log_id_b)?,
+            relation,
+        } => cmd_log_connect(&workspace, &log_id_a, &log_id_b, relation)?,
+        Commands::LogNeighbors {
+            workspace,
+            entry_id,
+            relation,
+            limit,
+        } => cmd_log_neighbors(&workspace, &entry_id, relation.as_deref(), limit)?,
+        Commands::LogViz {
+            workspace,
+            entry_id,
+            max_depth,
+            format,
+        } => cmd_log_viz(&workspace, entry_id.as_deref(), max_depth, &format)?,
+        Commands::LogRoute {
+            workspace,
+            barrier_id,
+            max_depth,
+        } => cmd_log_route(&workspace, &barrier_id, max_depth)?,
+        Commands::LogExtract {
+            workspace,
+            entry_id,
+        } => cmd_log_extract(&workspace, &entry_id)?,
+        Commands::LogSearchEntities {
+            workspace,
+            query,
+            limit,
+        } => cmd_log_search_entities(&workspace, &query, limit)?,
     }
     Ok(())
 }

@@ -19,9 +19,23 @@ if (!args) {
 const topic = typeof args === 'string' ? args : JSON.stringify(args)
 log(`Researching topic: ${topic}`)
 
+const recoveryTrace = { searches: [], extractionErrors: [], fetchFailures: [], warnings: [] }
+
+function safeHostname(url) {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return null
+  }
+}
+function normalizeUrl(url) {
+  if (!url) return ''
+  try { new URL(url); return url } catch { return 'https://' + url }
+}
+
 phase('Plan')
 log(`Planning search vectors...`)
-const planPrompt = `
+const planObj = await agent(`
 You are a research planning agent. The user wants to research:
 "${topic}"
 
@@ -30,9 +44,7 @@ Return JSON ONLY:
 {
   "queries": ["query 1", "query 2", ...]
 }
-`
-
-const planObj = await agent(planPrompt, {
+`, {
   label: 'plan-searches',
   phase: 'Plan',
   model: 'haiku',
@@ -47,6 +59,7 @@ const planObj = await agent(planPrompt, {
 
 const queries = planObj.queries
 log(`Generated ${queries.length} search vectors`)
+recoveryTrace.searches = queries.map(q => ({ query: q, yieldedUrls: 0 }))
 
 phase('Search')
 log(`Running searches...`)
@@ -67,27 +80,44 @@ const searchResults = await parallel(
         required: ["urls"]
       }
     }
-  ))
+  ).then(res => {
+    const found = res?.urls?.length || 0
+    // Update recovery trace for the matching query
+    for (const s of recoveryTrace.searches) {
+      if (s.query === q) s.yieldedUrls = found
+    }
+    return res
+  }))
 )
 
 // Deduplicate URLs
 const urlSet = new Set()
 searchResults.filter(Boolean).forEach(r => {
-  if (r.urls) r.urls.forEach(url => urlSet.add(url))
+  if (r.urls) r.urls.forEach(url => {
+    try { new URL(url); urlSet.add(url) } catch {
+      // silently skip malformed URLs from search results
+    }
+  })
 })
-const uniqueUrls = Array.from(urlSet).slice(0, 10) // Cap at 10 URLs
+const uniqueUrls = Array.from(urlSet).slice(0, 10)
 log(`Found ${uniqueUrls.length} unique sources to fetch`)
 
 if (uniqueUrls.length === 0) {
-  return { error: "No search results found." }
+  return { error: "No search results found.", recoveryTrace }
+}
+if (uniqueUrls.length < 3) {
+  recoveryTrace.warnings.push("Fewer than 3 unique sources — coverage may be thin")
 }
 
 phase('Extract')
 log(`Fetching and extracting claims...`)
+const extractionErrors = []
 const extractionResults = await pipeline(
   uniqueUrls,
-  url => agent(
-    `Fetch this URL using the WebFetch tool: ${url}
+  url => {
+    const hostname = safeHostname(url) || url.replace(/[^a-zA-Z0-9]/g, '').substring(0, 25) || 'unknown'
+    return agent(
+      `Fetch this URL using the WebFetch tool: ${normalizeUrl(url)}
     Then extract the key facts, claims, and evidence relevant to: "${topic}"
     Return JSON ONLY:
     {
@@ -95,40 +125,59 @@ const extractionResults = await pipeline(
         { "fact": "The claim text", "evidence": "Quote or specific context from page" }
       ]
     }`,
-    {
-      label: `extract:${new URL(url).hostname}`,
-      phase: 'Extract',
-      model: 'haiku',
-      schema: {
-        type: "object",
-        properties: {
-          claims: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                fact: { type: "string" },
-                evidence: { type: "string" }
-              },
-              required: ["fact", "evidence"]
+      {
+        label: `extract:${hostname}`,
+        phase: 'Extract',
+        model: 'haiku',
+        schema: {
+          type: "object",
+          properties: {
+            claims: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  fact: { type: "string" },
+                  evidence: { type: "string" }
+                },
+                required: ["fact", "evidence"]
+              }
             }
-          }
-        },
-        required: ["claims"]
+          },
+          required: ["claims"]
+        }
       }
-    }
-  ).then(res => ({ url, claims: res?.claims || [] })).catch(() => ({ url, claims: [] }))
+    ).then(res => ({ url, claims: res?.claims || [] }))
+     .catch(err => {
+       extractionErrors.push({ url, error: extractErrorSummary(err) })
+       return { url, claims: [] }
+     })
+  }
 )
+
+// Collect extraction trace
+for (const r of extractionResults) {
+  if (r.claims.length === 0 && extractionErrors.find(e => e.url === r.url)) {
+    recoveryTrace.extractionErrors.push(extractionErrors.find(e => e.url === r.url))
+  }
+}
+const totalFetched = extractionResults.filter(r => r.claims.length > 0).length
+recoveryTrace.fetchFailures.push({ total: uniqueUrls.length, succeeded: totalFetched, failed: uniqueUrls.length - totalFetched })
 
 const allClaims = extractionResults.flatMap(r =>
   r.claims.map(c => ({ ...c, url: r.url }))
 )
-log(`Extracted ${allClaims.length} raw claims`)
+log(`Extracted ${allClaims.length} raw claims from ${totalFetched} sources`)
+
+if (allClaims.length === 0) {
+  recoveryTrace.warnings.push("No claims extracted — sources may be paywalled or unresponsive")
+  return { error: "No claims could be extracted from any source.", recoveryTrace }
+}
 
 phase('Verify')
-log(`Adversarially verifying claims...`)
+log(`Cross-referencing and verifying claims across sources...`)
 
-// Deduplicate claims conceptually before verification
+// Dedup with sonnet for semantic accuracy
 const dedupPrompt = `
 Here are claims extracted from multiple sources about: "${topic}"
 Merge overlapping claims and filter out irrelevant ones.
@@ -147,7 +196,7 @@ ${JSON.stringify(allClaims, null, 2)}
 const dedupObj = await agent(dedupPrompt, {
   label: 'dedup-claims',
   phase: 'Verify',
-  model: 'haiku',
+  model: 'sonnet',
   schema: {
     type: "object",
     properties: {
@@ -171,35 +220,69 @@ const mergedClaims = dedupObj.merged_claims || []
 log(`Consolidated into ${mergedClaims.length} distinct claims for verification`)
 
 const verifiedClaims = await parallel(
-  mergedClaims.map(c => () => agent(
-    `Adversarially verify this claim based on general knowledge and internal consistency.
+  mergedClaims.map(c => () => {
+    // Collect evidence from all sources for this claim
+    const sourceEvidence = c.urls.map(u => {
+      const src = extractionResults.find(r => r.url === u)
+      const ev = src?.claims?.find(cc => cc.fact === c.claim)
+      return `- [${u}]: ${ev?.evidence || '(extracted without specific evidence)'}`
+    }).join('\n')
+
+    return agent(
+      `You are an adversarial fact-checker. Cross-reference this claim against ALL its source evidence.
+
+    Topic: "${topic}"
+
     Claim: "${c.claim}"
-    Sources: ${c.urls.join(", ")}
-    Is this claim factually sound, logically coherent, and generally accepted? Or is it highly contested, dubious, or subjective?
+
+    Evidence from each source:
+    ${sourceEvidence}
+
+    Tasks:
+    1. Do the sources AGREE or CONTRADICT each other on this claim?
+    2. Does the evidence actually support the claim (not just restate it)?
+    3. Is the claim logically coherent and generally accepted, or contested/dubious?
+    4. Are there known counterarguments or caveats the evidence misses?
+
     Return JSON ONLY:
     {
-      "is_valid": true/false,
-      "nuance": "Important context, caveats, or corrections"
+      "verdict": "verified" or "contested" or "refuted",
+      "sources_agree": true or false,
+      "evidence_supports_claim": true or false,
+      "contradictions": "description of any cross-source contradictions, or null",
+      "confidence": "high" or "medium" or "low",
+      "nuance": "Important caveats, corrections, or context. Keep concise but specific."
     }`,
-    {
-      label: `verify:${c.claim.substring(0, 30)}`,
-      phase: 'Verify',
-      model: 'haiku',
-      schema: {
-        type: "object",
-        properties: {
-          is_valid: { type: "boolean" },
-          nuance: { type: "string" }
-        },
-        required: ["is_valid", "nuance"]
+      {
+        label: `verify:${c.claim.substring(0, 30)}`,
+        phase: 'Verify',
+        model: 'sonnet',
+        schema: {
+          type: "object",
+          properties: {
+            verdict: { type: "string", enum: ["verified", "contested", "refuted"] },
+            sources_agree: { type: "boolean" },
+            evidence_supports_claim: { type: "boolean" },
+            contradictions: { type: ["string", "null"] },
+            confidence: { type: "string", enum: ["high", "medium", "low"] },
+            nuance: { type: "string" }
+          },
+          required: ["verdict", "sources_agree", "evidence_supports_claim", "confidence", "nuance"]
+        }
       }
-    }
-  ).then(res => ({ ...c, ...res })))
+    ).then(res => ({ ...c, ...res }))
+  })
 )
 
 const finalClaims = verifiedClaims.filter(Boolean)
-const validClaims = finalClaims.filter(c => c.is_valid)
-log(`${validClaims.length}/${finalClaims.length} claims passed verification`)
+const validClaims = finalClaims.filter(c => c.verdict === 'verified')
+const contestedClaims = finalClaims.filter(c => c.verdict === 'contested')
+const refutedClaims = finalClaims.filter(c => c.verdict === 'refuted')
+log(`${validClaims.length} verified, ${contestedClaims.length} contested, ${refutedClaims.length} refuted`)
+
+if (validClaims.length === 0) {
+  recoveryTrace.warnings.push("No claims passed adversarial verification — report will be thin or caveat-heavy")
+}
 
 phase('Synthesize')
 log(`Synthesizing final report...`)
@@ -207,21 +290,25 @@ log(`Synthesizing final report...`)
 const synthPrompt = `
 Write a comprehensive, well-structured research report on: "${topic}"
 
-Use the following verified claims and context. You MUST cite your sources inline using markdown links (e.g., [Source](url)).
-Do NOT include claims that failed verification unless discussing them as misconceptions.
+Use the following claims and context. You MUST cite your sources inline using markdown links (e.g., [Source](url)).
+Do NOT include refuted claims in the main body; contested claims go in the Caveats section.
 
 Verified Claims:
 ${JSON.stringify(validClaims, null, 2)}
 
-Refuted/Contested Claims (for context/debunking if relevant):
-${JSON.stringify(finalClaims.filter(c => !c.is_valid), null, 2)}
+Contested Claims (discuss under Nuances & Caveats):
+${JSON.stringify(contestedClaims, null, 2)}
+
+Recovery notes (for the methods section):
+${JSON.stringify(recoveryTrace, null, 2)}
 
 The report should be in simplified Chinese (面向用户的可见输出使用简体中文), written in a professional, academic style.
 Include:
 1. Executive Summary
-2. Detailed Findings (structured by themes)
-3. Nuances & Caveats
-4. References (list of URLs)
+2. Detailed Findings (structured by themes, not by source)
+3. Nuances & Caveats (contested claims, limitations, open questions)
+4. References (list of all URLs cited, with brief descriptions)
+5. Recovery trace (Appendix: what searches ran, which yielded results, what was excluded and why)
 `
 
 const report = await agent(synthPrompt, {
@@ -230,4 +317,17 @@ const report = await agent(synthPrompt, {
   model: 'sonnet'
 })
 
-return { report }
+return { report, recoveryTrace }
+
+
+// ---- helpers ----
+
+function extractErrorSummary(err) {
+  const msg = err?.message || String(err)
+  if (msg.includes('timeout') || msg.includes('Timeout')) return 'fetch_timeout'
+  if (msg.includes('404') || msg.includes('not found')) return 'not_found_404'
+  if (msg.includes('403') || msg.includes('forbidden')) return 'access_denied_403'
+  if (msg.includes('paywall') || msg.includes('Paywall')) return 'paywall_blocked'
+  if (msg.includes('fetch') || msg.includes('Fetch')) return 'fetch_error'
+  return msg.substring(0, 80)
+}

@@ -16,11 +16,11 @@ fn fresh_mcp_repo(host: &str, label: &str) -> PathBuf {
     path
 }
 
-fn call_closeout_gate(repo: &PathBuf, host: &str, args: &serde_json::Value) -> String {
+fn call_closeout_gate(repo: &Path, host: &str, args: &serde_json::Value) -> String {
     mcp_stdio_harness::tool_closeout_gate(args, repo, host).expect("closeout_gate")
 }
 
-fn call_review_gate_prompt(repo: &PathBuf, host: &str) -> String {
+fn call_review_gate_prompt(repo: &Path, host: &str) -> String {
     let response = mcp_stdio_harness::handle_mcp_request(
         r#"{"jsonrpc":"2.0","id":1,"method":"prompts/get","params":{"name":"review_gate"}}"#,
         repo,

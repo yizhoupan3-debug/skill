@@ -117,7 +117,7 @@
     ],
     [
       "citation-management",
-      "L1",
+      "L2",
       "owner",
       "none",
       "P2",
@@ -197,7 +197,8 @@
         "mcp__mcp-codegraph__codegraph_impact",
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
-        "mcp__mcp-codegraph__codegraph_dead_code"
+        "mcp__mcp-codegraph__codegraph_dead_code",
+                        "mcp__mcp-codegraph__codegraph_goto_definition"
       ],
       null
     ],
@@ -645,7 +646,8 @@
         "mcp__mcp-codegraph__codegraph_impact",
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
-        "mcp__mcp-codegraph__codegraph_dead_code"
+        "mcp__mcp-codegraph__codegraph_dead_code",
+                        "mcp__mcp-codegraph__codegraph_goto_definition"
       ],
       null
     ],
@@ -971,7 +973,8 @@
         "mcp__mcp-codegraph__codegraph_impact",
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
-        "mcp__mcp-codegraph__codegraph_dead_code"
+        "mcp__mcp-codegraph__codegraph_dead_code",
+                        "mcp__mcp-codegraph__codegraph_goto_definition"
       ],
       "sonnet"
     ],
@@ -1588,7 +1591,8 @@
         "mcp__mcp-codegraph__codegraph_impact",
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
-        "mcp__mcp-codegraph__codegraph_dead_code"
+        "mcp__mcp-codegraph__codegraph_dead_code",
+                        "mcp__mcp-codegraph__codegraph_goto_definition"
       ],
       null
     ],

@@ -2,6 +2,11 @@
 
 use serde_json::Value;
 
+/// Domain classification for a stdio operation.
+///
+/// Each variant corresponds to a namespace of op strings: Routing (skill/router dispatch),
+/// Runtime (execution, background, session control), Trace (event recording/replay), or Framework
+/// (snapshot, contract, goal/RFV). Use to group ops for dispatch routing and contract validation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StdioOpDomain {
     Routing,
@@ -79,6 +84,10 @@ fn op_in_domain(op: &str, domain_ops: &[&str]) -> bool {
     domain_ops.contains(&op)
 }
 
+/// Classify a stdio operation string into its domain.
+///
+/// Returns `Some(StdioOpDomain)` if the op is recognized, or `None` for unknown ops. Use as the
+/// primary entry point for routing incoming stdio requests to the correct dispatch handler.
 pub fn classify_stdio_op(op: &str) -> Option<StdioOpDomain> {
     if op_in_domain(op, ROUTING_STDIO_OPS) {
         Some(StdioOpDomain::Routing)
@@ -93,18 +102,26 @@ pub fn classify_stdio_op(op: &str) -> Option<StdioOpDomain> {
     }
 }
 
+/// Check whether a stdio operation belongs to the Routing domain.
+/// Use for domain-specific dispatch filtering or contract reporting.
 pub fn is_routing_stdio_op(op: &str) -> bool {
     op_in_domain(op, ROUTING_STDIO_OPS)
 }
 
+/// Check whether a stdio operation belongs to the Runtime domain.
+/// Use for domain-specific dispatch filtering or contract reporting.
 pub fn is_runtime_stdio_op(op: &str) -> bool {
     op_in_domain(op, RUNTIME_STDIO_OPS)
 }
 
+/// Check whether a stdio operation belongs to the Trace domain.
+/// Use for domain-specific dispatch filtering or contract reporting.
 pub fn is_trace_stdio_op(op: &str) -> bool {
     op_in_domain(op, TRACE_STDIO_OPS)
 }
 
+/// Check whether a stdio operation belongs to the Framework domain.
+/// Use for domain-specific dispatch filtering or contract reporting.
 pub fn is_framework_stdio_op(op: &str) -> bool {
     op_in_domain(op, FRAMEWORK_STDIO_OPS)
 }
@@ -126,6 +143,10 @@ pub fn dispatch_runtime_output_mode_stdio(
     None
 }
 
+/// Returns `false` for all runtime output mode operations.
+///
+/// The real dispatch is handled in `runtime-core::orchestration_controller` via host-projection
+/// hooks. This stub returns `false` so the dispatch branch in `stdio_dispatch.rs` is never entered.
 pub fn handles_runtime_output_stdio_op(_op: &str) -> bool {
     false
 }

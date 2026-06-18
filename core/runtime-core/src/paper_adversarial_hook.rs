@@ -5,7 +5,7 @@
 //! （review P0-1 修复）。环境变量 per-host：`1`/`true`/`yes`/`on` 启用；未设置或其它值视为关闭。
 //! - 受 `ROUTER_RS_OPERATOR_INJECT` 聚合闸约束（与 GOAL/RFV nudge 一致）。
 
-use crate::paper_prose_hook::PaperProseHookHost;
+use host_projection::hooks::PaperProseHookHost;
 use crate::router_env_flags::{
     router_rs_env_enabled_default_false, router_rs_operator_inject_globally_enabled,
 };
@@ -159,11 +159,10 @@ pub fn resolve_paper_adversarial_block(repo_root: &Path) -> String {
         .and_then(|m| m.modified().ok());
     {
         let guard = BLOCK_CACHE.lock().expect("paper adversarial block cache");
-        if let Some(ref cached) = *guard {
-            if cached.mtime == mtime {
+        if let Some(ref cached) = *guard
+            && cached.mtime == mtime {
                 return cached.content.clone();
             }
-        }
     }
     let content = match fs::read_to_string(&path) {
         Ok(t) => {
@@ -436,5 +435,43 @@ mod tests {
 
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
         restore_env(hook_var, prior_hook);
+    }
+
+    #[test]
+    fn prompt_signals_paper_manuscript_work_is_send() {
+        let result = std::thread::spawn(move || {
+            prompt_signals_paper_manuscript_work(
+                "请根据审稿意见逐条修改这篇论文的 Introduction",
+            )
+        })
+        .join()
+        .expect("thread panicked");
+        assert!(result);
+    }
+
+    #[test]
+    fn prompt_signals_negative_is_send() {
+        let result = std::thread::spawn(move || {
+            prompt_signals_paper_manuscript_work(
+                "run cargo fmt and clippy before pull request",
+            )
+        })
+        .join()
+        .expect("thread panicked");
+        assert!(!result);
+    }
+
+    #[test]
+    fn resolve_adversarial_block_is_send() {
+        let tmp = std::env::temp_dir().join("paper-adv-send-test");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(tmp.join("configs/framework")).unwrap();
+        let p = tmp.join(REL_PATH);
+        std::fs::write(&p, format!("{PREFIX_LINE}\n\nSend-safe 测试正文。")).unwrap();
+        let result = std::thread::spawn(move || resolve_paper_adversarial_block(&tmp))
+            .join()
+            .expect("thread panicked");
+        assert!(result.contains(PREFIX_LINE));
+        assert!(result.contains("Send-safe"));
     }
 }

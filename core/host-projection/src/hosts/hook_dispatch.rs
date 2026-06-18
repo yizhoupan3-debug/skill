@@ -1,6 +1,6 @@
 //! Unified hook dispatch trait for all 4 closed-set hosts.
 //!
-//! All hosts (cursor, claude-code, codex, opencode) implement `HostHookDispatcher`,
+//! All hosts (cursor, claude, codex, opencode) implement `HostHookDispatcher`,
 //! sharing common logic through trait defaults. Host-specific overrides are minimal.
 //!
 //! Architecture:
@@ -108,8 +108,9 @@ pub trait HostHookDispatcher: HostHookConfig {
     // ── (B) Shared + extension ─────────────────────────────────
 
     /// Stop: closeout gate + review gate check.
-    /// Default: closeout_followup check + state cleanup.
-    /// Override: Cursor adds goal signals; Claude adds TouchState; Codex adds advisory.
+    /// Default: closeout_followup check (reference only — all hosts override).
+    /// Claude adds review gate + TouchState; Codex adds phase bump + reject reason;
+    /// Cursor adds goal signals + review gate; OpenCode adds review gate + reject reason.
     fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> {
         let completion_text = extract_completion_text(event);
         if let Some(msg) = crate::hooks::closeout_stop_followup_for_completion_text(

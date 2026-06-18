@@ -389,3 +389,101 @@ pub fn print_catalog_summary(summary: &CatalogSummary) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::ProcessStatus;
+    use std::io::Write;
+
+    #[test]
+    fn test_checkpoint_default_not_done() {
+        let cp = Checkpoint::default();
+        assert!(!cp.is_done("anything"));
+        assert!(cp.completed.is_empty());
+        assert!(cp.failed.is_empty());
+        assert!(cp.skipped.is_empty());
+    }
+
+    #[test]
+    fn test_checkpoint_mark_ok() {
+        let mut cp = Checkpoint::default();
+        cp.mark("path1", ProcessStatus::Ok);
+        assert!(cp.is_done("path1"));
+        assert!(cp.completed.contains(&"path1".to_string()));
+        assert!(!cp.failed.contains(&"path1".to_string()));
+    }
+
+    #[test]
+    fn test_checkpoint_mark_transition() {
+        let mut cp = Checkpoint::default();
+        cp.mark("p1", ProcessStatus::Ok);
+        cp.mark("p1", ProcessStatus::Error); // transition from Ok -> Error
+        assert!(!cp.completed.contains(&"p1".to_string()));
+        assert!(cp.failed.contains(&"p1".to_string()));
+    }
+
+    #[test]
+    fn test_checkpoint_mark_multiple() {
+        let mut cp = Checkpoint::default();
+        cp.mark("a", ProcessStatus::Ok);
+        cp.mark("b", ProcessStatus::Error);
+        cp.mark("c", ProcessStatus::Skipped);
+        assert!(cp.is_done("a"));
+        assert!(cp.is_done("b"));
+        assert!(cp.is_done("c"));
+        assert_eq!(cp.completed.len(), 1);
+        assert_eq!(cp.failed.len(), 1);
+        assert_eq!(cp.skipped.len(), 1);
+    }
+
+    #[test]
+    fn test_load_paths_from_manifest_array() {
+        let dir = std::env::temp_dir().join("batch_engine_test_arr");
+        let _ = std::fs::create_dir_all(&dir);
+        let manifest = dir.join("manifest.json");
+        let mut f = std::fs::File::create(&manifest).unwrap();
+        f.write_all(b"[\"/path/a\", \"/path/b\"]").unwrap();
+        drop(f);
+
+        let paths = load_paths(Some(&manifest), false).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0], PathBuf::from("/path/a"));
+        assert_eq!(paths[1], PathBuf::from("/path/b"));
+    }
+
+    #[test]
+    fn test_load_paths_from_manifest_object() {
+        let dir = std::env::temp_dir().join("batch_engine_test_obj");
+        let _ = std::fs::create_dir_all(&dir);
+        let manifest = dir.join("manifest.json");
+        let mut f = std::fs::File::create(&manifest).unwrap();
+        f.write_all(b"{\"paths\": [\"/x\", \"/y\"]}").unwrap();
+        drop(f);
+
+        let paths = load_paths(Some(&manifest), false).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0], PathBuf::from("/x"));
+    }
+
+    #[test]
+    fn test_load_paths_requires_source() {
+        assert!(load_paths(None, false).is_err());
+    }
+
+    #[test]
+    fn test_load_paths_rejects_bad_manifest() {
+        let dir = std::env::temp_dir().join("batch_engine_test_bad");
+        let _ = std::fs::create_dir_all(&dir);
+        let manifest = dir.join("manifest.json");
+        std::fs::write(&manifest, b"invalid json").unwrap();
+
+        let result = load_paths(Some(&manifest), false);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(result.is_err());
+    }
+}

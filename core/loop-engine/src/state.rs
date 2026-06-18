@@ -2,27 +2,37 @@ use crate::types::{LoopError, LoopRunState, CurrentRun, LoopPhase, RunHistoryEnt
 use std::path::{Path, PathBuf};
 use std::fs;
 
+/// Filename used for persisting loop run state: `LOOP_RUN_STATE.json`.
 pub const LOOP_RUN_STATE_FILENAME: &str = "LOOP_RUN_STATE.json";
+/// Schema version string written into every LOOP_RUN_STATE.json: `loop-run-state-v1`.
 pub const LOOP_RUN_STATE_SCHEMA_VERSION: &str = "loop-run-state-v1";
+/// Filename for the exclusive loop lock file: `.loop-active`.
 pub const LOOP_LOCK_FILENAME: &str = ".loop-active";
+/// Maximum age (in seconds) before a loop lock is considered stale and can be overridden.
 pub const LOOP_LOCK_MAX_AGE_SECS: u64 = 3600;
 
+/// Return the path to `LOOP_RUN_STATE.json` for the given loop under `artifacts/loop/{loop_id}/`.
 pub fn loop_state_path(repo_root: &Path, loop_id: &str) -> PathBuf {
     repo_root.join("artifacts").join("loop").join(loop_id).join(LOOP_RUN_STATE_FILENAME)
 }
 
+/// Return the artifacts directory path for a loop: `artifacts/loop/{loop_id}/`.
 pub fn loop_artifacts_dir(repo_root: &Path, loop_id: &str) -> PathBuf {
     repo_root.join("artifacts").join("loop").join(loop_id)
 }
 
+/// Return the evidence directory path for a specific action: `artifacts/loop/{loop_id}/evidence/{action_id}/`.
 pub fn loop_evidence_dir(repo_root: &Path, loop_id: &str, action_id: &str) -> PathBuf {
     loop_artifacts_dir(repo_root, loop_id).join("evidence").join(action_id)
 }
 
+/// Return the reports directory path for a loop: `artifacts/loop/{loop_id}/reports/`.
 pub fn loop_reports_dir(repo_root: &Path, loop_id: &str) -> PathBuf {
     loop_artifacts_dir(repo_root, loop_id).join("reports")
 }
 
+/// Return the closeout file path for a specific action in a run:
+/// `artifacts/loop/{loop_id}/closeout/{run_id}-{action_id}.json`.
 pub fn closeout_path(repo_root: &Path, loop_id: &str, run_id: &str, action_id: &str) -> PathBuf {
     repo_root
         .join("artifacts")
@@ -32,18 +42,23 @@ pub fn closeout_path(repo_root: &Path, loop_id: &str, run_id: &str, action_id: &
         .join(format!("{run_id}-{action_id}.json"))
 }
 
+/// Return the path to the loop lock file: `.loop-active` in the repo root.
 pub fn lock_path(repo_root: &Path) -> PathBuf {
     repo_root.join(LOOP_LOCK_FILENAME)
 }
 
+/// Return the kill signal file path for a loop: `.loop-kill/{loop_id}`.
 pub fn kill_signal_path(repo_root: &Path, loop_id: &str) -> PathBuf {
     repo_root.join(".loop-kill").join(loop_id)
 }
 
+/// Return the current UTC time as an RFC 3339 string with seconds precision.
 pub fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
+/// Read the persisted loop run state from `LOOP_RUN_STATE.json` on disk.
+/// Returns `Ok(None)` when the file does not exist.
 pub fn read_loop_state(repo_root: &Path, loop_id: &str) -> Result<Option<LoopRunState>, LoopError> {
     let path = loop_state_path(repo_root, loop_id);
     if !path.is_file() {
@@ -56,6 +71,7 @@ pub fn read_loop_state(repo_root: &Path, loop_id: &str) -> Result<Option<LoopRun
     Ok(Some(state))
 }
 
+/// Atomically write the loop run state to `LOOP_RUN_STATE.json` using a temp-file + rename strategy.
 pub fn write_loop_state(repo_root: &Path, loop_id: &str, state: &LoopRunState) -> Result<(), LoopError> {
     let path = loop_state_path(repo_root, loop_id);
     if let Some(parent) = path.parent() {
@@ -79,6 +95,8 @@ pub fn write_loop_state(repo_root: &Path, loop_id: &str, state: &LoopRunState) -
     Ok(())
 }
 
+/// Create a new initial `LoopRunState` with the given loop ID and profile.
+/// The phase is set to `Pending` with no active run and an empty history.
 pub fn create_initial_state(loop_id: &str, profile: &str) -> LoopRunState {
     let now = now_iso();
     LoopRunState {
@@ -94,12 +112,14 @@ pub fn create_initial_state(loop_id: &str, profile: &str) -> LoopRunState {
     }
 }
 
+/// Transition the loop runner to a new phase, updating the heartbeat and refresh timestamp.
 pub fn transition_phase(state: &mut LoopRunState, new_phase: LoopPhase) {
     state.phase = new_phase.as_str().to_string();
     state.last_heartbeat = now_iso();
     state.last_refreshed_at = now_iso();
 }
 
+/// Initialise a new run within the loop state, setting the run ID and started-at timestamp.
 pub fn start_new_run(state: &mut LoopRunState, run_id: &str) {
     state.current_run = Some(CurrentRun {
         run_id: run_id.to_string(),
@@ -112,6 +132,7 @@ pub fn start_new_run(state: &mut LoopRunState, run_id: &str) {
     });
 }
 
+/// Mark the current run as finished, archiving it to the run history and clearing the current run.
 pub fn finish_run(state: &mut LoopRunState, result: &str) {
     if let Some(ref run) = state.current_run {
         state.history.push(RunHistoryEntry {
@@ -123,11 +144,13 @@ pub fn finish_run(state: &mut LoopRunState, result: &str) {
     state.current_run = None;
 }
 
+/// Generate a unique run ID string in the format `run-{YYYYMMDD}-{HHMM}-{SS}`.
 pub fn generate_run_id(_loop_id: &str) -> String {
     let now = chrono::Utc::now();
     format!("run-{}-{}-{}", now.format("%Y%m%d"), now.format("%H%M"), now.format("%S"))
 }
 
+/// Update the heartbeat timestamp of the loop run state to the current time.
 pub fn update_heartbeat(state: &mut LoopRunState) {
     state.last_heartbeat = now_iso();
     state.last_refreshed_at = now_iso();

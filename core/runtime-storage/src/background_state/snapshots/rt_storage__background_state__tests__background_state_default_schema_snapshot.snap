@@ -1,0 +1,10 @@
+---
+source: core/runtime-storage/src/background_state/tests.rs
+expression: persisted
+---
+{
+  "active_sessions": [],
+  "jobs": [],
+  "pending_session_takeovers": [],
+  "schema_version": "runtime-background-state-v5"
+}

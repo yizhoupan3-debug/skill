@@ -908,7 +908,7 @@ fn classify_rate_limit_generic_claude_code() {
     );
     assert!(
         result.is_ok(),
-        "claude-code should be classified via generic patterns: {result:?}"
+        "claude should be classified via generic patterns: {result:?}"
     );
     let cls = result.unwrap();
     assert_eq!(cls.blocked_reason, "rate_limit");

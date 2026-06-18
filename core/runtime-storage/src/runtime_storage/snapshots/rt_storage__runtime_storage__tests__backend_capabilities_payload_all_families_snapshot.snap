@@ -1,0 +1,42 @@
+---
+source: core/runtime-storage/src/runtime_storage/tests.rs
+expression: payloads
+---
+[
+    (
+        "filesystem",
+        Object {
+            "backend_family": String("filesystem"),
+            "supports_atomic_replace": Bool(true),
+            "supports_compaction": Bool(false),
+            "supports_consistent_append": Bool(true),
+            "supports_remote_event_transport": Bool(true),
+            "supports_snapshot_delta": Bool(false),
+            "supports_sqlite_wal": Bool(false),
+        },
+    ),
+    (
+        "sqlite",
+        Object {
+            "backend_family": String("sqlite"),
+            "supports_atomic_replace": Bool(true),
+            "supports_compaction": Bool(true),
+            "supports_consistent_append": Bool(true),
+            "supports_remote_event_transport": Bool(true),
+            "supports_snapshot_delta": Bool(true),
+            "supports_sqlite_wal": Bool(true),
+        },
+    ),
+    (
+        "memory",
+        Object {
+            "backend_family": String("memory"),
+            "supports_atomic_replace": Bool(false),
+            "supports_compaction": Bool(false),
+            "supports_consistent_append": Bool(false),
+            "supports_remote_event_transport": Bool(true),
+            "supports_snapshot_delta": Bool(false),
+            "supports_sqlite_wal": Bool(false),
+        },
+    ),
+]

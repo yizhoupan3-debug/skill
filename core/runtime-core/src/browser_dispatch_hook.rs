@@ -12,7 +12,9 @@ static BROWSER_DISPATCH: OnceLock<BrowserDispatchFn> = OnceLock::new();
 
 /// Register the browser command dispatch function (call once at startup).
 pub fn set_browser_dispatch(f: BrowserDispatchFn) {
-    let _ = BROWSER_DISPATCH.set(f);
+    if BROWSER_DISPATCH.set(f).is_err() {
+        tracing::warn!("BROWSER_DISPATCH already registered — second call ignored");
+    }
 }
 
 /// Dispatch a browser subcommand. Returns `Err` if no dispatch function was registered.

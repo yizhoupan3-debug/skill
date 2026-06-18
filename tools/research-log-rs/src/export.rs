@@ -73,7 +73,7 @@ mod tests {
     use std::path::Path;
 
     fn setup_test_db() -> rusqlite::Connection {
-        let conn = db::init_database(&Path::new(":memory:")).unwrap();
+        let conn = db::init_database(Path::new(":memory:")).unwrap();
         let entry = Entry {
             id: "exp-test-1".into(),
             direction: "quant".into(),
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn test_export_json_empty_db() {
-        let conn = db::init_database(&Path::new(":memory:")).unwrap();
+        let conn = db::init_database(Path::new(":memory:")).unwrap();
         let entries = export_json(&conn).unwrap();
         assert!(entries.is_empty());
     }
@@ -131,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_export_csv_special_chars() {
-        let conn = db::init_database(&Path::new(":memory:")).unwrap();
+        let conn = db::init_database(Path::new(":memory:")).unwrap();
         let entry = Entry {
             id: "csv-special".into(),
             direction: "a,b".into(),     // contains comma
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn test_export_obsidian_empty_db() {
-        let conn = db::init_database(&Path::new(":memory:")).unwrap();
+        let conn = db::init_database(Path::new(":memory:")).unwrap();
         let files = export_obsidian(&conn).unwrap();
         assert!(files.is_empty());
     }

@@ -384,6 +384,12 @@ mod tests {
     }
 
     #[test]
+    fn registry_reviewer_lanes_snapshot() {
+        // Snapshot sorted reviewer lanes for regression detection.
+        insta::assert_debug_snapshot!(reviewer_lanes_sorted(None));
+    }
+
+    #[test]
     fn spawn_first_registry_fields_disk_default() {
         assert!(review_spawn_first_enabled(None));
         let line = review_spawn_first_nudge_line(None, "cursor");
@@ -401,7 +407,7 @@ mod tests {
         let claude_line = review_spawn_first_nudge_line(None, "claude");
         assert!(
             claude_line.contains("Claude"),
-            "claude-code line from template: {claude_line}"
+            "claude line from template: {claude_line}"
         );
     }
 

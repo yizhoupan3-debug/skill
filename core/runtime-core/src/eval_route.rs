@@ -30,7 +30,15 @@ pub struct EvalCasePayload {
     pub notes: Option<String>,
     #[serde(default)]
     pub host_id: Option<String>,
+    /// Override first_turn for this case (defaults to true for backward compat).
+    #[serde(default = "default_true")]
+    pub first_turn: bool,
+    /// Override allow_overlay for this case (defaults to true for backward compat).
+    #[serde(default = "default_true")]
+    pub allow_overlay: bool,
 }
+
+fn default_true() -> bool { true }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct EvalCasesPayload {
@@ -117,8 +125,8 @@ pub fn evaluate_route_cases(
             host_id,
             &case.task,
             &session_id,
-            true,
-            true,
+            case.allow_overlay,
+            case.first_turn,
         ) {
             Ok(d) => d,
             Err(err) => {

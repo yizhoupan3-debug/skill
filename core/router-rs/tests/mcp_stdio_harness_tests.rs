@@ -847,7 +847,7 @@ mod init_tracker_error_handling_tests {
         let result = crate::mcp_stdio_harness::init_tracker_for_test(&test_path);
 
         let _ = std::fs::set_permissions(&test_path, std::fs::Permissions::from_mode(0o755));
-        let _ = std::fs::remove_dir_all(&test_path.parent().unwrap());
+        let _ = std::fs::remove_dir_all(test_path.parent().unwrap());
 
         // The key assertion: function returned (didn't panic), result should be Err
         assert!(

@@ -342,10 +342,12 @@ mod tests {
     #[test]
     fn high_reroute_rate_writes_alert() {
         let path = temp_alerts_path();
-        let mut cfg = EvolutionObserverConfig::default();
-        cfg.alerts_path = path.clone();
-        cfg.reroute_rate_alert = 0.3;
-        cfg.window_capacity = 64;
+        let mut cfg = EvolutionObserverConfig {
+            alerts_path: path.clone(),
+            reroute_rate_alert: 0.3,
+            window_capacity: 64,
+            ..Default::default()
+        };
         let mut obs = EvolutionObserver::new(cfg);
         for _ in 0..10 {
             obs.observe(&TelemetryEvent::RouteDecision {

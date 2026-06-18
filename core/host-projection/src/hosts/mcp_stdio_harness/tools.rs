@@ -912,6 +912,22 @@ pub(super) fn tool_closeout_record_write(
 
 pub(super) const WEB_FETCH_MAX_REDIRECTS: usize = 5;
 
+/// Build a reqwest blocking client with proxy, timeout, no-redirect, and DNS pins.
+fn build_web_fetch_client(pin_host: &str, addrs: &[std::net::SocketAddr]) -> Result<reqwest::blocking::Client, String> {
+    let mut builder = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent("router-rs-framework-mcp/0.1");
+    if let Some(proxy_url) = http_util::cached_proxy_url()
+        && let Ok(proxy) = reqwest::Proxy::all(proxy_url) {
+            builder = builder.proxy(proxy);
+        }
+    for addr in addrs {
+        builder = builder.resolve(pin_host, *addr);
+    }
+    builder.build().map_err(|err| format!("web_fetch client build failed: {err}"))
+}
+
 pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
     let url = arguments
         .get("url")
@@ -934,36 +950,10 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         .map(|value| value as usize)
         .unwrap_or(WEB_FETCH_MAX_BYTES_DEFAULT)
         .clamp(1, WEB_FETCH_MAX_BYTES_DEFAULT);
-    let mut client_builder = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent("router-rs-framework-mcp/0.1");
-    for key in [
-        "HTTPS_PROXY",
-        "https_proxy",
-        "HTTP_PROXY",
-        "http_proxy",
-        "ALL_PROXY",
-    ] {
-        if let Ok(proxy_url) = std::env::var(key) {
-            let trimmed = proxy_url.trim();
-            if !trimmed.is_empty()
-                && let Ok(proxy) = reqwest::Proxy::all(trimmed) {
-                    client_builder = client_builder.proxy(proxy);
-                    break;
-                }
-        }
-    }
-    // Pin DNS results from validate_and_resolve to prevent rebinding TOCTOU.
     let pin_host = parsed_url
         .host_str()
         .ok_or_else(|| format!("web_fetch URL missing host: {url}"))?;
-    for addr in &initial_addrs {
-        client_builder = client_builder.resolve(pin_host, *addr);
-    }
-    let mut client = client_builder
-        .build()
-        .map_err(|err| format!("web_fetch client build failed: {err}"))?;
+    let mut client = build_web_fetch_client(pin_host, &initial_addrs)?;
     let mut current_url = url.to_string();
     let mut response = None;
     for hop in 0..=WEB_FETCH_MAX_REDIRECTS {
@@ -987,8 +977,6 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
                         resp.status()
                     )
                 })?;
-            let _base = reqwest::Url::parse(&current_url)
-                .map_err(|err| format!("web_fetch redirect base URL invalid: {err}"))?;
             current_url = crate::hooks::resolve_web_fetch_redirect(&current_url, location)?;
             // Pin DNS for redirect target to prevent DNS rebinding TOCTOU.
             let redirect_parsed = reqwest::Url::parse(&current_url)
@@ -996,30 +984,14 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
             let rp_host = redirect_parsed
                 .host_str()
                 .ok_or_else(|| format!("web_fetch redirect URL missing host: {current_url}"))?;
-            let rp_port =
-                redirect_parsed
-                    .port()
-                    .unwrap_or(if redirect_parsed.scheme() == "https" {
-                        443
-                    } else {
-                        80
-                    });
+            let rp_port = redirect_parsed.port().unwrap_or(if redirect_parsed.scheme() == "https" { 443 } else { 80 });
             let rp_addrs: Vec<std::net::SocketAddr> =
                 crate::hooks::resolve_web_fetch_addresses(rp_host, rp_port)?
                     .iter()
                     .filter_map(|s| s.parse().ok())
                     .collect();
-            // Rebuild client with pinned DNS for redirect target.
-            let mut rb = reqwest::blocking::Client::builder()
-                .timeout(Duration::from_secs(WEB_FETCH_TIMEOUT_SECS))
-                .redirect(reqwest::redirect::Policy::none())
-                .user_agent("router-rs-framework-mcp/0.1");
-            for addr in &rp_addrs {
-                rb = rb.resolve(rp_host, *addr);
-            }
-            client = rb
-                .build()
-                .map_err(|err| format!("web_fetch client rebuild failed: {err}"))?;
+            // Rebuild client with pinned DNS for redirect target — proxy is inherited via build_web_fetch_client.
+            client = build_web_fetch_client(rp_host, &rp_addrs)?;
             continue;
         }
         response = Some(resp);
@@ -1058,18 +1030,17 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
 #[derive(serde::Deserialize)]
 struct RouteLogEntry {
     ts: Option<String>,
-    #[allow(dead_code)]
     kind: Option<String>,
     task: Option<String>,
     skill: Option<String>,
     confidence: Option<f32>,
     reroute: Option<bool>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Telemetry field, reserved for latency analysis.
     latency_ms: Option<u64>,
     parity_gate: Option<String>,
     #[serde(default)]
     reasons: Vec<String>,
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Telemetry metadata; reserved for token budget analysis.
     matched_tokens: Option<usize>,
 }
 

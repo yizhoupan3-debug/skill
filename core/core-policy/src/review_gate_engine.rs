@@ -170,17 +170,25 @@ mod fork_context_parse_tests {
     fn cursor_review_gate_mode_respects_lite_env() {
         let _lock = crate::test_env_sync::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_CURSOR_REVIEW_GATE_MODE");
+        // SAFETY: single-threaded test, no concurrent env var access.
         unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite") };
         assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Lite);
+        // SAFETY: single-threaded test, no concurrent env var access.
         unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "LITE") };
         assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Lite);
+        // SAFETY: single-threaded test, no concurrent env var access.
         unsafe { std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE") };
         assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Strict);
+        // SAFETY: single-threaded test, no concurrent env var access.
         unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "strict") };
         assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Strict);
         match prev {
-            Some(v) => unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE") },
+            Some(v) =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", v) },
+            None =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe { std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE") },
         }
     }
 
@@ -216,6 +224,7 @@ mod fork_context_parse_tests {
     fn review_independent_fork_infers_missing_fork_on_reviewer_lane_when_env_on() {
         let _lock = crate::test_env_sync::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+        // SAFETY: single-threaded test, no concurrent env var access.
         unsafe { std::env::set_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", "1") };
         assert!(review_independent_fork(None, true));
         assert!(!review_independent_fork(Some(true), true));
@@ -224,10 +233,14 @@ mod fork_context_parse_tests {
             "explore-class lane must not count even with explicit fork_context false"
         );
         match prev {
-            Some(v) => unsafe {
+            Some(v) =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe {
                 std::env::set_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v)
             },
-            None => unsafe {
+            None =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe {
                 std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
             },
         }
@@ -237,7 +250,9 @@ mod fork_context_parse_tests {
     fn legacy_host_fork_env_still_enables_canonical_infer() {
         let _lock = crate::test_env_sync::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+        // SAFETY: single-threaded test, no concurrent env var access.
         unsafe { std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE") };
+        // SAFETY: single-threaded test, no concurrent env var access.
         unsafe {
             std::env::set_var(
                 "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
@@ -248,13 +263,17 @@ mod fork_context_parse_tests {
         assert!(!review_independent_fork(Some(true), true));
         assert!(!review_independent_fork(None, false));
         match prev {
-            Some(v) => unsafe {
+            Some(v) =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe {
                 std::env::set_var(
                     "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
                     v,
                 );
             },
-            None => unsafe {
+            None =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe {
                 std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
             },
         }
@@ -271,7 +290,9 @@ mod fork_context_parse_tests {
     fn review_independent_fork_respects_infer_env_off() {
         let _lock = crate::test_env_sync::process_env_lock();
         let prev = std::env::var_os("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+        // SAFETY: single-threaded test, no concurrent env var access.
         unsafe { std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE") };
+        // SAFETY: single-threaded test, no concurrent env var access.
         unsafe {
             std::env::set_var(
                 "ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
@@ -287,10 +308,14 @@ mod fork_context_parse_tests {
             "explicit fork_context false still counts"
         );
         match prev {
-            Some(v) => unsafe {
+            Some(v) =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe {
                 std::env::set_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v)
             },
-            None => unsafe {
+            None =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe {
                 std::env::remove_var("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
             },
         }
@@ -333,5 +358,57 @@ mod fork_context_parse_tests {
         );
         let review_only = ReviewGateFacts::from_prompt("全面review这个仓库");
         assert!(review_only.review_required);
+    }
+
+    #[test]
+    fn review_gate_facts_from_review_prompt_snapshot() {
+        install_review_prompt_test_deps();
+        let facts = ReviewGateFacts::from_prompt("全面review这个仓库");
+        insta::assert_debug_snapshot!(facts);
+    }
+
+    #[test]
+    fn review_gate_blocks_stop_matrix_snapshot() {
+        let scenarios = vec![
+            ("armed-no-evidence", ReviewGateFacts { review_required: true, review_override: false, independent_reviewer_seen: false }),
+            ("cleared-by-evidence", ReviewGateFacts { review_required: true, review_override: false, independent_reviewer_seen: true }),
+            ("cleared-by-override", ReviewGateFacts { review_required: true, review_override: true, independent_reviewer_seen: false }),
+            ("not-required", ReviewGateFacts { review_required: false, review_override: false, independent_reviewer_seen: false }),
+        ];
+        let results: Vec<(&str, bool, bool)> = scenarios
+            .into_iter()
+            .map(|(label, facts)| {
+                let blocks_stop = review_gate_blocks_stop(facts);
+                let satisfied = review_gate_satisfied(facts.review_required, facts.review_override, facts.independent_reviewer_seen);
+                (label, blocks_stop, satisfied)
+            })
+            .collect();
+        insta::assert_debug_snapshot!(results);
+    }
+
+    #[test]
+    fn review_independent_fork_matrix_snapshot() {
+        let _lock = crate::test_env_sync::process_env_lock();
+        let prev = std::env::var_os("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE");
+        // SAFETY: single-threaded test, no concurrent env var access.
+        unsafe { std::env::set_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", "1") };
+
+        let matrix: Vec<(&str, bool)> = vec![
+            ("None, reviewer_lane=true", review_independent_fork(None, true)),
+            ("Some(true), reviewer_lane=true", review_independent_fork(Some(true), true)),
+            ("Some(false), reviewer_lane=true", review_independent_fork(Some(false), true)),
+            ("Some(false), reviewer_lane=false", review_independent_fork(Some(false), false)),
+            ("None, reviewer_lane=false", review_independent_fork(None, false)),
+        ];
+        insta::assert_debug_snapshot!(matrix);
+
+        match prev {
+            Some(v) =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe { std::env::set_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE", v) },
+            None =>
+                // SAFETY: single-threaded test, no concurrent env var access.
+                unsafe { std::env::remove_var("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE") },
+        }
     }
 }

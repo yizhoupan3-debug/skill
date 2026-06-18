@@ -3,6 +3,16 @@
 //! Uses per-thread caching so `rayon` parallel scoring threads each maintain
 //! their own cache, eliminating the global Mutex bottleneck that previously
 //! serialized all parallel scoring threads.
+//!
+//! The cache is scoped to a single query fingerprint: each new route request
+//! (different query text + token list) resets the cache automatically. No TTL
+//! is needed because the cache only lives for one routing decision — signals
+//! are re-evaluated on each new route request.
+//!
+//! This design presumes signals are pure functions over (query_text, token_list).
+//! If future routing requires signals that depend on mutable external state
+//! (e.g. time-of-day, session age), this cache should either be disabled for
+//! those signals or augmented with a time-based expiry.
 
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;

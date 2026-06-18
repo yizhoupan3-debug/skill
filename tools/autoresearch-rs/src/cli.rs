@@ -315,6 +315,64 @@ pub(crate) enum Commands {
         #[arg(long)]
         relation: Option<String>,
     },
+    /// Show neighbors of a research log entry
+    LogNeighbors {
+        #[arg(long)]
+        workspace: PathBuf,
+        /// Entry ID
+        #[arg(long = "entry-id")]
+        entry_id: String,
+        /// Relation filter: extends,contradicts,supports,supersedes
+        #[arg(long)]
+        relation: Option<String>,
+        /// Max results
+        #[arg(long, default_value_t = 50)]
+        limit: usize,
+    },
+    /// Visualize research knowledge graph
+    LogViz {
+        #[arg(long)]
+        workspace: PathBuf,
+        /// Center entry ID (full graph if omitted)
+        #[arg(long = "entry-id")]
+        entry_id: Option<String>,
+        /// Max depth
+        #[arg(long, default_value_t = 2)]
+        max_depth: usize,
+        /// Output format: text | dot
+        #[arg(long, default_value = "text")]
+        format: String,
+    },
+    /// Trace research path from a barrier
+    LogRoute {
+        #[arg(long)]
+        workspace: PathBuf,
+        /// Barrier ID
+        #[arg(long = "barrier-id")]
+        barrier_id: String,
+        /// Max depth
+        #[arg(long, default_value_t = 3)]
+        max_depth: usize,
+    },
+    /// Auto-extract entities from a log entry
+    LogExtract {
+        #[arg(long)]
+        workspace: PathBuf,
+        /// Log entry ID
+        #[arg(long = "entry-id")]
+        entry_id: String,
+    },
+    /// Search entities via FTS5
+    LogSearchEntities {
+        #[arg(long)]
+        workspace: PathBuf,
+        /// FTS5 query string
+        #[arg(long)]
+        query: String,
+        /// Max results
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
 }
 
 #[derive(Clone, ValueEnum)]

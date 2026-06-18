@@ -1,13 +1,13 @@
-//! Loop Architecture 核心类型。
+//! Core types for the Loop Architecture.
 //!
-//! 包含 LOOP_REGISTRY.json 反序列化类型、运行时阶段枚举、
-//! 安全级别、LoopActionRecord、LoopCloseoutAggregate 等。
+//! Includes deserialization types for LOOP_REGISTRY.json, runtime phase enums,
+//! safety levels, LoopActionRecord, LoopCloseoutAggregate, and related types.
 
 use serde::{Deserialize, Serialize};
 
 // ── Phase ──
 
-/// Loop Runner 状态机阶段。
+/// Phase of the Loop Runner state machine.
 ///
 /// ```text
 /// PENDING → DISCOVERING → PREFLIGHT → DISPATCHING → RUNNING → VERIFYING → COMPLETED
@@ -50,7 +50,8 @@ impl LoopPhase {
 
 // ── Safety Level ──
 
-/// Scope-based safety level（§6.1）。
+/// Scope-based safety level (§6.1). Use to control whether a loop action reports only,
+/// assists with fixes, or runs unattended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SafetyLevel {
@@ -74,7 +75,8 @@ impl SafetyLevel {
 
 // ── Profile Config ──
 
-/// Profile 配置快照，Loop Runner 在 PREFLIGHT 阶段从 RUNTIME_REGISTRY.json 加载。
+/// Profile configuration snapshot loaded from RUNTIME_REGISTRY.json during PREFLIGHT.
+/// Determines loop behaviour (scheduling, closeout enforcement, review gating, budgets).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoopProfileConfig {
     /// profile 标识符（"loop-auto" / "interactive" / "my-light"）
@@ -143,7 +145,7 @@ impl LoopProfileConfig {
     }
 }
 
-/// Token 预算软限制。
+/// Soft token budget constraints per run or per day.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CostBudgetConfig {
     /// 单次运行的 token 软上限
@@ -154,7 +156,7 @@ pub struct CostBudgetConfig {
     pub daily_tokens: Option<u64>,
 }
 
-/// 升级策略。
+/// Escalation strategy defining fallback actions on closeout / verify / budget / error failures.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EscalationConfig {
     #[serde(default)]
@@ -169,7 +171,8 @@ pub struct EscalationConfig {
 
 // ── Loop Registry Entry ──
 
-/// LOOP_REGISTRY.json 中的单条循环注册项（§4.1）。
+/// A single loop registration entry from LOOP_REGISTRY.json (§4.1).
+/// Defines the loop ID, profile, trigger schedule, safety rules, and optional research config.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoopRegistryEntry {
@@ -193,7 +196,8 @@ pub struct LoopRegistryEntry {
     pub research: Option<ResearchConfig>,
 }
 
-/// 科研配置 — barrier escalation 与 research-aware loop 的注册信息（§19.9）。
+/// Research configuration for barrier escalation (§19.9).
+/// Used by research-aware loops to define escalation thresholds, auto-resume behaviour, and time limits.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResearchConfig {
     #[serde(default = "default_barrier_threshold")]
@@ -213,7 +217,7 @@ fn default_escalation_target() -> String { "autoresearch".to_string() }
 fn default_max_research_time_min() -> u32 { 30 }
 fn default_auto_resume() -> bool { true }
 
-/// 循环触发器配置。
+/// Loop trigger configuration specifying the trigger type (e.g. cron / manual) and optional schedule parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoopTriggerConfig {
@@ -225,7 +229,8 @@ pub struct LoopTriggerConfig {
     pub timezone: Option<String>,
 }
 
-/// LOOP_REGISTRY.json 根结构。
+/// Root structure of LOOP_REGISTRY.json.
+/// Contains the schema version and the full list of registered loops.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoopRegistryRoot {
     pub schema_version: String,
@@ -234,7 +239,8 @@ pub struct LoopRegistryRoot {
 
 // ── Loop Action ──
 
-/// 单次循环中分配的一个 action（由 DISCOVERING 阶段产出）。
+/// A single action allocated during the DISCOVERING phase of a loop run.
+/// Each action carries a type, scope paths, safety level, and optional description for the subagent.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoopAction {
@@ -250,10 +256,10 @@ pub struct LoopAction {
 
 // ── Loop Action Record ──
 
-/// 每个 action 的 closeout record（§5.3）。
-/// 嵌入现有 `CloseoutRecord`，不修改现有类型。
+/// Closeout record for a single action (§5.3).
+/// Embeds the existing CloseoutRecord from framework-runtime.
 ///
-/// 写入路径：`artifacts/closeout/<action-id>.json`
+/// Written to `artifacts/closeout/<action-id>.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoopActionRecord {
@@ -268,7 +274,8 @@ pub struct LoopActionRecord {
 
 // ── Loop Closeout Aggregate ──
 
-/// 单次运行的 closeout 聚合结果（§5.4）。
+/// Aggregated closeout result for a single loop run (§5.4).
+/// Contains the overall status, per-action entries, and escalation/partial flags.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoopCloseoutAggregate {
@@ -281,7 +288,8 @@ pub struct LoopCloseoutAggregate {
     pub partial: bool,
 }
 
-/// 聚合中的单个 action 条目。
+/// A single action entry within a LoopCloseoutAggregate.
+/// Records the execution outcome, closeout path, verification result, and optional commit SHA.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AggregateActionEntry {
@@ -300,7 +308,8 @@ pub struct AggregateActionEntry {
 
 // ── Loop Run State ──
 
-/// LOOP_RUN_STATE.json 运行时持久化结构（§5.2）。
+/// Runtime persistent structure serialised as LOOP_RUN_STATE.json (§5.2).
+/// Tracks the current phase, heartbeat, run history, and circuit breaker state for a loop.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LoopRunState {
@@ -318,7 +327,8 @@ pub struct LoopRunState {
     pub last_refreshed_at: String,
 }
 
-/// 当前运行快照。
+/// Snapshot of the currently active loop run.
+/// Contains discovery results, unconsumed findings, dispatch map, and the closeout aggregate.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CurrentRun {
@@ -336,7 +346,7 @@ pub struct CurrentRun {
     pub report_path: Option<String>,
 }
 
-/// DISCOVERING 阶段结果。
+/// Result produced by the DISCOVERING phase: count of actions found and the full action list.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DiscoveryResult {
@@ -344,7 +354,8 @@ pub struct DiscoveryResult {
     pub actions: Vec<LoopAction>,
 }
 
-/// 未消耗的 finding（留给下一轮 DISCOVERING）。
+/// An unconsumed finding carried forward to the next DISCOVERING cycle.
+/// Prevents duplicate work when a previous run's findings were not fully addressed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct UnconsumedFinding {
@@ -353,7 +364,7 @@ pub struct UnconsumedFinding {
     pub finding: String,
 }
 
-/// 历史运行记录。
+/// A historical record of a completed loop run in the run history log.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RunHistoryEntry {
@@ -362,7 +373,8 @@ pub struct RunHistoryEntry {
     pub result: String,
 }
 
-/// 断路器状态（§6.3）。
+/// Circuit breaker state tracking consecutive failures and kill-switch arming (§6.3).
+/// Auto-escalates when the consecutive failure threshold is reached.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 #[derive(Default)]
@@ -378,7 +390,8 @@ pub struct CircuitBreaker {
 
 // ── Error ──
 
-/// loop-engine 错误类型。
+/// Error type for loop-engine operations, covering profile mismatches, kill signals,
+/// timeouts, spawn failures, serialization errors, action failures, and research escalations.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum LoopError {
     #[error("Profile mismatch: {0}")]
