@@ -39,7 +39,8 @@ pub fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         CREATE INDEX IF NOT EXISTS idx_edges_callee ON edges(callee_id);
         CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
             symbol, kind, language, file_path,
-            content='nodes', content_rowid='rowid'
+            content='nodes', content_rowid='rowid',
+            prefix='1 2 3'
         );
         CREATE TRIGGER IF NOT EXISTS nodes_ai AFTER INSERT ON nodes BEGIN
             INSERT INTO nodes_fts(rowid, symbol, kind, language, file_path)

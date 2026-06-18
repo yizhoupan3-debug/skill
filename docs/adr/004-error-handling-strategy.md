@@ -31,4 +31,4 @@ Accepted (2026-06-14).
 ## Related
 
 - `artifacts/current/roadmap-v7.md` §11.2 — thiserror 评估
-- `docs/spec-core-crates.md` — crate 职责与依赖
+- `docs/spec/core-crates.md` — crate 职责与依赖

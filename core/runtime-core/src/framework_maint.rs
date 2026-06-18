@@ -454,9 +454,9 @@ fn verify_claude_user_projection(_framework_root: &Path) -> Result<(), String> {
         ));
     }
     let text = fs::read_to_string(&rule).map_err(|e| e.to_string())?;
-    if !text.contains("host_projection: claude-code") {
+    if !text.contains("host_projection: claude") {
         return Err(format!(
-            "verify_claude_user_projection: {} must declare claude-code (run install-claude.sh --scope user)",
+            "verify_claude_user_projection: {} must declare claude (run install-claude.sh --scope user)",
             rule.display()
         ));
     }
@@ -1075,7 +1075,6 @@ fn is_key_document_path(path: &str) -> bool {
             | "AGENTS_CURSOR.md"
             | "AGENTS_CODEX.md"
             | "AGENTS_CLAUDE.md"
-            | "RTK.md"
             | "docs/README.md"
     );
     let is_research_doc = lower.contains("research")
@@ -1089,7 +1088,7 @@ fn is_key_document_path(path: &str) -> bool {
         || lower.ends_with(".bib")
         || lower.ends_with(".tex")
         || lower.ends_with(".ipynb");
-    let is_plan_doc = lower.starts_with("docs/plans/") || lower.contains("plan");
+    let is_plan_doc = lower.contains("plan");
     is_root_doc || ((is_research_doc || is_plan_doc) && is_document_like_path(&lower))
 }
 

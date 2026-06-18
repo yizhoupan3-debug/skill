@@ -359,7 +359,7 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
         serde_json::json!(["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"])
     );
     assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["claude-code"],
+        manifest["shared_system"]["host_entrypoints"]["claude"],
         serde_json::json!([
             "AGENTS_CLAUDE.md",
             ".claude/rules/framework.md",
@@ -784,18 +784,16 @@ fn framework_naming_conventions_has_no_router_rs_default_value_table() {
 #[test]
 fn removed_router_flags_are_absent_from_user_docs() {
     let docs = [
-        "RTK.md",
         "docs/spec.md",
         "AGENTS_CODEX.md",
-        "docs/spec-core-crates.md",
-        "docs/spec-sandbox-contract.md",
-        "docs/spec-multi-agent.md",
-        "docs/spec-host-matrix.md",
-        "docs/spec-routing-plugin.md",
-        "docs/spec-runtime-subsystems.md",
-        "docs/spec-security-lifecycle.md",
-        "docs/spec-auxiliary.md",
-        "docs/spec-observability-testing.md",
+        "docs/spec/core-crates.md",
+        "docs/spec/multi-agent.md",
+        "docs/spec/host-matrix.md",
+        "docs/spec/routing-plugin.md",
+        "docs/spec/runtime-subsystems.md",
+        "docs/spec/security-lifecycle.md",
+        "docs/spec/auxiliary.md",
+        "docs/spec/observability-testing.md",
     ]
     .iter()
     .map(|path| read_text(&project_root().join(path)))
@@ -1844,9 +1842,7 @@ fn runtime_registry_on_disk_closed_set_is_canonical_five_hosts() {
     }
 
     for host_doc in [
-        "docs/hosts/codex.md",
-        "docs/hosts/cursor.md",
-        "docs/hosts/claude.md",
+        "docs/hosts/hook-hosts.md",
         "docs/hosts/opencode.md",
     ] {
         assert!(

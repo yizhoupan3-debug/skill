@@ -52,7 +52,7 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 2. **Cursor 是 snake_case JSON**：Cursor 用 `mcp_servers` 而非 `mcpServers`，与其他 JSON 宿主不同。
 3. **transport 字段**：opencode 用 `"local"`；其余 host 用 `"stdio"`（或隐式）。
 
-**改动任何 host projection 前必读** [`spec.md`](spec.md) §7 与宿主手册 `docs/hosts/<host>.md`。
+**改动任何 host projection 前必读** [`spec.md`](spec.md) §7 与宿主手册 [`hosts/_common.md`](hosts/_common.md) + [`hosts/hook-hosts.md`](hosts/hook-hosts.md) / [`hosts/opencode.md`](hosts/opencode.md)。
 
 closeout 分层见 [`spec.md`](spec.md) §12。
 

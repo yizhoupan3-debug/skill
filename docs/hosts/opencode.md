@@ -1,18 +1,18 @@
 ---
-last_verified: "2026-06-16"
+last_verified: "2026-06-18"
 depends_on:
+  - _common.md
   - ../spec.md
+parent: _common.md
 ---
 
-# Opencode 宿主操作手册
+# OpenCode 宿主操作手册
 
 **闭集 id**: `opencode` · **传输**: native-opencode（JS/TS 插件 hook + MCP 双通道） · **权威**: `RUNTIME_REGISTRY.json` → `host_projections.opencode`
 
-## 代理身份与画风
+**共通内容**（代理身份与画风、Skill 路由、默认生命周期、Python 环境、进程管理与性能调优）见 [`_common.md`](_common.md)。
 
-- 主代理定位为严谨的科研学者与系统工程专家
-- 回复画风专业、客观、谦逊；默认使用简体中文
-- 不确定的信息直接说明，不编造
+---
 
 ## 能力边界与 Harness 入口
 
@@ -58,35 +58,11 @@ OpenCode 通过 JS/TS 插件系统提供完整 hook 生命周期：
 - 通过 `opencode.json` 的 `agents` 字段显式声明
 - Harness 投影通过 `.opencode/` 目录注入框架 agent
 
-## 默认生命周期
-
-- `/discussx` → `/planx` → `/implementx` → `/verifyx`
-- 默认 `my-light`（advisory closeout）
-
-## 自检诊断
-
-```bash
-router-rs framework doctor
-router-rs framework host-integration status
-```
-
-## Python 环境
-
-- 使用 uv-only、默认 3.12；仓库级 `uv.lock`
-
 ## Fail-open / Fail-closed 设计意图
 
-OpenCode 采用 **fail-open** 策略：当 `router-rs` hook 二进制缺失或不可读时，`tool.execute.before` 事件静默通过（不阻断工具执行）。这与 Claude / Codex CLI 的 fail-closed 策略不同。
+OpenCode 采用 **fail-open** 策略：当 `router-rs` hook 二进制缺失或不可读时，`tool.execute.before` 事件静默通过（不阻断工具执行）。这与 Claude / Cursor / Codex / MiMo 的 fail-closed 策略不同（见 [`hook-hosts.md`](hook-hosts.md) §Fail-open / Fail-closed 比较）。
 
 **设计理由**：OpenCode 的插件 hook 系统通过 JS/TS 运行时执行，hook 失败不应阻断核心编辑器功能。MCP 工具层（`framework_snapshot`、`skill_route` 等）独立于 hook 系统，hook 缺失不影响 MCP 功能。
-
-**对比**：
-| 宿主 | 策略 | Hook 缺失时行为 |
-|------|------|----------------|
-| Claude | fail-closed | Stop 返回 `decision:block` |
-| Codex | fail-closed | 各事件返回 `decision:block` |
-| Cursor | fail-closed | 各事件返回 `decision:block` |
-| OpenCode | fail-open | 静默通过，MCP 工具层不受影响 |
 
 ## 架构对比：TS/JS 插件 vs Rust Native Hook
 
@@ -99,7 +75,7 @@ OpenCode 的 hook 处理层在 **TS/JS 插件系统**中执行，而非 Rust 侧
 | PostToolUse | `PostToolUse` 事件 | `tool.execute.after` 插件事件 |
 | Stop | `Stop` 事件 | `session.idle` 插件事件 |
 | 权限守卫 | Rust 侧实现 | `permission.asked` / `permission.replied` 插件事件 |
-| Rust 侧 dispatch | ✅ 数千行 | ❌ 不需要（插件层处理） |
+| Rust 侧 dispatch | 数千行 | 不需要（插件层处理） |
 | Provider trait | 完整实现 | 完整实现（v7 已对齐） |
 | `has_native_hook` | `true` | `true` |
 | `harness_capabilities` | FULL | FULL |
@@ -154,22 +130,6 @@ OpenCode 的 `OpencodeHostProvider` 实现以下 trait 方法：
   # 或仅全局：./scripts/install-opencode.sh --scope user
   ```
 - **跨仓库**: `./scripts/opencode-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`
-
-## Skill 存放与路由
-
-- **Skill 存放**: 统一在项目根目录 `skills/` 文件夹
-- **热路由入口**: `skills/SKILL_ROUTING_RUNTIME.json`
-- **冷表清单**: `skills/SKILL_MANIFEST.json`
-- **查找原则**: 通过路由表精确匹配，不模糊猜测
-
-## 进程管理与性能调优
-
-1. **构建 Release 二进制**:
-   ```bash
-   CARGO_TARGET_DIR="$PWD/core/router-rs/target" \
-     cargo build --release --manifest-path core/router-rs/Cargo.toml
-   ```
-2. **Launcher 探测顺序**: 仓库 `core/router-rs/target/release` → `/tmp/skill-cargo-target/release` → debug → `PATH`
 
 ## Hook 事件矩阵详细
 

@@ -7,7 +7,7 @@ depends_on:
 
 # 文档索引
 
-**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`spec.md`](spec.md) = 统一控制面与接入契约规范。宿主差异见 [`hosts/`](hosts/)。运维见 [`operations/index.md`](operations/index.md)。
+**叙事分工**：仓库根 `AGENTS.md` = 跨宿主执行与语言策略；[`spec.md`](spec.md) = 统一控制面与接入契约规范。宿主差异见 [`hosts/`](hosts/)（[共通](hosts/_common.md) + [hook 宿主](hosts/hook-hosts.md) + [OpenCode](hosts/opencode.md)）。运维见 [`operations/index.md`](operations/index.md)。
 
 ## 推荐阅读顺序
 
@@ -15,17 +15,18 @@ depends_on:
 2. [AGENTS.md](../AGENTS.md) — 跨宿主策略、Lifecycle、Closeout
 3. [spec.md](spec.md) — 统一规约：架构、五层模型、沙箱、路由、Closeout
 4. [operations/getting-started.md](operations/getting-started.md) — 安装教程
-5. 各宿主手册 `hosts/<host>.md`
+5. 宿主手册：共通 [`hosts/_common.md`](hosts/_common.md)、差异 [`hosts/hook-hosts.md`](hosts/hook-hosts.md) / [`hosts/opencode.md`](hosts/opencode.md)
 
 ## 按主题
 
 | 主题 | 文档 |
 |------|------|
 | **按代码模块** | [modules/INDEX.md](modules/INDEX.md)（各 crate 模块详解） |
-| 宿主差异、hook 事件、Stop 行为 | [hosts/](hosts/)（claude / cursor / codex / opencode） |
+| 宿主差异、hook 事件、Stop 行为 | [hosts/](hosts/)：共通 [`_common.md`](hosts/_common.md)，hook 宿主 [`hook-hosts.md`](hosts/hook-hosts.md)（Claude / Cursor / Codex / MiMo），OpenCode [`opencode.md`](hosts/opencode.md） |
 | 安装教程 / 升级 / 多机同步 | [operations/getting-started.md](operations/getting-started.md) |
 | 运维主手册（配置、排障、路径速查） | [operations/index.md](operations/index.md) |
-| 统一规约（架构、契约、closeout） | [spec.md](spec.md) |
+| 统一规约（架构、契约、closeout） | [spec.md](spec.md) + [spec/](spec/) 子规约 |
+| 子系统详细规约 | [spec/](spec/)（core-crates / multi-agent / host-matrix 等） |
 | Env 命名模式 | [framework_naming_conventions.md](framework_naming_conventions.md) |
 | Profile 契约 | [framework_profile_contract.md](framework_profile_contract.md) |
 | Git 规范 | [git_hygiene.md](git_hygiene.md) |

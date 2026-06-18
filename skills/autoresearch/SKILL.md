@@ -109,7 +109,7 @@ loop-auto cycle hits a hard barrier (`consecutive_failures ≥ threshold`), the
 | `hypothesis_tracking` | `add-hypothesis / list-hypotheses` | Hypothesis CRUD |
 | `run_recording` | `record-run` | Experiment recording (env + git) |
 | `reflection` | `reflect` | Experiment reflection + drift detection |
-| `log` | `log:record / log:search / log:insight / log:connect` | Layered logging (text + SQLite) |
+| `log` | `log:record / log:search / log:insight / log:connect` | Layered logging (text + SQLite); bridges `research-log-rs` CLI |
 | `smoke_test` | `smoke-test` | Freshness guard |
 | `barrier_escalation` | `barrier <problem>` | **Loop bridge**: systematic research on hard barriers |
 | `sync` | `sync` | Sync to artifact |
@@ -147,18 +147,18 @@ When a loop-auto cycle hits `consecutive_failures ≥ threshold`:
 7. Output BARRIER_REPORT.json → `artifacts/research-barrier/<barrier-id>/`
 8. Loop runner consumes report → selects candidate → resumes
 
-See `docs/spec-research-harness.md` §19.4.3 for the detailed barrier escalation
+See `docs/spec/research-harness.md` §19.4.3 for the detailed barrier escalation
 contract and BARRIER_REPORT.json schema.
 
 ### Logging layer
 
-See `docs/spec-research-harness.md` §19.5 for the layered logging specification:
+See `docs/spec/research-harness.md` §19.5 for the layered logging specification:
 - Text layer: `artifacts/research-log/YYYY-MM/YYYY-MM-DD_direction-name.md`
 - Compressed DB: SQLite FTS5 (`exploration_logs`, `exploration_decisions`, `exploration_insights`, `barrier_reports`)
 
 ### Smoke test
 
-See `docs/spec-research-harness.md` §19.6 for smoke test specification:
+See `docs/spec/research-harness.md` §19.6 for smoke test specification:
 - Registry: `artifacts/research-log/smoke-tests.json`
 - Execution: `autoresearch smoke-test [--source <src>] [--barrier <id>]`
 - Freshness metadata on every external_research result
@@ -180,8 +180,8 @@ See `docs/spec-research-harness.md` §19.6 for smoke test specification:
 
 ## Cross-references
 
-- **Research harness specification**: `docs/spec-research-harness.md` (full §19)
-- **Loop architecture**: `docs/spec-loop-architecture.md` (loop-auto profile, barrier escalation bridge §9.2)
+- **Research harness specification**: `docs/spec/research-harness.md` (full §19)
+- **Loop architecture**: `docs/spec/loop-architecture.md` (loop-auto profile, barrier escalation bridge §9.2)
 - **Discovery front door**: `skills/research-discovery/SKILL.md`
 - **Execution back door**: `skills/research-execution/SKILL.md`
 - **Paper manuscript**: `skills/paper-workbench/SKILL.md`

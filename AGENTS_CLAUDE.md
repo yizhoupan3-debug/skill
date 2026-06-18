@@ -1,6 +1,6 @@
 # Claude Agent Policy
 
-跨宿主协议见 [`AGENTS.md`](AGENTS.md)。**双文件注入**：须与 `AGENTS.md` 同时生效，勿单独使用本文件。本文仅 **Claude**（`claude`）transport delta；review 清门为跨宿主 **canonical** 参考实现。手册 [`docs/hosts/claude.md`](docs/hosts/claude.md) · [`docs/spec.md`](docs/spec.md) §0.1。
+跨宿主协议见 [`AGENTS.md`](AGENTS.md)。**双文件注入**：须与 `AGENTS.md` 同时生效，勿单独使用本文件。本文仅 **Claude**（`claude`）transport delta；review 清门为跨宿主 **canonical** 参考实现。手册 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md) · [`docs/spec.md`](docs/spec.md) §0.1。
 
 ## PreToolUse 硬阻断（Claude 独有）
 

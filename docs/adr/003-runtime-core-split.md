@@ -2,7 +2,7 @@
 last_verified: "2026-06-16"
 depends_on:
   - ../spec.md
-  - ../architecture/module-decoupling.md
+  - ../spec/core-crates.md
 ---
 
 # ADR-003: runtime-core 拆分策略
@@ -46,5 +46,5 @@ Accepted (2026-06-14). **Execution**: v7 已提取 4 个子 crate，runtime-core
 - `core/framework-runtime/` — 已提取的 framework-runtime crate
 - `core/session-supervisor/` — 已提取的 session-supervisor crate
 - `core/trace-runtime/` — 已提取的 trace-runtime crate
-- `docs/architecture/module-decoupling.md` — 模块解耦架构
+- `docs/spec/core-crates.md` §3.6 — 模块解耦架构
 - `artifacts/current/roadmap-v7.md` §6 — 模块解耦 Wave

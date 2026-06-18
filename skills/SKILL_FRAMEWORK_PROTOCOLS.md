@@ -2,51 +2,9 @@
 
 本文件是共享的**最小协议层**；skill 不应在各自 `SKILL.md` 中重复长篇 schema。
 
-> **status: aspirational** — §1-3 的 Finding / Execution / Verification Result Schema 描述了理想的结构化协议，但当前代码中**无对应的序列化/反序列化实现**。Skill 实际以自然语言 Markdown 传递 finding 和 execution item，未走 schema 校验。§4-6 的 Runtime Protocol / Stop Rules / Self-Audit 在各 skill 中有非正式遵守。
+---
 
-## 1. Finding Schema
-
-> **status: aspirational** — schema 尚未在代码中实现；skill 以自然语言 Markdown 传递 finding。
-
-`finding` 表示一个离散问题。
-
-| Field | Required | Notes |
-|---|---|---|
-| `finding_id` | yes | 稳定 slug，如 `<skill>-<type>-<N>` |
-| `severity` | yes | `critical` / `major` / `minor` / `info` |
-| `category` | yes | 领域分类 |
-| `title` | yes | 单行标题 |
-| `description` | yes | 问题与影响 |
-| `location` | no | 文件、行、段落、元素 |
-| `suggestion` | no | 推荐修法 |
-| `effort` | no | `trivial` / `small` / `medium` / `large` |
-
-## 2. Execution Item Schema
-
-> **status: aspirational** — schema 尚未在代码中实现；skill 以自然语言 Markdown 传递 execution item。
-
-`execution item` 表示一次待执行动作。
-
-| Field | Required | Notes |
-|---|---|---|
-| `item_id` | yes | 如 `exec-1` |
-| `finding_ids` | yes | 关联哪些 finding |
-| `action` | yes | 要做什么 |
-| `scope` | yes | 影响范围 |
-| `priority` | yes | `P0` / `P1` / `P2` |
-
-## 3. Verification Result Schema
-
-> **status: aspirational** — schema 尚未在代码中实现；skill 以自然语言 Markdown 传递 verification result。
-
-| Field | Required | Notes |
-|---|---|---|
-| `item_id` | yes | 对应 execution item |
-| `status` | yes | `pass` / `fail` / `partial` / `skipped` |
-| `evidence` | no | 命令输出、截图、人工检查等 |
-| `regression` | no | 新引入问题 |
-
-## 4. Runtime Protocol
+## 1. Runtime Protocol
 
 所有 runtime / route 默认按以下四步闭环执行：
 

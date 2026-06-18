@@ -311,13 +311,14 @@ on_verify_fail after retries exhausted
    → 填充 barrier description + 失败实验上下文
    → 写入 research-state.yaml
 
-2. literature review (research-discovery 模式)
-   → paperplain search for related approaches
-   → 产出证据地图
+2. literature review (自动化学术检索)
+   → Semantic Scholar + arXiv HTTP API（autoresearch-rs 内置，无需 AI 路由）
+   → Top-2 draft claims 各有 3 篇相关论文结果
+   → 证据填入 BARRIER_REPORT.json 的 candidates.evidence
 
 3. hypothesis generation
    → draft-claims from state
-   → 生成 3-5 候选假设
+   → 生成 3-5 候选假设 + 每条的 evidence 列表
 
 4. feasibility scan
    → 对每个假设做 quick check
@@ -373,7 +374,7 @@ on_verify_fail after retries exhausted
 #### 19.4.5 跨 Skill 手递
 
 ```
-autoresearch → $research-discovery    深度文献调研 / barrier escalation
+autoresearch → $research-discovery    深度文献调研（barrier escalation 已内置自动学术检索；人工深入调研通过本路由）
 autoresearch → $research-execution    实验设计/验证
 autoresearch → $paper-workbench       手稿级产出
 autoresearch → loop runner            barrier_report 格式输出 → 恢复循环
@@ -480,16 +481,26 @@ CREATE VIRTUAL TABLE exploration_fts USING fts5(
 );
 ```
 
-**操作命令**：
+**操作命令**（通过 `research-log-rs` CLI 调用，亦可从 `autoresearch log:*` 桥接）：
 
 ```
-autoresearch log:record                       # 记录当前探索
-autoresearch log:search <query>               # 跨方向 FTS5 检索
-autoresearch log:insight <text>               # 记录新 insight
-autoresearch log:connect <id-a> <id-b>        # 连接两个方向
-autoresearch log:barrier <loop-id>            # 查询某个 loop 的所有 barrier 报告
-autoresearch log:route <barrier-id>           # 从 barrier 出发追溯完整研究路径
+research-log-rs record [--direction <name>] [--question <text>] [--entry-point <manual|barrier_escalation|loop>] [--barrier-id <id>]
+                                                                 # 记录当前探索（文字层 + SQLite）
+research-log-rs search <query> [--direction <dir>] [--status <active|abandoned|concluded>] [--limit <N>]
+                                                                 # 跨方向 FTS5 检索
+research-log-rs add-finding --entry-id <id> --kind <kind> --content <text> [--confidence <0-1>]
+                                                                 # 记录新发现/insight（kind: insight | claim | risk | todo）
+research-log-rs connect <log-id-a> <log-id-b> [--relation <text>] [--notes <text>]
+                                                                 # 连接两个研究方向
+research-log-rs barrier [--loop-id <id>]                         # 查询 barrier 报告列表（按 loop 或全部）
+research-log-rs render <entry-id> [--write] [--output <path>]    # 渲染单篇日志为 Markdown
+research-log-rs export --format <json|csv|obsidian> [--output <path>]
+                                                                 # 导出日志集（JSON / CSV / Obsidian MD）
+research-log-rs status                                           # 显示日志库状态（大小、条目数、WAL 模式）
+research-log-rs consolidate                                      # 整理 activity log 文件
 ```
+
+> **注意**：`log:route <barrier-id>`（从 barrier 追溯完整研究路径）尚未在 CLI 中实现。
 
 #### 19.5.3 两者同步规则
 
@@ -672,7 +683,7 @@ loop barrier escalation → autoresearch init
 
 #### 19.9.1 Loop 模式 Catalog — 新增
 
-`docs/spec-loop-architecture.md` §9.2 开箱模式表应增加：
+`docs/spec/loop-architecture.md` §9.2 开箱模式表应增加：
 
 | Skill | Cadence | Safety | 产出 | 触发条件 |
 |-------|---------|--------|------|---------|
@@ -800,7 +811,7 @@ Loop Runner 执行 action
 | deep-research workflow（JS）和 research-discovery（MCP+HTTP）使用不同的数据平面 | P3 | 有意图差异（Web 调研 vs 学术文献），不合并，但需更好的入口指引 |
 | autoresearch-rs 仍使用阻塞 HTTP（reqwest blocking），与异步框架不一致 | P2 | 重构成本高，功能不受影响 |
 | loop architecture spec（v8）尚未实现，§19.9 的 research-aware loop 依赖于它 | P0 blocker for loop | loop-engine 代码未编写，当前无法端到端测试（已在 spec-loop-architecture.md 首行标注） |
-| BARRIER_REPORT.json 格式尚未在 Rust 类型中定义 | P1 | 等待 v8.1 或 autoresearch-rs 扩展 |
+| BARRIER_REPORT.json 的 evidence 已由 Semantic Scholar + arXiv 自动填充 | ✅ 已修复 | candidates.evidence 现在包含论文标题+URL+作者 |
 | `research-state.yaml` schema 版本为 4，但无 schema 验证 | P2 | 仅靠 `ensure_state_defaults` 做运行时修复 |
 | `ROUTING_SIGNAL_MARKERS.json` 中无 barrier 相关信号定义 | P2 | 需要在配置文件中增加 "barrier_escalation" 信号组 |
 | NL_ROUTE_ADJUSTMENTS.json 被框架阻断直接修改 | P2 | 需通过 Rust host-entrypoint sync 或 routing path 修改 |
@@ -823,13 +834,13 @@ Loop Runner 执行 action
 
 | 文件 | 维护者 | 更新触发 |
 |------|--------|---------|
-| `docs/spec-research-harness.md`（本文件） | 框架维护者 | 所有科研 Harness 变更 |
+| `docs/spec/research-harness.md`（本文件） | 框架维护者 | 所有科研 Harness 变更 |
 | `skills/research-discovery/SKILL.md` | Skill 作者 | 路由契约/lane/barrier 入口变更 |
 | `skills/research-discovery/references/academic-sources.md` | Skill 作者 | 学术源新增/更新 |
 | `skills/research-execution/SKILL.md` | Skill 作者 | 路由契约/lane 变更 |
 | `skills/autoresearch/SKILL.md` | Skill 作者 | workspace lane / barrier escalation 变更 |
 | `tools/autoresearch-rs/src/` | Rust 开发者 | CLI 功能变更（含 barrier 子命令） |
-| `tools/research-log-rs/src/` (待创建) | Rust 开发者 | 日志系统 + FTS5 查询 |
+| `tools/research-log-rs/src/`（已实现） | Rust 开发者 | 日志系统 + FTS5 查询 |
 | `artifacts/research-log/smoke-tests.json` | 研究员 | 新查询/方向/barrier 注册 |
 | `artifacts/research-barrier/` | loop runner + autoresearch | barrier escalation 自动写入 |
 | `configs/framework/LOOP_REGISTRY.json` | 框架维护者 | loop research 模式注册 |
@@ -837,15 +848,15 @@ Loop Runner 执行 action
 | `configs/framework/NL_ROUTE_ADJUSTMENTS.json` | 框架维护者 | barrier boost 规则 |
 | `SKILL_LOADOUTS.json` | 框架维护者 | loadout 变更 |
 | `SKILL_ROUTING_RUNTIME.json` | 框架维护者 | 路由注册变更 |
-| `docs/spec-loop-architecture.md` | 框架维护者 | loop patterns catalog 中 research 模式 |
+| `docs/spec/loop-architecture.md` | 框架维护者 | loop patterns catalog 中 research 模式 |
 
 ### 19.13 与框架其他规约的关系
 
 | 关联文档 | 关系 |
 |---------|------|
-| [spec-routing-plugin.md](spec-routing-plugin.md) | §8 路由与插件契约 — research skill 的 L2 路由遵循此规约 |
-| [spec-runtime-subsystems.md](spec-runtime-subsystems.md) | §9 ResearchMode 运行时在此定义 |
-| [spec-auxiliary.md](spec-auxiliary.md) | §14.4 harness_context_signals 中数学信号与 research-discovery `math_background_inquiry` lane 共享 |
-| [spec-observability-testing.md](spec-observability-testing.md) | §17 测试契约包含 autoresearch-rs 覆盖统计；本规约 §19.10 为其科研领域特化 |
-| [spec-security-lifecycle.md](spec-security-lifecycle.md) | §12 closeout 为 research-execution 的验证 gate |
-| [spec-loop-architecture.md](spec-loop-architecture.md) | §19.9 research-aware loop 模式在此注册，本规约与 loop 架构通过 LOOP_REGISTRY.json 和 BARRIER_REPORT.json 桥接 |
+| [routing-plugin.md](routing-plugin.md) | §8 路由与插件契约 — research skill 的 L2 路由遵循此规约 |
+| [runtime-subsystems.md](runtime-subsystems.md) | §9 ResearchMode 运行时在此定义 |
+| [auxiliary.md](auxiliary.md) | §14.4 harness_context_signals 中数学信号与 research-discovery `math_background_inquiry` lane 共享 |
+| [observability-testing.md](observability-testing.md) | §17 测试契约包含 autoresearch-rs 覆盖统计；本规约 §19.10 为其科研领域特化 |
+| [security-lifecycle.md](security-lifecycle.md) | §12 closeout 为 research-execution 的验证 gate |
+| [loop-architecture.md](loop-architecture.md) | §19.9 research-aware loop 模式在此注册，本规约与 loop 架构通过 LOOP_REGISTRY.json 和 BARRIER_REPORT.json 桥接 |

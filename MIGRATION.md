@@ -33,7 +33,7 @@ Hook launchers、CI、`Cargo.toml` workspace 已对齐 `core/*`；勿再引用 `
 ## Codex 多账户示例（2026-05）
 
 - **`configs/codex/sub_accounts.example.json` 已移除**（2026-05）。勿再在文档或脚本中引用该路径。
-- 多账户 / 子账户配置见 Codex 宿主文档 [`docs/hosts/codex.md`](docs/hosts/codex.md)；机读状态仍使用 `configs/codex/sub_accounts.state.json`（gitignore，本机生成）。
+- 多账户 / 子账户配置见 Codex 宿主文档 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)；机读状态仍使用 `configs/codex/sub_accounts.state.json`（gitignore，本机生成）。
 
 ## 日常维护
 
@@ -134,7 +134,7 @@ cd /path/to/project
 |----|------|
 | **Registry** | `review_gate.spawn_first_enabled`（默认 true）、`spawn_first_nudge`（一行文案）、`spawn_first_includes_model_inherit_by_host.cursor`（去重 model inherit nudge）、`subagent_model_inherit_nudge_by_host` |
 | **`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE`** | `0`/`false`/`off`/`no` 关闭 Cursor beforeSubmit model inherit 单行（默认开；与 my-light / REVIEW_GATE 无关） |
-| **Cursor UPS re-arm** | fresh deep-review cycle 调用 `reset_review_cycle_progress(preserve_session_guards=true)`；保留 `review_pending_cap_refused` 与 open subagent 计数；见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md) |
+| **Cursor UPS re-arm** | fresh deep-review cycle 调用 `reset_review_cycle_progress(preserve_session_guards=true)`；保留 `review_pending_cap_refused` 与 open subagent 计数；见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md) |
 | **`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE`** | `0`/`false`/`off`/`no` **关闭** beforeSubmit/UPS spawn-first 单行 nudge（**零注入**，无 fallback）；**不** 改变 REVIEW_GATE 清门阈值 |
 | **窄范围** | `review ./path`、`small_task`、不用子代理 → **不武装** `review_required`（五宿主 `is_narrow_review_prompt`） |
 | **禁止** | `start_count≥2` 清门、缺 `review-lanes` 文件即 Stop block |
@@ -153,7 +153,7 @@ cd /path/to/project
 
 `review_gate.deep_gate_lanes` / `claude_reviewer_lanes` 已合并为单一 **`reviewer_lanes`**（Claude canonical 闭集）。lane 判定、fork 证据、Stop 满足规则统一在 **`core-policy`**（`review_gate_engine.rs`、`hook_common::is_reviewer_lane_normalized`）；各宿主 hook 仅保留 transport 差异（Stop **advisory** nudge、PostTool/subagentStart 观测路径；**不**硬拦 Stop）。维护：只改 `RUNTIME_REGISTRY.json` → `review_gate.reviewer_lanes`。
 
-**细则**：[`.cursor/rules/review-subagent-gate.mdc`](.cursor/rules/review-subagent-gate.mdc)、[`docs/hosts/cursor.md`](docs/hosts/cursor.md)、[`docs/hosts/codex.md`](docs/hosts/codex.md)
+**细则**：[`.cursor/rules/review-subagent-gate.mdc`](.cursor/rules/review-subagent-gate.mdc)、[`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)、[`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)
 
 ## Cursor：hooks 减法闭集（2026-05-20）
 
@@ -170,11 +170,11 @@ cd /path/to/project
 
 手动把事件加回 `hooks.json` 后，dispatch **自动**走真实 handler（无需 env）。仅当**未**注册但仍想跑 handler（单测/对照）时：`ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1`（见 [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env) 注释）。
 
-**门控 `timeout`**：`beforeSubmitPrompt` / `stop` / `postToolUse` / `subagentStart` / `subagentStop` 均为 **20s**（`sessionStart` 5s、`sessionEnd` 15s）。`postToolUse` 超时会导致 review multiset / shell 账本不完整 — 见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「对话中断排障」。
+**门控 `timeout`**：`beforeSubmitPrompt` / `stop` / `postToolUse` / `subagentStart` / `subagentStop` 均为 **20s**（`sessionStart` 5s、`sessionEnd` 15s）。`postToolUse` 超时会导致 review multiset / shell 账本不完整 — 见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)「对话中断排障」。
 
 **模板同步**：[`configs/framework/cursor-hooks.workspace-template.json`](configs/framework/cursor-hooks.workspace-template.json) 须与 [`.cursor/hooks.json`](.cursor/hooks.json) 一致（`bash scripts/ci/check-cursor-hooks-parity.sh`；事件列表真源：`router-rs schema-drift contract` ↔ [`subtraction.rs`](core/host-projection/src/hosts/cursor_hooks/subtraction.rs)）。
 
-**内存相关**：见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)「内存 / release」；项目 env [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。
+**内存相关**：见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)「内存 / release」；项目 env [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。
 
 ## Schema drift CLI（2026-05-20）
 
@@ -216,7 +216,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 
 | 移除 | 替代真源 |
 |------|----------|
-| `docs/plans/*.md`（除 [`docs/plans/README.md`](docs/plans/README.md)） | GSD：`artifacts/current/<task_id>/ROADMAP.md`；Cursor Plan：活跃任务 `.cursor/plans/*.plan.md` |
+| `docs/plans/` | GSD：`artifacts/current/<task_id>/ROADMAP.md`；Cursor Plan：活跃任务 `.cursor/plans/*.plan.md` |
 | `docs/history/**` | git 历史；[`MIGRATION.md`](MIGRATION.md) |
 | `configs/codex/docs/**` | [`docs/README.md`](docs/README.md)、宿主手册 [`docs/hosts/`](docs/hosts/) |
 | `skills/autopilot/`、`skills/_archived/autopilot/`、`skills/legacy-gsd-ci-stub/`（**仅迁移对照**；磁盘路径已删） | `/implementx` + My 四命令 |

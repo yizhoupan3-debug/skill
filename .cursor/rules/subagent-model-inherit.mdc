@@ -18,4 +18,4 @@ alwaysApply: true
 
 ## 排障
 
-见 [docs/hosts/cursor.md](../../docs/hosts/cursor.md)「Subagent 启动失败」；机读 nudge 来自 registry `subagent_model_inherit_nudge`（`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` 默认开）。
+见 [docs/hosts/hook-hosts.md](../../docs/hosts/hook-hosts.md)「Subagent 启动失败」；机读 nudge 来自 registry `subagent_model_inherit_nudge`（`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` 默认开）。

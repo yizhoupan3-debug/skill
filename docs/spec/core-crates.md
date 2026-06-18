@@ -119,5 +119,38 @@ version: unified-v7
 
 > **已归档** (v6 之前)：`image_gen_rs`, `image_process_rs`, `pubmed_tool_rs`, `ref_corpus_tool_rs`, `screenshot_rs` — 无下游依赖，从 workspace 移除。
 
+### 3.6 模块解耦架构（合并自 `docs/architecture/module-decoupling.md`）
+
+#### 层状依赖图
+
+```
+Layer 0 (leaf):  core-state  framework-kernel  routing-engine
+                 tools/codegraph-rs  tools/autoresearch-rs  tools/evolution-rs
+                 trace-runtime       runtime-storage
+Layer 1:         core-policy
+Layer 2:         host-projection
+Layer 3:         runtime-core (facade) → framework-runtime  session-supervisor
+                 runtime-core → browser-mcp
+Layer 4:         router-rs
+```
+
+无循环依赖。`runtime-core` 是最大的耦合热点。
+
+#### 拆分计划（v7）— 执行状态
+
+| 新 crate | 路径 | 职责 | 预计行数 | 提取来源 |
+|----------|------|------|---------|---------|
+| `runtime-storage` | `core/runtime-storage/` | 状态持久化、文件锁、atomic write、后台任务状态 | ~8K | `runtime_storage/`, `background_state/` |
+| `framework-runtime` | `core/framework-runtime/` | 框架运行时核心循环、execution contract、pre_tool_use_guard、closeout enforcement、trace I/O | ~5K | `closeout_enforcement.rs`, `execution_contract.rs`, `pre_tool_use_guard.rs`, `runtime_view.rs`, `trace_stream_io.rs`, `trace_attach.rs`, `trace_transport.rs`, `live_execute.rs`, `sandbox_control.rs`, `evolution_observer.rs` |
+| `session-supervisor` | `core/session-supervisor/` | Worker 管理、session 生命周期、evolution_idle | ~5K | `session_supervisor/`, `harness_operator_nudges.rs` |
+| `trace-runtime` | `core/trace-runtime/` | 事件追踪、observation、journal 聚合入口 | ~1K | `trace_runtime.rs` |
+
+#### 依赖规则
+
+1. 下层不得依赖上层。
+2. `runtime-core`（facade）可为向后兼容 re-export 已提取 crate 的内容。
+3. `browser-mcp` 只通过 `runtime-core` 获取共享状态类型。
+4. 任何 crate 不得依赖 3 个以上 workspace 内的 path dependencies。
+
 ---
 

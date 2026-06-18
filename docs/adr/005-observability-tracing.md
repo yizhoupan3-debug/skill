@@ -37,4 +37,4 @@ Accepted (2026-06-14).
 ## Related
 
 - `artifacts/current/roadmap-v7.md` §14 — 可观测性 Wave
-- `docs/spec-observability-testing.md` — 可观测性规约
+- `docs/spec/observability-testing.md` — 可观测性规约

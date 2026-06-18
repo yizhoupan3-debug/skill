@@ -4,7 +4,7 @@ use crate::CodeGraphIndex;
 use crate::db::index_ops::{
     IndexedFileMeta, IngestStmts, ingest_parsed_file_with_stmts, list_indexed_files, set_meta,
 };
-use crate::parser::{self, ParsedFile, common::hex_encode, parse_file, skill::parse_skill_manifest};
+use crate::parser::{self, ParsedFile, common::hex_encode, parse_file};
 use anyhow::Context;
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use rayon::prelude::*;
@@ -24,6 +24,8 @@ const SKIP_DIRS: &[&str] = &[
     "node_modules",
     "artifacts",
     ".cursor",
+    ".claude",
+    ".codex",
     "dist",
     "build",
     ".venv",
@@ -139,13 +141,18 @@ pub fn incremental_sync(
         report.edges_added += edges;
     }
 
-    // Phase 5: remove stale files (reusing IngestStmts.delete instead of re-preparing)
+    // Phase 5: remove stale files (atomic transaction)
+    //
+    // Note: DeleteFileStmts are prepared on `conn`, so we use execute_batch
+    // for the BEGIN/COMMIT wrapper rather than rusqlite Transaction.
+    conn.execute_batch("BEGIN")?;
     for (path, _) in indexed {
         if !seen.contains(&path) {
             ingest_stmts.delete.execute(&path)?;
             report.files_removed += 1;
         }
     }
+    conn.execute_batch("COMMIT")?;
 
     let indexed_at = chrono::Local::now().to_rfc3339();
     set_meta(conn, "indexed_at", &indexed_at)?;
@@ -162,37 +169,52 @@ fn sync_skill_manifest(
     force_all: bool,
     report: &mut SyncReport,
 ) -> anyhow::Result<()> {
-    let manifest_path = repo_root.join("skills/SKILL_MANIFEST.json");
+    let manifest_path = repo_root.join(parser::skill::MANIFEST_REL_PATH);
     if !manifest_path.is_file() {
         return Ok(());
     }
 
-    let rel_path = "skills/SKILL_MANIFEST.json".to_string();
     let conn = index.connection();
 
-    // Check if we need to re-index
-    let indexed = list_indexed_files(conn)?
-        .into_iter()
-        .find(|m| m.path == rel_path);
-
-    if !force_all
-        && let Some(ref stored) = indexed {
-            let mtime_ns = file_mtime_ns(&manifest_path)?;
+    // Fast path: mtime check without reading the file
+    if !force_all {
+        let mtime_ns = file_mtime_ns(&manifest_path)?;
+        let indexed = list_indexed_files(conn)?
+            .into_iter()
+            .find(|m| m.path == parser::skill::MANIFEST_REL_PATH);
+        if let Some(ref stored) = indexed {
             if stored.mtime_ns == mtime_ns {
-                return Ok(()); // mtime unchanged, skip
-            }
-            let content_hash = file_content_hash(&manifest_path)?;
-            if stored.content_hash == content_hash {
-                return Ok(()); // content unchanged
+                return Ok(()); // mtime unchanged, skip entirely
             }
         }
+    }
 
-    // Parse the manifest
-    let Some(parsed) = parse_skill_manifest(repo_root) else {
+    // mtime changed or new file: read once, share between hash and parser
+    let content = std::fs::read_to_string(&manifest_path)
+        .context("read skill manifest")?;
+    let mtime_ns = file_mtime_ns(&manifest_path)?;
+    let content_hash = hex_encode(
+        &Sha256::digest(content.as_bytes()).as_slice(),
+    );
+
+    // Content-hash check for mtime-noise (touch without content change)
+    if !force_all {
+        let indexed = list_indexed_files(conn)?
+            .into_iter()
+            .find(|m| m.path == parser::skill::MANIFEST_REL_PATH);
+        if let Some(ref stored) = indexed {
+            if stored.content_hash == content_hash {
+                return Ok(());
+            }
+        }
+    }
+
+    let Some(parsed) = parser::skill::parse_skill_manifest_with_content(
+        &content, mtime_ns, content_hash,
+    ) else {
         return Ok(());
     };
 
-    // Ingest: delete old skill nodes for this file, insert new ones
     let mut stmts = IngestStmts::prepare(conn)?;
     let (nodes, edges) = ingest_parsed_file_with_stmts(conn, &mut stmts, &parsed)?;
     report.nodes_added += nodes;
@@ -267,7 +289,14 @@ fn relative_path(repo_root: &Path, path: &Path) -> String {
 
 fn file_mtime_ns(path: &Path) -> anyhow::Result<i64> {
     let meta = fs::metadata(path)?;
-    let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+    let modified = match meta.modified() {
+        Ok(m) => m,
+        Err(e) => {
+            // Filesystems like FUSE/NFS may not support mtime; fall back to epoch.
+            eprintln!("[codegraph] mtime unavailable for {} ({}); using epoch", path.display(), e);
+            SystemTime::UNIX_EPOCH
+        }
+    };
     let duration = modified
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap_or_default();
@@ -493,8 +522,55 @@ mod tests {
         let root = std::env::temp_dir().join(format!("codegraph-watch-{suffix}"));
         fs::create_dir_all(&root).expect("create temp directory");
         let index = CodeGraphIndex::open(&root).expect("create temp directory");
-        let _watcher = super::IndexWatcher::spawn(root.clone()).expect("create temp directory");
+        let watcher = super::IndexWatcher::spawn(root.clone()).expect("create temp directory");
+        // Drop watcher before removing directory to avoid filesystem race
+        drop(watcher);
         let _ = fs::remove_dir_all(root);
         let _ = index;
+    }
+
+    #[test]
+    fn index_builds_markdown_headings_under_docs() {
+        let (root, index) = temp_repo();
+        let docs_dir = root.join("docs").join("spec");
+        fs::create_dir_all(&docs_dir).expect("create docs dir");
+        fs::write(
+            docs_dir.join("test-spec.md"),
+            "# Core Crates\n\nThis is about Rust crates.\n\n## Module Structure\n\nDetails here.\n",
+        )
+        .expect("write test md");
+        let report = build_full_index(&index, &root).expect("build full index");
+        assert!(
+            report.files_updated >= 1,
+            "expected at least 1 file indexed"
+        );
+        let hits = index
+            .search_symbols("Core Crates", None, Some("markdown"), 10)
+            .expect("search symbols");
+        assert!(
+            hits.iter().any(|n| n.symbol == "Core Crates"),
+            "expected heading 'Core Crates' in search results"
+        );
+        let hits2 = index
+            .search_symbols("Module Structure", None, None, 10)
+            .expect("search symbols");
+        assert!(hits2.iter().any(|n| n.symbol == "Module Structure"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn index_skips_markdown_outside_docs() {
+        let (root, index) = temp_repo();
+        fs::write(root.join("README.md"), "# Project\n\nDesc.\n")
+            .expect("write readme");
+        let report = build_full_index(&index, &root).expect("build full index");
+        let hits = index
+            .search_symbols("Project", None, None, 10)
+            .expect("search symbols");
+        assert!(
+            !hits.iter().any(|n| n.symbol == "Project"),
+            "README.md should not be indexed"
+        );
+        let _ = fs::remove_dir_all(root);
     }
 }

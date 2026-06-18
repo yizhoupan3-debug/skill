@@ -7,14 +7,14 @@ x-do-not-delete: |
   ║  本文件为 Loop Architecture 的**实现规约**。                   ║
   ║  core/loop-engine/ 已实现（~2420 LOC, 9 modules），          ║
   ║  LOOP_REGISTRY.json 已创建。                                 ║
-  ║  与科研 Harness 的桥接见 docs/spec-research-harness.md §19.9。║
+  ║  与科研 Harness 的桥接见 docs/spec/research-harness.md §19.9。║
   ╚══════════════════════════════════════════════════════════════╝
 ---
 
 > **✅ loop-engine crate 已实现**：`core/loop-engine/` ~2420 LOC，9 模块。
 > LOOP_REGISTRY.json 已创建（`configs/framework/LOOP_REGISTRY.json`）。
 > `router-rs loop <subcommand>` CLI 入口见 §4.6。
-> 与科研 Harness 的桥接（research-aware loop）见 `docs/spec-research-harness.md` §19.9。
+> 与科研 Harness 的桥接（research-aware loop）见 `docs/spec/research-harness.md` §19.9。
 
 # Loop Architecture — Framework v8 重构规约
 
@@ -872,12 +872,12 @@ loop:
 | loop-post-merge-cleanup | 1d | L2 | 清理 TODO/FIXME |
 | loop-issue-triage | 2h-1d | L1 | 分类 + 分配建议 |
 | loop-stale-cleanup | 1w | L1 | 过期分支报告 |
-| **loop-research-barrier** | **按需（on escalation）** | **L2** | **barrier report + candidate list（§19.9.1, spec-research-harness.md）** |
-| **loop-hypothesis-test** | **按配置** | **L2** | **hypothesis verification result（§19.9.1, spec-research-harness.md）** |
-| **loop-literature-watch** | **1w** | **L1** | **new papers digest（§19.9.1, spec-research-harness.md）** |
-| **loop-claim-refresh** | **1w-2w** | **L1** | **drift detection report（§19.9.1, spec-research-harness.md）** |
+| **loop-research-barrier** | **按需（on escalation）** | **L2** | **barrier report + candidate list（§19.9.1, spec/research-harness.md）** |
+| **loop-hypothesis-test** | **按配置** | **L2** | **hypothesis verification result（§19.9.1, spec/research-harness.md）** |
+| **loop-literature-watch** | **1w** | **L1** | **new papers digest（§19.9.1, spec/research-harness.md）** |
+| **loop-claim-refresh** | **1w-2w** | **L1** | **drift detection report（§19.9.1, spec/research-harness.md）** |
 
-**research-aware loop 详细契约**（与 `docs/spec-research-harness.md` §19.9 共享真源）：
+**research-aware loop 详细契约**（与 `docs/spec/research-harness.md` §19.9 共享真源）：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -1029,7 +1029,7 @@ Branch（L2）：`loop/<loop-id>/<run-id>/<action-id>`。
 | LoopActionRecord + closeout 聚合 | 已实现 | `core/loop-engine/src/closeout.rs`, `types.rs` |
 | 越界 git diff 检测 + LOOP_REPORT.md 渲染 | 已实现 | `core/loop-engine/src/dispatcher.rs` (`check_scope_compliance`), `report.rs` |
 | 断路器（连续 N 次失败暂停） | 已实现 | `core/loop-engine/src/runner.rs` (`consecutive_failures ≥ 3`) |
-| Research-aware loop 模式（barrier escalation） | 已设计 | `docs/spec-research-harness.md` §19.9 |
+| Research-aware loop 模式（barrier escalation） | 已设计 | `docs/spec/research-harness.md` §19.9 |
 
 ### 待解决
 
@@ -1044,6 +1044,6 @@ Branch（L2）：`loop/<loop-id>/<run-id>/<action-id>`。
 
 ---
 
-*本规约是 `docs/spec.md` 的延伸文档。科研 Harness 桥接见 `docs/spec-research-harness.md` §19.9。*
 
-*复杂度分析见 `docs/spec-loop-complexity-tradeoff.md`。*
+
+*本规约是 `docs/spec.md` 的延伸文档。科研 Harness 桥接见 `docs/spec/research-harness.md` §19.9。*

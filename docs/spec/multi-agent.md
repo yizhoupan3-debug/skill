@@ -39,7 +39,7 @@ spawned → running → draining → completed
 
 ### 5.5 REVIEW_GATE 差异
 
-> **清门真源（2026-06）**：`core-policy::review_gate_satisfied` — `independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override。**全宿主 Stop advisory-only**（不 `permission: deny` / `decision:block`）。详见 [`hosts/cursor.md`](hosts/cursor.md) §门控。
+> **清门真源（2026-06）**：`core-policy::review_gate_satisfied` — `independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override。**全宿主 Stop advisory-only**（不 `permission: deny` / `decision:block`）。详见 [`../hosts/hook-hosts.md`](../hosts/hook-hosts.md) §门控。
 
 | 能力 | claude | cursor | codex | opencode |
 |------|:-----------:|:------:|:-----:|:--------:|

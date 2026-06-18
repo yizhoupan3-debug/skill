@@ -25,7 +25,25 @@ pub fn detect_language(path: &str) -> Option<&'static str> {
     if lower.ends_with(".go") {
         return Some("go");
     }
+    if lower.ends_with(".md") && should_index_markdown(path) {
+        return Some("markdown");
+    }
     None
+}
+
+/// Only index .md files under docs/ or skills/ — skip README.md, CHANGELOG.md, LICENSE.md etc.
+fn should_index_markdown(path: &str) -> bool {
+    let normal = path.replace('\\', "/");
+    let in_scope = normal.contains("/docs/") || normal.contains("/skills/")
+        || normal.starts_with("docs/") || normal.starts_with("skills/");
+    if !in_scope {
+        return false;
+    }
+    // Exclude files whose headings are noise (not code-relevant)
+    let fname = normal.rsplit('/').next().unwrap_or(&normal);
+    !matches!(fname.to_ascii_lowercase().as_str(),
+        "readme.md" | "changelog.md" | "license.md" | "contributing.md" | "index.md"
+    )
 }
 
 #[cfg(test)]
@@ -48,5 +66,33 @@ mod tests {
     fn hex_encode_known_values() {
         assert_eq!(hex_encode(b"\x00\xff"), "00ff");
         assert_eq!(hex_encode(b"Hello"), "48656c6c6f");
+    }
+
+    #[test]
+    fn should_index_markdown_in_docs() {
+        assert_eq!(detect_language("docs/spec/core-crates.md"), Some("markdown"));
+        assert_eq!(detect_language("docs/hosts/hook-hosts.md"), Some("markdown"));
+        assert_eq!(detect_language("skills/code-review-deep/SKILL.md"), Some("markdown"));
+    }
+
+    #[test]
+    fn should_not_index_markdown_outside_docs_skills() {
+        assert_eq!(detect_language("README.md"), None);
+        assert_eq!(detect_language("CHANGELOG.md"), None);
+        assert_eq!(detect_language(".claude/CLAUDE.md"), None);
+        assert_eq!(detect_language("node_modules/pkg/README.md"), None);
+    }
+
+    #[test]
+    fn should_skip_noise_markdown_files() {
+        // README.md, CHANGELOG.md under docs/ are excluded
+        assert_eq!(detect_language("docs/README.md"), None);
+        assert_eq!(detect_language("docs/CHANGELOG.md"), None);
+        assert_eq!(detect_language("skills/primary-runtime/README.md"), None);
+    }
+
+    #[test]
+    fn should_index_subdir_skill_markdown() {
+        assert_eq!(detect_language("skills/paper-workbench/SKILL.md"), Some("markdown"));
     }
 }

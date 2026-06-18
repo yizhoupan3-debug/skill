@@ -248,9 +248,6 @@ fn markdown_link_skip_rules_ignore_templates_and_external() {
     assert!(should_skip_markdown_link_url(
         "runtime verification criteria"
     ));
-    assert!(should_skip_markdown_link_url(
-        "${SKILL_FRAMEWORK_ROOT}/RTK.md"
-    ));
     assert!(should_skip_markdown_link_url("skills/*/SKILL.md"));
     assert!(should_skip_markdown_link_url("url"));
     assert!(!should_skip_markdown_link_url("../AGENTS.md"));

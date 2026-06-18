@@ -294,7 +294,7 @@ pub fn my_light_profile_active(repo_root: Option<&std::path::Path>, text: &str) 
 /// 2. Prompt matches `/discussx|planx|implementx|verifyx`
 /// 3. (Future) GOAL_STATE.lifecycle_profile == "interactive" | "my-light" via repo_root
 ///
-/// Cf. docs/spec-loop-architecture.md §2.1
+/// Cf. docs/spec/loop-architecture.md §2.1
 pub fn is_interactive_profile(repo_root: Option<&std::path::Path>, text: &str) -> bool {
     if let Some(v) = TEST_MY_LIGHT_OVERRIDE.with(|c| c.get()) {
         return v;
@@ -461,7 +461,7 @@ pub fn review_gate_stop_would_nudge(
 /// Reads from LOOP_REGISTRY.json (not GOAL_STATE). Loop Runner in PREFLIGHT
 /// phase calls this to confirm the entry profile is schedulable.
 ///
-/// Cf. docs/spec-loop-architecture.md §2.1, §4.2
+/// Cf. docs/spec/loop-architecture.md §2.1, §4.2
 pub fn lifecycle_profile_is_loop_capable(profile: &str) -> bool {
     profile == "loop-auto"
 }

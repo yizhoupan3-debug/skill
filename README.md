@@ -59,7 +59,7 @@ git grep -n -I -E "OPENAI_API_KEY|api_key|secret|token|password|smtp|cookie|auth
 
 ```bash
 git init
-git add AGENTS.md README.md skills core scripts tests Cargo.toml Cargo.lock .github .githooks docs RTK.md
+git add AGENTS.md README.md skills core scripts tests Cargo.toml Cargo.lock .github .githooks docs
 git commit -m "Share Codex skill system"
 git branch -M main
 git remote add origin https://github.com/<your-name>/<repo-name>.git
@@ -159,7 +159,7 @@ codex
 
 - Cursor 规则来自 `.cursor/rules/`，对当前工作区（本仓库根目录）生效。
 - Cursor hooks 来自 `.cursor/hooks.json`，对当前工作区会话生效，不是跨所有仓库的全局策略。
-- 本仓库在 `.cursor/hooks.json` 注册 **7 个** hook 事件（减法闭集，见 [`docs/hosts/cursor.md`](docs/hosts/cursor.md)），经 [`configs/framework/cursor-router-rs-hook.sh`](configs/framework/cursor-router-rs-hook.sh) 调用 `router-rs cursor hook`；launcher **优先仓库 release**（~8MB），并 `source` [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。关键门控 fail-closed；`postToolUse` 对 `Read` 等走 Rust fast-path。`.cursor/hook-state/` 存门控状态。
+- 本仓库在 `.cursor/hooks.json` 注册 **7 个** hook 事件（减法闭集，见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)），经 [`configs/framework/cursor-router-rs-hook.sh`](configs/framework/cursor-router-rs-hook.sh) 调用 `router-rs cursor hook`；launcher **优先仓库 release**（~8MB），并 `source` [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。关键门控 fail-closed；`postToolUse` 对 `Read` 等走 Rust fast-path。`.cursor/hook-state/` 存门控状态。
 - 若使用 Codex CLI hooks，状态文件在 `.codex/hook-state/`，与 Cursor 独立。
 - Codex `.codex/hooks.json` 包装脚本解析 `router-rs` 的顺序为：环境变量 **`ROUTER_RS_BIN`**（可执行绝对路径）→ 仓库 `core/router-rs/target/{release,debug}` → 仓库根 `target/{release,debug}` → **`command -v router-rs`**（最后手段；生产环境建议固定前两档之一）。缺少二进制时各生命周期事件一律 fail-closed（单行 JSON `decision:block`）。`.codex/hook-state/` 跨事件串联依赖 stdin 常见字段（`session_id` 等，含 camelCase）或 **`CODEX_SESSION_ID`** / **`CODEX_CONVERSATION_ID`**；需要硬前置时可设 **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=1`**，在无稳定键时阻断 `UserPromptSubmit`/`PostToolUse`/`Stop`。
 - 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `core/runtime-core/src/hosts/cursor_hooks/` 内 handlers），与 Codex 不完全相同。
@@ -173,13 +173,13 @@ codex
 - 安装二进制：`cargo install --path /path/to/skill/core/router-rs`；若可执行文件名不是默认，在环境里设 `ROUTER_RS_BIN`（hooks 内展开）。
 - 与「本仓库 embedded」模式对照：本仓库 `.cursor/hooks.json` 与跨仓模板都走同一个 launcher；跨仓通常依赖 PATH / `ROUTER_RS_BIN` 或 `SKILL_FRAMEWORK_ROOT`。
 - **`router-rs framework …` 维护命令**：在目标仓库目录执行时，若当前目录不是框架检出根，需设置 **`SKILL_FRAMEWORK_ROOT`**（或传 `--framework-root`），否则会报无法解析 `framework_root`（实现会尝试从已安装二进制路径、`CURSOR_WORKSPACE_ROOT` 等推断，不可靠时以环境变量为准）。
-- Hook 减法与内存：[`docs/hosts/cursor.md`](docs/hosts/cursor.md)；恢复已删 Cursor 事件见 [`MIGRATION.md`](MIGRATION.md)。
+- Hook 减法与内存：[`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)；恢复已删 Cursor 事件见 [`MIGRATION.md`](MIGRATION.md)。
 
 ### Claude（项目级 + 用户级）
 
 - **My 生命周期**（与 Cursor 一致）：`/discussx` → `/planx` → `/implementx` → `/verifyx`；全局叙事在 **`~/.claude/rules/framework.md`**（对齐 `~/.cursor/rules/framework.mdc`）。
 - Hooks：`.claude/settings.json` 合并 **4 事件** → [`claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)；env [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env)。
-- **安装（推荐）**：`cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to claude`（project + user）。详见 [`docs/hosts/claude.md`](docs/hosts/claude.md)。
+- **安装（推荐）**：`cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to claude`（project + user）。详见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)。
 - **其它仓库**：`cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to claude --repo-root "$SKILL_FRAMEWORK_ROOT"`。
 
 **别的目录验收清单（Cursor 工作区 = 目标项目根）**

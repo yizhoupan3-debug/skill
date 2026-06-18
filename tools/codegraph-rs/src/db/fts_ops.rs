@@ -16,10 +16,10 @@ pub fn search_symbols(
     if trimmed.len() > 4096 {
         return Ok(Vec::new());
     }
-    // Strip FTS5 special operators to prevent query injection: + - * ^ " ( ) :
+    // Strip FTS5 operators that break quoted-prefix query semantics
     let sanitized: String = trimmed
         .chars()
-        .filter(|c| !matches!(c, '+' | '-' | '*' | '^' | '"' | '(' | ')' | ':'))
+        .filter(|c| !matches!(c, '+' | '-' | '^' | ':' | '"'))
         .collect();
     if sanitized.is_empty() {
         return Ok(Vec::new());
@@ -36,7 +36,7 @@ pub fn search_symbols(
         WHERE nodes_fts MATCH ?1
           AND (?2 IS NULL OR n.kind = ?2)
           AND (?3 IS NULL OR n.language = ?3)
-        ORDER BY bm25(nodes_fts)
+        ORDER BY bm25(nodes_fts), n.file_path, n.line
         LIMIT ?4
         "#,
     )?;

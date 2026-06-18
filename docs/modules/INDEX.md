@@ -21,17 +21,9 @@ last_verified: "2026-06-16"
 | B2 | `host-projection` | ~34,000 | [host-projection.md](host-projection.md) |
 | B2 | `browser-mcp` | ~5,600 | [browser-mcp.md](browser-mcp.md) |
 
-## 子模块详解
-
-| 文档 | 范围 |
-|------|------|
-| [runtime-core-framework-runtime.md](runtime-core-framework-runtime.md) | `framework_runtime/` 子模块（27 个文件，12,000+ 行） |
-| [host-projection-projection.md](host-projection-projection.md) | `host_integration/projection/` 子模块（4 个文件，3,700 行） |
-| [host-projection-hosts.md](host-projection-hosts.md) | `hosts/` 子模块（五宿主 hook 实现 + 共享抽象） |
-
 ## 阅读路径
 
 1. **快速了解架构**：[framework-kernel.md](framework-kernel.md) → [runtime-core.md](runtime-core.md) → [host-projection.md](host-projection.md)
-2. **深入 hook 系统**：[host-projection-hosts.md](host-projection-hosts.md) → [core-policy.md](core-policy.md)
-3. **框架运行时核心**：[runtime-core-framework-runtime.md](runtime-core-framework-runtime.md)
+2. **深入 hook 系统**：[host-projection.md#hosts-子模块详解](host-projection.md#hosts-子模块详解) → [core-policy.md](core-policy.md)
+3. **框架运行时核心**：[runtime-core.md#framework_runtime-子模块详解](runtime-core.md#framework_runtime-子模块详解)
 4. **浏览器自动化**：[browser-mcp.md](browser-mcp.md)

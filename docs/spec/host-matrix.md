@@ -19,7 +19,7 @@ version: unified-v7
 | `opencode` | `opencode` | `native-opencode` |
 | `mimo` | `mimo` | `native-mimo` |
 
-> **退役 id** 不在闭集内；迁移指引见 [`MIGRATION.md`](../MIGRATION.md)。
+> **退役 id** 不在闭集内；迁移指引见 [`MIGRATION.md`](../../MIGRATION.md)。
 
 ### 6.2 Hook 事件矩阵
 
@@ -64,6 +64,111 @@ version: unified-v7
 | codex | AGENTS.md + AGENTS_CODEX.md | `policy_embed.rs` |
 | opencode | opencode.json 投影 | `host_integration/projection` |
 | mimo | mimo.json 投影 | `host_integration/projection` |
+
+---
+
+### 6.6 跨宿主去重架构（合并自 `docs/architecture/cross-host-dedup.md`）
+
+> **Intent K4**: Eliminate duplicated code across host implementations.
+
+#### 共享层
+
+跨五宿主共享的代码在专用模块中：
+
+| Layer | Module | Responsibility |
+|-------|--------|---------------|
+| Hook dispatch | `host-projection/hook_dispatch.rs` | Event normalization, prompt/tool extraction, subagent detection |
+| State lock | `host-projection/file_state_lock.rs` | Atomic file-based state with flock |
+| Review gate | `core-policy/review_gate_engine.rs` | Review gate logic (facts, independent reviewer detection) |
+| Hook review state | `core-policy/hook_review_disk_core.rs` | Shared `HookReviewDiskCore` struct (cross-host compatible) |
+| Crypto | `core-policy/crypto_util.rs` | `short_hash_for_session()`, `hex_lower()` |
+| Session key | `core-policy/session_key.rs` | `extract_session_key()` |
+| Hook common | `core-policy/hook_common.rs` | `normalize_tool_name()`, `saw_reject_reason()`, `has_override()` |
+
+#### 去重决策
+
+某模式出现在 2+ 宿主实现中时的三选一规则：
+
+1. **Extracted to core-policy** — pure logic（无 IO、无宿主特定状态）
+2. **Extracted to host-projection shared** — 需要 IO 或宿主上下文
+3. **Left in host module** — 确属宿主特有行为
+
+#### 子代理工具识别
+
+共享层提供 `is_subagent_tool()`、`recognize_subagent_type()`、`subagent_lane_bits()`。宿主可通过覆盖（如 Codex 的 `saw_subagent_codex()`）扩展，但优先委托共享函数。
+
+#### Review Gate 共享状态
+
+所有宿主使用同一 `HookReviewDiskCore` 结构体：
+
+```json
+{
+  "review_required": false,
+  "review_override": false,
+  "reject_reason_seen": false,
+  "independent_reviewer_seen": false
+}
+```
+
+宿主特定扩展（如 `subagent_start_count`、`review_phase`）通过 `#[serde(flatten)]` 在各宿主的 state struct 中添加。
+
+### 6.7 宿主注册表规范 (v2)（合并自 `docs/architecture/host-registry.md`）
+
+> **权威真源**: `configs/framework/RUNTIME_REGISTRY.json`
+> **Schema version**: `framework-runtime-registry-v2`
+
+#### Schema v2 结构
+
+```jsonc
+{
+  "schema_version": "framework-runtime-registry-v2",
+  "framework_core": {
+    "authority": "rust",
+    "host_policy": "closed-set-explicit-projections"
+  },
+  "host_targets": {
+    "supported": ["cursor", "claude", "opencode", "codex", "mimo"],
+    "metadata": {
+      "<host_id>": {
+        "install_tool": "string",
+        "projection_status": "implemented | experimental",
+        "installable": true,
+        "default_framework_command": "implementx",
+        "host_entrypoints": "string | string[]",
+        // v2 新增
+        "display_name": "Human-readable name",
+        "transport_type": "hook | native-opencode",
+        "config_format": "json | toml | mdc",
+        "config_path": ".<host>/settings.json",
+        "cli_aliases": ["alias1", "alias2"],
+        "home_env_var": "HOST_HOME",
+        "default_home_dir": ".<host>"
+      }
+    },
+    "host_providers": { /* Rust module bindings */ }
+  },
+  "host_projections": { /* Runtime configuration per host */ }
+}
+```
+
+#### 新建宿主（非 registry 部分）
+
+注册表条目之外还需：
+
+1. **Rust provider**: `core/host-projection/src/hosts/<host>_provider.rs` — 实现 `HostLifecycle`、`HostTelemetry`、`HostProvider` traits
+2. **Hook dispatcher**: `core/host-projection/src/hosts/<host>_hooks.rs` — 实现 `HostHookDispatcher` trait（7 event handlers）
+3. **Hook launcher**: `configs/framework/<host>-router-rs-hook.sh`
+4. **模块注册**: `core/host-projection/src/hosts/mod.rs`
+5. **CLI 子命令**: `core/router-rs/src/`
+
+不需要修改共享基础设施（`hook_dispatch.rs`、`core-policy`、`mcp_stdio_harness`）。
+
+#### 关键不变量
+
+- `host_targets.supported` 长度 == metadata 条目数 == host_providers 条目数
+- 每个宿主必须有 `has_native_hook: true`（由 `host_provider.rs` 测试强制执行）
+- `transport_type` 必须在 metadata 与 `host_projections` 中一致
+- Schema version 在加载时严格校验（版本不匹配则 hard error）
 
 ---
 

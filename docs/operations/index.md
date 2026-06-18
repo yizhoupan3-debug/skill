@@ -50,11 +50,45 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 ## 模块索引（功能模块）
 
-| 板块 | 文档 | 职责摘要 |
-|------|------|----------|
-| **B5** browser-mcp | [b5-browser-mcp.md](b5-browser-mcp.md) | browser-mcp MCP 服务、session_launch、URL 防护 |
-| **B10** codegraph | [b10-codegraph.md](b10-codegraph.md) | 代码图谱索引、MCP 六工具、sync/watcher |
-| **B11** evolution-engine | [b11-evolution-engine.md](b11-evolution-engine.md) | 遥测 journal、evolution-rs analyze/audit |
+### B5 — browser-mcp
+
+浏览器自动化 MCP：`browser-mcp` stdio 服务、`session_launch`、页面 attach、URL 策略。实现：`core/browser-mcp/`。
+
+```bash
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
+  browser mcp-stdio --repo-root "$PWD"
+```
+
+排障：`no browser-mcp runtime attach artifact` → 先 `session_launch`；MCP 路径陈旧 → 重跑 `host-integration install`。
+
+相关路径：`core/browser-mcp/` · `docs/operations/security.md` §SSRF · `RUNTIME_REGISTRY.json` → `managed_mcp_servers.browser-mcp`
+
+### B10 — codegraph
+
+代码图谱索引（`tools/codegraph-rs/`），MCP 七工具：search / callers / callees / impact / node / status / dead_code。
+
+```bash
+cargo build --release --manifest-path core/router-rs/Cargo.toml --features codegraph
+cargo run --release --manifest-path core/router-rs/Cargo.toml --features codegraph -- \
+  codegraph mcp-stdio --repo-root "$PWD"
+```
+
+排障：工具不可用 → 确认 `--features codegraph` 构建；索引空 → 跑 sync + watcher。
+
+相关路径：`tools/codegraph-rs/` · `configs/framework/RUNTIME_REGISTRY.json` → `mcp-codegraph`
+
+### B11 — evolution-engine
+
+自进化离线分析（`tools/evolution-rs/`）：零 crate 级依赖，通过 mmap 读取遥测 JSONL。
+
+```bash
+cargo run --manifest-path tools/evolution-rs/Cargo.toml -- analyze --help
+cargo run --manifest-path tools/evolution-rs/Cargo.toml -- audit --config configs/evolution/evolution.toml
+```
+
+排障：找不到 journal → 确认 telemetry 目录；idle analyze 未触发 → 检查仍有 running worker。
+
+相关路径：`tools/evolution-rs/` · `configs/evolution/evolution.toml` · `core/session-supervisor/src/evolution_idle.rs`
 
 ---
 

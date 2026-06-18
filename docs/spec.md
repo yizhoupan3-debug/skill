@@ -15,15 +15,14 @@ version: "unified-v7"
 
 1. [架构总览](#1-架构总览)
 2. [五层模型](#2-五层模型)
-3. [Core Crates](spec-core-crates.md)
-4. [运行期沙箱契约](spec-sandbox-contract.md)
-5. [多 Agent 编排契约](spec-multi-agent.md)
-6. [跨宿主统一矩阵](spec-host-matrix.md) + [宿主接入契约](spec-host-matrix.md#7-宿主接入契约)
-7. [路由与插件契约](spec-routing-plugin.md)
-8. [运行时子系统](spec-runtime-subsystems.md) + [Hook 系统](spec-runtime-subsystems.md#10-hook-系统) + [传输与持久化](spec-runtime-subsystems.md#13-传输与持久化)
-9. [安全守卫](spec-security-lifecycle.md) + [Closeout 与生命周期](spec-security-lifecycle.md#12-closeout-与生命周期)
-10. [辅助模块](spec-auxiliary.md)
-11. [可观测性](spec-observability-testing.md) + [存储压缩](spec-observability-testing.md#16-存储压缩) + [测试契约](spec-observability-testing.md#17-测试契约) + [Schema 索引](spec-observability-testing.md#18-schema-索引)
+3. [Core Crates](spec/core-crates.md)
+4. [多 Agent 编排契约](spec/multi-agent.md)
+5. [跨宿主统一矩阵](spec/host-matrix.md) + [宿主接入契约](spec/host-matrix.md#7-宿主接入契约)
+6. [路由与插件契约](spec/routing-plugin.md)
+7. [运行时子系统](spec/runtime-subsystems.md) + [Hook 系统](spec/runtime-subsystems.md#10-hook-系统) + [传输与持久化](spec/runtime-subsystems.md#13-传输与持久化)
+8. [安全守卫](spec/security-lifecycle.md) + [Closeout 与生命周期](spec/security-lifecycle.md#12-closeout-与生命周期)
+9. [辅助模块](spec/auxiliary.md)
+10. [可观测性](spec/observability-testing.md) + [存储压缩](spec/observability-testing.md#16-存储压缩) + [测试契约](spec/observability-testing.md#17-测试契约) + [Schema 索引](spec/observability-testing.md#18-schema-索引)
 
 ---
 
@@ -100,9 +99,9 @@ core/loop-engine (~2.4K LOC)     ← 循环调度引擎（9 模块，v8 loop-aut
 └── 44 tests
 
 tools/codegraph-rs (~4.1K LOC)    ← 代码图谱（FTS5 + tree-sitter，位于 tools/）
-├── parser/{rust,typescript,python,go}
+├── parser/{rust,typescript,python,go,markdown}
 ├── db/{schema,node_ops,edge_ops,fts_ops}
-└── 74 tests
+└── 95 tests
 
 tools/evolution-rs (~2K LOC)      ← 技能进化审计（位于 tools/）
 └── 53 tests
@@ -178,17 +177,17 @@ router-rs → runtime-core → host-projection → core-state
 
 | 文档 | 覆盖章节 |
 |------|---------|
-| [spec-core-crates.md](spec-core-crates.md) | §3 Core Crates |
-| [spec-sandbox-contract.md](spec-sandbox-contract.md) | §4 运行期沙箱契约 |
-| [spec-multi-agent.md](spec-multi-agent.md) | §5 多 Agent 编排契约 |
-| [spec-host-matrix.md](spec-host-matrix.md) | §6 跨宿主统一矩阵 + §7 宿主接入契约 |
-| [spec-routing-plugin.md](spec-routing-plugin.md) | §8 路由与插件契约 |
-| [spec-runtime-subsystems.md](spec-runtime-subsystems.md) | §9 运行时子系统 + §10 Hook 系统 + §13 传输与持久化 |
-| [spec-security-lifecycle.md](spec-security-lifecycle.md) | §11 安全守卫 + §12 Closeout 与生命周期 |
-| [spec-auxiliary.md](spec-auxiliary.md) | §14 辅助模块 |
-| [spec-observability-testing.md](spec-observability-testing.md) | §15 可观测性 + §16 存储压缩 + §17 测试契约 + §18 Schema 索引 |
-| [spec-research-harness.md](spec-research-harness.md) | §19 科研 Harness 系统 |
-| [spec-loop-architecture.md](spec-loop-architecture.md) | Loop Architecture（v8，loop-auto 调度引擎） |
+| [spec/core-crates.md](spec/core-crates.md) | §3 Core Crates |
+| [spec/multi-agent.md](spec/multi-agent.md) | §5 多 Agent 编排契约 |
+| [spec/host-matrix.md](spec/host-matrix.md) | §6 跨宿主统一矩阵 + §7 宿主接入契约 |
+| [spec/routing-plugin.md](spec/routing-plugin.md) | §8 路由与插件契约 |
+| [spec/runtime-subsystems.md](spec/runtime-subsystems.md) | §9 运行时子系统 + §10 Hook 系统 + §13 传输与持久化 |
+| [spec/security-lifecycle.md](spec/security-lifecycle.md) | §11 安全守卫 + §12 Closeout 与生命周期 |
+| [spec/auxiliary.md](spec/auxiliary.md) | §14 辅助模块 |
+| [spec/observability-testing.md](spec/observability-testing.md) | §15 可观测性 + §16 存储压缩 + §17 测试契约 + §18 Schema 索引 |
+| [spec/research-harness.md](spec/research-harness.md) | §19 科研 Harness 系统 |
+| [spec/loop-architecture.md](spec/loop-architecture.md) | Loop Architecture（v8，loop-auto 调度引擎） |
+| [spec/performance-guide.md](spec/performance-guide.md) | §20 性能指南 |
 
 ---
 

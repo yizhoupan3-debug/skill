@@ -1,5 +1,6 @@
 pub mod common;
 mod go;
+pub mod markdown;
 mod python;
 mod rust;
 pub mod skill;
@@ -51,6 +52,10 @@ pub fn parse_file(path: &Path, contents: &str, mtime_ns: i64) -> Option<ParsedFi
         }
         "go" => {
             let parsed = go::parse(contents);
+            (parsed.symbols, parsed.edges)
+        }
+        "markdown" => {
+            let parsed = markdown::parse(contents);
             (parsed.symbols, parsed.edges)
         }
         _ => return None,

@@ -30,7 +30,7 @@ fn git_tracked_markdown_doc_and_skill_surfaces_are_valid_utf8() {
         let rel = std::str::from_utf8(chunk).expect("git path must be utf-8");
         if !(rel.starts_with("docs/")
             || rel.starts_with("skills/")
-            || matches!(rel, "AGENTS.md" | "README.md" | "RTK.md"))
+            || matches!(rel, "AGENTS.md" | "README.md"))
         {
             continue;
         }
