@@ -496,7 +496,7 @@ expression: json
   "host_capability_requirements": {},
   "host_family": "shared-rust-core",
   "host_payloads": {
-    "claude-code": {
+    "claude": {
       "capabilities": [
         "artifact_contract",
         "workspace_bootstrap",
@@ -516,8 +516,8 @@ expression: json
         "closeout_evidence_hooks",
         "review_gate_router_observation"
       ],
-      "host_cli": "claude-code",
-      "host_id": "claude-code",
+      "host_cli": "claude",
+      "host_id": "claude",
       "managed_mcp_paths": [],
       "managed_mcp_server_ids": [
         "router-rs-framework",
@@ -527,14 +527,14 @@ expression: json
       ],
       "managed_settings_paths": [],
       "mcp_config_paths": [],
-      "profile_id": "claude_code_profile",
+      "profile_id": "claude_profile",
       "resume_command_examples": [
-        "Continue in Claude Code in this workspace"
+        "Continue in Claude in this workspace"
       ],
       "session_supervisor_driver": "mcp_bridge",
       "session_supervisor_status": {
         "bridge": "browser-mcp session tools (session_launch/session_list/session_inspect/session_terminate)",
-        "rationale": "Claude Code bridges session supervision through browser-mcp MCP tools. SubagentStart/Stop hooks provide native lifecycle events.",
+        "rationale": "Claude bridges session supervision through browser-mcp MCP tools. SubagentStart/Stop hooks provide native lifecycle events.",
         "supported": true
       },
       "settings_paths": [
@@ -547,7 +547,7 @@ expression: json
       "settings_scopes": [],
       "structured_output_modes": [],
       "subagent_paths": [],
-      "transport": "anthropic-claude-code"
+      "transport": "anthropic-claude"
     },
     "codex": {
       "capabilities": [
@@ -661,7 +661,7 @@ expression: json
       ],
       "session_supervisor_driver": "unsupported",
       "session_supervisor_status": {
-        "rationale": "Cursor host does not expose external process supervision or auto-resume. session_supervisor currently supports codex and claude-code drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process.",
+        "rationale": "Cursor host does not expose external process supervision or auto-resume. session_supervisor currently supports codex and claude drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process.",
         "supported": false
       },
       "settings_paths": [

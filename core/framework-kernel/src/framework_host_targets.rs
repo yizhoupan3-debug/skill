@@ -344,7 +344,7 @@ mod tests {
     fn host_provider_mod_declarations_align_with_registry() {
         let root = repo_root();
         let reg = load_runtime_registry_json(&root).expect("registry");
-        let hosts_mod = std::fs::read_to_string(root.join("core/runtime-core/src/hosts/mod.rs"))
+        let hosts_mod = std::fs::read_to_string(root.join("core/host-projection/src/hosts/mod.rs"))
             .expect("hosts/mod.rs");
         let cargo_toml =
             std::fs::read_to_string(root.join("core/runtime-core/Cargo.toml")).expect("Cargo.toml");
