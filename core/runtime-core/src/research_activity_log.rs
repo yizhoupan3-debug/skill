@@ -30,11 +30,12 @@ pub fn record_research_activity(repo_root: &Path, tool_name: &str, summary: &str
         return;
     }
 
-    let date = chrono::Local::now().format("%Y-%m-%d");
+    let now = chrono::Local::now();
+    let date = now.format("%Y-%m-%d");
     let log_path = auto_dir.join(format!("{date}.jsonl"));
 
     let entry = serde_json::json!({
-        "ts": chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        "ts": now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
         "tool": tool_name,
         "summary": summary,
         "auto": true,

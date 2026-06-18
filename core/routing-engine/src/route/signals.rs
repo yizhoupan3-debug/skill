@@ -711,8 +711,8 @@ pub fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool 
 ///
 /// Returns true when the query contains research-log keywords OR when the
 /// current working directory (or an ancestor) contains a `research-state.yaml`
-/// or `.research.toml` marker file. Directory scan uses `OnceLock` so the
-/// filesystem is probed at most once per process lifetime.
+/// or `.research.toml` marker file. Directory detection is re-evaluated on
+/// each call (single `stat` per ancestor — negligible cost).
 /// Check ancestor directories for research workspace marker files.
 fn detect_research_directory(cwd: &std::path::Path) -> bool {
     cwd.ancestors().any(|dir| {
