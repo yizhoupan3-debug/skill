@@ -301,8 +301,8 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
                 Err(_) => {
                     drop(file);
                     const HOOK_STATE_LOCK_STALE_MS: u64 = 30_000;
-                    if let Ok(existing) = fs::read_to_string(&lock_path) {
-                        if let Some((pid, ts_ms)) = parse_lock_metadata(&existing) {
+                    if let Ok(existing) = fs::read_to_string(&lock_path)
+                        && let Some((pid, ts_ms)) = parse_lock_metadata(&existing) {
                             let age_ms = now_millis().saturating_sub(ts_ms);
                             if !is_process_alive(pid) {
                                 // Do not delete to preserve POSIX flock inode guarantee.
@@ -312,7 +312,6 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
                                 );
                             }
                         }
-                    }
                     thread::sleep(Duration::from_millis(50));
                 }
             }
@@ -483,11 +482,10 @@ fn hydrate_legacy_review_cycles_into_pending(state: &mut ReviewGateState) {
         sync_review_cycle_legacy_fields(state);
         return;
     }
-    if state.review_subagent_cycle_open {
-        if let Some(k) = state.review_subagent_cycle_key.clone() {
+    if state.review_subagent_cycle_open
+        && let Some(k) = state.review_subagent_cycle_key.clone() {
             state.review_subagent_pending_cycle_keys.push(k);
         }
-    }
     sync_review_cycle_legacy_fields(state);
 }
 
@@ -679,22 +677,20 @@ fn save_state(repo_root: &Path, event: &Value, state: &mut ReviewGateState) -> b
         let _ = fs::remove_file(&tmp);
         return false;
     }
-    if hooks::router_rs_cursor_hook_state_file_sync_enabled() {
-        if file.sync_all().is_err() {
+    if hooks::router_rs_cursor_hook_state_file_sync_enabled()
+        && file.sync_all().is_err() {
             let _ = fs::remove_file(&tmp);
             return false;
         }
-    }
     if fs::rename(&tmp, &target).is_err() {
         let _ = fs::remove_file(&tmp);
         return false;
     }
     #[cfg(unix)]
-    if hooks::router_rs_cursor_hook_state_dir_sync_enabled() {
-        if let Ok(dir_file) = OpenOptions::new().read(true).open(&directory) {
+    if hooks::router_rs_cursor_hook_state_dir_sync_enabled()
+        && let Ok(dir_file) = OpenOptions::new().read(true).open(&directory) {
             let _ = dir_file.sync_all();
         }
-    }
     true
 }
 

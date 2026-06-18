@@ -34,7 +34,7 @@
 
 | 宿主 | 入口方式 | Goal 驱动 | Closeout | 特殊差异 |
 |------|---------|-----------|----------|----------|
-| **claude-code** | 斜杠命令（`/discussx` 等） | `framework_goal_drive` stdio | `closeout_gate` advisory（my-light） | PreToolUse/Stop hook advisory 模式 |
+| **claude** | 斜杠命令（`/discussx` 等） | `framework_goal_drive` stdio | `closeout_gate` advisory（my-light） | PreToolUse/Stop hook advisory 模式 |
 | **cursor** | Plan 模式自动触发 `plan-mode` | `framework_goal_drive` stdio | advisory（my-light 下无硬拦） | `.cursor/rules/*-gate.mdc`；hook 不注入 spawn-first nudge |
 | **opencode** | 斜杠命令 | `framework_goal_drive` stdio | advisory | 配置在 `opencode.json` |
 

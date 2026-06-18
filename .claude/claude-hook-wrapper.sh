@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Fallback hook dispatch — only used if the Rust binary is missing.
-# Tries PATH, then common locations.
+# claude-hook-wrapper.sh — Fallback hook dispatch for router-rs
+#
+# Used only when router-rs binary is unavailable or as a fallback path.
+# Delegates to hook-dispatch.sh for registry-driven host resolution.
 set -euo pipefail
-BIN="${HOME}/.local/bin/router-rs"
-[[ -x "$BIN" ]] || BIN="$(command -v router-rs 2>/dev/null || true)"
-[[ -x "$BIN" ]] || BIN="/tmp/skill-cargo-target/release/router-rs-cli"
-[[ -x "$BIN" ]] || { echo '{"decision":"allow","reason":"router-rs binary not found","suppressOutput":true}'; exit 0; }
-exec "$BIN" host claude claude-hook "$@"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [[ -x "${SCRIPT_DIR}/hook-dispatch.sh" ]]; then
+  exec "${SCRIPT_DIR}/hook-dispatch.sh" "$@"
+fi
+
+# Absolute fallback — should not normally reach here
+echo '{"decision":"allow","reason":"hook-dispatch.sh not found","suppressOutput":true}'
+exit 0

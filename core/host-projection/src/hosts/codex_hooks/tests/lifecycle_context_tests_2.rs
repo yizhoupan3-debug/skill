@@ -5,34 +5,6 @@ use serde_json::json;
 use serial_test::serial;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-fn codex_review_gate_disable_env_skips_block() {
-    let _g = env_lock();
-    let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE");
-    core_policy::hook_common::set_test_my_light_override(Some(true));
-    unsafe { std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", "1") };
-    let repo = fresh_repo();
-    let start = json!({
-        "hook_event_name":"UserPromptSubmit",
-        "session_id":"sm-disable",
-        "cwd": repo.to_string_lossy().to_string(),
-        "prompt":"全面review"
-    });
-    let _ = run_gate(&repo, &start).unwrap();
-    let stop = json!({
-        "hook_event_name":"Stop",
-        "session_id":"sm-disable",
-        "cwd": repo.to_string_lossy().to_string(),
-        "prompt":"继续"
-    });
-    let out = run_gate(&repo, &stop).unwrap();
-    assert!(out.is_none(), "disable env must skip gate: {out:?}");
-    match prior {
-        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE", v) },
-        None => unsafe { std::env::remove_var("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE") },
-    }
-    core_policy::hook_common::set_test_my_light_override(None);
-}
-
 #[test]
 fn codex_review_gate_disable_clears_armed_state_on_userpromptsubmit() {
     let _g = env_lock();

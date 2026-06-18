@@ -355,8 +355,8 @@ impl Drop for IndexWatcher {
             .unwrap_or_else(|_| {
                 // If we can't create a replacement, the original will be dropped
                 // when this struct is dropped, closing the channel.
-                return RecommendedWatcher::new(mpsc::channel().0, Config::default())
-                    .expect("fallback watcher");
+                RecommendedWatcher::new(mpsc::channel().0, Config::default())
+                    .expect("fallback watcher")
             });
         if let Some(handle) = self._handle.take() {
             let _ = handle.join();

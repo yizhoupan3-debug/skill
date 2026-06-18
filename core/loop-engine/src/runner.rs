@@ -312,17 +312,14 @@ fn discover_barrier_candidates(repo_root: &Path) -> Vec<String> {
     entries.sort_by_key(|e| e.path());
     if let Some(latest) = entries.last() {
         let report_path = latest.path().join("BARRIER_REPORT.json");
-        if report_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&report_path) {
-                if let Ok(report) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if let Some(candidates) = report.get("candidates").and_then(|c| c.as_array()) {
+        if report_path.exists()
+            && let Ok(content) = std::fs::read_to_string(&report_path)
+                && let Ok(report) = serde_json::from_str::<serde_json::Value>(&content)
+                    && let Some(candidates) = report.get("candidates").and_then(|c| c.as_array()) {
                         return candidates.iter()
                             .filter_map(|c| c.as_str().map(|s| s.to_string()))
                             .collect();
                     }
-                }
-            }
-        }
     }
     vec![]
 }

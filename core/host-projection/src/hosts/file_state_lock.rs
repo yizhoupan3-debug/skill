@@ -57,12 +57,11 @@ impl HookStateConfig {
     /// Save state to disk atomically (temp + fsync + rename), creating parent directories as needed.
     pub fn save_state<T: serde::Serialize>(&self, repo_root: &Path, state: &T) {
         let path = self.state_path(repo_root);
-        if let Some(parent) = path.parent() {
-            if let Err(e) = fs::create_dir_all(parent) {
+        if let Some(parent) = path.parent()
+            && let Err(e) = fs::create_dir_all(parent) {
                 tracing::warn!(host = %self.host_id, "failed to create hook state dir: {e}");
                 return;
             }
-        }
         match serde_json::to_string_pretty(state) {
             Ok(json) => {
                 if let Err(e) = write_atomic_text(&path, &json) {

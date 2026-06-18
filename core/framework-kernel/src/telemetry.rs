@@ -17,6 +17,11 @@ pub enum TelemetryEvent {
         skill: String,
         confidence: f32,
         reroute: bool,
+        latency_ms: u64,
+        reasons: Vec<String>,
+        matched_tokens: usize,
+        parity_gate: String,
+        candidates: Vec<String>,
     },
     GoalTransition {
         from: String,
@@ -238,6 +243,11 @@ mod tests {
                     skill: "pdf".into(),
                     confidence: 0.8,
                     reroute: false,
+                    latency_ms: 0,
+                    reasons: vec![],
+                    matched_tokens: 0,
+                    parity_gate: "".into(),
+                    candidates: vec![],
                 })
                 .unwrap();
         }

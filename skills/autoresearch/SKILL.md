@@ -20,6 +20,10 @@ trigger_hints:
   - 研究工作区
   - 科研工作区
   - research workspace
+  - 研究方向（初始化）
+  - 初始化研究
+  - 研究初始化
+  - 开启研究
   # claim / novelty
   - claim 管理
   - 新颖性声明

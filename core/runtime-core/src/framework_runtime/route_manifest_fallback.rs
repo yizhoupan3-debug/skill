@@ -97,7 +97,7 @@ pub fn route_task_with_manifest_fallback(
 ) -> Result<RouteDecision, String> {
     let scoped_runtime = crate::route::filter_records_for_host(runtime_records, host_id)?;
     if let Some(decision) = literal_framework_alias_decision(&scoped_runtime, query, session_id) {
-        crate::telemetry_emit::emit_route_decision(query, &decision, false);
+        crate::telemetry_emit::emit_route_decision(query, &decision, false, 0, "");
         return Ok(decision);
     }
     let hot_decision = route_task(
@@ -109,7 +109,7 @@ pub fn route_task_with_manifest_fallback(
     )?;
     let should_retry = should_retry_with_manifest(&hot_decision);
     let Some(fallback_path) = manifest_fallback_path(runtime_path, manifest_path)? else {
-        crate::telemetry_emit::emit_route_decision(query, &hot_decision, false);
+        crate::telemetry_emit::emit_route_decision(query, &hot_decision, false, 0, "");
         return Ok(hot_decision);
     };
     let full_records = match load_records_from_manifest(&fallback_path)
@@ -121,13 +121,13 @@ pub fn route_task_with_manifest_fallback(
             degraded
                 .reasons
                 .push(format!("Manifest fallback unavailable: {err}"));
-            crate::telemetry_emit::emit_route_decision(query, &degraded, false);
+            crate::telemetry_emit::emit_route_decision(query, &degraded, false, 0, "");
             return Ok(degraded);
         }
         Err(err) => return Err(err),
     };
     if let Some(decision) = literal_framework_alias_decision(&full_records, query, session_id) {
-        crate::telemetry_emit::emit_route_decision(query, &decision, false);
+        crate::telemetry_emit::emit_route_decision(query, &decision, false, 0, "");
         return Ok(decision);
     }
     let full_decision = route_task(&full_records, query, session_id, allow_overlay, first_turn)?;
@@ -139,9 +139,9 @@ pub fn route_task_with_manifest_fallback(
         manifest_path.is_some(),
     ) {
         let reroute = full_decision.selected_skill != hot_decision.selected_skill;
-        crate::telemetry_emit::emit_route_decision(query, &full_decision, reroute);
+        crate::telemetry_emit::emit_route_decision(query, &full_decision, reroute, 0, "");
         return Ok(full_decision);
     }
-    crate::telemetry_emit::emit_route_decision(query, &hot_decision, false);
+    crate::telemetry_emit::emit_route_decision(query, &hot_decision, false, 0, "");
     Ok(hot_decision)
 }

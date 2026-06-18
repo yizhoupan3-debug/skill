@@ -82,7 +82,7 @@ pub fn should_dev_exempt(path: &Path, repo_root: &Path) -> bool {
 #[cfg(all(test, feature = "dev-exempt"))]
 mod tests {
     use super::*;
-    use crate::test_env_sync::{process_env_lock, with_env_var, with_env_var_removed};
+    use crate::test_env_sync::{with_env_var, with_env_var_removed};
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 

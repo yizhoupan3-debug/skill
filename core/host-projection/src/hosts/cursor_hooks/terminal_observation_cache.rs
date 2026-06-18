@@ -65,12 +65,11 @@ pub fn collect_terminal_observations_cached(terminals_dir: &Path) -> Vec<Termina
     let mtime = dir_mtime(terminals_dir);
     {
         let guard = CACHE.read().expect("terminal cache rwlock");
-        if let Some(map) = guard.as_ref() {
-            if let Some(entry) = map.get(terminals_dir)
+        if let Some(map) = guard.as_ref()
+            && let Some(entry) = map.get(terminals_dir)
                 && entry.dir_mtime == mtime {
                     return (*entry.observations).clone();
                 }
-        }
     }
     let observations = scan_terminals_dir(terminals_dir);
     let shared = Arc::new(observations);

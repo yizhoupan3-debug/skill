@@ -39,7 +39,7 @@ runtime-core (~14K LOC, facade)  ← 核心生命周期/closeout/编排/re-expor
 ├── framework_maint.rs            ← 维护命令
 ├── stdio_transport.rs            ← stdio 传输层
 ├── 184 tests
-└── features: codegraph, host-{cursor,claude-code,codex,opencode}
+└── features: codegraph, host-{cursor,claude,codex,opencode,mimo}
 
 core/framework-runtime (~5K LOC)  ← 框架运行时核心（从 runtime-core 提取）
 ├── closeout_enforcement.rs       ← hard/soft blocker 分级

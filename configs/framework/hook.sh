@@ -63,10 +63,8 @@ fi
 
 # ── Critical event check ─────────────────────────────────────────
 critical_event() {
-  case "$(printf '%s' "$HOOK_EVENT" | tr '[:upper:]' '[:lower:]')" in
-    $CRITICAL_EVENTS) return 0 ;;
-    *) return 1 ;;
-  esac
+  local ev; ev="$(printf '%s' "$HOOK_EVENT" | tr '[:upper:]' '[:lower:]')"
+  [[ "$ev" =~ ^($CRITICAL_EVENTS)$ ]]
 }
 
 # ── Fail-closed JSON emitter ─────────────────────────────────────

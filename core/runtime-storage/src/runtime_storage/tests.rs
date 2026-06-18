@@ -1380,7 +1380,7 @@ fn runtime_storage_verify_text_returns_false_when_missing() {
     })
     .expect("verify ok");
     assert_eq!(response.verified, Some(false));
-    assert_eq!(response.exists, false);
+    assert!(!response.exists);
 }
 
 #[test]

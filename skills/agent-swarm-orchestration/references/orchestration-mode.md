@@ -41,7 +41,7 @@ orchestration: { mode: local|sidecar|workflow_native|workflow_supervisor, trigge
 
 | mode | 宿主 | 执行 |
 |------|------|------|
-| `workflow_native` | claude-code（且未 `disableWorkflows`） | 后台跑 `.claude/workflows/*.js` |
+| `workflow_native` | claude（且未 `disableWorkflows`） | 后台跑 `.claude/workflows/*.js` |
 | `sidecar` | 全宿主 |  Bounded Task，无 JS runtime |
 | `local` | 全宿主 | 无 delegation |
 

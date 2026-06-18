@@ -76,7 +76,7 @@ orchestration: { mode, trigger, reason }
 |--------|------|--------|
 | `local` | 小任务、紧耦合、拒绝规则命中 | 主线程 |
 | `sidecar` | 有清晰并行 lane，**未**触发 workflow | Task / subagent（声明式表） |
-| `workflow_native` | workflow 触发 + **claude-code** + Dynamic Workflows 未禁用 | 运行 `.claude/workflows/*.js`（`import … from 'workflow'`） |
+| `workflow_native` | workflow 触发 + **claude** + Dynamic Workflows 未禁用 | 运行 `.claude/workflows/*.js`（`import … from 'workflow'`） |
 
 **优先级（HARD）**：`explicit workflow` > `auto_multi_phase` > 声明式 `sidecar` > `local`。见 [`references/orchestration-mode.md`](./references/orchestration-mode.md)。
 
@@ -115,7 +115,7 @@ Sidecar 模式的压缩契约仍见下文 **Main-thread compression contract**�
 
 | host_id | workflow_native | workflow_supervisor |
 |---------|-----------------|---------------------|
-| claude-code | yes | yes（native 优先） |
+| claude | yes | yes（native 优先） |
 | cursor | no | yes（Task 模拟 parallel/pipeline） |
 | codex | no | yes |
 | 其他闭集宿主 | no | yes（诚实降级） |

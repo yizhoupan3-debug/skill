@@ -391,7 +391,7 @@ pub const HARNESS_CAPABILITIES_MINIMAL: &[&str] = &[
 
 ### 4.1 核心一致点（全部 ✅）
 
-| 维度 | Claude Code | Codex | Cursor | OpenCode |
+| 维度 | Claude | Codex | Cursor | OpenCode |
 |---|---|---|---|---|
 | `has_native_hook` | ✅ | ✅ | ✅ | ✅ |
 | `supports_subagent` | ✅ | ✅ | ✅ | ✅ |
@@ -402,7 +402,7 @@ pub const HARNESS_CAPABILITIES_MINIMAL: &[&str] = &[
 
 ### 4.2 有意差异（产品决定，不强制统一）
 
-| 差异 | Claude Code | Codex | Cursor | OpenCode |
+| 差异 | Claude | Codex | Cursor | OpenCode |
 |---|---|---|---|---|
 | `supports_worktree` | ✅ | ✅ | ✅ | ❌ |
 | `session_supervisor` | ✅ | ✅ | ❌ | ❌ |

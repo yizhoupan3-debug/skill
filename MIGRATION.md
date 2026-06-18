@@ -2,7 +2,7 @@
 
 ## 闭集宿主收敛（2026-06）
 
-**权威闭集**（仅此 4 个 id）：`codex`、`claude`、`cursor`、`opencode` — `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。
+**权威闭集**（仅此 5 个 id）：`codex`、`claude`、`cursor`、`opencode`、`mimo` — `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。
 
 | 退役 id | 替代 / 说明 |
 |---------|-------------|

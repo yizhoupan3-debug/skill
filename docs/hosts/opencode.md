@@ -90,9 +90,9 @@ OpenCode 采用 **fail-open** 策略：当 `router-rs` hook 二进制缺失或�
 
 ## 架构对比：TS/JS 插件 vs Rust Native Hook
 
-OpenCode 的 hook 处理层在 **TS/JS 插件系统**中执行，而非 Rust 侧。这与 cursor/claude-code/codex 三宿主的 Rust hook 分发有本质差异：
+OpenCode 的 hook 处理层在 **TS/JS 插件系统**中执行，而非 Rust 侧。这与 cursor/claude/codex 三宿主的 Rust hook 分发有本质差异：
 
-| 维度 | cursor/claude-code/codex | opencode |
+| 维度 | cursor/claude/codex | opencode |
 |------|--------------------------|----------|
 | Hook 运行时 | Rust（`host-projection` crate） | JS/TS 插件运行时 |
 | PreToolUse | `PreToolUse` 事件 | `tool.execute.before` 插件事件 |

@@ -1,11 +1,9 @@
-use super::control_plane::normalized_backend_family;
 use super::persist::{handle_background_state_operation, is_mutating_background_operation};
 use super::status::validate_transition;
 use super::types::{
     BACKGROUND_STATE_REQUEST_SCHEMA_VERSION, BACKGROUND_STATE_SCHEMA_VERSION, BackgroundRunStatus,
     BackgroundStateStore, STALE_ACTIVE_HEARTBEAT_TTL_SECS, STALE_TERMINAL_JOB_TTL_SECS,
 };
-use super::*;
 use chrono::Utc;
 use serde_json::{Value, json};
 use std::collections::HashMap;

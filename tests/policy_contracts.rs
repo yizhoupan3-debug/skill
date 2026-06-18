@@ -67,7 +67,6 @@ const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
     "vue",
     "web-platform-basics",
     "ai-research",
-    "autoresearch",
     "chatgpt-apps",
     "cloudflare-deploy",
     "data-wrangling",
@@ -931,7 +930,7 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         );
     }
     assert!(
-        slugs.len() <= 44,
+        slugs.len() <= 45,
         "hot runtime surface should stay bounded; got {}",
         slugs.len()
     );
@@ -2167,13 +2166,13 @@ fn framework_runtime_python_package_stays_removed() {
 }
 
 #[test]
-fn autoresearch_runtime_controller_stays_without_legacy_skill_entrypoint() {
+fn autoresearch_skill_is_active_routing_entrypoint() {
     assert!(
         project_root()
             .join("tools/autoresearch-rs/src/main.rs")
             .exists()
     );
-    assert!(!project_root().join("skills/autoresearch").exists());
+    assert!(project_root().join("skills/autoresearch/SKILL.md").exists());
 }
 
 #[test]

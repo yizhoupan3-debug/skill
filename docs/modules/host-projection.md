@@ -7,7 +7,7 @@ last_verified: "2026-06-16"
 
 # host-projection（B2 层）
 
-宿主投影层，负责将框架能力投影到四个闭集宿主（claude-code、cursor、codex、opencode）。
+宿主投影层，负责将框架能力投影到五个闭集宿主（claude、cursor、codex、opencode、mimo）。
 
 ## 职责
 

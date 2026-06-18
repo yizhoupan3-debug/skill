@@ -134,6 +134,31 @@ pub fn calculate_dir_hash(path: &PathBuf) -> anyhow::Result<String> {
     Ok(hex::encode(hasher.finalize()))
 }
 
+fn hash_dir_recursive(path: &Path, hasher: &mut Sha256) -> anyhow::Result<()> {
+    let mut entries: Vec<_> = std::fs::read_dir(path)?
+        .filter_map(|e| e.ok())
+        .collect();
+    entries.sort_by_key(|e| e.path());
+
+    for entry in entries {
+        let entry_path = entry.path();
+        if entry.file_type()?.is_file() {
+            let mut file = File::open(&entry_path)?;
+            let mut buffer = [0u8; 8192];
+            loop {
+                let bytes_read = file.read(&mut buffer)?;
+                if bytes_read == 0 {
+                    break;
+                }
+                hasher.update(&buffer[..bytes_read]);
+            }
+        } else if entry.file_type()?.is_dir() {
+            hash_dir_recursive(&entry_path, hasher)?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -250,29 +275,4 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir1);
         let _ = std::fs::remove_dir_all(dir2);
     }
-}
-
-fn hash_dir_recursive(path: &Path, hasher: &mut Sha256) -> anyhow::Result<()> {
-    let mut entries: Vec<_> = std::fs::read_dir(path)?
-        .filter_map(|e| e.ok())
-        .collect();
-    entries.sort_by_key(|e| e.path());
-
-    for entry in entries {
-        let entry_path = entry.path();
-        if entry.file_type()?.is_file() {
-            let mut file = File::open(&entry_path)?;
-            let mut buffer = [0u8; 8192];
-            loop {
-                let bytes_read = file.read(&mut buffer)?;
-                if bytes_read == 0 {
-                    break;
-                }
-                hasher.update(&buffer[..bytes_read]);
-            }
-        } else if entry.file_type()?.is_dir() {
-            hash_dir_recursive(&entry_path, hasher)?;
-        }
-    }
-    Ok(())
 }

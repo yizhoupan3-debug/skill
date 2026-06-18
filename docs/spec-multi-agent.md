@@ -28,7 +28,7 @@ spawned → running → draining → completed
 
 | 模式 | 宿主 |
 |------|------|
-| `workflow_native`（JS 运行时） | claude-code |
+| `workflow_native`（JS 运行时） | claude |
 | `workflow_supervisor`（Task 模拟） | 所有 |
 
 ### 5.4 Spawn Admission
@@ -41,7 +41,7 @@ spawned → running → draining → completed
 
 > **清门真源（2026-06）**：`core-policy::review_gate_satisfied` — `independent_reviewer_seen`（`reviewer_lanes` + `fork_context=false`）或 override。**全宿主 Stop advisory-only**（不 `permission: deny` / `decision:block`）。详见 [`hosts/cursor.md`](hosts/cursor.md) §门控。
 
-| 能力 | claude-code | cursor | codex | opencode |
+| 能力 | claude | cursor | codex | opencode |
 |------|:-----------:|:------:|:-----:|:--------:|
 | 可数深度 lane | `reviewer_lanes`（registry 共用闭集） | 同左 | 同左 | skill + `review-lanes/` |
 | spawn-first | ✅ | ✅ | ✅ | — |

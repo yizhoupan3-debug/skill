@@ -1076,7 +1076,7 @@ mod tests {
     #[test]
     fn load_trace_events_skips_empty_lines() {
         let stream = "\n\n{\"run_id\": \"r1\", \"kind\": \"a\", \"seq\": 1}\n\n";
-        let events = load_trace_events_from_text(&stream, Some("r1"), None).unwrap();
+        let events = load_trace_events_from_text(stream, Some("r1"), None).unwrap();
         assert_eq!(events.len(), 1);
     }
 

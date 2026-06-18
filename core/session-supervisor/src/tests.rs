@@ -440,7 +440,7 @@ fn subagent_parallel_spawn_close_stability() {
     let version = store["version"].as_u64().expect("store version");
     // upsert_worker bumps version on launch only; terminate updates worker in place.
     assert!(
-        version >= 1 + N as u64,
+        version > N as u64,
         "expected monotonic launch version >= {}, got {version}",
         1 + N
     );

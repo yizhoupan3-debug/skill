@@ -119,7 +119,6 @@ pub fn routing_runtime_watch() -> Arc<RoutingRuntimeWatch> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
 
     #[test]
     fn bootstrap_loads_existing_runtime_json() {

@@ -30,4 +30,5 @@ fs2.workspace = true
 reqwest.workspace = true
 
 [dev-dependencies]
+core-policy = { path = "../core-policy", features = ["test-sync"] }
 serde_json.workspace = true

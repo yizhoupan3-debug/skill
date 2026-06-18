@@ -5,7 +5,7 @@
 
 ## Overview
 
-The host registry defines all supported AI coding hosts (Cursor, Claude, OpenCode, Codex)
+The host registry defines all supported AI coding hosts (Cursor, Claude, OpenCode, Codex, MiMo)
 and their configuration in a single JSON file. Adding or removing a host requires changes to
 this file plus a Rust provider module — no other Rust code needs modification.
 
@@ -19,7 +19,7 @@ this file plus a Rust provider module — no other Rust code needs modification.
     "host_policy": "closed-set-explicit-projections"
   },
   "host_targets": {
-    "supported": ["cursor", "claude-code", "opencode", "codex"],
+    "supported": ["cursor", "claude", "opencode", "codex", "mimo"],
     "metadata": {
       "<host_id>": {
         // ── Existing fields (v1) ──
@@ -31,7 +31,7 @@ this file plus a Rust provider module — no other Rust code needs modification.
 
         // ── New in v2 ──
         "display_name": "Human-readable name",
-        "transport_type": "cursor-agent | anthropic-claude-code | native-opencode | native-codex",
+        "transport_type": "hook | native-opencode",
         "config_format": "json | toml | mdc",
         "config_path": ".<host>/settings.json",
         "cli_aliases": ["alias1", "alias2"],
@@ -49,12 +49,12 @@ this file plus a Rust provider module — no other Rust code needs modification.
 
 | Host | Transport | Hook Mechanism |
 |------|-----------|---------------|
-| Cursor | `cursor-agent` | Shell hook → `router-rs cursor hook` |
-| Claude | `anthropic-claude-code` | Shell hook → `router-rs claude hook` |
+| Cursor | `hook` | Shell hook → `router-rs cursor hook` |
+| Claude | `hook` | Shell hook → `router-rs claude hook` |
 | OpenCode | `native-opencode` | Shell hook → `router-rs opencode hook` |
-| Codex | `native-codex` | Shell hook → `router-rs codex hook` |
+| Codex | `hook` | Shell hook → `router-rs codex hook` |
+| MiMo | `hook` | Shell hook → `router-rs mimo hook` |
 
-All four hosts use the same Rust `HostHookDispatcher` trait implementation.
 Hook launchers live in `configs/framework/<host>-router-rs-hook.sh`.
 
 ## Adding a New Host

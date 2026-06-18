@@ -8,7 +8,7 @@ use super::signals::*;
 /// Replaces `tokenize_route_text(phrase).len() == 1` to avoid regex + Vec allocation.
 #[inline]
 fn is_single_token_phrase(phrase: &str) -> bool {
-    !phrase.contains(|c: char| c == ' ' || c == ',' || c == '\n' || c == '/' || c == '|' || c == '，')
+    !phrase.contains([' ', ',', '\n', '/', '|', '，'])
 }
 use tracing::debug;
 use super::text::{
