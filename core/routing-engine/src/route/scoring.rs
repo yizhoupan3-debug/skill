@@ -572,11 +572,10 @@ pub fn pick_owner<'a>(
     query_text: &str,
     query_token_list: &[String],
     w: &ScoringWeights,
-) -> RouteCandidate<'a> {
+) -> Result<RouteCandidate<'a>, String> {
     let n = candidates.len();
     if n == 0 {
-        panic!("pick_owner called with empty candidates — caller ({}) must ensure non-empty input",
-               std::panic::Location::caller());
+        return Err("pick_owner: no candidates provided".to_string());
     }
 
     // Owner candidate indices
@@ -610,13 +609,13 @@ pub fn pick_owner<'a>(
                 "Prioritized delegation gate before strong owner for broad parallel-review admission."
                     .to_string(),
             );
-            return gate;
+            return Ok(gate);
         }
 
     // Top owner above threshold
     if let Some(&top_idx) = owner_idx.first()
         && candidates[top_idx].score >= w.top_owner_score_threshold {
-            return candidates.swap_remove(top_idx);
+            return Ok(candidates.swap_remove(top_idx));
         }
 
     // Gate before owner
@@ -627,7 +626,7 @@ pub fn pick_owner<'a>(
             let mut gate = candidates.swap_remove(idx);
             gate.reasons
                 .push("Prioritized via gate-before-owner precedence.".to_string());
-            return gate;
+            return Ok(gate);
         }
 
     // Build owner-pool indices (no RouteCandidate clones)
@@ -667,7 +666,7 @@ pub fn pick_owner<'a>(
             .sort_unstable_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
         if let Some(&top) = layer_candidates.first()
             && candidates[top].score >= w.layer_threshold(layer) {
-                return candidates.swap_remove(top);
+                return Ok(candidates.swap_remove(top));
             }
     }
 
@@ -687,11 +686,11 @@ pub fn pick_owner<'a>(
             })
             .then_with(|| candidates[a].record.slug.cmp(&candidates[b].record.slug))
     });
-    let winner_idx = *fallback_pool.first().unwrap_or_else(|| {
-        panic!("pick_owner: fallback_pool is empty after exhaustive fallbacks — {}",
-               "this should be unreachable because pool_indices always includes at least one fallback from lines 624-639")
-    });
-    candidates.swap_remove(winner_idx)
+    let winner_idx = match fallback_pool.first() {
+        Some(&idx) => idx,
+        None => return Err("pick_owner: fallback_pool empty after exhaustive fallbacks".to_string()),
+    };
+    Ok(candidates.swap_remove(winner_idx))
 }
 
 pub fn route_candidate_cmp(left: &RouteCandidate<'_>, right: &RouteCandidate<'_>) -> Ordering {
