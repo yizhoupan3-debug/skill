@@ -1304,7 +1304,8 @@ pub fn install_test_deps() {
 // (appended during host-projection hooks consolidation)
 // ────────────────────────────────────────────────────────────────
 
-// Framework Runtime (additional)
+// ── framework_runtime_extra ──
+
 static RESOLVE_REPO_ROOT_ARG: OnceLock<fn(Option<&Path>) -> Result<PathBuf, String>> =
     OnceLock::new();
 static CURRENT_LOCAL_TIMESTAMP: OnceLock<fn() -> String> = OnceLock::new();
@@ -1338,7 +1339,8 @@ static HOOK_ACTION_FROM_OUTPUT: OnceLock<fn(&Value) -> &'static str> = OnceLock:
 static CLOSEOUT_RECORD_SCHEMA_VERSION_FN: OnceLock<fn() -> &'static str> = OnceLock::new();
 static CHECK_ANOMALIES: OnceLock<fn(&Path) -> Result<Vec<String>, String>> = OnceLock::new();
 
-// Web Fetch Guard
+// ── web_fetch_guard ──
+
 static VALIDATE_AND_RESOLVE_WEB_FETCH_URL: OnceLock<
     fn(&str) -> Result<(String, Vec<String>), String>,
 > = OnceLock::new();
@@ -1347,7 +1349,8 @@ static RESOLVE_WEB_FETCH_REDIRECT: OnceLock<fn(&str, &str) -> Result<String, Str
 static RESOLVE_WEB_FETCH_ADDRESSES: OnceLock<fn(&str, u16) -> Result<Vec<String>, String>> =
     OnceLock::new();
 
-// MCP Pre Guard
+// ── mcp_pre_guard ──
+
 static EVALUATE_MCP_PRE_GUARD_SAFE: OnceLock<fn(&str, &Value, &Path) -> McpPreGuardVerdict> =
     OnceLock::new();
 

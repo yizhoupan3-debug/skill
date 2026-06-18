@@ -22,19 +22,29 @@ use regex::Regex;
 use serde_json::Value;
 use std::sync::OnceLock;
 
+pub mod paper;
+pub mod design;
+pub mod technical;
+pub mod tooling;
+
+pub use paper::*;
+pub use design::*;
+pub use technical::*;
+pub use tooling::*;
+
 // ---------------------------------------------------------------------------
 // Data-driven signal table
 // ---------------------------------------------------------------------------
 
 /// How markers are matched against the query.
-enum SignalMatchMode {
+pub(crate) enum SignalMatchMode {
     /// `query_text.contains(normalize_text(marker)) || text_matches_phrase(...)`.
     NormalizeAndToken,
     /// `query_text.contains(marker) || text_matches_phrase(...)` — raw substring + token.
     ContainsOrToken,
 }
 
-struct SignalDef {
+pub(crate) struct SignalDef {
     name: &'static str,
     mode: SignalMatchMode,
     markers: &'static [&'static str],
@@ -208,7 +218,7 @@ const SIGNAL_DEFS: &[SignalDef] = &[
 
 /// Generic engine: check whether `query_text` / `query_token_list` matches
 /// any marker in `markers` using the given `mode`.
-fn signal_matches(
+pub(crate) fn signal_matches(
     mode: &SignalMatchMode,
     query_text: &str,
     query_token_list: &[String],
@@ -226,7 +236,7 @@ fn signal_matches(
 }
 
 /// Look up a signal definition by name and evaluate it.
-fn has_signal_by_name(name: &str, query_text: &str, query_token_list: &[String]) -> bool {
+pub(crate) fn has_signal_by_name(name: &str, query_text: &str, query_token_list: &[String]) -> bool {
     SIGNAL_DEFS
         .iter()
         .find(|def| def.name == name)
@@ -239,7 +249,7 @@ const ROUTING_SIGNAL_MARKERS_EMBED: &str = include_str!(concat!(
     "/../../configs/framework/ROUTING_SIGNAL_MARKERS.json"
 ));
 
-fn routing_signal_markers_json() -> &'static Value {
+pub(crate) fn routing_signal_markers_json() -> &'static Value {
     static CELL: OnceLock<Value> = OnceLock::new();
     CELL.get_or_init(|| {
         let v: Value = serde_json::from_str(ROUTING_SIGNAL_MARKERS_EMBED)
@@ -255,7 +265,7 @@ fn routing_signal_markers_json() -> &'static Value {
     })
 }
 
-fn string_list_field<'a>(root: &'a Value, key: &'static str) -> &'a Vec<Value> {
+pub(crate) fn string_list_field<'a>(root: &'a Value, key: &'static str) -> &'a Vec<Value> {
     root.get(key).and_then(Value::as_array).unwrap_or_else(|| {
         panic!(
             "ROUTING_SIGNAL_MARKERS.json missing required array field `{key}` — \
@@ -264,7 +274,7 @@ fn string_list_field<'a>(root: &'a Value, key: &'static str) -> &'a Vec<Value> {
     })
 }
 
-fn meta_routing_anchors() -> &'static [String] {
+pub(crate) fn meta_routing_anchors() -> &'static [String] {
     static CELL: OnceLock<Vec<String>> = OnceLock::new();
     CELL.get_or_init(|| {
         let root = routing_signal_markers_json();
@@ -278,7 +288,7 @@ fn meta_routing_anchors() -> &'static [String] {
     })
 }
 
-fn meta_routing_markers() -> &'static [String] {
+pub(crate) fn meta_routing_markers() -> &'static [String] {
     static CELL: OnceLock<Vec<String>> = OnceLock::new();
     CELL.get_or_init(|| {
         let root = routing_signal_markers_json();
@@ -292,7 +302,7 @@ fn meta_routing_markers() -> &'static [String] {
     })
 }
 
-fn completion_marker_strings() -> &'static [String] {
+pub(crate) fn completion_marker_strings() -> &'static [String] {
     static CELL: OnceLock<Vec<String>> = OnceLock::new();
     CELL.get_or_init(|| {
         string_list_field(
@@ -305,7 +315,7 @@ fn completion_marker_strings() -> &'static [String] {
     })
 }
 
-fn supervisor_marker_strings() -> &'static [String] {
+pub(crate) fn supervisor_marker_strings() -> &'static [String] {
     static CELL: OnceLock<Vec<String>> = OnceLock::new();
     CELL.get_or_init(|| {
         string_list_field(
@@ -318,22 +328,11 @@ fn supervisor_marker_strings() -> &'static [String] {
     })
 }
 
-fn github_pr_standalone_token_regex() -> &'static Regex {
+pub(crate) fn github_pr_standalone_token_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"(?i)\bpr\b").expect("static github pr token regex"))
 }
 
-pub fn is_meta_routing_task(query_text: &str) -> bool {
-    let anchor_hit = meta_routing_anchors()
-        .iter()
-        .any(|a| query_text.contains(a.as_str()));
-    if !anchor_hit {
-        return false;
-    }
-    meta_routing_markers()
-        .iter()
-        .any(|m| query_text.contains(m.as_str()))
-}
 
 pub fn has_checklist_execution_context(query_text: &str) -> bool {
     query_text.contains("checklist")
@@ -364,101 +363,11 @@ pub fn has_checklist_execution_context(query_text: &str) -> bool {
         .any(|marker| query_text.contains(marker))
 }
 
-pub fn has_skill_creator_context(query_text: &str, query_token_list: &[String]) -> bool {
-    (query_text.contains("skill") || query_text.contains("skill.md"))
-        && [
-            "创建",
-            "新建",
-            "写一个",
-            "写个",
-            "做一个",
-            "做个",
-            "create",
-            "author",
-            "scaffold",
-            "update",
-            "revise",
-        ]
-        .iter()
-        .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
-}
 
-pub fn has_skill_installer_context(query_text: &str, query_token_list: &[String]) -> bool {
-    query_text.contains("skill")
-        && [
-            "安装",
-            "装一下",
-            "装一个",
-            "装个",
-            "导入",
-            "引入",
-            "install",
-            "installed",
-            "curated",
-            "github",
-        ]
-        .iter()
-        .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
-}
 
-pub fn has_skill_framework_maintenance_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    (query_text.contains("skill")
-        || query_text.contains("skill.md")
-        || query_text.contains("runtime")
-        || query_text.contains("框架")
-        || query_text.contains(".supervisor_state"))
-        && [
-            "不好用",
-            "持续优化",
-            "外部调研",
-            "路由没触发",
-            "触发不准",
-            "优化 skill",
-            "framework",
-            "routing",
-            "skill 系统",
-            "skill系统",
-            "轻量化",
-            "兼容层",
-            "胶水层",
-            "核查",
-            "合并",
-            "精简",
-            "清理",
-            "历史文件",
-            "旧文件",
-            "口径",
-            "contract",
-            "沉到 runtime",
-            "沉到runtime",
-            "减少入口",
-            "减入口",
-            "不损害功能",
-            "加重负担",
-            "没有用",
-            "治理任务",
-        ]
-        .iter()
-        .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
-}
 
-pub fn has_runtime_lightweighting_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("runtime_lightweighting", query_text, query_token_list)
-}
 
-pub fn has_systematic_debug_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("systematic_debug", query_text, query_token_list)
-}
 
-pub fn has_scientific_figure_plotting_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    has_signal_by_name("scientific_figure_plotting", query_text, query_token_list)
-}
 
 pub fn has_rendered_visual_evidence_context(query_text: &str, query_token_list: &[String]) -> bool {
     let direct_evidence = [
@@ -504,13 +413,7 @@ pub fn has_existing_image_file_context(query_text: &str, query_token_list: &[Str
     .any(|marker| query_text.contains(marker) || text_matches_phrase(query_token_list, marker))
 }
 
-pub fn has_prose_naturalization_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("prose_naturalization", query_text, query_token_list)
-}
 
-pub fn has_copywriting_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("copywriting", query_text, query_token_list)
-}
 
 pub fn is_overlay_record(record: &SkillRecord) -> bool {
     record.owner_lower == "overlay"
@@ -553,175 +456,15 @@ pub fn has_plan_mode_owner_context(query_text: &str, query_token_list: &[String]
         || (query_text.contains("可验收") && query_text.contains("todo"))
 }
 
-pub fn has_bounded_subagent_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("bounded_subagent", query_text, query_token_list)
-}
 
-pub fn has_token_budget_pressure(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("token_budget_pressure", query_text, query_token_list)
-}
 
-pub fn has_workflow_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("workflow_negation", query_text, query_token_list)
-}
 
-pub fn has_workflow_orchestration_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("workflow_orchestration", query_text, query_token_list)
-}
 
-pub fn has_parallel_execution_context(query_text: &str, query_token_list: &[String]) -> bool {
-    let explicit_parallel = [
-        "并行",
-        "同时",
-        "分头",
-        "分路",
-        "分三路",
-        "多路",
-        "多线",
-        "多方向",
-        "多个方向",
-        "独立方向",
-        "独立维度",
-        "parallel",
-        "concurrent",
-        "in parallel",
-        "split lanes",
-        "split work",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
-    });
-    if !explicit_parallel {
-        return false;
-    }
 
-    let split_shape = [
-        "三个方向",
-        "三方向",
-        "三个模块",
-        "三模块",
-        "多个模块",
-        "多个假设",
-        "多个独立",
-        "前端",
-        "后端",
-        "测试",
-        "api",
-        "数据库",
-        "ui",
-        "安全",
-        "性能",
-        "架构",
-        "实现",
-        "策略",
-        "验证",
-        "frontend",
-        "backend",
-        "testing",
-        "tests",
-        "database",
-        "security",
-        "performance",
-        "architecture",
-        "implementation",
-        "verification",
-    ]
-    .iter()
-    .filter(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
-    .count();
 
-    split_shape >= 2
-}
 
-pub fn has_parallel_review_candidate_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    let markers = crate::hooks::parallel_review_candidate_markers();
-    let review_requested = markers.review_markers.iter().any(|marker| {
-        // Avoid treating "revision" / "revisions" as a standalone "review" hit.
-        if marker.as_str() == "review" {
-            return text_matches_phrase(query_token_list, "review");
-        }
-        query_text.contains(marker.as_str())
-            || text_matches_phrase(query_token_list, marker)
-    });
-    if !review_requested {
-        return false;
-    }
 
-    let broad_or_independent = markers.breadth_markers.iter().any(|marker| {
-        query_text.contains(marker.as_str())
-            || text_matches_phrase(query_token_list, marker)
-    });
-    if !broad_or_independent {
-        return false;
-    }
-
-    markers.scope_markers.iter().any(|marker| {
-        query_text.contains(marker.as_str())
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
-
-pub fn paper_skill_requires_context(slug: &str) -> bool {
-    matches!(
-        slug,
-        "paper-workbench" | "paper-reviewer" | "paper-reviser" | "paper-writing"
-    )
-}
-
-/// Substring-prone single-token markers must use whole-token match only (e.g. `review` vs `preview`).
-fn paper_route_marker_matches(query_text: &str, query_token_list: &[String], marker: &str) -> bool {
-    let token_only = matches!(marker, "review" | "审" | "看" | "检查" | "评估");
-    if token_only {
-        return text_matches_phrase(query_token_list, marker);
-    }
-    if marker.split_whitespace().count() > 1 {
-        return query_text.contains(marker) || text_matches_phrase(query_token_list, marker);
-    }
-    query_text.contains(marker) || text_matches_phrase(query_token_list, marker)
-}
-
-pub fn has_paper_prose_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
-    if query_text.contains("别润色") || query_text.contains("不润色") {
-        return true;
-    }
-    [
-        "no polish",
-        "do not polish",
-        "don't polish",
-        "dont polish",
-        "不要润色",
-        "只审不改",
-        "critique only",
-        "critique-only",
-        "review only",
-        "review-only",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
-
-pub fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("paper", query_text, query_token_list)
-}
-
-/// Detect research workspace context: keyword match + directory-based detection.
-///
-/// Returns true when the query contains research-log keywords OR when the
-/// current working directory (or an ancestor) contains a `research-state.yaml`
-/// or `.research.toml` marker file. Directory detection is re-evaluated on
-/// each call (single `stat` per ancestor — negligible cost).
-/// Check ancestor directories for research workspace marker files.
-fn detect_research_directory(cwd: &std::path::Path) -> bool {
+pub(crate) fn detect_research_directory(cwd: &std::path::Path) -> bool {
     cwd.ancestors().any(|dir| {
         dir.join("research-state.yaml").is_file() || dir.join(".research.toml").is_file()
     })
@@ -747,49 +490,9 @@ pub fn has_research_context(query_text: &str, query_token_list: &[String]) -> bo
 /// True when the query is about reviewing/checking a mathematical proof or derivation,
 /// without a full-paper/manuscript context. Helps route pure math-review to `math-derivation`
 /// instead of `paper-reviewer`.
-pub fn has_math_review_context(query_text: &str, query_token_list: &[String]) -> bool {
-    let math_review_markers = [
-        "审一下这个证明",
-        "审这个证明",
-        "审一下推导",
-        "证明是否正确",
-        "推导是否正确",
-        "证明有没有漏洞",
-        "推导有没有漏洞",
-        "check this proof",
-        "review this proof",
-        "verify this derivation",
-        "数学推导审查",
-        "证明审查",
-    ];
-    let has_math_review = math_review_markers.iter().any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    });
-    if !has_math_review {
-        return false;
-    }
-    // Exclude when there's a full paper context (those route to paper-reviewer)
-    !has_paper_context(query_text, query_token_list)
-}
 
-pub fn has_github_pr_context(query_text: &str, query_token_list: &[String]) -> bool {
-    query_text.contains("github")
-        || text_matches_phrase(query_token_list, "github")
-        || text_matches_phrase(query_token_list, "gh")
-        || query_text.contains("pull request")
-        || text_matches_phrase(query_token_list, "pull request")
-        || github_pr_standalone_token_regex().is_match(query_text)
-        || text_matches_phrase(query_token_list, "pr")
-}
 
-pub fn has_pr_triage_summary_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("pr_triage_summary", query_text, query_token_list)
-}
 
-pub fn has_sentry_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("sentry", query_text, query_token_list)
-}
 
 pub fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> bool {
     let phrase_match = [
@@ -819,9 +522,6 @@ pub fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> 
     phrase_match || query_token_list.iter().any(|token| token == "ci")
 }
 
-pub fn has_non_github_ci_provider_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("non_github_ci_provider", query_text, query_token_list)
-}
 
 pub fn should_route_to_gh_fix_ci(query_text: &str, query_token_list: &[String]) -> bool {
     has_ci_failure_context(query_text, query_token_list)
@@ -829,427 +529,17 @@ pub fn should_route_to_gh_fix_ci(query_text: &str, query_token_list: &[String]) 
             || !has_non_github_ci_provider_context(query_text, query_token_list))
 }
 
-pub fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String]) -> bool {
-    if !has_paper_context(query_text, query_token_list) {
-        return false;
-    }
-    let review_markers = [
-        "review",
-        "reviewer comments",
-        "review comments",
-        "审稿意见",
-        "评审意见",
-    ];
-    let revise_markers = ["改论文", "修改论文", "改稿", "修改稿", "进入修改", "直接改"];
-    review_markers
-        .iter()
-        .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
-        && revise_markers.iter().any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-        })
-}
 
-pub fn has_paper_direct_revision_context(query_text: &str, query_token_list: &[String]) -> bool {
-    if !has_paper_context(query_text, query_token_list) {
-        return false;
-    }
-    if [
-        "该删就删",
-        "藏到附录",
-        "改到能投",
-        "根据 reviewer comments 修改论文",
-        "根据 reviewer comments 改论文",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    }) {
-        return false;
-    }
-    [
-        "别先给方案",
-        "直接进入修改",
-        "直接改稿",
-        "不要再审",
-        "只进改稿",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
 
-pub fn has_paper_workbench_frontdoor_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    if !has_paper_context(query_text, query_token_list) {
-        return false;
-    }
-    [
-        "整体推进这篇论文",
-        "现在该审",
-        "该审",
-        "该改",
-        "该补实验",
-        "怎么处理",
-        "先审再改",
-        "改到能投",
-        "该删就删",
-        "藏到附录",
-        "根据 reviewer comments 修改论文",
-        "根据 reviewer comments 改论文",
-        "能不能投",
-        "整篇严审",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
 
-fn text_has_manuscript_section(lower: &str, query_text: &str) -> bool {
-    [
-        "abstract",
-        "introduction",
-        "related work",
-        "methods",
-        "results",
-        "discussion",
-        "conclusion",
-    ]
-    .iter()
-    .any(|h| lower.contains(h))
-        || ["摘要", "引言", "相关工作", "方法", "结果", "讨论", "结论"]
-            .iter()
-            .any(|h| query_text.contains(h))
-}
 
-/// 显式润色/写作 marker（用于审稿+润色并存时不阻断 prose 路径）。
-pub fn has_explicit_prose_polish_marker(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("explicit_prose_polish", query_text, query_token_list)
-}
 
-/// 不要求 `has_paper_context` 的显式学术润色（如「SCI润色 abstract」「polish this abstract」）。
-pub fn has_standalone_academic_polish_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    if has_paper_prose_negation_context(query_text, query_token_list) {
-        return false;
-    }
-    let lower = query_text.to_ascii_lowercase();
-    if [
-        "SCI润色",
-        "SCI 润色",
-        "sci润色",
-        "sci 润色",
-        "学术润色",
-        "英文论文润色",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(marker)
-            || text_matches_phrase(query_token_list, marker)
-    }) {
-        return true;
-    }
-    let has_polish = has_explicit_prose_polish_marker(query_text, query_token_list)
-        || lower.contains("polish")
-        || lower.contains("proofread")
-        || lower.contains("copyedit");
-    has_polish && text_has_manuscript_section(&lower, query_text)
-}
 
-pub fn has_paper_writing_context(query_text: &str, query_token_list: &[String]) -> bool {
-    if !has_paper_context(query_text, query_token_list) {
-        return false;
-    }
-    if has_paper_prose_negation_context(query_text, query_token_list) {
-        return false;
-    }
-    if has_paper_ref_first_workflow_context(query_text, query_token_list) {
-        return false;
-    }
-    if has_paper_review_judgment_context(query_text, query_token_list)
-        && !has_explicit_prose_polish_marker(query_text, query_token_list)
-    {
-        return false;
-    }
-    [
-        "润色",
-        "文字精修",
-        "表达",
-        "故事线",
-        "重写摘要",
-        "重写引言",
-        "写摘要",
-        "写引言",
-        "写论文",
-        "论文写作",
-        "写 related work",
-        "related work 部分",
-        "SCI润色",
-        "英文论文润色",
-        "学术润色",
-        "只改表达",
-        "降AI味",
-        "去AI味",
-        "polish",
-        "rewrite introduction",
-        "rewrite abstract",
-        "manuscript editing",
-        "academic writing",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
 
-/// 比 `has_paper_writing_context` 更宽：口语改稿、粘贴段落、LaTeX 块——**无需**用户说「润色/language_register」。
-pub fn looks_like_pasted_manuscript_prose(text: &str) -> bool {
-    let lower = text.to_ascii_lowercase();
-    if text.contains("\\begin{")
-        || text.contains("\\section")
-        || text.contains("\\cite{")
-        || text.contains("\\ref{")
-    {
-        return true;
-    }
-    if [
-        "abstract",
-        "introduction",
-        "related work",
-        "methods",
-        "results",
-        "discussion",
-        "conclusion",
-    ]
-    .iter()
-    .any(|h| lower.contains(h))
-        && text.len() > 100
-    {
-        return true;
-    }
-    if ["摘要", "引言", "相关工作", "方法", "结果", "讨论", "结论"]
-        .iter()
-        .any(|h| text.contains(h))
-        && text.len() > 80
-    {
-        return true;
-    }
-    if text.len() > 320 {
-        let en_hits = [
-            "we propose",
-            "we present",
-            "however,",
-            "experiments show",
-            "our method",
-            "in this paper",
-        ]
-        .iter()
-        .filter(|m| lower.contains(*m))
-        .count();
-        let zh_hits = [
-            "本文",
-            "我们提出",
-            "实验表明",
-            "然而，",
-            "综上所述",
-            "本研究",
-        ]
-        .iter()
-        .filter(|m| text.contains(*m))
-        .count();
-        if en_hits >= 2 || zh_hits >= 2 {
-            return true;
-        }
-    }
-    false
-}
 
-pub fn has_paper_prose_edit_context(query_text: &str, query_token_list: &[String]) -> bool {
-    if has_paper_prose_negation_context(query_text, query_token_list) {
-        return false;
-    }
-    if has_standalone_academic_polish_context(query_text, query_token_list) {
-        return true;
-    }
-    if has_paper_writing_context(query_text, query_token_list) {
-        return true;
-    }
-    if !has_paper_context(query_text, query_token_list) {
-        return false;
-    }
-    if looks_like_pasted_manuscript_prose(query_text) {
-        return true;
-    }
-    if has_paper_ref_first_workflow_context(query_text, query_token_list) {
-        return false;
-    }
-    if has_paper_review_judgment_context(query_text, query_token_list)
-        && !has_explicit_prose_polish_marker(query_text, query_token_list)
-    {
-        return false;
-    }
-    [
-        "改这段",
-        "这段文字",
-        "这一段",
-        "这段话",
-        "不通顺",
-        "读起来",
-        "拗口",
-        "不好读",
-        "太难读",
-        "表达不好",
-        "写得太",
-        "改改",
-        "帮我改",
-        "顺一下",
-        "改一下",
-        "科研文本",
-        "正文",
-        "caption",
-        "图注",
-        "表注",
-        "polish this",
-        "proofread",
-        "copyedit",
-        "readability",
-        "wording",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
 
-pub fn has_paper_review_judgment_context(query_text: &str, query_token_list: &[String]) -> bool {
-    if !has_paper_context(query_text, query_token_list) {
-        return false;
-    }
-    [
-        "paper review",
-        "review paper",
-        "审稿",
-        "审一下",
-        "严审",
-        "投稿前",
-        "能不能投",
-        "投稿判断",
-        "reviewer-style",
-        "reviewer style",
-        "外部调研",
-        "查文献后审",
-        "科学性批评",
-        "科学批评",
-        "只要批评",
-        "只批评",
-        "只要科学",
-        "不要改稿",
-        "别改稿",
-        "只审不改",
-        "critique only",
-        "critique-only",
-        "review only",
-    ]
-    .iter()
-    .any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
 
-pub fn has_paper_figure_layout_review_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    if !has_paper_context(query_text, query_token_list) {
-        return false;
-    }
-    let visual_markers = [
-        "图表", "排版", "figure", "figures", "table", "tables", "layout",
-    ];
-    let review_markers = ["只看", "审", "review", "检查", "别检查别的维度"];
-    visual_markers
-        .iter()
-        .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
-        && review_markers
-            .iter()
-            .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
-}
 
-pub fn has_paper_logic_evidence_review_context(
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    if !has_paper_context(query_text, query_token_list) {
-        return false;
-    }
-    let logic_markers = [
-        "claim",
-        "claims",
-        "evidence",
-        "证据",
-        "支撑",
-        "实验支撑",
-        "对齐",
-        "够不够",
-    ];
-    let review_markers = ["看", "检查", "评估", "review", "审", "别润色"];
-    logic_markers
-        .iter()
-        .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
-        && review_markers
-            .iter()
-            .any(|marker| paper_route_marker_matches(query_text, query_token_list, marker))
-}
-
-pub fn has_paper_ref_first_workflow_context(query_text: &str, query_token_list: &[String]) -> bool {
-    if !has_paper_context(query_text, query_token_list) {
-        return false;
-    }
-    let ref_markers = [
-        "下载ref",
-        "目标期刊",
-        "相近ref",
-        "相近 ref",
-        "reference corpus",
-        "target journal",
-    ];
-    let story_or_write_markers = [
-        "讲故事",
-        "故事线",
-        "写作套路",
-        "重写摘要",
-        "重写引言",
-        "再写",
-        "再帮我重写",
-    ];
-    ref_markers.iter().any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    }) && story_or_write_markers.iter().any(|marker| {
-        query_text.contains(*marker)
-            || text_matches_phrase(query_token_list, marker)
-    })
-}
-
-pub fn has_design_reference_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("design_reference", query_text, query_token_list)
-}
-
-pub fn has_visual_evidence_review_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("visual_evidence_review", query_text, query_token_list)
-}
 
 pub fn artifact_gate_matches_query(query_token_list: &[String]) -> bool {
     ARTIFACT_GATE_PHRASES
@@ -1298,100 +588,17 @@ pub fn artifact_gate_target_slug(query_token_list: &[String]) -> Option<&'static
     })
 }
 
-pub fn has_design_contract_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("design_contract", query_text, query_token_list)
-}
 
-pub fn has_design_contract_negation_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("design_contract_negation", query_text, query_token_list)
-}
 
-pub fn has_design_output_audit_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("design_output_audit", query_text, query_token_list)
-}
 
-pub fn has_design_workflow_protocol_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("design_workflow_protocol", query_text, query_token_list)
-}
 
-pub fn has_quick_artifact_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("quick_artifact", query_text, query_token_list)
-}
 
-pub fn has_codegraph_index_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("codegraph_index_ready", query_text, query_token_list)
-}
 
-pub fn should_defer_to_artifact_gate(
-    record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    if record.gate_lower != "none" || !artifact_gate_matches_query(query_token_list) {
-        return false;
-    }
-    let explicit_entry = format!("${}", record.slug_lower);
-    if query_text.contains(&explicit_entry) {
-        return false;
-    }
-    if record.slug == "ppt-beamer" && has_beamer_slide_context(query_text, query_token_list) {
-        return false;
-    }
-    if record.slug == "source-slide-formats"
-        && has_source_slide_format_context(query_text, query_token_list)
-    {
-        return false;
-    }
-    record.session_start_lower == "n/a"
-        && (record
-            .name_tokens
-            .iter()
-            .any(|token| query_token_list.contains(token))
-            || record
-                .trigger_hints
-                .iter()
-                .any(|hint| text_matches_phrase(query_token_list, hint)))
-}
 
-pub fn should_suppress_non_target_artifact_gate(
-    record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    if record.slug == "design-md"
-        && has_design_contract_context(query_text, query_token_list)
-        && !has_design_contract_negation_context(query_text, query_token_list)
-    {
-        return false;
-    }
-    record.gate_lower == "artifact"
-        && !is_meta_routing_task(query_text)
-        && artifact_gate_target_slug(query_token_list)
-            .map(|target| record.slug != target)
-            .unwrap_or(false)
-}
 
-pub fn should_prefer_design_contract_over_artifact(
-    record: &SkillRecord,
-    query_text: &str,
-    query_token_list: &[String],
-) -> bool {
-    record.slug == "slides"
-        && has_design_contract_context(query_text, query_token_list)
-        && !has_design_contract_negation_context(query_text, query_token_list)
-}
 
-pub fn has_beamer_slide_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("beamer_slide", query_text, query_token_list)
-}
 
-pub fn has_source_slide_format_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("source_slide_format", query_text, query_token_list)
-}
 
-pub fn has_diagramming_context(query_text: &str, query_token_list: &[String]) -> bool {
-    has_signal_by_name("diagramming", query_text, query_token_list)
-}
 
 pub fn build_route_context(query_text: &str, query_token_list: &[String]) -> RouteContextPayload {
     let completion_requested = completion_marker_strings().iter().any(|marker| {
@@ -1469,52 +676,52 @@ mod paper_prose_edit_context_tests {
     use super::*;
     use crate::route::tokenize_route_text;
 
-    fn prose(text: &str) -> bool {
+    pub(crate) fn prose(text: &str) -> bool {
         let tokens = tokenize_route_text(text);
         has_paper_prose_edit_context(text, &tokens)
     }
 
     #[test]
-    fn standalone_sci_polish_abstract() {
+    pub(crate) fn standalone_sci_polish_abstract() {
         assert!(prose("SCI润色 abstract"));
     }
 
     #[test]
-    fn polish_this_abstract_without_paper_word() {
+    pub(crate) fn polish_this_abstract_without_paper_word() {
         assert!(prose("polish this abstract for clarity"));
     }
 
     #[test]
-    fn colloquial_edit_with_paper_context() {
+    pub(crate) fn colloquial_edit_with_paper_context() {
         assert!(prose("论文讨论节这段读起来不通顺，帮我改改"));
     }
 
     #[test]
-    fn pasted_latex_block_with_paper_context() {
+    pub(crate) fn pasted_latex_block_with_paper_context() {
         assert!(prose(
             "论文 改一下下面这段 \\begin{abstract} We propose a method \\cite{foo}"
         ));
     }
 
     #[test]
-    fn pasted_latex_without_paper_context_is_false() {
+    pub(crate) fn pasted_latex_without_paper_context_is_false() {
         assert!(!prose(
             "fix \\begin{abstract} in CI workflow for the template"
         ));
     }
 
     #[test]
-    fn negative_edit_abstract_base_class() {
+    pub(crate) fn negative_edit_abstract_base_class() {
         assert!(!prose("edit the abstract base class in this Java module"));
     }
 
     #[test]
-    fn negative_cargo_test_only() {
+    pub(crate) fn negative_cargo_test_only() {
         assert!(!prose("fix cargo test in pull request workflow"));
     }
 
     #[test]
-    fn review_plus_polish_not_blocked() {
+    pub(crate) fn review_plus_polish_not_blocked() {
         assert!(prose("审稿并润色这篇论文的 abstract"));
     }
 }
@@ -1525,14 +732,14 @@ mod paper_review_slice_context_tests {
     use crate::route::tokenize_route_text;
 
     #[test]
-    fn preview_does_not_trigger_figure_layout_review() {
+    pub(crate) fn preview_does_not_trigger_figure_layout_review() {
         let q = "论文 preview 图表";
         let tokens = tokenize_route_text(q);
         assert!(!has_paper_figure_layout_review_context(q, &tokens));
     }
 
     #[test]
-    fn figure_layout_review_matches_review_token() {
+    pub(crate) fn figure_layout_review_matches_review_token() {
         let q = "论文 figure layout 只 review 排版";
         let tokens = tokenize_route_text(q);
         assert!(has_paper_figure_layout_review_context(q, &tokens));
@@ -1545,7 +752,7 @@ mod github_pr_context_tests {
     use crate::route::tokenize_query;
 
     #[test]
-    fn github_pr_context_does_not_match_preview_primary() {
+    pub(crate) fn github_pr_context_does_not_match_preview_primary() {
         let q = "preview the layout before deploy";
         let tok = tokenize_query(q);
         assert!(!has_github_pr_context(q, &tok));
@@ -1555,7 +762,7 @@ mod github_pr_context_tests {
     }
 
     #[test]
-    fn github_pr_context_matches_pr_token_and_phrase() {
+    pub(crate) fn github_pr_context_matches_pr_token_and_phrase() {
         let spaced = "please triage my pr now";
         let tok = tokenize_query(spaced);
         assert!(has_github_pr_context(spaced, &tok));
@@ -1578,49 +785,49 @@ mod research_context_tests {
     }
 
     #[test]
-    fn research_context_matches_research_workspace_keyword() {
+    pub(crate) fn research_context_matches_research_workspace_keyword() {
         let q = "研究工作区";
         let tokens = tokenize_route_text(q);
         assert!(has_research_context(q, &tokens));
     }
 
     #[test]
-    fn research_context_matches_experiment_log_keyword() {
+    pub(crate) fn research_context_matches_experiment_log_keyword() {
         let q = "帮我记录一下今天的实验记录";
         let tokens = tokenize_route_text(q);
         assert!(has_research_context(q, &tokens));
     }
 
     #[test]
-    fn research_context_normal_query_no_false_positive() {
+    pub(crate) fn research_context_normal_query_no_false_positive() {
         let q = "帮我修复这个 bug";
         let tokens = tokenize_route_text(q);
         assert!(!has_research_context(q, &tokens));
     }
 
     #[test]
-    fn research_context_english_research_log() {
+    pub(crate) fn research_context_english_research_log() {
         let q = "record a research log entry for today";
         let tokens = tokenize_route_text(q);
         assert!(has_research_context(q, &tokens));
     }
 
     #[test]
-    fn detect_research_directory_finds_state_yaml() {
+    pub(crate) fn detect_research_directory_finds_state_yaml() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("research-state.yaml"), "project: test").unwrap();
         assert!(detect_research_directory(dir.path()));
     }
 
     #[test]
-    fn detect_research_directory_finds_toml_marker() {
+    pub(crate) fn detect_research_directory_finds_toml_marker() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(".research.toml"), "[research]\nenabled = true").unwrap();
         assert!(detect_research_directory(dir.path()));
     }
 
     #[test]
-    fn detect_research_directory_scans_ancestors() {
+    pub(crate) fn detect_research_directory_scans_ancestors() {
         let dir = tempfile::tempdir().unwrap();
         let sub = dir.path().join("a").join("b");
         std::fs::create_dir_all(&sub).unwrap();
@@ -1629,7 +836,7 @@ mod research_context_tests {
     }
 
     #[test]
-    fn detect_research_directory_no_marker_returns_false() {
+    pub(crate) fn detect_research_directory_no_marker_returns_false() {
         let dir = tempfile::tempdir().unwrap();
         assert!(!detect_research_directory(dir.path()));
     }

@@ -59,7 +59,7 @@ host-opencode = []
 host-codex = []
 host-mimo = []
 # Expose test helpers for downstream crate integration tests
-test-support = ["host-projection/test-support"]
+test-support = ["host-projection/test-support", "runtime-core-contracts/test-support"]
 # Codegraph MCP integration (module lives in runtime-core; router-rs re-exports)
 codegraph = ["dep:codegraph-rs", "host-projection/codegraph"]
 

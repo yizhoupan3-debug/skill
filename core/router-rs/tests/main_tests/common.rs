@@ -212,20 +212,23 @@ where
 
 /// 测试进程内 `ROUTER_RS_CLOSEOUT_ENFORCEMENT` 为全局环境变量；并行测试会互相干扰，需串行。
 pub(super) struct CloseoutStrictEnvGuard {
+    _lock: crate::test_env_sync::ProcessEnvLockGuard,
     prior: Option<String>,
 }
 
 impl CloseoutStrictEnvGuard {
     pub(super) fn new() -> Self {
+        let _lock = crate::test_env_sync::process_env_lock();
         let prior = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
-        // 显式开启硬门禁：本地默认已改为「未设置则软」，测试必须不依赖全局 CI 变量。
+        // SAFETY: _lock acquired above serializes env access.
         unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", "1") };
-        Self { prior }
+        Self { _lock, prior }
     }
 }
 
 impl Drop for CloseoutStrictEnvGuard {
     fn drop(&mut self) {
+        // SAFETY: self._lock is alive until after drop() returns.
         match &self.prior {
             Some(v) => unsafe { std::env::set_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
             None => unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
@@ -236,6 +239,7 @@ impl Drop for CloseoutStrictEnvGuard {
 /// 模拟「CI 检测为真 + 未设置 ROUTER_RS_CLOSEOUT_ENFORCEMENT」：应走硬门禁（与显式 `=1` 路径回归等价）。
 /// 故意 `remove_var("GITHUB_ACTIONS")`，单独覆盖实现里 `CI` 分支（`in_ci_like_environment` 为 OR）。
 pub(super) struct CiHardUnsetCloseoutEnvGuard {
+    _lock: crate::test_env_sync::ProcessEnvLockGuard,
     prior_ci: Option<String>,
     prior_github_actions: Option<String>,
     prior_closeout: Option<String>,
@@ -243,13 +247,16 @@ pub(super) struct CiHardUnsetCloseoutEnvGuard {
 
 impl CiHardUnsetCloseoutEnvGuard {
     pub(super) fn new() -> Self {
+        let _lock = crate::test_env_sync::process_env_lock();
         let prior_ci = std::env::var("CI").ok();
         let prior_github_actions = std::env::var("GITHUB_ACTIONS").ok();
         let prior_closeout = std::env::var("ROUTER_RS_CLOSEOUT_ENFORCEMENT").ok();
+        // SAFETY: _lock acquired above serializes env access.
         unsafe { std::env::set_var("CI", "true") };
         unsafe { std::env::remove_var("GITHUB_ACTIONS") };
         unsafe { std::env::remove_var("ROUTER_RS_CLOSEOUT_ENFORCEMENT") };
         Self {
+            _lock,
             prior_ci,
             prior_github_actions,
             prior_closeout,
@@ -259,6 +266,7 @@ impl CiHardUnsetCloseoutEnvGuard {
 
 impl Drop for CiHardUnsetCloseoutEnvGuard {
     fn drop(&mut self) {
+        // SAFETY: self._lock is alive until after drop() returns.
         match &self.prior_ci {
             Some(v) => unsafe { std::env::set_var("CI", v) },
             None => unsafe { std::env::remove_var("CI") },

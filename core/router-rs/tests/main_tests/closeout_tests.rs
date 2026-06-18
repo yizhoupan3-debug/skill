@@ -6,7 +6,6 @@ use serde_json::json;
 
 #[test]
 fn framework_session_artifact_write_blocks_completion_without_closeout_record() {
-    let _lock = crate::test_env_sync::process_env_lock();
     let _strict = CloseoutStrictEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-missing");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -225,7 +224,6 @@ fn framework_session_artifact_write_in_progress_ignores_malformed_closeout_recor
 
 #[test]
 fn framework_session_artifact_write_blocks_completion_with_failed_command() {
-    let _lock = crate::test_env_sync::process_env_lock();
     let _strict = CloseoutStrictEnvGuard::new();
     let repo_root = temp_dir_path("framework-session-closeout-bad");
     let output_dir = repo_root.join("artifacts").join("current");
