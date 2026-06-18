@@ -2,7 +2,7 @@
 module: host-projection
 lines: ~17000
 layer: B2
-last_verified: "2026-06-16"
+last_verified: "2026-06-19"
 ---
 
 # host-projection（B2 层）

@@ -5,9 +5,12 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// Default timeout in seconds for subagent action execution (10 minutes).
 pub const DEFAULT_ACTION_TIMEOUT_SECS: u64 = 600;
+/// Interval in seconds between kill signal polls and subagent process checks.
 pub const KILL_POLL_INTERVAL_SECS: u64 = 5;
 
+/// Result of a subagent action execution, wrapping success/failure status and stdout/stderr output.
 pub struct SubagentResult {
     pub success: bool,
     pub stdout: String,
@@ -15,6 +18,7 @@ pub struct SubagentResult {
 }
 
 impl SubagentResult {
+    /// Build a `SubagentResult` from a `std::process::Output` reference.
     pub fn from_output(output: &std::process::Output) -> Self {
         SubagentResult {
             success: output.status.success(),
@@ -24,6 +28,8 @@ impl SubagentResult {
     }
 }
 
+/// Build a subagent handoff message from an action definition.
+/// The handoff includes the action description, scope constraints, closeout instructions, and kill-signal path.
 pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String {
     let scope_display = if action.scope_paths.is_empty() {
         "all files".to_string()
@@ -55,6 +61,8 @@ pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String
     )
 }
 
+/// Resolve the subagent binary path from `ROUTER_RS_SUBAGENT_BIN` env var or `which opencode`.
+/// Returns an error if neither source yields a valid binary path.
 pub fn resolve_subagent_binary() -> Result<String, LoopError> {
     if let Ok(bin) = std::env::var("ROUTER_RS_SUBAGENT_BIN")
         && !bin.is_empty() {
@@ -79,6 +87,7 @@ pub fn resolve_subagent_binary() -> Result<String, LoopError> {
     ))
 }
 
+/// Execute a single action synchronously through a subagent process, with kill-signal and timeout support.
 pub fn run_action_sync(
     repo_root: &Path,
     loop_id: &str,
@@ -133,6 +142,7 @@ pub fn run_action_sync(
     }
 }
 
+/// Generate a dry-run description string for an action (no subagent is launched).
 pub fn run_action_dry_run(action: &LoopAction, loop_id: &str, run_id: &str) -> String {
     let handoff = build_handoff(action, loop_id, run_id);
     format!(
@@ -144,6 +154,8 @@ pub fn run_action_dry_run(action: &LoopAction, loop_id: &str, run_id: &str) -> S
     )
 }
 
+/// Check that modified tracked files are within the allowed scope paths.
+/// Returns a list of file paths that violate the scope constraint.
 pub fn check_scope_compliance(
     repo_root: &Path,
     scope_paths: &[String],

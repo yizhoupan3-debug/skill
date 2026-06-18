@@ -1,6 +1,8 @@
 use crate::types::{LoopAction, LoopRegistryEntry, SafetyLevel};
 use std::collections::BTreeMap;
 
+/// Parse a safety level string (`L1`, `L1-report-only`, `L2`, `L2-assisted-fix`, `L3`, `L3-unattended`)
+/// into the corresponding `SafetyLevel` enum variant.
 pub fn parse_safety_level(raw: &str) -> Option<SafetyLevel> {
     match raw {
         "L1" | "L1-report-only" => Some(SafetyLevel::L1ReportOnly),
@@ -10,6 +12,8 @@ pub fn parse_safety_level(raw: &str) -> Option<SafetyLevel> {
     }
 }
 
+/// Assign a safety level to a file path based on glob-pattern scope rules from the registry.
+/// Falls back to the default level when no rule matches.
 pub fn assign_safety_for_file(
     file_path: &str,
     scope_rules: &BTreeMap<String, String>,
@@ -25,6 +29,8 @@ pub fn assign_safety_for_file(
     parse_safety_level(default).unwrap_or(SafetyLevel::L1ReportOnly)
 }
 
+/// Assign a safety level to an action by evaluating its scope paths against the registry's
+/// scope-based safety rules. Returns the highest matching level across all scope paths.
 pub fn assign_safety_for_action(
     action: &LoopAction,
     entry: &LoopRegistryEntry,
@@ -53,6 +59,8 @@ pub fn assign_safety_for_action(
     highest
 }
 
+/// Resolve a conflict between multiple safety levels using the given strategy
+/// (`strictest` picks the highest level, `report` always returns L1ReportOnly).
 pub fn resolve_conflict(
     levels: &[SafetyLevel],
     strategy: &str,

@@ -7,11 +7,15 @@ use std::path::Path;
 use std::fs;
 
 #[derive(Debug, Clone)]
+/// Response from a closeout verification, indicating whether closeout is allowed
+/// and listing any violations found.
 pub struct CloseoutVerificationResponse {
     pub closeout_allowed: bool,
     pub violations: Vec<String>,
 }
 
+/// Verify a closeout JSON record for required fields (task_id, summary, verification_status,
+/// changed_files) and check for command failures or high-severity blockers.
 pub fn verify_closeout_value(record: &serde_json::Value) -> CloseoutVerificationResponse {
     let mut violations = Vec::new();
 
@@ -75,6 +79,7 @@ pub fn verify_closeout_value(record: &serde_json::Value) -> CloseoutVerification
     }
 }
 
+/// Verify that an evidence index exists and contains at least one artifact for the given task.
 pub fn verify_evidence_index(repo_root: &Path, task_id: &str) -> bool {
     let path = repo_root
         .join("artifacts")
@@ -98,6 +103,8 @@ pub fn verify_evidence_index(repo_root: &Path, task_id: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// Verify a closeout record against both structural rules (via `verify_closeout_value`)
+/// and evidence index presence.
 pub fn verify_closeout_with_evidence(
     record: &serde_json::Value,
     repo_root: &Path,
@@ -111,6 +118,8 @@ pub fn verify_closeout_with_evidence(
     response
 }
 
+/// Read a persisted `LoopActionRecord` from the closeout directory.
+/// Returns `Ok(None)` when the file does not exist.
 pub fn read_action_record(
     repo_root: &Path,
     loop_id: &str,
@@ -128,6 +137,7 @@ pub fn read_action_record(
     Ok(Some(record))
 }
 
+/// Build a `LoopCloseoutAggregate` from a list of actions and their individual results (committed, skipped, failed, interrupted).
 pub fn build_aggregate(
     run_id: &str,
     loop_id: &str,
@@ -225,6 +235,7 @@ pub fn build_aggregate(
 }
 
 #[derive(Debug, Clone)]
+/// Outcome of a single action execution for aggregation purposes.
 pub enum AggregateActionResult {
     Skipped,
     Committed {
@@ -237,14 +248,17 @@ pub enum AggregateActionResult {
     Interrupted,
 }
 
+/// Check whether the aggregate overall status is "pass".
 pub fn aggregate_passes(aggregate: &LoopCloseoutAggregate) -> bool {
     aggregate.overall_status == "pass"
 }
 
+/// Check whether the aggregate overall status is "fail".
 pub fn aggregate_has_failures(aggregate: &LoopCloseoutAggregate) -> bool {
     aggregate.overall_status == "fail"
 }
 
+/// Check whether the aggregate has any partial actions (interrupted or unmatched).
 pub fn aggregate_has_partial(aggregate: &LoopCloseoutAggregate) -> bool {
     aggregate.partial
 }

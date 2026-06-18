@@ -22,11 +22,13 @@ pub struct LockInfo {
 
 /// Check whether a kill signal file exists for the given loop.
 /// Returns `true` if the file `.loop-kill/{loop_id}` is present on disk.
+pub fn is_kill_signal_active(repo_root: &Path, loop_id: &str) -> bool {
     kill_signal_path(repo_root, loop_id).is_file()
 }
 
 /// Write a kill signal file for the given loop to request graceful termination.
 /// The file is stored at `.loop-kill/{loop_id}` with a JSON payload containing the loop ID and timestamp.
+pub fn write_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopError> {
     let path = kill_signal_path(repo_root, loop_id);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -46,6 +48,7 @@ pub struct LockInfo {
 
 /// Remove the kill signal file for a specific loop.
 /// Safe to call even if no signal file exists (no-op in that case).
+pub fn clear_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopError> {
     let path = kill_signal_path(repo_root, loop_id);
     if path.is_file() {
         fs::remove_file(&path)
@@ -56,6 +59,7 @@ pub struct LockInfo {
 
 /// Remove all kill signal files by deleting the entire `.loop-kill/` directory.
 /// Use during loop runner shutdown cleanup.
+pub fn clear_all_kill_signals(repo_root: &Path) -> Result<(), LoopError> {
     let kill_dir = repo_root.join(".loop-kill");
     if kill_dir.is_dir() {
         fs::remove_dir_all(&kill_dir)
@@ -66,6 +70,7 @@ pub struct LockInfo {
 
 /// Read the current lock file and return its content if it exists.
 /// Returns `Ok(None)` when no lock file is present.
+pub fn read_lock_info(repo_root: &Path) -> Result<Option<LockInfo>, LoopError> {
     let path = lock_path(repo_root);
     if !path.is_file() {
         return Ok(None);
@@ -81,6 +86,7 @@ pub struct LockInfo {
 /// Acquire an exclusive loop lock for the given loop and run.
 /// Fails if an active (non-stale) lock already exists. Stale locks older than
 /// `LOOP_LOCK_MAX_AGE_SECS` are automatically overridden.
+pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(), LoopError> {
     let path = lock_path(repo_root);
     if path.is_file() {
         let info = read_lock_info(repo_root)?;
@@ -145,6 +151,7 @@ pub struct LockInfo {
 
 /// Release the exclusive loop lock by deleting the lock file.
 /// Safe to call even when no lock file exists (no-op in that case).
+pub fn release_lock(repo_root: &Path) -> Result<(), LoopError> {
     let path = lock_path(repo_root);
     if path.is_file() {
         fs::remove_file(&path)

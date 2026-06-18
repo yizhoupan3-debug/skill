@@ -254,7 +254,7 @@ pub fn evaluate_closeout_record(record: &CloseoutRecord) -> CloseoutEnforcementR
         &mut violations,
     );
 
-    // TODO: task-scoped depth / `GOAL_STATE.completion_gates` alignment
+    // @later(v7.2): task-scoped depth / `GOAL_STATE.completion_gates` alignment
     // Phase 3 pointer consolidation (3B/3C) completed 2026-06-02.
     // Next: re-evaluate closeout vs completion_gates alignment -- state model simplified
     //   (5 files -> 2 control-plane anchors), closeout gate should align with

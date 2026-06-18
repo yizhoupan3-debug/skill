@@ -3,6 +3,7 @@ use crate::state::loop_reports_dir;
 use std::path::Path;
 use std::fs;
 
+/// Render a Markdown loop report from the run state, closeout aggregate, unconsumed findings, and lock duration.
 pub fn render_loop_report(
     state: &LoopRunState,
     aggregate: &LoopCloseoutAggregate,
@@ -93,6 +94,7 @@ fn render_action_section(action: &AggregateActionEntry) -> String {
     section
 }
 
+/// Write a loop report Markdown string to `artifacts/loop/{loop_id}/reports/{run_id}.md`.
 pub fn write_loop_report(
     repo_root: &Path,
     loop_id: &str,

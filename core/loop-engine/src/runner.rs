@@ -19,6 +19,8 @@ use std::fs;
 use std::path::Path;
 use std::time::Instant;
 
+/// Check whether a loop entry's profile is schedulable.
+/// Returns an error for interactive / my-light profiles which cannot be scheduled for unattended execution.
 pub fn preflight_profile_check(entry: &LoopRegistryEntry) -> Result<(), LoopError> {
     match entry.profile.as_str() {
         "interactive" | "my-light" => Err(LoopError::ProfileMismatch(
@@ -31,6 +33,7 @@ pub fn preflight_profile_check(entry: &LoopRegistryEntry) -> Result<(), LoopErro
     }
 }
 
+/// Execution context for a single loop run, including repo root, registry entry, dry-run flag, and timeout.
 pub struct RunContext<'a> {
     pub repo_root: &'a Path,
     pub entry: &'a LoopRegistryEntry,
@@ -38,6 +41,8 @@ pub struct RunContext<'a> {
     pub timeout: Option<std::time::Duration>,
 }
 
+/// Execute a full loop run: profile check, discovery, preflight, dispatch, verification, and closeout.
+/// Returns an aggregated closeout result for all actions in the run.
 pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
     let entry = ctx.entry;
     let loop_id = &entry.loop_id;
@@ -529,14 +534,19 @@ fn evaluate_subagent_output(
     }
 }
 
+/// Read the current loop run state from disk for the given loop ID.
+/// Returns `Ok(None)` if no state file exists.
 pub fn run_loop_status(repo_root: &Path, loop_id: &str) -> Result<Option<LoopRunState>, LoopError> {
     read_loop_state(repo_root, loop_id)
 }
 
+/// Send a kill signal to gracefully terminate a running loop by writing its kill signal file.
 pub fn run_loop_kill(repo_root: &Path, loop_id: &str) -> Result<(), LoopError> {
     kill_switch::write_kill_signal(repo_root, loop_id)
 }
 
+/// Send a kill signal to every loop registered in LOOP_REGISTRY.json.
+/// Iterates all entries and writes individual kill signal files.
 pub fn run_loop_kill_all(repo_root: &Path) -> Result<(), LoopError> {
     let registry_path = repo_root.join("configs").join("framework").join("LOOP_REGISTRY.json");
     let raw = fs::read_to_string(&registry_path)

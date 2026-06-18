@@ -1,17 +1,17 @@
 ---
 module: runtime-core
-lines: ~14000
+lines: ~20000
 layer: B1
-last_verified: "2026-06-16"
+last_verified: "2026-06-19"
 ---
 
 # runtime-core（B1 层 — facade crate）
 
-框架运行时核心 facade crate（v7 拆分后保留 ~14K 行），包含 CLI、RFV 循环、framework_runtime 子模块、维护命令等。提取的子 crate 见新 crate 文档。
+框架运行时核心 facade crate（v7 拆分后保留 ~20K 行，含 contracts/ re-export 层；纯实现 ~15K），包含 CLI、RFV 循环、framework_runtime、维护命令等。提取的子 crate 见新 crate 文档。
 
 ## 职责
 
-提供框架运行时的完整执行引擎（facade）：CLI 解析、命令分发、RFV 循环、closeout 评估、evidence 管理。从 v6.5 的 ~38K 行拆分为 facade + 4 个子 crate（`framework-runtime`、`session-supervisor`、`runtime-storage`、`trace-runtime`）。
+提供框架运行时的完整执行引擎（facade）：CLI 解析、命令分发、RFV 循环、closeout 评估、evidence 管理。从 v6.5 的 ~38K 行拆分为 facade + 5 个子 crate（`framework-runtime`、`session-supervisor`、`runtime-storage`、`trace-runtime`、`runtime-core-contracts`）。
 
 ## 顶层模块索引
 

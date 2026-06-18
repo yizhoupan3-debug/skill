@@ -53,6 +53,8 @@ enum BrowserMcpTransportMode {
     NewlineDelimited,
 }
 
+/// Run the browser MCP server loop on stdin/stdout with the given repo root and attach configuration.
+/// Use as the entry point for a stdio-based browser MCP process.
 pub fn run_browser_mcp_stdio_loop(
     repo_root: Option<&Path>,
     attach_config: BrowserAttachConfig,
@@ -64,6 +66,8 @@ pub fn run_browser_mcp_stdio_loop(
     run_browser_mcp_stdio(stdin.lock(), stdout.lock(), &mut runtime)
 }
 
+/// Resolve the attach artifact path from search roots relative to the repo root.
+/// Use before starting the browser MCP loop to discover a runtime event artifact for attach.
 pub fn resolve_browser_mcp_attach_artifact(
     repo_root: &Path,
     search_root: Option<&Path>,
@@ -74,6 +78,8 @@ pub fn resolve_browser_mcp_attach_artifact(
     select_attach_artifact_candidate(roots)
 }
 
+/// Drive the browser MCP JSON-RPC message loop on the given buffered input and output streams.
+/// Use when a custom transport or stream source is needed instead of the default stdin/stdout.
 pub fn run_browser_mcp_stdio<R: BufRead, W: Write>(
     mut input: R,
     mut output: W,
@@ -564,6 +570,8 @@ fn tool_definition(
     })
 }
 
+/// Runtime state for the browser MCP server, holding active sessions, browser processes, and counters.
+/// Use as the core state holder passed through all MCP tool handlers.
 pub struct BrowserRuntime {
     repo_root: PathBuf,
     attach_config: BrowserAttachConfig,
@@ -576,6 +584,8 @@ pub struct BrowserRuntime {
     screenshot_counter: usize,
 }
 
+/// Configuration for browser MCP runtime event attach, specifying descriptor and artifact paths plus headless mode.
+/// Use to initialize `BrowserRuntime` with attach parameters from CLI args or environment variables.
 #[derive(Clone, Debug, Default)]
 pub struct BrowserAttachConfig {
     runtime_attach_descriptor_path: Option<String>,
@@ -584,6 +594,8 @@ pub struct BrowserAttachConfig {
 }
 
 impl BrowserAttachConfig {
+    /// Build a `BrowserAttachConfig` from optional CLI arguments, falling back to environment variables for each field.
+    /// Use at startup to resolve attach setup before constructing the runtime.
     pub fn from_cli_and_env(
         runtime_attach_descriptor_path: Option<String>,
         runtime_attach_artifact_path: Option<String>,
