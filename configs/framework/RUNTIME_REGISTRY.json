@@ -226,7 +226,8 @@
         "cursor": "/discussx",
         "opencode": "/discussx",
         "codex": "/discussx",
-        "claude": "/discussx"
+        "claude": "/discussx",
+        "mimo": "/discussx"
       },
       "lineage": {
         "source": "repo-native",
@@ -240,7 +241,8 @@
         "cursor": "/planx",
         "opencode": "/planx",
         "codex": "/planx",
-        "claude": "/planx"
+        "claude": "/planx",
+        "mimo": "/planx"
       }
     },
     "implementx": {
@@ -250,7 +252,8 @@
         "cursor": "/implementx",
         "opencode": "/implementx",
         "codex": "/implementx",
-        "claude": "/implementx"
+        "claude": "/implementx",
+        "mimo": "/implementx"
       },
       "implementation_bar": [
         "one-breath-all-waves",
@@ -274,7 +277,8 @@
         "cursor": "/verifyx",
         "opencode": "/verifyx",
         "codex": "/verifyx",
-        "claude": "/verifyx"
+        "claude": "/verifyx",
+        "mimo": "/verifyx"
       }
     },
     "deepinterview": {
@@ -310,7 +314,8 @@
         "cursor": "/deepinterview",
         "opencode": "/deepinterview",
         "codex": "/deepinterview",
-        "claude": "/deepinterview"
+        "claude": "/deepinterview",
+        "mimo": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -331,7 +336,8 @@
         "cursor": "/gitx",
         "opencode": "/gitx",
         "codex": "/gitx",
-        "claude": "/gitx"
+        "claude": "/gitx",
+        "mimo": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -353,7 +359,8 @@
         "cursor": "/update",
         "opencode": "/update",
         "codex": "/update",
-        "claude": "/update"
+        "claude": "/update",
+        "mimo": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,

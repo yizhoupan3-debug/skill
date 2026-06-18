@@ -8,33 +8,13 @@ use super::host_provider::{
 pub struct CodexHostProvider;
 
 impl HostLifecycle for CodexHostProvider {
-    fn profile_id(&self) -> &'static str {
-        "codex_profile"
-    }
-
-    fn session_supervisor_driver(&self) -> &'static str {
-        "codex_driver"
-    }
-
-    fn context_file(&self) -> &'static str {
-        "AGENTS_CODEX.md"
-    }
-
-    fn hooks_manifest_path(&self) -> Option<&'static str> {
-        Some(crate::hosts::codex_hooks::CODEX_HOOKS_PATH)
-    }
-
-    fn registered_hook_events(&self) -> &'static [&'static str] {
-        &crate::hosts::codex_hooks::INSTALL_LIFECYCLE_EVENTS
-    }
-
-    fn driver_binary(&self) -> &'static str {
-        "codex"
-    }
-
-    fn driver_supports_resume(&self) -> bool {
-        true
-    }
+    fn profile_id(&self) -> &'static str { "codex_profile" }
+    fn session_supervisor_driver(&self) -> &'static str { "codex_driver" }
+    fn context_file(&self) -> &'static str { "AGENTS_CODEX.md" }
+    fn hooks_manifest_path(&self) -> Option<&'static str> { Some(crate::hosts::codex_hooks::CODEX_HOOKS_PATH) }
+    fn registered_hook_events(&self) -> &'static [&'static str] { &crate::hosts::codex_hooks::INSTALL_LIFECYCLE_EVENTS }
+    fn driver_binary(&self) -> &'static str { "codex" }
+    fn driver_supports_resume(&self) -> bool { true }
 
     fn build_driver_args(
         &self,
@@ -67,28 +47,14 @@ impl HostLifecycle for CodexHostProvider {
 impl HostToolExecutor for CodexHostProvider {}
 
 impl HostTelemetry for CodexHostProvider {
-    fn hook_telemetry_surface(&self) -> &'static str {
-        "native-codex"
-    }
-
-    fn observation_host_id(&self) -> Option<&'static str> {
-        Some("codex")
-    }
+    fn hook_telemetry_surface(&self) -> &'static str { "native-codex" }
+    fn observation_host_id(&self) -> Option<&'static str> { Some("codex") }
 }
 
 impl HostProvider for CodexHostProvider {
-    fn host_id(&self) -> &'static str {
-        "codex"
-    }
-
-    fn install_tool(&self) -> &'static str {
-        "codex"
-    }
-
-    fn aliases(&self) -> &'static [&'static str] {
-        &["codex-cli", "codex-app"]
-    }
-
+    fn host_id(&self) -> &'static str { "codex" }
+    fn install_tool(&self) -> &'static str { "codex" }
+    fn aliases(&self) -> &'static [&'static str] { &["codex-cli", "codex-app"] }
     fn capabilities(&self) -> HostCapabilities {
         HostCapabilities {
             mcp_config_key: "mcp_servers",

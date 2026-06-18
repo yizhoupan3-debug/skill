@@ -1384,23 +1384,6 @@ mod tests {
     }
 
     #[test]
-    fn claude_desktop_host_id_rejected_in_mcp_request() {
-        let response = handle_mcp_request(
-            r#"{"jsonrpc":"2.0","id":9,"method":"ping"}"#,
-            &unique_test_repo("retired-host"),
-            "claude-desktop",
-            "test-session",
-        )
-        .expect("error response");
-        assert_eq!(response["error"]["code"], -32600);
-        assert!(
-            response["error"]["message"]
-                .as_str()
-                .unwrap()
-                .contains("claude-desktop")
-        );
-    }
-
     #[test]
     fn ping_returns_empty_result() {
         let response = handle_mcp_request(

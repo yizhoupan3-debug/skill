@@ -311,6 +311,37 @@ pub fn validate_host_providers_against_registry(
     Ok(())
 }
 
+// ── Shared host_provider macro ──────────────────────────────────────────
+// Generates the common ~80% of HostLifecycle / HostTelemetry / HostProvider impl.
+// Each provider file calls this macro, then adds extra impls manually.
+#[macro_export]
+macro_rules! impl_host_provider {
+    (
+        $struct:ident for $host:literal;
+        capabilities { mcp_key: $mcp_key:literal; transport: $transport:literal; config: $config:literal; }
+        $(aliases: [$($alias:literal),*];)?
+    ) => {
+        #[derive(Debug, Default, Clone, Copy)]
+        pub struct $struct;
+
+        impl HostToolExecutor for $struct {}
+
+        impl HostProvider for $struct {
+            fn host_id(&self) -> &'static str { $host }
+            fn install_tool(&self) -> &'static str { $host }
+            $(fn aliases(&self) -> &'static [&'static str] { &[$($alias),*] })?
+            fn capabilities(&self) -> HostCapabilities {
+                HostCapabilities {
+                    mcp_config_key: $mcp_key,
+                    transport_type: $transport,
+                    config_path: $config,
+                    ..Default::default()
+                }
+            }
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

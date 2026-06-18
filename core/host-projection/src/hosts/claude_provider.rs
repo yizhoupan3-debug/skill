@@ -5,29 +5,17 @@ use super::host_provider::{
 };
 use serde_json::Value;
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct ClaudeHostProvider;
+crate::impl_host_provider! {
+    ClaudeHostProvider for "claude";
+    capabilities { mcp_key: ""; transport: "anthropic-claude"; config: ".claude/settings.json"; }
+}
 
 impl HostLifecycle for ClaudeHostProvider {
-    fn profile_id(&self) -> &'static str {
-        "claude_profile"
-    }
-
-    fn session_supervisor_driver(&self) -> &'static str {
-        "mcp_bridge"
-    }
-
-    fn context_file(&self) -> &'static str {
-        "AGENTS_CLAUDE.md"
-    }
-
-    fn driver_binary(&self) -> &'static str {
-        "claude"
-    }
-
-    fn driver_supports_resume(&self) -> bool {
-        true
-    }
+    fn profile_id(&self) -> &'static str { "claude_profile" }
+    fn session_supervisor_driver(&self) -> &'static str { "mcp_bridge" }
+    fn context_file(&self) -> &'static str { "AGENTS_CLAUDE.md" }
+    fn driver_binary(&self) -> &'static str { "claude" }
+    fn driver_supports_resume(&self) -> bool { true }
 
     fn build_driver_args(
         &self,
@@ -52,16 +40,9 @@ impl HostLifecycle for ClaudeHostProvider {
     }
 }
 
-impl HostToolExecutor for ClaudeHostProvider {}
-
 impl HostTelemetry for ClaudeHostProvider {
-    fn hook_telemetry_surface(&self) -> &'static str {
-        "anthropic-claude"
-    }
-
-    fn observation_host_id(&self) -> Option<&'static str> {
-        Some("claude")
-    }
+    fn hook_telemetry_surface(&self) -> &'static str { "anthropic-claude" }
+    fn observation_host_id(&self) -> Option<&'static str> { Some("claude") }
 
     fn extract_observation_surfaces(&self, output: &Value) -> (Option<String>, Option<String>) {
         let followup = output
@@ -82,28 +63,5 @@ impl HostTelemetry for ClaudeHostProvider {
             .and_then(Value::as_str)
             .map(|s| s.to_string());
         (followup, additional)
-    }
-}
-
-impl HostProvider for ClaudeHostProvider {
-    fn host_id(&self) -> &'static str {
-        "claude"
-    }
-
-    fn install_tool(&self) -> &'static str {
-        "claude"
-    }
-
-    fn aliases(&self) -> &'static [&'static str] {
-        &[]
-    }
-
-    fn capabilities(&self) -> HostCapabilities {
-        HostCapabilities {
-            mcp_config_key: "",
-            transport_type: "anthropic-claude",
-            config_path: ".claude/settings.json",
-            ..Default::default()
-        }
     }
 }
