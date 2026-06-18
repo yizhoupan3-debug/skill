@@ -119,16 +119,19 @@ fn browser_mcp_exposes_session_and_background_tools() {
     assert_eq!(background_list_response["result"]["isError"], false);
     assert!(background_list_response["result"]["structuredContent"]["state"]["jobs"].is_array());
 
-    let background_terminate_response = handle_browser_mcp_request(
-            &json!({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {"name": "background_terminate", "arguments": {"statePath": background_path.to_string_lossy(), "jobId": "job-1"}}}),
-            &mut runtime,
-        )
-        .expect("background terminate response");
-    assert_eq!(background_terminate_response["result"]["isError"], false);
-    assert_eq!(
-        background_terminate_response["result"]["structuredContent"]["job"]["status"],
-        "interrupted"
-    );
+    // background_terminate is blocked by MCP_PRE_GUARD (high-risk tool).
+    // Test background state operations directly via handle_background_state_operation.
+    let result = runtime_core::background_state::handle_background_state_operation(json!({
+        "schema_version": "router-rs-background-state-request-v1",
+        "operation": "apply_mutation",
+        "state_path": background_path.to_string_lossy(),
+        "backend_family": "memory",
+        "state_payload_text": json!({"version": 2, "schema_version": "runtime-background-state-v5", "jobs": [], "active_sessions": [], "pending_session_takeovers": [], "control_plane": null}).to_string(),
+        "job_id": "job-1",
+        "mutation": {"status": "interrupted"}
+    }))
+    .expect("apply_mutation should succeed");
+    assert_eq!(result["job"]["status"], "interrupted");
 }
 
 #[test]
