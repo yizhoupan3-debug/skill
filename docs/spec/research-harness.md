@@ -917,8 +917,8 @@ CREATE VIRTUAL TABLE entities_fts USING fts5(name, description, tokenize='unicod
 ```sql
 CREATE TABLE entity_relations (
     id INTEGER PRIMARY KEY,
-    entity_id_a INTEGER NOT NULL REFERENCES entities(id),
-    entity_id_b INTEGER NOT NULL REFERENCES entities(id),
+    entity_id_a INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+    entity_id_b INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
     relation TEXT NOT NULL,  -- uses|trains-on|evaluates|improves|depends-on|contradicts|is-a|part-of
     entry_id TEXT REFERENCES entries(id),
     confidence REAL,
@@ -953,13 +953,13 @@ CREATE TABLE entry_entities (
 |------|------|
 | `neighbors <entry-id> [--relation]` | 显示 entry 的直接连接 |
 | `path --from <id> --to <id> [--max-depth]` | BFS 最短路径 |
-| `subgraph <entry-id> [--max-depth]` | 子图提取 |
+| `subgraph <entry-id> [--max-depth] [--format text\|dot]` | 子图提取 |
 | `viz [--entry-id] [--max-depth] [--format]` | ASCII / DOT 可视化 |
 | `graph-stats` | 全图统计信息 |
 | `route --barrier-id <id> [--max-depth]` | Barrier 路径追溯 |
 | `extract-entities <entry-id>` | 自动提取知识实体 |
 | `add-entity <name> [--kind] [--description]` | 手动添加实体 |
-| `search-entities <query>` | FTS5 实体搜索 |
+| `search-entities <query> [--limit]` | FTS5 实体搜索 |
 | `link-entities <a> <b> --relation <rel>` | 链接实体 |
 | `hub-register [--path] [--name]` | 注册到 Hub |
 | `hub-index [--path]` | 索引到 Hub |

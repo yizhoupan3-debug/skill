@@ -12,6 +12,17 @@ use std::path::Path;
 
 use crate::models::*;
 
+/// 转义 FTS5 查询中的特殊字符，防止语法错误。
+/// FTS5 将 - " ( ) * ^ 解析为语法 token。
+pub(crate) fn sanitize_fts_query(query: &str) -> String {
+    let sanitized: String = query.chars().map(|c| match c {
+        '-' | '"' | '(' | ')' | '*' | '^' => ' ',
+        _ => c,
+    }).collect();
+    // 合并连续空格
+    sanitized.split_whitespace().collect::<Vec<&str>>().join(" ")
+}
+
 /// Schema version number, bumped for each migration.
 const SCHEMA_VERSION: i32 = 3;
 
@@ -486,7 +497,7 @@ pub fn search_findings(
     limit: usize,
 ) -> Result<Vec<Finding>> {
     let mut stmts = Stmts::new(conn)?;
-    let fts_query = query.replace('-', " ");
+    let fts_query = sanitize_fts_query(query);
     let mut rows = stmts.search_findings.query(params![fts_query, kind_filter, limit as i64])?;
     let mut results = Vec::new();
     while let Some(row) = rows.next()? {
@@ -636,7 +647,7 @@ pub fn get_entity_by_name(conn: &Connection, name: &str) -> Result<Option<Entity
 /// FTS5 search entities by name/description.
 pub fn search_entities(conn: &Connection, query: &str, limit: usize) -> Result<Vec<Entity>> {
     let mut stmts = Stmts::new(conn)?;
-    let fts_query = query.replace('-', " ");
+    let fts_query = sanitize_fts_query(query);
     let mut rows = stmts.search_entities.query(params![fts_query, limit as i64])?;
     let mut results = Vec::new();
     while let Some(row) = rows.next()? {

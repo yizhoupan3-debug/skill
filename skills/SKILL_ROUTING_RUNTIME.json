@@ -1677,6 +1677,52 @@
       "skill",
       null,
       null
+    ],
+    [
+      "research-knowledge-graph",
+      "L2",
+      "owner",
+      "none",
+      "P2",
+      "Research Knowledge Graph — navigate, visualize, trace connections between entries, manage entities, cross-workspace search.",
+      "preferred",
+      [
+        "知识图谱",
+        "research graph",
+        "研究方向连接",
+        "实体管理",
+        "research-knowledge-graph",
+        "研究路径追溯",
+        "知识关联",
+        "研究方向关系",
+        "knowledge graph",
+        "跨工作区搜索",
+        "研究关系图",
+        "kg viz",
+        "研究历史追溯",
+        "barrier route",
+        "障碍路径",
+        "log:neighbors",
+        "log:viz",
+        "log:route",
+        "entity search",
+        "hub search",
+        "连接查询",
+        "研究知识图谱可视化"
+      ],
+      "local",
+      0,
+      "skills/research-knowledge-graph/SKILL.md",
+      [
+        "claude",
+        "codex",
+        "cursor",
+        "opencode",
+        "mimo"
+      ],
+      "skill",
+      null,
+      null
     ]
   ],
   "default_host_platforms": [

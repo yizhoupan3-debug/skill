@@ -256,7 +256,7 @@ pub fn hub_search(
     limit: usize,
 ) -> Result<Vec<HubSearchResult>> {
     // Escape hyphens that would be interpreted as FTS5 column exclusion
-    let fts_query = query.replace('-', " ");
+    let fts_query = crate::db::sanitize_fts_query(query);
     let sql = "
         SELECT wi.workspace_name, wi.workspace_path,
                he.local_entry_id, he.direction, he.question,
