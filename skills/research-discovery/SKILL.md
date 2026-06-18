@@ -15,6 +15,7 @@ user-invocable: false
 disable-model-invocation: false
 short_description: Research discovery, literature survey, and theory-background router
 trigger_hints:
+  - 科研
   - 调研方向
   - 文献综述
   - 研究方向

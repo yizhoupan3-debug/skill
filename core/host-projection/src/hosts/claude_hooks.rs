@@ -674,6 +674,8 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
     record_reviewer_evidence(repo_root, payload);
     // §4.4: 自动 evidence 采集 — Bash 验证类命令自动记录到 EVIDENCE_INDEX
     auto_record_verification_evidence(repo_root, payload);
+    // §19.5: 科研活动内联日志 — 在科研工作空间中自动记录关键操作
+    auto_record_research_activity(repo_root, payload);
     let paths = payload_relative_paths(repo_root, payload);
     let touched_settings = paths.iter().any(|path| is_settings_path(path));
     let touched_framework = paths.iter().any(|path| is_framework_source_path(path));
@@ -1252,6 +1254,32 @@ fn auto_record_verification_evidence(repo_root: &Path, payload: &Value) {
             active_stdio_agent_hook_host().log_label()
         );
     }
+}
+
+/// 科研活动内联日志（§19.5）：在科研工作空间中自动记录关键工具调用。
+/// 通过函数指针委托到 runtime-core，避免 host-projection → runtime-core 循环依赖。
+fn auto_record_research_activity(repo_root: &Path, payload: &Value) {
+    let tool_name = payload
+        .get("tool_name")
+        .or(payload.get("tool"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let summary = match tool_name {
+        "Bash" => bash_command(payload).unwrap_or_default().to_string(),
+        "WebFetch" | "web_fetch" => {
+            payload
+                .get("tool_input")
+                .and_then(|ti| ti.get("url"))
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string()
+        }
+        other => other.to_string(),
+    };
+    if summary.is_empty() || summary == tool_name {
+        return;
+    }
+    crate::hooks::maybe_record_research_activity(repo_root, tool_name, &summary);
 }
 
 /// 判断命令是否为验证类命令。

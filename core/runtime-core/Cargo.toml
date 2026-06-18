@@ -64,3 +64,4 @@ codegraph = ["dep:codegraph-rs"]
 
 [dev-dependencies]
 serial_test = "3"
+tempfile.workspace = true

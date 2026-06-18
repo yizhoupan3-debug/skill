@@ -259,6 +259,62 @@ pub(crate) enum Commands {
         #[arg(long = "consecutive-failures", default_value_t = 0)]
         consecutive_failures: u32,
     },
+    /// Record a structured research log entry (text layer + SQLite FTS5)
+    LogRecord {
+        #[arg(long)]
+        workspace: PathBuf,
+        /// Research direction / project name
+        #[arg(long)]
+        direction: String,
+        /// Research question or problem
+        #[arg(long)]
+        question: String,
+        /// Entry point: manual | barrier_escalation | loop
+        #[arg(long, default_value = "manual")]
+        entry_point: String,
+        /// Barrier ID if escalation-triggered
+        #[arg(long)]
+        barrier_id: Option<String>,
+    },
+    /// Full-text search across all research logs
+    LogSearch {
+        #[arg(long)]
+        workspace: PathBuf,
+        /// FTS5 query string
+        #[arg(long)]
+        query: String,
+        /// Max results
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Add an insight to an existing log entry
+    LogInsight {
+        #[arg(long)]
+        workspace: PathBuf,
+        /// Log entry ID (UUID)
+        #[arg(long = "log-id")]
+        log_id: String,
+        /// Insight text
+        #[arg(long)]
+        text: String,
+        /// Confidence: high | medium | low
+        #[arg(long, default_value = "medium")]
+        confidence: String,
+    },
+    /// Connect two log entries (cross-reference)
+    LogConnect {
+        #[arg(long)]
+        workspace: PathBuf,
+        /// First log entry ID
+        #[arg(long = "log-id-a")]
+        log_id_a: String,
+        /// Second log entry ID
+        #[arg(long = "log-id-b")]
+        log_id_b: String,
+        /// Relationship description
+        #[arg(long)]
+        relation: Option<String>,
+    },
 }
 
 #[derive(Clone, ValueEnum)]

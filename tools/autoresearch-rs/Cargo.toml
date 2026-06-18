@@ -15,6 +15,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yml.workspace = true
 uuid = { version = "1.16.0", features = ["v4"] }
+research-log-rs = { path = "../research-log-rs" }
 
 [dev-dependencies]
 tempfile.workspace = true

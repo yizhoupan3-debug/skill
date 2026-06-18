@@ -1,113 +1,94 @@
-use anyhow::{Context, Result};
-use std::fs;
+//! 文字层（Markdown 生成器 - 按需渲染，不再强制双写）
+//!
+//! 按需从 SQLite 读取数据并渲染为 Markdown 日志文件。
+//! 用于 `log:render` 命令和 Obsidian 导出。
+
+use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-const DATE_FORMAT: &str = "%Y-%m-%d";
-const MONTH_FORMAT: &str = "%Y-%m";
+use crate::models::*;
 
-/// Ensure artifact directory tree exists.
-pub fn ensure_log_dirs(log_root: &Path) -> Result<()> {
-    let tags_dir = log_root.join("tags");
-    fs::create_dir_all(&tags_dir).context("create tags dir")?;
-    Ok(())
+/// 渲染一条日志条目为 Markdown 文件内容。
+pub fn render_entry(entry: &Entry, findings: &[Finding], tags: &[String]) -> String {
+    let mut md = String::new();
+
+    md.push_str(&format!("# {}: {}\n\n", entry.direction, entry.question));
+    md.push_str(&format!("- **ID**: {}\n", entry.id));
+    md.push_str(&format!("- **Status**: {}\n", entry.status));
+    md.push_str(&format!("- **Importance**: {}\n", entry.importance));
+    md.push_str(&format!("- **Created**: {}\n", entry.created_at));
+    if !tags.is_empty() {
+        md.push_str(&format!("- **Tags**: {}\n", tags.join(", ")));
+    }
+    md.push('\n');
+
+    if let Some(ctx) = &entry.context {
+        md.push_str("## Context\n\n```json\n");
+        md.push_str(ctx);
+        md.push_str("\n```\n\n");
+    }
+
+    if !findings.is_empty() {
+        md.push_str("## Findings\n\n");
+        for f in findings {
+            let emoji = match f.kind.as_str() {
+                "finding" => "🔍",
+                "decision" => "⚡",
+                "insight" => "💡",
+                "question" => "❓",
+                "plan" => "📋",
+                _ => "•",
+            };
+            md.push_str(&format!("### {} {}\n\n", emoji, f.kind));
+            md.push_str(&format!("{}\n\n", f.content));
+            if let Some(conf) = f.confidence {
+                md.push_str(&format!("> Confidence: {:.0}%\n\n", conf * 100.0));
+            }
+        }
+    }
+
+    md
 }
 
-/// Get the month subdirectory path.
-pub fn month_dir(log_root: &Path, date: &chrono::NaiveDate) -> PathBuf {
-    log_root.join(date.format(MONTH_FORMAT).to_string())
+/// 生成每日 INDEX.md 的表格行。
+pub fn render_index_row(entry: &Entry, tags: &[String]) -> String {
+    let tag_str = if tags.is_empty() {
+        "—".to_string()
+    } else {
+        tags.join(", ")
+    };
+    format!(
+        "| {} | {} | {} | {} | {} |\n",
+        entry.created_at.split('T').next().unwrap_or(&entry.created_at),
+        entry.direction,
+        entry.question.chars().take(48).collect::<String>(),
+        tag_str,
+        entry.status,
+    )
 }
 
-/// Generate daily log file path.
-pub fn daily_log_path(log_root: &Path, date: &chrono::NaiveDate, direction: &str) -> PathBuf {
-    let safe_name = direction
+/// 生成 INDEX.md 的完整表头。
+pub fn render_index_header() -> String {
+    "| 日期 | 方向 | 问题 | 标签 | 状态 |\n|------|------|------|------|------|\n".to_string()
+}
+
+/// 写入可选的 Markdown 文本层到文件系统。
+/// 仅用于 `log:render --write` 命令，不再作为默认写入路径。
+pub fn write_entry_md(root: &Path, entry: &Entry, findings: &[Finding], tags: &[String]) -> Result<PathBuf> {
+    let date = entry.created_at.split('T').next().unwrap_or("unknown");
+    let month = &date[..date.len().saturating_sub(3)];
+    let dir = root.join(month);
+    std::fs::create_dir_all(&dir)?;
+
+    let safe_name = entry
+        .direction
         .to_lowercase()
         .replace(|c: char| !c.is_alphanumeric() && c != '-', "-")
         .trim_matches('-')
         .to_string();
-    month_dir(log_root, date).join(format!(
-        "{}_{}.md",
-        date.format(DATE_FORMAT),
-        safe_name
-    ))
-}
 
-const TEXT_HEADER: &str = r#"# {date}: {direction}
-
-## 初始问题
-
-{question}
-
-## 探索路径
-
-## 关键发现
-
-## 未解决的问题
-
-## 关联 claim / hypothesis
-
-## 下次切入建议
-"#;
-
-/// Write a new daily log entry to the text layer.
-pub fn write_daily_log(
-    log_root: &Path,
-    date: &chrono::NaiveDate,
-    direction: &str,
-    question: &str,
-    _log_id: &str,
-) -> Result<PathBuf> {
-    let dir = month_dir(log_root, date);
-    fs::create_dir_all(&dir).context("create month dir")?;
-    let path = daily_log_path(log_root, date, direction);
-
-    let content = TEXT_HEADER
-        .replace("{date}", &date.format(DATE_FORMAT).to_string())
-        .replace("{direction}", direction)
-        .replace("{question}", question);
-
-    fs::write(&path, content)
-        .with_context(|| format!("write daily log: {}", path.display()))?;
-
+    let path = dir.join(format!("{}_{}.md", date, safe_name));
+    let content = render_entry(entry, findings, tags);
+    std::fs::write(&path, content)?;
     Ok(path)
-}
-
-/// Append insight to an existing log file.
-pub fn append_insight(log_path: &Path, text: &str) -> Result<()> {
-    let mut content = fs::read_to_string(log_path)
-        .with_context(|| format!("read log: {}", log_path.display()))?;
-    content.push_str(&format!("\n### Insight\n\n{}\n", text));
-    fs::write(log_path, content)
-        .with_context(|| format!("write log: {}", log_path.display()))?;
-    Ok(())
-}
-
-/// Update INDEX.md with a table row for the new log entry.
-///
-/// Format (per spec §19.5.1): | date | direction | status | tags | barrier |
-pub fn update_index(log_root: &Path, direction: &str, date: &chrono::NaiveDate) -> Result<()> {
-    let index_path = log_root.join("INDEX.md");
-
-    // Initialize with header and column definitions if not present
-    let header = "\
-# Research Log Index
-
-| 日期 | 方向 | 状态 | 标签 | 关联 barrier |
-|------|------|------|------|-------------|
-";
-    let existing = if index_path.exists() {
-        fs::read_to_string(&index_path)?
-    } else {
-        header.to_string()
-    };
-
-    let row = format!(
-        "| {} | {} | active | — | — |\n",
-        date.format(DATE_FORMAT),
-        direction
-    );
-
-    if !existing.contains(&row) {
-        fs::write(&index_path, format!("{}{}", existing, row))?;
-    }
-    Ok(())
 }

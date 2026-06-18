@@ -774,6 +774,135 @@ fn cmd_barrier(
     Ok(())
 }
 
+fn cmd_log_record(
+    workspace: &Path,
+    direction: &str,
+    question: &str,
+    entry_point: &str,
+    barrier_id: Option<&str>,
+) -> Result<()> {
+    let (workspace, _) = ensure_workspace(workspace)?;
+    // Use workspace-local research-log directory
+    let log_root = workspace.join("research-log");
+
+    // Ensure log workspace exists
+    research_log_rs::init_log_workspace(&log_root)
+        .context("failed to init research-log workspace")?;
+
+    let now = chrono::Utc::now();
+    let log_id = format!("rl-{}", now.format("%Y%m%d%H%M%S"));
+
+    // DB layer
+    let db_path = log_root.join("research-log.db");
+    let conn = research_log_rs::db::init_database(&db_path)?;
+
+    let entry = research_log_rs::models::Entry {
+        id: log_id.clone(),
+        direction: direction.to_string(),
+        question: question.to_string(),
+        context: None,
+        entry_point: entry_point.to_string(),
+        barrier_id: barrier_id.map(String::from),
+        importance: 0,
+        status: research_log_rs::models::STATUS_ACTIVE.to_string(),
+        created_at: now.to_rfc3339(),
+        updated_at: now.to_rfc3339(),
+    };
+    research_log_rs::db::insert_entry(&conn, &entry)?;
+
+    // Also write to legacy research-log.md for backward compatibility
+    append_research_log(
+        &workspace,
+        &format!("Log recorded: {}", direction),
+        vec![
+            format!("id: {}", log_id),
+            format!("question: {}", question),
+        ],
+    )?;
+
+    println!("Recorded research log entry: {}", log_id);
+    Ok(())
+}
+
+fn cmd_log_search(workspace: &Path, query: &str, limit: usize) -> Result<()> {
+    let (workspace, _) = ensure_workspace(workspace)?;
+    let log_root = workspace.join("research-log");
+    let db_path = log_root.join("research-log.db");
+
+    if !db_path.exists() {
+        println!("No research log database found at {}. Run `log:record` first.", db_path.display());
+        return Ok(());
+    }
+
+    let conn = research_log_rs::db::init_database(&db_path)?;
+    let results = research_log_rs::db::search_entries(&conn, query, None, None, None, None, limit)?;
+
+    if results.is_empty() {
+        println!("No results for: {}", query);
+        return Ok(());
+    }
+
+    println!("Search results for \"{}\" ({} found):", query, results.len());
+    for r in &results {
+        println!("  [{:.30}] {}: {} (score: {:.2})", r.id, r.direction, r.snippet, r.score);
+    }
+    Ok(())
+}
+
+fn cmd_log_insight(workspace: &Path, log_id: &str, text: &str, confidence: &str) -> Result<()> {
+    let (workspace, _) = ensure_workspace(workspace)?;
+    let log_root = workspace.join("research-log");
+    let db_path = log_root.join("research-log.db");
+    let conn = research_log_rs::db::init_database(&db_path)?;
+
+    let confidence_val: f64 = match confidence {
+        "high" => 0.9,
+        "medium" => 0.6,
+        "low" => 0.3,
+        _ => 0.5,
+    };
+
+    let finding = research_log_rs::models::Finding {
+        id: 0,
+        entry_id: log_id.to_string(),
+        kind: research_log_rs::models::FINDING_KIND_INSIGHT.to_string(),
+        content: text.to_string(),
+        confidence: Some(confidence_val),
+        metadata: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    research_log_rs::db::insert_finding(&conn, &finding)?;
+
+    // Also append to legacy log
+    append_research_log(
+        &workspace,
+        &format!("Insight for {}", log_id),
+        vec![format!("confidence: {}", confidence), text.to_string()],
+    )?;
+
+    println!("Added insight to log entry: {}", log_id);
+    Ok(())
+}
+
+fn cmd_log_connect(workspace: &Path, log_id_a: &str, log_id_b: &str) -> Result<()> {
+    let (workspace, _) = ensure_workspace(workspace)?;
+    let log_root = workspace.join("research-log");
+    let db_path = log_root.join("research-log.db");
+    let conn = research_log_rs::db::init_database(&db_path)?;
+
+    let log_conn = research_log_rs::models::LogConnection {
+        id: 0,
+        entry_id_a: log_id_a.to_string(),
+        entry_id_b: log_id_b.to_string(),
+        relation: None,
+        notes: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    research_log_rs::db::insert_connection(&conn, &log_conn)?;
+    println!("Connected log entries: {} <-> {}", log_id_a, log_id_b);
+    Ok(())
+}
+
 fn cmd_set_novelty_gate(
     workspace: &Path,
     status: &GateStatusArg,
@@ -828,7 +957,7 @@ fn main() -> Result<()> {
             question,
             dir,
             mode,
-        } => cmd_init(&project, &question, &dir, &mode.as_str())?,
+        } => cmd_init(&project, &question, &dir, mode.as_str())?,
         Commands::Status { workspace } => cmd_status(&workspace)?,
         Commands::Next { workspace } => cmd_next(&workspace)?,
         Commands::Resume { workspace } => cmd_resume(&workspace)?,
@@ -1020,6 +1149,36 @@ fn main() -> Result<()> {
             differentiation_strategy,
             &claims,
         )?,
+        Commands::LogRecord {
+            workspace,
+            direction,
+            question,
+            entry_point,
+            barrier_id,
+        } => cmd_log_record(
+            &workspace,
+            &direction,
+            &question,
+            &entry_point,
+            barrier_id.as_deref(),
+        )?,
+        Commands::LogSearch {
+            workspace,
+            query,
+            limit,
+        } => cmd_log_search(&workspace, &query, limit)?,
+        Commands::LogInsight {
+            workspace,
+            log_id,
+            text,
+            confidence,
+        } => cmd_log_insight(&workspace, &log_id, &text, &confidence)?,
+        Commands::LogConnect {
+            workspace,
+            log_id_a,
+            log_id_b,
+            relation: _,
+        } => cmd_log_connect(&workspace, &log_id_a, &log_id_b)?,
     }
     Ok(())
 }

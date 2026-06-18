@@ -61,6 +61,7 @@ pub use host_projection::hosts;
 pub use contracts::mcp_pre_guard;
 pub mod paper_adversarial_hook;
 pub mod paper_prose_hook;
+pub mod research_activity_log;
 pub use contracts::review_gate;
 pub use routing_engine::route;
 #[cfg(test)]
@@ -216,6 +217,12 @@ pub fn register_host_projection_hooks() {
                 paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(
                     root, output, prompt, followup,
                 )
+            },
+        );
+
+        host_projection::hooks::register_research_activity_hook(
+            |root, tool, summary| {
+                research_activity_log::record_research_activity(root, tool, summary)
             },
         );
 

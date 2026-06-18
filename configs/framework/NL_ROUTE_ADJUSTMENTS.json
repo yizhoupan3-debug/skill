@@ -715,6 +715,19 @@
     },
     {
       "when": {
+        "query_contains": "科研"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 35.0,
+        "reason": "Research-discovery boost: general research wording (broad front-door entry)."
+      },
+      "record": {
+        "slug": "research-discovery"
+      }
+    },
+    {
+      "when": {
         "query_contains": "卡住了"
       },
       "action": {
@@ -815,6 +828,32 @@
       },
       "record": {
         "slug": "autoresearch"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_research_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 50.0,
+        "reason": "Research-mode boost: research workspace directory or research-log wording detected."
+      },
+      "record": {
+        "slug": "autoresearch"
+      }
+    },
+    {
+      "when": {
+        "signal": "has_research_context"
+      },
+      "action": {
+        "type": "boost",
+        "delta": 15,
+        "reason": "Research-mode boost: research context detected (light discovery door, avoid double-boost overlap with query_contains 科研)."
+      },
+      "record": {
+        "slug": "research-discovery"
       }
     }
   ],

@@ -16,7 +16,7 @@
 //! `NL_ROUTE_ADJUSTMENTS.json` docs when relevant.
 use super::aliases::framework_alias_requires_explicit_call;
 use super::constants::ARTIFACT_GATE_PHRASES;
-use super::text::{normalize_text, text_matches_phrase};
+use super::text::text_matches_phrase;
 use super::types::{RouteContextPayload, SkillRecord};
 use regex::Regex;
 use serde_json::Value;
@@ -85,7 +85,7 @@ const SIGNAL_DEFS: &[SignalDef] = &[
     sig!("paper", normalize => &[
         "paper", "manuscript", "论文", "稿子", "稿件", "摘要", "引言",
         "审稿意见", "reviewer comments", "rebuttal", "appendix", "claim",
-        "投稿", "期刊", "科研",
+        "投稿", "期刊",
     ]),
     sig!("scientific_figure_plotting", normalize => &[
         "scientific figures", "scientific figure", "publication chart",
@@ -188,6 +188,11 @@ const SIGNAL_DEFS: &[SignalDef] = &[
         "不需要设计系统", "不需要设计规范", "不用设计系统", "不用设计规范",
         "无需设计系统", "无需设计规范", "不要设计系统", "不要设计规范",
         "no design system", "without design system",
+    ]),
+    sig!("research_context", normalize => &[
+        "科研日志", "研究日志", "研究工作区", "研究记录", "科研记录",
+        "research log", "research log entry", "experiment log",
+        "实验记录", "日志记录", "科研笔记", "科研回顾",
     ]),
     sig!("quick_artifact", normalize => &[
         "快速", "普通", "简单", "临时", "quick", "simple", "draft", "utility",
@@ -700,6 +705,36 @@ pub fn has_paper_prose_negation_context(query_text: &str, query_token_list: &[St
 
 pub fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool {
     has_signal_by_name("paper", query_text, query_token_list)
+}
+
+/// Detect research workspace context: keyword match + directory-based detection.
+///
+/// Returns true when the query contains research-log keywords OR when the
+/// current working directory (or an ancestor) contains a `research-state.yaml`
+/// or `.research.toml` marker file. Directory scan uses `OnceLock` so the
+/// filesystem is probed at most once per process lifetime.
+/// Check ancestor directories for research workspace marker files.
+fn detect_research_directory(cwd: &std::path::Path) -> bool {
+    cwd.ancestors().any(|dir| {
+        dir.join("research-state.yaml").is_file() || dir.join(".research.toml").is_file()
+    })
+}
+
+/// Detect research workspace context: keyword match + directory-based detection.
+///
+/// Returns true when the query contains research-log keywords OR when the
+/// current working directory (or an ancestor) contains a `research-state.yaml`
+/// or `.research.toml` marker file. Directory detection is re-evaluated on
+/// each call (single `stat` per ancestor — negligible cost).
+pub fn has_research_context(query_text: &str, query_token_list: &[String]) -> bool {
+    let from_keywords = has_signal_by_name("research_context", query_text, query_token_list);
+    if from_keywords {
+        return true;
+    }
+    // No caching: directory detection is cheap (2 is_file per ancestor) and
+    // caching would miss user-initiated "cd" across directories during a session.
+    std::env::current_dir()
+        .is_ok_and(|cwd| detect_research_directory(&cwd))
 }
 
 /// True when the query is about reviewing/checking a mathematical proof or derivation,
@@ -1516,5 +1551,75 @@ mod github_pr_context_tests {
         let spaced2 = "please triage pr fixes";
         let tok2 = tokenize_query(spaced2);
         assert!(has_github_pr_context(spaced2, &tok2));
+    }
+}
+
+#[cfg(test)]
+mod research_context_tests {
+    use super::*;
+    use crate::route::tokenize_route_text;
+
+    #[test]
+    fn research_context_matches_research_log_keyword() {
+        let q = "科研日志";
+        let tokens = tokenize_route_text(q);
+        assert!(has_research_context(q, &tokens));
+    }
+
+    #[test]
+    fn research_context_matches_research_workspace_keyword() {
+        let q = "研究工作区";
+        let tokens = tokenize_route_text(q);
+        assert!(has_research_context(q, &tokens));
+    }
+
+    #[test]
+    fn research_context_matches_experiment_log_keyword() {
+        let q = "帮我记录一下今天的实验记录";
+        let tokens = tokenize_route_text(q);
+        assert!(has_research_context(q, &tokens));
+    }
+
+    #[test]
+    fn research_context_normal_query_no_false_positive() {
+        let q = "帮我修复这个 bug";
+        let tokens = tokenize_route_text(q);
+        assert!(!has_research_context(q, &tokens));
+    }
+
+    #[test]
+    fn research_context_english_research_log() {
+        let q = "record a research log entry for today";
+        let tokens = tokenize_route_text(q);
+        assert!(has_research_context(q, &tokens));
+    }
+
+    #[test]
+    fn detect_research_directory_finds_state_yaml() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("research-state.yaml"), "project: test").unwrap();
+        assert!(detect_research_directory(dir.path()));
+    }
+
+    #[test]
+    fn detect_research_directory_finds_toml_marker() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(".research.toml"), "[research]\nenabled = true").unwrap();
+        assert!(detect_research_directory(dir.path()));
+    }
+
+    #[test]
+    fn detect_research_directory_scans_ancestors() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("a").join("b");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(dir.path().join("research-state.yaml"), "project: test").unwrap();
+        assert!(detect_research_directory(&sub));
+    }
+
+    #[test]
+    fn detect_research_directory_no_marker_returns_false() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!detect_research_directory(dir.path()));
     }
 }

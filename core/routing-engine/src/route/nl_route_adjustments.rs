@@ -119,6 +119,7 @@ nl_signals! {
     "has_pr_triage_summary_context"                => qt_ql: nl_sig_has_pr_triage_summary_context                => has_pr_triage_summary_context,
     "has_prose_naturalization_context"             => qt_ql: nl_sig_has_prose_naturalization_context             => has_prose_naturalization_context,
     "has_rendered_visual_evidence_context"         => qt_ql: nl_sig_has_rendered_visual_evidence_context         => has_rendered_visual_evidence_context,
+    "has_research_context"                          => qt_ql: nl_sig_has_research_context                          => has_research_context,
     "has_runtime_lightweighting_context"           => qt_ql: nl_sig_has_runtime_lightweighting_context           => has_runtime_lightweighting_context,
     "has_scientific_figure_plotting_context"       => qt_ql: nl_sig_has_scientific_figure_plotting_context       => has_scientific_figure_plotting_context,
     "has_sentry_context"                           => qt_ql: nl_sig_has_sentry_context                           => has_sentry_context,

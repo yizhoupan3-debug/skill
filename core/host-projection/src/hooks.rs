@@ -767,6 +767,22 @@ pub fn maybe_merge_paper_adversarial_before_submit(
 }
 
 // ────────────────────────────────────────────────────────────────
+// research activity log: function-pointer proxy (OnceLock)
+// ────────────────────────────────────────────────────────────────
+
+static RESEARCH_ACTIVITY: OnceLock<fn(&Path, &str, &str)> = OnceLock::new();
+
+pub fn register_research_activity_hook(f: fn(&Path, &str, &str)) {
+    let _ = RESEARCH_ACTIVITY.set(f).map_err(|_| tracing::warn!("research activity hook already registered"));
+}
+
+pub fn maybe_record_research_activity(repo_root: &Path, tool_name: &str, summary: &str) {
+    if let Some(f) = RESEARCH_ACTIVITY.get() {
+        f(repo_root, tool_name, summary)
+    }
+}
+
+// ────────────────────────────────────────────────────────────────
 // kernel_bootstrap: function-pointer proxy (OnceLock)
 // ────────────────────────────────────────────────────────────────
 

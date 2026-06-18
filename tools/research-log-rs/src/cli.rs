@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(name = "research-log", about = "Layered research logging CLI")]
@@ -9,9 +9,9 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Record a new exploration log entry (text + DB)
+    /// Record a new research log entry (direction + question)
     Record {
-        /// Direction/project name
+        /// Research direction / project name
         direction: String,
         /// Research question or problem
         question: String,
@@ -21,44 +21,105 @@ pub enum Command {
         /// Barrier ID if escalation-triggered
         #[arg(long)]
         barrier_id: Option<String>,
+        /// Importance 0-5
+        #[arg(long, default_value_t = 0)]
+        importance: i32,
+        /// Tags (comma-separated)
+        #[arg(long)]
+        tags: Option<String>,
     },
-    /// Full-text search across all logs
+    /// Add a finding/insight/decision to an existing entry
+    AddFinding {
+        /// Entry ID (from search or record output)
+        entry_id: String,
+        /// finding | decision | insight | question | plan
+        #[arg(long, default_value = "finding")]
+        kind: String,
+        /// Content text
+        content: String,
+        /// Confidence 0.0-1.0
+        #[arg(long)]
+        confidence: Option<f64>,
+    },
+    /// Full-text search across entries
     Search {
         /// FTS5 query string
         query: String,
+        /// Filter by direction
+        #[arg(long)]
+        direction: Option<String>,
+        /// Filter by status: active | archived | superseded
+        #[arg(long)]
+        status: Option<String>,
+        /// Date from (ISO date string)
+        #[arg(long)]
+        date_from: Option<String>,
+        /// Date to (ISO date string)
+        #[arg(long)]
+        date_to: Option<String>,
         /// Max results
         #[arg(long, default_value_t = 20)]
         limit: usize,
     },
-    /// Add insight to an existing log entry
-    Insight {
-        /// Log entry ID (UUID)
-        log_id: String,
-        /// Insight text
-        text: String,
-        /// Confidence: high | medium | low
-        #[arg(long, default_value = "medium")]
-        confidence: String,
+    /// Search findings/insights/decisions
+    SearchFindings {
+        /// FTS5 query string
+        query: String,
+        /// Filter by kind: finding | decision | insight | question | plan
+        #[arg(long)]
+        kind: Option<String>,
+        /// Max results
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
     },
-    /// Connect two log entries (cross-reference)
+    /// Render an entry as Markdown
+    Render {
+        /// Entry ID
+        entry_id: String,
+        /// Write entry to file system
+        #[arg(long)]
+        write: bool,
+        /// Output directory for --write (default: artifacts/research-log)
+        #[arg(long)]
+        output: Option<String>,
+    },
+    /// Show database statistics
+    Status,
+    /// Consolidate auto-activity logs into the database
+    Consolidate,
+    /// Export entries
+    Export {
+        /// Output format: json | csv | obsidian
+        #[arg(long, default_value = "json")]
+        format: ExportFormat,
+        /// Output directory for multi-file export
+        #[arg(long)]
+        output: Option<String>,
+    },
+    /// Connect two log entries
     Connect {
-        /// First log entry ID
+        /// First entry ID
         log_id_a: String,
-        /// Second log entry ID
+        /// Second entry ID
         log_id_b: String,
-        /// Relationship description
+        /// extends | contradicts | supports | supersedes
         #[arg(long)]
         relation: Option<String>,
+        /// Notes about the connection
+        #[arg(long)]
+        notes: Option<String>,
     },
-    /// List barrier reports for a loop
+    /// Barrier report operations
     Barrier {
         /// Loop ID filter
         #[arg(long)]
         loop_id: Option<String>,
     },
-    /// Trace full research path from a barrier
-    Route {
-        /// Barrier ID to trace from
-        barrier_id: String,
-    },
+}
+
+#[derive(Clone, ValueEnum)]
+pub enum ExportFormat {
+    Json,
+    Csv,
+    Obsidian,
 }
