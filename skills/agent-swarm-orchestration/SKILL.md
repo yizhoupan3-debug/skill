@@ -2,7 +2,7 @@
 name: agent-swarm-orchestration
 description: |
   Decide whether work stays local, uses bounded sidecars, or runs a cross-host workflow (JS orchestration).
-  Covers explicit/auto workflow triggers, workflow_native (Claude Code) vs workflow_supervisor (Cursor/Codex/…), and spawn admission. 适用于多 agent、workflow、ultracode、swarm、orchestrator 类请求.
+  Covers explicit/auto workflow triggers, workflow_native (Claude) vs workflow_supervisor (Cursor/Codex/…), and spawn admission. 适用于多 agent、workflow、ultracode、swarm、orchestrator 类请求.
   **注意**：team 概念已废弃（2026-06-08），仅保留 subagent + workflow 二元模型。
 risk: medium
 source: community-adapted
@@ -120,7 +120,7 @@ Sidecar 模式的压缩契约仍见下文 **Main-thread compression contract**�
 | codex | no | yes |
 | 其他闭集宿主 | no | yes（诚实降级） |
 
-模板索引：[`references/workflow-template-catalog.md`](./references/workflow-template-catalog.md)。**勿**声称非 Claude Code 宿主可 `import 'workflow'`。
+模板索引：[`references/workflow-template-catalog.md`](./references/workflow-template-catalog.md)。**勿**声称非 Claude 宿主可 `import 'workflow'`。
 
 ## Boundary: implementx / verifyx
 
@@ -136,7 +136,7 @@ Audit 类 workflow 默认 **findings-only**；修复需用户显式 `/implementx
 
 | 场景 | 推荐入口 | 执行面 | 对抗 Verify |
 |------|----------|--------|-------------|
-| 跨宿主 **多阶段 JS 编排**（Scan→Merge→Verify→Synthesize） | **`/workflow`** + `.claude/workflows/deep-review-template.js` | Claude Code: `workflow_native`；其它: **`workflow_supervisor`**（Task 同构） | 单 agent 批量验证 + `BATCH_VERDICT_SCHEMA` |
+| 跨宿主 **多阶段 JS 编排**（Scan→Merge→Verify→Synthesize） | **`/workflow`** + `.claude/workflows/deep-review-template.js` | Claude: `workflow_native`；其它: **`workflow_supervisor`**（Task 同构） | 单 agent 批量验证 + `BATCH_VERDICT_SCHEMA` |
 | **Hook 可数**深度 review、PR/全仓、spawn-first gate | **`$code-review-deep`** | `deep-reviewer` / `general-purpose` lane +（非 my-light）REVIEW_GATE | skill 层 findings-only + 多 lens |
 | 窄范围单文件 review | 主线程或 sidecar | 无 workflow | 可选 |
 | 产品交付 wave（实现+验证） | **`/implementx`** | `WAVE_STATE.json` lane | verify_commands，非 audit pipeline |
@@ -158,7 +158,7 @@ Audit 类 workflow 默认 **findings-only**；修复需用户显式 `/implementx
 - 用户要做 research swarm、support router、自动审查流水线
 - 用户要设计 agent supervisor、coordinator、manager-worker 架构
 - 用户显式要求 **workflow** / **ultracode**，或任务自带 **多阶段审计/审查管道**
-- 需要复用 `.claude/workflows/` 下 JS 编排（Claude Code）或跨宿主 **workflow_supervisor** 同构执行
+- 需要复用 `.claude/workflows/` 下 JS 编排（Claude）或跨宿主 **workflow_supervisor** 同构执行
 - 用户明确要求多 worker 生命周期、协作拆分或 supervisor 集成时，本 gate 负责判断 bounded sidecars 是否足够
 - 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：契约与模板通过 `framework_rfv_loop` 运行时管理；用户侧入口优先 My 执行区 `/implementx`（`GOAL_STATE.json`、`framework_goal_drive`）；本 gate 仍负责 spawn admission 与 reject reason
 

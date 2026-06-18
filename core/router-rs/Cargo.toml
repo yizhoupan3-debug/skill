@@ -44,14 +44,14 @@ path = "src/bin/router-rs-cli.rs"
 [features]
 default = [
     "host-cursor",
-    "host-claude-code",
+    "host-claude",
     "host-opencode",
     "host-codex",
     "host-mimo",
     "codegraph",
 ]
 host-cursor = []
-host-claude-code = []
+host-claude = []
 host-opencode = []
 host-codex = []
 host-mimo = []

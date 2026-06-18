@@ -135,7 +135,7 @@ Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentSta
 
 ### 与 Cursor / Claude 的关键差异
 
-| 维度 | Cursor | Claude Code | Codex CLI |
+| 维度 | Cursor | Claude | Codex CLI |
 |------|--------|-------------|-----------|
 | 子代理生命周期 hook | `subagentStart` / `subagentStop` | 无（原生 `Task`） | **无**（agent 自觉） |
 | 专用 gate 文件 | `execution-subagent-gate.mdc` + `review-subagent-gate.mdc` | 无 | **无**（本文档为真源） |

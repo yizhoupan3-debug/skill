@@ -20,7 +20,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
   framework doctor --repo-root "$PWD"
 ```
 
-Claude Code 可选用 `./scripts/install-claude.sh`（等价 `install --to claude-code`）。
+Claude 可选用 `./scripts/install-claude.sh`（等价 `install --to claude-code`）。
 
 ## 版本升级
 

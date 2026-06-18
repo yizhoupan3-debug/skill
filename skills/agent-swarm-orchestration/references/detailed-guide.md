@@ -7,7 +7,7 @@
 跨宿主 **workflow** 与 **sidecar** 的统一前门见 SKILL 正文 **Orchestration mode selection**。细则：
 
 - 触发与优先级：[orchestration-mode.md](./orchestration-mode.md)
-- 非 Claude Code 按 JS 派发：[workflow-supervisor-protocol.md](./workflow-supervisor-protocol.md)
+- 非 Claude 按 JS 派发：[workflow-supervisor-protocol.md](./workflow-supervisor-protocol.md)
 - `.claude/workflows` 模板表：[workflow-template-catalog.md](./workflow-template-catalog.md)
 - JS API / 四阶段：[workflow-script-conventions.md](./workflow-script-conventions.md)
 

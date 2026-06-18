@@ -28,7 +28,7 @@ trigger_hints:
   - cost optimization
 ---
 
-> **DEPRECATED** — Claude Code 原生已支持 prompt caching、context compaction 和 token 优化。本 skill 不再维护，内容保留作为参考。
+> **DEPRECATED** — Claude 原生已支持 prompt caching、context compaction 和 token 优化。本 skill 不再维护，内容保留作为参考。
 
 # Token Optimization
 

@@ -13,7 +13,7 @@ version: unified-v7
 
 | 宿主 ID | install_tool | 运输模式 |
 |---------|-------------|---------|
-| `claude-code` | `claude` | `anthropic-claude-code` |
+| `claude` | `claude` | `anthropic-claude` |
 | `cursor` | `cursor` | `cursor-agent` |
 | `codex` | `codex` | `native-codex` |
 | `opencode` | `opencode` | `native-opencode` |
@@ -23,7 +23,7 @@ version: unified-v7
 
 ### 6.2 Hook 事件矩阵
 
-| 事件 | claude-code | cursor | codex | opencode | mimo |
+| 事件 | claude | cursor | codex | opencode | mimo |
 |------|:-----------:|:------:|:-----:|:--------:|:----:|
 | PreToolUse | ✅ core | — | ✅ | ✅ ⁴ | ✅ ⁵ |
 | UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | ✅ ⁴ | ✅ ⁵ |
@@ -39,7 +39,7 @@ version: unified-v7
 
 | 宿主 | 顶层 key | transport | 配置文件 |
 |------|----------|-----------|----------|
-| claude-code | `mcpServers` | `stdio` | `~/.claude/mcp.json` |
+| claude | `mcpServers` | `stdio` | `~/.claude/mcp.json` |
 | cursor | `mcpServers` | `stdio` | `~/.cursor/mcp.json` |
 | opencode | `mcp` | `local` | `~/.config/opencode/opencode.json` |
 | codex | `mcp_servers` (TOML) | `stdio` | `~/.codex/config.toml` |
@@ -52,14 +52,14 @@ version: unified-v7
 | 档位 | 宿主 | capabilities | session_supervisor | harness_capabilities |
 |------|------|-------------|-------------------|---------------------|
 | **S 档** | codex | 11 | codex_driver | 4 项 |
-| **A 档** | claude-code, cursor | 6 | mcp_bridge / unsupported | 4 项 |
+| **A 档** | claude, cursor | 6 | mcp_bridge / unsupported | 4 项 |
 | **B 档** | opencode, mimo | 5 | unsupported | 4 项 |
 
 ### 6.5 编译嵌入矩阵
 
 | 宿主 | 嵌入内容 | 机制 |
 |------|----------|------|
-| claude-code | settings.json 模板 | `host_integration/projection` |
+| claude | settings.json 模板 | `host_integration/projection` |
 | cursor | hooks.json + .mdc | `host_integration/projection` |
 | codex | AGENTS.md + AGENTS_CODEX.md | `policy_embed.rs` |
 | opencode | opencode.json 投影 | `host_integration/projection` |

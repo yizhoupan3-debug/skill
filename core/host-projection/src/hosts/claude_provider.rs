@@ -1,4 +1,4 @@
-//! Claude Code host: `HostProvider` skeleton (stdio hook metadata).
+//! Claude host: `HostProvider` skeleton (stdio hook metadata).
 
 use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
@@ -10,7 +10,7 @@ pub struct ClaudeHostProvider;
 
 impl HostLifecycle for ClaudeHostProvider {
     fn profile_id(&self) -> &'static str {
-        "claude_code_profile"
+        "claude_profile"
     }
 
     fn session_supervisor_driver(&self) -> &'static str {
@@ -56,11 +56,11 @@ impl HostToolExecutor for ClaudeHostProvider {}
 
 impl HostTelemetry for ClaudeHostProvider {
     fn hook_telemetry_surface(&self) -> &'static str {
-        "anthropic-claude-code"
+        "anthropic-claude"
     }
 
     fn observation_host_id(&self) -> Option<&'static str> {
-        Some("claude-code")
+        Some("claude")
     }
 
     fn extract_observation_surfaces(&self, output: &Value) -> (Option<String>, Option<String>) {
@@ -87,7 +87,7 @@ impl HostTelemetry for ClaudeHostProvider {
 
 impl HostProvider for ClaudeHostProvider {
     fn host_id(&self) -> &'static str {
-        "claude-code"
+        "claude"
     }
 
     fn install_tool(&self) -> &'static str {
@@ -95,13 +95,13 @@ impl HostProvider for ClaudeHostProvider {
     }
 
     fn aliases(&self) -> &'static [&'static str] {
-        &["claude-code", "claude-desktop"]
+        &[]
     }
 
     fn capabilities(&self) -> HostCapabilities {
         HostCapabilities {
             mcp_config_key: "",
-            transport_type: "anthropic-claude-code",
+            transport_type: "anthropic-claude",
             config_path: ".claude/settings.json",
             ..Default::default()
         }

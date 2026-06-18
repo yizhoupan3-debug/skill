@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "browser-mcp": {
+      "args": [
+        "browser",
+        "mcp-stdio",
+        "--repo-root",
+        "/Users/joe/Developer/skill"
+      ],
+      "command": "router-rs",
+      "description": "Browser automation, session worker, background tasks",
+      "type": "stdio"
+    },
+    "mcp-codegraph": {
+      "args": [
+        "run",
+        "--release",
+        "--quiet",
+        "-p",
+        "codegraph-rs",
+        "--bin",
+        "mcp-codegraph",
+        "--manifest-path",
+        "/Users/joe/Developer/skill/Cargo.toml",
+        "--",
+        "--repo-root",
+        "/Users/joe/Developer/skill"
+      ],
+      "command": "cargo",
+      "description": "Code knowledge graph (search, callers, callees, impact) via mcp-codegraph",
+      "type": "stdio"
+    },
+    "paperplain": {
+      "args": [
+        "-y",
+        "paperplain-mcp"
+      ],
+      "command": "npx",
+      "description": "Academic paper metadata fetch/search (paperplain-mcp)",
+      "type": "stdio"
+    },
+    "router-rs-framework": {
+      "args": [
+        "claude",
+        "agent",
+        "--repo-root",
+        "/Users/joe/Developer/skill"
+      ],
+      "command": "router-rs",
+      "description": "Framework snapshot, skill routing, goal/closeout gating",
+      "type": "stdio"
+    }
+  }
+}

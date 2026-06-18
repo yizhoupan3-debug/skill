@@ -9,7 +9,7 @@
     "policy": "shared-rust-core-explicit-host-projections",
     "supported": [
       "cursor",
-      "claude-code",
+      "claude",
       "opencode",
       "codex",
       "mimo"
@@ -32,25 +32,6 @@
         "host_entrypoints": [
           "AGENTS_CURSOR.md",
           ".cursor/rules/*.mdc"
-        ]
-      },
-      "claude-code": {
-        "display_name": "Claude Code",
-        "transport_type": "hook",
-        "config_format": "json",
-        "home_env_var": "CLAUDE_HOME",
-        "default_home_dir": ".claude",
-        "cli_aliases": [
-          "claude"
-        ],
-        "install_tool": "claude",
-        "projection_status": "implemented",
-        "installable": true,
-        "default_framework_command": "implementx",
-        "host_entrypoints": [
-          "AGENTS_CLAUDE.md",
-          ".claude/rules/framework.md",
-          ".claude/settings.json"
         ]
       },
       "opencode": {
@@ -97,6 +78,25 @@
         "installable": true,
         "default_framework_command": "implementx",
         "host_entrypoints": "AGENTS_MIMO.md"
+      },
+      "claude": {
+        "display_name": "Claude",
+        "transport_type": "hook",
+        "config_format": "json",
+        "home_env_var": "CLAUDE_HOME",
+        "default_home_dir": ".claude",
+        "cli_aliases": [
+          "claude"
+        ],
+        "install_tool": "claude",
+        "projection_status": "implemented",
+        "installable": true,
+        "default_framework_command": "implementx",
+        "host_entrypoints": [
+          "AGENTS_CLAUDE.md",
+          ".claude/rules/framework.md",
+          ".claude/settings.json"
+        ]
       }
     },
     "host_providers": {
@@ -107,14 +107,6 @@
         "hooks_module": "cursor_hooks",
         "cli_hook_subcommand": "hook",
         "dispatch_fn": "dispatch_cursor_command"
-      },
-      "claude-code": {
-        "cargo_feature": "host-claude-code",
-        "provider_module": "claude_provider",
-        "provider_type": "ClaudeHostProvider",
-        "hooks_module": "claude_code_hooks",
-        "cli_hook_subcommand": "hook",
-        "dispatch_fn": "dispatch_claude_command"
       },
       "opencode": {
         "cargo_feature": "host-opencode",
@@ -140,6 +132,14 @@
         "hooks_module": "mimo_hooks",
         "cli_hook_subcommand": "hook",
         "dispatch_fn": "dispatch_mimo_command"
+      },
+      "claude": {
+        "cargo_feature": "host-claude",
+        "provider_module": "claude_provider",
+        "provider_type": "ClaudeHostProvider",
+        "hooks_module": "claude_hooks",
+        "cli_hook_subcommand": "hook",
+        "dispatch_fn": "dispatch_claude_command"
       }
     }
   },
@@ -160,12 +160,12 @@
     },
     "spawn_first_nudge_template": "配对审稿（{host_label}）：首轮工具前先 spawn 只读 reviewer（reviewer_lanes 闭集，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md",
     "spawn_first_nudge_host_labels": {
-      "claude-code": "Claude Code",
-      "codex": "Codex"
+      "codex": "Codex",
+      "claude": "Claude"
     },
     "spawn_first_nudge_by_host": {
       "cursor": "配对审稿（Cursor）：首轮工具前先 spawn 只读 reviewer（reviewer_lanes 闭集，fork_context=false）；主线程调研须另开独立 reviewer，explore 不计入证据；Task 省略 model、继承主会话，禁止默认 claude/sonnet。细则 skills/code-review-deep/SKILL.md",
-      "opencode": "配对审稿（Opencode）：无 hook 注入；须主动 spawn 只读 reviewer（reviewer_lanes）并写 review-lanes/*.md。closeout/complete 在 MCP 工具层同 Claude Code。细则 skills/code-review-deep/SKILL.md"
+      "opencode": "配对审稿（Opencode）：无 hook 注入；须主动 spawn 只读 reviewer（reviewer_lanes）并写 review-lanes/*.md。closeout/complete 在 MCP 工具层同 Claude。细则 skills/code-review-deep/SKILL.md"
     },
     "spawn_first_includes_model_inherit_by_host": {
       "cursor": true
@@ -224,9 +224,9 @@
       "skill_path": "skills/discussx/SKILL.md",
       "host_entrypoints": {
         "cursor": "/discussx",
-        "claude-code": "/discussx",
         "opencode": "/discussx",
-        "codex": "/discussx"
+        "codex": "/discussx",
+        "claude": "/discussx"
       },
       "lineage": {
         "source": "repo-native",
@@ -238,9 +238,9 @@
       "skill_path": "skills/planx/SKILL.md",
       "host_entrypoints": {
         "cursor": "/planx",
-        "claude-code": "/planx",
         "opencode": "/planx",
-        "codex": "/planx"
+        "codex": "/planx",
+        "claude": "/planx"
       }
     },
     "implementx": {
@@ -248,9 +248,9 @@
       "skill_path": "skills/implementx/SKILL.md",
       "host_entrypoints": {
         "cursor": "/implementx",
-        "claude-code": "/implementx",
         "opencode": "/implementx",
-        "codex": "/implementx"
+        "codex": "/implementx",
+        "claude": "/implementx"
       },
       "implementation_bar": [
         "one-breath-all-waves",
@@ -272,9 +272,9 @@
       "skill_path": "skills/verifyx/SKILL.md",
       "host_entrypoints": {
         "cursor": "/verifyx",
-        "claude-code": "/verifyx",
         "opencode": "/verifyx",
-        "codex": "/verifyx"
+        "codex": "/verifyx",
+        "claude": "/verifyx"
       }
     },
     "deepinterview": {
@@ -308,9 +308,9 @@
       ],
       "host_entrypoints": {
         "cursor": "/deepinterview",
-        "claude-code": "/deepinterview",
         "opencode": "/deepinterview",
-        "codex": "/deepinterview"
+        "codex": "/deepinterview",
+        "claude": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -329,9 +329,9 @@
       "skill_path": "skills/gitx/SKILL.md",
       "host_entrypoints": {
         "cursor": "/gitx",
-        "claude-code": "/gitx",
         "opencode": "/gitx",
-        "codex": "/gitx"
+        "codex": "/gitx",
+        "claude": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -351,9 +351,9 @@
       "skill_path": "skills/update/SKILL.md",
       "host_entrypoints": {
         "cursor": "/update",
-        "claude-code": "/update",
         "opencode": "/update",
-        "codex": "/update"
+        "codex": "/update",
+        "claude": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -403,17 +403,17 @@
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.router-rs-framework",
-        "claude-code": "mcpServers.router-rs-framework",
         "opencode": "mcpServers.router-rs-framework",
         "codex": "mcp_servers.router-rs-framework",
-        "mimo": "mcpServers.router-rs-framework"
+        "mimo": "mcpServers.router-rs-framework",
+        "claude": "mcpServers.router-rs-framework"
       },
       "install_surfaces": {
         "cursor": "user mcp.json",
-        "claude-code": "project .mcp.json",
         "opencode": "opencode.json mcpServers",
         "codex": "project .codex/config.toml",
-        "mimo": ".mimo/settings.json mcpServers"
+        "mimo": ".mimo/settings.json mcpServers",
+        "claude": "project .mcp.json"
       },
       "env_var_override": "ROUTER_RS_BIN"
     },
@@ -458,17 +458,17 @@
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.browser-mcp",
-        "claude-code": "mcpServers.browser-mcp",
         "opencode": "mcpServers.browser-mcp",
         "codex": "mcp_servers.browser-mcp",
-        "mimo": "mcpServers.browser-mcp"
+        "mimo": "mcpServers.browser-mcp",
+        "claude": "mcpServers.browser-mcp"
       },
       "install_surfaces": {
         "cursor": "user mcp.json",
-        "claude-code": "project .mcp.json",
         "opencode": "opencode.json mcpServers",
         "codex": "project .codex/config.toml",
-        "mimo": ".mimo/settings.json mcpServers"
+        "mimo": ".mimo/settings.json mcpServers",
+        "claude": "project .mcp.json"
       },
       "env_var_override": "ROUTER_RS_BIN",
       "repo_root": "framework_root"
@@ -489,17 +489,17 @@
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.mcp-codegraph",
-        "claude-code": "mcpServers.mcp-codegraph",
         "opencode": "mcpServers.mcp-codegraph",
         "codex": "mcp_servers.mcp-codegraph",
-        "mimo": "mcpServers.mcp-codegraph"
+        "mimo": "mcpServers.mcp-codegraph",
+        "claude": "mcpServers.mcp-codegraph"
       },
       "install_surfaces": {
         "cursor": "user mcp.json",
-        "claude-code": "project .mcp.json",
         "opencode": "opencode.json mcpServers",
         "codex": "project .codex/config.toml",
-        "mimo": ".mimo/settings.json mcpServers"
+        "mimo": ".mimo/settings.json mcpServers",
+        "claude": "project .mcp.json"
       }
     },
     "paperplain": {
@@ -517,17 +517,17 @@
       ],
       "host_config_keys": {
         "cursor": "mcp_servers.paperplain",
-        "claude-code": "mcpServers.paperplain",
         "opencode": "mcpServers.paperplain",
         "codex": "mcp_servers.paperplain",
-        "mimo": "mcpServers.paperplain"
+        "mimo": "mcpServers.paperplain",
+        "claude": "mcpServers.paperplain"
       },
       "install_surfaces": {
         "cursor": "user mcp.json",
-        "claude-code": "project .mcp.json",
         "opencode": "opencode.json mcpServers",
         "codex": "project .codex/config.toml",
-        "mimo": ".mimo/settings.json mcpServers"
+        "mimo": ".mimo/settings.json mcpServers",
+        "claude": "project .mcp.json"
       }
     }
   },
@@ -560,7 +560,7 @@
       "session_supervisor_driver": "unsupported",
       "session_supervisor_status": {
         "supported": false,
-        "rationale": "Cursor host does not expose external process supervision or auto-resume. session_supervisor currently supports codex and claude-code drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process."
+        "rationale": "Cursor host does not expose external process supervision or auto-resume. session_supervisor currently supports codex and claude drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process."
       },
       "resume_command_examples": [
         "在 Cursor 中继续当前会话",
@@ -580,48 +580,6 @@
         "host_resume_entrypoint",
         "hard_gate_hooks",
         "framework_alias_entrypoints"
-      ],
-      "managed_mcp_server_ids": [
-        "router-rs-framework",
-        "browser-mcp",
-        "mcp-codegraph",
-        "paperplain"
-      ]
-    },
-    "claude-code": {
-      "profile_id": "claude_code_profile",
-      "host_id": "claude-code",
-      "transport": "anthropic-claude-code",
-      "context_files": [
-        "AGENTS_CLAUDE.md"
-      ],
-      "settings_paths": [
-        {
-          "scope": "project",
-          "relative": ".claude/settings.json"
-        }
-      ],
-      "session_supervisor_driver": "mcp_bridge",
-      "session_supervisor_status": {
-        "supported": true,
-        "bridge": "browser-mcp session tools (session_launch/session_list/session_inspect/session_terminate)",
-        "rationale": "Claude Code bridges session supervision through browser-mcp MCP tools. SubagentStart/Stop hooks provide native lifecycle events."
-      },
-      "resume_command_examples": [
-        "Continue in Claude Code in this workspace"
-      ],
-      "harness_capabilities": [
-        "hot_runtime_routing",
-        "l2_continuity_contract",
-        "closeout_evidence_hooks",
-        "review_gate_router_observation"
-      ],
-      "capabilities": [
-        "artifact_contract",
-        "workspace_bootstrap",
-        "interactive_agent_chat",
-        "framework_alias_entrypoints",
-        "hard_gate_hooks"
       ],
       "managed_mcp_server_ids": [
         "router-rs-framework",
@@ -790,10 +748,51 @@
         "mcp-codegraph",
         "paperplain"
       ]
+    },
+    "claude": {
+      "profile_id": "claude_profile",
+      "host_id": "claude",
+      "transport": "anthropic-claude",
+      "context_files": [
+        "AGENTS_CLAUDE.md"
+      ],
+      "settings_paths": [
+        {
+          "scope": "project",
+          "relative": ".claude/settings.json"
+        }
+      ],
+      "session_supervisor_driver": "mcp_bridge",
+      "session_supervisor_status": {
+        "supported": true,
+        "bridge": "browser-mcp session tools (session_launch/session_list/session_inspect/session_terminate)",
+        "rationale": "Claude bridges session supervision through browser-mcp MCP tools. SubagentStart/Stop hooks provide native lifecycle events."
+      },
+      "resume_command_examples": [
+        "Continue in Claude in this workspace"
+      ],
+      "harness_capabilities": [
+        "hot_runtime_routing",
+        "l2_continuity_contract",
+        "closeout_evidence_hooks",
+        "review_gate_router_observation"
+      ],
+      "capabilities": [
+        "artifact_contract",
+        "workspace_bootstrap",
+        "interactive_agent_chat",
+        "framework_alias_entrypoints",
+        "hard_gate_hooks"
+      ],
+      "managed_mcp_server_ids": [
+        "router-rs-framework",
+        "browser-mcp",
+        "mcp-codegraph",
+        "paperplain"
+      ]
     }
   },
   "retired_hosts": {
-    "claude-desktop": "2026-06: use claude-code",
     "antigravity": "2026-06: product line discontinued",
     "antigravity-app": "2026-06: merged into antigravity",
     "antigravity-cli": "2026-06: replaced by antigravity MCP",

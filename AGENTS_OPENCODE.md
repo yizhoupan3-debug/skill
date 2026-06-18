@@ -19,7 +19,7 @@
 
 ## 所有者对比
 
-| 能力 | claude-code | cursor | codex | opencode | mimo |
+| 能力 | claude | cursor | codex | opencode | mimo |
 |------|:-----------:|:------:|:-----:|:--------:|:----:|
 | Hard gate hooks | ✓ | ✓ | ✓ | ✗（fail-open） | ✓ |
 | Closeout evidence hooks | ✓ | ✓ | ✓ | ✗ | ✓ |

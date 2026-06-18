@@ -18,7 +18,7 @@ depends_on:
 
 - **任务推进**: `/implementx` + `framework_goal_drive` stdio
 - **任务状态**: `artifacts/current/<task_id>/GOAL_STATE.json`
-- **门控模式**: hook 事件驱动，与 Claude Code / Cursor 对齐
+- **门控模式**: hook 事件驱动，与 Claude / Cursor 对齐
 
 ## Hook 事件矩阵
 

@@ -401,7 +401,7 @@ pub fn validate_cleanup_scope(
         let host_cli_home_set = match host_id {
             "codex" => command.codex_home.is_some(),
             "cursor" => command.cursor_home.is_some(),
-            "claude-code" => command.claude_home.is_some(),
+            "claude" => command.claude_home.is_some(),
             "opencode" => command.opencode_home.is_some(),
             _ => false,
         };
@@ -538,7 +538,7 @@ pub struct HostProjectionAdapter {
 
 /// Known tool→host_id mappings.
 /// Source of truth: RUNTIME_REGISTRY.json → host_targets.metadata.*.install_tool
-/// Retired host aliases (codex-cli, codex-app, claude-desktop) remain hardcoded for backward compat.
+/// Retired host aliases (codex-cli, codex-app) remain hardcoded for backward compat.
 const KNOWN_PROJECTION_TOOLS: &[HostProjectionAdapter] = &[
     HostProjectionAdapter {
         tool: "cursor",
@@ -547,8 +547,8 @@ const KNOWN_PROJECTION_TOOLS: &[HostProjectionAdapter] = &[
     },
     HostProjectionAdapter {
         tool: "claude",
-        host_id: "claude-code",
-        aliases: &["claude-code"],
+        host_id: "claude",
+        aliases: &[],
     },
     HostProjectionAdapter {
         tool: "opencode",
@@ -903,8 +903,6 @@ pub fn lifecycle_paragraph_for_host(
         .or_else(|| {
             match host_projection {
                 "codex-cli" | "codex-app" => narrative.lifecycle_by_host.get("codex").cloned(),
-                // 兼容已退役的 claude-desktop host，映射到 claude-code
-                "claude-desktop" => narrative.lifecycle_by_host.get("claude-code").cloned(),
                 _ => None,
             }
         })
@@ -992,11 +990,11 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
 
 ## MCP（可选）
 
-项目 `.claude/mcp.json` 可注册 `browser-mcp` 等（`claude-desktop` 已退役，勿作真源）。
+项目 `.claude/mcp.json` 可注册 `browser-mcp` 等。
 
 路由：`skills/SKILL_ROUTING_RUNTIME.json` · 产物：`artifacts/current/`。
 "#,
-        gsd = lifecycle_paragraph_for_host(&narrative, "claude-code"),
+        gsd = lifecycle_paragraph_for_host(&narrative, "claude"),
     ))
 }
 
@@ -1007,7 +1005,7 @@ pub fn render_claude_framework_entrypoint(
     let (narrative, runtime_rel) = framework_entrypoint_render_context(roots, "claude")?;
     Ok(format!(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude-code -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n{footer}",
-        gsd = lifecycle_paragraph_for_host(&narrative, "claude-code"),
+        gsd = lifecycle_paragraph_for_host(&narrative, "claude"),
         review = narrative.review_findings_only_paragraph,
         footer = framework_entrypoint_common_footer(&runtime_rel, "AGENTS_CLAUDE.md"),
     ))
@@ -1050,7 +1048,7 @@ pub fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
 }
 
 pub fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
-    projection_file_status(path, "claude-code")
+    projection_file_status(path, "claude")
 }
 
 /// Shared paperplain MCP entry (five-host research harness).
@@ -1106,7 +1104,7 @@ pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Resu
         .ok_or_else(|| "project .mcp.json mcpServers must be an object".to_string())?;
     let framework = host_router_rs_framework_payload(
         roots,
-        "claude-code",
+        "claude",
         "Framework snapshot, skill routing, goal/closeout gating",
     );
     let framework_changed = entries.get("router-rs-framework") != Some(&framework);

@@ -224,9 +224,9 @@
         "interactive_agent_chat"
       ]
     },
-    "claude-code": {
+    "claude": {
       "status": "implemented",
-      "projection": "claude_code_profile",
+      "projection": "claude_profile",
       "capabilities": [
         "context_files",
         "settings_paths",

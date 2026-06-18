@@ -13,7 +13,7 @@ pub mod file_state_lock;
 
 // ── Migrated host providers ──
 pub mod claude_agent;
-pub mod claude_code_hooks;
+pub mod claude_hooks;
 pub mod claude_provider;
 pub mod mcp_stdio_harness;
 pub mod mimo_hooks;

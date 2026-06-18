@@ -32,7 +32,7 @@ depends_on:
 
 ## Fail-open / Fail-closed 设计意图
 
-Cursor 采用 **fail-closed** 策略：hook 二进制缺失时，关键门控事件返回 `decision:block`。这与 Claude Code / Codex CLI 一致。
+Cursor 采用 **fail-closed** 策略：hook 二进制缺失时，关键门控事件返回 `decision:block`。这与 Claude / Codex CLI 一致。
 
 **设计理由**：Cursor 的 7 事件 hook 紧密嵌入会话生命周期（`stop` 可阻断提交、`beforeSubmitPrompt` 可注入 spawn-first nudge）。二进制损坏意味着安全关键路径断裂，fail-closed 避免 agent 在无审查状态下执行不可逆操作。
 

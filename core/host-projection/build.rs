@@ -44,7 +44,7 @@ fn main() {
     let host_provider_map: std::collections::HashMap<&str, (&str, &str)> = [
         ("cursor", ("cursor_provider", "CursorHostProvider")),
         ("codex", ("codex_provider", "CodexHostProvider")),
-        ("claude-code", ("claude_provider", "ClaudeHostProvider")),
+        ("claude", ("claude_provider", "ClaudeHostProvider")),
         ("opencode", ("opencode_provider", "OpencodeHostProvider")),
         ("mimo", ("mimo_provider", "MimoHostProvider")),
     ]

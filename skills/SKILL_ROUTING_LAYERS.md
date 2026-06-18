@@ -26,7 +26,7 @@
 
 - `skill-ci.yml`：push / PR 校验、生成物漂移拦截
 - `evolution-audit.yml`：定时健康审计、同步 routing 产物、创建维护 issue
-- Claude Code automations（默认位于 `~/.claude/automations/<id>/automation.toml`；若显式设置 `CLAUDE_CODE_HOME`，则位于 `$CLAUDE_CODE_HOME/automations/<id>/automation.toml`）：
+- Claude automations（默认位于 `~/.claude/automations/<id>/automation.toml`；若显式设置 `CLAUDE_CODE_HOME`，则位于 `$CLAUDE_CODE_HOME/automations/<id>/automation.toml`）：
   异步收集维护任务、例行检查、产物刷新
 
 自动化输出会在后续回合以 **evidence/source artifact** 形式进入路由，

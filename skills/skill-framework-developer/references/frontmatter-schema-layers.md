@@ -52,5 +52,5 @@
 
 ## 无宿主化约束
 
-description 和通用 instructions 中**禁止**提及特定宿主名（Codex、Claude Code、Cursor 等）。
+description 和通用 instructions 中**禁止**提及特定宿主名（Codex、Claude、Cursor 等）。
 仅在明确描述宿主差异的技术段落中可提及宿主名（如 hooks 集成、review gate 差异等）。

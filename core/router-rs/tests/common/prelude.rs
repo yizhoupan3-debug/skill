@@ -19,7 +19,7 @@ pub use runtime_core::{
 
 // host submodule re-exports
 pub use runtime_core::hosts::{
-    claude_code_hooks, codex_hooks, cursor_hooks, mcp_stdio_harness, opencode_hooks,
+    claude_hooks, codex_hooks, cursor_hooks, mcp_stdio_harness, opencode_hooks,
 };
 
 // specific function / constant re-exports
@@ -59,7 +59,7 @@ pub use runtime_core::{
         write_trace_metadata,
     },
     harness_operator_nudges::harness_nudges_env_test_lock,
-    hosts::claude_code_hooks::dispatch_claude_hook_payload_for_test,
+    hosts::claude_hooks::dispatch_claude_hook_payload_for_test,
     hosts::cursor_hooks::set_test_review_gate_disable_override,
     hosts::mcp_stdio_harness::{
         get_snapshot_ttl_for_test, get_task_view_ttl_for_test, init_tracker_for_test,

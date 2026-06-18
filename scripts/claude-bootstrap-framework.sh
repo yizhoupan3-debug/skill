@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Link framework skills/AGENTS.md into another project and install Claude Code + Desktop projections.
+# Link framework skills/AGENTS.md into another project and install Claude projections.
 set -euo pipefail
 
 usage() {
@@ -13,7 +13,7 @@ Options:
   --framework-root DIR   Framework repo root
   --project-root DIR     Project to modify (default: $PWD)
   --with-configs         Symlink configs/ -> <framework>/configs
-  --skip-desktop         Claude Code project install only (no Desktop MCP in project)
+  --skip-desktop         Claude project install only (no Desktop MCP in project)
   -h, --help             Show help
 
 Global Claude rules (My lifecycle, same as Cursor user framework.mdc) require user scope once:

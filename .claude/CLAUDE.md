@@ -1,9 +1,9 @@
-<!-- managed_by: skill-framework · claude-code · keep ≤48 lines -->
-<!-- projection_id: claude-code-project-narrative -->
-<!-- host_projection: claude-code -->
+<!-- managed_by: skill-framework · claude · keep ≤48 lines -->
+<!-- projection_id: claude-project-narrative -->
+<!-- host_projection: claude -->
 <!-- install_scope: project -->
 
-# Claude Code（本项目）
+# Claude（本项目）
 
 跨宿主 **`AGENTS.md`**；宿主差异 **`AGENTS_CLAUDE.md`**；手册 **`docs/hosts/claude.md`**。
 

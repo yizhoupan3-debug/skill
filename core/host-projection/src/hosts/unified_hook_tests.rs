@@ -10,7 +10,7 @@ use std::path::Path;
 /// Dispatch a hook event to the appropriate host handler and return the JSON response.
 fn dispatch(host_id: &str, event: &str, repo_root: &Path, payload: &Value) -> Value {
     match host_id {
-        "claude-code" => {
+        "claude" => {
             // Claude uses canonical event names (pre-tool-use, user-prompt-submit, etc.)
             let canonical = match event {
                 "tool.execute.before" => "pre-tool-use",
@@ -21,7 +21,7 @@ fn dispatch(host_id: &str, event: &str, repo_root: &Path, payload: &Value) -> Va
                 "subagent.stop" | "SubagentStop" => "subagent-stop",
                 other => other,
             };
-            crate::hosts::claude_code_hooks::dispatch_claude_hook_payload_for_test(
+            crate::hosts::claude_hooks::dispatch_claude_hook_payload_for_test(
                 canonical, repo_root, payload,
             )
         }
@@ -63,10 +63,10 @@ fn dispatch(host_id: &str, event: &str, repo_root: &Path, payload: &Value) -> Va
 }
 
 /// All supported host IDs for unified testing.
-const ALL_HOSTS: &[&str] = &["claude-code", "cursor", "codex", "opencode"];
+const ALL_HOSTS: &[&str] = &["claude", "cursor", "codex", "opencode"];
 
 /// Hosts that handle PreToolUse / tool.execute.before events.
-const PRE_TOOL_USE_HOSTS: &[&str] = &["claude-code", "cursor", "opencode"];
+const PRE_TOOL_USE_HOSTS: &[&str] = &["claude", "cursor", "opencode"];
 
 /// Create a temporary test repo with framework markers.
 fn test_repo(name: &str) -> std::path::PathBuf {
@@ -85,7 +85,7 @@ fn test_repo(name: &str) -> std::path::PathBuf {
     .unwrap();
     std::fs::write(
         root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v2","host_targets":{"supported":["codex","claude-code","cursor","opencode","mimo"]}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v2","host_targets":{"supported":["codex","claude","cursor","opencode","mimo"]}}"#,
     )
     .unwrap();
     let _ = std::fs::create_dir_all(root.join(".claude").join("hook-state"));
@@ -172,7 +172,7 @@ fn pre_tool_use_blocks_own_host_private_settings() {
                 "tool_name": "Write",
                 "tool_input": { "file_path": path }
             });
-            let result = dispatch("claude-code", "tool.execute.before", &claude_repo, &payload);
+            let result = dispatch("claude", "tool.execute.before", &claude_repo, &payload);
             assert!(
                 is_blocked_advised_or_passthrough(&result),
                 "host=claude-code: write to {path} was NOT blocked or advised: {result}"
@@ -221,7 +221,7 @@ fn pre_tool_use_blocks_cross_host_settings() {
                 "tool_name": "Write",
                 "tool_input": { "file_path": path }
             });
-            let result = dispatch("claude-code", "tool.execute.before", &claude_repo, &payload);
+            let result = dispatch("claude", "tool.execute.before", &claude_repo, &payload);
             assert!(
                 is_blocked_advised_or_passthrough(&result),
                 "host=claude-code: write to {path} was NOT blocked or advised: {result}"
@@ -725,7 +725,7 @@ fn corrupt_hook_state_surfaces_advisory() {
         let repo = test_repo(&format!("corrupt-{host}"));
         // Write corrupt hook state file
         let state_dir = match host {
-            "claude-code" => repo.join(".claude/hook-state"),
+            "claude" => repo.join(".claude/hook-state"),
             "cursor" => repo.join(".cursor/hook-state"),
             "codex" => repo.join(".codex/hook-state"),
             "opencode" => repo.join(".opencode/hook-state"),
@@ -752,7 +752,7 @@ fn corrupt_state_implementx_surfaces_unreadable() {
         let repo = test_repo(&format!("corrupt-imp-{host}"));
         // Write corrupt hook state
         let state_dir = match host {
-            "claude-code" => repo.join(".claude/hook-state"),
+            "claude" => repo.join(".claude/hook-state"),
             "cursor" => repo.join(".cursor/hook-state"),
             "codex" => repo.join(".codex/hook-state"),
             "opencode" => repo.join(".opencode/hook-state"),
@@ -969,7 +969,7 @@ fn corrupt_state_discussx_surfaces_unreadable() {
     for &host in ALL_HOSTS {
         let repo = test_repo(&format!("corrupt-disc-{host}"));
         let state_dir = match host {
-            "claude-code" => repo.join(".claude/hook-state"),
+            "claude" => repo.join(".claude/hook-state"),
             "cursor" => repo.join(".cursor/hook-state"),
             "codex" => repo.join(".codex/hook-state"),
             "opencode" => repo.join(".opencode/hook-state"),
@@ -991,7 +991,7 @@ fn corrupt_state_benign_ups_surfaces_unreadable() {
     for &host in ALL_HOSTS {
         let repo = test_repo(&format!("corrupt-benign-{host}"));
         let state_dir = match host {
-            "claude-code" => repo.join(".claude/hook-state"),
+            "claude" => repo.join(".claude/hook-state"),
             "cursor" => repo.join(".cursor/hook-state"),
             "codex" => repo.join(".codex/hook-state"),
             "opencode" => repo.join(".opencode/hook-state"),
@@ -1013,7 +1013,7 @@ fn corrupt_state_auto_recovers_on_stop() {
     for &host in ALL_HOSTS {
         let repo = test_repo(&format!("corrupt-recover-{host}"));
         let state_dir = match host {
-            "claude-code" => repo.join(".claude/hook-state"),
+            "claude" => repo.join(".claude/hook-state"),
             "cursor" => repo.join(".cursor/hook-state"),
             "codex" => repo.join(".codex/hook-state"),
             "opencode" => repo.join(".opencode/hook-state"),
@@ -1414,7 +1414,7 @@ fn readonly_hook_state_dir_fails_closed() {
     for &host in ALL_HOSTS {
         let repo = test_repo(&format!("readonly-{host}"));
         let state_dir = match host {
-            "claude-code" => repo.join(".claude/hook-state"),
+            "claude" => repo.join(".claude/hook-state"),
             "cursor" => repo.join(".cursor/hook-state"),
             "codex" => repo.join(".codex/hook-state"),
             "opencode" => repo.join(".opencode/hook-state"),
@@ -1451,7 +1451,7 @@ fn review_gate_disabled_env_skips_gate() {
         let repo = test_repo(&format!("rg-disable-{host}"));
         // Set host-specific review gate disable env var
         let env_var = match host {
-            "claude-code" => "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
+            "claude" => "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
             "cursor" => "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE",
             "codex" => "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE",
             "opencode" => "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE",
@@ -1483,7 +1483,7 @@ fn review_gate_noncanonical_disable_env_does_not_disable() {
     for &host in ALL_HOSTS {
         let repo = test_repo(&format!("rg-noncanon-{host}"));
         let env_var = match host {
-            "claude-code" => "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
+            "claude" => "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
             "cursor" => "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE",
             "codex" => "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE",
             "opencode" => "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE",
@@ -1807,7 +1807,7 @@ fn pretool_allows_agents_md() {
         "tool_name": "Write",
         "tool_input": { "file_path": repo.join("AGENTS.md").to_string_lossy() }
     });
-    let result = dispatch("claude-code", "tool.execute.before", &repo, &payload);
+    let result = dispatch("claude", "tool.execute.before", &repo, &payload);
     let blocked = is_blocked(&result);
     assert!(
         !blocked,

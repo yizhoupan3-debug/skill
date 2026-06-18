@@ -1,4 +1,4 @@
-# Workflow supervisor 协议（非 Claude Code 宿主）
+# Workflow supervisor 协议（非 Claude 宿主）
 
 当 `orchestration.mode = workflow_supervisor` 时，主线程 **不** 运行 `import 'workflow'`，但 **必须** 与目标 JS 脚本的 `meta.phases` 与 `parallel`/`pipeline`/`agent` 结构 **同构** 执行。
 

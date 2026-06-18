@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::cursor_hooks::dispatch_cursor_hook_event;
-use crate::hosts::claude_code_hooks::dispatch_claude_hook_payload_for_test;
+use crate::hosts::claude_hooks::dispatch_claude_hook_payload_for_test;
 use crate::hosts::codex_hooks::run_codex_lifecycle_context_hook_for_state_dir;
 use crate::opencode_hooks::dispatch_opencode_hook_event;
 use crate::test_env_sync::ProcessEnvLockGuard;

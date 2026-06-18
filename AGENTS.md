@@ -4,7 +4,7 @@
 
 **双文件注入（硬约束）**：各闭集宿主须**同时**注入仓库根 **`AGENTS.md`**（跨宿主内核）与 **`AGENTS_<HOST>.md`**（transport delta）；**禁止**合并为单文件。
 
-**闭集宿主（2026-06）**：`codex`、`claude-code`、`cursor`、`opencode` — 真源 `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。已退役 id：`claude-desktop`、`codex-app`、`codex-cli`。
+**闭集宿主（2026-06）**：`codex`、`claude`、`cursor`、`opencode` — 真源 `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。已退役 id：`codex-app`、`codex-cli`。
 
 ## 权威分层
 
@@ -47,7 +47,7 @@
 
 ## 宿主能力差异（降级矩阵）
 
-| 能力 | claude-code | cursor | codex | opencode |
+| 能力 | claude | cursor | codex | opencode |
 |------|:-----------:|:------:|:-----:|:--------:|
 | hard gate hooks | ✓ | ✓ | ✓ | ✗ |
 | closeout evidence hooks | ✓ | ✓ | ✓ | ✗ |

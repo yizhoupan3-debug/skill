@@ -1,4 +1,4 @@
-> **Cursor 宿主专属参考**。本文件从 `skills/plan-mode/SKILL.md` 中提取的 Cursor 特化细节，仅适用于 Cursor 宿主环境。其他宿主（如 Claude Code、Codex）可跳过本文件；跨宿主通用规范见 SKILL.md 正文。
+> **Cursor 宿主专属参考**。本文件从 `skills/plan-mode/SKILL.md` 中提取的 Cursor 特化细节，仅适用于 Cursor 宿主环境。其他宿主（如 Claude、Codex）可跳过本文件；跨宿主通用规范见 SKILL.md 正文。
 
 # CreatePlan 输出契约与 Cursor 宿主细节（参考）
 

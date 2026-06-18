@@ -398,9 +398,9 @@ mod tests {
             codex_line.contains("Codex"),
             "codex line from template: {codex_line}"
         );
-        let claude_line = review_spawn_first_nudge_line(None, "claude-code");
+        let claude_line = review_spawn_first_nudge_line(None, "claude");
         assert!(
-            claude_line.contains("Claude Code"),
+            claude_line.contains("Claude"),
             "claude-code line from template: {claude_line}"
         );
     }

@@ -124,18 +124,7 @@ pub fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String
 
 /// Map MCP stdio host spellings to `host_projections` keys (avoid `hosts` import cycle).
 fn registry_projection_host_key(host_id: &str) -> &str {
-    match host_id.trim() {
-        "claude-desktop" => {
-            static WARNED: std::sync::Once = std::sync::Once::new();
-            WARNED.call_once(|| {
-                eprintln!(
-                    "[router-rs] deprecate: host_id claude-desktop retired 2026-06; resolving projection as claude-code (use hooks, not MCP agent)"
-                );
-            });
-            "claude-code"
-        }
-        other => other.trim(),
-    }
+    host_id.trim()
 }
 
 pub fn host_projection_object<'a>(
@@ -245,10 +234,14 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn claude_desktop_projection_maps_to_claude_code() {
+    fn registry_projection_host_key_passes_through_unknown() {
         assert_eq!(
             registry_projection_host_key("claude-desktop"),
-            "claude-code"
+            "claude-desktop"
+        );
+        assert_eq!(
+            registry_projection_host_key("claude"),
+            "claude"
         );
     }
 

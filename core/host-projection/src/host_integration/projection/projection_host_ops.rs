@@ -448,7 +448,7 @@ pub fn remove_cursor_projection(
 pub fn claude_entrypoint_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots
-            .host_home_root("claude-code")
+            .host_home_root("claude")
             .expect("claude-code host must be registered in projection roots")
             .join("rules")
             .join("framework.md")
@@ -468,7 +468,7 @@ pub fn claude_project_narrative_path(roots: &ResolvedProjectionRoots) -> PathBuf
 pub fn claude_settings_target(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
         roots
-            .host_home_root("claude-code")
+            .host_home_root("claude")
             .expect("claude-code host must be registered in projection roots")
             .join("settings.json")
     } else {
@@ -629,7 +629,7 @@ pub fn install_claude_projection(
     )?);
     let manifest_changed = write_projection_manifest(
         roots,
-        "claude-code",
+        "claude",
         scope,
         &manifest_files,
         &manifest_key_paths,
@@ -676,8 +676,8 @@ pub fn claude_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value
             }
         },
         "manifest": {
-            "project": projection_manifest_status(&projection_manifest_path(roots, "claude-code", "project"))?,
-            "user": projection_manifest_status(&projection_manifest_path(roots, "claude-code", "user"))?,
+            "project": projection_manifest_status(&projection_manifest_path(roots, "claude", "project"))?,
+            "user": projection_manifest_status(&projection_manifest_path(roots, "claude", "user"))?,
         },
         "hooks": {
             "project": claude_settings_hook_status(&project_settings)?,
@@ -693,9 +693,9 @@ pub fn remove_claude_projection(
 ) -> Result<Value, String> {
     let target = claude_entrypoint_target(roots, scope);
     let settings_path = claude_settings_target(roots, scope);
-    let manifest_path = projection_manifest_path(roots, "claude-code", scope);
+    let manifest_path = projection_manifest_path(roots, "claude", scope);
     let manifest_ownership =
-        projection_manifest_ownership(&manifest_path, "claude-code", scope, &target)?;
+        projection_manifest_ownership(&manifest_path, "claude", scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
         fs::remove_file(&target).map_err(|err| err.to_string())?;

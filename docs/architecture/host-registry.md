@@ -5,7 +5,7 @@
 
 ## Overview
 
-The host registry defines all supported AI coding hosts (Cursor, Claude Code, OpenCode, Codex)
+The host registry defines all supported AI coding hosts (Cursor, Claude, OpenCode, Codex)
 and their configuration in a single JSON file. Adding or removing a host requires changes to
 this file plus a Rust provider module — no other Rust code needs modification.
 
@@ -50,7 +50,7 @@ this file plus a Rust provider module — no other Rust code needs modification.
 | Host | Transport | Hook Mechanism |
 |------|-----------|---------------|
 | Cursor | `cursor-agent` | Shell hook → `router-rs cursor hook` |
-| Claude Code | `anthropic-claude-code` | Shell hook → `router-rs claude hook` |
+| Claude | `anthropic-claude-code` | Shell hook → `router-rs claude hook` |
 | OpenCode | `native-opencode` | Shell hook → `router-rs opencode hook` |
 | Codex | `native-codex` | Shell hook → `router-rs codex hook` |
 

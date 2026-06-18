@@ -227,7 +227,7 @@ pub struct ResolvedProjectionRoots {
     pub artifact_root: PathBuf,
     /// OS account home for Desktop official config paths and stable MCP binary (not `CLAUDE_HOME` parent).
     pub account_home_root: PathBuf,
-    /// Per-host home roots, keyed by host_id (e.g. "codex", "cursor", "claude-code", "opencode").
+    /// Per-host home roots, keyed by host_id (e.g. "codex", "cursor", "claude", "opencode").
     pub host_home_roots: BTreeMap<String, PathBuf>,
 }
 
@@ -293,7 +293,7 @@ mod tests {
         );
         assert!(
             !cmd.contains("grep -Eq"),
-            "Cursor stdin prefilter must not short-circuit before router-rs (see claude_code_hooks payload_looks_like_cursor_hook_stdin): {cmd}"
+            "Cursor stdin prefilter must not short-circuit before router-rs (see claude_hooks payload_looks_like_cursor_hook_stdin): {cmd}"
         );
     }
 
@@ -301,7 +301,7 @@ mod tests {
     fn canonical_tool_name_reports_registry_supported_tools_and_aliases() {
         let root = repo_root();
 
-        assert_eq!(canonical_tool_name("claude-code", &root).unwrap(), "claude");
+        assert_eq!(canonical_tool_name("claude", &root).unwrap(), "claude");
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
         for tool in ["cursor", "claude", "opencode", "codex", "mimo"] {
@@ -310,7 +310,7 @@ mod tests {
                 "expected supported tool {tool} in error: {err}"
             );
         }
-        assert!(err.contains("claude-code"), "{err}");
+        assert!(err.contains("claude"), "{err}");
         assert!(err.contains("codex-cli"), "{err}");
     }
 
@@ -554,7 +554,7 @@ mod tests {
             host_home_roots: [
                 ("codex".into(), root.join("codex")),
                 ("cursor".into(), cursor_home.clone()),
-                ("claude-code".into(), root.join("claude")),
+                ("claude".into(), root.join("claude")),
                 ("opencode".into(), root.join("opencode")),
             ]
             .into_iter()
@@ -635,7 +635,7 @@ mod tests {
         .expect("resolve roots");
         assert_eq!(roots.account_home_root, os_home);
         assert_eq!(
-            roots.host_home_root("claude-code").unwrap().as_path(),
+            roots.host_home_root("claude").unwrap().as_path(),
             custom_claude.as_path()
         );
         assert_eq!(
@@ -673,7 +673,7 @@ mod tests {
             host_home_roots: [
                 ("codex".into(), home.join(".codex")),
                 ("cursor".into(), home.join(".cursor")),
-                ("claude-code".into(), home.join(".claude")),
+                ("claude".into(), home.join(".claude")),
                 ("opencode".into(), home.join(".opencode")),
             ]
             .into_iter()
@@ -720,7 +720,7 @@ mod tests {
             host_home_roots: [
                 ("codex".into(), home.join(".codex")),
                 ("cursor".into(), home.join(".cursor")),
-                ("claude-code".into(), home.join(".claude")),
+                ("claude".into(), home.join(".claude")),
                 ("opencode".into(), home.join(".opencode")),
             ]
             .into_iter()

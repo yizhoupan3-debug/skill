@@ -109,8 +109,8 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 | 宿主 | 配置文件 | `--repo-root` | env 注入 |
 |------|----------|---------------|----------|
-| Claude Code 全局 | `~/.claude/mcp.json` | ✅ 硬编码 | ✅ 三组 |
-| Claude Code 项目 | `skill/.claude/mcp.json` | ✅ 硬编码 | ✅ `SKILL_FRAMEWORK_ROOT` |
+| Claude 全局 | `~/.claude/mcp.json` | ✅ 硬编码 | ✅ 三组 |
+| Claude 项目 | `skill/.claude/mcp.json` | ✅ 硬编码 | ✅ `SKILL_FRAMEWORK_ROOT` |
 | Claude Desktop | `Claude-3p/claude_desktop_config.json` | ✅ 硬编码 | ✅ 三组 |
 | Gemini CLI 全局 | `~/.gemini/mcp.json` | ✅ 硬编码 | ✅ 三组 |
 | Gemini 项目级 | `skill/.gemini/mcp.json` | ✅ 硬编码 | ✅ 三组 |

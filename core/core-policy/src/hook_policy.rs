@@ -1236,7 +1236,7 @@ mod tests {
             runtime_root: None,
             tool_name: Some("session_launch".to_string()),
             tool_args: Some(
-                json!({"prompt": "summarize this file", "host": "claude-code", "cwd": "/tmp"}),
+                json!({"prompt": "summarize this file", "host": "claude", "cwd": "/tmp"}),
             ),
         };
         let response = evaluate_hook_policy(request).unwrap();

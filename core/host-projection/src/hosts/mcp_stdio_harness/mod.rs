@@ -47,16 +47,6 @@ fn mcp_host_display_label(host_id: &str) -> String {
         .unwrap_or_else(|| "MCP Host".to_string())
 }
 
-fn reject_retired_claude_desktop_host(host_id: &str) -> Result<(), String> {
-    if host_id.trim() == "claude-desktop" {
-        return Err(
-            "host_id claude-desktop retired 2026-06; use claude-code hooks (`router-rs claude hook`), not MCP agent"
-                .to_string(),
-        );
-    }
-    Ok(())
-}
-
 fn list_known_task_ids(repo_root: &Path) -> Vec<String> {
     let current = repo_root.join("artifacts/current");
     let Ok(entries) = fs::read_dir(&current) else {
@@ -302,7 +292,6 @@ pub fn run_mcp_stdio<R: BufRead, W: Write>(
     repo_root: &Path,
     host_id: &str,
 ) -> Result<(), String> {
-    reject_retired_claude_desktop_host(host_id)?;
     // 初始化 session tracker（session 级别，只执行一次）
     // 注意：init_tracker 失败不会阻塞 MCP 服务，因为某些环境可能不支持 tracker 文件
     if let Err(e) = init_tracker(repo_root) {
@@ -464,13 +453,6 @@ pub fn handle_mcp_request(
         }
     };
     let id = request.get("id").cloned();
-    if let Err(msg) = reject_retired_claude_desktop_host(host_id) {
-        return Some(json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": {"code": -32600, "message": msg},
-        }));
-    }
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
 
     match method {

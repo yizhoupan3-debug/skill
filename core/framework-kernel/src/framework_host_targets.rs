@@ -307,7 +307,7 @@ mod tests {
         assert_eq!(
             sorted,
             vec![
-                "claude-code".to_string(),
+                "claude".to_string(),
                 "codex".to_string(),
                 "cursor".to_string(),
                 "mimo".to_string(),
@@ -322,7 +322,7 @@ mod tests {
         let root = repo_root();
         let pairs = installable_host_id_and_skills_install_tool_pairs(&root).expect("pairs");
         assert!(pairs.iter().any(|(host_id, _)| host_id == "cursor"));
-        assert!(pairs.iter().any(|(host_id, _)| host_id == "claude-code"));
+        assert!(pairs.iter().any(|(host_id, _)| host_id == "claude"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "opencode"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "codex"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "mimo"));

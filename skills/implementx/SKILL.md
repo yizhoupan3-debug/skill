@@ -40,7 +40,7 @@ metadata:
 
 Under **`lifecycle_profile: my-light`**, Cursor **Stop** does **not** emit hard `router-rs AG_FOLLOWUP` (goal continuity is manual: `framework_goal_drive` stdio + `artifacts/current/<task_id>/` boards). **`beforeSubmit` does not arm `goal_required`** (uses `goal_drive_entry_active` for pre-goal only). Closeout / `CLOSEOUT_FOLLOWUP` may still apply when completion is claimed.
 
-> **设计依据**：Anthropic *Building Effective Agents*（orchestrator-workers pattern）、*How we built our multi-agent research system*（3-5 parallel subagent、artifact system、incremental injection）、*Effective context engineering*（subagent isolation + 摘要回传）、*Scaling Managed Agents*（brain/hands/session 三层解耦）、Claude Code 官方 subagent/workflow/agent-teams 文档、GitHub maestro-orchestrate（426★）/ code-audit-system / ArtChiTech-framework 等实战案例。完整证据表见 [`references/orchestration-contract.md`](references/orchestration-contract.md)。
+> **设计依据**：Anthropic *Building Effective Agents*（orchestrator-workers pattern）、*How we built our multi-agent research system*（3-5 parallel subagent、artifact system、incremental injection）、*Effective context engineering*（subagent isolation + 摘要回传）、*Scaling Managed Agents*（brain/hands/session 三层解耦）、Claude 官方 subagent/workflow/agent-teams 文档、GitHub maestro-orchestrate（426★）/ code-audit-system / ArtChiTech-framework 等实战案例。完整证据表见 [`references/orchestration-contract.md`](references/orchestration-contract.md)。
 
 ---
 
@@ -183,7 +183,7 @@ When invoked, run **every wave** in `WAVE_STATE.json` from current `wave_id` thr
 | 写入 disjoint | 各 lane 仅写 `scope_paths` 内文件 |
 | review 只读 | 默认 review-only；implementation lane 可写但仅限 scope_paths |
 | Model inherit | **省略 `model` 参数**；继承主会话模型（Cursor / Codex 均适用） |
-| Subagent 不能 spawn subagent | 单层 delegation（对齐 Claude Code 官方 subagent 规范） |
+| Subagent 不能 spawn subagent | 单层 delegation（对齐 Claude 官方 subagent 规范） |
 
 ### 3.4 Token Budget by Role (ADVISORY)
 
@@ -262,7 +262,7 @@ coordinator **不得**将 subagent 全量 output 注入主 context；只读 lane
 | `GOAL_STATE.json` | `framework_goal_drive` stdio | everyone（只读） |
 | `WAVE_STATE.json` | coordinator（status 更新） | everyone（只读） |
 
-**subagent 不直接相互通信**（对齐 Claude Code 官方规范）；所有跨 lane 信息经 coordinator 中转。
+**subagent 不直接相互通信**（对齐 Claude 官方规范）；所有跨 lane 信息经 coordinator 中转。
 
 ---
 

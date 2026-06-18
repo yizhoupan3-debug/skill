@@ -559,7 +559,7 @@ pub fn resolve_projection_roots(
     let host_overrides: [(&str, Option<&Path>, &str, &str); 5] = [
         ("codex", codex_home, "CODEX_HOME", ".codex"),
         ("cursor", cursor_home, "CURSOR_HOME", ".cursor"),
-        ("claude-code", claude_home, "CLAUDE_HOME", ".claude"),
+        ("claude", claude_home, "CLAUDE_HOME", ".claude"),
         ("opencode", opencode_home, "OPENCODE_HOME", ".opencode"),
         ("mimo", None, "MIMO_HOME", ".mimo"),
     ];

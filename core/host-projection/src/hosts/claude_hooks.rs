@@ -1,5 +1,5 @@
-//! L4 transport for `host_id=claude-code`; review/closeout policy in `core-policy`.
-//! Claude Code（Anthropic CLI）hooks：`router-rs claude hook --event=… --repo-root …`。
+//! L4 transport for `host_id=claude`; review/closeout policy in `core-policy`.
+//! Claude（Anthropic）hooks：`router-rs claude hook --event=… --repo-root …`。
 //! 历史版本接口快照：`git show 89ece4c^:core/router-rs/src/claude_hooks.rs`（事件：`pre-tool-use`、`user-prompt-submit`、`post-tool-use`、`stop`；CLI 亦接受 `PreToolUse` 等 PascalCase 别名，与 Codex hook 拼写对齐）。
 //!
 //! **误接 Cursor hook stdin**：仅在 stdin JSON 呈现结构化 Cursor envelope（顶层非空 `cursor_version` 字符串 + `workspace_roots` 数组 + 非空 `hook_event_name` 或 `hookEventName`）时整条静默；
@@ -28,65 +28,65 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const CLAUDE_HOOK_STATE_UNREADABLE: &str =
     "router-rs CLAUDE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
 
-/// 与 Claude Code 共享 hook JSON 协议；通过 thread-local 切换 `.claude` 等宿主差异。
+/// 与 Claude 共享 hook JSON 协议；通过 thread-local 切换 `.claude` 等宿主差异。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StdioAgentHookHost {
-    ClaudeCode,
+    Claude,
 }
 
 impl StdioAgentHookHost {
     fn state_dir(self) -> &'static str {
         match self {
-            Self::ClaudeCode => ".claude",
+            Self::Claude => ".claude",
         }
     }
 
     fn hook_state_unreadable(self) -> &'static str {
         match self {
-            Self::ClaudeCode => CLAUDE_HOOK_STATE_UNREADABLE,
+            Self::Claude => CLAUDE_HOOK_STATE_UNREADABLE,
         }
     }
 
     fn session_namespace_env(self) -> &'static str {
         match self {
-            Self::ClaudeCode => "ROUTER_RS_CLAUDE_SESSION_NAMESPACE",
+            Self::Claude => "ROUTER_RS_CLAUDE_SESSION_NAMESPACE",
         }
     }
 
     fn log_label(self) -> &'static str {
         match self {
-            Self::ClaudeCode => "claude",
+            Self::Claude => "claude",
         }
     }
 
     fn settings_guarded_paths(self) -> &'static [&'static str] {
         match self {
-            Self::ClaudeCode => SETTINGS_GUARDED_PATHS_CLAUDE,
+            Self::Claude => SETTINGS_GUARDED_PATHS_CLAUDE,
         }
     }
 
     fn generated_entrypoint_paths(self) -> &'static [&'static str] {
         match self {
-            Self::ClaudeCode => GENERATED_ENTRYPOINT_PATHS_CLAUDE,
+            Self::Claude => GENERATED_ENTRYPOINT_PATHS_CLAUDE,
         }
     }
 
     fn user_config_dir_leaf(self) -> &'static str {
         match self {
-            Self::ClaudeCode => ".claude",
+            Self::Claude => ".claude",
         }
     }
 
     fn validate_settings_stop_reason(self) -> &'static str {
         match self {
-            Self::ClaudeCode => "Validate Claude hook/settings JSON before ending this turn.",
+            Self::Claude => "Validate Claude hook/settings JSON before ending this turn.",
         }
     }
 }
 
 thread_local! {
     static ACTIVE_STDIO_AGENT_HOOK_HOST: Cell<StdioAgentHookHost> =
-        const { Cell::new(StdioAgentHookHost::ClaudeCode) };
+        const { Cell::new(StdioAgentHookHost::Claude) };
 }
 
 fn active_stdio_agent_hook_host() -> StdioAgentHookHost {
@@ -191,7 +191,7 @@ const FRAMEWORK_CHANGED_CONTEXT: &str = "Framework routing/runtime files changed
 const SETTINGS_CHANGED_CONTEXT: &str = "Hook/settings files changed; validate JSON and run the agent hook contract tests before finishing.";
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` 或 legacy `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE`。
 fn agent_review_gate_disabled() -> bool {
-    core_policy::env_flags::router_rs_review_gate_disabled_for_host("claude-code")
+    core_policy::env_flags::router_rs_review_gate_disabled_for_host("claude")
 }
 
 /// Env disable **or** `my-light` profile (advisory-only mode).
@@ -309,7 +309,7 @@ pub fn run_claude_hook(command: &str, repo_root: &Path) -> Result<Value, String>
     let telemetry_event = canonical.to_string();
     crate::hooks::mark_hook_start();
     let _registry_guard = core_policy::registry_review_gate::HookRegistryRepoGuard::new(repo_root);
-    let result = with_stdio_agent_hook_host(StdioAgentHookHost::ClaudeCode, || {
+    let result = with_stdio_agent_hook_host(StdioAgentHookHost::Claude, || {
         let payload = read_stdin_payload()?;
         let event = HookEvent { repo_root, event_name: canonical, payload: &payload };
         let output = ClaudeHookDispatcher.dispatch(&event);
@@ -358,7 +358,7 @@ fn canonical_stdio_agent_hook_command(command: &str) -> Result<&'static str, Str
 pub struct ClaudeHookDispatcher;
 
 impl HostHookConfig for ClaudeHookDispatcher {
-    fn host_id(&self) -> &'static str { "claude-code" }
+    fn host_id(&self) -> &'static str { "claude" }
     fn state_dir_leaf(&self) -> &'static str { ".claude" }
     fn hook_state_unreadable_tag(&self) -> &'static str { CLAUDE_HOOK_STATE_UNREADABLE }
     fn session_namespace_env(&self) -> &'static str { "ROUTER_RS_CLAUDE_SESSION_NAMESPACE" }
@@ -440,7 +440,7 @@ pub fn dispatch_claude_hook_payload_for_test(
     payload: &Value,
 ) -> Value {
     crate::hooks::ensure_kernel_bootstrap();
-    with_stdio_agent_hook_host(StdioAgentHookHost::ClaudeCode, || {
+    with_stdio_agent_hook_host(StdioAgentHookHost::Claude, || {
         let event = HookEvent { repo_root, event_name: canonical_event, payload };
         let output = ClaudeHookDispatcher.dispatch(&event);
         hook_output_to_claude_value(canonical_event, output)
@@ -453,7 +453,7 @@ pub fn run_claude_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<
     let mut output = run_claude_hook(event, &repo_root)?;
     crate::hooks::attach_router_rs_observation(
         &mut output,
-        crate::hooks::HookObservationHostType::ClaudeCode,
+        crate::hooks::HookObservationHostType::Claude,
     );
     let serialized = serde_json::to_string(&output).map_err(|e| e.to_string())?;
     let mut stdout = std::io::stdout();
@@ -633,7 +633,7 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
             contexts.push(
                 core_policy::registry_review_gate::review_spawn_first_nudge_line(
                     Some(repo_root),
-                    "claude-code",
+                    "claude",
                 ),
             );
         }
@@ -1570,5 +1570,5 @@ fn payload_runs_framework_tests(payload: &Value) -> bool {
 }
 
 #[cfg(test)]
-#[path = "claude_code_hooks_tests.rs"]
+#[path = "claude_hooks_tests.rs"]
 mod tests;

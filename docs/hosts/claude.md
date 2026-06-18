@@ -5,9 +5,9 @@ depends_on:
   - ../spec.md
 ---
 
-# Claude Code 宿主操作手册
+# Claude 宿主操作手册
 
-**闭集 id**：`claude-code` · **传输**：claude-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.claude-code`
+**闭集 id**：`claude` · **传输**：claude-hooks · **权威**：`RUNTIME_REGISTRY.json` → `host_projections.claude`
 
 ## 代理身份与画风 (Agent Identity & Style)
 
@@ -18,7 +18,7 @@ depends_on:
 
 ## 能力边界与 Harness 入口 (Capabilities & Harness Entrypoints)
 
-在 Claude Code 环境下，Harness 和任务管理的核心入口与工作区定义如下：
+在 Claude 环境下，Harness 和任务管理的核心入口与工作区定义如下：
 
 - **Harness 核心入口**：
   - **任务推进及推进控制**：利用 `/implementx` 和 `/verifyx` 指令，配合 `framework_goal_drive` stdio 推进宏任务。
@@ -35,7 +35,7 @@ depends_on:
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse\|Stop\|…` | [`claude_hooks.rs`](../../core/host-projection/src/hosts/claude_code_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse\|Stop\|…` | [`claude_hooks.rs`](../../core/host-projection/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
 | **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
 | 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/host-projection/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（四事件 hook）、`.claude/.framework-projection.json`（project scope） |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK`）；`ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` opt-in |
@@ -86,9 +86,9 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 
 ## Fail-open / Fail-closed 设计意图
 
-Claude Code 采用 **fail-closed** 策略：当 `router-rs` hook 二进制缺失或不可读时，`Stop` 事件返回 `decision:block`，阻断任务推进。这与 Cursor / Codex CLI 的策略一致。
+Claude 采用 **fail-closed** 策略：当 `router-rs` hook 二进制缺失或不可读时，`Stop` 事件返回 `decision:block`，阻断任务推进。这与 Cursor / Codex CLI 的策略一致。
 
-**设计理由**：Claude Code 的 4 事件 hook（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）深度嵌入会话生命周期，`Stop` 可阻断提交。二进制损坏意味着安全关键路径断裂——此时 fail-closed 避免 agent 在无审查状态下提交不可逆操作（如 git push、写盘）。
+**设计理由**：Claude 的 4 事件 hook（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`）深度嵌入会话生命周期，`Stop` 可阻断提交。二进制损坏意味着安全关键路径断裂——此时 fail-closed 避免 agent 在无审查状态下提交不可逆操作（如 git push、写盘）。
 
 
 ## 进程管理与性能调优 (Process & Memory)

@@ -225,7 +225,7 @@ mod tests {
     use serde_json::json;
 
     fn claude_code() -> HookObservationHost {
-        HookObservationHost::from_host_id("claude-code").unwrap()
+        HookObservationHost::from_host_id("claude").unwrap()
     }
 
     #[test]
@@ -303,7 +303,7 @@ mod tests {
             "stopReason": "router-rs CLAUDE_REVIEW_GATE incomplete: run subagent",
         });
         let o = build_router_rs_observation_value(&v, claude_code());
-        assert_eq!(o["host"], "claude-code");
+        assert_eq!(o["host"], "claude");
         assert_eq!(o["gate"]["code"], "claude_review_gate");
         assert_eq!(o["gate"]["blocking"], true);
     }

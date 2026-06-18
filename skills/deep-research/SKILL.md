@@ -55,7 +55,7 @@ scoping, experiment design, or manuscript work.
 
 **五宿主统一**：NL 热路由与本 skill 相同；非手稿科研总地图见
 [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md) 与
-[`../research-execution/SKILL.md`](../research-execution/SKILL.md)。Claude Code
+[`../research-execution/SKILL.md`](../research-execution/SKILL.md)。Claude
 另可用 native workflow：`.claude/workflows/deep-research.js`；Cursor 等宿主按
 [`../agent-swarm-orchestration/references/workflow-supervisor-protocol.md`](../agent-swarm-orchestration/references/workflow-supervisor-protocol.md)
 手调度。

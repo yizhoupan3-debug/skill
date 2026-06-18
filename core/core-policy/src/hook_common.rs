@@ -1,7 +1,7 @@
 //! Shared hook heuristics for prompt/gate classification and small cross-host JSON key merges.
-//! **不含**宿主 hook 的 stdin 生命周期分发、写盘或出站 JSON 投影；这类逻辑在 `cursor_hooks` / `codex_hooks` / `claude_code_hooks` 等模块。
+//! **不含**宿主 hook 的 stdin 生命周期分发、写盘或出站 JSON 投影；这类逻辑在 `cursor_hooks` / `codex_hooks` / `claude_hooks` 等模块。
 //! `tool_input_value_from_map` 仅合并常见别名字段（`tool_input` / `input` / `arguments` / `parameters`），不替代各宿主的嵌套扫描或事件路由。
-//! Dependency direction: `cursor_hooks` / `codex_hooks` / `claude_code_hooks` → `hook_common`；`hook_posttool_normalize` 不在此链上（其依赖 `cursor_hooks` 的字段 helper）。
+//! Dependency direction: `cursor_hooks` / `codex_hooks` / `claude_hooks` → `hook_common`；`hook_posttool_normalize` 不在此链上（其依赖 `cursor_hooks` 的字段 helper）。
 
 use regex::Regex;
 use serde_json::{Map, Value};

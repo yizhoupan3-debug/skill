@@ -76,14 +76,14 @@ router-rs framework host-integration status
 
 ## Fail-open / Fail-closed 设计意图
 
-OpenCode 采用 **fail-open** 策略：当 `router-rs` hook 二进制缺失或不可读时，`tool.execute.before` 事件静默通过（不阻断工具执行）。这与 Claude Code / Codex CLI 的 fail-closed 策略不同。
+OpenCode 采用 **fail-open** 策略：当 `router-rs` hook 二进制缺失或不可读时，`tool.execute.before` 事件静默通过（不阻断工具执行）。这与 Claude / Codex CLI 的 fail-closed 策略不同。
 
 **设计理由**：OpenCode 的插件 hook 系统通过 JS/TS 运行时执行，hook 失败不应阻断核心编辑器功能。MCP 工具层（`framework_snapshot`、`skill_route` 等）独立于 hook 系统，hook 缺失不影响 MCP 功能。
 
 **对比**：
 | 宿主 | 策略 | Hook 缺失时行为 |
 |------|------|----------------|
-| Claude Code | fail-closed | Stop 返回 `decision:block` |
+| Claude | fail-closed | Stop 返回 `decision:block` |
 | Codex | fail-closed | 各事件返回 `decision:block` |
 | Cursor | fail-closed | 各事件返回 `decision:block` |
 | OpenCode | fail-open | 静默通过，MCP 工具层不受影响 |

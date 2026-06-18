@@ -18,7 +18,7 @@ use std::sync::OnceLock;
 pub enum HookObservationHost {
     Cursor,
     Codex,
-    ClaudeCode,
+    Claude,
     OpenCode,
     MiMo,
 }
@@ -29,7 +29,7 @@ impl HookObservationHost {
         match host_id {
             "cursor" => Some(Self::Cursor),
             "codex" => Some(Self::Codex),
-            "claude-code" => Some(Self::ClaudeCode),
+            "claude" => Some(Self::Claude),
             "opencode" => Some(Self::OpenCode),
             "mimo" => Some(Self::MiMo),
             _ => None,
@@ -40,7 +40,7 @@ impl HookObservationHost {
         match self {
             Self::Cursor => "cursor",
             Self::Codex => "codex",
-            Self::ClaudeCode => "claude-code",
+            Self::Claude => "claude",
             Self::OpenCode => "opencode",
             Self::MiMo => "mimo",
         }
@@ -1215,7 +1215,7 @@ pub fn install_test_deps() {
             let host_str = match host {
                 HookObservationHost::Cursor => "cursor",
                 HookObservationHost::Codex => "codex",
-                HookObservationHost::ClaudeCode => "claude-code",
+                HookObservationHost::Claude => "claude",
                 HookObservationHost::OpenCode => "opencode",
                 HookObservationHost::MiMo => "mimo",
             };
@@ -1260,7 +1260,7 @@ pub fn install_test_deps() {
 }
 
 // ────────────────────────────────────────────────────────────────
-// Additional hooks needed by claude_code_hooks / mcp_stdio_harness
+// Additional hooks needed by claude_hooks / mcp_stdio_harness
 // (appended during host-projection hooks consolidation)
 // ────────────────────────────────────────────────────────────────
 
@@ -1669,7 +1669,7 @@ mod tests {
         for host in [
             HookObservationHost::Cursor,
             HookObservationHost::Codex,
-            HookObservationHost::ClaudeCode,
+            HookObservationHost::Claude,
             HookObservationHost::OpenCode,
             HookObservationHost::MiMo,
         ] {

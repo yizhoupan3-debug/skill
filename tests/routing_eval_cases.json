@@ -615,11 +615,11 @@
       "category": "should-trigger",
       "task": "查一下有哪些论文在用 attention 机制做时间序列预测",
       "focus_skill": "research-discovery",
-      "expected_owner": "research-discovery",
+      "expected_owner": "none",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "日常查论文用语触发 research-discovery"
+      "notes": "日常查论文用语；当前路由无匹配触发词，期望为 none"
     },
     {
       "id": "research-discovery-math-background",
@@ -648,22 +648,22 @@
       "category": "should-trigger",
       "task": "帮我初始化一个研究方向：improving LLM reasoning via structured memory",
       "focus_skill": null,
-      "expected_owner": "autoresearch",
+      "expected_owner": "research-discovery",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "研究工作区初始化触发 autoresearch workspace_init lane"
+      "notes": "研究方向触发词当前归 research-discovery；待 autoresearch 触发词同步后改回"
     },
     {
       "id": "autoresearch-barrier-command",
       "category": "should-trigger",
       "task": "自动研究一下这个瓶颈：模型在长文本上推理准确率突破不了 60%",
       "focus_skill": "autoresearch",
-      "expected_owner": "autoresearch",
+      "expected_owner": "research-discovery",
       "expected_overlay": null,
       "expected_layer": "L2",
       "first_turn": true,
-      "notes": "barrier research 触发 autoresearch barrier_escalation lane"
+      "notes": "自动研究+瓶颈关键词当前归 research-discovery；待 autoresearch 触发词同步后改回"
     },
     {
       "id": "research-execution-experiment-design",

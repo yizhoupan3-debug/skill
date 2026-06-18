@@ -255,7 +255,7 @@ fn resolve_worktree_cwd_path_overrides_name() {
 #[test]
 fn claude_host_builds_placeholder_spec() {
     let command = build_driver_command(
-        "claude-code",
+        "claude",
         "/tmp/project",
         Some("hello world".to_string()),
         None,
@@ -266,7 +266,7 @@ fn claude_host_builds_placeholder_spec() {
     )
     .expect("build claude command");
     // Without hooks registered, real hosts get a placeholder spec
-    assert_eq!(command.driver_id, "claude-code_driver");
+    assert_eq!(command.driver_id, "claude_driver");
     assert!(command.binary == "sh" || command.binary == "/bin/sh");
 }
 
@@ -903,7 +903,7 @@ fn subagent_spawn_real_process_smoke() {
 #[test]
 fn classify_rate_limit_generic_claude_code() {
     let result = crate::worker::classify_rate_limit_block(
-        "claude-code",
+        "claude",
         "Error 429: Too Many Requests. Please try again in 60 seconds.",
     );
     assert!(
@@ -913,7 +913,7 @@ fn classify_rate_limit_generic_claude_code() {
     let cls = result.unwrap();
     assert_eq!(cls.blocked_reason, "rate_limit");
     assert_eq!(cls.status, "blocked_rate_limit");
-    assert_eq!(cls.host, "claude-code");
+    assert_eq!(cls.host, "claude");
     assert_eq!(cls.backoff_seconds, 60);
 }
 
@@ -947,7 +947,7 @@ fn classify_rate_limit_generic_unknown_host() {
 #[test]
 fn classify_rate_limit_non_matching_evidence() {
     let result = crate::worker::classify_rate_limit_block(
-        "claude-code",
+        "claude",
         "Task completed successfully with no errors.",
     );
     assert!(

@@ -236,9 +236,9 @@ pub fn projection_manifest_path(
             .join(manifest_name);
     }
     // Project scope: use .<host_dir> under project_root.
-    // Host dir mapping: host_id -> dotfile name (e.g. "claude-code" -> ".claude")
+    // Host dir mapping: host_id -> dotfile name (e.g. "claude" -> ".claude")
     let host_dir = match host_projection {
-        "claude-code" => ".claude".to_string(),
+        "claude" => ".claude".to_string(),
         other => format!(".{other}"),
     };
     roots.project_root.join(&host_dir).join(manifest_name)
@@ -647,7 +647,7 @@ pub fn install_claude_mcp_server(
 
     let framework_payload = host_router_rs_framework_payload(
         roots,
-        "claude-code",
+        "claude",
         "Framework snapshot, skill routing, goal/closeout gating",
     );
     let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);

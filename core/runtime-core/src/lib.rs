@@ -111,7 +111,7 @@ pub(crate) use core_policy::review_gate_engine;
 pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;
 
 // ── host submodule re-exports (for `crate::X` path compat) ──
-pub use hosts::claude_code_hooks;
+pub use hosts::claude_hooks;
 pub use hosts::codex_hooks;
 pub use hosts::cursor_hooks;
 pub use hosts::mcp_stdio_harness;

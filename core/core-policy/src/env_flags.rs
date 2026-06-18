@@ -92,12 +92,12 @@ pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
 const REVIEW_GATE_DISABLE_BY_HOST: &[(&str, &str)] = &[
     ("cursor", ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV),
     ("codex", ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV),
-    ("claude-code", ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV),
+    ("claude", ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV),
     ("opencode", ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE_ENV),
     ("mimo", ROUTER_RS_MIMO_REVIEW_GATE_DISABLE_ENV),
 ];
 
-/// Emergency review-gate disable for hook hosts (`cursor` / `codex` / `claude-code`).
+/// Emergency review-gate disable for hook hosts (`cursor` / `codex` / `claude`).
 ///
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` applies to all; legacy per-host env still honored.
 /// Per-host match arms are intentional: operators need granular emergency disable per host without
@@ -224,7 +224,7 @@ mod tests {
         assert!(router_rs_review_gate_disabled_for_host("codex"));
         unsafe { env::remove_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) };
         unsafe { env::set_var(ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV, "true") };
-        assert!(router_rs_review_gate_disabled_for_host("claude-code"));
+        assert!(router_rs_review_gate_disabled_for_host("claude"));
         for (key, val) in prev {
             match val {
                 Some(v) => unsafe { env::set_var(key, v) },

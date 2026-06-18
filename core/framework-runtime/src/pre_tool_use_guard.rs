@@ -1,6 +1,6 @@
 //! PreToolUse strict fallback for hosts without native PreToolUse / `hard_gate_hooks`.
 //!
-//! Rich CLI hosts (Cursor, Codex, Claude Code) rely on shell hooks; MCP-only hosts must call the
+//! Rich CLI hosts (Cursor, Codex, Claude) rely on shell hooks; MCP-only hosts must call the
 //! `pre_tool_use_guard` stdio op before high-risk tool execution. Detection order:
 //! 1. HostProvider hint (`host_provider_strict_pre_tool_fallback_hint`)
 //! 2. Request payload override (`has_native_hook`)
@@ -475,7 +475,7 @@ mod tests {
     #[test]
     fn claude_code_skips_strict_fallback_with_hard_gate_hooks() {
         let root = skill_repo_root();
-        assert!(!host_requires_strict_pre_tool_fallback("claude-code", &root, None).unwrap());
+        assert!(!host_requires_strict_pre_tool_fallback("claude", &root, None).unwrap());
     }
 
     #[test]

@@ -45,8 +45,8 @@ HostHookDispatcher trait
 
 | 宿主 | 文件 | 行数 | 使用共享抽象 |
 |------|------|------|-------------|
-| Claude Code | `claude_code_hooks.rs` | 1,485 | 部分（独立实现 session_key、verification_command 等） |
-| Claude Code | `claude_code_hooks_tests.rs` | 1,037 | — |
+| Claude | `claude_code_hooks.rs` | 1,485 | 部分（独立实现 session_key、verification_command 等） |
+| Claude | `claude_code_hooks_tests.rs` | 1,037 | — |
 | Cursor | `cursor_hooks/` | 12,426+ | 部分（handlers、review_gate、stop、outbound、subagent） |
 | Codex | `codex_hooks/` | 4,826+ | 部分（handlers、install、state、pretool） |
 | OpenCode | `opencode_hooks.rs` | 498 | 完全使用 `hook_dispatch` 共享函数 |
@@ -55,7 +55,7 @@ HostHookDispatcher trait
 
 | 文件 | 行数 | 功能 |
 |------|------|------|
-| `claude_provider.rs` | 109 | Claude Code provider |
+| `claude_provider.rs` | 109 | Claude provider |
 | `cursor_provider.rs` | 62 | Cursor provider |
 | `codex_provider.rs` | 107 | Codex provider |
 | `opencode_provider.rs` | 61 | OpenCode provider |

@@ -9,7 +9,7 @@ use crate::framework_runtime::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
 use crate::browser_dispatch_hook;
-use crate::claude_code_hooks::run_claude_hook_cli;
+use crate::claude_hooks::run_claude_hook_cli;
 use super::args::*;
 use crate::framework_runtime::json_io::{parse_json_input, print_json_value};
 use crate::closeout_enforcement::{
@@ -479,7 +479,7 @@ pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Resu
     // Registry-driven dispatch table: add new hosts here.
     const DISPATCH_TABLE: &[(&str, HookDispatchFn)] = &[
         ("cursor", dispatch_cursor),
-        ("claude-code", dispatch_claude),
+        ("claude", dispatch_claude),
         ("opencode", dispatch_opencode),
         ("codex", dispatch_codex),
         ("mimo", dispatch_mimo),
@@ -516,7 +516,7 @@ pub fn dispatch_agent_command(host_id: &str, command: GenericAgentCommand) -> Re
 
     // Registry-driven dispatch table: add new hosts here.
     const DISPATCH_TABLE: &[(&str, AgentDispatchFn)] = &[
-        ("claude-code", dispatch_claude_agent),
+        ("claude", dispatch_claude_agent),
         ("opencode", dispatch_opencode_agent),
     ];
 

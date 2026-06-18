@@ -233,7 +233,7 @@ fn build_verify_registry(
     const VERIFY_TABLE: &[(&str, VerifyFn)] = &[
         ("codex", |root| verify_codex_hooks(root.to_path_buf())),
         ("cursor", |root| verify_cursor_hooks(root.to_path_buf())),
-        ("claude-code", verify_claude_code_projection),
+        ("claude", verify_claude_projection),
         ("opencode", verify_opencode_projection),
     ];
     for (host_id, tool) in pairs {
@@ -378,7 +378,7 @@ fn verify_cursor_launcher_fail_closed(repo_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn verify_claude_code_projection(repo_root: &Path) -> Result<(), String> {
+fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
     let rule = repo_root.join(".claude/rules/framework.md");
     let settings = repo_root.join(".claude/settings.json");
     let manifest = repo_root.join(".claude/.framework-projection.json");
@@ -391,17 +391,17 @@ fn verify_claude_code_projection(repo_root: &Path) -> Result<(), String> {
         }
     }
     let rule_text = fs::read_to_string(&rule).map_err(|e| e.to_string())?;
-    if !rule_text.contains("host_projection: claude-code") {
+    if !rule_text.contains("host_projection: claude") {
         return Err(
-            "verify_claude_projection: .claude/rules/framework.md must declare claude-code projection"
+            "verify_claude_projection: .claude/rules/framework.md must declare claude projection"
                 .to_string(),
         );
     }
     let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
     let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
-    if manifest_json.get("host_projection").and_then(Value::as_str) != Some("claude-code") {
+    if manifest_json.get("host_projection").and_then(Value::as_str) != Some("claude") {
         return Err(
-            "verify_claude_projection: .claude/.framework-projection.json must declare claude-code"
+            "verify_claude_projection: .claude/.framework-projection.json must declare claude"
                 .to_string(),
         );
     }

@@ -172,7 +172,7 @@ jobs:
           - "default"
           - "codegraph"
           - "host-cursor"
-          - "host-claude-code"
+          - "host-claude"
           - "host-codex"
           - "host-opencode"
           - "host-mimo"

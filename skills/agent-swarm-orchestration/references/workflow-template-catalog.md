@@ -1,6 +1,6 @@
 # Workflow 模板目录（`.claude/workflows/`）
 
-> Claude Code 可 `/workflows` 保存为命令；其他宿主作 **supervisor** 编排真源引用同一文件。
+> Claude 可 `/workflows` 保存为命令；其他宿主作 **supervisor** 编排真源引用同一文件。
 
 | 文件 | `meta.name` | 阶段概要 | 适用场景 |
 |------|-------------|----------|----------|

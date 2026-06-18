@@ -26,7 +26,7 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 
 | Host | Env Var Prefix | Notes |
 |------|---------------|-------|
-| Claude Code | `ROUTER_RS_CLAUDE_*` | Shell hook integration |
+| Claude | `ROUTER_RS_CLAUDE_*` | Shell hook integration |
 | Cursor | `ROUTER_RS_CURSOR_*` | Cursor IDE integration |
 | Codex | `ROUTER_RS_CODEX_*` | OpenAI Codex |
 | OpenCode | `ROUTER_RS_OPENCODE_*` | OpenCode MCP stdio |
@@ -42,13 +42,13 @@ ROUTER_RS_{HOST}_{FEATURE}_{ACTION}
 | host_id | MCP 配置文件 | **顶层 key（字面量）** | transport 字面量 | `managed_key_paths` 字面量 |
 |---------|--------------|------------------------|------------------|----------------------------|
 | `cursor` | `~/.cursor/mcp.json` | `mcp_servers`（**snake**，**不是** `mcpServers`） | `"stdio"` | `mcp_servers.router-rs-framework` · `mcp_servers.browser-mcp` · `mcp_servers.mcp-codegraph` · `mcp_servers.paperplain` |
-| `claude-code` | 项目 `.mcp.json` | `mcpServers`（**camel**） | `"stdio"` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
+| `claude` | 项目 `.mcp.json` | `mcpServers`（**camel**） | `"stdio"` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
 | `codex` | 项目 `.codex/config.toml` | `mcp_servers`（**snake**，**TOML 表**） | 无 `type`（`command` 隐式） | `mcp_servers.router-rs-framework` · `mcp_servers.browser-mcp` · `mcp_servers.mcp-codegraph` · `mcp_servers.paperplain` |
 | `opencode` | `~/.config/opencode/opencode.json` | `mcpServers`（**camel**） | `"local"` | `mcpServers.router-rs-framework` · `mcpServers.browser-mcp` · `mcpServers.mcp-codegraph` · `mcpServers.paperplain` |
 
 **三个最常踩的坑**：
 
-1. **snake_case vs camelCase**：TOML (codex) 和 Cursor JSON 用 `mcp_servers`；JSON (claude-code / opencode) 用 `mcpServers`。
+1. **snake_case vs camelCase**：TOML (codex) 和 Cursor JSON 用 `mcp_servers`；JSON (claude / opencode) 用 `mcpServers`。
 2. **Cursor 是 snake_case JSON**：Cursor 用 `mcp_servers` 而非 `mcpServers`，与其他 JSON 宿主不同。
 3. **transport 字段**：opencode 用 `"local"`；其余 host 用 `"stdio"`（或隐式）。
 

@@ -90,6 +90,7 @@ fn shell_installer_e2e_writes_expected_files() {
         codex_home.path().to_str().unwrap(),
     ])
     .env("HOME", codex_home.path())
+    .env_remove("SKILL_FRAMEWORK_ROOT")
     .status()
     .expect("router-rs maint install-codex-user-hooks");
     assert!(status.success());
@@ -609,12 +610,8 @@ fn project_scope_all_does_not_install_claude_projection() {
     assert_eq!(result["success"], true);
     assert_eq!(result["results"]["codex"]["status"], "installed");
     assert_eq!(result["results"]["cursor"]["status"], "installed");
-    // `claude` (claude-code) is excluded from project-scope batch install.
+    // `claude` is excluded from project-scope batch install.
     assert!(result["results"].get("claude").is_none());
-    assert!(
-        result["results"].get("claude-desktop").is_none(),
-        "retired claude-desktop must not appear in project-scope batch install"
-    );
     assert!(repo_root.join(".codex/prompts/framework.md").exists());
     assert!(home.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
@@ -2154,7 +2151,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         payload["host_targets"]["supported"],
-        json!(["cursor", "claude-code", "opencode", "codex", "mimo"])
+        json!(["cursor", "claude", "opencode", "codex", "mimo"])
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["codex"]["install_tool"],
@@ -2165,11 +2162,11 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         json!(["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"])
     );
     assert_eq!(
-        payload["host_targets"]["metadata"]["claude-code"]["install_tool"],
+        payload["host_targets"]["metadata"]["claude"]["install_tool"],
         "claude"
     );
     assert_eq!(
-        payload["host_targets"]["metadata"]["claude-code"]["host_entrypoints"],
+        payload["host_targets"]["metadata"]["claude"]["host_entrypoints"],
         json!([
             "AGENTS_CLAUDE.md",
             ".claude/rules/framework.md",

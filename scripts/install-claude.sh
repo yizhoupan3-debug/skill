@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Install / refresh Claude Code (claude-code) framework projections (align with Cursor My lifecycle).
+# Install / refresh Claude (claude) framework projections (align with Cursor My lifecycle).
 # Re-run after: git pull on skill framework, router-rs rebuild, or stale ~/.claude/rules/framework.md (GSD text).
 set -euo pipefail
 
@@ -7,22 +7,20 @@ usage() {
   cat <<'EOF'
 Usage: install-claude.sh [options]
 
-Installs harness projections for Claude Code (claude-code host; hooks + framework rule).
+Installs harness projections for Claude (claude host; hooks + framework rule).
 
 Writes:
-  claude-code project  → .claude/rules/framework.md, .claude/CLAUDE.md, .claude/settings.json, .claude/.framework-projection.json
-  claude-code user     → ~/.claude/rules/framework.md, ~/.claude/settings.json (global My lifecycle + hooks)
+  claude project  → .claude/rules/framework.md, .claude/CLAUDE.md, .claude/settings.json, .claude/.framework-projection.json
+  claude user     → ~/.claude/rules/framework.md, ~/.claude/settings.json (global My lifecycle + hooks)
 
 Options:
   --framework-root DIR   Framework repo (default: $SKILL_FRAMEWORK_ROOT or script ../..)
   --project-root DIR     Project root (default: $PWD)
   --scope SCOPE          project | user | both (default: both — matches Cursor publish parity)
-  --code-only            Deprecated no-op (2026-06; claude-desktop retired)
-  --desktop-only         Deprecated; exits with error — use install-claude.sh without flags for claude-code
   --skip-build           Do not run cargo build --release when router-rs missing
   -h, --help             Show help
 
-Note: claude-desktop host retired 2026-06. Do not use install-claude-desktop.sh.
+Note: claude-desktop host retired 2026-06.
 
 Example (framework repo):
   ./scripts/install-claude.sh
@@ -106,8 +104,7 @@ install_host() {
 FRAMEWORK_ROOT_ARG=""
 PROJECT_ROOT=""
 SCOPE="both"
-CODE_ONLY=0
-DESKTOP_ONLY=0
+# Retired 2026-06 (claude-desktop removed)
 SKIP_BUILD=0
 
 while [[ $# -gt 0 ]]; do
@@ -123,14 +120,6 @@ while [[ $# -gt 0 ]]; do
     --scope)
       SCOPE="${2:?}"
       shift 2
-      ;;
-    --code-only)
-      CODE_ONLY=1
-      shift
-      ;;
-    --desktop-only)
-      DESKTOP_ONLY=1
-      shift
       ;;
     --skip-build)
       SKIP_BUILD=1
@@ -148,10 +137,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$DESKTOP_ONLY" -eq 1 ]]; then
-  echo "error: --desktop-only retired 2026-06; claude-desktop removed from closed set. Use install-claude.sh for claude-code." >&2
-  exit 1
-fi
+# --code-only and --desktop-only retired 2026-06 (claude-desktop removed).
 
 FRAMEWORK_ROOT="$(resolve_framework_root)"
 PROJECT_ROOT="${PROJECT_ROOT:-$PWD}"
@@ -182,6 +168,6 @@ echo "==> status" >&2
   --artifact-root "$PROJECT_ROOT/artifacts"
 
 echo "" >&2
-echo "Done. Claude Code: confirm ~/.claude/rules/framework.md mentions /discussx (not /gsd-*)." >&2
+echo "Done. Claude: confirm ~/.claude/rules/framework.md mentions /discussx (not /gsd-*)." >&2
 echo "Re-run after framework updates:" >&2
 echo "  $FRAMEWORK_ROOT/scripts/install-claude.sh" >&2

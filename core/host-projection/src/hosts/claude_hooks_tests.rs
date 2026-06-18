@@ -1,6 +1,6 @@
-//! Tests for claude_code_hooks module.
+//! Tests for claude_hooks module.
 //!
-//! Extracted from claude_code_hooks.rs to keep file size ≤2000 lines.
+//! Extracted from claude_hooks.rs to keep file size ≤2000 lines.
 
 use super::*;
 use serde_json::json;
@@ -73,7 +73,7 @@ mod tests {
             "session_id": "s-framework-ok",
             "tool_name": "Bash",
             "tool_input": {
-                "command": "cargo test --manifest-path core/router-rs/Cargo.toml claude_code_hooks"
+                "command": "cargo test --manifest-path core/router-rs/Cargo.toml claude_hooks"
             },
             "exit_code": 0
         });
@@ -93,7 +93,7 @@ mod tests {
             "session_id": "s-framework-fail",
             "tool_name": "Bash",
             "tool_input": {
-                "command": "cargo test --manifest-path core/router-rs/Cargo.toml claude_code_hooks"
+                "command": "cargo test --manifest-path core/router-rs/Cargo.toml claude_hooks"
             },
             "exit_code": 101
         });
@@ -765,9 +765,9 @@ mod tests {
             "transcript_path": "/Users/joe/.cursor/projects/example/session.json",
             "tool_name": "Bash",
             "tool_input": {
-                "command": "apply_patch core/router-rs/src/claude_code_hooks.rs"
+                "command": "apply_patch core/router-rs/src/claude_hooks.rs"
             },
-            "file_path": "core/router-rs/src/claude_code_hooks.rs",
+            "file_path": "core/router-rs/src/claude_hooks.rs",
             "exit_code": 0
         });
 

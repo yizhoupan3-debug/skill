@@ -357,13 +357,13 @@ mod tests {
             host_provider_for_install_tool("claude")
                 .expect("claude install tool")
                 .host_id(),
-            "claude-code"
+            "claude"
         );
         assert_eq!(
-            host_provider_for_install_tool("claude-code")
+            host_provider_for_install_tool("claude")
                 .expect("claude-code alias")
                 .host_id(),
-            "claude-code"
+            "claude"
         );
         assert_eq!(
             host_provider_for_install_tool("opencode")
@@ -392,8 +392,8 @@ mod tests {
             // (host_id, transport_type, config_path_contains, session_supervisor, has_worktree)
             ("cursor", "cursor-agent", "mcp.json", "unsupported", true),
             (
-                "claude-code",
-                "anthropic-claude-code",
+                "claude",
+                "anthropic-claude",
                 ".claude/settings.json",
                 "mcp_bridge",
                 true,
@@ -513,11 +513,7 @@ mod tests {
     fn routing_aliases_expand_via_host_provider_registry() {
         let cases: &[(&str, &[&str])] = &[
             ("cursor", &["cursor"]),
-            (
-                "claude-desktop",
-                &["claude-desktop", "claude-code", "claude"],
-            ),
-            ("claude", &["claude", "claude-code", "claude-desktop"]),
+            ("claude", &["claude"]),
             ("codex-cli", &["codex-cli", "codex", "codex-app"]),
             ("codex", &["codex", "codex-cli", "codex-app"]),
         ];
@@ -534,12 +530,10 @@ mod tests {
 
     #[test]
     #[serial]
-    fn routing_spelling_resolves_retired_host_ids() {
-        assert_eq!(
-            host_provider_for_routing_spelling("claude-desktop")
-                .expect("claude-desktop")
-                .host_id(),
-            "claude-code"
+    fn retired_host_ids_no_longer_resolve() {
+        assert!(
+            host_provider_for_routing_spelling("claude-desktop").is_none(),
+            "claude-desktop is retired and should not resolve to any host provider"
         );
     }
 }

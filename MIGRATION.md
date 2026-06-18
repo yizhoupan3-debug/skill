@@ -2,12 +2,12 @@
 
 ## 闭集宿主收敛（2026-06）
 
-**权威闭集**（仅此 4 个 id）：`codex`、`claude-code`、`cursor`、`opencode` — `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。
+**权威闭集**（仅此 4 个 id）：`codex`、`claude`、`cursor`、`opencode` — `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。
 
 | 退役 id | 替代 / 说明 |
 |---------|-------------|
 | `codex-cli`、`codex-app` | **`codex`**（`install --to codex`） |
-| `claude-desktop` | **`claude-code`**（`install --to claude-code` / `./scripts/install-claude.sh`）；勿再 `install-claude-desktop.sh` |
+| `claude-desktop` | **`claude`**（`install --to claude` / `./scripts/install-claude.sh`）；勿再 `install-claude-desktop.sh` |
 | `antigravity`、`antigravity-app`、`antigravity-cli` | 早期实验性宿主 id，产品线已终止（2026-06），无替代宿主 |
 
 **文档**：宿主手册见 [`docs/hosts/`](docs/hosts/)。运维见 [`docs/operations/index.md`](docs/operations/index.md)（按功能模块 B0–B11）。
@@ -54,10 +54,10 @@ just doctor
 4. 改 `configs/framework/host_projection_narrative.json` 或 `RUNTIME_REGISTRY.json` **review_gate**：**无需** rebuild；重启 hook 子进程。
 5. 发布前：`router-rs framework maint update-one-shot`（全量 drift-gate）；日常仅 `framework doctor` **不等于** drift-gate 通过。
 
-### Claude Code（framework 源码仓）
+### Claude（framework 源码仓）
 
-- **`.claude/settings.json`** 由 `install --to claude-code` 材料化（四事件 hook）。
-- **Claude / Codex 退役面**：`claude-desktop`、`codex-app` 已移除；Codex 用 **`codex`**，Claude 用 **`claude-code`**。
+- **`.claude/settings.json`** 由 `install --to claude` 材料化（四事件 hook）。
+- **Claude / Codex 退役面**：`claude-desktop`、`codex-app` 已移除；Codex 用 **`codex`**，Claude 用 **`claude`**。
 - 勿再依赖 **`.claude/hooks/router-rs-hook.sh`**（deprecated shim）；真源为 `configs/framework/claude-router-rs-hook.sh` + settings hooks。
 
 ## 默认工作流（全宿主）
@@ -87,10 +87,10 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
   --artifact-root "$PWD/artifacts" --scope user --to cursor
 ```
 
-## Claude Code：与 Cursor 对齐 My 生命周期（2026-05-29）
+## Claude：与 Cursor 对齐 My 生命周期（2026-05-29）
 
 - **症状**：`~/.claude/rules/framework.md` 仍写 `/gsd-*` 或 `GOAL_CONTINUE` → 与 Cursor `framework.mdc` 的 `/discussx`→`/verifyx` 不一致；路由仍走仓库 `skills/SKILL_ROUTING_RUNTIME.json`，但**入口叙事过时**。
-- **真源**：`configs/framework/host_projection_narrative.json` + `install --to claude-code`。
+- **真源**：`configs/framework/host_projection_narrative.json` + `install --to claude`。
 - **推荐一键**（framework 仓或业务仓）：
 
 ```bash
@@ -100,7 +100,7 @@ cd "$SKILL_FRAMEWORK_ROOT"
 ./scripts/install-claude.sh --scope user
 ```
 
-- **`just publish`** / `update-one-shot` 对 **claude-code** 执行 **project + user** 双 scope（与 Cursor user-only 不同：Claude Code 仍需项目级 `.claude/settings.json` hooks）。
+- **`just publish`** / `update-one-shot` 对 **claude** 执行 **project + user** 双 scope（与 Cursor user-only 不同：Claude 仍需项目级 `.claude/settings.json` hooks）。
 - **其它仓库接入**：`scripts/claude-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`（symlink `skills/`、`AGENTS.md` + project 投影）；全局规则再跑 `install-claude.sh --scope user`。
 - **业务仓注意**：在 framework 仓执行 `just publish` **不会**自动更新其它项目目录下的 `.claude/*`；每个消费仓库须在本机重跑 `install-claude.sh --project-root <业务仓根>`（或先 `claude-bootstrap-framework.sh`）。
 
@@ -151,7 +151,7 @@ cd /path/to/project
 
 ## REVIEW_GATE 核心去宿主化（2026-06）
 
-`review_gate.deep_gate_lanes` / `claude_reviewer_lanes` 已合并为单一 **`reviewer_lanes`**（Claude Code canonical 闭集）。lane 判定、fork 证据、Stop 满足规则统一在 **`core-policy`**（`review_gate_engine.rs`、`hook_common::is_reviewer_lane_normalized`）；各宿主 hook 仅保留 transport 差异（Stop **advisory** nudge、PostTool/subagentStart 观测路径；**不**硬拦 Stop）。维护：只改 `RUNTIME_REGISTRY.json` → `review_gate.reviewer_lanes`。
+`review_gate.deep_gate_lanes` / `claude_reviewer_lanes` 已合并为单一 **`reviewer_lanes`**（Claude canonical 闭集）。lane 判定、fork 证据、Stop 满足规则统一在 **`core-policy`**（`review_gate_engine.rs`、`hook_common::is_reviewer_lane_normalized`）；各宿主 hook 仅保留 transport 差异（Stop **advisory** nudge、PostTool/subagentStart 观测路径；**不**硬拦 Stop）。维护：只改 `RUNTIME_REGISTRY.json` → `review_gate.reviewer_lanes`。
 
 **细则**：[`.cursor/rules/review-subagent-gate.mdc`](.cursor/rules/review-subagent-gate.mdc)、[`docs/hosts/cursor.md`](docs/hosts/cursor.md)、[`docs/hosts/codex.md`](docs/hosts/codex.md)
 
@@ -186,7 +186,7 @@ cd /path/to/project
 
 验收入口：[`skills/verifyx/SKILL.md`](skills/verifyx/SKILL.md)（verify 后 purge `artifacts/current/<task_id>/`）。CI 探针：`skill-ci` 跑 `schema-drift contract`。
 
-## Claude Code：hook env 与 Cursor 对齐（2026-05-20）
+## Claude：hook env 与 Cursor 对齐（2026-05-20）
 
 Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit` / `PostToolUse` / `Stop`），无需删除 Cursor 侧已移除的 5 个事件。
 
@@ -195,7 +195,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | 项目 env 真源 | [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env) |
 | 模板 / 新仓库复制 | [`configs/framework/claude-router-rs-hook.env`](configs/framework/claude-router-rs-hook.env) |
 | Launcher | [`configs/framework/claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)（release 优先，与 Cursor 同序） |
-| 重装 hooks 合并 | `framework host-integration install --to claude-code --scope project` |
+| 重装 hooks 合并 | `framework host-integration install --to claude --scope project` |
 
 默认 **`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`**（减 PostTool 证据写盘）。**不要**把 `ROUTER_RS_CURSOR_*` 写入 Claude env（无意义）。
 
