@@ -50,12 +50,42 @@ use crate::trace_runtime::{
     TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
     record_trace_event,
 };
+use host_projection::hosts::codex_hooks::dispatcher::CodexHookDispatcher;
+use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher, HookOutput};
 use host_projection::hosts::mimo_hooks::run_mimo_hook;
+use host_projection::hooks::{
+    HookObservationHost, attach_router_rs_observation, emit_hook_fired,
+    hook_action_from_optional_output, read_stdin_limited,
+};
 
 use crate::runtime_storage::RuntimeStorageRequestPayload;
 
-fn codex_hook_stdout_payload(payload: Option<Value>) -> Value {
-    payload.unwrap_or_else(|| json!({}))
+fn codex_hook_output_to_value(output: Option<HookOutput>) -> Value {
+    match output {
+        None | Some(HookOutput::None) => json!({}),
+        Some(HookOutput::Raw(val)) => val,
+        Some(HookOutput::AdditionalContext(ctx)) => json!({
+            "hookSpecificOutput": { "additionalContext": ctx }
+        }),
+        Some(HookOutput::Deny { reason }) => json!({
+            "decision": "block",
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            },
+        }),
+        Some(HookOutput::Block { reason }) => json!({
+            "decision": "block",
+            "followup_message": reason,
+        }),
+        Some(HookOutput::Advisory { message }) => json!({
+            "followup_message": message,
+        }),
+        Some(HookOutput::Warn { message }) => json!({
+            "warning": message,
+        }),
+    }
 }
 
 /// Resolve host entrypoint provider by `--host-id`.
@@ -492,11 +522,57 @@ pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Resu
         .unwrap_or_else(|| Err(format!("hook dispatch not implemented for host `{host_id}`")))
 }
 
-/// Hook dispatch for Codex via generic `hook` action.
+/// Hook dispatch for Codex via `CodexHookDispatcher` (unified trait dispatch).
+///
+/// Contract-guard is not a lifecycle event — keep existing `run_codex_audit_hook` path.
+/// All lifecycle events (pretooluse, userpromptsubmit, posttooluse, stop, sessionstart,
+/// subagentstart, subagentstop) are routed via `CodexHookDispatcher.dispatch()`.
 fn dispatch_codex_hook(event: &str, repo_root: Option<&Path>) -> Result<(), String> {
     let repo_root = resolve_repo_root_arg(repo_root)?;
-    let payload = run_codex_audit_hook(event, &repo_root)?;
-    print_json_value(&codex_hook_stdout_payload(payload))?;
+
+    // Contract-guard is not a lifecycle event; keep existing path.
+    if event.trim().eq_ignore_ascii_case("contract-guard") {
+        let payload = run_codex_audit_hook(event, &repo_root)?;
+        print_json_value(&payload.unwrap_or_else(|| json!({})))?;
+        std::process::exit(0);
+    }
+
+    // Bootstrap for lifecycle events
+    crate::kernel_bootstrap::ensure_kernel_bootstrap();
+    crate::hook_timing::mark_hook_start();
+    let _registry_guard = crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
+
+    // Read stdin payload (shared 4 MiB limited reader)
+    let mut stdin = std::io::stdin().lock();
+    let input = read_stdin_limited(&mut stdin).unwrap_or_default();
+    let payload: Value = if input.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str(input.trim())
+            .map_err(|err| format!("stdin_json_invalid: {err}"))?
+    };
+
+    // Dispatch via CodexHookDispatcher (unified trait dispatch replaces hand-written match)
+    let hook_event = HookEvent {
+        repo_root: &repo_root,
+        event_name: event,
+        payload: &payload,
+    };
+    let output = CodexHookDispatcher.dispatch(&hook_event);
+
+    // Convert HookOutput → JSON value
+    let mut json_output = codex_hook_output_to_value(output);
+
+    // Attach router-rs observation (matches attach_codex_hook_observation in handlers.rs)
+    attach_router_rs_observation(&mut json_output, HookObservationHost::Codex);
+
+    // Emit telemetry
+    let telemetry_event = event.to_ascii_lowercase();
+    emit_hook_fired(&telemetry_event, hook_action_from_optional_output(Some(&json_output)));
+    crate::hook_timing::emit_hook_timing_line(&telemetry_event);
+
+    // Print JSON output
+    print_json_value(&json_output)?;
     std::process::exit(0);
 }
 
@@ -564,7 +640,7 @@ pub fn dispatch_codex_command(command: CodexSubcommand) -> Result<(), String> {
                 .or(command.name)
                 .ok_or("hook event required")?;
             let payload = run_codex_audit_hook(&event_name, &repo_root)?;
-            print_json_value(&codex_hook_stdout_payload(payload))?;
+            print_json_value(&payload.unwrap_or_else(|| json!({})))?;
             std::process::exit(0);
         }
         CodexSubcommand::HostIntegration(command) => {
