@@ -3,6 +3,7 @@ pub use state::CodexHookError;
 use state::*;
 
 pub(crate) mod handlers;
+pub mod dispatcher;
 pub use handlers::run_codex_audit_hook;
 pub use handlers::run_codex_lifecycle_context_hook_for_state_dir;
 
