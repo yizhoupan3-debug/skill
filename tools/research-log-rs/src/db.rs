@@ -636,7 +636,8 @@ pub fn get_entity_by_name(conn: &Connection, name: &str) -> Result<Option<Entity
 /// FTS5 search entities by name/description.
 pub fn search_entities(conn: &Connection, query: &str, limit: usize) -> Result<Vec<Entity>> {
     let mut stmts = Stmts::new(conn)?;
-    let mut rows = stmts.search_entities.query(params![query, limit as i64])?;
+    let fts_query = query.replace('-', " ");
+    let mut rows = stmts.search_entities.query(params![fts_query, limit as i64])?;
     let mut results = Vec::new();
     while let Some(row) = rows.next()? {
         results.push(Entity {

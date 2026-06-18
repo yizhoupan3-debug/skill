@@ -498,9 +498,23 @@ research-log-rs export --format <json|csv|obsidian> [--output <path>]
                                                                  # 导出日志集（JSON / CSV / Obsidian MD）
 research-log-rs status                                           # 显示日志库状态（大小、条目数、WAL 模式）
 research-log-rs consolidate                                      # 整理 activity log 文件
+
+**Knowledge Graph 命令（§19.13）**：
+research-log-rs neighbors <entry-id> [--relation] [--limit]       # 显示 entry 的直接连接
+research-log-rs path --from <id> --to <id> [--max-depth]          # BFS 最短路径
+research-log-rs viz [--entry-id] [--max-depth] [--format text|dot] # 知识图谱可视化（ASCII / Graphviz DOT）
+research-log-rs graph-stats                                       # 全图统计（节点/边/密度/关系分布）
+research-log-rs route --barrier-id <id> [--max-depth]              # Barrier 路径追溯
+research-log-rs extract-entities <entry-id>                        # 自动提取 entry 中的知识实体
+research-log-rs add-entity <name> [--kind] [--description]         # 手动添加知识实体
+research-log-rs search-entities <query> [--limit]                  # FTS5 实体搜索
+research-log-rs entry-entities <entry-id>                          # 显示 entry 关联的实体
+research-log-rs hub-register [--path] [--name]                     # 注册到跨工作区 Hub
+research-log-rs hub-search <query> [--limit]                       # 跨工作区 FTS5 搜索
+research-log-rs hub-list                                           # 列出已注册的工作区
 ```
 
-> **注意**：`log:route <barrier-id>`（从 barrier 追溯完整研究路径）尚未在 CLI 中实现。
+> **注意**：`log:route <barrier-id>`（从 barrier 追溯完整研究路径）已通过 `research-log route --barrier-id <id>` 实现，见 §19.13。
 
 #### 19.5.3 两者同步规则
 
@@ -850,7 +864,128 @@ Loop Runner 执行 action
 | `SKILL_ROUTING_RUNTIME.json` | 框架维护者 | 路由注册变更 |
 | `docs/spec/loop-architecture.md` | 框架维护者 | loop patterns catalog 中 research 模式 |
 
-### 19.13 与框架其他规约的关系
+### 19.13 Research Knowledge Graph
+
+> 本节定义 Research Knowledge Graph（RKG）的功能契约：在扁平日志之上建立可查询的图结构，
+> 包括条目关系遍历、知识实体提取、跨工作区索引、图可视化和 barrier 路径追溯。
+
+#### 19.13.1 系统设计
+
+```
+连接存储（connections 表）
+    │ 条目 A ──[supports]──→ 条目 B
+    │ 条目 A ──[extends]───→ 条目 C
+    ▼
+图遍历引擎（graph.rs）
+    │ load_full_graph / load_subgraph
+    │ get_neighbors / find_path（BFS）
+    │ bfs_traverse / dfs_traverse
+    │ trace_barrier_route
+    ▼
+实体提取（extract.rs）
+    │ 5 组 regex 模式：method / dataset / metric / model / tool
+    │ entities 表 + entity_relations 表 + entities_fts
+    ▼
+跨工作区 Hub（hub.rs）
+    │ ~/.claude/research-knowledge-hub.db
+    │ 跨工作区搜索 + 统一索引
+    ▼
+可视化（viz 命令）
+    │ ASCII box-drawing / Graphviz DOT
+```
+
+#### 19.13.2 核心数据结构
+
+**connections 表扩展**（v2→v3 migration）：
+- `weight REAL DEFAULT 1.0` — 边权重，影响图遍历优先级
+- `confidence REAL` — 关系置信度 0.0-1.0
+
+**entities 表**：
+```sql
+CREATE TABLE entities (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL,  -- method|dataset|theorem|metric|concept|tool|author|model|other
+    description TEXT,
+    metadata TEXT,        -- JSON
+    created_at TEXT NOT NULL
+);
+CREATE VIRTUAL TABLE entities_fts USING fts5(name, description, tokenize='unicode61');
+```
+
+**entity_relations 表**：
+```sql
+CREATE TABLE entity_relations (
+    id INTEGER PRIMARY KEY,
+    entity_id_a INTEGER NOT NULL REFERENCES entities(id),
+    entity_id_b INTEGER NOT NULL REFERENCES entities(id),
+    relation TEXT NOT NULL,  -- uses|trains-on|evaluates|improves|depends-on|contradicts|is-a|part-of
+    entry_id TEXT REFERENCES entries(id),
+    confidence REAL,
+    metadata TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE(entity_id_a, entity_id_b, relation)
+);
+```
+
+**entry_entities 表**（条目 ↔ 实体关联）：
+```sql
+CREATE TABLE entry_entities (
+    entry_id TEXT NOT NULL REFERENCES entries(id),
+    entity_id INTEGER NOT NULL REFERENCES entities(id),
+    role TEXT NOT NULL DEFAULT 'mentioned',  -- primary|mentioned|derived|compared
+    PRIMARY KEY (entry_id, entity_id)
+);
+```
+
+#### 19.13.3 图遍历算法
+
+- **BFS 邻接加载**: 从 connections 表加载全部连接，构建内存邻接表（`HashMap<String, Vec<(neighbor, relation, weight, confidence)>>`）
+- **最短路径**: BFS 无权最短路径，支持 `max_depth` 上限
+- **子图抽取**: 从中心节点出发 BFS N 跳，过滤关联连接
+- **Barrier 追溯**: 从 barrier_reports 表出发，找到关联条目，加载子图
+
+#### 19.13.4 CLI 命令
+
+所有命令通过 `research-log <subcommand>` 或 `autoresearch log:<subcommand>` 调用：
+
+| 命令 | 功能 |
+|------|------|
+| `neighbors <entry-id> [--relation]` | 显示 entry 的直接连接 |
+| `path --from <id> --to <id> [--max-depth]` | BFS 最短路径 |
+| `subgraph <entry-id> [--max-depth]` | 子图提取 |
+| `viz [--entry-id] [--max-depth] [--format]` | ASCII / DOT 可视化 |
+| `graph-stats` | 全图统计信息 |
+| `route --barrier-id <id> [--max-depth]` | Barrier 路径追溯 |
+| `extract-entities <entry-id>` | 自动提取知识实体 |
+| `add-entity <name> [--kind] [--description]` | 手动添加实体 |
+| `search-entities <query>` | FTS5 实体搜索 |
+| `link-entities <a> <b> --relation <rel>` | 链接实体 |
+| `hub-register [--path] [--name]` | 注册到 Hub |
+| `hub-index [--path]` | 索引到 Hub |
+| `hub-search <query>` | 跨工作区搜索 |
+| `hub-list` | 列出工作区 |
+
+#### 19.13.5 跨工作区 Hub
+
+Hub 数据库位于 `~/.claude/research-knowledge-hub.db`，不绑定到单个 workspace。
+schema 包含 `workspace_index`、`hub_entries`、`hub_entries_fts` 三张核心表。
+用作"全局研究记忆"——跨项目搜索相关的工作、方法、线索。
+
+#### 19.13.6 实体提取策略
+
+无外部 NLP 依赖。5 组 hardcoded regex 覆盖量化金融/ML 常见 vocabulary：
+- **method** (30+): CNN, LSTM, Transformer, EWMA, PCA, GARCH, Attention, LoRA...
+- **dataset** (15+): SQuAD, ImageNet, MNIST, CIFAR, GLUE, CRSP, Compustat...
+- **metric** (35+): accuracy, F1, AUC, Sharpe, IC, Rank IC, MSE, KL divergence...
+- **model** (20+): GPT-4, BERT, ResNet, Llama, Fama-French, Factor Model...
+- **tool** (15+): PyTorch, TensorFlow, scikit-learn, Hugging Face...
+
+提取流程：拼接 entry.question + findings.content + tags → 5 组 regex 匹配 → dedup → upsert to entities 表。
+
+---
+
+### 19.14 与框架其他规约的关系
 
 | 关联文档 | 关系 |
 |---------|------|
