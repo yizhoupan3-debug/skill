@@ -289,6 +289,55 @@ fn apply_manifest_route_meta(
     });
 }
 
+/// Cached host platforms from `RUNTIME_REGISTRY.json` keyed by canonical repo root.
+static HOST_PLATFORMS_REGISTRY: OnceLock<RwLock<HashMap<PathBuf, Vec<String>>>> = OnceLock::new();
+
+/// Load the list of registered host platforms from `configs/framework/RUNTIME_REGISTRY.json`,
+/// using a module-level cache to avoid repeated file I/O and JSON parsing.
+///
+/// `repo_root` points to the project root directory. The cache key is derived from its
+/// canonical (realpath) form so that different path representations of the same root
+/// share one cache entry.
+fn load_host_platforms_registry(repo_root: &Path) -> Result<Vec<String>, String> {
+    let cache = HOST_PLATFORMS_REGISTRY
+        .get_or_init(|| RwLock::new(HashMap::new()));
+    let canonical = fs::canonicalize(repo_root)
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+
+    // Fast path: cached entry exists.
+    {
+        let guard = cache.read().map_err(|e| {
+            format!("host platforms registry cache lock poisoned: {e}")
+        })?;
+        if let Some(hosts) = guard.get(&canonical) {
+            return Ok(hosts.clone());
+        }
+    }
+
+    // Load and parse the registry file.
+    let reg_path = canonical.join("configs/framework/RUNTIME_REGISTRY.json");
+    let payload = read_json(&reg_path)
+        .map_err(|e| format!("failed to read {}: {e}", reg_path.display()))?;
+    let mut hosts: Vec<String> = payload
+        .get("host_targets")
+        .and_then(|v| v.get("supported"))
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    hosts.sort();
+
+    // Populate cache.
+    let mut guard = cache.write().map_err(|e| {
+        format!("host platforms registry cache lock poisoned: {e}")
+    })?;
+    guard.insert(canonical, hosts.clone());
+    Ok(hosts)
+}
+
 /// Expand `["supported"]` / `["all-hosts"]` wildcard in host_platforms to all registered hosts.
 fn expand_supported_host_platforms(records: &mut [SkillRecord], any_sibling_path: &Path) {
     let is_wildcard =
@@ -296,21 +345,14 @@ fn expand_supported_host_platforms(records: &mut [SkillRecord], any_sibling_path
     if !records.iter().any(|r| is_wildcard(&r.host_platforms)) {
         return;
     }
-    let all_hosts: Vec<String> = any_sibling_path
+    let Ok(all_hosts) = any_sibling_path
         .parent()
         .and_then(|p| p.parent())
-        .map(|repo| repo.join("configs/framework/RUNTIME_REGISTRY.json"))
-        .and_then(|reg_path| read_json(&reg_path).ok())
-        .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
-        .map(|arr| {
-            let mut v: Vec<String> = arr
-                .iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
-                .collect();
-            v.sort();
-            v
-        })
-        .unwrap_or_default();
+        .map(load_host_platforms_registry)
+        .unwrap_or(Ok(Vec::new()))
+    else {
+        return;
+    };
     if all_hosts.is_empty() {
         return;
     }
@@ -350,14 +392,7 @@ fn apply_manifest_host_platforms(
     let all_hosts: Vec<String> = manifest_path
         .parent()
         .and_then(|p| p.parent())
-        .map(|repo| repo.join("configs/framework/RUNTIME_REGISTRY.json"))
-        .and_then(|reg_path| read_json(&reg_path).ok())
-        .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(str::to_string))
-                .collect()
-        })
+        .and_then(|repo| load_host_platforms_registry(repo).ok())
         .unwrap_or_default();
 
     let mut hosts_by_slug = HashMap::new();
