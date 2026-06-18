@@ -318,6 +318,11 @@ mod tests {
             skill: "pdf".into(),
             confidence: 0.9,
             reroute: true,
+            latency_ms: 0,
+            reasons: vec![],
+            matched_tokens: 0,
+            parity_gate: "".into(),
+            candidates: vec![],
         })
         .unwrap();
         obs.observe(&TelemetryEvent::ToolCall {
@@ -348,6 +353,11 @@ mod tests {
                 skill: "y".into(),
                 confidence: 0.9,
                 reroute: true,
+                latency_ms: 0,
+                reasons: vec![],
+                matched_tokens: 0,
+                parity_gate: "".into(),
+                candidates: vec![],
             })
             .unwrap();
         }
@@ -371,7 +381,7 @@ mod tests {
         let alerts = dir.join("alerts.jsonl");
         fs::write(
             &journal,
-            r#"{"kind":"route_decision","task":"a","skill":"pdf","confidence":0.8,"reroute":false}
+            r#"{"kind":"route_decision","task":"a","skill":"pdf","confidence":0.8,"reroute":false,"latency_ms":100,"reasons":[],"matched_tokens":0,"parity_gate":"","candidates":[]}
 "#,
         )
         .unwrap();

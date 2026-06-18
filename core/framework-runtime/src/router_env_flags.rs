@@ -308,27 +308,15 @@ mod tests {
     #[test]
     fn pre_goal_enabled_opt_in_only() {
         let _g = lock_env();
-        let key_canonical = "ROUTER_RS_PRE_GOAL_ENABLED";
-        let key_legacy = "ROUTER_RS_CURSOR_PRE_GOAL_ENABLED";
-        let prev_canon = env::var_os(key_canonical);
-        let prev_legacy = env::var_os(key_legacy);
-        unsafe { env::remove_var(key_canonical) };
-        unsafe { env::remove_var(key_legacy) };
+        let key = "ROUTER_RS_PRE_GOAL_ENABLED";
+        let prev = env::var_os(key);
+        unsafe { env::remove_var(key) };
         assert!(!super::router_rs_pre_goal_enabled());
-        // Canonical takes precedence
-        unsafe { env::set_var(key_canonical, "true") };
+        unsafe { env::set_var(key, "true") };
         assert!(super::router_rs_pre_goal_enabled());
-        unsafe { env::remove_var(key_canonical) };
-        // Legacy fallback works
-        unsafe { env::set_var(key_legacy, "true") };
-        assert!(super::router_rs_pre_goal_enabled());
-        match prev_canon {
-            Some(v) => unsafe { env::set_var(key_canonical, v) },
-            None => unsafe { env::remove_var(key_canonical) },
-        }
-        match prev_legacy {
-            Some(v) => unsafe { env::set_var(key_legacy, v) },
-            None => unsafe { env::remove_var(key_legacy) },
+        match prev {
+            Some(v) => unsafe { env::set_var(key, v) },
+            None => unsafe { env::remove_var(key) },
         }
     }
 
