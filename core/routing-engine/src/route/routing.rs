@@ -17,9 +17,10 @@ use super::types::{
     SearchMatchRecordPayload, SearchResultsPayload, SkillRecord,
 };
 
-/// Shared shell for every RouteDecision — avoids 3 repeated `.to_string()` on static constants
-/// per construction site (saves ~21 String allocs across 7 call sites).
-fn make_no_hit_decision(
+/// Shared skeleton for every RouteDecision — avoids repeated `.to_string()` on static constants
+/// per construction site (saves ~21 String allocs across 7 call sites).  Override
+/// skill-specific fields with struct update syntax.
+fn route_decision_skeleton(
     query: &str,
     session_id: &str,
     route_context: RouteContextPayload,
@@ -49,6 +50,17 @@ fn make_no_hit_decision(
             &reasons,
         ),
     }
+}
+
+/// No-hit decision (zero-score / runtime-layer fallback).  Thin wrapper around
+/// [`route_decision_skeleton`].
+fn make_no_hit_decision(
+    query: &str,
+    session_id: &str,
+    route_context: RouteContextPayload,
+    reasons: Vec<String>,
+) -> RouteDecision {
+    route_decision_skeleton(query, session_id, route_context, reasons)
 }
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -332,36 +344,8 @@ pub fn route_task(
     let overlay_normalized_query = normalize_text(query);
     let overlay_query_tokens = tokenize_route_text(query);
 
-    if let Some(record) = records
-        .iter()
-        .find(|record| has_literal_framework_alias_call(&normalized_query, record))
-    {
-        let reasons =
-            compact_route_reasons(&["Framework alias entrypoint matched explicitly."]);
-        return Ok(RouteDecision {
-            decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-            authority: ROUTE_AUTHORITY.to_string(),
-            compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
-            task: query.to_string(),
-            session_id: session_id.to_string(),
-            selected_skill: record.slug.clone(),
-            selected_skill_path: record.skill_path.clone(),
-            overlay_skill: None,
-            route_context,
-            layer: record.layer.clone(),
-            score: 100.0,
-            fuzzy_match: false,
-            route_snapshot: build_route_snapshot(
-                "rust",
-                &record.slug,
-                None,
-                &record.layer,
-                100.0,
-                &reasons,
-            ),
-            reasons,
-            matched_token_count: 0,
-        });
+    if let Some(decision) = literal_framework_alias_decision(records, query, session_id) {
+        return Ok(decision);
     }
 
     let w = scoring_weights();
@@ -443,7 +427,7 @@ pub fn route_task(
         &normalized_query,
         &query_token_list,
         w,
-    );
+    ).map_err(|e| format!("Routing failure: {e}"))?;
     if selected.score < w.layer_threshold(&selected.record.layer) {
         // --- Fuzzy fallback: try trigram similarity before giving up ---
         if let Some((record, sim)) = fuzzy_rescue_primary_record(records, &primary_query) {
@@ -495,18 +479,14 @@ pub fn route_task(
         &selected.reasons.iter().map(|s| s.as_str()).collect::<Vec<_>>()
     );
 
+    let skeleton = route_decision_skeleton(query, session_id, route_context, compact_reasons.clone());
     Ok(RouteDecision {
-        decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-        authority: ROUTE_AUTHORITY.to_string(),
-        compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
-        task: query.to_string(),
-        session_id: session_id.to_string(),
         selected_skill: selected.record.slug.clone(),
         selected_skill_path: selected.record.skill_path.clone(),
         overlay_skill: filtered_overlay,
-        route_context,
         layer: selected.record.layer.clone(),
         score: round2(selected.score),
+        matched_token_count: selected.matched_token_count,
         route_snapshot: build_route_snapshot(
             "rust",
             &selected.record.slug,
@@ -518,8 +498,7 @@ pub fn route_task(
             &compact_reasons,
         ),
         reasons: compact_reasons,
-        matched_token_count: selected.matched_token_count,
-        fuzzy_match: false,
+        ..skeleton
     })
 }
 
@@ -649,20 +628,13 @@ fn build_fuzzy_rescue_decision(
         .filter(|item| *item != &record.slug)
         .cloned();
     let fuzzy_reasons = compact_route_reasons(&[reason_line]);
+    let skeleton = route_decision_skeleton(query, session_id, route_context, fuzzy_reasons.clone());
     RouteDecision {
-        decision_schema_version: ROUTE_DECISION_SCHEMA_VERSION.to_string(),
-        authority: ROUTE_AUTHORITY.to_string(),
-        compile_authority: PROFILE_COMPILE_AUTHORITY.to_string(),
-        task: query.to_string(),
-        session_id: session_id.to_string(),
         selected_skill: record.slug.clone(),
         selected_skill_path: record.skill_path.clone(),
         overlay_skill: filtered_overlay,
-        route_context,
         layer: record.layer.clone(),
         score: round2(sim * 100.0),
-        reasons: fuzzy_reasons.clone(),
-        matched_token_count: 0,
         fuzzy_match: true,
         route_snapshot: build_route_snapshot(
             "rust",
@@ -674,6 +646,8 @@ fn build_fuzzy_rescue_decision(
             round2(sim * 100.0),
             &fuzzy_reasons,
         ),
+        reasons: fuzzy_reasons,
+        ..skeleton
     }
 }
 
@@ -804,6 +778,43 @@ fn has_non_generic_manifest_signal(decision: &RouteDecision) -> bool {
         })
 }
 
+fn is_explicit_manifest_upgrade(hot: &RouteDecision, full: &RouteDecision) -> bool {
+    full.score > hot.score
+        || (full.score == hot.score && full.selected_skill != hot.selected_skill)
+        || (full.selected_skill == hot.selected_skill
+            && full.overlay_skill.is_some()
+            && hot.overlay_skill.is_none())
+}
+
+fn is_same_skill_with_extra_overlay(hot: &RouteDecision, full: &RouteDecision) -> bool {
+    full.selected_skill == hot.selected_skill
+        && full.overlay_skill.is_some()
+        && hot.overlay_skill.is_none()
+}
+
+fn hot_qualifies_for_retry(hot: &RouteDecision) -> bool {
+    route_decision_is_no_hit(hot)
+        || hot.score < 25.0
+        || (hot.score < 35.0
+            && matches!(
+                hot.selected_skill.as_str(),
+                "agent-swarm-orchestration" | "doc" | "design-md" | "pdf" | "sentry"
+            ))
+        || hot.selected_skill == "systematic-debugging"
+}
+
+fn is_significant_score_gap_with_signal(full: &RouteDecision, hot: &RouteDecision) -> bool {
+    full.score >= hot.score + 8.0 && has_non_generic_manifest_signal(full)
+}
+
+fn is_low_score_deepinterview_override(full: &RouteDecision) -> bool {
+    full.score >= 20.0 && matches!(full.selected_skill.as_str(), "deepinterview")
+}
+
+fn is_minimal_score_without_signal(full: &RouteDecision) -> bool {
+    full.score <= 10.0 && !matches!(full.selected_skill.as_str(), "deepinterview")
+}
+
 pub fn should_accept_manifest_fallback(
     hot_decision: &RouteDecision,
     full_decision: &RouteDecision,
@@ -816,62 +827,37 @@ pub fn should_accept_manifest_fallback(
     }
 
     if explicit_manifest && !route_decision_is_no_hit(hot_decision) {
-        return full_decision.score > hot_decision.score
-            || (full_decision.score == hot_decision.score
-                && full_decision.selected_skill != hot_decision.selected_skill)
-            || (full_decision.selected_skill == hot_decision.selected_skill
-                && full_decision.overlay_skill.is_some()
-                && hot_decision.overlay_skill.is_none());
+        return is_explicit_manifest_upgrade(hot_decision, full_decision);
     }
 
-    if full_decision.selected_skill == hot_decision.selected_skill
-        && full_decision.overlay_skill.is_some()
-        && hot_decision.overlay_skill.is_none()
-    {
+    if is_same_skill_with_extra_overlay(hot_decision, full_decision) {
         return true;
     }
 
-    if !should_retry
-        || !(route_decision_is_no_hit(hot_decision)
-            || hot_decision.score < 25.0
-            || (hot_decision.score < 35.0
-                && matches!(
-                    hot_decision.selected_skill.as_str(),
-                    "agent-swarm-orchestration" | "doc" | "design-md" | "pdf" | "sentry"
-                ))
-            || hot_decision.selected_skill == "systematic-debugging")
-    {
-        if full_decision.score >= hot_decision.score + 8.0
-            && has_non_generic_manifest_signal(full_decision)
-        {
-            return true;
-        }
-        return false;
+    if !should_retry || !hot_qualifies_for_retry(hot_decision) {
+        return is_significant_score_gap_with_signal(full_decision, hot_decision);
     }
 
-    let low_score_review_fallback = full_decision.score >= 20.0
-        && matches!(full_decision.selected_skill.as_str(), "deepinterview");
-
-    // 当 hot 触发 retry（no-hit 或低分）时：即使 full 分数 <= 10，
-    // 只要比 hot 好就应该接受，避免 hot no-hit 时静默丢弃 manifest 结果
+    // should_retry = true with hot qualifying for retry
     if should_retry && full_decision.score > hot_decision.score {
         return true;
     }
 
-    if full_decision.score <= 10.0
-        && !matches!(full_decision.selected_skill.as_str(), "deepinterview")
-    {
+    if is_minimal_score_without_signal(full_decision) {
         return false;
     }
 
-    if !low_score_review_fallback && !has_non_generic_manifest_signal(full_decision) {
+    if is_low_score_deepinterview_override(full_decision) {
+        return true;
+    }
+
+    if !has_non_generic_manifest_signal(full_decision) {
         return false;
     }
 
-    (full_decision.score > hot_decision.score
+    full_decision.score > hot_decision.score
         || (full_decision.score == hot_decision.score
-            && full_decision.selected_skill != hot_decision.selected_skill))
-        || low_score_review_fallback
+            && full_decision.selected_skill != hot_decision.selected_skill)
 }
 
 fn runtime_gate_blocks_manifest_owner(
