@@ -40,25 +40,16 @@ fn main() {
         .collect::<Vec<_>>()
         .join(", ");
 
-    // Map host_id → (module, struct) for all providers living in host-projection.
-    let host_provider_map: std::collections::HashMap<&str, (&str, &str)> = [
-        ("cursor", ("cursor_provider", "CursorHostProvider")),
-        ("codex", ("codex_provider", "CodexHostProvider")),
-        ("claude", ("claude_provider", "ClaudeHostProvider")),
-        ("opencode", ("opencode_provider", "OpencodeHostProvider")),
-        ("mimo", ("mimo_provider", "MimoHostProvider")),
-    ]
-    .into_iter()
-    .collect();
-
     let push_lines: Vec<String> = supported
         .iter()
         .filter_map(|id| {
-            host_provider_map
-                .get(id.as_str())
-                .map(|(module, struct_name)| {
-                    format!("    providers.push(Box::new(super::{module}::{struct_name}));")
-                })
+            let providers = reg.get("host_targets")?.get("host_providers")?;
+            let entry = providers.get(id.as_str())?;
+            let module = entry.get("provider_module")?.as_str()?;
+            let struct_name = entry.get("provider_type")?.as_str()?;
+            Some(format!(
+                "    providers.push(Box::new(super::{module}::{struct_name}));"
+            ))
         })
         .collect();
     let push_body = push_lines.join("\n");

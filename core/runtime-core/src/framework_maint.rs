@@ -127,7 +127,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     )?;
 
     let installable_tools = installable_projection_tools(&fw)?;
-    // claude-code uses projection manifests under `.claude/`.
+    // claude uses projection manifests under `.claude/`.
     let projection_tools: Vec<String> = installable_tools
         .iter()
         .filter(|tool| tool.as_str() != "codex")
@@ -162,7 +162,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     verify_installable_projections(&fw, &installable_tools)?;
     verify_claude_user_projection(&fw)?;
     eprintln!(
-        "ok: refreshed installable host projections (cursor=user; claude-code=project+user; others=project): {}",
+        "ok: refreshed installable host projections (cursor=user; claude=project+user; others=project): {}",
         installable_tools.join(", ")
     );
     Ok(())
@@ -1631,27 +1631,4 @@ fn clean_orphan_directories(repo_root: &Path, dry_run: bool, ttl_days: u64) -> R
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
 
-    static SEQ: AtomicU64 = AtomicU64::new(0);
-
-    fn fresh_root(label: &str) -> PathBuf {
-        let root = std::env::temp_dir().join(format!(
-            "framework-maint-{label}-{}-{}",
-            std::process::id(),
-            SEQ.fetch_add(1, Ordering::SeqCst)
-        ));
-        fs::create_dir_all(&root).unwrap();
-        root
-    }
-
-    fn write(path: &Path, text: &str) {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-        fs::write(path, text).unwrap();
-    }
-}

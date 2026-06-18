@@ -205,9 +205,7 @@ pub fn router_rs_cursor_review_gate_stop_max_nudges_cap() -> Option<u32> {
         let raw = env::var("ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES")
             .ok()
             .or_else(|| env::var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES").ok());
-        if raw.is_none() {
-            return None;
-        }
+        raw.as_ref()?;
     }
     core_policy::env_flags::router_rs_review_gate_stop_max_nudges_cap()
 }
@@ -261,20 +259,11 @@ pub fn router_rs_session_supervisor_real_process_smoke_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
-
-    static ENV_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-    fn lock_env() -> std::sync::MutexGuard<'static, ()> {
-        ENV_TEST_LOCK
-            .get_or_init(|| Mutex::new(()))
-            .lock()
-            .expect("env test lock")
-    }
+    use core_policy::test_env_sync::process_env_lock;
 
     #[test]
     fn unset_means_enabled_for_default_true() {
-        let _g = lock_env();
+        let _g = process_env_lock();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_UNSET";
         unsafe { env::remove_var(key) };
         assert!(router_rs_env_enabled_default_true(key));
@@ -282,7 +271,7 @@ mod tests {
 
     #[test]
     fn zero_false_off_no_disable_default_true() {
-        let _g = lock_env();
+        let _g = process_env_lock();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_TOKENS";
         for v in ["0", "false", "off", "no", "FALSE", " Off "] {
             unsafe { env::set_var(key, v) };
@@ -296,7 +285,7 @@ mod tests {
 
     #[test]
     fn other_values_enable_default_true() {
-        let _g = lock_env();
+        let _g = process_env_lock();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_OTHER";
         unsafe { env::set_var(key, "1") };
         assert!(router_rs_env_enabled_default_true(key));
@@ -307,7 +296,7 @@ mod tests {
 
     #[test]
     fn pre_goal_enabled_opt_in_only() {
-        let _g = lock_env();
+        let _g = process_env_lock();
         let key = "ROUTER_RS_PRE_GOAL_ENABLED";
         let prev = env::var_os(key);
         unsafe { env::remove_var(key) };
@@ -322,7 +311,7 @@ mod tests {
 
     #[test]
     fn pre_goal_strict_disk_default_true() {
-        let _g = lock_env();
+        let _g = process_env_lock();
         let key_canonical = "ROUTER_RS_PRE_GOAL_STRICT_DISK";
         let key_legacy = "ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK";
         let prev_canon = env::var_os(key_canonical);
@@ -349,7 +338,7 @@ mod tests {
 
     #[test]
     fn continuity_posttool_defaults_off_until_explicit_enable() {
-        let _g = lock_env();
+        let _g = process_env_lock();
         let key = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
         let prev = env::var_os(key);
         unsafe { env::remove_var(key) };
@@ -364,7 +353,7 @@ mod tests {
 
     #[test]
     fn review_gate_stop_max_nudges_unset_in_tests_means_strict_none() {
-        let _g = lock_env();
+        let _g = process_env_lock();
         let key = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
         let prev = env::var_os(key);
         unsafe { env::remove_var(key) };
@@ -392,7 +381,7 @@ mod tests {
 
     #[test]
     fn rfv_max_rounds_cap_defaults_and_clamped() {
-        let _g = lock_env();
+        let _g = process_env_lock();
         let prev = env::var_os("ROUTER_RS_RFV_MAX_ROUNDS_CAP");
         unsafe { env::remove_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP") };
         assert_eq!(super::router_rs_rfv_max_rounds_cap(), 1000);
