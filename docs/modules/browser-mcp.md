@@ -50,10 +50,10 @@ include!("tests.rs");
 
 browser-mcp 暴露的 MCP 工具（通过 stdio）：
 - `browser_open/close/tabs` — 标签页管理
-- `browser_navigate/screenshot/get_text/get_state` — 页面交互
-- `browser_click/fill/press` — 元素交互
-- `session_launch/list/terminate` — session supervisor
-- `background_list/inspect/terminate` — background jobs
+- `browser_screenshot/get_text/get_state/get_elements/get_network` — 页面交互与状态
+- `browser_click/fill/press/wait_for` — 元素交互
+- `browser_save_session/restore_session` — 会话持久化
+- `browser_diagnostics` — 运行时诊断
 
 ## 依赖关系
 

@@ -406,9 +406,8 @@ fn browser_mcp_stdio_exposes_browser_and_web_fetch_tools() {
         .iter()
         .filter_map(|tool| tool.get("name").and_then(serde_json::Value::as_str))
         .collect::<Vec<_>>();
-    // browser-mcp should expose browser tools and web_fetch, but NOT skill routing
+    // browser-mcp should expose browser tools and health diagnostics
     assert!(tool_names.contains(&"browser_open"));
-    assert!(tool_names.contains(&"web_fetch"));
     assert!(tool_names.contains(&"browser_diagnostics"));
     // skill routing tools should NOT be in browser-mcp anymore
     assert!(!tool_names.contains(&"skill_route"));

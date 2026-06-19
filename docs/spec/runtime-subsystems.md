@@ -7,12 +7,11 @@ version: unified-v7
 
 ### 9.1 browser_mcp/ — 浏览器 MCP 集成
 
-**功能**：基于 CDP 的 MCP 服务器，提供浏览器自动化、页面快照、网络监控和 Skill 路由。
+**功能**：基于 CDP 的 MCP 服务器，提供浏览器自动化、页面快照和网络监控。
 
 - 核心：`run_browser_mcp_stdio_loop()` — JSON-RPC 2.0 over stdio
-- 30+ MCP 工具：browser_open/click/fill/screenshot/get_state/network/tabs 等
-- Session 管理：session_launch/inspect/terminate/mark_blocked/resume_due
-- 依赖：`runtime-storage::background_state`, `session-supervisor`, `tungstenite`, `reqwest`
+- 15 个 MCP 工具：browser_open/click/fill/screenshot/get_state/network/tabs/wait_for 等
+- 依赖：`tungstenite`, `reqwest`
 
 ### 9.2 background_state/ — 后台任务状态（位于 core/runtime-storage/src/background_state/）
 

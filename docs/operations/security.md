@@ -19,7 +19,7 @@ last_verified: "2026-06-19"
 
 回归：`cargo test --manifest-path core/router-rs/Cargo.toml -- web_fetch_guard`
 
-## MCP 工具策略（core-policy）
+## MCP 工具策略（core-policy MCP pre-guard，适用于所有 MCP server）
 
 - `session_launch` 的 host 参数禁止元数据端点
 - `browser_get_network` 检测凭证关键词

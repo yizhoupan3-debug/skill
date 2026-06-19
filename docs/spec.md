@@ -38,7 +38,7 @@ runtime-core (~14K LOC, facade)  ← 核心生命周期/closeout/编排/re-expor
 ├── framework_maint.rs            ← 维护命令
 ├── stdio_transport.rs            ← stdio 传输层
 ├── 184 tests
-└── features: codegraph, host-{cursor,claude,codex,opencode,mimo}
+└── features: codegraph, host-{cursor,claude,codex,opencode}
 
 core/framework-runtime (~5K LOC)  ← 框架运行时核心（从 runtime-core 提取）
 ├── closeout_enforcement.rs       ← hard/soft blocker 分级
@@ -110,10 +110,9 @@ tools/autoresearch-rs (~5K LOC)   ← 研究工作区控制平面（位于 tools
 ├── 模块化架构（state/search/text/provenance）
 └── 164 tests
 
-browser-mcp (~4.8K LOC)           ← 浏览器 MCP
-├── session_launch/list/inspect/terminate MCP tools
-├── browser_* MCP tools
-└── 118 tests
+browser-mcp (~3.5K LOC)           ← 浏览器 MCP（仅浏览器功能）
+├── 15 browser_* MCP tools
+└── 117 tests
 
 rust_tools/ (6 活跃 MCP crates)
 ├── pdf_tool_rs (mcp-pdf)           ├── citation_tool_rs (mcp-citation)
@@ -133,7 +132,7 @@ rust_tools/ (6 活跃 MCP crates)
 | **配置驱动接入** | 新宿主 ≤ 1 天（5 文件：provider + AGENTS + docs + feature + registry） |
 | **Fail-closed** | 未知均默认拒绝 |
 | **函数指针注册表** | hooks 通过 OnceLock 函数指针注册（非 trait），82 个 slots |
-| **MCP 统一** | 4 个 MCP server 五宿主统一注册 |
+| **MCP 统一** | 4 个 MCP server 四宿主统一注册 |
 | **用户级配置** | MCP/hooks/settings 配置只放用户级（~/.config/），不在项目目录 |
 
 ### 1.3 依赖关系约束 (v7 DAG)

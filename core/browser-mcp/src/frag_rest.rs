@@ -335,34 +335,6 @@ fn base_attached_runtime_diagnostics(configured_source: &ConfiguredAttachSource)
     })
 }
 
-fn select_fields(source: &Value, fields: &[&str]) -> Value {
-    let mut map = serde_json::Map::new();
-    for field in fields {
-        map.insert(
-            field.to_string(),
-            source.get(*field).cloned().unwrap_or(Value::Null),
-        );
-    }
-    Value::Object(map)
-}
-
-fn attached_runtime_replay_context(diagnostics: &Value) -> Value {
-    select_fields(diagnostics, &[
-        "descriptorSource",
-        "descriptorPath",
-        "inputArtifactKind",
-        "attachMode",
-        "artifactBackendFamily",
-        "recommendedEntrypoint",
-        "sourceTransportMethod",
-        "sourceHandoffMethod",
-        "traceStreamPath",
-        "bindingArtifactSource",
-        "handoffSource",
-        "resumeManifestSource",
-        "traceStreamSource",
-    ])
-}
 
 fn descriptor_leaf<'a>(descriptor: &'a Value, path_parts: &[&str]) -> Option<&'a Value> {
     let mut current = descriptor;

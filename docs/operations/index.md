@@ -52,14 +52,14 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 ### B5 — browser-mcp
 
-浏览器自动化 MCP：`browser-mcp` stdio 服务、`session_launch`、页面 attach、URL 策略。实现：`core/browser-mcp/`。
+浏览器自动化 MCP：`browser-mcp` stdio 服务、页面 attach、URL 策略。实现：`core/browser-mcp/`。
 
 ```bash
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
   browser mcp-stdio --repo-root "$PWD"
 ```
 
-排障：`no browser-mcp runtime attach artifact` → 先 `session_launch`；MCP 路径陈旧 → 重跑 `host-integration install`。
+排障：`no browser-mcp runtime attach artifact` → 检查 `browser-mcp` 启动参数；MCP 路径陈旧 → 重跑 `host-integration install`。
 
 相关路径：`core/browser-mcp/` · `docs/operations/security.md` §SSRF · `RUNTIME_REGISTRY.json` → `managed_mcp_servers.browser-mcp`
 

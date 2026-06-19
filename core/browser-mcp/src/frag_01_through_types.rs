@@ -1,11 +1,9 @@
 // MCP 常量、transport、JSON-RPC、`BrowserRuntime`/会话类型与 `struct CdpClient`（须整体移动，不得在函数中途截断）。
-use runtime_core::background_state::handle_background_state_operation;
-use runtime_core::stdio_payload_types::{TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload};
+use runtime_core::stdio_payload_types::TraceStreamInspectRequestPayload;
 use runtime_core::framework_runtime::{
-    attach_runtime_event_transport, inspect_trace_stream, replay_trace_stream,
+    attach_runtime_event_transport, inspect_trace_stream,
 };
 use runtime_core::framework_runtime::resolve_repo_root_arg;
-use runtime_core::session_supervisor::handle_session_supervisor_operation;
 use chrono::{Local, SecondsFormat};
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
@@ -42,10 +40,8 @@ const RUNTIME_ATTACH_RESUME_MODE: &str = "after_event_id";
 const RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION: &str = "runtime-event-transport-v1";
 const RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION: &str = "runtime-event-handoff-v1";
 const TRACE_RESUME_MANIFEST_SCHEMA_VERSION: &str = "runtime-resume-manifest-v1";
-const ROUTER_RS_TRACE_STREAM_REPLAY_SCHEMA_VERSION: &str = "router-rs-trace-stream-replay-v1";
 const ROUTER_RS_TRACE_STREAM_INSPECT_SCHEMA_VERSION: &str = "router-rs-trace-stream-inspect-v1";
 const ROUTER_RS_TRACE_IO_AUTHORITY: &str = "rust-runtime-trace-io";
-const BACKGROUND_STATE_REQUEST_SCHEMA_VERSION: &str = "router-rs-background-state-request-v1";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BrowserMcpTransportMode {
@@ -271,19 +267,6 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         "browser_wait_for" => runtime.wait_for(&arguments),
         "browser_save_session" => runtime.save_session(&arguments),
         "browser_restore_session" => runtime.restore_session(&arguments),
-        "browser_get_attached_runtime_events" => runtime.get_attached_runtime_events(&arguments),
-        "runtime_heartbeat" => runtime.runtime_heartbeat(&arguments),
-        "session_launch" => runtime.session_launch(&arguments),
-        "session_list" => runtime.session_list(&arguments),
-        "session_inspect" => runtime.session_inspect(&arguments),
-        "session_terminate" => runtime.session_terminate(&arguments),
-        "session_mark_blocked" => runtime.session_mark_blocked(&arguments),
-        "session_resume_due" => runtime.session_resume_due(&arguments),
-        "session_classify_block" => runtime.session_classify_block(&arguments),
-        "background_list" => runtime.background_list(&arguments),
-        "background_inspect" => runtime.background_inspect(&arguments),
-        "background_terminate" => runtime.background_terminate(&arguments),
-        "web_fetch" => runtime.web_fetch(&arguments),
         "browser_diagnostics" => runtime.diagnostics(&arguments),
         _ => Err(browser_error(
             "INVALID_INPUT",
@@ -414,98 +397,7 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
             json!({"type": "object", "properties": {"sessionPath": {"type": "string"}}, "required": ["sessionPath"]}),
             empty_output.clone(),
         ),
-        tool_definition(
-            "browser_get_attached_runtime_events",
-            "Replay Attached Runtime Events",
-            "Replay runtime events through the configured Rust attach descriptor.",
-            json!({"type": "object", "properties": {"afterEventId": {"type": "string"}, "limit": {"type": "integer", "minimum": 1}, "heartbeat": {"type": "boolean"}}}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "runtime_heartbeat",
-            "Heartbeat Attached Runtime",
-            "Emit an idle heartbeat when no new attached runtime events are available.",
-            json!({"type": "object", "properties": {"afterEventId": {"type": "string"}, "limit": {"type": "integer", "minimum": 1}}}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "session_launch",
-            "Launch Session Worker",
-            "Launch one long-running worker session through the Rust session supervisor.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "cwd": {"type": "string"}, "prompt": {"type": "string"}, "resumeTarget": {"type": "string"}, "resumeMode": {"type": "string"}, "workerId": {"type": "string"}, "dryRun": {"type": "boolean"}, "worktreeName": {"type": "string", "description": "git worktree branch name; supervisor creates the worktree before launching"}, "worktreePath": {"type": "string", "description": "explicit worktree directory path (overrides worktreeName)"}}, "required": ["workerId"]}),
-            session_supervisor_worker_output_schema(),
-        ),
-        tool_definition(
-            "session_list",
-            "List Session Workers",
-            "List current session supervisor workers and refresh their runtime state.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}}}),
-            session_supervisor_workers_output_schema(),
-        ),
-        tool_definition(
-            "session_inspect",
-            "Inspect Session Worker",
-            "Inspect one session supervisor worker by worker id.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}}, "required": ["workerId"]}),
-            session_supervisor_worker_output_schema(),
-        ),
-        tool_definition(
-            "session_terminate",
-            "Terminate Session Worker",
-            "Terminate one session supervisor worker by worker id.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}, "dryRun": {"type": "boolean"}}, "required": ["workerId"]}),
-            session_supervisor_worker_output_schema(),
-        ),
-        tool_definition(
-            "session_mark_blocked",
-            "Mark Session Blocked",
-            "Mark a worker blocked with evidence so resume policy can back off.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "workerId": {"type": "string"}, "host": {"type": "string"}, "blockedReason": {"type": "string"}, "evidenceText": {"type": "string"}, "backoffSeconds": {"type": "integer"}}, "required": ["workerId"]}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "session_resume_due",
-            "Resume Due Sessions",
-            "Resume all due blocked workers using the supervisor resume policy.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "dryRun": {"type": "boolean"}}}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "session_classify_block",
-            "Classify Session Block",
-            "Classify a rate-limit/block signal from host evidence text.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "host": {"type": "string"}, "evidenceText": {"type": "string"}}, "required": []}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "background_list",
-            "List Background Jobs",
-            "Return the background job snapshot from Rust durable state.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "backendFamily": {"type": "string"}, "sqliteDbPath": {"type": "string"}}}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "background_inspect",
-            "Inspect Background Job",
-            "Return one background job by job id from Rust durable state.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "backendFamily": {"type": "string"}, "sqliteDbPath": {"type": "string"}, "jobId": {"type": "string"}}, "required": ["jobId"]}),
-            empty_output.clone(),
-        ),
-        tool_definition(
-            "background_terminate",
-            "Terminate Background Job",
-            "Mark one background job interrupted in Rust durable state.",
-            json!({"type": "object", "properties": {"statePath": {"type": "string"}, "backendFamily": {"type": "string"}, "sqliteDbPath": {"type": "string"}, "jobId": {"type": "string"}, "error": {"type": "string"}}, "required": ["jobId"]}),
-            empty_output.clone(),
-        ),
     ];
-    tools.push(tool_definition(
-        "web_fetch",
-        "Fetch URL",
-        "Read-only HTTP GET to fetch external URL content (bypasses Bash sandbox). Returns status and body summary.",
-        json!({"type": "object", "properties": {"url": {"type": "string", "description": "http(s) URL"}, "max_bytes": {"type": "integer", "description": "Max response body bytes (default 50000, clamped to [1, 50000])", "minimum": 1}}, "required": ["url"]}),
-        json!({"type": "object", "properties": {"url": {"type": "string"}, "status": {"type": "integer"}, "content_type": {"type": "string"}, "content_length": {"type": "integer"}, "truncated": {"type": "boolean"}, "body": {"type": "string"}}, "additionalProperties": true}),
-    ));
     tools.push(tool_definition(
         "browser_diagnostics",
         "Browser Diagnostics",
@@ -514,44 +406,6 @@ fn tool_definitions(_repo_root: &Path) -> Vec<Value> {
         empty_output,
     ));
     tools
-}
-
-fn session_supervisor_worker_fields_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "worker_id": {"type": "string"},
-            "host": {"type": "string"},
-            "status": {"type": "string"},
-            "pid": {"type": ["integer", "null"], "description": "OS process id when the worker is running"},
-            "log_path": {"type": ["string", "null"], "description": "Worker stdout/stderr log file path"},
-        },
-        "additionalProperties": true
-    })
-}
-
-fn session_supervisor_worker_output_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "schema_version": {"type": "string"},
-            "operation": {"type": "string"},
-            "worker": session_supervisor_worker_fields_schema(),
-        },
-        "additionalProperties": true
-    })
-}
-
-fn session_supervisor_workers_output_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "schema_version": {"type": "string"},
-            "operation": {"type": "string"},
-            "workers": {"type": "array", "items": session_supervisor_worker_fields_schema()},
-        },
-        "additionalProperties": true
-    })
 }
 
 fn tool_definition(
