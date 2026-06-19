@@ -21,6 +21,7 @@ const CODEGRAPH_TOOLS: &[&str] = &[
     "codegraph_node",
     "codegraph_status",
     "codegraph_dead_code",
+    "codegraph_goto_definition",
 ];
 
 fn framework_repo_root() -> PathBuf {
@@ -145,7 +146,7 @@ fn assert_manifest_codegraph_tools_resolve(registry: &Value, payload: &Value, sl
     assert_eq!(
         codegraph_fqns.len(),
         CODEGRAPH_TOOLS.len(),
-        "{slug} must declare six codegraph allowedTools"
+        "{slug} must declare eight codegraph allowedTools"
     );
 
     for fqn in codegraph_fqns {

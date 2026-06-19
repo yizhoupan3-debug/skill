@@ -3,7 +3,7 @@
 //! Complements the Cursor/Codex/Claude matrix in `mod.rs`; uses shared MCP harness helpers.
 
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::mcp_stdio_harness;
 use crate::mcp_stdio_test_support;

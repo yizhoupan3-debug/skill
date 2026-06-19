@@ -1,0 +1,42 @@
+{
+  "barrier": "test barrier problem",
+  "barrier_id": "br-20260619185654",
+  "candidates": [
+    {
+      "confidence": "medium",
+      "evidence": [],
+      "evidence_count": 0,
+      "expected_effort": "unknown",
+      "hypothesis": "Using test barrier problem is itself a defensible mechanism-level contribution.",
+      "id": null,
+      "risk": "unknown"
+    },
+    {
+      "confidence": "medium",
+      "evidence": [],
+      "evidence_count": 0,
+      "expected_effort": "unknown",
+      "hypothesis": "Applying test barrier problem to the stated task or setting is novel enough to justify a focused study.",
+      "id": null,
+      "risk": "unknown"
+    },
+    {
+      "confidence": "medium",
+      "evidence": [],
+      "evidence_count": 0,
+      "expected_effort": "unknown",
+      "hypothesis": "The value of test barrier problem depends on the specific setting or constraint around the stated task or setting.",
+      "id": null,
+      "risk": "unknown"
+    }
+  ],
+  "context": {
+    "action_id": null,
+    "consecutive_failures": 0,
+    "loop_id": null,
+    "run_id": null
+  },
+  "generated_at": "2026-06-19T18:56:59+00:00",
+  "recommended": null,
+  "schema_version": "barrier-report-v1"
+}
