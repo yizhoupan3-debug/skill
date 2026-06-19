@@ -532,37 +532,26 @@ pub fn default_projection_tools_for_scope(
 pub struct HostProjectionAdapter {
     pub tool: &'static str,
     pub host_id: &'static str,
-    pub aliases: &'static [&'static str],
 }
 
 /// Known tool→host_id mappings.
 /// Source of truth: RUNTIME_REGISTRY.json → host_targets.metadata.*.install_tool
-/// Retired host aliases (codex-cli, codex-app) remain hardcoded for backward compat.
 const KNOWN_PROJECTION_TOOLS: &[HostProjectionAdapter] = &[
     HostProjectionAdapter {
         tool: "cursor",
         host_id: "cursor",
-        aliases: &[],
     },
     HostProjectionAdapter {
         tool: "claude",
         host_id: "claude",
-        aliases: &[],
     },
     HostProjectionAdapter {
         tool: "opencode",
         host_id: "opencode",
-        aliases: &[],
     },
     HostProjectionAdapter {
         tool: "codex",
         host_id: "codex",
-        aliases: &["codex-cli", "codex-app"],
-    },
-    HostProjectionAdapter {
-        tool: "mimo",
-        host_id: "mimo",
-        aliases: &[],
     },
 ];
 
@@ -754,9 +743,7 @@ pub fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> 
 
 pub fn projection_adapter_for_raw(raw: &str) -> Option<&'static HostProjectionAdapter> {
     let normalized = raw.trim().to_lowercase();
-    KNOWN_PROJECTION_TOOLS.iter().find(|adapter| {
-        adapter.tool == normalized || adapter.aliases.iter().any(|alias| *alias == normalized)
-    })
+    KNOWN_PROJECTION_TOOLS.iter().find(|adapter| adapter.tool == normalized)
 }
 
 pub fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, String> {
@@ -796,16 +783,7 @@ pub fn validate_projection_adapters_against_registry(framework_root: &Path) -> R
 }
 
 pub fn projection_alias_summary() -> String {
-    KNOWN_PROJECTION_TOOLS
-        .iter()
-        .flat_map(|adapter| {
-            adapter
-                .aliases
-                .iter()
-                .map(move |alias| format!("{alias} → {}", adapter.tool))
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+    String::new()
 }
 
 pub fn canonical_scope(scope: &str) -> Result<&'static str, String> {
@@ -899,12 +877,6 @@ pub fn lifecycle_paragraph_for_host(
         .lifecycle_by_host
         .get(host_projection)
         .cloned()
-        .or_else(|| {
-            match host_projection {
-                "codex-cli" | "codex-app" => narrative.lifecycle_by_host.get("codex").cloned(),
-                _ => None,
-            }
-        })
         .unwrap_or_else(|| narrative.default_lifecycle_paragraph.clone())
 }
 

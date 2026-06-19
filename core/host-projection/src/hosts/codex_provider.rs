@@ -54,7 +54,6 @@ impl HostTelemetry for CodexHostProvider {
 impl HostProvider for CodexHostProvider {
     fn host_id(&self) -> &'static str { "codex" }
     fn install_tool(&self) -> &'static str { "codex" }
-    fn aliases(&self) -> &'static [&'static str] { &["codex-cli", "codex-app"] }
     fn capabilities(&self) -> HostCapabilities {
         HostCapabilities {
             mcp_config_key: "mcp_servers",

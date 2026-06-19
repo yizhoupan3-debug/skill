@@ -193,7 +193,6 @@ jobs:
           - "host-claude"
           - "host-codex"
           - "host-opencode"
-          - "host-mimo"
           - "no-default-features"
     steps:
       - uses: actions/checkout@v4

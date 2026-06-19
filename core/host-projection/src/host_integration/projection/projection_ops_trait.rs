@@ -50,11 +50,6 @@ fn build_projection_ops_registry() -> HashMap<&'static str, Box<dyn HostProjecti
         Box::new(super::projection_host_ops::CodexProjectionOps),
     );
 
-    m.insert(
-        "mimo",
-        Box::new(super::projection_host_ops::MimoProjectionOps),
-    );
-
     m
 }
 

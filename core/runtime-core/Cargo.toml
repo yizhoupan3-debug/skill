@@ -50,13 +50,11 @@ default = [
     "host-claude",
     "host-opencode",
     "host-codex",
-    "host-mimo",
 ]
 host-cursor = []
 host-claude = []
 host-opencode = []
 host-codex = []
-host-mimo = []
 # Expose test helpers for downstream crate integration tests
 test-support = ["host-projection/test-support", "runtime-core-contracts/test-support"]
 # Codegraph MCP integration (module lives in runtime-core; router-rs re-exports)

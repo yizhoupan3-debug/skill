@@ -681,68 +681,6 @@ expression: json
       "subagent_paths": [],
       "transport": "cursor-agent"
     },
-    "mimo": {
-      "capabilities": [
-        "artifact_contract",
-        "mcp_servers",
-        "workspace_bootstrap",
-        "interactive_agent_chat",
-        "framework_alias_entrypoints"
-      ],
-      "checkpointing_supported": false,
-      "config_root_env_var": null,
-      "context_files": [
-        "AGENTS_MIMO.md"
-      ],
-      "framework_alias_entrypoints": {},
-      "harness_capabilities": [
-        "hot_runtime_routing",
-        "l2_continuity_contract",
-        "closeout_evidence_hooks",
-        "review_gate_router_observation"
-      ],
-      "host_cli": "mimo",
-      "host_id": "mimo",
-      "managed_mcp_paths": [],
-      "managed_mcp_server_ids": [
-        "router-rs-framework",
-        "browser-mcp",
-        "mcp-codegraph",
-        "paperplain"
-      ],
-      "managed_settings_paths": [],
-      "mcp_config_paths": [
-        {
-          "relative": ".mimo/settings.json",
-          "scope": "project"
-        }
-      ],
-      "profile_id": "mimo_profile",
-      "resume_command_examples": [
-        "Continue in the same Mimo session"
-      ],
-      "session_supervisor_driver": "unsupported",
-      "session_supervisor_status": {
-        "rationale": "Mimo host does not expose external process supervision or auto-resume. Long-running goals must rely on in-session continuity artifacts.",
-        "supported": false
-      },
-      "settings_paths": [
-        {
-          "host_root": "mimo",
-          "relative": "settings.json",
-          "scope": "user"
-        },
-        {
-          "relative": ".mimo/settings.json",
-          "scope": "project"
-        }
-      ],
-      "settings_scope_order": [],
-      "settings_scopes": [],
-      "structured_output_modes": [],
-      "subagent_paths": [],
-      "transport": "native-mimo"
-    },
     "opencode": {
       "capabilities": [
         "artifact_contract",

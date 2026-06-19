@@ -8,7 +8,6 @@ use serde_json::Value;
 crate::impl_host_provider! {
     OpencodeHostProvider for "opencode";
     capabilities { mcp_key: "mcpServers"; transport: "native-opencode"; config: ".opencode/opencode.json"; }
-    aliases: ["opencode"];
 }
 
 impl HostLifecycle for OpencodeHostProvider {

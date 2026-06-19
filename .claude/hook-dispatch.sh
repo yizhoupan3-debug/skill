@@ -44,8 +44,6 @@ if [[ -z "${HOST_ID}" ]]; then
     HOST_ID="cursor"
   elif [[ -n "${CODEX_HOME:-}" ]] || [[ -d "${FRAMEWORK_ROOT}/.codex" ]]; then
     HOST_ID="codex"
-  elif [[ -n "${MIMO_HOME:-}" ]] || [[ -d "${FRAMEWORK_ROOT}/.mimo" ]]; then
-    HOST_ID="mimo"
   elif [[ -d "${FRAMEWORK_ROOT}/.opencode" ]]; then
     HOST_ID="opencode"
   else

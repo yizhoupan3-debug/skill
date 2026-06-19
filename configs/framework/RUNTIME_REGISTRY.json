@@ -11,8 +11,7 @@
       "cursor",
       "claude",
       "opencode",
-      "codex",
-      "mimo"
+      "codex"
     ],
     "shared_system_source": "skills",
     "metadata": {
@@ -22,9 +21,6 @@
         "config_format": "mdc",
         "home_env_var": "CURSOR_HOME",
         "default_home_dir": ".cursor",
-        "cli_aliases": [
-          "cursor"
-        ],
         "install_tool": "cursor",
         "projection_status": "implemented",
         "installable": true,
@@ -40,9 +36,6 @@
         "config_format": "json",
         "home_env_var": "OPENCODE_HOME",
         "default_home_dir": ".opencode",
-        "cli_aliases": [
-          "opencode"
-        ],
         "install_tool": "opencode",
         "projection_status": "implemented",
         "installable": true,
@@ -55,29 +48,11 @@
         "config_format": "json",
         "home_env_var": "CODEX_HOME",
         "default_home_dir": ".codex",
-        "cli_aliases": [
-          "codex"
-        ],
         "install_tool": "codex",
         "projection_status": "implemented",
         "installable": true,
         "default_framework_command": "implementx",
         "host_entrypoints": "AGENTS_CODEX.md"
-      },
-      "mimo": {
-        "display_name": "MiMo",
-        "transport_type": "hook",
-        "config_format": "json",
-        "home_env_var": "MIMO_HOME",
-        "default_home_dir": ".mimo",
-        "cli_aliases": [
-          "mimo"
-        ],
-        "install_tool": "mimo",
-        "projection_status": "implemented",
-        "installable": true,
-        "default_framework_command": "implementx",
-        "host_entrypoints": "AGENTS_MIMO.md"
       },
       "claude": {
         "display_name": "Claude",
@@ -85,9 +60,6 @@
         "config_format": "json",
         "home_env_var": "CLAUDE_HOME",
         "default_home_dir": ".claude",
-        "cli_aliases": [
-          "claude"
-        ],
         "install_tool": "claude",
         "projection_status": "implemented",
         "installable": true,
@@ -124,14 +96,6 @@
         "hooks_module": "codex_hooks",
         "cli_hook_subcommand": "hook",
         "dispatch_fn": "dispatch_codex_command"
-      },
-      "mimo": {
-        "cargo_feature": "host-mimo",
-        "provider_module": "mimo_provider",
-        "provider_type": "MimoHostProvider",
-        "hooks_module": "mimo_hooks",
-        "cli_hook_subcommand": "hook",
-        "dispatch_fn": "dispatch_mimo_command"
       },
       "claude": {
         "cargo_feature": "host-claude",
@@ -226,8 +190,7 @@
         "cursor": "/discussx",
         "opencode": "/discussx",
         "codex": "/discussx",
-        "claude": "/discussx",
-        "mimo": "/discussx"
+        "claude": "/discussx"
       },
       "lineage": {
         "source": "repo-native",
@@ -241,8 +204,7 @@
         "cursor": "/planx",
         "opencode": "/planx",
         "codex": "/planx",
-        "claude": "/planx",
-        "mimo": "/planx"
+        "claude": "/planx"
       }
     },
     "implementx": {
@@ -252,8 +214,7 @@
         "cursor": "/implementx",
         "opencode": "/implementx",
         "codex": "/implementx",
-        "claude": "/implementx",
-        "mimo": "/implementx"
+        "claude": "/implementx"
       },
       "implementation_bar": [
         "one-breath-all-waves",
@@ -277,8 +238,7 @@
         "cursor": "/verifyx",
         "opencode": "/verifyx",
         "codex": "/verifyx",
-        "claude": "/verifyx",
-        "mimo": "/verifyx"
+        "claude": "/verifyx"
       }
     },
     "deepinterview": {
@@ -314,8 +274,7 @@
         "cursor": "/deepinterview",
         "opencode": "/deepinterview",
         "codex": "/deepinterview",
-        "claude": "/deepinterview",
-        "mimo": "/deepinterview"
+        "claude": "/deepinterview"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -336,8 +295,7 @@
         "cursor": "/gitx",
         "opencode": "/gitx",
         "codex": "/gitx",
-        "claude": "/gitx",
-        "mimo": "/gitx"
+        "claude": "/gitx"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -359,8 +317,7 @@
         "cursor": "/update",
         "opencode": "/update",
         "codex": "/update",
-        "claude": "/update",
-        "mimo": "/update"
+        "claude": "/update"
       },
       "interaction_invariants": {
         "requires_explicit_entrypoint": true,
@@ -412,14 +369,12 @@
         "cursor": "mcp_servers.router-rs-framework",
         "opencode": "mcpServers.router-rs-framework",
         "codex": "mcp_servers.router-rs-framework",
-        "mimo": "mcpServers.router-rs-framework",
         "claude": "mcpServers.router-rs-framework"
       },
       "install_surfaces": {
         "cursor": "user mcp.json",
         "opencode": "opencode.json mcpServers",
         "codex": "project .codex/config.toml",
-        "mimo": ".mimo/settings.json mcpServers",
         "claude": "project .mcp.json"
       },
       "env_var_override": "ROUTER_RS_BIN"
@@ -467,14 +422,12 @@
         "cursor": "mcp_servers.browser-mcp",
         "opencode": "mcpServers.browser-mcp",
         "codex": "mcp_servers.browser-mcp",
-        "mimo": "mcpServers.browser-mcp",
         "claude": "mcpServers.browser-mcp"
       },
       "install_surfaces": {
         "cursor": "user mcp.json",
         "opencode": "opencode.json mcpServers",
         "codex": "project .codex/config.toml",
-        "mimo": ".mimo/settings.json mcpServers",
         "claude": "project .mcp.json"
       },
       "env_var_override": "ROUTER_RS_BIN",
@@ -499,14 +452,12 @@
         "cursor": "mcp_servers.mcp-codegraph",
         "opencode": "mcpServers.mcp-codegraph",
         "codex": "mcp_servers.mcp-codegraph",
-        "mimo": "mcpServers.mcp-codegraph",
         "claude": "mcpServers.mcp-codegraph"
       },
       "install_surfaces": {
         "cursor": "user mcp.json",
         "opencode": "opencode.json mcpServers",
         "codex": "project .codex/config.toml",
-        "mimo": ".mimo/settings.json mcpServers",
         "claude": "project .mcp.json"
       }
     },
@@ -527,14 +478,12 @@
         "cursor": "mcp_servers.paperplain",
         "opencode": "mcpServers.paperplain",
         "codex": "mcp_servers.paperplain",
-        "mimo": "mcpServers.paperplain",
         "claude": "mcpServers.paperplain"
       },
       "install_surfaces": {
         "cursor": "user mcp.json",
         "opencode": "opencode.json mcpServers",
         "codex": "project .codex/config.toml",
-        "mimo": ".mimo/settings.json mcpServers",
         "claude": "project .mcp.json"
       }
     }
@@ -705,58 +654,6 @@
         "paperplain"
       ]
     },
-    "mimo": {
-      "profile_id": "mimo_profile",
-      "host_id": "mimo",
-      "transport": "native-mimo",
-      "context_files": [
-        "AGENTS_MIMO.md"
-      ],
-      "settings_paths": [
-        {
-          "scope": "user",
-          "host_root": "mimo",
-          "relative": "settings.json"
-        },
-        {
-          "scope": "project",
-          "relative": ".mimo/settings.json"
-        }
-      ],
-      "mcp_config_paths": [
-        {
-          "scope": "project",
-          "relative": ".mimo/settings.json"
-        }
-      ],
-      "session_supervisor_driver": "unsupported",
-      "session_supervisor_status": {
-        "supported": false,
-        "rationale": "Mimo host does not expose external process supervision or auto-resume. Long-running goals must rely on in-session continuity artifacts."
-      },
-      "resume_command_examples": [
-        "Continue in the same Mimo session"
-      ],
-      "harness_capabilities": [
-        "hot_runtime_routing",
-        "l2_continuity_contract",
-        "closeout_evidence_hooks",
-        "review_gate_router_observation"
-      ],
-      "capabilities": [
-        "artifact_contract",
-        "mcp_servers",
-        "workspace_bootstrap",
-        "interactive_agent_chat",
-        "framework_alias_entrypoints"
-      ],
-      "managed_mcp_server_ids": [
-        "router-rs-framework",
-        "browser-mcp",
-        "mcp-codegraph",
-        "paperplain"
-      ]
-    },
     "claude": {
       "profile_id": "claude_profile",
       "host_id": "claude",
@@ -799,12 +696,5 @@
         "paperplain"
       ]
     }
-  },
-  "retired_hosts": {
-    "antigravity": "2026-06: product line discontinued",
-    "antigravity-app": "2026-06: merged into antigravity",
-    "antigravity-cli": "2026-06: replaced by antigravity MCP",
-    "codex-cli": "2026-06: merged into codex",
-    "codex-app": "2026-06: merged into codex"
   }
 }

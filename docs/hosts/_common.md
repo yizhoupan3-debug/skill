@@ -6,7 +6,7 @@ depends_on:
 
 # 共通宿主内容
 
-本文档抽取 5 个宿主手册（Claude / Cursor / Codex / MiMo / OpenCode）的**完全重复段落**，各宿主手册共享引用。
+本文档抽取 4 个宿主手册（Claude / Cursor / Codex / OpenCode）的**完全重复段落**，各宿主手册共享引用。
 
 **闭集 id 与传输协议**：见对应宿主手册（[`hook-hosts.md`](hook-hosts.md)、[`opencode.md`](opencode.md)）。
 

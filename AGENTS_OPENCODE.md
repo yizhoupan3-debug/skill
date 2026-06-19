@@ -19,10 +19,10 @@
 
 ## 所有者对比
 
-| 能力 | claude | cursor | codex | opencode | mimo |
-|------|:-----------:|:------:|:-----:|:--------:|:----:|
-| Hard gate hooks | ✓ | ✓ | ✓ | ✗（fail-open） | ✓ |
-| Closeout evidence hooks | ✓ | ✓ | ✓ | ✗ | ✓ |
-| Review gate | Rust 侧 | Rust 侧 | Rust 侧 | MCP 工具层 | Rust 侧 |
-| Session supervisor | mcp_bridge | ✗ | codex_driver | ✗ | ✗ |
-| Provider trait | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 能力 | claude | cursor | codex | opencode |
+|------|:-----------:|:------:|:-----:|:--------:|
+| Hard gate hooks | ✓ | ✓ | ✓ | ✗（fail-open） |
+| Closeout evidence hooks | ✓ | ✓ | ✓ | ✗ |
+| Review gate | Rust 侧 | Rust 侧 | Rust 侧 | MCP 工具层 |
+| Session supervisor | mcp_bridge | ✗ | codex_driver | ✗ |
+| Provider trait | ✓ | ✓ | ✓ | ✓ |

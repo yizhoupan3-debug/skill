@@ -52,7 +52,6 @@ use crate::trace_runtime::{
 };
 use host_projection::hosts::codex_hooks::dispatcher::CodexHookDispatcher;
 use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher, HookOutput};
-use host_projection::hosts::mimo_hooks::run_mimo_hook;
 use host_projection::hooks::{
     HookObservationHost, attach_router_rs_observation, emit_hook_fired,
     hook_action_from_optional_output, read_stdin_limited,
@@ -502,9 +501,6 @@ pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Resu
     fn dispatch_codex(cmd: &GenericHookCommand) -> Result<(), String> {
         dispatch_codex_hook(cmd.event.as_str(), cmd.repo_root.as_deref())
     }
-    fn dispatch_mimo(cmd: &GenericHookCommand) -> Result<(), String> {
-        run_mimo_hook(&cmd.event, cmd.repo_root.as_deref()).map(|_| ())
-    }
 
     // Registry-driven dispatch table: add new hosts here.
     const DISPATCH_TABLE: &[(&str, HookDispatchFn)] = &[
@@ -512,7 +508,6 @@ pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Resu
         ("claude", dispatch_claude),
         ("opencode", dispatch_opencode),
         ("codex", dispatch_codex),
-        ("mimo", dispatch_mimo),
     ];
 
     DISPATCH_TABLE

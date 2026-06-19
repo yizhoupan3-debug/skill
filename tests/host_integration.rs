@@ -2151,7 +2151,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         payload["host_targets"]["supported"],
-        json!(["cursor", "claude", "opencode", "codex", "mimo"])
+        json!(["cursor", "claude", "opencode", "codex"])
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["codex"]["install_tool"],

@@ -16,8 +16,6 @@ pub mod claude_agent;
 pub mod claude_hooks;
 pub mod claude_provider;
 pub mod mcp_stdio_harness;
-pub mod mimo_hooks;
-pub mod mimo_provider;
 pub mod opencode_agent;
 pub mod opencode_hooks;
 pub mod opencode_provider;

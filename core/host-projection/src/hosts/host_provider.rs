@@ -212,9 +212,7 @@ pub fn host_provider_for_install_tool(tool: &str) -> Option<&'static dyn HostPro
     let needle = tool.trim().to_lowercase();
     host_provider_registry().iter().find_map(|boxed| {
         let provider = boxed.as_ref();
-        if provider.install_tool() == needle
-            || provider.aliases().iter().any(|alias| *alias == needle)
-        {
+        if provider.install_tool() == needle {
             Some(provider)
         } else {
             None
@@ -222,48 +220,16 @@ pub fn host_provider_for_install_tool(tool: &str) -> Option<&'static dyn HostPro
     })
 }
 
-/// Resolve a routing `host_id` spelling (canonical id, install tool, or retired alias).
+/// Resolve a routing `host_id` spelling (canonical id or install tool).
 pub fn host_provider_for_routing_spelling(host_id: &str) -> Option<&'static dyn HostProvider> {
     let needle = host_id.trim();
     host_provider_for_id(needle)
         .or_else(|| host_provider_for_install_tool(needle))
-        .or_else(|| {
-            let needle_lower = needle.to_ascii_lowercase();
-            host_provider_registry().iter().find_map(|boxed| {
-                let provider = boxed.as_ref();
-                if provider
-                    .aliases()
-                    .iter()
-                    .any(|alias| alias.eq_ignore_ascii_case(&needle_lower))
-                {
-                    Some(provider)
-                } else {
-                    None
-                }
-            })
-        })
 }
 
 /// Host-filter alias expansion for B1 routing (`host_platforms` matching).
 pub fn host_provider_routing_aliases(host_id: &str) -> Vec<String> {
-    let needle = host_id.trim().to_ascii_lowercase();
-    let mut out = Vec::new();
-    let mut push_unique = |value: &str| {
-        let normalized = value.trim().to_ascii_lowercase();
-        if normalized.is_empty() || out.iter().any(|existing| existing == &normalized) {
-            return;
-        }
-        out.push(normalized);
-    };
-    push_unique(&needle);
-    if let Some(provider) = host_provider_for_routing_spelling(&needle) {
-        push_unique(provider.host_id());
-        push_unique(provider.install_tool());
-        for alias in provider.aliases() {
-            push_unique(alias);
-        }
-    }
-    out
+    vec![host_id.trim().to_ascii_lowercase()]
 }
 
 pub fn host_lifecycle_for_id(host_id: &str) -> Option<&'static dyn HostLifecycle> {
@@ -408,12 +374,6 @@ mod tests {
                 .host_id(),
             "codex"
         );
-        assert_eq!(
-            host_provider_for_install_tool("codex-cli")
-                .expect("codex-cli alias")
-                .host_id(),
-            "codex"
-        );
     }
 
     #[test]
@@ -545,8 +505,8 @@ mod tests {
         let cases: &[(&str, &[&str])] = &[
             ("cursor", &["cursor"]),
             ("claude", &["claude"]),
-            ("codex-cli", &["codex-cli", "codex", "codex-app"]),
-            ("codex", &["codex", "codex-cli", "codex-app"]),
+            ("codex", &["codex"]),
+            ("opencode", &["opencode"]),
         ];
         for (input, expected) in cases {
             let aliases = host_provider_routing_aliases(input);

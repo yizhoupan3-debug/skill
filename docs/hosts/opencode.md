@@ -60,7 +60,7 @@ OpenCode 通过 JS/TS 插件系统提供完整 hook 生命周期：
 
 ## Fail-open / Fail-closed 设计意图
 
-OpenCode 采用 **fail-open** 策略：当 `router-rs` hook 二进制缺失或不可读时，`tool.execute.before` 事件静默通过（不阻断工具执行）。这与 Claude / Cursor / Codex / MiMo 的 fail-closed 策略不同（见 [`hook-hosts.md`](hook-hosts.md) §Fail-open / Fail-closed 比较）。
+OpenCode 采用 **fail-open** 策略：当 `router-rs` hook 二进制缺失或不可读时，`tool.execute.before` 事件静默通过（不阻断工具执行）。这与 Claude / Cursor / Codex 的 fail-closed 策略不同（见 [`hook-hosts.md`](hook-hosts.md) §Fail-open / Fail-closed 比较）。
 
 **设计理由**：OpenCode 的插件 hook 系统通过 JS/TS 运行时执行，hook 失败不应阻断核心编辑器功能。MCP 工具层（`framework_snapshot`、`skill_route` 等）独立于 hook 系统，hook 缺失不影响 MCP 功能。
 

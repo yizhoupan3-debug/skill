@@ -8,7 +8,7 @@ parent: _common.md
 
 # Hook 宿主手册 (Hook Hosts)
 
-本文档覆盖 **Claude** / **Cursor** / **Codex** / **MiMo** 四宿主。**OpenCode** 因架构差异（JS/TS 插件系统 + fail-open）单独见 [`opencode.md`](opencode.md)。
+本文档覆盖 **Claude** / **Cursor** / **Codex** 三宿主。**OpenCode** 因架构差异（JS/TS 插件系统 + fail-open）单独见 [`opencode.md`](opencode.md)。
 
 **共通内容**（代理身份与画风、Skill 路由、默认生命周期、Python 环境、进程管理与性能调优）见 [`_common.md`](_common.md)。
 
@@ -16,15 +16,15 @@ parent: _common.md
 
 ## 总览
 
-| 属性 | Claude | Cursor | Codex | MiMo |
-|------|--------|--------|-------|------|
-| 闭集 id | `claude` | `cursor` | `codex` | `mimo` |
-| 传输 | claude-hooks | cursor-hooks | codex-hooks | native-mimo (hook) |
-| Hook 事件数 | 4（减法闭集） | 7（减法闭集） | 事件驱动（review gate + evidence） | 7（与 Cursor 对齐） |
-| Fail 策略 | fail-closed | fail-closed | fail-closed | fail-closed |
-| 注册表源 | `RUNTIME_REGISTRY.json` → `host_projections.claude` | `RUNTIME_REGISTRY.json` → `host_projections.cursor` | `RUNTIME_REGISTRY.json` → `host_projections.codex` | `RUNTIME_REGISTRY.json` → `host_projections.mimo` |
-| 多代理支持 | 原生 Task（无 hook 门控） | `subagentStart`/`subagentStop` hook 门控 | agent 自觉驱动（无 hook 门控） | `SubagentStart`/`SubagentStop` 追踪 |
-| Session Supervisor | 不支持 | 不支持 | **支持**（launch / resume / terminate） | 不支持 |
+| 属性 | Claude | Cursor | Codex |
+|------|--------|--------|-------|
+| 闭集 id | `claude` | `cursor` | `codex` |
+| 传输 | claude-hooks | cursor-hooks | codex-hooks |
+| Hook 事件数 | 4（减法闭集） | 7（减法闭集） | 事件驱动（review gate + evidence） |
+| Fail 策略 | fail-closed | fail-closed | fail-closed |
+| 注册表源 | `RUNTIME_REGISTRY.json` → `host_projections.claude` | `RUNTIME_REGISTRY.json` → `host_projections.cursor` | `RUNTIME_REGISTRY.json` → `host_projections.codex` |
+| 多代理支持 | 原生 Task（无 hook 门控） | `subagentStart`/`subagentStop` hook 门控 | agent 自觉驱动（无 hook 门控） |
+| Session Supervisor | 不支持 | 不支持 | **支持**（launch / resume / terminate） |
 
 ---
 
@@ -67,19 +67,6 @@ parent: _common.md
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
 | 宿主入口对齐 | `router-rs framework sync-entrypoints --host-id codex` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md` 及 **`host_entrypoints_sync_manifest`**；跨宿主内核 **[`AGENTS.md`](../../AGENTS.md)** 人工维护、不由 sync 覆盖 |
 
-### MiMo
-
-**注册 7 事件**（与 Cursor 对齐，减法闭集）：`PreToolUse`、`PostToolUse`、`UserPromptSubmit`、`Stop`、`SessionStart`、`SubagentStart`、`SubagentStop`。Rust 侧 [`mimo_hooks.rs`](../../core/host-projection/src/hosts/mimo_hooks.rs) 仅 `PreToolUse` + `Stop` 有显式 dispatch；其余事件通过 `router-rs host mimo mimo-hook <event>` 统一 CLI 路径处理。Hook 状态目录为 `.mimo/hook-state/`。
-
-| 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
-|--------|----------|----------------|-----------------|
-| PreToolUse 路径保护 | 工具调用匹配 `Bash\|Write\|Edit\|NotebookEdit` | `mimo_hooks::run_mimo_hook` → `PreToolUse` | 未授权工具调用 → `continue:false`（硬阻断）；未物化 GOAL_STATE 同理 |
-| PostToolUse 证据收集 | 工具调用匹配 `Bash\|Write\|Edit\|Agent` | `mimo_hooks::run_mimo_hook` → `PostToolUse` | `EVIDENCE_INDEX.json` 自动记录（opt-in） |
-| UserPromptSubmit 上下文 | 任意用户提交 | `mimo_hooks::run_mimo_hook` → `UserPromptSubmit` | review gate 检测 + context 注入 |
-| Stop closeout | 会话 stop | `mimo_hooks::run_mimo_hook` → `Stop` | closeout gate + review gate 状态检查 |
-| SessionStart | 会话启动 | `mimo_hooks::run_mimo_hook` → `SessionStart` | context 注入 |
-| SubagentStart/Stop | 子代理生命周期 | `mimo_hooks::run_mimo_hook` → `SubagentStart/Stop` | 子代理追踪 |
-
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
 
 ---
@@ -91,21 +78,20 @@ parent: _common.md
 | Claude | **fail-closed** | Stop 返回 `decision:block` | 4 事件深度嵌入会话，`Stop` 可阻断提交。二进制损坏 → 安全关键路径断裂 → 避免无审查不可逆操作 |
 | Cursor | **fail-closed** | critical 事件返回 `continue:false` / `permission:deny` | 7 事件紧密嵌入生命周期。`stop` 可阻断提交、`beforeSubmitPrompt` 可注入 nudge。critical 事件缺 binary 阻止不可逆操作 |
 | Codex | **fail-closed** | 各事件返回 `decision:block` | `.codex/hooks.json` 解析顺序：`ROUTER_RS_BIN` → 仓库 `target/{release,debug}` → `command -v router-rs`；解析失败直接阻断 |
-| MiMo | **fail-closed** | PreToolUse 与 Stop 返回 `decision:block` | 7 事件紧密嵌入，PreToolUse 可硬阻断工具调用，Stop 驱动 closeout gate。二进制损坏 → 安全路径断裂 |
 
 ---
 
 ## 安装与文件分布
 
-| 关注点 | Claude | Cursor | Codex | MiMo |
-|--------|--------|--------|-------|------|
-| **Hooks 配置** | `.claude/settings.json` | `.cursor/hooks.json` | `.codex/hooks.json` | `.mimo/settings.json` |
-| **环境变量文件** | `.claude/router-rs-hook.env` | `.cursor/router-rs-hook.env` | — | `.mimo/router-rs-hook.env`（可选） |
-| **Framework rules** | `.claude/rules/framework.md` (project)；`~/.claude/rules/framework.md` (user) | `~/.cursor/rules/framework.mdc` (user)；`.cursor/rules/*.mdc` (project) | `.codex/prompts/framework.md` (project) | `AGENTS_MIMO.md` (仓库根，双文件注入) |
-| **Project 叙事** | `.claude/CLAUDE.md` | `.cursor/commands/*.md`、`.cursor/agents/deep-reviewer.md` | — | — |
-| **AGENTS delta** | `AGENTS_CLAUDE.md` (仓库根) | `AGENTS_CURSOR.md` (仓库根) | `AGENTS_CODEX.md` (仓库根) | `AGENTS_MIMO.md` (仓库根) |
-| **Hook state 目录** | `.claude/hook-state/` | `.cursor/hook-state/` | `.codex/hook-state/` | `.mimo/hook-state/` |
-| **Projection manifest** | `.claude/.framework-projection.json` | — | — | `.mimo/.framework-projection.json` |
+| 关注点 | Claude | Cursor | Codex |
+|--------|--------|--------|-------|
+| **Hooks 配置** | `.claude/settings.json` | `.cursor/hooks.json` | `.codex/hooks.json` |
+| **环境变量文件** | `.claude/router-rs-hook.env` | `.cursor/router-rs-hook.env` | — |
+| **Framework rules** | `.claude/rules/framework.md` (project)；`~/.claude/rules/framework.md` (user) | `~/.cursor/rules/framework.mdc` (user)；`.cursor/rules/*.mdc` (project) | `.codex/prompts/framework.md` (project) |
+| **Project 叙事** | `.claude/CLAUDE.md` | `.cursor/commands/*.md`、`.cursor/agents/deep-reviewer.md` | — |
+| **AGENTS delta** | `AGENTS_CLAUDE.md` (仓库根) | `AGENTS_CURSOR.md` (仓库根) | `AGENTS_CODEX.md` (仓库根) |
+| **Hook state 目录** | `.claude/hook-state/` | `.cursor/hook-state/` | `.codex/hook-state/` |
+| **Projection manifest** | `.claude/.framework-projection.json` | — | — |
 
 ### 安装命令
 
@@ -125,13 +111,6 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 **Codex**（修改了 router-rs 嵌入的 AGENTS 文本、hook 模板或需重新材料化时）：
 ```bash
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root "$PWD"
-```
-
-**MiMo**：
-```bash
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
-  framework host-integration install --to mimo --scope user
-# 亦可直接：./scripts/install-claude.sh
 ```
 
 ---
@@ -243,31 +222,3 @@ Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentSta
 | 专用 gate 文件 | `execution-subagent-gate.mdc` + `review-subagent-gate.mdc` | 无 | **无**（本文档为真源） |
 | 模型继承规则 | 禁默认 Sonnet/Claude | N/A | **继承主会话模型**，不显式指定 |
 | 并行 lane 数 | 3–5 | 按需 | **3–5**（同 Cursor） |
-
-### MiMo
-
-- **Transport 架构**：Hook 层（`.mimo/settings.json` → `router-rs host mimo mimo-hook <event>`）处理 PreToolUse/PostToolUse/UPS 等 7 事件；MCP Bridge 层（`mcpServers` → `router-rs-framework`）提供 `framework_snapshot`、`skill_route`、`goal_state_manage` 等工具
-- **能力边界**：7 事件注册表；`PreToolUse` 守卫依赖 `GOAL_STATE` 存在性；Rust handler 仅 `PreToolUse` + `Stop` 有显式 dispatch；其余事件统一 CLI 路径处理
-- **Harness Capabilities**（`MimoHostProvider`）：
-  - `hot_runtime_routing` — 热路由
-  - `l2_continuity_contract` — L2 连续性契约
-  - `closeout_evidence_hooks` — closeout 证据 hook
-  - `review_gate_router_observation` — review gate 观测
-- **Review Gate**：
-  - **始终 advisory-only**（与 Claude canonical 实现一致）：仅 `followup_message` nudge，**不** `permission: deny` / 硬拦 Stop
-  - my-light 下完全 suppress：Stop 上无 `REVIEW_GATE` / `AG_FOLLOWUP` 输出，仅保留 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`
-  - 无 Cursor 的 `REVIEW_GATE_STOP_MAX_NUDGES` 上限机制，无 Codex 的 `subagentStart`/`subagentStop` 硬门控
-- **Goal/RFV**：通过 `framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/` 手动管理（**无** hook `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` / continuity digest 注入）
-- **MCP 服务器**：通过 `.mimo/settings.json` 的 `mcpServers` 字段注册。包括：
-  - `router-rs-framework` — Framework snapshot / skill routing / goal / closeout gating
-  - `browser-mcp` — Browser automation / session worker / background tasks
-  - `mcp-codegraph` — Code knowledge graph (search, callers, callees)
-  - `paperplain` — Academic paper metadata fetch/search
-  - 由 `host-integration install` 自动写入 `.mimo/settings.json`，通过 `.framework-projection.json` 标记 managed keys
-- **Session Supervisor**：**不支持**。长时目标依赖会话内连续性产物（`artifacts/current/` 目录）
-- **自检命令**：
-  ```bash
-  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration status
-  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor
-  cargo test --manifest-path core/router-rs/Cargo.toml host_integration
-  ```

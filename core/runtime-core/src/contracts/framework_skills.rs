@@ -105,7 +105,7 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
             .ok()
             .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
             .unwrap_or_else(|| {
-                json!(["claude", "codex", "cursor", "opencode", "mimo"])
+                json!(["claude", "codex", "cursor", "opencode"])
                     .as_array()
                     .cloned()
                     .unwrap()

@@ -285,7 +285,7 @@ mod tests {
             assert!(
                 matches!(
                     tool.as_str(),
-                    "codex" | "cursor" | "claude" | "opencode" | "mimo"
+                    "codex" | "cursor" | "claude" | "opencode"
                 ),
                 "unexpected mapping {host_id} -> {tool}"
             );
@@ -310,7 +310,6 @@ mod tests {
                 "claude".to_string(),
                 "codex".to_string(),
                 "cursor".to_string(),
-                "mimo".to_string(),
                 "opencode".to_string(),
             ],
             "AGENTS.md / MIGRATION.md closed-set must match RUNTIME_REGISTRY.host_targets.supported"
@@ -325,7 +324,6 @@ mod tests {
         assert!(pairs.iter().any(|(host_id, _)| host_id == "claude"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "opencode"));
         assert!(pairs.iter().any(|(host_id, _)| host_id == "codex"));
-        assert!(pairs.iter().any(|(host_id, _)| host_id == "mimo"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "codex-app"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "codex-cli"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "claude-desktop"));

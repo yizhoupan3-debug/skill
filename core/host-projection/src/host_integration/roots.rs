@@ -556,12 +556,11 @@ pub fn resolve_projection_roots(
     };
 
     // Build host home roots map from registry-driven host list + explicit overrides.
-    let host_overrides: [(&str, Option<&Path>, &str, &str); 5] = [
+    let host_overrides: [(&str, Option<&Path>, &str, &str); 4] = [
         ("codex", codex_home, "CODEX_HOME", ".codex"),
         ("cursor", cursor_home, "CURSOR_HOME", ".cursor"),
         ("claude", claude_home, "CLAUDE_HOME", ".claude"),
         ("opencode", opencode_home, "OPENCODE_HOME", ".opencode"),
-        ("mimo", None, "MIMO_HOME", ".mimo"),
     ];
     let mut host_home_roots = BTreeMap::new();
     for (host_id, explicit, env_var, default_leaf) in &host_overrides {

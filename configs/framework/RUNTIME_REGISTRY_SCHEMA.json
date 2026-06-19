@@ -5,8 +5,7 @@
     "cursor",
     "claude",
     "opencode",
-    "codex",
-    "mimo"
+    "codex"
   ],
   "projection_status_values": [
     "implemented",
@@ -20,7 +19,6 @@
     "config_format",
     "home_env_var",
     "default_home_dir",
-    "cli_aliases",
     "install_tool",
     "projection_status",
     "installable",
@@ -31,8 +29,7 @@
     "cursor",
     "claude",
     "opencode",
-    "codex",
-    "mimo"
+    "codex"
   ],
   "framework_command_required_fields": [
     "canonical_owner",

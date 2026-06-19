@@ -35,7 +35,6 @@ pub enum HookObservationHost {
     Codex,
     Claude,
     OpenCode,
-    MiMo,
 }
 pub type HookObservationHostType = HookObservationHost;
 
@@ -46,7 +45,6 @@ impl HookObservationHost {
             "codex" => Some(Self::Codex),
             "claude" => Some(Self::Claude),
             "opencode" => Some(Self::OpenCode),
-            "mimo" => Some(Self::MiMo),
             _ => None,
         }
     }
@@ -57,7 +55,6 @@ impl HookObservationHost {
             Self::Codex => "codex",
             Self::Claude => "claude",
             Self::OpenCode => "opencode",
-            Self::MiMo => "mimo",
         }
     }
 }
@@ -69,7 +66,6 @@ pub enum PaperProseHookHost {
     Codex,
     Claude,
     OpenCode,
-    MiMo,
 }
 pub type PaperProseHookHostType = PaperProseHookHost;
 
@@ -81,7 +77,6 @@ impl PaperProseHookHost {
             Self::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
             Self::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
             Self::OpenCode => "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK",
-            Self::MiMo => "ROUTER_RS_MIMO_PAPER_PROSE_HOOK",
         }
     }
 
@@ -92,7 +87,6 @@ impl PaperProseHookHost {
             Self::Codex => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
             Self::Claude => "ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK",
             Self::OpenCode => "ROUTER_RS_OPENCODE_PAPER_ADVERSARIAL_HOOK",
-            Self::MiMo => "ROUTER_RS_MIMO_PAPER_ADVERSARIAL_HOOK",
         }
     }
 
@@ -1131,7 +1125,6 @@ pub fn install_test_deps() {
                 PaperProseHookHost::Codex => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
                 PaperProseHookHost::Claude => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
                 PaperProseHookHost::OpenCode => "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK",
-                PaperProseHookHost::MiMo => "ROUTER_RS_MIMO_PAPER_PROSE_HOOK",
             };
             if !super::hooks::router_rs_env_enabled_default_true(env_var) {
                 return;
@@ -1257,7 +1250,6 @@ pub fn install_test_deps() {
                 HookObservationHost::Codex => "codex",
                 HookObservationHost::Claude => "claude",
                 HookObservationHost::OpenCode => "opencode",
-                HookObservationHost::MiMo => "mimo",
             };
             // Detect review gate advisory in followup_message.
             let followup = output
@@ -1704,7 +1696,6 @@ mod tests {
             HookObservationHost::Codex,
             HookObservationHost::Claude,
             HookObservationHost::OpenCode,
-            HookObservationHost::MiMo,
         ] {
             assert_eq!(HookObservationHost::from_host_id(host.as_str()), Some(host));
         }
@@ -1729,16 +1720,12 @@ mod tests {
             PaperProseHookHost::OpenCode.env_var(),
             "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK"
         );
-        assert_eq!(
-            PaperProseHookHost::MiMo.env_var(),
-            "ROUTER_RS_MIMO_PAPER_PROSE_HOOK"
-        );
     }
 
     #[test]
     fn hook_observation_host_json_snapshot() {
         // Snapshot all HookObservationHost enum variant serializations.
-        let variants: Vec<_> = ["cursor", "codex", "claude", "opencode", "mimo"]
+        let variants: Vec<_> = ["cursor", "codex", "claude", "opencode"]
             .iter()
             .filter_map(|h| HookObservationHost::from_host_id(h))
             .collect();

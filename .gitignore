@@ -68,7 +68,6 @@ core/router-rs/probe.err
 artifacts/ops/
 artifacts/evidence/
 artifacts/scratch/
-.mimo/
 artifacts/generated-artifacts-drift-check/
 artifacts/pet-runs/
 artifacts/tmp-*/

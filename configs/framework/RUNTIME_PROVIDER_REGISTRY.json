@@ -4,8 +4,7 @@
   "plugin_abi_version": "skill-plugin-abi-v1",
   "policy": {
     "core_rule": "Rust control plane stays stable; providers are declared, versioned, and fail closed when unsupported.",
-    "path_rule": "All provider paths are repo-relative or logical provider ids.",
-    "compatibility_rule": "Provider additions are additive; breaking provider shape changes require a schema version bump."
+    "path_rule": "All provider paths are repo-relative or logical provider ids."
   },
   "provider_inventory_policy": {
     "purpose": "document-only implementation inventory; not an execution ranking source",
@@ -263,14 +262,6 @@
         "mcp_config_paths"
       ],
       "notes": "OpenCode MCP capability profile."
-    },
-    "mimo": {
-      "status": "implemented",
-      "projection": "mimo_profile",
-      "capabilities": [
-        "context_files"
-      ],
-      "notes": "Mimo host projection — minimal profile."
     }
   },
   "governance_eval_loop": {

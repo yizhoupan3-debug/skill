@@ -1,6 +1,6 @@
 //! Normalize `SKILL.md` `metadata.platforms` tokens to the closed host ids in
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`
-//! (`cursor`, `claude`, `opencode`, `codex`, `mimo`).
+//! (`cursor`, `claude`, `opencode`, `codex`).
 //!
 //! Legacy tokens:
 //! - `claude` → `claude`
@@ -44,12 +44,12 @@ pub fn normalize_skill_host_platforms(
             "claude" => {
                 out.insert("claude".to_string());
             }
-            "cursor" | "opencode" | "mimo" => {
+            "cursor" | "opencode" => {
                 out.insert(t);
             }
             other => {
                 return Err(format!(
-                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, cursor, claude, opencode, mimo)"
+                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, cursor, claude, opencode)"
                 ));
             }
         }

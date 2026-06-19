@@ -304,14 +304,13 @@ mod tests {
         assert_eq!(canonical_tool_name("claude", &root).unwrap(), "claude");
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
-        for tool in ["cursor", "claude", "opencode", "codex", "mimo"] {
+        for tool in ["cursor", "claude", "opencode", "codex"] {
             assert!(
                 err.contains(tool),
                 "expected supported tool {tool} in error: {err}"
             );
         }
         assert!(err.contains("claude"), "{err}");
-        assert!(err.contains("codex-cli"), "{err}");
     }
 
     #[test]
@@ -326,7 +325,6 @@ mod tests {
                 "claude".to_string(),
                 "opencode".to_string(),
                 "codex".to_string(),
-                "mimo".to_string(),
             ]
         );
     }

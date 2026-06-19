@@ -9,7 +9,7 @@ version: unified-v7
 
 ### 6.1 宿主闭集
 
-权威真源：`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`（五 id 闭集）。
+权威真源：`configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`（四 id 闭集）。
 
 | 宿主 ID | install_tool | 运输模式 |
 |---------|-------------|---------|
@@ -17,23 +17,22 @@ version: unified-v7
 | `cursor` | `cursor` | `cursor-agent` |
 | `codex` | `codex` | `native-codex` |
 | `opencode` | `opencode` | `native-opencode` |
-| `mimo` | `mimo` | `native-mimo` |
 
 > **退役 id** 不在闭集内；迁移指引见 [`MIGRATION.md`](../../MIGRATION.md)。
 
 ### 6.2 Hook 事件矩阵
 
-| 事件 | claude | cursor | codex | opencode | mimo |
-|------|:-----------:|:------:|:-----:|:--------:|:----:|
-| PreToolUse | ✅ core | — | ✅ | ✅ ⁴ | ✅ ⁵ |
-| UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | ✅ ⁴ | ✅ ⁵ |
-| PostToolUse | ✅ core | ✅ | ✅ | ✅ ⁴ | ✅ ⁵ |
-| Stop | ✅ core | ✅ | ✅ | ✅ ⁴ | ✅ ⁵ |
-| SessionStart | optional | ✅ | ✅ | ✅ ⁴ | ✅ ⁵ |
-| SubagentStart | optional | ✅ | ✅ ² | ✅ ⁴ | ✅ ⁵ |
-| SubagentStop | optional | ✅ | ✅ ² | ✅ ⁴ | ✅ ⁵ |
+| 事件 | claude | cursor | codex | opencode |
+|------|:-----------:|:------:|:-----:|:--------:|
+| PreToolUse | ✅ core | — | ✅ | ✅ ⁴ |
+| UserPromptSubmit | ✅ core | ✅ ¹ | ✅ | ✅ ⁴ |
+| PostToolUse | ✅ core | ✅ | ✅ | ✅ ⁴ |
+| Stop | ✅ core | ✅ | ✅ | ✅ ⁴ |
+| SessionStart | optional | ✅ | ✅ | ✅ ⁴ |
+| SubagentStart | optional | ✅ | ✅ ² | ✅ ⁴ |
+| SubagentStop | optional | ✅ | ✅ ² | ✅ ⁴ |
 
-¹ `beforeSubmitPrompt` 映射 · ² v0.133.0+ · ⁴ 通过 `router-rs opencode agent` Rust 统一后端（JS 插件 bridge → `tool.execute.before/after` / `session.idle`） · ⁵ MiMo hook 统一后端
+¹ `beforeSubmitPrompt` 映射 · ² v0.133.0+ · ⁴ 通过 `router-rs opencode agent` Rust 统一后端（JS 插件 bridge → `tool.execute.before/after` / `session.idle`）
 
 ### 6.3 MCP 配置差异
 
@@ -43,7 +42,6 @@ version: unified-v7
 | cursor | `mcpServers` | `stdio` | `~/.cursor/mcp.json` |
 | opencode | `mcp` | `local` | `~/.config/opencode/opencode.json` |
 | codex | `mcp_servers` (TOML) | `stdio` | `~/.codex/config.toml` |
-| mimo | `mcpServers` | `stdio` | `~/.mimo/mcp.json` |
 
 **§14.7 Schema Drift 三道闸**：写盘前 validate → 写盘后 readback → manifest 路径存在性
 
@@ -53,7 +51,7 @@ version: unified-v7
 |------|------|-------------|-------------------|---------------------|
 | **S 档** | codex | 11 | codex_driver | 4 项 |
 | **A 档** | claude, cursor | 6 | mcp_bridge / unsupported | 4 项 |
-| **B 档** | opencode, mimo | 5 | unsupported | 4 项 |
+| **B 档** | opencode | 5 | unsupported | 4 项 |
 
 ### 6.5 编译嵌入矩阵
 
@@ -63,7 +61,6 @@ version: unified-v7
 | cursor | hooks.json + .mdc | `host_integration/projection` |
 | codex | AGENTS.md + AGENTS_CODEX.md | `policy_embed.rs` |
 | opencode | opencode.json 投影 | `host_integration/projection` |
-| mimo | mimo.json 投影 | `host_integration/projection` |
 
 ---
 
@@ -73,7 +70,7 @@ version: unified-v7
 
 #### 共享层
 
-跨五宿主共享的代码在专用模块中：
+跨四宿主共享的代码在专用模块中：
 
 | Layer | Module | Responsibility |
 |-------|--------|---------------|
@@ -127,7 +124,7 @@ version: unified-v7
     "host_policy": "closed-set-explicit-projections"
   },
   "host_targets": {
-    "supported": ["cursor", "claude", "opencode", "codex", "mimo"],
+    "supported": ["cursor", "claude", "opencode", "codex"],
     "metadata": {
       "<host_id>": {
         "install_tool": "string",
@@ -140,7 +137,6 @@ version: unified-v7
         "transport_type": "hook | native-opencode",
         "config_format": "json | toml | mdc",
         "config_path": ".<host>/settings.json",
-        "cli_aliases": ["alias1", "alias2"],
         "home_env_var": "HOST_HOME",
         "default_home_dir": ".<host>"
       }

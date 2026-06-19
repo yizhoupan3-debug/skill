@@ -48,7 +48,6 @@
   },
   "migration_guardrails": {
     "avoid_runtime_kernel_fork": true,
-    "compatibility_surfaces_explicit_only": true,
     "preserve_rust_runtime_authority": true
   },
   "outcome_metrics": [

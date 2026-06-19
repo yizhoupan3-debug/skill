@@ -58,21 +58,15 @@ fn dispatch(host_id: &str, event: &str, repo_root: &Path, payload: &Value) -> Va
         "opencode" => {
             crate::hosts::opencode_hooks::dispatch_opencode_hook_event(repo_root, event, payload)
         }
-        "mimo" => {
-            crate::hosts::mimo_hooks::run_mimo_hook(event, Some(repo_root))
-                .ok()
-                .flatten()
-                .unwrap_or_else(|| json!({}))
-        }
         _ => panic!("unknown host_id: {host_id}"),
     }
 }
 
 /// All supported host IDs for unified testing.
-const ALL_HOSTS: &[&str] = &["claude", "cursor", "codex", "opencode", "mimo"];
+const ALL_HOSTS: &[&str] = &["claude", "cursor", "codex", "opencode"];
 
 /// Hosts that handle PreToolUse / tool.execute.before events.
-const PRE_TOOL_USE_HOSTS: &[&str] = &["claude", "cursor", "opencode", "mimo"];
+const PRE_TOOL_USE_HOSTS: &[&str] = &["claude", "cursor", "opencode"];
 
 /// Create a temporary test repo with framework markers.
 fn test_repo(name: &str) -> std::path::PathBuf {
@@ -91,7 +85,7 @@ fn test_repo(name: &str) -> std::path::PathBuf {
     .unwrap();
     std::fs::write(
         root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v2","host_targets":{"supported":["codex","claude","cursor","opencode","mimo"]}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v2","host_targets":{"supported":["codex","claude","cursor","opencode"]}}"#,
     )
     .unwrap();
     let _ = std::fs::create_dir_all(root.join(".claude").join("hook-state"));

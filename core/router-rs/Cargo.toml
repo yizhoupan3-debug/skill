@@ -47,13 +47,11 @@ default = [
     "host-claude",
     "host-opencode",
     "host-codex",
-    "host-mimo",
 ]
 host-cursor = []
 host-claude = []
 host-opencode = []
 host-codex = []
-host-mimo = []
 codegraph = ["runtime-core/codegraph"]
 
 [dev-dependencies]
