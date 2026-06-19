@@ -21,6 +21,8 @@ version: unified-v8
 - `signals.rs`：单一文件（~1520 行），含路由信号检测（design_artifact/devtools/markers/orchestration/paper 等类别）
 - `nl_route_adjustments.rs`：NL suppress/boost 调整（746 行 Rust 适配层 + 61 条手工规则）
 
+**工具意图排除规则**：`has_mcp_tool_invocation_intent` 信号（`signals/tooling.rs`）检测查询中的 MCP 工具 FQN（`mcp__` 前缀）或工具使用意图词（"use/invoke/call + browser/paperplain/codegraph"）。命中时 suppress 所有 skill，防止工具调用意图被误路由到 skill。对应 NL_ROUTE_ADJUSTMENTS.json 的 `pre_framework_alias_rules` 中无 `record` 约束的 suppress 规则。
+
 **已知维护痛点（触发本变更）：**
 - 每新增一个 skill 需同步修改 4-5 个文件（signals.rs + NL_ROUTE_ADJUSTMENTS.json + scoring.rs 可能 + 路由表 + 分层文档）
 - `signals.rs` 的 68 个信号定义全靠人工维护 keyword 列表，embedding drift 和语义重叠导致规则膨胀

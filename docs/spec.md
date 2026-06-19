@@ -65,7 +65,7 @@ core/trace-runtime (~1K LOC)      ← 事件追踪/trace I/O 管道（从 runtim
 
 host-projection (~34K LOC)        ← 宿主适配层（已独立）
 ├── hosts/                        ← 4 宿主 provider + hooks 实现
-│   ├── claude_code_hooks.rs      ← PreToolUse/PostToolUse/Stop/SubagentStart-Stop
+│   ├── claude_hooks.rs           ← PreToolUse/PostToolUse/Stop/SubagentStart-Stop
 │   ├── codex_hooks/              ← Codex native hooks (5K LOC)
 │   ├── cursor_hooks/             ← Cursor agent hooks
 │   ├── opencode_hooks.rs         ← OpenCode MCP stdio hooks
@@ -79,17 +79,29 @@ router-rs (~558 LOC src)         ← CLI + 集成测试
 └── features: codegraph, host-*
 
 routing-engine (~8K LOC)          ← 路由评分/信号缓存
-├── route/{eval,scoring,signal_cache,text}
+├── route/{eval,scoring,signal_cache}
+├── text.rs                        ← 文本分析（不在 route/ 下）
 └── 78 tests
 
 core-state (~7K LOC)              ← Goal/RFV/Evidence/TaskState
-├── state_manager.rs, task_state.rs, step_ledger.rs
+├── state_manager/（goal/pointer/rfv/scrub/validation 子模块）, task_state.rs, step_ledger.rs
 └── 82 tests
 
-core-policy (~4K LOC)             ← Hook 策略/review gate/注册表
+core-policy (~5K LOC)             ← Hook 策略/review gate/注册表
 ├── review_gate_engine.rs, hook_review_disk_state.rs
-├── 含 186 条正则规则
+├── 含 52+ 条正则规则（hook_common + hook_policy + review_routing_signals）
 └── 96 tests
+
+runtime-core-contracts (~3.5K LOC) ← runtime-core 契约/trait（v7 提取）
+├── mcp_pre_guard, web_fetch_guard, session_call_tracker, harness_contract
+├── framework_skills, harness_operator_nudges, hook_event_routing
+├── router_env_flags, kernel_bootstrap, router_rs_observation, snapshots/
+└── 90 tests
+
+framework-kernel (~3.5K LOC)      ← 框架内核（v7 提取）
+├── framework_profile, runtime_registry, skill_repo, repo_roots
+├── router_self, framework_host_targets, tokenizer, telemetry
+└── stdio_payload_types, formal_toolchain
 
 core/loop-engine (~2.4K LOC)     ← 循环调度引擎（9 模块，v8 loop-auto）
 ├── runner.rs / dispatcher.rs    ← 主循环 + opencode 子进程
@@ -100,7 +112,7 @@ core/loop-engine (~2.4K LOC)     ← 循环调度引擎（9 模块，v8 loop-aut
 
 tools/codegraph-rs (~4.1K LOC)    ← 代码图谱（FTS5 + tree-sitter，位于 tools/）
 ├── parser/{rust,typescript,python,go,markdown}
-├── db/{schema,node_ops,edge_ops,fts_ops}
+├── db/{schema,node_ops,fts_ops,skill_ops,index_ops,mcp_tool_ops,stats}
 └── 95 tests
 
 tools/evolution-rs (~2K LOC)      ← 技能进化审计（位于 tools/）
@@ -113,6 +125,8 @@ tools/autoresearch-rs (~5K LOC)   ← 研究工作区控制平面（位于 tools
 browser-mcp (~3.5K LOC)           ← 浏览器 MCP（仅浏览器功能）
 ├── 15 browser_* MCP tools
 └── 117 tests
+
+research-log-rs (~4.6K LOC)       ← 研究日志系统（独立 crate）
 
 rust_tools/ (6 活跃 MCP crates)
 ├── pdf_tool_rs (mcp-pdf)           ├── citation_tool_rs (mcp-citation)
@@ -131,7 +145,7 @@ rust_tools/ (6 活跃 MCP crates)
 | **纯 Rust 隔离** | PID + SQLite |
 | **配置驱动接入** | 新宿主 ≤ 1 天（5 文件：provider + AGENTS + docs + feature + registry） |
 | **Fail-closed** | 未知均默认拒绝 |
-| **函数指针注册表** | hooks 通过 OnceLock 函数指针注册（非 trait），82 个 slots |
+| **函数指针注册表** | hooks 通过 OnceLock 函数指针注册（非 trait），49 个 slots |
 | **MCP 统一** | 4 个 MCP server 四宿主统一注册 |
 | **用户级配置** | MCP/hooks/settings 配置只放用户级（~/.config/），不在项目目录 |
 
@@ -169,6 +183,42 @@ router-rs → runtime-core → host-projection → core-state
 | **L3** | CLI 行为 | 门控、证据追加、closeout | 宿主 shell 复制 L3 决策 |
 | **L4** | 宿主适配壳 | argv/stdin/超时/路径转发 | 长段策略 prose |
 | **L5** | 宿主策略 | .mdc、AGENTS* 投影 | 与 L2 冲突的并行真源 |
+
+---
+
+## 2.1 工具路由 vs Skill 路由隔离边界
+
+两条独立管线，共享 hook 事件流但职责分明：
+
+| 维度 | Skill 路由 | 工具路由（Hook 门控） |
+|------|-----------|---------------------|
+| 入口 | UserPromptSubmit → `route_task()` | PreToolUse/PostToolUse → hook handler |
+| 数据源 | `SKILL_ROUTING_RUNTIME.json` | `.claude/settings.json` matcher + Rust 层分类 |
+| 分类 | `kind`: skill / framework_command | `ToolOrigin`: NativeHost / McpServer / Unknown |
+| 联动 | `allowedTools` → `active-skill-context.json` → PreToolUse advisory |
+
+### 隔离保证
+
+- `allowedTools` 不参与 NL 评分（`RawSkillRecord` 不含此字段，记录加载时跳过）
+- `keyword_tokens` 不含工具名（仅从 summary/trigger_hints/tags 构建）
+- MCP 工具 FQN（`mcp__*__*`）格式与自然语言 query 差异大，不会误匹配
+- NL 路由调整规则 `has_mcp_tool_invocation_intent` 在查询含 `mcp__` 或工具使用意图时 suppress 所有 skill
+
+### 四宿主 Matcher 策略
+
+| 宿主 | PreToolUse matcher | PostToolUse matcher | MCP 覆盖 |
+|------|-------------------|---------------------|---------|
+| Claude | `""` (全局) | `""` (全局) | ✅ 正则 `^mcp__` 或空 matcher |
+| Cursor | 无 PreToolUse 事件 | 全局触发 | ✅ 自动 |
+| Codex | `""` (全局) | `""` (全局) | ✅ 空 matcher |
+| OpenCode | 全局 (TS 插件) | 全局 (TS 插件) | ✅ 自动 |
+
+### 关键 Rust 类型
+
+- `ToolOrigin`（`core_policy::hook_common`）：工具来源分类枚举
+- `classify_tool_origin()`：分类工具为 NativeHost/McpServer/Unknown
+- `parse_mcp_tool_fqn()`：解析 `mcp__{server}__{tool}` FQN
+- `dangerous_mcp_tool_reason()`：MCP 工具安全审查（高风险名 + arg 模式 + shell 注入）
 
 ---
 

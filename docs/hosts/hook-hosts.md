@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-18"
+last_verified: "2026-06-20"
 depends_on:
   - _common.md
   - ../spec.md
@@ -8,9 +8,29 @@ parent: _common.md
 
 # Hook 宿主手册 (Hook Hosts)
 
-本文档覆盖 **Claude** / **Cursor** / **Codex** 三宿主。**OpenCode** 因架构差异（JS/TS 插件系统 + fail-open）单独见 [`opencode.md`](opencode.md)。
+本文档覆盖 **Claude** / **Cursor** / **Codex** 三宿主。**OpenCode** 因架构差异（JS/TS 插件系统：插件层 fail-open，hook 脚本层对 critical events 仍 fail-closed）单独见 [`opencode.md`](opencode.md)。
 
 **共通内容**（代理身份与画风、Skill 路由、默认生命周期、Python 环境、进程管理与性能调优）见 [`_common.md`](_common.md)。
+
+---
+
+## 统一 Hook 架构
+
+所有四宿主（Claude / Cursor / Codex / OpenCode）共用同一个 hook 分发脚本 [`configs/framework/hook.sh`](../../configs/framework/hook.sh)。每个宿主有一个单行 shim（`<host>-router-rs-hook.sh`）委托给 `hook.sh`：
+
+```
+宿主 hook 配置 → <host>-router-rs-hook.sh → hook.sh <host_id> <event>
+                                                  ↓
+                                    resolve_bin() → router-rs-cli
+                                    source .<host>/router-rs-hook.env
+                                    router-rs-cli host hook --event=<event> --repo-root <root> <host_id>
+```
+
+**关键设计**：
+- **`resolve_bin()`**：优先 `ROUTER_RS_BIN` env → `~/.local/bin/router-rs-cli` → PATH → cargo target；**自动跳过 redirect shim**（`router-rs` 旧二进制）
+- **环境变量**：`hook.sh` 统一 sourcing `.<host_id>/router-rs-hook.env`（所有宿主），无需在配置命令中内联
+- **Fail 策略**：critical events（每宿主定义）缺 binary 时 fail-closed；非 critical 事件 fail-open
+- **超时保护**：10 秒 kill guard，防止 router-rs 挂死
 
 ---
 
@@ -20,25 +40,25 @@ parent: _common.md
 |------|--------|--------|-------|
 | 闭集 id | `claude` | `cursor` | `codex` |
 | 传输 | claude-hooks | cursor-hooks | codex-hooks |
-| Hook 事件数 | 4（减法闭集） | 7（减法闭集） | 事件驱动（review gate + evidence） |
+| Hook 事件数 | 7（4 core + 3 optional） | 7（减法闭集） | 事件驱动（review gate + evidence） |
 | Fail 策略 | fail-closed | fail-closed | fail-closed |
 | 注册表源 | `RUNTIME_REGISTRY.json` → `host_projections.claude` | `RUNTIME_REGISTRY.json` → `host_projections.cursor` | `RUNTIME_REGISTRY.json` → `host_projections.codex` |
 | 多代理支持 | 原生 Task（无 hook 门控） | `subagentStart`/`subagentStop` hook 门控 | agent 自觉驱动（无 hook 门控） |
-| Session Supervisor | 不支持 | 不支持 | **支持**（launch / resume / terminate） |
+| Session Supervisor | `mcp_bridge`（通过 MCP 工具层） | 不支持 | **支持**（launch / resume / terminate） |
 
 ---
 
 ## Hook 事件矩阵
 
-### Claude — 4 事件
+### Claude — 7 事件（4 core + 3 optional）
 
-**默认注册 4 事件**（减法闭集）：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`。项目 env：[`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)（模板 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)）；launcher **release 优先**（[`claude-router-rs-hook.sh`](../../configs/framework/claude-router-rs-hook.sh)）。
+**默认注册 7 事件**：4 core 事件（`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`）+ 3 optional 事件（`SessionStart`、`SubagentStart`、`SubagentStop`）。项目 env：[`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)（模板 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)）；launcher **release 优先**（[`claude-router-rs-hook.sh`](../../configs/framework/claude-router-rs-hook.sh)）。
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks 调用 `router-rs claude hook --event=PreToolUse\|Stop\|…` | [`claude_hooks.rs`](../../core/host-projection/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks → `claude-router-rs-hook.sh` → `hook.sh claude <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> claude` | [`claude_hooks.rs`](../../core/host-projection/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
 | **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
-| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/host-projection/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（四事件 hook）、`.claude/.framework-projection.json`（project scope） |
+| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/host-projection/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（七事件 hook：4 core + 3 optional）、`.claude/.framework-projection.json`（project scope） |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK`）；`ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 
 ### Cursor — 7 事件
@@ -61,7 +81,7 @@ parent: _common.md
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项指向 `router-rs codex hook …` | `codex hook`（[`codex_hooks/mod.rs`](../../core/host-projection/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭 review nudge |
+| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项 → `codex-router-rs-hook.sh` → `hook.sh codex <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> codex` | `codex hook`（[`codex_hooks/mod.rs`](../../core/host-projection/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭 review nudge |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CODEX_PAPER_PROSE_HOOK`）；`ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 | **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
@@ -75,9 +95,47 @@ parent: _common.md
 
 | 宿主 | 策略 | Hook 缺失时行为 | 设计理由 |
 |------|------|----------------|----------|
-| Claude | **fail-closed** | Stop 返回 `decision:block` | 4 事件深度嵌入会话，`Stop` 可阻断提交。二进制损坏 → 安全关键路径断裂 → 避免无审查不可逆操作 |
+| Claude | **fail-closed** | Stop 返回 `decision:block` | 7 事件（4 core + 3 optional）深度嵌入会话，`Stop` 可阻断提交。二进制损坏 → 安全关键路径断裂 → 避免无审查不可逆操作 |
 | Cursor | **fail-closed** | critical 事件返回 `continue:false` / `permission:deny` | 7 事件紧密嵌入生命周期。`stop` 可阻断提交、`beforeSubmitPrompt` 可注入 nudge。critical 事件缺 binary 阻止不可逆操作 |
 | Codex | **fail-closed** | 各事件返回 `decision:block` | `.codex/hooks.json` 解析顺序：`ROUTER_RS_BIN` → 仓库 `target/{release,debug}` → `command -v router-rs`；解析失败直接阻断 |
+
+---
+
+## Matcher 策略与工具覆盖
+
+### PreToolUse / PostToolUse Matcher 对比
+
+| 宿主 | PreToolUse matcher | PostToolUse matcher | MCP 工具覆盖 | 策略 |
+|------|-------------------|---------------------|-------------|------|
+| Claude | `""` (全局) | `""` (全局) | ✅ | 全局触发 + Rust 层运行时过滤 |
+| Cursor | 无 PreToolUse 事件 | 全局触发（无 matcher） | ✅ | postToolUse 无 matcher 限制 |
+| Codex | `""` (全局) | `""` (全局) | ✅ | 全局触发 + Rust 层运行时过滤 |
+| OpenCode | 全局（TS 插件） | 全局（TS 插件） | ✅ | 插件拦截所有 tool.execute 事件 |
+
+### Claude Code Matcher 语法
+
+Claude Code hook matcher 支持两种模式（从 v2.1.183 二进制逆向确认）：
+
+1. **精确匹配**（快速路径）：matcher 仅含 `[a-zA-Z0-9_|]` 时，按 `|` 分隔的工具名列表精确匹配
+2. **正则匹配**：matcher 含其他字符（`^`、`.`、`(` 等）时，走 `new RegExp(matcher)` 路径
+
+特殊值：`""` 和 `"*"` 匹配所有工具。
+
+### 工具分类体系
+
+`ToolOrigin` 枚举（`core_policy::hook_common`）：
+
+- `NativeHost`：宿主内置工具（Bash/Write/Edit/Read/Agent/Shell 等跨宿主闭集）
+- `McpServer { server_id, tool_name }`：MCP 工具（`mcp__{server}__{tool}` FQN）
+- `Unknown`：未识别工具
+
+### MCP 工具安全审查
+
+`dangerous_mcp_tool_reason()`（`core_policy::hook_policy`）三层检查：
+
+1. **高风险工具名**：`session_terminate`、`background_terminate`、`session_resume_due`、`preview_eval`
+2. **Arg 级风险模式**：credential 泄露、RCE prompt、SSRF、路径穿越
+3. **Shell 注入检测**：`curl|sh`、`git reset --hard`、`git push --force`
 
 ---
 
@@ -86,7 +144,7 @@ parent: _common.md
 | 关注点 | Claude | Cursor | Codex |
 |--------|--------|--------|-------|
 | **Hooks 配置** | `.claude/settings.json` | `.cursor/hooks.json` | `.codex/hooks.json` |
-| **环境变量文件** | `.claude/router-rs-hook.env` | `.cursor/router-rs-hook.env` | — |
+| **环境变量文件** | `.claude/router-rs-hook.env` | `.cursor/router-rs-hook.env` | `.codex/router-rs-hook.env`（可选） |
 | **Framework rules** | `.claude/rules/framework.md` (project)；`~/.claude/rules/framework.md` (user) | `~/.cursor/rules/framework.mdc` (user)；`.cursor/rules/*.mdc` (project) | `.codex/prompts/framework.md` (project) |
 | **Project 叙事** | `.claude/CLAUDE.md` | `.cursor/commands/*.md`、`.cursor/agents/deep-reviewer.md` | — |
 | **AGENTS delta** | `AGENTS_CLAUDE.md` (仓库根) | `AGENTS_CURSOR.md` (仓库根) | `AGENTS_CODEX.md` (仓库根) |
@@ -119,7 +177,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 
 ### Claude
 
-- **能力边界**：4 核心 hook 事件；深度 Review 默认 `lifecycle_profile: my-light` 不注入 spawn-first；非 my-light 时 spawn-first 配对审稿，见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)
+- **能力边界**：7 事件（4 core + 3 optional）；深度 Review 默认 `lifecycle_profile: my-light` 不注入 spawn-first；非 my-light 时 spawn-first 配对审稿，见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)
 - **Review Gate**：全局 advisory-only（仅 `followup_message` nudge）；my-light 下 Stop 上 `REVIEW_GATE` / `AG_FOLLOWUP` 关闭，仅保留 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`
 - **自检命令**：
   ```bash
@@ -155,6 +213,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 | Stop 后出现 `router-rs REVIEW_GATE` / `AG_FOLLOWUP` | 非 **my-light** 且 review 未清门（advisory nudge，非硬拦） | 先 spawn `fork_context=false` 深度 lane；或 `rg_clear` / 拆开 review 与 `/implementx` |
 | `beforeSubmit` 无法继续（`continue:false`） | hook-state 锁/持久化失败 | 查 `.cursor/hook-state` 权限；应急 `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` |
 | 子代理 `permission: deny`（open count） | 重复 `subagentStart` 或 session 分片 | 看 `review-subagent-*.json` 的 `active_subagent_count` vs pending；升级后旧 state 可删或等新会话 |
+| `router-rs: binary moved to router-rs-cli` | `.env` 文件 `ROUTER_RS_BIN` 指向 redirect shim | 更新 `ROUTER_RS_BIN` 为 `router-rs-cli` 路径；`hook.sh resolve_bin()` 已自动跳过 shim |
 | PostTool 卡 ~20s | L1/L3 争用或 armed 全路径 L3 | 默认已修 L3→L1 逆序；仍慢则 w2 压测后可将 gate timeout 提到 25（见 `.cursor/hooks.json`） |
 | 双聊天互相影响 | 同 `cwd` 共桶 | 各聊天设 **`ROUTER_RS_CURSOR_SESSION_NAMESPACE`**（见 `.cursor/router-rs-hook.env` 注释） |
 | `CLOSEOUT_FOLLOWUP`（my-light） | 无磁盘 goal 仍声称完成 | 仅 hydration 有 `GOAL_STATE` 时触发；口语「完成了」不应再拦 |
