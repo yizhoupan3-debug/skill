@@ -273,6 +273,10 @@ pub fn build_codex_hook_manifest() -> Value {
         });
         if event == "SessionStart" {
             entry["matcher"] = json!("startup|resume|clear");
+        } else if event == "PreToolUse" || event == "PostToolUse" {
+            // Global trigger: match all tools (including MCP) for full hook coverage.
+            // Runtime filtering is handled by the Rust hook handler (classify_tool_origin).
+            entry["matcher"] = json!("");
         }
         hooks_map.insert(event.to_string(), json!([entry]));
     }
