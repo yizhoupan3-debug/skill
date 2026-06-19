@@ -29,14 +29,14 @@
 
 | 能力 | claude | cursor | codex | opencode |
 |------|:-----------:|:------:|:-----:|:--------:|
-| hard gate hooks | ✓ | ✓ | ✓ | ✗ |
+| hard gate hooks | ✓ | ✓ | ✓ | ✓ |
 | closeout evidence hooks | ✓ | ✓ | ✓ | ✓ |
 | review gate observable | ✓ | ✓ | ✓ | ✓ |
 | session supervisor | mcp_bridge | ✗ | codex_driver | ✗ |
 | worktree | ✓ | ✓ | ✓ | ✗ |
 | batch/cron/CI | ✗ | ✗ | ✓ | ✗ |
 
-详见 `configs/framework/RUNTIME_REGISTRY.json` 各宿主 `harness_capability_exceptions`。
+详见 `configs/framework/RUNTIME_REGISTRY.json` 各宿主 `host_projections`。
 
 ## 启动序列（跨宿主 DAG）
 
