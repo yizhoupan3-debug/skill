@@ -1,20 +1,8 @@
 # Agent Policy (Cross-Host)
 
-跨宿主叙述性协议真源。宿主差异见 `AGENTS_<HOST>.md`。
+跨宿主叙述性协议真源。宿主差异见 `AGENTS_<HOST>.md`。跨宿主实现细节见 `docs/cross-host-architecture.md`。
 
 **双文件注入（硬约束）**：各闭集宿主须**同时**注入仓库根 **`AGENTS.md`**（跨宿主内核）与 **`AGENTS_<HOST>.md`**（transport delta）；**禁止**合并为单文件。
-
-**闭集宿主（2026-06）**：`codex`、`claude`、`cursor`、`opencode` — 真源 `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。已退役 id：`codex-app`、`codex-cli`。
-
-## 权威分层
-
-| 类别 | 权威落点 |
-|------|----------|
-| 跨宿主叙述性协议（语言、路由、Lifecycle、Closeout） | 仓库根 **`AGENTS.md`** |
-| 宿主执行面差异 | `AGENTS_<HOST>.md` + 各宿主 hook/rules |
-| skill 路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
-| 框架命令 / CLI | `configs/framework/RUNTIME_REGISTRY.json` |
-| hook 行为 | 各宿主 `hooks.json` + `router-rs` |
 
 ## Language
 
@@ -38,25 +26,6 @@
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
 - Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
 - **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。
-
-## 启动序列（跨宿主 DAG）
-
-- **T0 并行**：`framework_snapshot` ∥ `skill_route` ∥ `goal_state_manage(start)` — 无数据依赖，首轮必须。
-- **T1 按需**：`record_evidence` — 验证类命令后追加。
-- **T2 延迟**：`session_checkpoint` → `closeout_gate` → `goal_state_manage(complete)` — 对话结束时执行，首轮跳过。
-
-## 宿主能力差异（降级矩阵）
-
-| 能力 | claude | cursor | codex | opencode |
-|------|:-----------:|:------:|:-----:|:--------:|
-| hard gate hooks | ✓ | ✓ | ✓ | ✗ |
-| closeout evidence hooks | ✓ | ✓ | ✓ | ✓ |
-| review gate observable | ✓ | ✓ | ✓ | ✓ |
-| session supervisor | mcp_bridge | ✗ | codex_driver | ✗ |
-| worktree | ✓ | ✓ | ✓ | ✗ |
-| batch/cron/CI | ✗ | ✗ | ✓ | ✗ |
-
-详见 `configs/framework/RUNTIME_REGISTRY.json` 各宿主 `harness_capability_exceptions`。
 
 ## Task Intake
 
@@ -170,3 +139,5 @@ LLM：（自动调用codegraph_dead_code检查）→ 返回死代码列表
 - **技能无关性**：无论是否触发了特定技能（如/implementx），都必须执行此规则
 - **强制性**：这是硬约束，不是建议，所有宿主必须遵守
 - **自动触发**：不需要用户显式提及codegraph，系统应自动识别并调用
+
+**跨宿主实现细节**：宿主能力差异、启动序列、双文件注入实现等见 `docs/cross-host-architecture.md`。
