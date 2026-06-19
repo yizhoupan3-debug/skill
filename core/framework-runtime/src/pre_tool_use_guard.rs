@@ -17,7 +17,7 @@ use framework_kernel::runtime_registry::load_runtime_registry_json;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::path::Path;
+use std::path::{Component, Path};
 
 /// Schema version string for the pre-tool-use guard protocol.
 /// Use to validate response schema compatibility in callers.
@@ -459,6 +459,11 @@ fn extract_file_path(tool_input: &Value) -> Option<String> {
         if let Some(text) = tool_input.get(key).and_then(Value::as_str) {
             let trimmed = text.trim();
             if !trimmed.is_empty() {
+                // Reject path traversal attempts (../ etc.)
+                let p = Path::new(trimmed);
+                if p.components().any(|c| c == Component::ParentDir) {
+                    return None;
+                }
                 return Some(trimmed.to_string());
             }
         }

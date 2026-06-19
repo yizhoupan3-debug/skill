@@ -160,6 +160,55 @@ pub struct CloseoutEnforcementResponse {
     pub prediction_verification: Vec<PredictionVerificationReport>,
 }
 
+/// Shared helper: build a blocked closeout response with the given violations.
+/// Used by both `evaluate_closeout_record_value` and its `_with_context` variant.
+fn make_blocked_closeout_response(
+    task_id: &str,
+    violations: Vec<CloseoutViolation>,
+) -> Result<Value, String> {
+    let mut response = CloseoutEnforcementResponse {
+        schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
+        authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
+        task_id: task_id.to_string(),
+        closeout_allowed: false,
+        can_proceed: false,
+        claimed_completion: false,
+        violations: Vec::new(),
+        missing_evidence: Vec::new(),
+        verification_status: String::new(),
+        prediction_verification: Vec::new(),
+    };
+    append_closeout_violations(&mut response, violations);
+    serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
+}
+
+/// Shared helper: build a parse-error closeout response.
+fn make_parse_error_closeout_response(
+    task_id: &str,
+    violations: Vec<CloseoutViolation>,
+    parse_error: String,
+) -> Result<Value, String> {
+    let mut response = CloseoutEnforcementResponse {
+        schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
+        authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
+        task_id: task_id.to_string(),
+        closeout_allowed: false,
+        can_proceed: false,
+        claimed_completion: false,
+        violations: Vec::new(),
+        missing_evidence: Vec::new(),
+        verification_status: String::new(),
+        prediction_verification: Vec::new(),
+    };
+    append_closeout_violations(&mut response, violations);
+    response.violations.push(CloseoutViolation::new(
+        "parse_error",
+        "block",
+        format!("parse closeout record failed: {parse_error}"),
+    ));
+    serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
+}
+
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
     // Check raw shape violations FIRST: critical issues like missing schema_version
@@ -167,27 +216,13 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
     // the real problem when the record shape is fundamentally broken.
     let raw_shape_violations = raw_closeout_record_shape_violations(&payload, None);
     if raw_shape_violations.iter().any(|v| v.severity == "block") {
-        let mut response = CloseoutEnforcementResponse {
-            schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
-            authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
-            task_id: payload
-                .get("task_id")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string(),
-            closeout_allowed: false,
-            can_proceed: false,
-            claimed_completion: false,
-            violations: Vec::new(),
-            missing_evidence: Vec::new(),
-            verification_status: String::new(),
-            prediction_verification: Vec::new(),
-        };
-        append_closeout_violations(&mut response, raw_shape_violations);
-        return serde_json::to_value(response)
-            .map_err(|err| format!("serialize closeout response: {err}"));
+        let task_id = payload
+            .get("task_id")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        return make_blocked_closeout_response(task_id, raw_shape_violations);
     }
-    let task_id_for_error = payload
+    let task_id = payload
         .get("task_id")
         .and_then(Value::as_str)
         .unwrap_or("")
@@ -199,28 +234,7 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
             serde_json::to_value(response)
                 .map_err(|err| format!("serialize closeout response: {err}"))
         }
-        Err(err) => {
-            let mut response = CloseoutEnforcementResponse {
-                schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
-                authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
-                task_id: task_id_for_error,
-                closeout_allowed: false,
-                can_proceed: false,
-                claimed_completion: false,
-                violations: Vec::new(),
-                missing_evidence: Vec::new(),
-                verification_status: String::new(),
-                prediction_verification: Vec::new(),
-            };
-            append_closeout_violations(&mut response, raw_shape_violations);
-            response.violations.push(CloseoutViolation::new(
-                "parse_error",
-                "block",
-                format!("parse closeout record failed: {err}"),
-            ));
-            serde_json::to_value(response)
-                .map_err(|err| format!("serialize closeout response: {err}"))
-        }
+        Err(err) => make_parse_error_closeout_response(&task_id, raw_shape_violations, err.to_string()),
     }
 }
 
@@ -719,27 +733,13 @@ pub fn evaluate_closeout_record_value_with_context(
     let raw_shape_violations =
         raw_closeout_record_shape_violations(&payload, ctx.task_id.as_deref());
     if raw_shape_violations.iter().any(|v| v.severity == "block") {
-        let mut response = CloseoutEnforcementResponse {
-            schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
-            authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
-            task_id: payload
-                .get("task_id")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string(),
-            closeout_allowed: false,
-            can_proceed: false,
-            claimed_completion: false,
-            violations: Vec::new(),
-            missing_evidence: Vec::new(),
-            verification_status: String::new(),
-            prediction_verification: Vec::new(),
-        };
-        append_closeout_violations(&mut response, raw_shape_violations);
-        return serde_json::to_value(response)
-            .map_err(|err| format!("serialize closeout response: {err}"));
+        let task_id = payload
+            .get("task_id")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        return make_blocked_closeout_response(task_id, raw_shape_violations);
     }
-    let task_id_for_error = payload
+    let task_id = payload
         .get("task_id")
         .and_then(Value::as_str)
         .unwrap_or("")
@@ -751,28 +751,7 @@ pub fn evaluate_closeout_record_value_with_context(
             serde_json::to_value(response)
                 .map_err(|err| format!("serialize closeout response: {err}"))
         }
-        Err(err) => {
-            let mut response = CloseoutEnforcementResponse {
-                schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
-                authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
-                task_id: task_id_for_error,
-                closeout_allowed: false,
-                can_proceed: false,
-                claimed_completion: false,
-                violations: Vec::new(),
-                missing_evidence: Vec::new(),
-                verification_status: String::new(),
-                prediction_verification: Vec::new(),
-            };
-            append_closeout_violations(&mut response, raw_shape_violations);
-            response.violations.push(CloseoutViolation::new(
-                "parse_error",
-                "block",
-                format!("parse closeout record failed: {err}"),
-            ));
-            serde_json::to_value(response)
-                .map_err(|err| format!("serialize closeout response: {err}"))
-        }
+        Err(err) => make_parse_error_closeout_response(&task_id, raw_shape_violations, err.to_string()),
     }
 }
 

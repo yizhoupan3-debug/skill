@@ -42,7 +42,6 @@ pub use contracts::task_write_lock;
 // ── migrated supporting modules ──
 // browser_mcp: physically migrated to core/browser-mcp crate (§2.4)
 // Use browser-mcp crate directly; dispatch via browser_dispatch_hook.
-#[cfg(feature = "codegraph")]
 pub mod cli;
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;

@@ -936,6 +936,7 @@ mod tests {
             .lock()
             .expect("depth score mode env mutex poisoned");
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
+        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
         unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("goal");
         let tid = "t1";
@@ -1207,6 +1208,7 @@ mod tests {
             .lock()
             .expect("depth score mode env mutex poisoned");
         let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
+        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
         unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict") };
         let tmp = unique_repo("strict-fals");
         let tid = "t-strict-fals";
@@ -1253,7 +1255,9 @@ mod tests {
             .expect("depth score mode env mutex poisoned");
         let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
+        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
         unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") };
+        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
         unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("ext-deep");
         let tid = "t-ext";
@@ -1303,7 +1307,9 @@ mod tests {
             .expect("depth score mode env mutex poisoned");
         let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
+        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
         unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict") };
+        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
         unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("ext-deep-strict-note");
         let tid = "t-ext-note";
@@ -1349,7 +1355,9 @@ mod tests {
             .expect("depth score mode env mutex poisoned");
         let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
+        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
         unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") };
+        // SAFETY: test-only, env mutex held by caller or thread-local test serialization
         unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("ext-strict");
         let tid = "t-ext-st";

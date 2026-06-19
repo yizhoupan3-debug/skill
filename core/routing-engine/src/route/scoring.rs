@@ -10,6 +10,20 @@ use super::signals::*;
 fn is_single_token_phrase(phrase: &str) -> bool {
     !phrase.contains([' ', ',', '\n', '/', '|', '，'])
 }
+
+/// If phrase is a single token, count how many query tokens contain it.
+/// Used by scoring functions that track matched_token_count for single-word phrases.
+#[inline]
+fn count_single_token_hits(phrase: &str, query_token_list: &[String]) -> usize {
+    if is_single_token_phrase(phrase) {
+        query_token_list
+            .iter()
+            .filter(|t| text_matches_phrase(std::slice::from_ref(t), phrase))
+            .count()
+    } else {
+        0
+    }
+}
 use tracing::debug;
 use super::text::{
     common_route_stop_tokens, text_matches_phrase, tokenize_route_text,
@@ -180,13 +194,7 @@ fn score_gate_name_token_signals(
             matched_gates.join(", ")
         ));
         for phrase in &matched_gates {
-            if is_single_token_phrase(phrase) {
-                for t in query_token_list {
-                    if text_matches_phrase(std::slice::from_ref(t), phrase) {
-                        matched_count += 1;
-                    }
-                }
-            }
+            matched_count += count_single_token_hits(phrase, query_token_list);
         }
     }
 
@@ -226,13 +234,7 @@ fn score_gate_name_token_signals(
             matched_trigger_hints.join(", ")
         ));
         for phrase in &matched_trigger_hints {
-            if is_single_token_phrase(phrase) {
-                for t in query_token_list {
-                    if text_matches_phrase(std::slice::from_ref(t), phrase) {
-                        matched_count += 1;
-                    }
-                }
-            }
+            matched_count += count_single_token_hits(phrase, query_token_list);
         }
     }
 
@@ -270,13 +272,7 @@ fn score_metadata_trigger_signals(
             matched_metadata_triggers.join(", ")
         ));
         for phrase in &matched_metadata_triggers {
-            if is_single_token_phrase(phrase) {
-                for t in query_token_list {
-                    if text_matches_phrase(std::slice::from_ref(t), phrase) {
-                        matched_count += 1;
-                    }
-                }
-            }
+            matched_count += count_single_token_hits(phrase, query_token_list);
         }
     }
 
@@ -364,6 +360,27 @@ fn score_session_start_signals(
     (delta, reasons)
 }
 
+/// Route candidate scoring pipeline (16 steps):
+///   1. NL pre-framework-alias rules (apply_nl_pre_framework_alias_rules)
+///   2. Agent-swarm signal scoring (score_agent_swarm_signals)
+///   3. Framework alias check/ suppression (check_framework_alias_suppression)
+///   4. NL post-framework-alias rules (apply_nl_post_framework_alias_rules)
+///   5. Design-md signal scoring (score_design_md_signals)
+///   6. Framework alias explicit boost
+///   7. Gate/ name-token/ trigger-hint scoring (score_gate_name_token_signals)
+///   8. Metadata trigger/ keyword/ alias scoring (score_metadata_trigger_signals)
+///   9. Session-start + code-review-deep scoring (score_session_start_signals)
+///  10. Gate-owner boost (owner_lower == "gate")
+///  11. Visual-review special logic (slug == "visual-review")
+///  12. Do-not-use token penalty
+///  13. Paper-workbench boost (slug == "paper-workbench")
+///  14. CodeGraph signal boost (codegraph_boost)
+///  15. Overlay suppression factor
+///  16. RouteCandidate construction
+///
+/// Each step contributes a delta to `score`; some steps return early (skip remaining steps).
+/// Hardcoded slug branches (visual-review, paper-workbench, code-review-deep) bypass generic scoring
+/// and are registered as the final adjustments before overlay suppression.
 pub fn score_route_candidate<'a>(
     record: &'a SkillRecord,
     query_text: &'a str,

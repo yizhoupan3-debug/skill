@@ -416,6 +416,7 @@ where
         "messages": messages,
         "max_tokens": max_tokens,
     });
+    use std::time::Duration;
     let mut response_payload = Value::Null;
     let mut last_error = "router-rs live execute request failed".to_string();
     for attempt in 0..=1usize {
@@ -427,9 +428,14 @@ where
                         status_code,
                         truncate_for_error(&response_body)
                     );
-                    if attempt == 0 {
+                    if attempt == 0
+                        && matches!(status_code, 429 | 500..=599)
+                    {
+                        // 瞬态服务端错误或限速：退避后重试一次
+                        std::thread::sleep(Duration::from_millis(500));
                         continue;
                     }
+                    // 4xx 客户端错误（401/403/404 等）：直接返回，不重试
                     return Err(last_error);
                 }
                 response_payload =
@@ -441,6 +447,7 @@ where
             Err(err) => {
                 last_error = format!("router-rs live execute request failed: {err}");
                 if attempt == 0 {
+                    std::thread::sleep(Duration::from_millis(500));
                     continue;
                 }
                 return Err(last_error);

@@ -378,6 +378,9 @@ pub fn run_generated_artifact_generator(
         .map_err(|err| format!("failed to create {}: {err}", stdout_path.display()))?;
     let stderr_file = fs::File::create(&stderr_path)
         .map_err(|err| format!("failed to create {}: {err}", stderr_path.display()))?;
+    // SAFETY: generator comes from GENERATED_ARTIFACTS.json (version-controlled config),
+    // not from direct user input. If user-controlled input is ever accepted as generator,
+    // this `sh -c` call becomes a shell injection vector and must be hardened.
     let mut child = Command::new("sh")
         .arg("-c")
         .arg(rewrite_generated_artifact_generator(
