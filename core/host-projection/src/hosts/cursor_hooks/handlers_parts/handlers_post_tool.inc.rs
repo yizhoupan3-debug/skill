@@ -1,5 +1,7 @@
 fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let name = normalize_tool_name(Some(&tool_name_of(event)));
+    let tool_origin = core_policy::hook_common::classify_tool_origin(&name);
+    let _ = &tool_origin; // Used by allowedTools linkage (Phase 4) and mcp-tool-safety (Phase 5)
     hooks::emit_tool_call(
         &name,
         hooks::extract_post_tool_duration_ms(event).unwrap_or(0),

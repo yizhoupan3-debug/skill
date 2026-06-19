@@ -360,9 +360,18 @@ fn is_readonly_search_segment(command: &str) -> bool {
             && parts.get(1).is_some_and(|subcommand| {
                 matches!(
                     subcommand.as_str(),
+                    // Existing readonly subcommands.
                     "grep" | "diff" | "status" | "log" | "show"
+                    // Unconditionally readonly subcommands used by the harness
+                    // (worktree_auto_save, framework_maint, statusline, autoresearch).
+                    | "ls-files" | "rev-parse" | "describe" | "name-rev"
                 )
             }))
+    // NOT included: `stash`, `branch`, `tag`, `worktree`, `remote`.
+    // These have both readonly and destructive sub-modes (e.g., `stash drop`,
+    // `branch -D`, `tag -d`).  The dangerous-bash patterns catch the most
+    // common destructive variants, but not all — keeping them out of the
+    // readonly whitelist ensures they still go through pattern matching.
 }
 
 fn shell_words(command: &str) -> Vec<String> {
@@ -635,6 +644,10 @@ const HIGH_RISK_MCP_TOOLS: &[(&str, &str)] = &[
         r"^background_terminate$",
         "background_terminate can interrupt background jobs in durable state.",
     ),
+    (
+        r"^preview_eval$",
+        "preview_eval executes arbitrary JavaScript in the preview page — RCE risk if expression is untrusted.",
+    ),
 ];
 
 /// MCP-specific arg-level risk patterns.
@@ -699,6 +712,18 @@ const MCP_ARG_RISK_PATTERNS: &[(&str, &str, &str, &str)] = &[
         "sessionPath",
         r"(?i)(\.\./|~|/etc|/var|/tmp|/dev)",
         "browser_restore_session sessionPath with path-traversal-like pattern may load browser state from unexpected locations.",
+    ),
+    (
+        r"^send_message$",
+        "message",
+        r"(?i)(password|secret|token|api.?key|credential)",
+        "send_message message may leak sensitive credentials to another CCD session.",
+    ),
+    (
+        r"^archive_session$",
+        "reason",
+        r".{500,}",
+        "archive_session reason with excessive length may indicate payload injection.",
     ),
 ];
 
@@ -810,6 +835,21 @@ mod tests {
         assert!(dangerous_bash_reason("git status").is_none());
         assert!(dangerous_bash_reason("rg --files").is_none());
         assert!(dangerous_bash_reason("cargo test -q").is_none());
+    }
+
+    #[test]
+    fn dangerous_bash_allows_extended_readonly_git_subcommands() {
+        // Unconditionally readonly subcommands used by the harness.
+        assert!(dangerous_bash_reason("git ls-files").is_none());
+        assert!(dangerous_bash_reason("git ls-files -o --exclude-standard").is_none());
+        assert!(dangerous_bash_reason("git rev-parse --show-toplevel").is_none());
+        assert!(dangerous_bash_reason("git rev-parse --abbrev-ref HEAD").is_none());
+        assert!(dangerous_bash_reason("git describe --tags").is_none());
+        assert!(dangerous_bash_reason("git name-rev HEAD").is_none());
+        // Subcommands with mixed modes must NOT be classified as readonly;
+        // they go through the dangerous-pattern regex instead.
+        assert!(dangerous_bash_reason("git branch -D feature").is_some());
+        assert!(dangerous_bash_reason("git push --force").is_some());
     }
 
     #[test]

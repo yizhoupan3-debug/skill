@@ -24,12 +24,18 @@ pub const CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS: usize = 4096;
 
 /// Truncate assistant text for hook signal paths (char-based; matches deep-continuation tail style).
 pub fn hook_assistant_tail_window(raw: &str, max_chars: usize) -> String {
+    // Single-pass char_indices() instead of two full chars() traversals (O(n) → O(n) but faster).
     let total = raw.chars().count();
     if total <= max_chars {
         return raw.to_string();
     }
     let omitted = total.saturating_sub(max_chars);
-    let tail: String = raw.chars().skip(omitted).collect();
+    let byte_start = raw
+        .char_indices()
+        .nth(omitted)
+        .map(|(i, _)| i)
+        .unwrap_or(raw.len());
+    let tail = &raw[byte_start..];
     format!("[...omitted {omitted} chars...]\n{tail}")
 }
 
@@ -167,6 +173,191 @@ pub const COMPLETION_DETECT_ZH_PHRASES: &[&str] =
 
 /// 仅用于无磁盘 GOAL 时的聊天 progress/verify 提示（不进 closeout 词表）。
 pub const GOAL_CHAT_VERIFY_ZH_PHRASES: &[&str] = &["验证通过", "测试通过", "审核通过", "已通过"];
+
+// ────────────────────────────────────────────────────────────────
+// Goal signal detection (shared across all hosts)
+// ────────────────────────────────────────────────────────────────
+
+/// Regex for goal contract keywords (EN + ZH).
+pub fn goal_contract_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(
+            r"(?i)\b(goal|done when|validation commands|checkpoint plan|non-goals)\b|(目标|完成条件|验证命令|检查点|非目标)",
+        )
+        .expect("invalid regex")
+    })
+}
+
+/// Regex for goal progress keywords (EN + ZH).
+pub fn goal_progress_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)\b(checkpoint|milestone|progress|next step)\b|(检查点|里程碑|进度|下一步)")
+            .expect("invalid regex")
+    })
+}
+
+/// Regex for goal verify/block keywords (EN + ZH).
+pub fn goal_verify_or_block_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?i)\b(verified|verification|test passed|blocker)\b|(已验证|阻塞)")
+            .expect("invalid regex")
+    })
+}
+
+/// Check if text contains goal progress signal.
+pub fn has_goal_progress_signal(text: &str) -> bool {
+    goal_progress_re().is_match(text)
+}
+
+/// Check if text contains goal verify or blocker signal.
+pub fn has_goal_verify_or_block_signal(text: &str) -> bool {
+    goal_verify_or_block_re().is_match(text)
+        || GOAL_CHAT_VERIFY_ZH_PHRASES
+            .iter()
+            .any(|p| text.contains(p))
+}
+
+/// Check for structured goal contract: Goal + Non-goals + Validation commands headings
+/// all non-empty, plus at least 2 "Done when" items (EN/ZH).
+pub fn has_structured_goal_contract(text: &str) -> bool {
+    let goal_ok =
+        nonempty_inline_heading_any(text, "Goal") || nonempty_inline_heading_any(text, "目标");
+    let non_goals_ok = nonempty_inline_heading_any(text, "Non-goals")
+        || nonempty_inline_heading_any(text, "非目标");
+    let validation_ok = nonempty_inline_heading_any(text, "Validation commands")
+        || nonempty_inline_heading_any(text, "验证命令");
+    let done_when_items = count_done_when_items(text);
+    goal_ok && non_goals_ok && validation_ok && done_when_items >= 2
+}
+
+/// Check if a heading has non-empty inline content after `:`.
+pub fn nonempty_inline_heading_any(text: &str, heading: &str) -> bool {
+    use std::sync::LazyLock;
+
+    static GOAL_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*Goal\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+    static NON_GOALS_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*Non-goals\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+    static VALIDATION_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*Validation commands\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+    static GOAL_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*目标\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+    static NON_GOALS_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*非目标\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+    static VALIDATION_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?im)^\s*验证命令\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
+    });
+
+    let re = match heading {
+        "Goal" => &*GOAL_RE,
+        "Non-goals" => &*NON_GOALS_RE,
+        "Validation commands" => &*VALIDATION_RE,
+        "目标" => &*GOAL_ZH_RE,
+        "非目标" => &*NON_GOALS_ZH_RE,
+        "验证命令" => &*VALIDATION_ZH_RE,
+        _ => return false,
+    };
+
+    re.captures(text)
+        .and_then(|cap| cap.get(1))
+        .map(|m| !m.as_str().trim().is_empty())
+        .unwrap_or(false)
+}
+
+/// Count "Done when" items: prefer bullet/numbered items, fallback to inline separators.
+fn count_done_when_items(text: &str) -> usize {
+    const HEADINGS: [&str; 2] = ["Done when", "完成条件"];
+    static NUMBERED_LINE_RE: OnceLock<Regex> = OnceLock::new();
+    static RE_DONE: OnceLock<Regex> = OnceLock::new();
+    static RE_ZH: OnceLock<Regex> = OnceLock::new();
+    let numbered_line_re = NUMBERED_LINE_RE
+        .get_or_init(|| Regex::new(r"(?m)^\d+\.\s+\S").expect("invalid numbered line regex"));
+    let re_done = RE_DONE.get_or_init(|| {
+        Regex::new(&format!(
+            r"(?im)^\s*{}\s*[:：]\s*(.*)$",
+            regex::escape(HEADINGS[0])
+        ))
+        .expect("invalid done regex")
+    });
+    let re_zh = RE_ZH.get_or_init(|| {
+        Regex::new(&format!(
+            r"(?im)^\s*{}\s*[:：]\s*(.*)$",
+            regex::escape(HEADINGS[1])
+        ))
+        .expect("invalid zh regex")
+    });
+    let heading_pairs = [
+        (HEADINGS[0], Some(re_done)),
+        (HEADINGS[1], Some(re_zh)),
+    ];
+    for (h, maybe_re) in heading_pairs {
+        let Some(re) = maybe_re else {
+            continue;
+        };
+        let Some(cap) = re.captures(text) else {
+            continue;
+        };
+        let inline = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
+        if !inline.is_empty() {
+            let parts = inline
+                .split(&[';', '；', ',', '，', '|', '、'][..])
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .count();
+            if parts >= 2 {
+                return parts;
+            }
+        }
+
+        let mut in_section = false;
+        let mut count = 0usize;
+        let h_lower = h.to_ascii_lowercase();
+        for raw in text.lines() {
+            let line = raw.trim();
+            if line.is_empty() {
+                if in_section {
+                    continue;
+                }
+                continue;
+            }
+            if !in_section {
+                let lowered = line.to_ascii_lowercase();
+                if lowered.starts_with(&h_lower) && (lowered.contains(':') || line.contains('：')) {
+                    in_section = true;
+                }
+                continue;
+            }
+
+            if goal_contract_re().is_match(line)
+                && !line
+                    .to_ascii_lowercase()
+                    .starts_with(&h_lower)
+            {
+                break;
+            }
+
+            let is_bullet = line.starts_with("- ")
+                || line.starts_with("* ")
+                || line.starts_with("• ")
+                || numbered_line_re.is_match(line);
+            if is_bullet {
+                count += 1;
+            }
+        }
+        if count > 0 {
+            return count;
+        }
+    }
+    0
+}
 
 /// 在已剥离/未剥离的文本中查找完成宣称 token。空串直接返回 false；EN 走 ASCII 大小写不敏感，ZH 走原文子串匹配。
 pub fn contains_completion_claim_token(text: &str) -> bool {
@@ -603,6 +794,95 @@ pub fn normalize_tool_name(value: Option<&str>) -> String {
     value.map(|s| s.trim().to_lowercase()).unwrap_or_default()
 }
 
+// ────────────────────────────────────────────────────────────────
+// Tool vs Skill namespace isolation
+// ────────────────────────────────────────────────────────────────
+
+/// 工具来源分类，用于隔离 hook 事件处理中的 tool vs skill 边界。
+///
+/// - `NativeHost`：宿主内置工具（Bash, Write, Edit, Read, Agent 等）
+/// - `McpServer`：MCP 工具，FQN 格式 `mcp__{server_id}__{tool_name}`
+/// - `Unknown`：未识别的工具名（可能是新宿主工具或第三方扩展）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolOrigin {
+    NativeHost,
+    McpServer {
+        server_id: String,
+        tool_name: String,
+    },
+    Unknown,
+}
+
+impl ToolOrigin {
+    /// 是否为 MCP 工具
+    pub fn is_mcp(&self) -> bool {
+        matches!(self, ToolOrigin::McpServer { .. })
+    }
+
+    /// 是否为宿主内置工具
+    pub fn is_native(&self) -> bool {
+        matches!(self, ToolOrigin::NativeHost)
+    }
+}
+
+/// 判断工具名是否为 MCP 工具 FQN（`mcp__{server}__{tool}`）。
+pub fn is_mcp_tool_name(name: &str) -> bool {
+    name.starts_with("mcp__")
+}
+
+/// 解析 MCP 工具 FQN：`mcp__{server_id}__{tool_name}`。
+///
+/// 使用 `rsplit_once("__")` 从右侧解析，支持 server_id 包含连字符
+/// （如 `browser-mcp`、`router-rs-framework`）。
+pub fn parse_mcp_tool_fqn(fqn: &str) -> Option<(&str, &str)> {
+    let rest = fqn.strip_prefix("mcp__")?;
+    let (server_id, tool_name) = rest.rsplit_once("__")?;
+    if server_id.is_empty() || tool_name.is_empty() {
+        return None;
+    }
+    Some((server_id, tool_name))
+}
+
+/// 已知宿主内置工具闭集（跨 Claude/Cursor/Codex/OpenCode 全覆盖）。
+///
+/// 包含：宿主原生工具 + 跨宿主 shell/写入/子代理工具。
+fn is_known_native_tool(name: &str) -> bool {
+    matches!(
+        name,
+        // Claude 原生工具
+        "Bash" | "Write" | "Edit" | "Read" | "Agent" | "NotebookEdit"
+        | "WebSearch" | "WebFetch" | "Glob" | "Grep" | "LS"
+        | "SendMessage" | "Skill" | "EnterWorktree" | "ExitWorktree"
+        | "TeamCreate" | "DesignSync" | "CronCreate" | "CronDelete" | "CronList"
+        // 跨宿主 shell 工具（is_shell_tool 闭集）
+        | "shell" | "bash" | "run_terminal_cmd" | "execute_command"
+        | "terminal" | "run_command" | "sh" | "exec" | "cmd"
+        // 跨宿主写入工具（is_file_write_tool 闭集）
+        | "write" | "strreplace" | "str_replace" | "delete"
+        | "applypatch" | "apply_patch" | "notebookedit" | "notebook_edit"
+        // 子代理工具（SUBAGENT_TOOL_NAMES + 扩展）
+        | "task" | "subagent" | "spawn_agent" | "dispatch_agent"
+        | "functions.task" | "functions.subagent" | "functions.spawn_agent"
+        | "functions.exec_command"
+    )
+}
+
+/// 分类工具来源。
+///
+/// 优先检查 MCP FQN 格式，再检查宿主内置工具闭集，最后归为 Unknown。
+pub fn classify_tool_origin(tool_name: &str) -> ToolOrigin {
+    if let Some((server, tool)) = parse_mcp_tool_fqn(tool_name) {
+        ToolOrigin::McpServer {
+            server_id: server.to_string(),
+            tool_name: tool.to_string(),
+        }
+    } else if is_known_native_tool(tool_name) {
+        ToolOrigin::NativeHost
+    } else {
+        ToolOrigin::Unknown
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn install_review_prompt_test_deps() {
     struct WhitespaceTokenizer;
@@ -890,5 +1170,72 @@ mod tests {
         assert!(!result.contains("code"), "should strip inline code");
         assert!(!result.contains("block"), "should strip fenced code");
         assert!(!result.contains("https://"), "should strip URL");
+    }
+
+    // ── ToolOrigin / classify_tool_origin tests ──────────────────
+
+    #[test]
+    fn parse_mcp_tool_fqn_basic() {
+        assert_eq!(
+            parse_mcp_tool_fqn("mcp__browser-mcp__browser_click"),
+            Some(("browser-mcp", "browser_click"))
+        );
+        assert_eq!(
+            parse_mcp_tool_fqn("mcp__router-rs-framework__goal_state_manage"),
+            Some(("router-rs-framework", "goal_state_manage"))
+        );
+        assert_eq!(
+            parse_mcp_tool_fqn("mcp__paperplain__search_research"),
+            Some(("paperplain", "search_research"))
+        );
+        assert_eq!(
+            parse_mcp_tool_fqn("mcp__mcp-codegraph__codegraph_search"),
+            Some(("mcp-codegraph", "codegraph_search"))
+        );
+    }
+
+    #[test]
+    fn parse_mcp_tool_fqn_rejects_invalid() {
+        assert_eq!(parse_mcp_tool_fqn("Bash"), None);
+        assert_eq!(parse_mcp_tool_fqn("mcp__"), None);
+        assert_eq!(parse_mcp_tool_fqn("mcp__server__"), None);
+        assert_eq!(parse_mcp_tool_fqn("mcp____tool"), None);
+        assert_eq!(parse_mcp_tool_fqn(""), None);
+    }
+
+    #[test]
+    fn is_mcp_tool_name_works() {
+        assert!(is_mcp_tool_name("mcp__browser-mcp__browser_click"));
+        assert!(!is_mcp_tool_name("Bash"));
+        assert!(!is_mcp_tool_name(""));
+        assert!(!is_mcp_tool_name("mcp_tool")); // single underscore
+    }
+
+    #[test]
+    fn classify_tool_origin_mcp() {
+        let origin = classify_tool_origin("mcp__browser-mcp__browser_click");
+        assert!(origin.is_mcp());
+        assert!(!origin.is_native());
+        match &origin {
+            ToolOrigin::McpServer { server_id, tool_name } => {
+                assert_eq!(server_id, "browser-mcp");
+                assert_eq!(tool_name, "browser_click");
+            }
+            _ => panic!("expected McpServer"),
+        }
+    }
+
+    #[test]
+    fn classify_tool_origin_native() {
+        for tool in &["Bash", "Write", "Edit", "Read", "Agent", "shell", "bash", "task"] {
+            let origin = classify_tool_origin(tool);
+            assert!(origin.is_native(), "{tool} should be NativeHost");
+        }
+    }
+
+    #[test]
+    fn classify_tool_origin_unknown() {
+        let origin = classify_tool_origin("SomeNewTool");
+        assert_eq!(origin, ToolOrigin::Unknown);
     }
 }

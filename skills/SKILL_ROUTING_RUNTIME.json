@@ -3,9 +3,9 @@
   "schema_version": "skill-routing-runtime-v3",
   "scope": {
     "fallback_manifest": "skills/SKILL_MANIFEST.json",
-    "full_skill_count": 45,
-    "hot_skill_count": 45,
-    "manifest_skill_count": 46,
+    "full_skill_count": 47,
+    "hot_skill_count": 47,
+    "manifest_skill_count": 47,
     "kind": "hot",
     "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
   },
@@ -485,7 +485,7 @@
         "探索性分析",
         "数据版本控制",
         "方案偏离",
-        "环境管理",
+        "实验环境管理",
         "随机种子",
         "预注册"
       ],
@@ -676,7 +676,22 @@
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
         "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition"
+        "mcp__mcp-codegraph__codegraph_goto_definition",
+        "mcp__router-rs-framework__goal_state_manage",
+        "mcp__router-rs-framework__goal_state_read",
+        "mcp__router-rs-framework__record_evidence",
+        "mcp__router-rs-framework__session_checkpoint",
+        "mcp__router-rs-framework__closeout_gate",
+        "mcp__router-rs-framework__closeout_record_write",
+        "mcp__router-rs-framework__rfv_loop_manage",
+        "mcp__router-rs-framework__rfv_loop_status",
+        "mcp__router-rs-framework__skill_route",
+        "mcp__router-rs-framework__skill_search",
+        "mcp__router-rs-framework__skill_read",
+        "mcp__router-rs-framework__framework_snapshot",
+        "mcp__router-rs-framework__skill_route_status",
+        "mcp__router-rs-framework__routing_evolution",
+        "mcp__router-rs-framework__web_fetch"
       ],
       null
     ],
@@ -724,7 +739,7 @@
         "citation verification",
         "contradiction sweep",
         "literature check",
-        "引用检查",
+        "引用审查",
         "文献验证"
       ],
       "local",
@@ -813,6 +828,7 @@
       "论文全流程前门：自动路由 reviewer/writer lane，一站式审稿、返修、投稿。按顶刊/顶会标准把关，支持 rebuttal、R&R、cover letter 全流程。",
       "preferred",
       [
+        "改稿",
         "CCF-A 论文",
         "SCI润色",
         "paper review",
@@ -876,7 +892,6 @@
         "prose ladder",
         "section rewrite",
         "story card",
-        "改稿",
         "润色落笔",
         "论文改稿"
       ],
@@ -910,7 +925,7 @@
       "required",
       [
         "PDF 转文字",
-        "layout",
+        "pdf layout",
         "pdf",
         "rendering",
         "reportlab",
@@ -994,7 +1009,13 @@
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
         "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition"
+        "mcp__mcp-codegraph__codegraph_goto_definition",
+        "mcp__router-rs-framework__skill_route",
+        "mcp__router-rs-framework__skill_search",
+        "mcp__router-rs-framework__skill_read",
+        "mcp__router-rs-framework__framework_snapshot",
+        "mcp__router-rs-framework__skill_route_status",
+        "mcp__router-rs-framework__routing_evolution"
       ],
       "sonnet"
     ],
@@ -1298,7 +1319,7 @@
         "clean up code",
         "code simplify",
         "simplify",
-        "代码清理",
+        "代码简化清理",
         "代码简化",
         "去重",
         "简化代码",
@@ -1355,6 +1376,43 @@
       "project",
       0,
       "skills/skill-framework-developer/SKILL.md",
+      [
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
+      "skill",
+      null,
+      null
+    ],
+    [
+      "systematic-debugging",
+      "L0",
+      "gate",
+      "evidence",
+      "P2",
+      "Root-cause investigation lane: hypothesis-driven debugging, reproduction capture, flake isolation, incident triage.",
+      "n/a",
+      [
+        "blind fix",
+        "debug",
+        "flake",
+        "incident triage",
+        "root cause",
+        "systematic-debugging",
+        "为什么失败",
+        "为什么报错",
+        "偶发失败",
+        "失败了",
+        "崩了",
+        "无法复现",
+        "根因分析",
+        "调试"
+      ],
+      "local",
+      10,
+      "skills/systematic-debugging/SKILL.md",
       [
         "claude",
         "codex",
@@ -1528,40 +1586,6 @@
       null
     ],
     [
-      "systematic-debugging",
-      "L2",
-      "owner",
-      "none",
-      "P3",
-      "Investigate unknown failures before fixing: root-cause analysis, evidence capture, flake isolation, incident triage, or failure-mode playbooks.",
-      "n/a",
-      [
-        "bug reproduction",
-        "diagnostic playbook",
-        "failure analysis",
-        "failure-mode playbooks",
-        "flake isolation",
-        "incident triage",
-        "root-cause analysis",
-        "root cause analysis",
-        "systematic-debugging",
-        "定位根因",
-        "找根因"
-      ],
-      "project",
-      0,
-      "skills/systematic-debugging/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      null,
-      null
-    ],
-    [
       "tikz-paper-figure",
       "L3",
       "owner",
@@ -1674,7 +1698,22 @@
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
         "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition"
+        "mcp__mcp-codegraph__codegraph_goto_definition",
+        "mcp__router-rs-framework__goal_state_manage",
+        "mcp__router-rs-framework__goal_state_read",
+        "mcp__router-rs-framework__record_evidence",
+        "mcp__router-rs-framework__session_checkpoint",
+        "mcp__router-rs-framework__closeout_gate",
+        "mcp__router-rs-framework__closeout_record_write",
+        "mcp__router-rs-framework__rfv_loop_manage",
+        "mcp__router-rs-framework__rfv_loop_status",
+        "mcp__router-rs-framework__skill_route",
+        "mcp__router-rs-framework__skill_search",
+        "mcp__router-rs-framework__skill_read",
+        "mcp__router-rs-framework__framework_snapshot",
+        "mcp__router-rs-framework__skill_route_status",
+        "mcp__router-rs-framework__routing_evolution",
+        "mcp__router-rs-framework__web_fetch"
       ],
       null
     ],

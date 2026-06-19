@@ -14,7 +14,12 @@ use core_policy::review_gate_engine::{
 };
 use core_policy::{HookReviewDiskCore, HookReviewGateFields};
 use serde_json::{Map, Value, json};
-use super::hook_dispatch::{HookEvent, HookOutput, HostHookConfig, HostHookDispatcher};
+use super::hook_dispatch::{
+    HookEvent, HookOutput, HostHookConfig, HostHookDispatcher,
+    is_verification_command, shared_framework_test_advisory,
+    shared_goal_stop_followup_line, shared_settings_validation_advisory,
+    shared_stop_review_output_lint_suppressed,
+};
 use std::cell::Cell;
 use std::collections::HashSet;
 use std::fs;
@@ -533,8 +538,154 @@ fn add_context(event: &str, context: &str) -> Option<Value> {
     }))
 }
 
+// ── Active skill context (allowedTools linkage) ──────────────────
+
+fn active_skill_context_path(repo_root: &Path) -> PathBuf {
+    hook_state_base(repo_root).join("active-skill-context.json")
+}
+
+/// 从 SKILL_ROUTING_RUNTIME.json 读取指定 skill 的 allowedTools 列表。
+/// 使用 OnceLock 缓存 JSON 解析结果，避免重复 I/O。
+fn skill_allowed_tools_from_runtime(skill_slug: &str) -> Option<Vec<String>> {
+    use std::sync::OnceLock;
+    static RUNTIME_CACHE: OnceLock<Option<Value>> = OnceLock::new();
+
+    let runtime = RUNTIME_CACHE.get_or_init(|| {
+        let candidates = [
+            std::path::PathBuf::from("skills/SKILL_ROUTING_RUNTIME.json"),
+            std::path::PathBuf::from("SKILL_ROUTING_RUNTIME.json"),
+        ];
+        for path in &candidates {
+            if let Ok(data) = std::fs::read_to_string(path) {
+                if let Ok(v) = serde_json::from_str(&data) {
+                    return Some(v);
+                }
+            }
+        }
+        None
+    });
+
+    let runtime = runtime.as_ref()?;
+    let keys = runtime.get("keys")?.as_array()?;
+    let slug_idx = keys.iter().position(|k| k.as_str() == Some("slug"))?;
+    let allowed_idx = keys.iter().position(|k| k.as_str() == Some("allowedTools"))?;
+
+    let skills = runtime.get("skills")?.as_array()?;
+    for row in skills {
+        let arr = row.as_array()?;
+        if arr.get(slug_idx).and_then(Value::as_str) == Some(skill_slug) {
+            let allowed = arr.get(allowed_idx)?;
+            if allowed.is_null() {
+                return None;
+            }
+            let tools = allowed
+                .as_array()?
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect::<Vec<_>>();
+            return if tools.is_empty() { None } else { Some(tools) };
+        }
+    }
+    None
+}
+
+/// 写入 active skill context（UserPromptSubmit 时调用）。
+fn write_active_skill_context(repo_root: &Path, skill_slug: &str, allowed_tools: &[String]) {
+    let path = active_skill_context_path(repo_root);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let ctx = json!({
+        "skill_slug": skill_slug,
+        "allowed_tools": allowed_tools,
+        "timestamp": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0),
+    });
+    let _ = std::fs::write(&path, ctx.to_string());
+}
+
+/// 读取 active skill context（PreToolUse 时调用）。
+fn read_active_skill_context(repo_root: &Path) -> Option<Value> {
+    let path = active_skill_context_path(repo_root);
+    let data = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&data).ok()
+}
+
+/// 清理 active skill context（Stop 时调用）。
+fn clear_active_skill_context(repo_root: &Path) {
+    let path = active_skill_context_path(repo_root);
+    let _ = std::fs::remove_file(&path);
+}
+
+/// 从用户 prompt 中提取生命周期 skill slug。
+fn detect_lifecycle_skill_slug(prompt: &str) -> Option<&'static str> {
+    let lower = prompt.to_ascii_lowercase();
+    if lower.contains("/implementx") {
+        Some("implementx")
+    } else if lower.contains("/verifyx") {
+        Some("verifyx")
+    } else if lower.contains("/planx") {
+        Some("planx")
+    } else if lower.contains("/discussx") {
+        Some("discussx")
+    } else {
+        None
+    }
+}
+
 fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
     crate::hooks::ensure_kernel_bootstrap();
+    let tool_name_raw = payload
+        .get("tool_name")
+        .or(payload.get("tool"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let tool_origin = core_policy::hook_common::classify_tool_origin(tool_name_raw);
+    // allowedTools 联动：检查当前激活 skill 是否允许此工具
+    if let Some(ctx) = read_active_skill_context(repo_root) {
+        if let (Some(slug), Some(allowed)) = (
+            ctx.get("skill_slug").and_then(Value::as_str),
+            ctx.get("allowed_tools").and_then(Value::as_array),
+        ) && !allowed.is_empty() {
+            let tool_in_list = allowed.iter().any(|v| {
+                v.as_str().is_some_and(|a| {
+                    // 支持前缀匹配：mcp__mcp-codegraph__* 匹配所有 codegraph 工具
+                    a == tool_name_raw
+                        || (a.ends_with('*') && tool_name_raw.starts_with(&a[..a.len() - 1]))
+                })
+            });
+            if !tool_in_list {
+                return Some(json!({
+                    "hookEventName": "PreToolUse",
+                    "additionalContext": format!(
+                        "⚠️ Tool '{}' not in active skill '{}' allowedTools. Proceed with caution.",
+                        tool_name_raw, slug
+                    ),
+                }));
+            }
+        }
+    }
+    // MCP 工具：安全检查 + 跳过文件路径保护
+    if tool_origin.is_mcp() {
+        // mcp-tool-safety: 检查高风险工具名和参数模式
+        let tool_args_str = payload
+            .get("tool_input")
+            .or(payload.get("input"))
+            .or(payload.get("arguments"))
+            .map(|v| v.to_string())
+            .unwrap_or_default();
+        if let Some(reason) = core_policy::hook_policy::dangerous_mcp_tool_reason(
+            tool_name_raw,
+            &tool_args_str,
+        ) {
+            return deny_pre_tool_use(format!(
+                "Blocked MCP tool '{tool_name_raw}': {reason}"
+            ));
+        }
+        return None;
+    }
     let mut warn_contexts: Vec<String> = Vec::new();
     for path in payload_relative_paths(repo_root, payload) {
         if is_cross_host_or_retired_surface(&path) {
@@ -635,10 +786,24 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
         );
     }
     if core_policy::hook_common::is_framework_goal_entry_prompt(&prompt) {
+        // Write active skill context for allowedTools linkage
+        if let Some(slug) = detect_lifecycle_skill_slug(&prompt) {
+            if let Some(allowed) = skill_allowed_tools_from_runtime(slug) {
+                write_active_skill_context(repo_root, slug, &allowed);
+            }
+        }
         return add_context(
             "UserPromptSubmit",
             core_policy::hook_common::my_goal_drive_hook_nudge_for_prompt(&prompt),
         );
+    }
+    // Write active skill context for pre-execution lifecycle commands too
+    if core_policy::hook_common::is_my_lifecycle_entry_prompt(&prompt) {
+        if let Some(slug) = detect_lifecycle_skill_slug(&prompt) {
+            if let Some(allowed) = skill_allowed_tools_from_runtime(slug) {
+                write_active_skill_context(repo_root, slug, &allowed);
+            }
+        }
     }
     let mut contexts: Vec<String> = Vec::new();
     if let Some(Ok(state)) = review_sync
@@ -682,6 +847,9 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
+    let tool_origin = core_policy::hook_common::classify_tool_origin(&tool_name);
+    // MCP 工具分类已知，后续 Phase 使用此信息做 allowedTools 联动和 mcp-tool-safety
+    let _ = &tool_origin;
     crate::hooks::emit_tool_call(
         &tool_name,
         crate::hooks::extract_post_tool_duration_ms(payload).unwrap_or(0),
@@ -723,8 +891,43 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
     }
 }
 
+
+/// Pre-computed context for a single Stop hook invocation.
+/// Avoids repeated session_key computation and canonicalize syscalls.
+#[allow(dead_code)]
+struct StopContext {
+    session_key: String,
+    review_path: PathBuf,
+    touch_path: PathBuf,
+    legacy_review_gate_path: PathBuf,
+    legacy_review_flat_path: PathBuf,
+    legacy_touch_path: PathBuf,
+}
+
+impl StopContext {
+    fn new(repo_root: &Path, payload: &Value) -> Self {
+        let key = session_key(repo_root, payload);
+        let base = hook_state_base(repo_root);
+        let review_path = base.join(core_policy::hook_review_subagent_state_basename(&key));
+        let legacy_review_gate_path = base.join(core_policy::hook_review_gate_legacy_state_basename(&key));
+        let legacy_review_flat_path = repo_root.join(".claude").join(core_policy::hook_review_gate_legacy_state_basename(&key));
+        let touch_path = base.join(format!("hook_state_{key}.json"));
+        let legacy_touch_path = base.join("hook_state.json");
+        Self {
+            session_key: key,
+            review_path,
+            touch_path,
+            legacy_review_gate_path,
+            legacy_review_flat_path,
+            legacy_touch_path,
+        }
+    }
+}
+
 fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     crate::hooks::ensure_kernel_bootstrap();
+    // 清理 active skill context（allowedTools 联动状态）
+    clear_active_skill_context(repo_root);
     if let Some(msg) = crate::hooks::closeout_stop_followup_for_completion_text(
         repo_root,
         &claude_closeout_completion_text(payload),
@@ -733,15 +936,15 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
         return add_context("Stop", &format!("[advisory] {msg}"));
     }
 
-    let review_load = load_review_gate_disk(repo_root, payload);
-    let touch_load = load_touch_state_disk(repo_root, payload);
+    let ctx = StopContext::new(repo_root, payload);
+    let review_load = load_review_gate_disk_with_ctx(repo_root, &ctx);
+    let touch_load = load_touch_state_disk_with_ctx(&ctx);
     if matches!(review_load, AgentDiskState::Unreadable) {
         eprintln!(
             "[router-rs] {} review_gate state unreadable on Stop: {}",
             active_stdio_agent_hook_host().log_label(),
-            review_state_path(repo_root, payload).display()
+            ctx.review_path.display()
         );
-        // Advisory — corrupted state is not a reason to block indefinitely
         return add_context(
             "Stop",
             "[advisory] hook-state unreadable; clearing stale files.",
@@ -751,10 +954,9 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
         eprintln!(
             "[router-rs] {} hook_state unreadable on Stop: {}",
             active_stdio_agent_hook_host().log_label(),
-            touch_state_path(repo_root, payload).display()
+            ctx.touch_path.display()
         );
-        // Advisory — corrupted state is not a reason to block indefinitely
-        clear_touch_state(repo_root, payload);
+        clear_touch_state_with_ctx(&ctx);
         return add_context(
             "Stop",
             "[advisory] hook-state unreadable; cleared stale files.",
@@ -763,50 +965,152 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
 
     let stop_signal = claude_stop_signal_text(payload);
     let prompt = claude_user_prompt_text(payload);
-    let reject_now = saw_reject_reason(&stop_signal, &prompt);
+    let response_full = payload
+        .get("response")
+        .or_else(|| payload.get("assistant_response"))
+        .or_else(|| payload.get("last_assistant_message"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let response_for_lint = core_policy::hook_common::hook_assistant_tail_window(
+        response_full,
+        core_policy::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+    );
 
     let mut review_state = match review_load {
         AgentDiskState::Absent => HookReviewDiskCore::default(),
         AgentDiskState::Ok(s) => s,
-        AgentDiskState::Unreadable => unreachable!("Unreadable already returned above"),
+        AgentDiskState::Unreadable => unreachable!(),
     };
+
+    // ── Override detection (parity with Cursor) ────────────────
+    if has_override(&prompt) {
+        review_state.review_override = true;
+        review_state.delegation_override = true;
+    }
+
+    // ── Goal drive entry detection (parity with Cursor) ────────
+    let goal_drive_entrypoint =
+        core_policy::hook_common::is_framework_goal_entry_prompt(&prompt);
+    if goal_drive_entrypoint {
+        review_state.goal_drive_entry_active = true;
+    }
+    // Goal signal detection from assistant response — uses the same regex-based
+    // detection as Cursor (shared via hook_common).
+    if goal_drive_entrypoint || review_state.goal_drive_entry_active {
+        if core_policy::hook_common::has_structured_goal_contract(&stop_signal) {
+            review_state.goal_contract_seen = true;
+        }
+        if core_policy::hook_common::has_goal_progress_signal(&stop_signal) {
+            review_state.goal_progress_seen = true;
+        }
+        if core_policy::hook_common::has_goal_verify_or_block_signal(&stop_signal) {
+            review_state.goal_verify_or_block_seen = true;
+        }
+    }
+    // Hydrate goal gate from disk (GOAL_STATE.json — active when runtime-core registers)
+    hydrate_goal_gate_from_disk_for_claude(repo_root, &mut review_state, goal_drive_entrypoint);
+
+    // ── Reject reason detection (parity with Cursor) ───────────
+    let reject_now = saw_reject_reason(&stop_signal, &prompt);
     if reject_now {
         review_state.reject_reason_seen = true;
-        let path = review_state_path(repo_root, payload);
-        let _ = write_review_state_unlocked(&path, &review_state);
+        // Clear escalation counters when reject reason is seen (parity with Cursor)
+        review_state.followup_count = 0;
+        review_state.review_followup_count = 0;
     }
-    if !claude_review_gate_suppressed(repo_root, &prompt)
-        && let Some(reason) = claude_review_gate_incomplete_stop_reason(&review_state.gate_fields())
-        {
-            return add_context("Stop", &reason);
-        }
-    let state = match touch_load {
+
+    // ── Review gate check (shared logic) ───────────────────────
+    let review_suppressed = claude_review_gate_suppressed(repo_root, &prompt);
+    let gate_fields = review_state.gate_fields();
+    let review_advisory_needed = if review_suppressed {
+        None
+    } else {
+        core_policy::hook_review_stop_advisory_needed(&gate_fields, "CLAUDE_REVIEW_GATE")
+    };
+
+    if let Some(reason) = &review_advisory_needed {
+        review_state.followup_count += 1;
+        review_state.review_followup_count += 1;
+        let _ = write_review_state_unlocked(&ctx.review_path, &review_state);
+        return add_context("Stop", reason);
+    }
+
+    // ── Goal followup check (shared logic, parity with Cursor) ─
+    if review_state.tracks_goal() && !review_state.goal_is_satisfied() {
+        review_state.followup_count += 1;
+        review_state.goal_followup_count += 1;
+        let _ = write_review_state_unlocked(&ctx.review_path, &review_state);
+        let message = shared_goal_stop_followup_line(
+            review_state.goal_contract_seen,
+            review_state.goal_progress_seen,
+            review_state.goal_verify_or_block_seen,
+            review_state.goal_followup_count,
+        );
+        return add_context("Stop", &message);
+    }
+
+    // ── Touch state checks (shared advisory) ───────────────────
+    let touch_state = match touch_load {
         AgentDiskState::Absent => TouchState::default(),
         AgentDiskState::Ok(s) => s,
-        AgentDiskState::Unreadable => unreachable!("Unreadable already returned above"),
+        AgentDiskState::Unreadable => unreachable!(),
     };
-    if state.settings && !state.settings_validated {
-        // Advisory — warn but do not block
-        clear_touch_state(repo_root, payload);
-        return add_context(
-            "Stop",
-            &format!(
-                "[advisory] {}",
-                active_stdio_agent_hook_host().validate_settings_stop_reason()
-            ),
-        );
+    if touch_state.settings && !touch_state.settings_validated {
+        clear_touch_state_with_ctx(&ctx);
+        return add_context("Stop", &format!("[advisory] {}", shared_settings_validation_advisory()));
     }
-    if state.framework && !state.framework_tested {
-        // Advisory — warn but do not block
-        clear_touch_state(repo_root, payload);
-        return add_context(
-            "Stop",
-            "[advisory] Framework source files were modified. Consider running tests.",
-        );
+    if touch_state.framework && !touch_state.framework_tested {
+        clear_touch_state_with_ctx(&ctx);
+        return add_context("Stop", &format!("[advisory] {}", shared_framework_test_advisory()));
     }
-    clear_review_state(repo_root, payload);
-    clear_touch_state(repo_root, payload);
-    None
+
+    // ── Review output lint (parity with Cursor) ────────────────
+    let mut output = json!({});
+    let skip_lint = shared_stop_review_output_lint_suppressed(
+        review_advisory_needed.is_some(),
+        false, // goal_required — Claude uses goal_drive_entry_active instead
+        review_state.goal_drive_entry_active,
+        review_state.goal_contract_seen,
+        review_state.goal_progress_seen,
+        review_state.goal_verify_or_block_seen,
+        review_state.review_override,
+        review_state.delegation_override,
+    );
+    if !skip_lint
+        && !response_for_lint.trim().is_empty()
+        && response_for_lint.contains("[P")
+    {
+        let lint_findings = core_policy::review_output_lint::lint_review_output(&response_for_lint);
+        let warning_count = lint_findings
+            .iter()
+            .filter(|f| f.severity == core_policy::review_output_lint::LintSeverity::Warning)
+            .count();
+        if warning_count > 0 {
+            let msg = format!(
+                "review-output-lint: {} compact envelope warning(s) — check `skills/code-review-deep/SKILL.md` §Compact envelope",
+                warning_count
+            );
+            output["additional_context"] = Value::String(msg);
+        }
+    }
+
+    // ── Conditional state cleanup (parity with Cursor — P1 #6 fix) ──
+    // Only clear state when no active gate tracking remains.
+    let should_clear = !review_state.review_required
+        && !review_state.tracks_goal()
+        && !review_state.reject_reason_seen;
+    if should_clear {
+        clear_review_state_with_ctx(&ctx);
+    } else {
+        let _ = write_review_state_unlocked(&ctx.review_path, &review_state);
+    }
+    clear_touch_state_with_ctx(&ctx);
+
+    if output.as_object().is_some_and(|o| !o.is_empty()) {
+        Some(output)
+    } else {
+        None
+    }
 }
 
 #[derive(Default)]
@@ -815,6 +1119,76 @@ struct TouchState {
     framework: bool,
     settings_validated: bool,
     framework_tested: bool,
+}
+
+/// Hydrate goal gate from disk (GOAL_STATE.json + EVIDENCE_INDEX.json).
+/// Uses the same function-pointer proxy as Cursor; active when runtime-core registers
+/// `evaluate_goal_readiness_from_disk` (no-op in standalone mode).
+/// Falls back to direct GOAL_STATE.json read when runtime-core is not registered.
+fn hydrate_goal_gate_from_disk_for_claude(
+    repo_root: &Path,
+    state: &mut HookReviewDiskCore,
+    goal_drive_entrypoint: bool,
+) {
+    if !state.goal_drive_entry_active && !goal_drive_entrypoint {
+        return;
+    }
+    let frame = core_state::task_state::resolve_cursor_continuity_frame(repo_root);
+    let Some((goal, task_id)) = frame.hydration_goal.as_ref() else {
+        if goal_drive_entrypoint {
+            state.goal_drive_entry_active = false;
+        }
+        return;
+    };
+    let readiness = crate::hooks::evaluate_goal_readiness_from_disk(
+        repo_root,
+        goal,
+        task_id.as_str(),
+    );
+    // If runtime-core registered a real evaluator, use its result.
+    if readiness.contract || readiness.progress || readiness.verification {
+        if readiness.contract {
+            state.goal_contract_seen = true;
+        }
+        if readiness.progress {
+            state.goal_progress_seen = true;
+        }
+        if readiness.verification {
+            state.goal_verify_or_block_seen = true;
+        }
+        return;
+    }
+    // Standalone fallback: read GOAL_STATE.json directly.
+    let goal_path = repo_root
+        .join("artifacts/current")
+        .join(task_id.as_str())
+        .join("GOAL_STATE.json");
+    let Ok(raw) = fs::read_to_string(&goal_path) else {
+        return;
+    };
+    let Ok(goal_json) = serde_json::from_str::<Value>(&raw) else {
+        return;
+    };
+    // Check for goal contract fields (done_when, validation_commands, non_goals)
+    if goal_json.get("done_when").and_then(|v| v.as_array()).is_some_and(|a| !a.is_empty())
+        || goal_json.get("validation_commands").and_then(|v| v.as_array()).is_some_and(|a| !a.is_empty())
+    {
+        state.goal_contract_seen = true;
+    }
+    // Check for progress/milestone markers
+    if goal_json.get("progress").is_some()
+        || goal_json.get("checkpoints").is_some()
+        || goal_json.get("milestone").is_some()
+    {
+        state.goal_progress_seen = true;
+    }
+    // Check for verification/blocker markers
+    if goal_json.get("verification").is_some()
+        || goal_json.get("verified").and_then(Value::as_bool).is_some_and(|b| b)
+        || goal_json.get("blockers").is_some()
+    {
+        state.goal_verify_or_block_seen = true;
+    }
 }
 
 
@@ -991,19 +1365,45 @@ fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewSta
         .open(&lock_path)
         .map_err(|e| format!("claude_state_lock_open_failed: {e}"))?;
     let fd = file.as_raw_fd();
-    // SAFETY: flock(LOCK_EX) acquires an exclusive advisory lock on the given fd.
-    // The fd comes from a freshly opened file (OpenOptions above) and is guaranteed
-    // valid. flock is a simple syscall that operates on kernel file table entries;
-    // it cannot cause memory unsafety. If the lock is unavailable, it blocks until
-    // acquired (LOCK_EX semantics). The return value is checked for errors below.
-    let rc = unsafe { libc::flock(fd, libc::LOCK_EX) };
-    if rc != 0 {
-        return Err(format!(
-            "claude_state_lock_flock_failed: {}",
-            io::Error::last_os_error()
-        ));
+    // Non-blocking lock with retry + timeout (avoids indefinite hang on stale locks)
+    let max_wait_ms: u64 = 5000;
+    let mut elapsed_ms: u64 = 0;
+    let retry_interval_ms: u64 = 50;
+    loop {
+        // SAFETY: LOCK_NB makes flock non-blocking; returns -1 with EWOULDBLOCK if unavailable.
+        let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+        if rc == 0 {
+            return Ok(ClaudeReviewStateLock { file });
+        }
+        let err = std::io::Error::last_os_error();
+        if err.raw_os_error() != Some(libc::EWOULDBLOCK) {
+            return Err(format!("claude_state_lock_flock_failed: {err}"));
+        }
+        if elapsed_ms >= max_wait_ms {
+            // Stale lock cleanup: check if lock file is old (>60s)
+            if let Ok(meta) = fs::metadata(&lock_path) {
+                if let Ok(modified) = meta.modified() {
+                    if modified.elapsed().unwrap_or(std::time::Duration::ZERO)
+                        > std::time::Duration::from_secs(60)
+                    {
+                        eprintln!("[router-rs] claude stale lock detected (>60s), retrying");
+                        // Force release and retry once
+                        unsafe { libc::flock(fd, libc::LOCK_UN); }
+                        let rc2 = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+                        if rc2 == 0 {
+                            return Ok(ClaudeReviewStateLock { file });
+                        }
+                    }
+                }
+            }
+            return Err(format!(
+                "claude_state_lock_timeout after {max_wait_ms}ms (path={})",
+                lock_path.display()
+            ));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(retry_interval_ms));
+        elapsed_ms += retry_interval_ms;
     }
-    Ok(ClaudeReviewStateLock { file })
 }
 
 #[cfg(not(unix))]
@@ -1141,14 +1541,15 @@ fn load_touch_state_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<To
 fn write_review_state_unlocked(path: &Path, state: &HookReviewDiskCore) -> Result<(), String> {
     let mut to_write = state.clone();
     to_write.bump_version_for_save();
-    let value = serde_json::to_value(&to_write).map_err(|e| e.to_string())?;
-    let body = format!("{value}\n");
+    let mut body = serde_json::to_string(&to_write).map_err(|e| e.to_string())?;
+    body.push('\n');
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     fs::write(path, &body).map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 fn clear_review_state(repo_root: &Path, payload: &Value) {
     let _ = fs::remove_file(review_state_path(repo_root, payload));
     let _ = fs::remove_file(legacy_review_gate_hook_state_path(repo_root, payload));
@@ -1230,21 +1631,19 @@ fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
         }
 }
 
-/// §4.4: 自动 evidence 采集。当 Bash 运行验证类命令时，自动记录到 EVIDENCE_INDEX。
-/// 命令分类规则：
-/// - `cargo test*`, `cargo check*`, `cargo build*` → exit_code + 输出摘要
-/// - `git diff*`, `git log*` → 变更统计
-/// - `npm test*`, `pytest*`, `make test*` → exit_code + 输出摘要
-// 同一命令在同一 task 目录下不重复记录（检查最近 5 条）。
+/// §4.4: 自动 evidence 采集。当 shell/terminal 类工具运行验证类命令时，自动记录到 EVIDENCE_INDEX。
+/// 使用 `hook_dispatch::is_verification_command` 统一分类（含 tool_name 过滤）。
+/// 同一命令在同一 task 目录下不重复记录（检查最近 5 条）。
 fn auto_record_verification_evidence(repo_root: &Path, payload: &Value) {
-    if payload.get("tool_name").and_then(Value::as_str) != Some("Bash") {
-        return;
-    }
+    let tool_name = payload
+        .get("tool_name")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
     let Some(command) = bash_command(payload) else {
         return;
     };
     let cmd_trimmed = command.trim();
-    if !is_verification_command(cmd_trimmed) {
+    if !is_verification_command(tool_name, cmd_trimmed) {
         return;
     }
     let exit_code = payload_exit_code(payload);
@@ -1299,27 +1698,6 @@ fn auto_record_research_activity(repo_root: &Path, payload: &Value) {
         return;
     }
     crate::hooks::maybe_record_research_activity(repo_root, tool_name, &summary);
-}
-
-/// 判断命令是否为验证类命令。
-fn is_verification_command(cmd: &str) -> bool {
-    let cmd_lower = cmd.to_ascii_lowercase();
-    let patterns = [
-        "cargo test",
-        "cargo check",
-        "cargo build",
-        "cargo clippy",
-        "cargo fmt",
-        "npm test",
-        "npm run test",
-        "pytest",
-        "make test",
-        "make check",
-        "go test",
-        "git diff",
-        "git log",
-    ];
-    patterns.iter().any(|p| cmd_lower.starts_with(p))
 }
 
 /// 从 payload 中提取输出摘要，截断到 max_chars。
@@ -1396,10 +1774,65 @@ fn persist_touch_state(
         }
 }
 
+#[allow(dead_code)]
 fn clear_touch_state(repo_root: &Path, payload: &Value) {
     let _ = fs::remove_file(touch_state_path(repo_root, payload));
     let _ = fs::remove_file(legacy_touch_state_path(repo_root));
 }
+
+fn load_review_gate_disk_with_ctx(repo_root: &Path, ctx: &StopContext) -> AgentDiskState<HookReviewDiskCore> {
+    match read_review_gate_file(&ctx.review_path) {
+        AgentDiskState::Ok(state) => return AgentDiskState::Ok(state),
+        AgentDiskState::Unreadable => return AgentDiskState::Unreadable,
+        AgentDiskState::Absent => {}
+    }
+    for legacy_path in [&ctx.legacy_review_gate_path, &ctx.legacy_review_flat_path] {
+        match read_review_gate_file(legacy_path) {
+            AgentDiskState::Ok(state) => {
+                return migrate_claude_review_gate_state_to_canonical(&ctx.review_path, &state);
+            }
+            AgentDiskState::Unreadable => return AgentDiskState::Unreadable,
+            AgentDiskState::Absent => {}
+        }
+    }
+    AgentDiskState::Absent
+}
+
+fn load_touch_state_disk_with_ctx(ctx: &StopContext) -> AgentDiskState<TouchState> {
+    if !ctx.touch_path.is_file() {
+        return AgentDiskState::Absent;
+    }
+    let raw = match fs::read_to_string(&ctx.touch_path) {
+        Ok(s) => s,
+        Err(_) => return AgentDiskState::Unreadable,
+    };
+    if raw.trim().is_empty() {
+        return AgentDiskState::Unreadable;
+    }
+    let payload_val: Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return AgentDiskState::Unreadable,
+    };
+    AgentDiskState::Ok(TouchState {
+        settings: payload_val.get("settings").and_then(Value::as_bool).unwrap_or(false),
+        framework: payload_val.get("framework").and_then(Value::as_bool).unwrap_or(false),
+        settings_validated: payload_val.get("settings_validated").and_then(Value::as_bool).unwrap_or(false),
+        framework_tested: payload_val.get("framework_tested").and_then(Value::as_bool).unwrap_or(false),
+    })
+}
+
+fn clear_review_state_with_ctx(ctx: &StopContext) {
+    let _ = fs::remove_file(&ctx.review_path);
+    let _ = fs::remove_file(&ctx.legacy_review_gate_path);
+    let _ = fs::remove_file(&ctx.legacy_review_flat_path);
+}
+
+fn clear_touch_state_with_ctx(ctx: &StopContext) {
+    let _ = fs::remove_file(&ctx.touch_path);
+    let _ = fs::remove_file(&ctx.legacy_touch_path);
+}
+
+
 
 fn payload_relative_paths(repo_root: &Path, payload: &Value) -> Vec<String> {
     let mut paths = HashSet::new();

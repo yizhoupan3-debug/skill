@@ -364,6 +364,8 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
 
 pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
     let tool_name = codex_tool_name(event);
+    let tool_origin = core_policy::hook_common::classify_tool_origin(&tool_name);
+    let _ = &tool_origin; // Used by allowedTools linkage (Phase 4) and mcp-tool-safety (Phase 5)
     hooks::emit_tool_call(
         &tool_name,
         hooks::extract_post_tool_duration_ms(event).unwrap_or(0),
