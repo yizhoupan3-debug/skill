@@ -144,11 +144,11 @@ cargo run --manifest-path tools/evolution-rs/Cargo.toml -- audit --config config
 | 宿主 | 配置文件 | `--repo-root` | env 注入 |
 |------|----------|---------------|----------|
 | Claude 全局 | `~/.claude/mcp.json` | ✅ 硬编码 | ✅ 三组 |
-| Claude 项目 | `skill/.claude/mcp.json` | ✅ 硬编码 | ✅ `SKILL_FRAMEWORK_ROOT` |
+| Claude 项目 | `.mcp.json` | ✅ 硬编码 | ✅ `SKILL_FRAMEWORK_ROOT` |
 | Claude Desktop | `Claude-3p/claude_desktop_config.json` | ✅ 硬编码 | ✅ 三组 |
 | Gemini CLI 全局 | `~/.gemini/mcp.json` | ✅ 硬编码 | ✅ 三组 |
-| Gemini 项目级 | `skill/.gemini/mcp.json` | ✅ 硬编码 | ✅ 三组 |
-| OpenCode | `skill/.opencode/opencode.json` | ✅ 硬编码 | ✅ `SKILL_FRAMEWORK_ROOT` |
+| Gemini 项目级 | `.gemini/mcp.json` | ✅ 硬编码 | ✅ 三组 |
+| OpenCode | `.opencode/opencode.json` | ✅ 硬编码 | ✅ `SKILL_FRAMEWORK_ROOT` |
 
 ### 校验命令
 
@@ -159,8 +159,8 @@ import json, os
 configs = [
     (os.path.expanduser('~/.claude/mcp.json'), 'mcpServers'),
     (os.path.expanduser('~/.gemini/mcp.json'), 'mcpServers'),
-    ('/Users/joe/Developer/skill/.claude/mcp.json', 'mcpServers'),
-    ('/Users/joe/Developer/skill/.gemini/mcp.json', 'mcpServers'),
+    ('.mcp.json', 'mcpServers'),
+    ('.gemini/mcp.json', 'mcpServers'),
     (os.path.expanduser('~/Library/Application Support/Claude-3p/claude_desktop_config.json'), 'mcpServers'),
 ]
 for path, key in configs:
