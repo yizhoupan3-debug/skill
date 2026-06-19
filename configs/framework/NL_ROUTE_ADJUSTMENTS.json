@@ -209,6 +209,15 @@
       "record": {
         "slug": "skill-framework-developer"
       }
+    },
+    {
+      "when": {
+        "signal": "has_mcp_tool_invocation_intent"
+      },
+      "action": {
+        "type": "suppress",
+        "reason": "Suppressed: user query contains MCP tool name or tool invocation intent, not a skill request."
+      }
     }
   ],
   "post_framework_alias_rules": [
@@ -710,7 +719,7 @@
       "action": {
         "type": "boost",
         "delta": 40.0,
-        "reason": "Research-discovery barrier boost: hard barrier wording detected."
+        "reason": "Research-discovery barrier boost: hard barrier wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
       },
       "record": {
         "slug": "research-discovery"
@@ -736,7 +745,7 @@
       "action": {
         "type": "boost",
         "delta": 40.0,
-        "reason": "Research-discovery barrier boost: stuck wording detected."
+        "reason": "Research-discovery barrier boost: stuck wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
       },
       "record": {
         "slug": "research-discovery"
@@ -749,7 +758,7 @@
       "action": {
         "type": "boost",
         "delta": 50.0,
-        "reason": "Research-discovery barrier boost: cannot-break-through wording detected."
+        "reason": "Research-discovery barrier boost: cannot-break-through wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
       },
       "record": {
         "slug": "research-discovery"
@@ -827,7 +836,7 @@
       "action": {
         "type": "boost",
         "delta": 50.0,
-        "reason": "Autoresearch boost: barrier research wording detected."
+        "reason": "Autoresearch boost: barrier research wording. [signal-derived: ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals]"
       },
       "record": {
         "slug": "autoresearch"

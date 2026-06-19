@@ -105,6 +105,7 @@ nl_signals! {
     "has_diagramming_context"                      => qt_ql: nl_sig_has_diagramming_context                      => has_diagramming_context,
     "has_github_pr_context"                        => qt_ql: nl_sig_has_github_pr_context                        => has_github_pr_context,
     "has_math_review_context"                      => qt_ql: nl_sig_has_math_review_context                      => has_math_review_context,
+    "has_mcp_tool_invocation_intent"               => qt_ql: nl_sig_has_mcp_tool_invocation_intent               => has_mcp_tool_invocation_intent,
     "has_paper_context"                            => qt_ql: nl_sig_has_paper_context                            => has_paper_context,
     "has_paper_direct_revision_context"            => qt_ql: nl_sig_has_paper_direct_revision_context            => has_paper_direct_revision_context,
     "has_paper_figure_layout_review_context"       => qt_ql: nl_sig_has_paper_figure_layout_review_context       => has_paper_figure_layout_review_context,
