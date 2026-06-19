@@ -622,7 +622,7 @@ pub(super) fn desktop_review_evidence_attested(
     let review_lane =
         core_policy::registry_review_gate::is_reviewer_lane_from_registry(lane, Some(repo_root));
     let fork = fork_context_from_values(arguments, None);
-    review_independent_reviewer_evidence(review_lane, fork)
+    review_independent_reviewer_evidence(fork, review_lane)
 }
 
 #[derive(Debug, Clone)]

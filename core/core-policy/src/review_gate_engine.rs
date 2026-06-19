@@ -98,7 +98,7 @@ pub fn review_independent_fork(fork: Option<bool>, reviewer_lane: bool) -> bool 
 }
 
 /// Canonical cross-host independent reviewer evidence (Claude semantics).
-pub fn review_independent_reviewer_evidence(review_lane: bool, fork: Option<bool>) -> bool {
+pub fn review_independent_reviewer_evidence(fork: Option<bool>, review_lane: bool) -> bool {
     review_lane && review_independent_fork(fork, review_lane)
 }
 

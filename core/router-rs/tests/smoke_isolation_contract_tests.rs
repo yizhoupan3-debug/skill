@@ -27,11 +27,11 @@ fn subagent_context_isolation_smoke() {
         let fork = fork_context_from_values(tool_input, None);
         assert_eq!(fork, Some(false), "tool_input={tool_input}");
         assert!(
-            review_independent_reviewer_evidence(true, fork),
+            review_independent_reviewer_evidence(fork, true),
             "reviewer lane with fork_context=false must be independent: {tool_input}"
         );
         assert!(
-            !review_independent_reviewer_evidence(false, fork),
+            !review_independent_reviewer_evidence(fork, false),
             "non-reviewer lane must not count as independent evidence: {tool_input}"
         );
     }
@@ -45,7 +45,7 @@ fn subagent_context_isolation_smoke() {
         let fork = fork_context_from_values(tool_input, None);
         assert_eq!(fork, Some(true), "tool_input={tool_input}");
         assert!(
-            !review_independent_reviewer_evidence(true, fork),
+            !review_independent_reviewer_evidence(fork, true),
             "fork_context=true shares main context and must not satisfy isolation: {tool_input}"
         );
     }
@@ -54,7 +54,7 @@ fn subagent_context_isolation_smoke() {
     let tool_input = json!({"subagent_type": "general-purpose"});
     let fork = fork_context_from_values(&tool_input, Some(&event_root_fork));
     assert_eq!(fork, Some(false));
-    assert!(review_independent_reviewer_evidence(true, fork));
+    assert!(review_independent_reviewer_evidence(fork, true));
 }
 
 /// Shared `path_guard` + hook `protected-path` block traversal escapes and generated host writes.

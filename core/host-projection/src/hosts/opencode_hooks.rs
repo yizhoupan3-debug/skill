@@ -298,7 +298,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
             state.review_phase = state.review_phase.saturating_add(1);
 
             if review_lane {
-                let is_independent = review_independent_reviewer_evidence(review_lane, fork);
+                let is_independent = review_independent_reviewer_evidence(fork, review_lane);
                 if is_independent {
                     state.core.independent_reviewer_seen = true;
                 }
@@ -308,7 +308,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         // Independent reviewer evidence for non-subagent tools
         let fork = fork_context_from_values(&tool_input, Some(event.payload));
         let is_reviewer_tool = is_reviewer_tool_name(&normalized);
-        if review_independent_reviewer_evidence(is_reviewer_tool, fork) {
+        if review_independent_reviewer_evidence(fork, is_reviewer_tool) {
             state.core.independent_reviewer_seen = true;
         }
 

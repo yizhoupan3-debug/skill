@@ -121,7 +121,7 @@ fn codex_deep_independent_reviewer_evidence(
     event: &Value,
 ) -> bool {
     let reviewer_lane = recognized_kind.is_some_and(is_reviewer_lane_normalized);
-    review_independent_reviewer_evidence(reviewer_lane, codex_tool_fork_context(tool_input, event))
+    review_independent_reviewer_evidence(codex_tool_fork_context(tool_input, event), reviewer_lane)
 }
 
 fn codex_hook_state_persist_block_payload() -> Value {

@@ -152,7 +152,7 @@ pub trait HostHookDispatcher: HostHookConfig {
     fn dispatch(&self, event: &HookEvent) -> Option<HookOutput> {
         let normalized = normalize_event_name(event.event_name);
         debug!(event = %normalized, host = %self.host_id(), "hook dispatch");
-        match normalized.as_ref() {
+        let output = match normalized.as_ref() {
             "sessionstart" if self.supports_session_start() => self.handle_session_start(event),
             "userpromptsubmit" | "beforesubmitprompt" => self.handle_user_prompt_submit(event),
             "pretooluse" => self.handle_pre_tool_use(event),
@@ -161,7 +161,19 @@ pub trait HostHookDispatcher: HostHookConfig {
             "subagentstart" if self.supports_subagent_start() => self.handle_subagent_start(event),
             "subagentstop" if self.supports_subagent_stop() => self.handle_subagent_stop(event),
             _ => None,
+        };
+        // Inject pending session-start audit into the first event after
+        // SessionStart — not into SessionStart itself. Written by
+        // dispatch_hook_command(), consumed once here.
+        if output.is_none() && normalized.as_ref() != "sessionstart" {
+            if let Some(audit) = crate::hosts::worktree_auto_save::take_audit_result(
+                event.repo_root,
+                self.host_id(),
+            ) {
+                return Some(HookOutput::AdditionalContext(audit));
+            }
         }
+        output
     }
 }
 

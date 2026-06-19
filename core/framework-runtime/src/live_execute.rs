@@ -62,30 +62,20 @@ fn parse_execute_aggregator_host_allowlist() -> Result<Option<HashSet<String>>, 
 }
 
 pub fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, String> {
-    let prompt_preview = payload
-        .prompt_preview
-        .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .map(str::to_string);
     if payload.dry_run {
-        let dry_run_prompt_preview =
-            Some(prompt_preview.unwrap_or_else(|| build_live_execute_prompt(&payload)));
-        return Ok(build_dry_run_execute_response(
-            &payload,
-            dry_run_prompt_preview,
-        ));
+        return Ok(build_dry_run_execute_response(&payload));
     }
-    let live_prompt_preview = build_live_execute_prompt(&payload);
+    let prompt_preview = build_live_execute_prompt(&payload);
     if payload.aggregator_base_url.trim().is_empty() {
         return Err("router-rs execute requires a non-empty aggregator_base_url".to_string());
     }
     if payload.aggregator_api_key.trim().is_empty() {
         return Err("router-rs execute requires a non-empty aggregator_api_key".to_string());
     }
-    let live_result = perform_live_execute(&payload, &live_prompt_preview)?;
+    let live_result = perform_live_execute(&payload, &prompt_preview)?;
     Ok(build_live_execute_response(
         &payload,
-        Some(live_prompt_preview),
+        Some(prompt_preview),
         live_result,
     ))
 }
@@ -157,10 +147,9 @@ pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
 
 fn build_dry_run_execute_response(
     payload: &ExecuteRequestPayload,
-    prompt_preview: Option<String>,
 ) -> ExecuteResponsePayload {
-    let prompt = prompt_preview.clone().unwrap_or_default();
-    let input_tokens = estimate_tokens(&format!("{}\n{}", payload.task, prompt));
+    let trimmed = payload.task.trim();
+    let input_tokens = if trimmed.is_empty() { 0 } else { trimmed.chars().count().div_ceil(4) };
     let output_tokens = payload.default_output_tokens.min(96);
     let content = format!(
         "[dry-run] Routed to `{}` on {}. Session `{}` is ready for Rust-owned execution.",
@@ -204,7 +193,7 @@ fn build_dry_run_execute_response(
             total_tokens: input_tokens + output_tokens,
             mode: "estimated".to_string(),
         },
-        prompt_preview,
+        prompt_preview: None,
         model_id: None,
         metadata: Value::Object(metadata),
     }

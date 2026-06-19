@@ -1215,7 +1215,7 @@ fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
             return Ok(());
         }
         if subagent_tool(payload)
-            && review_independent_reviewer_evidence(reviewer_lane(&tool_input, payload), fork)
+            && review_independent_reviewer_evidence(fork, reviewer_lane(&tool_input, payload))
         {
             state.independent_reviewer_seen = true;
             write_review_state_unlocked(&path, &state)?;
