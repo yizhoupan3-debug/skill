@@ -8,6 +8,7 @@ on:
       - 'scripts/**'
       - 'core/**'
       - 'rust_tools/**'
+      - 'tools/**'
       - 'tests/**'
       - '.claude/**'
       - '.cursor/**'
@@ -24,6 +25,7 @@ on:
       - 'scripts/**'
       - 'core/**'
       - 'rust_tools/**'
+      - 'tools/**'
       - 'tests/**'
       - '.claude/**'
       - '.cursor/**'
@@ -35,6 +37,11 @@ on:
       - 'uv.lock'
       - '.python-version'
   workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
 
 jobs:
   validate:
@@ -48,6 +55,17 @@ jobs:
           enable-cache: true
 
       - run: uv sync --frozen
+
+      - name: Enable sccache + mold
+        uses: mozilla/sccache-action@v0.0.8
+        with:
+          version: "latest"
+
+      - name: Install mold linker
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq mold clang
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
 
       - name: Skills must not teach operator pip
         run: bash scripts/ci/check-skills-no-operator-pip.sh

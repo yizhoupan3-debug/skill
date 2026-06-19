@@ -1,3 +1,4 @@
+// Test helper functions that may not all be called from every test.
 #![allow(dead_code)]
 mod common;
 mod host_platforms;

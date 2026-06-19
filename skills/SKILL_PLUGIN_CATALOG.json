@@ -575,5 +575,6 @@
       "skill_path": "skills/visual-review/SKILL.md"
     }
   },
-  "source_of_truth": false
+  "source_of_truth": false,
+  "version": 1
 }
