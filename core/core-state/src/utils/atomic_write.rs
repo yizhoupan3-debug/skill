@@ -5,8 +5,10 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 
+/// Fsync the parent directory of `path` (Unix only, no-op on other platforms).
+/// Ensures directory metadata (including the rename entry) is durable on disk.
 #[cfg(unix)]
-fn fsync_parent_dir(path: &Path) -> Result<(), String> {
+pub fn fsync_parent_dir(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::OpenOptionsExt;
     let Some(parent) = path.parent() else {
         return Ok(());
@@ -27,7 +29,7 @@ fn fsync_parent_dir(path: &Path) -> Result<(), String> {
 }
 
 #[cfg(not(unix))]
-fn fsync_parent_dir(_path: &Path) -> Result<(), String> {
+pub fn fsync_parent_dir(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 

@@ -1,12 +1,9 @@
 //! Trace stream replay / inspect / metadata I/O.
 
 use chrono::Utc;
-use hex;
 use serde_json::{Map, Value, json};
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::io_utils::{append_text_with_process_lock, validate_write_path};
 use rt_storage::runtime_envelope_ids::{
@@ -22,83 +19,23 @@ use framework_kernel::stdio_payload_types::{
     TraceStreamReplayCursorPayload, TraceStreamReplayRequestPayload,
     TraceStreamReplayResponsePayload,
 };
+use trace_runtime::{
+    build_trace_cursor, hydrate_trace_event, trace_event_object, trace_event_string_field,
+    trace_event_usize_field,
+};
 
-fn extract_trace_event_payload(payload: Value) -> Result<Value, String> {
-    let event_payload = match payload {
-        Value::Object(mut object) => match object.remove("event") {
-            Some(Value::Object(event)) => Value::Object(event),
-            Some(other) => {
-                return Err(format!(
-                    "trace stream line contained non-object event wrapper: {other}"
-                ));
-            }
-            None => Value::Object(object),
-        },
-        other => {
-            return Err(format!(
-                "trace stream line must decode to a JSON object: {other}"
-            ));
-        }
-    };
-    Ok(event_payload)
-}
-
-fn trace_event_object(payload: Value) -> Result<Map<String, Value>, String> {
-    match extract_trace_event_payload(payload)? {
-        Value::Object(object) => Ok(object),
-        other => Err(format!(
-            "trace stream payload must resolve to a JSON object: {other}"
-        )),
-    }
-}
-
-fn trace_event_string_field(payload: &Map<String, Value>, field: &str) -> Option<String> {
-    payload
-        .get(field)
-        .and_then(Value::as_str)
-        .map(str::to_string)
-}
-
-fn trace_event_usize_field(payload: &Map<String, Value>, field: &str) -> Option<usize> {
-    payload
-        .get(field)
-        .and_then(|value| value.as_u64().map(|number| number as usize))
-}
-
-fn build_trace_cursor(generation: usize, seq: usize, event_id: &str) -> String {
-    format!("g{generation}:s{seq}:{event_id}")
-}
-
+/// Hydrate a replayed trace event, overriding schema_version to the
+/// framework-runtime canonical value.
 fn hydrate_trace_event_object(
-    mut payload: Map<String, Value>,
+    payload: Map<String, Value>,
     line_number: usize,
 ) -> Map<String, Value> {
-    let seq = trace_event_usize_field(&payload, "seq").unwrap_or(line_number);
-    let generation = trace_event_usize_field(&payload, "generation").unwrap_or(0);
-    let event_id = trace_event_string_field(&payload, "event_id")
-        .unwrap_or_else(|| format!("evt_replay_{line_number:06}"));
-    let cursor = trace_event_string_field(&payload, "cursor")
-        .unwrap_or_else(|| build_trace_cursor(generation, seq, &event_id));
-
-    payload
-        .entry("seq".to_string())
-        .or_insert_with(|| json!(seq));
-    payload
-        .entry("generation".to_string())
-        .or_insert_with(|| json!(generation));
-    payload
-        .entry("event_id".to_string())
-        .or_insert_with(|| Value::String(event_id));
-    payload
-        .entry("cursor".to_string())
-        .or_insert_with(|| Value::String(cursor));
-    payload
-        .entry("status".to_string())
-        .or_insert_with(|| Value::String("ok".to_string()));
-    payload
-        .entry("schema_version".to_string())
-        .or_insert_with(|| Value::String("runtime-trace-v2".to_string()));
-    payload
+    let mut event = hydrate_trace_event(payload, line_number);
+    event.insert(
+        "schema_version".to_string(),
+        Value::String("runtime-trace-v2".to_string()),
+    );
+    event
 }
 
 fn trace_event_matches_scope(
@@ -307,7 +244,7 @@ fn validate_compaction_artifact_digest(
         .get("digest")
         .and_then(Value::as_str)
         .ok_or_else(|| format!("compaction {label} artifact ref is missing digest"))?;
-    let actual = sha256_hex(payload_text.as_bytes());
+    let actual = trace_runtime::sha256_hex(payload_text.as_bytes());
     if expected != actual {
         return Err(format!(
             "Compaction recovery failed closed because {label} artifact digest mismatched."
@@ -316,11 +253,7 @@ fn validate_compaction_artifact_digest(
     Ok(())
 }
 
-pub fn sha256_hex(payload: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(payload);
-    hex::encode(hasher.finalize())
-}
+// sha256_hex is re-exported from trace-runtime via lib.rs.
 
 struct ResolvedTraceSource {
     path: PathBuf,
@@ -1005,52 +938,7 @@ pub fn write_trace_metadata(
         for output in outputs {
             let path = PathBuf::from(&output);
             validate_write_path(&path, None)?;
-            // write + fsync + rename for durability (consistent with
-            // write_text_payload and runtime_storage.rs patterns).
-            let file_name = path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or("trace-metadata");
-            let nonce = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos();
-            let tmp_path = path.with_file_name(format!(
-                "{}.{}.{}.tmp",
-                file_name,
-                std::process::id(),
-                nonce
-            ));
-            let mut file = fs::OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&tmp_path)
-                .map_err(|err| {
-                    format!(
-                        "create trace metadata temp file {} failed: {err}",
-                        tmp_path.display()
-                    )
-                })?;
-            use std::io::Write;
-            let write_result = file
-                .write_all(serialized.as_bytes())
-                .and_then(|_| file.sync_all())
-                .map_err(|err| {
-                    format!(
-                        "write/sync trace metadata temp {} failed: {err}",
-                        tmp_path.display()
-                    )
-                });
-            if let Err(err) = write_result {
-                drop(file);
-                let _ = fs::remove_file(&tmp_path);
-                return Err(err);
-            }
-            drop(file);
-            fs::rename(&tmp_path, &path).map_err(|err| {
-                let _ = fs::remove_file(&tmp_path);
-                format!("replace trace metadata {} failed: {err}", path.display())
-            })?;
+            core_state::utils::atomic_write::write_atomic_text(&path, &serialized)?;
         }
     }
 

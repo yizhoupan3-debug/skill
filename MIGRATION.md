@@ -1,5 +1,40 @@
 # Skill 真源迁移（2026-05-19）
 
+## 跨 crate 去重（2026-06-21）
+
+强对抗审计发现并修复了 14 项跨 crate 代码重复（~1000 行），涉及安全关键路径。
+
+### P0 — 已修复
+
+| 问题 | 修复 |
+|------|------|
+| 原子写入 4 处独立实现 | 统一到 `core-state::utils::atomic_write`，framework-runtime 和 runtime-storage 改为调用 |
+| `TelemetryEvent` 双重定义（字段漂移） | 创建 `core/telemetry-types` 微 crate，framework-kernel 和 evolution-rs 共用 |
+| `ROUTER_RS_TASK_LEDGER_FLOCK` 开关双处定义 | 统一到 `core-policy::env_flags`，core-state 和 framework-runtime 委托调用 |
+
+### P1 — 已修复
+
+| 问题 | 修复 |
+|------|------|
+| trace helper 7 函数逐行克隆 | trace-runtime 已导出公共 API，framework-runtime/trace_stream_io 改为 import |
+| `canonicalize_existing_ancestors` 重复 | framework-runtime 改为委托调用 runtime-storage 版本 |
+
+### P2 — 确认可接受 / 待后续处理
+
+| 问题 | 状态 |
+|------|------|
+| `reject_unsafe_path` vs `validate_write_path` | 可接受：基础版 vs 超集版，因依赖方向无法合并 |
+| flock 3 处实现 | 可接受：三种不同场景（repo-level/per-path/per-host）各有不同重试策略 |
+| mcp_main.rs 6 处 boilerplate | 待后续：rust_tools 独立 workspace，可用 `mcp_stdio_main!` 宏消除 |
+| codegraph-rs 自实现 MCP stdio | 待后续：接入 mcp-stdio-common |
+| truncate_text 3 处重复 | 待后续：提取到共享 util |
+| `FileResult` 结构体重复 | 待后续：提取到 batch-common |
+| evolution_observer 阈值硬编码 | 可接受：已注释说明与 TOML 默认值一致 |
+
+### 新增 crate
+
+- **`core/telemetry-types`**：`TelemetryEvent` + `PredictionOutcomeCheck` 的唯一定义源。
+
 ## 闭集宿主收敛（2026-06）
 
 **权威闭集**（仅此 4 个 id）：`codex`、`claude`、`cursor`、`opencode` — `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。
@@ -136,7 +171,7 @@ cd /path/to/project
 | **`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE`** | `0`/`false`/`off`/`no` 关闭 Cursor beforeSubmit model inherit 单行（默认开；与 my-light / REVIEW_GATE 无关） |
 | **Cursor UPS re-arm** | fresh deep-review cycle 调用 `reset_review_cycle_progress(preserve_session_guards=true)`；保留 `review_pending_cap_refused` 与 open subagent 计数；见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md) |
 | **`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE`** | `0`/`false`/`off`/`no` **关闭** beforeSubmit/UPS spawn-first 单行 nudge（**零注入**，无 fallback）；**不** 改变 REVIEW_GATE 清门阈值 |
-| **窄范围** | `review ./path`、`small_task`、不用子代理 → **不武装** `review_required`（五宿主 `is_narrow_review_prompt`） |
+| **窄范围** | `review ./path`、`small_task`、不用子代理 → **不武装** `review_required`（四宿主 `is_narrow_review_prompt`） |
 | **禁止** | `start_count≥2` 清门、缺 `review-lanes` 文件即 Stop block |
 | **细则** | [`skills/code-review-deep/SKILL.md`](skills/code-review-deep/SKILL.md)、[`AGENTS.md`](AGENTS.md) |
 

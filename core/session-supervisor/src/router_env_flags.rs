@@ -1,7 +1,9 @@
-//! Minimal env flags for session-supervisor (standalone copy from runtime-core).
+//! Minimal env flags for session-supervisor (standalone, avoids circular dependency).
 //!
 //! Contains only the flags needed by the session-supervisor crate.
-//! The canonical source remains `core/runtime-core/src/contracts/router_env_flags.rs`.
+//! The canonical `env_enabled_default_true`/`env_enabled_default_false` helpers
+//! live in `core-policy::env_flags`; this crate re-implements `env_enabled_default_false`
+//! locally because session-supervisor does not depend on core-policy.
 
 use std::env;
 

@@ -21,7 +21,6 @@
 use std::env;
 
 const ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV: &str = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
-const ROUTER_RS_TASK_LEDGER_FLOCK_ENV: &str = "ROUTER_RS_TASK_LEDGER_FLOCK";
 const ROUTER_RS_HOOK_TIMING_ENV: &str = "ROUTER_RS_HOOK_TIMING";
 const ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV: &str =
     "ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX";
@@ -81,9 +80,10 @@ pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
 }
 
 /// `ROUTER_RS_TASK_LEDGER_FLOCK`：是否对「任务账本」写入使用 flock sentinel。
+/// Delegates to core-policy's canonical implementation; emits a one-time tracing warning when disabled.
 pub fn router_rs_task_ledger_flock_enabled() -> bool {
     static FLOCK_WARN: std::sync::Once = std::sync::Once::new();
-    let enabled = router_rs_env_enabled_default_true(ROUTER_RS_TASK_LEDGER_FLOCK_ENV);
+    let enabled = core_policy::env_flags::router_rs_task_ledger_flock_enabled();
     if !enabled {
         FLOCK_WARN.call_once(|| {
             tracing::warn!(

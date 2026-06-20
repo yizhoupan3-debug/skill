@@ -21,13 +21,14 @@ pub mod test_env_sync;
 pub use dev_exempt::{EXEMPT_PATH_PREFIXES, should_dev_exempt};
 pub use env_flags::{
     env_enabled_default_false, env_enabled_default_true,
-    router_rs_cursor_subagent_model_inherit_nudge_enabled,
+    router_rs_subagent_model_inherit_nudge_enabled,
     router_rs_review_fork_context_missing_infer_false_enabled,
     router_rs_review_gate_disabled_for_host, router_rs_review_gate_stop_max_nudges_cap,
     router_rs_review_pending_cycle_max, router_rs_review_spawn_first_nudge_enabled,
+    router_rs_task_ledger_flock_enabled,
 };
 pub use hook_common::{
-    COMPLETION_DETECT_EN, COMPLETION_DETECT_ZH_PHRASES, CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+    COMPLETION_DETECT_EN, COMPLETION_DETECT_ZH_PHRASES, HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
     GOAL_CHAT_VERIFY_ZH_PHRASES, MY_GOAL_DRIVE_HOOK_NUDGE, MY_IMPLEMENT_GOAL_DRIVE_HOOK_NUDGE,
     MY_PRE_EXECUTION_HOOK_NUDGE, completion_claim_keywords_export, contains_completion_claim_token,
     has_delegation_override, has_override, has_review_override, hook_assistant_tail_window,

@@ -34,6 +34,7 @@ pub fn test_review_gate_disabled_override() -> Option<bool> {
 const ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV: &str = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
 const ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str =
     "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
+const ROUTER_RS_TASK_LEDGER_FLOCK_ENV: &str = "ROUTER_RS_TASK_LEDGER_FLOCK";
 
 const ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
     "ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
@@ -92,6 +93,12 @@ pub fn router_rs_review_spawn_first_nudge_enabled() -> bool {
 
 pub fn router_rs_subagent_model_inherit_nudge_enabled() -> bool {
     env_enabled_default_true(ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV)
+}
+
+/// `ROUTER_RS_TASK_LEDGER_FLOCK`（default ON）：是否对任务账本写入使用 flock sentinel。
+/// `0`/`false`/`off`/`no` 禁用；未设置 = 启用。
+pub fn router_rs_task_ledger_flock_enabled() -> bool {
+    env_enabled_default_true(ROUTER_RS_TASK_LEDGER_FLOCK_ENV)
 }
 
 /// Per-host `REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` env var mapping.

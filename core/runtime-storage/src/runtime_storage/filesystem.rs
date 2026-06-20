@@ -10,17 +10,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const O_NOFOLLOW_FLAG: i32 = 0o400000;
-#[cfg(any(
-    target_os = "macos",
-    target_os = "ios",
-    target_os = "freebsd",
-    target_os = "netbsd",
-    target_os = "openbsd",
-    target_os = "dragonfly"
-))]
-const O_NOFOLLOW_FLAG: i32 = 0x0100;
 /// Serialize `append_text` for the in-memory regression backend (no `flock`); parallel writers
 /// could otherwise interleave bytes on the same logical path.
 pub static MEMORY_APPEND_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
@@ -68,6 +57,7 @@ pub fn filesystem_reject_symlink_write_target(path: &Path) -> Result<(), String>
     }
 }
 
+#[allow(dead_code)]
 const FILESYSTEM_TEMP_CREATE_ATTEMPTS: u32 = 128;
 
 /// RAII guard for a cross-process advisory lock keyed by an arbitrary
@@ -80,11 +70,17 @@ pub struct RuntimePathLockGuard {
     _file: fs::File,
 }
 
-/// Acquire an exclusive cross-process lock for `path`. Multiple writers
-/// (codex/cursor/test harness) racing on the same shared runtime artifact
-/// (`background_state.json`, trace JSONL, supervisor state, etc.) will
-/// serialize through this lock so read-modify-write sequences stay atomic
-/// at the process boundary. The OS releases the lock if the process dies.
+/// Acquire an exclusive cross-process lock for `path` with a timeout.
+/// Multiple writers (codex/cursor/test harness) racing on the same shared
+/// runtime artifact will serialize through this lock. Uses `try_lock_exclusive`
+/// with retry so hook dispatch never blocks indefinitely.
+///
+/// Timeout: 5s (50 attempts × 100ms). If the lock cannot be acquired within
+/// this window, the call returns an error rather than hanging forever.
+const LOCK_ACQUIRE_TIMEOUT_MS: u64 = 5_000;
+const LOCK_RETRY_INTERVAL_MS: u64 = 100;
+const LOCK_MAX_ATTEMPTS: u64 = LOCK_ACQUIRE_TIMEOUT_MS / LOCK_RETRY_INTERVAL_MS;
+
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, String> {
     let parent = path.parent().ok_or_else(|| {
@@ -118,15 +114,34 @@ pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, St
                 lock_path.display()
             )
         })?;
-    file.lock_exclusive().map_err(|err| {
-        format!(
-            "acquire runtime path lock {} failed: {err}",
-            lock_path.display()
-        )
-    })?;
+    let mut attempt = 0u64;
+    loop {
+        match file.try_lock_exclusive() {
+            Ok(()) => break,
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                attempt += 1;
+                if attempt >= LOCK_MAX_ATTEMPTS {
+                    return Err(format!(
+                        "acquire runtime path lock {} timed out after {}ms ({} attempts)",
+                        lock_path.display(),
+                        LOCK_ACQUIRE_TIMEOUT_MS,
+                        attempt,
+                    ));
+                }
+                std::thread::sleep(std::time::Duration::from_millis(LOCK_RETRY_INTERVAL_MS));
+            }
+            Err(err) => {
+                return Err(format!(
+                    "acquire runtime path lock {} failed: {err}",
+                    lock_path.display()
+                ));
+            }
+        }
+    }
     Ok(RuntimePathLockGuard { _file: file })
 }
 
+#[allow(dead_code)]
 pub fn filesystem_atomic_temp_path(
     parent: &Path,
     file_name: &str,
@@ -149,7 +164,7 @@ pub fn filesystem_atomic_temp_path(
 pub fn filesystem_write_text_inner(
     path: &Path,
     payload_text: &str,
-    nanos: u128,
+    _nanos: u128,
 ) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
@@ -164,70 +179,8 @@ pub fn filesystem_write_text_inner(
     let _path_lock = acquire_runtime_path_lock(path)?;
     filesystem_reject_symlink_write_target(path)?;
 
-    let parent = path.parent().ok_or_else(|| {
-        format!(
-            "runtime storage path {} has no parent directory",
-            path.display()
-        )
-    })?;
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("runtime-storage");
-    let pid = std::process::id();
-
-    let (tmp_path, mut file) = {
-        let mut chosen: Option<(PathBuf, fs::File)> = None;
-        for attempt in 0u32..FILESYSTEM_TEMP_CREATE_ATTEMPTS {
-            let candidate = filesystem_atomic_temp_path(parent, file_name, nanos, pid, attempt);
-            match OpenOptions::new()
-                .create_new(true)
-                .write(true)
-                .open(&candidate)
-            {
-                Ok(file) => {
-                    chosen = Some((candidate, file));
-                    break;
-                }
-                Err(err) if err.kind() == ErrorKind::AlreadyExists => continue,
-                Err(err) => {
-                    return Err(format!(
-                        "create runtime storage temp file {} failed: {err}",
-                        candidate.display()
-                    ));
-                }
-            }
-        }
-        chosen.ok_or_else(|| {
-            "exhausted runtime storage temp file create attempts (unexpected collision load)"
-                .to_string()
-        })?
-    };
-
-    let write_result = file
-        .write_all(payload_text.as_bytes())
-        .and_then(|_| file.sync_all())
-        .map_err(|err| {
-            format!(
-                "write runtime storage temp payload failed for {}: {err}",
-                tmp_path.display()
-            )
-        });
-    if let Err(err) = write_result {
-        drop(file);
-        let _ = fs::remove_file(&tmp_path);
-        return Err(err);
-    }
-    drop(file);
-
-    if let Err(err) = fs::rename(&tmp_path, path) {
-        let _ = fs::remove_file(&tmp_path);
-        return Err(format!(
-            "replace runtime storage payload failed for {}: {err}",
-            path.display()
-        ));
-    }
-    Ok(())
+    // Delegate to core-state's canonical atomic write (temp + write + fsync + rename + fsync_parent_dir).
+    core_state::utils::atomic_write::write_atomic_text(path, payload_text)
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
@@ -274,7 +227,7 @@ pub fn filesystem_open_append_text(path: &Path) -> Result<fs::File, String> {
     OpenOptions::new()
         .create(true)
         .append(true)
-        .custom_flags(O_NOFOLLOW_FLAG)
+        .custom_flags(libc::O_NOFOLLOW)
         .open(path)
         .map_err(|err| {
             format!(

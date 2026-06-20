@@ -14,6 +14,11 @@
 //! The in-memory `runtime_storage` regression backend uses a process-local mutex for `append_text`
 //! only; it does **not** participate in the repo-wide task-ledger flock.
 
+/// Canonical env flag for task-ledger flock. Parses `ROUTER_RS_TASK_LEDGER_FLOCK`
+/// (default ON; `0`/`false`/`off`/`no` disables).
+/// NOTE: A matching function lives in core-policy/env_flags.rs for crates that
+/// depend on core-policy. core-state cannot depend on core-policy (reverse dep),
+/// so this leaf-crate copy is intentionally kept in sync.
 pub fn router_rs_task_ledger_flock_enabled() -> bool {
     match std::env::var("ROUTER_RS_TASK_LEDGER_FLOCK") {
         Ok(v) => {
