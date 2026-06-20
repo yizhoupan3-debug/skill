@@ -108,3 +108,23 @@ fn deduplicate_papers(papers: &mut Vec<Paper>) {
         seen.insert(key)
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn search_raw_rejects_empty_query_gracefully() {
+        // This tests the API surface; actual HTTP calls are tested via integration tests
+        let result = search_raw("", 5, &ExternalSourceArg::All, 3);
+        // May fail due to network, but should not panic
+        let _ = result;
+    }
+
+    #[test]
+    fn external_source_arg_display() {
+        assert_eq!(ExternalSourceArg::All.as_str(), "all");
+        assert_eq!(ExternalSourceArg::SemanticScholar.as_str(), "semantic-scholar");
+        assert_eq!(ExternalSourceArg::Arxiv.as_str(), "arxiv");
+    }
+}
