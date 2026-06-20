@@ -1,0 +1,21 @@
+---
+description: Cursor-only — parallel Task/subagent model must inherit parent session
+alwaysApply: true
+---
+
+# Subagent Model Inherit（仅 Cursor）
+
+跨宿主基线见 [AGENTS.md](../../AGENTS.md) · [docs/spec.md §策略](../../docs/spec.md) · [docs/spec.md §架构](../../docs/spec.md)；lane/并行度见 [execution-subagent-gate.mdc](execution-subagent-gate.mdc)。本节只约束 **子代理模型选择**。
+
+## 硬约束
+
+- 调用 `Task` 或启动并行子代理时：**默认省略 `model` 参数**（继承主会话当前模型）。
+- **禁止**将 `model` 设为 `claude-*` / `sonnet*` / `anthropic` 等 Anthropic 线路，除非**主会话已在使用**同类模型。
+- **禁止**为「更强」擅自换模型；子代理模型须与发起 Agent **一致**（inherit），不得默认 Sonnet。
+- 若子代理失败且 transcript/日志含 `Model not available` 或 `not supported in your region`：**不得**仅写「子代理不可用」即放弃；改为主会话可用模型的显式 `Task`（仍省略 `model`）或主线程深审，并提示 [Regions](https://cursor.com/docs/account/regions)。
+- **所有 Task lane**（含 `explore`、`general-purpose`、`best-of-n-runner` 等）均遵守：省略 `model`，继承主会话。
+- Cursor **UI 自动并行**若仍显示 Sonnet 4.6：优先用显式 `Task`（任意 lane，`fork_context=false`，**无 `model`**）分路，勿依赖宿主默认并行编排。
+
+## 排障
+
+见 [docs/hosts/hook-hosts.md](../../docs/hosts/hook-hosts.md)「Subagent 启动失败」；机读 nudge 来自 registry `subagent_model_inherit_nudge`（`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` 默认开）。
