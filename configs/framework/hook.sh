@@ -175,12 +175,14 @@ fi
 _ROUTER_HOOK_TIMEOUT=10
 printf '%s' "$HOOK_PAYLOAD" | "$ROUTER_RS_BIN" host hook --event="$HOOK_EVENT" --repo-root "$ROOT" "$HOST_ID" &
 _ROUTER_PID=$!
-(sleep "${_ROUTER_HOOK_TIMEOUT}" && kill "${_ROUTER_PID}" 2>/dev/null) &
+# Timer: sleep + kill, then kill the timer itself so it doesn't linger after router exits
+(sleep "${_ROUTER_HOOK_TIMEOUT}" && kill "${_ROUTER_PID}" 2>/dev/null && kill "$$" 2>/dev/null) &
 _TIMER_PID=$!
 _hook_rc=0
 wait "${_ROUTER_PID}" 2>/dev/null || _hook_rc=$?
+# Kill timer to cancel pending sleep (best-effort; timer may have already exited)
 kill "${_TIMER_PID}" 2>/dev/null || true
-wait "${_TIMER_PID}" 2>/dev/null || true  # reap zombie; suppress set -e (timer exit code irrelevant)
+wait "${_TIMER_PID}" 2>/dev/null || true  # reap zombie; suppress set -e
 if [ "$_hook_rc" -eq 137 ] || [ "$_hook_rc" -eq 143 ]; then
   # 137 = SIGKILL (128+9), 143 = SIGTERM (128+15)
   echo "[$HOST_ID-hook] router-rs timed out after ${_ROUTER_HOOK_TIMEOUT}s for $HOOK_EVENT" >&2

@@ -1008,6 +1008,64 @@
       "skill",
       "L2",
       "owner"
+    ],
+    [
+      "research-knowledge-graph",
+      "none",
+      "Research Knowledge Graph — navigate, visualize, trace connections between entries, manage entities, cross-workspace search.",
+      [
+        "知识图谱",
+        "research graph",
+        "研究方向连接",
+        "实体管理",
+        "research-knowledge-graph",
+        "研究路径追溯",
+        "知识关联",
+        "研究方向关系",
+        "knowledge graph",
+        "跨工作区搜索",
+        "研究关系图",
+        "kg viz",
+        "研究历史追溯",
+        "barrier route",
+        "障碍路径",
+        "log:neighbors",
+        "log:viz",
+        "log:route",
+        "entity search",
+        "hub search",
+        "连接查询",
+        "研究知识图谱可视化"
+      ],
+      "skills/research-knowledge-graph/SKILL.md",
+      "skill",
+      "L2",
+      "owner"
+    ],
+    [
+      "systematic-debugging",
+      "evidence",
+      "Root-cause investigation lane: hypothesis-driven debugging, reproduction capture, flake isolation, incident triage.",
+      [
+        "blind fix",
+        "debug",
+        "flake",
+        "incident triage",
+        "root cause",
+        "systematic-debugging",
+        "为什么失败",
+        "为什么报错",
+        "偶发失败",
+        "失败了",
+        "崩了",
+        "无法复现",
+        "根因分析",
+        "调试"
+      ],
+      "skills/systematic-debugging/SKILL.md",
+      "skill",
+      "L0",
+      "gate"
     ]
   ]
 }

@@ -1712,9 +1712,9 @@
       null
     ]
   ],
-  "full_skill_count": 46,
-  "hot_skill_count": 45,
-  "manifest_skill_count": 46,
+  "full_skill_count": 47,
+  "hot_skill_count": 11,
+  "manifest_skill_count": 47,
   "version": 1,
   "default_host_platforms": [
     "claude",
