@@ -143,7 +143,8 @@ Layer 4:         router-rs
 | `runtime-storage` | `core/runtime-storage/` | 状态持久化、文件锁、atomic write、后台任务状态 | ~8K | `runtime_storage/`, `background_state/` |
 | `framework-runtime` | `core/framework-runtime/` | 框架运行时核心循环、execution contract、pre_tool_use_guard、closeout enforcement、trace I/O | ~5K | `closeout_enforcement.rs`, `execution_contract.rs`, `pre_tool_use_guard.rs`, `runtime_view.rs`, `trace_stream_io.rs`, `trace_attach.rs`, `trace_transport.rs`, `live_execute.rs`, `sandbox_control.rs`, `evolution_observer.rs` |
 | `session-supervisor` | `core/session-supervisor/` | Worker 管理、session 生命周期、evolution_idle | ~5K | `session_supervisor/`, `harness_operator_nudges.rs` |
-| `trace-runtime` | `core/trace-runtime/` | 事件追踪、observation、journal 聚合入口 | ~1K | `trace_runtime.rs` |
+| `trace-runtime` | `core/trace-runtime/` | 事件追踪、observation、journal 聚合入口；共享 trace helper（`trace_event_object`, `hydrate_trace_event`, `sha256_hex` 等） | ~1K | `trace_runtime.rs` |
+| `telemetry-types` | `core/telemetry-types/` | `TelemetryEvent` / `PredictionOutcomeCheck` 共享类型定义（单源，framework-kernel 和 evolution-rs 共用） | ~80 | 新建 |
 
 #### 依赖规则
 

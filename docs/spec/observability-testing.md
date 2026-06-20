@@ -25,7 +25,7 @@ version: unified-v7
 | B0 core crates（core-state 等） | ~10K 合计 | ~161 | B |
 | codegraph-rs | 2.3K | 25 | C |
 | evolution-rs | 851 | 2 | D |
-| autoresearch-rs | 6K | 8 | D |
+| research-harness | 6K | 8 | D |
 | rust_tools (6) | ~16K | ~102 | C |
 | **合计** | **130K** | **~1,850** | |
 

@@ -126,7 +126,7 @@ browser-mcp (~3.5K LOC)           ← 浏览器 MCP（仅浏览器功能）
 ├── 15 browser_* MCP tools
 └── 117 tests
 
-research-log-rs (~4.6K LOC)       ← 研究日志系统（独立 crate）
+research-harness (~4.6K LOC)       ← 科研 harness（统一 crate）
 
 rust_tools/ (6 活跃 MCP crates)
 ├── pdf_tool_rs (mcp-pdf)           ├── citation_tool_rs (mcp-citation)
@@ -167,7 +167,7 @@ router-rs → runtime-core → host-projection → core-state
 - host-projection 包含所有宿主 hooks 实现（从 runtime-core 迁出）
 - runtime-core 通过 re-export shim 向后兼容 `framework_runtime::*`、`session_supervisor::*` 等
 - `framework-runtime`、`session-supervisor`、`runtime-storage`、`trace-runtime` 是 v7 从 runtime-core 提取的自洽 crate
-- `codegraph-rs`、`evolution-rs`、`autoresearch-rs` 位于 `tools/` 目录下
+- `codegraph-rs`、`evolution-rs` 位于 `tools/` 目录下；`research-harness` 位于 `core/` 目录下
 - B0 core crates 不依赖 `router-rs`
 - host 特有逻辑禁止出现在 B0 core crates 中
 

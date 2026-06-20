@@ -14,9 +14,8 @@
 
 - 科研项目推进
 - 深度调研这个科研方向
-- 深调研
+- 学术深调研
 - research workbench
-- research harness
 - 建立数学模型
 - 数学背景
 - 理论背景

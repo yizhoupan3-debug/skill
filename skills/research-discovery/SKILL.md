@@ -6,6 +6,7 @@ description: |
   properties (analogies with breaks_when), and research-question scoping.
   Use for requests like "深度调研这个科研方向", "这个问题该用什么数学理论",
   "未知性质怎么找数学背景", "文献综述", or "做一个 research harness".
+  **不适用于**：Web 信息搜索、事实核查、多源验证（这些属于 deep-research）。
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -27,10 +28,9 @@ trigger_hints:
   - 数学背景
   - 用什么数学
   - 该用什么理论
-  - 深度调研这个科研方向
-  - 深调研
+  - 学术深调研
+  - 学术调研方向
   - research workbench
-  - research harness
   - 类比
   - 未知性质
   - 性质不清楚

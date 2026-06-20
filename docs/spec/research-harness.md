@@ -481,37 +481,37 @@ CREATE VIRTUAL TABLE exploration_fts USING fts5(
 );
 ```
 
-**操作命令**（通过 `research-log-rs` CLI 调用，亦可从 `autoresearch log:*` 桥接）：
+**操作命令**（通过 `cargo run -p research-harness --bin research-log` 调用，亦可从 `cargo run -p research-harness --bin autoresearch -- log:*` 桥接）：
 
 ```
-research-log-rs record [--direction <name>] [--question <text>] [--entry-point <manual|barrier_escalation|loop>] [--barrier-id <id>]
+cargo run -p research-harness --bin research-log -- record [--direction <name>] [--question <text>] [--entry-point <manual|barrier_escalation|loop>] [--barrier-id <id>]
                                                                  # 记录当前探索（文字层 + SQLite）
-research-log-rs search <query> [--direction <dir>] [--status <active|abandoned|concluded>] [--limit <N>]
+cargo run -p research-harness --bin research-log -- search <query> [--direction <dir>] [--status <active|abandoned|concluded>] [--limit <N>]
                                                                  # 跨方向 FTS5 检索
-research-log-rs add-finding --entry-id <id> --kind <kind> --content <text> [--confidence <0-1>]
+cargo run -p research-harness --bin research-log -- add-finding --entry-id <id> --kind <kind> --content <text> [--confidence <0-1>]
                                                                  # 记录新发现/insight（kind: insight | claim | risk | todo）
-research-log-rs connect <log-id-a> <log-id-b> [--relation <text>] [--notes <text>]
+cargo run -p research-harness --bin research-log -- connect <log-id-a> <log-id-b> [--relation <text>] [--notes <text>]
                                                                  # 连接两个研究方向
-research-log-rs barrier [--loop-id <id>]                         # 查询 barrier 报告列表（按 loop 或全部）
-research-log-rs render <entry-id> [--write] [--output <path>]    # 渲染单篇日志为 Markdown
-research-log-rs export --format <json|csv|obsidian> [--output <path>]
+cargo run -p research-harness --bin research-log -- barrier [--loop-id <id>]                         # 查询 barrier 报告列表（按 loop 或全部）
+cargo run -p research-harness --bin research-log -- render <entry-id> [--write] [--output <path>]    # 渲染单篇日志为 Markdown
+cargo run -p research-harness --bin research-log -- export --format <json|csv|obsidian> [--output <path>]
                                                                  # 导出日志集（JSON / CSV / Obsidian MD）
-research-log-rs status                                           # 显示日志库状态（大小、条目数、WAL 模式）
-research-log-rs consolidate                                      # 整理 activity log 文件
+cargo run -p research-harness --bin research-log -- status                                           # 显示日志库状态（大小、条目数、WAL 模式）
+cargo run -p research-harness --bin research-log -- consolidate                                      # 整理 activity log 文件
 
 **Knowledge Graph 命令（§19.13）**：
-research-log-rs neighbors <entry-id> [--relation] [--limit]       # 显示 entry 的直接连接
-research-log-rs path --from <id> --to <id> [--max-depth]          # BFS 最短路径
-research-log-rs viz [--entry-id] [--max-depth] [--format text|dot] # 知识图谱可视化（ASCII / Graphviz DOT）
-research-log-rs graph-stats                                       # 全图统计（节点/边/密度/关系分布）
-research-log-rs route --barrier-id <id> [--max-depth]              # Barrier 路径追溯
-research-log-rs extract-entities <entry-id>                        # 自动提取 entry 中的知识实体
-research-log-rs add-entity <name> [--kind] [--description]         # 手动添加知识实体
-research-log-rs search-entities <query> [--limit]                  # FTS5 实体搜索
-research-log-rs entry-entities <entry-id>                          # 显示 entry 关联的实体
-research-log-rs hub-register [--path] [--name]                     # 注册到跨工作区 Hub
-research-log-rs hub-search <query> [--limit]                       # 跨工作区 FTS5 搜索
-research-log-rs hub-list                                           # 列出已注册的工作区
+cargo run -p research-harness --bin research-log -- neighbors <entry-id> [--relation] [--limit]       # 显示 entry 的直接连接
+cargo run -p research-harness --bin research-log -- path --from <id> --to <id> [--max-depth]          # BFS 最短路径
+cargo run -p research-harness --bin research-log -- viz [--entry-id] [--max-depth] [--format text|dot] # 知识图谱可视化（ASCII / Graphviz DOT）
+cargo run -p research-harness --bin research-log -- graph-stats                                       # 全图统计（节点/边/密度/关系分布）
+cargo run -p research-harness --bin research-log -- route --barrier-id <id> [--max-depth]              # Barrier 路径追溯
+cargo run -p research-harness --bin research-log -- extract-entities <entry-id>                        # 自动提取 entry 中的知识实体
+cargo run -p research-harness --bin research-log -- add-entity <name> [--kind] [--description]         # 手动添加知识实体
+cargo run -p research-harness --bin research-log -- search-entities <query> [--limit]                  # FTS5 实体搜索
+cargo run -p research-harness --bin research-log -- entry-entities <entry-id>                          # 显示 entry 关联的实体
+cargo run -p research-harness --bin research-log -- hub-register [--path] [--name]                     # 注册到跨工作区 Hub
+cargo run -p research-harness --bin research-log -- hub-search <query> [--limit]                       # 跨工作区 FTS5 搜索
+cargo run -p research-harness --bin research-log -- hub-list                                           # 列出已注册的工作区
 ```
 
 > **注意**：`log:route <barrier-id>`（从 barrier 追溯完整研究路径）已通过 `research-log route --barrier-id <id>` 实现，见 §19.13。
@@ -1013,6 +1013,7 @@ v7 引入 `core/research-harness/` crate，将散落在 `runtime-core`、`autore
 | `hooks/` | Prose/Adversarial/ActivityLog hooks | runtime-core hooks |
 | `aigc/` | AIGC 检测（n-gram + burstiness + syntactic）、降重 | 新建 |
 | `verification/` | 文献/统计/Prose QC/结构/形式验证 | scripts/verify/*.sh |
+| `latex/` | LaTeX 数学公式解析与 SVG 渲染（基于 RaTeX） | RaTeX 开源项目 |
 | `types.rs` | 共享类型（Finding, Claim, Paper, AigcResult...） | 新建 |
 
 #### MCP Tools
@@ -1022,6 +1023,8 @@ v7 引入 `core/research-harness/` crate，将散落在 `runtime-core`、`autore
 - `research_review_dimensions` — 获取审稿维度 prompt + checklist
 - `research_aigc_check` — AIGC 检测（0-100 评分 + 信号列表）
 - `research_aigc_humanize` — AIGC 降重（句法改写/词汇替换）
+- `research_latex_parse` — LaTeX 数学公式 AST 解析
+- `research_latex_render_svg` — LaTeX 公式渲染为 SVG（支持内联/独立模式）
 
 #### 依赖关系
 
@@ -1029,6 +1032,8 @@ v7 引入 `core/research-harness/` crate，将散落在 `runtime-core`、`autore
 research-harness
     ├── core-state (leaf crate, no cycle risk)
     ├── loop-engine (通用 loop 调度器)
+    ├── ratex-lexer (LaTeX 词法分析器)
+    ├── ratex-font (字体度量和符号表)
     └── workspace deps (anyhow, chrono, reqwest, rusqlite, serde, regex, ...)
 ```
 

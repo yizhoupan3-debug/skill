@@ -59,7 +59,7 @@ version: unified-v7
 |------|----------|------|
 | claude | settings.json 模板 | `host_integration/projection` |
 | cursor | hooks.json + .mdc | `host_integration/projection` |
-| codex | AGENTS.md + AGENTS_CODEX.md | `policy_embed.rs` |
+| codex | AGENTS.md（编译期 `include_str!`） | `policy_embed.rs` |
 | opencode | opencode.json 投影 | `host_integration/projection` |
 
 ---

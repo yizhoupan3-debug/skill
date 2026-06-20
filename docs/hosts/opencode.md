@@ -110,12 +110,12 @@ OpenCode 的 `OpencodeHostProvider` 实现以下 trait 方法：
 | `extract_observation_surfaces()` | 自定义适配 | 适配 opencode hook 输出的 JSON 结构 |
 | `has_native_hook()` | `true` | 声明为完整 hook 体系宿主 |
 
-## AGENTS_OPENCODE.md 说明
+## OpenCode 宿主行为差异
 
-`AGENTS_OPENCODE.md`（仓库根目录）是 OpenCode 宿主 delta 文件，与 `AGENTS.md`（跨宿主内核）配合使用：
+`AGENTS.md` 是唯一的策略真源文件，OpenCode 宿主行为差异内嵌于 `AGENTS.md` § 宿主行为差异 / OpenCode：
 
-- **双文件注入**：`AGENTS.md`（跨宿主内核）+ `AGENTS_OPENCODE.md`（宿主 delta）
-- **内容**：MCP-native 架构说明、permission 规则替代 PreToolUse、session/review 状态管理路径
+- **MCP-native 架构**：通过 JS/TS 插件系统提供 hook，同时通过 `opencode.json` → MCP 提供框架工具
+- **权限策略**：fail-open（插件层；hook 脚本层对 critical events 仍 fail-closed）
 - **与其他宿主的差异**：opencode 的 `has_hard_gate_hooks` 为 `false`（无 Rust 侧 hard gate），closeout evidence hooks 通过 MCP 工具层实现
 
 ## 安装与文件分布

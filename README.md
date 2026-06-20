@@ -14,7 +14,7 @@
 
 - **路径 B — 全量 harness（router-rs + hooks）**  
   适合：需要 **Cursor/Codex/Claude hooks**、`.cursor/hook-state` 门控、连续性 `artifacts/current/`、证据索引等。必须先 **构建并安装 `router-rs`**，再按宿主配置 hooks；关键事件在二进制缺失时常 **fail-closed**（见下文 Codex hooks 解析顺序）。  
-  **维护注意**：若修改根目录 `AGENTS.md` 且依赖 Codex 投影，改完后须重新 **`cargo build` + `router-rs framework sync-entrypoints --repo-root "$PWD"`**（首选；与 `codex sync --repo-root "$PWD"` 为同一实现之兼容别名）；策略正文可能以**编译期嵌入**形式进二进制，详见 [`AGENTS_CODEX.md`](AGENTS_CODEX.md) → **Codex：`AGENTS.md` 构建快照（策略 A）**。  
+  **维护注意**：若修改根目录 `AGENTS.md` 且依赖 Codex 投影，改完后须重新 **`cargo build` + `router-rs framework sync-entrypoints --repo-root "$PWD"`**（首选；与 `codex sync --repo-root "$PWD"` 为同一实现之兼容别名）；策略正文以**编译期嵌入**形式进二进制。  
   Windows 首次全量验证见下文 **「第一次验证」**；装好后可在仓库根执行：  
   `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
 
@@ -22,8 +22,8 @@
 
 ## 这套系统包含什么
 
-- `AGENTS.md`：五宿主（Claude、Codex、Cursor、OpenCode）进入本仓库时共同遵守的项目规则。
-  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建（见 [`AGENTS_CODEX.md`](AGENTS_CODEX.md) → **Codex：`AGENTS.md` 构建快照（策略 A）**）。
+- `AGENTS.md`：四宿主（Claude、Codex、Cursor、OpenCode）进入本仓库时共同遵守的项目规则（含宿主行为差异附录）。
+  - **维护**：若修改 `AGENTS.md` 且依赖 `router-rs` 生成的 Codex hook 投影，优先直接用本仓源码重新执行 `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root "$PWD"`（或与其实现相同的 `codex sync --repo-root "$PWD"`）；策略正文在二进制内为**编译期嵌入**，不要直接假设 PATH 里的 `router-rs` 已同步到最新构建。
 - `docs/README.md`：文档索引（阅读顺序、主题表）。
 - `docs/spec.md`：统一规约（架构、五层模型、沙箱、路由、Closeout）。
 - `skills/`：全部 skill 源文件，每个 skill 通常在 `skills/<name>/SKILL.md`。

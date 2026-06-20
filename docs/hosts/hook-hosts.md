@@ -85,7 +85,7 @@ parent: _common.md
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CODEX_PAPER_PROSE_HOOK`）；`ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 | **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
-| 宿主入口对齐 | `router-rs framework sync-entrypoints --host-id codex` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、**`AGENTS_CODEX.md`**、`.codex/README.md` 及 **`host_entrypoints_sync_manifest`**；跨宿主内核 **[`AGENTS.md`](../../AGENTS.md)** 人工维护、不由 sync 覆盖 |
+| 宿主入口对齐 | `router-rs framework sync-entrypoints --host-id codex` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、`.codex/README.md` 及 **`host_entrypoints_sync_manifest`**；**[`AGENTS.md`](../../AGENTS.md)** 为唯一策略真源、不由 sync 覆盖 |
 
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
 
@@ -147,7 +147,7 @@ Claude Code hook matcher 支持两种模式（从 v2.1.183 二进制逆向确认
 | **环境变量文件** | `.claude/router-rs-hook.env` | `.cursor/router-rs-hook.env` | `.codex/router-rs-hook.env`（可选） |
 | **Framework rules** | `.claude/rules/framework.md` (project)；`~/.claude/rules/framework.md` (user) | `~/.cursor/rules/framework.mdc` (user)；`.cursor/rules/*.mdc` (project) | `.codex/prompts/framework.md` (project) |
 | **Project 叙事** | `.claude/CLAUDE.md` | `.cursor/commands/*.md`、`.cursor/agents/deep-reviewer.md` | — |
-| **AGENTS delta** | `AGENTS_CLAUDE.md` (仓库根) | `AGENTS_CURSOR.md` (仓库根) | `AGENTS_CODEX.md` (仓库根) |
+| **AGENTS 策略** | `AGENTS.md`（唯一真源） | `AGENTS.md`（唯一真源） | `AGENTS.md`（唯一真源） |
 | **Hook state 目录** | `.claude/hook-state/` | `.cursor/hook-state/` | `.codex/hook-state/` |
 | **Projection manifest** | `.claude/.framework-projection.json` | — | — |
 
@@ -187,7 +187,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 
 ### Cursor
 
-- **能力边界**：7 事件 hook；Stop `REVIEW_GATE` 全局 advisory-only（对齐 [`AGENTS_CURSOR.md`](../../AGENTS_CURSOR.md)）；`lifecycle_profile: my-light` suppress `REVIEW_GATE` / spawn-first nudge
+- **能力边界**：7 事件 hook；Stop `REVIEW_GATE` 全局 advisory-only（对齐 [`AGENTS.md` § Cursor](../../AGENTS.md)）；`lifecycle_profile: my-light` suppress `REVIEW_GATE` / spawn-first nudge
 - **自检命令**：
   ```bash
   cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-cursor-hooks

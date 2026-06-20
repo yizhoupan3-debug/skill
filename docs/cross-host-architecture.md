@@ -6,8 +6,8 @@
 
 | 类别 | 权威落点 |
 |------|----------|
-| 跨宿主叙述性协议（语言、路由、Lifecycle、Closeout） | 仓库根 **`AGENTS.md`** |
-| 宿主执行面差异 | `AGENTS_<HOST>.md` + 各宿主 hook/rules |
+| 跨宿主叙述性协议（语言、路由、Lifecycle、Closeout） | 仓库根 **`AGENTS.md`**（含 `## 宿主行为差异` 附录） |
+| 宿主执行面差异 | `AGENTS.md` § 宿主行为差异 + 各宿主 hook/rules |
 | skill 路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
 | 框架命令 / CLI | `configs/framework/RUNTIME_REGISTRY.json` |
 | hook 行为 | 各宿主 `hooks.json` + `router-rs` |
@@ -16,14 +16,13 @@
 
 **闭集宿主（2026-06）**：`codex`、`claude`、`cursor`、`opencode` — 真源 `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`。已退役 id：`codex-app`、`codex-cli`。
 
-## 双文件注入（硬约束）
+## 单文件策略
 
-各闭集宿主须**同时**注入仓库根 **`AGENTS.md`**（跨宿主内核）与 **`AGENTS_<HOST>.md`**（transport delta）；**禁止**合并为单文件。
+`AGENTS.md` 是唯一的策略真源文件，包含跨宿主通用规则和 `## 宿主行为差异` 附录（收纳各宿主 transport delta）。各宿主通过 Rust `host-projection` crate 将 `AGENTS.md` 注入到宿主 context 中，不再维护独立的 delta 文件。
 
 **实现细节**：
-- `AGENTS.md`：跨宿主内核，包含执行时需要读取的上下文和工具指引
-- `AGENTS_<HOST>.md`：transport delta，包含宿主特定的执行面差异
-- 两者必须同时注入，不能单独使用
+- `AGENTS.md`：跨宿主内核 + 宿主行为差异附录，是唯一的策略真源
+- 各宿主通过 `context_file()` 返回 `"AGENTS.md"`，projection 系统统一注入
 
 ## 宿主能力差异（降级矩阵）
 
@@ -101,7 +100,7 @@
 - `updateCurrentStep`：禁止空载荷；须含可机读步骤或状态
 
 ### Codex
-- 策略嵌入：编译期 `include_str!` 嵌入 `AGENTS.md` + 本文件
+- 策略嵌入：编译期 `include_str!` 嵌入 `AGENTS.md`（`policy_embed.rs` → `codex_agent_policy`）
 - 多代理：`/implementx` 且 `execution_mode=parallel` 时应 spawn lane
 - stdio 替代 MCP 工具
 
@@ -127,8 +126,7 @@
 
 ## 相关文档
 
-- `AGENTS.md`：跨宿主内核，执行时需要读取的上下文和工具指引
-- `AGENTS_<HOST>.md`：transport delta，宿主特定的执行面差异
+- `AGENTS.md`：跨宿主策略真源（含宿主行为差异附录）
 - `docs/spec.md`：框架规范
 - `docs/hosts/_common.md`：宿主通用手册
 - `docs/hosts/hook-hosts.md`：Hook 宿主手册

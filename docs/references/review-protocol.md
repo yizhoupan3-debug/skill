@@ -123,7 +123,7 @@
 | 文件 | 原因 |
 |------|------|
 | `workflow-helpers.js` 的 FACTCHECK_VERDICT_SCHEMA 字段名 | 保持 code-specific（语义精确） |
-| AGENTS.md / AGENTS_*.md | 不宿主特化 |
+| AGENTS.md | 不宿主特化 |
 | RUNTIME_REGISTRY.json | 已在前轮追加 factcheck lanes |
 | Rust 代码 | review engine advisory 模式不变 |
 
