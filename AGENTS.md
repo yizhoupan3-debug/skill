@@ -1,8 +1,6 @@
 # Agent Policy (Cross-Host)
 
-跨宿主叙述性协议真源。宿主差异见 `AGENTS_<HOST>.md`。跨宿主实现细节见 `docs/cross-host-architecture.md`。
-
-**双文件注入（硬约束）**：各闭集宿主须**同时**注入仓库根 **`AGENTS.md`**（跨宿主内核）与 **`AGENTS_<HOST>.md`**（transport delta）；**禁止**合并为单文件。
+跨宿主叙述性协议真源。各宿主行为差异见 `## 宿主行为差异`。跨宿主实现细节见 `docs/cross-host-architecture.md`。
 
 ## Language
 
@@ -141,4 +139,34 @@ LLM：（自动调用codegraph_dead_code检查）→ 返回死代码列表
 - **强制性**：这是硬约束，不是建议，所有宿主必须遵守
 - **自动触发**：不需要用户显式提及codegraph，系统应自动识别并调用
 
-**跨宿主实现细节**：宿主能力差异、启动序列、双文件注入实现等见 `docs/cross-host-architecture.md`。
+## 宿主行为差异
+
+> 以下段落仅对该节标题标注的宿主生效。通用规则（Language → CodeGraph）对所有宿主一致。
+
+### Claude
+
+- **PreToolUse 硬阻断**：未物化 `GOAL_STATE.json` 或未授权执行区 → 硬阻断。遭遇阻断时 `/discussx` 或 `/planx` 自愈，勿盲目重试。
+- **Review gate**：Stop `REVIEW_GATE` advisory-only；**无** `rg_clear` 粘贴面（须完成可数 reviewer lane 或自然语言 override）。
+- **框架命令流**：无 `AG_FOLLOWUP` / `updateCurrentStep`；续跑 `framework_goal_drive` + `artifacts/current/<task_id>/` 手动画板。
+- **my-light**：suppress spawn-first 与 review Stop nudge（skill 层 findings-only 仍适用）。
+
+### Cursor
+
+- **Hook 事件**：`.cursor/hooks.json` + `router-rs cursor hook`（7 事件闭集）；清门 **Claude canonical**；Stop **advisory-only**。
+- **机读短码**：`REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP`（须 `router-rs ` 前缀）；**my-light** suppress `REVIEW_GATE` / `AG_FOLLOWUP`。清门粘贴 **`rg_clear`** 或拒因 token。
+- **`updateCurrentStep`**：禁止空载荷；须含可机读步骤或状态。
+- **子代理模型**：并行 `Task` 默认继承主会话（省略 `model`）。
+
+### Codex
+
+- **策略嵌入**：编译期 `include_str!` 嵌入本文件（`policy_embed.rs` → `codex_agent_policy`）；hook 运行期不读盘。
+- **Hook**：`.codex/hooks.json` + `router-rs codex hook`；清门 **Claude canonical**；Stop **advisory-only** `CODEX_REVIEW_GATE`。
+- **多代理**：`/implementx` 且 `execution_mode=parallel` 时应 spawn lane；深度 review spawn-first（`fork_context=false`）。
+- **stdio 替代 MCP 工具**：`framework_goal_drive` / `framework_rfv_loop`；证据 PostTool 追加。
+
+### OpenCode
+
+- **插件 hook + MCP 双通道**：通过 JS/TS 插件系统提供 hook（`tool.execute.before`、`tool.execute.after`、`session.idle` 等），同时通过 `opencode.json` → MCP 提供框架工具。
+- **Review / closeout**：清门 **Claude canonical**；Stop review **advisory-only**（MCP `ADVISORY`）；非 my-light 时 MCP 可对**未满足 closeout 证据** hard-block。
+- **权限策略**：**fail-open**（插件层；hook 脚本层对 critical events 仍 fail-closed）。
+- **安装**：`framework host-integration install --to opencode --repo-root "$PWD"`。
