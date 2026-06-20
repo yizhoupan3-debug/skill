@@ -30,10 +30,9 @@ members = [
     "core/host-projection",
     "core/framework-runtime",
     "core/loop-engine",
-    "tools/autoresearch-rs",
+    "core/research-harness",
     "tools/evolution-rs",
     "tools/codegraph-rs",
-    "tools/research-log-rs",
     "tron-search"]
 exclude = [
     "codex-aggregator"

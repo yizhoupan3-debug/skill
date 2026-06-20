@@ -4,7 +4,7 @@ description: |
   Research workspace CLI frontend — init, draft claims, external research,
   hypothesis management, run records, novelty gating, reflection, barrier
   escalation (loop bridge), layered logging, smoke tests, and sync.
-  Wraps tools/autoresearch-rs CLI commands through the routing system.
+  Backed by core/research-harness unified library.
   Use for requests like "帮我初始化一个研究方向", "做 claim 管理",
   "自动研究这个瓶颈", or "记录实验反思".
 routing_layer: L2
@@ -69,11 +69,12 @@ source: local
 
 # Autoresearch
 
-This skill wraps `tools/autoresearch-rs/` — a Rust CLI for research workspace
-lifecycle management — and exposes it through the routing system. It also serves
-as the **bridge between loop engineering and systematic research**: when a
-loop-auto cycle hits a hard barrier (`consecutive_failures ≥ threshold`), the
-`barrier_escalation` lane runs systematic research and returns candidates.
+This skill wraps the `autoresearch` CLI binary — a Rust CLI for research workspace
+lifecycle management backed by `core/research-harness` — and exposes it through
+the routing system. It also serves as the **bridge between loop engineering and
+systematic research**: when a loop-auto cycle hits a hard barrier
+(`consecutive_failures ≥ threshold`), the `barrier_escalation` lane runs
+systematic research and returns candidates.
 
 ## When to use
 
@@ -116,8 +117,8 @@ loop-auto cycle hits a hard barrier (`consecutive_failures ≥ threshold`), the
 
 ### Backend
 
-All lanes call `cargo run -p autoresearch-rs -- <subcommand>` to invoke the
-CLI in `tools/autoresearch-rs/`.
+All lanes call `cargo run -p research-harness --bin autoresearch -- <subcommand>` to
+invoke the CLI in `core/research-harness/src/bin/autoresearch.rs`.
 
 Workspace data:
 - State: `<workspace>/research-state.yaml` (schema v4)

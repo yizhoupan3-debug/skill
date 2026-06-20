@@ -1,0 +1,47 @@
+[package]
+name = "research-harness"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+description = "Unified research harness: paper revision loop, literature search, claims management, AIGC detection, verification, research logging, and CLI tools"
+
+[features]
+default = ["cli"]
+cli = ["dep:clap"]
+
+[dependencies]
+# framework (leaf crates, no cycle risk)
+core-state = { path = "../core-state" }
+loop-engine = { path = "../loop-engine" }
+
+# common
+anyhow.workspace = true
+chrono.workspace = true
+reqwest.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yml.workspace = true
+tracing.workspace = true
+regex.workspace = true
+sha2.workspace = true
+uuid.workspace = true
+
+# CLI (optional)
+clap = { workspace = true, optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "autoresearch"
+path = "src/bin/autoresearch.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "research-log"
+path = "src/bin/research-log.rs"
+required-features = ["cli"]
+
+[lints]
+workspace = true

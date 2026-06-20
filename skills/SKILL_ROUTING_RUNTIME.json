@@ -119,7 +119,7 @@
       "owner",
       "none",
       "P2",
-      "Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation, smoke tests. Wraps tools/autoresearch-rs.",
+      "Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation, smoke tests. Backed by core/research-harness.",
       "optional",
       [
         "研究工作区",

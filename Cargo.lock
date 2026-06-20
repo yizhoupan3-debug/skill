@@ -107,23 +107,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
-name = "autoresearch-rs"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "regex",
- "reqwest",
- "research-log-rs",
- "serde",
- "serde_json",
- "serde_yml",
- "tempfile",
- "uuid",
-]
-
-[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -873,6 +856,7 @@ dependencies = [
  "libc",
  "regex",
  "reqwest",
+ "research-harness",
  "routing-engine",
  "serde",
  "serde_json",
@@ -1811,18 +1795,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "research-log-rs"
+name = "research-harness"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "core-state",
+ "loop-engine",
  "regex",
+ "reqwest",
  "rusqlite",
  "serde",
  "serde_json",
  "serde_yml",
+ "sha2",
  "tempfile",
+ "tracing",
  "uuid",
 ]
 
@@ -1910,6 +1899,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
+ "research-harness",
  "routing-engine",
  "runtime-core-contracts",
  "runtime-storage",
@@ -2773,7 +2763,6 @@ version = "1.23.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "144d6b123cef80b301b8f72a9e2ca4370ddec21950d0a103dd22c437006d2db7"
 dependencies = [
- "getrandom 0.4.3",
  "js-sys",
  "wasm-bindgen",
 ]
