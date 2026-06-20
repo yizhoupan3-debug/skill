@@ -4,15 +4,12 @@
 //! - per-host env：**默认开**；`0`/`false`/`off`/`no` 关闭。
 //! - 受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。
 
-use crate::route::{has_paper_prose_edit_context, tokenize_route_text};
+use crate::paper_block_cache::BlockCache;
 use crate::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
 };
 use serde_json::Value;
-use std::fs;
 use std::path::Path;
-use std::sync::Mutex;
-use std::time::SystemTime;
 
 const REL_PATH: &str = "configs/framework/PAPER_PROSE_QUALITY_HOOK.txt";
 pub const PREFIX_LINE: &str = "**PAPER_PROSE_QUALITY_HOOK**";
@@ -24,6 +21,8 @@ pub use host_projection::hooks::PaperProseHookHost;
 
 static BUILTIN_BLOCK: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| BUILTIN_TXT.trim().to_string());
+
+static BLOCK_CACHE: BlockCache = BlockCache::new(REL_PATH, PREFIX_LINE, "paper prose");
 
 fn builtin_block() -> String {
     BUILTIN_BLOCK.clone()
@@ -38,54 +37,13 @@ pub fn cursor_paper_prose_hook_requested() -> bool {
     paper_prose_hook_requested(PaperProseHookHost::Cursor)
 }
 
-/// 主动触发：与 NL `has_paper_prose_edit_context` 单真源。
+/// 主动触发：委托 research-harness 的独立检测逻辑。
 pub fn prompt_signals_paper_prose_work(text: &str) -> bool {
-    let tokens = tokenize_route_text(text);
-    has_paper_prose_edit_context(text, &tokens)
+    research_harness::hooks::paper_prose::prompt_signals_prose_work(text)
 }
-
-struct CachedBlock {
-    content: String,
-    mtime: Option<SystemTime>,
-}
-
-static BLOCK_CACHE: Mutex<Option<CachedBlock>> = Mutex::new(None);
 
 pub fn resolve_paper_prose_block(repo_root: &Path) -> String {
-    let path = repo_root.join(REL_PATH);
-    let mtime = fs::metadata(&path)
-        .ok()
-        .and_then(|m| m.modified().ok());
-    {
-        let guard = BLOCK_CACHE.lock().expect("paper prose block cache");
-        if let Some(ref cached) = *guard
-            && cached.mtime == mtime {
-                return cached.content.clone();
-            }
-    }
-    let content = match fs::read_to_string(&path) {
-        Ok(t) => {
-            let trimmed = t.trim();
-            if trimmed.is_empty() {
-                builtin_block()
-            } else if let Some(after) = trimmed.strip_prefix(PREFIX_LINE) {
-                let after = after.trim();
-                if after.is_empty() {
-                    builtin_block()
-                } else {
-                    trimmed.to_string()
-                }
-            } else {
-                format!("{PREFIX_LINE}\n\n{trimmed}")
-            }
-        }
-        Err(_) => builtin_block(),
-    };
-    {
-        let mut guard = BLOCK_CACHE.lock().expect("paper prose block cache");
-        *guard = Some(CachedBlock { content: content.clone(), mtime });
-    }
-    content
+    BLOCK_CACHE.resolve(repo_root, builtin_block)
 }
 
 pub fn maybe_append_paper_prose_context(

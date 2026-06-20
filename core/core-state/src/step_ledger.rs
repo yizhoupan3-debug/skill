@@ -146,9 +146,11 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
             if let Err(e) =
                 crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
             {
-                eprintln!("[router-rs] failed to append step transaction to TASK_LEDGER: {e}");
+                tracing::warn!(task_id = %task_id, error = %e, "failed to append step transaction to TASK_LEDGER");
             }
-            let _ = crate::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id);
+            if let Err(e) = crate::task_state_aggregate::sync_task_state_aggregate(&repo_root, &task_id) {
+                tracing::warn!(task_id = %task_id, error = %e, "failed to sync task state aggregate after step append");
+            }
         }
         Ok(inner_changed)
     })?;
@@ -172,10 +174,20 @@ fn summarize_step_ledger_operation(payload: Value) -> Result<Value, String> {
 pub fn summarize_step_ledger_for_task(repo_root: &Path, task_id: &str) -> Value {
     let path = step_ledger_path_for_task(repo_root, task_id);
     // Repair corrupt tail before summarising.
-    if path.is_file()
-        && let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path) {
-            eprintln!("[router-rs] truncate_corrupt_tail failed for STEP_LEDGER summary: {e}");
+    // Read-first pattern: open the file directly instead of is_file() + open() TOCTOU.
+    let file = match fs::File::open(&path) {
+        Ok(f) => {
+            if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path) {
+                tracing::warn!(error = %e, "truncate_corrupt_tail failed for STEP_LEDGER summary");
+            }
+            Some(f)
         }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to open STEP_LEDGER for summary");
+            None
+        }
+    };
     let mut status_counts = BTreeMap::<String, u64>::new();
     let mut entry_count = 0_u64;
     let mut invalid_line_count = 0_u64;
@@ -184,7 +196,7 @@ pub fn summarize_step_ledger_for_task(repo_root: &Path, task_id: &str) -> Value 
     let mut latest_resume_hint = Value::Null;
     let mut latest_evidence_ref = Value::Null;
 
-    if let Ok(file) = fs::File::open(&path) {
+    if let Some(file) = file {
         for line in BufReader::new(file).lines().map_while(Result::ok) {
             let trimmed = line.trim();
             if trimmed.is_empty() {
@@ -257,7 +269,7 @@ fn append_jsonl_entry(
 
     // Auto-compact when the file grows past 100 lines.
     if let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(path, 100) {
-        eprintln!("[router-rs] compact_jsonl_if_needed failed for STEP_LEDGER: {e}");
+        tracing::warn!(error = %e, "compact_jsonl_if_needed failed for STEP_LEDGER");
     }
 
     Ok(true)
@@ -267,15 +279,19 @@ fn step_ledger_contains_idempotency_key(
     path: &Path,
     idempotency_key: &str,
 ) -> Result<bool, String> {
-    if idempotency_key.trim().is_empty() || !path.is_file() {
+    if idempotency_key.trim().is_empty() {
         return Ok(false);
     }
+    // Read-first pattern: open directly to avoid TOCTOU between is_file() and open().
+    let file = match fs::File::open(path) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(err) => return Err(format!("open step ledger {} failed: {err}", path.display())),
+    };
     // Repair corrupt tail before scanning.
     if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(path) {
-        eprintln!("[router-rs] truncate_corrupt_tail failed for STEP_LEDGER: {e}");
+        tracing::warn!(error = %e, "truncate_corrupt_tail failed for STEP_LEDGER");
     }
-    let file = fs::File::open(path)
-        .map_err(|err| format!("open step ledger {} failed: {err}", path.display()))?;
     for line in BufReader::new(file).lines().map_while(Result::ok) {
         let trimmed = line.trim();
         if trimmed.is_empty() {
@@ -541,16 +557,7 @@ fn sha256_text(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn unique_repo(label: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "router-rs-step-ledger-{label}-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
-        ))
-    }
+    use crate::utils::test_helpers::unique_repo;
 
     #[test]
     fn append_and_summary_round_trip() {

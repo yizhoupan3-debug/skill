@@ -676,7 +676,7 @@ fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
             warn_contexts.push(format!(
                 "Modifying {path} — ensure JSON validity before finishing (jq . or python -m json.tool)."
             ));
-        } else if path == "AGENTS_CLAUDE.md" {
+        } else if path == "AGENTS.md" {
             warn_contexts.push(format!(
                 "Modifying {path} — this is a cross-host strategy document; ensure consistency across all hosts."
             ));

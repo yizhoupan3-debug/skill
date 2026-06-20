@@ -103,7 +103,11 @@ mod repo_root_placeholder_tests {
     #[test]
     fn workspace_root_placeholder_falls_back_to_cwd_without_claude_project_dir() {
         let prior = env::var_os("CLAUDE_PROJECT_DIR");
-        // SAFETY: test-only; no concurrent threads reading env during this block
+        // SAFETY: Rust 2024 edition requires `unsafe` for `env::remove_var` /
+        // `env::set_var` because they are not thread-safe on all platforms.
+        // This is safe in the test context: the test runner does not read or
+        // write `CLAUDE_PROJECT_DIR` concurrently, and the original value is
+        // restored before the function returns.
         unsafe { env::remove_var("CLAUDE_PROJECT_DIR") };
         let cwd = env::current_dir().expect("cwd");
         let resolved =
@@ -117,7 +121,7 @@ mod repo_root_placeholder_tests {
             cwd
         );
         if let Some(value) = prior {
-            // SAFETY: test-only; restoring original env value
+            // SAFETY: see above — test-only, restoring original env value.
             unsafe { env::set_var("CLAUDE_PROJECT_DIR", value) };
         }
     }

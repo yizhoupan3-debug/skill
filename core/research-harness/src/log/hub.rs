@@ -339,7 +339,7 @@ pub fn register_and_index_current() -> Result<()> {
 
 /// 兼容骨架 API：同步单个工作区的日志到 Hub。
 pub fn sync_workspace(hub_path: &Path, workspace: &Path) -> Result<()> {
-    let conn = if hub_path.exists() || hub_path.parent().map_or(false, |p| p.exists()) {
+    let conn = if hub_path.exists() || hub_path.parent().is_some_and(|p| p.exists()) {
         init_hub_at(hub_path)?
     } else {
         init_hub()?

@@ -6,9 +6,20 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
 use regex::Regex;
+
+static BIB_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^@\w+\s*\{\s*([^,\s]+)").expect("invalid BIB_KEY_RE regex")
+});
+static LATEX_CITE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\\cite[a-zA-Z*]*\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}").expect("invalid LATEX_CITE_RE regex")
+});
+static PANDOC_CITE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)(?:^|[^\w:-])@([A-Za-z0-9_:.+\-/]+)").expect("invalid PANDOC_CITE_RE regex")
+});
 
 /// 审计 BibTeX 与 LaTeX 文件的引用交叉比对。
 /// 返回未被正文引用或在 BibTeX 中缺失的条目列表。
@@ -41,19 +52,16 @@ pub fn audit_bibtex(bib_path: &Path, tex_path: &Path) -> Result<Vec<String>> {
 
 /// Extract BibTeX entry keys from a .bib file.
 fn extract_bib_keys(text: &str) -> Vec<String> {
-    let re = Regex::new(r"(?m)^@\w+\s*\{\s*([^,\s]+)").expect("static regex");
-    re.captures_iter(text)
+    BIB_KEY_RE
+        .captures_iter(text)
         .map(|cap| cap[1].trim().to_string())
         .collect()
 }
 
 /// Extract cited keys from LaTeX text (\cite{key1,key2} and @pandoc citations).
 fn extract_cited_keys(text: &str) -> Result<Vec<String>> {
-    let latex_re = Regex::new(r"\\cite[a-zA-Z*]*\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}")?;
-    let pandoc_re = Regex::new(r"(?m)(?:^|[^\w:-])@([A-Za-z0-9_:.+\-/]+)")?;
-
     let mut keys = Vec::new();
-    for cap in latex_re.captures_iter(text) {
+    for cap in LATEX_CITE_RE.captures_iter(text) {
         keys.extend(
             cap[1]
                 .split(',')
@@ -61,7 +69,7 @@ fn extract_cited_keys(text: &str) -> Result<Vec<String>> {
                 .filter(|s| !s.is_empty()),
         );
     }
-    for cap in pandoc_re.captures_iter(text) {
+    for cap in PANDOC_CITE_RE.captures_iter(text) {
         keys.push(cap[1].trim().to_string());
     }
     Ok(keys)

@@ -11,22 +11,15 @@ use anyhow::Result;
 /// 原理：如果数据是 N 个整数，均值的分母必须能整除 N × mean。
 /// 具体检查：round(N × mean) / N 是否约等于报告的 mean（到小数位精度）。
 ///
+/// `decimals`：报告均值的小数位数（如报告 "3.50" 则 decimals=2）。
 /// 返回 `true` 表示通过（合理），`false` 表示存在可疑。
-pub fn grim_test(observed_mean: f64, n: usize) -> Result<bool> {
+pub fn grim_test(observed_mean: f64, n: usize, decimals: usize) -> Result<bool> {
     if n == 0 {
         return Err(anyhow::anyhow!("sample size n must be > 0"));
     }
     if observed_mean < 0.0 {
         return Err(anyhow::anyhow!("observed_mean must be >= 0"));
     }
-
-    // 计算均值的小数位数
-    let mean_str = format!("{}", observed_mean);
-    let decimals = if let Some(pos) = mean_str.find('.') {
-        mean_str.len() - pos - 1
-    } else {
-        0
-    };
 
     // 重建均值：round(N × mean) / N
     let sum = n as f64 * observed_mean;
@@ -38,13 +31,27 @@ pub fn grim_test(observed_mean: f64, n: usize) -> Result<bool> {
     Ok((observed_mean - reconstructed).abs() <= tolerance)
 }
 
+/// GRIM 检验（自动推断小数位数版本）。
+///
+/// 注意：Rust 的 f64 Display 不保留尾零，因此自动推断可能不准确。
+/// 如果知道报告的小数位数，请使用 `grim_test` 并显式传入 `decimals`。
+pub fn grim_test_auto(observed_mean: f64, n: usize) -> Result<bool> {
+    let mean_str = format!("{}", observed_mean);
+    let decimals = if let Some(pos) = mean_str.find('.') {
+        mean_str.len() - pos - 1
+    } else {
+        0
+    };
+    grim_test(observed_mean, n, decimals)
+}
+
 /// 验证观测 p 值是否在预期值的容差范围内。
 /// 返回 `true` 表示通过。
 pub fn verify_p_value(observed: f64, expected: f64, tolerance: f64) -> bool {
-    if expected < 0.0 || expected > 1.0 {
+    if !(0.0..=1.0).contains(&expected) {
         return false;
     }
-    if observed < 0.0 || observed > 1.0 {
+    if !(0.0..=1.0).contains(&observed) {
         return false;
     }
     (observed - expected).abs() <= tolerance
@@ -79,18 +86,18 @@ mod tests {
     #[test]
     fn test_grim_pass_integer_responses() {
         // N=20, mean=3.5 → sum=70, 70/20=3.5 ✓
-        assert!(grim_test(3.50, 20).unwrap());
+        assert!(grim_test(3.50, 20, 2).unwrap());
     }
 
     #[test]
     fn test_grim_fail_suspicious_mean() {
         // N=20, mean=3.47 → sum=69.4, round=69, 69/20=3.45 ≠ 3.47
-        assert!(!grim_test(3.47, 20).unwrap());
+        assert!(!grim_test(3.47, 20, 2).unwrap());
     }
 
     #[test]
     fn test_grim_edge_case_zero() {
-        assert!(grim_test(0.0, 10).unwrap());
+        assert!(grim_test(0.0, 10, 1).unwrap());
     }
 
     #[test]

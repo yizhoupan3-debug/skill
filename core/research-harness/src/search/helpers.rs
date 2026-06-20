@@ -69,7 +69,7 @@ pub(super) static ARXIV_AUTHOR_RE: std::sync::LazyLock<Regex> = std::sync::LazyL
 pub(super) fn compact_words(text: &str, limit: usize) -> Vec<String> {
     static WORD_RE: OnceLock<Regex> = OnceLock::new();
     let re = WORD_RE.get_or_init(|| {
-        Regex::new(r"[A-Za-z0-9][A-Za-z0-9_-]*|[\p{Han}]{2,}").unwrap()
+        Regex::new(r"[A-Za-z0-9][A-Za-z0-9_-]*|[\p{Han}]{2,}").expect("invalid compact_words regex")
     });
     let stops = stopwords();
     let mut filtered = Vec::new();
@@ -128,6 +128,7 @@ pub(super) fn value_to_string(value: &Value) -> String {
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn arr<'a>(value: &'a Value, key: &str) -> &'a Vec<Value> {
     value
         .get(key)
@@ -135,6 +136,7 @@ pub(super) fn arr<'a>(value: &'a Value, key: &str) -> &'a Vec<Value> {
         .expect("expected array after defaults")
 }
 
+#[allow(dead_code)]
 pub(super) fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
     obj_mut(value)
         .entry(key.to_string())
@@ -143,6 +145,7 @@ pub(super) fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value>
         .expect("expected array")
 }
 
+#[allow(dead_code)]
 pub(super) fn obj_mut(value: &mut Value) -> &mut Map<String, Value> {
     value.as_object_mut().expect("state must be an object")
 }

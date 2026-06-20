@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use regex::Regex;
+use std::sync::LazyLock;
 
 use crate::aigc::Language;
 use crate::types::HumanizeResult;
@@ -228,6 +229,29 @@ fn chinese_replacement_table() -> Vec<(String, String)> {
 
 // ── Strategy 2: Syntactic Rewrite ──
 
+// Pre-compiled regex patterns for syntactic rewriting.
+static RE_IT_IS_ADJ_THAT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)It is (\w+) that ([^.]+)\.").expect("invalid IT_IS_ADJ_THAT regex")
+});
+static RE_PASSIVE_BY: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)The (\w+) was (\w+) by the (\w+)\.").expect("invalid PASSIVE_BY regex")
+});
+static RE_BEI_SOU_ZH: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"被(\w+)所(\w+)").expect("invalid BEI_SOU regex")
+});
+static RE_WHICH_CLAUSE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r",\s+which ([^,]+),\s+").expect("invalid WHICH_CLAUSE regex")
+});
+static RE_SEMICOLON_CONNECTORS: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r";\s+(moreover|furthermore|however|nevertheless),\s+").expect("invalid SEMICOLON regex")
+});
+static RE_AND_CONNECTOR: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(.{40,}?), and (.+)$").expect("invalid AND_CONNECTOR regex")
+});
+static RE_BINGQIE_ZH: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(.{20,}?)，并且(.+?)(。|$)").expect("invalid BINGQIE regex")
+});
+
 /// Apply syntactic transforms: passive→active reordering, clause reordering.
 fn syntactic_rewrite(text: &str, language: Language) -> (String, usize) {
     if language == Language::Chinese {
@@ -238,11 +262,8 @@ fn syntactic_rewrite(text: &str, language: Language) -> (String, usize) {
     let mut count = 0;
 
     // Transform: "It is [adj] that [clause]" → "[Clause] is [adj]."
-    let it_is_adj_that = Regex::new(
-        r"(?i)It is (\w+) that ([^.]+)\.",
-    ).unwrap();
-    if it_is_adj_that.is_match(&result) {
-        result = it_is_adj_that
+    if RE_IT_IS_ADJ_THAT.is_match(&result) {
+        result = RE_IT_IS_ADJ_THAT
             .replace_all(&result, |caps: &regex::Captures| {
                 let adj = &caps[1];
                 let clause = &caps[2];
@@ -258,21 +279,14 @@ fn syntactic_rewrite(text: &str, language: Language) -> (String, usize) {
 
     // Transform: "The [noun] was [past participle] by [agent]" → "[Agent] [verb]s the [noun]."
     // This is a simplified heuristic.
-    let passive_by = Regex::new(
-        r"(?i)The (\w+) was (\w+) by the (\w+)\.",
-    ).unwrap();
-    if passive_by.is_match(&result) {
-        result = passive_by
+    if RE_PASSIVE_BY.is_match(&result) {
+        result = RE_PASSIVE_BY
             .replace_all(&result, |caps: &regex::Captures| {
                 let noun = &caps[1];
                 let verb = &caps[2];
                 let agent = &caps[3];
                 // Simple conjugation: add "s" for third person.
-                let v = if verb.ends_with('e') {
-                    format!("{verb}s")
-                } else {
-                    format!("{verb}s")
-                };
+                let v = format!("{verb}s");
                 let mut a_chars = agent.chars();
                 let a_first = a_chars.next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
                 let a_rest: String = a_chars.collect();
@@ -293,9 +307,8 @@ fn syntactic_rewrite_zh(text: &str) -> (String, usize) {
 
     // "被...所" → remove 所
     if result.contains("被") {
-        let re = Regex::new(r"被(\w+)所(\w+)").unwrap();
         let before = result.clone();
-        result = re.replace_all(&result, "$1$2").to_string();
+        result = RE_BEI_SOU_ZH.replace_all(&result, "$1$2").to_string();
         if result != before {
             count += 1;
         }
@@ -368,10 +381,9 @@ fn clause_restructure(text: &str, language: Language) -> (String, usize) {
     let mut count = 0;
 
     // Split "X, which Y, Z" into "X Z. This Y."
-    let which_clause = Regex::new(r",\s+which ([^,]+),\s+").unwrap();
-    if which_clause.is_match(&result) {
+    if RE_WHICH_CLAUSE.is_match(&result) {
         let before = result.clone();
-        result = which_clause
+        result = RE_WHICH_CLAUSE
             .replace_all(&result, ". This $1 and ")
             .to_string();
         if result != before {
@@ -380,10 +392,9 @@ fn clause_restructure(text: &str, language: Language) -> (String, usize) {
     }
 
     // Split "X; moreover, Y" or "X; furthermore, Y" into two sentences.
-    let semicolon_connectors = Regex::new(r";\s+(moreover|furthermore|however|nevertheless),\s+").unwrap();
-    if semicolon_connectors.is_match(&result) {
+    if RE_SEMICOLON_CONNECTORS.is_match(&result) {
         let before = result.clone();
-        result = semicolon_connectors
+        result = RE_SEMICOLON_CONNECTORS
             .replace_all(&result, |caps: &regex::Captures| {
                 let connector = &caps[1];
                 let c = capitalize_first(connector);
@@ -396,12 +407,11 @@ fn clause_restructure(text: &str, language: Language) -> (String, usize) {
     }
 
     // Split long "X, and Y" sentences where X is > 50 chars.
-    let and_connector = Regex::new(r"^(.{40,}?), and (.+)$").unwrap();
     let lines: Vec<String> = result
         .split(". ")
         .map(|s| {
             let trimmed = s.trim();
-            if let Some(caps) = and_connector.captures(trimmed) {
+            if let Some(caps) = RE_AND_CONNECTOR.captures(trimmed) {
                 let x = caps[1].trim();
                 let y = caps[2].trim();
                 if !x.is_empty() && !y.is_empty() {
@@ -421,10 +431,9 @@ fn clause_restructure_zh(text: &str) -> (String, usize) {
     let mut count = 0;
 
     // Split long "……，并且……" sentences.
-    let re = Regex::new(r"(.{20,}?)，并且(.+?)(。|$)").unwrap();
-    if re.is_match(&result) {
+    if RE_BINGQIE_ZH.is_match(&result) {
         let before = result.clone();
-        result = re
+        result = RE_BINGQIE_ZH
             .replace_all(&result, |caps: &regex::Captures| {
                 count += 1;
                 format!("{}。{}", caps[1].trim(), caps[2].trim())
@@ -479,12 +488,12 @@ fn estimate_improvement(original: &str, rewritten: &str, language: Language) -> 
 fn split_sentences(text: &str, language: Language) -> Vec<String> {
     match language {
         Language::English => text
-            .split(|c: char| c == '.' || c == '!' || c == '?')
+            .split(['.', '!', '?'])
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect(),
         Language::Chinese => text
-            .split(|c: char| c == '。' || c == '！' || c == '？' || c == '.' || c == '!' || c == '?')
+            .split(['。', '！', '？', '.', '!', '?'])
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
             .collect(),

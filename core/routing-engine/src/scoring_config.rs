@@ -97,8 +97,8 @@ static WEIGHTS: LazyLock<&'static ScoringWeights> = LazyLock::new(|| {
         if let Ok(w) = serde_json::from_str::<ScoringWeights>(&json) {
             return Box::leak(Box::new(w));
         }
-        eprintln!(
-            "[scoring_config] WARN: {} exists but failed to parse; using embedded defaults.",
+        tracing::warn!(
+            "[scoring_config] {} exists but failed to parse; using embedded defaults.",
             RUNTIME_CONFIG_PATH,
         );
     }

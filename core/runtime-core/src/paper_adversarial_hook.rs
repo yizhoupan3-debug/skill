@@ -6,14 +6,12 @@
 //! - 受 `ROUTER_RS_OPERATOR_INJECT` 聚合闸约束（与 GOAL/RFV nudge 一致）。
 
 use host_projection::hooks::PaperProseHookHost;
+use crate::paper_block_cache::BlockCache;
 use crate::router_env_flags::{
     router_rs_env_enabled_default_false, router_rs_operator_inject_globally_enabled,
 };
 use serde_json::Value;
-use std::fs;
 use std::path::Path;
-use std::sync::Mutex;
-use std::time::SystemTime;
 
 const REL_PATH: &str = "configs/framework/PAPER_ADVERSARIAL_HOOK.txt";
 /// 首行须与 `merge_hook_nudge_paragraph` strip 前缀、`apply_cursor_hook_output_policy` SILENT 放行子串一致。
@@ -25,6 +23,8 @@ const BUILTIN_TXT: &str = include_str!("../../../configs/framework/PAPER_ADVERSA
 
 static BUILTIN_BLOCK: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| BUILTIN_TXT.trim().to_string());
+
+static BLOCK_CACHE: BlockCache = BlockCache::new(REL_PATH, PREFIX_LINE, "paper adversarial");
 
 fn builtin_block() -> String {
     BUILTIN_BLOCK.clone()
@@ -43,150 +43,13 @@ pub fn cursor_paper_adversarial_hook_requested() -> bool {
     paper_adversarial_hook_requested(PaperProseHookHost::Cursor)
 }
 
-/// 轻量启发：倾向少漏报论文任务、少误伤纯工程 PR/Cargo 对话与纯 ML/CS 技术讨论。
+/// 轻量启发：委托 research-harness 的独立检测逻辑。
 pub fn prompt_signals_paper_manuscript_work(text: &str) -> bool {
-    let lower = text.to_ascii_lowercase();
-    let has_zh_paper = text.contains("论文") || text.contains("手稿");
-    let has_en_paper = lower.contains("manuscript") || lower.contains("rebuttal");
-    let has_paper_signal = has_zh_paper || has_en_paper;
-
-    // 工程噪声过滤（纯 CI/PR/代码操作）
-    let code_only_noise = (lower.contains("pull request")
-        || lower.contains(".github/workflows")
-        || lower.contains("cargo test")
-        || lower.contains("cargo build")
-        || lower.contains("cargo fmt")
-        || lower.contains("clippy")
-        || lower.contains("rustfmt"))
-        && !has_paper_signal;
-
-    if code_only_noise {
-        return false;
-    }
-
-    // 纯 ML/CS 技术讨论过滤（不含论文关键词时）
-    let tech_ml_noise = {
-        static TECH_TOKENS: &[&str] = &[
-            "training",
-            "model architecture",
-            "loss function",
-            "hyperparameter",
-            "embedding",
-            "backpropagation",
-            "dataset",
-            "inference",
-        ];
-        TECH_TOKENS.iter().filter(|k| lower.contains(*k)).count() >= 2
-            && !has_paper_signal
-            && !text.contains("审稿")
-            && !text.contains("投稿")
-            && !text.contains("reviewer comment")
-    };
-    if tech_ml_noise {
-        return false;
-    }
-
-    static STRONG_ZH: &[&str] = &[
-        "审稿",
-        "审稿人",
-        "审稿意见",
-        "返修",
-        "大修",
-        "小修",
-        "论文",
-        "手稿",
-        "改稿",
-        "投稿",
-        "能不能投",
-        "rebuttal",
-        "response letter",
-    ];
-    if STRONG_ZH.iter().any(|k| text.contains(k)) {
-        return true;
-    }
-
-    static STRONG_EN: &[&str] = &[
-        "manuscript",
-        "revise and resubmit",
-        "meta-review",
-        "reviewer comment",
-        "major revision",
-        "minor revision",
-        "point-by-point",
-        "\\begin{abstract}",
-        "supplementary material",
-    ];
-    if STRONG_EN.iter().any(|k| lower.contains(*k)) {
-        return true;
-    }
-
-    // 不用泛词 `paper`（易与 white paper / 产品文档误触）；弱信号须凑满条数才放行，减少纯工程/ML 代码聊天误注入。
-    static WEAK: &[&str] = &[
-        "latex", "appendix", "theorem", "lemma", "baseline", "ablation", "novelty", "claim",
-    ];
-    let mut weak_count = WEAK.iter().filter(|k| lower.contains(*k)).count() as isize;
-
-    // Anti-signal: ML/CS 行话在无强信号时降权，减少纯技术讨论误触发
-    static ANTI_SIGNALS: &[&str] = &[
-        "transformer",
-        "attention",
-        "convolution",
-        "normalization",
-        "optimizer",
-        "gradient descent",
-        "batch size",
-        "learning rate",
-    ];
-    let anti_hits = ANTI_SIGNALS.iter().filter(|k| lower.contains(*k)).count();
-    if anti_hits >= 2 && !has_paper_signal && !text.contains("审稿") {
-        weak_count -= 2;
-    }
-
-    weak_count >= 5
+    research_harness::hooks::paper_adversarial::prompt_signals_manuscript_work(text)
 }
-
-struct CachedBlock {
-    content: String,
-    mtime: Option<SystemTime>,
-}
-
-static BLOCK_CACHE: Mutex<Option<CachedBlock>> = Mutex::new(None);
 
 pub fn resolve_paper_adversarial_block(repo_root: &Path) -> String {
-    let path = repo_root.join(REL_PATH);
-    let mtime = fs::metadata(&path)
-        .ok()
-        .and_then(|m| m.modified().ok());
-    {
-        let guard = BLOCK_CACHE.lock().expect("paper adversarial block cache");
-        if let Some(ref cached) = *guard
-            && cached.mtime == mtime {
-                return cached.content.clone();
-            }
-    }
-    let content = match fs::read_to_string(&path) {
-        Ok(t) => {
-            let trimmed = t.trim();
-            if trimmed.is_empty() {
-                builtin_block()
-            } else if let Some(after) = trimmed.strip_prefix(PREFIX_LINE) {
-                let after = after.trim();
-                if after.is_empty() {
-                    builtin_block()
-                } else {
-                    trimmed.to_string()
-                }
-            } else {
-                format!("{PREFIX_LINE}\n\n{trimmed}")
-            }
-        }
-        Err(_) => builtin_block(),
-    };
-    {
-        let mut guard = BLOCK_CACHE.lock().expect("paper adversarial block cache");
-        *guard = Some(CachedBlock { content: content.clone(), mtime });
-    }
-    content
+    BLOCK_CACHE.resolve(repo_root, builtin_block)
 }
 
 pub fn maybe_append_paper_adversarial_context(

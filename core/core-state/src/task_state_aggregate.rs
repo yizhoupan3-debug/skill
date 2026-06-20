@@ -9,6 +9,7 @@
 use crate::state_manager::read_rfv_loop_state;
 use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::utils::atomic_write::write_atomic_json;
+use crate::utils::path_guard::{safe_task_id_component, validate_task_id_component};
 use chrono::Utc;
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -66,32 +67,8 @@ pub fn sync_task_state_aggregate_best_effort(repo_root: &Path, task_id: &str) {
         return;
     }
     if let Err(e) = sync_task_state_aggregate(repo_root, task_id) {
-        eprintln!(
-            "[router-rs] TASK_STATE_AGGREGATE_SYNC_FAILED task_id={} err={}",
-            task_id.trim(),
-            e
-        );
+        tracing::warn!(task_id = %task_id.trim(), error = %e, "TASK_STATE_AGGREGATE_SYNC_FAILED");
     }
-}
-
-fn safe_task_id_component(task_id: &str) -> Option<&str> {
-    let tid = task_id.trim();
-    if tid.is_empty()
-        || tid == "."
-        || tid == ".."
-        || tid.contains("..")
-        || tid.contains('/')
-        || tid.contains('\\')
-        || tid.contains('\0')
-    {
-        return None;
-    }
-    Some(tid)
-}
-
-fn validate_task_id_component(task_id: &str) -> Result<&str, String> {
-    safe_task_id_component(task_id)
-        .ok_or_else(|| "TASK_STATE task_id must be a single safe path component".to_string())
 }
 
 #[cfg(test)]

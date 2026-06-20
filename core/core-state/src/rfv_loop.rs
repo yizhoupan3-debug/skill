@@ -94,11 +94,22 @@ fn framework_rfv_loop_impl(payload: Value) -> Result<Value, String> {
                 .get("max_rounds")
                 .and_then(Value::as_u64)
                 .unwrap_or(3);
+            let min_rounds = payload
+                .get("min_rounds")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let consecutive_stable_required = payload
+                .get("consecutive_stable_required")
+                .and_then(Value::as_u64)
+                .unwrap_or(2);
             let mut obj = Map::new();
             obj.insert("schema_version".to_string(), json!(RFV_LOOP_SCHEMA_VERSION));
             obj.insert("goal".to_string(), json!(goal));
             obj.insert("loop_status".to_string(), json!("active"));
             obj.insert("max_rounds".to_string(), json!(max_rounds));
+            obj.insert("min_rounds".to_string(), json!(min_rounds));
+            obj.insert("consecutive_stable_required".to_string(), json!(consecutive_stable_required));
+            obj.insert("consecutive_stable_count".to_string(), json!(0u64));
             obj.insert(
                 "updated_at".to_string(),
                 json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),

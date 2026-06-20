@@ -46,10 +46,24 @@ pub fn value_to_string_list(value: &Value) -> Vec<String> {
 }
 
 pub fn normalize_text(text: &str) -> String {
-    text.to_lowercase()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let mut result = String::with_capacity(trimmed.len());
+    let mut prev_whitespace = false;
+    for ch in trimmed.chars() {
+        if ch.is_whitespace() {
+            if !prev_whitespace {
+                result.push(' ');
+            }
+            prev_whitespace = true;
+        } else {
+            result.extend(ch.to_lowercase());
+            prev_whitespace = false;
+        }
+    }
+    result
 }
 
 pub fn tokenize_query(text: &str) -> Vec<String> {

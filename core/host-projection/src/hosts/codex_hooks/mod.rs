@@ -36,14 +36,12 @@ use std::path::Path;
 const CODEX_HOOK_AUTHORITY: &str = "rust-codex-audit";
 pub const HOST_ENTRYPOINT_SYNC_MANIFEST_PATH: &str = ".codex/host_entrypoints_sync_manifest.json";
 pub(super) const HOST_ENTRYPOINT_SYNC_HINT: &str = "cargo run --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --host-id codex --repo-root \"$PWD\"";
-pub const CODEX_AGENT_POLICY_PATH: &str = "AGENTS_CODEX.md";
+pub const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
 pub const CODEX_HOOKS_PATH: &str = ".codex/hooks.json";
 pub const CODEX_HOOKS_README_PATH: &str = ".codex/README.md";
 pub const HOST_ENTRYPOINT_JSON_RELATIVE_PATHS: [&str; 1] = [CODEX_HOOKS_PATH];
-pub(super) const PROTECTED_GENERATED_PATHS: [&str; 6] = [
+pub(super) const PROTECTED_GENERATED_PATHS: [&str; 4] = [
     CODEX_AGENT_POLICY_PATH,
-    "AGENTS.md",
-    "AGENTS_CURSOR.md",
     CODEX_HOOKS_PATH,
     CODEX_HOOKS_README_PATH,
     HOST_ENTRYPOINT_SYNC_MANIFEST_PATH,

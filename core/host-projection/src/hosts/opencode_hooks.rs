@@ -538,10 +538,6 @@ fn classify_protected_path(path: &Path, repo_root: &Path) -> Option<&'static str
 
     // Generated entrypoints
     if path_str.contains("AGENTS.md")
-        || path_str.contains("AGENTS_OPENCODE.md")
-        || path_str.contains("AGENTS_CLAUDE.md")
-        || path_str.contains("AGENTS_CURSOR.md")
-        || path_str.contains("AGENTS_CODEX.md")
     {
         return Some("Generated entrypoint. Edit via framework tools.");
     }

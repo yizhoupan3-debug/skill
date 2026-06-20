@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 
 /// Parse a safety level string (`L1`, `L1-report-only`, `L2`, `L2-assisted-fix`, `L3`, `L3-unattended`)
 /// into the corresponding `SafetyLevel` enum variant.
+/// Returns `None` for unrecognized strings; callers should fall back to `L1ReportOnly`
+/// (fail-safe: default to the most restrictive action-observation-only level).
 pub fn parse_safety_level(raw: &str) -> Option<SafetyLevel> {
     match raw {
         "L1" | "L1-report-only" => Some(SafetyLevel::L1ReportOnly),
@@ -22,11 +24,24 @@ pub fn assign_safety_for_file(
     let path = std::path::Path::new(file_path);
     for (pattern, level_str) in scope_rules {
         if path_matches(path, pattern) {
-            return parse_safety_level(level_str)
-                .unwrap_or(SafetyLevel::L1ReportOnly);
+            return parse_safety_level_or_warn(level_str, "scope_rule");
         }
     }
-    parse_safety_level(default).unwrap_or(SafetyLevel::L1ReportOnly)
+    parse_safety_level_or_warn(default, "default")
+}
+
+/// Parse safety level with warning on unknown values instead of silent downgrade.
+fn parse_safety_level_or_warn(raw: &str, context: &str) -> SafetyLevel {
+    match parse_safety_level(raw) {
+        Some(level) => level,
+        None => {
+            tracing::warn!(
+                "[safety] unknown safety level {:?} in {}, falling back to L1ReportOnly",
+                raw, context
+            );
+            SafetyLevel::L1ReportOnly
+        }
+    }
 }
 
 /// Assign a safety level to an action by evaluating its scope paths against the registry's
@@ -36,16 +51,16 @@ pub fn assign_safety_for_action(
     entry: &LoopRegistryEntry,
 ) -> SafetyLevel {
     if action.scope_paths.is_empty() {
-        return parse_safety_level(
+        return parse_safety_level_or_warn(
             entry.default_safety.as_deref().unwrap_or("L1"),
-        )
-        .unwrap_or(SafetyLevel::L1ReportOnly);
+            "action_default",
+        );
     }
 
     let scope_rules = entry.scope_based_safety.as_ref();
     let default = entry.default_safety.as_deref().unwrap_or("L1");
 
-    let mut highest = parse_safety_level(default).unwrap_or(SafetyLevel::L1ReportOnly);
+    let mut highest = parse_safety_level_or_warn(default, "entry_default");
 
     if let Some(rules) = scope_rules {
         for path in &action.scope_paths {
@@ -61,6 +76,14 @@ pub fn assign_safety_for_action(
 
 /// Resolve a conflict between multiple safety levels using the given strategy
 /// (`strictest` picks the highest level, `report` always returns L1ReportOnly).
+///
+/// # Design: fail-safe fallback to L1ReportOnly
+/// When no strategy matches or the level list is empty, this function returns
+/// `L1ReportOnly` — the most conservative safety level. This is intentional
+/// fail-safe behavior: an unrecognized strategy should *restrict* action rather
+/// than *permit* it (which would be fail-open). L1ReportOnly means "observe and
+/// report only, no file modifications", so the worst outcome of an unknown
+/// strategy is a missed opportunity to fix, not an uncontrolled change.
 pub fn resolve_conflict(
     levels: &[SafetyLevel],
     strategy: &str,
@@ -72,8 +95,14 @@ pub fn resolve_conflict(
         "strictest" => levels.iter().max_by_key(|l| safety_rank(l)).cloned()
             .unwrap_or(SafetyLevel::L1ReportOnly),
         "report" => SafetyLevel::L1ReportOnly,
-        _ => levels.iter().max_by_key(|l| safety_rank(l)).cloned()
-            .unwrap_or(SafetyLevel::L1ReportOnly),
+        unknown => {
+            tracing::warn!(
+                "[safety] unknown conflict resolution strategy {:?}, using strictest as fail-safe",
+                unknown
+            );
+            levels.iter().max_by_key(|l| safety_rank(l)).cloned()
+                .unwrap_or(SafetyLevel::L1ReportOnly)
+        }
     }
 }
 

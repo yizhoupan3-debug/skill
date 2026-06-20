@@ -48,13 +48,16 @@ pub fn write_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopErro
 
 /// Remove the kill signal file for a specific loop.
 /// Safe to call even if no signal file exists (no-op in that case).
+///
+/// **TOCTOU note**: uses `remove_file` directly without prior `is_file()` check;
+/// `NotFound` is treated as success (the desired end state — no signal file).
 pub fn clear_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopError> {
     let path = kill_signal_path(repo_root, loop_id);
-    if path.is_file() {
-        fs::remove_file(&path)
-            .map_err(|e| LoopError::Io(format!("remove kill signal {}: {e}", path.display())))?;
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(LoopError::Io(format!("remove kill signal {}: {e}", path.display()))),
     }
-    Ok(())
 }
 
 /// Remove all kill signal files by deleting the entire `.loop-kill/` directory.
@@ -70,13 +73,16 @@ pub fn clear_all_kill_signals(repo_root: &Path) -> Result<(), LoopError> {
 
 /// Read the current lock file and return its content if it exists.
 /// Returns `Ok(None)` when no lock file is present.
+///
+/// **TOCTOU note**: reads directly without prior `is_file()` check to avoid race
+/// between check and read. `NotFound` returns `Ok(None)`.
 pub fn read_lock_info(repo_root: &Path) -> Result<Option<LockInfo>, LoopError> {
     let path = lock_path(repo_root);
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let raw = fs::read_to_string(&path)
-        .map_err(|e| LoopError::Io(format!("read lock {}: {e}", path.display())))?;
+    let raw = match fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(LoopError::Io(format!("read lock {}: {e}", path.display()))),
+    };
     let lock: LoopLock = serde_json::from_str(&raw)
         .map_err(|e| LoopError::Serde(format!("parse lock {}: {e}", path.display())))?;
     let epoch = parse_iso_epoch(&lock.acquired_at).unwrap_or(0);
@@ -86,11 +92,19 @@ pub fn read_lock_info(repo_root: &Path) -> Result<Option<LockInfo>, LoopError> {
 /// Acquire an exclusive loop lock for the given loop and run.
 /// Fails if an active (non-stale) lock already exists. Stale locks older than
 /// `LOOP_LOCK_MAX_AGE_SECS` are automatically overridden.
+///
+/// # Limitations
+/// The lock file records the acquiring process's PID and start timestamp for
+/// diagnostics, but the 1-hour expiry (`LOOP_LOCK_MAX_AGE_SECS`) is the only
+/// automatic release mechanism. There is no daemon or OS-level cleanup — if the
+/// process dies without calling `release_lock`, the lock persists on disk until
+/// it expires or is manually removed. Callers should ensure `release_lock` is
+/// invoked in all exit paths (including error paths).
 pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(), LoopError> {
     let path = lock_path(repo_root);
-    if path.is_file() {
-        let info = read_lock_info(repo_root)?;
-        if let Some(info) = info {
+    // Read-first pattern: attempt read directly to avoid TOCTOU between is_file() and read.
+    match read_lock_info(repo_root)? {
+        Some(info) => {
             let age = now_epoch().saturating_sub(info.acquired_epoch);
             if age < LOOP_LOCK_MAX_AGE_SECS {
                 return Err(LoopError::ActionFailed(format!(
@@ -102,8 +116,17 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
                 "stale lock from loop '{}' (run '{}'), overriding (age={}s >= {}s)",
                 info.lock.loop_id, info.lock.run_id, age, LOOP_LOCK_MAX_AGE_SECS,
             );
-            fs::remove_file(&path)
-                .map_err(|e| LoopError::Io(format!("remove stale lock {}: {e}", path.display())))?;
+            // Use match to handle concurrent removal of stale lock.
+            match fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // Another process already removed the stale lock — proceed.
+                }
+                Err(e) => return Err(LoopError::Io(format!("remove stale lock {}: {e}", path.display()))),
+            }
+        }
+        None => {
+            // No existing lock — proceed to create.
         }
     }
     let lock = LoopLock {
@@ -111,7 +134,15 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
         run_id: run_id.to_string(),
         acquired_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
     };
-    let text = serde_json::to_string_pretty(&lock)
+    // Record PID and start timestamp for diagnostics and stale-lock analysis.
+    let lock_meta = serde_json::json!({
+        "loop_id": lock.loop_id,
+        "run_id": lock.run_id,
+        "acquired_at": lock.acquired_at,
+        "pid": std::process::id(),
+        "started_at": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+    });
+    let text = serde_json::to_string_pretty(&lock_meta)
         .map_err(|e| LoopError::Serde(format!("serialize lock: {e}")))?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)
@@ -142,6 +173,13 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
 
     #[cfg(not(unix))]
     {
+        // NOTE: On non-Unix platforms (Windows, etc.) we cannot use O_EXCL for atomic
+        // file creation. The `fs::write` call below is susceptible to a TOCTOU race:
+        // another process could create the lock file between the existence check above
+        // and this write. For production Windows deployments, consider using a Named Mutex
+        // (via the `windows` crate or `winapi`) to achieve true cross-process mutual
+        // exclusion. The current approach is acceptable for single-user CI/development
+        // environments where concurrent loop runners on Windows are unlikely.
         fs::write(&path, text)
             .map_err(|e| LoopError::Io(format!("write lock {}: {e}", path.display())))?;
     }
@@ -150,16 +188,24 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
 }
 
 /// Release the exclusive loop lock by deleting the lock file.
-/// Safe to call even when no lock file exists (no-op in that case).
+/// Uses atomic remove without prior `is_file()` check to avoid TOCTOU.
+/// `NotFound` is treated as success (lock already released).
 pub fn release_lock(repo_root: &Path) -> Result<(), LoopError> {
     let path = lock_path(repo_root);
-    if path.is_file() {
-        fs::remove_file(&path)
-            .map_err(|e| LoopError::Io(format!("remove lock {}: {e}", path.display())))?;
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(LoopError::Io(format!("remove lock {}: {e}", path.display()))),
     }
-    Ok(())
 }
 
+/// Return the current epoch seconds.
+///
+/// # Note on unwrap_or(0)
+/// `SystemTime::now()` returns `Err` only if the system clock is before UNIX_EPOCH
+/// (1970-01-01), which should never happen on any sane system. Falling back to 0
+/// means "epoch origin" — a lock acquired at 0 will always be considered stale,
+/// which is a safe degradation (allows re-acquisition rather than blocking forever).
 fn now_epoch() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

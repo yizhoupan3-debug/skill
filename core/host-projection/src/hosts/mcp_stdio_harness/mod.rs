@@ -117,10 +117,15 @@ impl RateLimiter {
 
 // Global caches and rate limiter (session-scoped via OnceLock)
 // Caches use RwLock for concurrent reads; rate limiter uses Mutex (read+write in one call).
+
+/// Task view cache entry: (resolved_view, last_access_instant).
+type TaskViewCacheEntry = (core_state::task_state::ResolvedTaskView, Instant);
+
+/// Task view cache: path → (resolved_view, last_access).
+type TaskViewCache = HashMap<PathBuf, TaskViewCacheEntry>;
+
 static SNAPSHOT_CACHE: OnceLock<Arc<std::sync::RwLock<Option<SnapshotCache>>>> = OnceLock::new();
-static TASK_VIEW_CACHE: OnceLock<
-    Arc<std::sync::RwLock<HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>>>,
-> = OnceLock::new();
+static TASK_VIEW_CACHE: OnceLock<Arc<std::sync::RwLock<TaskViewCache>>> = OnceLock::new();
 static RATE_LIMITER: OnceLock<Arc<std::sync::Mutex<RateLimiter>>> = OnceLock::new();
 
 /// Poison-safe lock helpers that recover from lock poisoning.
@@ -527,7 +532,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "skill_search",
-                    "description": "Search full skill catalog, return best matches.",
+                    "description": "搜索 skill 目录，返回最佳匹配。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -540,14 +545,11 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "skill_read",
-                    "description": "Read matched skill SKILL.md body (max 20K chars).",
+                    "description": "读取 skill 的 SKILL.md 内容。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "skill": {
-                                "type": "string",
-                                "description": "Skill slug to read",
-                            },
+                            "skill": {"type": "string"},
                             "maxChars": {"type": "integer", "minimum": 1, "maximum": 50000},
                         },
                         "required": ["skill"],
@@ -590,17 +592,14 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "closeout_gate",
-                    "description": "closeout 状态与缺失项清单（advisory）。",
+                    "description": "closeout 就绪状态与缺失项清单（advisory）。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "task_id": {
-                                "type": "string",
-                                "description": "task id，默认当前 active task",
-                            },
-                            "reviewer_lane": {"type": "string", "description": "Reviewer lane for evidence attestation (optional)"},
-                            "subagent_type": {"type": "string", "description": "Subagent type for evidence attestation (optional)"},
-                            "agent_type": {"type": "string", "description": "Agent type for evidence attestation (optional)"}
+                            "task_id": {"type": "string"},
+                            "reviewer_lane": {"type": "string"},
+                            "subagent_type": {"type": "string"},
+                            "agent_type": {"type": "string"},
                         },
                     },
                 },
@@ -626,7 +625,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "rfv_loop_manage",
-                    "description": "管理 RFV 循环：start / append_round。operation=start 时需要 goal、max_rounds、allow_external_research。operation=append_round 时需要 round、review_summary、fix_summary、verify_result。",
+                    "description": "管理 RFV 循环 (start|append_round)。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -648,7 +647,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "closeout_record_write",
-                    "description": "写入并验证 closeout record (artifacts/closeout/<task_id>.json)。",
+                    "description": "写入并验证 closeout record。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -678,30 +677,20 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "routing_evolution",
-                    "description": "读取路由日志并分析/校准/提取 utterances。operations: stats | analyze | extract | calibrate",
+                    "description": "路由日志分析 (stats|analyze|extract|calibrate)。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "operation": {
-                                "type": "string",
-                                "enum": ["stats", "analyze", "extract", "calibrate"],
-                                "description": "stats=概览, analyze=深度分析, extract=提取 high-conf utterances, calibrate=阈值建议"
-                            },
-                            "skill": {
-                                "type": "string",
-                                "description": "按 skill 过滤（可选）"
-                            },
-                            "days": {
-                                "type": "integer",
-                                "description": "只分析最近 N 天（可选，默认全部）"
-                            },
+                            "operation": {"type": "string", "enum": ["stats", "analyze", "extract", "calibrate"]},
+                            "skill": {"type": "string"},
+                            "days": {"type": "integer"},
                         },
                         "required": ["operation"],
                     },
                 },
                 {
                     "name": "goal_state_manage",
-                    "description": "管理 Goal 状态：start / checkpoint / pause / resume / complete / clear / block。operation=start 时需要 goal。operation=checkpoint 时需要 note。operation=block 时需要 blocker。",
+                    "description": "管理 Goal 状态 (start|checkpoint|pause|resume|complete|clear|block)。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -722,6 +711,74 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             "set_focus": {"type": "boolean"},
                         },
                         "required": ["operation"],
+                    },
+                },
+                {
+                    "name": "research_aigc_check",
+                    "description": "AIGC 检测：返回 AI 概率评分(0-100)和逐段分析。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "language": {"type": "string", "enum": ["en", "zh"]},
+                        },
+                        "required": ["text"],
+                    },
+                },
+                {
+                    "name": "research_aigc_humanize",
+                    "description": "AIGC 降重：句法改写/词汇替换/句式多样化。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "language": {"type": "string", "enum": ["en", "zh"]},
+                            "preserve_academic_tone": {"type": "boolean"},
+                        },
+                        "required": ["text"],
+                    },
+                },
+                {
+                    "name": "research_review_dimensions",
+                    "description": "获取审稿维度 prompt (round 1-7+)。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "round": {"type": "integer"},
+                            "manuscript_summary": {"type": "string"},
+                        },
+                        "required": ["round"],
+                    },
+                },
+                {
+                    "name": "research_claim_drift",
+                    "description": "检测 claim 漂移：原始 vs 当前声明的相似度和证据变化。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "original_claims": {
+                                "type": "array",
+                                "items": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]},
+                            },
+                            "current_claims": {
+                                "type": "array",
+                                "items": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]},
+                            },
+                        },
+                        "required": ["original_claims", "current_claims"],
+                    },
+                },
+                {
+                    "name": "research_review_loop",
+                    "description": "启动多轮对抗审稿循环。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "max_rounds": {"type": "integer"},
+                            "min_rounds": {"type": "integer"},
+                            "consecutive_stable_required": {"type": "integer"},
+                        },
+                        "required": [],
                     },
                 },
             ],
@@ -783,13 +840,10 @@ fn handle_prompts_get(
     let text = match prompt_name {
         "framework_routing" => {
             let source_rel = "skills/SKILL_ROUTING_RUNTIME.json";
-            let agents_delta = crate::hosts::host_provider_for_id(host_id)
-                .map(|provider| provider.context_file())
-                .unwrap_or("AGENTS_<HOST>.md");
             format!(
                 "面向用户的回复必须使用简体中文（代码/路径/命令/第三方原文除外）。\n\n\
                  Use this repo shared framework runtime.\n\n\
-                 1) Start from AGENTS.md（跨宿主内核）；宿主差异见 {agents_delta}。\n\
+                 1) Start from AGENTS.md。\n\
                  2) Route via {source_rel}.\n\
                  3) Read only the matched skill_path.\n\n\
                  Framework root: core/router-rs/"
@@ -1345,7 +1399,7 @@ mod tests {
         let response = handle_tools_list(Some(json!(1)));
         let tools = response["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 15, "expected 15 tools, got: {:?}", names);
+        assert_eq!(names.len(), 20, "expected 20 tools, got: {:?}", names);
         for tool in &[
             "framework_snapshot",
             "skill_route",
@@ -1362,6 +1416,11 @@ mod tests {
             "rfv_loop_status",
             "rfv_loop_manage",
             "goal_state_manage",
+            "research_aigc_check",
+            "research_aigc_humanize",
+            "research_review_dimensions",
+            "research_claim_drift",
+            "research_review_loop",
         ] {
             assert!(names.contains(tool), "missing tool: {tool}");
         }

@@ -1,4 +1,5 @@
 //! Primary routing entrypoints (search + `route_task`) and manifest fallback helpers.
+use tracing;
 use super::aliases::has_literal_framework_alias_call;
 use super::constants::{
     NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN, PROFILE_COMPILE_AUTHORITY, ROUTE_AUTHORITY,
@@ -286,9 +287,9 @@ pub fn filter_record_indices_for_host(
     }
 
     if indices.is_empty() && original_len > 0 {
-        eprintln!(
-            "[router-rs warning] host_id={} filtered all {} records (saw_host={})",
-            host_id, original_len, saw_host
+        tracing::warn!(
+            host_id, original_len, saw_host,
+            "host_id filtered all records"
         );
     }
 
@@ -390,10 +391,7 @@ pub fn route_task(
                 None,
             ));
         }
-        eprintln!(
-            "[router-rs route] NO SKILL HIT: query=\"{}\" session_id=\"{}\"",
-            query, session_id
-        );
+        tracing::debug!(query, session_id, "route: no skill hit");
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill.",
         ]);
@@ -417,10 +415,7 @@ pub fn route_task(
         .iter()
         .all(|candidate| is_overlay_record(candidate.record))
     {
-        eprintln!(
-            "[router-rs route] ALL-OVERLAY ALLOWED: query=\"{}\" session_id=\"{}\"",
-            query, session_id
-        );
+        tracing::debug!(query, session_id, "route: all-overlay candidates allowed");
     }
     let selected = pick_owner(
         viable,
@@ -448,12 +443,12 @@ pub fn route_task(
                 Some(selected.score),
             ));
         }
-        eprintln!(
-            "[router-rs route] BELOW THRESHOLD: query=\"{}\" selected={} score={:.2} threshold={:.2}",
+        tracing::debug!(
             query,
-            selected.record.slug,
-            selected.score,
-            w.layer_threshold(&selected.record.layer)
+            skill = %selected.record.slug,
+            score = selected.score,
+            threshold = w.layer_threshold(&selected.record.layer),
+            "route: below threshold"
         );
         let fallback_reasons = compact_route_reasons(&[
             "No explicit skill hit; native runtime should proceed without loading a skill.",
@@ -608,14 +603,14 @@ fn build_fuzzy_rescue_decision(
     exact_score: Option<f64>,
 ) -> RouteDecision {
     if let Some(exact) = exact_score {
-        eprintln!(
-            "[router-rs route] FUZZY RESCUE (below-threshold): query=\"{}\" skill=\"{}\" sim={:.3} exact_score={:.2}",
-            query, record.slug, sim, exact
+        tracing::debug!(
+            query, skill = %record.slug, sim, exact_score = exact,
+            "fuzzy rescue (below-threshold)"
         );
     } else {
-        eprintln!(
-            "[router-rs route] FUZZY RESCUE: query=\"{}\" skill=\"{}\" sim={:.3}",
-            query, record.slug, sim
+        tracing::debug!(
+            query, skill = %record.slug, sim,
+            "fuzzy rescue"
         );
     }
     let overlay = if allow_overlay {

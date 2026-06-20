@@ -1,5 +1,4 @@
 use std::fs;
-use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value, json};
 
@@ -9,21 +8,8 @@ use super::types::{
     RUNTIME_SURFACE_FIELDS, SUPERVISOR_STATE_CONTRACT_ARTIFACT_ID,
 };
 
-fn repo_scan_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."))
-}
-
-fn value_object<const N: usize>(pairs: [(&str, Value); N]) -> Value {
-    let mut object = Map::new();
-    for (key, value) in pairs {
-        object.insert(key.to_string(), value);
-    }
-    Value::Object(object)
-}
+// De-duplicated: reuse repo_scan_root() and value_object() from parent module.
+use super::{repo_scan_root, value_object};
 
 fn value_array(items: Vec<Value>) -> Value {
     Value::Array(items)

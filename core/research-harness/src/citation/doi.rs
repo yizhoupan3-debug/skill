@@ -2,9 +2,16 @@
 //!
 //! DOI 格式验证和通过 doi.org API 解析论文元数据。
 
+use std::sync::LazyLock;
+
 use anyhow::Result;
+use regex::Regex;
 
 use crate::types::{Paper, PaperSource};
+
+static DOI_PATTERN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^10\.\d{4,}/.+").expect("invalid DOI_PATTERN_RE regex")
+});
 
 /// 验证 DOI 格式是否合法。
 ///
@@ -24,8 +31,7 @@ pub fn validate_doi(doi: &str) -> Result<bool> {
         .trim();
 
     // 基本格式检查：10.NNNN/...
-    let re = regex::Regex::new(r"^10\.\d{4,}/.+")?;
-    Ok(re.is_match(stripped))
+    Ok(DOI_PATTERN_RE.is_match(stripped))
 }
 
 /// 通过 DOI 解析论文元数据。

@@ -36,120 +36,108 @@ pub use tooling::*;
 // Data-driven signal table
 // ---------------------------------------------------------------------------
 
-/// How markers are matched against the query.
-pub(crate) enum SignalMatchMode {
-    /// `query_text.contains(normalize_text(marker)) || text_matches_phrase(...)`.
-    NormalizeAndToken,
-    /// `query_text.contains(marker) || text_matches_phrase(...)` — raw substring + token.
-    ContainsOrToken,
-}
-
+/// A named signal defined by a set of marker phrases.
+/// Markers are matched via substring containment in the (already-normalized)
+/// query text, with a token-level fallback for multi-word phrases.
+/// Both CJK and ASCII markers are supported; normalization (lowercasing +
+/// whitespace collapse) is applied once at the routing entry point, so no
+/// per-marker normalization is needed here.
 pub(crate) struct SignalDef {
     name: &'static str,
-    mode: SignalMatchMode,
     markers: &'static [&'static str],
 }
 
 macro_rules! sig {
-    ($name:expr, normalize => $markers:expr) => {
+    ($name:expr, markers => $markers:expr) => {
         SignalDef {
             name: $name,
-            mode: SignalMatchMode::NormalizeAndToken,
-            markers: $markers,
-        }
-    };
-    ($name:expr, contains_or_token => $markers:expr) => {
-        SignalDef {
-            name: $name,
-            mode: SignalMatchMode::ContainsOrToken,
             markers: $markers,
         }
     };
 }
 
-/// All pure-template signal definitions. Each entry replaces a hand-written
+/// All data-driven signal definitions. Each entry replaces a hand-written
 /// `has_xxx_context` function that was just `.iter().any(…)` over a marker list.
 const SIGNAL_DEFS: &[SignalDef] = &[
-    // ── Contains-mode signals (raw `query_text.contains(marker)`) ──────
-    sig!("runtime_lightweighting", contains_or_token => &[
+    // ── Signals ────────────────────────────────────────────────────────────
+    sig!("runtime_lightweighting", markers => &[
         "runtime 轻量化", "轻量化", "兼容层", "胶水层",
         "沉到 runtime", "沉到runtime", "runtime 下沉", "下沉 runtime",
         "沉到运行时", "减少入口", "减入口", "不损害功能", "加重负担", "没有用",
     ]),
-    sig!("systematic_debug", contains_or_token => &[
+    sig!("systematic_debug", markers => &[
         "root-cause analysis", "root cause analysis", "root-cause", "root cause",
         "根因", "找根因", "bug", "报错", "失败", "崩了", "不工作", "哪里错了",
         "flaky", "flake", "traceback", "error", "tdd workflow", "tdd",
         "定位根因", "修这个 bug", "fix login", "login bug",
     ]),
-    sig!("copywriting", normalize => &[
+    sig!("copywriting", markers => &[
         "ux 微文案", "ux", "微文案", "空状态", "cta", "转化", "转化率",
         "点击创建", "创建项目", "广告词", "产品卖点", "落地页", "品牌故事",
         "copywriting", "in-app microcopy", "tagline",
     ]),
-    sig!("prose_naturalization", normalize => &[
+    sig!("prose_naturalization", markers => &[
         "润色", "润色得自然", "自然一点", "改自然", "自然化", "文本精修",
         "表达优化", "去模板腔", "像人写的", "humanize", "aigc", "ai 味", "ai味",
         "ai 感", "逐句评估", "哪些句子", "普通说明", "说明文字", "普通写作",
     ]),
-    sig!("paper", normalize => &[
+    sig!("paper", markers => &[
         "paper", "manuscript", "论文", "稿子", "稿件", "摘要", "引言",
         "审稿意见", "reviewer comments", "rebuttal", "appendix", "claim",
         "投稿", "期刊",
     ]),
-    sig!("scientific_figure_plotting", normalize => &[
+    sig!("scientific_figure_plotting", markers => &[
         "scientific figures", "scientific figure", "publication chart",
         "publication figure", "journal style", "科研出图", "论文图", "期刊风格",
         "matplotlib", "seaborn", "plotnine", "raincloud", "ridge plot",
         "statistical annotations", "colorblind-safe", "cjk font",
     ]),
-    // ── NormalizeAndToken-mode signals ─────────────────────────────────
-    sig!("sentry", normalize => &[
+    sig!("sentry", markers => &[
         "sentry", "production error", "production errors", "线上异常",
     ]),
-    sig!("pr_triage_summary", normalize => &[
-        "quick PR 状态梳理", "pr 状态梳理", "pr review summary",
+    sig!("pr_triage_summary", markers => &[
+        "quick pr 状态梳理", "pr 状态梳理", "pr review summary",
         "pull request summary", "reviewer feedback digest", "changed-file digest",
         "changed files summary", "pr triage", "pr-level follow-up",
         "pr follow-up", "changed-file surface",
     ]),
-    sig!("non_github_ci_provider", normalize => &[
+    sig!("non_github_ci_provider", markers => &[
         "gitlab", "gitlab ci", "circleci", "circle ci", "jenkins",
         "azure pipelines", "buildkite", "travis", "bitbucket pipelines",
     ]),
-    sig!("design_reference", normalize => &[
+    sig!("design_reference", markers => &[
         "参考源", "verified tokens", "品牌 token", "stripe", "linear", "apple",
         "vercel", "liquid glass motion", "产品风格映射", "borrowable cues",
     ]),
-    sig!("visual_evidence_review", normalize => &[
+    sig!("visual_evidence_review", markers => &[
         "看图", "截图", "界面图", "视觉问题", "可读性审查", "重叠", "层级",
         "渲染", "rendered", "screenshot", "visual review", "ui overlap",
         "readability review",
     ]),
-    sig!("design_output_audit", normalize => &[
+    sig!("design_output_audit", markers => &[
         "设计审计", "设计验收", "验收结论", "风格漂移", "ai 味", "反模式",
         "drift", "anti-pattern", "audit produced",
     ]),
-    sig!("design_workflow_protocol", normalize => &[
+    sig!("design_workflow_protocol", markers => &[
         "设计工件协议", "设计工作流", "设计迭代协议", "design workflow",
         "design artifact protocol", "prompt 到 screenshot 到 verdict",
         "每轮都按这个工作流跑", "工作流跑",
     ]),
-    sig!("beamer_slide", normalize => &[
+    sig!("beamer_slide", markers => &[
         "beamer", "beamer slides", "latex beamer", "latex 幻灯片",
         "beamer 编译", "学术 ppt",
     ]),
-    sig!("source_slide_format", normalize => &[
+    sig!("source_slide_format", markers => &[
         "markdown slides", "slidev", "marp", "html slides", "source slide formats",
         "source-first slides", "用 markdown 做 slides", "根据大纲做 html slides",
         "browser-matched pdf", "presentation.html",
     ]),
-    sig!("diagramming", normalize => &[
+    sig!("diagramming", markers => &[
         "mermaid", "graphviz", "dot diagram", "流程图", "研究流程图",
         "技术路线图", "方法图", "实验流程", "pipeline 图", "时序图", "架构图",
         "依赖图", "状态机",
     ]),
-    sig!("bounded_subagent", normalize => &[
+    sig!("bounded_subagent", markers => &[
         "sidecar", "sidecars", "subagent", "subagents", "delegation plan",
         "multiagent", "multi-agent", "多 agent", "多 agent 执行", "多 agent 路由",
         "bounded sidecar", "bounded sidecars", "bounded subagent",
@@ -159,18 +147,18 @@ const SIGNAL_DEFS: &[SignalDef] = &[
         "主线程保留", "保留主线程", "主线程集成", "lane-local output",
         "不创建 worker",
     ]),
-    sig!("token_budget_pressure", normalize => &[
+    sig!("token_budget_pressure", markers => &[
         "token budget", "context budget", "token 开销", "token 成本",
         "降低 token", "压 token", "省 token", "缩上下文",
     ]),
-    sig!("workflow_negation", normalize => &[
+    sig!("workflow_negation", markers => &[
         "不要 workflow", "不要进入 workflow", "不进 workflow", "不用 workflow",
         "无需 workflow", "not workflow", "without workflow",
         "不要 workflow orchestration", "不要 workflow 编排", "只是 sidecar",
         "only sidecar", "tdd workflow", "用 tdd workflow",
         "test driven development",
     ]),
-    sig!("workflow_orchestration", normalize => &[
+    sig!("workflow_orchestration", markers => &[
         "workflow orchestration", "workflow supervisor", "workflow mode",
         "workflow 编排", "用 workflow", ".claude/workflows", "/workflow",
         "ultracode", "worker lifecycle", "worker orchestration",
@@ -182,32 +170,32 @@ const SIGNAL_DEFS: &[SignalDef] = &[
         "团队编排", "多 worker", "worker 生命周期",
         "supervisor-led", "supervisor led",
     ]),
-    sig!("explicit_prose_polish", normalize => &[
-        "润色", "文字精修", "SCI润色", "SCI 润色", "英文论文润色",
+    sig!("explicit_prose_polish", markers => &[
+        "润色", "文字精修", "sci润色", "sci 润色", "英文论文润色",
         "学术润色", "只改表达", "polish", "proofread", "copyedit",
         "rewrite introduction", "rewrite abstract", "manuscript editing",
         "academic writing",
     ]),
-    sig!("design_contract", normalize => &[
+    sig!("design_contract", markers => &[
         "design.md", "设计规范", "设计系统", "设计 token", "design token",
         "design tokens", "视觉身份", "视觉规范", "品牌风格", "品牌规范",
         "house style", "visual identity", "style contract", "统一设计规范",
         "统一视觉", "统一风格", "风格漂移", "根据 design.md",
     ]),
-    sig!("design_contract_negation", normalize => &[
+    sig!("design_contract_negation", markers => &[
         "不需要设计系统", "不需要设计规范", "不用设计系统", "不用设计规范",
         "无需设计系统", "无需设计规范", "不要设计系统", "不要设计规范",
         "no design system", "without design system",
     ]),
-    sig!("research_context", normalize => &[
+    sig!("research_context", markers => &[
         "科研日志", "研究日志", "研究工作区", "研究记录", "科研记录",
         "research log", "research log entry", "experiment log",
         "实验记录", "日志记录", "科研笔记", "科研回顾",
     ]),
-    sig!("quick_artifact", normalize => &[
+    sig!("quick_artifact", markers => &[
         "快速", "普通", "简单", "临时", "quick", "simple", "draft", "utility",
     ]),
-    sig!("codegraph_index_ready", normalize => &[
+    sig!("codegraph_index_ready", markers => &[
         "codegraph", "调用链", "影响半径", "call graph", "callers",
         "callees", "impact analysis", "死代码", "dead code",
         "重构影响", "refactor impact", "rename symbol",
@@ -216,23 +204,26 @@ const SIGNAL_DEFS: &[SignalDef] = &[
     ]),
 ];
 
-/// Generic engine: check whether `query_text` / `query_token_list` matches
-/// any marker in `markers` using the given `mode`.
+/// Check whether `query_text` / `query_token_list` matches any marker in a
+/// signal definition.  The query text is already normalized (lowercased +
+/// whitespace-collapsed) at the routing entry point, so no per-marker
+/// normalization is needed — direct substring containment is sufficient.
+///
+/// **Marker contract**: all ASCII markers MUST be lowercase.  CJK characters
+/// are caseless and pass through unchanged.  A compile-time test
+/// (`signal_marker_case_tests::all_signal_markers_are_lowercase_ascii`)
+/// enforces this; adding an uppercase ASCII marker will fail CI.  Markers
+/// containing mixed ASCII+CJK (e.g. "SCI润色") are unreliable via
+/// `contains` because the ASCII portion is lowercased before matching — use
+/// token-level `text_matches_phrase` for such patterns instead.
 pub(crate) fn signal_matches(
-    mode: &SignalMatchMode,
     query_text: &str,
     query_token_list: &[String],
     markers: &[&str],
 ) -> bool {
-    match mode {
-        // query_text is already normalized at routing entry; markers are static lowercase ASCII.
-        // Skip per-marker normalize_text allocation — direct contains is sufficient.
-        SignalMatchMode::NormalizeAndToken | SignalMatchMode::ContainsOrToken => {
-            markers
-                .iter()
-                .any(|m| query_text.contains(*m) || text_matches_phrase(query_token_list, m))
-        }
-    }
+    markers
+        .iter()
+        .any(|m| query_text.contains(*m) || text_matches_phrase(query_token_list, m))
 }
 
 /// Look up a signal definition by name and evaluate it.
@@ -240,7 +231,7 @@ pub(crate) fn has_signal_by_name(name: &str, query_text: &str, query_token_list:
     SIGNAL_DEFS
         .iter()
         .find(|def| def.name == name)
-        .map(|def| signal_matches(&def.mode, query_text, query_token_list, def.markers))
+        .map(|def| signal_matches(query_text, query_token_list, def.markers))
         .unwrap_or(false)
 }
 
@@ -334,34 +325,7 @@ pub(crate) fn github_pr_standalone_token_regex() -> &'static Regex {
 }
 
 
-pub fn has_checklist_execution_context(query_text: &str) -> bool {
-    query_text.contains("checklist")
-        && ![
-            "规范",
-            "规范化",
-            "normalize",
-            "normalise",
-            "serial",
-            "parallel",
-            "并行",
-            "串行",
-        ]
-        .iter()
-        .any(|marker| query_text.contains(marker))
-        && [
-            "执行",
-            "一口气",
-            "彻底",
-            "落实",
-            "按",
-            "fix",
-            "implement",
-            "run",
-            "do it",
-        ]
-        .iter()
-        .any(|marker| query_text.contains(marker))
-}
+
 
 
 
@@ -440,9 +404,9 @@ pub fn can_be_fallback_owner(record: &SkillRecord) -> bool {
 /// host-neutral: not tied to Cursor product name.
 /// Used to keep delegation-gate admission from overriding the `plan-mode` owner on first-turn routing.
 pub fn has_plan_mode_owner_context(query_text: &str, query_token_list: &[String]) -> bool {
+    // query_text is already lowercased at routing entry — all markers are lowercase.
     query_text.contains("cursor plan")
-        || query_text.contains("Cursor Plan")
-        || query_text.contains("CreatePlan")
+        || query_text.contains("createplan")
         || query_text.contains("plan_profile")
         || query_text.contains("plan-mode")
         || query_text.contains("skill/plan-mode")
@@ -490,10 +454,6 @@ pub fn has_research_context(query_text: &str, query_token_list: &[String]) -> bo
 /// True when the query is about reviewing/checking a mathematical proof or derivation,
 /// without a full-paper/manuscript context. Helps route pure math-review to `math-derivation`
 /// instead of `paper-reviewer`.
-
-
-
-
 pub fn has_ci_failure_context(query_text: &str, query_token_list: &[String]) -> bool {
     let phrase_match = [
         "github actions",
@@ -677,8 +637,9 @@ mod paper_prose_edit_context_tests {
     use crate::route::tokenize_route_text;
 
     pub(crate) fn prose(text: &str) -> bool {
-        let tokens = tokenize_route_text(text);
-        has_paper_prose_edit_context(text, &tokens)
+        let normalized = text.to_lowercase();
+        let tokens = tokenize_route_text(&normalized);
+        has_paper_prose_edit_context(&normalized, &tokens)
     }
 
     #[test]
@@ -839,5 +800,31 @@ mod research_context_tests {
     pub(crate) fn detect_research_directory_no_marker_returns_false() {
         let dir = tempfile::tempdir().unwrap();
         assert!(!detect_research_directory(dir.path()));
+    }
+}
+
+#[cfg(test)]
+mod signal_marker_case_tests {
+    use super::*;
+
+    /// Compile-time safety net: all SIGNAL_DEFS markers must be lowercase ASCII.
+    /// CJK characters are caseless and pass through unchanged; ASCII markers
+    /// that contain uppercase will silently never match because `query_text` is
+    /// lowercased at the routing entry point.
+    #[test]
+    fn all_signal_markers_are_lowercase_ascii() {
+        for def in SIGNAL_DEFS {
+            for marker in def.markers {
+                let ascii_part: String = marker.chars().filter(|c| c.is_ascii()).collect();
+                assert_eq!(
+                    ascii_part,
+                    ascii_part.to_ascii_lowercase(),
+                    "signal `{}` marker `{}` has uppercase ASCII — will never match \
+                     because query_text is lowercased at routing entry",
+                    def.name,
+                    marker,
+                );
+            }
+        }
     }
 }

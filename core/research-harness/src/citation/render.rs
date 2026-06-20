@@ -2,7 +2,27 @@
 //!
 //! 从 citation_tool_rs 的渲染逻辑适配而来。
 
+use std::sync::LazyLock;
+
 use anyhow::{Context, Result};
+use regex::Regex;
+
+static BIBTEX_FIELD_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?m)^\s*(\w+)\s*=").expect("invalid BIBTEX_FIELD_NAME_RE regex")
+});
+
+/// Escape BibTeX special characters for proper LaTeX rendering.
+///
+/// In BibTeX field values wrapped in braces, these characters need escaping:
+/// & % # _ ~ ^
+fn escape_bibtex_value(val: &str) -> String {
+    val.replace('&', "\\&")
+        .replace('%', "\\%")
+        .replace('#', "\\#")
+        .replace('_', "\\_")
+        .replace('~', "\\~")
+        .replace('^', "\\^")
+}
 
 /// 将 JSON 格式的引用条目渲染为 BibTeX 字符串。
 ///
@@ -37,7 +57,7 @@ pub fn render_entry(entry: &serde_json::Value) -> Result<String> {
         } else {
             bibtex.push_str(",\n");
         }
-        bibtex.push_str(&format!("  {name} = {{{val}}}"));
+        bibtex.push_str(&format!("  {name} = {{{}}}", escape_bibtex_value(val)));
     }
     bibtex.push_str("\n}\n");
     Ok(bibtex)
@@ -45,24 +65,93 @@ pub fn render_entry(entry: &serde_json::Value) -> Result<String> {
 
 /// 将 BibTeX 字符串解析为 JSON 条目列表。
 ///
-/// 简化解析器：提取 @type{key, fields...} 结构。
+/// 使用大括号深度计数正确处理嵌套大括号（如 `title = {A {Deep} Learning}`）。
 pub fn parse_bibtex_to_json(text: &str) -> Vec<serde_json::Value> {
-    let re = regex::Regex::new(r"(?is)@(\w+)\s*[\({]\s*([^,\s]+)\s*,\s*(.+?)\s*[\)}]\s*$")
-        .expect("static regex");
-    let field_re = regex::Regex::new(r"(?m)^\s*(\w+)\s*=\s*\{([^}]*)\}").expect("static regex");
-
     let mut entries = Vec::new();
-    for cap in re.captures_iter(text) {
-        let entry_type = cap[1].to_lowercase();
-        let key = cap[2].to_string();
-        let body = &cap[3];
+    // Find @type{key, ...} entries using brace-depth counting
+    let mut pos = 0;
+    while let Some(at_pos) = text[pos..].find('@') {
+        let abs_at = pos + at_pos;
+        // Match @type{ or @type(
+        let after_at = &text[abs_at + 1..];
+        let type_end = after_at.find(|c: char| !c.is_alphanumeric() && c != '_').unwrap_or(after_at.len());
+        if type_end == 0 {
+            pos = abs_at + 1;
+            continue;
+        }
+        let entry_type = after_at[..type_end].to_lowercase();
+        let after_type = after_at[type_end..].trim_start();
+        if !after_type.starts_with('{') && !after_type.starts_with('(') {
+            pos = abs_at + 1;
+            continue;
+        }
+        let open_char = after_type.as_bytes()[0];
+        let close_char = if open_char == b'{' { b'}' } else { b')' };
+        let body_start = abs_at + 1 + type_end + (after_at.len() - after_type.len()) + 1;
+
+        // Find key (first comma)
+        let body_rest = &text[body_start..];
+        let comma_pos = body_rest.find(',').unwrap_or(body_rest.len());
+        let key = body_rest[..comma_pos].trim().to_string();
+
+        // Find matching closing brace using depth counting
+        let mut depth = 1;
+        let mut body_end = body_start + comma_pos;
+        for (i, ch) in text[body_start..].char_indices() {
+            if ch as u8 == open_char {
+                depth += 1;
+            } else if ch as u8 == close_char {
+                depth -= 1;
+                if depth == 0 {
+                    body_end = body_start + i;
+                    break;
+                }
+            }
+        }
+        if depth != 0 {
+            pos = body_start;
+            continue;
+        }
+        let body = &text[body_start + comma_pos + 1..body_end];
 
         let mut fields = serde_json::Map::new();
-        for fcap in field_re.captures_iter(body) {
-            fields.insert(
-                fcap[1].to_lowercase(),
-                serde_json::Value::String(fcap[2].trim().to_string()),
-            );
+        // Parse fields using brace-depth counting to handle nested braces
+        for fcap in BIBTEX_FIELD_NAME_RE.captures_iter(body) {
+            let field_name = fcap[1].trim().to_lowercase();
+            let value_start = fcap.get(0).unwrap().end();
+            // Find the matching closing brace by counting depth
+            if value_start >= body.len() || &body[value_start..value_start + 1] != "=" {
+                continue;
+            }
+            let eq_pos = value_start;
+            // Skip whitespace and opening brace
+            let after_eq = body[eq_pos + 1..].trim_start();
+            if !after_eq.starts_with('{') {
+                continue;
+            }
+            let brace_start = body.len() - after_eq.len();
+            let mut val_depth = 0;
+            let val_start = brace_start + 1;
+            let mut val_end = brace_start + 1;
+            for (i, ch) in body[brace_start..].char_indices() {
+                match ch {
+                    '{' => val_depth += 1,
+                    '}' => {
+                        val_depth -= 1;
+                        if val_depth == 0 {
+                            val_end = brace_start + i;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if val_depth == 0 && val_end > val_start {
+                fields.insert(
+                    field_name,
+                    serde_json::Value::String(body[val_start..val_end].trim().to_string()),
+                );
+            }
         }
 
         entries.push(serde_json::json!({
@@ -70,6 +159,7 @@ pub fn parse_bibtex_to_json(text: &str) -> Vec<serde_json::Value> {
             "key": key,
             "fields": fields,
         }));
+        pos = body_end + 1;
     }
     entries
 }

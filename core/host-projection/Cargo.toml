@@ -20,6 +20,7 @@ http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
+research-harness = { path = "../research-harness" }
 routing-engine = { path = "../routing-engine" }
 chrono.workspace = true
 clap.workspace = true

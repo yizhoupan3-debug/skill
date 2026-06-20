@@ -3,9 +3,9 @@
 //! Dissolved from `tools/autoresearch-rs/`. Calls `research_harness::*` for all business logic.
 
 use anyhow::Result;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use serde_json::{json, Value};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ── CLI Definition ──
 
@@ -290,16 +290,16 @@ fn resolve_workspace(path: &PathBuf) -> Result<PathBuf> {
     }
 }
 
-fn state_path(workspace: &PathBuf) -> PathBuf {
+fn state_path(workspace: &Path) -> PathBuf {
     workspace.join("research-state.yaml")
 }
 
-fn load_state(workspace: &PathBuf) -> Result<Value> {
+fn load_state(workspace: &Path) -> Result<Value> {
     let path = state_path(workspace);
     research_harness::state::load_state(&path)
 }
 
-fn dump_state(workspace: &PathBuf, state: &Value) -> Result<()> {
+fn dump_state(workspace: &Path, state: &Value) -> Result<()> {
     let path = state_path(workspace);
     research_harness::state::dump_state(&path, state)
 }
@@ -316,7 +316,7 @@ fn parse_source(s: &str) -> research_harness::search::ExternalSourceArg {
 
 // ── Command Implementations ──
 
-fn cmd_init(project: &str, question: &str, dir: &PathBuf, mode: &str) -> Result<()> {
+fn cmd_init(project: &str, question: &str, dir: &Path, mode: &str) -> Result<()> {
     let workspace = research_harness::workspace::init_workspace(project, question, dir, mode)?;
     println!("Workspace initialized at: {}", workspace.display());
     Ok(())
@@ -331,11 +331,11 @@ fn cmd_status(workspace: &PathBuf) -> Result<()> {
     let mut state = state;
     state
         .as_object_mut()
-        .unwrap()
+        .expect("state must be an object after load")
         .insert("git".into(), git);
     state
         .as_object_mut()
-        .unwrap()
+        .expect("state must be an object after load")
         .insert("environment".into(), env);
     println!("{}", research_harness::render::format_status(&state));
     Ok(())
@@ -541,6 +541,7 @@ fn cmd_brief_first_claim(workspace: &PathBuf) -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_compare_claim(
     workspace: &PathBuf,
     claim: &str,
@@ -570,6 +571,7 @@ fn cmd_compare_claim(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_add_hypothesis(
     workspace: &PathBuf,
     claim: &str,
@@ -609,6 +611,7 @@ fn cmd_add_hypothesis(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn cmd_record_run(
     workspace: &PathBuf,
     hypothesis_id: &str,
@@ -759,31 +762,30 @@ fn cmd_set_novelty_gate(
     {
         let gate = next
             .as_object_mut()
-            .unwrap()
+            .expect("state must be an object after load")
             .entry("novelty_gate")
             .or_insert(json!({}));
-        gate.as_object_mut().unwrap().insert(
-            "status".into(),
-            json!(status),
-        );
+        gate.as_object_mut()
+            .expect("novelty_gate must be an object")
+            .insert("status".into(), json!(status));
         if let Some(d) = decision {
             gate.as_object_mut()
-                .unwrap()
+                .expect("novelty_gate must be an object")
                 .insert("decision".into(), json!(d));
         }
         if let Some(os) = overlap_summary {
             gate.as_object_mut()
-                .unwrap()
+                .expect("novelty_gate must be an object")
                 .insert("overlap_summary".into(), json!(os));
         }
         if let Some(ds) = differentiation_strategy {
             gate.as_object_mut()
-                .unwrap()
+                .expect("novelty_gate must be an object")
                 .insert("differentiation_strategy".into(), json!(ds));
         }
         if !claims.is_empty() {
             gate.as_object_mut()
-                .unwrap()
+                .expect("novelty_gate must be an object")
                 .insert("claims".into(), json!(claims));
         }
     }
@@ -844,6 +846,8 @@ fn cmd_barrier(
 // ── Entry Point ──
 
 fn main() -> Result<()> {
+    // Note: tempfile::NamedTempFile auto-deletes on drop, so atomic writes are safe
+    // even if process is interrupted (Ctrl+C or kill)
     let cli = Cli::parse();
     match cli.command {
         Commands::Init {

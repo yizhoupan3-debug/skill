@@ -37,8 +37,12 @@ pub fn install_tokenizer_provider(provider: Box<dyn TokenizerProvider>) {
 /// Replace provider (tests / late binding).
 pub fn set_tokenizer_provider(provider: Box<dyn TokenizerProvider>) {
     if PROVIDER.get().is_some() {
-        if let Ok(mut guard) = provider_cell().write() {
-            *guard = provider;
+        match provider_cell().write() {
+            Ok(mut guard) => *guard = provider,
+            Err(poisoned) => {
+                tracing::warn!("[router-rs] tokenizer: recovering write-lock from poisoned state");
+                *poisoned.into_inner() = provider;
+            }
         }
     } else {
         let _ = PROVIDER.set(RwLock::new(provider));
@@ -46,17 +50,27 @@ pub fn set_tokenizer_provider(provider: Box<dyn TokenizerProvider>) {
 }
 
 pub fn tokenize_query(text: &str) -> Vec<String> {
-    provider_cell()
-        .read()
-        .expect("tokenizer provider lock poisoned")
-        .tokenize_query(text)
+    match provider_cell().read() {
+        Ok(guard) => guard.tokenize_query(text),
+        Err(poisoned) => {
+            // Recover from poisoned lock: extract the inner guard and continue.
+            // A previous write-lock holder panicked, but the provider is still usable.
+            tracing::warn!("[router-rs] tokenizer: recovering from poisoned RwLock");
+            poisoned.into_inner().tokenize_query(text)
+        }
+    }
 }
 
 pub fn has_parallel_review_candidate_context(query: &str, tokens: &[String]) -> bool {
-    provider_cell()
-        .read()
-        .expect("tokenizer provider lock poisoned")
-        .has_parallel_review_candidate_context(query, tokens)
+    match provider_cell().read() {
+        Ok(guard) => guard.has_parallel_review_candidate_context(query, tokens),
+        Err(poisoned) => {
+            tracing::warn!("[router-rs] tokenizer: recovering from poisoned RwLock");
+            poisoned
+                .into_inner()
+                .has_parallel_review_candidate_context(query, tokens)
+        }
+    }
 }
 
 #[cfg(test)]

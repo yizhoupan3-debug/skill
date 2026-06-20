@@ -69,8 +69,7 @@ pub const RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL: &str =
 pub const RESOLUTION_NOTE_ACTIVE_GOAL_NOT_DRIVING_FOCUS_DRIVES: &str =
     "continuity:active_goal_not_driving_focus_drives";
 
-pub const RESOLUTION_NOTE_POINTER_PROMOTED_FOCUS_TO_ACTIVE: &str =
-    "continuity:pointer_promoted_focus_to_active";
+// RESOLUTION_NOTE_POINTER_PROMOTED_FOCUS_TO_ACTIVE: removed — no callers, superseded by pointer auto-promotion logic.
 
 pub const RESOLUTION_NOTE_DUAL_GOAL_POINTER_CONFLICT: &str =
     "continuity:dual_goal_pointer_conflict";
@@ -86,10 +85,7 @@ pub const CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH: &str = concat!(
     "若仍未修复请核对 `artifacts/current/active_task.json`。",
 );
 
-pub const CONTINUITY_ACTIVE_NOT_DRIVING_FOCUS_DRIVES_HINT_ZH: &str = concat!(
-    "连续性提示: active 任务的 GOAL 未在续跑，但 `focus_task` 正在 drive；",
-    "hydration/checkpoint 已优先 focus。请核对 active/focus 指针是否应对齐。",
-);
+// CONTINUITY_ACTIVE_NOT_DRIVING_FOCUS_DRIVES_HINT_ZH: removed — no callers, hint text retained for reference only in comments.
 
 /// Pushes [`RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL`] when appropriate. Active may still
 /// have RFV or other task-scoped state with no readable GOAL; the note is about pointers vs
@@ -221,9 +217,7 @@ pub fn maybe_promote_focus_to_active_pointer(repo_root: &Path) -> bool {
     if crate::utils::atomic_write::write_atomic_json(&path, &body).is_err() {
         return false;
     }
-    eprintln!(
-        "router-rs: promoted focus_task `{focus_id}` to active_task (active `{active_id}` had no GOAL)"
-    );
+    tracing::warn!(focus_id = %focus_id, active_id = %active_id, "promoted focus_task to active_task (active had no GOAL)");
     true
 }
 
@@ -550,14 +544,12 @@ pub fn read_task_ledger_transactions(
     }
     // Repair any trailing corrupt lines before reading (e.g. truncated crash writes).
     if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path) {
-        eprintln!(
-            "[router-rs] truncate_corrupt_tail failed for TASK_LEDGER.jsonl task {task_id}: {e}"
-        );
+        tracing::warn!(task_id = %task_id, error = %e, "truncate_corrupt_tail failed for TASK_LEDGER.jsonl");
     }
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("[router-rs] failed to read TASK_LEDGER.jsonl for task {task_id}: {e}");
+            tracing::warn!(task_id = %task_id, error = %e, "failed to read TASK_LEDGER.jsonl");
             return Vec::new();
         }
     };
@@ -570,11 +562,11 @@ pub fn read_task_ledger_transactions(
         match serde_json::from_str::<crate::task_ledger::LedgerTransaction>(line_trim) {
             Ok(tx) => txs.push(tx),
             Err(e) => {
-                eprintln!(
-                    "[router-rs] WARNING: Forgiving JSON Reader skipped corrupt line {} in TASK_LEDGER.jsonl for task {}: {}",
-                    i + 1,
-                    task_id,
-                    e
+                tracing::warn!(
+                    line = i + 1,
+                    task_id = %task_id,
+                    error = %e,
+                    "skipping corrupt line in TASK_LEDGER.jsonl"
                 );
             }
         }
@@ -898,13 +890,7 @@ mod tests {
 
     static DEPTH_SCORE_MODE_ENV_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
-    fn unique_repo(label: &str) -> std::path::PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0);
-        std::env::temp_dir().join(format!("router-rs-task-state-{label}-{nonce}"))
-    }
+    use crate::utils::test_helpers::unique_repo;
 
     fn write_active(tmp: &Path, id: &str) {
         let p = tmp.join("artifacts/current/active_task.json");

@@ -662,6 +662,21 @@ pub fn validate_source_rel(source_rel: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Check if a binary is the redirect shim (prints "binary moved to router-rs-cli" and exits).
+fn is_redirect_shim_binary(path: &Path) -> bool {
+    let Ok(out) = std::process::Command::new(path)
+        .arg("--help")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .output()
+    else {
+        return false;
+    };
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    stderr.contains("binary moved to router-rs-cli")
+}
+
 pub fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf, String> {
     if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
         let path = PathBuf::from(raw);
@@ -670,19 +685,27 @@ pub fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf, String>
         }
     }
     let installed = framework_kernel::router_self::default_router_rs_install_path();
-    if installed.is_file() {
+    if installed.is_file() && !is_redirect_shim_binary(&installed) {
         return Ok(installed);
     }
-    if let Ok(exe) = which::which("router-rs") {
-        let path_text = exe.to_string_lossy();
-        if !is_ephemeral_executable_path(&path_text) {
-            return Ok(exe);
+    // Prefer router-rs-cli over router-rs (which is now a redirect shim)
+    for name in ["router-rs-cli", "router-rs"] {
+        if let Ok(exe) = which::which(name) {
+            let path_text = exe.to_string_lossy();
+            if !is_ephemeral_executable_path(&path_text) && !is_redirect_shim_binary(&exe) {
+                return Ok(exe);
+            }
         }
     }
     if let Ok(td) = std::env::var("CARGO_TARGET_DIR") {
         let base = PathBuf::from(td);
-        for candidate in [base.join("release/router-rs"), base.join("debug/router-rs")] {
-            if candidate.is_file() {
+        for candidate in [
+            base.join("release/router-rs-cli"),
+            base.join("debug/router-rs-cli"),
+            base.join("release/router-rs"),
+            base.join("debug/router-rs"),
+        ] {
+            if candidate.is_file() && !is_redirect_shim_binary(&candidate) {
                 return Ok(candidate);
             }
         }
@@ -697,12 +720,16 @@ pub fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf, String>
     }
     let repo_root = normalize_path(repo_root)?;
     for candidate in [
+        repo_root.join("target/release/router-rs-cli"),
+        repo_root.join("target/debug/router-rs-cli"),
+        repo_root.join("core/router-rs/target/release/router-rs-cli"),
+        repo_root.join("core/router-rs/target/debug/router-rs-cli"),
         repo_root.join("target/release/router-rs"),
         repo_root.join("target/debug/router-rs"),
         repo_root.join("core/router-rs/target/release/router-rs"),
         repo_root.join("core/router-rs/target/debug/router-rs"),
     ] {
-        if candidate.is_file() {
+        if candidate.is_file() && !is_redirect_shim_binary(&candidate) {
             return Ok(candidate);
         }
     }

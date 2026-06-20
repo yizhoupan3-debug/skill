@@ -196,8 +196,8 @@ pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, St
                 .read(true)
                 .custom_flags(libc::O_RDONLY)
                 .open(parent_dir)
-            {
-                let _ = dir.sync_all();
+            && let Err(e) = dir.sync_all() {
+                tracing::warn!(error = %e, "failed to sync parent directory after truncation");
             }
     }
 

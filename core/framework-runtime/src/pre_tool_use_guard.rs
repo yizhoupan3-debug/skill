@@ -475,19 +475,23 @@ fn extract_file_path(tool_input: &Value) -> Option<String> {
 #[cfg(test)]
 #[ctor::ctor]
 fn register_test_hooks() {
-    use crate::hooks::RuntimeCoreHooks;
+    use crate::hooks::{RuntimeCoreHooks, TelemetryHooks, HostProviderHooks};
     crate::hooks::register(RuntimeCoreHooks {
-        emit_hook_fired: |_, _| {},
-        emit_tool_call: |_, _, _| {},
-        emit_route_decision: |_, _, _| {},
+        telemetry: TelemetryHooks {
+            hook_fired: |_, _| {},
+            tool_call: |_, _, _| {},
+            route_decision: |_, _, _| {},
+            prediction_outcome: |_, _, _, _| {},
+            rfv_round: |_, _| {},
+        },
+        host_provider: HostProviderHooks {
+            for_routing_spelling: |_| None,
+            default_id: || "test",
+            strict_pre_tool_fallback_hint: |_| None,
+            registry: || vec![],
+        },
         framework_goal_drive: |_| Ok(serde_json::Value::Null),
         framework_rfv_loop: |_| Ok(serde_json::Value::Null),
-        emit_prediction_outcome: |_, _, _, _| {},
-        emit_rfv_round: |_, _| {},
-        host_provider_for_routing_spelling: |_| None,
-        default_host_id: || "test",
-        host_provider_strict_pre_tool_fallback_hint: |_| None,
-        host_provider_registry: || vec![],
         handle_session_supervisor_operation: |_| Ok(serde_json::Value::Null),
         handle_background_state_operation: |_| Ok(serde_json::Value::Null),
         runtime_concurrency_defaults_payload: || serde_json::Value::Null,

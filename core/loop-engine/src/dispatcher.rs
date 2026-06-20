@@ -63,6 +63,12 @@ pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String
 
 /// Resolve the subagent binary path from `ROUTER_RS_SUBAGENT_BIN` env var or `which opencode`.
 /// Returns an error if neither source yields a valid binary path.
+///
+/// # Platform dependency
+/// The fallback uses the `which` command, which is available on Unix/macOS by default
+/// and on Windows when Git for Windows or similar tooling is installed (as `where.exe`).
+/// On bare Windows without these tools, this fallback will fail. Always set
+/// `ROUTER_RS_SUBAGENT_BIN` on Windows for reliable binary resolution.
 pub fn resolve_subagent_binary() -> Result<String, LoopError> {
     if let Ok(bin) = std::env::var("ROUTER_RS_SUBAGENT_BIN")
         && !bin.is_empty() {

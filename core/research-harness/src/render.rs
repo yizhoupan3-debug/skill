@@ -336,11 +336,11 @@ pub fn render_novelty_gate_summary(state: &Value) -> String {
         for record in records {
             lines.push(format!(
                 "| {} | {} | {} | {} | {} | {} | {} |",
-                escape_table_cell(&str_field_default(record, "claim", "_missing_")),
-                escape_table_cell(&str_field_default(record, "axis", "-")),
-                escape_table_cell(&str_field_default(record, "closest_prior_work", "-")),
-                format_overlap_risk(&str_field_default(record, "overlap", "-")),
-                escape_table_cell(&str_field_default(record, "difference", "-")),
+                escape_table_cell(str_field_default(record, "claim", "_missing_")),
+                escape_table_cell(str_field_default(record, "axis", "-")),
+                escape_table_cell(str_field_default(record, "closest_prior_work", "-")),
+                format_overlap_risk(str_field_default(record, "overlap", "-")),
+                escape_table_cell(str_field_default(record, "difference", "-")),
                 str_field_default(record, "confidence", "-"),
                 str_field_default(record, "verdict", "-")
             ));
@@ -374,14 +374,14 @@ pub fn render_reuse_index_summary(state: &Value) -> String {
         for record in runs.iter().take(20) {
             lines.push(format!(
                 "| {} | {} | {} | {} | {} | {} |",
-                escape_table_cell(&str_field_default(record, "run_id", "-")),
-                escape_table_cell(&str_field_default(record, "finding", "-")),
-                escape_table_cell(&str_field_default(record, "decision_delta", "-")),
+                escape_table_cell(str_field_default(record, "run_id", "-")),
+                escape_table_cell(str_field_default(record, "finding", "-")),
+                escape_table_cell(str_field_default(record, "decision_delta", "-")),
                 escape_table_cell(&value_as_string_list(record, "applies_to").join("; ")),
                 escape_table_cell(
                     &value_as_string_list(record, "does_not_apply_to").join("; ")
                 ),
-                escape_table_cell(&str_field_default(record, "reuse_note", "-")),
+                escape_table_cell(str_field_default(record, "reuse_note", "-")),
             ));
         }
     }
@@ -780,11 +780,11 @@ pub fn format_hypothesis_card(hypothesis: &Value) -> String {
         "",
         "## Claim",
         "",
-        &str_field_default(hypothesis, "claim", "_TBD_"),
+        str_field_default(hypothesis, "claim", "_TBD_"),
         "",
         "## Mechanism",
         "",
-        &str_field_default(
+        str_field_default(
             hypothesis,
             "mechanism",
             "_Why should this work, beyond changing a parameter?_",
@@ -792,7 +792,7 @@ pub fn format_hypothesis_card(hypothesis: &Value) -> String {
         "",
         "## Prediction",
         "",
-        &str_field_default(
+        str_field_default(
             hypothesis,
             "prediction",
             "_Add the expected observable change._",
@@ -800,7 +800,7 @@ pub fn format_hypothesis_card(hypothesis: &Value) -> String {
         "",
         "## Falsifiable Prediction",
         "",
-        &str_field_default(
+        str_field_default(
             hypothesis,
             "falsifiable_prediction",
             "_What observation would make this hypothesis weaker?_",
@@ -836,7 +836,7 @@ pub fn format_hypothesis_card(hypothesis: &Value) -> String {
         "",
         "## Success Threshold",
         "",
-        &str_field_default(
+        str_field_default(
             hypothesis,
             "success_threshold",
             "_What metric or observation counts as a win?_",
@@ -844,7 +844,7 @@ pub fn format_hypothesis_card(hypothesis: &Value) -> String {
         "",
         "## Minimal Decisive Test",
         "",
-        &str_field_default(
+        str_field_default(
             hypothesis,
             "minimal_test",
             "_Smallest test that can change the decision._",
@@ -852,7 +852,7 @@ pub fn format_hypothesis_card(hypothesis: &Value) -> String {
         "",
         "## Stop Condition",
         "",
-        &str_field_default(
+        str_field_default(
             hypothesis,
             "stop_condition",
             "_When do we stop spending more budget on this branch?_",
@@ -870,7 +870,7 @@ pub fn format_protocol(hypothesis: &Value) -> String {
         "",
         "## Hypothesis",
         "",
-        &str_field_default(hypothesis, "claim", "_Which hypothesis is being tested?_"),
+        str_field_default(hypothesis, "claim", "_Which hypothesis is being tested?_"),
         "",
         "## What Change",
         "",
@@ -878,7 +878,7 @@ pub fn format_protocol(hypothesis: &Value) -> String {
         "",
         "## Proposed Mechanism",
         "",
-        &str_field_default(
+        str_field_default(
             hypothesis,
             "mechanism",
             "_Why should the change cause the predicted result?_",
@@ -886,7 +886,7 @@ pub fn format_protocol(hypothesis: &Value) -> String {
         "",
         "## Prediction",
         "",
-        &str_field_default(hypothesis, "prediction", "_What outcome do you expect?_"),
+        str_field_default(hypothesis, "prediction", "_What outcome do you expect?_"),
         "",
         "## Baselines / Controls",
         "",
@@ -904,7 +904,7 @@ pub fn format_protocol(hypothesis: &Value) -> String {
         "",
         "## Success Threshold",
         "",
-        &str_field_default(
+        str_field_default(
             hypothesis,
             "success_threshold",
             "_What result counts as success?_",
@@ -925,7 +925,7 @@ pub fn format_protocol(hypothesis: &Value) -> String {
         "",
         "## Minimal Decisive Test",
         "",
-        &str_field_default(
+        str_field_default(
             hypothesis,
             "minimal_test",
             "_Smallest run that can update the decision._",
@@ -1006,11 +1006,11 @@ pub fn format_run_record(record: &Value) -> String {
         "",
         "## Summary",
         "",
-        &str_field_default(record, "summary", "_No summary recorded._"),
+        str_field_default(record, "summary", "_No summary recorded._"),
         "",
         "## Reusable Finding",
         "",
-        &str_field_default(
+        str_field_default(
             record,
             "finding",
             "_One reusable sentence: under what condition, what changed, and why it matters._",
@@ -1018,7 +1018,7 @@ pub fn format_run_record(record: &Value) -> String {
         "",
         "## Decision Delta",
         "",
-        &str_field_default(
+        str_field_default(
             record,
             "decision_delta",
             "_What future decision should change because of this run?_",
@@ -1067,7 +1067,7 @@ pub fn format_run_record(record: &Value) -> String {
         "",
         "## Interpretation",
         "",
-        &str_field_default(
+        str_field_default(
             record,
             "interpretation",
             "_Mechanistic interpretation, not just metric narration._",
@@ -1092,11 +1092,11 @@ pub fn format_reflection_note(decision: &Value) -> String {
         "",
         "## What Happened",
         "",
-        &str_field_default(decision, "reason", "_Summarize the observed pattern._"),
+        str_field_default(decision, "reason", "_Summarize the observed pattern._"),
         "",
         "## Why It Probably Happened",
         "",
-        &str_field_default(
+        str_field_default(
             decision,
             "reason",
             "_Mechanistic explanation or best current guess._",
@@ -1111,7 +1111,7 @@ pub fn format_reflection_note(decision: &Value) -> String {
         "",
         "## Next Step",
         "",
-        &str_field_default(decision, "next_step", "_One concrete next move only._"),
+        str_field_default(decision, "next_step", "_One concrete next move only._"),
         "",
     ]
     .join("\n")

@@ -8,6 +8,32 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+// ── Function pointer type aliases (reduce type_complexity warnings) ──
+
+/// Route task with manifest fallback: (records, runtime_path, manifest_path, host_id, query, session_id, allow_overlay, first_turn) -> Result<RouteDecision, String>
+type RouteTaskFn = fn(
+    &[routing_engine::route::SkillRecord],
+    Option<&Path>,
+    Option<&Path>,
+    Option<&str>,
+    &str,
+    &str,
+    bool,
+    bool,
+) -> Result<RouteDecision, String>;
+
+/// Build framework runtime snapshot envelope: (repo_root, runtime_path, host_id) -> Result<Value, String>
+type BuildSnapshotFn = fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>;
+
+/// Build snapshot with level: (repo_root, runtime_path, host_id, level) -> Result<Value, String>
+type BuildSnapshotWithLevelFn = fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>;
+
+/// Build automatic continuity checkpoint payload: (repo_root, task_id, session_id, current_query, allow_overlay, first_turn) -> Value
+type BuildCheckpointFn = fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value;
+
+/// Append evidence index row: (repo_root, task_id, metadata) -> Result<(), String>
+type AppendEvidenceFn = fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<(), String>;
+
 /// Register a `OnceLock` cell with consistent diagnostics on double-registration.
 /// In `#[cfg(test)]` mode, includes a backtrace to help debug conflicting registrations.
 pub(crate) fn once_lock_set<T>(lock: &OnceLock<T>, value: T, name: &str) {
@@ -28,7 +54,15 @@ pub(crate) fn once_lock_set<T>(lock: &OnceLock<T>, value: T, name: &str) {
 // Mirror types (avoid dependency on runtime-core definitions)
 // ────────────────────────────────────────────────────────────────
 
-/// Mirror of `runtime_core::router_rs_observation::HookObservationHost`.
+/// Mirror of `runtime_core_contracts::router_rs_observation::HookObservationHost`.
+///
+/// SYNC REQUIREMENT: When adding a new host, update BOTH:
+/// 1. This enum (add variant + `from_host_id` + `as_str` arms)
+/// 2. `PaperProseHookHost` enum below (same file)
+///
+/// The runtime-core-contracts newtype version resolves via the host provider registry
+/// (`host_telemetry_for_id()`) and does NOT need an enum change — only this mirror does.
+/// Long-term: replace this enum with `&'static str` to eliminate the dual-source risk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HookObservationHost {
     Cursor,
@@ -60,6 +94,9 @@ impl HookObservationHost {
 }
 
 /// Mirror of `runtime_core::paper_prose_hook::PaperProseHookHost`.
+///
+/// SYNC REQUIREMENT: must have the same variants as `HookObservationHost` above.
+/// See `HookObservationHost` doc comment for the full sync protocol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PaperProseHookHost {
     Cursor,
@@ -90,8 +127,18 @@ impl PaperProseHookHost {
         }
     }
 
-    pub fn from_codex_lifecycle_state_dir(_state_dir_leaf: &str) -> Self {
+    pub fn from_host_lifecycle_state_dir(_state_dir_leaf: &str) -> Self {
         Self::Codex
+    }
+
+    pub fn from_host_id(host_id: &str) -> Option<Self> {
+        match host_id {
+            "cursor" => Some(Self::Cursor),
+            "codex" => Some(Self::Codex),
+            "claude" => Some(Self::Claude),
+            "opencode" => Some(Self::OpenCode),
+            _ => None,
+        }
     }
 }
 
@@ -146,16 +193,16 @@ pub fn router_rs_operator_inject_globally_enabled() -> bool {
     router_rs_env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
 }
 
-pub fn router_rs_cursor_hook_legacy_subtracted_events_enabled() -> bool {
+pub fn router_rs_hook_legacy_subtracted_events_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS")
 }
 
-pub fn router_rs_cursor_hook_silent_enabled() -> bool {
+pub fn router_rs_hook_silent_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_HOOK_SILENT")
         || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_SILENT")
 }
 
-pub fn router_rs_cursor_hook_outbound_context_max_bytes() -> usize {
+pub fn router_rs_hook_outbound_context_max_bytes() -> usize {
     let key_canonical = "ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS";
     let key_legacy = "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS";
     parse_env_usize(key_canonical)
@@ -163,7 +210,7 @@ pub fn router_rs_cursor_hook_outbound_context_max_bytes() -> usize {
         .unwrap_or(8192)
 }
 
-pub fn router_rs_cursor_review_fork_context_missing_infer_false_enabled() -> bool {
+pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
 }
 
@@ -171,23 +218,23 @@ pub fn router_rs_pre_goal_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_PRE_GOAL_ENABLED")
 }
 
-pub fn router_rs_cursor_hook_state_lock_retries() -> u32 {
+pub fn router_rs_hook_state_lock_retries() -> u32 {
     parse_env_u32("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES").unwrap_or(8)
 }
 
-pub fn router_rs_cursor_hook_state_file_sync_enabled() -> bool {
+pub fn router_rs_hook_state_file_sync_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC")
 }
 
-pub fn router_rs_cursor_hook_state_dir_sync_enabled() -> bool {
+pub fn router_rs_hook_state_dir_sync_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC")
 }
 
-pub fn router_rs_cursor_review_pending_cycle_max() -> usize {
+pub fn router_rs_review_pending_cycle_max() -> usize {
     parse_env_usize("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX").unwrap_or(3)
 }
 
-pub fn router_rs_cursor_review_gate_stop_max_nudges_cap() -> Option<u32> {
+pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
     #[cfg(test)]
     {
         let raw = std::env::var("ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES")
@@ -199,23 +246,23 @@ pub fn router_rs_cursor_review_gate_stop_max_nudges_cap() -> Option<u32> {
         .or_else(|| parse_env_u32("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES"))
 }
 
-pub fn router_rs_cursor_pre_goal_strict_disk_enabled() -> bool {
+pub fn router_rs_pre_goal_strict_disk_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK")
 }
 
-pub fn router_rs_cursor_hook_state_fail_open_enabled() -> bool {
+pub fn router_rs_hook_state_fail_open_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN")
 }
 
-pub fn router_rs_cursor_cargo_check_sync_enabled() -> bool {
+pub fn router_rs_cargo_check_sync_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC")
 }
 
-pub fn router_rs_cursor_hook_state_legacy_full_sweep_enabled() -> bool {
+pub fn router_rs_hook_state_legacy_full_sweep_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP")
 }
 
-pub fn router_rs_cursor_hook_state_stale_sweep_days() -> u64 {
+pub fn router_rs_hook_state_stale_sweep_days() -> u64 {
     parse_env_u64("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS").unwrap_or(7)
 }
 
@@ -238,7 +285,7 @@ pub fn sweep_stale_hook_state_files(hook_state_dir: &Path) -> usize {
         }
     }
 
-    let days = router_rs_cursor_hook_state_stale_sweep_days();
+    let days = router_rs_hook_state_stale_sweep_days();
     let cutoff = std::time::Duration::from_secs(days * 86400);
     let now = std::time::SystemTime::now();
     let mut cleaned = 0;
@@ -272,7 +319,7 @@ pub fn sweep_stale_hook_state_files(hook_state_dir: &Path) -> usize {
     cleaned
 }
 
-pub fn router_rs_cursor_sessionstart_context_max_bytes() -> usize {
+pub fn router_rs_sessionstart_context_max_bytes() -> usize {
     parse_env_usize("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_BYTES").unwrap_or(64 * 1024)
 }
 
@@ -585,7 +632,18 @@ pub fn strip_router_rs_observation(output: &mut Value) {
 }
 
 // ────────────────────────────────────────────────────────────────
-// hook_outbound_protect: default policy (register removed — was never called in production)
+// hook_outbound_protect: default policy
+//
+// DESIGN INTENT: host-projection's outbound protection is intentionally a no-op in production.
+//
+// The authoritative implementation lives in runtime-core-contracts (hook_outbound_protect.rs),
+// which runtime-core re-exports and registers via register_hook_outbound_protect().
+// host-projection provides a cfg(test)-only registration slot for unit tests that need
+// to verify protection behavior without pulling in the full runtime-core stack.
+//
+// All 4 hosts deploy through runtime-core at runtime, so protection is always active.
+// If host-projection is ever used standalone, protection would be absent — this is acceptable
+// because the standalone deployment model does not exist today.
 // ────────────────────────────────────────────────────────────────
 
 #[cfg(not(test))]
@@ -724,19 +782,22 @@ pub fn goal_stop_followup_line(
 // paper hooks: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-#[allow(clippy::type_complexity)]
-static APPEND_PROSE: OnceLock<fn(&Path, &str, &mut Vec<String>, PaperProseHookHost)> =
-    OnceLock::new();
-static MERGE_PROSE: OnceLock<fn(&Path, &mut Value, &str, bool)> = OnceLock::new();
-static APPEND_ADVERSARIAL: OnceLock<fn(&Path, &str, &mut Vec<String>, PaperProseHookHost)> =
-    OnceLock::new();
-static MERGE_ADVERSARIAL: OnceLock<fn(&Path, &mut Value, &str, bool)> = OnceLock::new();
+/// Append paper prose/adversarial context: (repo_root, prompt_text, contexts, host)
+type AppendPaperContextFn = fn(&Path, &str, &mut Vec<String>, PaperProseHookHost);
+
+/// Merge paper prose/adversarial before submit: (repo_root, output, prompt_text, use_followup_message)
+type MergePaperContextFn = fn(&Path, &mut Value, &str, bool);
+
+static APPEND_PROSE: OnceLock<AppendPaperContextFn> = OnceLock::new();
+static MERGE_PROSE: OnceLock<MergePaperContextFn> = OnceLock::new();
+static APPEND_ADVERSARIAL: OnceLock<AppendPaperContextFn> = OnceLock::new();
+static MERGE_ADVERSARIAL: OnceLock<MergePaperContextFn> = OnceLock::new();
 
 pub fn register_paper_hooks(
-    append_prose: fn(&Path, &str, &mut Vec<String>, PaperProseHookHost),
-    merge_prose: fn(&Path, &mut Value, &str, bool),
-    append_adversarial: fn(&Path, &str, &mut Vec<String>, PaperProseHookHost),
-    merge_adversarial: fn(&Path, &mut Value, &str, bool),
+    append_prose: AppendPaperContextFn,
+    merge_prose: MergePaperContextFn,
+    append_adversarial: AppendPaperContextFn,
+    merge_adversarial: MergePaperContextFn,
 ) {
     once_lock_set(&APPEND_PROSE, append_prose, "APPEND_PROSE");
     once_lock_set(&MERGE_PROSE, merge_prose, "MERGE_PROSE");
@@ -1298,48 +1359,39 @@ pub fn install_test_deps() {
 
 // ── framework_runtime_extra ──
 
-static RESOLVE_REPO_ROOT_ARG: OnceLock<fn(Option<&Path>) -> Result<PathBuf, String>> =
-    OnceLock::new();
+/// Resolve repo root argument: (repo_root) -> Result<PathBuf, String>
+type ResolveRepoRootFn = fn(Option<&Path>) -> Result<PathBuf, String>;
+
+/// Check anomalies: (repo_root) -> Result<anomaly_list, String>
+type CheckAnomaliesFn = fn(&Path) -> Result<Vec<String>, String>;
+
+static RESOLVE_REPO_ROOT_ARG: OnceLock<ResolveRepoRootFn> = OnceLock::new();
 static CURRENT_LOCAL_TIMESTAMP: OnceLock<fn() -> String> = OnceLock::new();
 static WRITE_FRAMEWORK_SESSION_ARTIFACTS: OnceLock<fn(Value) -> Result<Value, String>> =
     OnceLock::new();
-static ROUTE_TASK_WITH_MANIFEST_FALLBACK: OnceLock<
-    fn(
-        &[routing_engine::route::SkillRecord],
-        Option<&Path>,
-        Option<&Path>,
-        Option<&str>,
-        &str,
-        &str,
-        bool,
-        bool,
-    ) -> Result<RouteDecision, String>,
-> = OnceLock::new();
-static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<
-    fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>,
-> = OnceLock::new();
-static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL: OnceLock<
-    fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>,
-> = OnceLock::new();
-static BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD: OnceLock<
-    fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value,
-> = OnceLock::new();
-static APPEND_EVIDENCE_INDEX: OnceLock<
-    fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<(), String>,
-> = OnceLock::new();
+static ROUTE_TASK_WITH_MANIFEST_FALLBACK: OnceLock<RouteTaskFn> = OnceLock::new();
+static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<BuildSnapshotFn> = OnceLock::new();
+static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL: OnceLock<BuildSnapshotWithLevelFn> = OnceLock::new();
+static BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD: OnceLock<BuildCheckpointFn> = OnceLock::new();
+static APPEND_EVIDENCE_INDEX: OnceLock<AppendEvidenceFn> = OnceLock::new();
 static HOOK_ACTION_FROM_OUTPUT: OnceLock<fn(&Value) -> &'static str> = OnceLock::new();
 static CLOSEOUT_RECORD_SCHEMA_VERSION_FN: OnceLock<fn() -> &'static str> = OnceLock::new();
-static CHECK_ANOMALIES: OnceLock<fn(&Path) -> Result<Vec<String>, String>> = OnceLock::new();
+static CHECK_ANOMALIES: OnceLock<CheckAnomaliesFn> = OnceLock::new();
 
 // ── web_fetch_guard ──
 
-static VALIDATE_AND_RESOLVE_WEB_FETCH_URL: OnceLock<
-    fn(&str) -> Result<(String, Vec<String>), String>,
-> = OnceLock::new();
-static RESOLVE_WEB_FETCH_REDIRECT: OnceLock<fn(&str, &str) -> Result<String, String>> =
-    OnceLock::new();
-static RESOLVE_WEB_FETCH_ADDRESSES: OnceLock<fn(&str, u16) -> Result<Vec<String>, String>> =
-    OnceLock::new();
+/// Validate and resolve web fetch URL: (url) -> Result<(resolved_url, addresses), String>
+type ValidateWebFetchUrlFn = fn(&str) -> Result<(String, Vec<String>), String>;
+
+/// Resolve web fetch redirect: (base_url, location) -> Result<resolved_url, String>
+type ResolveWebFetchRedirectFn = fn(&str, &str) -> Result<String, String>;
+
+/// Resolve web fetch addresses: (host, port) -> Result<addresses, String>
+type ResolveWebFetchAddressesFn = fn(&str, u16) -> Result<Vec<String>, String>;
+
+static VALIDATE_AND_RESOLVE_WEB_FETCH_URL: OnceLock<ValidateWebFetchUrlFn> = OnceLock::new();
+static RESOLVE_WEB_FETCH_REDIRECT: OnceLock<ResolveWebFetchRedirectFn> = OnceLock::new();
+static RESOLVE_WEB_FETCH_ADDRESSES: OnceLock<ResolveWebFetchAddressesFn> = OnceLock::new();
 
 // ── mcp_pre_guard ──
 
@@ -1350,40 +1402,16 @@ static EVALUATE_MCP_PRE_GUARD_SAFE: OnceLock<fn(&str, &Value, &Path) -> McpPreGu
 // Each is a distinct OnceLock slot; struct would not reduce surface.
 #[allow(clippy::too_many_arguments)]
 pub fn register_framework_runtime_extra(
-    resolve_repo_root_arg: fn(Option<&Path>) -> Result<PathBuf, String>,
+    resolve_repo_root_arg: ResolveRepoRootFn,
     current_local_timestamp: fn() -> String,
     write_framework_session_artifacts: fn(Value) -> Result<Value, String>,
-    route_task_with_manifest_fallback: fn(
-        &[routing_engine::route::SkillRecord],
-        Option<&Path>,
-        Option<&Path>,
-        Option<&str>,
-        &str,
-        &str,
-        bool,
-        bool,
-    ) -> Result<RouteDecision, String>,
-    build_framework_runtime_snapshot_envelope: fn(
-        &Path,
-        Option<&Path>,
-        Option<&str>,
-    ) -> Result<Value, String>,
-    build_automatic_continuity_checkpoint_payload: fn(
-        &Path,
-        &str,
-        &str,
-        Option<&str>,
-        bool,
-        bool,
-    ) -> Value,
-    append_evidence_index: fn(
-        &Path,
-        Option<&str>,
-        serde_json::Map<String, Value>,
-    ) -> Result<(), String>,
+    route_task_with_manifest_fallback: RouteTaskFn,
+    build_framework_runtime_snapshot_envelope: BuildSnapshotFn,
+    build_automatic_continuity_checkpoint_payload: BuildCheckpointFn,
+    append_evidence_index: AppendEvidenceFn,
     hook_action_from_output: fn(&Value) -> &'static str,
     closeout_record_schema_version: fn() -> &'static str,
-    check_anomalies: fn(&Path) -> Result<Vec<String>, String>,
+    check_anomalies: CheckAnomaliesFn,
 ) {
     once_lock_set(&RESOLVE_REPO_ROOT_ARG, resolve_repo_root_arg, "RESOLVE_REPO_ROOT_ARG");
     once_lock_set(&CURRENT_LOCAL_TIMESTAMP, current_local_timestamp, "CURRENT_LOCAL_TIMESTAMP");
@@ -1398,9 +1426,9 @@ pub fn register_framework_runtime_extra(
 }
 
 pub fn register_web_fetch_guard_extra(
-    validate_url: fn(&str) -> Result<(String, Vec<String>), String>,
-    resolve_redirect: fn(&str, &str) -> Result<String, String>,
-    resolve_addresses: fn(&str, u16) -> Result<Vec<String>, String>,
+    validate_url: ValidateWebFetchUrlFn,
+    resolve_redirect: ResolveWebFetchRedirectFn,
+    resolve_addresses: ResolveWebFetchAddressesFn,
 ) {
     once_lock_set(&VALIDATE_AND_RESOLVE_WEB_FETCH_URL, validate_url, "VALIDATE_AND_RESOLVE_WEB_FETCH_URL");
     once_lock_set(&RESOLVE_WEB_FETCH_REDIRECT, resolve_redirect, "RESOLVE_WEB_FETCH_REDIRECT");
@@ -1497,7 +1525,7 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
 }
 
 pub fn register_build_framework_runtime_snapshot_envelope_with_level(
-    func: fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>,
+    func: BuildSnapshotWithLevelFn,
 ) {
     once_lock_set(&BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL, func, "BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL");
 }
@@ -1619,32 +1647,32 @@ mod tests {
     #[test]
     fn env_enabled_default_false_returns_false_when_unset() {
         unsafe { std::env::remove_var("ROUTER_RS_HOOK_SILENT") };
-        assert!(!router_rs_cursor_hook_silent_enabled());
+        assert!(!router_rs_hook_silent_enabled());
     }
 
     #[test]
     fn outbound_context_max_bytes_default() {
         unsafe { std::env::remove_var("ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS") };
         unsafe { std::env::remove_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS") };
-        assert_eq!(router_rs_cursor_hook_outbound_context_max_bytes(), 8192);
+        assert_eq!(router_rs_hook_outbound_context_max_bytes(), 8192);
     }
 
     #[test]
     fn hook_state_lock_retries_default() {
         unsafe { std::env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES") };
-        assert_eq!(router_rs_cursor_hook_state_lock_retries(), 8);
+        assert_eq!(router_rs_hook_state_lock_retries(), 8);
     }
 
     #[test]
     fn review_pending_cycle_max_default() {
         unsafe { std::env::remove_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX") };
-        assert_eq!(router_rs_cursor_review_pending_cycle_max(), 3);
+        assert_eq!(router_rs_review_pending_cycle_max(), 3);
     }
 
     #[test]
     fn stale_sweep_days_default() {
         unsafe { std::env::remove_var("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS") };
-        assert_eq!(router_rs_cursor_hook_state_stale_sweep_days(), 7);
+        assert_eq!(router_rs_hook_state_stale_sweep_days(), 7);
     }
 
     #[test]
@@ -1767,5 +1795,26 @@ mod tests {
     fn constants_values() {
         assert_eq!(MAX_CONCURRENT_SUBAGENTS_LIMIT, 24);
         assert!(RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH.ends_with(".json"));
+    }
+
+    #[test]
+    fn mirror_host_enums_cover_canonical_hosts() {
+        // Ensure HookObservationHost covers all formal hosts from RUNTIME_REGISTRY
+        let canonical = framework_kernel::runtime_registry::HOST_HOME_DIRS;
+        for host_dir in canonical {
+            let host_id = host_dir.strip_prefix('.').unwrap_or(host_dir);
+            assert!(
+                HookObservationHost::from_host_id(host_id).is_some(),
+                "HookObservationHost missing variant for canonical host: {host_id}"
+            );
+        }
+        // Ensure PaperProseHookHost covers the same set
+        for host_dir in canonical {
+            let host_id = host_dir.strip_prefix('.').unwrap_or(host_dir);
+            assert!(
+                PaperProseHookHost::from_host_id(host_id).is_some(),
+                "PaperProseHookHost missing variant for canonical host: {host_id}"
+            );
+        }
     }
 }

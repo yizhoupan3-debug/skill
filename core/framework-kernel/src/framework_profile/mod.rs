@@ -222,37 +222,36 @@ fn compile_session_mode(session_policy: &Map<String, Value>) -> Value {
         }
     }
 
-    if let Value::Object(mut result) = serde_json::json!({
+    let Value::Object(mut result) = serde_json::json!({
         "mode": session_policy.get("mode"),
         "approval_mode": session_policy.get("approval_mode"),
         "history_policy": session_policy.get("history_policy"),
         "takeover": session_policy.get("takeover"),
         "extras": extras,
-    }) {
-        // json! serializes `None` (from .get() for a missing key) as `Value::Null`.
-        // Replace Null entries with the defaults that the old code applied.
-        if matches!(result.get("mode"), Some(Value::Null)) {
-            result.insert("mode".to_string(), Value::String("default".to_string()));
-        }
-        if matches!(result.get("approval_mode"), Some(Value::Null)) {
-            result.insert(
-                "approval_mode".to_string(),
-                Value::String("inherit".to_string()),
-            );
-        }
-        if matches!(result.get("history_policy"), Some(Value::Null)) {
-            result.insert(
-                "history_policy".to_string(),
-                Value::String("host-managed".to_string()),
-            );
-        }
-        if matches!(result.get("takeover"), Some(Value::Null)) {
-            result.insert("takeover".to_string(), Value::Bool(false));
-        }
-        Value::Object(result)
-    } else {
+    }) else {
         unreachable!()
+    };
+    // json! serializes `None` (from .get() for a missing key) as `Value::Null`.
+    // Replace Null entries with the defaults that the old code applied.
+    if matches!(result.get("mode"), Some(Value::Null)) {
+        result.insert("mode".to_string(), Value::String("default".to_string()));
     }
+    if matches!(result.get("approval_mode"), Some(Value::Null)) {
+        result.insert(
+            "approval_mode".to_string(),
+            Value::String("inherit".to_string()),
+        );
+    }
+    if matches!(result.get("history_policy"), Some(Value::Null)) {
+        result.insert(
+            "history_policy".to_string(),
+            Value::String("host-managed".to_string()),
+        );
+    }
+    if matches!(result.get("takeover"), Some(Value::Null)) {
+        result.insert("takeover".to_string(), Value::Bool(false));
+    }
+    Value::Object(result)
 }
 
 // ── shared contract ──
@@ -264,7 +263,7 @@ fn build_shared_contract(
 ) -> Map<String, Value> {
     
 
-    if let Value::Object(contract) = serde_json::json!({
+    let Value::Object(contract) = serde_json::json!({
         "routing": {
             "mode": profile
                 .session_policy
@@ -297,11 +296,10 @@ fn build_shared_contract(
             "mode": "shared-rust-core",
             "metadata": profile.metadata,
         },
-    }) {
-        contract
-    } else {
+    }) else {
         unreachable!()
-    }
+    };
+    contract
 }
 
 // ── HostProfileSpec ──
@@ -412,16 +410,17 @@ fn build_host_profile(
         normalized_mcp_servers,
         workspace_bootstrap,
     };
-    let mut profile_map = if let Value::Object(map) = serde_json::json!({
-        "profile_id": profile.profile_id,
-        "display_name": profile.display_name,
-        "framework_profile_version": profile.framework_profile_version,
-        "runtime_family": profile.runtime_family,
-        "host_family": profile.host_family,
-    }) {
+    let mut profile_map = {
+        let Value::Object(map) = serde_json::json!({
+            "profile_id": profile.profile_id,
+            "display_name": profile.display_name,
+            "framework_profile_version": profile.framework_profile_version,
+            "runtime_family": profile.runtime_family,
+            "host_family": profile.host_family,
+        }) else {
+            unreachable!()
+        };
         map
-    } else {
-        unreachable!()
     };
     profile_map.insert(
         "capabilities".to_string(),

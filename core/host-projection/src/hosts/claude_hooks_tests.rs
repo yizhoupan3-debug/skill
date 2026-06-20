@@ -128,10 +128,12 @@ mod tests {
         let payload = json!({ "session_id": "flock-s1", "prompt": "深度 review" });
         let _ = run_user_prompt_submit(&repo, &payload);
         let path = review_state_path(&repo, &payload);
-        assert!(path.is_file());
+        assert!(path.is_file(), "review state file should exist after locked write");
+        // Lock file is cleaned up on Drop (unified FileStateLockGuard behavior).
+        // Verify lock file does NOT remain (clean release).
         assert!(
-            PathBuf::from(format!("{}.lock", path.display())).is_file(),
-            "flock sidecar should exist after locked write"
+            !PathBuf::from(format!("{}.lock", path.display())).is_file(),
+            "lock file should be cleaned up after release"
         );
         let _ = fs::remove_dir_all(repo);
     }

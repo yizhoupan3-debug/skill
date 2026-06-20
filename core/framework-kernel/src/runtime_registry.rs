@@ -8,6 +8,24 @@ use std::path::{Path, PathBuf};
 
 pub const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v2";
 pub const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
+
+/// Canonical list of managed MCP server IDs. Used as fallback when registry is unavailable.
+pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] = &[
+    "router-rs-framework",
+    "browser-mcp",
+    "mcp-codegraph",
+    "paperplain",
+];
+
+/// Host home directories for the four formal hosts.
+/// This is the single source of truth — all code that iterates host directories
+/// should reference this constant rather than hardcoding the list.
+/// Note: `.gemini` is included for legacy cleanup but is not a formal host.
+pub const HOST_HOME_DIRS: &[&str] = &[".claude", ".cursor", ".codex", ".opencode"];
+
+/// All known host home directories including legacy/external ones (e.g. `.gemini`).
+/// Use for cleanup/scan operations that should be exhaustive.
+pub const ALL_KNOWN_HOST_DIRS: &[&str] = &[".claude", ".cursor", ".codex", ".opencode", ".gemini"];
 pub const HOST_ADAPTER_CONTRACT_PATH: &str = "docs/spec.md";
 
 // ---------------------------------------------------------------------------
@@ -36,26 +54,42 @@ pub struct RuntimeSkillsDefaults {
 
 pub fn runtime_registry_path(repo_root: &Path) -> Result<PathBuf, String> {
     let repo_candidate = repo_root.join(RUNTIME_REGISTRY_PATH);
-    if repo_candidate.is_file() {
-        return Ok(repo_candidate);
+    // Read-first pattern: check existence by attempting to read metadata,
+    // avoiding TOCTOU between is_file() and subsequent open.
+    match fs::metadata(&repo_candidate) {
+        Ok(m) if m.is_file() => Ok(repo_candidate),
+        Ok(_) => Err(format!(
+            "Runtime registry path exists but is not a file: {}. Expected a regular file at {}.",
+            repo_root.to_string_lossy(),
+            repo_candidate.to_string_lossy()
+        )),
+        Err(e) => Err(format!(
+            "Runtime registry not found at active workspace root: {}. Expected {}. Fix by opening the framework repo root as the active workspace or passing --framework-root <framework-repo-root>. Error: {e}",
+            repo_root.to_string_lossy(),
+            repo_candidate.to_string_lossy()
+        )),
     }
-    Err(format!(
-        "Runtime registry not found at active workspace root: {}. Expected {}. Fix by opening the framework repo root as the active workspace or passing --framework-root <framework-repo-root>.",
-        repo_root.to_string_lossy(),
-        repo_candidate.to_string_lossy()
-    ))
 }
 
 pub fn load_runtime_registry_json(framework_root: &Path) -> Result<Value, String> {
     let path = framework_root.join(RUNTIME_REGISTRY_PATH);
-    if !path.is_file() {
-        return Err(format!(
-            "runtime registry not found under framework root {} (expected {})",
-            framework_root.display(),
-            path.display()
-        ));
-    }
-    let payload = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    // Read-first pattern: attempt to read directly, avoiding TOCTOU between is_file() and read_to_string().
+    let payload = match fs::read_to_string(&path) {
+        Ok(payload) => payload,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(format!(
+                "runtime registry not found under framework root {} (expected {})",
+                framework_root.display(),
+                path.display()
+            ));
+        }
+        Err(e) => {
+            return Err(format!(
+                "failed to read runtime registry {}: {e}",
+                path.display()
+            ));
+        }
+    };
     let parsed: Value = serde_json::from_str(&payload).map_err(|e| {
         format!(
             "invalid JSON in {}: {e}; see {HOST_ADAPTER_CONTRACT_PATH}",
@@ -82,21 +116,24 @@ pub fn load_runtime_registry_json(framework_root: &Path) -> Result<Value, String
 }
 
 pub fn load_runtime_registry_payload(repo_root: &Path) -> Result<Value, String> {
-    match runtime_registry_path(repo_root) {
-        Ok(_) => {}
-        Err(e) => return Err(e),
-    }
-    load_runtime_registry_json(repo_root)
+    load_runtime_registry_json(repo_root).map_err(|e| {
+        format!(
+            "{e}. If the workspace root differs from the framework repo, \
+             pass --framework-root <framework-repo-root> or open the framework repo as the active workspace."
+        )
+    })
 }
 
 pub fn load_runtime_registry_payload_if_repo_local(
     repo_root: &Path,
 ) -> Result<Option<Value>, String> {
     let path = repo_root.join(RUNTIME_REGISTRY_PATH);
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let payload = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    // Read-first pattern: avoid TOCTOU between is_file() and read_to_string().
+    let payload = match fs::read_to_string(&path) {
+        Ok(payload) => payload,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(format!("read {}: {e}", path.display())),
+    };
     let parsed = serde_json::from_str::<Value>(&payload).map_err(|err| err.to_string())?;
     let schema_version = parsed
         .get("schema_version")
@@ -123,6 +160,11 @@ pub fn load_runtime_registry(repo_root: &Path) -> Result<RuntimeRegistry, String
 }
 
 /// Map MCP stdio host spellings to `host_projections` keys (avoid `hosts` import cycle).
+///
+/// Currently this only performs whitespace trimming.  In the future it may need
+/// to normalize host identifiers — for example mapping `claude-desktop` to the
+/// canonical `claude` projection key, or folding other host-family aliases —
+/// once the registry's key convention stabilises.
 fn registry_projection_host_key(host_id: &str) -> &str {
     host_id.trim()
 }

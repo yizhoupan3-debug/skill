@@ -34,7 +34,7 @@ fn compile_review_gate_regexes(patterns: &[String]) -> Vec<Regex> {
     for (index, pattern) in patterns.iter().enumerate() {
         match Regex::new(pattern.as_str()) {
             Ok(regex) => out.push(regex),
-            Err(err) => eprintln!(
+            Err(err) => tracing::warn!(
                 "[router-rs] REVIEW_ROUTING_SIGNALS: skipping invalid review_gate_regexes[{index}]: {err}; pattern={pattern:?}"
             ),
         }

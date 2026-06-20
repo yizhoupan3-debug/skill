@@ -1,67 +1,16 @@
 //! MPSC telemetry pipeline: workers enqueue, Log Aggregator serializes disk writes.
 use chrono::Utc;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::mpsc::{self, SyncSender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::{AtomicU64, Ordering}};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, SystemTime};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum TelemetryEvent {
-    RouteDecision {
-        task: String,
-        skill: String,
-        confidence: f32,
-        reroute: bool,
-        latency_ms: u64,
-        reasons: Vec<String>,
-        matched_tokens: usize,
-        parity_gate: String,
-        candidates: Vec<String>,
-    },
-    GoalTransition {
-        from: String,
-        to: String,
-        task_id: String,
-    },
-    ToolCall {
-        tool: String,
-        duration_ms: u64,
-        success: bool,
-    },
-    RfvRound {
-        round: u32,
-        verdict: String,
-    },
-    HookFired {
-        hook_name: String,
-        action: String,
-    },
-    DevExempt {
-        path: String,
-        action: String,
-    },
-    PredictionOutcome {
-        task_id: String,
-        matched: bool,
-        predicted_verification_status: Option<String>,
-        predicted_hypothesis: Option<String>,
-        actual_verification_status: String,
-        checks_summary: String,
-        checks: Vec<PredictionOutcomeCheck>,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PredictionOutcomeCheck {
-    pub rule: String,
-    pub matched: bool,
-    pub severity: String,
-}
+// Re-export from the single source of truth in telemetry-types.
+pub use telemetry_types::{PredictionOutcomeCheck, TelemetryEvent};
 
 pub trait TelemetryWriter: Send + Sync {
     fn write_event(&self, event: &TelemetryEvent) -> Result<(), String>;
@@ -108,8 +57,26 @@ impl LogAggregatorHandle {
 
 pub struct LogAggregator;
 
+/// Cumulative count of telemetry journal flush failures since process start.
+/// Observable via [`flush_failure_count`].
+static FLUSH_FAILURE_COUNT: AtomicU64 = AtomicU64::new(0);
+
+/// Returns the number of telemetry journal flush failures since process start.
+pub fn flush_failure_count() -> u64 {
+    FLUSH_FAILURE_COUNT.load(Ordering::Relaxed)
+}
+
 impl LogAggregator {
-    /// Start aggregator; returns handle with writer + bounded MPSC sender.
+/// Start aggregator; returns handle with writer + bounded MPSC sender.
+///
+/// **Back-pressure note:** The channel is bounded (`sync_channel(1024)`).  When
+/// journal IO is slow (e.g. disk contention, NFS stalls) the `SyncSender`
+/// will block callers of [`MpscTelemetryWriter::write_event`] until space
+/// frees up.  Monitor [`flush_failure_count`] to detect sustained back-pressure.
+///
+/// **Future improvement:** Replace `send` with `try_send` + drop-on-full to
+/// make the telemetry path fully non-blocking at the cost of event loss under
+/// extreme load.
     pub fn start(journal_path: impl AsRef<Path>) -> LogAggregatorHandle {
         let journal_path = journal_path.as_ref().to_path_buf();
         let (sender, receiver) = mpsc::sync_channel::<TelemetryEvent>(1024);
@@ -122,15 +89,23 @@ impl LogAggregator {
                 match receiver.recv_timeout(Duration::from_secs(5)) {
                     Ok(event) => {
                         buffer.push(event);
-                        if buffer.len() >= 10 {
-                            let _ = flush_buffer(&journal_path, &mut buffer);
-                        }
+                        if buffer.len() >= 10
+                            && let Err(e) = flush_buffer(&journal_path, &mut buffer) {
+                                FLUSH_FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
+                                tracing::warn!("[router-rs] telemetry flush error: {e}");
+                            }
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => {
-                        let _ = flush_buffer(&journal_path, &mut buffer);
+                        if let Err(e) = flush_buffer(&journal_path, &mut buffer) {
+                            FLUSH_FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
+                            tracing::warn!("[router-rs] telemetry flush error: {e}");
+                        }
                     }
                     Err(mpsc::RecvTimeoutError::Disconnected) => {
-                        let _ = flush_buffer(&journal_path, &mut buffer);
+                        if let Err(e) = flush_buffer(&journal_path, &mut buffer) {
+                            FLUSH_FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
+                            tracing::warn!("[router-rs] telemetry final flush error: {e}");
+                        }
                         break;
                     }
                 }
@@ -214,9 +189,11 @@ pub fn global_telemetry_writer() -> Option<Arc<dyn TelemetryWriter>> {
 }
 
 pub fn emit_telemetry(event: &TelemetryEvent) {
-    if let Some(writer) = global_telemetry_writer() {
-        let _ = writer.write_event(event);
-    }
+    if let Some(writer) = global_telemetry_writer()
+        && let Err(e) = writer.write_event(event) {
+            FLUSH_FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
+            tracing::warn!("[router-rs] telemetry emit error: {e}");
+        }
 }
 
 #[cfg(test)]

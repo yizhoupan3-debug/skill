@@ -12,7 +12,7 @@ crate::impl_host_provider! {
 impl HostLifecycle for CursorHostProvider {
     fn profile_id(&self) -> &'static str { "cursor_profile" }
     fn session_supervisor_driver(&self) -> &'static str { "unsupported" }
-    fn context_file(&self) -> &'static str { "AGENTS_CURSOR.md" }
+    fn context_file(&self) -> &'static str { "AGENTS.md" }
     fn driver_binary(&self) -> &'static str { "cursor" }
     fn hooks_manifest_path(&self) -> Option<&'static str> { Some(".cursor/hooks.json") }
     fn registered_hook_events(&self) -> &'static [&'static str] { crate::hosts::cursor_hooks::CURSOR_HOOKS_REGISTERED_EVENTS }

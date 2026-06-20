@@ -8,7 +8,7 @@ use serde_json::{Map, Value, json};
 use std::path::Path;
 
 /// Canonical agent policy path for Codex (mirrors codex_hooks::CODEX_AGENT_POLICY_PATH).
-const CODEX_AGENT_POLICY_PATH: &str = "AGENTS_CODEX.md";
+const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
 
 pub fn host_targets_supported_host_ids(registry: &Value) -> Result<Vec<String>, String> {
     let out = registry

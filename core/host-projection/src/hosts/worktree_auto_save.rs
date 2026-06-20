@@ -54,7 +54,7 @@ pub fn is_worktree_path(cwd: &Path) -> bool {
 
 /// Returns `true` when `branch` is a default/protected branch name.
 pub fn is_default_branch(branch: &str) -> bool {
-    DEFAULT_BRANCHES.iter().any(|b| *b == branch)
+    DEFAULT_BRANCHES.contains(&branch)
 }
 
 /// Parse `git worktree list --porcelain` output.

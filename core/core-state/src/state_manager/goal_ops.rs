@@ -58,8 +58,15 @@ pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
     }
 }
 
+/// Cache-invalidation hook called after every goal-state mutation.
+///
+/// Currently a no-op because the routing record cache lives in
+/// `routing_engine` (across crate boundary) and is invalidated via
+/// file-system mtime checks rather than in-process signals.
+/// Retained as a seam so a future in-process cache can plug in without
+/// touching every call-site.
 fn invalidate_route_records_cache_on_write() {
-    // No route records cache; no-op for goal drive writes.
+    // No in-process route records cache; no-op for goal drive writes.
 }
 
 fn resolve_session_id(payload: &Value) -> String {

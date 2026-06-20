@@ -90,6 +90,7 @@ fn merge_string_array(existing: &Value, additions: &[String]) -> Value {
     json!(merged)
 }
 
+#[allow(dead_code)]
 fn value_to_string(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
@@ -100,6 +101,7 @@ fn value_to_string(v: &Value) -> String {
     }
 }
 
+#[allow(dead_code)]
 fn join_string_array(values: &[Value]) -> String {
     if values.is_empty() { return "_none_".into(); }
     values.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join(", ")
@@ -117,6 +119,7 @@ fn novelty_str<'a>(state: &'a Value, key: &str, default: &'a str) -> &'a str {
     novelty_gate(state).get(key).and_then(Value::as_str).unwrap_or(default)
 }
 
+#[allow(dead_code)]
 fn novelty_value(state: &Value, key: &str) -> Value {
     novelty_gate(state).get(key).cloned().unwrap_or(Value::Null)
 }
@@ -135,6 +138,7 @@ fn slugify(text: &str) -> String {
     if slug.is_empty() { "hypothesis".into() } else { slug }
 }
 
+#[allow(dead_code)]
 fn refresh_novelty_views(_state: &mut Value) { /* placeholder */ }
 
 fn ensure_state_defaults(state: &Value) -> Value {
@@ -161,11 +165,14 @@ fn ensure_state_defaults(state: &Value) -> Value {
     s
 }
 
+#[allow(dead_code)]
 fn repo_root() -> Result<std::path::PathBuf> {
     std::env::current_dir().map_err(|e| anyhow!("cannot determine repo root: {e}"))
 }
 
+#[allow(dead_code)]
 fn capture_environment_fingerprint(_workspace: &Path) -> Value { Value::Null }
+#[allow(dead_code)]
 fn capture_git_provenance(_workspace: &Path) -> Value { Value::Null }
 
 // ── 常量 ──
@@ -198,7 +205,7 @@ pub fn current_context_runs(state: &Value) -> Vec<Value> {
         let recent: Vec<_> = sort_entries_by_recency(runs, "recorded_at")
             .into_iter()
             .filter(|r| r.get("hypothesis_id").and_then(Value::as_str) == Some(active_id))
-            .filter(|r| days_since(str_field(r, "recorded_at")).map_or(false, |d| d <= RECENT_ACTIVITY_DAYS))
+            .filter(|r| days_since(str_field(r, "recorded_at")).is_some_and(|d| d <= RECENT_ACTIVITY_DAYS))
             .take(FALLBACK_ACTIVITY_LIMIT)
             .collect();
         if !recent.is_empty() { return recent; }
@@ -319,7 +326,18 @@ pub struct HypothesisInput<'a> {
 
 pub fn add_hypothesis(state: &Value, input: HypothesisInput<'_>) -> Result<Value> {
     let mut next = ensure_state_defaults(state);
-    let id = input.hypothesis_id.map(ToString::to_string).unwrap_or_else(|| slugify(input.claim).chars().take(40).collect());
+    let id = input.hypothesis_id.map(ToString::to_string).unwrap_or_else(|| {
+        let slug = slugify(input.claim);
+        if slug.len() <= 40 {
+            slug
+        } else {
+            // Add 8-char hash suffix to avoid collisions when truncated
+            use sha2::{Sha256, Digest};
+            let hash = Sha256::digest(input.claim.as_bytes());
+            let suffix: String = hash.iter().take(4).map(|b| format!("{:02x}", b)).collect();
+            format!("{}-{}", slug.chars().take(31).collect::<String>(), suffix)
+        }
+    });
     if find_hypothesis(&next, &id).is_some() { bail!("Hypothesis already exists: {id}"); }
     let entry = json!({
         "id": id, "claim": input.claim, "prediction": input.prediction,
@@ -338,7 +356,7 @@ pub fn add_hypothesis(state: &Value, input: HypothesisInput<'_>) -> Result<Value
     if !backlog.iter().any(|v| v.as_str() == Some(&id)) { backlog.push(json!(id.clone())); }
     if next.get("active_hypothesis").and_then(Value::as_str).is_none() && novelty_str(&next, "status", "pending") == "passed" {
         set_key(&mut next, "active_hypothesis", json!(id.clone()));
-        let idx = find_hypothesis_index(&next, &id).unwrap();
+        let idx = find_hypothesis_index(&next, &id).expect("hypothesis just inserted must exist");
         transition_hypothesis(&mut next, idx, "active", Some("first active hypothesis after novelty gate passed"))?;
     }
     Ok(next)
@@ -370,7 +388,7 @@ pub struct RecordRunInput<'a> {
     pub override_reason: Option<&'a str>,
 }
 
-pub fn record_run(state: &Value, input: &RecordRunInput<'_>, workspace: &Path) -> Result<Value> {
+pub fn record_run(state: &Value, input: &RecordRunInput<'_>, _workspace: &Path) -> Result<Value> {
     let mut next = ensure_state_defaults(state);
     let Some(index) = find_hypothesis_index(&next, input.hypothesis_id) else {
         bail!("Unknown hypothesis: {}", input.hypothesis_id);
@@ -472,9 +490,15 @@ pub fn reflect(
     set_key(&mut next, "current_direction", json!(direction));
     match direction {
         "CONCLUDE" => {
-            set_key(&mut next, "status", json!("concluded"));
-            set_key(&mut next, "stage", json!(STAGE_FINALIZE));
             transition_hypothesis(&mut next, index, "concluded", Some(reason))?;
+            // Only set global status if ALL hypotheses are concluded
+            let all_concluded = arr(&next, "hypotheses").iter().all(|h| {
+                h.get("status").and_then(Value::as_str) == Some("concluded")
+            });
+            if all_concluded {
+                set_key(&mut next, "status", json!("concluded"));
+                set_key(&mut next, "stage", json!(STAGE_FINALIZE));
+            }
         }
         "PIVOT" => {
             set_key(&mut next, "stage", json!(STAGE_INNER_LOOP));
@@ -515,7 +539,7 @@ pub fn add_claim_comparison(
     let gate = novelty_gate_mut(&mut next).as_object_mut().expect("gate must be object");
     let claims_list;
     {
-        let records = gate.entry("claim_records".to_string()).or_insert(json!([])).as_array_mut().unwrap();
+        let records = gate.entry("claim_records".to_string()).or_insert(json!([])).as_array_mut().expect("claim_records must be an array");
         if let Some(pos) = records.iter().position(|r| r.get("claim_id").and_then(Value::as_str) == Some(&id)) {
             records[pos] = record;
         } else {
@@ -530,7 +554,7 @@ pub fn add_claim_comparison(
 // ── 默认状态 ──
 
 pub fn default_state(project: &str, question: &str, mode: &str) -> Value {
-    let mut state = json!({
+    let state = json!({
         "schema_version": SCHEMA_VERSION, "project": project, "question": question, "mode": mode,
         "status": "active", "stage": STAGE_BOOTSTRAP,
         "current_direction": Value::Null, "active_hypothesis": Value::Null,
@@ -569,10 +593,9 @@ pub fn recommend_next_actions(state: &Value) -> Vec<String> {
         return vec!["补 3 条可比较的 hypothesis。".into()];
     }
     let active = state.get("active_hypothesis").and_then(Value::as_str).and_then(|id| find_hypothesis(state, id));
-    if active.is_none() {
+    let Some(active) = active else {
         return vec!["指定一个 active hypothesis。".into()];
-    }
-    let active = active.unwrap();
+    };
     let active_id = str_field(active, "id");
     if latest_run_for_hypothesis(state, active_id).is_none() {
         return vec![format!("先为 {active_id} 写 protocol，再做第一轮 bounded run。")];
@@ -612,7 +635,7 @@ pub fn state_freshness(state: &Value) -> StateFreshness {
             })
             .filter(|r| {
                 days_since(str_field(r, "recorded_at"))
-                    .map_or(false, |d| d <= RECENT_ACTIVITY_DAYS)
+                    .is_some_and(|d| d <= RECENT_ACTIVITY_DAYS)
             })
             .take(FALLBACK_ACTIVITY_LIMIT)
             .collect();
@@ -640,7 +663,7 @@ pub fn state_freshness(state: &Value) -> StateFreshness {
             })
             .filter(|d| {
                 days_since(str_field(d, "recorded_at"))
-                    .map_or(false, |d| d <= RECENT_ACTIVITY_DAYS)
+                    .is_some_and(|d| d <= RECENT_ACTIVITY_DAYS)
             })
             .take(FALLBACK_ACTIVITY_LIMIT)
             .collect();

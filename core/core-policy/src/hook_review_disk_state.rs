@@ -22,6 +22,9 @@ pub struct HookReviewGateFields {
 }
 
 /// Claude `review_gate_*.json` on-disk shape (version + shared gate fields).
+///
+/// Extended with goal-tracking fields (v2+): `goal_*` and `followup_count` are
+/// serde(default) so v1 files load cleanly without migration.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HookReviewDiskCore {
     #[serde(default)]
@@ -35,6 +38,31 @@ pub struct HookReviewDiskCore {
     pub independent_reviewer_seen: bool,
     #[serde(default)]
     pub reject_reason_seen: bool,
+    // ── Goal tracking fields (serde default = backward compat with v1) ──
+    /// `/implementx` or `/verifyx` has been invoked in this session.
+    #[serde(default)]
+    pub goal_drive_entry_active: bool,
+    /// Structured goal contract has been seen in assistant response.
+    #[serde(default)]
+    pub goal_contract_seen: bool,
+    /// Goal progress signal has been seen.
+    #[serde(default)]
+    pub goal_progress_seen: bool,
+    /// Goal verification or blocker signal has been seen.
+    #[serde(default)]
+    pub goal_verify_or_block_seen: bool,
+    /// Delegation override detected (user said "no subagent" etc.).
+    #[serde(default)]
+    pub delegation_override: bool,
+    /// Total Stop followup nudges sent.
+    #[serde(default)]
+    pub followup_count: u32,
+    /// Review-specific Stop followup nudges.
+    #[serde(default)]
+    pub review_followup_count: u32,
+    /// Goal-specific Stop followup nudges.
+    #[serde(default)]
+    pub goal_followup_count: u32,
 }
 
 /// Common trait for hook-state structs that carry a schema `version` field.
@@ -89,6 +117,22 @@ impl HookReviewDiskCore {
             self.independent_reviewer_seen,
             self.reject_reason_seen,
         )
+    }
+
+    /// Whether this session has active goal tracking (for Stop followup).
+    pub fn tracks_goal(&self) -> bool {
+        self.goal_drive_entry_active
+    }
+
+    /// Whether the goal gate is satisfied.
+    pub fn goal_is_satisfied(&self) -> bool {
+        if !self.tracks_goal() {
+            return true;
+        }
+        if self.review_override || self.delegation_override {
+            return true;
+        }
+        self.goal_contract_seen && self.goal_progress_seen && self.goal_verify_or_block_seen
     }
 }
 
@@ -202,6 +246,7 @@ pub fn hook_review_disk_core_from_value(value: &Value) -> HookReviewDiskCore {
         review_override: gate.review_override,
         independent_reviewer_seen: gate.independent_reviewer_seen,
         reject_reason_seen: gate.reject_reason_seen,
+        ..Default::default()
     }
 }
 
@@ -394,6 +439,7 @@ mod tests {
             review_override: false,
             independent_reviewer_seen: true,
             reject_reason_seen: false,
+            ..Default::default()
         };
         insta::assert_debug_snapshot!(core);
     }

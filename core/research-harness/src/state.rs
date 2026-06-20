@@ -13,15 +13,18 @@ use std::path::Path;
 // ── Local helpers ──
 
 fn obj_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
-    value.as_object_mut().expect("state must be an object")
+    value
+        .as_object_mut()
+        .expect("state must be an object — likely corrupted research-state.yaml")
 }
 
 fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
-    obj_mut(value)
+    let entry = obj_mut(value)
         .entry(key.to_string())
-        .or_insert_with(|| json!([]))
+        .or_insert_with(|| json!([]));
+    entry
         .as_array_mut()
-        .expect("expected array")
+        .unwrap_or_else(|| panic!("expected '{key}' to be an array in state — likely corrupted research-state.yaml"))
 }
 
 fn set_key(value: &mut Value, key: &str, child: Value) {
@@ -40,6 +43,7 @@ fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
+#[allow(dead_code)]
 fn value_as_string_list(value: &Value, key: &str) -> Vec<String> {
     value
         .get(key)
@@ -54,12 +58,12 @@ fn value_as_string_list(value: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn novelty_gate_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
+fn novelty_gate_mut(value: &mut Value) -> Result<&mut serde_json::Map<String, Value>> {
     obj_mut(value)
         .entry("novelty_gate".to_string())
         .or_insert_with(|| json!({}))
         .as_object_mut()
-        .expect("novelty_gate must be object")
+        .ok_or_else(|| anyhow::anyhow!("novelty_gate must be object"))
 }
 
 // ── Constants ──
@@ -129,14 +133,14 @@ fn ensure_run_record_defaults(item: &mut serde_json::Map<String, Value>) {
 // ── Schema migration ──
 
 /// Migrate state from older schema versions to the current version.
-pub fn migrate_state(state: &Value) -> Value {
+pub fn migrate_state(state: &Value) -> Result<Value> {
     let mut migrated = state.clone();
     let version = migrated
         .get("schema_version")
         .and_then(Value::as_i64)
         .unwrap_or(2);
     if version >= SCHEMA_VERSION {
-        return migrated;
+        return Ok(migrated);
     }
     let run_history = migrated
         .get("run_history")
@@ -193,7 +197,7 @@ pub fn migrate_state(state: &Value) -> Value {
         .entry("external_research")
         .or_insert(json!([]));
     set_key(&mut migrated, "schema_version", json!(SCHEMA_VERSION));
-    migrated
+    Ok(migrated)
 }
 
 // ── Hydrate state ──
@@ -203,7 +207,7 @@ pub fn migrate_state(state: &Value) -> Value {
 ///
 /// This is the comprehensive version of `ensure_state_defaults` that includes
 /// field-level defaults for nested structures (hypotheses, runs, external research).
-pub fn hydrate_state(state: &Value) -> Value {
+pub fn hydrate_state(state: &Value) -> Result<Value> {
     let mut hydrated = state.clone();
     {
         let root = obj_mut(&mut hydrated);
@@ -231,7 +235,7 @@ pub fn hydrate_state(state: &Value) -> Value {
         root.entry("updated_at").or_insert(created_at);
     }
     {
-        let gate = novelty_gate_mut(&mut hydrated);
+        let gate = novelty_gate_mut(&mut hydrated)?;
         gate.entry("status").or_insert(json!("pending"));
         gate.entry("claims").or_insert(json!([]));
         gate.entry("claim_records").or_insert(json!([]));
@@ -245,17 +249,19 @@ pub fn hydrate_state(state: &Value) -> Value {
     for hypothesis in arr_mut(&mut hydrated, "hypotheses") {
         let item = hypothesis
             .as_object_mut()
-            .expect("hypothesis must be object");
+            .ok_or_else(|| anyhow::anyhow!("hypothesis must be object"))?;
         ensure_hypothesis_defaults(item, &updated_at);
     }
     for record in arr_mut(&mut hydrated, "run_history") {
-        let item = record.as_object_mut().expect("run record must be object");
+        let item = record
+            .as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("run record must be object"))?;
         ensure_run_record_defaults(item);
     }
     for record in arr_mut(&mut hydrated, "external_research") {
         let item = record
             .as_object_mut()
-            .expect("external research record must be object");
+            .ok_or_else(|| anyhow::anyhow!("external research record must be object"))?;
         item.entry("claim_id").or_insert(Value::Null);
         item.entry("source").or_insert(json!("all"));
         item.entry("results").or_insert(json!([]));
@@ -264,7 +270,7 @@ pub fn hydrate_state(state: &Value) -> Value {
             .or_insert_with(|| json!(updated_at.clone()));
     }
     set_key(&mut hydrated, "schema_version", json!(SCHEMA_VERSION));
-    hydrated
+    Ok(hydrated)
 }
 
 // ── Load / Save ──
@@ -278,18 +284,29 @@ pub fn load_state(path: &Path) -> Result<Value> {
     if !data.is_object() {
         anyhow::bail!("State file must be a mapping: {}", path.display());
     }
-    Ok(hydrate_state(&migrate_state(&data)))
+    hydrate_state(&migrate_state(&data)?)
 }
 
 /// Save state to disk with refreshed novelty views and updated timestamps.
+///
+/// Uses write-to-tempfile-then-rename for crash safety: if the process is
+/// killed mid-write, the original file remains intact (POSIX rename is atomic).
 pub fn dump_state(path: &Path, state: &Value) -> Result<()> {
-    let mut state_to_write = hydrate_state(state);
+    let mut state_to_write = hydrate_state(state)?;
     set_key(&mut state_to_write, "schema_version", json!(SCHEMA_VERSION));
     set_key(&mut state_to_write, "updated_at", json!(now_iso()));
     let actions = crate::claims::lifecycle::recommend_next_actions(&state_to_write);
     set_key(&mut state_to_write, "next_actions", json!(actions));
     let rendered = serde_yml::to_string(&state_to_write)?;
-    fs::write(path, rendered)?;
+
+    // Atomic write: write to temp file in same directory, then rename
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut tmp = tempfile::NamedTempFile::new_in(parent)
+        .context("failed to create temp file for atomic state write")?;
+    std::io::Write::write_all(&mut tmp, rendered.as_bytes())
+        .context("failed to write state to temp file")?;
+    tmp.persist(path)
+        .context("failed to atomically rename temp file to state path")?;
     Ok(())
 }
 
@@ -302,7 +319,7 @@ mod tests {
     #[test]
     fn hydrate_state_fills_all_arrays() {
         let state = json!({});
-        let hydrated = hydrate_state(&state);
+        let hydrated = hydrate_state(&state).unwrap();
         assert!(hydrated.get("hypotheses").unwrap().is_array());
         assert!(hydrated.get("run_history").unwrap().is_array());
         assert!(hydrated.get("decisions").unwrap().is_array());
@@ -313,7 +330,7 @@ mod tests {
     #[test]
     fn hydrate_state_fills_novelty_gate() {
         let state = json!({});
-        let hydrated = hydrate_state(&state);
+        let hydrated = hydrate_state(&state).unwrap();
         let gate = hydrated.get("novelty_gate").unwrap();
         assert_eq!(gate.get("status").unwrap(), "pending");
         assert!(gate.get("claims").unwrap().is_array());
@@ -326,7 +343,7 @@ mod tests {
         let state = json!({
             "hypotheses": [{"id": "h1", "claim": "test"}]
         });
-        let hydrated = hydrate_state(&state);
+        let hydrated = hydrate_state(&state).unwrap();
         let h = &hydrated["hypotheses"][0];
         assert_eq!(h["status"], "queued");
         assert!(h["mechanism"].is_null());
@@ -340,7 +357,7 @@ mod tests {
         let state = json!({
             "run_history": [{"run_id": "run-001", "hypothesis_id": "h1", "outcome": "confirmatory"}]
         });
-        let hydrated = hydrate_state(&state);
+        let hydrated = hydrate_state(&state).unwrap();
         let r = &hydrated["run_history"][0];
         assert!(r["finding"].is_null());
         assert!(r["decision_delta"].is_null());
@@ -355,7 +372,7 @@ mod tests {
         let state = json!({
             "external_research": [{"query": "test"}]
         });
-        let hydrated = hydrate_state(&state);
+        let hydrated = hydrate_state(&state).unwrap();
         let r = &hydrated["external_research"][0];
         assert_eq!(r["source"], "all");
         assert!(r["results"].is_array());
@@ -370,7 +387,7 @@ mod tests {
             "status": "concluded",
             "hypotheses": [{"id": "h1", "claim": "c", "status": "active", "mechanism": "m"}]
         });
-        let hydrated = hydrate_state(&state);
+        let hydrated = hydrate_state(&state).unwrap();
         assert_eq!(hydrated["project"], "my-project");
         assert_eq!(hydrated["status"], "concluded");
         assert_eq!(hydrated["hypotheses"][0]["mechanism"], "m");
@@ -379,14 +396,14 @@ mod tests {
     #[test]
     fn migrate_state_upgrades_version() {
         let state = json!({"schema_version": 2, "hypotheses": [], "run_history": []});
-        let migrated = migrate_state(&state);
+        let migrated = migrate_state(&state).unwrap();
         assert_eq!(migrated["schema_version"], SCHEMA_VERSION);
     }
 
     #[test]
     fn migrate_state_noop_for_current() {
         let state = json!({"schema_version": SCHEMA_VERSION});
-        let migrated = migrate_state(&state);
+        let migrated = migrate_state(&state).unwrap();
         assert_eq!(migrated["schema_version"], SCHEMA_VERSION);
     }
 

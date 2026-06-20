@@ -10,7 +10,7 @@ pub struct CodexHostProvider;
 impl HostLifecycle for CodexHostProvider {
     fn profile_id(&self) -> &'static str { "codex_profile" }
     fn session_supervisor_driver(&self) -> &'static str { "codex_driver" }
-    fn context_file(&self) -> &'static str { "AGENTS_CODEX.md" }
+    fn context_file(&self) -> &'static str { "AGENTS.md" }
     fn hooks_manifest_path(&self) -> Option<&'static str> { Some(crate::hosts::codex_hooks::CODEX_HOOKS_PATH) }
     fn registered_hook_events(&self) -> &'static [&'static str] { &crate::hosts::codex_hooks::INSTALL_LIFECYCLE_EVENTS }
     fn driver_binary(&self) -> &'static str { "codex" }

@@ -218,7 +218,7 @@ expression: json
       "checkpointing_supported": false,
       "config_root_env_var": null,
       "context_files": [
-        "AGENTS_CODEX.md"
+        "AGENTS.md"
       ],
       "framework_alias_entrypoints": {},
       "harness_capabilities": [
@@ -507,7 +507,7 @@ expression: json
       "checkpointing_supported": false,
       "config_root_env_var": null,
       "context_files": [
-        "AGENTS_CLAUDE.md"
+        "AGENTS.md"
       ],
       "framework_alias_entrypoints": {},
       "harness_capabilities": [
@@ -567,7 +567,7 @@ expression: json
       "checkpointing_supported": false,
       "config_root_env_var": null,
       "context_files": [
-        "AGENTS_CODEX.md"
+        "AGENTS.md"
       ],
       "framework_alias_entrypoints": {},
       "harness_capabilities": [
@@ -628,7 +628,7 @@ expression: json
       "checkpointing_supported": false,
       "config_root_env_var": null,
       "context_files": [
-        "AGENTS_CURSOR.md"
+        "AGENTS.md"
       ],
       "framework_alias_entrypoints": {},
       "harness_capabilities": [
@@ -692,7 +692,7 @@ expression: json
       "checkpointing_supported": false,
       "config_root_env_var": null,
       "context_files": [
-        "AGENTS_OPENCODE.md"
+        "AGENTS.md"
       ],
       "framework_alias_entrypoints": {},
       "harness_capabilities": [

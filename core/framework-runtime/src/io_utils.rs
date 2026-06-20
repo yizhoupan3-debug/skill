@@ -16,52 +16,9 @@ fn append_io_lock() -> &'static Mutex<()> {
     APPEND_IO_LOCK.get_or_init(|| Mutex::new(()))
 }
 
-/// Resolve symlinks on the longest existing ancestor of `path`, then re-attach
-/// any non-existing tail components verbatim. Mirrors runtime_storage.rs
-/// `canonicalize_existing_ancestors` for containment checks against a canonical root.
+/// Re-export canonicalize from runtime-storage (single source of truth).
 fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, String> {
-    if !path.is_absolute() {
-        return Err(format!(
-            "write path must be absolute before symlink resolution: {}",
-            path.display()
-        ));
-    }
-    let mut current = path.to_path_buf();
-    let mut tail: Vec<std::ffi::OsString> = Vec::new();
-    loop {
-        match fs::symlink_metadata(&current) {
-            Ok(_) => break,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                let Some(file_name) = current.file_name().map(|name| name.to_os_string()) else {
-                    return Err(format!(
-                        "write path has no existing ancestor: {}",
-                        path.display()
-                    ));
-                };
-                tail.push(file_name);
-                current = current.parent().map(Path::to_path_buf).ok_or_else(|| {
-                    format!("write path ancestor resolution failed: {}", path.display())
-                })?;
-            }
-            Err(err) => {
-                return Err(format!(
-                    "stat write path ancestor {} failed: {err}",
-                    current.display()
-                ));
-            }
-        }
-    }
-    let canonical = fs::canonicalize(&current).map_err(|err| {
-        format!(
-            "canonicalize write path ancestor {} failed: {err}",
-            current.display()
-        )
-    })?;
-    let mut resolved = canonical;
-    for component in tail.into_iter().rev() {
-        resolved = resolved.join(component);
-    }
-    Ok(resolved)
+    rt_storage::runtime_storage::paths::canonicalize_existing_ancestors(path)
 }
 
 /// Unified security guard for all write entry points.

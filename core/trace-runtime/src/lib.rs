@@ -563,7 +563,9 @@ fn load_trace_events_from_text(
     Ok(events)
 }
 
-fn trace_event_object(payload: Value) -> Result<Map<String, Value>, String> {
+/// Extract the inner event JSON object from a trace stream line.
+/// Handles both `{"event": {...}}` wrapper format and bare object format.
+pub fn trace_event_object(payload: Value) -> Result<Map<String, Value>, String> {
     match payload {
         Value::Object(mut object) => match object.remove("event") {
             Some(Value::Object(event)) => Ok(event),
@@ -578,7 +580,8 @@ fn trace_event_object(payload: Value) -> Result<Map<String, Value>, String> {
     }
 }
 
-fn hydrate_trace_event(mut payload: Map<String, Value>, line_number: usize) -> Map<String, Value> {
+/// Hydrate a trace event with default values for seq, generation, event_id, cursor, status, and schema_version.
+pub fn hydrate_trace_event(mut payload: Map<String, Value>, line_number: usize) -> Map<String, Value> {
     let seq = trace_event_usize_field(&payload, "seq").unwrap_or(line_number);
     let generation = trace_event_usize_field(&payload, "generation").unwrap_or(0);
     let event_id = trace_event_string_field(&payload, "event_id")
@@ -644,20 +647,23 @@ fn latest_cursor_from_event(payload: &Map<String, Value>) -> Option<Value> {
     }))
 }
 
-fn trace_event_string_field(payload: &Map<String, Value>, field: &str) -> Option<String> {
+/// Extract a string field from a trace event JSON object.
+pub fn trace_event_string_field(payload: &Map<String, Value>, field: &str) -> Option<String> {
     payload
         .get(field)
         .and_then(Value::as_str)
         .map(str::to_string)
 }
 
-fn trace_event_usize_field(payload: &Map<String, Value>, field: &str) -> Option<usize> {
+/// Extract a usize field from a trace event JSON object.
+pub fn trace_event_usize_field(payload: &Map<String, Value>, field: &str) -> Option<usize> {
     payload
         .get(field)
         .and_then(|value| value.as_u64().map(|number| number as usize))
 }
 
-fn build_trace_cursor(generation: usize, seq: usize, event_id: &str) -> String {
+/// Build a trace cursor string from generation, seq, and event_id components.
+pub fn build_trace_cursor(generation: usize, seq: usize, event_id: &str) -> String {
     format!("g{generation}:s{seq}:{event_id}")
 }
 
@@ -680,7 +686,8 @@ fn stable_digest(value: &Value) -> String {
     sha256_hex(serialized.as_bytes())
 }
 
-fn sha256_hex(payload: &[u8]) -> String {
+/// SHA-256 hash of a byte payload, returned as a hex string.
+pub fn sha256_hex(payload: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(payload);
     hex::encode(hasher.finalize())

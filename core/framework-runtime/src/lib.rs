@@ -66,7 +66,8 @@ pub use trace_attach::{
     subscribe_attached_runtime_events,
 };
 pub use trace_stream_io::{
-    inspect_trace_stream, replay_trace_stream, sha256_hex, write_trace_compaction_delta,
+    inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta,
     write_trace_metadata,
 };
+pub use trace_runtime::sha256_hex;
 pub use types::FrameworkAliasBuildOptions;

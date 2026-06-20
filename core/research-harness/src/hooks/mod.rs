@@ -18,7 +18,6 @@ pub mod paper_adversarial;
 pub mod paper_prose;
 
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 use std::time::{Duration, SystemTime};
 
 // ── Environment variable helpers ──

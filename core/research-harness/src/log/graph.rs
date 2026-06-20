@@ -13,11 +13,23 @@ use rusqlite::Connection;
 use crate::log::db;
 use crate::log::models::*;
 
+/// Graph edge: (neighbor_id, relation_type, weight, confidence).
+type GraphEdge = (String, Option<String>, f64, Option<f64>);
+
+/// Path segment: (node_id, relation_type, weight).
+type PathSegment = (String, Option<String>, f64);
+
+/// Traversal result: (node_id, relation_type, weight, depth).
+type TraversalNode = (String, Option<String>, f64, usize);
+
+/// Neighbor reference: (node_id, relation_type, weight, confidence).
+type NeighborRef<'a> = (&'a String, Option<&'a str>, f64, Option<f64>);
+
 /// In-memory adjacency structure loaded from the `connections` table.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct KnowledgeGraph {
     /// entry_id → Vec<(neighbor_id, relation_type, weight, confidence)>
-    pub adjacency: HashMap<String, Vec<(String, Option<String>, f64, Option<f64>)>>,
+    pub adjacency: HashMap<String, Vec<GraphEdge>>,
     /// All entry IDs appearing as either side of at least one connection.
     pub nodes: HashSet<String>,
 }
@@ -77,8 +89,7 @@ pub fn load_subgraph(
 
 /// Build a KnowledgeGraph from a list of connections.
 fn build_graph(connections: &[LogConnection]) -> Result<KnowledgeGraph, anyhow::Error> {
-    let mut adjacency: HashMap<String, Vec<(String, Option<String>, f64, Option<f64>)>> =
-        HashMap::new();
+    let mut adjacency: HashMap<String, Vec<GraphEdge>> = HashMap::new();
     let mut nodes = HashSet::new();
 
     for c in connections {
@@ -157,7 +168,7 @@ pub fn get_neighbors<'a>(
     graph: &'a KnowledgeGraph,
     entry_id: &str,
     relation_filter: Option<&[&str]>,
-) -> Vec<(&'a String, Option<&'a str>, f64, Option<f64>)> {
+) -> Vec<NeighborRef<'a>> {
     let Some(edges) = graph.adjacency.get(entry_id) else {
         return vec![];
     };
@@ -165,8 +176,8 @@ pub fn get_neighbors<'a>(
     edges
         .iter()
         .filter(|(_, rel, _, _)| {
-            relation_filter.map_or(true, |allowed| {
-                rel.as_deref().map_or(false, |r| allowed.contains(&r))
+            relation_filter.is_none_or(|allowed| {
+                rel.as_deref().is_some_and(|r| allowed.contains(&r))
             })
         })
         .map(|(nid, rel, w, conf)| (nid, rel.as_deref(), *w, *conf))
@@ -180,7 +191,7 @@ pub fn find_path(
     from: &str,
     to: &str,
     max_depth: usize,
-) -> Option<Vec<(String, Option<String>, f64)>> {
+) -> Option<Vec<PathSegment>> {
     if from == to {
         return Some(vec![(from.to_string(), None, 1.0)]);
     }
@@ -235,7 +246,7 @@ pub fn bfs_traverse(
     start: &str,
     max_depth: usize,
     relation_filter: Option<&[&str]>,
-) -> Vec<(String, Option<String>, f64, usize)> {
+) -> Vec<TraversalNode> {
     let mut visited: HashSet<String> = HashSet::new();
     let mut result = Vec::new();
     let mut queue = VecDeque::new();
@@ -249,8 +260,8 @@ pub fn bfs_traverse(
         }
         if let Some(edges) = graph.adjacency.get(&node) {
             for (nbor, rel, w, _) in edges {
-                let filtered = relation_filter.map_or(true, |allowed| {
-                    rel.as_deref().map_or(false, |r| allowed.contains(&r))
+                let filtered = relation_filter.is_none_or(|allowed| {
+                    rel.as_deref().is_some_and(|r| allowed.contains(&r))
                 });
                 if !filtered {
                     continue;

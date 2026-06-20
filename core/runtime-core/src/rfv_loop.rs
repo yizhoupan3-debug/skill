@@ -332,6 +332,19 @@ fn now_iso() -> String {
     Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
+/// Check whether any finding in the list has severity P0, A, or B.
+/// Used by the convergence floor logic to decide if this round is "stable".
+fn has_ab_level_findings(findings: &[Value]) -> bool {
+    findings.iter().any(|f| {
+        let severity = f
+            .get("severity")
+            .or_else(|| f.get("level"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        matches!(severity, "P0" | "p0" | "A" | "a" | "B" | "b")
+    })
+}
+
 pub fn rfv_loop_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
     let tid = crate::path_guard::validate_task_id_component(task_id)?;
     Ok(repo_root
@@ -551,6 +564,19 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
         "stop_when".to_string(),
         Value::Array(value_string_list(payload, "stop_when")),
     );
+    // Convergence floor: min_rounds prevents supervisor from closing too early;
+    // consecutive_stable_required tracks how many clean rounds are needed.
+    let min_rounds = payload
+        .get("min_rounds")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let consecutive_stable_required = payload
+        .get("consecutive_stable_required")
+        .and_then(Value::as_u64)
+        .unwrap_or(2);
+    obj.insert("min_rounds".to_string(), json!(min_rounds));
+    obj.insert("consecutive_stable_required".to_string(), json!(consecutive_stable_required));
+    obj.insert("consecutive_stable_count".to_string(), json!(0u64));
     obj.insert("loop_status".to_string(), json!("active"));
     obj.insert("current_round".to_string(), json!(0));
     obj.insert("rounds".to_string(), json!([]));
@@ -577,7 +603,7 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
     if let Err(e) =
         crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
     {
-        eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
+        tracing::error!(task_id = %task_id, error = %e, "failed to append rfv transaction to TASK_LEDGER");
     }
     let goal_state_cleared =
         crate::goal_drive::deactivate_goal_for_conflict_with_rfv(repo_root, &task_id)?;
@@ -635,6 +661,13 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
 
     let close_gates_cfg = parse_close_gates(obj);
 
+    // Convergence floor parameters (set during start, read here for enforcement)
+    let min_rounds = obj.get("min_rounds").and_then(Value::as_u64).unwrap_or(0);
+    let consecutive_stable_required = obj
+        .get("consecutive_stable_required")
+        .and_then(Value::as_u64)
+        .unwrap_or(2);
+
     let review_summary = payload
         .get("review_summary")
         .and_then(Value::as_str)
@@ -670,6 +703,26 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     // Shapes are minimally validated here so later rollups can trust arrays.
     let adversarial_findings = value_array_or_empty(payload, "adversarial_findings")?;
     let falsification_tests = value_array_or_empty(payload, "falsification_tests")?;
+
+    // Convergence floor: track consecutive stable rounds (no new A/B/P0 findings).
+    let round_has_ab = has_ab_level_findings(&adversarial_findings);
+    let prev_stable = obj
+        .get("consecutive_stable_count")
+        .and_then(Value::as_u64)
+        .unwrap_or(0);
+    let new_stable = if round_has_ab { 0 } else { prev_stable + 1 };
+    obj.insert("consecutive_stable_count".to_string(), json!(new_stable));
+
+    // Effective close: supervisor close is blocked until min_rounds reached
+    // AND consecutive_stable_required met. max_rounds is unconditional.
+    let supervisor_closes = matches!(supervisor_decision.as_str(), "close" | "closed");
+    let effective_close = if round_n >= max_rounds {
+        true // hard ceiling: always close
+    } else if supervisor_closes {
+        round_n >= min_rounds && new_stable >= consecutive_stable_required
+    } else {
+        false
+    };
 
     let external_research_strict = external_research_strict_from_loaded_state(obj);
     if let Some(er) = payload.get("external_research")
@@ -723,8 +776,6 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         }
     let entry = Value::Object(entry_map);
 
-    let supervisor_closes = matches!(supervisor_decision.as_str(), "close" | "closed");
-
     // Push entry now so preview and final state share the same entry.
     // If gates reject, we undo the push before returning Err.
     {
@@ -735,7 +786,9 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         rounds.push(entry);
     }
 
-    if supervisor_closes
+    // Enforce close_gates only when effective_close is true (supervisor close
+    // approved by min_rounds + convergence floor, or max_rounds hard ceiling).
+    if effective_close
         && let Some(ref g) = close_gates_cfg {
             let closing = obj
                 .get("rounds")
@@ -753,7 +806,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
             }
         }
 
-    let closes_due_to_round_cap = !supervisor_closes
+    let closes_due_to_round_cap = !effective_close
         && !matches!(supervisor_decision.as_str(), "block" | "blocked")
         && round_n >= max_rounds;
     if closes_due_to_round_cap
@@ -778,22 +831,22 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     obj.insert("current_round".to_string(), json!(round_n));
     obj.insert("updated_at".to_string(), json!(now_iso()));
 
-    let loop_status = match supervisor_decision.as_str() {
-        "close" | "closed" => "closed",
-        "block" | "blocked" => "blocked",
-        _ => {
-            if round_n >= max_rounds {
-                "closed"
-            } else {
-                "active"
-            }
-        }
+    // Convergence-aware loop status: supervisor close is gated by min_rounds
+    // AND consecutive_stable_required. max_rounds is an unconditional hard ceiling.
+    let loop_status = if effective_close {
+        "closed"
+    } else if matches!(supervisor_decision.as_str(), "block" | "blocked") {
+        "blocked"
+    } else if round_n >= max_rounds {
+        "closed"
+    } else {
+        "active"
     };
     obj.insert("loop_status".to_string(), json!(loop_status));
 
     let round_cap_warning = if round_n >= max_rounds
         && close_gates_cfg.is_none()
-        && !supervisor_closes
+        && !effective_close
     {
         Some(
             "RFV loop reached max_rounds without close_gates configuration; closing without gate verification. Consider configuring close_gates for future loops.",
@@ -801,6 +854,15 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     } else {
         None
     };
+
+    // Emit convergence info in response for observability
+    let convergence_info = json!({
+        "min_rounds": min_rounds,
+        "consecutive_stable_required": consecutive_stable_required,
+        "consecutive_stable_count": new_stable,
+        "round_has_ab_findings": round_has_ab,
+        "effective_close": effective_close,
+    });
 
     write_atomic_json(&path, &state)?;
     let tx = crate::task_ledger::LedgerTransaction {
@@ -814,7 +876,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     if let Err(e) =
         crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
     {
-        eprintln!("[router-rs] failed to append rfv transaction to TASK_LEDGER: {e}");
+        tracing::error!(task_id = %task_id, error = %e, "failed to append rfv transaction to TASK_LEDGER");
     }
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
         repo_root, &task_id,
@@ -828,6 +890,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     if let Some(w) = round_cap_warning {
         resp["warning"] = json!(w);
     }
+    resp["convergence"] = convergence_info;
     merge_operator_nudge_refs(&mut resp, repo_root, Some(&state));
     resp["rfv_loop_state"] = state;
     crate::telemetry_emit::emit_rfv_round(round_n as u32, &verify_result);

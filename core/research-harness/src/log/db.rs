@@ -28,10 +28,13 @@ pub fn sanitize_fts_query(query: &str) -> String {
 /// Schema version number, bumped for each migration.
 const SCHEMA_VERSION: i32 = 3;
 
+/// Migration function signature: takes a connection, returns Result.
+type MigrationFn = fn(&Connection) -> Result<()>;
+
 /// Migration registry: (from_version, migration_fn).
 /// Each function must be idempotent (safe to retry on partial failure).
 /// **Must be sorted by from_version ascending with no gaps** — validated by test.
-const MIGRATIONS: &[(i32, fn(&Connection) -> Result<()>)] = &[
+const MIGRATIONS: &[(i32, MigrationFn)] = &[
     (2, migrate_v2_to_v3),
 ];
 
@@ -48,7 +51,7 @@ fn run_migrations(conn: &Connection, existing_version: i32) -> Result<()> {
     let mut version = existing_version;
     for (from_ver, migration_fn) in MIGRATIONS {
         if version == *from_ver {
-            migration_fn(&conn).context(format!("migration v{} -> v{}", from_ver, from_ver + 1))?;
+            migration_fn(conn).context(format!("migration v{} -> v{}", from_ver, from_ver + 1))?;
             version = *from_ver + 1;
         }
     }

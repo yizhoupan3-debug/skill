@@ -72,12 +72,12 @@ impl RoutingRuntimeWatch {
                 },
                 Config::default(),
             ) else {
-                eprintln!("[routing-engine] WARN: notify watcher init failed");
+                tracing::warn!("[routing-engine] notify watcher init failed");
                 return;
             };
             if let Err(err) = watcher.watch(&path, RecursiveMode::NonRecursive) {
-                eprintln!(
-                    "[routing-engine] WARN: watch {} failed: {err}",
+                tracing::warn!(
+                    "[routing-engine] watch {} failed: {err}",
                     path.display()
                 );
                 return;
@@ -106,7 +106,7 @@ pub fn routing_runtime_watch() -> Arc<RoutingRuntimeWatch> {
     GLOBAL_WATCH
         .get_or_init(|| {
             Arc::new(RoutingRuntimeWatch::bootstrap(None).unwrap_or_else(|err| {
-                eprintln!("[routing-engine] WARN: routing runtime watch bootstrap: {err}");
+                tracing::warn!("[routing-engine] routing runtime watch bootstrap: {err}");
                 let path = default_skill_routing_runtime_path();
                 let (tx, rx) = watch::channel(empty_snapshot(path));
                 drop(tx);

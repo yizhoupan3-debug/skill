@@ -150,6 +150,12 @@ fn score_design_md_signals(
 
 /// Score gate phrases, exact skill name, name tokens, and trigger hints.
 /// Returns `(delta, reasons, matched_query_token_count)`.
+///
+/// Note: gate phrases and keyword tokens are scored independently — a query
+/// token that matches both a gate phrase and a keyword will contribute to both
+/// scores.  This is intentional: gate phrases are high-signal routing hints
+/// while keywords are general content matching; the additive boost reflects
+/// stronger evidence when both dimensions agree.
 #[inline]
 fn score_gate_name_token_signals(
     record: &SkillRecord,
@@ -404,7 +410,6 @@ pub fn score_route_candidate<'a>(
     ) {
         return done;
     }
-    let _checklist_execution_context = has_checklist_execution_context(query_text);
     let bounded_subagent_context = has_bounded_subagent_context(query_text, query_token_list);
     let token_budget_pressure = has_token_budget_pressure(query_text, query_token_list);
     let workflow_orchestration_context = cached_signal(
@@ -584,6 +589,11 @@ pub fn score_route_candidate<'a>(
     candidate
 }
 
+/// Select the best owner from scored candidates.
+///
+/// **Refactored from `swap_remove` pattern**: computes the winner index first,
+/// then does a single `swap_remove` at the end. This eliminates the fragile
+/// invariant that every `swap_remove` must be immediately followed by `return`.
 pub fn pick_owner<'a>(
     mut candidates: Vec<RouteCandidate<'a>>,
     query_text: &str,
@@ -614,100 +624,110 @@ pub fn pick_owner<'a>(
         })
         .min_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
 
-    // Agent-swarm special case
-    if let Some(idx) = gate_idx
-        && candidates[idx].record.slug == "agent-swarm-orchestration"
-            && candidates[idx].score >= w.agent_swarm_candidate_threshold
-            && !has_plan_mode_owner_context(query_text, query_token_list)
-            && !has_systematic_debug_context(query_text, query_token_list)
-        {
-            let mut gate = candidates.swap_remove(idx);
-            gate.reasons.push(
-                "Prioritized delegation gate before strong owner for broad parallel-review admission."
-                    .to_string(),
-            );
-            return Ok(gate);
-        }
-
-    // Top owner above threshold
-    if let Some(&top_idx) = owner_idx.first()
-        && candidates[top_idx].score >= w.top_owner_score_threshold {
-            return Ok(candidates.swap_remove(top_idx));
-        }
-
-    // Gate before owner
-    if let Some(idx) = gate_idx
-        && candidates[idx].score >= w.gate_before_owner_threshold
-            && candidates[idx].score >= top_owner_score
-        {
-            let mut gate = candidates.swap_remove(idx);
-            gate.reasons
-                .push("Prioritized via gate-before-owner precedence.".to_string());
-            return Ok(gate);
-        }
-
-    // Build owner-pool indices (no RouteCandidate clones)
-    let mut pool_indices: Vec<usize> = if owner_idx.is_empty() {
-        (0..candidates.len())
-            .filter(|&i| !is_overlay_record(candidates[i].record))
-            .collect()
-    } else {
-        owner_idx
-    };
-
-    if pool_indices.is_empty() {
-        pool_indices = (0..candidates.len())
-            .filter(|&i| can_be_fallback_owner(candidates[i].record))
-            .collect();
-    }
-    if pool_indices.is_empty() {
-        pool_indices = (0..candidates.len()).collect();
-    }
-
-    // Layer ranking (use &str instead of cloned String)
-    let mut layers: Vec<&str> = pool_indices
-        .iter()
-        .map(|&i| candidates[i].record.layer.as_str())
-        .collect::<HashSet<_>>()
-        .into_iter()
-        .collect();
-    layers.sort_unstable_by_key(|layer| layer_rank(layer));
-
-    for layer in layers {
-        let mut layer_candidates: Vec<usize> = pool_indices
-            .iter()
-            .filter(|&&i| candidates[i].record.layer == layer)
-            .copied()
-            .collect();
-        layer_candidates
-            .sort_unstable_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
-        if let Some(&top) = layer_candidates.first()
-            && candidates[top].score >= w.layer_threshold(layer) {
-                return Ok(candidates.swap_remove(top));
+    // Determine winner index and optional extra reason in a single pass.
+    let (winner_idx, extra_reason): (usize, Option<String>) =
+        // Agent-swarm special case
+        if let Some(idx) = gate_idx
+            && candidates[idx].record.slug == "agent-swarm-orchestration"
+                && candidates[idx].score >= w.agent_swarm_candidate_threshold
+                && !has_plan_mode_owner_context(query_text, query_token_list)
+                && !has_systematic_debug_context(query_text, query_token_list)
+            {
+                (idx, Some(
+                    "Prioritized delegation gate before strong owner for broad parallel-review admission."
+                        .to_string(),
+                ))
             }
-    }
+        // Top owner above threshold
+        else if let Some(&top_idx) = owner_idx.first()
+            && candidates[top_idx].score >= w.top_owner_score_threshold {
+                (top_idx, None)
+            }
+        // Gate before owner
+        else if let Some(idx) = gate_idx
+            && candidates[idx].score >= w.gate_before_owner_threshold
+                && candidates[idx].score >= top_owner_score
+            {
+                (idx, Some("Prioritized via gate-before-owner precedence.".to_string()))
+            }
+        else {
+            // Build owner-pool indices (no RouteCandidate clones)
+            let mut pool_indices: Vec<usize> = if owner_idx.is_empty() {
+                (0..candidates.len())
+                    .filter(|&i| !is_overlay_record(candidates[i].record))
+                    .collect()
+            } else {
+                owner_idx
+            };
 
-    // Fallback: sort pool by layer, score, priority, slug
-    let mut fallback_pool = pool_indices;
-    fallback_pool.sort_unstable_by(|&a, &b| {
-        layer_rank(&candidates[a].record.layer)
-            .cmp(&layer_rank(&candidates[b].record.layer))
-            .then_with(|| {
-                finite_route_score(candidates[b].score)
-                    .partial_cmp(&finite_route_score(candidates[a].score))
-                    .unwrap_or(Ordering::Equal)
-            })
-            .then_with(|| {
-                priority_rank(&candidates[a].record.priority)
-                    .cmp(&priority_rank(&candidates[b].record.priority))
-            })
-            .then_with(|| candidates[a].record.slug.cmp(&candidates[b].record.slug))
-    });
-    let winner_idx = match fallback_pool.first() {
-        Some(&idx) => idx,
-        None => return Err("pick_owner: fallback_pool empty after exhaustive fallbacks".to_string()),
-    };
-    Ok(candidates.swap_remove(winner_idx))
+            if pool_indices.is_empty() {
+                pool_indices = (0..candidates.len())
+                    .filter(|&i| can_be_fallback_owner(candidates[i].record))
+                    .collect();
+            }
+            if pool_indices.is_empty() {
+                pool_indices = (0..candidates.len()).collect();
+            }
+
+            // Layer ranking (use &str instead of cloned String)
+            let mut layers: Vec<&str> = pool_indices
+                .iter()
+                .map(|&i| candidates[i].record.layer.as_str())
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .collect();
+            layers.sort_unstable_by_key(|layer| layer_rank(layer));
+
+            let mut layer_winner: Option<usize> = None;
+            for layer in layers {
+                let mut layer_candidates: Vec<usize> = pool_indices
+                    .iter()
+                    .filter(|&&i| candidates[i].record.layer == layer)
+                    .copied()
+                    .collect();
+                layer_candidates
+                    .sort_unstable_by(|&a, &b| route_candidate_cmp(&candidates[a], &candidates[b]));
+                if let Some(&top) = layer_candidates.first()
+                    && candidates[top].score >= w.layer_threshold(layer) {
+                        layer_winner = Some(top);
+                        break;
+                    }
+            }
+
+            match layer_winner {
+                Some(idx) => (idx, None),
+                None => {
+                    // Fallback: sort pool by layer, score, priority, slug
+                    let mut fallback_pool = pool_indices;
+                    fallback_pool.sort_unstable_by(|&a, &b| {
+                        layer_rank(&candidates[a].record.layer)
+                            .cmp(&layer_rank(&candidates[b].record.layer))
+                            .then_with(|| {
+                                finite_route_score(candidates[b].score)
+                                    .partial_cmp(&finite_route_score(candidates[a].score))
+                                    .unwrap_or(Ordering::Equal)
+                            })
+                            .then_with(|| {
+                                priority_rank(&candidates[a].record.priority)
+                                    .cmp(&priority_rank(&candidates[b].record.priority))
+                            })
+                            .then_with(|| candidates[a].record.slug.cmp(&candidates[b].record.slug))
+                    });
+                    let idx = match fallback_pool.first() {
+                        Some(&idx) => idx,
+                        None => return Err("pick_owner: fallback_pool empty after exhaustive fallbacks".to_string()),
+                    };
+                    (idx, None)
+                }
+            }
+        };
+
+    // Single swap_remove at the end — no fragile index invariant needed.
+    let mut winner = candidates.swap_remove(winner_idx);
+    if let Some(reason) = extra_reason {
+        winner.reasons.push(reason);
+    }
+    Ok(winner)
 }
 
 pub fn route_candidate_cmp(left: &RouteCandidate<'_>, right: &RouteCandidate<'_>) -> Ordering {

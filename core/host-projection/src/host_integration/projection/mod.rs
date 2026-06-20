@@ -29,6 +29,7 @@ pub fn host_router_rs_framework_payload(
     make_mcp_server_payload(
         roots,
         &[
+            "host",
             host_label,
             "agent",
             "--repo-root",
@@ -922,9 +923,9 @@ fn framework_entrypoint_render_context(
     Ok((narrative, runtime_rel))
 }
 
-fn framework_entrypoint_common_footer(runtime_rel: &str, agents_delta_file: &str) -> String {
+fn framework_entrypoint_common_footer(runtime_rel: &str) -> String {
     format!(
-        "1) Start from `AGENTS.md`（跨宿主内核）；宿主差异见 `{agents_delta_file}`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n"
+        "1) Start from `AGENTS.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n"
     )
 }
 
@@ -942,7 +943,7 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
 
 # Claude Code（本项目）
 
-跨宿主 **`AGENTS.md`**；宿主差异 **`AGENTS_CLAUDE.md`**；手册 **`docs/hosts/_common.md`** / **`docs/hosts/hook-hosts.md`**。
+跨宿主 **`AGENTS.md`**；手册 **`docs/hosts/_common.md`** / **`docs/hosts/hook-hosts.md`**。
 
 ## 语言（硬约束）
 
@@ -978,7 +979,7 @@ pub fn render_claude_framework_entrypoint(
         "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n{footer}",
         gsd = lifecycle_paragraph_for_host(&narrative, "claude"),
         review = narrative.review_findings_only_paragraph,
-        footer = framework_entrypoint_common_footer(&runtime_rel, "AGENTS_CLAUDE.md"),
+        footer = framework_entrypoint_common_footer(&runtime_rel),
     ))
 }
 

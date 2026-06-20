@@ -8,4 +8,12 @@ HookReviewDiskCore {
     review_override: false,
     independent_reviewer_seen: true,
     reject_reason_seen: false,
+    goal_drive_entry_active: false,
+    goal_contract_seen: false,
+    goal_progress_seen: false,
+    goal_verify_or_block_seen: false,
+    delegation_override: false,
+    followup_count: 0,
+    review_followup_count: 0,
+    goal_followup_count: 0,
 }

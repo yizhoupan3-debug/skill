@@ -62,14 +62,16 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
         transition_phase(&mut state, LoopPhase::Discovering);
         let actions = discover_actions(entry, ctx.repo_root)?;
         transition_phase(&mut state, LoopPhase::Preflight);
-        let _ = assign_safety_levels(&actions, entry);
+        let _safety_map = assign_safety_levels(&actions, entry);
         transition_phase(&mut state, LoopPhase::Completed);
         let aggregate = build_aggregate(
             &run_id, loop_id, &actions,
             actions.iter().map(|a| (a.action_id.clone(), AggregateActionResult::Skipped)).collect(),
         );
         finish_run(&mut state, "dry-run");
-        let _ = write_loop_state(ctx.repo_root, loop_id, &state);
+        if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
+            tracing::error!("failed to write loop state on dry-run path: {e}");
+        }
         return Ok(aggregate);
     }
 
@@ -80,7 +82,13 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
 
     match result {
         Ok(agg) => {
-            let report_text = report::render_loop_report(&state, &agg, &state.current_run.as_ref().map(|r| r.unconsumed_findings.clone()).unwrap_or_default(), Some(lock_start.elapsed().as_secs()));
+            let findings = state.current_run.as_ref()
+                .map(|r| r.unconsumed_findings.clone())
+                .unwrap_or_default();
+            let elapsed = Some(lock_start.elapsed().as_secs());
+            let report_text = report::render_loop_report(
+                &state, &agg, &findings, elapsed,
+            );
             let report_path = report::write_loop_report(ctx.repo_root, loop_id, &run_id, &report_text)
                 .ok();
             if let Some(ref mut r) = state.current_run {
@@ -89,16 +97,24 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
             }
             transition_phase(&mut state, LoopPhase::Completed);
             finish_run(&mut state, &agg.overall_status);
-            let _ = write_loop_state(ctx.repo_root, loop_id, &state);
-            let _ = release_lock(ctx.repo_root);
+            if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
+                tracing::error!("failed to write loop state on success path: {e}");
+            }
+            if let Err(e) = release_lock(ctx.repo_root) {
+                tracing::error!("failed to release lock on success path: {e}");
+            }
             Ok(agg)
         }
         Err(LoopError::ResearchEscalation(msg)) => {
             // Research completed with candidates: restart the loop to consume them
-            eprintln!("[loop-engine] {msg}");
+            tracing::info!("[loop-engine] {msg}");
             state.circuit_breaker.consecutive_failures = 0;
-            let _ = write_loop_state(ctx.repo_root, loop_id, &state);
-            let _ = release_lock(ctx.repo_root);
+            if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
+                tracing::error!("failed to write loop state on research escalation: {e}");
+            }
+            if let Err(e) = release_lock(ctx.repo_root) {
+                tracing::error!("failed to release lock on research escalation: {e}");
+            }
 
             // Recursively restart with a new run — candidates become the new action set
             let new_ctx = RunContext {
@@ -112,8 +128,12 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
         Err(e) => {
             transition_phase(&mut state, LoopPhase::Escalated);
             finish_run(&mut state, "escalated");
-            let _ = write_loop_state(ctx.repo_root, loop_id, &state);
-            let _ = release_lock(ctx.repo_root);
+            if let Err(write_err) = write_loop_state(ctx.repo_root, loop_id, &state) {
+                tracing::error!("failed to write loop state on error path: {write_err}");
+            }
+            if let Err(lock_err) = release_lock(ctx.repo_root) {
+                tracing::error!("failed to release lock on error path: {lock_err}");
+            }
             Err(e)
         }
     }
@@ -212,7 +232,27 @@ fn run_loop_inner(
     transition_phase(state, LoopPhase::Running);
 
     transition_phase(state, LoopPhase::Verifying);
-    let aggregate = build_aggregate(run_id, &entry.loop_id, &actions, results);
+    let mut aggregate = build_aggregate(run_id, &entry.loop_id, &actions, results);
+
+    // For loops with verify_rfv_convergence enabled, additionally verify RFV convergence state.
+    // If the aggregate passes but RFV hasn't converged, mark as fail.
+    if entry.verify_rfv_convergence.unwrap_or(false) && aggregate.overall_status == "pass" {
+        // Derive task_id from action_id (strip "-orchestrator" suffix)
+        let task_id = actions.first()
+            .map(|a| a.action_id.strip_suffix("-orchestrator")
+                .unwrap_or(&a.action_id)
+                .to_string())
+            .unwrap_or_default();
+        if let Err(violations) = crate::closeout::verify_rfv_convergence(
+            ctx.repo_root, &task_id,
+        ) {
+            tracing::warn!(
+                "RFV convergence not met (verify_rfv_convergence=true): {}",
+                violations.join(", ")
+            );
+            aggregate.overall_status = "fail".to_string();
+        }
+    }
 
     if aggregate.overall_status == "pass" {
         state.circuit_breaker.consecutive_failures = 0;
@@ -274,7 +314,7 @@ fn barrier_escalation(
     // Shell out to autoresearch barrier CLI with proper --problem flag
     let output = std::process::Command::new("cargo")
         .args([
-            "run", "-p", "autoresearch-rs", "--", "barrier",
+            "run", "-p", "research-harness", "--bin", "autoresearch", "--", "barrier",
             "--problem", &problem,
             "--loop-id", loop_id,
             "--run-id", run_id,
@@ -285,7 +325,7 @@ fn barrier_escalation(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("[loop-engine] autoresearch barrier failed: {stderr}");
+        tracing::warn!("[loop-engine] autoresearch barrier failed: {stderr}");
         return Ok(BarrierResult { candidates: vec![], will_resume: false });
     }
 
@@ -295,7 +335,7 @@ fn barrier_escalation(
     let auto_resume = entry.research.as_ref().map(|r| r.auto_resume).unwrap_or(true);
     let candidates = discover_barrier_candidates(repo_root);
 
-    eprintln!(
+    tracing::info!(
         "[loop-engine] barrier escalation to {escalation_target}: {} candidates, auto_resume={auto_resume}",
         candidates.len()
     );
@@ -309,7 +349,11 @@ fn discover_barrier_candidates(repo_root: &Path) -> Vec<String> {
     if !barrier_dir.exists() {
         return vec![];
     }
-    // Find most recent barrier directory
+    // Find most recent barrier directory.
+    // NOTE: This uses lexicographic path sorting, which works correctly when
+    // directory names contain ISO-like timestamps (e.g. "2026-06-20T12-00-00Z")
+    // but is only an approximation for truly chronological ordering. If barrier
+    // directories use non-sortable names, this may select the wrong report.
     let mut entries: Vec<_> = match std::fs::read_dir(&barrier_dir) {
         Ok(rd) => rd.filter_map(|e| e.ok()).collect(),
         Err(_) => return vec![],
@@ -334,6 +378,18 @@ fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> R
     let default_safety = entry.default_safety.as_deref().unwrap_or("L1");
     let _schedule_info = entry.trigger.schedule.as_deref().unwrap_or("manual");
 
+    // Use static actions if configured in the registry entry.
+    // Static actions allow loops to define their action set declaratively
+    // instead of spawning a subagent for discovery.
+    if let Some(ref static_actions) = entry.static_actions
+        && !static_actions.is_empty() {
+        tracing::info!(
+            "loop {}: using {} static action(s) from registry config",
+            entry.loop_id, static_actions.len()
+        );
+        return Ok(static_actions.clone());
+    }
+
     let handoff = format!(
         "## Objective\n\
          Discovery for loop: {loop_id}\n\n\
@@ -352,6 +408,10 @@ fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> R
         .spawn()
         .map_err(|e| LoopError::SpawnFailed(format!("discovery {binary}: {e}")))?;
 
+    // Discovery uses a hardcoded 300s timeout rather than `ctx.timeout` because
+    // discovery is a pre-dispatch phase that should finish quickly regardless of
+    // the per-action timeout. If a configurable discovery timeout is needed,
+    // add a `discovery_timeout` field to `RunContext` / `LoopRegistryEntry`.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
     let poll_interval = std::time::Duration::from_secs(dispatcher::KILL_POLL_INTERVAL_SECS);
 
@@ -366,7 +426,10 @@ fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> R
                     repo_root,
                     &entry.loop_id,
                 ) {
-                    let _ = crate::kill_switch::clear_kill_signal(repo_root, &entry.loop_id);
+                    // Best-effort cleanup: file may already be removed by another process.
+                    if let Err(e) = crate::kill_switch::clear_kill_signal(repo_root, &entry.loop_id) {
+                        tracing::debug!("clear_kill_signal (best-effort): {e}");
+                    }
                     child.kill().map_err(|e| LoopError::Io(format!("discovery kill: {e}")))?;
                     child.wait().map_err(|e| LoopError::Io(format!("discovery wait: {e}")))?;
                     return Err(LoopError::KillSignaled(format!(
@@ -472,9 +535,26 @@ fn assign_safety_levels(
 fn check_budget_preflight(profile: &LoopProfileConfig) -> Result<(), LoopError> {
     if let Some(ref budget) = profile.cost_budget
         && let Some(max_tokens) = budget.tokens_per_run {
+            // Read the hard upper limit from environment, defaulting to 10 million tokens.
+            let hard_limit: u64 = std::env::var("ROUTER_RS_LOOP_MAX_TOKENS_PER_RUN")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(10_000_000);
+
             tracing::info!(
-                "budget preflight: tokens_per_run={max_tokens} (soft limit, enforcement={})",
-                profile.closeout_enforcement,
+                "budget preflight: tokens_per_run={max_tokens}, hard_limit={hard_limit}",
+            );
+
+            if max_tokens > hard_limit {
+                return Err(LoopError::BudgetExceeded(format!(
+                    "tokens_per_run ({max_tokens}) exceeds hard upper limit ({hard_limit}). \
+                     Set ROUTER_RS_LOOP_MAX_TOKENS_PER_RUN to raise the limit.",
+                )));
+            }
+        } else {
+            tracing::warn!(
+                "budget preflight: no cost_budget or tokens_per_run configured — \
+                 budget enforcement disabled; set cost_budget.tokens_per_run to enable limits"
             );
         }
     Ok(())
@@ -581,6 +661,8 @@ mod tests {
             notification: None,
             research_enabled: false,
             research: None,
+            verify_rfv_convergence: None,
+            static_actions: None,
         }
     }
 

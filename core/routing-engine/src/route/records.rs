@@ -47,8 +47,8 @@ fn load_records_from_index_or_runtime(runtime_path: &Path) -> Result<Vec<SkillRe
         && index_path.is_file() {
             match load_records_from_index(&index_path) {
                 Ok(records) if !records.is_empty() => return Ok(records),
-                Ok(_) => eprintln!("[router-rs] index file empty, falling back to full runtime"),
-                Err(err) => eprintln!(
+                Ok(_) => tracing::info!("[router-rs] index file empty, falling back to full runtime"),
+                Err(err) => tracing::warn!(
                     "[router-rs] index load failed ({}), falling back to full runtime",
                     err
                 ),
@@ -555,7 +555,7 @@ fn min_entry_mtime(entry: &RecordsCacheEntry) -> Option<u64> {
 /// Invalidate all records cache entries (full flush).
 pub fn invalidate_records_cache() -> Result<(), String> {
     let mut state = records_cache_state().write().map_err(|e| {
-        eprintln!("[router-rs] route records cache lock poisoned: {e}");
+        tracing::warn!("[router-rs] route records cache lock poisoned: {e}");
         "route records cache lock poisoned".to_string()
     })?;
     state.map.clear();
@@ -585,7 +585,7 @@ pub fn load_records_cached_for_stdio_resolved(
 
     {
         let state = records_cache_state().read().map_err(|e| {
-            eprintln!("[router-rs] route records cache lock poisoned: {e}");
+            tracing::warn!("[router-rs] route records cache lock poisoned: {e}");
             "route records cache lock poisoned".to_string()
         })?;
         if let Some(entry) = state.map.get(&key)
@@ -607,7 +607,7 @@ pub fn load_records_cached_for_stdio_resolved(
         records: Arc::clone(&records),
     };
     let mut state = records_cache_state().write().map_err(|e| {
-        eprintln!("[router-rs] route records cache lock poisoned: {e}");
+        tracing::warn!("[router-rs] route records cache lock poisoned: {e}");
         "route records cache lock poisoned".to_string()
     })?;
     let is_new_key = !state.map.contains_key(&key);

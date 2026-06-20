@@ -194,6 +194,15 @@ pub struct LoopRegistryEntry {
     pub research_enabled: bool,
     #[serde(default)]
     pub research: Option<ResearchConfig>,
+    /// When true, the runner verifies RFV convergence state after a "pass" aggregate.
+    /// If RFV hasn't converged, the aggregate is downgraded to "fail".
+    /// Only meaningful for loops that use the RFV loop protocol.
+    #[serde(default)]
+    pub verify_rfv_convergence: Option<bool>,
+    /// Pre-defined static action list. When present, the runner uses these actions
+    /// directly instead of spawning a subagent for discovery.
+    #[serde(default)]
+    pub static_actions: Option<Vec<LoopAction>>,
 }
 
 /// Research configuration for barrier escalation (§19.9).
@@ -231,6 +240,15 @@ pub struct LoopTriggerConfig {
 
 /// Root structure of LOOP_REGISTRY.json.
 /// Contains the schema version and the full list of registered loops.
+///
+/// # Design note: String-typed enums vs Rust enums (M8)
+/// Several fields use `String` rather than a Rust `enum` (e.g. `profile`, `safety`,
+/// `execution`, `overall_status`). This is intentional: the JSON schema is consumed
+/// by external tools and may evolve independently. Using `String` provides forward
+/// compatibility — unknown values deserialize without error. The trade-off is that
+/// invalid values are caught at runtime rather than compile time. If stricter
+/// validation is needed, introduce a serde `deserialize_with` custom deserializer
+/// that falls back gracefully.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoopRegistryRoot {
     pub schema_version: String,
@@ -420,6 +438,9 @@ pub enum LoopError {
 
     #[error("Research escalation: {0}")]
     ResearchEscalation(String),
+
+    #[error("Budget exceeded: {0}")]
+    BudgetExceeded(String),
 }
 
 impl From<serde_json::Error> for LoopError {

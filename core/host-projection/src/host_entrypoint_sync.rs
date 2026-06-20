@@ -417,7 +417,7 @@ mod tests {
         let registry_json = registry_dir.join("RUNTIME_REGISTRY.json");
         fs::write(
             &registry_json,
-            r#"{"schema_version":"framework-runtime-registry-v2","host_targets":{"supported":["codex","cursor","claude","opencode"],"metadata":{"codex":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS_CODEX.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CURSOR.md",".cursor/rules/*.mdc"]},"claude":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CLAUDE.md",".claude/rules/framework.md",".claude/settings.json"]},"opencode":{"install_tool":"opencode","projection_status":"implemented","installable":true,"host_entrypoints":".opencode/opencode.json"}}}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v2","host_targets":{"supported":["codex","cursor","claude","opencode"],"metadata":{"codex":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]},"opencode":{"install_tool":"opencode","projection_status":"implemented","installable":true,"host_entrypoints":".opencode/opencode.json"}}}}"#,
         )
         .unwrap();
         assert!(
@@ -428,7 +428,7 @@ mod tests {
 
         let mut files = BTreeMap::new();
         files.insert(
-            "AGENTS_CODEX.md".to_string(),
+            "AGENTS.md".to_string(),
             b"fake codex delta\n".to_vec(),
         );
         files.insert(".fake/hooks.json".to_string(), b"{\"hooks\":{}}\n".to_vec());
@@ -436,7 +436,7 @@ mod tests {
             files,
             json_relative_paths: vec![".fake/hooks.json".to_string()],
             manifest_relative_path: ".fake/host_entrypoints_sync_manifest.json".to_string(),
-            agent_policy_entrypoint: "AGENTS_CODEX.md".to_string(),
+            agent_policy_entrypoint: "AGENTS.md".to_string(),
             after_apply: None,
         };
 
@@ -499,18 +499,18 @@ mod tests {
         fs::create_dir_all(&registry_dir).unwrap();
         fs::write(
             registry_dir.join("RUNTIME_REGISTRY.json"),
-            r#"{"schema_version":"framework-runtime-registry-v2","host_targets":{"supported":["codex","cursor","claude","opencode"],"metadata":{"codex":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS_CODEX.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CURSOR.md",".cursor/rules/*.mdc"]},"claude":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS_CLAUDE.md",".claude/rules/framework.md",".claude/settings.json"]},"opencode":{"install_tool":"opencode","projection_status":"implemented","installable":true,"host_entrypoints":".opencode/opencode.json"}}}}"#,
+            r#"{"schema_version":"framework-runtime-registry-v2","host_targets":{"supported":["codex","cursor","claude","opencode"],"metadata":{"codex":{"install_tool":"codex","projection_status":"implemented","installable":true,"host_entrypoints":"AGENTS.md"},"cursor":{"install_tool":"cursor","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".cursor/rules/*.mdc"]},"claude":{"install_tool":"claude","projection_status":"implemented","installable":true,"host_entrypoints":["AGENTS.md",".claude/rules/framework.md",".claude/settings.json"]},"opencode":{"install_tool":"opencode","projection_status":"implemented","installable":true,"host_entrypoints":".opencode/opencode.json"}}}}"#,
         )
         .unwrap();
         fs::write(
-            sibling.join("AGENTS_CODEX.md"),
+            sibling.join("AGENTS.md"),
             "local sibling codex delta\n",
         )
         .unwrap();
 
         let mut files = BTreeMap::new();
         files.insert(
-            "AGENTS_CODEX.md".to_string(),
+            "AGENTS.md".to_string(),
             b"generated codex delta\n".to_vec(),
         );
         files.insert(".fake/hooks.json".to_string(), b"{\"hooks\":{}}\n".to_vec());
@@ -518,7 +518,7 @@ mod tests {
             files,
             json_relative_paths: vec![".fake/hooks.json".to_string()],
             manifest_relative_path: ".fake/host_entrypoints_sync_manifest.json".to_string(),
-            agent_policy_entrypoint: "AGENTS_CODEX.md".to_string(),
+            agent_policy_entrypoint: "AGENTS.md".to_string(),
             after_apply: None,
         };
 
@@ -536,7 +536,7 @@ mod tests {
                 .any(|item| item.as_str() == Some(sibling_canonical.as_str()))
         );
         assert_eq!(
-            fs::read_to_string(sibling.join("AGENTS_CODEX.md")).unwrap(),
+            fs::read_to_string(sibling.join("AGENTS.md")).unwrap(),
             "local sibling codex delta\n"
         );
         assert!(sibling.join(".fake/hooks.json").is_file());

@@ -16,9 +16,7 @@ pub fn compute_claim_ceiling(claim: &Claim) -> ClaimCeiling {
         matches!(e.strength, crate::types::EvidenceStrength::Missing)
     });
 
-    if has_missing {
-        ClaimCeiling::NoClaim
-    } else if !has_strong && !has_moderate {
+    if has_missing || (!has_strong && !has_moderate) {
         ClaimCeiling::NoClaim
     } else if has_strong && claim.evidence.len() >= 3 {
         ClaimCeiling::TopVenue

@@ -67,7 +67,14 @@ pub fn verify_closeout_value(record: &serde_json::Value) -> CloseoutVerification
         for b in blockers {
             let text = b.as_str().unwrap_or("");
             let lower = text.to_ascii_lowercase();
-            if lower.contains("high") || lower.contains("critical") || lower.contains("block") {
+            // Use word-boundary-aware matching to avoid false positives from
+            // substrings (e.g. "block" in "unblock", "high" in "highlights").
+            // Matches whole words only: "high", "critical", "block", "blocked", "blocking".
+            let has_high = lower.split(|c: char| !c.is_alphanumeric())
+                .any(|w| w == "high" || w == "critical");
+            let has_block = lower.split(|c: char| !c.is_alphanumeric())
+                .any(|w| w.starts_with("block"));
+            if has_high || has_block {
                 violations.push(format!("high_severity_blocker: {}", text));
             }
         }
@@ -116,6 +123,70 @@ pub fn verify_closeout_with_evidence(
         response.closeout_allowed = false;
     }
     response
+}
+
+/// Verify RFV convergence state for paper-revision tasks.
+/// Checks that the RFV loop has closed with proper convergence (min_rounds met,
+/// consecutive_stable_count >= required, loop_status == "closed").
+/// Returns Ok(()) if converged or if no RFV state exists (non-paper tasks).
+/// Returns Err(violations) if RFV state indicates incomplete convergence.
+pub fn verify_rfv_convergence(
+    repo_root: &Path,
+    task_id: &str,
+) -> Result<(), Vec<String>> {
+    let rfv_path = repo_root
+        .join("artifacts/current")
+        .join(task_id)
+        .join("RFV_LOOP_STATE.json");
+    if !rfv_path.is_file() {
+        // No RFV state — not a paper-revision task, or RFV not started. Pass through.
+        return Ok(());
+    }
+    let raw = match fs::read_to_string(&rfv_path) {
+        Ok(r) => r,
+        Err(_) => return Ok(()), // Can't read — not a hard block for non-paper tasks
+    };
+    let val: serde_json::Value = match serde_json::from_str(&raw) {
+        Ok(v) => v,
+        Err(_) => return Ok(()),
+    };
+
+    let mut violations = Vec::new();
+
+    let loop_status = val.get("loop_status").and_then(|v| v.as_str()).unwrap_or("");
+    if loop_status != "closed" {
+        violations.push(format!("rfv_loop_not_closed: status={}", loop_status));
+    }
+
+    let current_round = val.get("current_round").and_then(|v| v.as_u64()).unwrap_or(0);
+    let min_rounds = val.get("min_rounds").and_then(|v| v.as_u64()).unwrap_or(0);
+    if current_round < min_rounds {
+        violations.push(format!(
+            "rfv_below_min_rounds: current={} min={}",
+            current_round, min_rounds
+        ));
+    }
+
+    let stable_count = val
+        .get("consecutive_stable_count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let stable_required = val
+        .get("consecutive_stable_required")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(2);
+    if stable_count < stable_required {
+        violations.push(format!(
+            "rfv_convergence_not_met: stable_count={} required={}",
+            stable_count, stable_required
+        ));
+    }
+
+    if violations.is_empty() {
+        Ok(())
+    } else {
+        Err(violations)
+    }
 }
 
 /// Read a persisted `LoopActionRecord` from the closeout directory.

@@ -52,7 +52,7 @@ pub fn score_per_segment(results: &[AigcDetectionResult]) -> Vec<(String, u32)> 
     results
         .iter()
         .map(|r| {
-            let seg_score = score(&[r.clone()]);
+            let seg_score = score(std::slice::from_ref(r));
             (r.segment_id.clone(), seg_score)
         })
         .collect()

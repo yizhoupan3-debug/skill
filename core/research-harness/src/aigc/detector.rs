@@ -340,13 +340,13 @@ fn split_sentences(text: &str, language: Language) -> Vec<String> {
     match language {
         Language::English => {
             // Split on sentence-ending punctuation.
-            text.split(|c: char| c == '.' || c == '!' || c == '?')
+            text.split(['.', '!', '?'])
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect()
         }
         Language::Chinese => {
-            text.split(|c: char| c == '。' || c == '！' || c == '？' || c == '.' || c == '!' || c == '?')
+            text.split(['。', '！', '？', '.', '!', '?'])
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect()

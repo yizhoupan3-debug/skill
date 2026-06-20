@@ -13,7 +13,7 @@ crate::impl_host_provider! {
 impl HostLifecycle for OpencodeHostProvider {
     fn profile_id(&self) -> &'static str { "opencode_profile" }
     fn session_supervisor_driver(&self) -> &'static str { "unsupported" }
-    fn context_file(&self) -> &'static str { "AGENTS_OPENCODE.md" }
+    fn context_file(&self) -> &'static str { "AGENTS.md" }
     fn driver_binary(&self) -> &'static str { "opencode" }
     fn registered_hook_events(&self) -> &'static [&'static str] { super::opencode_hooks::OPENCODE_HOOKS_REGISTERED_EVENTS }
 }

@@ -30,7 +30,7 @@ pub fn validate_research_state(path: &Path) -> Result<Vec<ValidationIssue>> {
     // Required top-level keys
     let required = ["schema_version", "project", "question", "status", "stage"];
     for key in &required {
-        if !value.get(*key).is_some() {
+        if value.get(*key).is_none() {
             issues.push(ValidationIssue {
                 path: format!("/{}", key),
                 severity: "error".into(),

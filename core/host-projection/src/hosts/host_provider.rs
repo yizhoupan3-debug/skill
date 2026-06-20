@@ -18,6 +18,14 @@ pub const HARNESS_CAPABILITIES_FULL: &[&str] = &[
 ///
 /// Default values reflect the majority across the 4 closed-set hosts.
 /// Only fields that differ per host need to be overridden in `capabilities()`.
+///
+/// **Design note**: The boolean defaults (`has_native_hook`, `supports_subagent`,
+/// `supports_worktree`) are `true` because all current closed-set hosts (claude,
+/// cursor, codex, opencode) support these features. If a new host is added that
+/// lacks any of these capabilities, it MUST explicitly set the field to `false`
+/// in its `capabilities()` override. The test
+/// `all_host_capabilities_match_expected_values` in this module guards against
+/// accidental default drift.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HostCapabilities {
     pub has_native_hook: bool,
@@ -197,7 +205,7 @@ pub fn default_host_id() -> &'static str {
     host_provider_registry()
         .first()
         .map(|p| p.host_id())
-        .unwrap_or("codex")
+        .unwrap_or("unknown")
 }
 
 pub fn host_provider_for_id(host_id: &str) -> Option<&'static dyn HostProvider> {
@@ -228,6 +236,8 @@ pub fn host_provider_for_routing_spelling(host_id: &str) -> Option<&'static dyn 
 }
 
 /// Host-filter alias expansion for B1 routing (`host_platforms` matching).
+// TODO: extend with HostProvider::routing_aliases() when alias mapping is needed
+// (e.g. "claude-code" -> "claude"). Currently all 4 hosts have no extra aliases.
 pub fn host_provider_routing_aliases(host_id: &str) -> Vec<String> {
     vec![host_id.trim().to_ascii_lowercase()]
 }

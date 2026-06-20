@@ -13,7 +13,7 @@ crate::impl_host_provider! {
 impl HostLifecycle for ClaudeHostProvider {
     fn profile_id(&self) -> &'static str { "claude_profile" }
     fn session_supervisor_driver(&self) -> &'static str { "mcp_bridge" }
-    fn context_file(&self) -> &'static str { "AGENTS_CLAUDE.md" }
+    fn context_file(&self) -> &'static str { "AGENTS.md" }
     fn driver_binary(&self) -> &'static str { "claude" }
     fn driver_supports_resume(&self) -> bool { true }
 

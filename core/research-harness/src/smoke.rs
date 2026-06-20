@@ -215,9 +215,16 @@ pub fn execute_query(query: &SmokeQuery, client: &reqwest::blocking::Client) -> 
                         return Some(days);
                     }
                     p.get("year").and_then(Value::as_i64).map(|yr| {
-                        let est_date = chrono::NaiveDate::from_ymd_opt(yr as i32, 7, 1)
-                            .unwrap_or_else(|| chrono::NaiveDate::from_ymd_opt(yr as i32, 1, 1).unwrap());
-                        (now.date_naive() - est_date).num_days().max(0)
+                        let current_year = now.year();
+                        if yr as i32 == current_year {
+                            // Same year: assume fresh (conservative)
+                            0
+                        } else {
+                            // Different year: calculate from start of that year
+                            let est_date = chrono::NaiveDate::from_ymd_opt(yr as i32, 1, 1)
+                                .unwrap_or(now.date_naive());
+                            (now.date_naive() - est_date).num_days().max(0)
+                        }
                     })
                 })
                 .min()

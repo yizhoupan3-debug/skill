@@ -60,7 +60,7 @@ pub fn detect_drift(original: &[Claim], current: &[Claim]) -> Result<Vec<DriftRe
     }
 
     // New claims in current (not in original)
-    for (id, _) in &curr_map {
+    for id in curr_map.keys() {
         if !orig_map.contains_key(id) {
             results.push(DriftResult {
                 claim_id: id.to_string(),

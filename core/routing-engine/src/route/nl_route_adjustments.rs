@@ -550,6 +550,10 @@ fn eval_when_expr(
 /// so a single skill may receive up to MAX_NL_BOOST_ACCUMULATION × 2 (90 pre + 90 post).
 /// Prevents multiple boost rules within one phase from stacking to unbeatable 100+ scores.
 /// Suppress rules are not affected by this cap.
+///
+/// **Cross-reference**: If [`super::scoring_config::ScoringWeights`] weight values change
+/// significantly (e.g. max score doubles from ~100 to ~200), this constant must be
+/// re-evaluated to prevent NL adjustments from dominating or being capped too early.
 const MAX_NL_BOOST_ACCUMULATION: f64 = 90.0;
 
 fn apply_rule_list<'a>(

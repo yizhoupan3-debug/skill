@@ -14,9 +14,9 @@ pub fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
     };
     out.insert(
         "tool_name".to_string(),
-        json!(crate::cursor_hooks::tool_name_of(event)),
+        json!(host_projection::hosts::hook_dispatch::extract_tool_name(event)),
     );
-    let merged_input = crate::cursor_hooks::tool_input_of(event);
+    let merged_input = host_projection::hosts::hook_dispatch::extract_tool_input(event);
     if merged_input
         .as_object()
         .map(|m| !m.is_empty())

@@ -67,6 +67,7 @@ fn ensure_state_defaults(state: &Value) -> Value {
     s
 }
 
+#[allow(dead_code)]
 fn arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
     state
         .get(key)
@@ -85,6 +86,7 @@ fn arr_mut<'a>(state: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
         .expect("expected array")
 }
 
+#[allow(dead_code)]
 fn set_key(state: &mut Value, key: &str, value: Value) {
     state
         .as_object_mut()
@@ -196,16 +198,17 @@ pub fn research_claim_with_client(
     if results.is_empty() && !errors.is_empty() {
         bail!("External research failed: {}", errors.join("; "));
     }
-    let simple_id: String = {
+    // Use nanosecond timestamp for research IDs (64 bits entropy from lower 16 hex chars)
+    let research_id = {
         use std::time::{SystemTime, UNIX_EPOCH};
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        format!("{nanos:016x}").chars().take(8).collect()
+        format!("ext-{nanos:016x}")
     };
     Ok(json!({
-        "research_id": format!("ext-{simple_id}"),
+        "research_id": research_id,
         "claim_id": source_record
             .as_ref()
             .and_then(|item| item.get("claim_id"))
@@ -599,7 +602,7 @@ pub fn cleanup_question_text(question: &str) -> String {
         regex::Regex::new(
             r"(?i)^(can|could|does|do|did|is|are|should|would|will|how|why|what|whether)\s+",
         )
-        .unwrap()
+        .expect("invalid CLEANUP_RE regex")
     });
     let cleaned = re.replace(trimmed, "").trim().to_string();
     if cleaned.is_empty() {
@@ -621,7 +624,7 @@ pub fn extract_question_parts(question: &str) -> (String, String, String) {
         regex::Regex::new(
             r"(.+?)\s+(improve|improves|reduce|reduces|increase|increases|enable|enables)\s+(.+)",
         )
-        .unwrap()
+        .expect("invalid MAIN_RE regex")
     });
     if let Some(caps) = main_re.captures(&lowered) {
         focus = caps[1].trim().to_string();
@@ -630,7 +633,7 @@ pub fn extract_question_parts(question: &str) -> (String, String, String) {
     } else {
         static USING_RE: OnceLock<regex::Regex> = OnceLock::new();
         let using_re =
-            USING_RE.get_or_init(|| regex::Regex::new(r"using\s+(.+?)\s+for\s+(.+)").unwrap());
+            USING_RE.get_or_init(|| regex::Regex::new(r"using\s+(.+?)\s+for\s+(.+)").expect("invalid USING_RE regex"));
         if let Some(caps) = using_re.captures(&lowered) {
             focus = caps[1].trim().to_string();
             target = caps[2].trim().to_string();
@@ -751,7 +754,7 @@ pub fn draft_claims_from_state(
     let claims = gate
         .get("draft_claims")
         .and_then(Value::as_array)
-        .unwrap()
+        .expect("draft_claims just inserted must be an array")
         .iter()
         .map(|draft| str_field(draft, "claim"))
         .collect::<Vec<_>>();

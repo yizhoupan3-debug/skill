@@ -11,6 +11,9 @@ pub mod hook_dispatch;
 /// Cross-host file state lock abstraction.
 pub mod file_state_lock;
 
+/// Cross-host worktree auto-save and audit utilities (all 4 hosts).
+pub mod worktree_auto_save;
+
 // ── Migrated host providers ──
 pub mod claude_agent;
 pub mod claude_hooks;

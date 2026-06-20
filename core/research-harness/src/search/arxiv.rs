@@ -15,7 +15,31 @@ use crate::search::helpers::*;
 ///
 /// Returns a list of JSON objects with fields: source, title, authors, year,
 /// venue, url, abstract, citation_count, external_ids.
+///
+/// Retries up to 3 times with exponential backoff on transient errors (503, timeout).
 pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
+    let mut last_err = None;
+    for attempt in 0..3 {
+        match try_search(client, query, limit) {
+            Ok(results) => return Ok(results),
+            Err(e) => {
+                let msg = e.to_string();
+                // Only retry on transient errors
+                let is_transient = msg.contains("503") || msg.contains("502")
+                    || msg.contains("timeout") || msg.contains("connection");
+                if is_transient && attempt < 2 {
+                    last_err = Some(e);
+                    std::thread::sleep(std::time::Duration::from_millis(500 * (1 << attempt)));
+                    continue;
+                }
+                return Err(e);
+            }
+        }
+    }
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("arXiv search failed after 3 attempts")))
+}
+
+fn try_search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
     let raw = client
         .get(ARXIV_BASE_URL)
         .header(USER_AGENT, "research-harness/0.1")

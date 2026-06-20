@@ -19,7 +19,7 @@ pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
 pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-goal-v1";
 pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
 pub const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
-pub const LEGACY_GOAL_DRIVE_PARAGRAPH_PREFIX: &str = "GOAL_DRIVE";
+// LEGACY_GOAL_DRIVE_PARAGRAPH_PREFIX removed — no callers, legacy prefix from retired goal-drive paragraph format.
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
 
 // Re-export from validation

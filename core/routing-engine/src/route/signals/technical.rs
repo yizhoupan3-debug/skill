@@ -71,9 +71,12 @@ pub fn has_skill_framework_maintenance_context(
             "routing",
             "skill 系统",
             "skill系统",
-            "轻量化",
-            "兼容层",
-            "胶水层",
+            // NOTE: "轻量化", "兼容层", "胶水层", "沉到 runtime", "沉到runtime",
+            // "减少入口", "减入口", "不损害功能", "加重负担", "没有用" were removed
+            // here to avoid implicit double-counting with SIGNAL_DEFS
+            // `runtime_lightweighting` markers. Those markers are now scored via
+            // `has_signal_by_name("runtime_lightweighting", …)` / NL route
+            // adjustments — no framework keyword gate needed.
             "核查",
             "合并",
             "精简",
@@ -82,13 +85,6 @@ pub fn has_skill_framework_maintenance_context(
             "旧文件",
             "口径",
             "contract",
-            "沉到 runtime",
-            "沉到runtime",
-            "减少入口",
-            "减入口",
-            "不损害功能",
-            "加重负担",
-            "没有用",
             "治理任务",
         ]
         .iter()

@@ -131,7 +131,7 @@ pub fn score_claim_priority(record: &Value) -> Value {
 
 /// 按优先级排序 claims。
 pub fn prioritize_claims(records: &[Value]) -> Vec<Value> {
-    let mut scored: Vec<Value> = records.iter().map(|r| score_claim_priority(r)).collect();
+    let mut scored: Vec<Value> = records.iter().map(score_claim_priority).collect();
     scored.sort_by(|a, b| {
         let sa = a.get("priority_score").and_then(Value::as_i64).unwrap_or(0);
         let sb = b.get("priority_score").and_then(Value::as_i64).unwrap_or(0);
@@ -192,6 +192,7 @@ fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
         .unwrap_or(&[])
 }
 
+#[allow(dead_code)]
 fn set_key(state: &mut Value, key: &str, value: Value) {
     state
         .as_object_mut()
@@ -227,7 +228,7 @@ pub fn top_priority_claim(state: &Value) -> Option<Value> {
             order_a
                 .cmp(&order_b)
                 .then_with(|| score_b.cmp(&score_a))
-                .then_with(|| str_field(a, "claim_id").cmp(&str_field(b, "claim_id")))
+                .then_with(|| str_field(a, "claim_id").cmp(str_field(b, "claim_id")))
         });
         return ranked.into_iter().next();
     }
@@ -246,10 +247,10 @@ pub fn build_search_plan_entry(record: &Value) -> Value {
         "priority_label": record.get("priority_label").cloned().unwrap_or(Value::Null),
         "priority_reason": record.get("priority_reason").cloned().unwrap_or(Value::Null),
         "recommended_order": record.get("recommended_order").cloned().unwrap_or(Value::Null),
-        "keywords": compact_words(&claim, 6),
-        "queries": build_search_queries(&claim, &axis),
+        "keywords": compact_words(claim, 6),
+        "queries": build_search_queries(claim, axis),
         "sources": ["Semantic Scholar", "arXiv", "Google Scholar"],
-        "required_evidence": default_required_evidence(&axis),
+        "required_evidence": default_required_evidence(axis),
     })
 }
 
@@ -278,7 +279,7 @@ pub fn current_search_plan(state: &Value) -> Vec<Value> {
         order_a
             .cmp(&order_b)
             .then_with(|| score_b.cmp(&score_a))
-            .then_with(|| str_field(a, "claim_id").cmp(&str_field(b, "claim_id")))
+            .then_with(|| str_field(a, "claim_id").cmp(str_field(b, "claim_id")))
     });
     plan
 }
@@ -309,11 +310,11 @@ pub fn current_brief(state: &Value) -> Option<Value> {
         "priority_score": top.get("priority_score").cloned().unwrap_or(json!(0)),
         "priority_reason": str_field_default(&top, "priority_reason", "_No reason recorded._"),
         "decision_goal": "Decide whether this claim is safe to keep, should be reframed, or should be dropped.",
-        "verification_standard": verification_standard_for_priority(&str_field_default(&top, "priority_label", "later")),
+        "verification_standard": verification_standard_for_priority(str_field_default(&top, "priority_label", "later")),
         "sources": matching.and_then(|item| item.get("sources")).cloned().unwrap_or(json!(["Semantic Scholar", "arXiv", "Google Scholar"])),
-        "queries": matching.and_then(|item| item.get("queries")).cloned().unwrap_or_else(|| json!(build_search_queries(&str_field(&top, "claim"), &axis))),
-        "required_evidence": matching.and_then(|item| item.get("required_evidence")).cloned().unwrap_or_else(|| json!(default_required_evidence(&axis))),
-        "expected_baselines": expected_baselines_for_axis(&axis),
+        "queries": matching.and_then(|item| item.get("queries")).cloned().unwrap_or_else(|| json!(build_search_queries(str_field(&top, "claim"), axis))),
+        "required_evidence": matching.and_then(|item| item.get("required_evidence")).cloned().unwrap_or_else(|| json!(default_required_evidence(axis))),
+        "expected_baselines": expected_baselines_for_axis(axis),
     }))
 }
 

@@ -10,7 +10,6 @@ pub fn has_explicit_prose_polish_marker(query_text: &str, query_token_list: &[St
 }
 
 /// 不要求 `has_paper_context` 的显式学术润色（如「SCI润色 abstract」「polish this abstract」）。
-
 pub fn has_standalone_academic_polish_context(
     query_text: &str,
     query_token_list: &[String],
@@ -18,12 +17,14 @@ pub fn has_standalone_academic_polish_context(
     if has_paper_prose_negation_context(query_text, query_token_list) {
         return false;
     }
-    let lower = query_text.to_ascii_lowercase();
+    // query_text is already lowercased at routing entry — all markers are lowercase.
+    // NOTE: "sci润色" / "sci 润色" are intentionally omitted here because the
+    // whitespace-variant ambiguity (no-space "sci润色" vs spaced "sci 润色") is
+    // unreliable via `contains`.  The signal is reliably caught by the
+    // `explicit_prose_polish` SIGNAL_DEFS entry ("sci润色", "sci 润色" markers)
+    // via `has_explicit_prose_polish_marker` below, which uses token-level
+    // `text_matches_phrase` (order-independent, whitespace-tolerant).
     if [
-        "SCI润色",
-        "SCI 润色",
-        "sci润色",
-        "sci 润色",
         "学术润色",
         "英文论文润色",
     ]
@@ -35,10 +36,10 @@ pub fn has_standalone_academic_polish_context(
         return true;
     }
     let has_polish = has_explicit_prose_polish_marker(query_text, query_token_list)
-        || lower.contains("polish")
-        || lower.contains("proofread")
-        || lower.contains("copyedit");
-    has_polish && text_has_manuscript_section(&lower, query_text)
+        || query_text.contains("polish")
+        || query_text.contains("proofread")
+        || query_text.contains("copyedit");
+    has_polish && text_has_manuscript_section(query_text, query_text)
 }
 
 pub fn has_paper_writing_context(query_text: &str, query_token_list: &[String]) -> bool {
@@ -89,7 +90,6 @@ pub fn has_paper_writing_context(query_text: &str, query_token_list: &[String]) 
 }
 
 /// 比 `has_paper_writing_context` 更宽：口语改稿、粘贴段落、LaTeX 块——**无需**用户说「润色/language_register」。
-
 pub fn looks_like_pasted_manuscript_prose(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     if text.contains("\\begin{")
@@ -220,7 +220,6 @@ pub fn has_paper_context(query_text: &str, query_token_list: &[String]) -> bool 
 /// or `.research.toml` marker file. Directory detection is re-evaluated on
 /// each call (single `stat` per ancestor — negligible cost).
 /// Check ancestor directories for research workspace marker files.
-
 pub fn has_paper_workbench_frontdoor_context(
     query_text: &str,
     query_token_list: &[String],
@@ -327,7 +326,6 @@ pub fn paper_skill_requires_context(slug: &str) -> bool {
 }
 
 /// Substring-prone single-token markers must use whole-token match only (e.g. `review` vs `preview`).
-
 fn paper_route_marker_matches(query_text: &str, query_token_list: &[String], marker: &str) -> bool {
     let token_only = matches!(marker, "review" | "审" | "看" | "检查" | "评估");
     if token_only {
@@ -357,7 +355,6 @@ fn text_has_manuscript_section(lower: &str, query_text: &str) -> bool {
 }
 
 /// 显式润色/写作 marker（用于审稿+润色并存时不阻断 prose 路径）。
-
 pub fn has_paper_review_revision_intent(query_text: &str, query_token_list: &[String]) -> bool {
     if !has_paper_context(query_text, query_token_list) {
         return false;
