@@ -301,7 +301,6 @@ fn scaffold_host_integration(
             ));
         }
 
-    let host_id_upper = host_id.to_uppercase().replace('-', "_");
     let host_id_camel = host_id.replace('-', "_");
     let host_name = host_id
         .split('-')
@@ -391,7 +390,6 @@ host_id: {hid}
                 hn = host_name,
                 hid = host_id,
                 hcc = host_id_camel,
-                hiu = host_id_upper,
             ),
         ),
     ];

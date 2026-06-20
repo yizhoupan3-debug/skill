@@ -22,6 +22,14 @@ test-all:
     cargo test --test rust_cli_tools
     cargo test --manifest-path core/runtime-core/Cargo.toml --lib
     cargo test --manifest-path core/host-projection/Cargo.toml --lib
+    cargo test --manifest-path core/core-state/Cargo.toml --lib
+    cargo test --manifest-path core/framework-kernel/Cargo.toml --lib
+    cargo test --manifest-path core/routing-engine/Cargo.toml --lib
+    cargo test --manifest-path core/loop-engine/Cargo.toml --lib
+    cargo test --manifest-path core/core-policy/Cargo.toml --lib
+    cargo test --manifest-path core/framework-runtime/Cargo.toml --lib
+    cargo test --manifest-path core/runtime-core-contracts/Cargo.toml --lib
+    cargo test --manifest-path core/research-harness/Cargo.toml --lib
 
 test-workspace:
     cargo test --workspace
