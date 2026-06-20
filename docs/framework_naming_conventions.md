@@ -140,4 +140,6 @@ fn check_legacy_env_vars() {
 
 **Status**: RESOLVED - `GENERATED_ARTIFACTS.json` updated to remove 10 entries referencing deleted `scripts/skill-compiler-rs/Cargo.toml`. Deprecated entries moved to `_deprecated_entries` array for audit trail.
 
-`skill-compiler-rs` 删除后，**手维护热路由**为 `skills/SKILL_ROUTING_RUNTIME.json` 与 `skills/SKILL_MANIFEST.json`（见 [`SKILL_MAINTENANCE_GUIDE.md`](../skills/SKILL_MAINTENANCE_GUIDE.md)）。2026-06 已清理的空壳 companion（`SKILL_ROUTING_RUNTIME_EXPLAIN.json`、`SKILL_ROUTING_METADATA.json`、`SKILL_PLUGIN_CATALOG.json`、`SKILL_HEALTH_MANIFEST.json`、`SKILL_ROUTING_INDEX.md` 等）**勿**再手改或恢复；路由 metadata 真源为 `SKILL_ROUTING_RUNTIME.json` 顶层 `default_host_platforms` 与各 skill 行。其余生成物见 [`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json)（如 `FRAMEWORK_SURFACE_POLICY.json`）。
+`skill-compiler-rs` 删除后，**手维护热路由**为 `skills/SKILL_ROUTING_RUNTIME.json` 与 `skills/SKILL_MANIFEST.json`（见 [`SKILL_MAINTENANCE_GUIDE.md`](../skills/SKILL_MAINTENANCE_GUIDE.md)）。2026-06 已清理的空壳 companion（`SKILL_ROUTING_RUNTIME_EXPLAIN.json`、`SKILL_ROUTING_METADATA.json`、`SKILL_PLUGIN_CATALOG.json`、`SKILL_HEALTH_MANIFEST.json` 等）**勿**再手改或恢复；路由 metadata 真源为 `SKILL_ROUTING_RUNTIME.json` 顶层 `default_host_platforms` 与各 skill 行。其余生成物见 [`GENERATED_ARTIFACTS.json`](../configs/framework/GENERATED_ARTIFACTS.json)（如 `FRAMEWORK_SURFACE_POLICY.json`）。
+
+**重要说明**：上述空壳 companion 文件是存根文件，仅用于向后兼容，不应被修改或恢复。所有实际的路由配置和元数据都应存储在 `SKILL_ROUTING_RUNTIME.json` 中。

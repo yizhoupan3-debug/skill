@@ -31,6 +31,10 @@ trigger_hints:
   - top-tier 论文
   - revision modes
   - claim 漂移
+  - 改稿周期
+  - revision loop
+  - 自动改到能投
+  - 对抗审稿循环
 metadata:
   version: "1.16.0"
   platforms: [supported]
@@ -43,9 +47,9 @@ source: local
 ---
 
 ## Quick Ref
-- **Purpose**: 论文全流程前门——自动路由 reviewer/writer lane，一站式审稿、返修、投稿
-- **Key Rules**: 默认 hostile-but-fair 审稿立场；edit_scope 门控（surgical/refactor）；审稿意见逐条关停；prose chain 自动触发；禁降 claim 逃避
-- **Trigger**: "帮我审这篇 paper"、"改到能投"、"R&R"、"顶刊"、"先审再改"、"整体推进这篇论文"
+- **Purpose**: 论文全流程前门——自动路由 reviewer/writer lane，一站式审稿、返修、投稿。支持 loop mode（自动多轮对抗审稿直到收敛）
+- **Key Rules**: 默认 hostile-but-fair 审稿立场；edit_scope 门控（surgical/refactor）；审稿意见逐条关停；prose chain 自动触发；禁降 claim 逃避；**loop mode 收敛硬约束**（min_rounds=5, consecutive_stable=2）
+- **Trigger**: "帮我审这篇 paper"、"改到能投"、"R&R"、"顶刊"、"先审再改"、"整体推进这篇论文"、"改稿周期"、"revision loop"
 <!-- full content below; load on demand -->
 
 # Paper Workbench
@@ -92,6 +96,8 @@ It exists so the user does not need to decide first whether the job is
 - External calibration can change the verdict, baseline expectations, novelty bar, or target-journal fit
 - The user wants 顶刊/顶会/CCF-A/top-tier readiness, or wants the workflow to
   produce papers that can survive selective venues rather than local polish
+- The user says `改稿周期`, `revision loop`, `自动改到能投`, `对抗审稿循环`, or wants
+  automated multi-round adversarial review until convergence → **loop mode**
 
 ## Do not use
 
@@ -277,6 +283,144 @@ When lanes require structured verification, load the corresponding skill:
 - `@lane:reviewer` structure/logic checks → [`../structure-verification/SKILL.md`](../structure-verification/SKILL.md)
 - Literature/citation integrity checks → [`../literature-verification/SKILL.md`](../literature-verification/SKILL.md)
 - Statistical methodology checks → [`../statistical-verification/SKILL.md`](../statistical-verification/SKILL.md)
+
+## Research Harness MCP tools（Rust 加速路径）
+
+论文审稿/返修流程可通过 `research-harness` crate 的 MCP tools 加速。
+这些 tools 在 `host-projection` 的 `mcp_stdio_harness` 中注册，可直接调用：
+
+| MCP Tool | 用途 | 输入 | 输出 |
+|----------|------|------|------|
+| `research_review_dimensions` | 获取审稿维度 prompt + checklist | `round: u64` | 该轮维度的审稿 prompt 和 checklist |
+| `research_aigc_check` | AIGC 检测 | `text: string` | 0-100 AI 概率评分 + 信号列表 |
+| `research_aigc_humanize` | AIGC 降重（句法改写/词汇替换） | `text: string` | 重写后的文本 + 策略列表 |
+
+**使用时机**：
+- **审稿维度 prompt**：loop mode 每轮 reviewer spawn 时，用 `research_review_dimensions(round)` 获取精确的审稿 prompt 和 checklist，替代手动构建
+- **AIGC 检测**：投稿前检测手稿 AI 概率，或在 prose chain 中作为 QC 步骤
+- **AIGC 降重**：对高 AI 概率段落执行句法改写，降低 AIGC 检测风险
+
+## AIGC 检测与降重（可选步骤）
+
+在投稿前或 prose chain 中，可对论文正文执行 AIGC 检测和降重：
+
+### 检测流程
+
+```
+1. 将论文正文按段落/句子分割
+2. 对每个片段调用 research_aigc_check → 获取 0-100 评分
+3. 评分阈值：
+   - 0-30: 安全（低 AI 概率）
+   - 30-60: 注意（中等 AI 概率，建议人工复查）
+   - 60-100: 高风险（高 AI 概率，强烈建议降重）
+4. 对高风险片段执行降重
+```
+
+### 降重策略
+
+调用 `research_aigc_humanize` 对高风险文本执行以下策略：
+- **词汇替换**：AI 高频词汇 → 学术常用替代（Moreover → Additionally, Leverage → Use）
+- **句法改写**：主动/被动变换、从句重组
+- **句式多样化**：注入长短句交替，打破 AI 文本的均匀节奏
+- **保持学术语气**：不降低学术规范性
+
+## Loop mode（自动多轮对抗审稿 — 直到收敛）
+
+### 路由规则
+
+| 用户意图 | 模式 | 行为 |
+|---------|------|------|
+| 默认（不指定维度）：帮我审 / 改到能投 / 投稿前把关 / 整体推进 | **loop mode** | 自动多轮对抗审稿 → 修复 → 再审，直到收敛 |
+| 指定单一维度：只审语言 / 只审逻辑 / 只审图表 | **single-dimension** | 单轮审查该维度，不循环 |
+| 明确说"loop" + 维度：只审语言但 loop / 改稿周期 | **loop mode** | 进入 loop，该维度作为第一轮，后续轮次渐进扩展 |
+| 明确说"loop" + 无维度：改稿周期 / revision loop | **loop mode** | 从头开始完整 loop |
+
+### Loop mode 核心流程
+
+```
+Step 1: 初始化 RFV 账本
+  rfv_loop_manage(operation=start,
+    goal="顶刊标准 paper revision — 对抗审稿 → 修复 → 收敛",
+    max_rounds=10,
+    min_rounds=5,
+    consecutive_stable_required=2)
+
+Step 2: 多轮循环（一次只 spawn 一个 reviewer subagent）
+  FOR round = 1 TO 10:
+
+    # 2a: Spawn reviewer subagent
+    spawn_agent(
+      role="hostile {target_venue} reviewer",
+      prompt="""
+        本轮审查维度：{dimension_for_round(round)}
+        渐进披露：每轮一个新维度，不暴露总轮数。
+        严格按 severity-spec 分级（P0/A/B/Warning/C）。
+        只报告确实找到的、有具体位置的问题。
+        输出 JSON：{findings: [...], verdict, dimension_covered}
+      """
+    )
+
+    # 2b: 主会话修复（surgical edit_scope）
+    基于 findings 执行改稿
+
+    # 2c: 记录轮次
+    rfv_loop_manage(operation=append_round,
+      round=round,
+      review_summary=..., fix_summary=...,
+      adversarial_findings=...,
+      supervisor_decision="continue")
+
+    # 2d: 收敛检查
+    IF 无新 A/B 级 findings AND round >= min_rounds → stable_count++
+    ELSE → stable_count = 0
+    IF stable_count >= consecutive_stable_required → BREAK（收敛）
+
+Step 3: 关闭 RFV
+  rfv_loop_manage(operation=append_round,
+    round=current_round,
+    supervisor_decision="close",
+    verify_result="PASS")
+
+Step 4: 输出收敛报告（verdict + 每轮 findings 摘要 + 改动统计）
+```
+
+### 渐进披露维度（7 维度循环）
+
+| 轮次 | 审查维度 | 子维度 |
+|------|---------|--------|
+| R1 | **逻辑与证据** | claim ceiling, evidence coverage, ablation isolation, comparison fairness |
+| R2 | **最近工作与新颖性** | closest prior work gaps, novelty positioning, venue calibration |
+| R3 | **数学与符号** | equation closure, symbol uniqueness, derivation gaps, overmath |
+| R4 | **图表与可读性** | figure rendering, caption self-containment, table density |
+| R5 | **语言与防御性** | terminology density, defensive tone, EN slop / ZH 套话 |
+| R6 | **长度与附录路由** | page pressure, hidden evidence, appendix routing |
+| R7+ | **全面重审** | 所有维度一起审，验证前几轮修复无回归 |
+
+### 收敛定义（硬约束）
+
+```yaml
+convergence:
+  min_rounds: 5                     # 硬约束：至少跑满 5 轮
+  consecutive_stable_required: 2    # 连续 2 轮无新 A/B/P0 findings
+  max_rounds: 10                    # 硬上限
+  stable_definition:
+    - no_new_P0: true               # 无新 P0（一票否决）发现
+    - no_new_A: true                # 无新 A（核心硬伤）发现
+    - no_new_B: true                # 无新 B（需补充）发现
+    # C 级和 Warning 不阻塞收敛（记录但不阻止关闭）
+  diminishing_returns:              # 可选辅助退出
+    threshold: 3                    # 连续 3 轮只发现 C/Warning → 提示用户
+```
+
+RFV 引擎在 Rust 层强制执行 `min_rounds` 和 `consecutive_stable_required`——即使 supervisor（LLM）传入 `supervisor_decision: "close"`，round < min_rounds 时仍被拦截为 "active"。
+
+### Subagent 约束
+
+- **每次只 spawn 1 个 reviewer subagent**（不并行）
+- reviewer subagent 不知道总轮数（渐进披露）
+- reviewer subagent 不知道前几轮的 findings（防止锚定偏差）
+- 主会话负责修复（不 spawn fixer subagent）
+- 收敛后写 closeout record 供 loop-engine 验证
 
 ## Exit Criteria
 

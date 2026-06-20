@@ -30,7 +30,7 @@
 
 **测试验证**:
 ```bash
-cargo run -p autoresearch-rs -- barrier --problem "test"
+cargo run -p research-harness --bin autoresearch -- barrier --problem "test"
 # 输出包含：
 "drift_detection": {
   "score": 0.3,
@@ -57,7 +57,7 @@ cargo run -p autoresearch-rs -- barrier --problem "test"
 
 **测试验证**:
 ```bash
-cargo run -p autoresearch-rs -- list-hypotheses --workspace test-proj
+cargo run -p research-harness --bin autoresearch -- list-hypotheses --workspace test-proj
 # 输出：
 Hypotheses in /path:
 --------------------------------------------------------------------------------

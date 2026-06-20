@@ -61,14 +61,15 @@ trigger_hints:
 
 ## Verification Checklist
 
-可执行脚本：[`scripts/verify/reproducibility.sh`](../../scripts/verify/reproducibility.sh)
+注：可复现性验证暂无独立 Rust 实现，使用通用检查流程。
 
-```bash
-# 自动检测 lock file + source 目录：
-SRCDIR=src/ scripts/verify/reproducibility.sh
-
-# 指定 checkpoint 文件：
-CKPT=checkpoints/latest.pt scripts/verify/reproducibility.sh
+```
+# 手动检查清单：
+1. grep -r 'seed\|random_state\|set_seed' src/ — 确认种子设置
+2. diff <(run1_hash) <(run2_hash) — 确定性重跑
+3. 检查 lock file（Pipfile.lock / poetry.lock / Cargo.lock）存在且同步
+4. 检查数据版本化（DVC / Git LFS）
+5. 加载 checkpoint 并验证无报错
 ```
 
 | # | 检查名 | PASS 条件 |

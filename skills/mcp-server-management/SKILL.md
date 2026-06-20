@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
 ### Rust 实现
 
-参考本仓库四个 Rust MCP server（跨五宿主统一注册）：
+参考本仓库四个 Rust MCP server（跨四宿主统一注册）：
 - `router-rs-framework`：stdio 模式，框架路由 / goal / closeout 工具集
 - `browser-mcp`：stdio 模式，带 session supervisor 的浏览器自动化
 - `mcp-codegraph`：stdio 模式，代码知识图谱（search/callers/callees/impact）

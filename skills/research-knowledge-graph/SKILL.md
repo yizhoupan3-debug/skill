@@ -111,9 +111,9 @@ research-log hub-search "transformer"
 
 ## Cross-References
 
-- Research log database: `tools/research-log-rs/`
-- Research workspace CLI: `tools/autoresearch-rs/`
+- Research log database: `core/research-harness/src/log/`
+- Research workspace CLI: `core/research-harness/src/bin/autoresearch.rs`
 - Harness specification: `docs/spec/research-harness.md` §19
-- Entity extraction patterns: `tools/research-log-rs/src/extract.rs`
-- Graph traversal: `tools/research-log-rs/src/graph.rs`
-- Hub indexer: `tools/research-log-rs/src/hub.rs`
+- Entity extraction patterns: `core/research-harness/src/log/extract.rs`
+- Graph traversal: `core/research-harness/src/log/graph.rs`
+- Hub indexer: `core/research-harness/src/log/hub.rs`

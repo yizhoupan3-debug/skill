@@ -25,7 +25,7 @@
       "gate",
       "delegation",
       "P1",
-      "Decide whether work should stay local, use bounded sidecars, or escalate to team orchestration. Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundar",
+      "Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration. Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundar",
       "required",
       [
         "/workflow",
@@ -44,7 +44,10 @@
       3,
       "skills/agent-swarm-orchestration/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -88,7 +91,10 @@
       10,
       "skills/algo-trading/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -124,7 +130,10 @@
       3,
       "skills/citation-management/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -160,7 +169,10 @@
       3,
       "skills/code-review-deep/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -227,7 +239,10 @@
       0,
       "skills/deepinterview/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -260,7 +275,10 @@
       3,
       "skills/design-md/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -294,7 +312,10 @@
       3,
       "skills/diagramming/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -316,7 +337,10 @@
       0,
       "skills/discussx/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -344,7 +368,10 @@
       3,
       "skills/doc/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -375,7 +402,10 @@
       10,
       "skills/email-template/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -401,7 +431,7 @@
         "探索性分析",
         "数据版本控制",
         "方案偏离",
-        "环境管理",
+        "实验环境管理",
         "随机种子",
         "预注册"
       ],
@@ -409,7 +439,10 @@
       3,
       "skills/experiment-reproducibility/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -435,7 +468,10 @@
       0,
       "skills/formal-verification/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -469,7 +505,10 @@
       3,
       "skills/gh-address-comments/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -509,7 +548,10 @@
       3,
       "skills/gh-fix-ci/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -531,7 +573,10 @@
       0,
       "skills/gitx/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -563,7 +608,10 @@
       0,
       "skills/implementx/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       [
@@ -600,7 +648,10 @@
       10,
       "skills/infographic/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -619,14 +670,17 @@
         "citation verification",
         "contradiction sweep",
         "literature check",
-        "引用检查",
+        "引用审查",
         "文献验证"
       ],
       "local",
       0,
       "skills/literature-verification/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -656,7 +710,10 @@
       3,
       "skills/math-derivation/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -684,7 +741,10 @@
       3,
       "skills/mcp-server-management/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -699,6 +759,7 @@
       "论文全流程前门：自动路由 reviewer/writer lane，一站式审稿、返修、投稿。按顶刊/顶会标准把关，支持 rebuttal、R&R、cover letter 全流程。",
       "preferred",
       [
+        "改稿",
         "CCF-A 论文",
         "SCI润色",
         "paper review",
@@ -732,7 +793,10 @@
       3,
       "skills/paper-workbench/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -759,7 +823,6 @@
         "prose ladder",
         "section rewrite",
         "story card",
-        "改稿",
         "润色落笔",
         "论文改稿"
       ],
@@ -767,7 +830,10 @@
       3,
       "skills/paper-workbench/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -790,7 +856,7 @@
       "required",
       [
         "PDF 转文字",
-        "layout",
+        "pdf layout",
         "pdf",
         "rendering",
         "reportlab",
@@ -802,7 +868,10 @@
       3,
       "skills/pdf/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -832,7 +901,10 @@
       3,
       "skills/plan-mode/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -854,7 +926,10 @@
       0,
       "skills/planx/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       [
@@ -889,7 +964,10 @@
       0,
       "skills/prose-verification/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -921,7 +999,10 @@
       3,
       "skills/python-env-management/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -946,7 +1027,10 @@
       0,
       "skills/reproducibility-verification/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -989,7 +1073,10 @@
       0,
       "skills/research-discovery/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1028,7 +1115,10 @@
       0,
       "skills/research-execution/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1058,7 +1148,55 @@
       3,
       "skills/scientific-figure-plotting/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
+      "skill",
+      null,
+      null
+    ],
+    [
+      "research-knowledge-graph",
+      "L2",
+      "owner",
+      "none",
+      "P2",
+      "Research Knowledge Graph — navigate, visualize, trace connections between entries, manage entities, cross-workspace search.",
+      "preferred",
+      [
+        "知识图谱",
+        "research graph",
+        "研究方向连接",
+        "实体管理",
+        "research-knowledge-graph",
+        "研究路径追溯",
+        "知识关联",
+        "研究方向关系",
+        "knowledge graph",
+        "跨工作区搜索",
+        "研究关系图",
+        "kg viz",
+        "研究历史追溯",
+        "barrier route",
+        "障碍路径",
+        "log:neighbors",
+        "log:viz",
+        "log:route",
+        "entity search",
+        "hub search",
+        "连接查询",
+        "研究知识图谱可视化"
+      ],
+      "local",
+      0,
+      "skills/research-knowledge-graph/SKILL.md",
+      [
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1084,7 +1222,10 @@
       3,
       "skills/sentry/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1103,7 +1244,7 @@
         "clean up code",
         "code simplify",
         "simplify",
-        "代码清理",
+        "代码简化清理",
         "代码简化",
         "去重",
         "简化代码",
@@ -1115,7 +1256,10 @@
       3,
       "skills/simplify/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -1158,7 +1302,10 @@
       3,
       "skills/skill-framework-developer/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1186,7 +1333,10 @@
       3,
       "skills/slides/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -1218,7 +1368,10 @@
       3,
       "skills/primary-runtime/spreadsheets/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1253,7 +1406,10 @@
       3,
       "skills/statistical-analysis/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1279,7 +1435,10 @@
       0,
       "skills/statistical-verification/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1305,7 +1464,10 @@
       0,
       "skills/structure-verification/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1339,7 +1501,10 @@
       10,
       "skills/systematic-debugging/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1377,7 +1542,10 @@
       10,
       "skills/tikz-paper-figure/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       [
@@ -1416,7 +1584,10 @@
       0,
       "skills/update/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       null,
@@ -1438,7 +1609,10 @@
       0,
       "skills/verifyx/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "framework_command",
       [
@@ -1478,7 +1652,10 @@
       3,
       "skills/visual-review/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1490,12 +1667,16 @@
       "owner",
       "none",
       "P2",
-      "Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation, smoke tests.",
+      "Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation, smoke tests. Backed by core/research-harness.",
       "optional",
       [
         "研究工作区",
         "科研工作区",
         "research workspace",
+        "研究方向（初始化）",
+        "初始化研究",
+        "研究初始化",
+        "开启研究",
         "claim 管理",
         "新颖性声明",
         "novelty gate",
@@ -1505,6 +1686,7 @@
         "实验反思",
         "科研回顾",
         "研究日志",
+        "research log",
         "自动研究",
         "loop 研究",
         "barrier research",
@@ -1516,7 +1698,10 @@
       0,
       "skills/autoresearch/SKILL.md",
       [
-        "supported"
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
       ],
       "skill",
       null,
@@ -1526,5 +1711,11 @@
   "full_skill_count": 46,
   "hot_skill_count": 45,
   "manifest_skill_count": 46,
-  "version": 1
+  "version": 1,
+  "default_host_platforms": [
+    "claude",
+    "codex",
+    "cursor",
+    "opencode"
+  ]
 }

@@ -62,14 +62,14 @@ trigger_hints:
 
 ## Verification Checklist
 
-可执行脚本：[`scripts/verify/formal.sh`](../../scripts/verify/formal.sh)
+Rust 实现：`research_harness::verification::formal`（通过 MCP tool 或直接调用）
 
-```bash
-# 检查 SymPy 表达式恒等性：
-EXPR="sin(x)**2 + cos(x)**2 - 1" scripts/verify/formal.sh
+```
+# 量纲一致性检查（MCP）：
+research_aigc_check / research_review_dimensions 获取维度 prompt
 
-# 检查量纲报告：
-DIMENSION_FILE=dimension_report.txt scripts/verify/formal.sh
+# 编程方式调用：
+research_harness::verification::formal::check_dimensional_consistency(equation)
 ```
 
 | # | 检查名 | PASS 条件 |

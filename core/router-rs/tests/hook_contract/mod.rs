@@ -531,17 +531,11 @@ fn matrix_user_override_disarms_review_gate_on_stop() {
             stop_allowed(host, &stop),
             "{host:?} user override must not hard-block Stop; out={stop:?}"
         );
-        match host {
-            // Claude applies `review_override` on UserPromptSubmit only (Stop delta).
-            MatrixHost::Claude => assert!(
-                stop_review_gate_advisory(host, &stop),
-                "{host:?} Stop-time override not wired; advisory expected; out={stop:?}"
-            ),
-            _ => assert!(
-                !stop_review_gate_advisory(host, &stop),
-                "{host:?} user override must clear REVIEW_GATE nudge; out={stop:?}"
-            ),
-        }
+        // All hosts: user override must suppress REVIEW_GATE advisory on Stop.
+        assert!(
+            !stop_review_gate_advisory(host, &stop),
+            "{host:?} user override must clear REVIEW_GATE nudge; out={stop:?}"
+        );
     });
 }
 

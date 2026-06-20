@@ -1,6 +1,6 @@
 # Data Availability & FAIR（Nature-data 精华）
 
-五宿主统一：手稿数据声明与仓库计划由 **`$paper-workbench`** 在改稿/rebuttal 阶段引用本 reference，不另设热路由 skill。
+四宿主统一：手稿数据声明与仓库计划由 **`$paper-workbench`** 在改稿/rebuttal 阶段引用本 reference，不另设热路由 skill。
 
 ## 何时读
 

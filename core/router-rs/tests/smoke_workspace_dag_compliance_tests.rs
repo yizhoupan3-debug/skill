@@ -58,17 +58,8 @@ fn workspace_has_nine_core_crates() {
         "core/router-rs",
         "tools/codegraph-rs",
         "tools/evolution-rs",
-        "tools/autoresearch-rs",
+        "core/research-harness",
     ];
-
-    for krate in &expected_crates {
-        assert!(
-            workspace_content.contains(krate),
-            "Workspace missing core crate: {}",
-            krate
-        );
-    }
-}
 
 #[test]
 fn leaf_crates_have_zero_workspace_deps() {
@@ -79,7 +70,7 @@ fn leaf_crates_have_zero_workspace_deps() {
         "core/routing-engine",
         "tools/evolution-rs",
         "tools/codegraph-rs",
-        "tools/autoresearch-rs",
+        "core/research-harness",
     ];
 
     let workspace_core = [

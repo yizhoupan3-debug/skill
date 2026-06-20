@@ -53,7 +53,7 @@ and synthesizes a cited report. It is the general-purpose answer to "deeply
 research this topic for me" when the task does not require literature-survey
 scoping, experiment design, or manuscript work.
 
-**五宿主统一**：NL 热路由与本 skill 相同；非手稿科研总地图见
+**四宿主统一**：NL 热路由与本 skill 相同；非手稿科研总地图见
 [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md) 与
 [`../research-execution/SKILL.md`](../research-execution/SKILL.md)。Claude
 另可用 native workflow：`.claude/workflows/deep-research.js`；Cursor 等宿主按

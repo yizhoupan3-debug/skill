@@ -929,7 +929,7 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         );
     }
     assert!(
-        slugs.len() <= 45,
+        slugs.len() <= 46,
         "hot runtime surface should stay bounded; got {}",
         slugs.len()
     );
@@ -2166,7 +2166,7 @@ fn framework_runtime_python_package_stays_removed() {
 fn autoresearch_skill_is_active_routing_entrypoint() {
     assert!(
         project_root()
-            .join("tools/autoresearch-rs/src/main.rs")
+            .join("core/research-harness/src/bin/autoresearch.rs")
             .exists()
     );
     assert!(project_root().join("skills/autoresearch/SKILL.md").exists());

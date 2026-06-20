@@ -279,8 +279,8 @@ fn run_ctl_ok(args: &[&str]) -> Output {
 fn run_ctl(args: &[&str]) -> Output {
     let mut command = Command::new("cargo");
     command
-        .args(["run", "--quiet", "--manifest-path"])
-        .arg(project_root().join("tools/autoresearch-rs/Cargo.toml"))
+        .args(["run", "--quiet", "--bin", "autoresearch", "--manifest-path"])
+        .arg(project_root().join("core/research-harness/Cargo.toml"))
         .arg("--")
         .args(args)
         .current_dir(project_root());

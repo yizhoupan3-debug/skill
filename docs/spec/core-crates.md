@@ -98,7 +98,7 @@ version: unified-v7
 | `snapshot_skills` | 版本快照（带排他锁） |
 | `heal_skills` | 自动剪枝零使用技能 |
 
-### 3.4 tools/autoresearch-rs — 研究工作区
+### 3.4 core/research-harness — 研究工作区（含 autoresearch CLI）
 
 **功能**：管理工作区生命周期（init → claim → hypothesis → run → reflect），维护 research-state.yaml。
 
@@ -125,7 +125,7 @@ version: unified-v7
 
 ```
 Layer 0 (leaf):  core-state  framework-kernel  routing-engine
-                 tools/codegraph-rs  tools/autoresearch-rs  tools/evolution-rs
+                 tools/codegraph-rs  core/research-harness  tools/evolution-rs
                  trace-runtime       runtime-storage
 Layer 1:         core-policy
 Layer 2:         host-projection

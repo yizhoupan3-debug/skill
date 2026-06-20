@@ -8,7 +8,7 @@
 - 任务含「加一节」「改结构」「补 label/引用」「换模板」。
 - 与 `$paper-workbench` 改稿并行：先过本蓝图再落 prose。
 
-## 硬约束（五宿主相同）
+## 硬约束（四宿主相同）
 
 1. **源真源**：只改仓库内作者维护的 `.tex` / `.Rmd`；禁止把 `build/`、`*.aux`、`*.log` 当编辑对象。
 2. **一次一动**：单轮优先一个 `section` 或一个 `environment` 块；跨多节重构先交 outline（见 claim-spine section contract）。

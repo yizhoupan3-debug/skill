@@ -58,8 +58,8 @@ research-discovery / research-execution
     → skill routing system (NL 路由 ± $ref)
 
 autoresearch (skill wrapper)
-    → tools/autoresearch-rs/ (Rust CLI，跨 skill 共享)
-    → tools/research-log-rs/ (分层日志，§19.5)
+    → core/research-harness/src/bin/autoresearch.rs (Rust CLI，跨 skill 共享)
+    → core/research-harness/src/log/ (分层日志，§19.5)
     → research-state.yaml (研究状态真源)
     → research-discovery / research-execution (§19.4.4 handoff)
 
@@ -363,7 +363,7 @@ on_verify_fail after retries exhausted
 
 #### 19.4.4 后端实现
 
-所有 lane 通过 `cargo run -p autoresearch-rs -- <subcommand>` 调用 `tools/autoresearch-rs/` CLI。
+所有 lane 通过 `cargo run -p research-harness --bin autoresearch -- <subcommand>` 调用 `core/research-harness/src/bin/autoresearch.rs` CLI。
 
 工作区数据：
 - 状态：`<workspace>/research-state.yaml`（schema_version: 4）
@@ -810,7 +810,7 @@ Loop Runner 执行 action
 | 问题 | 严重度 | 修复位置 |
 |------|--------|---------|
 | research-discovery `disable-model-invocation: true` → NL 路由命中后也无法触发 | P0 blocker | §19.2.1 → `false` |
-| research-loadout `explicit_opt_in` → 用户不知道要手动激活 | P1 | §19.8 → `default` |
+| research-loadout `explicit_opt_in` → 用户不知道要手动激活 | ~~P1~~ ✅ 已修复 | §19.8 → moved to `default_loadouts` |
 | research ↔ loop 完全隔离，无 barrier escalation | P0 | §19.9 新增 |
 | NL 路由 trigger_hints 不覆盖日常用语（"查论文""找文献"） | P2 | §19.2.2 扩展 |
 | autoresearch-rs 无 skill 入口 | P1 | §19.4 |
@@ -824,11 +824,11 @@ Loop Runner 执行 action
 |------|--------|------|
 | deep-research workflow（JS）和 research-discovery（MCP+HTTP）使用不同的数据平面 | P3 | 有意图差异（Web 调研 vs 学术文献），不合并，但需更好的入口指引 |
 | autoresearch-rs 仍使用阻塞 HTTP（reqwest blocking），与异步框架不一致 | P2 | 重构成本高，功能不受影响 |
-| loop architecture spec（v8）尚未实现，§19.9 的 research-aware loop 依赖于它 | P0 blocker for loop | loop-engine 代码未编写，当前无法端到端测试（已在 spec-loop-architecture.md 首行标注） |
+| loop architecture spec（v8）已实现，research-aware loop 已可用 | ~~P0~~ ✅ 已实现 | `core/loop-engine/` ~2666 LOC，`barrier_escalation()` 在 runner.rs 中通过 shell 调用 autoresearch CLI |
 | BARRIER_REPORT.json 的 evidence 已由 Semantic Scholar + arXiv 自动填充 | ✅ 已修复 | candidates.evidence 现在包含论文标题+URL+作者 |
 | `research-state.yaml` schema 版本为 4，但无 schema 验证 | P2 | 仅靠 `ensure_state_defaults` 做运行时修复 |
-| `ROUTING_SIGNAL_MARKERS.json` 中无 barrier 相关信号定义 | P2 | 需要在配置文件中增加 "barrier_escalation" 信号组 |
-| NL_ROUTE_ADJUSTMENTS.json 被框架阻断直接修改 | P2 | 需通过 Rust host-entrypoint sync 或 routing path 修改 |
+| `ROUTING_SIGNAL_MARKERS.json` 中无 barrier 相关信号定义 | ~~P2~~ ✅ 已修复 | 已新增 `barrier_escalation_signals` 组（17 个 marker） |
+| NL_ROUTE_ADJUSTMENTS.json 被框架阻断直接修改 | ~~P2~~ ✅ 已标注 | barrier 相关 entries 已标注 `_signal_source` 引用 ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals |
 
 #### 19.11.3 对抗审查结论
 
@@ -853,8 +853,8 @@ Loop Runner 执行 action
 | `skills/research-discovery/references/academic-sources.md` | Skill 作者 | 学术源新增/更新 |
 | `skills/research-execution/SKILL.md` | Skill 作者 | 路由契约/lane 变更 |
 | `skills/autoresearch/SKILL.md` | Skill 作者 | workspace lane / barrier escalation 变更 |
-| `tools/autoresearch-rs/src/` | Rust 开发者 | CLI 功能变更（含 barrier 子命令） |
-| `tools/research-log-rs/src/`（已实现） | Rust 开发者 | 日志系统 + FTS5 查询 |
+| `core/research-harness/src/bin/` | Rust 开发者 | CLI 功能变更（含 barrier 子命令） |
+| `core/research-harness/src/log/`（已实现） | Rust 开发者 | 日志系统 + FTS5 查询 |
 | `artifacts/research-log/smoke-tests.json` | 研究员 | 新查询/方向/barrier 注册 |
 | `artifacts/research-barrier/` | loop runner + autoresearch | barrier escalation 自动写入 |
 | `configs/framework/LOOP_REGISTRY.json` | 框架维护者 | loop research 模式注册 |
@@ -994,4 +994,51 @@ schema 包含 `workspace_index`、`hub_entries`、`hub_entries_fts` 三张核心
 | [auxiliary.md](auxiliary.md) | §14.4 harness_context_signals 中数学信号与 research-discovery `math_background_inquiry` lane 共享 |
 | [observability-testing.md](observability-testing.md) | §17 测试契约包含 autoresearch-rs 覆盖统计；本规约 §19.10 为其科研领域特化 |
 | [security-lifecycle.md](security-lifecycle.md) | §12 closeout 为 research-execution 的验证 gate |
+
+---
+
+### 19.15 统一 Rust Crate 架构（`core/research-harness/`）
+
+v7 引入 `core/research-harness/` crate，将散落在 `runtime-core`、`autoresearch-rs`、`research-log-rs`、`citation_tool_rs` 中的科研逻辑统一到单一 crate。SKILL.md 保留为用户前端，MCP tools 暴露 Rust API。
+
+#### 模块结构
+
+| 模块 | 职责 | 源 |
+|------|------|-----|
+| `search/` | 文献检索（Semantic Scholar, arXiv, paperplain MCP） | autoresearch-rs |
+| `claims/` | Claim ledger 管理、drift 检测、ceiling 计算 | autoresearch-rs |
+| `log/` | 研究活动日志（SQLite FTS5）、知识图谱、实体提取 | research-log-rs |
+| `citation/` | 引用审计、BibTeX 渲染、DOI 验证 | citation_tool_rs |
+| `review/` | 多轮对抗审稿编排、7 维度、收敛判定 | runtime-core/rfv_loop.rs |
+| `hooks/` | Prose/Adversarial/ActivityLog hooks | runtime-core hooks |
+| `aigc/` | AIGC 检测（n-gram + burstiness + syntactic）、降重 | 新建 |
+| `verification/` | 文献/统计/Prose QC/结构/形式验证 | scripts/verify/*.sh |
+| `types.rs` | 共享类型（Finding, Claim, Paper, AigcResult...） | 新建 |
+
+#### MCP Tools
+
+通过 `host-projection` 的 `mcp_stdio_harness` 暴露：
+
+- `research_review_dimensions` — 获取审稿维度 prompt + checklist
+- `research_aigc_check` — AIGC 检测（0-100 评分 + 信号列表）
+- `research_aigc_humanize` — AIGC 降重（句法改写/词汇替换）
+
+#### 依赖关系
+
+```
+research-harness
+    ├── core-state (leaf crate, no cycle risk)
+    ├── loop-engine (通用 loop 调度器)
+    └── workspace deps (anyhow, chrono, reqwest, rusqlite, serde, regex, ...)
+```
+
+**不依赖** `runtime-core` 或 `host-projection`，避免循环依赖。
+`runtime-core` 可通过 trait object 或函数指针调用 `research-harness` 的 hook 接口。
+
+#### 向后兼容
+
+- `autoresearch-rs` / `research-log-rs` 保留为独立 binary（thin CLI wrapper 待完成）
+- `scripts/verify/*.sh` 保留（被验证 skill 引用），Rust 实现为 programmatic API
+- `host-projection` 的 hook 注册可渐进迁移为调用 `research_harness::hooks`
+- 所有现有 MCP tool 名称不变，调用方无感知
 | [loop-architecture.md](loop-architecture.md) | §19.9 research-aware loop 模式在此注册，本规约与 loop 架构通过 LOOP_REGISTRY.json 和 BARRIER_REPORT.json 桥接 |

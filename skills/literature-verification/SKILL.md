@@ -59,18 +59,14 @@ trigger_hints:
 
 ## Verification Checklist
 
-可执行脚本：[`scripts/verify/literature.sh`](../../scripts/verify/literature.sh)
+Rust 实现：`research_harness::verification::literature`（通过 MCP tool 或直接调用）
 
-```bash
-# 完整运行（需提供 DOIs + claim 矩阵文件）：
-scripts/verify/literature.sh \
-  --dois "10.1234/abc 10.5678/def" \
-  --claims claim_matrix.txt \
-  --contradictions contradiction_report.txt \
-  --closest closest_work.md
+```
+# DOI 可达性检查：
+research_harness::verification::literature::verify_doi_reachable(doi).await
 
-# 仅检查 DOI 可达性：
-DOIS="10.1234/abc 10.5678/def" scripts/verify/literature.sh
+# Claim 覆盖率计算：
+research_harness::verification::literature::verify_claim_coverage(claims, references)
 ```
 
 | # | 检查名 | PASS 条件 |

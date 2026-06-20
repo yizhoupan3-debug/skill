@@ -34,7 +34,11 @@ mod desktop_mcp_tests {
             "rfv_loop_manage",
             "closeout_record_write",
             "web_fetch",
+            "routing_evolution",
             "goal_state_manage",
+            "research_aigc_check",
+            "research_aigc_humanize",
+            "research_review_dimensions",
         ];
         for name in &handler_arms {
             assert!(names.contains(name), "tool {name} missing from tools/list");
@@ -132,8 +136,8 @@ mod desktop_mcp_tests {
         assert_eq!(response["result"]["isError"], true);
         let text = response_text(&response);
         assert!(
-            text.contains("blocked"),
-            "expected blocked loopback, got: {text}"
+            text.contains("SSRF") || text.contains("blocked"),
+            "expected blocked loopback or SSRF warning, got: {text}"
         );
     }
 

@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-18"
+last_verified: "2026-06-20"
 depends_on:
   - _common.md
   - ../spec.md
@@ -22,15 +22,15 @@ parent: _common.md
 
 ## 插件 Hook 系统
 
-OpenCode 通过 JS/TS 插件系统提供完整 hook 生命周期：
+OpenCode 通过 JS/TS 插件系统提供完整 hook 生命周期。插件调用 `router-rs-cli host hook --event=<event> --repo-root <cwd> opencode`（与其它宿主共用 `hook.sh` 的统一命令格式）：
 
-| OpenCode Hook | 等价于 | 能力 |
+| OpenCode Hook | 等价于 | router-rs 命令 |
 |---|---|---|
-| `tool.execute.before` | PreToolUse | 拦截工具调用，可修改参数或 throw 阻断 |
-| `tool.execute.after` | PostToolUse | 工具执行后处理 |
-| `session.idle` | Stop | 会话空闲时触发 |
+| `tool.execute.before` | PreToolUse | `router-rs-cli host hook --event=PreToolUse --repo-root <cwd> opencode` |
+| `tool.execute.after` | PostToolUse | `router-rs-cli host hook --event=PostToolUse --repo-root <cwd> opencode` |
+| `session.idle` | Stop | `router-rs-cli host hook --event=Stop --repo-root <cwd> opencode` |
 | `permission.asked` / `permission.replied` | Permission hooks | 权限拦截 |
-| `shell.env` | 环境注入 | 注入 shell 环境变量 |
+| `shell.env` | 环境注入 | 注入 `SKILL_FRAMEWORK_ROOT` / `OPENCODE_PROJECT_ROOT` |
 
 插件加载顺序：全局配置 → 项目配置 → `~/.config/opencode/plugins/` → `.opencode/plugins/`
 
@@ -60,7 +60,7 @@ OpenCode 通过 JS/TS 插件系统提供完整 hook 生命周期：
 
 ## Fail-open / Fail-closed 设计意图
 
-OpenCode 采用 **fail-open** 策略：当 `router-rs` hook 二进制缺失或不可读时，`tool.execute.before` 事件静默通过（不阻断工具执行）。这与 Claude / Cursor / Codex 的 fail-closed 策略不同（见 [`hook-hosts.md`](hook-hosts.md) §Fail-open / Fail-closed 比较）。
+OpenCode 采用**分层安全策略**：插件层 **fail-open**（JS/TS 插件 hook 失败不阻断编辑器），hook 脚本层对 critical events（`tool.execute.before`、`tool.execute.after`、`session.idle`、`session.created`）仍 **fail-closed**（router-rs 不可用时返回 `decision:block`）。这与 Claude / Cursor / Codex 的纯 fail-closed 策略不同（见 [`hook-hosts.md`](hook-hosts.md) §Fail-open / Fail-closed 比较）。
 
 **设计理由**：OpenCode 的插件 hook 系统通过 JS/TS 运行时执行，hook 失败不应阻断核心编辑器功能。MCP 工具层（`framework_snapshot`、`skill_route` 等）独立于 hook 系统，hook 缺失不影响 MCP 功能。
 
@@ -116,7 +116,7 @@ OpenCode 的 `OpencodeHostProvider` 实现以下 trait 方法：
 
 - **双文件注入**：`AGENTS.md`（跨宿主内核）+ `AGENTS_OPENCODE.md`（宿主 delta）
 - **内容**：MCP-native 架构说明、permission 规则替代 PreToolUse、session/review 状态管理路径
-- **与其他宿主的差异**：opencode 的 `has_hard_gate_hooks` 为 `false`（无 Rust 侧 hard gate），closeout evidence hooks 不支持
+- **与其他宿主的差异**：opencode 的 `has_hard_gate_hooks` 为 `false`（无 Rust 侧 hard gate），closeout evidence hooks 通过 MCP 工具层实现
 
 ## 安装与文件分布
 

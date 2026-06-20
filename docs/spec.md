@@ -118,7 +118,7 @@ tools/codegraph-rs (~4.1K LOC)    ← 代码图谱（FTS5 + tree-sitter，位于
 tools/evolution-rs (~2K LOC)      ← 技能进化审计（位于 tools/）
 └── 53 tests
 
-tools/autoresearch-rs (~5K LOC)   ← 研究工作区控制平面（位于 tools/）
+core/research-harness (含 autoresearch CLI) ← 研究工作区控制平面
 ├── 模块化架构（state/search/text/provenance）
 └── 164 tests
 

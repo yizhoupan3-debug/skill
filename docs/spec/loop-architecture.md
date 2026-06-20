@@ -242,7 +242,7 @@ core-state/                                 ← 扩展
 └── ...                                     ← 其余不变
 
 runtime-core/src/cli/
-└── loop_cli.rs (NEW)                       ← router-rs loop {run,status,kill}
+└── router_command_dispatch.rs               ← router-rs loop {run,status,kill}（见 `run_loop_command`）
 
 host-projection/src/hosts/                  ← 最小变更
 └── ...                                     ← my-light → interactive 映射
@@ -295,7 +295,7 @@ pub fn resolve_subagent_binary() -> Result<String, LoopError> {
     // 2. which opencode
 }
 
-pub fn run_action_sync(repo_root, loop_id, run_id, action, timeout) -> Result<SubagentResult> {
+pub fn run_action_sync(repo_root, action, loop_id, run_id, timeout) -> Result<SubagentResult> {
     let handoff = build_handoff(action, loop_id, run_id);
     let child = Command::new(binary).args(["-p", &handoff])...;
     // 同步等待，5s 轮询 kill 信号

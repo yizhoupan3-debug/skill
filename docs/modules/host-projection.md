@@ -20,7 +20,7 @@ last_verified: "2026-06-19"
 | `hooks` | 1,541 | 函数指针代理层（OnceLock slots，解耦 runtime-core 与宿主 hooks） |
 | `host_entrypoint_sync` | 541 | 宿主入口同步 |
 | `host_integration/` | 6,794 | 宿主集成核心（详见 [#projection-子模块详解](#projection-子模块详解)） |
-| `hosts/` | ~15,700+ | 五宿主 hook 实现（详见 [#hosts-子模块详解](#hosts-子模块详解)） |
+| `hosts/` | ~15,700+ | 四宿主 hook 实现（详见 [#hosts-子模块详解](#hosts-子模块详解)） |
 
 ## hooks.rs 函数指针代理层
 
@@ -40,7 +40,7 @@ runtime-core (注册) → hooks.rs (OnceLock slots) → host-projection hosts (�
 ## 近期变更
 
 - v6.5: `projection.rs`（3,668 行）拆分为 `mod.rs` + `projection_bootstrap.rs` + `projection_host_ops.rs` + `projection_manifest.rs`
-- v6.5: `mcp_stdio_harness.rs` 拆分为目录 `mcp_stdio_harness_dir/mod.rs` + `tools.rs`
+- v6.5: `mcp_stdio_harness.rs` 拆分为目录 `mcp_stdio_harness/mod.rs` + `tools.rs`
 - v6.5: 新增 `hook_dispatch.rs`（统一 hook 分发 trait）和 `file_state_lock.rs`（跨宿主文件锁）
 - v6.5: `claude_code_hooks` 测试提取到独立文件
 
@@ -58,24 +58,30 @@ runtime-core (注册) → hooks.rs (OnceLock slots) → host-projection hosts (�
 
 | 文件 | 行数 | 功能 |
 |------|------|------|
-| `mod.rs` | 1,590 | 核心投影逻辑：`HostProjectionAdapter` trait、五宿主适配器常量、MCP payload 生成、narrative 渲染 |
-| `projection_bootstrap.rs` | 702 | 默认 bootstrap 生成与验证（`build_default_bootstrap_payload`） |
-| `projection_host_ops.rs` | 659 | 各宿主 install/status/remove 实现 |
-| `projection_manifest.rs` | 747 | 投影 manifest CRUD、entrypoint 渲染、Cursor MCP 服务器管理 |
+| `mod.rs` | ~1,300 | 核心投影逻辑：`HostProjectionAdapter` 定义、四宿主适配器常量、MCP payload 生成、narrative 渲染 |
+| `projection_bootstrap.rs` | 678 | 默认 bootstrap 生成与验证（`build_default_bootstrap_payload`） |
+| `projection_host_ops.rs` | 741 | 各宿主 install/status/remove 实现 |
+| `projection_manifest.rs` | 780 | 投影 manifest CRUD、entrypoint 渲染、Cursor MCP 服务器管理 |
+| `projection_ops_trait.rs` | 60 | `HostProjectionOps` trait + `PROJECTION_OPS_REGISTRY`（v6.5 拆分产物） |
 
 ### 核心 trait
 
 ```rust
+// mod.rs — HostProjectionAdapter 是元数据持有者（非分发表）
 pub struct HostProjectionAdapter {
-    pub install: fn(...) -> Result<...>,
-    pub status: fn(...) -> Result<...>,
-    pub remove: fn(...) -> Result<...>,
-    pub home_root: fn(...) -> Option<PathBuf>,
-    pub explicit_home: fn(...) -> Option<String>,
+    pub tool: &'static str,
+    pub host_id: &'static str,
+}
+
+// 操作分发通过 HostProjectionOps trait（projection_ops_trait.rs）实现
+pub trait HostProjectionOps: Send + Sync {
+    fn install(&self, args: &ProjectionArgs) -> Result<(), String>;
+    fn status(&self, args: &ProjectionArgs) -> Result<ProjectionStatus, String>;
+    fn remove(&self, args: &ProjectionArgs) -> Result<(), String>;
 }
 ```
 
-四个适配器常量: `CURSOR_ADAPTER`、`CLAUDE_ADAPTER`、`OPENCODE_ADAPTER`、`CODEX_ADAPTER`。
+四宿主适配器常量: `KNOWN_PROJECTION_TOOLS` 静态数组（`mod.rs`）中包含 cursor、claude、opencode、codex 四项。
 
 ### 关键 pub 函数
 
@@ -99,7 +105,7 @@ pub struct HostProjectionAdapter {
 
 ## hosts 子模块详解
 
-五宿主 hook 实现 + 共享抽象层。
+四宿主 hook 实现 + 共享抽象层。
 
 ### 共享抽象
 
@@ -133,7 +139,7 @@ HostHookDispatcher trait
 - `HookStateConfig`: 配置 host_id/state_dir_leaf/state_filename，提供 `with_state_lock` 泛型方法
 - `read_stdin_json`: 带 4 MiB 限制的 stdin JSON 读取
 
-### 五宿主 hook 实现
+### 四宿主 hook 实现
 
 | 宿主 | 文件 | 行数 | 使用共享抽象 |
 |------|------|------|-------------|
@@ -156,8 +162,8 @@ HostHookDispatcher trait
 
 | 文件 | 行数 | 功能 |
 |------|------|------|
-| `mcp_stdio_harness_dir/mod.rs` | 1,600 | MCP 工具分发主循环 |
-| `mcp_stdio_harness_dir/tools.rs` | 900+ | 工具实现（evidence、goal、rfv、closeout、session、snapshot、web_fetch、skill_route/skill_search/skill_read/skill_route_status） |
+| `mcp_stdio_harness/mod.rs` | ~1,470 | MCP 工具分发主循环 |
+| `mcp_stdio_harness/tools.rs` | ~1,380 | 工具实现（evidence、goal、rfv、closeout、session、snapshot、web_fetch、skill_route/skill_search/skill_read/skill_route_status） |
 
 ### 已知技术债
 

@@ -60,11 +60,17 @@ trigger_hints:
 
 ## Verification Checklist
 
-可执行脚本：[`scripts/verify/statistical.sh`](../../scripts/verify/statistical.sh)
+Rust 实现：`research_harness::verification::statistical`（通过 MCP tool 或直接调用）
 
-```bash
-# 含数据 + 方法文件：
-DATA=results.csv METHODS=methods.md scripts/verify/statistical.sh
+```
+# GRIM 检验：
+research_harness::verification::statistical::grim_test(observed_mean, n)
+
+# p 值验证：
+research_harness::verification::statistical::verify_p_value(observed, expected, tolerance)
+
+# 多重比较校正检查：
+research_harness::verification::statistical::check_multiple_comparison_correction(num_tests, correction_applied)
 ```
 
 | # | 检查名 | PASS 条件 |

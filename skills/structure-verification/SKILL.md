@@ -61,14 +61,15 @@ trigger_hints:
 
 ## Verification Checklist
 
-可执行脚本：[`scripts/verify/structure.sh`](../../scripts/verify/structure.sh)
+Rust 实现：`research_harness::verification::structure`（通过 MCP tool 或直接调用）
 
-```bash
-# 基本用法（默认查找 main.tex）：
-TEXDIR=/path/to/paper scripts/verify/structure.sh
+```
+# LaTeX 语法检查：
+research_harness::verification::structure::check_latex_compilable(tex_path)
 
-# 指定主文件：
-TEXDIR=/path/to/paper MAIN=paper.tex scripts/verify/structure.sh
+# 图表引用完整性：
+research_harness::verification::structure::check_figure_references(tex_path)
+# 返回未找到定义的引用列表
 ```
 
 | # | 检查名 | PASS 条件 |

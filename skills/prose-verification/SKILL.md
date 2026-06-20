@@ -61,14 +61,20 @@ trigger_hints:
 
 ## Verification Checklist
 
-可执行脚本：[`scripts/verify/prose.sh`](../../scripts/verify/prose.sh)
+Rust 实现：`research_harness::verification::prose_qc`（通过 MCP tool 或直接调用）
 
-```bash
-# 基本用法（提供文稿文件）：
-FILE=draft.tex scripts/verify/prose.sh
+```
+# 术语一致性检查：
+research_harness::verification::prose_qc::check_terminology_consistency(text, glossary)
 
-# 含术语表 + claim ledger：
-FILE=draft.tex GLOSSARY=glossary.txt CLAIM_LEDGER=claim_ledger.md scripts/verify/prose.sh
+# AI slop 检测（英文）：
+research_harness::verification::prose_qc::detect_en_slop(text)
+
+# 中文套话检测：
+research_harness::verification::prose_qc::detect_zh_slop(text)
+
+# Hedging 词统计：
+research_harness::verification::prose_qc::count_hedging_words(text)
 ```
 
 | # | 检查名 | PASS 条件 |

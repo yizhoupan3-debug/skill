@@ -65,18 +65,41 @@ pub fn fresh_matrix_repo(host: MatrixHost, label: &str) -> PathBuf {
             fs::create_dir_all(root.join(".cursor/hooks")).expect("mkdir cursor hooks");
             fs::write(root.join(".cursor/hooks.json"), b"{\"version\":1}\n").expect("hooks.json");
             fs::create_dir_all(root.join(".cursor/hook-state")).expect("hook-state");
+            seed_runtime_registry_json(&root);
         }
         MatrixHost::Codex => {
             fs::create_dir_all(root.join(".codex/hook-state")).expect("codex hook-state");
+            seed_runtime_registry_json(&root);
         }
         MatrixHost::Claude => {
             fs::create_dir_all(root.join(".claude/hook-state")).expect("claude hook-state");
+            seed_runtime_registry_json(&root);
         }
         MatrixHost::Opencode => {
             fs::create_dir_all(root.join(".opencode")).expect("opencode dir");
+            seed_runtime_registry_json(&root);
         }
     }
     root
+}
+
+/// Seed a minimal RUNTIME_REGISTRY.json in the temp repo so
+/// `review_spawn_first_enabled(repo_root)` resolves to `true`.
+fn seed_runtime_registry_json(root: &Path) {
+    let registry = json!({
+        "schema_version": "framework-runtime-registry-v2",
+        "review_gate": {
+            "spawn_first_enabled": true,
+            "reviewer_lanes": ["general-purpose"]
+        }
+    });
+    let configs = root.join("configs/framework");
+    fs::create_dir_all(&configs).expect("mkdir configs/framework");
+    fs::write(
+        configs.join("RUNTIME_REGISTRY.json"),
+        registry.to_string(),
+    )
+    .expect("write RUNTIME_REGISTRY.json");
 }
 
 pub fn host_label(host: MatrixHost) -> &'static str {
@@ -322,6 +345,7 @@ impl ForkInferEnableGuard {
             "ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
             "ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
             "ROUTER_RS_CLAUDE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
+            "ROUTER_RS_OPENCODE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE",
         ] {
             restored_legacy.push((key.to_string(), std::env::var_os(key)));
             unsafe { std::env::remove_var(key) };

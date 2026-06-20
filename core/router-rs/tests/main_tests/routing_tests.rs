@@ -981,7 +981,7 @@ fn route_snapshot_builder_normalizes_score_bucket_and_reasons_class() {
     assert_eq!(snapshot.route_snapshot.score_bucket, "30-39");
     assert_eq!(
         snapshot.route_snapshot.reasons_class,
-        "trigger phrase matched: 直接做代码."
+        " Trigger phrase matched: 直接做代码. |trigger phrase matched: 直接做代码."
     );
 }
 

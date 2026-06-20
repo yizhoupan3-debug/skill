@@ -74,7 +74,7 @@ runtime-core 的核心子模块（v7 拆分后保留 ~5,700 行），包含 stdi
 
 | 子模块 | 行数 | 功能 |
 |--------|------|------|
-| `mod.rs` | 1,900+ | 主入口：closeout 评估、evidence append、session artifacts |
+| `mod.rs` | 180 | 主入口：重新导出子模块，closeout 评估、evidence append、session artifacts |
 | `mod_tests.rs` | 217 | 模块测试 |
 | `alias.rs` | 743 | framework alias 构建与分发 |
 | `framework_doctor.rs` | 646+ | 框架诊断（continuity audit） |
@@ -104,7 +104,7 @@ runtime-core 的核心子模块（v7 拆分后保留 ~5,700 行），包含 stdi
 
 1. **PreToolUse 流**: `pre_tool_use_guard.rs` → `evaluate_hook_policy`（core-policy）→ block/allow
 2. **Evidence 流**: `mod.rs::append_evidence_index_merged_row` → `EVIDENCE_INDEX.json`
-3. **Closeout 流**: `mod.rs::evaluate_closeout` → `closeout_enforcement` → gate verdict
+3. **Closeout 流**: `closeout.rs::evaluate_closeout_record_file_for_task` → `closeout_enforcement` → gate verdict
 4. **Command 流**: `stdio_dispatch.rs` → `router_command_dispatch.rs` → 子命令
 
 ### 已知技术债
