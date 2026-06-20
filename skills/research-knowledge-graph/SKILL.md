@@ -51,62 +51,62 @@ All commands operate on the research log database at `artifacts/research-log/`.
 
 | Command | Description |
 |---------|-------------|
-| `research-log neighbors <entry-id> [--relation]` | Show entries directly connected to a given entry |
-| `research-log path --from <id> --to <id>` | BFS shortest path between two entries |
-| `research-log subgraph <entry-id> [--max-depth] [--format text\|dot]` | Extract and render subgraph |
-| `research-log viz [--entry-id] [--max-depth] [--format]` | Visualize knowledge graph (ASCII or Graphviz DOT) |
-| `research-log graph-stats` | Statistics: node/edge count, density, relation breakdown |
-| `research-log route --barrier-id <id> [--max-depth]` | Trace full research path from a barrier report |
+| `cargo run -p research-harness --bin research-log -- neighbors <entry-id> [--relation]` | Show entries directly connected to a given entry |
+| `cargo run -p research-harness --bin research-log -- path --from <id> --to <id>` | BFS shortest path between two entries |
+| `cargo run -p research-harness --bin research-log -- subgraph <entry-id> [--max-depth] [--format text\|dot]` | Extract and render subgraph |
+| `cargo run -p research-harness --bin research-log -- viz [--entry-id] [--max-depth] [--format]` | Visualize knowledge graph (ASCII or Graphviz DOT) |
+| `cargo run -p research-harness --bin research-log -- graph-stats` | Statistics: node/edge count, density, relation breakdown |
+| `cargo run -p research-harness --bin research-log -- route --barrier-id <id> [--max-depth]` | Trace full research path from a barrier report |
 
 ### Entity Management
 
 | Command | Description |
 |---------|-------------|
-| `research-log extract-entities <entry-id>` | Auto-extract entities (methods, datasets, metrics, models, tools) from entry text |
-| `research-log add-entity <name> [--kind] [--description]` | Manually add a knowledge entity |
-| `research-log search-entities <query> [--limit]` | FTS5 search entities by name/description |
-| `research-log entry-entities <entry-id>` | Show entities associated with an entry |
-| `research-log link-entities <entity-a> <entity-b> --relation <rel>` | Link two entities with a typed relation |
+| `cargo run -p research-harness --bin research-log -- extract-entities <entry-id>` | Auto-extract entities (methods, datasets, metrics, models, tools) from entry text |
+| `cargo run -p research-harness --bin research-log -- add-entity <name> [--kind] [--description]` | Manually add a knowledge entity |
+| `cargo run -p research-harness --bin research-log -- search-entities <query> [--limit]` | FTS5 search entities by name/description |
+| `cargo run -p research-harness --bin research-log -- entry-entities <entry-id>` | Show entities associated with an entry |
+| `cargo run -p research-harness --bin research-log -- link-entities <entity-a> <entity-b> --relation <rel>` | Link two entities with a typed relation |
 
 ### Cross-Workspace Hub
 
 | Command | Description |
 |---------|-------------|
-| `research-log hub-register [--path] [--name]` | Register current workspace in the hub |
-| `research-log hub-index [--path]` | Index workspaces into the hub |
-| `research-log hub-search <query> [--limit]` | Cross-workspace search |
-| `research-log hub-list` | List registered workspaces |
+| `cargo run -p research-harness --bin research-log -- hub-register [--path] [--name]` | Register current workspace in the hub |
+| `cargo run -p research-harness --bin research-log -- hub-index [--path]` | Index workspaces into the hub |
+| `cargo run -p research-harness --bin research-log -- hub-search <query> [--limit]` | Cross-workspace search |
+| `cargo run -p research-harness --bin research-log -- hub-list` | List registered workspaces |
 
 ### Autoresearch Mirror Commands
 
 From within a research workspace, the same operations are available via:
 
 ```
-autoresearch log:neighbors --entry-id <id>
-autoresearch log:viz [--entry-id] [--max-depth]
-autoresearch log:route --barrier-id <id>
-autoresearch log:extract --entry-id <id>
-autoresearch log:search-entities --query <text>
+cargo run -p research-harness --bin autoresearch -- log-neighbors --entry-id <id>
+cargo run -p research-harness --bin autoresearch -- log-viz [--entry-id] [--max-depth]
+cargo run -p research-harness --bin autoresearch -- log-route --barrier-id <id>
+cargo run -p research-harness --bin autoresearch -- log-extract --entry-id <id>
+cargo run -p research-harness --bin autoresearch -- log-search-entities --query <text>
 ```
 
 ## Quick Start
 
 ```bash
 # Show your entire knowledge graph
-research-log viz
+cargo run -p research-harness --bin research-log -- viz
 
 # Find connections to a specific entry
-research-log neighbors rl-20260618120000
+cargo run -p research-harness --bin research-log -- neighbors rl-20260618120000
 
 # Discover path between two research directions
-research-log path --from rl-20260618100000 --to rl-20260620090000
+cargo run -p research-harness --bin research-log -- path --from rl-20260618100000 --to rl-20260620090000
 
 # Extract entities from an entry
-research-log extract-entities rl-20260618120000
+cargo run -p research-harness --bin research-log -- extract-entities rl-20260618120000
 
 # Register in cross-workspace hub
-research-log hub-register
-research-log hub-search "transformer"
+cargo run -p research-harness --bin research-log -- hub-register
+cargo run -p research-harness --bin research-log -- hub-search "transformer"
 ```
 
 ## Cross-References

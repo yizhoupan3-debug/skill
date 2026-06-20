@@ -140,7 +140,7 @@ autoresearch → loop runner            BARRIER_REPORT.json → resume loop
 When a loop-auto cycle hits `consecutive_failures ≥ threshold`:
 
 1. Construct barrier description (loop_id + run_id + action_id + failure context)
-2. Call `autoresearch barrier <description>`
+2. Call `cargo run -p research-harness --bin autoresearch -- barrier <description>`
 3. Research workspace init with barrier problem as question
 4. Literature review via `$research-discovery`
 5. Hypothesis generation (draft-claims)
@@ -161,7 +161,7 @@ See `docs/spec/research-harness.md` §19.5 for the layered logging specification
 
 See `docs/spec/research-harness.md` §19.6 for smoke test specification:
 - Registry: `artifacts/research-log/smoke-tests.json`
-- Execution: `autoresearch smoke-test [--source <src>] [--barrier <id>]`
+- Execution: `cargo run -p research-harness --bin autoresearch -- smoke-test [--source <src>] [--barrier <id>]`
 - Freshness metadata on every external_research result
 
 ### Verification and failure contract
