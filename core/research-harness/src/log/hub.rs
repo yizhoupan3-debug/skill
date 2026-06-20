@@ -354,3 +354,37 @@ pub fn sync_workspace(hub_path: &Path, workspace: &Path) -> Result<()> {
     println!("Synced workspace '{}' ({} entries)", name, count);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hub_search_result_struct() {
+        let result = HubSearchResult {
+            workspace_name: "test-ws".into(),
+            workspace_path: "/tmp/test".into(),
+            local_entry_id: "e1".into(),
+            direction: "deepen".into(),
+            question: "test q".into(),
+            tags: vec!["ml".into()],
+            status: "active".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            score: 0.95,
+        };
+        assert_eq!(result.workspace_name, "test-ws");
+        assert_eq!(result.score, 0.95);
+    }
+
+    #[test]
+    fn workspace_info_struct() {
+        let info = WorkspaceInfo {
+            id: 1,
+            name: "my-project".into(),
+            path: "/home/user/project".into(),
+            entry_count: 42,
+            last_indexed_at: None,
+        };
+        assert_eq!(info.entry_count, 42);
+    }
+}

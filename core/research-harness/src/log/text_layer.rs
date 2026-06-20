@@ -94,3 +94,80 @@ pub fn write_entry_md(root: &Path, entry: &Entry, findings: &[Finding], tags: &[
     std::fs::write(&path, content)?;
     Ok(path)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_entry() -> Entry {
+        Entry {
+            id: "e1".into(),
+            direction: "deepen".into(),
+            question: "Does X improve Y?".into(),
+            context: Some(r#"{"env":"test"}"#.into()),
+            entry_point: "cli".into(),
+            barrier_id: None,
+            importance: 3,
+            status: "active".into(),
+            created_at: "2026-01-15T10:00:00Z".into(),
+            updated_at: "2026-01-15T10:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn render_entry_basic() {
+        let entry = test_entry();
+        let md = render_entry(&entry, &[], &[]);
+        assert!(md.contains("deepen"));
+        assert!(md.contains("Does X improve Y?"));
+        assert!(md.contains("e1"));
+    }
+
+    #[test]
+    fn render_entry_with_findings() {
+        let entry = test_entry();
+        let findings = vec![
+            Finding {
+                id: 1, entry_id: "e1".into(), kind: "finding".into(),
+                content: "accuracy improved by 5%".into(),
+                confidence: Some(0.85), metadata: None,
+                created_at: "2026-01-15T10:00:00Z".into(),
+            },
+        ];
+        let md = render_entry(&entry, &findings, &[]);
+        assert!(md.contains("accuracy improved"));
+        assert!(md.contains("85%"));
+    }
+
+    #[test]
+    fn render_entry_with_tags() {
+        let entry = test_entry();
+        let md = render_entry(&entry, &[], &["ml".into(), "nlp".into()]);
+        assert!(md.contains("ml, nlp"));
+    }
+
+    #[test]
+    fn render_index_row_basic() {
+        let entry = test_entry();
+        let row = render_index_row(&entry, &["tag1".into()]);
+        assert!(row.contains("deepen"));
+        assert!(row.contains("tag1"));
+    }
+
+    #[test]
+    fn render_index_header_check() {
+        let header = render_index_header();
+        assert!(header.contains("日期"));
+        assert!(header.contains("|------|"));
+    }
+
+    #[test]
+    fn write_entry_md_creates_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let entry = test_entry();
+        let path = write_entry_md(dir.path(), &entry, &[], &["tag1".into()]).unwrap();
+        assert!(path.exists());
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("deepen"));
+    }
+}

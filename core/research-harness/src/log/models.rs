@@ -245,3 +245,83 @@ pub struct EntryEntity {
     pub entity_id: i64,
     pub role: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn entry_construction() {
+        let entry = Entry {
+            id: "e1".into(),
+            direction: "deepen".into(),
+            question: "test".into(),
+            context: None,
+            entry_point: "cli".into(),
+            barrier_id: None,
+            importance: 3,
+            status: "active".into(),
+            created_at: "2026-01-01T00:00:00Z".into(),
+            updated_at: "2026-01-01T00:00:00Z".into(),
+        };
+        assert_eq!(entry.id, "e1");
+        assert_eq!(entry.importance, 3);
+    }
+
+    #[test]
+    fn finding_construction() {
+        let finding = Finding {
+            id: 1,
+            entry_id: "e1".into(),
+            kind: "insight".into(),
+            content: "test finding".into(),
+            confidence: Some(0.9),
+            metadata: None,
+            created_at: "2026-01-01T00:00:00Z".into(),
+        };
+        assert_eq!(finding.kind, "insight");
+        assert_eq!(finding.confidence, Some(0.9));
+    }
+
+    #[test]
+    fn entity_construction() {
+        let entity = Entity {
+            id: 1,
+            name: "BERT".into(),
+            kind: "model".into(),
+            description: Some("language model".into()),
+            metadata: None,
+            created_at: "2026-01-01T00:00:00Z".into(),
+        };
+        assert_eq!(entity.name, "BERT");
+    }
+
+    #[test]
+    fn search_result_construction() {
+        let result = SearchResult {
+            id: "e1".into(),
+            direction: "deepen".into(),
+            question: "test".into(),
+            snippet: "highlighted text".into(),
+            score: 1.5,
+            created_at: "2026-01-01T00:00:00Z".into(),
+        };
+        assert_eq!(result.score, 1.5);
+    }
+
+    #[test]
+    fn log_connection_construction() {
+        let conn = LogConnection {
+            id: 1,
+            entry_id_a: "e1".into(),
+            entry_id_b: "e2".into(),
+            relation: Some("extends".into()),
+            weight: 0.8,
+            
+            confidence: None,
+            notes: None,
+            created_at: "2026-01-01T00:00:00Z".into(),
+        };
+        assert_eq!(conn.relation.as_deref(), Some("extends"));
+    }
+}

@@ -76,3 +76,63 @@ pub fn extract_entities_from_text(text: &str) -> Vec<(String, String)> {
 pub fn extract_entities(text: &str) -> anyhow::Result<Vec<(String, String)>> {
     Ok(extract_entities_from_text(text))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_method_entities() {
+        let entities = extract_entities_from_text("We use Transformer and BERT for this task");
+        let methods: Vec<_> = entities.iter().filter(|(_, k)| k == "method").map(|(n, _)| n.as_str()).collect();
+        assert!(methods.contains(&"Transformer"), "should find Transformer as method");
+    }
+
+    #[test]
+    fn extract_model_entities() {
+        let entities = extract_entities_from_text("Fine-tuned GPT-3 on SQuAD");
+        let models: Vec<_> = entities.iter().filter(|(_, k)| k == "model").map(|(n, _)| n.as_str()).collect();
+        assert!(!models.is_empty(), "should find at least one model entity");
+    }
+
+    #[test]
+    fn extract_dataset_entities() {
+        let entities = extract_entities_from_text("Evaluated on ImageNet and CIFAR-10");
+        let datasets: Vec<_> = entities.iter().filter(|(_, k)| k == "dataset").map(|(n, _)| n.as_str()).collect();
+        assert!(datasets.contains(&"ImageNet"));
+        assert!(datasets.contains(&"CIFAR-10"));
+    }
+
+    #[test]
+    fn extract_metric_entities() {
+        let entities = extract_entities_from_text("Measured F1-score and accuracy");
+        let metrics: Vec<_> = entities.iter().filter(|(_, k)| k == "metric").map(|(n, _)| n.as_str()).collect();
+        assert!(!metrics.is_empty());
+    }
+
+    #[test]
+    fn extract_tool_entities() {
+        let entities = extract_entities_from_text("Implemented in PyTorch with CUDA");
+        let tools: Vec<_> = entities.iter().filter(|(_, k)| k == "tool").map(|(n, _)| n.as_str()).collect();
+        assert!(tools.contains(&"PyTorch"));
+    }
+
+    #[test]
+    fn extract_deduplicates() {
+        let entities = extract_entities_from_text("BERT is great. BERT outperforms BERT.");
+        let bert_count = entities.iter().filter(|(n, _)| n == "BERT").count();
+        assert_eq!(bert_count, 1, "should deduplicate BERT");
+    }
+
+    #[test]
+    fn extract_empty_text() {
+        let entities = extract_entities_from_text("");
+        assert!(entities.is_empty());
+    }
+
+    #[test]
+    fn extract_no_entities() {
+        let entities = extract_entities_from_text("The quick brown fox jumps over the lazy dog.");
+        assert!(entities.is_empty());
+    }
+}

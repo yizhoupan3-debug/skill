@@ -432,3 +432,50 @@ pub fn trace_barrier_route(
         subgraph,
     })
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn knowledge_graph_struct_fields() {
+        let kg = KnowledgeGraph {
+            adjacency: HashMap::new(),
+            nodes: HashSet::new(),
+        };
+        assert!(kg.adjacency.is_empty());
+        assert!(kg.nodes.is_empty());
+    }
+
+    #[test]
+    fn graph_stats_struct() {
+        let stats = GraphStats {
+            node_count: 5,
+            edge_count: 4,
+            avg_degree: 1.6,
+            density: 0.4,
+            isolated_nodes: 1,
+            relation_counts: HashMap::new(),
+        };
+        assert_eq!(stats.node_count, 5);
+        assert_eq!(stats.edge_count, 4);
+    }
+
+    #[test]
+    fn entry_with_findings_struct() {
+        let ewf = EntryWithFindings {
+            entry: Entry {
+                id: "e1".into(), direction: "deepen".into(), question: "q".into(),
+                context: None, entry_point: "cli".into(), barrier_id: None,
+                importance: 0, status: "active".into(),
+                created_at: "2026-01-01T00:00:00Z".into(), updated_at: "2026-01-01T00:00:00Z".into(),
+            },
+            findings: vec![],
+            tags: vec!["ml".into()],
+            connections: vec![],
+        };
+        assert_eq!(ewf.entry.id, "e1");
+        assert_eq!(ewf.tags.len(), 1);
+    }
+}
