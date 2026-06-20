@@ -1,0 +1,101 @@
+//! Shared JSON value helpers for the research harness.
+//!
+//! Consolidates duplicated helper functions from state, render, smoke,
+//! claims, search, and CLI modules.
+//!
+//! NOTE: Several functions here are duplicated as local helpers in individual
+//! modules. This is tracked as technical debt — the canonical versions should
+//! live here and be imported. Until that refactoring, `#[allow(dead_code)]`
+//! suppresses clippy warnings for the unused copies.
+
+#![allow(dead_code)]
+
+use serde_json::Value;
+
+/// Extract a string field, returning `""` if missing.
+pub(crate) fn str_field<'a>(value: &'a Value, key: &str) -> &'a str {
+    value.get(key).and_then(Value::as_str).unwrap_or("")
+}
+
+
+/// Extract a string field with a custom default.
+pub(crate) fn str_field_default<'a>(value: &'a Value, key: &str, default: &'a str) -> &'a str {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(default)
+}
+
+/// Get an array slice, returning `&[]` if missing.
+pub(crate) fn arr<'a>(value: &'a Value, key: &str) -> &'a [Value] {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|a| a.as_slice())
+        .unwrap_or(&[])
+}
+
+/// Get a mutable array, inserting `[]` if missing.
+pub(crate) fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
+    obj_mut(value)
+        .entry(key.to_string())
+        .or_insert_with(|| serde_json::json!([]))
+        .as_array_mut()
+        .expect("expected array")
+}
+
+/// Get the underlying mutable object map.
+pub(crate) fn obj_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
+    value.as_object_mut().expect("state must be an object")
+}
+
+/// Insert a key-value pair into a mutable object.
+pub(crate) fn set_key(value: &mut Value, key: &str, child: Value) {
+    obj_mut(value).insert(key.to_string(), child);
+}
+
+/// Get the `novelty_gate` sub-object (immutable).
+pub(crate) fn novelty_gate(state: &Value) -> &Value {
+    state.get("novelty_gate").unwrap_or(&Value::Null)
+}
+
+/// Get the `novelty_gate` sub-object (mutable), inserting `{}` if missing.
+pub(crate) fn novelty_gate_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
+    obj_mut(value)
+        .entry("novelty_gate".to_string())
+        .or_insert_with(|| serde_json::json!({}))
+        .as_object_mut()
+        .expect("novelty_gate must be object")
+}
+
+/// Extract a list of strings from a JSON array field.
+pub(crate) fn value_as_string_list(value: &Value, key: &str) -> Vec<String> {
+    value
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .filter(|s| !s.is_empty())
+                .map(ToString::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Current UTC time in RFC 3339 format.
+pub(crate) fn now_iso() -> String {
+    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+}
+
+/// Render a Value as a string (string values pass through, numbers become text).
+pub(crate) fn value_to_string(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => "-".into(),
+        other => other.to_string(),
+    }
+}
