@@ -4,7 +4,7 @@
 //! 若是则返回 prose 质量检查提示段落。
 
 /// Prose 质量检查提示文本（内建回落文案）。
-const PROSE_QUALITY_CONTEXT: &str = concat!(
+pub const PROSE_QUALITY_CONTEXT: &str = concat!(
     "**PAPER_PROSE_QUALITY_HOOK**\n\n",
     "当前场景检测到论文写作/润色信号。请遵守以下语言质量准则：\n",
     "1. 避免 AI slop 词汇（Moreover, Furthermore, Delve, Tapestry, Landscape, Leverage）\n",

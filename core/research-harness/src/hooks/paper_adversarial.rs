@@ -4,7 +4,7 @@
 //! 若是则返回强对抗审稿提示段落。
 
 /// 对抗审稿提示文本（内建回落文案）。
-const ADVERSARIAL_CONTEXT: &str = concat!(
+pub const ADVERSARIAL_CONTEXT: &str = concat!(
     "**PAPER_ADVERSARIAL_HOOK**\n\n",
     "当前场景检测到论文审稿/返修信号。请执行强对抗审稿：\n",
     "1. 以 closest-work 为基线，逐维度检查 claim ceiling\n",
