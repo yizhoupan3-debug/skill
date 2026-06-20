@@ -115,9 +115,6 @@ fn collect_policy_markdown_files(root: &Path) -> Vec<PathBuf> {
     }
     for name in [
         "AGENTS.md",
-        "AGENTS_CURSOR.md",
-        "AGENTS_CODEX.md",
-        "AGENTS_CLAUDE.md",
         "MIGRATION.md",
         "README.md",
     ] {

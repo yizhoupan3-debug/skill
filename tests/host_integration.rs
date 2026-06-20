@@ -488,7 +488,7 @@ fn install_skills_cursor_target_installs_only_cursor() {
     assert!(home.join(".cursor/rules/framework.mdc").exists());
     let framework_rule = read_text(&home.join(".cursor/rules/framework.mdc"));
     assert!(framework_rule.contains("跨宿主内核"));
-    assert!(framework_rule.contains("AGENTS_CURSOR.md"));
+    assert!(framework_rule.contains("AGENTS.md"));
     assert!(!repo_root.join(".cursor/rules/framework.mdc").exists());
     assert!(!repo_root.join(".codex/prompts/framework.md").exists());
 }
@@ -523,7 +523,7 @@ fn install_skills_claude_target_installs_only_claude() {
     assert!(repo_root.join(".claude/rules/framework.md").exists());
     let framework_rule = read_text(&repo_root.join(".claude/rules/framework.md"));
     assert!(framework_rule.contains("跨宿主内核"));
-    assert!(framework_rule.contains("AGENTS_CLAUDE.md"));
+    assert!(framework_rule.contains("AGENTS.md"));
     let settings_path = repo_root.join(".claude/settings.json");
     assert!(settings_path.exists());
     let settings = read_json(&settings_path);
@@ -2159,7 +2159,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["cursor"]["host_entrypoints"],
-        json!(["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"])
+        json!(["AGENTS.md", ".cursor/rules/*.mdc"])
     );
     assert_eq!(
         payload["host_targets"]["metadata"]["claude"]["install_tool"],
@@ -2168,7 +2168,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     assert_eq!(
         payload["host_targets"]["metadata"]["claude"]["host_entrypoints"],
         json!([
-            "AGENTS_CLAUDE.md",
+            "AGENTS.md",
             ".claude/rules/framework.md",
             ".claude/settings.json"
         ])

@@ -353,16 +353,16 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["codex"],
-        serde_json::json!("AGENTS_CODEX.md")
+        serde_json::json!("AGENTS.md")
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["cursor"],
-        serde_json::json!(["AGENTS_CURSOR.md", ".cursor/rules/*.mdc"])
+        serde_json::json!(["AGENTS.md", ".cursor/rules/*.mdc"])
     );
     assert_eq!(
         manifest["shared_system"]["host_entrypoints"]["claude"],
         serde_json::json!([
-            "AGENTS_CLAUDE.md",
+            "AGENTS.md",
             ".claude/rules/framework.md",
             ".claude/settings.json"
         ])
@@ -388,16 +388,16 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     );
     assert_eq!(
         manifest["shared_system"]["agent_policy_entrypoint"],
-        "AGENTS_CODEX.md"
+        "AGENTS.md"
     );
-    let codex_policy = read_text(&repo_root.join("AGENTS_CODEX.md"));
+    let codex_policy = read_text(&repo_root.join("AGENTS.md"));
     assert!(codex_policy.contains("Codex Agent Policy"));
     assert!(codex_policy.contains("AGENTS.md"));
     assert!(
         manifest["full_sync"]["text_files"]
             .as_array()
             .unwrap()
-            .contains(&serde_json::json!("AGENTS_CODEX.md"))
+            .contains(&serde_json::json!("AGENTS.md"))
     );
     assert!(
         manifest["full_sync"]["text_files"]
@@ -462,7 +462,7 @@ fn codex_sync_preserves_existing_agents_codex_delta_file() {
     std::fs::create_dir_all(&repo_root).unwrap();
     seed_framework_markers(&repo_root);
     let delta = "custom codex delta from disk\nReview findings-only\n";
-    std::fs::write(repo_root.join("AGENTS_CODEX.md"), delta).unwrap();
+    std::fs::write(repo_root.join("AGENTS.md"), delta).unwrap();
 
     let sync_report = router_rs_json(&[
         "framework",
@@ -474,10 +474,10 @@ fn codex_sync_preserves_existing_agents_codex_delta_file() {
     ]);
     let written = sync_report["written"].as_array().unwrap();
     assert!(
-        !written.contains(&serde_json::json!("AGENTS_CODEX.md")),
-        "sync must not rewrite unchanged AGENTS_CODEX.md: {sync_report}"
+        !written.contains(&serde_json::json!("AGENTS.md")),
+        "sync must not rewrite unchanged AGENTS.md: {sync_report}"
     );
-    assert_eq!(read_text(&repo_root.join("AGENTS_CODEX.md")), delta);
+    assert_eq!(read_text(&repo_root.join("AGENTS.md")), delta);
 }
 
 #[test]
@@ -786,7 +786,7 @@ fn framework_naming_conventions_has_no_router_rs_default_value_table() {
 fn removed_router_flags_are_absent_from_user_docs() {
     let docs = [
         "docs/spec.md",
-        "AGENTS_CODEX.md",
+        "AGENTS.md",
         "docs/spec/core-crates.md",
         "docs/spec/multi-agent.md",
         "docs/spec/host-matrix.md",
@@ -1851,17 +1851,10 @@ fn runtime_registry_on_disk_closed_set_is_canonical_five_hosts() {
             "missing canonical host manual: {host_doc}"
         );
     }
-    for agents_doc in [
-        "AGENTS_CODEX.md",
-        "AGENTS_CURSOR.md",
-        "AGENTS_CLAUDE.md",
-        "AGENTS_OPENCODE.md",
-    ] {
-        assert!(
-            project_root().join(agents_doc).is_file(),
-            "missing host agent policy: {agents_doc}"
-        );
-    }
+    assert!(
+        project_root().join("AGENTS.md").is_file(),
+        "missing host agent policy: AGENTS.md"
+    );
 }
 
 #[test]
