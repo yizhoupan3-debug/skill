@@ -9,7 +9,7 @@ Use this repository's shared framework runtime.
 
 **Hooks**: PreToolUse/PostToolUse/Stop/UserPromptSubmit 已安装（`claude-router-rs-hook.sh`），运行于 advisory 模式。
 
-1) Start from `../../AGENTS.md`（跨宿主内核）；宿主差异见 `../../AGENTS_CLAUDE.md`。
+1) Start from `../../AGENTS.md`。
 2) Route via `skills/SKILL_ROUTING_RUNTIME.json`。
 3) Read only the matched `skill_path`。
 
