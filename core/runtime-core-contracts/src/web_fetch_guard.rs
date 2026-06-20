@@ -84,11 +84,10 @@ pub(crate) fn validate_web_fetch_host_basic(host: &str) -> Result<(), String> {
             return Err(format!("web_fetch blocked host suffix: {host}"));
         }
     }
-    if let Ok(ip) = IpAddr::from_str(host) {
-        if is_forbidden_web_fetch_ip(&ip) {
+    if let Ok(ip) = IpAddr::from_str(host)
+        && is_forbidden_web_fetch_ip(&ip) {
             return Err(format!("web_fetch blocked IP: {host}"));
         }
-    }
     Ok(())
 }
 
@@ -455,7 +454,12 @@ mod tests {
         ];
         let results: Vec<_> = ips
             .iter()
-            .map(|ip| (ip.to_string(), super::is_forbidden_web_fetch_ipv4(ip.parse().unwrap())))
+            .map(|ip| {
+                (
+                    ip.to_string(),
+                    super::is_forbidden_web_fetch_ipv4(ip.parse().unwrap()),
+                )
+            })
             .collect();
         insta::assert_debug_snapshot!(results);
     }
@@ -463,19 +467,24 @@ mod tests {
     #[test]
     fn debug_forbidden_ipv6_classification() {
         let ips = [
-            "::1",               // loopback
-            "::",                // unspecified
-            "fd00::1",           // unique-local
-            "fe80::1",           // link-local
-            "ff02::1",           // multicast
-            "::ffff:127.0.0.1",  // IPv4-mapped loopback
-            "::ffff:10.0.0.1",   // IPv4-mapped private
-            "::ffff:8.8.8.8",    // IPv4-mapped public
+            "::1",                  // loopback
+            "::",                   // unspecified
+            "fd00::1",              // unique-local
+            "fe80::1",              // link-local
+            "ff02::1",              // multicast
+            "::ffff:127.0.0.1",     // IPv4-mapped loopback
+            "::ffff:10.0.0.1",      // IPv4-mapped private
+            "::ffff:8.8.8.8",       // IPv4-mapped public
             "2001:4860:4860::8888", // public (Google DNS)
         ];
         let results: Vec<_> = ips
             .iter()
-            .map(|ip| (ip.to_string(), super::is_forbidden_web_fetch_ipv6(ip.parse().unwrap())))
+            .map(|ip| {
+                (
+                    ip.to_string(),
+                    super::is_forbidden_web_fetch_ipv6(ip.parse().unwrap()),
+                )
+            })
             .collect();
         insta::assert_debug_snapshot!(results);
     }

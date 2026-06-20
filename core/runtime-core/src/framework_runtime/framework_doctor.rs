@@ -31,9 +31,11 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
 
     let mut warns: Vec<String> = Vec::new();
 
-    println!("\n--- auto self-healing: cleaning broken symlinks ---");
-    if let Err(e) = auto_clean_broken_symlinks(repo_root) {
-        eprintln!("warn: failed to auto-clean broken symlinks: {e}");
+    println!("\n--- symlink health check (report-only) ---");
+    match report_broken_symlinks(repo_root) {
+        Ok(0) => println!("INFO: No broken symlinks detected. Multi-host workspace is healthy."),
+        Ok(n) => println!("WARN: {n} broken symlink(s) found. Run `router-rs framework clean-orphans` to fix."),
+        Err(e) => tracing::warn!(error = %e, "failed to check broken symlinks"),
     }
 
     let checks = [
@@ -89,14 +91,6 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     println!("\n--- host install projections (optional in framework source repo) ---");
     // Build check list dynamically from RUNTIME_REGISTRY.json host_entrypoints.
     let mut host_install_checks: Vec<(String, std::path::PathBuf)> = Vec::new();
-    // Always-known non-entrypoint paths (settings, mcp.json per host)
-    let known_extra_checks: &[(&str, std::path::PathBuf)] = &[(
-        ".claude/settings.json",
-        repo_root.join(".claude").join("settings.json"),
-    )];
-    for (label, path) in known_extra_checks {
-        host_install_checks.push((label.to_string(), path.clone()));
-    }
     // Read host_entrypoints from registry for each supported host
     if let Ok(reg) = crate::runtime_registry::load_runtime_registry_json(repo_root)
         && let Ok(supported) = crate::framework_host_targets::host_targets_supported_host_ids(&reg)
@@ -114,7 +108,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
                         _ => vec![],
                     };
                     for ep in &paths {
-                        // Only check file paths (skip agent policy names like AGENTS_*.md)
+                        // Only check file paths (skip agent policy names like AGENTS.md)
                         if ep.contains('/') || ep.contains('.') {
                             host_install_checks.push((ep.clone(), repo_root.join(ep)));
                         }
@@ -158,11 +152,11 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
 
     println!("\n--- Codex projection reminder ---");
     println!(
-        "If you edited repo-root AGENTS.md or AGENTS_CODEX.md and rely on Codex hooks that embed policy from router-rs,"
+        "If you edited repo-root AGENTS.md and rely on Codex hooks that embed policy from router-rs,"
     );
     println!("rebuild this binary then run:");
     println!("  router-rs framework sync-entrypoints --repo-root <repo>");
-    println!("See AGENTS_CODEX.md (Codex Sync) for host-specific details.");
+    println!("See AGENTS.md (Codex Sync) for host-specific details.");
 
     println!("\n--- hook follow-up tokens (quick ref) ---");
     println!(
@@ -592,17 +586,10 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
 /// Target directories include all known host integration dotdirs plus `artifacts/`.
 /// Keep this list comprehensive (not registry-derived) since stale dirs from removed hosts
 /// or renamed directories still need cleanup even after registry changes.
+#[allow(dead_code)]
 pub fn auto_clean_broken_symlinks(repo_root: &Path) -> Result<(), String> {
-    let targets = [
-        // Host integration directories (all known, including legacy)
-        ".claude",
-        ".codex",
-        ".cursor",
-        ".gemini",
-        ".opencode",
-        // Project artifact directory
-        "artifacts",
-    ];
+    let mut targets: Vec<&str> = framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS.to_vec();
+    targets.push("artifacts");
     let mut cleaned_count = 0;
     for sub in &targets {
         let dir_path = repo_root.join(sub);
@@ -626,29 +613,56 @@ pub fn auto_clean_broken_symlinks(repo_root: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Report broken symlinks without removing them (diagnostic-only).
+pub fn report_broken_symlinks(repo_root: &Path) -> Result<usize, String> {
+    let mut targets: Vec<&str> = framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS.to_vec();
+    targets.push("artifacts");
+    let mut broken_count = 0;
+    for sub in &targets {
+        let dir_path = repo_root.join(sub);
+        if !dir_path.is_dir() {
+            continue;
+        }
+        if let Ok(entries) = fs::read_dir(&dir_path) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Ok(metadata) = fs::symlink_metadata(&path)
+                    && metadata.is_symlink()
+                    && !path.exists()
+                {
+                    println!("  BROKEN: {}", path.display());
+                    broken_count += 1;
+                }
+            }
+        }
+    }
+    Ok(broken_count)
+}
+
+#[allow(dead_code)]
 fn clean_broken_symlinks_in_dir(dir: &Path, cleaned_count: &mut usize) -> Result<(), String> {
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if let Ok(metadata) = fs::symlink_metadata(&path) {
-                if metadata.is_symlink() {
-                    // Check if the symlink target exists
-                    if !path.exists() {
-                        if let Err(e) = fs::remove_file(&path) {
-                            println!(
-                                "WARN: failed to remove broken symlink {}: {e}",
-                                path.display()
-                            );
-                        } else {
-                            println!("REPAIRED: Removed broken symlink {}", path.display());
-                            *cleaned_count += 1;
-                        }
-                    }
-                } else if metadata.is_dir() {
-                    if let Err(e) = clean_broken_symlinks_in_dir(&path, cleaned_count) {
-                        eprintln!("warn: failed to clean broken symlinks in {}: {e}", path.display());
-                    }
+            if let Ok(metadata) = fs::symlink_metadata(&path)
+                && metadata.is_symlink()
+                && !path.exists()
+            {
+                // Remove broken symlink
+                if let Err(e) = fs::remove_file(&path) {
+                    println!(
+                        "WARN: failed to remove broken symlink {}: {e}",
+                        path.display()
+                    );
+                } else {
+                    println!("REPAIRED: Removed broken symlink {}", path.display());
+                    *cleaned_count += 1;
                 }
+            } else if let Ok(metadata) = fs::symlink_metadata(&path)
+                && metadata.is_dir()
+                && let Err(e) = clean_broken_symlinks_in_dir(&path, cleaned_count)
+            {
+                tracing::warn!(path = %path.display(), error = %e, "failed to clean broken symlinks");
             }
         }
     }

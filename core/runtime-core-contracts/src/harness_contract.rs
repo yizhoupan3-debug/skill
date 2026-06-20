@@ -279,8 +279,11 @@ fn default_high_impact_skill_slugs() -> Vec<String> {
 }
 
 fn frontmatter_block(text: &str) -> Option<&str> {
-    let trimmed = text.strip_prefix("---\n")?;
-    let end = trimmed.find("\n---")?;
+    // Strip optional UTF-8 BOM
+    let text = text.strip_prefix('\u{FEFF}').unwrap_or(text);
+    // Handle both \n and \r\n line endings
+    let trimmed = text.strip_prefix("---\r\n").or_else(|| text.strip_prefix("---\n"))?;
+    let end = trimmed.find("\r\n---").or_else(|| trimmed.find("\n---"))?;
     Some(&trimmed[..end])
 }
 
@@ -299,6 +302,9 @@ fn yaml_multiline_value(fm: &str, key: &str) -> Option<String> {
         }
         if capture {
             if line.starts_with(char::is_alphanumeric) && line.contains(':') {
+                break;
+            }
+            if out.len() >= 500 {
                 break;
             }
             out.push(line.trim().to_string());

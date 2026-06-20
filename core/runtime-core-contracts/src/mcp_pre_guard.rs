@@ -37,7 +37,10 @@ fn evaluate_mcp_pre_guard_inner(
         return McpPreGuardVerdict::allow();
     }
 
-    let args_str = serde_json::to_string(arguments).unwrap_or_default();
+    let args_str = serde_json::to_string(arguments).unwrap_or_else(|e| {
+        tracing::warn!("[router-rs] MCP pre-guard: failed to serialize arguments for tool={tool_name:?}: {e}");
+        String::new()
+    });
     if let Some(reason) = dangerous_mcp_tool_reason(tool_name, &args_str) {
         return McpPreGuardVerdict::block(reason);
     }
@@ -56,8 +59,8 @@ pub fn evaluate_mcp_pre_guard_safe(
     })) {
         Ok(verdict) => verdict,
         Err(_) => {
-            eprintln!(
-                "[router-rs warning] MCP pre-guard panicked for tool={tool_name:?}; allowing call (fallback)"
+            tracing::warn!(
+                "[router-rs] MCP pre-guard panicked for tool={tool_name:?}; allowing call (fallback)"
             );
             McpPreGuardVerdict::allow()
         }

@@ -55,11 +55,12 @@ pub fn canonical_hook_event(raw: &str) -> Option<&'static str> {
         "pretooluse" | "toolexecutebefore" => Some("PreToolUse"),
         "toolexecuteafter" | "posttooluse" => Some("PostToolUse"),
         "userpromptsubmit" | "beforesubmitprompt" => Some("UserPromptSubmit"),
-        "sessionend" | "sessionidle" => Some("SessionEnd"),
+        "sessionend" | "sessiondeleted" => Some("SessionEnd"),
+        "sessionidle" => Some("Stop"),
         "stop" => Some("Stop"),
         "subagentstart" => Some("SubagentStart"),
         "subagentstop" => Some("SubagentStop"),
-        "sessioncreated" | "sessiondeleted" => Some("SessionEnd"),
+        "sessioncreated" => Some("SessionStart"),
         "permissionasked" | "permissionreplied" => Some("PreToolUse"),
         "fileedited" | "shellenv" => Some("PostToolUse"),
         _ => None,
@@ -90,5 +91,18 @@ mod tests {
         assert_eq!(canonical_hook_event("post-tool-use"), Some("PostToolUse"));
         assert_eq!(canonical_hook_event("sessionEnd"), Some("SessionEnd"));
         assert!(canonical_hook_event("unknown-event").is_none());
+    }
+
+    #[test]
+    fn canonical_hook_event_maps_opencode_session_events() {
+        // session.idle = Stop (session ending/idle = equivalent of Stop)
+        assert_eq!(canonical_hook_event("sessionidle"), Some("Stop"));
+        assert_eq!(canonical_hook_event("session.idle"), Some("Stop"));
+        // session.created = SessionStart
+        assert_eq!(canonical_hook_event("sessioncreated"), Some("SessionStart"));
+        assert_eq!(canonical_hook_event("session.created"), Some("SessionStart"));
+        // session.deleted = SessionEnd
+        assert_eq!(canonical_hook_event("sessiondeleted"), Some("SessionEnd"));
+        assert_eq!(canonical_hook_event("session.deleted"), Some("SessionEnd"));
     }
 }

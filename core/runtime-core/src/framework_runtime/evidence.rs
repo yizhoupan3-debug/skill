@@ -220,10 +220,9 @@ pub fn append_evidence_index_merged_row(
     let active_pointer_exists = current_root.join(TASK_POINTERS_FILENAME).is_file();
     let summary_exists = current_root.join(SESSION_SUMMARY_FILENAME).is_file();
     if !active_pointer_exists && !summary_exists {
-        eprintln!(
-            "[router-rs] warning: evidence append skipped — no active continuity session \
-             (no active/focus task pointer and no SESSION_SUMMARY at {})",
-            current_root.join(SESSION_SUMMARY_FILENAME).display()
+        tracing::debug!(
+            current_dir = %current_root.display(),
+            "evidence append skipped — no active continuity session"
         );
         return Ok(());
     }
@@ -297,7 +296,7 @@ pub fn append_evidence_index_merged_row(
             schema_version: Some(1),
         };
         if let Err(e) = crate::task_ledger::append_transaction(repo_root, &tid, tx) {
-            eprintln!("[router-rs] failed to append evidence transaction to TASK_LEDGER: {e}");
+            tracing::error!(task_id = %tid, error = %e, "failed to append evidence transaction to TASK_LEDGER");
         }
         crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &tid);
     }

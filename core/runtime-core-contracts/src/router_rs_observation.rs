@@ -37,8 +37,11 @@ fn classify_gate(followup: Option<&str>, additional: Option<&str>) -> Option<Gat
 
 fn extract_surfaces(output: &Value, host: HookObservationHost) -> (Option<String>, Option<String>) {
     // Delegate to the host provider registry via HostTelemetry::extract_observation_surfaces.
-    host_projection::hosts::host_provider::extract_observation_surfaces_for_host(host.as_str(), output)
-        .unwrap_or((None, None))
+    host_projection::hosts::host_provider::extract_observation_surfaces_for_host(
+        host.as_str(),
+        output,
+    )
+    .unwrap_or((None, None))
 }
 
 fn nonempty_trimmed_str(value: Option<&Value>) -> Option<String> {
@@ -60,13 +63,15 @@ fn extract_observation_correlation(output: &Value) -> Option<Value> {
     }
     if let Some(ti) = output.get("tool_input").and_then(Value::as_object) {
         if !m.contains_key("session_id")
-            && let Some(s) = nonempty_trimmed_str(ti.get("session_id")) {
-                m.insert("session_id".to_string(), Value::String(s));
-            }
+            && let Some(s) = nonempty_trimmed_str(ti.get("session_id"))
+        {
+            m.insert("session_id".to_string(), Value::String(s));
+        }
         if !m.contains_key("task_id")
-            && let Some(s) = nonempty_trimmed_str(ti.get("task_id")) {
-                m.insert("task_id".to_string(), Value::String(s));
-            }
+            && let Some(s) = nonempty_trimmed_str(ti.get("task_id"))
+        {
+            m.insert("task_id".to_string(), Value::String(s));
+        }
     }
     if m.is_empty() {
         None

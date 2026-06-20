@@ -170,6 +170,8 @@ pub struct MaintRootsArgs {
 pub struct MaintRepoArgs {
     #[arg(long, alias = "repo-root")]
     pub framework_root: Option<PathBuf>,
+    #[arg(long, default_value = "false")]
+    pub dry_run: bool,
 }
 
 #[derive(Args, Debug, Clone)]

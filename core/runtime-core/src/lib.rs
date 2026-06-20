@@ -24,20 +24,36 @@ pub mod schema_drift;
 // ── browser dispatch hook (decouples runtime-core from browser-mcp crate) ──
 pub mod browser_dispatch_hook;
 
-// ── contracts: zero-dependency modules grouped for clarity ──
-pub mod contracts;
+// ── re-exports from rt_core_contracts (flattened, no intermediate contracts module) ──
+pub use rt_core_contracts::formal_toolchain;
+pub use rt_core_contracts::framework_skills;
+pub use rt_core_contracts::harness_contract;
+pub use rt_core_contracts::harness_context_signals;
+pub use rt_core_contracts::harness_operator_nudges;
+pub use rt_core_contracts::hook_event_routing;
+pub use rt_core_contracts::hook_observation_rules;
+pub use rt_core_contracts::hook_outbound_protect;
+pub use rt_core_contracts::kernel_bootstrap;
+pub use rt_core_contracts::mcp_pre_guard;
+pub use rt_core_contracts::router_env_flags;
+pub use rt_core_contracts::router_rs_observation;
+pub use rt_core_contracts::session_call_tracker;
+pub use rt_core_contracts::web_fetch_guard;
 
-// ── proxy / re-export modules ──
-pub use contracts::atomic_write;
-pub use contracts::goal_drive;
-pub use contracts::formal_toolchain;
-pub use contracts::kernel_bootstrap;
-pub use contracts::path_guard;
-pub use contracts::step_ledger;
-pub use contracts::task_ledger;
-pub use contracts::task_state;
-pub use contracts::task_state_aggregate;
-pub use contracts::task_write_lock;
+// ── re-exports from core-state (flattened) ──
+pub use core_state::utils::atomic_write;
+pub use core_state::utils::path_guard;
+pub use core_state::step_ledger;
+pub use core_state::task_ledger;
+pub use core_state::task_state;
+pub use core_state::task_state_aggregate;
+pub use core_state::utils::task_write_lock;
+pub use core_state::state_manager as goal_drive;
+
+// ── local contract modules (remain in runtime-core due to internal coupling) ──
+pub mod hook_timing;
+pub mod review_gate;
+pub mod task_command;
 
 // ── migrated supporting modules ──
 // browser_mcp: physically migrated to core/browser-mcp crate (§2.4)
@@ -48,28 +64,34 @@ pub mod codegraph_mcp;
 pub mod eval_route;
 pub use framework_kernel::framework_host_targets;
 pub mod framework_maint;
-pub use contracts::framework_skills;
-pub use contracts::harness_context_signals;
-pub use contracts::harness_contract;
-pub use contracts::hook_event_routing;
-pub use contracts::hook_outbound_protect;
-pub use contracts::hook_timing;
 pub use host_projection::host_entrypoint_sync;
 pub use host_projection::host_integration;
 pub use host_projection::hosts;
-pub use contracts::mcp_pre_guard;
 pub mod paper_adversarial_hook;
+mod paper_block_cache;
 pub mod paper_prose_hook;
 pub mod research_activity_log;
-pub use contracts::review_gate;
 pub use routing_engine::route;
 #[cfg(test)]
 mod route_metadata_tests;
 pub use framework_kernel::router_self;
-// runtime_registry: re-export from framework-kernel + review gate additions from core-policy
+// runtime_registry: explicit re-exports from framework-kernel (no glob)
+// + review gate additions from core-policy (separated by source)
 pub mod runtime_registry {
-    pub use framework_kernel::runtime_registry::*;
-    // Review gate re-exports that were previously in this module
+    // ── framework-kernel re-exports ──
+    pub use framework_kernel::runtime_registry::{
+        ALL_KNOWN_HOST_DIRS, DEFAULT_MANAGED_MCP_SERVER_IDS, HOST_ADAPTER_CONTRACT_PATH,
+        HOST_HOME_DIRS, RUNTIME_REGISTRY_PATH, RUNTIME_REGISTRY_SCHEMA_VERSION,
+        RuntimeRegistry, RuntimeSkillsDefaults, RuntimeWorkspaceBootstrapDefaults,
+        closeout_evidence_hooks_unsupported_on_host, harness_capability_exception_entry,
+        harness_capability_exception_rationale, host_projection_object,
+        load_runtime_registry, load_runtime_registry_json,
+        load_runtime_registry_payload, load_runtime_registry_payload_if_repo_local,
+        managed_mcp_server_for_tool, managed_mcp_server_ids,
+        parse_host_mcp_tool_fqn, resolves_managed_mcp_tool,
+        runtime_registry_path,
+    };
+    // ── core-policy review gate re-exports ──
     pub use core_policy::registry_review_gate::{
         HookRegistryRepoGuard, check_review_gate_registry_snapshot, clear_hook_registry_repo_root,
         is_reviewer_lane_from_registry, lifecycle_profile_disables_spawn_first_nudge,
@@ -79,22 +101,13 @@ pub mod runtime_registry {
         spawn_first_includes_model_inherit_for_host,
     };
 }
-pub use contracts::session_call_tracker;
 pub use framework_kernel::skill_repo;
 pub use framework_kernel::stdio_payload_types;
 pub mod mcp_stdio_test_support;
 pub mod stdio_transport;
-pub use contracts::task_command;
 pub mod telemetry_emit;
 #[cfg(test)]
 pub mod test_env_sync;
-pub use contracts::web_fetch_guard;
-
-// ── modules with transitive deps ──
-pub use contracts::harness_operator_nudges;
-pub use contracts::hook_observation_rules;
-pub use contracts::router_env_flags;
-pub use contracts::router_rs_observation;
 
 // ── path-qualified module ──
 #[path = "utils/hook_posttool_normalize.rs"]
@@ -293,14 +306,86 @@ pub fn register_host_projection_hooks() {
 
         // ── RFV loop full implementation (supports append_round) ──
         host_projection::hooks::register_rfv_loop_drive(rfv_loop::framework_rfv_loop);
+
+        // ── framework-runtime internal hooks (pre_tool_use_guard, closeout, etc.) ──
+        ::framework_runtime::hooks::register(::framework_runtime::hooks::RuntimeCoreHooks {
+            telemetry: ::framework_runtime::hooks::TelemetryHooks {
+                hook_fired: telemetry_emit::emit_hook_fired,
+                tool_call: |tool, count, blocked| {
+                    telemetry_emit::emit_tool_call(tool, count as u64, blocked);
+                },
+                route_decision: |_query, _decision, _reroute| {},
+                prediction_outcome: |_task_id, _checks_summary, _verification_status, _checks_count| {},
+                rfv_round: telemetry_emit::emit_rfv_round,
+            },
+            host_provider: ::framework_runtime::hooks::HostProviderHooks {
+                for_routing_spelling: |host_id| {
+                    host_id.and_then(|id| {
+                        hosts::host_provider::host_provider_for_routing_spelling(id)
+                            .map(|p| p.host_id())
+                    })
+                },
+                default_id: hosts::host_provider::default_host_id,
+                strict_pre_tool_fallback_hint: hosts::host_provider::host_provider_strict_pre_tool_fallback_hint,
+                registry: || {
+                    hosts::host_provider::host_provider_registry()
+                        .iter()
+                        .map(|p| (p.host_id(), None))
+                        .collect()
+                },
+            },
+            framework_goal_drive: core_state::state_manager::framework_goal_drive,
+            framework_rfv_loop: rfv_loop::framework_rfv_loop,
+            handle_session_supervisor_operation: session_supervisor::handle_session_supervisor_operation,
+            handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
+            runtime_concurrency_defaults_payload: || {
+                serde_json::to_value(stdio_transport::runtime_concurrency_defaults_payload())
+                    .unwrap_or(serde_json::json!({}))
+            },
+            eval_route_contract: eval_route::eval_route_contract,
+            run_eval_route: |cases_path, runtime, manifest| {
+                eval_route::run_eval_route(cases_path, runtime, manifest)
+                    .map(|report| serde_json::to_value(report).unwrap_or(serde_json::json!({})))
+                    .map_err(|e| e.to_string())
+            },
+            generated_artifacts_status_for_repo: |repo_root| {
+                host_projection::host_integration::generated_artifacts_status_for_repo(repo_root)
+                    .map(|v| v.to_string())
+            },
+            ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
+        });
     });
 }
 
-/// Auto-initialize routing hooks at library load time.
-#[ctor::ctor]
-fn auto_init_routing_hooks() {
+/// Explicitly initialize all runtime-core hooks.
+///
+/// **Prefer calling this at the top of `main()`** instead of relying on the
+/// `#[ctor::ctor]` auto-initialization below.  Explicit init gives you
+/// deterministic ordering, easier testing, and avoids undefined behavior
+/// around static initialization ordering across dynamic libraries.
+///
+/// Safe to call multiple times — internal `OnceLock` guards make repeated
+/// calls no-ops.
+pub fn init_hooks() {
     register_routing_hooks();
     register_host_projection_hooks();
+}
+
+/// Auto-initialize routing hooks at library load time.
+///
+/// **SAFETY / CAVEAT**: `#[ctor::ctor]` runs before `main()` with no
+/// guaranteed ordering relative to other static initializers.  This is
+/// acceptable for the router-rs CLI binary (single crate, no dynamic
+/// loading), but **not safe** for:
+/// - Embedding runtime-core as a dynamic library
+/// - Test harnesses that need deterministic init ordering
+///
+/// For those cases, call [`init_hooks()`] explicitly and compile with
+/// `--no-default-features` to disable ctor.
+#[cfg(not(test))]
+#[ctor::ctor]
+fn auto_init_routing_hooks() {
+    init_hooks();
 }
 
 // ── test helpers ──

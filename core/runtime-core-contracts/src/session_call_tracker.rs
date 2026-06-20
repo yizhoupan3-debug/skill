@@ -126,9 +126,7 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
     apply_task_ledger_mutation(repo_root, || {
         let mut payload = load_or_init_tracker(&path)?;
 
-        payload["total_calls"] = json!(
-            payload["total_calls"].as_u64().unwrap_or(0) + total
-        );
+        payload["total_calls"] = json!(payload["total_calls"].as_u64().unwrap_or(0) + total);
 
         let per_tool = payload["per_tool"]
             .as_object_mut()
@@ -164,7 +162,10 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
         let cur_in = tu.get("input").and_then(Value::as_u64).unwrap_or(0);
         let cur_out = tu.get("output").and_then(Value::as_u64).unwrap_or(0);
         let cur_cr = tu.get("cache_read").and_then(Value::as_u64).unwrap_or(0);
-        let cur_cc = tu.get("cache_creation").and_then(Value::as_u64).unwrap_or(0);
+        let cur_cc = tu
+            .get("cache_creation")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
         tu.insert("input".to_string(), json!(cur_in + in_tok));
         tu.insert("output".to_string(), json!(cur_out + out_tok));
         tu.insert("cache_read".to_string(), json!(cur_cr + cr_tok));
@@ -216,10 +217,8 @@ pub fn record_tool_call(
     if let Some(stats) = cache_stats {
         TOKEN_INPUT.fetch_add(stats.input_tokens, Ordering::Relaxed);
         TOKEN_OUTPUT.fetch_add(stats.output_tokens, Ordering::Relaxed);
-        TOKEN_CACHE_READ
-            .fetch_add(stats.cache_read_input_tokens, Ordering::Relaxed);
-        TOKEN_CACHE_CREATION
-            .fetch_add(stats.cache_creation_input_tokens, Ordering::Relaxed);
+        TOKEN_CACHE_READ.fetch_add(stats.cache_read_input_tokens, Ordering::Relaxed);
+        TOKEN_CACHE_CREATION.fetch_add(stats.cache_creation_input_tokens, Ordering::Relaxed);
     }
 
     // Periodic flush
@@ -265,31 +264,37 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
         // Desktop MCP sessions typically end at 10-20 calls. The 15-call threshold
         // catches unverified Desktop sessions before they grow too long.
         if total >= 15 {
-            let has_closeout = payload["per_tool"].as_object().is_some_and(|obj| {
-                obj.keys().any(|k| k.eq_ignore_ascii_case("closeout_gate"))
-            });
+            let has_closeout = payload["per_tool"]
+                .as_object()
+                .is_some_and(|obj| obj.keys().any(|k| k.eq_ignore_ascii_case("closeout_gate")));
             if !has_closeout {
                 warnings.push("Session has 15+ tool calls but closeout_gate was never called -- session may end without verification.".to_string());
             }
         }
 
         // Rule 4: Bash dominates
-        let bash_count = payload["per_tool"].as_object()
+        let bash_count = payload["per_tool"]
+            .as_object()
             .and_then(|obj| obj.iter().find(|(k, _)| k.eq_ignore_ascii_case("Bash")))
             .and_then(|(_, v)| v.as_u64());
         if let Some(bash_count) = bash_count
-            && total > 0 && bash_count > total / 2 {
-                warnings.push(format!("Bash calls ({bash_count}) exceed 50% of total ({total}) -- possible unsafe automation."));
-            }
+            && total > 0
+            && bash_count > total / 2
+        {
+            warnings.push(format!("Bash calls ({bash_count}) exceed 50% of total ({total}) -- possible unsafe automation."));
+        }
 
         // Rule 5: Write dominates
-        let write_count = payload["per_tool"].as_object()
+        let write_count = payload["per_tool"]
+            .as_object()
             .and_then(|obj| obj.iter().find(|(k, _)| k.eq_ignore_ascii_case("Write")))
             .and_then(|(_, v)| v.as_u64());
         if let Some(write_count) = write_count
-            && total > 0 && write_count > total * 3 / 10 {
-                warnings.push(format!("Write calls ({write_count}) exceed 30% of total ({total}) -- possible blind overwriting."));
-            }
+            && total > 0
+            && write_count > total * 3 / 10
+        {
+            warnings.push(format!("Write calls ({write_count}) exceed 30% of total ({total}) -- possible blind overwriting."));
+        }
 
         // Rule 6: CodeGraph index exists but no codegraph tools used (after 20+ calls)
         if total >= 20 {
@@ -369,7 +374,7 @@ fn write_tracker(path: &Path, payload: &Value) -> Result<(), String> {
     // Acquire global lock for thread-safe writes
     let lock = get_tracker_lock();
     let _guard = lock.lock().map_err(|e| {
-        eprintln!("[router-rs] tracker lock poisoned: {e}");
+        tracing::warn!("[router-rs] tracker lock poisoned: {e}");
         format!("tracker lock poisoned: {e}")
     })?;
 

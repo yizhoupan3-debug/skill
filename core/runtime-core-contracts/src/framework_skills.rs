@@ -101,14 +101,21 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
     // Load all registered hosts from RUNTIME_REGISTRY so [supported] expands correctly.
     let mut all_hosts: Vec<Value> = {
         let reg_path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
-        serde_json::from_str::<Value>(&fs::read_to_string(&reg_path).unwrap_or_default())
+        let reg_content = fs::read_to_string(&reg_path).unwrap_or_else(|e| {
+            eprintln!(
+                "[router-rs] warning: failed to read RUNTIME_REGISTRY.json: {e}"
+            );
+            String::new()
+        });
+        const DEFAULT_HOSTS: &[&str] = &["claude", "codex", "cursor", "opencode"];
+        serde_json::from_str::<Value>(&reg_content)
             .ok()
             .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
             .unwrap_or_else(|| {
-                json!(["claude", "codex", "cursor", "opencode"])
-                    .as_array()
-                    .cloned()
-                    .unwrap()
+                DEFAULT_HOSTS
+                    .iter()
+                    .map(|h| json!(h))
+                    .collect()
             })
     };
     all_hosts.sort_by(|a, b| a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or("")));
@@ -155,12 +162,13 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
     if let Some(hot) = policy["default_surface"]["hot_first_turn_owners"].as_array() {
         for slug in hot.iter().filter_map(|v| v.as_str()) {
             if let Some(entry) = metadata_skills.get_mut(slug)
-                && let Some(obj) = entry.as_object_mut() {
-                    obj.insert(
-                        "selection_reason".to_string(),
-                        Value::String("allowlisted first-turn owner".to_string()),
-                    );
-                }
+                && let Some(obj) = entry.as_object_mut()
+            {
+                obj.insert(
+                    "selection_reason".to_string(),
+                    Value::String("allowlisted first-turn owner".to_string()),
+                );
+            }
         }
     }
     let stubs: [(&str, Value); 6] = [
@@ -212,9 +220,11 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
         let path = repo_root.join(rel);
         if rel.ends_with(".md") {
             let body = "# Generated routing index (stub)\n\nSee `skills/SKILL_ROUTING_RUNTIME.json` and `skills/SKILL_MANIFEST.json`. Maintained by `router-rs framework skills refresh --write`.\n";
-            core_state::utils::atomic_write::write_atomic_text(&path, body).map_err(|e| e.to_string())?;
+            core_state::utils::atomic_write::write_atomic_text(&path, body)
+                .map_err(|e| e.to_string())?;
         } else {
-            core_state::utils::atomic_write::write_atomic_json(&path, &value).map_err(|e| e.to_string())?;
+            core_state::utils::atomic_write::write_atomic_json(&path, &value)
+                .map_err(|e| e.to_string())?;
         }
     }
     Ok(())
@@ -301,14 +311,16 @@ fn walk_skill_md(dir: &Path, slugs: &mut BTreeSet<String>) -> Result<(), String>
         let path = entry.path();
         if path.is_dir() {
             if let Some(name) = path.file_name().and_then(|s| s.to_str())
-                && name.starts_with('.') {
-                    continue;
-                }
+                && name.starts_with('.')
+            {
+                continue;
+            }
             walk_skill_md(&path, slugs)?;
         } else if path.file_name().and_then(|s| s.to_str()) == Some("SKILL.md")
-            && let Some(name) = parse_skill_name(&path)? {
-                slugs.insert(name);
-            }
+            && let Some(name) = parse_skill_name(&path)?
+        {
+            slugs.insert(name);
+        }
     }
     Ok(())
 }

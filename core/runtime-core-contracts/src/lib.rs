@@ -6,8 +6,8 @@
 
 pub mod formal_toolchain;
 pub mod framework_skills;
-pub mod harness_contract;
 pub mod harness_context_signals;
+pub mod harness_contract;
 pub mod harness_operator_nudges;
 pub mod hook_event_routing;
 pub mod hook_observation_rules;

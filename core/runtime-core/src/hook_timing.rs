@@ -47,10 +47,10 @@ pub fn emit_hook_timing_line(event: &str) {
         cargo_check_ms,
         "hook timing"
     );
-    eprintln!(
-        "hook_timing event={event} duration_ms={duration_ms} lock_wait_ms={lock_wait_ms} cargo_check_ms={cargo_check_ms}"
+    tracing::debug!(
+        event, duration_ms, lock_wait_ms, cargo_check_ms,
+        "hook timing"
     );
-    let _ = std::io::Write::flush(&mut std::io::stderr());
     crate::telemetry_emit::emit_hook_timing_telemetry(
         event,
         duration_ms,

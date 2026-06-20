@@ -103,29 +103,28 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
         return ResolvedHarnessNudges::disabled();
     }
     let path = repo_root.join(NUDGES_REL_PATH);
-    let mtime = fs::metadata(&path)
-        .ok()
-        .and_then(|m| m.modified().ok());
+    let mtime = fs::metadata(&path).ok().and_then(|m| m.modified().ok());
     {
         let guard = NUDGES_CACHE.lock().expect("nudges cache");
         if let Some(ref cached) = *guard
-            && cached.mtime == mtime {
-                return cached.content.clone();
-            }
+            && cached.mtime == mtime
+        {
+            return cached.content.clone();
+        }
     }
     let mut out = builtin_defaults();
     let Ok(text) = fs::read_to_string(&path) else {
         return out;
     };
     let Ok(file) = serde_json::from_str::<HarnessOperatorNudgesFile>(&text) else {
-        eprintln!(
+        tracing::warn!(
             "[router-rs] harness operator nudges: parse failed at {}",
             path.display()
         );
         return out;
     };
     if !file.schema_version.is_empty() && file.schema_version != EXPECTED_SCHEMA_VERSION {
-        eprintln!(
+        tracing::warn!(
             "[router-rs] harness operator nudges: expected schema_version={EXPECTED_SCHEMA_VERSION}, got {:?} — falling back to compiled defaults (no partial merge)",
             file.schema_version
         );
@@ -157,7 +156,10 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
     );
     {
         let mut guard = NUDGES_CACHE.lock().expect("nudges cache");
-        *guard = Some(CachedNudges { content: out.clone(), mtime });
+        *guard = Some(CachedNudges {
+            content: out.clone(),
+            mtime,
+        });
     }
     out
 }
