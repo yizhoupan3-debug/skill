@@ -7,7 +7,7 @@
         "--repo-root",
         "/Users/joe/Developer/skill"
       ],
-      "command": "router-rs",
+      "command": "router-rs-cli",
       "description": "Browser automation, session worker, background tasks",
       "type": "stdio"
     },
@@ -20,8 +20,6 @@
         "codegraph-rs",
         "--bin",
         "mcp-codegraph",
-        "--manifest-path",
-        "/Users/joe/Developer/skill/Cargo.toml",
         "--",
         "--repo-root",
         "/Users/joe/Developer/skill"
@@ -41,12 +39,13 @@
     },
     "router-rs-framework": {
       "args": [
-        "claude",
+        "host",
         "agent",
         "--repo-root",
-        "/Users/joe/Developer/skill"
+        "/Users/joe/Developer/skill",
+        "claude"
       ],
-      "command": "router-rs",
+      "command": "router-rs-cli",
       "description": "Framework snapshot, skill routing, goal/closeout gating",
       "type": "stdio"
     }

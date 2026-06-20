@@ -7,11 +7,6 @@
       "compare": "normalized-text"
     },
     {
-      "path": "AGENTS_CODEX.md",
-      "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
-      "compare": "byte-for-byte"
-    },
-    {
       "path": ".codex/README.md",
       "generator": "cargo run --quiet --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --repo-root \"$PWD\"",
       "compare": "normalized-text"

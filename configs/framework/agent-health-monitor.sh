@@ -10,11 +10,33 @@
 #   agent-health-monitor.sh kill-stuck [timeout_secs]        # auto-terminate stuck agents
 set -euo pipefail
 
-STATE_DIR="${CLAUDE_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}/.claude"
+# Detect repo root from any host's environment, then fall back to git.
+_REPO_ROOT="${CLAUDE_PROJECT_ROOT:-${CODEX_PROJECT_ROOT:-${CURSOR_WORKSPACE_ROOT:-${OPENCODE_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}}}"
+# Use .framework/agent-health/ for host-agnostic state (previously .claude/).
+STATE_DIR="${_REPO_ROOT}/.framework/agent-health"
 STATE_FILE="$STATE_DIR/agent_health_state.json"
+LOCK_FILE="$STATE_DIR/agent_health_state.lock"
 DEFAULT_TIMEOUT_SECS=600  # 10 minutes
 
+# One-time migration: move old .claude/ state to .framework/agent-health/
+_OLD_STATE_DIR="${_REPO_ROOT}/.claude"
+if [ -f "$_OLD_STATE_DIR/agent_health_state.json" ] && [ ! -f "$STATE_FILE" ]; then
+  mkdir -p "$STATE_DIR"
+  mv "$_OLD_STATE_DIR/agent_health_state.json" "$STATE_FILE" 2>/dev/null || true
+  rm -f "$_OLD_STATE_DIR/agent_health_state.lock" 2>/dev/null || true
+fi
+
 mkdir -p "$STATE_DIR"
+
+# Acquire exclusive flock with 10s timeout.
+# Opened on fd 9; released on script exit.
+acquire_lock() {
+  exec 9>"$LOCK_FILE"
+  flock --exclusive --timeout 10 9 || {
+    echo '{"error":"failed to acquire agent health lock within 10s"}' >&2
+    exit 1
+  }
+}
 
 # Initialize state file if missing
 init_state() {
@@ -25,13 +47,14 @@ init_state() {
 
 # Record agent start
 do_start() {
+  acquire_lock
   local name="${1:?agent name required}"
   local agent_id="${2:?agent id required}"
   init_state
   local now
   now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  local tmp="${STATE_FILE}.tmp"
+  local tmp="${STATE_FILE}.tmp.$$"
   jq --arg name "$name" --arg aid "$agent_id" --arg now "$now" \
     '.agents[$aid] = {"name": $name, "started_at": $now, "status": "running", "last_heartbeat": $now}' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
@@ -41,12 +64,13 @@ do_start() {
 
 # Record agent stop
 do_stop() {
+  acquire_lock
   local agent_id="${1:?agent id required}"
   init_state
   local now
   now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  local tmp="${STATE_FILE}.tmp"
+  local tmp="${STATE_FILE}.tmp.$$"
   jq --arg aid "$agent_id" --arg now "$now" \
     'if .agents[$aid] then .agents[$aid].status = "stopped" | .agents[$aid].stopped_at = $now else . end' \
     "$STATE_FILE" > "$tmp" && mv "$tmp" "$STATE_FILE"
@@ -56,13 +80,13 @@ do_stop() {
 
 # Health check — returns JSON with agent statuses and warnings (single file read for atomicity)
 do_check() {
+  acquire_lock
   init_state
   local timeout_secs="${1:-$DEFAULT_TIMEOUT_SECS}"
   local now
   now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-  local tmp="${STATE_FILE}.tmp"
+  local tmp="${STATE_FILE}.tmp.$$"
 
-  # Single file read: compute report AND updated state atomically
   local combined
   combined=$(jq --argjson timeout "$timeout_secs" --arg now "$now" '
     (.agents // {}) as $agents |
@@ -92,7 +116,6 @@ do_check() {
     }
   ' "$STATE_FILE")
 
-  # Write updated state and output report
   printf '%s' "$combined" | jq '._updated_state' > "$tmp" && mv "$tmp" "$STATE_FILE"
   printf '%s' "$combined" | jq '.report'
 }
@@ -128,12 +151,13 @@ do_kill_stuck() {
 
 # Clean up old entries (> 1 hour)
 do_cleanup() {
+  acquire_lock
   init_state
   local now_epoch
   now_epoch=$(date -u +%s)
   local cutoff=$((now_epoch - 3600))
 
-  local before after tmp="${STATE_FILE}.tmp"
+  local before after tmp="${STATE_FILE}.tmp.$$"
   before=$(jq '.agents | length' "$STATE_FILE")
 
   jq --argjson cutoff "$cutoff" '

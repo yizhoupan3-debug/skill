@@ -470,7 +470,13 @@ fn matrix_my_light_stop_assistant_only_does_not_suppress() {
                     "{host:?} combined stop_signal may suppress via assistant /implementx; out={stop:?}"
                 );
             }
-            _ => assert!(
+            // Claude: advisory posture — assistant-only /implementx must not trigger my-light suppress.
+            MatrixHost::Claude => assert!(
+                stop_review_gate_advisory(host, &stop),
+                "{host:?} assistant tail must not trigger my-light suppress; out={stop:?}"
+            ),
+            // Cursor, Opencode: same advisory behavior — explicitly listed to catch future behavioral divergence.
+            MatrixHost::Cursor | MatrixHost::Opencode => assert!(
                 stop_review_gate_advisory(host, &stop),
                 "{host:?} assistant tail must not trigger my-light suppress; out={stop:?}"
             ),

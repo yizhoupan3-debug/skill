@@ -128,7 +128,7 @@ pub fn snapshot_skills(manifest_path: PathBuf, registry_path: PathBuf) -> anyhow
     Ok(())
 }
 
-pub fn calculate_dir_hash(path: &PathBuf) -> anyhow::Result<String> {
+pub fn calculate_dir_hash(path: &Path) -> anyhow::Result<String> {
     let mut hasher = Sha256::new();
     hash_dir_recursive(path, &mut hasher)?;
     Ok(hex::encode(hasher.finalize()))

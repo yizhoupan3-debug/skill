@@ -7,7 +7,7 @@ use std::path::PathBuf;
 mod backend;
 mod filesystem;
 mod operation;
-mod paths;
+pub mod paths;
 mod sqlite;
 
 pub use backend::{

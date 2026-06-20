@@ -61,16 +61,25 @@ fn workspace_has_nine_core_crates() {
         "core/research-harness",
     ];
 
+    for crate_path in &expected_crates {
+        assert!(
+            workspace_content.contains(crate_path),
+            "workspace missing crate: {}",
+            crate_path
+        );
+    }
+}
+
 #[test]
 fn leaf_crates_have_zero_workspace_deps() {
     // These crates should have NO path dependencies to other workspace crates
+    // Note: research-harness depends on core-state, so it's no longer a leaf
     let leaf_crates = [
         "core/core-state",
         "core/framework-kernel",
         "core/routing-engine",
         "tools/evolution-rs",
         "tools/codegraph-rs",
-        "core/research-harness",
     ];
 
     let workspace_core = [
@@ -81,7 +90,7 @@ fn leaf_crates_have_zero_workspace_deps() {
         "router-rs",
         "codegraph-rs",
         "evolution-rs",
-        "autoresearch-rs",
+        "research-harness",
     ];
 
     for leaf in &leaf_crates {

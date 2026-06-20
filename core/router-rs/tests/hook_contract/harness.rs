@@ -127,7 +127,7 @@ impl ReviewGateActiveGuard {
             unsafe { std::env::remove_var(key) };
         }
         if host == MatrixHost::Cursor {
-            crate::cursor_hooks::set_test_review_gate_disable_override(Some(false));
+            core_policy::env_flags::set_test_review_gate_disabled_override(Some(false));
         }
         Self { _lock, restored }
     }
@@ -170,7 +170,7 @@ impl CanonicalReviewGateDisableGuard {
         }
         unsafe { std::env::set_var(CANONICAL_REVIEW_GATE_DISABLE_ENV, "1") };
         if host == MatrixHost::Cursor {
-            crate::cursor_hooks::set_test_review_gate_disable_override(Some(true));
+            core_policy::env_flags::set_test_review_gate_disabled_override(Some(true));
         }
         Self { _lock, restored }
     }
@@ -198,7 +198,7 @@ impl LegacyReviewGateDisableGuard {
         let legacy = review_gate_disable_env_keys(host)[1];
         unsafe { std::env::set_var(legacy, "1") };
         if host == MatrixHost::Cursor {
-            crate::cursor_hooks::set_test_review_gate_disable_override(None);
+            core_policy::env_flags::set_test_review_gate_disabled_override(None);
         }
         Self { _lock, restored }
     }
@@ -212,7 +212,7 @@ impl Drop for LegacyReviewGateDisableGuard {
                 None => unsafe { std::env::remove_var(&key) },
             }
         }
-        crate::cursor_hooks::set_test_review_gate_disable_override(None);
+        core_policy::env_flags::set_test_review_gate_disabled_override(None);
         crate::hook_common::set_test_my_light_override(None);
     }
 }
@@ -225,7 +225,7 @@ impl Drop for CanonicalReviewGateDisableGuard {
                 None => unsafe { std::env::remove_var(&key) },
             }
         }
-        crate::cursor_hooks::set_test_review_gate_disable_override(None);
+        core_policy::env_flags::set_test_review_gate_disabled_override(None);
         crate::hook_common::set_test_my_light_override(None);
     }
 }
@@ -238,7 +238,7 @@ impl Drop for ReviewGateActiveGuard {
                 None => unsafe { std::env::remove_var(&key) },
             }
         }
-        crate::cursor_hooks::set_test_review_gate_disable_override(None);
+        core_policy::env_flags::set_test_review_gate_disabled_override(None);
         crate::hook_common::set_test_my_light_override(None);
     }
 }

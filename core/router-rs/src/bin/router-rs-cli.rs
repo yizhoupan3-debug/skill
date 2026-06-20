@@ -6,6 +6,11 @@ static GLOBAL: MiMalloc = MiMalloc;
 use clap::Parser;
 
 fn main() -> Result<(), String> {
+    // Explicit hook initialization (deterministic ordering, testable).
+    // The #[ctor::ctor] in runtime-core handles this for non-test builds,
+    // but explicit init is safer and makes dependencies clear.
+    runtime_core::init_hooks();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

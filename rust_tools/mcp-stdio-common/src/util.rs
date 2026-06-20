@@ -72,6 +72,41 @@ pub fn parse_range(spec: &str, total: u64) -> Result<Vec<u64>> {
     Ok(indices)
 }
 
+/// Truncate a string to at most `max_chars` Unicode characters.
+///
+/// Returns the (possibly truncated) string and whether truncation occurred.
+/// If the input exceeds `max_chars`, it is sliced at the character boundary
+/// and `"…"` is appended (1 char), so the result is at most `max_chars` chars.
+pub fn truncate_text(text: &str, max_chars: usize) -> (String, bool) {
+    if max_chars == 0 {
+        return (String::new(), !text.is_empty());
+    }
+    let char_count = text.chars().count();
+    if char_count <= max_chars {
+        (text.to_string(), false)
+    } else {
+        let truncated: String = text.chars().take(max_chars.saturating_sub(1)).collect();
+        (truncated + "…", true)
+    }
+}
+
+/// Emit output as pretty-printed JSON or via a custom text formatter.
+///
+/// When `json_mode` is true, serializes `value` as pretty JSON to stdout.
+/// Otherwise calls `text_fn` for plain-text output.
+pub fn emit_output<T: serde::Serialize>(
+    value: &T,
+    json_mode: bool,
+    text_fn: impl FnOnce(&T),
+) -> anyhow::Result<()> {
+    if json_mode {
+        println!("{}", serde_json::to_string_pretty(value)?);
+    } else {
+        text_fn(value);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,5 +195,33 @@ mod tests {
             assert!(expanded.starts_with(&home));
             assert!(expanded.ends_with("documents"));
         }
+    }
+
+    #[test]
+    fn test_truncate_text_short() {
+        let (text, truncated) = truncate_text("hello", 10);
+        assert_eq!(text, "hello");
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn test_truncate_text_exact() {
+        let (text, truncated) = truncate_text("hello", 5);
+        assert_eq!(text, "hello");
+        assert!(!truncated);
+    }
+
+    #[test]
+    fn test_truncate_text_long() {
+        let (text, truncated) = truncate_text("hello world", 5);
+        assert_eq!(text, "hell…");
+        assert!(truncated);
+    }
+
+    #[test]
+    fn test_truncate_text_unicode() {
+        let (text, truncated) = truncate_text("你好世界test", 4);
+        assert_eq!(text, "你好世…");
+        assert!(truncated);
     }
 }

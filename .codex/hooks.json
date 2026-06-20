@@ -1,5 +1,5 @@
 {
-  "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path core/router-rs/Cargo.toml -- codex sync --repo-root \"$PWD\"`.",
+  "_comment": "Managed by router-rs. Regenerate with `cargo run --manifest-path core/router-rs/Cargo.toml -- framework sync-entrypoints --host-id codex --repo-root \"$PWD\"`.",
   "hooks": {
     "PostToolUse": [
       {
@@ -10,7 +10,8 @@
             "timeout": 5,
             "type": "command"
           }
-        ]
+        ],
+        "matcher": "shell|Bash|apply_patch|text_editor"
       }
     ],
     "PreToolUse": [
@@ -22,7 +23,8 @@
             "timeout": 8,
             "type": "command"
           }
-        ]
+        ],
+        "matcher": "shell|Bash|apply_patch|text_editor"
       }
     ],
     "SessionStart": [

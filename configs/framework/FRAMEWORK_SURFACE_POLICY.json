@@ -2,11 +2,11 @@
   "default_surface": {
     "default_entry_loadout": "default_surface_loadout",
     "default_loadouts": [
-      "default_surface_loadout"
+      "default_surface_loadout",
+      "research_loadout"
     ],
     "default_overlays": [],
     "explicit_opt_in_loadouts": [
-      "research_loadout",
       "implementation_loadout",
       "audit_loadout",
       "framework_loadout",

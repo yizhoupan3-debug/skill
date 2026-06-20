@@ -8,3 +8,27 @@ sandbox_mode = "danger-full-access"
 
 [sandbox_workspace_write]
 writable_roots = ["."]
+
+# managed_by: skill-framework · mcp_servers.router-rs-framework
+[mcp_servers.router-rs-framework]
+command = "router-rs"
+args = ["host", "codex", "agent", "--repo-root", "/Users/joe/Developer/skill"]
+enabled = true
+
+# managed_by: skill-framework · mcp_servers.browser-mcp
+[mcp_servers.browser-mcp]
+command = "router-rs"
+args = ["browser", "mcp-stdio", "--repo-root", "/Users/joe/Developer/skill"]
+enabled = true
+
+# managed_by: skill-framework · mcp_servers.paperplain
+[mcp_servers.paperplain]
+command = "npx"
+args = ["-y", "paperplain-mcp"]
+enabled = true
+
+# managed_by: skill-framework · mcp_servers.mcp-codegraph
+[mcp_servers.mcp-codegraph]
+command = "cargo"
+args = ["run", "--release", "--quiet", "-p", "codegraph-rs", "--bin", "mcp-codegraph", "--", "--repo-root", "/Users/joe/Developer/skill"]
+enabled = true

@@ -3,7 +3,7 @@
 <!-- host_projection: claude -->
 <!-- install_scope: project -->
 
-# Claude（本项目）
+# Claude Code（本项目）
 
 跨宿主 **`AGENTS.md`**；宿主差异 **`AGENTS_CLAUDE.md`**；手册 **`docs/hosts/_common.md`** / **`docs/hosts/hook-hosts.md`**。
 
@@ -24,6 +24,6 @@
 
 ## MCP（可选）
 
-项目 `.claude/mcp.json` 可注册 `browser-mcp` 等；历史 Desktop 配置见 **`mcp.README.md`**（`claude-desktop` 已退役，勿作真源）。
+项目 `.claude/mcp.json` 可注册 `browser-mcp` 等。
 
 路由：`skills/SKILL_ROUTING_RUNTIME.json` · 产物：`artifacts/current/`。

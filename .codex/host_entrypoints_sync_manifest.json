@@ -6,7 +6,7 @@
     ],
     "text_files": [
       ".codex/README.md",
-      "AGENTS_CODEX.md"
+      "AGENTS.md"
     ]
   },
   "partial_sync": {
@@ -18,16 +18,16 @@
   },
   "schema_version": "host-entrypoints-sync-manifest-v1",
   "shared_system": {
-    "agent_policy_entrypoint": "AGENTS_CODEX.md",
+    "agent_policy_entrypoint": "AGENTS.md",
     "host_entrypoints": {
       "claude": [
-        "AGENTS_CLAUDE.md",
+        "AGENTS.md",
         ".claude/rules/framework.md",
         ".claude/settings.json"
       ],
-      "codex": "AGENTS_CODEX.md",
+      "codex": "AGENTS.md",
       "cursor": [
-        "AGENTS_CURSOR.md",
+        "AGENTS.md",
         ".cursor/rules/*.mdc"
       ],
       "opencode": ".opencode/opencode.json"

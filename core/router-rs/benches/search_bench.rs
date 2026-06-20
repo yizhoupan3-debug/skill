@@ -13,7 +13,7 @@ use router_rs::route::{
     SkillRecord, filter_record_indices_for_host, invalidate_records_cache, load_records,
     load_records_cached_for_stdio, load_records_from_manifest, search_skills, search_skills_subset,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 fn repo_root() -> PathBuf {

@@ -193,11 +193,11 @@ fn jsonl_each_line_is_valid_file_result() {
         let line = line.unwrap();
         let parsed: pdf_tool_rs::schema::FileResult = serde_json::from_str(&line).unwrap();
         assert!(matches!(
-            parsed.status,
+            parsed.common.status,
             ProcessStatus::Ok | ProcessStatus::Error | ProcessStatus::Skipped
         ));
         assert!(matches!(
-            parsed.content_class,
+            parsed.common.content_class,
             ContentClass::Text
                 | ContentClass::Scanned
                 | ContentClass::Empty

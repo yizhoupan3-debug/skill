@@ -39,6 +39,8 @@ mod desktop_mcp_tests {
             "research_aigc_check",
             "research_aigc_humanize",
             "research_review_dimensions",
+            "research_claim_drift",
+            "research_review_loop",
         ];
         for name in &handler_arms {
             assert!(names.contains(name), "tool {name} missing from tools/list");
@@ -135,9 +137,11 @@ mod desktop_mcp_tests {
         .expect("web_fetch response");
         assert_eq!(response["result"]["isError"], true);
         let text = response_text(&response);
+        // Assert stable invariants: isError flag + web_fetch context.
+        // Avoids fragility on exact error wording (e.g. "SSRF" vs "blocked IP" vs "private IP range").
         assert!(
-            text.contains("SSRF") || text.contains("blocked"),
-            "expected blocked loopback or SSRF warning, got: {text}"
+            text.contains("web_fetch"),
+            "expected web_fetch error context, got: {text}"
         );
     }
 

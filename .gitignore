@@ -142,6 +142,9 @@ core/router-rs/.claude/
 .claude/scheduled_tasks.lock
 .claude/worktrees/
 
+# Agent health monitor state (host-agnostic, generated at runtime)
+.framework/agent-health/
+
 # Cursor hook backups
 .cursor/hooks.json.orig
 

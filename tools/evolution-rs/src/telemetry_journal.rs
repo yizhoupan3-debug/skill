@@ -5,54 +5,8 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum TelemetryEvent {
-    RouteDecision {
-        task: String,
-        skill: String,
-        confidence: f32,
-        reroute: bool,
-    },
-    GoalTransition {
-        from: String,
-        to: String,
-        task_id: String,
-    },
-    ToolCall {
-        tool: String,
-        duration_ms: u64,
-        success: bool,
-    },
-    RfvRound {
-        round: u32,
-        verdict: String,
-    },
-    HookFired {
-        hook_name: String,
-        action: String,
-    },
-    DevExempt {
-        path: String,
-        action: String,
-    },
-    PredictionOutcome {
-        task_id: String,
-        matched: bool,
-        predicted_verification_status: Option<String>,
-        predicted_hypothesis: Option<String>,
-        actual_verification_status: String,
-        checks_summary: String,
-        checks: Vec<PredictionOutcomeCheck>,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct PredictionOutcomeCheck {
-    pub rule: String,
-    pub matched: bool,
-    pub severity: String,
-}
+// Re-export from the single source of truth in telemetry-types.
+pub use telemetry_types::{PredictionOutcomeCheck, TelemetryEvent};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TimestampedTelemetryEvent {
@@ -250,6 +204,7 @@ fn audit_entry_from_telemetry(line: &JournalLine) -> Option<AuditJournalEntry> {
             skill,
             confidence,
             reroute,
+            ..
         } => Some(AuditJournalEntry {
             ts: line.ts.clone().unwrap_or_default(),
             task: task.clone(),

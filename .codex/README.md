@@ -4,7 +4,7 @@ Codex hooks are enabled for this repo and are managed by the Rust `router-rs` co
 
 <!-- managed_by: router-rs codex sync -->
 
-**Policy snapshot:** the `codex_agent_policy` payload embeds repository `AGENTS.md` + `AGENTS_CODEX.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` / `framework sync-entrypoints` materialize **`AGENTS_CODEX.md`** and **`.codex/README.md`** (see `.codex/host_entrypoints_sync_manifest.json`); an existing `AGENTS_CODEX.md` on disk is preserved. When the delta file is missing, sync bootstraps **delta-only** content (not a merged kernel+delta blob). Rebuild before sync when hook payloads must carry policy edits (see `AGENTS_CODEX.md` → **Codex 构建快照与同步逻辑**).
+**Policy snapshot:** the `codex_agent_policy` payload embeds repository `AGENTS.md` at **router-rs compile time** (`include_str!`), not from disk on each hook run. `codex sync` / `framework sync-entrypoints` materializes **`.codex/README.md`** (see `.codex/host_entrypoints_sync_manifest.json`). Rebuild before sync when hook payloads must carry policy edits.
 
 Project-local `.codex/hooks.json` uses the official Codex lifecycle surface: `SessionStart`, `PreToolUse`, `UserPromptSubmit`, `PostToolUse`, and `Stop`.
 

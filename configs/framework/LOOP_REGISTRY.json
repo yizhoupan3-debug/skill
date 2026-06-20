@@ -33,6 +33,49 @@
         "auto_resume": true,
         "require_human_approval": false
       }
+    },
+    {
+      "loop_id": "paper-revision",
+      "profile": "loop-auto",
+      "trigger": {
+        "type": "manual"
+      },
+      "skill": "paper-workbench",
+      "default_safety": "L2-assisted-fix",
+      "scope_based_safety": {
+        "manuscript/**": "L3-unattended",
+        "figures/**": "L2-assisted-fix",
+        "paper_story/**": "L3-unattended",
+        "paper_review_v*/**": "L3-unattended",
+        "paper_ref/**": "L1-report-only"
+      },
+      "cost_budget": {
+        "tokens_per_run": 500000
+      },
+      "research_enabled": true,
+      "research": {
+        "barrier_threshold": 3,
+        "escalation_target": "autoresearch",
+        "max_research_time_min": 20,
+        "auto_resume": true,
+        "require_human_approval": false
+      },
+      "verify_rfv_convergence": true,
+      "static_actions": [
+        {
+          "action_id": "paper-revision-orchestrator",
+          "type": "orchestrator",
+          "scope_paths": [
+            "manuscript/",
+            "figures/",
+            "paper_story/",
+            "paper_review_v*/",
+            "paper_ref/"
+          ],
+          "safety": "L2",
+          "description": "顶刊标准 paper revision 循环。内部流程：(1) 初始化 RFV (min_rounds=5, consecutive_stable_required=2); (2) 每轮 spawn 1 个 reviewer subagent 做强对抗审稿（渐进披露维度）; (3) 主会话执行 surgical 修复; (4) 收敛条件：连续 2 轮无新 A/B findings 且 round >= 5; (5) 写 closeout record。"
+        }
+      ]
     }
   ]
 }

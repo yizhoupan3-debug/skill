@@ -182,11 +182,10 @@ fn sync_skill_manifest(
         let indexed = list_indexed_files(conn)?
             .into_iter()
             .find(|m| m.path == parser::skill::MANIFEST_REL_PATH);
-        if let Some(ref stored) = indexed {
-            if stored.mtime_ns == mtime_ns {
+        if let Some(ref stored) = indexed
+            && stored.mtime_ns == mtime_ns {
                 return Ok(()); // mtime unchanged, skip entirely
             }
-        }
     }
 
     // mtime changed or new file: read once, share between hash and parser
@@ -194,7 +193,7 @@ fn sync_skill_manifest(
         .context("read skill manifest")?;
     let mtime_ns = file_mtime_ns(&manifest_path)?;
     let content_hash = hex_encode(
-        &Sha256::digest(content.as_bytes()).as_slice(),
+        Sha256::digest(content.as_bytes()).as_slice(),
     );
 
     // Content-hash check for mtime-noise (touch without content change)
@@ -202,11 +201,10 @@ fn sync_skill_manifest(
         let indexed = list_indexed_files(conn)?
             .into_iter()
             .find(|m| m.path == parser::skill::MANIFEST_REL_PATH);
-        if let Some(ref stored) = indexed {
-            if stored.content_hash == content_hash {
+        if let Some(ref stored) = indexed
+            && stored.content_hash == content_hash {
                 return Ok(());
             }
-        }
     }
 
     let Some(parsed) = parser::skill::parse_skill_manifest_with_content(

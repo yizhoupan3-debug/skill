@@ -52,6 +52,8 @@ for candidate in \
   ${TARGET_DIR:+"$TARGET_DIR/debug/router-rs"} \
   "/tmp/skill-${UID:-0}-cargo-target/release/router-rs" \
   "/tmp/skill-${UID:-0}-cargo-target/debug/router-rs" \
+  "$REPO_ROOT/core/router-rs/target/release/router-rs-cli" \
+  "$REPO_ROOT/core/router-rs/target/debug/router-rs-cli" \
   "$REPO_ROOT/core/router-rs/target/release/router-rs" \
   "$REPO_ROOT/core/router-rs/target/debug/router-rs"
 do
@@ -60,7 +62,7 @@ do
   fi
 done
 if [[ -z "$ROUTER_RS_BIN" ]]; then
-  ROUTER_RS_BIN="$(command -v router-rs 2>/dev/null || true)"
+  ROUTER_RS_BIN="$(command -v router-rs-cli 2>/dev/null || command -v router-rs 2>/dev/null || true)"
 fi
 if [[ ! -x "$ROUTER_RS_BIN" ]]; then
   echo "bench-hooks: router-rs binary not found; run: cargo build --manifest-path core/router-rs/Cargo.toml --release" >&2
@@ -129,7 +131,7 @@ for ev in "${EVENT_ARR[@]}"; do
   payload="$(hook_payload "$ev")"
   for ((i = 1; i <= ITERATIONS; i++)); do
     start_ms=$(now_ms)
-    printf '%s' "$payload" | "$ROUTER_RS_BIN" host cursor hook --event="$ev" --repo-root "$REPO_ROOT" >/dev/null 2>/dev/null || true
+    printf '%s' "$payload" | "$ROUTER_RS_BIN" host hook --event="$ev" --repo-root "$REPO_ROOT" cursor >/dev/null 2>/dev/null || true
     end_ms=$(now_ms)
     echo $((end_ms - start_ms)) >> "$times_file"
   done

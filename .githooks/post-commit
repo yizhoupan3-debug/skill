@@ -6,4 +6,6 @@ fi
 if [ "${SKILL_SYNC_AUTO_PUSH:-0}" != "1" ]; then
   exit 0
 fi
-git push || true
+if ! git push 2>&1; then
+  echo "[post-commit] auto-push failed; retry manually with: git push" >&2
+fi
