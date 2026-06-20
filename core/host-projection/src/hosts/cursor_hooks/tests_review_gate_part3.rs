@@ -777,7 +777,7 @@ fn stale_sweep_preserves_alive_holder_lock_when_json_fresh() {
     let victim = event("victim-alive-lock", "全面review这个仓库");
     let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &victim);
     let lock_path = state_lock_path(&repo, &victim);
-    let stale_ts = now_millis().saturating_sub(120_000);
+    let stale_ts = crate::hosts::file_state_lock::now_millis().saturating_sub(120_000);
     fs::write(
         &lock_path,
         format!("pid={} ts={stale_ts}\n", std::process::id()),
@@ -818,7 +818,7 @@ fn session_end_stale_sweep_removes_old_orphan_preserves_recent() {
     assert!(old_state.exists());
     set_path_mtime_days_ago(&old_state, 10);
     let old_lock = state_lock_path(&repo, &old_payload);
-    let old_ts = now_millis().saturating_sub(10 * 86_400 * 1000);
+    let old_ts = crate::hosts::file_state_lock::now_millis().saturating_sub(10 * 86_400 * 1000);
     fs::write(&old_lock, format!("pid=1 ts={old_ts}\n")).expect("seed old ts lock");
     set_path_mtime_days_ago(&old_lock, 10);
 
@@ -1506,7 +1506,7 @@ fn resolve_cursor_hook_repo_root_finds_hooks_from_payload_cwd() {
 }
 
 #[test]
-fn cursor_session_key_fallback_stable_for_cwd_without_session_id() {
+fn session_key_fallback_stable_for_cwd_without_session_id() {
     let payload = json!({ "cwd": "/tmp/abc-stable-fallback" });
     let a = session_key(&payload);
     let b = session_key(&payload);
@@ -1515,7 +1515,7 @@ fn cursor_session_key_fallback_stable_for_cwd_without_session_id() {
 }
 
 #[test]
-fn cursor_session_key_reads_metadata_session_id() {
+fn session_key_reads_metadata_session_id() {
     let payload = json!({
         "cwd": "/tmp/x",
         "metadata": { "sessionId": "meta-sess-1" }
@@ -1529,7 +1529,7 @@ fn cursor_session_key_reads_metadata_session_id() {
 }
 
 #[test]
-fn cursor_session_key_nested_payload_session_id_matches_top_level() {
+fn session_key_nested_payload_session_id_matches_top_level() {
     let nested = json!({
         "cwd": "/tmp/x",
         "payload": { "sessionId": "uuid-nested-pregoal" }
@@ -1542,7 +1542,7 @@ fn cursor_session_key_nested_payload_session_id_matches_top_level() {
 }
 
 #[test]
-fn cursor_session_key_nested_workspace_folder_matches_top_cwd() {
+fn session_key_nested_workspace_folder_matches_top_cwd() {
     let nested = json!({
         "payload": { "workspaceFolder": "/tmp/ws-nested" }
     });
@@ -1617,7 +1617,7 @@ fn subagent_start_pre_goal_requires_typed_subagent() {
 }
 
 #[test]
-fn cursor_lock_writes_owner_metadata() {
+fn lock_writes_owner_metadata() {
     let repo = fresh_repo();
     let payload = event("s26", "review");
     let lock = acquire_state_lock(&repo, &payload).expect("acquire");
@@ -1629,12 +1629,12 @@ fn cursor_lock_writes_owner_metadata() {
 }
 
 #[test]
-fn cursor_lock_recovers_from_stale_timestamp() {
+fn lock_recovers_from_stale_timestamp() {
     let repo = fresh_repo();
     let payload = event("s27", "review");
     let lock_path = state_lock_path(&repo, &payload);
     fs::create_dir_all(lock_path.parent().expect("parent")).expect("mkdir");
-    let stale_ts = now_millis().saturating_sub(60_000);
+    let stale_ts = crate::hosts::file_state_lock::now_millis().saturating_sub(60_000);
     fs::write(&lock_path, format!("pid=999999 ts={stale_ts}\n")).expect("seed stale lock");
     let mut lock = acquire_state_lock(&repo, &payload);
     assert!(lock.is_some());
@@ -1642,12 +1642,12 @@ fn cursor_lock_recovers_from_stale_timestamp() {
 }
 
 #[test]
-fn cursor_lock_recovers_orphan_lock_file_without_remove_when_holder_alive() {
+fn lock_recovers_orphan_lock_file_without_remove_when_holder_alive() {
     let repo = fresh_repo();
     let payload = event("s27-alive", "review");
     let lock_path = state_lock_path(&repo, &payload);
     fs::create_dir_all(lock_path.parent().expect("parent")).expect("mkdir");
-    let stale_ts = now_millis().saturating_sub(60_000);
+    let stale_ts = crate::hosts::file_state_lock::now_millis().saturating_sub(60_000);
     fs::write(
         &lock_path,
         format!("pid={} ts={stale_ts}\n", std::process::id()),
@@ -1666,7 +1666,7 @@ fn cursor_lock_recovers_orphan_lock_file_without_remove_when_holder_alive() {
 }
 
 #[test]
-fn cursor_lock_concurrent_acquire_serializes() {
+fn lock_concurrent_acquire_serializes() {
     let repo = Arc::new(fresh_repo());
     let sessions = ["s28-a", "s28-b"];
     let mut joins = Vec::new();
@@ -1687,7 +1687,7 @@ fn cursor_lock_concurrent_acquire_serializes() {
 }
 
 #[test]
-fn cursor_state_save_completes_with_fsync_unix() {
+fn state_save_completes_with_fsync_unix() {
     let repo = fresh_repo();
     let payload = event("s29", "review");
     let mut state = empty_state();
@@ -1705,20 +1705,20 @@ fn prompt_from_nested_messages_reads_text_without_content_key() {
         "messages": [{"role": "user", "text": "small_task review ./foo.rs"}],
     });
     assert_eq!(
-        super::prompt_text(&payload),
+        hook_dispatch::extract_prompt_text(&payload),
         "small_task review ./foo.rs"
     );
 }
 
 #[test]
-fn cursor_hook_rejects_non_object_stdin() {
+fn hook_rejects_non_object_stdin() {
     let mut reader = Cursor::new(b"[]".to_vec());
     let err = super::stdin::read_stdin_json_from_reader(&mut reader).expect_err("must reject");
     assert_eq!(err, "stdin_json_not_object");
 }
 
 #[test]
-fn cursor_hook_rejects_oversized_stdin() {
+fn hook_rejects_oversized_stdin() {
     let large = "a".repeat(5 * 1024 * 1024);
     let mut reader = Cursor::new(large.into_bytes());
     let err = super::stdin::read_stdin_json_from_reader(&mut reader).expect_err("must reject");

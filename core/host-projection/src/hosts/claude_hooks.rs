@@ -12,7 +12,7 @@ use core_policy::hook_common::{
 use core_policy::review_gate_engine::{
     fork_context_from_values, review_independent_reviewer_evidence,
 };
-use core_policy::{HookReviewDiskCore, HookReviewGateFields};
+use core_policy::HookReviewDiskCore;
 use serde_json::{Map, Value, json};
 use super::hook_dispatch::{
     HookEvent, HookOutput, HostHookConfig, HostHookDispatcher,
@@ -24,8 +24,6 @@ use std::cell::Cell;
 use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read, Write};
-#[cfg(unix)]
-use std::os::unix::io::AsRawFd;
 use std::path::{Component, Path, PathBuf};
 #[cfg(not(unix))]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -79,12 +77,6 @@ impl StdioAgentHookHost {
     fn user_config_dir_leaf(self) -> &'static str {
         match self {
             Self::Claude => ".claude",
-        }
-    }
-
-    fn validate_settings_stop_reason(self) -> &'static str {
-        match self {
-            Self::Claude => "Validate Claude hook/settings JSON before ending this turn.",
         }
     }
 }
@@ -194,49 +186,13 @@ fn repo_relative_slash_path(repo_root: &Path, raw: &str) -> Option<String> {
 
 const FRAMEWORK_CHANGED_CONTEXT: &str = "Framework routing/runtime files changed; run the targeted Rust contract tests before finishing.";
 const SETTINGS_CHANGED_CONTEXT: &str = "Hook/settings files changed; validate JSON and run the agent hook contract tests before finishing.";
-/// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` 或 legacy `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE`。
-fn agent_review_gate_disabled() -> bool {
-    core_policy::env_flags::router_rs_review_gate_disabled_for_host("claude")
+
+fn stop_signal_text(payload: &Value) -> String {
+    closeout_completion_text(payload)
 }
 
-/// Env disable **or** `my-light` profile (advisory-only mode).
-fn claude_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
-    if agent_review_gate_disabled() {
-        return true;
-    }
-    core_policy::hook_common::review_gate_hard_block_disabled(Some(repo_root), text)
-}
-
-fn claude_user_prompt_text(payload: &Value) -> String {
-    payload
-        .get("prompt")
-        .or_else(|| payload.get("user_prompt"))
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string()
-}
-
-fn claude_stop_signal_text(payload: &Value) -> String {
-    claude_closeout_completion_text(payload)
-}
-
-fn claude_closeout_completion_text(payload: &Value) -> String {
-    let prompt = claude_user_prompt_text(payload);
-    let response = payload
-        .get("response")
-        .or_else(|| payload.get("assistant_response"))
-        .or_else(|| payload.get("last_assistant_message"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    if response.trim().is_empty() {
-        prompt
-    } else {
-        format!("{prompt}\n{response}")
-    }
-}
-
-fn claude_review_gate_incomplete_stop_reason(fields: &HookReviewGateFields) -> Option<String> {
-    core_policy::hook_review_stop_advisory_needed(fields, "CLAUDE_REVIEW_GATE")
+fn closeout_completion_text(payload: &Value) -> String {
+    crate::hosts::hook_dispatch::stop_signal_text_from_payload(payload)
 }
 
 fn should_sync_review_gate_on_user_prompt(repo_root: &Path, prompt: &str) -> bool {
@@ -371,7 +327,7 @@ impl HostHookConfig for ClaudeHookDispatcher {
 }
 
 /// Convert Claude-specific hook JSON to unified HookOutput.
-fn claude_value_to_hook_output(val: &Value) -> Option<HookOutput> {
+fn value_to_hook_output(val: &Value) -> Option<HookOutput> {
     if val.get("suppressOutput") != Some(&json!(true)) {
         return Some(HookOutput::Raw(val.clone()));
     }
@@ -418,22 +374,22 @@ fn hook_output_to_claude_value(event_name: &str, output: Option<HookOutput>) -> 
 impl HostHookDispatcher for ClaudeHookDispatcher {
     fn handle_pre_tool_use(&self, event: &HookEvent) -> Option<HookOutput> {
         let val = run_pre_tool_use(event.repo_root, event.payload);
-        val.and_then(|v| claude_value_to_hook_output(&v))
+        val.and_then(|v| value_to_hook_output(&v))
     }
 
     fn handle_user_prompt_submit(&self, event: &HookEvent) -> Option<HookOutput> {
         let val = run_user_prompt_submit(event.repo_root, event.payload);
-        val.and_then(|v| claude_value_to_hook_output(&v))
+        val.and_then(|v| value_to_hook_output(&v))
     }
 
     fn handle_post_tool_use(&self, event: &HookEvent) -> Option<HookOutput> {
         let val = run_post_tool_use(event.repo_root, event.payload);
-        val.and_then(|v| claude_value_to_hook_output(&v))
+        val.and_then(|v| value_to_hook_output(&v))
     }
 
     fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> {
         let val = run_stop(event.repo_root, event.payload);
-        val.and_then(|v| claude_value_to_hook_output(&v))
+        val.and_then(|v| value_to_hook_output(&v))
     }
 }
 
@@ -465,8 +421,20 @@ pub fn run_claude_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<
     stdout
         .write_all(format!("{serialized}\n").as_bytes())
         .map_err(|e| e.to_string())?;
-    // Force immediate exit — skip background thread cleanup (file watcher, telemetry).
-    // Hook processes are short-lived fire-and-forget; background threads are not needed.
+    // SAFETY / DESIGN NOTE: `std::process::exit(0)` 而非正常 return。
+    //
+    // 1. 为什么使用 exit(0)：`router-rs claude hook` 是短生命周期 CLI 子进程，
+    //    输出 JSON 后立即退出是预期行为。正常 return 会触发线程清理（file watcher、
+    //    telemetry 后台线程等）和 Drop 栈展开，对 hook 进程而言是无意义的开销。
+    //
+    // 2. 风险：exit(0) 跳过所有 Rust Drop 语义——局部变量的析构函数不会运行，
+    //    可能导致：(a) advisory file lock 未显式释放（依赖 OS 进程退出清理 fd），
+    //    (b) BufWriter 缓冲区未 flush（此处用 write_all + flush 已确保写入磁盘），
+    //    (c) 临时文件未删除。对于本场景（hook 子进程、仅写 stdout、无脏锁），
+    //    这些风险均为可接受。
+    //
+    // 3. 适用场景限制：仅用于 Claude hook CLI 子进程模式（`run_claude_hook_cli`）。
+    //    库函数 `run_claude_hook` 被调用方（如集成测试、MCP harness）不应走此路径。
     std::process::exit(0);
 }
 
@@ -556,11 +524,10 @@ fn skill_allowed_tools_from_runtime(skill_slug: &str) -> Option<Vec<String>> {
             std::path::PathBuf::from("SKILL_ROUTING_RUNTIME.json"),
         ];
         for path in &candidates {
-            if let Ok(data) = std::fs::read_to_string(path) {
-                if let Ok(v) = serde_json::from_str(&data) {
+            if let Ok(data) = std::fs::read_to_string(path)
+                && let Ok(v) = serde_json::from_str(&data) {
                     return Some(v);
                 }
-            }
         }
         None
     });
@@ -637,18 +604,15 @@ fn detect_lifecycle_skill_slug(prompt: &str) -> Option<&'static str> {
 
 fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
     crate::hooks::ensure_kernel_bootstrap();
-    let tool_name_raw = payload
-        .get("tool_name")
-        .or(payload.get("tool"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    let tool_name_raw = payload.get("tool_name").or(payload.get("tool")).and_then(serde_json::Value::as_str).unwrap_or_default();
     let tool_origin = core_policy::hook_common::classify_tool_origin(tool_name_raw);
     // allowedTools 联动：检查当前激活 skill 是否允许此工具
-    if let Some(ctx) = read_active_skill_context(repo_root) {
-        if let (Some(slug), Some(allowed)) = (
+    if let Some(ctx) = read_active_skill_context(repo_root)
+        && let (Some(slug), Some(allowed)) = (
             ctx.get("skill_slug").and_then(Value::as_str),
             ctx.get("allowed_tools").and_then(Value::as_array),
-        ) && !allowed.is_empty() {
+        ) && !allowed.is_empty()
+    {
             let tool_in_list = allowed.iter().any(|v| {
                 v.as_str().is_some_and(|a| {
                     // 支持前缀匹配：mcp__mcp-codegraph__* 匹配所有 codegraph 工具
@@ -665,7 +629,6 @@ fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
                     ),
                 }));
             }
-        }
     }
     // MCP 工具：安全检查 + 跳过文件路径保护
     if tool_origin.is_mcp() {
@@ -758,8 +721,8 @@ fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
 
 fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
     crate::hooks::ensure_kernel_bootstrap();
-    let prompt = claude_user_prompt_text(payload);
-    let review_sync = if !agent_review_gate_disabled()
+    let prompt = crate::hosts::hook_dispatch::extract_prompt_text(payload);
+    let review_sync = if !core_policy::env_flags::router_rs_review_gate_disabled_for_host("claude")
         && should_sync_review_gate_on_user_prompt(repo_root, &prompt)
     {
         Some(apply_claude_review_gate_user_prompt(
@@ -787,24 +750,21 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
     }
     if core_policy::hook_common::is_framework_goal_entry_prompt(&prompt) {
         // Write active skill context for allowedTools linkage
-        if let Some(slug) = detect_lifecycle_skill_slug(&prompt) {
-            if let Some(allowed) = skill_allowed_tools_from_runtime(slug) {
+        if let Some(slug) = detect_lifecycle_skill_slug(&prompt)
+            && let Some(allowed) = skill_allowed_tools_from_runtime(slug) {
                 write_active_skill_context(repo_root, slug, &allowed);
             }
-        }
         return add_context(
             "UserPromptSubmit",
             core_policy::hook_common::my_goal_drive_hook_nudge_for_prompt(&prompt),
         );
     }
     // Write active skill context for pre-execution lifecycle commands too
-    if core_policy::hook_common::is_my_lifecycle_entry_prompt(&prompt) {
-        if let Some(slug) = detect_lifecycle_skill_slug(&prompt) {
-            if let Some(allowed) = skill_allowed_tools_from_runtime(slug) {
-                write_active_skill_context(repo_root, slug, &allowed);
-            }
+    if core_policy::hook_common::is_my_lifecycle_entry_prompt(&prompt)
+        && let Some(slug) = detect_lifecycle_skill_slug(&prompt)
+        && let Some(allowed) = skill_allowed_tools_from_runtime(slug) {
+            write_active_skill_context(repo_root, slug, &allowed);
         }
-    }
     let mut contexts: Vec<String> = Vec::new();
     if let Some(Ok(state)) = review_sync
         && state.review_required
@@ -894,7 +854,6 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
 
 /// Pre-computed context for a single Stop hook invocation.
 /// Avoids repeated session_key computation and canonicalize syscalls.
-#[allow(dead_code)]
 struct StopContext {
     session_key: String,
     review_path: PathBuf,
@@ -930,7 +889,7 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     clear_active_skill_context(repo_root);
     if let Some(msg) = crate::hooks::closeout_stop_followup_for_completion_text(
         repo_root,
-        &claude_closeout_completion_text(payload),
+        &closeout_completion_text(payload),
     ) {
         // Advisory only — do not block_stop (causes infinite retry loop)
         return add_context("Stop", &format!("[advisory] {msg}"));
@@ -963,8 +922,8 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
         );
     }
 
-    let stop_signal = claude_stop_signal_text(payload);
-    let prompt = claude_user_prompt_text(payload);
+    let stop_signal = stop_signal_text(payload);
+    let prompt = crate::hosts::hook_dispatch::extract_prompt_text(payload);
     let response_full = payload
         .get("response")
         .or_else(|| payload.get("assistant_response"))
@@ -973,7 +932,7 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
         .unwrap_or("");
     let response_for_lint = core_policy::hook_common::hook_assistant_tail_window(
         response_full,
-        core_policy::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+        core_policy::hook_common::HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
     );
 
     let mut review_state = match review_load {
@@ -988,25 +947,15 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
         review_state.delegation_override = true;
     }
 
-    // ── Goal drive entry detection (parity with Cursor) ────────
+    // ── Unified goal gate (shared across all 4 hosts) ──────────
     let goal_drive_entrypoint =
         core_policy::hook_common::is_framework_goal_entry_prompt(&prompt);
-    if goal_drive_entrypoint {
-        review_state.goal_drive_entry_active = true;
-    }
-    // Goal signal detection from assistant response — uses the same regex-based
-    // detection as Cursor (shared via hook_common).
-    if goal_drive_entrypoint || review_state.goal_drive_entry_active {
-        if core_policy::hook_common::has_structured_goal_contract(&stop_signal) {
-            review_state.goal_contract_seen = true;
-        }
-        if core_policy::hook_common::has_goal_progress_signal(&stop_signal) {
-            review_state.goal_progress_seen = true;
-        }
-        if core_policy::hook_common::has_goal_verify_or_block_signal(&stop_signal) {
-            review_state.goal_verify_or_block_seen = true;
-        }
-    }
+    crate::hosts::hook_dispatch::update_goal_gate(
+        &mut review_state,
+        &prompt,
+        &crate::hosts::hook_dispatch::extract_response_text(payload),
+        goal_drive_entrypoint,
+    );
     // Hydrate goal gate from disk (GOAL_STATE.json — active when runtime-core registers)
     hydrate_goal_gate_from_disk_for_claude(repo_root, &mut review_state, goal_drive_entrypoint);
 
@@ -1020,7 +969,7 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     }
 
     // ── Review gate check (shared logic) ───────────────────────
-    let review_suppressed = claude_review_gate_suppressed(repo_root, &prompt);
+    let review_suppressed = crate::hosts::hook_dispatch::is_review_gate_suppressed("claude", Some(repo_root), &prompt);
     let gate_fields = review_state.gate_fields();
     let review_advisory_needed = if review_suppressed {
         None
@@ -1318,144 +1267,19 @@ fn read_review_gate_file(path: &Path) -> AgentDiskState<HookReviewDiskCore> {
     AgentDiskState::Ok(core_policy::migrate_hook_review_disk_core(&value))
 }
 
-/// Serialize Claude review_gate JSON under `<state>.lock` (ADR P1-5; mirrors Codex hook-state flock).
-#[cfg(unix)]
-struct ClaudeReviewStateLock {
-    file: std::fs::File,
-}
-
-#[cfg(unix)]
-impl Drop for ClaudeReviewStateLock {
-    fn drop(&mut self) {
-        let fd = self.file.as_raw_fd();
-        // SAFETY: flock(LOCK_UN) releases an advisory lock previously acquired via
-        // LOCK_EX in acquire_claude_review_state_lock. The fd comes from a valid
-        // File handle that is still open (we are inside Drop for that handle's owner).
-        // flock is a simple syscall with no memory safety concerns; its worst case is
-        // returning -1 on an already-unlocked fd, which is harmless.
-        unsafe {
-            let _ = libc::flock(fd, libc::LOCK_UN);
-        }
-    }
-}
-
-#[cfg(not(unix))]
-struct ClaudeReviewStateLock {
-    path: PathBuf,
-}
-
-#[cfg(not(unix))]
-impl Drop for ClaudeReviewStateLock {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
-
-#[cfg(unix)]
-fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewStateLock, String> {
-    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
-    if let Some(parent) = lock_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("claude_state_dir_create_failed: {e}"))?;
-    }
-    let file = std::fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .create(true)
-        .truncate(false)
-        .open(&lock_path)
-        .map_err(|e| format!("claude_state_lock_open_failed: {e}"))?;
-    let fd = file.as_raw_fd();
-    // Non-blocking lock with retry + timeout (avoids indefinite hang on stale locks)
-    let max_wait_ms: u64 = 5000;
-    let mut elapsed_ms: u64 = 0;
-    let retry_interval_ms: u64 = 50;
-    loop {
-        // SAFETY: LOCK_NB makes flock non-blocking; returns -1 with EWOULDBLOCK if unavailable.
-        let rc = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
-        if rc == 0 {
-            return Ok(ClaudeReviewStateLock { file });
-        }
-        let err = std::io::Error::last_os_error();
-        if err.raw_os_error() != Some(libc::EWOULDBLOCK) {
-            return Err(format!("claude_state_lock_flock_failed: {err}"));
-        }
-        if elapsed_ms >= max_wait_ms {
-            // Stale lock cleanup: check if lock file is old (>60s)
-            if let Ok(meta) = fs::metadata(&lock_path) {
-                if let Ok(modified) = meta.modified() {
-                    if modified.elapsed().unwrap_or(std::time::Duration::ZERO)
-                        > std::time::Duration::from_secs(60)
-                    {
-                        eprintln!("[router-rs] claude stale lock detected (>60s), retrying");
-                        // Force release and retry once
-                        unsafe { libc::flock(fd, libc::LOCK_UN); }
-                        let rc2 = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
-                        if rc2 == 0 {
-                            return Ok(ClaudeReviewStateLock { file });
-                        }
-                    }
-                }
-            }
-            return Err(format!(
-                "claude_state_lock_timeout after {max_wait_ms}ms (path={})",
-                lock_path.display()
-            ));
-        }
-        std::thread::sleep(std::time::Duration::from_millis(retry_interval_ms));
-        elapsed_ms += retry_interval_ms;
-    }
-}
-
-#[cfg(not(unix))]
-fn acquire_claude_review_state_lock(state_path: &Path) -> Result<ClaudeReviewStateLock, String> {
-    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
-    if let Some(parent) = lock_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("claude_state_dir_create_failed: {e}"))?;
-    }
-    let started = SystemTime::now();
-    loop {
-        match std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&lock_path)
-        {
-            Ok(mut file) => {
-                let now_ms = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map(|d| d.as_millis() as u64)
-                    .unwrap_or(0);
-                let stamp = format!("pid={} ts={now_ms}\n", std::process::id());
-                file.write_all(stamp.as_bytes())
-                    .map_err(|e| format!("claude_state_lock_write_failed: {e}"))?;
-                return Ok(ClaudeReviewStateLock { path: lock_path });
-            }
-            Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
-                if started.elapsed().unwrap_or(Duration::ZERO) > Duration::from_secs(20) {
-                    // Attempt stale lock cleanup before giving up
-                    if let Ok(meta) = fs::metadata(&lock_path) {
-                        if let Ok(modified) = meta.modified() {
-                            if modified.elapsed().unwrap_or(Duration::ZERO)
-                                > Duration::from_secs(60)
-                            {
-                                let _ = fs::remove_file(&lock_path);
-                                continue;
-                            }
-                        }
-                    }
-                    return Err("claude_state_lock_timeout".to_string());
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            Err(err) => return Err(format!("claude_state_lock_open_failed: {err}")),
-        }
-    }
-}
-
+/// Acquire a file lock and execute a closure (Claude-specific config).
+///
+/// Uses the shared `FileStateLockGuard` with Claude's timeout/stale-lock config.
+/// Replaces the former `ClaudeReviewStateLock` + `acquire_claude_review_state_lock`.
 fn with_claude_review_state_lock<T, F>(state_path: &Path, f: F) -> Result<T, String>
 where
     F: FnOnce() -> Result<T, String>,
 {
-    let _guard = acquire_claude_review_state_lock(state_path)?;
+    let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
+    let _guard = super::file_state_lock::acquire_file_lock_with_config(
+        &lock_path,
+        &super::file_state_lock::LockConfig::short_timeout(),
+    )?;
     f()
 }
 
@@ -1549,19 +1373,6 @@ fn write_review_state_unlocked(path: &Path, state: &HookReviewDiskCore) -> Resul
     fs::write(path, &body).map_err(|e| e.to_string())
 }
 
-#[allow(dead_code)]
-fn clear_review_state(repo_root: &Path, payload: &Value) {
-    let _ = fs::remove_file(review_state_path(repo_root, payload));
-    let _ = fs::remove_file(legacy_review_gate_hook_state_path(repo_root, payload));
-    let _ = fs::remove_file(legacy_review_state_path(repo_root, payload));
-}
-
-fn agent_tool_input(payload: &Value) -> Value {
-    payload
-        .as_object()
-        .and_then(core_policy::hook_common::tool_input_value_from_map)
-        .unwrap_or_else(|| json!({}))
-}
 
 fn reviewer_lane(tool_input: &Value, payload: &Value) -> bool {
     let subagent_type = normalize_subagent_type(
@@ -1594,7 +1405,7 @@ fn tool_name_implies_subagent(normalized: &str) -> bool {
 
 fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
     let path = review_state_path(repo_root, payload);
-    let tool_input = agent_tool_input(payload);
+    let tool_input = crate::hosts::hook_dispatch::extract_tool_input(payload);
     let fork = fork_context_from_values(&tool_input, Some(payload));
     if let Err(err) = with_claude_review_state_lock(&path, || {
         let mut state = match load_review_gate_disk(repo_root, payload) {
@@ -1774,13 +1585,7 @@ fn persist_touch_state(
         }
 }
 
-#[allow(dead_code)]
-fn clear_touch_state(repo_root: &Path, payload: &Value) {
-    let _ = fs::remove_file(touch_state_path(repo_root, payload));
-    let _ = fs::remove_file(legacy_touch_state_path(repo_root));
-}
-
-fn load_review_gate_disk_with_ctx(repo_root: &Path, ctx: &StopContext) -> AgentDiskState<HookReviewDiskCore> {
+fn load_review_gate_disk_with_ctx(_repo_root: &Path, ctx: &StopContext) -> AgentDiskState<HookReviewDiskCore> {
     match read_review_gate_file(&ctx.review_path) {
         AgentDiskState::Ok(state) => return AgentDiskState::Ok(state),
         AgentDiskState::Unreadable => return AgentDiskState::Unreadable,

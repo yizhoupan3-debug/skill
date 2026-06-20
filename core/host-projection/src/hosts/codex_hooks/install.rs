@@ -53,7 +53,7 @@ thread_local! {
 // Hook timeout
 // ---------------------------------------------------------------------------
 
-pub(super) fn codex_hook_command_timeout_secs(_host: CodexLifecycleHostKind, event: &str) -> u64 {
+pub(super) fn hook_command_timeout_secs(_host: CodexLifecycleHostKind, event: &str) -> u64 {
     match event {
         "SessionStart" => 3,
         "PostToolUse" => 5,
@@ -261,7 +261,7 @@ fn sha256_hex(text: &str) -> String {
 pub fn build_codex_hook_manifest() -> Value {
     let mut hooks_map = serde_json::Map::new();
     for event in INSTALL_EVENTS {
-        let timeout = codex_hook_command_timeout_secs(CodexLifecycleHostKind::CODEX, event);
+        let timeout = hook_command_timeout_secs(CodexLifecycleHostKind::CODEX, event);
         let hook = json!({
             "type": "command",
             "command": build_project_hook_command(event),
@@ -329,7 +329,7 @@ Steady-state documentation map: `docs/README.md`.\n"
         .to_string()
 }
 
-pub fn codex_host_entrypoint_provider(
+pub fn host_entrypoint_provider(
     repo_root: &Path,
 ) -> Result<HostEntrypointPayloadProvider, String> {
     let mut files = BTreeMap::new();
@@ -365,11 +365,11 @@ pub fn codex_host_entrypoint_provider(
             .collect(),
         manifest_relative_path: HOST_ENTRYPOINT_SYNC_MANIFEST_PATH.to_string(),
         agent_policy_entrypoint: CODEX_AGENT_POLICY_PATH.to_string(),
-        after_apply: Some(codex_host_entrypoint_after_apply),
+        after_apply: Some(host_entrypoint_after_apply),
     })
 }
 
-fn codex_host_entrypoint_after_apply(_repo_root: &Path) -> Result<Value, String> {
+fn host_entrypoint_after_apply(_repo_root: &Path) -> Result<Value, String> {
     // Surface removed: Codex uses runtime routing like other hosts.
     Ok(json!({}))
 }
@@ -530,7 +530,7 @@ fn merge_hooks_json_for_events(
                 "hooks": [{
                     "type": "command",
                     "command": hook_command,
-                    "timeout": codex_hook_command_timeout_secs(host, event),
+                    "timeout": hook_command_timeout_secs(host, event),
                     "statusMessage": hook_event_status_message(host, event),
                 }]
             }));

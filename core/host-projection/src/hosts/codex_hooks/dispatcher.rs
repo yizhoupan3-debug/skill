@@ -145,8 +145,8 @@ impl HostHookDispatcher for CodexHookDispatcher {
 /// Check if a stable session key is required and available.
 /// Mirrors the check from `run_codex_lifecycle_context_hook_inner` in handlers.rs.
 fn check_codex_stable_session_key(payload: &Value) -> Option<HookOutput> {
-    if state::codex_require_stable_session_key_enabled()
-        && state::codex_stable_session_raw(payload).is_none()
+    if state::require_stable_session_key_enabled()
+        && state::stable_session_raw(payload).is_none()
     {
         return Some(HookOutput::Block {
             reason: cod_ex_session_key_error(),

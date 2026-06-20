@@ -19,8 +19,8 @@ pub fn set_test_my_light_override(v: Option<bool>) {
     TEST_MY_LIGHT_OVERRIDE.with(|c| c.set(v));
 }
 
-/// Default UTF-8 **char** budget for assistant text on Cursor hook signal / lint paths.
-pub const CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS: usize = 4096;
+/// Default UTF-8 **char** budget for assistant text on hook signal / lint paths (all hosts).
+pub const HOOK_SIGNAL_ASSISTANT_TAIL_CHARS: usize = 4096;
 
 /// Truncate assistant text for hook signal paths (char-based; matches deep-continuation tail style).
 pub fn hook_assistant_tail_window(raw: &str, max_chars: usize) -> String {
@@ -138,7 +138,7 @@ fn reject_reason_patterns() -> &'static Vec<Regex> {
 }
 
 /// Merge hook payloads' tool argument object from common alternate keys (`tool_input`, `input`,
-/// `arguments`, `parameters`). Shared by Cursor nested stdin extraction and Claude tool parsing.
+/// `arguments`, `parameters`). Shared by all hosts' nested stdin extraction and tool parsing.
 pub fn tool_input_value_from_map(obj: &Map<String, Value>) -> Option<Value> {
     obj.get("tool_input")
         .or_else(|| obj.get("input"))
@@ -516,7 +516,7 @@ fn framework_non_goal_entry_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/(gitx|update)\b").expect("invalid regex"))
 }
 
-/// Execution-zone `/implementx|verifyx` — arms goal continuity gates (Cursor hooks).
+/// Execution-zone `/implementx|verifyx` — arms goal continuity gates (all hosts' hooks).
 pub fn is_framework_goal_entry_prompt(text: &str) -> bool {
     framework_goal_drive_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
 }
@@ -583,7 +583,7 @@ pub fn is_narrow_review_prompt(text: &str) -> bool {
     narrow_review_prefix_re().is_match(text)
 }
 
-/// Whether Cursor beforeSubmit may inject the subagent model inherit one-liner (independent of my-light / REVIEW_GATE).
+/// Whether beforeSubmit may inject the subagent model inherit one-liner (independent of my-light / REVIEW_GATE).
 pub fn should_inject_subagent_model_inherit_nudge(
     prompt_text: &str,
     user_gate_override: bool,
@@ -591,7 +591,7 @@ pub fn should_inject_subagent_model_inherit_nudge(
     delegation: bool,
     review: bool,
 ) -> bool {
-    if !crate::env_flags::router_rs_cursor_subagent_model_inherit_nudge_enabled() {
+    if !crate::env_flags::router_rs_subagent_model_inherit_nudge_enabled() {
         return false;
     }
     if user_gate_override {
@@ -726,7 +726,7 @@ pub fn has_delegation_override(text: &str) -> bool {
 /// **不含** `rg_followup`：该形态与 harness 文档中的「仿冒机读行」一致，若允许用户粘贴清门会鼓励误用模型自拟行；清门请用 `rg_clear`、拒因 token 或自然语言 override。
 const PASTED_LINE_AG_FOLLOWUP_PREFIX: &str = concat!("ag", "_followup");
 
-/// Recognize Codex/Cursor gate clearance: bounded subagent **`reject_reason` tokens**, `rg_clear`,
+/// Recognize host gate clearance: bounded subagent **`reject_reason` tokens**, `rg_clear`,
 /// plus **paste-style** `ag_followup` leader **only when it appears in the user's turn**.
 ///
 /// # Why split `signal_text` vs `user_turn_text`
@@ -1073,7 +1073,7 @@ mod tests {
         use std::path::PathBuf;
 
         let mdc_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../.cursor/rules/review-subagent-gate.mdc");
+            .join("../../.rules/review-subagent-gate.mdc");
         let mdc = std::fs::read_to_string(&mdc_path)
             .unwrap_or_else(|e| panic!("read {}: {e}", mdc_path.display()));
         for needle in ["reviewer_lanes", "fork_context"] {

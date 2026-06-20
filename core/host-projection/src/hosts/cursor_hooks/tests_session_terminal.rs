@@ -36,21 +36,21 @@ fn parse_terminal_header_rejects_non_yaml_block() {
 }
 
 #[test]
-fn cursor_kill_stale_terminals_disabled_by_env_truthy_values_keep_enabled() {
+fn kill_stale_terminals_disabled_by_env_truthy_values_keep_enabled() {
     let prev = std::env::var_os("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS");
     unsafe { std::env::remove_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS") };
-    assert!(!cursor_kill_stale_terminals_disabled_by_env());
+    assert!(!kill_stale_terminals_disabled_by_env());
     for v in ["", "1", "true", "yes", "on", "anything"] {
         unsafe { std::env::set_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS", v) };
         assert!(
-            !cursor_kill_stale_terminals_disabled_by_env(),
+            !kill_stale_terminals_disabled_by_env(),
             "value {v:?} should NOT disable"
         );
     }
     for v in ["0", "false", "off", "no", "  FALSE  "] {
         unsafe { std::env::set_var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS", v) };
         assert!(
-            cursor_kill_stale_terminals_disabled_by_env(),
+            kill_stale_terminals_disabled_by_env(),
             "value {v:?} should disable"
         );
     }
@@ -123,7 +123,7 @@ fn terminate_in_dir_skips_inactive_outside_and_dead_branches() {
     quick.wait().expect("reap true");
     // 等待 OS 把 PID 标记为 ESRCH（macOS/Linux 下 reap 后立刻就 dead，但留几次轮询兜底）。
     for _ in 0..50 {
-        if !is_process_alive(dead_pid) {
+        if !crate::hosts::file_state_lock::is_process_alive(dead_pid) {
             break;
         }
         thread::sleep(Duration::from_millis(20));
@@ -140,7 +140,7 @@ fn terminate_in_dir_skips_inactive_outside_and_dead_branches() {
     let report = terminate_stale_terminal_processes_in_dir(&repo, &term_dir, None);
     // outside 子进程必须仍活着——证明 cwd 范围过滤生效。
     assert!(
-        is_process_alive(outside_pid),
+        crate::hosts::file_state_lock::is_process_alive(outside_pid),
         "outside-repo child {outside_pid} must NOT be killed; report={report:?}"
     );
     assert!(
@@ -200,7 +200,7 @@ fn terminate_in_dir_kills_real_sleep_child_within_repo() {
     let pid = child.id();
     // 等 sleep 真正进入运行态。
     thread::sleep(Duration::from_millis(50));
-    assert!(is_process_alive(pid), "child must be alive before kill");
+    assert!(crate::hosts::file_state_lock::is_process_alive(pid), "child must be alive before kill");
 
     write_terminal_file(
         &term_dir,
@@ -220,7 +220,7 @@ fn terminate_in_dir_kills_real_sleep_child_within_repo() {
     let report = terminate_stale_terminal_processes_in_dir(&repo, &term_dir, None);
     let _ = waiter.join();
     assert_eq!(report.killed, vec![pid], "report={report:?}");
-    assert!(!is_process_alive(pid), "child must be reaped");
+    assert!(!crate::hosts::file_state_lock::is_process_alive(pid), "child must be reaped");
 }
 
 #[cfg(unix)]
@@ -393,7 +393,7 @@ fn session_start_repo_only_no_continuity_hints() {
 
 #[test]
 fn session_start_initializes_terminal_baseline_ledger() {
-    let _term_env = cursor_terminals_dir_env_lock();
+    let _term_env = terminals_dir_env_lock();
     let repo = fresh_repo();
     let term_dir = repo.join("__terminals");
     write_terminal_file(
@@ -423,7 +423,7 @@ fn session_start_initializes_terminal_baseline_ledger() {
 #[cfg(unix)]
 #[test]
 fn session_end_kills_only_owned_terminal_pids() {
-    let _term_env = cursor_terminals_dir_env_lock();
+    let _term_env = terminals_dir_env_lock();
     use std::os::unix::process::CommandExt;
     use std::process::{Command, Stdio};
 
@@ -452,8 +452,8 @@ fn session_end_kills_only_owned_terminal_pids() {
     let owned_pid = owned_child.id();
     let other_pid = other_child.id();
     thread::sleep(Duration::from_millis(50));
-    assert!(is_process_alive(owned_pid));
-    assert!(is_process_alive(other_pid));
+    assert!(crate::hosts::file_state_lock::is_process_alive(owned_pid));
+    assert!(crate::hosts::file_state_lock::is_process_alive(other_pid));
 
     write_terminal_file(
         &term_dir,
@@ -493,14 +493,14 @@ fn session_end_kills_only_owned_terminal_pids() {
 
     // owned pid should be terminated by SessionEnd
     for _ in 0..40 {
-        if !is_process_alive(owned_pid) {
+        if !crate::hosts::file_state_lock::is_process_alive(owned_pid) {
             break;
         }
         thread::sleep(Duration::from_millis(20));
     }
     let _ = owned_waiter.join();
-    assert!(!is_process_alive(owned_pid), "owned pid must be killed");
-    assert!(is_process_alive(other_pid), "non-owned pid must stay alive");
+    assert!(!crate::hosts::file_state_lock::is_process_alive(owned_pid), "owned pid must be killed");
+    assert!(crate::hosts::file_state_lock::is_process_alive(other_pid), "non-owned pid must stay alive");
 
     unsafe {
         let _ = libc::kill(other_pid as libc::pid_t, libc::SIGKILL);
@@ -514,7 +514,7 @@ fn session_end_kills_only_owned_terminal_pids() {
 }
 
 #[test]
-fn cursor_launcher_fail_closed_before_submit_when_router_rs_missing() {
+fn launcher_fail_closed_before_submit_when_router_rs_missing() {
     use std::process::Command;
     let framework = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let launcher = framework.join("configs/framework/cursor-router-rs-hook.sh");
@@ -558,7 +558,7 @@ fn cursor_launcher_fail_closed_before_submit_when_router_rs_missing() {
 }
 
 #[test]
-fn cursor_launcher_fail_open_session_start_when_router_rs_missing() {
+fn launcher_fail_open_session_start_when_router_rs_missing() {
     use std::process::Command;
     let framework = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let launcher = framework.join("configs/framework/cursor-router-rs-hook.sh");
@@ -598,7 +598,7 @@ fn stop_handler_releases_session_lock_before_task_ledger_checkpoint() {
     let src = concat!(
         include_str!("handlers.rs"),
         include_str!("handlers/stop_closeout.rs"),
-        include_str!("handlers_parts/handlers_stop.inc.rs"),
+        include_str!("handlers/stop.rs"),
     );
     assert!(
         src.contains("release_lock_then_finalize_stop"),
@@ -1264,7 +1264,7 @@ fn review_gate_env_matrix_fixtures_apply_env() {
             );
         }
         assert_eq!(
-            hooks::router_rs_cursor_review_pending_cycle_max(),
+            hooks::router_rs_review_pending_cycle_max(),
             pending_cap as usize
         );
     }
@@ -1348,7 +1348,7 @@ fn before_submit_skips_paper_prose_on_java_abstract_false_positive() {
 fn before_submit_paper_prose_survives_outbound_truncation() {
     let _review_clear = ReviewGateDisableEnvClearGuard::new();
     let _g = hooks::harness_nudges_env_test_lock();
-    let _cap_lock = cursor_hook_outbound_context_max_chars_env_lock();
+    let _cap_lock = hook_outbound_context_max_chars_env_lock();
     let prior_cap = env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
     unsafe { env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", "1024") };
     let prior_hook = env::var_os("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK");

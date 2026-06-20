@@ -65,3 +65,36 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-
 ```
 
 宿主专用自检命令见各宿主手册。
+
+---
+
+## 跨宿主公用资产架构 (Shared Asset Architecture)
+
+框架的公用代码和配置资产通过**中立路径**管理，不嵌入任何宿主名称。
+
+### 公用模块层
+
+| 层 | 路径 | 职责 |
+|---|---|---|
+| 策略层 | `core/core-policy/src/hook_common.rs` | 跨宿主 hook 逻辑（goal gate、review gate、subagent 识别） |
+| 策略层 | `core/core-policy/src/env_flags.rs` | 跨宿主 `ROUTER_RS_*` 环境变量读取 |
+| 分发层 | `core/host-projection/src/hosts/hook_dispatch.rs` | 统一 hook 事件路由、文本提取（`extract_prompt_text`、`extract_response_text`、`extract_tool_name/input`）、上下文压缩（`compact_contexts`）、goal gate（`update_goal_gate`、`goal_gate_satisfied`）、review gate（`is_review_gate_suppressed`、`shared_tracks_goal`、`shared_goal_is_satisfied`） |
+| 状态层 | `core/host-projection/src/hosts/hook_state_common.rs` | 状态版本 trait、`HookReviewDiskCore` 共用结构（含 goal gate 字段） |
+| 锁层 | `core/host-projection/src/hosts/file_state_lock.rs` | 跨平台文件锁（`acquire_file_lock_with_config`）、进程存活检测（`is_process_alive`）、时间工具（`now_millis`）、锁元数据解析（`parse_lock_metadata`） |
+| Provider 层 | `core/host-projection/src/hosts/host_provider.rs` | 宿主元数据注册表 |
+| 启动器 | `configs/framework/hook.sh` | 统一 shell 启动器（4 宿主共用） |
+
+### 中立配置目录
+
+| 目录 | 内容 | 宿主目录 symlink 指向 |
+|---|---|---|
+| `.commands/` | 共享 slash 命令定义 | `.cursor/commands/` → `.commands/`，`.opencode/commands/` → `.commands/` |
+| `.rules/` | 共享规则文件（`.mdc`） | `.cursor/rules/` → `.rules/` |
+
+### 命名规范
+
+- 公用函数名**禁止**包含宿主名称（`cursor`/`codex`/`opencode`/`claude`）。
+- 公用常量名**禁止**包含宿主前缀（如 `CURSOR_`）。
+- 环境变量名（`ROUTER_RS_CURSOR_*` 等）属于已发布的运维合约，不受此限制。
+- 宿主适配层中的宿主前缀函数已全部去除（`codex_*` → 通用名，`cursor_*` → 通用名）。
+- 仅 Cursor IDE 专属功能（终端管理、事件减法、出站保护）保留为宿主适配层内部实现。

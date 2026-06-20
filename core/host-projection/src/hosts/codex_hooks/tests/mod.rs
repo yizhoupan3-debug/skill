@@ -2,7 +2,7 @@
 
 use crate::hosts::codex_hooks::handlers;
 use crate::hosts::codex_hooks::handlers::{
-    codex_additional_context_max_bytes, codex_compact_contexts, handle_codex_session_start, read_codex_stdin_limited,
+    handle_codex_session_start, read_codex_stdin_limited,
     run_codex_lifecycle_context_hook, run_codex_review_subagent_gate, saw_subagent_codex,
 };
 use crate::hosts::codex_hooks::install::FORCE_ATOMIC_WRITE_FAIL;
@@ -14,8 +14,8 @@ use crate::hosts::codex_hooks::pretool::{
 };
 use crate::hosts::codex_hooks::state;
 use crate::hosts::codex_hooks::state::{
-    acquire_codex_state_lock, codex_load_state, codex_save_state_to_path, codex_session_key,
-    codex_state_path, prune_stale_hook_state_files, with_codex_state_lock,
+    acquire_codex_state_lock, load_state, save_state_to_path, session_key_for_host,
+    state_path_for_host, prune_stale_hook_state_files, with_codex_state_lock,
 };
 use crate::hosts::codex_hooks::{INSTALL_EVENTS, InstallMode, ROUTER_RS_HOOK_PROJECTION_VERSION};
 use serde_json::{Value, json};
@@ -37,9 +37,9 @@ pub(super) fn ensure_test_deps() {
 }
 
 #[test]
-fn codex_first_nonempty_prompt_line_skips_leading_blank_lines() {
+fn first_nonempty_prompt_line_skips_leading_blank_lines() {
     assert_eq!(
-        handlers::codex_first_nonempty_prompt_line("\n  \nreal task\nmore"),
+        handlers::first_nonempty_prompt_line("\n  \nreal task\nmore"),
         "real task"
     );
 }

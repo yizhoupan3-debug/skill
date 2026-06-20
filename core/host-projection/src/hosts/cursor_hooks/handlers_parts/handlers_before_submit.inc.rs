@@ -11,7 +11,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         }
         return out;
     }
-    let text = prompt_text(event);
+    let text = crate::hosts::hook_dispatch::extract_prompt_text(event);
     let signal_text = hook_event_signal_text(event, &text, "");
     let state_load = load_state(repo_root, event);
     if let Err(ref load_err) = state_load {
@@ -36,7 +36,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
 
     let prior_review_required = state.review_required;
     let my_light = core_policy::hook_common::my_light_profile_active(Some(repo_root), &text);
-    let review_gate_live = !cursor_review_gate_suppressed(repo_root, &text);
+    let review_gate_live = !crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &text);
     let mut fresh_review_cycle = false;
     if my_light {
         state.review_required = false;
@@ -73,7 +73,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     // `signal_text` 含整树字符串，覆盖仅出现在 `messages[].content` 等深层路径的 token。
     if saw_reject_reason(&signal_text, &text) {
         state.reject_reason_seen = true;
-        if tracks_goal_or_drive_entry(&state) {
+        if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) {
             state.pre_goal_review_satisfied = true;
         }
         clear_review_gate_escalation_counters(&mut state);
@@ -96,15 +96,15 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     // Review：首次武装门控时注入默认「深度+广度」契约指针（短）；相位仍只靠 subagent/PostToolUse（仅 review_hard_armed）。
     let needs_pre_goal =
         hooks::router_rs_pre_goal_enabled()
-            && tracks_goal_or_drive_entry(&state)
+            && crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active)
             && !state.pre_goal_review_satisfied
-            && !is_overridden(&state)
+            && !(state.review_override || state.delegation_override)
             && !state.reject_reason_seen;
     let mut output = json!({ "continue": true });
     let mut spawn_first_line: Option<String> = None;
     if review_arms_for_gate
         && (fresh_review_cycle || !prior_review_required)
-        && !cursor_review_gate_suppressed(repo_root, &text)
+        && !crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &text)
         && !state.review_override
         && core_policy::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &text)
     {
@@ -119,7 +119,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
             "cursor",
         );
     if !my_light
-        && !cursor_review_gate_suppressed(repo_root, &text)
+        && !crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &text)
         && review
         && goal_drive_entrypoint
     {
@@ -185,7 +185,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         || needs_pre_goal;
     if !persisted || !persisted_after_followup {
         if gate_needs_persist
-            && !hooks::router_rs_cursor_hook_state_fail_open_enabled()
+            && !hooks::router_rs_hook_state_fail_open_enabled()
         {
             release_state_lock(&mut lock);
             let mut out = json!({ "continue": false });

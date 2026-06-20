@@ -140,8 +140,8 @@ fn stop_goal_and_rfv_do_not_merge_schema_hint_into_continue() {
 
 #[test]
 #[serial]
-fn cursor_hook_output_policy_truncates_additional_context_under_env_budget() {
-    let _env_lock = cursor_hook_outbound_context_max_chars_env_lock();
+fn hook_output_policy_truncates_additional_context_under_env_budget() {
+    let _env_lock = hook_outbound_context_max_chars_env_lock();
     let prev = env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
     unsafe { env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", "1500") };
     let pad = "Z".repeat(8000);
@@ -171,11 +171,11 @@ fn cursor_hook_output_policy_truncates_additional_context_under_env_budget() {
 
 #[test]
 #[serial]
-fn cursor_hook_output_policy_truncates_followup_after_absurd_length() {
-    let _env_lock = cursor_hook_outbound_context_max_chars_env_lock();
+fn hook_output_policy_truncates_followup_after_absurd_length() {
+    let _env_lock = hook_outbound_context_max_chars_env_lock();
     let prev_cap = env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
     unsafe { env::remove_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS") };
-    let max_out = hooks::router_rs_cursor_hook_outbound_context_max_bytes();
+    let max_out = hooks::router_rs_hook_outbound_context_max_bytes();
     let absurd = vec![b'Q'; max_out.saturating_mul(5).max(32 * 1024)];
     let absurd_str = String::from_utf8(absurd).expect("ascii");
     let mut out = json!({ "followup_message": absurd_str });
@@ -192,7 +192,7 @@ fn cursor_hook_output_policy_truncates_followup_after_absurd_length() {
 
 #[test]
 #[serial]
-fn cursor_hook_output_policy_is_noop_for_review_gate_advisory_lines() {
+fn hook_output_policy_is_noop_for_review_gate_advisory_lines() {
     let hard = format!(
         "router-rs REVIEW_GATE incomplete phase=0 {} {}",
         REVIEW_GATE_FOLLOWUP_NEED_SEGMENT, REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
@@ -207,7 +207,7 @@ fn cursor_hook_output_policy_is_noop_for_review_gate_advisory_lines() {
 }
 
 #[test]
-fn cursor_hook_outbound_trunc_respects_byte_cap_and_marker() {
+fn hook_outbound_trunc_respects_byte_cap_and_marker() {
     let body = "x".repeat(9000);
     let max_out = 8192usize;
     let got = super::truncate_cursor_hook_outbound_context(&body, max_out);
@@ -218,7 +218,7 @@ fn cursor_hook_outbound_trunc_respects_byte_cap_and_marker() {
 #[test]
 #[serial]
 fn outbound_truncation_preserves_review_gate_and_continuity_suppressed_lines() {
-    let _env_lock = cursor_hook_outbound_context_max_chars_env_lock();
+    let _env_lock = hook_outbound_context_max_chars_env_lock();
     let prev = std::env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
     unsafe { std::env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", "512") };
 
@@ -229,7 +229,7 @@ fn outbound_truncation_preserves_review_gate_and_continuity_suppressed_lines() {
         super::REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
     );
     let body = format!("{filler}\ncontinuity_suppressed=review_soft_nag\n{gate_line}\n{filler}");
-    let max_out = hooks::router_rs_cursor_hook_outbound_context_max_bytes();
+    let max_out = hooks::router_rs_hook_outbound_context_max_bytes();
     let got = super::truncate_cursor_hook_outbound_context_preserving_gate(&body, max_out);
     assert!(got.len() <= max_out);
     assert!(got.contains("continuity_suppressed=review_soft_nag"));
@@ -275,7 +275,7 @@ fn review_gate_disabled_post_tool_use_does_not_advance_review_phase() {
 }
 
 #[test]
-fn cursor_hook_output_policy_is_noop() {
+fn hook_output_policy_is_noop() {
     let mut keep = json!({ "followup_message": "keep" });
     apply_cursor_hook_output_policy(&mut keep);
     assert_eq!(keep["followup_message"], json!("keep"));
@@ -428,7 +428,7 @@ fn review_gate_soft_nag_includes_need_segment() {
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let _cap_env = ReviewGateStopMaxNudgesEnvGuard::set("1");
     assert_eq!(
-        hooks::router_rs_cursor_review_gate_stop_max_nudges_cap(),
+        hooks::router_rs_review_gate_stop_max_nudges_cap(),
         Some(1)
     );
     let repo = fresh_repo();
@@ -470,7 +470,7 @@ fn post_tool_skips_cargo_check_when_env_off() {
     let prev = std::env::var_os("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC");
     unsafe { std::env::set_var("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC", "0") };
     assert!(
-        !hooks::router_rs_cursor_cargo_check_sync_enabled(),
+        !hooks::router_rs_cargo_check_sync_enabled(),
         "env off must disable sync cargo check gate"
     );
     match prev {
@@ -485,7 +485,7 @@ fn review_gate_stop_softens_after_max_nudges_env_cap() {
     let _rg_env = ReviewGateDisableEnvClearGuard::new();
     let _cap_env = ReviewGateStopMaxNudgesEnvGuard::set("2");
     assert_eq!(
-        hooks::router_rs_cursor_review_gate_stop_max_nudges_cap(),
+        hooks::router_rs_review_gate_stop_max_nudges_cap(),
         Some(2)
     );
     let repo = fresh_repo();
@@ -565,7 +565,7 @@ fn session_end_skips_state_delete_when_lock_unavailable() {
 }
 
 #[test]
-fn cursor_hook_silent_strips_additional_context_keeps_review_gate_followup() {
+fn hook_silent_strips_additional_context_keeps_review_gate_followup() {
     let _env = core_policy::test_env_sync::process_env_lock();
     let prev = std::env::var_os("ROUTER_RS_CURSOR_HOOK_SILENT");
     unsafe { std::env::set_var("ROUTER_RS_CURSOR_HOOK_SILENT", "1") };
@@ -635,7 +635,7 @@ fn review_pending_cycle_keys_respects_env_cap() {
     let prev = std::env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
     unsafe { std::env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", "2") };
     assert_eq!(
-        hooks::router_rs_cursor_review_pending_cycle_max(),
+        hooks::router_rs_review_pending_cycle_max(),
         2,
         "env cap must be visible before dispatch"
     );
@@ -1258,7 +1258,7 @@ fn before_submit_planx_persist_fail_soft_warning_not_block() {
 }
 
 #[test]
-fn cursor_rearm_review_resets_active_subagent_count_after_start_without_stop() {
+fn rearm_review_resets_active_subagent_count_after_start_without_stop() {
     let _gate = ReviewGateActiveGuard::new();
     let repo = fresh_repo();
     let sid = "s-rearm-open-subagent";
@@ -1647,7 +1647,7 @@ fn pending_cap_denial_does_not_increment_active_subagent_count() {
     let prev = env::var_os("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX");
     unsafe { env::set_var("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX", "1") };
     assert_eq!(
-        hooks::router_rs_cursor_review_pending_cycle_max(),
+        hooks::router_rs_review_pending_cycle_max(),
         1
     );
 

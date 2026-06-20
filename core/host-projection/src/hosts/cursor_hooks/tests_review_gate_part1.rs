@@ -219,7 +219,7 @@ fn before_submit_spawn_first_and_model_inherit_not_duplicated() {
 fn before_submit_model_inherit_survives_output_policy_truncation() {
     let _lock = core_policy::test_env_sync::process_env_lock();
     let _env = SubagentModelInheritNudgeForceOnEnvGuard::new();
-    let _cap_lock = cursor_hook_outbound_context_max_chars_env_lock();
+    let _cap_lock = hook_outbound_context_max_chars_env_lock();
     let prev_cap = env::var_os("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS");
     unsafe { env::set_var("ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS", "900") };
     let repo = fresh_repo();
@@ -329,7 +329,7 @@ fn before_submit_implementx_returns_unreadable_when_hook_state_corrupt() {
 }
 
 #[test]
-fn cursor_rearm_review_resets_review_followup_count_after_soft_nag() {
+fn rearm_review_resets_review_followup_count_after_soft_nag() {
     let _env = core_policy::test_env_sync::process_env_lock();
     let _gate = ReviewGateActiveGuard::new();
     let _spawn_on = SpawnFirstNudgeEnableEnvGuard::enable();
@@ -436,7 +436,7 @@ fn before_submit_my_plan_phase_does_not_arm_goal_required() {
 }
 
 #[test]
-fn cursor_plan_build_path_does_not_arm_goal() {
+fn plan_build_path_does_not_arm_goal() {
     let repo = fresh_repo();
     let cwd = repo.display().to_string();
     let plan_ref = format!("{cwd}/.cursor/plans/feature.plan.md");

@@ -34,7 +34,7 @@ fn projection_version_older(manifest_version: &str, current: &str) -> bool {
     }
 }
 
-pub(super) fn codex_projection_drift_warning(repo_root: &Path) -> Option<String> {
+pub(super) fn projection_drift_warning(repo_root: &Path) -> Option<String> {
     const CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(300);
     {
         let guard = DRIFT_CACHE.lock().unwrap_or_else(|e| e.into_inner());

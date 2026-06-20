@@ -115,11 +115,13 @@ See [`spec.md`](spec.md) §13.5.
 When renaming env vars, maintain legacy aliases with deprecation warnings:
 
 ```rust
-pub fn router_rs_claude_review_gate_disabled() -> bool {
-    // New name takes precedence
-    router_rs_env_enabled_default_false("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE")
-        || router_rs_env_enabled_default_false("ROUTER_RS_REVIEW_GATE_DISABLE") // legacy
+// Current shared implementation (hook_dispatch.rs)
+pub fn is_review_gate_suppressed(host_id: &str, repo_root: Option<&Path>, prompt: &str) -> bool {
+    core_policy::env_flags::router_rs_review_gate_disabled_for_host(host_id)
+        || core_policy::hook_common::review_gate_hard_block_disabled(repo_root, prompt)
 }
+// Per-host env vars (ROUTER_RS_CURSOR_*, ROUTER_RS_CLAUDE_*, etc.) are
+// still honored by router_rs_review_gate_disabled_for_host() for backward compat.
 ```
 
 ### Deprecation Warning Pattern
@@ -131,6 +133,43 @@ fn check_legacy_env_vars() {
     }
 }
 ```
+
+---
+
+## Shared Code Naming Convention（公用代码命名规范）
+
+### 核心原则
+
+**公用模块中的函数名、常量名、类型名禁止包含宿主名称**（`cursor`/`codex`/`opencode`/`claude`）。
+
+### 规则
+
+| 场景 | 规则 | 示例 |
+|------|------|------|
+| 公用函数 | 通用语义命名 | `extract_prompt_text` ✅，`cursor_prompt_text` ❌ |
+| 公用常量 | 通用语义命名 | `HOOK_SIGNAL_ASSISTANT_TAIL_CHARS` ✅，`CURSOR_HOOK_SIGNAL_*` ❌ |
+| 公用类型 | 通用语义命名 | `LockConfig::long_timeout()` ✅，`LockConfig::cursor()` ❌ |
+| 环境变量 | 保留宿主前缀（运维合约） | `ROUTER_RS_CURSOR_HOOK_SILENT` ✅（已发布，不可改） |
+| 宿主适配层 | 允许宿主前缀 | `recognized_subagent_kind` ✅（宿主适配层内，无宿主前缀） |
+
+### 中立配置目录
+
+| 目录 | 内容 | 宿主目录 symlink 指向 |
+|---|---|---|
+| `.commands/` | 共享 slash 命令定义 | `.cursor/commands/` → `.commands/`，`.opencode/commands/` → `.commands/` |
+| `.rules/` | 共享规则文件（`.mdc`） | `.cursor/rules/` → `.rules/` |
+
+### 公用模块清单
+
+| 层 | 路径 |
+|---|---|
+| 策略层 | `core/core-policy/src/hook_common.rs` |
+| 策略层 | `core/core-policy/src/env_flags.rs` |
+| 分发层 | `core/host-projection/src/hosts/hook_dispatch.rs` |
+| 状态层 | `core/host-projection/src/hosts/hook_state_common.rs` |
+| 锁层 | `core/host-projection/src/hosts/file_state_lock.rs` |
+| Provider 层 | `core/host-projection/src/hosts/host_provider.rs` |
+| 启动器 | `configs/framework/hook.sh` |
 
 ---
 

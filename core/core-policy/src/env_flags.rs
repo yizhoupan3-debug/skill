@@ -4,7 +4,32 @@
 //! remain honored for explicit opt-in / disable (backward compatibility).
 //! Operator table: see below `// §5` comments in this file.
 
+use std::cell::Cell;
 use std::env;
+
+// ────────────────────────────────────────────────────────────────
+// §0  Test-only thread-local env overrides (shared by all hosts)
+// ────────────────────────────────────────────────────────────────
+
+thread_local! {
+    /// Test-only override for `router_rs_review_gate_disabled_for_host`.
+    /// When set (via [`set_test_review_gate_disabled_override`]), bypasses real env lookup.
+    static TEST_REVIEW_GATE_DISABLED_OVERRIDE: Cell<Option<bool>> = const { Cell::new(None) };
+}
+
+/// Set a test-only override for review-gate disable check (all hosts).
+/// Pass `None` to clear. Only effective under `#[cfg(test)]` or with `test-sync` feature.
+#[cfg(any(test, feature = "test-sync"))]
+pub fn set_test_review_gate_disabled_override(value: Option<bool>) {
+    TEST_REVIEW_GATE_DISABLED_OVERRIDE.with(|c| c.set(value));
+}
+
+/// Returns the test override value if set, otherwise `None`.
+/// Available in both test and non-test builds for call-site compatibility;
+/// the setter is `#[cfg(test)]` only.
+pub fn test_review_gate_disabled_override() -> Option<bool> {
+    TEST_REVIEW_GATE_DISABLED_OVERRIDE.with(|c| c.get())
+}
 
 const ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV: &str = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
 const ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str =
@@ -65,7 +90,7 @@ pub fn router_rs_review_spawn_first_nudge_enabled() -> bool {
     env_enabled_default_true(ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV)
 }
 
-pub fn router_rs_cursor_subagent_model_inherit_nudge_enabled() -> bool {
+pub fn router_rs_subagent_model_inherit_nudge_enabled() -> bool {
     env_enabled_default_true(ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV)
 }
 
@@ -106,6 +131,10 @@ const REVIEW_GATE_DISABLE_BY_HOST: &[(&str, &str)] = &[
 /// affecting others. These env var names are part of the operator contract (docs §5) and cannot be
 /// replaced by registry queries without breaking existing CI/operator scripts.
 pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
+    #[cfg(test)]
+    if let Some(v) = test_review_gate_disabled_override() {
+        return v;
+    }
     if env_enabled_default_false(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) {
         return true;
     }
@@ -117,7 +146,7 @@ pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
             if disabled {
                 static WARNED: std::sync::Once = std::sync::Once::new();
                 WARNED.call_once(|| {
-                    eprintln!(
+                    tracing::warn!(
                         "[router-rs] deprecate: {env} is a legacy per-host env var; \
                          use ROUTER_RS_REVIEW_GATE_DISABLE=1 to disable for all hosts"
                     );
@@ -139,7 +168,7 @@ pub fn router_rs_review_pending_cycle_max() -> usize {
     )
 }
 
-/// Stop `REVIEW_GATE` full-line cap before soft_nag downgrade (Cursor Stop today).
+/// Stop `REVIEW_GATE` full-line cap before soft_nag downgrade (all hosts).
 ///
 /// - **未设置**（非 test）：默认 **8**。
 /// - `=0` / `false` / `off` / `no`：**关闭**降频（严格、每轮完整硬行）。
@@ -169,7 +198,7 @@ fn parse_review_gate_stop_max_nudges_cap(raw: Option<&str>) -> Option<u32> {
     if let Some(n) = t.parse::<u32>().ok().filter(|v| *v >= 1) {
         return Some(n);
     }
-    eprintln!("[core-policy] invalid review gate stop max nudges={raw:?}; using default cap 8");
+    tracing::warn!("[core-policy] invalid review gate stop max nudges={raw:?}; using default cap 8");
     Some(8)
 }
 
@@ -193,7 +222,7 @@ fn parse_usize_clamped(
             match trimmed.parse::<usize>() {
                 Ok(n) => n.clamp(min_allowed, max_allowed),
                 Err(_) => {
-                    eprintln!(
+                    tracing::warn!(
                         "[core-policy] invalid {canonical_key} (or legacy {legacy_key})={raw:?}; using default {default_val} (clamp {min_allowed}..{max_allowed})"
                     );
                     default_val

@@ -18,36 +18,18 @@ fn tool_name_matches_subagent_lane(normalized: &str) -> bool {
     crate::hosts::hook_dispatch::is_subagent_tool(normalized)
 }
 
-fn goal_contract_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(
-            r"(?i)\b(goal|done when|validation commands|checkpoint plan|non-goals)\b|(目标|完成条件|验证命令|检查点|非目标)",
-        )
-        .expect("invalid regex")
-    })
+/// Goal gate：须同时满足 Goal、Non-goals、Validation commands 行内标题非空，且 Done when 至少两条（英/中标题均可）。
+/// Delegates to shared implementation in `hook_common`.
+fn has_structured_goal_contract(text: &str) -> bool {
+    core_policy::hook_common::has_structured_goal_contract(text)
 }
 
-fn goal_progress_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)\b(checkpoint|milestone|progress|next step)\b|(检查点|里程碑|进度|下一步)")
-            .expect("invalid regex")
-    })
+fn has_goal_progress_signal(text: &str) -> bool {
+    core_policy::hook_common::has_goal_progress_signal(text)
 }
 
-fn goal_verify_or_block_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)\b(verified|verification|test passed|blocker)\b|(已验证|阻塞)")
-            .expect("invalid regex")
-    })
-}
-
-fn goal_chat_verify_zh_signal(text: &str) -> bool {
-    core_policy::hook_common::GOAL_CHAT_VERIFY_ZH_PHRASES
-        .iter()
-        .any(|p| text.contains(p))
+fn has_goal_verify_or_block_signal(text: &str) -> bool {
+    core_policy::hook_common::has_goal_verify_or_block_signal(text)
 }
 
 /// Task/subagent 调用里明示 `fork_context: true` 时视为与主会话共享上下文，不满足 goal_drive 要求的「独立上下文」预检。
@@ -57,7 +39,7 @@ fn fork_context_from_tool(event: &Value, tool_input: &Value) -> Option<bool> {
 }
 
 /// Cursor-only: optional inference when `fork_context` is omitted on countable deep-review lanes.
-fn cursor_fork_context_from_tool(
+fn fork_context_from_tool_with_inference(
     event: &Value,
     tool_input: &Value,
     sub_type: &str,
@@ -66,7 +48,7 @@ fn cursor_fork_context_from_tool(
     if let Some(parsed) = fork_context_from_tool(event, tool_input) {
         return Some(parsed);
     }
-    if !hooks::router_rs_cursor_review_fork_context_missing_infer_false_enabled()
+    if !hooks::router_rs_review_fork_context_missing_infer_false_enabled()
     {
         return None;
     }
@@ -82,161 +64,8 @@ fn cursor_fork_context_from_tool(
     }
 }
 
-/// Goal gate：须同时满足 Goal、Non-goals、Validation commands 行内标题非空，且 Done when 至少两条（英/中标题均可）。
-fn has_structured_goal_contract(text: &str) -> bool {
-    let goal_ok =
-        nonempty_inline_heading_any(text, "Goal") || nonempty_inline_heading_any(text, "目标");
-    let non_goals_ok = nonempty_inline_heading_any(text, "Non-goals")
-        || nonempty_inline_heading_any(text, "非目标");
-    let validation_ok = nonempty_inline_heading_any(text, "Validation commands")
-        || nonempty_inline_heading_any(text, "验证命令");
-    let done_when_items = count_done_when_items(text);
-    goal_ok && non_goals_ok && validation_ok && done_when_items >= 2
-}
-
-fn nonempty_inline_heading_any(text: &str, heading: &str) -> bool {
-    use std::sync::LazyLock;
-
-    static GOAL_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?im)^\s*Goal\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
-    });
-    static NON_GOALS_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?im)^\s*Non-goals\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
-    });
-    static VALIDATION_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?im)^\s*Validation commands\s*[:：]\s*(\S.+)$")
-            .expect("invalid heading regex")
-    });
-    static GOAL_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?im)^\s*目标\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
-    });
-    static NON_GOALS_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?im)^\s*非目标\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
-    });
-    static VALIDATION_ZH_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?im)^\s*验证命令\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
-    });
-
-    let re = match heading {
-        "Goal" => &*GOAL_RE,
-        "Non-goals" => &*NON_GOALS_RE,
-        "Validation commands" => &*VALIDATION_RE,
-        "目标" => &*GOAL_ZH_RE,
-        "非目标" => &*NON_GOALS_ZH_RE,
-        "验证命令" => &*VALIDATION_ZH_RE,
-        _ => return false,
-    };
-
-    re.captures(text)
-        .and_then(|cap| cap.get(1))
-        .map(|m| !m.as_str().trim().is_empty())
-        .unwrap_or(false)
-}
-
-fn count_done_when_items(text: &str) -> usize {
-    // Prefer bullet/numbered items under "Done when:" / "完成条件:".
-    // Fallback: treat an inline list after the heading as multiple items if it contains clear
-    // separators.
-    const HEADINGS: [&str; 2] = ["Done when", "完成条件"];
-    static NUMBERED_LINE_RE: OnceLock<Regex> = OnceLock::new();
-    static RE_DONE: OnceLock<Regex> = OnceLock::new();
-    static RE_ZH: OnceLock<Regex> = OnceLock::new();
-    let numbered_line_re = NUMBERED_LINE_RE
-        .get_or_init(|| Regex::new(r"(?m)^\d+\.\s+\S").expect("invalid numbered line regex"));
-    let re_done = RE_DONE.get_or_init(|| {
-        Regex::new(&format!(
-            r"(?im)^\s*{}\s*[:：]\s*(.*)$",
-            regex::escape(HEADINGS[0])
-        ))
-        .expect("invalid done regex")
-    });
-    let re_zh = RE_ZH.get_or_init(|| {
-        Regex::new(&format!(
-            r"(?im)^\s*{}\s*[:：]\s*(.*)$",
-            regex::escape(HEADINGS[1])
-        ))
-        .expect("invalid zh regex")
-    });
-    let heading_pairs = [
-        (HEADINGS[0], Some(re_done)),
-        (HEADINGS[1], Some(re_zh)),
-    ];
-    for (h, maybe_re) in heading_pairs {
-        let Some(re) = maybe_re else {
-            continue;
-        };
-        let Some(cap) = re.captures(text) else {
-            continue;
-        };
-        let inline = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("");
-        if !inline.is_empty() {
-            // Inline: split on common separators; require at least 2 non-empty parts.
-            let parts = inline
-                .split(&[';', '；', ',', '，', '|', '、'][..])
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .count();
-            if parts >= 2 {
-                return parts;
-            }
-        }
-
-        // Block-style: count bullet/numbered lines after the heading until the next heading-ish
-        // line or a blank-only tail. This is intentionally conservative.
-        let mut in_section = false;
-        let mut count = 0usize;
-        let h_lower = h.to_ascii_lowercase();
-        for raw in text.lines() {
-            let line = raw.trim();
-            if line.is_empty() {
-                if in_section {
-                    // Allow blank lines inside section; do not terminate immediately.
-                    continue;
-                }
-                continue;
-            }
-            if !in_section {
-                let lowered = line.to_ascii_lowercase();
-                if lowered.starts_with(&h_lower) && (lowered.contains(':') || line.contains('：')) {
-                    in_section = true;
-                }
-                continue;
-            }
-
-            // Stop if we hit another contract heading.
-            if goal_contract_re().is_match(line)
-                && !line
-                    .to_ascii_lowercase()
-                    .starts_with(&h_lower)
-            {
-                break;
-            }
-
-            let is_bullet = line.starts_with("- ")
-                || line.starts_with("* ")
-                || line.starts_with("• ")
-                || numbered_line_re.is_match(line);
-            if is_bullet {
-                count += 1;
-            }
-        }
-        if count > 0 {
-            return count;
-        }
-    }
-    0
-}
-
-fn has_goal_progress_signal(text: &str) -> bool {
-    goal_progress_re().is_match(text)
-}
-
-fn has_goal_verify_or_block_signal(text: &str) -> bool {
-    goal_verify_or_block_re().is_match(text) || goal_chat_verify_zh_signal(text)
-}
-
 /// Task/subagent 工具载荷上的类型字段（与 Codex `codex_subagent_type_evidence` 对齐）：部分宿主用 `type` 代替 `subagent_type`。
-fn cursor_subagent_type_pair(tool_input: &Value, event: &Value) -> (String, String) {
+fn subagent_type_pair(tool_input: &Value, event: &Value) -> (String, String) {
     let sub_raw = tool_input
         .get("subagent_type")
         .or_else(|| tool_input.get("subagentType"))
@@ -263,7 +92,7 @@ fn cursor_subagent_type_pair(tool_input: &Value, event: &Value) -> (String, Stri
 /// My implement pre-goal（`ROUTER_RS_PRE_GOAL_ENABLED`）：常态下与 `review_subagent_kind_ok` 对齐（仅可数深度 lane + 独立 fork 证据链）；
 /// `ROUTER_RS_REVIEW_GATE_DISABLE` 应急开启时退化为「任一带名 lane/agent 字段」以免应急路径过严。
 fn pre_goal_subagent_kind_ok(sub_type: &str, agent_type: &str) -> bool {
-    if cursor_review_gate_disabled_by_env() {
+    if crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", None, "") {
         return !sub_type.is_empty() || !agent_type.is_empty();
     }
     review_subagent_kind_ok(sub_type, agent_type)
@@ -292,7 +121,7 @@ fn review_subagent_kind_ok_loose_when_cursor_gate_disabled(
 }
 
 fn review_subagent_kind_ok(sub_type: &str, agent_type: &str) -> bool {
-    if cursor_review_gate_disabled_by_env() {
+    if crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", None, "") {
         return review_subagent_kind_ok_loose_when_cursor_gate_disabled(sub_type, agent_type);
     }
     // 默认可清除 `REVIEW_GATE` 的深度审稿 lane：**不**含 `explore` / CI / guide / Claude-only `review` 别名。
@@ -391,42 +220,6 @@ fn first_nonempty_event_str(event: &Value, keys: &[&str]) -> String {
     String::new()
 }
 
-/// 宿主 JSON 字段不完全一致：顶层或 `payload`/`data` 内都可能挂用户输入。
-fn prompt_text(event: &Value) -> String {
-    const KEYS: &[&str] = &[
-        "prompt",
-        "user_prompt",
-        "message",
-        "input",
-        "text",
-        "userPrompt",
-        "userMessage",
-        "command",
-        "content",
-        "userContent",
-        "query",
-        "composerText",
-        "editorText",
-    ];
-    let direct = first_nonempty_event_str(event, KEYS);
-    if !direct.trim().is_empty() {
-        return direct;
-    }
-    prompt_from_nested_messages(event)
-}
-
-fn is_user_message_role(obj: &serde_json::Map<String, Value>) -> bool {
-    let role = obj
-        .get("role")
-        .or_else(|| obj.get("type"))
-        .or_else(|| obj.get("kind"))
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim()
-        .to_ascii_lowercase();
-    matches!(role.as_str(), "user" | "human")
-}
-
 fn is_assistant_message_role(obj: &serde_json::Map<String, Value>) -> bool {
     let role = obj
         .get("role")
@@ -440,74 +233,6 @@ fn is_assistant_message_role(obj: &serde_json::Map<String, Value>) -> bool {
         role.as_str(),
         "assistant" | "ai" | "model" | "bot" | "agent"
     )
-}
-
-fn message_body_text(obj: &serde_json::Map<String, Value>) -> Option<String> {
-    for key in ["content", "text", "body", "value"] {
-        let Some(value) = obj.get(key) else {
-            continue;
-        };
-        match value {
-            Value::String(s) => {
-                let t = s.trim();
-                if !t.is_empty() {
-                    return Some(s.clone());
-                }
-            }
-            Value::Array(parts) => {
-                let mut buf = String::new();
-                for p in parts {
-                    if let Some(o) = p.as_object() {
-                        if let Some(Value::String(s)) = o.get("text") {
-                            buf.push_str(s);
-                        }
-                    } else if let Some(s) = p.as_str() {
-                        buf.push_str(s);
-                    }
-                }
-                if !buf.trim().is_empty() {
-                    return Some(buf);
-                }
-            }
-            _ => {}
-        }
-    }
-    None
-}
-
-/// `beforeSubmit` 有时不把用户输入放在 `prompt`，而放在 `messages` 末尾；取**最后一条 user** 文本供门控与拒因识别。
-fn prompt_from_nested_messages(event: &Value) -> String {
-    if let Some(obj) = event.as_object() {
-        for key in [
-            "messages",
-            "conversationMessages",
-            "chatMessages",
-            "history",
-        ] {
-            if let Some(Value::Array(arr)) = obj.get(key) {
-                for item in arr.iter().rev() {
-                    let Some(msg) = item.as_object() else {
-                        continue;
-                    };
-                    if !is_user_message_role(msg) {
-                        continue;
-                    }
-                    if let Some(t) = message_body_text(msg) {
-                        return t;
-                    }
-                }
-            }
-        }
-        for nest in HOOK_EVENT_NESTED {
-            if let Some(nested) = obj.get(*nest) {
-                let s = prompt_from_nested_messages(nested);
-                if !s.trim().is_empty() {
-                    return s;
-                }
-            }
-        }
-    }
-    String::new()
 }
 
 /// `Stop` / 部分宿主事件不把助手正文放在顶层 `response` / `content`；与 `prompt_from_nested_messages`
@@ -529,7 +254,7 @@ fn agent_response_from_nested_messages(event: &Value) -> String {
                     if !is_assistant_message_role(msg) {
                         continue;
                     }
-                    if let Some(t) = message_body_text(msg) {
+                    if let Some(t) = hook_dispatch::message_body_text(msg) {
                         return t;
                     }
                 }
@@ -630,7 +355,7 @@ fn hook_event_all_text(event: &Value) -> String {
     out
 }
 
-fn cursor_full_json_scrape_enabled() -> bool {
+fn full_json_scrape_enabled() -> bool {
     use std::sync::OnceLock;
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| {
@@ -652,7 +377,7 @@ fn hook_event_signal_text_with_scrape_mode(
 ) -> String {
     let response = core_policy::hook_common::hook_assistant_tail_window(
         response,
-        core_policy::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+        core_policy::hook_common::HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
     );
     let mut s = String::with_capacity(
         prompt
@@ -676,57 +401,12 @@ fn hook_event_signal_text(event: &Value, prompt: &str, response: &str) -> String
         event,
         prompt,
         response,
-        cursor_full_json_scrape_enabled(),
+        full_json_scrape_enabled(),
     )
 }
 
-fn grab_tool_name_from_object(obj: &serde_json::Map<String, Value>) -> Option<String> {
-    for key in ["tool_name", "toolName", "tool", "name"] {
-        if let Some(s) = obj.get(key).and_then(Value::as_str) {
-            let t = s.trim();
-            if !t.is_empty() {
-                return Some(t.to_string());
-            }
-        }
-    }
-    None
-}
 
-pub fn tool_name_of(event: &Value) -> String {
-    if let Some(obj) = event.as_object() {
-        if let Some(s) = grab_tool_name_from_object(obj) {
-            return s;
-        }
-        for nest in HOOK_EVENT_NESTED {
-            if let Some(nobj) = obj.get(*nest).and_then(Value::as_object)
-                && let Some(s) = grab_tool_name_from_object(nobj) {
-                    return s;
-                }
-        }
-    }
-    String::new()
-}
 
-fn grab_tool_input_from_object(obj: &serde_json::Map<String, Value>) -> Option<Value> {
-    core_policy::hook_common::tool_input_value_from_map(obj)
-}
-
-pub fn tool_input_of(event: &Value) -> Value {
-    if let Some(obj) = event.as_object() {
-        if let Some(v) = grab_tool_input_from_object(obj)
-            && v.is_object() {
-                return v;
-            }
-        for nest in HOOK_EVENT_NESTED {
-            if let Some(nobj) = obj.get(*nest).and_then(Value::as_object)
-                && let Some(v) = grab_tool_input_from_object(nobj)
-                    && v.is_object() {
-                        return v;
-                    }
-        }
-    }
-    json!({})
-}
 
 /// 从 stdin JSON 提取会话标识。
 ///
@@ -899,7 +579,7 @@ fn extract_first_session_string_including_tool_input(event: &Value) -> Option<St
             return Some(s);
         }
     // Parent session in tool_input must win over nested `hookPayload.conversation_id` (subagent threads).
-    if let Some(s) = try_extract_parent_session_from_tool_json(&tool_input_of(event)) {
+    if let Some(s) = try_extract_parent_session_from_tool_json(&hook_dispatch::extract_tool_input(event)) {
         return Some(s);
     }
     if let Some(s) = extract_first_session_string(event) {
@@ -972,7 +652,7 @@ struct SessionTerminalLedger {
 const SESSION_TERMINAL_LEDGER_VERSION: u32 = 2;
 
 fn prune_session_terminal_ledger(ledger: &mut SessionTerminalLedger) {
-    ledger.owned_pids.retain(|pid| is_process_alive(*pid));
+    ledger.owned_pids.retain(|pid| crate::hosts::file_state_lock::is_process_alive(*pid));
 }
 
 fn load_session_terminal_ledger(repo_root: &Path, event: &Value) -> SessionTerminalLedger {
@@ -1009,7 +689,7 @@ fn save_session_terminal_ledger(repo_root: &Path, event: &Value, ledger: &Sessio
             .owned_pids
             .iter()
             .copied()
-            .filter(|pid| is_process_alive(*pid))
+            .filter(|pid| crate::hosts::file_state_lock::is_process_alive(*pid))
             .collect(),
         pending_shells: ledger.pending_shells.clone(),
     };
@@ -1024,7 +704,7 @@ fn save_session_terminal_ledger(repo_root: &Path, event: &Value, ledger: &Sessio
 
 /// **`ROUTER_RS_CURSOR_TERMINAL_KILL_MODE`**：默认 `scoped`（仅杀掉本会话账本 `owned_pids` 内的活跃 terminal）。
 /// 设为 `legacy`/`all`/`repo`/`repo-wide`/`repowide` 时恢复旧行为：**仓库 cwd 范围内**扫描所有 stale active terminal（与是否本会话无关）。
-fn cursor_terminal_kill_use_scoped_ownership() -> bool {
+fn terminal_kill_use_scoped_ownership() -> bool {
     match std::env::var("ROUTER_RS_CURSOR_TERMINAL_KILL_MODE") {
         Ok(raw) => {
             let t = raw.trim().to_ascii_lowercase();
@@ -1144,8 +824,8 @@ fn parse_terminal_started_at_unix_ms(raw: &str) -> Option<u64> {
         .map(|dt| dt.with_timezone(&Utc).timestamp_millis().max(0) as u64)
 }
 
-fn cursor_post_tool_shell_terminal_track(repo_root: &Path, event: &Value) {
-    let ti = tool_input_of(event);
+fn post_tool_shell_terminal_track(repo_root: &Path, event: &Value) {
+    let ti = crate::hosts::hook_dispatch::extract_tool_input(event);
     let (cmd, cwd) = tool_input_shell_command_and_cwd(&ti);
     let Some(cmd_s) = cmd else {
         return;

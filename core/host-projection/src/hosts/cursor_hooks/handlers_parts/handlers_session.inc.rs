@@ -7,7 +7,7 @@ fn handle_session_start(repo_root: &Path, event: &Value) -> Value {
         return json!({ "additional_context": "" });
     }
     let ctx = format!("Repo: {}", repo_root.display());
-    let ctx = compact_cursor_sessionstart_context(vec![ctx]).unwrap_or_default();
+    let ctx = crate::hosts::hook_dispatch::compact_contexts(vec![ctx], crate::hooks::router_rs_sessionstart_context_max_bytes()).unwrap_or_default();
     if let Err(e) = hooks::init_tracker(repo_root) {
         eprintln!("[router-rs warning] init_tracker failed: {e}");
     }
@@ -134,7 +134,7 @@ fn handle_before_shell_execution(repo_root: &Path, event: &Value) -> Value {
         ledger.pending_shells.push(PendingShellRecord {
             command_norm: cmd_norm,
             cwd_raw,
-            queued_ms: now_millis(),
+            queued_ms: crate::hosts::file_state_lock::now_millis(),
         });
         trim_pending_shell_records(&mut ledger);
         save_session_terminal_ledger(repo_root, event, &ledger);
@@ -238,10 +238,10 @@ fn handle_session_end(repo_root: &Path, event: &Value) -> Value {
     sweep_stale_hook_state_by_age(repo_root, event);
     // 默认不扫其它会话的 review/adversarial/session 文件（同仓库多 Cursor 会话避免互删）。
     // 需清 session_id/cwd 漂移遗留的全目录 stale 时，设 `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP=1`。
-    if hooks::router_rs_cursor_hook_state_legacy_full_sweep_enabled() {
+    if hooks::router_rs_hook_state_legacy_full_sweep_enabled() {
         sweep_review_gate_state_dir(repo_root);
     }
-    let owned_filter = if cursor_terminal_kill_use_scoped_ownership() {
+    let owned_filter = if terminal_kill_use_scoped_ownership() {
         Some(&owned)
     } else {
         None
@@ -283,7 +283,7 @@ fn hook_state_lock_removable_for_sweep(lock_path: &Path) -> bool {
     if !lock_path.is_file() {
         return true;
     }
-    let days = hooks::router_rs_cursor_hook_state_stale_sweep_days();
+    let days = hooks::router_rs_hook_state_stale_sweep_days();
     if days > 0 {
         let cutoff_system = SystemTime::now() - std::time::Duration::from_secs(days.saturating_mul(86_400));
         if hook_state_file_mtime_stale(lock_path, cutoff_system) {
@@ -293,16 +293,16 @@ fn hook_state_lock_removable_for_sweep(lock_path: &Path) -> bool {
     let Ok(existing) = fs::read_to_string(lock_path) else {
         return true;
     };
-    let Some((pid, ts_ms)) = parse_lock_metadata(&existing) else {
+    let Some((pid, ts_ms)) = crate::hosts::file_state_lock::parse_lock_metadata(&existing) else {
         return true;
     };
     if days > 0 {
-        let cutoff_ms = now_millis().saturating_sub(days.saturating_mul(86_400 * 1000));
+        let cutoff_ms = crate::hosts::file_state_lock::now_millis().saturating_sub(days.saturating_mul(86_400 * 1000));
         if ts_ms < cutoff_ms {
             return true;
         }
     }
-    !is_process_alive(pid)
+    !crate::hosts::file_state_lock::is_process_alive(pid)
 }
 
 fn companion_lock_path_for_hook_state_file(path: &Path) -> Option<PathBuf> {
@@ -353,7 +353,7 @@ fn hook_state_file_is_stale(
 
 /// Age-based sweep of owned hook-state files (default 7d). Skips current `session_key` paths.
 fn sweep_stale_hook_state_by_age(repo_root: &Path, event: &Value) {
-    let days = hooks::router_rs_cursor_hook_state_stale_sweep_days();
+    let days = hooks::router_rs_hook_state_stale_sweep_days();
     if days == 0 {
         return;
     }
@@ -551,7 +551,7 @@ struct TerminalObservation {
     started_at_ms: Option<u64>,
 }
 
-fn cursor_kill_stale_terminals_disabled_by_env() -> bool {
+fn kill_stale_terminals_disabled_by_env() -> bool {
     let Ok(raw) = std::env::var("ROUTER_RS_CURSOR_KILL_STALE_TERMINALS") else {
         return false;
     };
@@ -725,7 +725,7 @@ fn terminate_pids_batch(targets: &[TerminalKillTarget]) -> (Vec<u32>, Vec<(u32, 
     let mut deadline_slices = 20;
     while deadline_slices > 0 && !remaining.is_empty() {
         thread::sleep(Duration::from_millis(100));
-        remaining.retain(|t| is_process_alive(t.pid));
+        remaining.retain(|t| crate::hosts::file_state_lock::is_process_alive(t.pid));
         deadline_slices -= 1;
     }
 
@@ -741,7 +741,7 @@ fn terminate_pids_batch(targets: &[TerminalKillTarget]) -> (Vec<u32>, Vec<(u32, 
     let mut killed = Vec::new();
     let mut failed = Vec::new();
     for t in targets {
-        if !is_process_alive(t.pid) {
+        if !crate::hosts::file_state_lock::is_process_alive(t.pid) {
             killed.push(t.pid);
         } else {
             failed.push((t.pid, format!("SIGKILL did not reap pid={}", t.pid)));
@@ -759,7 +759,7 @@ fn terminate_stale_terminal_processes(
     repo_root: &Path,
     owned_pids: Option<&HashSet<u32>>,
 ) -> StaleTerminalKillReport {
-    if cursor_kill_stale_terminals_disabled_by_env() {
+    if kill_stale_terminals_disabled_by_env() {
         return StaleTerminalKillReport::default();
     }
     let Some(terminals_dir) = resolve_cursor_terminals_dir(repo_root) else {
@@ -849,7 +849,7 @@ fn terminate_stale_terminal_processes_in_dir(
                 continue;
             }
         }
-        if !is_process_alive(pid) {
+        if !crate::hosts::file_state_lock::is_process_alive(pid) {
             report.skipped_dead += 1;
             continue;
         }
@@ -913,8 +913,8 @@ pub fn dispatch_cursor_hook_event(
 ) -> Value {
     let lowered = event_name.trim().to_lowercase();
     let lowered = lowered.as_str();
-    let dispatch_text = prompt_text(payload);
-    let disabled = cursor_review_gate_suppressed(repo_root, &dispatch_text);
+    let dispatch_text = crate::hosts::hook_dispatch::extract_prompt_text(payload);
+    let disabled = crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &dispatch_text);
 
     if disabled && matches!(
         lowered,

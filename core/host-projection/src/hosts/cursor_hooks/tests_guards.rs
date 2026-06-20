@@ -17,14 +17,14 @@ struct ReviewGateDisableTestGuard;
 impl ReviewGateDisableTestGuard {
     fn new() -> Self {
         ensure_test_deps();
-        super::set_test_review_gate_disable_override(Some(true));
+        core_policy::env_flags::set_test_review_gate_disabled_override(Some(true));
         Self
     }
 }
 
 impl Drop for ReviewGateDisableTestGuard {
     fn drop(&mut self) {
-        super::set_test_review_gate_disable_override(None);
+        core_policy::env_flags::set_test_review_gate_disabled_override(None);
     }
 }
 
@@ -99,7 +99,7 @@ struct ReviewGateActiveGuard {
 impl ReviewGateActiveGuard {
     fn new() -> Self {
         // Force gate on regardless of parallel env pollution (`ROUTER_RS_*_REVIEW_GATE_DISABLE=1`).
-        super::set_test_review_gate_disable_override(Some(false));
+        core_policy::env_flags::set_test_review_gate_disabled_override(Some(false));
         Self {
             _env: ReviewGateDisableEnvClearGuard::new(),
         }
@@ -108,7 +108,7 @@ impl ReviewGateActiveGuard {
 
 impl Drop for ReviewGateActiveGuard {
     fn drop(&mut self) {
-        super::set_test_review_gate_disable_override(None);
+        core_policy::env_flags::set_test_review_gate_disabled_override(None);
     }
 }
 
@@ -375,7 +375,7 @@ impl Drop for ForceHookStateLockFailureGuard {
 }
 
 /// 序列化修改 `CURSOR_TERMINALS_DIR` 的用例，避免并行测试互相覆盖环境变量。
-fn cursor_terminals_dir_env_lock() -> std::sync::MutexGuard<'static, ()> {
+fn terminals_dir_env_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
     LOCK.get_or_init(|| std::sync::Mutex::new(()))
         .lock()
@@ -383,7 +383,7 @@ fn cursor_terminals_dir_env_lock() -> std::sync::MutexGuard<'static, ()> {
 }
 
 /// `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` 进程全局；并行用例同时 set/remove 会竞态。
-fn cursor_hook_outbound_context_max_chars_env_lock() -> std::sync::MutexGuard<'static, ()> {
+fn hook_outbound_context_max_chars_env_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
     LOCK.get_or_init(|| std::sync::Mutex::new(()))
         .lock()
@@ -558,7 +558,7 @@ fn session_key_prefers_root_session_over_nested_child_conversation() {
 }
 
 #[test]
-fn cursor_session_key_child_conversation_with_parent_session_id_in_tool_input() {
+fn session_key_child_conversation_with_parent_session_id_in_tool_input() {
     let parent = "parent-chat-42";
     let subagent_only = json!({
         "cwd": FRAMEWORK_HARNESS_TEST_CWD,

@@ -165,14 +165,13 @@ pub trait HostHookDispatcher: HostHookConfig {
         // Inject pending session-start audit into the first event after
         // SessionStart — not into SessionStart itself. Written by
         // dispatch_hook_command(), consumed once here.
-        if output.is_none() && normalized.as_ref() != "sessionstart" {
-            if let Some(audit) = crate::hosts::worktree_auto_save::take_audit_result(
+        if output.is_none() && normalized.as_ref() != "sessionstart"
+            && let Some(audit) = crate::hosts::worktree_auto_save::take_audit_result(
                 event.repo_root,
                 self.host_id(),
             ) {
                 return Some(HookOutput::AdditionalContext(audit));
             }
-        }
         output
     }
 }
@@ -212,19 +211,26 @@ pub fn normalize_event_name(name: &str) -> std::borrow::Cow<'_, str> {
 
 /// Extract prompt text from event payload, trying all common field names.
 /// This is the superset of all host field names (13 direct keys).
+///
+/// Field ordering is by observed frequency across closed-set hosts:
+///   - `prompt`, `user_prompt`: Claude + OpenCode (highest frequency)
+///   - `message`, `content`: multi-host generic payloads
+///   - `input`, `text`: OpenCode + generic
+///   - `userPrompt`, `userMessage`: Cursor (camelCase)
+///   - remaining: rare / host-specific fallbacks
 pub fn extract_prompt_text(event: &Value) -> String {
     const KEYS: &[&str] = &[
         "prompt",
         "user_prompt",
         "message",
+        "content",
         "input",
         "text",
         "userPrompt",
         "userMessage",
-        "command",
-        "content",
-        "userContent",
         "query",
+        "userContent",
+        "command",
         "composerText",
         "editorText",
     ];
@@ -239,7 +245,7 @@ pub fn extract_prompt_text(event: &Value) -> String {
 }
 
 /// Scan nested messages arrays for the last user-role message.
-fn extract_prompt_from_nested_messages(event: &Value) -> String {
+pub fn extract_prompt_from_nested_messages(event: &Value) -> String {
     extract_prompt_from_nested_messages_inner(event, 0)
 }
 
@@ -284,7 +290,7 @@ fn extract_prompt_from_nested_messages_inner(event: &Value, depth: usize) -> Str
 }
 
 /// Check if a message object has a user/human role.
-fn is_user_message_role(obj: &serde_json::Map<String, Value>) -> bool {
+pub fn is_user_message_role(obj: &serde_json::Map<String, Value>) -> bool {
     let role = obj
         .get("role")
         .or_else(|| obj.get("type"))
@@ -297,8 +303,8 @@ fn is_user_message_role(obj: &serde_json::Map<String, Value>) -> bool {
 }
 
 /// Extract body text from a message object.
-fn message_body_text(msg: &serde_json::Map<String, Value>) -> Option<String> {
-    for key in &["content", "text", "body", "message"] {
+pub fn message_body_text(msg: &serde_json::Map<String, Value>) -> Option<String> {
+    for key in &["content", "text", "body", "message", "value"] {
         if let Some(val) = msg.get(*key) {
             if let Some(s) = val.as_str()
                 && !s.trim().is_empty() {
@@ -356,6 +362,65 @@ pub fn extract_completion_text(event: &HookEvent) -> String {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string()
+}
+
+/// Shared stop signal text: combines prompt + assistant response for gate detection.
+/// Used by Claude, Codex, OpenCode Stop handlers. Cursor uses `hook_event_signal_text` with scrape.
+pub fn stop_signal_text_from_payload(payload: &Value) -> String {
+    let prompt = extract_prompt_text(payload);
+    let response = extract_response_text(payload);
+    if prompt.trim().is_empty() {
+        response
+    } else if response.trim().is_empty() {
+        prompt
+    } else {
+        format!("{prompt}\n{response}")
+    }
+}
+
+/// Extract assistant response text from payload, covering all host response key variants.
+/// Keys checked: response, agent_response, agentResponse, assistant_response,
+/// last_assistant_message, content, text, output (first non-empty wins).
+pub fn extract_response_text(payload: &Value) -> String {
+    const RESPONSE_KEYS: &[&str] = &[
+        "response",
+        "agent_response",
+        "agentResponse",
+        "assistant_response",
+        "last_assistant_message",
+        "content",
+        "text",
+        "output",
+    ];
+    for key in RESPONSE_KEYS {
+        if let Some(value) = payload.get(*key).and_then(Value::as_str)
+            && !value.trim().is_empty() {
+                return value.to_string();
+            }
+    }
+    String::new()
+}
+
+/// Borrow response text directly from payload (zero-alloc when possible).
+/// Returns `None` if no response key is found or value is not a string.
+pub fn borrow_response_text<'a>(payload: &'a Value) -> Option<&'a str> {
+    const RESPONSE_KEYS: &[&str] = &[
+        "response",
+        "agent_response",
+        "agentResponse",
+        "assistant_response",
+        "last_assistant_message",
+        "content",
+        "text",
+        "output",
+    ];
+    for key in RESPONSE_KEYS {
+        if let Some(value) = payload.get(*key).and_then(Value::as_str)
+            && !value.trim().is_empty() {
+                return Some(value);
+            }
+    }
+    None
 }
 
 /// Re-export from core-policy (single source of truth).
@@ -516,10 +581,209 @@ pub fn is_verification_command(tool_name: &str, command: &str) -> bool {
         || cmd_lower.contains("cargo clippy")
         || cmd_lower.contains("cargo fmt")
         || cmd_lower.contains("npm test")
+        || cmd_lower.contains("npm run test")
         || cmd_lower.contains("pytest")
         || cmd_lower.contains("make test")
         || cmd_lower.contains("make check")
         || cmd_lower.contains("go test")
         || cmd_lower.contains("git diff")
         || cmd_lower.contains("git log")
+}
+
+// ────────────────────────────────────────────────────────────────
+// Shared Stop decision logic (used by all hosts)
+// ────────────────────────────────────────────────────────────────
+
+/// `need=` segment for REVIEW_GATE incomplete stop lines.
+/// Shared across all hosts for consistent observation classification.
+pub const REVIEW_GATE_FOLLOWUP_NEED_SEGMENT: &str =
+    "need=deep_reviewer_cycle general-purpose|best-of-n|deep-reviewer fork_context=false";
+
+/// Stable hint suffix for REVIEW_GATE incomplete lines.
+pub const REVIEW_GATE_FOLLOWUP_HINT_SEGMENT: &str =
+    "hint=fork_context_json_false_not_omitted";
+
+/// `merge_hook_nudge_paragraph` dedup prefix for REVIEW_GATE detail.
+pub const REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX: &str = "router-rs REVIEW_GATE detail";
+
+/// Check if goal tracking is active for this state.
+/// Shared: tracks whether `goal_required` or `goal_drive_entry_active` is set.
+pub fn shared_tracks_goal(goal_required: bool, goal_drive_entry_active: bool) -> bool {
+    goal_required || goal_drive_entry_active
+}
+
+/// Check if the goal gate is satisfied.
+/// Shared decision logic: goal is satisfied when:
+/// 1. Goal tracking is not active, OR
+/// 2. Override is in effect, OR
+/// 3. All three signals (contract, progress, verify) are seen.
+pub fn shared_goal_is_satisfied(
+    goal_required: bool,
+    goal_drive_entry_active: bool,
+    goal_contract_seen: bool,
+    goal_progress_seen: bool,
+    goal_verify_or_block_seen: bool,
+    review_override: bool,
+    delegation_override: bool,
+) -> bool {
+    if !shared_tracks_goal(goal_required, goal_drive_entry_active) {
+        return true;
+    }
+    if review_override || delegation_override {
+        return true;
+    }
+    goal_contract_seen && goal_progress_seen && goal_verify_or_block_seen
+}
+
+/// Check if review output lint should be suppressed during Stop.
+/// Shared: skip lint when review gate or goal followup is active.
+pub fn shared_stop_review_output_lint_suppressed(
+    review_advisory_needed: bool,
+    goal_required: bool,
+    goal_drive_entry_active: bool,
+    goal_contract_seen: bool,
+    goal_progress_seen: bool,
+    goal_verify_or_block_seen: bool,
+    review_override: bool,
+    delegation_override: bool,
+) -> bool {
+    if review_advisory_needed {
+        return true;
+    }
+    if shared_tracks_goal(goal_required, goal_drive_entry_active)
+        && !shared_goal_is_satisfied(
+            goal_required,
+            goal_drive_entry_active,
+            goal_contract_seen,
+            goal_progress_seen,
+            goal_verify_or_block_seen,
+            review_override,
+            delegation_override,
+        )
+    {
+        return true;
+    }
+    false
+}
+
+/// Unified goal gate update — **single implementation for all 4 hosts**.
+///
+/// Call this from each host's Stop/PostTool handler. It:
+/// 1. Detects goal drive entry from prompt (via `is_framework_goal_entry_prompt`)
+/// 2. Detects goal signals from response text (contract / progress / verify)
+/// 3. Optionally reads disk state via `hooks::evaluate_goal_readiness_from_disk` (more precise)
+/// 4. Updates `HookReviewDiskCore` fields in-place
+///
+/// Hosts should pass their `review_state.core` (or equivalent `HookReviewDiskCore`).
+pub fn update_goal_gate(
+    core: &mut core_policy::HookReviewDiskCore,
+    prompt: &str,
+    response_text: &str,
+    goal_drive_entrypoint: bool,
+) {
+    update_goal_gate_with_disk(core, prompt, response_text, goal_drive_entrypoint, None, None)
+}
+
+/// Extended goal gate update with optional disk-based readiness evaluation.
+///
+/// When `repo_root` and `task_id` are provided, reads `GOAL_STATE.json` via
+/// `hooks::evaluate_goal_readiness_from_disk` for more precise signal detection.
+/// Disk signals are merged with regex-based signals (union: either can arm a field).
+pub fn update_goal_gate_with_disk(
+    core: &mut core_policy::HookReviewDiskCore,
+    prompt: &str,
+    response_text: &str,
+    goal_drive_entrypoint: bool,
+    repo_root: Option<&std::path::Path>,
+    task_id: Option<&str>,
+) {
+    // Arm goal drive on entry
+    if goal_drive_entrypoint {
+        core.goal_drive_entry_active = true;
+    }
+    // Only scan for signals if goal tracking is active
+    if !core.goal_drive_entry_active {
+        return;
+    }
+    // Scan combined signal text for goal signals (regex-based, all hosts)
+    let signal = if prompt.is_empty() {
+        response_text.to_string()
+    } else if response_text.is_empty() {
+        prompt.to_string()
+    } else {
+        format!("{prompt}\n{response_text}")
+    };
+    if core_policy::hook_common::has_structured_goal_contract(&signal) {
+        core.goal_contract_seen = true;
+    }
+    if core_policy::hook_common::has_goal_progress_signal(&signal) {
+        core.goal_progress_seen = true;
+    }
+    if core_policy::hook_common::has_goal_verify_or_block_signal(&signal) {
+        core.goal_verify_or_block_seen = true;
+    }
+    // Disk-based readiness (more precise: reads GOAL_STATE.json + EVIDENCE_INDEX.json)
+    if let (Some(root), Some(tid)) = (repo_root, task_id) {
+        let goal_val = serde_json::Value::Null; // placeholder; real evaluator reads disk
+        let readiness = crate::hooks::evaluate_goal_readiness_from_disk(root, &goal_val, tid);
+        if readiness.contract {
+            core.goal_contract_seen = true;
+        }
+        if readiness.progress {
+            core.goal_progress_seen = true;
+        }
+        if readiness.verification {
+            core.goal_verify_or_block_seen = true;
+        }
+    }
+}
+
+/// Check if goal gate is satisfied using shared `HookReviewDiskCore` fields.
+pub fn goal_gate_satisfied(core: &core_policy::HookReviewDiskCore) -> bool {
+    shared_goal_is_satisfied(
+        false, // goal_required is Cursor-specific; shared uses goal_drive_entry_active
+        core.goal_drive_entry_active,
+        core.goal_contract_seen,
+        core.goal_progress_seen,
+        core.goal_verify_or_block_seen,
+        core.review_override,
+        core.delegation_override,
+    )
+}
+
+/// Generate the goal stop followup line using shared logic.
+/// Phase-aware: includes short code for goal drive continuation.
+pub fn shared_goal_stop_followup_line(
+    goal_contract_seen: bool,
+    goal_progress_seen: bool,
+    goal_verify_or_block_seen: bool,
+    goal_followup_count: u32,
+) -> String {
+    let missing = {
+        let mut m = Vec::new();
+        if !goal_contract_seen {
+            m.push("contract");
+        }
+        if !goal_progress_seen {
+            m.push("progress");
+        }
+        if !goal_verify_or_block_seen {
+            m.push("verify");
+        }
+        m.join(",")
+    };
+    format!(
+        "router-rs GOAL_FOLLOWUP missing={} nudge={}",
+        missing, goal_followup_count
+    )
+}
+
+/// Shared advisory for settings changed but not validated.
+pub fn shared_settings_validation_advisory() -> String {
+    "Validate Claude hook/settings JSON before ending this turn.".to_string()
+}
+
+/// Shared advisory for framework source changed but not tested.
+pub fn shared_framework_test_advisory() -> String {
+    "Framework source files were modified. Consider running tests.".to_string()
 }

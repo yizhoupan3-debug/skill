@@ -125,9 +125,9 @@ fn user_prompt_submit_review_emits_subagent_gate_context() {
     assert!(ctx.contains("fork_context=false"));
     // The nudge references "reviewer_lanes 闭集" without enumerating lane names.
     if !ctx.is_empty() {
-        assert!(ctx.len() <= codex_additional_context_max_bytes());
+        assert!(ctx.len() <= additional_context_max_bytes());
     }
-    let state = codex_load_state(&repo, &payload).unwrap().unwrap();
+    let state = load_state(&repo, &payload).unwrap().unwrap();
     assert_eq!(state.seq, 1);
     assert!(state.review_gate.review_required);
 }
@@ -146,7 +146,7 @@ fn user_prompt_submit_narrow_path_skips_review_arm() {
         out.is_none(),
         "narrow single-path review must not arm gate: {out:?}"
     );
-    let armed = codex_load_state(&repo, &payload)
+    let armed = load_state(&repo, &payload)
         .ok()
         .flatten()
         .map(|s| s.review_gate.review_required)
@@ -171,15 +171,15 @@ fn user_prompt_submit_with_override_does_not_emit() {
 #[serial]
 fn additional_context_is_deduped_and_capped() {
     let duplicate = "Codex live state: one".to_string();
-    let long_line = "x".repeat(codex_additional_context_max_bytes());
-    let ctx = codex_compact_contexts(vec![
+    let long_line = "x".repeat(additional_context_max_bytes());
+    let ctx = compact_contexts_shared(vec![
         duplicate.clone(),
         duplicate,
         long_line.clone(),
         long_line,
     ])
     .unwrap();
-    assert!(ctx.len() <= codex_additional_context_max_bytes());
+    assert!(ctx.len() <= additional_context_max_bytes());
     assert_eq!(ctx.matches("Codex live state: one").count(), 1);
 }
 
@@ -238,7 +238,7 @@ fn post_tool_use_with_subagent_marks_seen_without_explore_counting_deep_independ
     });
     let out = run_gate(&repo, &post).unwrap();
     assert!(out.is_none());
-    let state = codex_load_state(&repo, &post).unwrap().unwrap();
+    let state = load_state(&repo, &post).unwrap().unwrap();
     assert!(state.review_subagent_seen);
     assert!(
         !state.review_gate.independent_reviewer_seen,
@@ -269,7 +269,7 @@ fn post_tool_general_purpose_fork_false_counts_deep_independent() {
     });
     let out = run_gate(&repo, &post).unwrap();
     assert!(out.is_none());
-    let state = codex_load_state(&repo, &post).unwrap().unwrap();
+    let state = load_state(&repo, &post).unwrap().unwrap();
     assert!(state.review_gate.independent_reviewer_seen);
     assert!(state.review_lane_seen);
 }
@@ -293,7 +293,7 @@ fn post_tool_review_lane_fork_false_does_not_count_deep_independent() {
     });
     let out = run_gate(&repo, &post).unwrap();
     assert!(out.is_none());
-    let state = codex_load_state(&repo, &post).unwrap().unwrap();
+    let state = load_state(&repo, &post).unwrap().unwrap();
     assert!(
         !state.review_gate.independent_reviewer_seen,
         "review subagent_type is Claude-only; must not satisfy Codex reviewer_lanes"
@@ -319,7 +319,7 @@ fn post_tool_use_without_subagent_type_marks_generic_and_untyped_label() {
     });
     let out = run_gate(&repo, &post).unwrap();
     assert!(out.is_none());
-    let state = codex_load_state(&repo, &post).unwrap().unwrap();
+    let state = load_state(&repo, &post).unwrap().unwrap();
     assert!(state.generic_subagent_seen);
     assert!(state.review_subagent_seen);
     assert_eq!(state.review_subagent_tool.as_deref(), Some("Task#untyped"));
@@ -374,7 +374,7 @@ fn stop_blocks_when_hook_state_corrupt() {
         "cwd": repo.to_string_lossy().to_string(),
         "prompt":"x"
     });
-    let path = state::codex_state_path(&repo, &payload);
+    let path = state::state_path_for_host(&repo, &payload);
     fs::write(&path, b"{not json").unwrap();
     // B-3: corrupted state auto-recovers (backup .bak + reset to fresh)
     let out = handlers::handle_codex_stop(&repo, &payload);
@@ -399,14 +399,14 @@ fn session_key_without_stable_identifier_is_deterministic() {
     unsafe { std::env::remove_var("ROUTER_RS_CODEX_HOOK_STATE_SALT") };
     let repo = fresh_repo();
     let event = json!({"cwd": repo.to_string_lossy()});
-    let k1 = state::codex_session_key(&repo, &event);
-    let k2 = state::codex_session_key(&repo, &event);
+    let k1 = state::session_key_for_host(&repo, &event);
+    let k2 = state::session_key_for_host(&repo, &event);
     assert_eq!(k1, k2, "fallback keys must alias the same hook-state file");
     assert_eq!(k1.len(), 32);
 }
 
 #[test]
-fn codex_session_key_differs_by_payload_session_when_strict_off() {
+fn session_key_differs_by_payload_session_when_strict_off() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY");
     unsafe { std::env::set_var("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY", "0") };
@@ -414,8 +414,8 @@ fn codex_session_key_differs_by_payload_session_when_strict_off() {
     unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     let repo = fresh_repo();
     let cwd = repo.to_string_lossy().to_string();
-    let k1 = state::codex_session_key(&repo, &json!({"session_id":"sess-a","cwd":cwd}));
-    let k2 = state::codex_session_key(&repo, &json!({"session_id":"sess-b","cwd":cwd}));
+    let k1 = state::session_key_for_host(&repo, &json!({"session_id":"sess-a","cwd":cwd}));
+    let k2 = state::session_key_for_host(&repo, &json!({"session_id":"sess-b","cwd":cwd}));
     assert_ne!(
         k1, k2,
         "payload session_id must isolate hook-state when strict off"
@@ -457,7 +457,7 @@ fn delegation_stop_does_not_block_when_only_explore_subagent_observed() {
 #[test]
 #[serial]
 fn additional_context_truncates_on_newline_preference_under_small_budget() {
-    // codex_additional_context_max_bytes clamps to [256, 8192]; use the
+    // additional_context_max_bytes clamps to [256, 8192]; use the
     // floor so the assertions exercise the real budget rather than a
     // value that the clamp silently rewrites.
     unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
@@ -465,10 +465,14 @@ fn additional_context_truncates_on_newline_preference_under_small_budget() {
     let line1 = format!("{}{}", "A".repeat(24), ": L1");
     let line2 = format!("{}{}", "C".repeat(24), ": L2");
     let line3 = "B".repeat(240);
-    let ctx = codex_compact_contexts(vec![format!("{line1}\n{line2}\n{line3}")]).unwrap();
+    let ctx = compact_contexts_shared(vec![format!("{line1}\n{line2}\n{line3}")]).unwrap();
     unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX") };
     unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
-    assert!(ctx.ends_with("..."));
+    assert!(
+        ctx.ends_with("...(截断)"),
+        "expected codex truncation suffix, got: {}",
+        &ctx[ctx.len().saturating_sub(20)..]
+    );
     assert!(
         ctx.matches('\n').count() >= 1,
         "expected multiple lines before ellipsis when budget allows: {ctx:?}"
@@ -477,10 +481,10 @@ fn additional_context_truncates_on_newline_preference_under_small_budget() {
 }
 
 #[test]
-fn codex_compact_contexts_dedup_requires_exact_trim_match() {
+fn compact_contexts_dedup_requires_exact_trim_match() {
     let a = "Repo: /path/A";
     let b = "repo: /path/B";
-    let ctx = codex_compact_contexts(vec![a.to_string(), b.to_string()]).expect("ctx");
+    let ctx = compact_contexts_shared(vec![a.to_string(), b.to_string()]).expect("ctx");
     assert!(
         ctx.contains(a),
         "distinct lines must not merge on ASCII case: {ctx:?}"
@@ -491,24 +495,28 @@ fn codex_compact_contexts_dedup_requires_exact_trim_match() {
     );
 }
 
-/// Multi-segment `codex_compact_contexts` join order is preserved when the
+/// Multi-segment `compact_contexts_shared` join order is preserved when the
 /// combined string is truncated (SessionStart budget). Complements
 /// `additional_context_truncates_on_newline_preference_under_small_budget`
 /// (single blob + newline preference inside one segment).
 #[test]
 #[serial]
-fn codex_compact_contexts_preserves_join_order_under_small_budget() {
+fn compact_contexts_preserves_join_order_under_small_budget() {
     unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
     unsafe { std::env::set_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX", "256") };
     let part1 = "CODEX_JOIN_ORDER_MARK_FIRST:alpha";
     let part2 = "CODEX_JOIN_ORDER_MARK_SECOND:beta";
     let part3 = format!("CODEX_JOIN_ORDER_MARK_TAIL:{}", "Z".repeat(280));
-    let ctx = codex_compact_contexts(vec![part1.to_string(), part2.to_string(), part3])
+    let ctx = compact_contexts_shared(vec![part1.to_string(), part2.to_string(), part3])
         .expect("expected combined contexts");
     unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX") };
     unsafe { std::env::remove_var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES") };
     assert!(ctx.len() <= 256, "len={}", ctx.len());
-    assert!(ctx.ends_with("..."));
+    assert!(
+        ctx.ends_with("...(截断)"),
+        "expected codex truncation suffix, got: {}",
+        &ctx[ctx.len().saturating_sub(20)..]
+    );
     assert!(
         ctx.contains("CODEX_JOIN_ORDER_MARK_FIRST"),
         "first joined segment should survive truncation: {ctx:?}"
@@ -573,7 +581,7 @@ fn post_tool_use_without_state_is_non_fatal() {
     });
     let out = run_gate(&repo, &post).unwrap();
     assert!(out.is_none());
-    let state = codex_load_state(&repo, &post)
+    let state = load_state(&repo, &post)
         .unwrap()
         .expect("lazy hook-state");
     assert!(state.generic_subagent_seen);
@@ -597,7 +605,7 @@ fn post_tool_use_without_prior_state_persists_independent_deep_reviewer() {
     });
     let out = run_gate(&repo, &post).unwrap();
     assert!(out.is_none());
-    let state = codex_load_state(&repo, &post).unwrap().expect("state");
+    let state = load_state(&repo, &post).unwrap().expect("state");
     assert!(state.review_gate.independent_reviewer_seen);
     assert!(
         state.review_gate.review_required,
@@ -617,7 +625,7 @@ fn post_tool_deep_reviewer_without_review_prompt_does_not_arm_gate() {
         "tool_input":{"subagent_type":"general-purpose","fork_context":false}
     });
     let _ = run_gate(&repo, &post).unwrap();
-    let state = codex_load_state(&repo, &post).unwrap().expect("state");
+    let state = load_state(&repo, &post).unwrap().expect("state");
     assert!(state.review_gate.independent_reviewer_seen);
     assert!(
         !state.review_gate.review_required,
@@ -649,7 +657,7 @@ fn lazy_post_tool_deep_reviewer_arms_gate_and_stop_blocks_without_compact() {
         "tool_input":{"subagent_type":"general-purpose","fork_context":false}
     });
     assert!(run_gate(&repo, &post).unwrap().is_none());
-    let loaded = codex_load_state(&repo, &post).unwrap().unwrap();
+    let loaded = load_state(&repo, &post).unwrap().unwrap();
     assert!(loaded.review_gate.independent_reviewer_seen);
     assert!(
         loaded.review_gate.review_required,
@@ -713,7 +721,7 @@ fn post_tool_use_with_invalid_state_blocks_fail_closed() {
         "prompt":"全面review"
     });
     let _ = run_gate(&repo, &start).unwrap();
-    let state_path = codex_state_path(&repo, &start);
+    let state_path = state_path_for_host(&repo, &start);
     fs::write(&state_path, "{invalid").unwrap();
     let post = json!({
         "hook_event_name":"PostToolUse",
@@ -908,7 +916,7 @@ fn stop_with_subagent_seen_resets_state_after_general_purpose_deep_reviewer() {
     });
     let out = run_gate(&repo, &stop).unwrap();
     assert!(out.is_none());
-    let state = codex_load_state(&repo, &stop).unwrap().unwrap();
+    let state = load_state(&repo, &stop).unwrap().unwrap();
     assert_eq!(state.seq, 0);
     assert!(!state.review_subagent_seen);
     assert!(!state.review_gate.independent_reviewer_seen);
@@ -1038,7 +1046,7 @@ fn my_light_post_tool_suppress_clears_hook_state() {
     });
     let _ = run_gate(&repo, &arm).unwrap();
     assert!(
-        codex_load_state(&repo, &arm)
+        load_state(&repo, &arm)
             .unwrap()
             .map(|s| s.review_gate.review_required)
             .unwrap_or(false)
@@ -1051,7 +1059,7 @@ fn my_light_post_tool_suppress_clears_hook_state() {
     });
     let _ = run_gate(&repo, &my).unwrap();
     assert!(
-        !codex_load_state(&repo, &my)
+        !load_state(&repo, &my)
             .unwrap()
             .map(|s| s.review_gate.review_required)
             .unwrap_or(true),
@@ -1067,7 +1075,7 @@ fn my_light_post_tool_suppress_clears_hook_state() {
     });
     let _ = run_gate(&repo, &post).unwrap();
     assert!(
-        codex_load_state(&repo, &post)
+        load_state(&repo, &post)
             .unwrap()
             .map(|s| s.seq)
             .unwrap_or(0)

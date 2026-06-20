@@ -5,7 +5,7 @@
 //!
 //! Helper 映射（core-policy）：
 //! - `ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE` → [`router_rs_review_spawn_first_nudge_enabled`]
-//! - `ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE` → [`router_rs_cursor_subagent_model_inherit_nudge_enabled`]
+//! - `ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE` → [`router_rs_subagent_model_inherit_nudge_enabled`]
 //! - `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`（+ legacy per-host 别名）→ [`router_rs_review_fork_context_missing_infer_false_enabled`]
 //! - `ROUTER_RS_REVIEW_GATE_DISABLE`（+ legacy per-host `ROUTER_RS_*_REVIEW_GATE_DISABLE`）→ [`router_rs_review_gate_disabled_for_host`]
 //! - `ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES`（legacy `ROUTER_RS_CURSOR_*`）→ [`router_rs_review_gate_stop_max_nudges_cap`]
@@ -30,8 +30,7 @@ const ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE_ENV: &str =
     "ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE";
 
 pub use core_policy::env_flags::{
-    router_rs_cursor_subagent_model_inherit_nudge_enabled,
-    router_rs_review_fork_context_missing_infer_false_enabled,
+    router_rs_subagent_model_inherit_nudge_enabled,
     router_rs_review_gate_disabled_for_host, router_rs_review_pending_cycle_max,
     router_rs_review_spawn_first_nudge_enabled,
 };
@@ -44,14 +43,14 @@ pub fn router_rs_pre_goal_enabled() -> bool {
 
 /// Hook-state: 是否对 `.cursor/hook-state/` 做**历史全目录前缀清扫**。
 /// Legacy env: `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP`.
-pub fn router_rs_cursor_hook_state_legacy_full_sweep_enabled() -> bool {
+pub fn router_rs_hook_state_legacy_full_sweep_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP")
 }
 
 /// 是否**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真。
 /// Canonical `ROUTER_RS_PRE_GOAL_STRICT_DISK`; legacy `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` still honored.
 /// Canonical explicitly set (`0`/`false`/`off`/`no`) wins over legacy; unset falls through to legacy.
-pub fn router_rs_cursor_pre_goal_strict_disk_enabled() -> bool {
+pub fn router_rs_pre_goal_strict_disk_enabled() -> bool {
     let canonical_key = "ROUTER_RS_PRE_GOAL_STRICT_DISK";
     let legacy_key = "ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK";
     if env::var(canonical_key).is_ok() {
@@ -61,12 +60,12 @@ pub fn router_rs_cursor_pre_goal_strict_disk_enabled() -> bool {
 }
 
 /// 恢复已从默认 `hooks.json` 移除的 5 个事件的完整 handler dispatch。
-pub fn router_rs_cursor_hook_legacy_subtracted_events_enabled() -> bool {
+pub fn router_rs_hook_legacy_subtracted_events_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS")
 }
 
 /// `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`（legacy）：hook-state 持久化失败时 beforeSubmit 仍 `continue: true`（应急）。
-pub fn router_rs_cursor_hook_state_fail_open_enabled() -> bool {
+pub fn router_rs_hook_state_fail_open_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN")
 }
 
@@ -74,7 +73,7 @@ pub fn router_rs_cursor_hook_state_fail_open_enabled() -> bool {
 /// Canonical `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` explicit opt-in still wins;
 /// legacy `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` **unset = on** (Cursor 历史默认).
 /// Deprecated: prefer canonical `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`.
-pub fn router_rs_cursor_review_fork_context_missing_infer_false_enabled() -> bool {
+pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
     if router_rs_env_enabled_default_false("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE") {
         return true;
     }
@@ -87,8 +86,8 @@ pub fn router_rs_task_ledger_flock_enabled() -> bool {
     let enabled = router_rs_env_enabled_default_true(ROUTER_RS_TASK_LEDGER_FLOCK_ENV);
     if !enabled {
         FLOCK_WARN.call_once(|| {
-            eprintln!(
-                "[router-rs] WARNING: ROUTER_RS_TASK_LEDGER_FLOCK is disabled;                  parallel writes to task ledger files may interleave"
+            tracing::warn!(
+                "[router-rs] ROUTER_RS_TASK_LEDGER_FLOCK is disabled; parallel writes to task ledger files may interleave"
             );
         });
     }
@@ -100,26 +99,26 @@ pub fn router_rs_hook_timing_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_HOOK_TIMING_ENV)
 }
 
-pub fn router_rs_cursor_cargo_check_sync_enabled() -> bool {
+pub fn router_rs_cargo_check_sync_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC")
 }
 
-pub fn router_rs_cursor_hook_state_dir_sync_enabled() -> bool {
+pub fn router_rs_hook_state_dir_sync_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC")
 }
 
-pub fn router_rs_cursor_hook_state_file_sync_enabled() -> bool {
+pub fn router_rs_hook_state_file_sync_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC")
 }
 
-pub fn router_rs_cursor_hook_state_lock_retries() -> u32 {
+pub fn router_rs_hook_state_lock_retries() -> u32 {
     env::var("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES")
         .ok()
         .and_then(|raw| raw.trim().parse::<u32>().ok())
         .unwrap_or(100)
 }
 
-pub fn router_rs_cursor_hook_state_stale_sweep_days() -> u64 {
+pub fn router_rs_hook_state_stale_sweep_days() -> u64 {
     let env_key = "ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS";
     match env::var(env_key) {
         Err(_) => 7,
@@ -131,7 +130,7 @@ pub fn router_rs_cursor_hook_state_stale_sweep_days() -> u64 {
             match raw.trim().parse::<u64>() {
                 Ok(n) => n,
                 Err(_) => {
-                    eprintln!("[router-rs] invalid {env_key}={raw:?}; using default 7");
+                    tracing::warn!("[router-rs] invalid {env_key}={raw:?}; using default 7");
                     7
                 }
             }
@@ -157,7 +156,7 @@ pub fn router_rs_env_enabled_default_false(var_name: &str) -> bool {
 }
 
 /// Canonical `ROUTER_RS_HOOK_SILENT`; legacy `ROUTER_RS_CURSOR_HOOK_SILENT` still honored.
-pub fn router_rs_cursor_hook_silent_enabled() -> bool {
+pub fn router_rs_hook_silent_enabled() -> bool {
     router_rs_env_enabled_default_false("ROUTER_RS_HOOK_SILENT")
         || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_SILENT")
 }
@@ -171,7 +170,7 @@ pub fn router_rs_continuity_post_tool_evidence_enabled() -> bool {
 }
 
 /// Canonical `ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`; legacy `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` still honored.
-pub fn router_rs_cursor_hook_outbound_context_max_bytes() -> usize {
+pub fn router_rs_hook_outbound_context_max_bytes() -> usize {
     let key_canonical = "ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS";
     let key_legacy = "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS";
     let raw = env::var(key_canonical)
@@ -185,7 +184,7 @@ pub fn router_rs_cursor_hook_outbound_context_max_bytes() -> usize {
             match trimmed.parse::<usize>() {
                 Ok(n) => n.clamp(1024, 65536),
                 Err(_) => {
-                    eprintln!(
+                    tracing::warn!(
                         "[router-rs] invalid {key_canonical} (or legacy {key_legacy})={raw:?}; using default 8192 (clamp 1024..65536)"
                     );
                     8192
@@ -199,7 +198,7 @@ pub fn router_rs_cursor_hook_outbound_context_max_bytes() -> usize {
 ///
 /// router-rs 单测：两 env 均未设置时返回 `None`（严格、不降级）；core-policy 依赖构建无 `cfg(test)`，故在此保留测试语义。
 /// Deprecated: `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` → prefer `ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES`.
-pub fn router_rs_cursor_review_gate_stop_max_nudges_cap() -> Option<u32> {
+pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
     #[cfg(test)]
     {
         let raw = env::var("ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES")
@@ -226,7 +225,7 @@ fn parse_router_rs_usize_clamped(
             match trimmed.parse::<usize>() {
                 Ok(n) => n.clamp(min_allowed, max_allowed),
                 Err(_) => {
-                    eprintln!(
+                    tracing::warn!(
                         "[router-rs] invalid {env_key}={raw:?}; using default {default_val} (clamp {min_allowed}..{max_allowed})"
                     );
                     default_val
@@ -318,14 +317,14 @@ mod tests {
         let prev_legacy = env::var_os(key_legacy);
         unsafe { env::remove_var(key_canonical) };
         unsafe { env::remove_var(key_legacy) };
-        assert!(super::router_rs_cursor_pre_goal_strict_disk_enabled());
+        assert!(super::router_rs_pre_goal_strict_disk_enabled());
         // Canonical explicitly set to "0" disables
         unsafe { env::set_var(key_canonical, "0") };
-        assert!(!super::router_rs_cursor_pre_goal_strict_disk_enabled());
+        assert!(!super::router_rs_pre_goal_strict_disk_enabled());
         unsafe { env::remove_var(key_canonical) };
         // Legacy fallback works when canonical unset
         unsafe { env::set_var(key_legacy, "0") };
-        assert!(!super::router_rs_cursor_pre_goal_strict_disk_enabled());
+        assert!(!super::router_rs_pre_goal_strict_disk_enabled());
         match prev_canon {
             Some(v) => unsafe { env::set_var(key_canonical, v) },
             None => unsafe { env::remove_var(key_canonical) },
@@ -357,19 +356,19 @@ mod tests {
         let key = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
         let prev = env::var_os(key);
         unsafe { env::remove_var(key) };
-        assert!(super::router_rs_cursor_review_gate_stop_max_nudges_cap().is_none());
+        assert!(super::router_rs_review_gate_stop_max_nudges_cap().is_none());
         unsafe { env::set_var(key, "3") };
         assert_eq!(
-            super::router_rs_cursor_review_gate_stop_max_nudges_cap(),
+            super::router_rs_review_gate_stop_max_nudges_cap(),
             Some(3)
         );
         unsafe { env::set_var(key, "0") };
-        assert!(super::router_rs_cursor_review_gate_stop_max_nudges_cap().is_none());
+        assert!(super::router_rs_review_gate_stop_max_nudges_cap().is_none());
         unsafe { env::remove_var(key) };
         // Also verify legacy CURSOR_ name is still honored by core-policy
         unsafe { env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES", "5") };
         assert_eq!(
-            super::router_rs_cursor_review_gate_stop_max_nudges_cap(),
+            super::router_rs_review_gate_stop_max_nudges_cap(),
             Some(5)
         );
         unsafe { env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES") };

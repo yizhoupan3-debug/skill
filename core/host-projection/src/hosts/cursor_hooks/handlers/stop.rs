@@ -1,8 +1,8 @@
 // Stop / preCompact hook handlers (P4 handlers split; closeout in stop_closeout.rs).
 fn handle_stop(repo_root: &Path, event: &Value) -> Value {
     let frame = core_state::task_state::resolve_cursor_continuity_frame(repo_root);
-    let stop_prompt_for_profile = prompt_text(event);
-    if cursor_review_gate_suppressed(repo_root, &stop_prompt_for_profile) {
+    let stop_prompt_for_profile = crate::hosts::hook_dispatch::extract_prompt_text(event);
+    if crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &stop_prompt_for_profile) {
         let response_text = agent_response_text(event);
         let closeout_msg =
             stop_hard_closeout_followup_for_assistant_response(repo_root, &response_text);
@@ -30,12 +30,12 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         return out;
     }
     let loaded = load_state(repo_root, event);
-    let text = prompt_text(event);
+    let text = crate::hosts::hook_dispatch::extract_prompt_text(event);
     let response_full = agent_response_text(event);
     let signal_text = hook_event_signal_text(event, &text, &response_full);
     let response_for_lint = core_policy::hook_common::hook_assistant_tail_window(
         &response_full,
-        core_policy::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+        core_policy::hook_common::HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
     );
 
     // Completion claim guard must not depend on hook-state existence: a strict closeout violation
@@ -77,7 +77,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             }
             if saw_reject_reason(&signal_text, &text) {
                 state.reject_reason_seen = true;
-                if tracks_goal_or_drive_entry(&state) {
+                if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) {
                     state.pre_goal_review_satisfied = true;
                 }
                 clear_review_gate_escalation_counters(&mut state);
@@ -97,12 +97,12 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             ) {
                 let _ = save_state(repo_root, event, &mut state);
             }
-            let gate_suppresses_review_lint = stop_review_output_lint_suppressed(&state);
+            let gate_suppresses_review_lint = crate::hosts::hook_dispatch::shared_stop_review_output_lint_suppressed(review_stop_followup_needed(&state), state.goal_required, state.goal_drive_entry_active, state.goal_contract_seen, state.goal_progress_seen, state.goal_verify_or_block_seen, state.review_override, state.delegation_override);
             if review_stop_followup_needed(&state) {
                 state.followup_count += 1;
                 state.review_followup_count += 1;
                 let cap =
-                    hooks::router_rs_cursor_review_gate_stop_max_nudges_cap();
+                    hooks::router_rs_review_gate_stop_max_nudges_cap();
                 let use_full = match cap {
                     None => true,
                     Some(n) => state.review_followup_count <= n,
@@ -111,7 +111,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 let skip_review_output_lint = if use_full {
                     gate_suppresses_review_lint
                 } else {
-                    tracks_goal_or_drive_entry(&state) && !goal_is_satisfied(&state)
+                    crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) && !crate::hosts::hook_dispatch::shared_goal_is_satisfied(state.goal_required, state.goal_drive_entry_active, state.goal_contract_seen, state.goal_progress_seen, state.goal_verify_or_block_seen, state.review_override, state.delegation_override)
                 };
                 let out = if use_full {
                     json!({ "followup_message": review_stop_followup_line(&state) })
@@ -131,7 +131,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 };
                 let _ = save_state(repo_root, event, &mut state);
                 (out, skip_review_output_lint)
-            } else if tracks_goal_or_drive_entry(&state) && !goal_is_satisfied(&state) {
+            } else if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) && !crate::hosts::hook_dispatch::shared_goal_is_satisfied(state.goal_required, state.goal_drive_entry_active, state.goal_contract_seen, state.goal_progress_seen, state.goal_verify_or_block_seen, state.review_override, state.delegation_override) {
                 state.followup_count += 1;
                 state.goal_followup_count += 1;
                 let _ = save_state(repo_root, event, &mut state);
@@ -145,7 +145,7 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 // Do not clear gate state on Stop for sessions that still track goal/review:
                 // the next Stop should still enforce the same requirements until satisfied/overridden.
                 if state.review_required
-                    || tracks_goal_or_drive_entry(&state)
+                    || crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active)
                     || state.reject_reason_seen
                 {
                     let _ = save_state(repo_root, event, &mut state);
@@ -205,7 +205,7 @@ fn handle_pre_compact(repo_root: &Path, event: &Value) -> Value {
                 "router-rs 门控快照：phase={} review={} override={} reject={} pre_goal_ok={} subagentStart_n={} subagent_stop={}",
                 state.phase,
                 state.review_required,
-                is_overridden(&state),
+                (state.review_override || state.delegation_override),
                 state.reject_reason_seen,
                 state.pre_goal_review_satisfied,
                 state.subagent_start_count,
@@ -290,23 +290,5 @@ fn handle_pre_compact(repo_root: &Path, event: &Value) -> Value {
     out["user_message"] = Value::String(notice);
     release_state_lock(&mut lock);
     out
-}
-
-fn truncate_cursor_sessionstart_context(text: &str) -> String {
-    let max_bytes = hooks::router_rs_cursor_sessionstart_context_max_bytes();
-    truncate_cursor_hook_outbound_context(text, max_bytes)
-}
-
-fn compact_cursor_sessionstart_context(parts: Vec<String>) -> Option<String> {
-    let joined = parts
-        .into_iter()
-        .filter(|part| !part.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    if joined.trim().is_empty() {
-        None
-    } else {
-        Some(truncate_cursor_sessionstart_context(&joined))
-    }
 }
 

@@ -1,6 +1,6 @@
 // Stop 收尾：SESSION_CLOSE_STYLE 软提示与 strict closeout 完成宣称检测。
 // 从原 `handlers.rs` 单体拆出的首片（P4 deferred 续切）；`handle_stop` 编排仍在
-// `handlers_parts/handlers_stop.inc.rs`。
+// `handlers/stop.rs`。
 
 /// Stop 收尾：在**无**硬 `followup_message` 时每轮稳定注入一条软提示，避免仅依赖规则时「有时有续跑段落、有时什么也没有」。
 ///

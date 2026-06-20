@@ -4,7 +4,7 @@
 //! Stop, SubagentStart, SubagentStop, SessionStart) and the main dispatch logic
 //! (`run_codex_lifecycle_context_hook_for_state_dir`).
 
-use super::state::codex_load_state;
+use super::state::load_state;
 use super::{
     CODEX_ADDITIONAL_CONTEXT_MAX_BYTES, CODEX_REVIEW_SUBAGENT_TYPES, CodexLifecycleContextState,
     CodexLifecycleHostKind, lifecycle_host,
@@ -13,6 +13,8 @@ use crate::hooks;
 use crate::hooks::{
     router_rs_operator_inject_globally_enabled, try_append_post_tool_shell_evidence,
 };
+use crate::hosts::hook_dispatch;
+use crate::hosts::hook_dispatch::{extract_prompt_text, extract_tool_name, extract_tool_input};
 use core_policy::HookReviewDiskCore;
 use core_policy::hook_common::{
     has_override, is_reviewer_lane_normalized, normalize_subagent_type, normalize_tool_name,
@@ -22,27 +24,19 @@ use core_policy::review_gate_engine::{
     review_independent_reviewer_evidence,
 };
 use serde_json::{Value, json};
-use std::collections::HashSet;
 use std::path::Path;
 
-use super::drift::codex_projection_drift_warning;
+use super::drift::projection_drift_warning;
 use super::state::with_codex_state_lock;
 
 // ---------------------------------------------------------------------------
 // Helper functions used by handlers
 // ---------------------------------------------------------------------------
 
-fn codex_prompt_text(event: &Value) -> String {
-    for key in ["prompt", "user_prompt", "message", "input"] {
-        if let Some(value) = event.get(key).and_then(Value::as_str) {
-            return value.to_string();
-        }
-    }
-    String::new()
-}
+// Codex uses shared hook_dispatch extractors (no local duplicates).
 
 #[cfg(test)]
-pub(super) fn codex_first_nonempty_prompt_line(text: &str) -> String {
+pub(super) fn first_nonempty_prompt_line(text: &str) -> String {
     text.lines()
         .map(str::trim)
         .find(|l| !l.is_empty())
@@ -50,32 +44,12 @@ pub(super) fn codex_first_nonempty_prompt_line(text: &str) -> String {
         .to_string()
 }
 
-pub(super) fn codex_tool_name(event: &Value) -> String {
-    event
-        .get("tool_name")
-        .or(event.get("tool"))
-        .or(event.get("name"))
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string()
-}
-
-pub(super) fn codex_tool_input(event: &Value) -> Value {
-    event
-        .get("tool_input")
-        .or(event.get("input"))
-        .or(event.get("arguments"))
-        .cloned()
-        .filter(Value::is_object)
-        .unwrap_or_else(|| json!({}))
-}
-
 pub(crate) fn saw_subagent_codex(tool_name: &str, _tool_input: &Value) -> bool {
     let name = normalize_tool_name(Some(tool_name));
     core_policy::subagent::is_subagent_tool(&name)
 }
 
-fn codex_recognized_subagent_kind(tool_input: &Value) -> Option<String> {
+fn recognized_subagent_kind(tool_input: &Value) -> Option<String> {
     let typed_fields = [
         tool_input.get("subagent_type").and_then(Value::as_str),
         tool_input.get("agent_type").and_then(Value::as_str),
@@ -88,7 +62,7 @@ fn codex_recognized_subagent_kind(tool_input: &Value) -> Option<String> {
         .find(|normalized| CODEX_REVIEW_SUBAGENT_TYPES.contains(&normalized.as_str()))
 }
 
-fn codex_subagent_lane_bits_from_kind(kind: Option<&str>) -> (bool, bool) {
+fn subagent_lane_bits_from_kind(kind: Option<&str>) -> (bool, bool) {
     let Some(k) = kind else {
         return (false, false);
     };
@@ -110,21 +84,21 @@ fn codex_subagent_lane_bits_from_kind(kind: Option<&str>) -> (bool, bool) {
     (review_lane, parallel_lane)
 }
 
-fn codex_tool_fork_context(tool_input: &Value, event: &Value) -> Option<bool> {
+fn tool_fork_context(tool_input: &Value, event: &Value) -> Option<bool> {
     fork_context_from_values(tool_input, Some(event))
 }
 
 /// 与 Cursor `REVIEW_GATE` 深度 lane 对齐：`general-purpose` / `best-of-n-runner`（已 normalize）；缺字段推断见 [`review_independent_fork`].
-fn codex_deep_independent_reviewer_evidence(
+fn deep_independent_reviewer_evidence(
     recognized_kind: Option<&str>,
     tool_input: &Value,
     event: &Value,
 ) -> bool {
     let reviewer_lane = recognized_kind.is_some_and(is_reviewer_lane_normalized);
-    review_independent_reviewer_evidence(codex_tool_fork_context(tool_input, event), reviewer_lane)
+    review_independent_reviewer_evidence(tool_fork_context(tool_input, event), reviewer_lane)
 }
 
-fn codex_hook_state_persist_block_payload() -> Value {
+fn hook_state_persist_block_payload() -> Value {
     let host = lifecycle_host();
     json!({
         "decision": "block",
@@ -136,7 +110,7 @@ fn codex_hook_state_persist_block_payload() -> Value {
     })
 }
 
-fn codex_stop_hook_active_replay(event: &Value) -> bool {
+fn stop_hook_active_replay(event: &Value) -> bool {
     event
         .get("stop_hook_active")
         .or(event.get("stopHookActive"))
@@ -145,64 +119,25 @@ fn codex_stop_hook_active_replay(event: &Value) -> bool {
 }
 
 /// Codex-internal Stop replays (`stop_hook_active`): skip gate enforcement only when explicitly opted in.
-fn codex_stop_hook_active_bypass_enabled() -> bool {
+fn stop_hook_active_bypass_enabled() -> bool {
     crate::hooks::router_rs_env_enabled_default_false(
         lifecycle_host().stop_hook_active_bypass_env(),
     )
 }
 
-/// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` or legacy `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE`.
-fn codex_review_gate_disabled_by_env() -> bool {
-    core_policy::env_flags::router_rs_review_gate_disabled_for_host("codex")
-}
-
-/// Env disable **or** `my-light` profile (advisory-only mode; Claude parity).
-pub(super) fn codex_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
-    if codex_review_gate_disabled_by_env() {
-        return true;
-    }
-    core_policy::hook_common::review_gate_hard_block_disabled(Some(repo_root), text)
-}
-
 fn clear_codex_review_gate_hook_state(repo_root: &Path, event: &Value) {
-    super::codex_reset_hook_state(repo_root, event);
+    super::reset_hook_state(repo_root, event);
 }
 
-fn codex_agent_response_text(event: &Value) -> String {
-    const KEYS: &[&str] = &[
-        "response",
-        "agent_response",
-        "agentResponse",
-        "content",
-        "text",
-        "output",
-    ];
-    for key in KEYS {
-        if let Some(value) = event.get(key).and_then(Value::as_str)
-            && !value.trim().is_empty() {
-                return value.to_string();
-            }
-    }
-    String::new()
+fn stop_signal_text(event: &Value) -> String {
+    hook_dispatch::stop_signal_text_from_payload(event)
 }
 
-fn codex_stop_signal_text(event: &Value) -> String {
-    let prompt = codex_prompt_text(event);
-    let response = codex_agent_response_text(event);
-    if prompt.trim().is_empty() {
-        response
-    } else if response.trim().is_empty() {
-        prompt
-    } else {
-        format!("{prompt}\n{response}")
-    }
+fn closeout_completion_text(event: &Value) -> String {
+    stop_signal_text(event)
 }
 
-fn codex_closeout_completion_text(event: &Value) -> String {
-    codex_stop_signal_text(event)
-}
-
-fn codex_review_stop_advisory_payload(fields: &core_policy::HookReviewGateFields) -> Option<Value> {
+fn review_stop_advisory_payload(fields: &core_policy::HookReviewGateFields) -> Option<Value> {
     core_policy::hook_review_stop_advisory_needed(fields, lifecycle_host().review_gate_tag())
         .map(|followup_message| json!({ "followup_message": followup_message }))
 }
@@ -216,7 +151,7 @@ fn codex_review_stop_advisory_payload(fields: &core_policy::HookReviewGateFields
 /// Reads `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES` first when set; otherwise
 /// `ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX` (legacy name; still interpreted as bytes).
 /// Value is clamped to [256, 8192].
-pub(crate) fn codex_additional_context_max_bytes() -> usize {
+pub(crate) fn additional_context_max_bytes() -> usize {
     const MIN: usize = 256;
     const MAX: usize = 8192;
     std::env::var("ROUTER_RS_CODEX_SESSIONSTART_CONTEXT_MAX_BYTES")
@@ -231,34 +166,19 @@ pub(crate) fn codex_additional_context_max_bytes() -> usize {
         .unwrap_or(CODEX_ADDITIONAL_CONTEXT_MAX_BYTES)
 }
 
-fn truncate_codex_additional_context_bytes(combined: &str, max_bytes: usize) -> String {
-    hooks::truncate_hook_outbound_lines_preserving(combined, max_bytes, "...")
-}
-
-pub(crate) fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
-    let mut dedup = HashSet::new();
-    let mut unique = Vec::new();
-    for part in parts {
-        let normalized = part.trim();
-        if normalized.is_empty() {
-            continue;
-        }
-        let key = normalized.to_string();
-        if dedup.insert(key.clone()) {
-            unique.push(key);
-        }
-    }
-    if unique.is_empty() {
-        return None;
-    }
-    let combined = unique.join("\n");
-    let max_bytes = codex_additional_context_max_bytes();
-    if combined.len() <= max_bytes {
-        return Some(combined);
-    }
-    Some(truncate_codex_additional_context_bytes(
-        &combined, max_bytes,
-    ))
+pub(crate) fn compact_contexts_shared(parts: Vec<String>) -> Option<String> {
+    // Trim + filter empty before dedup; then delegate to shared compaction.
+    let trimmed: Vec<String> = parts
+        .into_iter()
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect();
+    let max_bytes = additional_context_max_bytes();
+    crate::hosts::hook_dispatch::compact_contexts_with_suffix(
+        trimmed,
+        max_bytes,
+        "...(截断)",
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -266,8 +186,8 @@ pub(crate) fn codex_compact_contexts(parts: Vec<String>) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> Option<Value> {
-    let prompt = codex_prompt_text(event);
-    if codex_review_gate_suppressed(repo_root, &prompt) {
+    let prompt = extract_prompt_text(event);
+    if hook_dispatch::is_review_gate_suppressed("codex", Some(repo_root), &prompt) {
         clear_codex_review_gate_hook_state(repo_root, event);
         return None;
     }
@@ -321,7 +241,7 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
         Ok((Some(next), ()))
     });
     if write_result.is_err() {
-        return Some(codex_hook_state_persist_block_payload());
+        return Some(hook_state_persist_block_payload());
     }
 
     if !router_rs_operator_inject_globally_enabled() {
@@ -329,7 +249,7 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
     }
 
     let mut contexts: Vec<String> = Vec::new();
-    if let Some(warning) = codex_projection_drift_warning(repo_root) {
+    if let Some(warning) = projection_drift_warning(repo_root) {
         contexts.push(warning);
     }
     if facts.review_required
@@ -349,7 +269,7 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
     let paper_host = lifecycle_host().paper_prose_hook_host();
     hooks::maybe_append_paper_adversarial_context(repo_root, &prompt, &mut contexts, paper_host);
     hooks::maybe_append_paper_prose_context(repo_root, &prompt, &mut contexts, paper_host);
-    let additional_context = codex_compact_contexts(contexts);
+    let additional_context = compact_contexts_shared(contexts);
     if additional_context.is_none() {
         None
     } else {
@@ -363,7 +283,7 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
 }
 
 pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
-    let tool_name = codex_tool_name(event);
+    let tool_name = extract_tool_name(event);
     let tool_origin = core_policy::hook_common::classify_tool_origin(&tool_name);
     let _ = &tool_origin; // Used by allowedTools linkage (Phase 4) and mcp-tool-safety (Phase 5)
     hooks::emit_tool_call(
@@ -371,8 +291,8 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
         hooks::extract_post_tool_duration_ms(event).unwrap_or(0),
         hooks::post_tool_call_succeeded(event),
     );
-    let prompt_for_profile = codex_prompt_text(event);
-    if codex_review_gate_suppressed(repo_root, &prompt_for_profile) {
+    let prompt_for_profile = extract_prompt_text(event);
+    if hook_dispatch::is_review_gate_suppressed("codex", Some(repo_root), &prompt_for_profile) {
         clear_codex_review_gate_hook_state(repo_root, event);
         return None;
     }
@@ -381,7 +301,7 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
     {
         eprintln!("[router-rs] post-tool evidence append failed (non-fatal): {err}");
     }
-    let tool_input = codex_tool_input(event);
+    let tool_input = extract_tool_input(event);
     if let Err(e) = hooks::record_tool_call(repo_root, &tool_name, None) {
         eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
     }
@@ -392,7 +312,7 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
         let mut state = match loaded {
             Some(value) => value,
             None => {
-                let prompt = codex_prompt_text(event);
+                let prompt = extract_prompt_text(event);
                 let facts = ReviewGateFacts::from_prompt(&prompt);
                 CodexLifecycleContextState {
                     seq: 1,
@@ -406,14 +326,14 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
             }
         };
         state.generic_subagent_seen = true;
-        let recognized = codex_recognized_subagent_kind(&tool_input);
+        let recognized = recognized_subagent_kind(&tool_input);
         let tool_label = recognized
             .as_ref()
             .map(|kind| format!("{tool_name}#{kind}"))
             .unwrap_or_else(|| format!("{tool_name}#untyped"));
         state.review_subagent_tool = Some(tool_label);
         let (review_lane, parallel_lane) =
-            codex_subagent_lane_bits_from_kind(recognized.as_deref());
+            subagent_lane_bits_from_kind(recognized.as_deref());
         if review_lane {
             state.review_lane_seen = true;
         }
@@ -421,7 +341,7 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
             state.parallel_lane_seen = true;
         }
         state.review_subagent_seen = true;
-        if codex_deep_independent_reviewer_evidence(recognized.as_deref(), &tool_input, event) {
+        if deep_independent_reviewer_evidence(recognized.as_deref(), &tool_input, event) {
             state.review_gate.independent_reviewer_seen = true;
             state.subagent_start_count = state.subagent_start_count.saturating_add(1);
             state.phase = state.phase.max(2);
@@ -441,38 +361,38 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
         Ok(()) => None,
         Err(err) => {
             eprintln!("[router-rs] codex subagent evidence persist failed (fail-closed): {err}");
-            Some(codex_hook_state_persist_block_payload())
+            Some(hook_state_persist_block_payload())
         }
     }
 }
 
 pub(super) fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value> {
-    if codex_stop_hook_active_replay(event) && codex_stop_hook_active_bypass_enabled() {
+    if stop_hook_active_replay(event) && stop_hook_active_bypass_enabled() {
         return None;
     }
 
-    let stop_signal = codex_stop_signal_text(event);
-    let prompt_text = codex_prompt_text(event);
-    let response_full = codex_agent_response_text(event);
+    let stop_signal = stop_signal_text(event);
+    let prompt_text = extract_prompt_text(event);
+    let response_full = hook_dispatch::extract_response_text(event);
 
     // my-light / disable suppress: user Stop prompt only (not assistant tail in `stop_signal`).
-    if codex_review_gate_suppressed(repo_root, &prompt_text) {
+    if hook_dispatch::is_review_gate_suppressed("codex", Some(repo_root), &prompt_text) {
         if let Some(msg) = hooks::closeout_stop_followup_for_completion_text(
             repo_root,
-            &codex_closeout_completion_text(event),
+            &closeout_completion_text(event),
         ) {
             return Some(json!({
                 "decision": "block",
                 "followup_message": msg
             }));
         }
-        super::codex_reset_hook_state(repo_root, event);
+        super::reset_hook_state(repo_root, event);
         return None;
     }
 
     if let Some(msg) = hooks::closeout_stop_followup_for_completion_text(
         repo_root,
-        &codex_closeout_completion_text(event),
+        &closeout_completion_text(event),
     ) {
         return Some(json!({
             "decision": "block",
@@ -480,7 +400,7 @@ pub(super) fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value
         }));
     }
 
-    match codex_load_state(repo_root, event) {
+    match load_state(repo_root, event) {
         Err(reason) => {
             eprintln!("[router-rs] codex hook-state unreadable: {reason}");
             return Some(json!({
@@ -499,9 +419,17 @@ pub(super) fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value
                 if core_policy::hook_common::saw_reject_reason(&stop_signal, &prompt_text) {
                     state.review_gate.reject_reason_seen = true;
                 }
+                // Unified goal gate (shared across all 4 hosts)
+                let goal_entry = core_policy::hook_common::is_framework_goal_entry_prompt(&prompt_text);
+                hook_dispatch::update_goal_gate(
+                    &mut state.review_gate,
+                    &prompt_text,
+                    &response_full,
+                    goal_entry,
+                );
                 let assistant_tail = core_policy::hook_common::hook_assistant_tail_window(
                     &response_full,
-                    core_policy::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+                    core_policy::hook_common::HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
                 );
                 if let Some(phase) = maybe_bump_codex_review_phase_for_compact_findings(
                     state.review_gate.review_required,
@@ -517,9 +445,9 @@ pub(super) fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value
                 Ok((Some(state), fields))
             });
             match persist {
-                Err(_) => return Some(codex_hook_state_persist_block_payload()),
+                Err(_) => return Some(hook_state_persist_block_payload()),
                 Ok(fields) => {
-                    if let Some(payload) = codex_review_stop_advisory_payload(&fields) {
+                    if let Some(payload) = review_stop_advisory_payload(&fields) {
                         return Some(payload);
                     }
                 }
@@ -529,22 +457,42 @@ pub(super) fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value
             let stop_facts = ReviewGateFacts::from_prompt(&prompt_text);
             let reject = core_policy::hook_common::saw_reject_reason(&stop_signal, &prompt_text);
             let fields = core_policy::hook_review_gate_fields_from_facts(&stop_facts, reject);
-            if let Some(payload) = codex_review_stop_advisory_payload(&fields) {
+            if let Some(payload) = review_stop_advisory_payload(&fields) {
                 return Some(payload);
             }
         }
     }
 
-    super::codex_reset_hook_state(repo_root, event);
+    // Unified goal gate followup check (shared across all 4 hosts)
+    // Re-load state to check goal gate after update_goal_gate wrote fields
+    if let Ok(Some(state)) = load_state(repo_root, event) {
+        if hook_dispatch::goal_gate_satisfied(&state.review_gate) {
+            super::reset_hook_state(repo_root, event);
+            return None;
+        }
+        // Goal gate not satisfied — inject followup
+        let followup = hook_dispatch::shared_goal_stop_followup_line(
+            state.review_gate.goal_contract_seen,
+            state.review_gate.goal_progress_seen,
+            state.review_gate.goal_verify_or_block_seen,
+            state.review_gate.goal_followup_count,
+        );
+        return Some(json!({
+            "decision": "block",
+            "followup_message": followup
+        }));
+    }
+
+    super::reset_hook_state(repo_root, event);
     None
 }
 
 pub(super) fn handle_codex_subagent_start(repo_root: &Path, event: &Value) -> Option<Value> {
-    let tool_name = codex_tool_name(event);
-    let tool_input = codex_tool_input(event);
-    let prompt = codex_prompt_text(event);
+    let tool_name = extract_tool_name(event);
+    let tool_input = extract_tool_input(event);
+    let prompt = extract_prompt_text(event);
     let facts = ReviewGateFacts::from_prompt(&prompt);
-    let recognized = codex_recognized_subagent_kind(&tool_input);
+    let recognized = recognized_subagent_kind(&tool_input);
 
     match with_codex_state_lock(repo_root, event, |loaded| {
         let mut state = match loaded {
@@ -566,7 +514,7 @@ pub(super) fn handle_codex_subagent_start(repo_root: &Path, event: &Value) -> Op
             .unwrap_or_else(|| format!("{tool_name}#untyped"));
         state.review_subagent_tool = Some(tool_label);
         let (review_lane, parallel_lane) =
-            codex_subagent_lane_bits_from_kind(recognized.as_deref());
+            subagent_lane_bits_from_kind(recognized.as_deref());
         if review_lane {
             state.review_lane_seen = true;
         }
@@ -588,7 +536,7 @@ pub(super) fn handle_codex_subagent_start(repo_root: &Path, event: &Value) -> Op
         Ok(()) => None,
         Err(err) => {
             eprintln!("[router-rs] codex subagent start persist failed: {err}");
-            Some(codex_hook_state_persist_block_payload())
+            Some(hook_state_persist_block_payload())
         }
     }
 }
@@ -613,7 +561,7 @@ pub(crate) fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> O
     if !source.trim().is_empty() {
         contexts.push(format!("SessionStart source: {source}."));
     }
-    let additional_context = codex_compact_contexts(contexts)?;
+    let additional_context = compact_contexts_shared(contexts)?;
     Some(json!({
         "hookSpecificOutput": {
             "hookEventName": "SessionStart",
@@ -626,7 +574,7 @@ pub(crate) fn handle_codex_session_start(repo_root: &Path, payload: &Value) -> O
 // Main dispatch
 // ---------------------------------------------------------------------------
 
-pub(super) fn codex_lifecycle_input_error(message: &str) -> Value {
+pub(super) fn lifecycle_input_error(message: &str) -> Value {
     json!({
         "decision": "block",
         "message": message,
@@ -673,7 +621,7 @@ fn run_codex_lifecycle_context_hook_inner(
     host: CodexLifecycleHostKind,
 ) -> Result<Option<Value>, String> {
     if !payload.is_object() {
-        return Ok(Some(codex_lifecycle_input_error(&format!(
+        return Ok(Some(lifecycle_input_error(&format!(
             "{} lifecycle hook input schema invalid: expected a JSON object payload.",
             host.lifecycle_label()
         ))));
@@ -684,11 +632,11 @@ fn run_codex_lifecycle_context_hook_inner(
         .and_then(Value::as_str)
         .map(|s| s.trim().to_lowercase())
         .unwrap_or_default();
-    if super::state::codex_require_stable_session_key_enabled() {
+    if super::state::require_stable_session_key_enabled() {
         match event_name.as_str() {
             "userpromptsubmit" | "posttooluse" | "stop"
-                if super::state::codex_stable_session_raw(payload).is_none() => {
-                    return Ok(Some(codex_lifecycle_input_error(&format!(
+                if super::state::stable_session_raw(payload).is_none() => {
+                    return Ok(Some(lifecycle_input_error(&format!(
                         "{} lifecycle hook blocked: stable session key required ({} defaults on). Add session_id / conversation_id / thread_id (snake_case or camelCase) to hook JSON, or set session env fallbacks. Review gate ({}) cannot run without per-session hook-state.",
                         host.lifecycle_label(),
                         host.require_stable_session_key_env(),
@@ -705,11 +653,11 @@ fn run_codex_lifecycle_context_hook_inner(
         "stop" => handle_codex_stop(repo_root, payload),
         "subagentstart" => handle_codex_subagent_start(repo_root, payload),
         "subagentstop" => handle_codex_subagent_stop(repo_root, payload),
-        "" => Some(codex_lifecycle_input_error(&format!(
+        "" => Some(lifecycle_input_error(&format!(
             "{} lifecycle hook input schema invalid: missing hook_event_name/event.",
             host.lifecycle_label()
         ))),
-        other => Some(codex_lifecycle_input_error(&format!(
+        other => Some(lifecycle_input_error(&format!(
             "{} lifecycle hook input schema invalid: unsupported hook_event_name/event `{other}`.",
             host.lifecycle_label()
         ))),
@@ -755,7 +703,7 @@ pub(crate) fn read_codex_stdin_limited<R: std::io::Read>(reader: &mut R) -> Resu
 }
 
 pub(super) fn canonical_codex_audit_command(command: &str) -> Result<&'static str, String> {
-    if let Some(event_name) = codex_lifecycle_event_name(command) {
+    if let Some(event_name) = lifecycle_event_name(command) {
         if event_name == "PreToolUse" {
             return Ok("pre-tool-use");
         }
@@ -769,7 +717,7 @@ pub(super) fn canonical_codex_audit_command(command: &str) -> Result<&'static st
     }
 }
 
-pub(super) fn codex_lifecycle_event_name(command: &str) -> Option<&'static str> {
+pub(super) fn lifecycle_event_name(command: &str) -> Option<&'static str> {
     match command.trim().to_ascii_lowercase().as_str() {
         "sessionstart" => Some("SessionStart"),
         "pretooluse" => Some("PreToolUse"),
@@ -793,7 +741,7 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
     hooks::ensure_kernel_bootstrap();
     let _registry_guard = core_policy::registry_review_gate::HookRegistryRepoGuard::new(repo_root);
     let canonical = canonical_codex_audit_command(command)?;
-    let telemetry_event = codex_lifecycle_event_name(command)
+    let telemetry_event = lifecycle_event_name(command)
         .map(|name| name.to_ascii_lowercase())
         .unwrap_or_else(|| canonical.to_string());
     hooks::mark_hook_start();
@@ -801,7 +749,7 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
         Ok(payload) => payload,
         Err(err) if canonical == "lifecycle-context" => {
             let out = Ok(attach_codex_hook_observation(Some(
-                codex_lifecycle_input_error(&format!(
+                lifecycle_input_error(&format!(
                     "Codex lifecycle hook input JSON invalid: {err}"
                 )),
             )));
@@ -818,7 +766,7 @@ pub fn run_codex_audit_hook(command: &str, repo_root: &Path) -> Result<Option<Va
             return Err(err);
         }
     };
-    if let Some(event_name) = codex_lifecycle_event_name(command)
+    if let Some(event_name) = lifecycle_event_name(command)
         && payload.is_object()
             && payload.get("hook_event_name").is_none()
             && payload.get("event").is_none()

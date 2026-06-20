@@ -241,7 +241,7 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
         use std::os::unix::fs::MetadataExt;
         use fs2::FileExt;
 
-        let retries = hooks::router_rs_cursor_hook_state_lock_retries();
+        let retries = hooks::router_rs_hook_state_lock_retries();
         for _ in 0..retries {
             let file = match OpenOptions::new()
                 .read(true)
@@ -283,7 +283,7 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
                         continue;
                     }
 
-                    let lock_text = format!("pid={} ts={}\n", std::process::id(), now_millis());
+                    let lock_text = format!("pid={} ts={}\n", std::process::id(), crate::hosts::file_state_lock::now_millis());
                     let mut owned = file;
                     let _ = owned.set_len(0);
                     use std::io::Seek;
@@ -302,9 +302,9 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
                     drop(file);
                     const HOOK_STATE_LOCK_STALE_MS: u64 = 30_000;
                     if let Ok(existing) = fs::read_to_string(&lock_path)
-                        && let Some((pid, ts_ms)) = parse_lock_metadata(&existing) {
-                            let age_ms = now_millis().saturating_sub(ts_ms);
-                            if !is_process_alive(pid) {
+                        && let Some((pid, ts_ms)) = crate::hosts::file_state_lock::parse_lock_metadata(&existing) {
+                            let age_ms = crate::hosts::file_state_lock::now_millis().saturating_sub(ts_ms);
+                            if !crate::hosts::file_state_lock::is_process_alive(pid) {
                                 // Do not delete to preserve POSIX flock inode guarantee.
                             } else if age_ms > HOOK_STATE_LOCK_STALE_MS {
                                 eprintln!(
@@ -333,87 +333,6 @@ fn acquire_state_lock(repo_root: &Path, event: &Value) -> Option<LockGuard> {
                 None
             }
         }
-    }
-}
-
-fn now_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
-fn parse_lock_metadata(text: &str) -> Option<(u32, u64)> {
-    let pid = text
-        .split_whitespace()
-        .find_map(|part| part.strip_prefix("pid="))
-        .and_then(|v| v.parse::<u32>().ok())?;
-    let ts = text
-        .split_whitespace()
-        .find_map(|part| part.strip_prefix("ts="))
-        .and_then(|v| v.parse::<u64>().ok())?;
-    Some((pid, ts))
-}
-
-#[cfg(unix)]
-fn is_process_alive(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
-    }
-    unsafe {
-        let rc = libc::kill(pid as libc::pid_t, 0);
-        if rc == 0 {
-            return true;
-        }
-        let err = std::io::Error::last_os_error();
-        match err.raw_os_error() {
-            Some(libc::ESRCH) => false,
-            Some(libc::EPERM) => true,
-            _ => true,
-        }
-    }
-}
-
-#[cfg(not(unix))]
-fn is_process_alive(pid: u32) -> bool {
-    #[cfg(windows)]
-    {
-        use std::os::windows::raw::HANDLE;
-
-        #[link(name = "kernel32")]
-        extern "system" {
-            fn OpenProcess(dwDesiredAccess: u32, bInheritHandle: i32, dwProcessId: u32) -> HANDLE;
-            fn GetExitCodeProcess(hProcess: HANDLE, lpExitCode: *mut u32) -> i32;
-            fn CloseHandle(hObject: HANDLE) -> i32;
-        }
-
-        if pid == 0 {
-            return false;
-        }
-
-        const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
-        const STILL_ACTIVE: u32 = 259;
-
-        unsafe {
-            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-            if handle.is_null() {
-                return std::io::Error::last_os_error().raw_os_error() != Some(87);
-            }
-
-            let mut exit_code = 0u32;
-            let ok = GetExitCodeProcess(handle, &mut exit_code);
-            CloseHandle(handle);
-
-            if ok != 0 {
-                exit_code == STILL_ACTIVE
-            } else {
-                true
-            }
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        true
     }
 }
 
@@ -677,7 +596,7 @@ fn save_state(repo_root: &Path, event: &Value, state: &mut ReviewGateState) -> b
         let _ = fs::remove_file(&tmp);
         return false;
     }
-    if hooks::router_rs_cursor_hook_state_file_sync_enabled()
+    if hooks::router_rs_hook_state_file_sync_enabled()
         && file.sync_all().is_err() {
             let _ = fs::remove_file(&tmp);
             return false;
@@ -687,7 +606,7 @@ fn save_state(repo_root: &Path, event: &Value, state: &mut ReviewGateState) -> b
         return false;
     }
     #[cfg(unix)]
-    if hooks::router_rs_cursor_hook_state_dir_sync_enabled()
+    if hooks::router_rs_hook_state_dir_sync_enabled()
         && let Ok(dir_file) = OpenOptions::new().read(true).open(&directory) {
             let _ = dir_file.sync_all();
         }
@@ -745,25 +664,23 @@ fn maybe_bump_review_phase_for_main_thread_compact_findings(
 }
 
 /// When true, Stop skips advisory `review-output-lint` on assistant tail (REVIEW_GATE / AG_FOLLOWUP active).
-fn stop_review_output_lint_suppressed(state: &ReviewGateState) -> bool {
-    review_stop_followup_needed(state)
-        || (tracks_goal_or_drive_entry(state) && !goal_is_satisfied(state))
-}
 
 /// Stop / 观测 fixture 共用的 `need=` 段（前缀仍须含 `REVIEW_GATE` 供 `router_rs_observation` 分类）。
+/// Re-exported from `hook_dispatch` for cross-host consistency.
 pub const REVIEW_GATE_FOLLOWUP_NEED_SEGMENT: &str =
-    "need=deep_reviewer_cycle general-purpose|best-of-n|deep-reviewer fork_context=false";
+    crate::hosts::hook_dispatch::REVIEW_GATE_FOLLOWUP_NEED_SEGMENT;
 
 /// Short, stable tail for `REVIEW_GATE incomplete` lines (after `need=`). Does not change the first
 /// `router-rs` token (`REVIEW_GATE`) used by observation classification.
+/// Re-exported from `hook_dispatch` for cross-host consistency.
 pub const REVIEW_GATE_FOLLOWUP_HINT_SEGMENT: &str =
-    "hint=fork_context_json_false_not_omitted";
+    crate::hosts::hook_dispatch::REVIEW_GATE_FOLLOWUP_HINT_SEGMENT;
 
 fn review_stop_followup_line(state: &ReviewGateState) -> String {
     let cap_need = if state.review_pending_cap_refused {
         format!(
             " need=pending_cycle_keys_at_cap max={}",
-            hooks::router_rs_cursor_review_pending_cycle_max()
+            hooks::router_rs_review_pending_cycle_max()
         )
     } else {
         String::new()
@@ -778,7 +695,9 @@ fn review_stop_followup_line(state: &ReviewGateState) -> String {
 }
 
 /// `merge_hook_nudge_paragraph` 去重前缀：首行须与 `REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX` 常量一致以便每轮刷新同一段落。
-pub const REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX: &str = "router-rs REVIEW_GATE detail";
+/// Re-exported from `hook_dispatch` for cross-host consistency.
+pub const REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX: &str =
+    crate::hosts::hook_dispatch::REVIEW_GATE_DETAIL_PARAGRAPH_PREFIX;
 
 pub const CURSOR_HOOK_STATE_UNREADABLE: &str =
     "router-rs CURSOR_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
@@ -789,8 +708,10 @@ pub fn review_stop_followup_soft_line(
     full_line_cap: u32,
 ) -> String {
     format!(
-        "router-rs REVIEW_GATE incomplete mode=soft_nag full_line_cap={full_line_cap} phase={} stop_nudge_count={} see=.cursor/hook-state rg_clear|ROUTER_RS_REVIEW_GATE_DISABLE=1|ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES=0(strict)|detail=additional_context",
-        state.phase, state.review_followup_count
+        "router-rs REVIEW_GATE incomplete mode=soft_nag full_line_cap={full_line_cap} phase={phase} stop_nudge_count={nudge} see=.cursor/hook-state rg_clear|ROUTER_RS_REVIEW_GATE_DISABLE=1|ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES=0(strict)|detail=additional_context",
+        full_line_cap = full_line_cap,
+        phase = state.phase,
+        nudge = state.review_followup_count,
     )
 }
 
@@ -803,24 +724,8 @@ pub fn review_stop_followup_detail_paragraph(state: &ReviewGateState) -> String 
     )
 }
 
-fn is_overridden(state: &ReviewGateState) -> bool {
-    state.review_override || state.delegation_override
-}
 
-fn tracks_goal_or_drive_entry(state: &ReviewGateState) -> bool {
-    state.goal_required || state.goal_drive_entry_active
-}
 
-fn goal_is_satisfied(state: &ReviewGateState) -> bool {
-    if !tracks_goal_or_drive_entry(state) {
-        return true;
-    }
-    // 全局 override（例如不要用子代理）仍可跳过整套 gate。
-    if is_overridden(state) {
-        return true;
-    }
-    state.goal_contract_seen && state.goal_progress_seen && state.goal_verify_or_block_seen
-}
 
 fn bump_phase(state: &mut ReviewGateState, target: u32) {
     state.phase = state.phase.max(target);
@@ -849,9 +754,9 @@ fn maybe_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Option<&'stati
     if !hooks::router_rs_pre_goal_enabled() {
         return None;
     }
-    if !tracks_goal_or_drive_entry(state)
+    if !hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active)
         || state.pre_goal_review_satisfied
-        || is_overridden(state)
+        || (state.review_override || state.delegation_override)
         || state.reject_reason_seen
     {
         return None;
@@ -868,26 +773,12 @@ fn maybe_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Option<&'stati
 }
 
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` or legacy `ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE`.
-fn cursor_review_gate_disabled_by_env() -> bool {
-    #[cfg(test)]
-    {
-        if let Some(v) = TEST_CURSOR_REVIEW_GATE_DISABLE.with(|c| c.get()) {
-            return v;
-        }
-    }
-    core_policy::env_flags::router_rs_review_gate_disabled_for_host("cursor")
-}
+/// Test override now shared via `core_policy::env_flags::test_review_gate_disabled_override`.
 
 /// Env disable **or** `lifecycle_profile: my-light` (prompt / GOAL_STATE) — profile-scoped, not global.
-fn cursor_review_gate_suppressed(repo_root: &Path, text: &str) -> bool {
-    if cursor_review_gate_disabled_by_env() {
-        return true;
-    }
-    core_policy::hook_common::review_gate_hard_block_disabled(Some(repo_root), text)
-}
 
 /// `subagentStart` 只能拒绝/提示，不能主动关闭既有 subagent；这里用活跃数避免继续堆积。
-fn cursor_max_open_subagents() -> Option<u32> {
+fn max_open_subagents() -> Option<u32> {
     let Ok(raw) = std::env::var("ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS") else {
         return Some(DEFAULT_CURSOR_MAX_OPEN_SUBAGENTS);
     };
@@ -902,7 +793,7 @@ fn cursor_max_open_subagents() -> Option<u32> {
         .or(Some(DEFAULT_CURSOR_MAX_OPEN_SUBAGENTS))
 }
 
-fn cursor_open_subagent_stale_after_secs() -> Option<i64> {
+fn open_subagent_stale_after_secs() -> Option<i64> {
     let Ok(raw) = std::env::var("ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS") else {
         return Some(DEFAULT_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS);
     };
@@ -920,7 +811,7 @@ fn reset_stale_active_subagents(state: &mut ReviewGateState) -> bool {
     if state.active_subagent_count == 0 {
         return false;
     }
-    let Some(stale_after_secs) = cursor_open_subagent_stale_after_secs() else {
+    let Some(stale_after_secs) = open_subagent_stale_after_secs() else {
         return false;
     };
     let Some(started_at) = state.active_subagent_last_started_at.as_deref() else {
@@ -1031,27 +922,35 @@ fn hydrate_goal_gate_from_disk(
         }
         return;
     };
-    if !hooks::router_rs_cursor_pre_goal_strict_disk_enabled()
+    if !hooks::router_rs_pre_goal_strict_disk_enabled()
         && (state.goal_required || goal_drive_entrypoint)
     {
         state.pre_goal_review_satisfied = true;
         state.pre_goal_nag_count = 0;
     }
     if state.goal_required || arm_if_goal_file || state.goal_drive_entry_active {
-        let readiness = hooks::evaluate_goal_readiness_from_disk(
-            repo_root,
-            goal,
-            task_id.as_str(),
+        // Use shared disk-based goal evaluation (unified across all 4 hosts)
+        let mut goal_core = core_policy::HookReviewDiskCore {
+            goal_drive_entry_active: state.goal_drive_entry_active,
+            goal_contract_seen: state.goal_contract_seen,
+            goal_progress_seen: state.goal_progress_seen,
+            goal_verify_or_block_seen: state.goal_verify_or_block_seen,
+            review_override: state.review_override,
+            delegation_override: state.delegation_override,
+            ..Default::default()
+        };
+        crate::hosts::hook_dispatch::update_goal_gate_with_disk(
+            &mut goal_core,
+            "",
+            "",
+            goal_drive_entrypoint,
+            Some(repo_root),
+            Some(task_id.as_str()),
         );
-        if readiness.contract {
-            state.goal_contract_seen = true;
-        }
-        if readiness.progress {
-            state.goal_progress_seen = true;
-        }
-        if readiness.verification {
-            state.goal_verify_or_block_seen = true;
-        }
+        state.goal_drive_entry_active = goal_core.goal_drive_entry_active;
+        state.goal_contract_seen = goal_core.goal_contract_seen;
+        state.goal_progress_seen = goal_core.goal_progress_seen;
+        state.goal_verify_or_block_seen = goal_core.goal_verify_or_block_seen;
     }
 }
 
@@ -1070,7 +969,7 @@ fn state_lock_degraded_followup() -> &'static str {
 }
 
 fn lock_failure_followup_for_before_submit(repo_root: &Path, event: &Value) -> (bool, String) {
-    let text = prompt_text(event);
+    let text = hook_dispatch::extract_prompt_text(event);
     let signal_text = hook_event_signal_text(event, &text, "");
     let review = is_review_prompt(&text);
     let goal_drive_entrypoint = is_framework_goal_drive_entry_prompt(&text, &signal_text);
@@ -1100,7 +999,7 @@ fn lock_failure_followup_for_before_submit(repo_root: &Path, event: &Value) -> (
 }
 
 fn stop_lock_failure_is_fail_closed(repo_root: &Path, event: &Value) -> bool {
-    let text = prompt_text(event);
+    let text = hook_dispatch::extract_prompt_text(event);
     let response_text = agent_response_text(event);
     let signal_text = hook_event_signal_text(event, &text, &response_text);
     let review = is_review_prompt(&text);
@@ -1195,7 +1094,7 @@ fn push_review_lite_pending_cycle_key(
     {
         return PendingCyclePush::AlreadyPresent;
     }
-    let max = hooks::router_rs_cursor_review_pending_cycle_max();
+    let max = hooks::router_rs_review_pending_cycle_max();
     if state.review_lite_pending_cycle_keys.len() >= max {
         eprintln!("[router-rs] review_lite_pending_at_cap_refused cap={max} key={k}");
         state.review_pending_cap_refused = true;
@@ -1236,7 +1135,7 @@ fn push_review_pending_cycle_key(
     {
         return PendingCyclePush::AlreadyPresent;
     }
-    let max = hooks::router_rs_cursor_review_pending_cycle_max();
+    let max = hooks::router_rs_review_pending_cycle_max();
     if state.review_subagent_pending_cycle_keys.len() >= max {
         eprintln!("[router-rs] review_pending_cycle_keys_at_cap_refused cap={max} key={k}");
         state.review_pending_cap_refused = true;
@@ -1255,7 +1154,7 @@ fn prune_stale_review_pending_cycle_keys(state: &mut ReviewGateState) {
     {
         return;
     }
-    let Some(stale_after_secs) = cursor_open_subagent_stale_after_secs() else {
+    let Some(stale_after_secs) = open_subagent_stale_after_secs() else {
         // Align with `reset_stale_active_subagents`: stale recovery off → do not prune pending.
         return;
     };

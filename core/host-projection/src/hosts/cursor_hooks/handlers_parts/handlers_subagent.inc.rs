@@ -7,15 +7,15 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
         .ok()
         .flatten()
         .unwrap_or_else(empty_state);
-    let tool_input = tool_input_of(event);
+    let tool_input = crate::hosts::hook_dispatch::extract_tool_input(event);
     let stale_reset = apply_subagent_stale_hygiene(&mut state);
-    if let Some(limit) = cursor_max_open_subagents()
+    if let Some(limit) = max_open_subagents()
         && state.active_subagent_count >= limit {
             release_state_lock(&mut lock);
             return subagent_limit_denial(state.active_subagent_count, limit);
         }
-    let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
-    let fork = cursor_fork_context_from_tool(event, &tool_input, &sub_type, &agent_type);
+    let (sub_type, agent_type) = subagent_type_pair(&tool_input, event);
+    let fork = fork_context_from_tool_with_inference(event, &tool_input, &sub_type, &agent_type);
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
     let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
     let independent_fork_pre_goal =
@@ -28,7 +28,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
     let mut track_open_subagent = true;
     let mut mutated = false;
     // 与 PostToolUse 对齐：pre-goal 在独立 fork 且存在 lane 类型证据时满足（含非白名单 lane 名）。
-    if tracks_goal_or_drive_entry(&state) && pre_goal_kind && independent_fork_pre_goal {
+    if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) && pre_goal_kind && independent_fork_pre_goal {
         state.pre_goal_review_satisfied = true;
         state.pre_goal_nag_count = 0;
         mutated = true;
@@ -38,7 +38,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
             let _ = save_state(repo_root, event, &mut state);
             release_state_lock(&mut lock);
             return review_pending_cycle_cap_denial(
-                hooks::router_rs_cursor_review_pending_cycle_max(),
+                hooks::router_rs_review_pending_cycle_max(),
             );
         }
         match push_review_pending_cycle_key(&mut state, cycle_key, false, lite_stable_id) {
@@ -66,7 +66,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
             let _ = save_state(repo_root, event, &mut state);
             release_state_lock(&mut lock);
             return review_pending_cycle_cap_denial(
-                hooks::router_rs_cursor_review_pending_cycle_max(),
+                hooks::router_rs_review_pending_cycle_max(),
             );
             }
         }
@@ -96,8 +96,8 @@ fn handle_subagent_stop(repo_root: &Path, event: &Value) -> Value {
         .flatten()
         .unwrap_or_else(empty_state);
     let mut mutated = false;
-    let tool_input = tool_input_of(event);
-    let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
+    let tool_input = crate::hosts::hook_dispatch::extract_tool_input(event);
+    let (sub_type, agent_type) = subagent_type_pair(&tool_input, event);
     let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
     let cycle_key = review_subagent_cycle_key(event, &tool_input, &sub_type, &agent_type);
     let cycle_matches = !state.review_subagent_pending_cycle_keys.is_empty()

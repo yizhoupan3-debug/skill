@@ -1,5 +1,5 @@
 fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
-    let name = normalize_tool_name(Some(&tool_name_of(event)));
+    let name = normalize_tool_name(Some(&crate::hosts::hook_dispatch::extract_tool_name(event)));
     let tool_origin = core_policy::hook_common::classify_tool_origin(&name);
     let _ = &tool_origin; // Used by allowedTools linkage (Phase 4) and mcp-tool-safety (Phase 5)
     hooks::emit_tool_call(
@@ -56,10 +56,10 @@ fn handle_post_tool_use_with_lock(
     mut state: ReviewGateState,
 ) -> Value {
     let armed = review_hard_armed(&state);
-    let tool_input = tool_input_of(event);
-    let (sub_type, agent_type) = cursor_subagent_type_pair(&tool_input, event);
+    let tool_input = crate::hosts::hook_dispatch::extract_tool_input(event);
+    let (sub_type, agent_type) = subagent_type_pair(&tool_input, event);
     let pre_goal_kind = pre_goal_subagent_kind_ok(&sub_type, &agent_type);
-    let fork = cursor_fork_context_from_tool(event, &tool_input, &sub_type, &agent_type);
+    let fork = fork_context_from_tool_with_inference(event, &tool_input, &sub_type, &agent_type);
     let review_kind = review_subagent_kind_ok(&sub_type, &agent_type);
     let independent_fork_review =
         core_policy::review_gate_engine::review_independent_fork(fork, review_kind);
@@ -68,7 +68,7 @@ fn handle_post_tool_use_with_lock(
     let mut mutated = false;
     if tool_name_matches_subagent_lane(name)
         && pre_goal_kind
-        && tracks_goal_or_drive_entry(&state)
+        && crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active)
         && independent_fork_pre_goal
     {
         state.pre_goal_review_satisfied = true;
@@ -76,7 +76,7 @@ fn handle_post_tool_use_with_lock(
         mutated = true;
     }
     if tool_name_matches_subagent_lane(name) && review_kind && armed && independent_fork_review {
-        if let Some(limit) = cursor_max_open_subagents() {
+        if let Some(limit) = max_open_subagents() {
             let pending_open = state
                 .review_subagent_pending_cycle_keys
                 .len()
@@ -127,7 +127,7 @@ fn handle_post_tool_use_with_lock(
     }
     // Agent `Shell` 工具：在释放 session 锁之前更新终端账本（ADR-003）。
     if name == "shell" {
-        cursor_post_tool_shell_terminal_track(repo_root, event);
+        post_tool_shell_terminal_track(repo_root, event);
     }
     if mutated {
         let _ = save_state(repo_root, event, &mut state);
@@ -152,7 +152,7 @@ fn handle_post_tool_use_with_lock(
 }
 
 fn payload_tool_name(event: &Value) -> String {
-    tool_name_of(event).trim().to_string()
+    crate::hosts::hook_dispatch::extract_tool_name(event).trim().to_string()
 }
 
 fn payload_tool_path(event: &Value) -> Option<PathBuf> {
@@ -238,7 +238,7 @@ fn cargo_check_with_timeout(cargo_dir: &Path, timeout: std::time::Duration) -> (
 }
 
 fn maybe_run_cursor_rust_lint(repo_root: &Path, event: &Value) -> Option<String> {
-    if !hooks::router_rs_cursor_cargo_check_sync_enabled() {
+    if !hooks::router_rs_cargo_check_sync_enabled() {
         return None;
     }
     const TIMEOUT_S: u64 = 25;
@@ -330,14 +330,14 @@ fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
         .unwrap_or_else(empty_state);
     let armed = review_hard_armed(&state);
     let track_goal = state.goal_required || armed;
-    let prompt = prompt_text(event);
+    let prompt = crate::hosts::hook_dispatch::extract_prompt_text(event);
     let text = agent_response_text(event);
     let signal = hook_event_signal_text(event, &prompt, &text);
     let disk_goal = frame.hydration_goal.is_some();
     let mut dirty = false;
     if saw_reject_reason(&signal, &prompt) {
         state.reject_reason_seen = true;
-        if tracks_goal_or_drive_entry(&state) {
+        if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) {
             state.pre_goal_review_satisfied = true;
         }
         clear_review_gate_escalation_counters(&mut state);
@@ -363,7 +363,7 @@ fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
     }
     let tail = core_policy::hook_common::hook_assistant_tail_window(
         &text,
-        core_policy::hook_common::CURSOR_HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
+        core_policy::hook_common::HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
     );
     if maybe_bump_review_phase_for_main_thread_compact_findings(&mut state, &tail) {
         dirty = true;

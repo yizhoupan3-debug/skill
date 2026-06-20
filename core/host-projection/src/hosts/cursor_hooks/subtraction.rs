@@ -4,7 +4,7 @@
 //! - 将事件写回 [`.cursor/hooks.json`](../../../../.cursor/hooks.json)（非空 `command` 条目）→ 自动走 handler；
 //! - 或 `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS=1`（未注册时强制 handler，单测/对照）。
 
-use crate::hooks::router_rs_cursor_hook_legacy_subtracted_events_enabled;
+use crate::hooks::router_rs_hook_legacy_subtracted_events_enabled;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -28,7 +28,7 @@ pub const CURSOR_HOOKS_SUBTRACTED_EVENTS: &[&str] = &[
     "preCompact",
 ];
 
-pub fn cursor_hook_event_is_subtracted(lowered_event: &str) -> bool {
+pub fn hook_event_is_subtracted(lowered_event: &str) -> bool {
     matches!(
         lowered_event,
         "afteragentresponse"
@@ -51,7 +51,7 @@ fn hook_entry_has_command(entries: &Value) -> bool {
 }
 
 /// 事件是否在仓库 `.cursor/hooks.json` 中有效注册（键存在且首条 hook 含非空 `command`）。
-pub fn cursor_hooks_json_registers_event(repo_root: &Path, lowered_event: &str) -> bool {
+pub fn hooks_json_registers_event(repo_root: &Path, lowered_event: &str) -> bool {
     let path = repo_root.join(".cursor/hooks.json");
     let Ok(raw) = std::fs::read_to_string(&path) else {
         return false;
@@ -71,13 +71,13 @@ pub fn cursor_hooks_json_registers_event(repo_root: &Path, lowered_event: &str) 
 }
 
 pub fn should_noop_subtracted_event(repo_root: &Path, lowered_event: &str) -> bool {
-    if !cursor_hook_event_is_subtracted(lowered_event) {
+    if !hook_event_is_subtracted(lowered_event) {
         return false;
     }
-    if router_rs_cursor_hook_legacy_subtracted_events_enabled() {
+    if router_rs_hook_legacy_subtracted_events_enabled() {
         return false;
     }
-    if cursor_hooks_json_registers_event(repo_root, lowered_event) {
+    if hooks_json_registers_event(repo_root, lowered_event) {
         return false;
     }
     true

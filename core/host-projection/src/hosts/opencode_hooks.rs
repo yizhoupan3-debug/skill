@@ -51,7 +51,7 @@ const OPENCODE_HOOK_STATE_UNREADABLE: &str =
 const OPENCODE_REVIEW_GATE_TAG: &str = "opencode-review-gate";
 
 /// Shared state configuration for opencode hook state.
-fn opencode_state_config() -> HookStateConfig {
+fn state_config() -> HookStateConfig {
     HookStateConfig {
         host_id: "opencode",
         state_dir_leaf: ".opencode",
@@ -172,8 +172,8 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
 
         // Load or create review gate state
         // state_dir managed by HookStateConfig
-        let _state_path = opencode_state_config().state_path(event.repo_root);
-        let mut state: OpencodeHookState = opencode_state_config().load_state(event.repo_root);
+        let _state_path = state_config().state_path(event.repo_root);
+        let mut state: OpencodeHookState = state_config().load_state(event.repo_root);
 
         // Check for reject reason
         let signal_text = event
@@ -198,7 +198,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         }
 
         // Save state
-        opencode_state_config().save_state(event.repo_root, &state);
+        state_config().save_state(event.repo_root, &state);
 
         // Build additional context
         let mut contexts = Vec::new();
@@ -272,12 +272,23 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
 
         // Load state
         // state_dir managed by HookStateConfig
-        let _state_path = opencode_state_config().state_path(event.repo_root);
-        let mut state: OpencodeHookState = opencode_state_config().load_state(event.repo_root);
+        let _state_path = state_config().state_path(event.repo_root);
+        let mut state: OpencodeHookState = state_config().load_state(event.repo_root);
 
-        // Shell evidence for verification commands
-        if is_verification_command(&tool_name, &tool_input) {
-            append_shell_evidence(event.repo_root, &tool_name, &tool_input, succeeded);
+        // Shell evidence for verification commands (shared with Claude/Cursor/Codex)
+        let command = tool_input
+            .get("command")
+            .or(tool_input.get("cmd"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if hook_dispatch::is_verification_command(&tool_name, command) {
+            if let Err(err) = crate::hooks::try_append_post_tool_shell_evidence(
+                event.repo_root,
+                event.payload,
+                "opencode_post_tool_verification",
+            ) {
+                eprintln!("[router-rs] opencode auto-evidence record failed: {err}");
+            }
         }
 
         // Subagent tracking
@@ -313,7 +324,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         }
 
         // Save state
-        opencode_state_config().save_state(event.repo_root, &state);
+        state_config().save_state(event.repo_root, &state);
 
         None
     }
@@ -324,7 +335,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         // my-light suppression: if stop prompt is a lifecycle entry, skip review gate
         let stop_prompt = extract_prompt_text(event.payload);
         if is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &stop_prompt) {
-            opencode_state_config().remove_state(event.repo_root);
+            state_config().remove_state(event.repo_root);
             return None;
         }
 
@@ -337,7 +348,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         }
 
         // Load review gate state
-        let mut state: OpencodeHookState = opencode_state_config().load_state(event.repo_root);
+        let mut state: OpencodeHookState = state_config().load_state(event.repo_root);
 
         // Check override in stop prompt (cross-host contract: Cursor/Codex/Opencode check Stop-time override)
         if has_override(&stop_prompt) {
@@ -357,9 +368,24 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         {
             state.core.reject_reason_seen = true;
             state.core.review_required = false;
-            opencode_state_config().save_state(event.repo_root, &state);
+            state_config().save_state(event.repo_root, &state);
             return None;
         }
+
+        // Unified goal gate (shared across all 4 hosts)
+        let response_text = event
+            .payload
+            .get("response")
+            .or_else(|| event.payload.get("content"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        let goal_entry = core_policy::hook_common::is_framework_goal_entry_prompt(&stop_prompt);
+        crate::hosts::hook_dispatch::update_goal_gate(
+            &mut state.core,
+            &stop_prompt,
+            response_text,
+            goal_entry,
+        );
 
         // Check reject from previous arming
         if state.core.reject_reason_seen {
@@ -379,8 +405,19 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
             return Some(HookOutput::Advisory { message: nudge });
         }
 
+        // Unified goal gate followup check (shared across all 4 hosts)
+        if !crate::hosts::hook_dispatch::goal_gate_satisfied(&state.core) {
+            let followup = crate::hosts::hook_dispatch::shared_goal_stop_followup_line(
+                state.core.goal_contract_seen,
+                state.core.goal_progress_seen,
+                state.core.goal_verify_or_block_seen,
+                state.core.goal_followup_count,
+            );
+            return Some(HookOutput::Block { reason: followup });
+        }
+
         // Cleanup state
-        opencode_state_config().remove_state(event.repo_root);
+        state_config().remove_state(event.repo_root);
 
         None
     }
@@ -424,8 +461,8 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         let (review_lane, parallel_lane) = subagent_lane_bits(kind.as_deref());
 
         // state_dir managed by HookStateConfig
-        let _state_path = opencode_state_config().state_path(event.repo_root);
-        let mut state: OpencodeHookState = opencode_state_config().load_state(event.repo_root);
+        let _state_path = state_config().state_path(event.repo_root);
+        let mut state: OpencodeHookState = state_config().load_state(event.repo_root);
 
         if review_lane {
             state.review_subagent_seen = true;
@@ -437,7 +474,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         state.subagent_start_count += 1;
         state.review_phase = state.review_phase.saturating_add(1);
 
-        opencode_state_config().save_state(event.repo_root, &state);
+        state_config().save_state(event.repo_root, &state);
 
         None
     }
@@ -510,42 +547,6 @@ fn classify_protected_path(path: &Path, repo_root: &Path) -> Option<&'static str
     }
 
     None
-}
-
-/// Check if a tool call represents a verification command.
-fn is_verification_command(tool_name: &str, tool_input: &Value) -> bool {
-    let command = tool_input
-        .get("command")
-        .or(tool_input.get("cmd"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    hook_dispatch::is_verification_command(tool_name, command)
-}
-
-/// Append shell evidence to the EVIDENCE_INDEX for verification commands.
-fn append_shell_evidence(repo_root: &Path, tool_name: &str, tool_input: &Value, succeeded: bool) {
-    if !is_verification_command(tool_name, tool_input) {
-        return;
-    }
-    let command = tool_input
-        .get("command")
-        .or(tool_input.get("cmd"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    let cmd_trimmed: String = command.chars().take(200).collect();
-    let mut entry = serde_json::Map::new();
-    entry.insert("kind".to_string(), json!("auto_evidence"));
-    entry.insert("source".to_string(), json!("post_tool_use_auto"));
-    entry.insert("tool_name".to_string(), json!(tool_name));
-    entry.insert("command_preview".to_string(), json!(cmd_trimmed));
-    entry.insert("success".to_string(), json!(succeeded));
-    entry.insert(
-        "recorded_at".to_string(),
-        json!(crate::hooks::current_local_timestamp()),
-    );
-    if let Err(err) = crate::hooks::append_evidence_index(repo_root, None, entry) {
-        eprintln!("[router-rs] opencode auto-evidence record failed: {err}");
-    }
 }
 
 /// Check if a tool name indicates a reviewer-type tool.

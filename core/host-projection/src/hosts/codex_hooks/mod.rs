@@ -10,7 +10,7 @@ pub use handlers::run_codex_lifecycle_context_hook_for_state_dir;
 mod install;
 pub use install::{
     build_codex_hook_manifest, build_codex_hook_projection, build_codex_hooks_readme,
-    build_hook_binary_preamble, codex_host_entrypoint_provider, install_codex_cli_hooks,
+    build_hook_binary_preamble, host_entrypoint_provider, install_codex_cli_hooks,
     resolve_codex_home,
 };
 
@@ -150,7 +150,7 @@ impl CodexLifecycleHostKind {
     }
 
     fn paper_prose_hook_host(self) -> hooks::PaperProseHookHost {
-        hooks::PaperProseHookHost::from_codex_lifecycle_state_dir(self.state_dir_leaf)
+        hooks::PaperProseHookHost::from_host_lifecycle_state_dir(self.state_dir_leaf)
     }
 }
 
@@ -222,7 +222,7 @@ impl CodexLifecycleContextState {
     }
 }
 
-fn codex_reset_hook_state(repo_root: &Path, event: &Value) {
+fn reset_hook_state(repo_root: &Path, event: &Value) {
     let _ = with_codex_state_lock(repo_root, event, |_loaded| {
         let reset = CodexLifecycleContextState {
             seq: 0,

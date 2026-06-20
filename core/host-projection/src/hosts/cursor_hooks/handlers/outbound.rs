@@ -2,7 +2,7 @@
 /// When `ROUTER_RS_HOOK_SILENT=1` (legacy `ROUTER_RS_CURSOR_HOOK_SILENT`): drop advisory `additional_context`; keep hard
 /// `followup_message` lines that start with the `router-rs ` leader prefix.
 pub fn apply_cursor_hook_silent_policy(output: &mut Value) {
-    if !hooks::router_rs_cursor_hook_silent_enabled() {
+    if !hooks::router_rs_hook_silent_enabled() {
         return;
     }
     if let Some(obj) = output.as_object_mut() {
@@ -28,14 +28,14 @@ pub fn apply_cursor_hook_output_policy(output: &mut Value) {
         output,
         hooks::HookObservationHost::Cursor,
     );
-    let max_out = hooks::router_rs_cursor_hook_outbound_context_max_bytes();
+    let max_out = hooks::router_rs_hook_outbound_context_max_bytes();
     if let Some(Value::String(s)) = output.get_mut("additional_context") {
         let next = truncate_cursor_hook_outbound_context_preserving_gate(s.as_str(), max_out);
         *s = next;
     }
 
     let absurd_followup_threshold =
-        hooks::router_rs_cursor_hook_outbound_context_max_bytes()
+        hooks::router_rs_hook_outbound_context_max_bytes()
             .saturating_mul(4)
             .max(32 * 1024);
     if let Some(Value::String(s)) = output.get_mut("followup_message")
@@ -79,7 +79,7 @@ fn truncate_cursor_hook_outbound_context(combined: &str, max_bytes: usize) -> St
     format!("{}{}", &combined[..cut], suf)
 }
 
-fn cursor_hook_outbound_line_is_protected(line: &str) -> bool {
+fn hook_outbound_line_is_protected(line: &str) -> bool {
     hooks::hook_outbound_line_is_framework_protected(line)
 }
 
@@ -135,7 +135,7 @@ pub fn truncate_cursor_hook_outbound_context_preserving_gate(
     combined: &str,
     max_bytes: usize,
 ) -> String {
-    truncate_cursor_hook_lines_preserving(combined, max_bytes, cursor_hook_outbound_line_is_protected)
+    truncate_cursor_hook_lines_preserving(combined, max_bytes, hook_outbound_line_is_protected)
 }
 
 fn truncate_cursor_hook_followup_preserving_review_gate(

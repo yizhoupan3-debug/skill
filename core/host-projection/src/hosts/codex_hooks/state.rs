@@ -67,7 +67,7 @@ impl std::fmt::Display for CodexHookError {
 
 impl std::error::Error for CodexHookError {}
 
-pub(super) fn codex_merge_legacy_subagent_gate_evidence(state: &mut CodexLifecycleContextState) {
+pub(super) fn merge_legacy_subagent_gate_evidence(state: &mut CodexLifecycleContextState) {
     if state.review_subagent_seen
         && !state.generic_subagent_seen
         && !state.review_lane_seen
@@ -79,7 +79,7 @@ pub(super) fn codex_merge_legacy_subagent_gate_evidence(state: &mut CodexLifecyc
     }
 }
 
-pub(super) fn codex_state_dir(repo_root: &Path) -> PathBuf {
+pub(super) fn state_dir_for_host(repo_root: &Path) -> PathBuf {
     repo_root
         .join(lifecycle_host().state_dir_leaf)
         .join("hook-state")
@@ -117,7 +117,7 @@ impl Drop for CodexStateLock {
 }
 
 /// Stable session identifier for hook-state filenames.
-pub(super) fn codex_stable_session_raw(event: &Value) -> Option<String> {
+pub(super) fn stable_session_raw(event: &Value) -> Option<String> {
     fn trimmed_nonempty(value: &str) -> Option<String> {
         let t = value.trim();
         (!t.is_empty()).then(|| t.to_string())
@@ -148,12 +148,12 @@ pub(super) fn codex_stable_session_raw(event: &Value) -> Option<String> {
     None
 }
 
-pub(super) fn codex_require_stable_session_key_enabled() -> bool {
+pub(super) fn require_stable_session_key_enabled() -> bool {
     router_rs_env_enabled_default_true(lifecycle_host().require_stable_session_key_env())
 }
 
 /// Fallback hook-state key material when no stable session id (repo-scoped, not one global file).
-pub(super) fn codex_unstable_session_key_raw(repo_root: &Path, event: &Value) -> String {
+pub(super) fn unstable_session_key_raw(repo_root: &Path, event: &Value) -> String {
     let repo = repo_root.to_string_lossy();
     let cwd = event
         .get("cwd")
@@ -166,7 +166,7 @@ pub(super) fn codex_unstable_session_key_raw(repo_root: &Path, event: &Value) ->
             "[router-rs] codex hook-state: unstable fallback with empty cwd — prefer stable session ids or set ROUTER_RS_CODEX_HOOK_STATE_SALT"
         );
     }
-    let payload_session = codex_stable_session_raw(event).unwrap_or_default();
+    let payload_session = stable_session_raw(event).unwrap_or_default();
     let salt = env::var(lifecycle_host().hook_state_salt_env())
         .ok()
         .map(|s| s.trim().to_string())
@@ -184,14 +184,14 @@ pub(super) fn codex_unstable_session_key_raw(repo_root: &Path, event: &Value) ->
     }
 }
 
-pub(super) fn codex_session_key(repo_root: &Path, event: &Value) -> String {
-    let raw = codex_stable_session_raw(event).unwrap_or_else(|| {
+pub(super) fn session_key_for_host(repo_root: &Path, event: &Value) -> String {
+    let raw = stable_session_raw(event).unwrap_or_else(|| {
         CODEX_SESSION_KEY_FALLBACK_WARN.call_once(|| {
             eprintln!(
                 "[router-rs] codex hook-state: no stable session id (set CODEX_SESSION_ID / CODEX_CONVERSATION_ID or include session_id / sessionId / conversation_id / thread_id in hook payloads). With ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY disabled, hook-state uses a deterministic fallback keyed by repo (+ cwd / ROUTER_RS_CODEX_HOOK_STATE_SALT) — not a stable per-conversation id."
             );
         });
-        codex_unstable_session_key_raw(repo_root, event)
+        unstable_session_key_raw(repo_root, event)
     });
     let mut hasher = Sha256::new();
     hasher.update(raw.as_bytes());
@@ -203,50 +203,10 @@ pub(super) fn codex_session_key(repo_root: &Path, event: &Value) -> String {
     full_hex.chars().take(32).collect()
 }
 
-pub(super) fn codex_state_path(repo_root: &Path, event: &Value) -> PathBuf {
-    codex_state_dir(repo_root).join(core_policy::hook_review_subagent_state_basename(
-        &codex_session_key(repo_root, event),
+pub(super) fn state_path_for_host(repo_root: &Path, event: &Value) -> PathBuf {
+    state_dir_for_host(repo_root).join(core_policy::hook_review_subagent_state_basename(
+        &session_key_for_host(repo_root, event),
     ))
-}
-
-pub(super) fn parse_lock_metadata(text: &str) -> (Option<u32>, Option<u64>) {
-    let mut pid = None;
-    let mut ts = None;
-    for part in text.split_whitespace() {
-        if let Some(value) = part.strip_prefix("pid=") {
-            pid = value.parse::<u32>().ok();
-        } else if let Some(value) = part.strip_prefix("ts=") {
-            ts = value.parse::<u64>().ok();
-        }
-    }
-    (pid, ts)
-}
-
-#[cfg(unix)]
-pub(super) fn process_is_alive(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
-    }
-    // Avoid spawning `kill` (PATH / sandbox failures must not look like "process dead").
-    // SAFETY: signal 0 is a POSIX existence check that delivers no signal;
-    // `pid` is parsed from lock-file metadata (not user input) and cast to `pid_t`.
-    unsafe {
-        let rc = libc::kill(pid as libc::pid_t, 0);
-        if rc == 0 {
-            return true;
-        }
-        let err = std::io::Error::last_os_error();
-        match err.raw_os_error() {
-            Some(libc::ESRCH) => false,
-            Some(libc::EPERM) => true,
-            _ => true,
-        }
-    }
-}
-
-#[cfg(not(unix))]
-pub(super) fn process_is_alive(_pid: u32) -> bool {
-    true
 }
 
 pub(super) fn lock_is_stale(path: &Path) -> bool {
@@ -254,7 +214,10 @@ pub(super) fn lock_is_stale(path: &Path) -> bool {
         Ok(value) => value,
         Err(_) => return true,
     };
-    let (pid, ts) = parse_lock_metadata(&text);
+    let (pid, ts) = match crate::hosts::file_state_lock::parse_lock_metadata(&text) {
+        Some(pair) => (Some(pair.0), Some(pair.1)),
+        None => (None, None),
+    };
     if pid.is_none() && ts.is_none() {
         if text.trim().is_empty() {
             let now_ms = SystemTime::now()
@@ -279,7 +242,7 @@ pub(super) fn lock_is_stale(path: &Path) -> bool {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0);
     if let Some(process_id) = pid
-        && process_is_alive(process_id) {
+        && crate::hosts::file_state_lock::is_process_alive(process_id) {
             return false;
         }
     ts.is_none_or(|t| now_ms.saturating_sub(t) > 30_000)
@@ -401,7 +364,7 @@ pub(super) fn acquire_codex_state_lock(
     Err(CodexHookError::StateLockTimeout)
 }
 
-pub(crate) fn codex_load_state_from_path(
+pub(crate) fn load_state_from_path(
     path: &Path,
 ) -> Result<Option<CodexLifecycleContextState>, CodexHookError> {
     let text = match fs::read_to_string(path) {
@@ -450,7 +413,7 @@ pub(crate) fn codex_load_state_from_path(
     serde_json::from_value::<CodexLifecycleContextState>(value.clone())
         .map(|mut parsed| {
             parsed.review_gate = core_policy::hook_review_disk_core_from_value(&value);
-            codex_merge_legacy_subagent_gate_evidence(&mut parsed);
+            merge_legacy_subagent_gate_evidence(&mut parsed);
             Some(parsed)
         })
         .map_err(|err| {
@@ -461,14 +424,14 @@ pub(crate) fn codex_load_state_from_path(
         .or(Ok(None))
 }
 
-pub(crate) fn codex_load_state(
+pub(crate) fn load_state(
     repo_root: &Path,
     event: &Value,
 ) -> Result<Option<CodexLifecycleContextState>, CodexHookError> {
-    codex_load_state_from_path(&codex_state_path(repo_root, event))
+    load_state_from_path(&state_path_for_host(repo_root, event))
 }
 
-pub(super) fn codex_save_state_to_path(
+pub(super) fn save_state_to_path(
     state_path: &Path,
     state: &mut CodexLifecycleContextState,
 ) -> bool {
@@ -609,7 +572,7 @@ where
         Option<CodexLifecycleContextState>,
     ) -> Result<(Option<CodexLifecycleContextState>, T), String>,
 {
-    let state_path = codex_state_path(repo_root, event);
+    let state_path = state_path_for_host(repo_root, event);
     if let Some(parent) = state_path.parent() {
         fs::create_dir_all(parent).map_err(CodexHookError::StateDirCreate)?;
         static LAST_PRUNE: AtomicU64 = AtomicU64::new(0);
@@ -623,10 +586,10 @@ where
         }
     }
     let _guard = acquire_codex_state_lock(&state_path)?;
-    let loaded = codex_load_state_from_path(&state_path)?;
+    let loaded = load_state_from_path(&state_path)?;
     let (next_state, output) = f(loaded).map_err(CodexHookError::StateLockAcquire)?;
     if let Some(mut state) = next_state
-        && !codex_save_state_to_path(&state_path, &mut state) {
+        && !save_state_to_path(&state_path, &mut state) {
             return Err(CodexHookError::StateWriteFailed);
         }
     Ok(output)
@@ -638,54 +601,54 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn codex_stable_session_from_session_id() {
+    fn stable_session_from_session_id() {
         let event = json!({"session_id": "abc-123"});
         assert_eq!(
-            codex_stable_session_raw(&event),
+            stable_session_raw(&event),
             Some("abc-123".to_string())
         );
     }
 
     #[test]
-    fn codex_stable_session_from_session_id_camel() {
+    fn stable_session_from_session_id_camel() {
         let event = json!({"sessionId": "camel-case-id"});
         assert_eq!(
-            codex_stable_session_raw(&event),
+            stable_session_raw(&event),
             Some("camel-case-id".to_string())
         );
     }
 
     #[test]
-    fn codex_stable_session_from_conversation_id() {
+    fn stable_session_from_conversation_id() {
         let event = json!({"conversation_id": "conv-456"});
         assert_eq!(
-            codex_stable_session_raw(&event),
+            stable_session_raw(&event),
             Some("conv-456".to_string())
         );
     }
 
     #[test]
-    fn codex_stable_session_trims_whitespace() {
+    fn stable_session_trims_whitespace() {
         let event = json!({"session_id": "  padded  "});
-        assert_eq!(codex_stable_session_raw(&event), Some("padded".to_string()));
+        assert_eq!(stable_session_raw(&event), Some("padded".to_string()));
     }
 
     #[test]
-    fn codex_stable_session_empty_string_returns_none() {
+    fn stable_session_empty_string_returns_none() {
         let event = json!({"session_id": ""});
-        assert_eq!(codex_stable_session_raw(&event), None);
+        assert_eq!(stable_session_raw(&event), None);
     }
 
     #[test]
-    fn codex_stable_session_no_key_returns_none() {
+    fn stable_session_no_key_returns_none() {
         let event = json!({"other": "value"});
         unsafe { std::env::remove_var("CODEX_SESSION_ID") };
         unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
-        assert_eq!(codex_stable_session_raw(&event), None);
+        assert_eq!(stable_session_raw(&event), None);
     }
 
     #[test]
-    fn codex_hook_error_display() {
+    fn hook_error_display() {
         let err = CodexHookError::StateLockTimeout;
         assert_eq!(format!("{err}"), "state_lock_timeout");
 
@@ -698,7 +661,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_hook_error_is_std_error() {
+    fn hook_error_is_std_error() {
         let err: Box<dyn std::error::Error> = Box::new(CodexHookError::StateLockTimeout);
         assert!(err.to_string().contains("state_lock_timeout"));
     }

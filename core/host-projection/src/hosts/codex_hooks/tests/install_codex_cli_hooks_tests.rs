@@ -409,7 +409,7 @@ fn atomic_write_completes_normally_with_fsync() {
 }
 
 #[test]
-fn codex_hook_rejects_oversized_stdin() {
+fn hook_rejects_oversized_stdin() {
     let large = vec![b'a'; 5 * 1024 * 1024];
     let mut cursor = std::io::Cursor::new(large);
     let err = read_codex_stdin_limited(&mut cursor).unwrap_err();
@@ -417,7 +417,7 @@ fn codex_hook_rejects_oversized_stdin() {
 }
 
 #[test]
-fn codex_hook_rejects_invalid_utf8_stdin() {
+fn hook_rejects_invalid_utf8_stdin() {
     let bytes = vec![0xff, 0xfe, 0xfd];
     let mut cursor = std::io::Cursor::new(bytes);
     let err = read_codex_stdin_limited(&mut cursor).unwrap_err();
@@ -425,7 +425,7 @@ fn codex_hook_rejects_invalid_utf8_stdin() {
 }
 
 #[test]
-fn codex_hook_rejects_truncated_utf8_sequence_stdin() {
+fn hook_rejects_truncated_utf8_sequence_stdin() {
     let mut buf = vec![b'a'; 64];
     buf.push(0x80);
     let mut cursor = std::io::Cursor::new(buf);

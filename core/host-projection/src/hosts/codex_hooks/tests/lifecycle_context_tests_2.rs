@@ -6,7 +6,7 @@ use serial_test::serial;
 use std::sync::atomic::Ordering;
 
 #[test]
-fn codex_review_gate_disable_clears_armed_state_on_userpromptsubmit() {
+fn review_gate_disable_clears_armed_state_on_userpromptsubmit() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE");
     let repo = fresh_repo();
@@ -18,7 +18,7 @@ fn codex_review_gate_disable_clears_armed_state_on_userpromptsubmit() {
     });
     let _ = run_gate(&repo, &arm).unwrap();
     assert!(
-        codex_load_state(&repo, &arm)
+        load_state(&repo, &arm)
             .unwrap()
             .map(|s| s.review_gate.review_required)
             .unwrap_or(false)
@@ -32,7 +32,7 @@ fn codex_review_gate_disable_clears_armed_state_on_userpromptsubmit() {
         "prompt":"继续"
     });
     let _ = run_gate(&repo, &ups_disable).unwrap();
-    let state = codex_load_state(&repo, &ups_disable).unwrap().unwrap();
+    let state = load_state(&repo, &ups_disable).unwrap().unwrap();
     assert_eq!(state.seq, 0, "disable UPS must reset hook-state");
     assert!(!state.review_gate.review_required);
     match prior {
@@ -43,7 +43,7 @@ fn codex_review_gate_disable_clears_armed_state_on_userpromptsubmit() {
 }
 
 #[test]
-fn codex_review_gate_disable_clears_state_on_posttool() {
+fn review_gate_disable_clears_state_on_posttool() {
     let _g = env_lock();
     let prior = std::env::var_os("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE");
     let repo = fresh_repo();
@@ -65,7 +65,7 @@ fn codex_review_gate_disable_clears_state_on_posttool() {
         "tool_input":{"subagent_type":"general-purpose","fork_context":false}
     });
     let _ = run_gate(&repo, &post).unwrap();
-    let state = codex_load_state(&repo, &post).unwrap().unwrap();
+    let state = load_state(&repo, &post).unwrap().unwrap();
     assert_eq!(state.seq, 0, "disable PostTool must reset hook-state");
     assert!(!state.review_gate.review_required);
     match prior {
@@ -93,7 +93,7 @@ fn post_tool_delegate_tool_does_not_count_deep_evidence() {
         "tool_input":{"subagent_type":"general-purpose","fork_context":false}
     });
     let _ = run_gate(&repo, &post).unwrap();
-    let state = codex_load_state(&repo, &post).unwrap().unwrap();
+    let state = load_state(&repo, &post).unwrap().unwrap();
     assert!(!state.review_gate.independent_reviewer_seen);
     let stop = json!({
         "hook_event_name":"Stop",
@@ -135,7 +135,7 @@ fn post_tool_gp_missing_fork_codex_infer_off_blocks_at_stop() {
         "tool_input":{"subagent_type":"general-purpose"}
     });
     let _ = run_gate(&repo, &post).unwrap();
-    let state = codex_load_state(&repo, &post).unwrap().unwrap();
+    let state = load_state(&repo, &post).unwrap().unwrap();
     assert!(!state.review_gate.independent_reviewer_seen);
     let stop = json!({
         "hook_event_name":"Stop",
@@ -171,7 +171,7 @@ fn user_prompt_submit_review_and_implementx_suppresses_review_arming() {
         "prompt":"全面review这个仓库"
     });
     let _ = run_gate(&repo, &arm).unwrap();
-    let armed = codex_load_state(&repo, &arm).unwrap().unwrap();
+    let armed = load_state(&repo, &arm).unwrap().unwrap();
     assert!(
         armed.review_gate.review_required,
         "review-only UPS should arm; got {armed:?}"
@@ -183,7 +183,7 @@ fn user_prompt_submit_review_and_implementx_suppresses_review_arming() {
         "prompt":"请全面review这个仓库 /implementx 修复刚发现的问题"
     });
     let _ = run_gate(&repo, &dual).unwrap();
-    let cleared = codex_load_state(&repo, &dual).unwrap().unwrap();
+    let cleared = load_state(&repo, &dual).unwrap().unwrap();
     assert!(
         !cleared.review_gate.review_required,
         "my-light goal drive must clear/disarm review on Codex UPS; got {cleared:?}"
@@ -210,7 +210,7 @@ fn rearm_review_resets_codex_independent_evidence() {
         "tool_input":{"subagent_type":"general-purpose","fork_context":false}
     });
     let _ = run_gate(&repo, &post).unwrap();
-    let seeded = codex_load_state(&repo, &post).unwrap().unwrap();
+    let seeded = load_state(&repo, &post).unwrap().unwrap();
     assert!(seeded.review_gate.independent_reviewer_seen);
     assert!(seeded.phase >= 2);
     let rearm = json!({
@@ -220,7 +220,7 @@ fn rearm_review_resets_codex_independent_evidence() {
         "prompt":"全面review全仓找bug"
     });
     let _ = run_gate(&repo, &rearm).unwrap();
-    let reset = codex_load_state(&repo, &rearm).unwrap().unwrap();
+    let reset = load_state(&repo, &rearm).unwrap().unwrap();
     assert!(
         !reset.review_gate.independent_reviewer_seen,
         "re-arm review must reset PostTool evidence"
@@ -251,7 +251,7 @@ fn rearm_review_preserves_evidence_when_override() {
         "tool_input":{"subagent_type":"general-purpose","fork_context":false}
     });
     let _ = run_gate(&repo, &post).unwrap();
-    let seeded = codex_load_state(&repo, &post).unwrap().unwrap();
+    let seeded = load_state(&repo, &post).unwrap().unwrap();
     assert!(seeded.review_gate.independent_reviewer_seen);
     let override_ups = json!({
         "hook_event_name":"UserPromptSubmit",
@@ -260,7 +260,7 @@ fn rearm_review_preserves_evidence_when_override() {
         "prompt":"全面review，不要用子代理"
     });
     let _ = run_gate(&repo, &override_ups).unwrap();
-    let kept = codex_load_state(&repo, &override_ups).unwrap().unwrap();
+    let kept = load_state(&repo, &override_ups).unwrap().unwrap();
     assert!(
         kept.review_gate.independent_reviewer_seen,
         "override must not reset prior PostTool reviewer evidence"
@@ -280,13 +280,13 @@ fn legacy_phase_two_alone_compact_does_not_clear_codex_review_gate() {
         "prompt":"全面review"
     });
     let _ = run_gate(&repo, &arm).unwrap();
-    let sp = codex_state_path(&repo, &arm);
-    let mut state = codex_load_state(&repo, &arm).unwrap().unwrap();
+    let sp = state_path_for_host(&repo, &arm);
+    let mut state = load_state(&repo, &arm).unwrap().unwrap();
     state.phase = 2;
     state.subagent_start_count = 0;
     state.review_gate.independent_reviewer_seen = false;
     state.review_gate.review_required = true;
-    assert!(codex_save_state_to_path(&sp, &mut state));
+    assert!(save_state_to_path(&sp, &mut state));
     let stop = json!({
         "hook_event_name":"Stop",
         "session_id": sid,
@@ -303,7 +303,7 @@ fn legacy_phase_two_alone_compact_does_not_clear_codex_review_gate() {
         msg.contains("CODEX_REVIEW_GATE"),
         "legacy phase=2 without PostTool start/independent must not clear gate; msg={msg:?}"
     );
-    let loaded = codex_load_state(&repo, &stop).unwrap().unwrap();
+    let loaded = load_state(&repo, &stop).unwrap().unwrap();
     assert!(
         loaded.phase < 3,
         "compact must not bump to phase 3 without countable evidence"
@@ -522,7 +522,7 @@ fn post_tool_state_lock_failure_blocks_like_user_prompt_submit() {
         "tool_name":"Task",
         "tool_input":{"subagent_type":"general-purpose","fork_context":false}
     });
-    let state_path = codex_state_path(&repo, &event);
+    let state_path = state_path_for_host(&repo, &event);
     fs::create_dir_all(state_path.parent().unwrap()).unwrap();
     let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
     fs::write(&lock_path, "pid=1 ts=1\n").unwrap();
@@ -610,13 +610,13 @@ fn no_drift_warn_when_manifest_matches() {
 fn v1_migration_ignores_removed_override_flag() {
     let repo = fresh_repo();
     let event = json!({"session_id":"v1-override"});
-    let state_path = codex_state_path(&repo, &event);
+    let state_path = state_path_for_host(&repo, &event);
     fs::write(
         state_path,
         r#"{"schema_version":1,"override":true,"subagent_required":true}"#,
     )
     .unwrap();
-    let state = codex_load_state(&repo, &event).unwrap().unwrap();
+    let state = load_state(&repo, &event).unwrap().unwrap();
     assert_eq!(state.seq, 0);
 }
 
@@ -624,13 +624,13 @@ fn v1_migration_ignores_removed_override_flag() {
 fn v1_migration_ignores_removed_reject_reason_flag() {
     let repo = fresh_repo();
     let event = json!({"session_id":"v1-reject"});
-    let state_path = codex_state_path(&repo, &event);
+    let state_path = state_path_for_host(&repo, &event);
     fs::write(
         state_path,
         r#"{"schema_version":1,"reject_reason_seen":true}"#,
     )
     .unwrap();
-    let state = codex_load_state(&repo, &event).unwrap().unwrap();
+    let state = load_state(&repo, &event).unwrap().unwrap();
     assert_eq!(state.seq, 0);
 }
 
@@ -638,39 +638,39 @@ fn v1_migration_ignores_removed_reject_reason_flag() {
 fn v1_delegation_only_maps_to_phase1() {
     let repo = fresh_repo();
     let event = json!({"session_id":"v1-phase"});
-    let state_path = codex_state_path(&repo, &event);
+    let state_path = state_path_for_host(&repo, &event);
     fs::write(
         state_path,
         r#"{"schema_version":1,"delegation_required":true,"review_subagent_seen":false}"#,
     )
     .unwrap();
-    let state = codex_load_state(&repo, &event).unwrap().unwrap();
+    let state = load_state(&repo, &event).unwrap().unwrap();
     assert_eq!(state.seq, 1);
 }
 
 #[test]
-fn codex_session_key_fallback_is_stable_without_identifiers() {
+fn session_key_fallback_is_stable_without_identifiers() {
     let _guard = env_lock();
     unsafe { std::env::remove_var("CODEX_SESSION_ID") };
     unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     unsafe { std::env::remove_var("ROUTER_RS_CODEX_HOOK_STATE_SALT") };
     let repo = fresh_repo();
     let event = json!({"cwd": repo.to_string_lossy()});
-    let a = codex_session_key(&repo, &event);
-    let b = codex_session_key(&repo, &event);
+    let a = session_key_for_host(&repo, &event);
+    let b = session_key_for_host(&repo, &event);
     assert_eq!(a, b);
     assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
     assert_eq!(a.len(), 32);
 }
 
 #[test]
-fn codex_session_key_differs_by_cwd_when_unstable() {
+fn session_key_differs_by_cwd_when_unstable() {
     let _guard = env_lock();
     unsafe { std::env::remove_var("CODEX_SESSION_ID") };
     unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     let repo = fresh_repo();
-    let a = codex_session_key(&repo, &json!({"cwd":"/tmp/a"}));
-    let b = codex_session_key(&repo, &json!({"cwd":"/tmp/b"}));
+    let a = session_key_for_host(&repo, &json!({"cwd":"/tmp/a"}));
+    let b = session_key_for_host(&repo, &json!({"cwd":"/tmp/b"}));
     assert_ne!(a, b, "unstable fallback must not collapse unlike cwd");
 }
 
@@ -701,7 +701,7 @@ fn post_tool_use_with_agent_type_camel_case_marks_seen_without_deep_independent(
     });
     let out = run_gate(&repo, &post).unwrap();
     assert!(out.is_none());
-    let state = codex_load_state(&repo, &post).unwrap().unwrap();
+    let state = load_state(&repo, &post).unwrap().unwrap();
     assert!(state.review_subagent_seen);
     assert!(
         !state.review_gate.independent_reviewer_seen,
@@ -746,10 +746,10 @@ fn dispatch_missing_event_blocks_with_message() {
 }
 
 #[test]
-fn codex_state_lock_recovers_from_stale_lock() {
+fn state_lock_recovers_from_stale_lock() {
     let repo = fresh_repo();
     let event = json!({"session_id":"lock-stale"});
-    let state_path = codex_state_path(&repo, &event);
+    let state_path = state_path_for_host(&repo, &event);
     fs::create_dir_all(state_path.parent().unwrap()).unwrap();
     let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
     fs::write(&lock_path, "pid=999999 ts=1\n").unwrap();
@@ -758,10 +758,10 @@ fn codex_state_lock_recovers_from_stale_lock() {
 }
 
 #[test]
-fn codex_state_lock_recovers_from_corrupt_lock_metadata() {
+fn state_lock_recovers_from_corrupt_lock_metadata() {
     let repo = fresh_repo();
     let event = json!({"session_id":"lock-corrupt"});
-    let state_path = codex_state_path(&repo, &event);
+    let state_path = state_path_for_host(&repo, &event);
     fs::create_dir_all(state_path.parent().unwrap()).unwrap();
     let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
     fs::write(&lock_path, "not-a-lock-metadata-line\n").unwrap();
@@ -770,10 +770,10 @@ fn codex_state_lock_recovers_from_corrupt_lock_metadata() {
 }
 
 #[test]
-fn codex_state_lock_recovers_from_unparseable_pid_and_ts() {
+fn state_lock_recovers_from_unparseable_pid_and_ts() {
     let repo = fresh_repo();
     let event = json!({"session_id":"lock-unparseable"});
-    let state_path = codex_state_path(&repo, &event);
+    let state_path = state_path_for_host(&repo, &event);
     fs::create_dir_all(state_path.parent().unwrap()).unwrap();
     let lock_path = PathBuf::from(format!("{}.lock", state_path.display()));
     fs::write(&lock_path, "pid=bad ts=bad\n").unwrap();
@@ -783,12 +783,12 @@ fn codex_state_lock_recovers_from_unparseable_pid_and_ts() {
 
 #[cfg(unix)]
 #[test]
-fn codex_state_lock_blocks_until_released() {
+fn state_lock_blocks_until_released() {
     use std::sync::mpsc;
 
     let repo = fresh_repo();
     let event = json!({"session_id":"lock-held"});
-    let state_path = codex_state_path(&repo, &event);
+    let state_path = state_path_for_host(&repo, &event);
     fs::create_dir_all(state_path.parent().unwrap()).unwrap();
     let guard = acquire_codex_state_lock(&state_path).unwrap();
     let state_path_clone = state_path.clone();
@@ -808,10 +808,10 @@ fn codex_state_lock_blocks_until_released() {
 
 #[cfg(not(unix))]
 #[test]
-fn codex_state_lock_blocks_when_held() {
+fn state_lock_blocks_when_held() {
     let repo = fresh_repo();
     let event = json!({"session_id":"lock-held"});
-    let state_path = codex_state_path(&repo, &event);
+    let state_path = state_path_for_host(&repo, &event);
     fs::create_dir_all(state_path.parent().unwrap()).unwrap();
     let guard = acquire_codex_state_lock(&state_path).unwrap();
     let started = std::time::Instant::now();
@@ -823,7 +823,7 @@ fn codex_state_lock_blocks_when_held() {
 
 #[test]
 #[serial]
-fn codex_state_lock_serializes_concurrent_writes() {
+fn state_lock_serializes_concurrent_writes() {
     let repo = fresh_repo();
     let event = json!({"session_id":"lock-inc"});
     let repo_a = repo.clone();
@@ -844,7 +844,7 @@ fn codex_state_lock_serializes_concurrent_writes() {
     let t2 = std::thread::spawn(move || worker(repo_b, event_b));
     t1.join().unwrap();
     t2.join().unwrap();
-    let state = codex_load_state(&repo, &event).unwrap().unwrap();
+    let state = load_state(&repo, &event).unwrap().unwrap();
     // flock on macOS has known edge cases with concurrent threads;
     // accept 1999-2000 to avoid flaky test failures.
     assert!(
@@ -864,7 +864,7 @@ fn userpromptsubmit_simple_prompt_records_only_telemetry() {
         "prompt": "just a simple question about coding"
     });
     let _ = run_gate(&repo, &event).unwrap();
-    let state = codex_load_state(&repo, &event).unwrap().unwrap();
+    let state = load_state(&repo, &event).unwrap().unwrap();
     assert_eq!(state.seq, 1);
     assert!(!state.review_subagent_seen);
 }
@@ -879,7 +879,7 @@ fn userpromptsubmit_review_prompt_records_gate_requirement() {
         "prompt": "please do a deep code review of this module"
     });
     let _ = run_gate(&repo, &event).unwrap();
-    let state = codex_load_state(&repo, &event).unwrap().unwrap();
+    let state = load_state(&repo, &event).unwrap().unwrap();
     assert_eq!(state.seq, 1);
     assert!(state.review_gate.review_required);
     assert!(!state.review_subagent_seen);
@@ -908,7 +908,7 @@ fn protected_prefixes_cover_skill_files_and_registry() {
 
 // P1-B: CODEX_SESSION_ID env var fallback test
 #[test]
-fn codex_session_key_uses_codex_session_id_env_when_no_event_fields() {
+fn session_key_uses_codex_session_id_env_when_no_event_fields() {
     let _guard = env_lock();
     // Use a unique env-var value to avoid cross-test pollution.
     let unique_id = format!(
@@ -919,8 +919,8 @@ fn codex_session_key_uses_codex_session_id_env_when_no_event_fields() {
     let event = json!({});
     let repo = fresh_repo();
     unsafe { std::env::set_var("CODEX_SESSION_ID", &unique_id) };
-    let a = codex_session_key(&repo, &event);
-    let b = codex_session_key(&repo, &event);
+    let a = session_key_for_host(&repo, &event);
+    let b = session_key_for_host(&repo, &event);
     unsafe { std::env::remove_var("CODEX_SESSION_ID") };
     assert_eq!(a, b, "env var fallback should produce a stable key");
     assert!(
@@ -931,16 +931,16 @@ fn codex_session_key_uses_codex_session_id_env_when_no_event_fields() {
 }
 
 #[test]
-fn codex_session_key_matches_for_session_id_camel_case() {
+fn session_key_matches_for_session_id_camel_case() {
     let repo = fresh_repo();
     let sid = "sess-key-camel-01";
-    let snake = codex_session_key(&repo, &json!({"session_id": sid}));
-    let camel = codex_session_key(&repo, &json!({"sessionId": sid}));
+    let snake = session_key_for_host(&repo, &json!({"session_id": sid}));
+    let camel = session_key_for_host(&repo, &json!({"sessionId": sid}));
     assert_eq!(snake, camel);
 }
 
 #[test]
-fn codex_session_key_uses_codex_conversation_id_env_when_no_event_fields() {
+fn session_key_uses_codex_conversation_id_env_when_no_event_fields() {
     let _guard = env_lock();
     let unique_id = format!(
         "test-conv-{}-{}",
@@ -951,8 +951,8 @@ fn codex_session_key_uses_codex_conversation_id_env_when_no_event_fields() {
     unsafe { std::env::remove_var("CODEX_SESSION_ID") };
     let repo = fresh_repo();
     unsafe { std::env::set_var("CODEX_CONVERSATION_ID", &unique_id) };
-    let a = codex_session_key(&repo, &event);
-    let b = codex_session_key(&repo, &event);
+    let a = session_key_for_host(&repo, &event);
+    let b = session_key_for_host(&repo, &event);
     unsafe { std::env::remove_var("CODEX_CONVERSATION_ID") };
     assert_eq!(a, b, "CODEX_CONVERSATION_ID fallback should be stable");
     assert_eq!(a.len(), 32);
