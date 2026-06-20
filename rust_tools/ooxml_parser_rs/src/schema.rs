@@ -1,5 +1,5 @@
 //! OOXML-specific batch schema types.
-pub use batch_common::schema::{classify_text, ContentClass, ProcessStatus};
+pub use batch_common::schema::{classify_text, CommonFileResult, ContentClass, ProcessStatus};
 use batch_common::engine::BatchResult;
 use serde::{Deserialize, Serialize};
 use std::io::{Result as IoResult, Write};
@@ -15,22 +15,21 @@ impl FileKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileResult {
-    pub path: String, pub sha256: String, pub file_kind: FileKind, pub status: ProcessStatus,
-    pub content_class: ContentClass, pub unit_count: u32,
-    #[serde(skip_serializing_if = "Option::is_none")] pub text_path: Option<String>,
-    pub char_count: usize, pub truncated: bool, pub warnings: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")] pub error: Option<String>,
+    #[serde(flatten)]
+    pub common: CommonFileResult,
+    pub file_kind: FileKind,
+    pub unit_count: u32,
 }
 
 impl BatchResult for FileResult {
-    fn path(&self) -> &str { &self.path }
-    fn status(&self) -> ProcessStatus { self.status }
+    fn path(&self) -> &str { &self.common.path }
+    fn status(&self) -> ProcessStatus { self.common.status }
     fn write_index_row(&self, writer: &mut dyn Write) -> IoResult<()> {
-        let text_ref = self.text_path.as_deref().unwrap_or("-");
+        let text_ref = self.common.text_path.as_deref().unwrap_or("-");
         writeln!(writer, "| {} | {} | {:?} | {} | {} | {} |",
-            self.path, self.file_kind.as_str(), self.status, self.content_class.as_str(), self.unit_count, text_ref)
+            self.common.path, self.file_kind.as_str(), self.common.status, self.common.content_class.as_str(), self.unit_count, text_ref)
     }
     fn to_summary_entry(&self) -> serde_json::Value {
-        serde_json::json!({"path": self.path, "file_kind": self.file_kind, "status": self.status, "content_class": self.content_class, "unit_count": self.unit_count})
+        serde_json::json!({"path": self.common.path, "file_kind": self.file_kind, "status": self.common.status, "content_class": self.common.content_class, "unit_count": self.unit_count})
     }
 }

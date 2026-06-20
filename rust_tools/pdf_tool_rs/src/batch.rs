@@ -12,11 +12,14 @@ pub fn resolve_jobs(jobs_arg: &str, hint_paths: &[PathBuf]) -> usize { engine::r
 
 fn skipped_scanned_file_result(path: &Path, pages: u32, class: ContentClass) -> FileResult {
     FileResult {
-        path: path.display().to_string(),
-        sha256: crate::read::file_sha256(path).unwrap_or_default(),
-        status: ProcessStatus::Skipped, content_class: class, page_count: pages,
-        text_path: None, char_count: 0, truncated: false,
-        warnings: vec!["skip_scanned".to_string()], error: None,
+        common: batch_common::schema::CommonFileResult {
+            path: path.display().to_string(),
+            sha256: crate::read::file_sha256(path).unwrap_or_default(),
+            status: ProcessStatus::Skipped, content_class: class,
+            text_path: None, char_count: 0, truncated: false,
+            warnings: vec!["skip_scanned".to_string()], error: None,
+        },
+        page_count: pages,
     }
 }
 
@@ -30,10 +33,12 @@ pub fn run_batch(paths: Vec<PathBuf>, opts: &BatchOptions, skip_scanned: bool) -
             match shallow_scan_classify(path) {
                 Ok((pages, class, true)) => skipped_scanned_file_result(path, pages, class),
                 Ok(_) => read_to_result(path, &read_opts),
-                Err(e) => FileResult { path: path.display().to_string(), sha256: String::new(),
+                Err(e) => FileResult { common: batch_common::schema::CommonFileResult {
+                    path: path.display().to_string(), sha256: String::new(),
                     status: ProcessStatus::Error, content_class: ContentClass::Error,
-                    page_count: 0, text_path: None, char_count: 0, truncated: false,
+                    text_path: None, char_count: 0, truncated: false,
                     warnings: vec![], error: Some(format!("{e:#}")) },
+                    page_count: 0 },
             }
         } else { read_to_result(path, &read_opts) }
     })

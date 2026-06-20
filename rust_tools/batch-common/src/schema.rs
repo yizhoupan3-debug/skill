@@ -43,6 +43,25 @@ pub fn classify_text(char_count: usize) -> ContentClass {
     }
 }
 
+/// Common fields shared by all batch `FileResult` types (PDF, OOXML, etc.).
+///
+/// Tool-specific crates extend this via `#[serde(flatten)]` to add
+/// domain-specific fields (e.g. `page_count`, `file_kind`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommonFileResult {
+    pub path: String,
+    pub sha256: String,
+    pub status: ProcessStatus,
+    pub content_class: ContentClass,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_path: Option<String>,
+    pub char_count: usize,
+    pub truncated: bool,
+    pub warnings: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

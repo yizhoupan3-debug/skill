@@ -1249,11 +1249,7 @@ fn null_adj_close_count(records: &[OhlcvRecord]) -> usize {
 }
 
 fn truncate(value: &str, max_len: usize) -> String {
-    if value.chars().count() <= max_len {
-        return value.to_string();
-    }
-    let truncated: String = value.chars().take(max_len).collect();
-    format!("{truncated}...")
+    mcp_stdio_common::util::truncate_text(value, max_len).0
 }
 
 #[derive(serde::Deserialize)]

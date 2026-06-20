@@ -19,16 +19,16 @@
 | trace helper 7 函数逐行克隆 | trace-runtime 已导出公共 API，framework-runtime/trace_stream_io 改为 import |
 | `canonicalize_existing_ancestors` 重复 | framework-runtime 改为委托调用 runtime-storage 版本 |
 
-### P2 — 确认可接受 / 待后续处理
+### P2 — 已修复 / 确认可接受
 
 | 问题 | 状态 |
 |------|------|
 | `reject_unsafe_path` vs `validate_write_path` | 可接受：基础版 vs 超集版，因依赖方向无法合并 |
 | flock 3 处实现 | 可接受：三种不同场景（repo-level/per-path/per-host）各有不同重试策略 |
-| mcp_main.rs 6 处 boilerplate | 待后续：rust_tools 独立 workspace，可用 `mcp_stdio_main!` 宏消除 |
-| codegraph-rs 自实现 MCP stdio | 待后续：接入 mcp-stdio-common |
-| truncate_text 3 处重复 | 待后续：提取到共享 util |
-| `FileResult` 结构体重复 | 待后续：提取到 batch-common |
+| mcp_main.rs 6 处 boilerplate | ✅ 已有 `mcp_stdio_main!` 宏（前一轮修复） |
+| codegraph-rs 自实现 MCP stdio | 可接受：需要自定义初始化（index + watcher），mcp-stdio-common 不支持 |
+| truncate_text 3 处重复 | ✅ ooxml_parser_rs 和 financial_data_rs 改为委托 `mcp-stdio-common::util::truncate_text` |
+| `FileResult` 结构体重复 | ✅ 提取 `CommonFileResult` 到 batch-common，pdf_tool_rs 和 ooxml_parser_rs 通过 `#[serde(flatten)]` 组合 |
 | evolution_observer 阈值硬编码 | 可接受：已注释说明与 TOML 默认值一致 |
 
 ### 新增 crate
