@@ -52,21 +52,14 @@ pub(super) const PROTECTED_GENERATED_PREFIXES: [&str; 3] = [
     "core/router-rs/",
 ];
 pub(super) const CODEX_REVIEW_SUBAGENT_TYPES: &[&str] = &[
-    "default",
     "explore",
     "explorer",
     "general-purpose",
-    "generalpurpose",
-    "shell",
-    "worker",
-    "browser-use",
-    "browseruse",
-    "ci-investigator",
-    "ciinvestigator",
-    "best-of-n-runner",
-    "bestofnrunner",
-    "cursor-guide",
-    "cursorguide",
+    "deep-review-agent",
+    "review",
+    "verifyx-agent",
+    "plan",
+    "claude",
 ];
 pub const INSTALL_LIFECYCLE_EVENTS: [&str; 7] = [
     "SessionStart",

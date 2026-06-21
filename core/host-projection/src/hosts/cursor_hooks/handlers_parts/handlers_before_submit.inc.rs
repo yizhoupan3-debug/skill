@@ -34,46 +34,46 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         is_parallel_delegation_prompt(&text) || framework_prompt_arms_delegation(&text);
     let user_gate_override = has_override(&text);
 
-    let prior_review_required = state.review_required;
-    let my_light = core_policy::hook_common::my_light_profile_active(Some(repo_root), &text);
+    let prior_review_required = state.core.review_required;
+    let my_light = core_policy::hook_common::is_interactive_profile(Some(repo_root), &text);
     let review_gate_live = !crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &text);
     let mut fresh_review_cycle = false;
     if my_light {
-        state.review_required = false;
+        state.core.review_required = false;
         reset_review_cycle_progress(&mut state, false);
     } else {
         if review_arms_for_gate && !user_gate_override && review_gate_live {
             reset_review_cycle_progress(&mut state, true);
             fresh_review_cycle = true;
         }
-        state.review_required = state.review_required || review_arms_for_gate;
+        state.core.review_required = state.core.review_required || review_arms_for_gate;
     }
     if goal_drive_entrypoint && !review_arms_for_gate {
-        state.review_required = false;
+        state.core.review_required = false;
         clear_review_gate_escalation_counters(&mut state);
         reset_review_cycle_progress(&mut state, false);
     }
-    state.review_override = state.review_override || user_gate_override;
-    state.delegation_override = state.delegation_override || user_gate_override;
+    state.core.review_override = state.core.review_override || user_gate_override;
+    state.core.delegation_override = state.core.delegation_override || user_gate_override;
     if goal_drive_entrypoint {
-        state.goal_drive_entry_active = true;
+        state.core.goal_drive_entry_active = true;
     }
     state.goal_required =
         state.goal_required || (goal_drive_entrypoint && !my_light);
     let disk_goal = frame.hydration_goal.is_some();
     if !disk_goal {
-        state.goal_contract_seen =
-            state.goal_contract_seen || has_structured_goal_contract(&signal_text);
-        state.goal_progress_seen =
-            state.goal_progress_seen || has_goal_progress_signal(&signal_text);
-        state.goal_verify_or_block_seen = state.goal_verify_or_block_seen
+        state.core.goal_contract_seen =
+            state.core.goal_contract_seen || has_structured_goal_contract(&signal_text);
+        state.core.goal_progress_seen =
+            state.core.goal_progress_seen || has_goal_progress_signal(&signal_text);
+        state.core.goal_verify_or_block_seen = state.core.goal_verify_or_block_seen
             || has_goal_verify_or_block_signal(&signal_text);
     }
     // 用户在本轮提交里写出 reject_reason token 时须即时生效；否则仅能在助手回复或 Stop 里识别，导致 pre-goal 与 AG_FOLLOWUP 循环。
     // `signal_text` 含整树字符串，覆盖仅出现在 `messages[].content` 等深层路径的 token。
     if saw_reject_reason(&signal_text, &text) {
-        state.reject_reason_seen = true;
-        if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) {
+        state.core.reject_reason_seen = true;
+        if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active) {
             state.pre_goal_review_satisfied = true;
         }
         clear_review_gate_escalation_counters(&mut state);
@@ -96,16 +96,16 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     // Review：首次武装门控时注入默认「深度+广度」契约指针（短）；相位仍只靠 subagent/PostToolUse（仅 review_hard_armed）。
     let needs_pre_goal =
         hooks::router_rs_pre_goal_enabled()
-            && crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active)
+            && crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active)
             && !state.pre_goal_review_satisfied
-            && !(state.review_override || state.delegation_override)
-            && !state.reject_reason_seen;
+            && !(state.core.review_override || state.core.delegation_override)
+            && !state.core.reject_reason_seen;
     let mut output = json!({ "continue": true });
     let mut spawn_first_line: Option<String> = None;
     if review_arms_for_gate
         && (fresh_review_cycle || !prior_review_required)
         && !crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &text)
-        && !state.review_override
+        && !state.core.review_override
         && core_policy::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), &text)
     {
         let nudge =
@@ -142,7 +142,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     }
     if needs_pre_goal {
         // 仅计入总 follow-up 次数；不要把 goal_followup_count 算进去，否则首次 stop 会误判成「非首条」而跳过完整 goal 提示。
-        state.followup_count += 1;
+        state.core.followup_count += 1;
         let pre = my_pre_goal_followup_message();
         core_state::state_manager::merge_hook_nudge_paragraph(
             &mut output,

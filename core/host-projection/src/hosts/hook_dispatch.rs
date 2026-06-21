@@ -827,3 +827,238 @@ pub fn shared_settings_validation_advisory() -> String {
 pub fn shared_framework_test_advisory() -> String {
     "Framework source files were modified. Consider running tests.".to_string()
 }
+
+// ════════════════════════════════════════════════════════════════════
+// Shared handler logic (4-host unification)
+// ════════════════════════════════════════════════════════════════════
+
+/// Record tool call telemetry + session tracking (PostToolUse).
+/// All 4 hosts emit the same 2-line sequence; call once after extracting tool_name + duration.
+pub fn record_tool_call_emission(repo_root: &Path, tool_name: &str, duration_ms: u64, succeeded: bool) {
+    crate::hooks::emit_tool_call(tool_name, duration_ms, succeeded);
+    if let Err(e) = crate::hooks::record_tool_call(repo_root, tool_name, None) {
+        eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
+    }
+}
+
+/// Merge review gate state on UserPromptSubmit (pure logic, no I/O).
+///
+/// All 4 hosts share this core sequence:
+/// 1. my_light / goal_drive / narrow → suppress review (clear `review_required` + `independent_reviewer_seen`)
+/// 2. review_arms && !override_now → clear `independent_reviewer_seen` (fresh cycle)
+/// 3. Accumulate: `review_required = prev || review_arms`, `review_override = prev || override_now`
+///
+/// Returns the updated `HookReviewDiskCore` and flags for the caller:
+/// - `review_required` (post-merge): whether review gate is armed
+/// - `review_override` (post-merge): whether override is active
+/// - `fresh_cycle`: whether a new review cycle was armed this call
+pub struct ReviewGateMergeResult {
+    pub core: core_policy::HookReviewDiskCore,
+    pub review_arms: bool,
+    pub override_now: bool,
+    pub fresh_cycle: bool,
+    pub suppressed: bool,
+}
+
+pub fn merge_review_gate_on_user_prompt(
+    prev: &core_policy::HookReviewDiskCore,
+    prompt: &str,
+    repo_root: &Path,
+    host_id: &str,
+) -> ReviewGateMergeResult {
+    let suppressed = is_review_gate_suppressed(host_id, Some(repo_root), prompt);
+    if suppressed {
+        return ReviewGateMergeResult {
+            core: prev.clone(),
+            review_arms: false,
+            override_now: false,
+            fresh_cycle: false,
+            suppressed: true,
+        };
+    }
+
+    let my_light = core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt);
+    let goal_drive = core_policy::hook_common::is_framework_goal_entry_prompt(prompt);
+    let narrow = core_policy::hook_common::is_narrow_review_prompt(prompt);
+    let review_arms = core_policy::hook_common::is_review_prompt(prompt) && !goal_drive;
+    let override_now = core_policy::hook_common::has_override(prompt);
+
+    let mut core = prev.clone();
+
+    if my_light || goal_drive || narrow {
+        core.review_required = false;
+        core.independent_reviewer_seen = false;
+    } else {
+        if review_arms && !override_now {
+            core.independent_reviewer_seen = false;
+        }
+        core.review_required = core.review_required || review_arms;
+    }
+    core.review_override = core.review_override || override_now;
+
+    let fresh_cycle = review_arms && !override_now && !my_light && !goal_drive && !narrow;
+
+    ReviewGateMergeResult {
+        core,
+        review_arms,
+        override_now,
+        fresh_cycle,
+        suppressed: false,
+    }
+}
+
+/// Apply override + reject detection to review gate state (Stop event).
+/// All 4 hosts run this sequence. Call before gate evaluation.
+pub fn apply_override_and_reject(
+    core: &mut core_policy::HookReviewDiskCore,
+    prompt: &str,
+    stop_signal: &str,
+) {
+    if core_policy::hook_common::has_override(prompt) {
+        core.review_override = true;
+        core.delegation_override = true;
+    }
+    if core_policy::hook_common::saw_reject_reason(stop_signal, prompt)
+        || core_policy::hook_common::saw_reject_reason(prompt, stop_signal)
+    {
+        core.reject_reason_seen = true;
+        core.followup_count = 0;
+        core.review_followup_count = 0;
+    }
+}
+
+/// Stop decision enum — returned by `evaluate_stop_decision`.
+pub enum StopDecision {
+    /// Closeout advisory (unmet closeout evidence).
+    Closeout { message: String },
+    /// Review gate nudge (unmet review requirements).
+    ReviewGateNudge { message: String },
+    /// Goal followup nudge (unmet goal contract/progress/verify).
+    GoalFollowup { message: String },
+    /// All gates satisfied — safe to stop.
+    Clean,
+}
+
+/// Evaluate the full stop decision sequence (pure logic, no I/O).
+///
+/// All 4 hosts run the same pipeline:
+/// 1. Closeout check → advisory
+/// 2. Override + reject detection
+/// 3. Goal gate update (via `update_goal_gate`)
+/// 4. Review gate check → advisory nudge
+/// 5. Goal followup check → advisory nudge
+/// 6. Clean
+///
+/// Callers must pass mutable `HookReviewDiskCore` (override/reject mutations applied in-place).
+pub fn evaluate_stop_decision(
+    core: &mut core_policy::HookReviewDiskCore,
+    prompt: &str,
+    response_text: &str,
+    stop_signal: &str,
+    completion_text: &str,
+    repo_root: &Path,
+    host_id: &str,
+) -> StopDecision {
+    // 1. Closeout
+    if let Some(msg) = crate::hooks::closeout_stop_followup_for_completion_text(repo_root, completion_text) {
+        return StopDecision::Closeout { message: msg };
+    }
+
+    // 2. Override + reject
+    apply_override_and_reject(core, prompt, stop_signal);
+
+    // 3. Goal gate update
+    let goal_entry = core_policy::hook_common::is_framework_goal_entry_prompt(prompt);
+    update_goal_gate(core, prompt, response_text, goal_entry);
+
+    // 4. Review gate
+    let gate_fields = core_policy::hook_review_gate_fields_from_parts(
+        core.review_required,
+        core.review_override,
+        core.independent_reviewer_seen,
+        core.reject_reason_seen,
+    );
+    if let Some(nudge) = core_policy::hook_review_stop_advisory_needed(
+        &gate_fields,
+        &format!("{}_REVIEW_GATE", host_id.to_ascii_uppercase()),
+    ) {
+        return StopDecision::ReviewGateNudge { message: nudge };
+    }
+
+    // 5. Goal followup
+    if !goal_gate_satisfied(core) {
+        let followup = shared_goal_stop_followup_line(
+            core.goal_contract_seen,
+            core.goal_progress_seen,
+            core.goal_verify_or_block_seen,
+            core.goal_followup_count,
+        );
+        return StopDecision::GoalFollowup { message: followup };
+    }
+
+    StopDecision::Clean
+}
+
+/// Build UserPromptSubmit additional context (spawn-first nudge + paper context).
+/// All 4 hosts inject the same context sequence. Returns empty vec if nothing to inject.
+pub fn build_user_prompt_context_injection(
+    repo_root: &Path,
+    prompt: &str,
+    host_id: &str,
+    paper_host: crate::hooks::PaperProseHookHostType,
+    review_required: bool,
+    review_override: bool,
+) -> Vec<String> {
+    let mut contexts = Vec::new();
+
+    // Spawn-first review nudge
+    if review_required && !review_override {
+        if core_policy::hook_common::should_inject_spawn_first_review_nudge(Some(repo_root), prompt) {
+            contexts.push(core_policy::registry_review_gate::review_spawn_first_nudge_line(
+                Some(repo_root),
+                host_id,
+            ));
+        }
+    }
+
+    // Paper context injection
+    crate::hooks::maybe_append_paper_adversarial_context(repo_root, prompt, &mut contexts, paper_host);
+    crate::hooks::maybe_append_paper_prose_context(repo_root, prompt, &mut contexts, paper_host);
+
+    contexts
+}
+
+/// Detect reviewer evidence from PostToolUse (fork_context + review lane).
+/// Returns true if independent_reviewer_seen should be armed.
+/// All 4 hosts run this same detection after subagent type recognition.
+pub fn detect_reviewer_evidence(
+    tool_input: &Value,
+    reviewer_lane: bool,
+) -> bool {
+    if !reviewer_lane {
+        return false;
+    }
+    let fork = extract_fork_context(tool_input);
+    core_policy::review_gate_engine::review_independent_reviewer_evidence(fork, reviewer_lane)
+}
+
+/// Extract fork_context from tool input (tries multiple field names).
+/// Returns `None` if field is absent or unparseable (Claude semantics: absent ≠ false).
+fn extract_fork_context(tool_input: &Value) -> Option<bool> {
+    tool_input
+        .get("fork_context")
+        .or_else(|| tool_input.get("forkContext"))
+        .and_then(|v| {
+            if let Some(b) = v.as_bool() {
+                Some(b)
+            } else if let Some(s) = v.as_str() {
+                match s {
+                    "true" | "1" | "yes" => Some(true),
+                    "false" | "0" | "no" => Some(false),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        })
+}

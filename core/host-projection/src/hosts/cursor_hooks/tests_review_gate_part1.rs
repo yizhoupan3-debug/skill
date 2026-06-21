@@ -14,7 +14,7 @@ fn before_submit_review_and_implementx_same_prompt_suppresses_review_but_arms_go
     assert_eq!(out.get("continue").and_then(Value::as_bool), Some(true));
     let state = load_state_for(&repo, sid);
     assert!(
-        !state.review_required,
+        !state.core.review_required,
         "my-light + goal drive must not arm review; got {state:?}"
     );
     assert!(
@@ -76,7 +76,7 @@ fn my_implement_entry_does_not_arm_delegation_or_review_from_fix_copy() {
     );
     let state = load_state_for(&repo, "ap-del");
     assert!(
-        !state.review_required,
+        !state.core.review_required,
         "My implement turn must not re-arm review from findings wording"
     );
     assert!(
@@ -105,7 +105,7 @@ fn before_submit_review_and_goal_drive_same_prompt_merges_mixing_hint() {
     );
     let state = load_state_for(&repo, sid);
     assert!(
-        !state.review_required,
+        !state.core.review_required,
         "same-submit goal_drive must suppress review arming; got {state:?}"
     );
     assert!(
@@ -144,7 +144,7 @@ fn before_submit_review_with_disk_goal_non_my_light_injects_mixing_hint() {
         .expect("load ok")
         .expect("state exists");
     assert!(
-        !state.review_required,
+        !state.core.review_required,
         "same-submit implementx must disarm review arming; got {state:?}"
     );
     assert!(state.goal_required);
@@ -346,7 +346,7 @@ fn rearm_review_resets_review_followup_count_after_soft_nag() {
         assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&stop));
     }
     assert!(
-        load_state_for(&repo, sid).review_followup_count >= 3,
+        load_state_for(&repo, sid).core.review_followup_count >= 3,
         "advisory Stop nudges must accumulate review_followup_count"
     );
     let _ = dispatch_cursor_hook_event(
@@ -376,7 +376,7 @@ fn rearm_review_resets_review_followup_count_after_soft_nag() {
     );
     let rearmed = load_state_for(&repo, sid);
     assert_eq!(
-        rearmed.review_followup_count, 0,
+        rearmed.core.review_followup_count, 0,
         "re-arm must reset review_followup_count; got {rearmed:?}"
     );
     let ac = rearm_out
@@ -1062,7 +1062,7 @@ fn override_phrase_in_chinese_disables_arming() {
     );
     assert!(out.get("followup_message").is_none());
     let state = load_state_for(&repo, "s3");
-    assert!(state.review_override);
+    assert!(state.core.review_override);
     assert_eq!(state.phase, 0);
 }
 
@@ -1075,7 +1075,7 @@ fn stop_does_not_set_review_override_from_assistant_echo_alone() {
         &event("s-ov-echo", "全面review这个仓库"),
     );
     assert!(
-        !load_state_for(&repo, "s-ov-echo").review_override,
+        !load_state_for(&repo, "s-ov-echo").core.review_override,
         "user prompt must not imply review_override"
     );
     let out = dispatch_cursor_hook_event(
@@ -1090,7 +1090,7 @@ fn stop_does_not_set_review_override_from_assistant_echo_alone() {
     );
     let state = load_state_for(&repo, "s-ov-echo");
     assert!(
-        !state.review_override,
+        !state.core.review_override,
         "assistant echo of override-like wording must not set review_override"
     );
     assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
@@ -1105,7 +1105,7 @@ fn stop_does_not_set_delegation_override_from_assistant_echo_when_review_armed()
         "beforeSubmitPrompt",
         &event(sid, "全面review这个仓库"),
     );
-    assert!(!load_state_for(&repo, sid).delegation_override);
+    assert!(!load_state_for(&repo, sid).core.delegation_override);
     let out = dispatch_cursor_hook_event(
         &repo,
         "stop",
@@ -1119,11 +1119,11 @@ fn stop_does_not_set_delegation_override_from_assistant_echo_when_review_armed()
     assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
     let st = load_state_for(&repo, sid);
     assert!(
-        !st.delegation_override,
+        !st.core.delegation_override,
         "`has_delegation_override`-like wording must not be read from assistant response alone"
     );
     assert!(
-        !st.review_override,
+        !st.core.review_override,
         "sanity: user prompt did not request review bypass",
     );
 }
@@ -1137,7 +1137,7 @@ fn stop_does_not_set_delegation_override_from_assistant_global_override_echo_whe
         "beforeSubmitPrompt",
         &event(sid, "全面review这个仓库"),
     );
-    assert!(!load_state_for(&repo, sid).delegation_override);
+    assert!(!load_state_for(&repo, sid).core.delegation_override);
     let out = dispatch_cursor_hook_event(
         &repo,
         "stop",
@@ -1151,11 +1151,11 @@ fn stop_does_not_set_delegation_override_from_assistant_global_override_echo_whe
     assert_followup_signals_review_gate_incomplete(&hook_user_visible_blob(&out));
     let st = load_state_for(&repo, sid);
     assert!(
-        !st.delegation_override,
+        !st.core.delegation_override,
         "`has_override` wording on Stop must not originate from assistant response alone",
     );
     assert!(
-        !st.review_override,
+        !st.core.review_override,
         "sanity: user prompt did not request review bypass",
     );
 }
@@ -1182,9 +1182,9 @@ fn stop_user_parallel_opt_out_matches_has_override_and_delegation_regex_coupling
         }),
     );
     let st = load_state_for(&repo, sid);
-    assert!(st.delegation_override);
+    assert!(st.core.delegation_override);
     assert!(
-        st.review_override,
+        st.core.review_override,
         "同一 `has_override` 句式同时推高 review/disarm branch"
     );
     let blob = hook_user_visible_blob(&out);
@@ -1235,7 +1235,7 @@ fn nested_payload_response_sets_reject_reason_on_after_agent_response() {
             "payload": { "response": "small_task" }
         }),
     );
-    assert!(load_state_for(&repo, "s13nest-a").reject_reason_seen);
+    assert!(load_state_for(&repo, "s13nest-a").core.reject_reason_seen);
 }
 
 #[test]
@@ -1254,7 +1254,7 @@ fn emergency_review_gate_disable_cold_after_agent_response_persists_reject_reaso
         }),
     );
     assert!(
-        load_state_for(&repo, "s-cold-ara").reject_reason_seen,
+        load_state_for(&repo, "s-cold-ara").core.reject_reason_seen,
         "应急门控下仍以 `handle_after_agent_response` 写入 hook-state；无 beforeSubmit 冷启动亦应落盘 reject_reason_seen"
     );
 }
@@ -1362,7 +1362,7 @@ fn subagent_start_lock_failure_denies_when_review_armed() {
     let sid = "s-sub-lock-deny";
     let submit = event(sid, "全面review这个仓库");
     let mut armed = empty_state();
-    armed.review_required = true;
+    armed.core.review_required = true;
     armed.phase = 1;
     if let Some(parent) = state_path(&repo, &submit).parent() {
         fs::create_dir_all(parent).expect("mkdir hook-state");
@@ -1666,7 +1666,7 @@ fn review_gate_disabled_after_agent_response_updates_state_after_before_submit_s
         &event(sid, "全面review这个仓库"),
     );
     assert!(
-        !load_state_for(&repo, sid).reject_reason_seen,
+        !load_state_for(&repo, sid).core.reject_reason_seen,
         "precondition: reject_reason not set by beforeSubmit alone"
     );
     let payload = json!({
@@ -1683,7 +1683,7 @@ fn review_gate_disabled_after_agent_response_updates_state_after_before_submit_s
         );
     }
     assert!(
-        load_state_for(&repo, sid).reject_reason_seen,
+        load_state_for(&repo, sid).core.reject_reason_seen,
         "reject_reason must persist when afterAgentResponse runs on emergency dispatch table"
     );
 }

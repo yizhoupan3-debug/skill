@@ -57,30 +57,26 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
         }
         Ok(Some(mut state)) => {
             let _stale_reset = apply_subagent_stale_hygiene(&mut state);
-            // Override 句式仅承认用户本轮 prompt（与 beforeSubmit 一致）；勿用含助手输出的
-            // `signal_text`，避免助手复述「不要用子代理」类话术误清空 REVIEW_GATE。
-            if has_override(&text) {
-                state.review_override = true;
-                state.delegation_override = true;
+            // Shared override + reject detection (4-host unified via state.core)
+            crate::hosts::hook_dispatch::apply_override_and_reject(&mut state.core, &text, &signal_text);
+            // Cursor-specific: reject reason arms pre_goal_review_satisfied
+            if state.core.reject_reason_seen
+                && crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active) {
+                state.pre_goal_review_satisfied = true;
+                clear_review_gate_escalation_counters(&mut state);
             }
+            // Goal gate signal scanning + disk hydration (host-specific)
             let disk_goal = frame.hydration_goal.is_some();
             if !disk_goal {
                 if has_structured_goal_contract(&signal_text) {
-                    state.goal_contract_seen = true;
+                    state.core.goal_contract_seen = true;
                 }
                 if has_goal_progress_signal(&signal_text) {
-                    state.goal_progress_seen = true;
+                    state.core.goal_progress_seen = true;
                 }
                 if has_goal_verify_or_block_signal(&signal_text) {
-                    state.goal_verify_or_block_seen = true;
+                    state.core.goal_verify_or_block_seen = true;
                 }
-            }
-            if saw_reject_reason(&signal_text, &text) {
-                state.reject_reason_seen = true;
-                if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) {
-                    state.pre_goal_review_satisfied = true;
-                }
-                clear_review_gate_escalation_counters(&mut state);
             }
             let goal_drive_entrypoint =
                 is_framework_goal_drive_entry_prompt(&text, &signal_text);
@@ -97,21 +93,21 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             ) {
                 let _ = save_state(repo_root, event, &mut state);
             }
-            let gate_suppresses_review_lint = crate::hosts::hook_dispatch::shared_stop_review_output_lint_suppressed(review_stop_followup_needed(&state), state.goal_required, state.goal_drive_entry_active, state.goal_contract_seen, state.goal_progress_seen, state.goal_verify_or_block_seen, state.review_override, state.delegation_override);
+            let gate_suppresses_review_lint = crate::hosts::hook_dispatch::shared_stop_review_output_lint_suppressed(review_stop_followup_needed(&state), state.goal_required, state.core.goal_drive_entry_active, state.core.goal_contract_seen, state.core.goal_progress_seen, state.core.goal_verify_or_block_seen, state.core.review_override, state.core.delegation_override);
             if review_stop_followup_needed(&state) {
-                state.followup_count += 1;
-                state.review_followup_count += 1;
+                state.core.followup_count += 1;
+                state.core.review_followup_count += 1;
                 let cap =
                     hooks::router_rs_review_gate_stop_max_nudges_cap();
                 let use_full = match cap {
                     None => true,
-                    Some(n) => state.review_followup_count <= n,
+                    Some(n) => state.core.review_followup_count <= n,
                 };
                 // soft_nag 超 cap：仍注入 REVIEW 提示，但不阻断 My/RFV 续跑（ADR / P1-4）。
                 let skip_review_output_lint = if use_full {
                     gate_suppresses_review_lint
                 } else {
-                    crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) && !crate::hosts::hook_dispatch::shared_goal_is_satisfied(state.goal_required, state.goal_drive_entry_active, state.goal_contract_seen, state.goal_progress_seen, state.goal_verify_or_block_seen, state.review_override, state.delegation_override)
+                    crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active) && !crate::hosts::hook_dispatch::shared_goal_is_satisfied(state.goal_required, state.core.goal_drive_entry_active, state.core.goal_contract_seen, state.core.goal_progress_seen, state.core.goal_verify_or_block_seen, state.core.review_override, state.core.delegation_override)
                 };
                 let out = if use_full {
                     json!({ "followup_message": review_stop_followup_line(&state) })
@@ -131,9 +127,9 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
                 };
                 let _ = save_state(repo_root, event, &mut state);
                 (out, skip_review_output_lint)
-            } else if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) && !crate::hosts::hook_dispatch::shared_goal_is_satisfied(state.goal_required, state.goal_drive_entry_active, state.goal_contract_seen, state.goal_progress_seen, state.goal_verify_or_block_seen, state.review_override, state.delegation_override) {
-                state.followup_count += 1;
-                state.goal_followup_count += 1;
+            } else if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active) && !crate::hosts::hook_dispatch::shared_goal_is_satisfied(state.goal_required, state.core.goal_drive_entry_active, state.core.goal_contract_seen, state.core.goal_progress_seen, state.core.goal_verify_or_block_seen, state.core.review_override, state.core.delegation_override) {
+                state.core.followup_count += 1;
+                state.core.goal_followup_count += 1;
                 let _ = save_state(repo_root, event, &mut state);
                 // Stop 只给短码，避免把整段 Goal drive 契约说明塞进会话收尾（细则见 beforeSubmit / AGENTS）。
                 let message = goal_stop_followup_line(&state);
@@ -144,9 +140,9 @@ fn handle_stop(repo_root: &Path, event: &Value) -> Value {
             } else {
                 // Do not clear gate state on Stop for sessions that still track goal/review:
                 // the next Stop should still enforce the same requirements until satisfied/overridden.
-                if state.review_required
-                    || crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active)
-                    || state.reject_reason_seen
+                if state.core.review_required
+                    || crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active)
+                    || state.core.reject_reason_seen
                 {
                     let _ = save_state(repo_root, event, &mut state);
                 } else {
@@ -204,9 +200,9 @@ fn handle_pre_compact(repo_root: &Path, event: &Value) -> Value {
             let summary = format!(
                 "router-rs 门控快照：phase={} review={} override={} reject={} pre_goal_ok={} subagentStart_n={} subagent_stop={}",
                 state.phase,
-                state.review_required,
-                (state.review_override || state.delegation_override),
-                state.reject_reason_seen,
+                state.core.review_required,
+                (state.core.review_override || state.core.delegation_override),
+                state.core.reject_reason_seen,
                 state.pre_goal_review_satisfied,
                 state.subagent_start_count,
                 state.subagent_stop_count

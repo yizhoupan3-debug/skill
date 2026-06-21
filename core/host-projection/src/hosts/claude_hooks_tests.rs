@@ -60,7 +60,7 @@ mod tests {
             ctx.contains("Framework source files were modified"),
             "unexpected advisory: {ctx}"
         );
-        clear_touch_state(&repo, &payload);
+        let _ = fs::remove_file(touch_state_path(&repo, &payload));
         let _ = fs::remove_dir_all(repo);
     }
 
@@ -110,7 +110,7 @@ mod tests {
             ctx.contains("Framework source files were modified"),
             "unexpected advisory: {ctx}"
         );
-        clear_touch_state(&repo, &session);
+        let _ = fs::remove_file(touch_state_path(&repo, &session));
         let _ = fs::remove_dir_all(repo);
     }
 

@@ -581,38 +581,6 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
     }))
 }
 
-/// Auto-detect and safely clean broken symlinks inside multi-host client directories.
-///
-/// Target directories include all known host integration dotdirs plus `artifacts/`.
-/// Keep this list comprehensive (not registry-derived) since stale dirs from removed hosts
-/// or renamed directories still need cleanup even after registry changes.
-#[allow(dead_code)]
-pub fn auto_clean_broken_symlinks(repo_root: &Path) -> Result<(), String> {
-    let mut targets: Vec<&str> = framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS.to_vec();
-    targets.push("artifacts");
-    let mut cleaned_count = 0;
-    for sub in &targets {
-        let dir_path = repo_root.join(sub);
-        if !dir_path.is_dir() {
-            continue;
-        }
-        if let Err(e) = clean_broken_symlinks_in_dir(&dir_path, &mut cleaned_count) {
-            println!(
-                "WARN: failed to clean broken symlinks in {}: {e}",
-                dir_path.display()
-            );
-        }
-    }
-    if cleaned_count > 0 {
-        println!(
-            "INFO: Successfully auto-cleaned {cleaned_count} broken symlink(s) to secure system integrity."
-        );
-    } else {
-        println!("INFO: No broken symlinks detected. Multi-host workspace is healthy.");
-    }
-    Ok(())
-}
-
 /// Report broken symlinks without removing them (diagnostic-only).
 pub fn report_broken_symlinks(repo_root: &Path) -> Result<usize, String> {
     let mut targets: Vec<&str> = framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS.to_vec();
@@ -637,36 +605,6 @@ pub fn report_broken_symlinks(repo_root: &Path) -> Result<usize, String> {
         }
     }
     Ok(broken_count)
-}
-
-#[allow(dead_code)]
-fn clean_broken_symlinks_in_dir(dir: &Path, cleaned_count: &mut usize) -> Result<(), String> {
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if let Ok(metadata) = fs::symlink_metadata(&path)
-                && metadata.is_symlink()
-                && !path.exists()
-            {
-                // Remove broken symlink
-                if let Err(e) = fs::remove_file(&path) {
-                    println!(
-                        "WARN: failed to remove broken symlink {}: {e}",
-                        path.display()
-                    );
-                } else {
-                    println!("REPAIRED: Removed broken symlink {}", path.display());
-                    *cleaned_count += 1;
-                }
-            } else if let Ok(metadata) = fs::symlink_metadata(&path)
-                && metadata.is_dir()
-                && let Err(e) = clean_broken_symlinks_in_dir(&path, cleaned_count)
-            {
-                tracing::warn!(path = %path.display(), error = %e, "failed to clean broken symlinks");
-            }
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

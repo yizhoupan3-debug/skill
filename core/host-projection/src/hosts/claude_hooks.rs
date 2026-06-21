@@ -7,7 +7,7 @@
 //! stdin 体量上限 4 MiB，与 Codex hook 读取路径对齐，防失控输入撑爆 hook 进程内存。
 use core_policy::hook_common::{
     has_override, is_narrow_review_prompt, is_review_prompt, normalize_subagent_type,
-    normalize_tool_name, saw_reject_reason,
+    normalize_tool_name,
 };
 use core_policy::review_gate_engine::{
     fork_context_from_values, review_independent_reviewer_evidence,
@@ -196,7 +196,7 @@ fn closeout_completion_text(payload: &Value) -> String {
 }
 
 fn should_sync_review_gate_on_user_prompt(repo_root: &Path, prompt: &str) -> bool {
-    core_policy::hook_common::my_light_profile_active(Some(repo_root), prompt)
+    core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt)
         || core_policy::hook_common::is_framework_goal_entry_prompt(prompt)
         || core_policy::hook_common::is_my_pre_execution_entry_prompt(prompt)
         || is_narrow_review_prompt(prompt)
@@ -210,7 +210,7 @@ fn apply_claude_review_gate_user_prompt(
     prompt: &str,
 ) -> Result<HookReviewDiskCore, String> {
     let path = review_state_path(repo_root, payload);
-    let my_light = core_policy::hook_common::my_light_profile_active(Some(repo_root), prompt);
+    let my_light = core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt);
     let narrow = is_narrow_review_prompt(prompt);
     let goal_drive = core_policy::hook_common::is_framework_goal_entry_prompt(prompt);
     let review_arms = is_review_prompt(prompt) && !goal_drive;
@@ -766,33 +766,17 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
             write_active_skill_context(repo_root, slug, &allowed);
         }
     let mut contexts: Vec<String> = Vec::new();
-    if let Some(Ok(state)) = review_sync
-        && state.review_required
-            && !state.review_override
-            && core_policy::hook_common::should_inject_spawn_first_review_nudge(
-                Some(repo_root),
-                &prompt,
-            )
-        {
-            contexts.push(
-                core_policy::registry_review_gate::review_spawn_first_nudge_line(
-                    Some(repo_root),
-                    "claude",
-                ),
-            );
-        }
-    crate::hooks::maybe_append_paper_adversarial_context(
-        repo_root,
-        &prompt,
-        &mut contexts,
-        crate::hooks::PaperProseHookHostType::Claude,
-    );
-    crate::hooks::maybe_append_paper_prose_context(
-        repo_root,
-        &prompt,
-        &mut contexts,
-        crate::hooks::PaperProseHookHostType::Claude,
-    );
+    if let Some(Ok(state)) = review_sync {
+        // Shared context injection (4-host unified)
+        contexts.extend(crate::hosts::hook_dispatch::build_user_prompt_context_injection(
+            repo_root,
+            &prompt,
+            "claude",
+            crate::hooks::PaperProseHookHostType::Claude,
+            state.review_required,
+            state.review_override,
+        ));
+    }
     if contexts.is_empty() {
         return None;
     }
@@ -808,16 +792,15 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
         .unwrap_or_default()
         .to_string();
     let tool_origin = core_policy::hook_common::classify_tool_origin(&tool_name);
-    // MCP 工具分类已知，后续 Phase 使用此信息做 allowedTools 联动和 mcp-tool-safety
     let _ = &tool_origin;
-    crate::hooks::emit_tool_call(
+
+    // Shared tool call telemetry (4-host unified)
+    crate::hosts::hook_dispatch::record_tool_call_emission(
+        repo_root,
         &tool_name,
         crate::hooks::extract_post_tool_duration_ms(payload).unwrap_or(0),
         crate::hooks::post_tool_call_succeeded(payload),
     );
-    if let Err(e) = crate::hooks::record_tool_call(repo_root, &tool_name, None) {
-        eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
-    }
     record_reviewer_evidence(repo_root, payload);
     // §4.4: 自动 evidence 采集 — Bash 验证类命令自动记录到 EVIDENCE_INDEX
     auto_record_verification_evidence(repo_root, payload);
@@ -941,11 +924,8 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
         AgentDiskState::Unreadable => unreachable!(),
     };
 
-    // ── Override detection (parity with Cursor) ────────────────
-    if has_override(&prompt) {
-        review_state.review_override = true;
-        review_state.delegation_override = true;
-    }
+    // ── Override + reject detection (4-host shared) ────────────
+    crate::hosts::hook_dispatch::apply_override_and_reject(&mut review_state, &prompt, &stop_signal);
 
     // ── Unified goal gate (shared across all 4 hosts) ──────────
     let goal_drive_entrypoint =
@@ -958,15 +938,6 @@ fn run_stop(repo_root: &Path, payload: &Value) -> Option<Value> {
     );
     // Hydrate goal gate from disk (GOAL_STATE.json — active when runtime-core registers)
     hydrate_goal_gate_from_disk_for_claude(repo_root, &mut review_state, goal_drive_entrypoint);
-
-    // ── Reject reason detection (parity with Cursor) ───────────
-    let reject_now = saw_reject_reason(&stop_signal, &prompt);
-    if reject_now {
-        review_state.reject_reason_seen = true;
-        // Clear escalation counters when reject reason is seen (parity with Cursor)
-        review_state.followup_count = 0;
-        review_state.review_followup_count = 0;
-    }
 
     // ── Review gate check (shared logic) ───────────────────────
     let review_suppressed = crate::hosts::hook_dispatch::is_review_gate_suppressed("claude", Some(repo_root), &prompt);

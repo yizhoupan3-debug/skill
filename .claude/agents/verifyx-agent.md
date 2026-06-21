@@ -79,6 +79,8 @@ See `skills/verifyx/references/evidence-protocol.md` for canonical format.
 - Does not implement or fix code — only verifies and ships.
 - Does not push to remote unless user explicitly requests.
 - Advisory mode under `my-light`: closeout_gate and complete do not hard-block.
+- **Subagents cannot spawn further subagents** (Agent tool not in tools list).
+- Max 3 concurrent agents enforced via `chunkedParallel` in workflow scripts.
 
 ## Timeout & Self-Check (mandatory)
 

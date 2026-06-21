@@ -1,8 +1,11 @@
 fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     let name = normalize_tool_name(Some(&crate::hosts::hook_dispatch::extract_tool_name(event)));
     let tool_origin = core_policy::hook_common::classify_tool_origin(&name);
-    let _ = &tool_origin; // Used by allowedTools linkage (Phase 4) and mcp-tool-safety (Phase 5)
-    hooks::emit_tool_call(
+    let _ = &tool_origin;
+
+    // Shared tool call telemetry (4-host unified)
+    crate::hosts::hook_dispatch::record_tool_call_emission(
+        repo_root,
         &name,
         hooks::extract_post_tool_duration_ms(event).unwrap_or(0),
         hooks::post_tool_call_succeeded(event),
@@ -12,9 +15,6 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
     if review_armed_peek {
         if !post_tool_use_needs_work(repo_root, event, &name, None) {
             return json!({});
-        }
-        if let Err(e) = hooks::record_tool_call(repo_root, &name, None) {
-            eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
         }
         let mut lock = acquire_state_lock(repo_root, event);
         if lock.is_none() {
@@ -33,9 +33,6 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
 
     if !post_tool_use_needs_work(repo_root, event, &name, None) {
         return json!({});
-    }
-    if let Err(e) = hooks::record_tool_call(repo_root, &name, None) {
-        eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
     }
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
@@ -68,7 +65,7 @@ fn handle_post_tool_use_with_lock(
     let mut mutated = false;
     if tool_name_matches_subagent_lane(name)
         && pre_goal_kind
-        && crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active)
+        && crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active)
         && independent_fork_pre_goal
     {
         state.pre_goal_review_satisfied = true;
@@ -336,8 +333,8 @@ fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
     let disk_goal = frame.hydration_goal.is_some();
     let mut dirty = false;
     if saw_reject_reason(&signal, &prompt) {
-        state.reject_reason_seen = true;
-        if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) {
+        state.core.reject_reason_seen = true;
+        if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active) {
             state.pre_goal_review_satisfied = true;
         }
         clear_review_gate_escalation_counters(&mut state);
@@ -345,15 +342,15 @@ fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
     }
     if track_goal && !disk_goal {
         if has_structured_goal_contract(&signal) {
-            state.goal_contract_seen = true;
+            state.core.goal_contract_seen = true;
             dirty = true;
         }
         if has_goal_progress_signal(&signal) {
-            state.goal_progress_seen = true;
+            state.core.goal_progress_seen = true;
             dirty = true;
         }
         if has_goal_verify_or_block_signal(&signal) {
-            state.goal_verify_or_block_seen = true;
+            state.core.goal_verify_or_block_seen = true;
             dirty = true;
         }
     }

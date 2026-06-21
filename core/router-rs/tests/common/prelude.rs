@@ -43,9 +43,10 @@ pub use runtime_core::{
         attach_runtime_event_transport, subscribe_attached_runtime_events,
     },
     framework_runtime::trace_stream_io::{
-        inspect_trace_stream, replay_trace_stream, sha256_hex, write_trace_compaction_delta,
+        inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta,
         write_trace_metadata,
     },
+    framework_runtime::sha256_hex,
     route::{
         ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
         RouteSnapshotEnvelopePayload, build_route_diff_report, build_route_policy,

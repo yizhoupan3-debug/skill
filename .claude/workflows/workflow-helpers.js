@@ -92,6 +92,30 @@ export const BATCH_VERDICT_SCHEMA = {
   required: ['verdicts'],
 }
 
+// ── Concurrency Limit ─────────────────────────────────────────────────────
+
+const DEFAULT_MAX_CONCURRENT = 3
+
+/**
+ * chunkedParallel — parallel() 的限流版：每批最多 maxConcurrent 个 thunks 并发，
+ * 批与批之间串行等待，保证同时运行中的 agent ≤ maxConcurrent。
+ *
+ * 用法：const results = await chunkedParallel(items.map(x => () => agent(...)))
+ */
+export async function chunkedParallel(thunks, maxConcurrent = DEFAULT_MAX_CONCURRENT) {
+  const { parallel } = await import('workflow')
+  if (thunks.length === 0) return []
+  if (thunks.length <= maxConcurrent) return parallel(thunks)
+
+  const results = []
+  for (let i = 0; i < thunks.length; i += maxConcurrent) {
+    const batch = thunks.slice(i, i + maxConcurrent)
+    const batchResults = await parallel(batch)
+    results.push(...batchResults)
+  }
+  return results
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 export const READ_INSTRUCTION = `请使用 Bash 工具的 cat 命令读取文件（不要用 Read 工具，因为框架保护了这些文件）。`

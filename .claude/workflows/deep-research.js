@@ -1,4 +1,5 @@
-import { agent, parallel, pipeline, phase, log } from "workflow"
+import { agent, pipeline, phase, log } from "workflow"
+import { chunkedParallel } from './workflow-helpers.js'
 export const meta = {
   name: 'deep-research',
   description: 'Deep research harness — fan-out web searches, fetch sources, adversarially verify claims, synthesize a cited report.',
@@ -63,7 +64,7 @@ recoveryTrace.searches = queries.map(q => ({ query: q, yieldedUrls: 0 }))
 
 phase('Search')
 log(`Running searches...`)
-const searchResults = await parallel(
+const searchResults = await chunkedParallel(
   queries.map(q => () => agent(
     `Run a WebSearch for "${q}" and return the top 3 highly relevant URLs. You must use the WebSearch tool.
     Return JSON ONLY:
@@ -219,7 +220,7 @@ const dedupObj = await agent(dedupPrompt, {
 const mergedClaims = dedupObj.merged_claims || []
 log(`Consolidated into ${mergedClaims.length} distinct claims for verification`)
 
-const verifiedClaims = await parallel(
+const verifiedClaims = await chunkedParallel(
   mergedClaims.map(c => () => {
     // Collect evidence from all sources for this claim
     const sourceEvidence = c.urls.map(u => {

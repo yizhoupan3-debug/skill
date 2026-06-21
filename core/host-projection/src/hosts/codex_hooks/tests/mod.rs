@@ -4,6 +4,7 @@ use crate::hosts::codex_hooks::handlers;
 use crate::hosts::codex_hooks::handlers::{
     handle_codex_session_start, read_codex_stdin_limited,
     run_codex_lifecycle_context_hook, run_codex_review_subagent_gate, saw_subagent_codex,
+    additional_context_max_bytes, compact_contexts_shared,
 };
 use crate::hosts::codex_hooks::install::FORCE_ATOMIC_WRITE_FAIL;
 use crate::hosts::codex_hooks::install::{

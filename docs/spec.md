@@ -1,13 +1,14 @@
 ---
-last_verified: "2026-06-19"
-version: "unified-v7"
+last_verified: "2026-06-21"
+version: "unified-v8.5"
 ---
 
 # 框架统一规约 (Unified Framework Specification)
 
 > 本文件是框架**总览规约**，覆盖架构总览、设计原则与五层模型。
 > 各子系统详细规约见下方 `extends` 延伸文档（各自在其领域内为真源）。
-> 实施路线图见 `artifacts/current/roadmap-v7.md`。
+> 实施路线图见 `artifacts/current/roadmap-v8.5.md`（控制面重构）。
+> v7 路线图已归档：`artifacts/current/roadmap-v7.md`（v7.0-final, 2026-06-18）。
 
 ---
 

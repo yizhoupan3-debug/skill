@@ -92,6 +92,7 @@ mod tests {
 
     #[test]
     fn heal_prunes_inactive_skill() {
+        let _ = std::fs::remove_dir_all(".backups/pruned");
         let dir = temp_dir("prune");
         let skills_root = dir.join("skills");
         let inactive = skills_root.join("inactive-skill");

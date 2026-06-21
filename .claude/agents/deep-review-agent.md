@@ -11,7 +11,6 @@ tools:
   - Grep
   - Glob
   - Task
-  - Agent
   - WebSearch
   - WebFetch
 timeout_secs: 480
@@ -59,6 +58,9 @@ disparate-domain coverage, use `pipeline()` or `for...of` to run reviewers
 serially; only use `parallel()` when the user explicitly requests cross-domain
 broad review across clearly disjoint scope paths. Narrow scope (single-file):
 no subagent needed.
+
+**Subagents cannot spawn further subagents** (Agent tool removed from tools).
+Max 3 concurrent agents enforced via `chunkedParallel` in workflow scripts.
 
 ## Severity Evidence Gate
 

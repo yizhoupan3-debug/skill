@@ -655,7 +655,7 @@ fn armed_post_tool_read_fast_path_skips_l3_when_no_pending_work() {
         "beforeSubmitPrompt",
         &event(sid, "全面review这个仓库"),
     );
-    assert!(load_state_for(&repo, sid).review_required);
+    assert!(load_state_for(&repo, sid).core.review_required);
     let out = dispatch_cursor_hook_event(
         &repo,
         "postToolUse",
@@ -754,7 +754,7 @@ fn verify_state_flock_concurrency() {
         let mut lock = acquire_state_lock(&repo, &payload);
         assert!(lock.is_some());
         let mut state = empty_state();
-        state.followup_count = 0;
+        state.core.followup_count = 0;
         let _ = save_state(&repo, &payload, &mut state);
         release_state_lock(&mut lock);
     }
@@ -777,7 +777,7 @@ fn verify_state_flock_concurrency() {
                     .ok()
                     .flatten()
                     .unwrap_or_else(empty_state);
-                state.followup_count += 1;
+                state.core.followup_count += 1;
                 // 用非原子操作模拟一点延时，扩大竞争竞态窗口
                 std::thread::sleep(std::time::Duration::from_millis(2));
                 let _ = save_state(&repo_clone, &payload_clone, &mut state);
@@ -794,7 +794,7 @@ fn verify_state_flock_concurrency() {
     let mut lock = acquire_state_lock(&repo, &payload);
     assert!(lock.is_some());
     let state = load_state(&repo, &payload).ok().flatten().unwrap();
-    assert_eq!(state.followup_count, num_threads * 5);
+    assert_eq!(state.core.followup_count, num_threads * 5);
     release_state_lock(&mut lock);
 }
 

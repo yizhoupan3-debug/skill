@@ -28,7 +28,7 @@ fn handle_subagent_start(repo_root: &Path, event: &Value) -> Value {
     let mut track_open_subagent = true;
     let mut mutated = false;
     // 与 PostToolUse 对齐：pre-goal 在独立 fork 且存在 lane 类型证据时满足（含非白名单 lane 名）。
-    if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active) && pre_goal_kind && independent_fork_pre_goal {
+    if crate::hosts::hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active) && pre_goal_kind && independent_fork_pre_goal {
         state.pre_goal_review_satisfied = true;
         state.pre_goal_nag_count = 0;
         mutated = true;

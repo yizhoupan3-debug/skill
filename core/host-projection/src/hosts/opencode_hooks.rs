@@ -10,16 +10,12 @@ use super::file_state_lock::HookStateConfig;
 use super::hook_dispatch::{
     self, HookEvent, HookOutput, HostHookConfig, HostHookDispatcher, compact_contexts,
     extract_prompt_text, extract_session_key, extract_tool_input, extract_tool_name,
-    is_review_gate_suppressed, is_subagent_tool, recognize_subagent_type, subagent_lane_bits,
+    is_review_gate_suppressed, is_subagent_tool,
 };
 use crate::hooks;
 use core_policy::HookReviewDiskCore;
 use core_policy::hook_common::{
-    has_override, normalize_tool_name, saw_reject_reason, should_inject_spawn_first_review_nudge,
-};
-use core_policy::registry_review_gate::review_spawn_first_nudge_line;
-use core_policy::review_gate_engine::{
-    ReviewGateFacts, fork_context_from_values, review_independent_reviewer_evidence,
+    has_override, normalize_tool_name, saw_reject_reason,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -164,54 +160,42 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
 
     fn handle_user_prompt_submit(&self, event: &HookEvent) -> Option<HookOutput> {
         let prompt = extract_prompt_text(event.payload);
-        let suppressed = is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &prompt);
-
-        if suppressed {
-            return None;
-        }
-
-        // Load or create review gate state
-        // state_dir managed by HookStateConfig
-        let _state_path = state_config().state_path(event.repo_root);
         let mut state: OpencodeHookState = state_config().load_state(event.repo_root);
 
-        // Check for reject reason
-        let signal_text = event
-            .payload
-            .get("signal_text")
-            .and_then(Value::as_str)
-            .unwrap_or("");
+        // Shared review gate merge (4-host unified)
+        let merge = hook_dispatch::merge_review_gate_on_user_prompt(
+            &state.core,
+            &prompt,
+            event.repo_root,
+            self.host_id(),
+        );
+        if merge.suppressed {
+            return None;
+        }
+        state.core = merge.core;
+
+        // OpenCode-specific: reject reason on submit
+        let signal_text = event.payload.get("signal_text").and_then(Value::as_str).unwrap_or("");
         if saw_reject_reason(signal_text, &prompt) {
             state.core.reject_reason_seen = true;
-            state.review_phase = state.review_phase.saturating_add(1);
         }
-
-        // Check for override
         if has_override(&prompt) {
             state.core.review_override = true;
         }
 
-        // Build review gate facts
-        let facts = ReviewGateFacts::from_prompt(&prompt);
-        if facts.review_required && !state.core.review_override {
-            state.core.review_required = true;
-        }
-
-        // Save state
         state_config().save_state(event.repo_root, &state);
 
-        // Build additional context
-        let mut contexts = Vec::new();
+        // Shared context injection (4-host unified)
+        let mut contexts = hook_dispatch::build_user_prompt_context_injection(
+            event.repo_root,
+            &prompt,
+            "opencode",
+            crate::hooks::PaperProseHookHostType::OpenCode,
+            state.core.review_required,
+            state.core.review_override,
+        );
 
-        // Spawn-first nudge (cross-host contract: inject skill pointer when review arms)
-        if state.core.review_required && !state.core.review_override {
-            let repo_root_opt = Some(event.repo_root);
-            if should_inject_spawn_first_review_nudge(repo_root_opt, &prompt) {
-                contexts.push(review_spawn_first_nudge_line(repo_root_opt, "opencode"));
-            }
-        }
-
-        // Goal drive context
+        // Goal drive context (OpenCode-specific)
         let session_key = extract_session_key(
             event.payload,
             self.session_namespace_env(),
@@ -220,20 +204,6 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         if let Some(goal_ctx) = build_goal_context(event.repo_root, &session_key) {
             contexts.push(goal_ctx);
         }
-
-        // Paper context injection (parity with Claude/Cursor/Codex)
-        crate::hooks::maybe_append_paper_adversarial_context(
-            event.repo_root,
-            &prompt,
-            &mut contexts,
-            crate::hooks::PaperProseHookHostType::OpenCode,
-        );
-        crate::hooks::maybe_append_paper_prose_context(
-            event.repo_root,
-            &prompt,
-            &mut contexts,
-            crate::hooks::PaperProseHookHostType::OpenCode,
-        );
 
         compact_contexts(contexts, self.additional_context_max_bytes())
             .map(HookOutput::AdditionalContext)
@@ -256,23 +226,16 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
             .and_then(Value::as_u64)
             .unwrap_or(0);
 
-        // Record tool call
-        hooks::emit_tool_call(&normalized, duration_ms, succeeded);
-        if let Err(e) = hooks::record_tool_call(event.repo_root, &normalized, None) {
-            eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
-        }
+        // Shared tool call telemetry (4-host unified)
+        hook_dispatch::record_tool_call_emission(event.repo_root, &normalized, duration_ms, succeeded);
 
         // Check if review gate is suppressed
         let prompt = extract_prompt_text(event.payload);
-        let suppressed = is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &prompt);
-
-        if suppressed {
+        if is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &prompt) {
             return None;
         }
 
         // Load state
-        // state_dir managed by HookStateConfig
-        let _state_path = state_config().state_path(event.repo_root);
         let mut state: OpencodeHookState = state_config().load_state(event.repo_root);
 
         // Shell evidence for verification commands (shared with Claude/Cursor/Codex)
@@ -291,10 +254,10 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
             }
         }
 
-        // Subagent tracking
+        // Subagent tracking (using shared lane bits)
         if is_subagent_tool(&normalized) {
-            let kind = recognize_subagent_type(&tool_input);
-            let (review_lane, parallel_lane) = subagent_lane_bits(kind.as_deref());
+            let kind = hook_dispatch::recognize_subagent_type(&tool_input);
+            let (review_lane, parallel_lane) = hook_dispatch::subagent_lane_bits(kind.as_deref());
 
             if review_lane {
                 state.review_subagent_seen = true;
@@ -303,23 +266,18 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
                 state.parallel_lane_seen = true;
             }
 
-            let fork = fork_context_from_values(&tool_input, Some(event.payload));
-
             state.subagent_start_count += 1;
             state.review_phase = state.review_phase.saturating_add(1);
 
-            if review_lane {
-                let is_independent = review_independent_reviewer_evidence(fork, review_lane);
-                if is_independent {
-                    state.core.independent_reviewer_seen = true;
-                }
+            // Shared reviewer evidence detection (4-host unified)
+            if hook_dispatch::detect_reviewer_evidence(&tool_input, review_lane) {
+                state.core.independent_reviewer_seen = true;
             }
         }
 
         // Independent reviewer evidence for non-subagent tools
-        let fork = fork_context_from_values(&tool_input, Some(event.payload));
         let is_reviewer_tool = is_reviewer_tool_name(&normalized);
-        if review_independent_reviewer_evidence(fork, is_reviewer_tool) {
+        if hook_dispatch::detect_reviewer_evidence(&tool_input, is_reviewer_tool) {
             state.core.independent_reviewer_seen = true;
         }
 
@@ -332,93 +290,49 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
     // ── Stop: closeout gate + review gate check ──
 
     fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> {
-        // my-light suppression: if stop prompt is a lifecycle entry, skip review gate
         let stop_prompt = extract_prompt_text(event.payload);
         if is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &stop_prompt) {
             state_config().remove_state(event.repo_root);
             return None;
         }
 
-        // Default closeout check
-        let completion_text = hook_dispatch::extract_completion_text(event);
-        if let Some(msg) =
-            hooks::closeout_stop_followup_for_completion_text(event.repo_root, &completion_text)
-        {
-            return Some(HookOutput::Block { reason: msg });
-        }
-
-        // Load review gate state
         let mut state: OpencodeHookState = state_config().load_state(event.repo_root);
 
-        // Check override in stop prompt (cross-host contract: Cursor/Codex/Opencode check Stop-time override)
-        if has_override(&stop_prompt) {
-            state.core.review_override = true;
-        }
-
-        // Check reject / rg_clear tokens in stop prompt, signal_text, or response text
-        // (cross-host contract: reject tokens in user prompt or assistant response clear the gate)
-        let signal_text = event
-            .payload
-            .get("signal_text")
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        if saw_reject_reason(signal_text, &stop_prompt)
-            || saw_reject_reason(&stop_prompt, &completion_text)
-            || saw_reject_reason(&completion_text, &stop_prompt)
-        {
+        // OpenCode-specific: reject reason seen on Submit clears gate (parity with Cursor early reject)
+        let signal_text = event.payload.get("signal_text").and_then(Value::as_str).unwrap_or("");
+        if saw_reject_reason(signal_text, &stop_prompt) {
             state.core.reject_reason_seen = true;
             state.core.review_required = false;
             state_config().save_state(event.repo_root, &state);
             return None;
         }
 
-        // Unified goal gate (shared across all 4 hosts)
-        let response_text = event
-            .payload
-            .get("response")
-            .or_else(|| event.payload.get("content"))
-            .and_then(Value::as_str)
-            .unwrap_or("");
-        let goal_entry = core_policy::hook_common::is_framework_goal_entry_prompt(&stop_prompt);
-        crate::hosts::hook_dispatch::update_goal_gate(
+        // Shared stop decision pipeline (4-host unified)
+        let response_text = hook_dispatch::extract_response_text(event.payload);
+        let completion_text = hook_dispatch::extract_completion_text(event);
+
+        match hook_dispatch::evaluate_stop_decision(
             &mut state.core,
             &stop_prompt,
-            response_text,
-            goal_entry,
-        );
-
-        // Check reject from previous arming
-        if state.core.reject_reason_seen {
-            return Some(HookOutput::Block {
-                reason: format!(
-                    "[{OPENCODE_REVIEW_GATE_TAG}] Reject reason seen. \
-                     Review before ending this turn."
-                ),
-            });
-        }
-
-        // Check review gate using shared core_policy function
-        if let Some(nudge) = core_policy::hook_review_disk_state::hook_review_stop_advisory_needed(
-            &state.core.gate_fields(),
-            OPENCODE_REVIEW_GATE_TAG,
+            &response_text,
+            &format!("{stop_prompt}\n{response_text}"),
+            &completion_text,
+            event.repo_root,
+            self.host_id(),
         ) {
-            return Some(HookOutput::Advisory { message: nudge });
+            hook_dispatch::StopDecision::Closeout { message } => {
+                return Some(HookOutput::Advisory { message });
+            }
+            hook_dispatch::StopDecision::ReviewGateNudge { message } => {
+                return Some(HookOutput::Advisory { message });
+            }
+            hook_dispatch::StopDecision::GoalFollowup { message } => {
+                return Some(HookOutput::Advisory { message });
+            }
+            hook_dispatch::StopDecision::Clean => {}
         }
 
-        // Unified goal gate followup check (shared across all 4 hosts)
-        if !crate::hosts::hook_dispatch::goal_gate_satisfied(&state.core) {
-            let followup = crate::hosts::hook_dispatch::shared_goal_stop_followup_line(
-                state.core.goal_contract_seen,
-                state.core.goal_progress_seen,
-                state.core.goal_verify_or_block_seen,
-                state.core.goal_followup_count,
-            );
-            return Some(HookOutput::Block { reason: followup });
-        }
-
-        // Cleanup state
         state_config().remove_state(event.repo_root);
-
         None
     }
 
@@ -457,8 +371,8 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
             return None;
         }
 
-        let kind = recognize_subagent_type(&tool_input);
-        let (review_lane, parallel_lane) = subagent_lane_bits(kind.as_deref());
+        let kind = hook_dispatch::recognize_subagent_type(&tool_input);
+        let (review_lane, parallel_lane) = hook_dispatch::subagent_lane_bits(kind.as_deref());
 
         // state_dir managed by HookStateConfig
         let _state_path = state_config().state_path(event.repo_root);

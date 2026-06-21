@@ -8,6 +8,7 @@ use core_policy::hook_common::{
 };
 use core_policy::review_gate_engine::{fork_context_from_values, review_gate_armed};
 use core_policy::review_output_lint::{LintSeverity, lint_review_output};
+use std::cell::Cell;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashSet;

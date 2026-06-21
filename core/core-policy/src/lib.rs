@@ -36,7 +36,7 @@ pub use hook_common::{
     is_framework_implement_entry_prompt, is_framework_non_goal_entrypoint_prompt,
     is_my_lifecycle_entry_prompt, is_my_pre_execution_entry_prompt, is_my_verify_entry_prompt,
     is_narrow_review_prompt, is_parallel_delegation_prompt, is_review_prompt,
-    is_reviewer_lane_normalized, my_goal_drive_hook_nudge_for_prompt, my_light_profile_active,
+    is_reviewer_lane_normalized, my_goal_drive_hook_nudge_for_prompt, 
     normalize_subagent_type, normalize_tool_name, review_gate_advisory_only,
     review_gate_hard_block_disabled, review_gate_stop_would_nudge, saw_reject_reason,
     should_inject_spawn_first_review_nudge, should_inject_subagent_model_inherit_nudge,

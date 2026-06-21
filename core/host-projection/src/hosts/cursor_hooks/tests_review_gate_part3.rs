@@ -148,7 +148,7 @@ fn strict_disk_stop_pre_goal_not_satisfied_from_goal_file_alone() {
         "strict disk: Stop hydrate must not set pre_goal from disk GOAL alone"
     );
     assert!(
-        after_stop.goal_required || after_stop.goal_drive_entry_active,
+        after_stop.goal_required || after_stop.core.goal_drive_entry_active,
         "implementx must arm goal tracking on Stop"
     );
 
@@ -504,7 +504,7 @@ fn subtracted_after_agent_response_runs_handler_when_registered_in_hooks_json() 
         }),
     );
     assert!(
-        load_state_for(&repo, "sub-ara-reg").reject_reason_seen,
+        load_state_for(&repo, "sub-ara-reg").core.reject_reason_seen,
         "registered subtracted event must run handler without LEGACY env"
     );
 
@@ -544,7 +544,7 @@ fn subtracted_empty_hooks_entry_stays_noop() {
         }),
     );
     assert!(
-        !load_state_for(&repo, "sub-ara-empty").reject_reason_seen,
+        !load_state_for(&repo, "sub-ara-empty").core.reject_reason_seen,
         "empty hooks entry must not run handler"
     );
 
@@ -585,7 +585,7 @@ fn review_gate_disabled_registered_after_agent_response_persists_reject_reason()
         }),
     );
     assert!(
-        load_state_for(&repo, sid).reject_reason_seen,
+        load_state_for(&repo, sid).core.reject_reason_seen,
         "review-gate-disabled + registered afterAgentResponse must still run handler"
     );
 
@@ -930,9 +930,9 @@ fn v1_state_migrates_to_current_schema_phase() {
     )
     .expect("write v1");
     let state = load_state(&repo, &payload).expect("load").expect("state");
-    assert_eq!(state.version, STATE_VERSION);
+    assert_eq!(state.core.version, STATE_VERSION);
     assert_eq!(state.phase, 2);
-    assert_eq!(state.followup_count, 2);
+    assert_eq!(state.core.followup_count, 2);
 }
 
 #[test]
@@ -1170,7 +1170,7 @@ fn messages_tail_user_text_clears_review_gate_when_top_level_prompt_empty() {
     });
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &ev);
     let state = load_state_for(&repo, "s-msg-only");
-    assert!(state.reject_reason_seen);
+    assert!(state.core.reject_reason_seen);
     let msg = out
         .get("followup_message")
         .and_then(Value::as_str)
@@ -1179,8 +1179,8 @@ fn messages_tail_user_text_clears_review_gate_when_top_level_prompt_empty() {
         !msg.contains(LEGACY_REVIEW_FOLLOWUP_TOKEN) && !msg.contains("Broad/deep review detected"),
         "expected gate clear from messages[].content; msg={msg:?} out={out:?}"
     );
-    assert_eq!(state.followup_count, 0);
-    assert_eq!(state.review_followup_count, 0);
+    assert_eq!(state.core.followup_count, 0);
+    assert_eq!(state.core.review_followup_count, 0);
 }
 
 #[test]
@@ -1201,7 +1201,7 @@ fn before_submit_reject_reason_token_in_user_prompt_satisfies_pre_goal() {
             ),
         );
     let state = load_state_for(&repo, "s17e");
-    assert!(state.reject_reason_seen);
+    assert!(state.core.reject_reason_seen);
     assert!(state.pre_goal_review_satisfied);
     let msg = out
         .get("followup_message")
@@ -1231,7 +1231,7 @@ fn nested_payload_prompt_reject_reason_satisfies_pre_goal_before_submit() {
     });
     let out = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &nested);
     let state = load_state_for(&repo, "s17nest");
-    assert!(state.reject_reason_seen);
+    assert!(state.core.reject_reason_seen);
     assert!(state.pre_goal_review_satisfied);
     let msg = out
         .get("followup_message")

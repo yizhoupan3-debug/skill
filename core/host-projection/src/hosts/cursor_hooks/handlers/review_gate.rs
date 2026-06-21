@@ -1,14 +1,10 @@
 // Review gate state, persistence, lock, and gate logic (P4 handlers split).
+// Embeds HookReviewDiskCore via serde(flatten) for 4-host shared function compatibility.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReviewGateState {
-    pub version: u32,
+    #[serde(flatten)]
+    pub core: core_policy::HookReviewDiskCore,
     pub phase: u32,
-    pub review_required: bool,
-    pub review_override: bool,
-    pub delegation_override: bool,
-    pub reject_reason_seen: bool,
-    /// Claude canonical: independent reviewer evidence (`fork_context=false` on countable lane).
-    pub independent_reviewer_seen: bool,
     #[serde(default)]
     pub active_subagent_count: u32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -16,16 +12,6 @@ pub struct ReviewGateState {
     /// 仅统计 **`SubagentStart`** 上 qualifying review 入队次数；**`PostToolUse`**  multiset 入队不递增（与 `review_subagent_pending_cycle_keys` 长度不同步属刻意）。
     pub subagent_start_count: u32,
     pub subagent_stop_count: u32,
-    pub followup_count: u32,
-    pub review_followup_count: u32,
-    pub goal_followup_count: u32,
-    pub goal_required: bool,
-    /// `/implementx|/verifyx` 本轮已武装（my-light 下可不设 `goal_required` 但仍跟踪 pre-goal）。
-    #[serde(default)]
-    pub goal_drive_entry_active: bool,
-    pub goal_contract_seen: bool,
-    pub goal_progress_seen: bool,
-    pub goal_verify_or_block_seen: bool,
     /// My implement pre-goal：在 goal 契约与收口证据之前，要求独立上下文 subagent 预检（或拒绝原因词）。
     #[serde(default)]
     pub pre_goal_review_satisfied: bool,
@@ -58,6 +44,10 @@ pub struct ReviewGateState {
     pub review_pending_last_pushed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
+    // ── Goal tracking (goal_required is Cursor-specific, not in HookReviewDiskCore) ──
+    /// `/implementx|/verifyx` has been explicitly armed via goal_required (Cursor-specific).
+    #[serde(default)]
+    pub goal_required: bool,
 }
 
 impl crate::hosts::hook_state_common::HookStateVersion for ReviewGateState {
@@ -70,10 +60,10 @@ impl crate::hosts::hook_state_common::HookStateVersion for ReviewGateState {
 impl ReviewGateState {
     fn review_gate_fields(&self) -> core_policy::HookReviewGateFields {
         core_policy::hook_review_gate_fields_from_parts(
-            self.review_required,
-            self.review_override,
-            self.independent_reviewer_seen,
-            self.reject_reason_seen,
+            self.core.review_required,
+            self.core.review_override,
+            self.core.independent_reviewer_seen,
+            self.core.reject_reason_seen,
         )
     }
 }
@@ -351,25 +341,16 @@ fn release_state_lock(lock: &mut Option<LockGuard>) {
 
 fn empty_state() -> ReviewGateState {
     ReviewGateState {
-        version: STATE_VERSION,
+        core: core_policy::HookReviewDiskCore {
+            version: STATE_VERSION,
+            ..core_policy::HookReviewDiskCore::default()
+        },
         phase: 0,
-        review_required: false,
-        review_override: false,
-        delegation_override: false,
-        reject_reason_seen: false,
-        independent_reviewer_seen: false,
         active_subagent_count: 0,
         active_subagent_last_started_at: None,
         subagent_start_count: 0,
         subagent_stop_count: 0,
-        followup_count: 0,
-        review_followup_count: 0,
-        goal_followup_count: 0,
         goal_required: false,
-        goal_drive_entry_active: false,
-        goal_contract_seen: false,
-        goal_progress_seen: false,
-        goal_verify_or_block_seen: false,
         pre_goal_review_satisfied: false,
         pre_goal_nag_count: 0,
         last_prompt: None,
@@ -411,17 +392,17 @@ fn hydrate_legacy_review_cycles_into_pending(state: &mut ReviewGateState) {
 fn hydrate_review_gate_fields_from_disk(raw: &Value, state: &mut ReviewGateState) {
     core_policy::hydrate_hook_review_gate_fields_from_value(
         raw,
-        &mut state.review_required,
-        &mut state.review_override,
-        &mut state.independent_reviewer_seen,
-        &mut state.reject_reason_seen,
+        &mut state.core.review_required,
+        &mut state.core.review_override,
+        &mut state.core.independent_reviewer_seen,
+        &mut state.core.reject_reason_seen,
     );
 }
 
 fn migrate_v1(raw: &Value) -> ReviewGateState {
     let mut state = empty_state();
     hydrate_review_gate_fields_from_disk(raw, &mut state);
-    state.delegation_override = raw
+    state.core.delegation_override = raw
         .get("delegation_override")
         .and_then(Value::as_bool)
         .unwrap_or(false);
@@ -431,7 +412,7 @@ fn migrate_v1(raw: &Value) -> ReviewGateState {
         .unwrap_or(false)
     {
         state.phase = 2;
-    } else if state.review_required
+    } else if state.core.review_required
         || raw
             .get("delegation_required")
             .and_then(Value::as_bool)
@@ -439,17 +420,17 @@ fn migrate_v1(raw: &Value) -> ReviewGateState {
     {
         state.phase = 1;
     }
-    state.followup_count = raw
+    state.core.followup_count = raw
         .get("followup_count")
         .and_then(Value::as_u64)
         .map(|v| u32::try_from(v).unwrap_or(u32::MAX))
         .unwrap_or(0);
-    state.review_followup_count = raw
+    state.core.review_followup_count = raw
         .get("review_followup_count")
         .and_then(Value::as_u64)
         .map(|v| u32::try_from(v).unwrap_or(u32::MAX))
         .unwrap_or(0);
-    state.goal_followup_count = raw
+    state.core.goal_followup_count = raw
         .get("goal_followup_count")
         .and_then(Value::as_u64)
         .map(|v| u32::try_from(v).unwrap_or(u32::MAX))
@@ -480,16 +461,16 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
             base.phase = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj.get("review_required").and_then(Value::as_bool) {
-            base.review_required = v;
+            base.core.review_required = v;
         }
         if let Some(v) = obj.get("review_override").and_then(Value::as_bool) {
-            base.review_override = v;
+            base.core.review_override = v;
         }
         if let Some(v) = obj.get("delegation_override").and_then(Value::as_bool) {
-            base.delegation_override = v;
+            base.core.delegation_override = v;
         }
         if let Some(v) = obj.get("reject_reason_seen").and_then(Value::as_bool) {
-            base.reject_reason_seen = v;
+            base.core.reject_reason_seen = v;
         }
         if let Some(v) = obj.get("active_subagent_count").and_then(Value::as_u64) {
             base.active_subagent_count = u32::try_from(v).unwrap_or(u32::MAX);
@@ -507,13 +488,13 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
             base.subagent_stop_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj.get("followup_count").and_then(Value::as_u64) {
-            base.followup_count = u32::try_from(v).unwrap_or(u32::MAX);
+            base.core.followup_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj.get("review_followup_count").and_then(Value::as_u64) {
-            base.review_followup_count = u32::try_from(v).unwrap_or(u32::MAX);
+            base.core.review_followup_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj.get("goal_followup_count").and_then(Value::as_u64) {
-            base.goal_followup_count = u32::try_from(v).unwrap_or(u32::MAX);
+            base.core.goal_followup_count = u32::try_from(v).unwrap_or(u32::MAX);
         }
         if let Some(v) = obj
             .get("pre_goal_review_satisfied")
@@ -556,7 +537,7 @@ fn load_state(repo_root: &Path, event: &Value) -> Result<Option<ReviewGateState>
     }
     hydrate_legacy_review_cycles_into_pending(&mut base);
     hydrate_review_gate_fields_from_disk(&raw, &mut base);
-    base.version = STATE_VERSION;
+    base.core.version = STATE_VERSION;
     Ok(Some(base))
 }
 
@@ -564,7 +545,7 @@ fn save_state(repo_root: &Path, event: &Value, state: &mut ReviewGateState) -> b
     let directory = state_dir(repo_root);
     let target = state_path(repo_root, event);
     let _ = fs::create_dir_all(&directory);
-    state.version = STATE_VERSION;
+    state.core.version = STATE_VERSION;
     state.updated_at = Some(Utc::now().to_rfc3339());
     let payload = match serde_json::to_string_pretty(state) {
         Ok(text) => format!("{text}\n"),
@@ -615,7 +596,7 @@ fn save_state(repo_root: &Path, event: &Value, state: &mut ReviewGateState) -> b
 
 /// 仅 **review** 路径的硬门控（独立上下文 subagent 证据链）。
 fn review_hard_armed(state: &ReviewGateState) -> bool {
-    review_gate_armed(state.review_required, state.review_override)
+    review_gate_armed(state.core.review_required, state.core.review_override)
 }
 
 fn review_pending_both_empty(state: &ReviewGateState) -> bool {
@@ -711,7 +692,7 @@ pub fn review_stop_followup_soft_line(
         "router-rs REVIEW_GATE incomplete mode=soft_nag full_line_cap={full_line_cap} phase={phase} stop_nudge_count={nudge} see=.cursor/hook-state rg_clear|ROUTER_RS_REVIEW_GATE_DISABLE=1|ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES=0(strict)|detail=additional_context",
         full_line_cap = full_line_cap,
         phase = state.phase,
-        nudge = state.review_followup_count,
+        nudge = state.core.review_followup_count,
     )
 }
 
@@ -754,10 +735,10 @@ fn maybe_pre_goal_nag_cap_release(state: &mut ReviewGateState) -> Option<&'stati
     if !hooks::router_rs_pre_goal_enabled() {
         return None;
     }
-    if !hook_dispatch::shared_tracks_goal(state.goal_required, state.goal_drive_entry_active)
+    if !hook_dispatch::shared_tracks_goal(state.goal_required, state.core.goal_drive_entry_active)
         || state.pre_goal_review_satisfied
-        || (state.review_override || state.delegation_override)
-        || state.reject_reason_seen
+        || (state.core.review_override || state.core.delegation_override)
+        || state.core.reject_reason_seen
     {
         return None;
     }
@@ -858,8 +839,8 @@ fn strip_cursor_hook_user_visible_nags(output: &mut Value) {
 
 /// 清门或 subagent 满足 review 后归零，避免 `followup_count` 长期累积导致 **escalation** 粘住。
 fn clear_review_gate_escalation_counters(state: &mut ReviewGateState) {
-    state.followup_count = 0;
-    state.review_followup_count = 0;
+    state.core.followup_count = 0;
+    state.core.review_followup_count = 0;
     state.pre_goal_nag_count = 0;
 }
 
@@ -881,8 +862,8 @@ fn reset_review_cycle_progress(state: &mut ReviewGateState, preserve_session_gua
     state.review_subagent_pending_cycle_keys.clear();
     state.review_lite_pending_cycle_keys.clear();
     state.review_pending_last_pushed_at = None;
-    state.review_followup_count = 0;
-    state.independent_reviewer_seen = false;
+    state.core.review_followup_count = 0;
+    state.core.independent_reviewer_seen = false;
     sync_review_cycle_legacy_fields(state);
 }
 
@@ -909,7 +890,7 @@ fn hydrate_goal_gate_from_disk(
     if !state.goal_required
         && !arm_if_goal_file
         && !goal_drive_entrypoint
-        && !state.goal_drive_entry_active
+        && !state.core.goal_drive_entry_active
     {
         return;
     }
@@ -918,7 +899,7 @@ fn hydrate_goal_gate_from_disk(
         // hook-state may still carry goal drive arms from /implementx|/verifyx.
         if arm_if_goal_file {
             state.goal_required = false;
-            state.goal_drive_entry_active = false;
+            state.core.goal_drive_entry_active = false;
         }
         return;
     };
@@ -928,15 +909,15 @@ fn hydrate_goal_gate_from_disk(
         state.pre_goal_review_satisfied = true;
         state.pre_goal_nag_count = 0;
     }
-    if state.goal_required || arm_if_goal_file || state.goal_drive_entry_active {
+    if state.goal_required || arm_if_goal_file || state.core.goal_drive_entry_active {
         // Use shared disk-based goal evaluation (unified across all 4 hosts)
         let mut goal_core = core_policy::HookReviewDiskCore {
-            goal_drive_entry_active: state.goal_drive_entry_active,
-            goal_contract_seen: state.goal_contract_seen,
-            goal_progress_seen: state.goal_progress_seen,
-            goal_verify_or_block_seen: state.goal_verify_or_block_seen,
-            review_override: state.review_override,
-            delegation_override: state.delegation_override,
+            goal_drive_entry_active: state.core.goal_drive_entry_active,
+            goal_contract_seen: state.core.goal_contract_seen,
+            goal_progress_seen: state.core.goal_progress_seen,
+            goal_verify_or_block_seen: state.core.goal_verify_or_block_seen,
+            review_override: state.core.review_override,
+            delegation_override: state.core.delegation_override,
             ..Default::default()
         };
         crate::hosts::hook_dispatch::update_goal_gate_with_disk(
@@ -947,20 +928,20 @@ fn hydrate_goal_gate_from_disk(
             Some(repo_root),
             Some(task_id.as_str()),
         );
-        state.goal_drive_entry_active = goal_core.goal_drive_entry_active;
-        state.goal_contract_seen = goal_core.goal_contract_seen;
-        state.goal_progress_seen = goal_core.goal_progress_seen;
-        state.goal_verify_or_block_seen = goal_core.goal_verify_or_block_seen;
+        state.core.goal_drive_entry_active = goal_core.goal_drive_entry_active;
+        state.core.goal_contract_seen = goal_core.goal_contract_seen;
+        state.core.goal_progress_seen = goal_core.goal_progress_seen;
+        state.core.goal_verify_or_block_seen = goal_core.goal_verify_or_block_seen;
     }
 }
 
 /// Stop 上的 goal 门控短码（磁盘优先 evaluator；见 `ship_readiness.rs`）。
 fn goal_stop_followup_line(state: &ReviewGateState) -> String {
     hooks::goal_stop_followup_line(
-        state.goal_contract_seen,
-        state.goal_progress_seen,
-        state.goal_verify_or_block_seen,
-        state.goal_followup_count,
+        state.core.goal_contract_seen,
+        state.core.goal_progress_seen,
+        state.core.goal_verify_or_block_seen,
+        state.core.goal_followup_count,
     )
 }
 
@@ -1074,7 +1055,7 @@ fn try_settle_review_subagent_cycle(
         bump_phase(state, 3);
         state.subagent_stop_count = state.subagent_stop_count.saturating_add(1);
         state.lane_intent_matches = Some(true);
-        state.independent_reviewer_seen = true;
+        state.core.independent_reviewer_seen = true;
         clear_review_gate_escalation_counters(state);
     }
     true

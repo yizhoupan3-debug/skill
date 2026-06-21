@@ -12,7 +12,7 @@ thread_local! {
     static TEST_MY_LIGHT_OVERRIDE: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
-/// Test-only override for [`my_light_profile_active`] (also used by `router-rs` host hook tests).
+/// Test-only override for [`is_interactive_profile`] (also used by `router-rs` host hook tests).
 /// Thread-local so parallel `#[test]` threads do not race.
 #[doc(hidden)]
 pub fn set_test_my_light_override(v: Option<bool>) {
@@ -465,14 +465,6 @@ fn my_lifecycle_entry_re() -> &'static Regex {
 /// Any `/discussx|planx|implementx|verifyx` personal lifecycle slash command.
 pub fn is_my_lifecycle_entry_prompt(text: &str) -> bool {
     my_lifecycle_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
-}
-
-/// `GOAL_STATE.lifecycle_profile` or active my-* prompt → my-light harness behavior.
-///
-/// **Deprecated**: prefer [`is_interactive_profile`] for new code.
-/// Internally delegates to `is_interactive_profile()` for identical behavior.
-pub fn my_light_profile_active(repo_root: Option<&std::path::Path>, text: &str) -> bool {
-    is_interactive_profile(repo_root, text)
 }
 
 /// True when the current session is in an interactive profile (my-light or interactive).
@@ -1088,33 +1080,33 @@ mod tests {
     }
 
     #[test]
-    fn my_light_profile_active_prompt_match_returns_true_without_root() {
-        // Prompt matching (/implementx) activates my-light even without repo_root
-        assert!(my_light_profile_active(None, "/implementx 继续"));
-        assert!(my_light_profile_active(None, "/discussx 讨论架构"));
-        assert!(my_light_profile_active(None, "/planx"));
-        assert!(my_light_profile_active(None, "/verifyx"));
+    fn is_interactive_profile_prompt_match_returns_true_without_root() {
+        // Prompt matching (/implementx) activates interactive even without repo_root
+        assert!(is_interactive_profile(None, "/implementx 继续"));
+        assert!(is_interactive_profile(None, "/discussx 讨论架构"));
+        assert!(is_interactive_profile(None, "/planx"));
+        assert!(is_interactive_profile(None, "/verifyx"));
     }
 
     #[test]
-    fn my_light_profile_active_returns_false_for_non_lifecycle_prompt_without_root() {
-        assert!(!my_light_profile_active(None, "深度review整个路由系统"));
-        assert!(!my_light_profile_active(None, "fix the bug"));
-        assert!(!my_light_profile_active(None, ""));
+    fn is_interactive_profile_returns_false_for_non_lifecycle_prompt_without_root() {
+        assert!(!is_interactive_profile(None, "深度review整个路由系统"));
+        assert!(!is_interactive_profile(None, "fix the bug"));
+        assert!(!is_interactive_profile(None, ""));
     }
 
     #[test]
-    fn my_light_profile_active_test_override_takes_priority() {
+    fn is_interactive_profile_test_override_takes_priority() {
         let _lock = crate::test_env_sync::process_env_lock();
         // Override to false even though prompt matches /implementx
         set_test_my_light_override(Some(false));
-        assert!(!my_light_profile_active(None, "/implementx"));
+        assert!(!is_interactive_profile(None, "/implementx"));
         // Override to true even for non-lifecycle prompt
         set_test_my_light_override(Some(true));
-        assert!(my_light_profile_active(None, "random text"));
+        assert!(is_interactive_profile(None, "random text"));
         // Clear override, prompt match works again
         set_test_my_light_override(None);
-        assert!(my_light_profile_active(None, "/implementx"));
+        assert!(is_interactive_profile(None, "/implementx"));
     }
 
     #[test]

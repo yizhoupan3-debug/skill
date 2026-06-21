@@ -688,7 +688,7 @@ fn v1_migrate_pending_preserved_when_no_started_at_timestamp() {
     let _ = dispatch_cursor_hook_event(&repo, "beforeSubmitPrompt", &payload);
 
     let mut state = empty_state();
-    state.review_required = true;
+    state.core.review_required = true;
     state.phase = 2;
     state.review_subagent_pending_cycle_keys = vec!["id:orphan".to_string()];
     state.active_subagent_count = 0;
@@ -870,7 +870,7 @@ fn armed_review_explore_posttool_then_general_purpose_cycle_clears_phase() {
         "beforeSubmitPrompt",
         &event(sid, "全面review这个仓库"),
     );
-    assert!(load_state_for(&repo, sid).review_required);
+    assert!(load_state_for(&repo, sid).core.review_required);
 
     let _ = dispatch_cursor_hook_event(
         &repo,
@@ -1017,7 +1017,7 @@ fn post_tool_armed_lock_failure_fails_closed_with_continue_false() {
     let sid = "s-posttool-armed-lock";
     let submit = event(sid, "全面review这个仓库");
     let mut armed = empty_state();
-    armed.review_required = true;
+    armed.core.review_required = true;
     armed.phase = 1;
     if let Some(parent) = state_path(&repo, &submit).parent() {
         fs::create_dir_all(parent).expect("mkdir hook-state");
@@ -1552,7 +1552,7 @@ fn before_submit_review_and_implementx_injects_mixing_nudge_when_not_my_light() 
     let state = load_state(&repo, &json!({ "session_id": sid, "cwd": cwd }))
         .expect("load ok")
         .expect("state exists");
-    assert!(!state.review_required);
+    assert!(!state.core.review_required);
     assert!(state.goal_required);
 }
 

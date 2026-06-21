@@ -191,7 +191,7 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
         clear_codex_review_gate_hook_state(repo_root, event);
         return None;
     }
-    let my_light = core_policy::hook_common::my_light_profile_active(Some(repo_root), &prompt);
+    let my_light = core_policy::hook_common::is_interactive_profile(Some(repo_root), &prompt);
     let mut facts = ReviewGateFacts::from_prompt(&prompt);
     if my_light {
         facts.review_required = false;
@@ -252,23 +252,16 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
     if let Some(warning) = projection_drift_warning(repo_root) {
         contexts.push(warning);
     }
-    if facts.review_required
-        && !facts.review_override
-        && core_policy::hook_common::should_inject_spawn_first_review_nudge(
-            Some(repo_root),
-            &prompt,
-        )
-    {
-        contexts.push(
-            core_policy::registry_review_gate::review_spawn_first_nudge_line(
-                Some(repo_root),
-                lifecycle_host().spawn_first_host_id(),
-            ),
-        );
-    }
+    // Shared context injection (4-host unified)
     let paper_host = lifecycle_host().paper_prose_hook_host();
-    hooks::maybe_append_paper_adversarial_context(repo_root, &prompt, &mut contexts, paper_host);
-    hooks::maybe_append_paper_prose_context(repo_root, &prompt, &mut contexts, paper_host);
+    contexts.extend(hook_dispatch::build_user_prompt_context_injection(
+        repo_root,
+        &prompt,
+        lifecycle_host().spawn_first_host_id(),
+        paper_host,
+        facts.review_required,
+        facts.review_override,
+    ));
     let additional_context = compact_contexts_shared(contexts);
     if additional_context.is_none() {
         None
@@ -285,12 +278,16 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
 pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Option<Value> {
     let tool_name = extract_tool_name(event);
     let tool_origin = core_policy::hook_common::classify_tool_origin(&tool_name);
-    let _ = &tool_origin; // Used by allowedTools linkage (Phase 4) and mcp-tool-safety (Phase 5)
-    hooks::emit_tool_call(
+    let _ = &tool_origin;
+
+    // Shared tool call telemetry (4-host unified)
+    hook_dispatch::record_tool_call_emission(
+        repo_root,
         &tool_name,
         hooks::extract_post_tool_duration_ms(event).unwrap_or(0),
         hooks::post_tool_call_succeeded(event),
     );
+
     let prompt_for_profile = extract_prompt_text(event);
     if hook_dispatch::is_review_gate_suppressed("codex", Some(repo_root), &prompt_for_profile) {
         clear_codex_review_gate_hook_state(repo_root, event);
@@ -302,9 +299,6 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
         eprintln!("[router-rs] post-tool evidence append failed (non-fatal): {err}");
     }
     let tool_input = extract_tool_input(event);
-    if let Err(e) = hooks::record_tool_call(repo_root, &tool_name, None) {
-        eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
-    }
     if !saw_subagent_codex(&tool_name, &tool_input) {
         return None;
     }
@@ -326,14 +320,16 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
             }
         };
         state.generic_subagent_seen = true;
-        let recognized = recognized_subagent_kind(&tool_input);
+
+        // Shared subagent type recognition (4-host unified)
+        let recognized = hook_dispatch::recognize_subagent_type(&tool_input);
         let tool_label = recognized
             .as_ref()
             .map(|kind| format!("{tool_name}#{kind}"))
             .unwrap_or_else(|| format!("{tool_name}#untyped"));
         state.review_subagent_tool = Some(tool_label);
         let (review_lane, parallel_lane) =
-            subagent_lane_bits_from_kind(recognized.as_deref());
+            hook_dispatch::subagent_lane_bits(recognized.as_deref());
         if review_lane {
             state.review_lane_seen = true;
         }
@@ -341,14 +337,16 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
             state.parallel_lane_seen = true;
         }
         state.review_subagent_seen = true;
-        if deep_independent_reviewer_evidence(recognized.as_deref(), &tool_input, event) {
+
+        // Shared reviewer evidence detection (4-host unified)
+        if hook_dispatch::detect_reviewer_evidence(&tool_input, review_lane) {
             state.review_gate.independent_reviewer_seen = true;
             state.subagent_start_count = state.subagent_start_count.saturating_add(1);
             state.phase = state.phase.max(2);
             let post_facts = ReviewGateFacts::from_prompt(&prompt_for_profile);
             let should_arm_review = state.review_gate.review_required || post_facts.review_required;
             if should_arm_review
-                && !core_policy::hook_common::my_light_profile_active(
+                && !core_policy::hook_common::is_interactive_profile(
                     Some(repo_root),
                     &prompt_for_profile,
                 )
@@ -526,7 +524,7 @@ pub(super) fn handle_codex_subagent_start(repo_root: &Path, event: &Value) -> Op
         if review_lane {
             state.phase = state.phase.max(2);
             if facts.review_required
-                && !core_policy::hook_common::my_light_profile_active(Some(repo_root), &prompt)
+                && !core_policy::hook_common::is_interactive_profile(Some(repo_root), &prompt)
             {
                 state.review_gate.review_required = true;
             }
