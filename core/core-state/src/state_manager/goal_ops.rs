@@ -478,7 +478,13 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 .and_then(|o| o.get_mut("checkpoints"))
                 .and_then(|c| c.as_array_mut())
                 .ok_or_else(|| "GOAL_STATE.checkpoints corrupt".to_string())?;
-            arr.push(json!({"at": now_iso(), "note": note}));
+            arr.push(json!({
+                "at": now_iso(),
+                "note": note,
+                "type": payload.get("checkpoint_type").and_then(Value::as_str).unwrap_or("milestone"),
+                "done_when_covers": payload.get("done_when_covers").cloned().unwrap_or(json!([])),
+                "evidence_refs": payload.get("evidence_refs").cloned().unwrap_or(json!([])),
+            }));
             if let Some(o) = state.as_object_mut() {
                 o.insert("updated_at".to_string(), json!(now_iso()));
                 crate::goal_prediction::merge_prediction_from_payload(o, &payload);
