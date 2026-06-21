@@ -189,7 +189,9 @@ pub trait HostHookDispatcher: HostHookConfig {
     }
 
     /// Unified dispatch entry. All hosts use the same routing logic.
+    /// Calls `ensure_kernel_bootstrap()` before dispatching to host handlers.
     fn dispatch(&self, event: &HookEvent) -> Option<HookOutput> {
+        crate::hooks::ensure_kernel_bootstrap();
         let normalized = normalize_event_name(event.event_name);
         debug!(event = %normalized, host = %self.host_id(), "hook dispatch");
         let output = match normalized.as_ref() {
@@ -571,41 +573,100 @@ pub fn is_review_gate_suppressed(host_id: &str, repo_root: Option<&Path>, prompt
 }
 
 /// Standard cwd field names used across all hosts for session key fallback.
-pub const SESSION_KEY_CWD_FIELDS: &[&str] = &[
-    "cwd",
-    "workspaceFolder",
-    "workspace_folder",
-    "workspaceRoot",
-    "workspace_root",
-    "root",
-];
+///
+/// Re-exports `core_policy::session_key::SESSION_KEY_CWD_FIELDS` for host-projection consumers.
+pub use core_policy::session_key::SESSION_KEY_CWD_FIELDS;
+
+/// Standard session id field names (4-host superset).
+pub use core_policy::session_key::SESSION_ID_FIELDS;
+
+/// Tool-input parent session id field names (Cursor scan_tool_input).
+pub use core_policy::session_key::TOOL_INPUT_SESSION_ID_FIELDS;
+
+/// Tool-input metadata session id field names.
+pub use core_policy::session_key::TOOL_INPUT_METADATA_SESSION_ID_FIELDS;
 
 /// Extract session key using core_policy's shared `session_key_core`.
 ///
 /// This is the canonical session key extraction used by all hosts.
-/// Each host provides `env_var` (via `HostHookConfig::session_namespace_env`)
-/// and `repo_fallback_token` (derived from repo_root).
-pub fn extract_session_key(event: &Value, env_var: &'static str, repo_fallback: &str) -> String {
+/// Each host provides `env_var` (via `HostHookConfig::session_namespace_env`),
+/// `repo_fallback_token` (derived from repo_root), and `scan_tool_input`
+/// (Cursor sets this to `true` to scan `tool_input` for parent session ids).
+pub fn extract_session_key(
+    event: &Value,
+    env_var: &'static str,
+    repo_fallback: &str,
+    scan_tool_input: bool,
+) -> String {
     core_policy::session_key::session_key_core(
-        &core_policy::session_key::SessionKeyConfig { env_var },
-        || extract_session_id_from_payload(event),
+        &core_policy::session_key::SessionKeyConfig { env_var, scan_tool_input },
+        || {
+            // When scan_tool_input, first check root-level fields,
+            // then tool_input, then nested objects.
+            if scan_tool_input {
+                if let Some(s) = extract_session_id_from_payload(event) {
+                    return Some(s);
+                }
+                let tool_input = extract_tool_input(event);
+                if let Some(s) = extract_session_id_from_tool_input(&tool_input) {
+                    return Some(s);
+                }
+                return extract_session_id_from_nested(event);
+            }
+            extract_session_id_from_payload(event)
+        },
         || extract_cwd_from_payload(event),
         repo_fallback,
     )
 }
 
-/// Extract explicit session id from payload (tries multiple field names).
+/// Extract explicit session id from payload (tries shared SESSION_ID_FIELDS).
 fn extract_session_id_from_payload(event: &Value) -> Option<String> {
-    for key in &[
-        "session_id",
-        "sessionId",
-        "conversation_id",
-        "conversationId",
-    ] {
+    for key in core_policy::session_key::SESSION_ID_FIELDS {
         if let Some(val) = event.get(*key).and_then(Value::as_str)
             && !val.is_empty() {
                 return Some(val.to_string());
             }
+    }
+    None
+}
+
+/// Extract parent session id from `tool_input` object (Cursor scan_tool_input path).
+fn extract_session_id_from_tool_input(tool_input: &Value) -> Option<String> {
+    let obj = tool_input.as_object()?;
+    for key in core_policy::session_key::TOOL_INPUT_SESSION_ID_FIELDS {
+        if let Some(value) = obj.get(*key).and_then(Value::as_str) {
+            let t = value.trim();
+            if !t.is_empty() {
+                return Some(t.to_string());
+            }
+        }
+    }
+    // Check nested metadata
+    if let Some(meta) = obj.get("metadata").and_then(Value::as_object) {
+        for key in core_policy::session_key::TOOL_INPUT_METADATA_SESSION_ID_FIELDS {
+            if let Some(value) = meta.get(*key).and_then(Value::as_str) {
+                let t = value.trim();
+                if !t.is_empty() {
+                    return Some(t.to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Extract session id from nested objects (e.g. `hookPayload`).
+fn extract_session_id_from_nested(event: &Value) -> Option<String> {
+    for nest in &["hookPayload", "metadata", "context"] {
+        if let Some(nobj) = event.get(*nest).and_then(Value::as_object) {
+            for key in core_policy::session_key::SESSION_ID_FIELDS {
+                if let Some(val) = nobj.get(*key).and_then(Value::as_str)
+                    && !val.is_empty() {
+                        return Some(val.to_string());
+                    }
+            }
+        }
     }
     None
 }

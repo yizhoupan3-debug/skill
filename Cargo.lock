@@ -1336,6 +1336,7 @@ name = "loop-engine"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "framework-runtime",
  "serde",
  "serde_json",
  "sha2",

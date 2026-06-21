@@ -137,6 +137,43 @@ pub fn countable_review_subagent_evidence(
     subagent_start_count > 0 || independent_reviewer_seen
 }
 
+// ── Deprecated aliases (host-projection compat) ─────────────────────
+
+/// Deprecated: use [`ReviewGateMode`].
+pub type CursorReviewGateMode = ReviewGateMode;
+
+/// Deprecated: use [`review_gate_mode`].
+pub fn cursor_review_gate_mode() -> ReviewGateMode {
+    review_gate_mode()
+}
+
+/// Deprecated: use [`countable_review_subagent_evidence`].
+pub fn codex_countable_review_subagent_evidence(
+    subagent_start_count: u32,
+    independent_reviewer_seen: bool,
+) -> bool {
+    countable_review_subagent_evidence(subagent_start_count, independent_reviewer_seen)
+}
+
+/// Deprecated: use [`maybe_bump_review_phase_for_compact_findings`].
+pub fn maybe_bump_codex_review_phase_for_compact_findings(
+    review_required: bool,
+    review_override: bool,
+    phase: u32,
+    subagent_start_count: u32,
+    independent_reviewer_seen: bool,
+    assistant_tail: &str,
+) -> Option<u32> {
+    maybe_bump_review_phase_for_compact_findings(
+        review_required,
+        review_override,
+        phase,
+        subagent_start_count,
+        independent_reviewer_seen,
+        assistant_tail,
+    )
+}
+
 /// Bump Codex review phase to 3 when compact findings appear after countable PostTool evidence.
 pub fn maybe_bump_review_phase_for_compact_findings(
     review_required: bool,

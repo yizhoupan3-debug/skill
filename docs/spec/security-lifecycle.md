@@ -46,7 +46,7 @@ version: unified-v7
 
 - `evaluate_closeout_record_value()` — 评估 closeout 记录
 - `summary_claims_completion()` — 摘要是否声称完成
-- **my-light**: advisory；**非 my-light**: closeout fail-closed
+- **interactive**: advisory；**非 interactive**: closeout fail-closed
 - `closeout_gate` — 门控定义及拦截逻辑，用于验证是否满足 closeout 状态
 - `closeout_record_write` — 写入 closeout 记录与断言结果
 
@@ -78,8 +78,7 @@ version: unified-v7
 
 | Profile | REVIEW_GATE | AG_FOLLOWUP | closeout | loop_capable | 备注 |
 |---------|:-----------:|:-----------:|:--------:|:------------:|------|
-| my-light | suppressed | advisory | advisory | false | 默认轻量模式 |
-| interactive | suppressed | advisory | advisory | false | 手动看板模式 |
+| interactive | suppressed | advisory | advisory | false | 默认轻量模式（原 my-light） |
 | loop-auto | **mandatory** | advisory | **hard-block** | true | 自动循环模式，含 cost_budget + kill_switch |
 
 ---

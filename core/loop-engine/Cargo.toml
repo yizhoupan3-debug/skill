@@ -16,6 +16,7 @@ chrono.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 sha2.workspace = true
+framework-runtime = { path = "../framework-runtime" }
 
 [dev-dependencies]
 tempfile.workspace = true

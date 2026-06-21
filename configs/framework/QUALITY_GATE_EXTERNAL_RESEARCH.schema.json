@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local/framework/rfv-external-research-v1",
+  "title": "RFV_APPEND_ROUND_EXTERNAL_RESEARCH",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Structured claims. Under task-level external_research_strict (default true on new RFV starts), router-rs additionally requires ≥2 traceable sources per claim; see validate_external_research_strict in rfv_loop.rs.",
+      "items": {
+        "type": "object",
+        "required": ["claim", "sources"],
+        "additionalProperties": true,
+        "properties": {
+          "claim": { "type": "string", "minLength": 1 },
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "description": "When strict mode is on, each entry should satisfy source_traceable_heuristic (https URL, DOI forms, arxiv:/pmid:/isbn:/dataset:/official_doc: prefixes, etc.).",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "contradiction_sweep": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Under strict mode, length must be ≥ max(2, number of claims); each entry keeps ≥1 non-empty source string, all traceable per router-rs.",
+      "items": {
+        "type": "object",
+        "required": [
+          "related_claim_or_topic",
+          "contradicting_or_limiting_evidence",
+          "sources"
+        ],
+        "additionalProperties": true,
+        "properties": {
+          "related_claim_or_topic": { "type": "string", "minLength": 1 },
+          "contradicting_or_limiting_evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "unknowns": {
+      "type": ["array", "null"],
+      "description": "Optional in baseline structured validation, but strict mode requires this property key to exist on the root object (value [] or null).",
+      "items": {
+        "type": "object",
+        "required": ["question", "why_insufficient"],
+        "additionalProperties": true,
+        "properties": {
+          "question": { "type": "string", "minLength": 1 },
+          "why_insufficient": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "quantitative_replays": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "dataset_or_source_id",
+              "version_or_snapshot",
+              "window",
+              "replay_command"
+            ],
+            "additionalProperties": true,
+            "properties": {
+              "dataset_or_source_id": { "type": "string", "minLength": 1 },
+              "version_or_snapshot": { "type": "string", "minLength": 1 },
+              "window": { "type": "string", "minLength": 1 },
+              "replay_command": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        { "type": "null", "description": "Omit N/A quantitative replays" },
+        {
+          "type": "string",
+          "const": "none",
+          "description": "Human-friendly N/A sentinel (case-insensitive in Rust validator)"
+        }
+      ]
+    },
+    "retrieval_trace": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Strict mode (router-rs) requires ≥3 queries_used strings and inclusion_rules, exclusions, exclusion_rationale each ≥40 trimmed characters.",
+      "required": [
+        "queries_used",
+        "inclusion_rules",
+        "exclusions",
+        "exclusion_rationale"
+      ],
+      "properties": {
+        "queries_used": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Strict mode requires at least three non-empty query strings.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "inclusion_rules": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Strict mode: trimmed length floor enforced in Rust (EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN), not duplicated here as schema minLength."
+        },
+        "exclusions": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Same strict prose floor as inclusion_rules (Rust)."
+        },
+        "exclusion_rationale": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Same strict prose floor as inclusion_rules (Rust)."
+        }
+      }
+    }
+  },
+  "required": ["claims", "contradiction_sweep", "retrieval_trace"]
+}

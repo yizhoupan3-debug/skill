@@ -1,81 +1,81 @@
 {
-  "schema_version": "loop-registry-v1",
-  "loops": [
-    {
-      "loop_id": "daily-triage",
-      "profile": "loop-auto",
-      "trigger": {
-        "type": "cron",
-        "schedule": "0 */6 * * *",
-        "timezone": "UTC"
-      },
-      "skill": "systematic-debugging",
-      "scope_based_safety": {
-        "src/**/*.rs": "L2-assisted-fix",
-        "*.md": "L3-unattended",
-        "Cargo.toml": "L1-report-only"
-      },
-      "default_safety": "L1-report-only",
-      "scope_conflict_resolution": "split",
-      "cost_budget": {
-        "tokens_per_run": 200000,
-        "daily_tokens": 1000000
-      },
-      "notification": {
-        "on_escalation": "issue",
-        "on_completion_L3": "commit-only"
-      },
-      "research_enabled": true,
-      "research": {
-        "barrier_threshold": 3,
-        "escalation_target": "autoresearch",
-        "max_research_time_min": 30,
-        "auto_resume": true,
-        "require_human_approval": false
-      }
-    },
-    {
-      "loop_id": "paper-revision",
-      "profile": "loop-auto",
-      "trigger": {
-        "type": "manual"
-      },
-      "skill": "paper-workbench",
-      "default_safety": "L2-assisted-fix",
-      "scope_based_safety": {
-        "manuscript/**": "L3-unattended",
-        "figures/**": "L2-assisted-fix",
-        "paper_story/**": "L3-unattended",
-        "paper_review_v*/**": "L3-unattended",
-        "paper_ref/**": "L1-report-only"
-      },
-      "cost_budget": {
-        "tokens_per_run": 500000
-      },
-      "research_enabled": true,
-      "research": {
-        "barrier_threshold": 3,
-        "escalation_target": "autoresearch",
-        "max_research_time_min": 20,
-        "auto_resume": true,
-        "require_human_approval": false
-      },
-      "verify_rfv_convergence": true,
-      "static_actions": [
+    "schema_version": "loop-registry-v1",
+    "loops": [
         {
-          "action_id": "paper-revision-orchestrator",
-          "type": "orchestrator",
-          "scope_paths": [
-            "manuscript/",
-            "figures/",
-            "paper_story/",
-            "paper_review_v*/",
-            "paper_ref/"
-          ],
-          "safety": "L2",
-          "description": "顶刊标准 paper revision 循环。内部流程：(1) 初始化 RFV (min_rounds=5, consecutive_stable_required=2); (2) 每轮 spawn 1 个 reviewer subagent 做强对抗审稿（渐进披露维度）; (3) 主会话执行 surgical 修复; (4) 收敛条件：连续 2 轮无新 A/B findings 且 round >= 5; (5) 写 closeout record。"
+            "loop_id": "daily-triage",
+            "profile": "loop-auto",
+            "trigger": {
+                "type": "cron",
+                "schedule": "0 */6 * * *",
+                "timezone": "UTC"
+            },
+            "skill": "systematic-debugging",
+            "scope_based_safety": {
+                "src/**/*.rs": "L2-assisted-fix",
+                "*.md": "L3-unattended",
+                "Cargo.toml": "L1-report-only"
+            },
+            "default_safety": "L1-report-only",
+            "scope_conflict_resolution": "split",
+            "cost_budget": {
+                "tokens_per_run": 200000,
+                "daily_tokens": 1000000
+            },
+            "notification": {
+                "on_escalation": "issue",
+                "on_completion_L3": "commit-only"
+            },
+            "research_enabled": true,
+            "research": {
+                "barrier_threshold": 3,
+                "escalation_target": "autoresearch",
+                "max_research_time_min": 30,
+                "auto_resume": true,
+                "require_human_approval": false
+            }
+        },
+        {
+            "loop_id": "paper-revision",
+            "profile": "loop-auto",
+            "trigger": {
+                "type": "manual"
+            },
+            "skill": "paper-workbench",
+            "default_safety": "L2-assisted-fix",
+            "scope_based_safety": {
+                "manuscript/**": "L3-unattended",
+                "figures/**": "L2-assisted-fix",
+                "paper_story/**": "L3-unattended",
+                "paper_review_v*/**": "L3-unattended",
+                "paper_ref/**": "L1-report-only"
+            },
+            "cost_budget": {
+                "tokens_per_run": 500000
+            },
+            "research_enabled": true,
+            "research": {
+                "barrier_threshold": 3,
+                "escalation_target": "autoresearch",
+                "max_research_time_min": 20,
+                "auto_resume": true,
+                "require_human_approval": false
+            },
+            "static_actions": [
+                {
+                    "action_id": "paper-revision-orchestrator",
+                    "type": "orchestrator",
+                    "scope_paths": [
+                        "manuscript/",
+                        "figures/",
+                        "paper_story/",
+                        "paper_review_v*/",
+                        "paper_ref/"
+                    ],
+                    "safety": "L2",
+                    "description": "顶刊标准 paper revision 循环。内部流程：(1) 初始化 RFV (min_rounds=5, consecutive_stable_required=2); (2) 每轮 spawn 1 个 reviewer subagent 做强对抗审稿（渐进披露维度）; (3) 主会话执行 surgical 修复; (4) 收敛条件：连续 2 轮无新 A/B findings 且 round >= 5; (5) 写 closeout record。"
+                }
+            ],
+            "verify_quality_gate_convergence": true
         }
-      ]
-    }
-  ]
+    ]
 }

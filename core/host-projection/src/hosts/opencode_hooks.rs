@@ -200,6 +200,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
             event.payload,
             self.session_namespace_env(),
             &format!("opencode-{}", event.repo_root.display()),
+            false,
         );
         if let Some(goal_ctx) = build_goal_context(event.repo_root, &session_key) {
             contexts.push(goal_ctx);
@@ -347,6 +348,7 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
             event.payload,
             self.session_namespace_env(),
             &format!("opencode-{}", event.repo_root.display()),
+            false,
         );
 
         let ctx = format!(

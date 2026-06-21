@@ -69,9 +69,9 @@ pub use review_context_signals::{
     has_github_pr_context, has_paper_context, install_review_context_probes,
 };
 pub use review_gate_engine::{
-    CursorReviewGateMode, ReviewGateFacts, codex_countable_review_subagent_evidence,
-    cursor_review_gate_mode, cycle_key_eligible_for_lite, fork_context_from_values,
-    independent_context_fork, maybe_bump_codex_review_phase_for_compact_findings,
+    ReviewGateMode, ReviewGateFacts, countable_review_subagent_evidence,
+    review_gate_mode, cycle_key_eligible_for_lite, fork_context_from_values,
+    independent_context_fork, maybe_bump_review_phase_for_compact_findings,
     review_gate_armed, review_gate_blocks_stop, review_gate_satisfied, review_independent_fork,
     review_independent_reviewer_evidence,
 };

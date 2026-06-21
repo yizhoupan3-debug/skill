@@ -25,11 +25,16 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
+use std::sync::Mutex;
 #[cfg(not(unix))]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 const CLAUDE_HOOK_STATE_UNREADABLE: &str =
     "router-rs CLAUDE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
+
+/// mtime 缓存：`read_active_skill_context` 使用，避免重复 I/O + JSON 解析。
+/// `write_active_skill_context` / `clear_active_skill_context` 时主动失效。
+static SKILL_CONTEXT_CACHE: Mutex<Option<(std::time::SystemTime, Value)>> = Mutex::new(None);
 
 /// 与 Claude 共享 hook JSON 协议；通过 thread-local 切换 `.claude` 等宿主差异。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -557,6 +562,7 @@ fn skill_allowed_tools_from_runtime(skill_slug: &str) -> Option<Vec<String>> {
 }
 
 /// 写入 active skill context（UserPromptSubmit 时调用）。
+/// 写入后清除 mtime 缓存，确保下次 PreToolUse 读取到最新值。
 fn write_active_skill_context(repo_root: &Path, skill_slug: &str, allowed_tools: &[String]) {
     let path = active_skill_context_path(repo_root);
     if let Some(parent) = path.parent() {
@@ -571,19 +577,45 @@ fn write_active_skill_context(repo_root: &Path, skill_slug: &str, allowed_tools:
             .unwrap_or(0),
     });
     let _ = std::fs::write(&path, ctx.to_string());
+    // 失效 mtime 缓存
+    if let Ok(mut guard) = SKILL_CONTEXT_CACHE.lock() {
+        *guard = None;
+    }
 }
 
 /// 读取 active skill context（PreToolUse 时调用）。
+/// 使用 mtime 缓存：如果文件 mtime 未变则返回缓存值，避免每次 PreToolUse 都读文件+解析 JSON。
 fn read_active_skill_context(repo_root: &Path) -> Option<Value> {
     let path = active_skill_context_path(repo_root);
-    let data = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&data).ok()
+    let meta = fs::metadata(&path).ok()?;
+    let mtime = meta.modified().ok()?;
+
+    // 检查缓存：mtime 未变直接返回
+    if let Ok(guard) = SKILL_CONTEXT_CACHE.lock()
+        && let Some((cached_mtime, ref cached_val)) = *guard
+        && cached_mtime == mtime
+    {
+        return Some(cached_val.clone());
+    }
+
+    // mtime 变了或缓存为空，重新读取
+    let data = fs::read_to_string(&path).ok()?;
+    let value: Value = serde_json::from_str(&data).ok()?;
+    if let Ok(mut guard) = SKILL_CONTEXT_CACHE.lock() {
+        *guard = Some((mtime, value.clone()));
+    }
+    Some(value)
 }
 
 /// 清理 active skill context（Stop 时调用）。
+/// 同时失效 mtime 缓存。
 fn clear_active_skill_context(repo_root: &Path) {
     let path = active_skill_context_path(repo_root);
     let _ = std::fs::remove_file(&path);
+    // 失效 mtime 缓存
+    if let Ok(mut guard) = SKILL_CONTEXT_CACHE.lock() {
+        *guard = None;
+    }
 }
 
 /// 从用户 prompt 中提取生命周期 skill slug。
@@ -783,6 +815,65 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
     add_context("UserPromptSubmit", &contexts.join("\n"))
 }
 
+/// Pre-computed context for a single PostToolUse hook invocation.
+/// Avoids repeated `session_key` computation and path building across
+/// `record_reviewer_evidence` and `persist_touch_state`.
+struct PostToolContext {
+    session_key: String,
+    review_path: PathBuf,
+    touch_path: PathBuf,
+}
+
+impl PostToolContext {
+    fn new(repo_root: &Path, payload: &Value) -> Self {
+        let key = session_key(repo_root, payload);
+        let base = hook_state_base(repo_root);
+        let review_path = base.join(core_policy::hook_review_subagent_state_basename(&key));
+        let touch_path = base.join(format!("hook_state_{key}.json"));
+        Self { session_key: key, review_path, touch_path }
+    }
+}
+
+/// 合并 PostToolUse 中 reviewer evidence 记录和 touch state 持久化。
+/// 共享 `PostToolContext`，避免 `session_key` 重复计算和路径重复构建。
+fn record_evidence_and_persist_touch_state(
+    repo_root: &Path,
+    payload: &Value,
+    touched_settings: bool,
+    touched_framework: bool,
+    settings_validated: bool,
+    framework_tested: bool,
+) {
+    let ctx = PostToolContext::new(repo_root, payload);
+
+    // record_reviewer_evidence (使用 ctx.review_path)
+    record_reviewer_evidence_with_ctx(repo_root, payload, &ctx);
+
+    // persist_touch_state (仅在条件满足时执行，使用 ctx.touch_path)
+    if touched_settings || touched_framework || settings_validated || framework_tested {
+        persist_touch_state_with_ctx(repo_root, &ctx, touched_settings, touched_framework, settings_validated, framework_tested);
+    }
+}
+
+/// Backwards-compatible wrapper for tests: persists touch state without reviewer evidence.
+fn persist_touch_state(
+    repo_root: &Path,
+    payload: &Value,
+    touched_settings: bool,
+    touched_framework: bool,
+    settings_validated: bool,
+    framework_tested: bool,
+) {
+    record_evidence_and_persist_touch_state(
+        repo_root,
+        payload,
+        touched_settings,
+        touched_framework,
+        settings_validated,
+        framework_tested,
+    );
+}
+
 fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
     crate::hooks::ensure_kernel_bootstrap();
     let tool_name = payload
@@ -801,7 +892,6 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
         crate::hooks::extract_post_tool_duration_ms(payload).unwrap_or(0),
         crate::hooks::post_tool_call_succeeded(payload),
     );
-    record_reviewer_evidence(repo_root, payload);
     // §4.4: 自动 evidence 采集 — Bash 验证类命令自动记录到 EVIDENCE_INDEX
     auto_record_verification_evidence(repo_root, payload);
     // §19.5: 科研活动内联日志 — 在科研工作空间中自动记录关键操作
@@ -813,16 +903,12 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
         payload_is_successful_bash(payload) && payload_runs_settings_validation(payload);
     let framework_tested =
         payload_is_successful_bash(payload) && payload_runs_framework_tests(payload);
-    if touched_settings || touched_framework || settings_validated || framework_tested {
-        persist_touch_state(
-            repo_root,
-            payload,
-            touched_settings,
-            touched_framework,
-            settings_validated,
-            framework_tested,
-        );
-    }
+    // 合并 reviewer evidence 记录和 touch state 持久化，共享 session_key 计算
+    record_evidence_and_persist_touch_state(
+        repo_root, payload,
+        touched_settings, touched_framework,
+        settings_validated, framework_tested,
+    );
     match (touched_settings, touched_framework) {
         (true, true) => add_context(
             "PostToolUse",
@@ -1177,21 +1263,14 @@ fn repo_fallback_token(repo_root: &Path) -> String {
 /// 与 Cursor `session_key` 同类：**显式会话串** → **宿主 `ROUTER_RS_*_SESSION_NAMESPACE`** → **`cwd` 类字段** → **repo 稳定 token**。
 /// 同仓多会话在无 id 时仍可能共用状态文件；需并行分流时与 Cursor 一样设 namespace。
 fn session_key(repo_root: &Path, payload: &Value) -> String {
-    const CWD_KEYS: &[&str] = &[
-        "cwd",
-        "workspaceFolder",
-        "workspace_folder",
-        "workspaceRoot",
-        "workspace_root",
-        "root",
-    ];
     core_policy::session_key::session_key_core(
         &core_policy::session_key::SessionKeyConfig {
             env_var: active_stdio_agent_hook_host().session_namespace_env(),
+            scan_tool_input: false,
         },
         || try_extract_session_string(payload),
         || {
-            let cwd = first_nonempty_payload_str(payload, CWD_KEYS);
+            let cwd = first_nonempty_payload_str(payload, core_policy::session_key::SESSION_KEY_CWD_FIELDS);
             if cwd.is_empty() { None } else { Some(cwd) }
         },
         &repo_fallback_token(repo_root),
@@ -1374,11 +1453,11 @@ fn tool_name_implies_subagent(normalized: &str) -> bool {
     crate::hosts::hook_dispatch::is_subagent_tool(normalized)
 }
 
-fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
-    let path = review_state_path(repo_root, payload);
+fn record_reviewer_evidence_with_ctx(repo_root: &Path, payload: &Value, ctx: &PostToolContext) {
+    let path = &ctx.review_path;
     let tool_input = crate::hosts::hook_dispatch::extract_tool_input(payload);
     let fork = fork_context_from_values(&tool_input, Some(payload));
-    if let Err(err) = with_claude_review_state_lock(&path, || {
+    if let Err(err) = with_claude_review_state_lock(path, || {
         let mut state = match load_review_gate_disk(repo_root, payload) {
             AgentDiskState::Unreadable => {
                 eprintln!(
@@ -1401,7 +1480,7 @@ fn record_reviewer_evidence(repo_root: &Path, payload: &Value) {
             && review_independent_reviewer_evidence(fork, reviewer_lane(&tool_input, payload))
         {
             state.independent_reviewer_seen = true;
-            write_review_state_unlocked(&path, &state)?;
+            write_review_state_unlocked(path, &state)?;
         }
         Ok(())
     })
@@ -1508,18 +1587,17 @@ fn touch_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
     ))
 }
 
-fn persist_touch_state(
+fn persist_touch_state_with_ctx(
     repo_root: &Path,
-    session_payload: &Value,
+    ctx: &PostToolContext,
     settings: bool,
     framework: bool,
     settings_validated: bool,
     framework_tested: bool,
 ) {
-    let path = touch_state_path(repo_root, session_payload);
-    let lock_path = path.clone();
-    if let Err(err) = with_claude_review_state_lock(&lock_path, || {
-        let current = match load_touch_state_disk(repo_root, session_payload) {
+    let path = &ctx.touch_path;
+    if let Err(err) = with_claude_review_state_lock(path, || {
+        let current = match load_touch_state_from_path(path) {
             AgentDiskState::Unreadable => {
                 eprintln!(
                     "[router-rs] {} hook_state unreadable; skip merge (path {}): repair JSON or remove file",
@@ -1541,7 +1619,7 @@ fn persist_touch_state(
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let _ = fs::remove_file(legacy_touch_state_path(repo_root));
-        fs::write(&path, format!("{state_payload}\n")).map_err(|e| e.to_string())?;
+        fs::write(path, format!("{state_payload}\n")).map_err(|e| e.to_string())?;
         // §1.3: hook-state 写入后概率性清理过期文件
         if let Some(hook_state_dir) = path.parent() {
             crate::hooks::sweep_stale_hook_state_files(hook_state_dir);
@@ -1574,11 +1652,11 @@ fn load_review_gate_disk_with_ctx(_repo_root: &Path, ctx: &StopContext) -> Agent
     AgentDiskState::Absent
 }
 
-fn load_touch_state_disk_with_ctx(ctx: &StopContext) -> AgentDiskState<TouchState> {
-    if !ctx.touch_path.is_file() {
+fn load_touch_state_from_path(touch_path: &Path) -> AgentDiskState<TouchState> {
+    if !touch_path.is_file() {
         return AgentDiskState::Absent;
     }
-    let raw = match fs::read_to_string(&ctx.touch_path) {
+    let raw = match fs::read_to_string(touch_path) {
         Ok(s) => s,
         Err(_) => return AgentDiskState::Unreadable,
     };
@@ -1595,6 +1673,10 @@ fn load_touch_state_disk_with_ctx(ctx: &StopContext) -> AgentDiskState<TouchStat
         settings_validated: payload_val.get("settings_validated").and_then(Value::as_bool).unwrap_or(false),
         framework_tested: payload_val.get("framework_tested").and_then(Value::as_bool).unwrap_or(false),
     })
+}
+
+fn load_touch_state_disk_with_ctx(ctx: &StopContext) -> AgentDiskState<TouchState> {
+    load_touch_state_from_path(&ctx.touch_path)
 }
 
 fn clear_review_state_with_ctx(ctx: &StopContext) {

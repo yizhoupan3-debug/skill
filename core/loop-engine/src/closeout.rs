@@ -3,6 +3,7 @@ use crate::types::{
     LoopError,
 };
 use crate::state::closeout_path;
+use framework_runtime::closeout_enforcement::evaluate_closeout_record_value;
 use std::path::Path;
 use std::fs;
 
@@ -14,75 +15,53 @@ pub struct CloseoutVerificationResponse {
     pub violations: Vec<String>,
 }
 
-/// Verify a closeout JSON record for required fields (task_id, summary, verification_status,
-/// changed_files) and check for command failures or high-severity blockers.
+/// Verify a closeout JSON record by delegating to the framework-runtime
+/// `evaluate_closeout_record_value` implementation (single source of truth).
+///
+/// This replaces the former independent 6-rule implementation, ensuring
+/// the same closeout JSON produces the same `closeout_allowed` on both paths.
 pub fn verify_closeout_value(record: &serde_json::Value) -> CloseoutVerificationResponse {
-    let mut violations = Vec::new();
+    delegate_to_framework_runtime(record)
+}
 
-    let task_id = record.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
-    if task_id.trim().is_empty() {
-        violations.push("task_id_missing".to_string());
-    }
-
-    let summary = record.get("summary").and_then(|v| v.as_str()).unwrap_or("");
-    if summary.trim().is_empty() {
-        violations.push("summary_missing".to_string());
-    }
-
-    let verification_status = record.get("verification_status")
-        .and_then(|v| v.as_str()).unwrap_or("");
-    if verification_status == "not_run" {
-        violations.push("verification_status_not_run".to_string());
-    }
-
-    let changed_files = record.get("changed_files")
-        .and_then(|v| v.as_array())
-        .map(|a| a.len())
-        .unwrap_or(0);
-    if changed_files == 0 {
-        let has_risks = record.get("risks")
-            .and_then(|v| v.as_array())
-            .map(|a| !a.is_empty())
-            .unwrap_or(false);
-        let has_blockers = record.get("blockers")
-            .and_then(|v| v.as_array())
-            .map(|a| !a.is_empty())
-            .unwrap_or(false);
-        if !has_risks && !has_blockers {
-            violations.push("claimed_done_without_evidence".to_string());
-        }
-    }
-
-    if let Some(commands) = record.get("commands_run").and_then(|v| v.as_array()) {
-        for cmd in commands {
-            let exit_code = cmd.get("exit_code").and_then(|v| v.as_i64()).unwrap_or(-1);
-            if exit_code != 0 {
-                let command = cmd.get("command").and_then(|v| v.as_str()).unwrap_or("?");
-                violations.push(format!("command_failed: {} (exit={})", command, exit_code));
+/// Internal helper: call framework-runtime's `evaluate_closeout_record_value`
+/// and translate the result into a `CloseoutVerificationResponse`.
+fn delegate_to_framework_runtime(record: &serde_json::Value) -> CloseoutVerificationResponse {
+    match evaluate_closeout_record_value(record.clone()) {
+        Ok(response_value) => {
+            // Parse the structured CloseoutEnforcementResponse from JSON.
+            let closeout_allowed = response_value
+                .get("closeout_allowed")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let violations: Vec<String> = response_value
+                .get("violations")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .map(|v| {
+                            // Each violation is a CloseoutViolation { rule, severity, category, detail }.
+                            // Format as "rule: detail" for backward-compatible string output.
+                            let rule = v.get("rule").and_then(|r| r.as_str()).unwrap_or("unknown");
+                            let detail = v.get("detail").and_then(|d| d.as_str()).unwrap_or("");
+                            if detail.is_empty() {
+                                rule.to_string()
+                            } else {
+                                format!("{rule}: {detail}")
+                            }
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            CloseoutVerificationResponse {
+                closeout_allowed,
+                violations,
             }
         }
-    }
-
-    if let Some(blockers) = record.get("blockers").and_then(|v| v.as_array()) {
-        for b in blockers {
-            let text = b.as_str().unwrap_or("");
-            let lower = text.to_ascii_lowercase();
-            // Use word-boundary-aware matching to avoid false positives from
-            // substrings (e.g. "block" in "unblock", "high" in "highlights").
-            // Matches whole words only: "high", "critical", "block", "blocked", "blocking".
-            let has_high = lower.split(|c: char| !c.is_alphanumeric())
-                .any(|w| w == "high" || w == "critical");
-            let has_block = lower.split(|c: char| !c.is_alphanumeric())
-                .any(|w| w.starts_with("block"));
-            if has_high || has_block {
-                violations.push(format!("high_severity_blocker: {}", text));
-            }
-        }
-    }
-
-    CloseoutVerificationResponse {
-        closeout_allowed: violations.is_empty(),
-        violations,
+        Err(err) => CloseoutVerificationResponse {
+            closeout_allowed: false,
+            violations: vec![format!("framework_runtime_error: {err}")],
+        },
     }
 }
 
@@ -342,6 +321,7 @@ mod tests {
     #[test]
     fn test_verify_closeout_passes() {
         let record = json!({
+            "schema_version": "closeout-record-v1",
             "task_id": "a1",
             "summary": "fixed deprecation",
             "verification_status": "passed",
@@ -358,6 +338,7 @@ mod tests {
     #[test]
     fn test_verify_closeout_fails_missing_task_id() {
         let record = json!({
+            "schema_version": "closeout-record-v1",
             "summary": "fix",
             "verification_status": "passed",
             "changed_files": ["a.rs"],
@@ -371,6 +352,7 @@ mod tests {
     #[test]
     fn test_verify_closeout_fails_not_run() {
         let record = json!({
+            "schema_version": "closeout-record-v1",
             "task_id": "a1",
             "summary": "fix",
             "verification_status": "not_run",
@@ -379,12 +361,15 @@ mod tests {
         });
         let resp = verify_closeout_value(&record);
         assert!(!resp.closeout_allowed);
+        // framework-runtime emits "not_run_without_blockers_or_risks" or
+        // "claimed_done_without_evidence" for not_run records.
         assert!(resp.violations.iter().any(|v| v.contains("not_run")));
     }
 
     #[test]
     fn test_verify_closeout_fails_command_failure() {
         let record = json!({
+            "schema_version": "closeout-record-v1",
             "task_id": "a1",
             "summary": "fix",
             "verification_status": "passed",
@@ -395,7 +380,8 @@ mod tests {
         });
         let resp = verify_closeout_value(&record);
         assert!(!resp.closeout_allowed);
-        assert!(resp.violations.iter().any(|v| v.contains("command_failed")));
+        // framework-runtime emits "verification_passed_with_failed_command" for this case.
+        assert!(resp.violations.iter().any(|v| v.contains("failed_command") || v.contains("command_failed")));
     }
 
     #[test]
@@ -445,5 +431,61 @@ mod tests {
         let agg = build_aggregate("run-1", "test-loop", &actions, results);
         assert_eq!(agg.overall_status, "partial");
         assert!(aggregate_has_partial(&agg));
+    }
+
+    /// B9 cross-path equivalence: the same closeout JSON must produce the same
+    /// `closeout_allowed` when evaluated by both loop-engine's `verify_closeout_value`
+    /// (which now delegates to framework-runtime) and the raw
+    /// `evaluate_closeout_record_value` function directly.
+    #[test]
+    fn test_cross_path_equivalence_pass() {
+        let record = json!({
+            "schema_version": "closeout-record-v1",
+            "task_id": "b9-equiv",
+            "summary": "cross-path equivalence test",
+            "verification_status": "passed",
+            "changed_files": ["src/closeout.rs"],
+            "commands_run": [{"command": "cargo test -p loop-engine", "exit_code": 0}],
+            "blockers": [],
+            "risks": []
+        });
+        // Loop-engine path (delegates to framework-runtime)
+        let le_resp = verify_closeout_value(&record);
+        // Direct framework-runtime path
+        let fr_resp = framework_runtime::closeout_enforcement::evaluate_closeout_record_value(
+            record.clone(),
+        ).expect("framework-runtime should return Ok");
+        let fr_allowed = fr_resp
+            .get("closeout_allowed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        assert_eq!(le_resp.closeout_allowed, fr_allowed,
+            "both paths must agree on closeout_allowed for a valid record");
+    }
+
+    #[test]
+    fn test_cross_path_equivalence_fail() {
+        let record = json!({
+            "schema_version": "closeout-record-v1",
+            "task_id": "b9-equiv-fail",
+            "summary": "should fail on command failure",
+            "verification_status": "passed",
+            "changed_files": ["src/closeout.rs"],
+            "commands_run": [{"command": "cargo test", "exit_code": 1}],
+            "blockers": [],
+            "risks": []
+        });
+        let le_resp = verify_closeout_value(&record);
+        let fr_resp = framework_runtime::closeout_enforcement::evaluate_closeout_record_value(
+            record.clone(),
+        ).expect("framework-runtime should return Ok");
+        let fr_allowed = fr_resp
+            .get("closeout_allowed")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        assert_eq!(le_resp.closeout_allowed, fr_allowed,
+            "both paths must agree on closeout_allowed for a failing record");
+        assert!(!le_resp.closeout_allowed, "this record should be disallowed");
+        assert!(!fr_allowed, "this record should be disallowed");
     }
 }

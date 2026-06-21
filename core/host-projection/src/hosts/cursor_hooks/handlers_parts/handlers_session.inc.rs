@@ -911,6 +911,7 @@ pub fn dispatch_cursor_hook_event(
     event_name: &str,
     payload: &Value,
 ) -> Value {
+    crate::hooks::ensure_kernel_bootstrap();
     let lowered = event_name.trim().to_lowercase();
     let lowered = lowered.as_str();
     let dispatch_text = crate::hosts::hook_dispatch::extract_prompt_text(payload);

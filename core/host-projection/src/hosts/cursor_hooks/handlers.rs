@@ -591,21 +591,14 @@ fn extract_first_session_string_including_tool_input(event: &Value) -> Option<St
 /// 派生 `.cursor/hook-state/review-subagent-<key>.json` 文件名组件。
 /// 顺序：`extract_first_session_string_including_tool_input`（含 **`tool_input` 内父会话 id**）→ `ROUTER_RS_CURSOR_SESSION_NAMESPACE` → `cwd`（含嵌套 workspace 字段）→ 常量 fallback。
 fn session_key(event: &Value) -> String {
-    const CWD_KEYS: &[&str] = &[
-        "cwd",
-        "workspaceFolder",
-        "workspace_folder",
-        "workspaceRoot",
-        "workspace_root",
-        "root",
-    ];
     core_policy::session_key::session_key_core(
         &core_policy::session_key::SessionKeyConfig {
             env_var: "ROUTER_RS_CURSOR_SESSION_NAMESPACE",
+            scan_tool_input: true,
         },
         || extract_first_session_string_including_tool_input(event),
         || {
-            let cwd = first_nonempty_event_str(event, CWD_KEYS);
+            let cwd = first_nonempty_event_str(event, core_policy::session_key::SESSION_KEY_CWD_FIELDS);
             if cwd.is_empty() { None } else { Some(cwd) }
         },
         "router-rs-cursor-session-fallback",
