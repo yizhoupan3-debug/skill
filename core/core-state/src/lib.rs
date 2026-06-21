@@ -1,5 +1,6 @@
 pub mod exit_gate_evaluator;
 pub mod goal_prediction;
+pub mod quality_gate;
 pub mod rfv_loop;
 pub mod state_manager;
 pub mod step_ledger;

@@ -190,10 +190,10 @@ mod tests {
                 "{label} must not re-acquire L1 via append_transaction inside mutation paths"
             );
         }
-        let rfv_loop = include_str!("../rfv_loop.rs");
+        let quality_gate = include_str!("../quality_gate.rs");
         assert!(
-            rfv_loop.contains("apply_task_ledger_mutation"),
-            "rfv_loop must serialize mutations via apply_task_ledger_mutation"
+            quality_gate.contains("apply_task_ledger_mutation"),
+            "quality_gate must serialize mutations via apply_task_ledger_mutation"
         );
     }
 }
