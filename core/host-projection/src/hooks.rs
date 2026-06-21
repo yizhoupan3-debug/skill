@@ -368,14 +368,19 @@ pub fn read_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String, St
     Ok(input)
 }
 
-/// Read stdin as JSON with 4 MiB limit. Returns empty object if stdin is empty.
+/// Read stdin as JSON object with 4 MiB limit. Returns empty object if stdin is empty.
+/// Rejects non-object JSON (arrays, strings, numbers, etc.) with an error.
 pub fn read_stdin_json_limited() -> Result<Value, String> {
     let mut stdin = std::io::stdin();
     let input = read_stdin_limited(&mut stdin)?;
     if input.trim().is_empty() {
         return Ok(serde_json::json!({}));
     }
-    serde_json::from_str(&input).map_err(|_| "stdin_json_invalid".to_string())
+    let val: Value = serde_json::from_str(&input).map_err(|_| "stdin_json_invalid".to_string())?;
+    if !val.is_object() {
+        return Err("stdin_json_not_object: expected JSON object".to_string());
+    }
+    Ok(val)
 }
 
 // ────────────────────────────────────────────────────────────────
