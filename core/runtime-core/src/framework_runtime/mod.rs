@@ -87,7 +87,8 @@ pub use stdio_op_registry::{
 pub use trace_attach::{
     cleanup_attached_runtime_event_transport, subscribe_attached_runtime_events,
 };
-pub use trace_stream_io::{sha256_hex, write_trace_compaction_delta, write_trace_metadata};
+pub use trace_stream_io::{write_trace_compaction_delta, write_trace_metadata};
+pub use trace_runtime::sha256_hex;
 
 // Re-export from new submodules for backward-compatible paths.
 pub use closeout::{

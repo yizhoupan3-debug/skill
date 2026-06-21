@@ -19,7 +19,7 @@ use crate::closeout_enforcement::{
 #[cfg(feature = "codegraph")]
 use crate::codegraph_mcp::run_codegraph_mcp_stdio_loop;
 use crate::codex_hooks::{
-    InstallMode, build_codex_hook_projection, codex_host_entrypoint_provider,
+    InstallMode, build_codex_hook_projection, host_entrypoint_provider,
     install_codex_cli_hooks, resolve_codex_home, run_codex_audit_hook,
 };
 use crate::eval_route::{eval_route_contract, run_eval_route};
@@ -102,7 +102,7 @@ fn resolve_host_entrypoint_provider(
     // Future hosts add their own providers here via the registry pattern.
     match crate::hosts::host_provider_for_routing_spelling(resolved) {
         Some(provider) if provider.host_id() == "codex" || provider.install_tool() == "codex" => {
-            codex_host_entrypoint_provider(repo_root)
+            host_entrypoint_provider(repo_root)
         }
         Some(provider) => Err(format!(
             "host '{}' does not yet have an entrypoint provider; only codex is currently supported",
@@ -593,7 +593,7 @@ pub fn dispatch_codex_command(command: CodexSubcommand) -> Result<(), String> {
         CodexSubcommand::HookProjection => print_json_value(&build_codex_hook_projection()),
         CodexSubcommand::Check(command) => {
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let provider = codex_host_entrypoint_provider(&repo_root)?;
+            let provider = host_entrypoint_provider(&repo_root)?;
             print_json_value(&sync_host_entrypoints(&repo_root, false, provider)?)
         }
         CodexSubcommand::Hook(command) => {

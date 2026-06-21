@@ -10,6 +10,7 @@
 )]
 pub fn init() {}
 
+pub mod exit_gate_evaluator;
 pub mod goal_prediction;
 pub mod rfv_loop;
 pub mod state_manager;
