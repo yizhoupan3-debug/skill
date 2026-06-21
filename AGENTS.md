@@ -18,20 +18,16 @@
 
 - **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/spec.md` §6。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
-- **Closeout**：`closeout_gate` / `complete` 为 advisory（`my-light`）。
+- **Closeout**：`closeout_gate` / `complete` 为 advisory（`interactive`）。
 
 ## Continuity artifacts（手动画板 only）
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
 - Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
-<<<<<<< Updated upstream
-- **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。
-=======
-- **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。详见 roadmap v5 §4.9。
-  - **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `rfv_loop_manage` 的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。连接结束 → 该 session_id 不再出现 → 新连接读取旧 state 会标 stale。详见 roadmap v6 §5.1。
+- **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。
+  - **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `rfv_loop_manage` 的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。
   - **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`closeout_gate` / `goal_state_read` / `rfv_loop_status` 的 `task_id` 仍为可选（默认 active task）。
 - 历史 env 名见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)。
->>>>>>> Stashed changes
 
 ## Task Intake
 
@@ -155,12 +151,12 @@ LLM：（自动调用codegraph_dead_code检查）→ 返回死代码列表
 - **PreToolUse 硬阻断**：未物化 `GOAL_STATE.json` 或未授权执行区 → 硬阻断。遭遇阻断时 `/discussx` 或 `/planx` 自愈，勿盲目重试。
 - **Review gate**：Stop `REVIEW_GATE` advisory-only；**无** `rg_clear` 粘贴面（须完成可数 reviewer lane 或自然语言 override）。
 - **框架命令流**：无 `AG_FOLLOWUP` / `updateCurrentStep`；续跑 `framework_goal_drive` + `artifacts/current/<task_id>/` 手动画板。
-- **my-light**：suppress spawn-first 与 review Stop nudge（skill 层 findings-only 仍适用）。
+- **interactive**：suppress spawn-first 与 review Stop nudge（skill 层 findings-only 仍适用）。
 
 ### Cursor
 
 - **Hook 事件**：`.cursor/hooks.json` + `router-rs cursor hook`（7 事件闭集）；清门 **Claude canonical**；Stop **advisory-only**。
-- **机读短码**：`REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP`（须 `router-rs ` 前缀）；**my-light** suppress `REVIEW_GATE` / `AG_FOLLOWUP`。清门粘贴 **`rg_clear`** 或拒因 token。
+- **机读短码**：`REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP`（须 `router-rs ` 前缀）；**interactive** suppress `REVIEW_GATE` / `AG_FOLLOWUP`。清门粘贴 **`rg_clear`** 或拒因 token。
 - **`updateCurrentStep`**：禁止空载荷；须含可机读步骤或状态。
 - **子代理模型**：并行 `Task` 默认继承主会话（省略 `model`）。
 
@@ -174,6 +170,6 @@ LLM：（自动调用codegraph_dead_code检查）→ 返回死代码列表
 ### OpenCode
 
 - **插件 hook + MCP 双通道**：通过 JS/TS 插件系统提供 hook（`tool.execute.before`、`tool.execute.after`、`session.idle` 等），同时通过 `opencode.json` → MCP 提供框架工具。
-- **Review / closeout**：清门 **Claude canonical**；Stop review **advisory-only**（MCP `ADVISORY`）；非 my-light 时 MCP 可对**未满足 closeout 证据** hard-block。
+- **Review / closeout**：清门 **Claude canonical**；Stop review **advisory-only**（MCP `ADVISORY`）；非 interactive 时 MCP 可对**未满足 closeout 证据** hard-block。
 - **权限策略**：**fail-open**（插件层；hook 脚本层对 critical events 仍 fail-closed）。
 - **安装**：`framework host-integration install --to opencode --repo-root "$PWD"`。

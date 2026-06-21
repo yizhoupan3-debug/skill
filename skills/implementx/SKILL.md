@@ -3,7 +3,7 @@ name: implementx
 description: |
   Personal lifecycle — execute ALL waves in one breath. Main thread is pure orchestrator;
   all implementation work is strictly delegated to subagents. Coordinator visible content ≤35%.
-  Sets drive_until_done true. REVIEW_GATE hard block off under lifecycle_profile my-light.
+  Sets drive_until_done true. REVIEW_GATE hard block off under lifecycle_profile interactive.
   Use for /implementx after /planx.
 routing_layer: L0
 routing_owner: owner
@@ -39,7 +39,7 @@ metadata:
 
 （共享 header 见 [`../my-lifecycle-common/header.md`](../my-lifecycle-common/header.md)）
 
-Under **`lifecycle_profile: my-light`**, Cursor **Stop** does **not** emit hard `router-rs AG_FOLLOWUP` (goal continuity is manual: `framework_goal_drive` stdio + `artifacts/current/<task_id>/` boards). **`beforeSubmit` does not arm `goal_required`** (uses `goal_drive_entry_active` for pre-goal only). Closeout / `CLOSEOUT_FOLLOWUP` may still apply when completion is claimed.
+Under **`lifecycle_profile: interactive`**, Cursor **Stop** does **not** emit hard `router-rs AG_FOLLOWUP` (goal continuity is manual: `framework_goal_drive` stdio + `artifacts/current/<task_id>/` boards). **`beforeSubmit` does not arm `goal_required`** (uses `goal_drive_entry_active` for pre-goal only). Closeout / `CLOSEOUT_FOLLOWUP` may still apply when completion is claimed.
 
 > **设计依据**：Anthropic *Building Effective Agents*（orchestrator-workers pattern）、*How we built our multi-agent research system*（3-5 parallel subagent、artifact system、incremental injection）、*Effective context engineering*（subagent isolation + 摘要回传）、*Scaling Managed Agents*（brain/hands/session 三层解耦）、Claude 官方 subagent/workflow/agent-teams 文档、GitHub maestro-orchestrate（426★）/ code-audit-system / ArtChiTech-framework 等实战案例。完整证据表见 [`references/orchestration-contract.md`](references/orchestration-contract.md)。
 
@@ -292,8 +292,8 @@ coordinator **不得**将 subagent 全量 output 注入主 context；只读 lane
 显式 stdio 启动（**无** Stop `GOAL_CONTINUE` hook 注入，2026-05 连续性拔除）。**`start` / `resume` 同时写入** `artifacts/current/active_task.json`（及默认 `focus_task.json`，`set_focus: false` 可跳过 focus）；**禁止**手改 `{}` 作指针占位。
 
 ```bash
-# status=running, drive_until_done=true, lifecycle_profile=my-light
-printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start","repo_root":"<repo>","task_id":"<task_id>","goal":"<from GOAL_STATE>","drive_until_done":true,"status":"running","lifecycle_profile":"my-light"}}' | router-rs --stdio-json
+# status=running, drive_until_done=true, lifecycle_profile=interactive
+printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start","repo_root":"<repo>","task_id":"<task_id>","goal":"<from GOAL_STATE>","drive_until_done":true,"status":"running","lifecycle_profile":"interactive"}}' | router-rs --stdio-json
 ```
 
 `complete` / `clear` 会中性化指向该 `task_id` 的 active/focus 指针（删除文件，不留空对象）。

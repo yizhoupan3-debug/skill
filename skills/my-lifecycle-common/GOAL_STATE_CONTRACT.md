@@ -19,7 +19,7 @@
 
 | 字段 | 值 | 备注 |
 |------|------|------|
-| `lifecycle_profile` | `my-light` | 全阶段固定 |
+| `lifecycle_profile` | `interactive` | 全阶段固定 |
 | `drive_until_done` | `false`（discuss/plan/verify）· `true`（implement） | implement 阶段启动时显式设为 `true` |
 
 ## 操作语义
@@ -44,8 +44,8 @@
 **Stdio（CLI / Cursor / Codex）**:
 
 ```bash
-# status=running, drive_until_done=true, lifecycle_profile=my-light
-printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start","repo_root":"<repo>","task_id":"<task_id>","goal":"<from GOAL_STATE>","drive_until_done":true,"status":"running","lifecycle_profile":"my-light"}}' | router-rs --stdio-json
+# status=running, drive_until_done=true, lifecycle_profile=interactive
+printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start","repo_root":"<repo>","task_id":"<task_id>","goal":"<from GOAL_STATE>","drive_until_done":true,"status":"running","lifecycle_profile":"interactive"}}' | router-rs --stdio-json
 ```
 
 ## 各阶段差异速览

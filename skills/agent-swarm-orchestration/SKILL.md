@@ -137,7 +137,7 @@ Audit 类 workflow 默认 **findings-only**；修复需用户显式 `/implementx
 | 场景 | 推荐入口 | 执行面 | 对抗 Verify |
 |------|----------|--------|-------------|
 | 跨宿主 **多阶段 JS 编排**（Scan→Merge→Verify→Synthesize） | **`/workflow`** + `.claude/workflows/deep-review-template.js` | Claude: `workflow_native`；其它: **`workflow_supervisor`**（Task 同构） | 单 agent 批量验证 + `BATCH_VERDICT_SCHEMA` |
-| **Hook 可数**深度 review、PR/全仓、spawn-first gate | **`$code-review-deep`** | `deep-reviewer` / `general-purpose` lane +（非 my-light）REVIEW_GATE | skill 层 findings-only + 多 lens |
+| **Hook 可数**深度 review、PR/全仓、spawn-first gate | **`$code-review-deep`** | `deep-reviewer` / `general-purpose` lane +（非 interactive）REVIEW_GATE | skill 层 findings-only + 多 lens |
 | 窄范围单文件 review | 主线程或 sidecar | 无 workflow | 可选 |
 | 产品交付 wave（实现+验证） | **`/implementx`** | `WAVE_STATE.json` lane | verify_commands，非 audit pipeline |
 

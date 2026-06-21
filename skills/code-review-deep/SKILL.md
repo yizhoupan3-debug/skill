@@ -108,9 +108,9 @@ For broad/deep/PR-level review, spawn **a single serial** read-only reviewer (`f
 
 ### REVIEW_GATE clearance
 
-**Cursor**: countable reviewer evidence per wave-2 (`start_count>=1`, multiset drained, no compact-alone forgery). `lifecycle_profile: my-light` does **not** hard-block Stop.
+**Cursor**: countable reviewer evidence per wave-2 (`start_count>=1`, multiset drained, no compact-alone forgery). `lifecycle_profile: interactive` does **not** hard-block Stop.
 
-**Claude**: `PostToolUse` observes `claude_reviewer_lanes` (registry `review_gate.claude_reviewer_lanes`) with `fork_context` parsed as logical `false`. Stop hard-blocks before `independent_reviewer_seen`. `my-light` / `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` disables hard-block.
+**Claude**: `PostToolUse` observes `claude_reviewer_lanes` (registry `review_gate.claude_reviewer_lanes`) with `fork_context` parsed as logical `false`. Stop hard-blocks before `independent_reviewer_seen`. `interactive` / `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` disables hard-block.
 
 **Host countable evidence**: the subagent lane (after normalization) must be in `RUNTIME_REGISTRY.json` -> `review_gate.reviewer_lanes`. `explore`, `ci-investigator`, `cursor-guide`, and custom lane names **do not count** on Cursor — even with `fork_context=false`.
 

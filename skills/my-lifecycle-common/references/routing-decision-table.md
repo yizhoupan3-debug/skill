@@ -23,7 +23,7 @@
 | **架构讨论**（不写码） | `discussx` | `gsd-discuss-phase` | 多轮用户门控，直到显式 `/planx` |
 | **任务规划**（已有需求） | `planx` | `plan-mode`（宿主 Plan 模式） | `planx` 生成完整 ROADMAP + DAG；`plan-mode` 生成轻量可验收 todo |
 | **单文件/小改动** | 直接实施 | `plan-mode` 轻量五行 | 跳过 discuss/plan 阶段，用 `plan-mode` 收口即可 |
-| **实施（有 ROADMAP）** | `implementx` | — | 一口气执行所有 wave；`my-light` 模式下无硬拦 |
+| **实施（有 ROADMAP）** | `implementx` | — | 一口气执行所有 wave；`interactive` 模式下无硬拦 |
 | **实施后验证** | `verifyx` | `gsd-verify-work` | 证据索引 + closeout + goal complete 一步完成 |
 | **代码审查** | `code-review-deep` | `code-review`（低/中置信度） | 深度审查用 lens 扩展目录；轻量审查用基础版 |
 | **文档/论文** | `paper-workbench` | `doc` | 学术写作走 prose-chain；普通文档走 `doc` |
@@ -34,8 +34,8 @@
 
 | 宿主 | 入口方式 | Goal 驱动 | Closeout | 特殊差异 |
 |------|---------|-----------|----------|----------|
-| **claude** | 斜杠命令（`/discussx` 等） | `framework_goal_drive` stdio | `closeout_gate` advisory（my-light） | PreToolUse/Stop hook advisory 模式 |
-| **cursor** | Plan 模式自动触发 `plan-mode` | `framework_goal_drive` stdio | advisory（my-light 下无硬拦） | `.cursor/rules/*-gate.mdc`；hook 不注入 spawn-first nudge |
+| **claude** | 斜杠命令（`/discussx` 等） | `framework_goal_drive` stdio | `closeout_gate` advisory（interactive） | PreToolUse/Stop hook advisory 模式 |
+| **cursor** | Plan 模式自动触发 `plan-mode` | `framework_goal_drive` stdio | advisory（interactive 下无硬拦） | `.cursor/rules/*-gate.mdc`；hook 不注入 spawn-first nudge |
 | **opencode** | 斜杠命令 | `framework_goal_drive` stdio | advisory | 配置在 `opencode.json` |
 
 **宿主权威分层**：跨宿主协议 → `AGENTS.md`；宿主执行面 → `AGENTS_<HOST>.md`；skill 路由 → `SKILL_ROUTING_RUNTIME.json`；hook 行为 → 各宿主 `hooks.json` + `router-rs`。
@@ -47,6 +47,6 @@
    需求       规划       实施          验证+交付
 ```
 
-- **my-light profile**：closeout/complete 为 advisory；`REVIEW_GATE` 无硬拦；spawn-first nudge 关闭。
-- **非 my-light**：`closeout_gate` 未满足时 advisory 提醒 `complete`。
+- **interactive profile**：closeout/complete 为 advisory；`REVIEW_GATE` 无硬拦；spawn-first nudge 关闭。
+- **非 interactive**：`closeout_gate` 未满足时 advisory 提醒 `complete`。
 - Goal 磁盘真源：`artifacts/current/<task_id>/GOAL_STATE.json`。

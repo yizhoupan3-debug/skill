@@ -4,10 +4,10 @@
 
 **Zone 头（每个 skill 必带，frontmatter 之外的开头段）**：
 
-- **discussx**: `**Zone**: pre-execution · **profile**: \`my-light\` · **no product code**`
-- **planx**: `**Zone**: pre-execution · **profile**: \`my-light\``
-- **implementx**: `**Zone**: execution+ · **profile**: \`my-light\` · **all waves in one breath**`
-- **verifyx**: `**Zone**: execution+ · **profile**: \`my-light\` · **no separate ship command**`
+- **discussx**: `**Zone**: pre-execution · **profile**: \`interactive\` · **no product code**`
+- **planx**: `**Zone**: pre-execution · **profile**: \`interactive\``
+- **implementx**: `**Zone**: execution+ · **profile**: \`interactive\` · **all waves in one breath**`
+- **verifyx**: `**Zone**: execution+ · **profile**: \`interactive\` · **no separate ship command**`
 
 **GOAL_STATE writes（HARD, 3 个 skill 用）**：
 

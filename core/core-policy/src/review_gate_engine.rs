@@ -4,19 +4,19 @@ use tracing::debug;
 
 /// Cursor `REVIEW_GATE` evidence path: multiset (strict) vs id-only pending vec (lite).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CursorReviewGateMode {
+pub enum ReviewGateMode {
     Strict,
     Lite,
 }
 
 /// `ROUTER_RS_REVIEW_GATE_MODE=lite` enables lite; unset or `strict` → strict.
 /// Falls back to legacy `ROUTER_RS_CURSOR_REVIEW_GATE_MODE` for backward compat.
-pub fn cursor_review_gate_mode() -> CursorReviewGateMode {
+pub fn review_gate_mode() -> ReviewGateMode {
     match std::env::var("ROUTER_RS_REVIEW_GATE_MODE")
         .or_else(|_| std::env::var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"))
     {
-        Ok(v) if v.trim().eq_ignore_ascii_case("lite") => CursorReviewGateMode::Lite,
-        _ => CursorReviewGateMode::Strict,
+        Ok(v) if v.trim().eq_ignore_ascii_case("lite") => ReviewGateMode::Lite,
+        _ => ReviewGateMode::Strict,
     }
 }
 
@@ -130,7 +130,7 @@ pub fn review_gate_satisfied(
 }
 
 /// Codex telemetry: countable PostTool evidence before Stop compact (not a gate condition).
-pub fn codex_countable_review_subagent_evidence(
+pub fn countable_review_subagent_evidence(
     subagent_start_count: u32,
     independent_reviewer_seen: bool,
 ) -> bool {
@@ -138,7 +138,7 @@ pub fn codex_countable_review_subagent_evidence(
 }
 
 /// Bump Codex review phase to 3 when compact findings appear after countable PostTool evidence.
-pub fn maybe_bump_codex_review_phase_for_compact_findings(
+pub fn maybe_bump_review_phase_for_compact_findings(
     review_required: bool,
     review_override: bool,
     phase: u32,
@@ -149,7 +149,7 @@ pub fn maybe_bump_codex_review_phase_for_compact_findings(
     if !review_gate_armed(review_required, review_override) || phase >= 3 {
         return None;
     }
-    if !codex_countable_review_subagent_evidence(subagent_start_count, independent_reviewer_seen) {
+    if !countable_review_subagent_evidence(subagent_start_count, independent_reviewer_seen) {
         return None;
     }
     if !crate::review_output_lint::assistant_has_substantive_compact_review_finding_line(
@@ -167,26 +167,26 @@ mod fork_context_parse_tests {
     use serde_json::json;
 
     #[test]
-    fn cursor_review_gate_mode_respects_lite_env() {
+    fn review_gate_mode_respects_lite_env() {
         let _lock = crate::test_env_sync::process_env_lock();
         crate::test_env_sync::with_env_var(
             "ROUTER_RS_CURSOR_REVIEW_GATE_MODE",
             "lite",
-            || assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Lite),
+            || assert_eq!(review_gate_mode(), ReviewGateMode::Lite),
         );
         crate::test_env_sync::with_env_var(
             "ROUTER_RS_CURSOR_REVIEW_GATE_MODE",
             "LITE",
-            || assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Lite),
+            || assert_eq!(review_gate_mode(), ReviewGateMode::Lite),
         );
         crate::test_env_sync::with_env_var_removed(
             "ROUTER_RS_CURSOR_REVIEW_GATE_MODE",
-            || assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Strict),
+            || assert_eq!(review_gate_mode(), ReviewGateMode::Strict),
         );
         crate::test_env_sync::with_env_var(
             "ROUTER_RS_CURSOR_REVIEW_GATE_MODE",
             "strict",
-            || assert_eq!(cursor_review_gate_mode(), CursorReviewGateMode::Strict),
+            || assert_eq!(review_gate_mode(), ReviewGateMode::Strict),
         );
     }
 
@@ -256,9 +256,9 @@ mod fork_context_parse_tests {
 
     #[test]
     fn codex_countable_evidence_excludes_start_zero_without_independent() {
-        assert!(!codex_countable_review_subagent_evidence(0, false));
-        assert!(codex_countable_review_subagent_evidence(1, false));
-        assert!(codex_countable_review_subagent_evidence(0, true));
+        assert!(!countable_review_subagent_evidence(0, false));
+        assert!(countable_review_subagent_evidence(1, false));
+        assert!(countable_review_subagent_evidence(0, true));
     }
 
     #[test]
@@ -289,16 +289,16 @@ mod fork_context_parse_tests {
     fn codex_wave2_compact_bump_requires_countable_evidence() {
         let finding = "[P1] foo.rs:1 — substantive compact finding for gate";
         assert!(
-            maybe_bump_codex_review_phase_for_compact_findings(true, false, 0, 0, false, finding,)
+            maybe_bump_review_phase_for_compact_findings(true, false, 0, 0, false, finding,)
                 .is_none()
         );
         assert!(
-            maybe_bump_codex_review_phase_for_compact_findings(true, false, 2, 0, false, finding,)
+            maybe_bump_review_phase_for_compact_findings(true, false, 2, 0, false, finding,)
                 .is_none(),
             "legacy phase>=2 alone must not count as countable evidence"
         );
         assert_eq!(
-            maybe_bump_codex_review_phase_for_compact_findings(true, false, 2, 1, true, finding,),
+            maybe_bump_review_phase_for_compact_findings(true, false, 2, 1, true, finding,),
             Some(3)
         );
     }

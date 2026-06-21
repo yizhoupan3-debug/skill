@@ -13,13 +13,13 @@
 - 仅当用户**当轮明确要求英文**时可切换。
 - **子代理 / Task**：spawn 时在 prompt **首行**写「面向用户的可见输出使用简体中文」。
 
-**Default lifecycle: My** — `/discussx` → `/planx` → `/implementx` → `/verifyx`. Goal/RFV via stdio + manual boards; `router-rs claude hook` does not inject GOAL_CONTINUE/RFV/digest. REVIEW_GATE Stop advisory-only (Claude canonical clearance); `my-light` suppresses review nudge and spawn-first.
+**Default lifecycle: My** — `/discussx` → `/planx` → `/implementx` → `/verifyx`. Goal/RFV via stdio + manual boards; `router-rs claude hook` does not inject GOAL_CONTINUE/RFV/digest. REVIEW_GATE Stop advisory-only (Claude canonical clearance); `interactive` suppresses review nudge and spawn-first.
 
 ## Hook 集成（非 MCP）
 
 - 四事件：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`（`.claude/settings.json` + `router-rs claude hook`）。
 - Goal/RFV：`framework_goal_drive` / `framework_rfv_loop` stdio + `artifacts/current/<task_id>/`。
-- 默认 **`lifecycle_profile: my-light`**：closeout/complete 为 advisory，suppress review Stop nudge；非 my-light 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/spec.md` §6）。
+- 默认 **`lifecycle_profile: interactive`**：closeout/complete 为 advisory，suppress review Stop nudge；非 interactive 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/spec.md` §6）。
 - 检查点：`session_checkpoint`（非自动）。
 
 ## MCP（可选）
