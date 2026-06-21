@@ -1062,3 +1062,528 @@ fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
         engine.decode(input.as_bytes()).map_err(|e| format!("decode base64 failed: {e}"))
     }
 }
+
+#[cfg(test)]
+mod frag_rest_tests {
+    use super::*;
+
+    // --- fingerprint ---
+
+    #[test]
+    fn create_fingerprint_prefers_test_id() {
+        let mut counts = HashMap::new();
+        let desc = ElementDescriptor {
+            role: "button".to_string(),
+            name: "Submit".to_string(),
+            text: "Submit".to_string(),
+            visible: true,
+            enabled: true,
+            tag: "button".to_string(),
+            test_id: Some("submit-btn".to_string()),
+            _ordinal: 0,
+            selector: "button".to_string(),
+        };
+        assert_eq!(create_fingerprint(&desc, &mut counts), "tid::submit-btn");
+    }
+
+    #[test]
+    fn create_fingerprint_deduplicates_by_counter() {
+        let mut counts = HashMap::new();
+        let desc = ElementDescriptor {
+            role: "link".to_string(),
+            name: "Home".to_string(),
+            text: "Home".to_string(),
+            visible: true,
+            enabled: true,
+            tag: "a".to_string(),
+            test_id: None,
+            _ordinal: 0,
+            selector: "a".to_string(),
+        };
+        assert_eq!(create_fingerprint(&desc, &mut counts), "link::Home::a");
+        let desc2 = ElementDescriptor {
+            _ordinal: 1,
+            ..desc.clone()
+        };
+        assert_eq!(create_fingerprint(&desc2, &mut counts), "link::Home::a#2");
+        let desc3 = ElementDescriptor {
+            _ordinal: 2,
+            ..desc.clone()
+        };
+        assert_eq!(create_fingerprint(&desc3, &mut counts), "link::Home::a#3");
+    }
+
+    // --- has_meaningful_change ---
+
+    fn make_snapshot(url: &str, title: &str, text: &str, elements: Vec<InteractiveElement>) -> PageSnapshot {
+        make_snapshot_with_revision(1, url, title, text, elements)
+    }
+
+    fn make_snapshot_with_revision(revision: u64, url: &str, title: &str, text: &str, elements: Vec<InteractiveElement>) -> PageSnapshot {
+        PageSnapshot {
+            revision,
+            url: url.to_string(),
+            title: title.to_string(),
+            loading_state: "complete".to_string(),
+            summary: json!({}),
+            interactive_elements: elements,
+            text_content: text.to_string(),
+            text_lines: text.lines().map(|s| s.to_string()).collect(),
+            _created_at: 0,
+        }
+    }
+
+    #[test]
+    fn meaningful_change_detects_url_diff() {
+        let a = make_snapshot("http://a.com", "A", "text", vec![]);
+        let b = make_snapshot("http://b.com", "A", "text", vec![]);
+        assert!(has_meaningful_change(&a, &b));
+    }
+
+    #[test]
+    fn meaningful_change_detects_text_diff() {
+        let a = make_snapshot("http://a.com", "A", "old text", vec![]);
+        let b = make_snapshot("http://a.com", "A", "new text", vec![]);
+        assert!(has_meaningful_change(&a, &b));
+    }
+
+    #[test]
+    fn meaningful_change_false_for_identical_snapshots() {
+        let a = make_snapshot("http://a.com", "A", "text", vec![]);
+        let b = make_snapshot("http://a.com", "A", "text", vec![]);
+        assert!(!has_meaningful_change(&a, &b));
+    }
+
+    #[test]
+    fn meaningful_change_detects_element_fingerprint_diff() {
+        let elem = InteractiveElement {
+            ref_id: "ref_1".to_string(),
+            page_revision: 1,
+            role: "button".to_string(),
+            name: "Go".to_string(),
+            text: "Go".to_string(),
+            visible: true,
+            enabled: true,
+            tag: "button".to_string(),
+            test_id: None,
+            fingerprint: "fp-a".to_string(),
+            selector: "button".to_string(),
+        };
+        let mut elem2 = elem.clone();
+        elem2.fingerprint = "fp-b".to_string();
+        let a = make_snapshot("http://a.com", "A", "text", vec![elem]);
+        let b = make_snapshot("http://a.com", "A", "text", vec![elem2]);
+        assert!(has_meaningful_change(&a, &b));
+    }
+
+    // --- compute_delta ---
+
+    #[test]
+    fn delta_identifies_new_and_removed_elements() {
+        let elem1 = InteractiveElement {
+            ref_id: "ref_1".to_string(),
+            page_revision: 1,
+            role: "button".to_string(),
+            name: "Old".to_string(),
+            text: "Old".to_string(),
+            visible: true,
+            enabled: true,
+            tag: "button".to_string(),
+            test_id: None,
+            fingerprint: "fp-1".to_string(),
+            selector: "button".to_string(),
+        };
+        let elem2 = InteractiveElement {
+            ref_id: "ref_2".to_string(),
+            page_revision: 2,
+            role: "link".to_string(),
+            name: "New".to_string(),
+            text: "New".to_string(),
+            visible: true,
+            enabled: true,
+            tag: "a".to_string(),
+            test_id: None,
+            fingerprint: "fp-2".to_string(),
+            selector: "a".to_string(),
+        };
+        let prev = make_snapshot_with_revision(1, "http://x.com", "T", "text", vec![elem1]);
+        let next = make_snapshot_with_revision(2, "http://x.com", "T", "text", vec![elem2]);
+        let delta = compute_delta(&prev, &next);
+        assert_eq!(delta["fromRevision"], json!(1));
+        assert_eq!(delta["toRevision"], json!(2));
+        assert_eq!(delta["urlChanged"], false);
+        let new_elems = delta["newElements"].as_array().unwrap();
+        assert_eq!(new_elems.len(), 1);
+        assert_eq!(new_elems[0]["ref"], "ref_2");
+        let removed = delta["removedRefs"].as_array().unwrap();
+        assert_eq!(removed.len(), 1);
+        assert_eq!(removed[0], "ref_1");
+    }
+
+    // --- browser_error ---
+
+    #[test]
+    fn browser_error_structure() {
+        let err = browser_error("CODE", "msg", &["action1"], true);
+        assert_eq!(err["code"], "CODE");
+        assert_eq!(err["message"], "msg");
+        assert_eq!(err["recoverable"], true);
+        assert_eq!(err["suggested_next_actions"][0], "action1");
+    }
+
+    #[test]
+    fn skill_error_wraps_browser_error() {
+        let err = skill_error("SKILL_ERR", "missing");
+        assert_eq!(err["code"], "SKILL_ERR");
+        assert!(err["suggested_next_actions"].as_array().unwrap().len() > 1);
+    }
+
+    #[test]
+    fn runtime_error_wraps_browser_error() {
+        let err = runtime_error("RT_ERR", "bad state");
+        assert_eq!(err["code"], "RT_ERR");
+        assert_eq!(err["recoverable"], true);
+    }
+
+    // --- require_string / optional helpers ---
+
+    #[test]
+    fn require_string_valid_input() {
+        let payload = json!({"key": "value"});
+        assert_eq!(require_string(&payload, "key").unwrap(), "value");
+    }
+
+    #[test]
+    fn require_string_empty_is_error() {
+        let payload = json!({"key": "  "});
+        assert!(require_string(&payload, "key").is_err());
+    }
+
+    #[test]
+    fn require_string_missing_is_error() {
+        let payload = json!({});
+        assert!(require_string(&payload, "key").is_err());
+    }
+
+    #[test]
+    fn optional_string_returns_trimmed() {
+        let payload = json!({"k": " hello "});
+        assert_eq!(optional_string(&payload, "k"), Some("hello".to_string()));
+    }
+
+    #[test]
+    fn optional_string_returns_none_for_empty() {
+        let payload = json!({"k": "  "});
+        assert_eq!(optional_string(&payload, "k"), None);
+    }
+
+    #[test]
+    fn optional_bool_returns_value() {
+        let payload = json!({"k": true});
+        assert_eq!(optional_bool(&payload, "k"), Some(true));
+    }
+
+    #[test]
+    fn optional_bool_returns_none_for_missing() {
+        let payload = json!({});
+        assert_eq!(optional_bool(&payload, "k"), None);
+    }
+
+    #[test]
+    fn optional_u64_valid() {
+        let payload = json!({"k": 42});
+        assert_eq!(optional_u64(&payload, "k").unwrap(), Some(42));
+    }
+
+    #[test]
+    fn optional_u64_none_for_missing() {
+        let payload = json!({});
+        assert_eq!(optional_u64(&payload, "k").unwrap(), None);
+    }
+
+    #[test]
+    fn optional_u64_error_for_string() {
+        let payload = json!({"k": "not_a_number"});
+        assert!(optional_u64(&payload, "k").is_err());
+    }
+
+    #[test]
+    fn optional_usize_uses_default() {
+        let payload = json!({});
+        assert_eq!(optional_usize(&payload, "k", 99).unwrap(), 99);
+    }
+
+    #[test]
+    fn optional_string_array_parses() {
+        let payload = json!({"k": ["a", "b", "c"]});
+        let result = optional_string_array(&payload, "k").unwrap();
+        assert_eq!(result, vec!["a", "b", "c"]);
+    }
+
+    #[test]
+    fn optional_string_array_none_for_missing() {
+        let payload = json!({});
+        assert_eq!(optional_string_array(&payload, "k"), None);
+    }
+
+    // --- json_type_name ---
+
+    #[test]
+    fn json_type_name_covers_all_variants() {
+        assert_eq!(json_type_name(&Value::Null), "NoneType");
+        assert_eq!(json_type_name(&json!(true)), "bool");
+        assert_eq!(json_type_name(&json!(42)), "int");
+        assert_eq!(json_type_name(&json!("hello")), "str");
+        assert_eq!(json_type_name(&json!([])), "list");
+        assert_eq!(json_type_name(&json!({})), "dict");
+    }
+
+    // --- truncate_text ---
+
+    #[test]
+    fn truncate_text_returns_original_when_short() {
+        assert_eq!(truncate_text("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncate_text_truncates_long_text() {
+        let result = truncate_text("hello world", 5);
+        assert_eq!(result, "hell...");
+        assert_eq!(result.chars().count(), 7); // 4 + "..." = 7, wait no: max=5, take(5-1=4), + "..." = 7
+    }
+
+    // --- to_text_lines ---
+
+    #[test]
+    fn to_text_lines_deduplicates_and_trims() {
+        let lines = to_text_lines("  hello  \nworld\nhello\n");
+        assert_eq!(lines, vec!["hello", "world"]);
+    }
+
+    #[test]
+    fn to_text_lines_limits_to_50() {
+        let big = (0..100).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
+        let lines = to_text_lines(&big);
+        assert!(lines.len() <= 50);
+    }
+
+    // --- cdp_key_name ---
+
+    #[test]
+    fn cdp_key_name_maps_return_to_enter() {
+        assert_eq!(cdp_key_name("Return"), "Enter");
+        assert_eq!(cdp_key_name("Tab"), "Tab");
+    }
+
+    // --- decode_base64 ---
+
+    #[test]
+    fn decode_base64_standard() {
+        assert_eq!(decode_base64("SGVsbG8=").unwrap(), b"Hello");
+    }
+
+    #[test]
+    fn decode_base64_no_padding() {
+        assert_eq!(decode_base64("SGVsbG8").unwrap(), b"Hello");
+    }
+
+    #[test]
+    fn decode_base64_empty() {
+        assert_eq!(decode_base64("").unwrap(), b"");
+    }
+
+    #[test]
+    fn decode_base64_invalid_byte() {
+        assert!(decode_base64("SGVs#G8=").is_err());
+    }
+
+    // --- env helpers ---
+
+    #[test]
+    fn resolve_headless_option_cli_overrides_env() {
+        assert_eq!(resolve_headless_option(Some("false".to_string())), false);
+        assert_eq!(resolve_headless_option(Some("true".to_string())), true);
+    }
+
+    // --- opt_string_value ---
+
+    #[test]
+    fn opt_string_value_some_and_none() {
+        assert_eq!(opt_string_value(Some("hello".to_string())), json!("hello"));
+        assert_eq!(opt_string_value(None), Value::Null);
+    }
+
+    // --- value_string ---
+
+    #[test]
+    fn value_string_handles_all_types() {
+        assert_eq!(value_string(Some(&json!("text"))), "text");
+        assert_eq!(value_string(Some(&json!(42))), "42");
+        assert_eq!(value_string(Some(&json!(true))), "true");
+        assert_eq!(value_string(Some(&Value::Null)), "");
+        assert_eq!(value_string(None), "");
+        assert_eq!(value_string(Some(&json!(["a", "b"]))), "a b");
+    }
+
+    // --- compact_summary ---
+
+    #[test]
+    fn compact_summary_truncates_text() {
+        let summary = json!({
+            "mainGoalArea": "a".repeat(1000),
+            "visibleMessages": ["msg1", "msg2"],
+            "forms": 2,
+            "dialogs": 1
+        });
+        let compact = compact_summary(&summary, 100);
+        // truncate_text adds "...", so result is max_chars + 3 chars ("...")
+        let main_text = compact["mainGoalArea"].as_str().unwrap();
+        assert!(main_text.chars().count() <= 103, "mainGoalArea should be truncated: {} chars", main_text.chars().count());
+        assert!(main_text.chars().count() < 1000, "mainGoalArea should be shorter than original");
+        assert_eq!(compact["forms"], 2);
+    }
+
+    // --- session_not_found_error ---
+
+    #[test]
+    fn session_not_found_error_format() {
+        let err = session_not_found_error();
+        assert_eq!(err["code"], "SESSION_NOT_FOUND");
+        assert!(err["suggested_next_actions"].as_array().unwrap().iter().any(|a| a == "call browser_open"));
+    }
+
+    // --- success_response / error_response ---
+
+    #[test]
+    fn success_response_wraps_jsonrpc() {
+        let resp = success_response(json!(1), json!({"ok": true}));
+        assert_eq!(resp["jsonrpc"], "2.0");
+        assert_eq!(resp["id"], 1);
+        assert_eq!(resp["result"]["ok"], true);
+    }
+
+    #[test]
+    fn error_response_wraps_jsonrpc() {
+        let err = browser_error("CODE", "msg", &[], false);
+        let resp = error_response(json!(1), err);
+        assert_eq!(resp["jsonrpc"], "2.0");
+        assert_eq!(resp["error"]["code"], -32000);
+    }
+
+    // --- json_string_literal ---
+
+    #[test]
+    fn json_string_literal_produces_quoted_string() {
+        assert_eq!(json_string_literal("hello"), "\"hello\"");
+        assert_eq!(json_string_literal("a\"b"), "\"a\\\"b\"");
+    }
+
+    // --- descriptor_leaf / descriptor_string / descriptor_bool ---
+
+    #[test]
+    fn descriptor_leaf_navigates_path() {
+        let val = json!({"a": {"b": {"c": 42}}});
+        assert_eq!(descriptor_leaf(&val, &["a", "b", "c"]), Some(&json!(42)));
+        assert_eq!(descriptor_leaf(&val, &["a", "missing"]), None);
+    }
+
+    #[test]
+    fn descriptor_string_extracts_string() {
+        let val = json!({"a": "hello"});
+        assert_eq!(descriptor_string(&val, &["a"]), Some("hello".to_string()));
+        assert_eq!(descriptor_string(&val, &["b"]), None);
+    }
+
+    #[test]
+    fn descriptor_bool_extracts_bool() {
+        let val = json!({"a": true, "b": "not_bool"});
+        assert_eq!(descriptor_bool(&val, &["a"]), Some(true));
+        assert_eq!(descriptor_bool(&val, &["b"]), None);
+        assert_eq!(descriptor_bool(&val, &["c"]), None);
+    }
+
+    // --- skill_body_path ---
+
+    #[test]
+    fn skill_body_path_rejects_traversal() {
+        let root = PathBuf::from("/tmp/test-repo");
+        assert!(skill_body_path(&root, "../etc/passwd").is_err());
+        assert!(skill_body_path(&root, "foo/bar").is_err());
+        assert!(skill_body_path(&root, "").is_err());
+        assert!(skill_body_path(&root, ".hidden").is_err());
+    }
+
+    // --- normalize_text (via to_text_lines usage) ---
+
+    #[test]
+    fn normalize_runtime_locator_returns_original_when_missing() {
+        let result = normalize_runtime_locator_for_existing_file("/nonexistent/path/file.json");
+        assert_eq!(result, "/nonexistent/path/file.json");
+    }
+
+    // --- attach_candidate_ranking ---
+
+    #[test]
+    fn manifest_attach_candidate_rejects_wrong_schema() {
+        let payload = json!({"schema_version": "wrong"});
+        assert!(manifest_attach_candidate(&payload, "/path".to_string(), 0).is_none());
+    }
+
+    #[test]
+    fn manifest_attach_candidate_accepts_valid() {
+        let payload = json!({
+            "schema_version": TRACE_RESUME_MANIFEST_SCHEMA_VERSION,
+            "event_transport_path": "/transport.json"
+        });
+        let candidate = manifest_attach_candidate(&payload, "/path".to_string(), 100).unwrap();
+        assert_eq!(candidate.path, "/path");
+        assert_eq!(candidate.rank.recency_ms, 100);
+        assert_eq!(candidate.rank.source_priority, 1);
+    }
+
+    #[test]
+    fn binding_attach_candidate_rejects_wrong_schema() {
+        let payload = json!({"schema_version": "wrong"});
+        assert!(binding_attach_candidate(&payload, "/path".to_string(), 0).is_none());
+    }
+
+    #[test]
+    fn binding_attach_candidate_rejects_filesystem_backend() {
+        let payload = json!({
+            "schema_version": RUNTIME_EVENT_TRANSPORT_SCHEMA_VERSION,
+            "binding_backend_family": "filesystem"
+        });
+        assert!(binding_attach_candidate(&payload, "/path".to_string(), 0).is_none());
+    }
+
+    // --- should_skip_attach_discovery_dir ---
+
+    #[test]
+    fn should_skip_known_dirs() {
+        assert!(should_skip_attach_discovery_dir(Path::new("/foo/.git")));
+        assert!(should_skip_attach_discovery_dir(Path::new("/foo/node_modules")));
+        assert!(should_skip_attach_discovery_dir(Path::new("/foo/target")));
+        assert!(!should_skip_attach_discovery_dir(Path::new("/foo/artifacts")));
+    }
+
+    // --- parse_rfc3339_millis ---
+
+    #[test]
+    fn parse_rfc3339_millis_valid() {
+        let result = parse_rfc3339_millis("2026-06-01T00:00:00Z");
+        assert!(result.is_some());
+        assert!(result.unwrap() > 0);
+    }
+
+    #[test]
+    fn parse_rfc3339_millis_invalid() {
+        assert!(parse_rfc3339_millis("not-a-date").is_none());
+    }
+
+    // --- skill_runtime_available ---
+
+    #[test]
+    fn skill_runtime_available_false_for_nonexistent_root() {
+        assert!(!skill_runtime_available(Path::new("/nonexistent/repo")));
+    }
+}

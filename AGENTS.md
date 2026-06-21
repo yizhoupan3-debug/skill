@@ -24,7 +24,14 @@
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
 - Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
+<<<<<<< Updated upstream
 - **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。
+=======
+- **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。详见 roadmap v5 §4.9。
+  - **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `rfv_loop_manage` 的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。连接结束 → 该 session_id 不再出现 → 新连接读取旧 state 会标 stale。详见 roadmap v6 §5.1。
+  - **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`closeout_gate` / `goal_state_read` / `rfv_loop_status` 的 `task_id` 仍为可选（默认 active task）。
+- 历史 env 名见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)。
+>>>>>>> Stashed changes
 
 ## Task Intake
 

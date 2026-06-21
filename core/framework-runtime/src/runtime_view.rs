@@ -4,6 +4,7 @@
 //! continuity classification logic extracted from `framework_runtime/mod.rs`.
 
 use super::constants::*;
+use core_state::state_manager::EVIDENCE_INDEX_FILENAME;
 use super::json_io::{read_json_if_exists, read_json_strict, read_text_if_exists};
 use super::json_value::{
     first_nonempty, join_lines, nonempty_string, safe_slug, stable_line_items, value_bool_or_none,

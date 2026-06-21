@@ -55,12 +55,16 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
         Commands::InstallNativeIntegration {
             repo_root,
             home_config_path,
+            home_codex_skills_path,
             bootstrap_output_dir,
+            skip_home_codex_skills_link,
             skip_default_bootstrap,
         } => install_native_integration(
             &repo_root,
             &home_config_path,
+            &home_codex_skills_path,
             bootstrap_output_dir.as_deref(),
+            !skip_home_codex_skills_link,
             !skip_default_bootstrap,
         )?,
         Commands::InstallSkills {
@@ -71,6 +75,8 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             codex_home,
             cursor_home,
             claude_home,
+            antigravity_home,
+            antigravity_cli_home,
             opencode_home,
             to,
             scope,
@@ -89,6 +95,8 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                 codex_home,
                 cursor_home,
                 claude_home,
+                antigravity_home: antigravity_home.clone(),
+                antigravity_cli_home,
                 opencode_home,
                 home,
                 scope,
@@ -106,6 +114,8 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
                         codex_home: projection_command.codex_home.clone(),
                         cursor_home: projection_command.cursor_home.clone(),
                         claude_home: projection_command.claude_home.clone(),
+                        antigravity_home: projection_command.antigravity_home.clone(),
+                        antigravity_cli_home: projection_command.antigravity_cli_home.clone(),
                         opencode_home: projection_command.opencode_home.clone(),
                         home: projection_command.home.clone(),
                     })?
@@ -156,10 +166,11 @@ pub fn try_framework_root_from_workspace_env() -> Option<PathBuf> {
             continue;
         };
         let candidate = PathBuf::from(raw);
-        if let Ok(root) = normalize_path(&candidate)
-            && is_framework_root(&root) {
+        if let Ok(root) = normalize_path(&candidate) {
+            if is_framework_root(&root) {
                 return Some(root);
             }
+        }
     }
     None
 }
@@ -209,10 +220,7 @@ pub fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<Path
     Ok(root)
 }
 
-pub fn resolve_project_root(
-    explicit: Option<&Path>,
-    framework_root: &Path,
-) -> Result<PathBuf, String> {
+pub fn resolve_project_root(explicit: Option<&Path>, framework_root: &Path) -> Result<PathBuf, String> {
     if let Some(path) = explicit {
         return normalize_path(path);
     }
@@ -327,11 +335,11 @@ pub fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
 }
 
 pub fn is_ephemeral_executable_path(path: &str) -> bool {
-    framework_kernel::router_self::is_ephemeral_router_rs_path(path)
+    crate::router_self::is_ephemeral_router_rs_path(path)
 }
 
 pub fn is_repo_build_executable_path(path: &str, framework_root: &Path) -> bool {
-    framework_kernel::router_self::is_repo_build_router_rs_path(path, framework_root)
+    crate::router_self::is_repo_build_router_rs_path(path, framework_root)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -360,7 +368,7 @@ pub fn resolve_mcp_router_rs_command(framework_root: &Path) -> McpRouterRsComman
             return McpRouterRsCommand::OnPath;
         }
     }
-    let installed = framework_kernel::router_self::default_router_rs_install_path();
+    let installed = crate::router_self::default_router_rs_install_path();
     if installed.is_file() {
         return McpRouterRsCommand::Absolute(installed);
     }
@@ -375,16 +383,18 @@ pub fn mcp_router_rs_command_value(command: &McpRouterRsCommand) -> Value {
     }
 }
 
-pub fn ensure_router_rs_installed_for_mcp_with_roots(
-    roots: &ResolvedProjectionRoots,
-) -> Result<(), String> {
+pub fn ensure_router_rs_installed_for_mcp_with_roots(roots: &ResolvedProjectionRoots) -> Result<(), String> {
     if matches!(
         resolve_mcp_router_rs_command(&roots.framework_root),
         McpRouterRsCommand::CargoBootstrap
     ) {
-        framework_kernel::router_self::ensure_router_rs_installed_for_runtime()?;
+        crate::router_self::ensure_router_rs_installed_for_runtime()?;
     }
     Ok(())
+}
+
+pub fn host_account_home_from_roots(roots: &ResolvedProjectionRoots) -> PathBuf {
+    roots.account_home_root.clone()
 }
 
 pub fn resolve_stable_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
@@ -484,7 +494,10 @@ pub fn mcp_codegraph_command_value(command: &McpCodegraphCommand) -> Value {
     }
 }
 
-pub fn codegraph_mcp_cargo_bootstrap_args(framework_root: &Path, repo_root: &str) -> Vec<String> {
+pub fn codegraph_mcp_cargo_bootstrap_args(
+    framework_root: &Path,
+    repo_root: &str,
+) -> Vec<String> {
     vec![
         "run".to_string(),
         "--release".to_string(),
@@ -494,10 +507,7 @@ pub fn codegraph_mcp_cargo_bootstrap_args(framework_root: &Path, repo_root: &str
         "--bin".to_string(),
         "mcp-codegraph".to_string(),
         "--manifest-path".to_string(),
-        framework_root
-            .join("Cargo.toml")
-            .to_string_lossy()
-            .into_owned(),
+        framework_root.join("Cargo.toml").to_string_lossy().into_owned(),
         "--".to_string(),
         "--repo-root".to_string(),
         repo_root.to_string(),
@@ -561,38 +571,41 @@ pub fn resolve_projection_roots(
     codex_home: Option<&Path>,
     cursor_home: Option<&Path>,
     claude_home: Option<&Path>,
+    antigravity_home: Option<&Path>,
+    antigravity_cli_home: Option<&Path>,
     opencode_home: Option<&Path>,
     shared_home: Option<&Path>,
 ) -> Result<ResolvedProjectionRoots, String> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
     let project_root = resolve_project_root(project_root, &framework_root)?;
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
+    let codex_home_root = resolve_host_home(codex_home, shared_home, "CODEX_HOME", ".codex")?;
+    let cursor_home_root = resolve_host_home(cursor_home, shared_home, "CURSOR_HOME", ".cursor")?;
+    let claude_home_root = resolve_host_home(claude_home, shared_home, "CLAUDE_HOME", ".claude")?;
+    let antigravity_home_root = resolve_host_home(antigravity_home, shared_home, "ANTIGRAVITY_HOME", ".gemini")?;
+    let antigravity_cli_home_root =
+        resolve_host_home(antigravity_cli_home, shared_home, "ANTIGRAVITY_CLI_HOME", ".antigravitycli")?;
+    let opencode_home_root = resolve_host_home(
+        opencode_home,
+        shared_home,
+        "OPENCODE_HOME",
+        ".opencode",
+    )?;
     let account_home_root = match shared_home {
         Some(home) => normalize_path(home)?,
         None => default_home_dir(),
     };
-
-    // Build host home roots map from registry-driven host list + explicit overrides.
-    let host_overrides: [(&str, Option<&Path>, &str, &str); 4] = [
-        ("codex", codex_home, "CODEX_HOME", ".codex"),
-        ("cursor", cursor_home, "CURSOR_HOME", ".cursor"),
-        ("claude", claude_home, "CLAUDE_HOME", ".claude"),
-        ("opencode", opencode_home, "OPENCODE_HOME", ".opencode"),
-    ];
-    let mut host_home_roots = BTreeMap::new();
-    for (host_id, explicit, env_var, default_leaf) in &host_overrides {
-        host_home_roots.insert(
-            host_id.to_string(),
-            resolve_host_home(*explicit, shared_home, env_var, default_leaf)?,
-        );
-    }
-
     Ok(ResolvedProjectionRoots {
         framework_root,
         project_root,
         artifact_root,
         account_home_root,
-        host_home_roots,
+        codex_home_root,
+        cursor_home_root,
+        claude_home_root,
+        antigravity_home_root,
+        antigravity_cli_home_root,
+        opencode_home_root,
     })
 }
 
@@ -602,3 +615,4 @@ pub fn nearest_marker_root(start: &Path, marker: &str) -> Option<PathBuf> {
         .find(|candidate| candidate.join(marker).exists())
         .map(Path::to_path_buf)
 }
+

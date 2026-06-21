@@ -1335,3 +1335,269 @@ fn parse_rfc3339_valid() {
 fn parse_rfc3339_invalid() {
     assert!(parse_rfc3339_millis("not-a-date").is_none());
 }
+
+// --- Additional integration tests ---
+
+#[test]
+fn browser_mcp_initialize_returns_server_info() {
+    let repo_root = temp_root("init");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}),
+        &mut runtime,
+    )
+    .expect("init response");
+    assert_eq!(response["result"]["serverInfo"]["name"], "browser-mcp");
+    assert_eq!(response["result"]["serverInfo"]["version"], "0.3.0-rust");
+    assert_eq!(response["result"]["protocolVersion"], "2024-11-05");
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_ping_returns_empty_result() {
+    let repo_root = temp_root("ping");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {}}),
+        &mut runtime,
+    )
+    .expect("ping response");
+    assert_eq!(response["result"], json!({}));
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_notifications_initialized_returns_none() {
+    let repo_root = temp_root("notif");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}),
+        &mut runtime,
+    );
+    assert!(response.is_none());
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_unsupported_method_returns_error() {
+    let repo_root = temp_root("unsupported");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "nonexistent/method", "params": {}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert!(response["error"].is_object());
+    assert_eq!(response["error"]["code"], -32000);
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_unknown_tool_returns_error() {
+    let repo_root = temp_root("unknown-tool");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "nonexistent_tool", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "INVALID_INPUT");
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_browser_diagnostics_returns_health() {
+    let repo_root = temp_root("diagnostics");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "browser_diagnostics", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], false);
+    assert!(response["result"]["structuredContent"].is_object());
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_session_list_empty_returns_workers_array() {
+    let repo_root = temp_root("session-list-empty");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "session_list", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], false);
+    assert!(response["result"]["structuredContent"]["workers"].is_array());
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_background_list_empty_returns_jobs_array() {
+    let repo_root = temp_root("bg-list");
+    let bg_path = repo_root.join("artifacts").join("runtime").join("background_state.json");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "background_list", "arguments": {"statePath": bg_path.to_string_lossy()}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], false);
+    assert!(response["result"]["structuredContent"]["state"]["jobs"].is_array());
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_browser_open_requires_url() {
+    let repo_root = temp_root("open-no-url");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "browser_open", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "INVALID_INPUT");
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_browser_click_requires_ref() {
+    let repo_root = temp_root("click-no-ref");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "browser_click", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "INVALID_INPUT");
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_browser_fill_requires_ref_and_value() {
+    let repo_root = temp_root("fill-missing");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "browser_fill", "arguments": {"ref": "ref_1"}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_browser_press_requires_key() {
+    let repo_root = temp_root("press-no-key");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "browser_press", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    assert_eq!(response["result"]["structuredContent"]["error"]["code"], "INVALID_INPUT");
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_tool_definitions_include_output_schema() {
+    let repo_root = temp_root("output-schema");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}),
+        &mut runtime,
+    )
+    .expect("response");
+    let tools = response["result"]["tools"].as_array().unwrap();
+    for tool in tools {
+        assert!(tool.get("name").is_some(), "tool missing name");
+        assert!(tool.get("title").is_some(), "tool missing title");
+        assert!(tool.get("description").is_some(), "tool missing description");
+        assert!(tool.get("inputSchema").is_some(), "tool missing inputSchema");
+        assert!(tool.get("outputSchema").is_some(), "tool missing outputSchema");
+    }
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_session_inspect_requires_worker_id() {
+    let repo_root = temp_root("inspect-no-id");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "session_inspect", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_session_terminate_requires_worker_id() {
+    let repo_root = temp_root("terminate-no-id");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "session_terminate", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_session_mark_blocked_requires_fields() {
+    let repo_root = temp_root("mark-blocked");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "session_mark_blocked", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_background_inspect_requires_job_id() {
+    let repo_root = temp_root("bg-inspect-no-id");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "background_inspect", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_background_terminate_requires_job_id() {
+    let repo_root = temp_root("bg-terminate-no-id");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let response = handle_browser_mcp_request(
+        &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "background_terminate", "arguments": {}}}),
+        &mut runtime,
+    )
+    .expect("response");
+    assert_eq!(response["result"]["isError"], true);
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
+
+#[test]
+fn browser_mcp_invalid_json_returns_error() {
+    let repo_root = temp_root("invalid-json");
+    let mut runtime = BrowserRuntime::new(repo_root.clone());
+    let input = Cursor::new("not valid json\n");
+    let mut output = Vec::new();
+    run_browser_mcp_stdio(input, &mut output, &mut runtime).expect("run");
+    let lines = String::from_utf8(output).expect("utf8");
+    let response: Value = serde_json::from_str(lines.trim()).expect("json");
+    assert_eq!(response["error"]["code"], -32000);
+    fs::remove_dir_all(repo_root).expect("cleanup");
+}
