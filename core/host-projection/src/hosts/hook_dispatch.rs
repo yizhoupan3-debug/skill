@@ -503,6 +503,29 @@ pub fn subagent_lane_bits(kind: Option<&str>) -> (bool, bool) {
     (review_lane, parallel_lane)
 }
 
+/// Codex-specific subagent review types — superset of `SUBAGENT_REVIEW_TYPES`.
+/// Includes Codex-specific worker types that old Codex hooks recognized as review lane.
+const CODEX_REVIEW_TYPES: &[&str] = &[
+    "explore", "explorer", "general-purpose", "generalpurpose",
+    "default", "shell", "worker", "browser-use", "browseruse",
+    "ci-investigator", "ciinvestigator", "best-of-n-runner", "bestofnrunner",
+    "cursor-guide", "cursorguide",
+];
+
+/// Host-aware subagent lane bits. Codex uses a different review type set.
+pub fn subagent_lane_bits_for_host(kind: Option<&str>, host_id: &str) -> (bool, bool) {
+    if host_id == "codex" {
+        let Some(k) = kind else {
+            return (false, false);
+        };
+        let review_lane = CODEX_REVIEW_TYPES.contains(&k);
+        let parallel_lane = matches!(k, "worker" | "shell" | "browser-use" | "browseruse");
+        (review_lane, parallel_lane)
+    } else {
+        subagent_lane_bits(kind)
+    }
+}
+
 /// Truncate string preserving UTF-8 character boundaries, with optional suffix.
 pub fn truncate_bytes(s: &str, max_bytes: usize, suffix: &str) -> String {
     if s.len() <= max_bytes {
