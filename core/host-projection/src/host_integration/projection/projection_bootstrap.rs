@@ -632,14 +632,9 @@ pub fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {
     }
 }
 
-pub fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
-    core_state::utils::json_io::write_text_if_changed(path, content)
-}
+pub use core_state::utils::json_io::{write_json_if_changed, write_text_if_changed};
 
-pub fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
-    core_state::utils::json_io::write_json_if_changed(path, payload)
-}
-
+/// Read JSON from file if it exists. Returns `Ok(None)` when file is absent.
 pub fn read_json_if_exists(path: &Path) -> Result<Option<Value>, String> {
     Ok(Some(core_state::utils::json_io::read_json_if_exists(path)))
 }

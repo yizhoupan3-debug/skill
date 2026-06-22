@@ -24,41 +24,18 @@ fn canonicalize_existing_ancestors(path: &Path) -> Result<PathBuf, String> {
 /// Unified security guard for all write entry points.
 ///
 /// Performs the following checks (in order):
-///   1. Reject `..` path traversal components.
-///   2. Reject symlinks at the target path itself.
-///   3. If `allowed_root` is provided, resolve symlinks on existing ancestor
+///   1. Delegates to `core_state::utils::path_guard::reject_unsafe_path` for
+///      path traversal (`..`) and symlink checks.
+///   2. If `allowed_root` is provided, resolve symlinks on existing ancestor
 ///      directories of both the root and the target path, then verify the
 ///      target remains under the root (prevents ancestor-directory symlink escape).
-///   4. Create parent directories if needed (after all validation passes).
+///   3. Create parent directories if needed (after all validation passes).
 pub fn validate_write_path(path: &Path, allowed_root: Option<&Path>) -> Result<(), String> {
-    // 1. Reject path traversal via `..` components.
-    if path
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
-        return Err(format!(
-            "write path {} must not contain '..' traversal segments",
-            path.display()
-        ));
-    }
-    // 2. Reject symlink at the target path itself.
-    match fs::symlink_metadata(path) {
-        Ok(meta) if meta.is_symlink() => {
-            return Err(format!(
-                "write path {} must not be a symlink",
-                path.display()
-            ));
-        }
-        Ok(_) => {}
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-        Err(err) => {
-            return Err(format!(
-                "stat write path {} failed: {err}",
-                path.display()
-            ));
-        }
-    }
-    // 3. Optional root containment: resolve symlinks on existing ancestors of
+    // 1. Path traversal + symlink check (shared with core_state::utils::path_guard).
+    core_state::utils::path_guard::reject_unsafe_path(path)?;
+
+    // 2. Optional root containment: resolve symlinks on existing ancestors of
+    //    both the allowed root and the target path, then verify containment.
     //    both the allowed root and the target path, then verify containment.
     //    This prevents a symlink in an ancestor directory from redirecting the
     //    write outside the allowed boundary.

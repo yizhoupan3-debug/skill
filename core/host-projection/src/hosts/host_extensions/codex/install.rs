@@ -7,8 +7,6 @@
 //! - Merging existing hooks.json with new entries
 //! - Atomic file writes and lock management
 
-use super::state::lock_is_stale;
-
 use super::{
     CODEX_AGENT_POLICY_PATH, CODEX_HOOK_AUTHORITY, CODEX_HOOKS_PATH, CODEX_HOOKS_README_PATH,
     CodexLifecycleHostKind, HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
@@ -146,6 +144,49 @@ pub(super) fn build_install_hook_command(_repo_root: &Path, event: &str) -> Stri
 // Install lock
 // ---------------------------------------------------------------------------
 
+/// Check if a lock file with `pid=N ts=MS` metadata is stale (process dead or
+/// timestamp too old). Delegates to `file_state_lock` for lock metadata parsing
+/// and process-alive detection. This was moved into `install.rs` from the now-
+/// removed `state.rs` — if a second consumer appears, extract to `file_state_lock`.
+fn lock_is_stale(path: &Path) -> bool {
+    let text = match fs::read_to_string(path) {
+        Ok(value) => value,
+        Err(_) => return true,
+    };
+    let (pid, ts) = match crate::hosts::file_state_lock::parse_lock_metadata(&text) {
+        Some(pair) => (Some(pair.0), Some(pair.1)),
+        None => (None, None),
+    };
+    if pid.is_none() && ts.is_none() {
+        if text.trim().is_empty() {
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            if let Ok(meta) = fs::metadata(path)
+                && let Ok(modified) = meta.modified() {
+                    let modified_ms = modified
+                        .duration_since(UNIX_EPOCH)
+                        .map(|d| d.as_millis() as u64)
+                        .unwrap_or(0);
+                    if now_ms.saturating_sub(modified_ms) <= 1_000 {
+                        return false;
+                    }
+                }
+        }
+        return true;
+    }
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    if let Some(process_id) = pid
+        && crate::hosts::file_state_lock::is_process_alive(process_id) {
+            return false;
+        }
+    ts.is_none_or(|t| now_ms.saturating_sub(t) > 30_000)
+}
+
 pub struct HooksInstallLock {
     path: PathBuf,
 }
@@ -187,8 +228,6 @@ fn acquire_install_lock(codex_home: &Path) -> Result<HooksInstallLock, String> {
     }
     Err("install_lock_timeout".to_string())
 }
-
-// Re-export from state.rs (used by install tests)
 
 // ---------------------------------------------------------------------------
 // Atomic write

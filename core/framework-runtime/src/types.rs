@@ -147,13 +147,16 @@ pub struct StaleContinuityInputs<'a> {
     pub terminal_reasons_empty: bool,
 }
 
-/// Stdio JSON request payload (mirrored from `runtime-core::stdio_transport`).
+/// Stdio JSON request payload (canonical definition).
 #[derive(Debug, Clone, Deserialize)]
 pub struct StdioJsonRequestPayload {
     pub id: Value,
     pub op: String,
     #[serde(default)]
     pub payload: Value,
+    /// Optional concurrency hint for the stdio transport worker pool.
+    #[serde(default)]
+    pub concurrency: Option<usize>,
 }
 
 /// Stdio JSON response payload (mirrored from `runtime-core::stdio_transport`).

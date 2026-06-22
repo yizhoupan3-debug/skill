@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, BufWriter, Write};
@@ -12,6 +11,9 @@ use rt_storage::runtime_envelope_ids::{
     DEFAULT_MAX_CONCURRENT_SUBAGENTS, DEFAULT_SUBAGENT_TIMEOUT_SECONDS, MAX_BACKGROUND_JOBS_LIMIT,
     MAX_COMPUTE_THREADS, MAX_CONCURRENT_SUBAGENTS_LIMIT,
 };
+
+// Canonical StdioJson*Payload types — single source of truth in framework-runtime.
+pub use framework_runtime::types::{StdioJsonRequestPayload, StdioJsonResponsePayload};
 
 // ── Function pointer injection (decouples from cli/ per ADR §10.3) ──
 
@@ -53,26 +55,6 @@ pub const MAX_ROUTER_STDIO_POOL_SIZE: usize = 32;
 const DEFAULT_STDIO_IN_FLIGHT_TIMEOUT_SECONDS: u64 = 30;
 const MAX_STDIO_IN_FLIGHT_TIMEOUT_SECONDS: u64 = 3600;
 const STDIO_RESPONSE_FLUSH_BATCH_SIZE: usize = 16;
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct StdioJsonRequestPayload {
-    pub id: Value,
-    pub op: String,
-    #[serde(default)]
-    pub payload: Value,
-    #[serde(default)]
-    concurrency: Option<usize>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct StdioJsonResponsePayload {
-    pub id: Value,
-    pub ok: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub payload: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
 
 #[derive(Debug, Clone)]
 struct StdioJsonRequestEnvelope {

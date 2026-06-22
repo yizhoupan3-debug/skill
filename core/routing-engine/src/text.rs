@@ -2,13 +2,10 @@
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashSet;
-use std::fs;
-use std::path::Path;
 use std::sync::OnceLock;
 
-pub fn read_json(path: &Path) -> Result<Value, String> {
-    core_state::utils::json_io::read_json_strict(path)
-}
+/// Read and parse JSON from a file path. Can be used as `crate::text::read_json`.
+pub use core_state::utils::json_io::read_json_strict as read_json;
 
 pub fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value.and_then(|raw| {

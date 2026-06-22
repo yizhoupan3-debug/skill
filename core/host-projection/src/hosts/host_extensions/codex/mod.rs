@@ -1,7 +1,7 @@
 //! Codex-specific capabilities: install and contract guard.
-//! state.rs — hook state persistence required by install.
+//! `CodexLifecycleContextState` (defined in this module) is the hook-state schema.
+//! Lock primitives use the shared `file_state_lock.rs` (no per-host lock code).
 
-pub(crate) mod state;
 pub mod install;
 
 pub use install::{

@@ -705,13 +705,7 @@ fn sha256_hex(bytes: &[u8]) -> String {
     hex::encode(hasher.finalize())
 }
 
-pub(super) fn write_text_if_changed(path: &Path, content: &str) -> Result<bool, String> {
-    core_state::utils::json_io::write_text_if_changed(path, content)
-}
-
-pub(super) fn write_json_if_changed(path: &Path, payload: &Value) -> Result<bool, String> {
-    core_state::utils::json_io::write_json_if_changed(path, payload)
-}
+pub(super) use core_state::utils::json_io::{write_json_if_changed, write_text_if_changed};
 
 pub(super) fn current_file_hash(path: &Path) -> Result<Option<String>, String> {
     match fs::read(path) {

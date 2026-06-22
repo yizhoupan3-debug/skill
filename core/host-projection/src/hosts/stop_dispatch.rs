@@ -75,7 +75,7 @@ pub fn run_unified_stop(
     host.pre_stop_cleanup(repo_root);
 
     // ── 2. Closeout advisory (non-blocking) ──
-    let response_text = extract_response_text(payload);
+    let response_text = hook_dispatch::extract_response_text(payload);
     if let Some(msg) = crate::hooks::closeout_stop_followup_for_completion_text(
         repo_root,
         &response_text,
@@ -289,16 +289,6 @@ fn write_review_state(path: &Path, state: &core_policy::hook_review_disk_state::
 
 fn clear_file(path: &Path) {
     let _ = std::fs::remove_file(path);
-}
-
-fn extract_response_text(payload: &Value) -> String {
-    payload
-        .get("response")
-        .or_else(|| payload.get("assistant_response"))
-        .or_else(|| payload.get("last_assistant_message"))
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_string()
 }
 
 fn add_context(event: &str, msg: &str) -> Option<Value> {

@@ -12,9 +12,8 @@ use super::json_value::{
 };
 use super::types::*;
 
-use chrono::{DateTime, FixedOffset, Local, SecondsFormat};
+use chrono::{DateTime, FixedOffset, Local};
 use serde_json::{Map, Value, json};
-use std::collections::HashSet;
 use std::ops::Not;
 use std::path::{Path, PathBuf};
 
@@ -642,25 +641,11 @@ fn stale_continuity_reasons(
 }
 
 fn current_local_timestamp() -> String {
-    Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
+    crate::util::current_local_timestamp()
 }
 
 fn parse_session_summary(text: &str) -> Map<String, Value> {
-    let mut result = Map::new();
-    for line in text.lines() {
-        if !line.starts_with("- ") {
-            continue;
-        }
-        let body = &line[2..];
-        let Some((key, value)) = body.split_once(':') else {
-            continue;
-        };
-        result.insert(
-            key.trim().to_string(),
-            Value::String(value.trim().to_string()),
-        );
-    }
-    result
+    crate::util::parse_session_summary(text)
 }
 
 fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>) {
@@ -669,86 +654,14 @@ fn normalized_task_registry(payload: &Value) -> (Value, Vec<String>, Vec<String>
 }
 
 fn registry_rows_from_payload(payload: &Value) -> Vec<Value> {
-    let mut rows = Vec::new();
-    if let Some(items) = payload.get("tasks").and_then(Value::as_array) {
-        for item in items {
-            let Some(row) = item.as_object() else {
-                continue;
-            };
-            let task_id = safe_slug(&value_text(row.get("task_id")));
-            if task_id.is_empty() {
-                continue;
-            }
-            let task = value_text(row.get("task"));
-            let task_value = if task.is_empty() {
-                Value::String(task_id.clone())
-            } else {
-                Value::String(task)
-            };
-            rows.push(json!({
-                "task_id": task_id,
-                "task": task_value,
-                "updated_at": nonempty_string(row.get("updated_at")),
-                "status": nonempty_string(row.get("status")),
-                "phase": nonempty_string(row.get("phase")),
-                "resume_allowed": value_bool_or_none(row.get("resume_allowed")),
-            }));
-        }
-    }
-    rows
+    crate::util::registry_rows_from_payload(payload)
 }
 
 fn normalize_task_registry_rows(
     focus_task_id: String,
     mut rows: Vec<Value>,
 ) -> (Value, Vec<String>, Vec<String>) {
-    rows.sort_by(|left, right| {
-        registry_task_sort_key(right)
-            .cmp(&registry_task_sort_key(left))
-            .then_with(|| value_text(right.get("task_id")).cmp(&value_text(left.get("task_id"))))
-    });
-
-    let mut seen = HashSet::new();
-    let mut tasks = Vec::new();
-    let mut known_task_ids = Vec::new();
-    let mut recoverable_task_ids = Vec::new();
-    let mut overflow_count = 0usize;
-    for row in rows {
-        let task_id = safe_slug(&value_text(row.get("task_id")));
-        if task_id.is_empty() || !seen.insert(task_id.clone()) {
-            continue;
-        }
-        if value_bool_or_none(row.get("resume_allowed")) == Some(true) {
-            recoverable_task_ids.push(task_id.clone());
-        }
-        known_task_ids.push(task_id);
-        if tasks.len() >= 128 {
-            overflow_count += 1;
-            continue;
-        }
-        tasks.push(row);
-    }
-    tasks.sort_by(|left, right| {
-        let left_focus = value_text(left.get("task_id")) == focus_task_id;
-        let right_focus = value_text(right.get("task_id")) == focus_task_id;
-        right_focus
-            .cmp(&left_focus)
-            .then_with(|| registry_task_sort_key(right).cmp(&registry_task_sort_key(left)))
-            .then_with(|| value_text(left.get("task_id")).cmp(&value_text(right.get("task_id"))))
-    });
-    (
-        json!({
-            "schema_version": TASK_REGISTRY_SCHEMA_VERSION,
-            "focus_task_id": if focus_task_id.is_empty() { Value::Null } else { Value::String(focus_task_id) },
-            "tasks": tasks,
-            "task_count": known_task_ids.len(),
-            "recoverable_task_count": recoverable_task_ids.len(),
-            "truncated": overflow_count > 0,
-            "overflow_count": overflow_count,
-        }),
-        known_task_ids,
-        recoverable_task_ids,
-    )
+    crate::util::normalize_task_registry_rows(focus_task_id, rows)
 }
 
 fn registry_task_sort_key(row: &Value) -> String {
@@ -987,11 +900,7 @@ fn authoritative_route(
 }
 
 fn supervisor_contract(state: &Map<String, Value>) -> Map<String, Value> {
-    state
-        .get("execution_contract")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default()
+    crate::util::supervisor_contract(state)
 }
 
 fn parse_iso_timestamp(value: Option<&Value>) -> Option<DateTime<FixedOffset>> {
@@ -1051,10 +960,7 @@ fn terminal_reason(prefix: &str, value: &str, terminal_values: &[&str]) -> Strin
 }
 
 fn is_terminal(value: &str, terminal_values: &[&str]) -> bool {
-    let lowered = value.trim().to_ascii_lowercase();
-    terminal_values
-        .iter()
-        .any(|candidate| lowered == *candidate)
+    crate::util::is_terminal(value, terminal_values)
 }
 
 fn looks_same_identity(left: &str, right: &str) -> bool {
