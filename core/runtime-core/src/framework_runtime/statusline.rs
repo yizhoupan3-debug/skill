@@ -22,7 +22,7 @@ pub fn build_framework_statusline(repo_root: &Path) -> Result<String, String> {
             tid_ok.then_some(dc)
         })
         .map(|dc| {
-            let bang = if dc.rfv_pass_without_evidence_count > 0 {
+            let bang = if dc.qg_pass_without_evidence_count > 0 {
                 "!"
             } else {
                 ""

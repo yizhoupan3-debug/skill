@@ -38,7 +38,7 @@ depends_on:
 | 安全策略（SSRF、MCP） | [operations/security.md](operations/security.md) |
 | 备份 / 恢复 | [operations/backup-restore.md](operations/backup-restore.md) |
 | 历史迁移 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |
-| RFV / 数理推理 | `spec.md` + 代码（`core/core-state/src/rfv_loop.rs`） |
+| RFV / 数理推理 | `spec.md` + 代码（`core/runtime-core/src/quality_gate.rs`） |
 | Python 环境治理 | [`skills/python-env-management/SKILL.md`](../skills/python-env-management/SKILL.md) |
 
 ## 已淘汰叙述

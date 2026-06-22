@@ -30,8 +30,8 @@ mod desktop_mcp_tests {
             "session_checkpoint",
             "closeout_gate",
             "goal_state_read",
-            "rfv_loop_status",
-            "rfv_loop_manage",
+            "quality_gate_status",
+            "quality_gate_manage",
             "closeout_record_write",
             "web_fetch",
             "routing_evolution",
@@ -399,8 +399,8 @@ mod desktop_mcp_tests {
         let tools = response["result"]["tools"].as_array().expect("tools");
         let rfv = tools
             .iter()
-            .find(|t| t["name"] == "rfv_loop_manage")
-            .expect("rfv_loop_manage");
+            .find(|t| t["name"] == "quality_gate_manage")
+            .expect("quality_gate_manage");
         let round = &rfv["inputSchema"]["properties"]["round"];
         assert_eq!(round["type"], "integer");
     }
@@ -635,8 +635,8 @@ mod parameter_validation_tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(
-            err.contains("rfv_loop_manage"),
-            "expected error about 'rfv_loop_manage', got: {err}"
+            err.contains("quality_gate_manage"),
+            "expected error about 'quality_gate_manage', got: {err}"
         );
     }
 

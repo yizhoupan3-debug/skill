@@ -1,5 +1,3 @@
-//! Neutral entry for Cursor hook JSON stdin → review/subagent gate (implementation in `cursor_hooks`).
-
 use std::io::Write;
 use std::path::Path;
 
@@ -44,10 +42,10 @@ fn emit_cursor_hook_fail_closed_stdout(event: &str) -> Result<(), String> {
 }
 
 pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), String> {
-    crate::kernel_bootstrap::ensure_kernel_bootstrap();
-    crate::hook_timing::mark_hook_start();
+    crate::hooks::ensure_kernel_bootstrap();
+    crate::hooks::mark_hook_start();
     let result = (|| -> Result<(), String> {
-        let payload = match crate::cursor_hooks::read_cursor_hook_stdin_json() {
+        let payload = match crate::hosts::cursor_hooks::read_cursor_hook_stdin_json() {
             Ok(v) => v,
             Err(e) if cursor_hook_event_is_critical(event) => {
                 emit_cursor_hook_fail_closed_stdout(event)?;
@@ -61,17 +59,17 @@ pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), 
                 return Err("stdin_json_not_object".to_string());
             }
         let repo_root =
-            crate::cursor_hooks::resolve_cursor_hook_repo_root(cli_repo_root, &payload)?;
-        let _registry_guard = crate::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
+            crate::hosts::cursor_hooks::resolve_cursor_hook_repo_root(cli_repo_root, &payload)?;
+        let _registry_guard = core_policy::registry_review_gate::HookRegistryRepoGuard::new(&repo_root);
         let mut output =
-            crate::cursor_hooks::dispatch_cursor_hook_event(&repo_root, event, &payload);
-        crate::telemetry_emit::emit_hook_fired(
+            crate::hosts::cursor_hooks::dispatch_cursor_hook_event(&repo_root, event, &payload);
+        crate::hooks::emit_hook_fired(
             event,
-            crate::telemetry_emit::hook_action_from_output(&output),
+            crate::hooks::hook_action_from_optional_output(Some(&output)),
         );
-        crate::goal_drive::scrub_followup_fields_in_hook_output(&mut output);
-        crate::cursor_hooks::apply_cursor_hook_output_policy(&mut output);
-        crate::cursor_hooks::apply_cursor_hook_silent_policy(&mut output);
+        core_state::state_manager::scrub_followup_fields_in_hook_output(&mut output);
+        crate::hosts::cursor_hooks::apply_cursor_hook_output_policy(&mut output);
+        crate::hosts::cursor_hooks::apply_cursor_hook_silent_policy(&mut output);
         let mut stdout = std::io::stdout();
         let serialized = serde_json::to_string(&output).map_err(|e| e.to_string())?;
         stdout
@@ -79,6 +77,6 @@ pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), 
             .map_err(|e| e.to_string())?;
         Ok(())
     })();
-    crate::hook_timing::emit_hook_timing_line(event);
+    crate::hooks::emit_hook_timing_line(event);
     result
 }

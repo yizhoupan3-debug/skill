@@ -12,9 +12,9 @@ argument-hint: "[framework task...]"
 
 Use `$framework` semantics via the Rust-owned shared core.
 
-**Default lifecycle: My** (same chain). Goal/Quality Gate via `framework_goal_drive` / `framework_quality_gate` stdio + manual boards only; no continuity digest or GOAL_CONTINUE/RFV_LOOP_CONTINUE on hooks. REVIEW_GATE Stop advisory-only; `my-light` suppresses review nudge and spawn-first.
+**Default lifecycle: My** (same chain). Goal/Quality Gate via `framework_goal_drive` / `framework_quality_gate` stdio + manual boards only; no continuity digest or GOAL_CONTINUE/RFV_LOOP_CONTINUE on hooks. REVIEW_GATE Stop advisory-only; `interactive` suppresses review nudge and spawn-first.
 
-**Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply at skill layer; REVIEW_GATE never hard-blocks Stop on any host (advisory nudge only). `my-light` suppresses review Stop nudge and spawn-first. See `skills/code-review-deep/SKILL.md`.
+**Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply at skill layer; REVIEW_GATE never hard-blocks Stop on any host (advisory nudge only). `interactive` suppresses review Stop nudge and spawn-first. See `skills/code-review-deep/SKILL.md`.
 
 1) Start from `AGENTS.md`（跨宿主内核，宿主差异见该文件内「宿主行为差异」节）。
 2) Route via `skills/SKILL_ROUTING_RUNTIME.json`.

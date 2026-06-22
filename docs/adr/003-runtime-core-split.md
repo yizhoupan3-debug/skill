@@ -38,7 +38,7 @@ Accepted (2026-06-14). **Execution**: v7 已提取 4 个子 crate，runtime-core
 - **最大单 crate 从 38K→14K 行**（facade crate 保留 ~14K 行集成代码，提取 ~19K 行到子 crate）。
 - **依赖关系更清晰**：`trace-runtime` 不需要依赖 `framework-runtime`。
 - **短期代价**：拆分期间可能引入临时 re-export；需在拆分完成后清理。
-- **v7 执行状态**：4 个子 crate 已全部创建并通过编译，`background_state`、`session_supervisor`、`trace_runtime` 完全提取，`framework-runtime/closeout_enforcement/execution_contract/pre_tool_use_guard` 等完全提取。`rfv_loop.rs` 和 `harness_operator_nudges.rs` 暂留在 runtime-core。
+- **v7 执行状态**：4 个子 crate 已全部创建并通过编译，`background_state`、`session_supervisor`、`trace_runtime` 完全提取，`framework-runtime/closeout_enforcement/execution_contract/pre_tool_use_guard` 等完全提取。`quality_gate.rs`（原 `rfv_loop.rs`）和 `harness_operator_nudges.rs` 暂留在 runtime-core。
 
 ## Related
 

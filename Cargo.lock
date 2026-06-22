@@ -1967,6 +1967,7 @@ dependencies = [
  "framework-kernel",
  "fs2",
  "hex",
+ "host-projection",
  "libc",
  "mimalloc",
  "rayon",

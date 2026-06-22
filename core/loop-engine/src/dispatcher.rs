@@ -61,35 +61,15 @@ pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String
     )
 }
 
-/// Resolve the subagent binary path from `ROUTER_RS_SUBAGENT_BIN` env var or `which opencode`.
-/// Returns an error if neither source yields a valid binary path.
-///
-/// # Platform dependency
-/// The fallback uses the `which` command, which is available on Unix/macOS by default
-/// and on Windows when Git for Windows or similar tooling is installed (as `where.exe`).
-/// On bare Windows without these tools, this fallback will fail. Always set
-/// `ROUTER_RS_SUBAGENT_BIN` on Windows for reliable binary resolution.
+/// Resolve the subagent binary path from `ROUTER_RS_SUBAGENT_BIN` env var.
+/// Returns an error if the env var is not set or is empty.
 pub fn resolve_subagent_binary() -> Result<String, LoopError> {
     if let Ok(bin) = std::env::var("ROUTER_RS_SUBAGENT_BIN")
         && !bin.is_empty() {
             return Ok(bin);
         }
-    let output = Command::new("which")
-        .arg("opencode")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output();
-    match output {
-        Ok(out) if out.status.success() => {
-            let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Ok(path);
-            }
-        }
-        _ => {}
-    }
     Err(LoopError::SpawnFailed(
-        "opencode binary not found. Set ROUTER_RS_SUBAGENT_BIN or ensure opencode is in PATH.".to_string(),
+        "opencode binary not found. Set ROUTER_RS_SUBAGENT_BIN.".to_string(),
     ))
 }
 

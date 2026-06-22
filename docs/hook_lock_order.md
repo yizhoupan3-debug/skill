@@ -62,4 +62,4 @@ Do not share one lock file between Cursor and Codex. See [`task_write_lock.rs`](
 ## Related
 
 - [`core/core-state/src/utils/task_write_lock.rs`](../core/core-state/src/utils/task_write_lock.rs) (L1 contract; `router-rs` re-exports via `core_state`)
-- `artifacts/current/hook-perf-deadlock/ARCHITECTURE.md`
+- [`docs/hosts/hook-hosts.md`](hosts/hook-hosts.md) (host lock behavior)

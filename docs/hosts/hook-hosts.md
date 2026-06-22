@@ -70,7 +70,7 @@ parent: _common.md
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
 | Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `cursor_hooks::execute_cursor_hook` → `CursorHookHost::dispatch` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`；**`ROUTER_RS_CURSOR_REVIEW_GATE_MODE`**=`strict`（默认 multiset）或 `lite`（仅 `id:` pending）；`framework doctor` 打印 mode；Stop advisory 提示上限 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** |
-| Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../../core/host-projection/src/hosts/cursor_hooks/mod.rs) | **my-light Stop 早退**：仅 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`（无 `REVIEW_GATE` / `AG_FOLLOWUP`）；非 my-light 保留完整 Stop 链；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
+| Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../../core/host-projection/src/hosts/cursor_hooks/mod.rs) | **interactive Stop 早退**：仅 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`（无 `REVIEW_GATE` / `AG_FOLLOWUP`）；非 interactive 保留完整 Stop 链；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
 | **Paper prose L4** | beforeSubmit 命中 `has_paper_prose_edit_context` | `paper_prose_hook.rs` | 合并 `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK`，`0` 关）；对抗审稿 opt-in：`ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` |
 | **SessionStart** | 会话启动 | `cursor_hooks`（`handle_session_start`） | **仅** `Repo:` 单行（`ROUTER_RS_OPERATOR_INJECT=0` 时为空）；**无** digest / 无 pointer hint |
 | **运维自检** | 手工排障 | `router-rs framework doctor --repo-root <repo>` | **metadata-only** `generated-artifacts-status`；`ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时打印 WARN |
@@ -177,8 +177,8 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 
 ### Claude
 
-- **能力边界**：7 事件（4 core + 3 optional）；深度 Review 默认 `lifecycle_profile: my-light` 不注入 spawn-first；非 my-light 时 spawn-first 配对审稿，见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)
-- **Review Gate**：全局 advisory-only（仅 `followup_message` nudge）；my-light 下 Stop 上 `REVIEW_GATE` / `AG_FOLLOWUP` 关闭，仅保留 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`
+- **能力边界**：7 事件（4 core + 3 optional）；深度 Review 默认 `lifecycle_profile: interactive` 不注入 spawn-first；非 interactive 时 spawn-first 配对审稿，见 [`skills/code-review-deep/SKILL.md`](../../skills/code-review-deep/SKILL.md)
+- **Review Gate**：全局 advisory-only（仅 `followup_message` nudge）；interactive 下 Stop 上 `REVIEW_GATE` / `AG_FOLLOWUP` 关闭，仅保留 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`
 - **自检命令**：
   ```bash
   cargo test --manifest-path core/router-rs/Cargo.toml claude
@@ -187,7 +187,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 
 ### Cursor
 
-- **能力边界**：7 事件 hook；Stop `REVIEW_GATE` 全局 advisory-only（对齐 [`AGENTS.md` § Cursor](../../AGENTS.md)）；`lifecycle_profile: my-light` suppress `REVIEW_GATE` / spawn-first nudge
+- **能力边界**：7 事件 hook；Stop `REVIEW_GATE` 全局 advisory-only（对齐 [`AGENTS.md` § Cursor](../../AGENTS.md)）；`lifecycle_profile: interactive` suppress `REVIEW_GATE` / spawn-first nudge
 - **自检命令**：
   ```bash
   cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
@@ -210,13 +210,13 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 | 现象 | 常见根因 | 处理 |
 |------|----------|------|
 | Stop 后任务未完成 | **无** hook `GOAL_CONTINUE`（2026-05 已删） | `/implementx` + `framework_goal_drive` stdio + `artifacts/current/<task_id>/` |
-| Stop 后出现 `router-rs REVIEW_GATE` / `AG_FOLLOWUP` | 非 **my-light** 且 review 未清门（advisory nudge，非硬拦） | 先 spawn `fork_context=false` 深度 lane；或 `rg_clear` / 拆开 review 与 `/implementx` |
+| Stop 后出现 `router-rs REVIEW_GATE` / `AG_FOLLOWUP` | 非 **interactive** 且 review 未清门（advisory nudge，非硬拦） | 先 spawn `fork_context=false` 深度 lane；或 `rg_clear` / 拆开 review 与 `/implementx` |
 | `beforeSubmit` 无法继续（`continue:false`） | hook-state 锁/持久化失败 | 查 `.cursor/hook-state` 权限；应急 `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` |
 | 子代理 `permission: deny`（open count） | 重复 `subagentStart` 或 session 分片 | 看 `review-subagent-*.json` 的 `active_subagent_count` vs pending；升级后旧 state 可删或等新会话 |
 | `router-rs: binary moved to router-rs-cli` | `.env` 文件 `ROUTER_RS_BIN` 指向 redirect shim | 更新 `ROUTER_RS_BIN` 为 `router-rs-cli` 路径；`hook.sh resolve_bin()` 已自动跳过 shim |
 | PostTool 卡 ~20s | L1/L3 争用或 armed 全路径 L3 | 默认已修 L3→L1 逆序；仍慢则 w2 压测后可将 gate timeout 提到 25（见 `.cursor/hooks.json`） |
 | 双聊天互相影响 | 同 `cwd` 共桶 | 各聊天设 **`ROUTER_RS_CURSOR_SESSION_NAMESPACE`**（见 `.cursor/router-rs-hook.env` 注释） |
-| `CLOSEOUT_FOLLOWUP`（my-light） | 无磁盘 goal 仍声称完成 | 仅 hydration 有 `GOAL_STATE` 时触发；口语「完成了」不应再拦 |
+| `CLOSEOUT_FOLLOWUP`（interactive） | 无磁盘 goal 仍声称完成 | 仅 hydration 有 `GOAL_STATE` 时触发；口语「完成了」不应再拦 |
 
 **其他注意事项**：
 - **PostToolUse timeout**：门控事件默认 **20s**（`hooks.json`）；`postToolUse` 超时会导致 review multiset 不完整 → Stop 循环。慢盘先查 hook-state 体积与锁 stderr（`hook-state lock held`）。
@@ -252,7 +252,7 @@ Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentSta
 
 **并行执行指引**：
 - `/implementx` 且 `execution_mode=parallel` 时，主线程**应主动 spawn 子代理**并行执行各 lane，主线程仅担任 scheduler（coordinator visible content ≤35% of turn）
-- 深度 review：非 my-light 时默认 spawn-first 配对审稿（`fork_context=false` 只读 reviewer）；my-light 下仍可按需 spawn
+- 深度 review：非 interactive 时默认 spawn-first 配对审稿（`fork_context=false` 只读 reviewer）；interactive 下仍可按需 spawn
 - ≥2 独立子问题时默认并行；通常 3–5 个 `fork_context=false` lane
 - 窄范围（单文件、`small_task`）：可不 spawn，但不应以此为默认习惯
 

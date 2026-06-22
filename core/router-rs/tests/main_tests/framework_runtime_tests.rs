@@ -1344,7 +1344,7 @@ fn stdio_framework_goal_drive_roundtrip() {
     assert!(response.ok, "{:?}", response.error);
     let body = response.payload.expect("payload");
     assert_eq!(body["ok"], json!(true));
-    assert_eq!(body["rfv_loop_superseded"], json!(false));
+    assert_eq!(body["quality_gate_superseded"], json!(false));
 
     let path = repo_root.join("artifacts/current/ag-stdio-task/GOAL_STATE.json");
     assert!(path.is_file(), "missing {}", path.display());
@@ -1354,7 +1354,7 @@ fn stdio_framework_goal_drive_roundtrip() {
 
 
 #[test]
-fn stdio_framework_rfv_loop_roundtrip() {
+fn stdio_framework_quality_gate_roundtrip() {
     let repo_root = temp_dir_path("stdio-rfv-loop");
     let _ = fs::remove_dir_all(&repo_root);
     let output_dir = repo_root.join("artifacts").join("current");
@@ -1374,7 +1374,7 @@ fn stdio_framework_rfv_loop_roundtrip() {
     let rr = repo_root.display().to_string();
     let start = json!({
         "id": "rfv-1",
-        "op": "framework_rfv_loop",
+        "op": "framework_quality_gate",
         "payload": {
             "repo_root": rr,
             "operation": "start",
@@ -1395,12 +1395,12 @@ fn stdio_framework_rfv_loop_roundtrip() {
     assert!(path.is_file(), "missing {}", path.display());
 
     assert_eq!(
-        body["rfv_loop_state"]["prefer_structured_external_research"],
+        body["quality_gate_state"]["prefer_structured_external_research"],
         json!(true),
         "prefer_structured defaults true when allow_external_research=true"
     );
     assert_eq!(
-        body["rfv_loop_state"]["external_research_strict"],
+        body["quality_gate_state"]["external_research_strict"],
         json!(true),
         "external_research_strict defaults true in persisted RFV state"
     );

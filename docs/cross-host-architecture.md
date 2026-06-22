@@ -80,7 +80,7 @@
 ### 3. Lifecycle 一致性
 - Default lifecycle：`/discussx` → `/planx` → `/implementx` → `/verifyx`
 - Review：Review findings-only
-- Closeout：`closeout_gate` / `complete` 为 advisory（`my-light`）
+- Closeout：`closeout_gate` / `complete` 为 advisory（`interactive`）
 
 ### 4. 工具使用一致性
 - 所有宿主必须使用相同的工具集
@@ -92,7 +92,7 @@
 ### Claude
 - PreToolUse 硬阻断（独有）
 - Review gate（canonical）
-- my-light：suppress spawn-first 与 review Stop nudge
+- interactive：suppress spawn-first 与 review Stop nudge
 
 ### Cursor
 - Hook：`.cursor/hooks.json` + `router-rs cursor hook`（7 事件闭集）

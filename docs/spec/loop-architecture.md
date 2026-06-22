@@ -18,7 +18,7 @@ x-do-not-delete: |
 
 # Loop Architecture — Framework v8 重构规约
 
-> 本规约定义从**交互式 my-light** 到**自动执行 loop-auto** 的框架级重构。
+> 本规约定义从**交互式 interactive** 到**自动执行 loop-auto** 的框架级重构。
 > 交互式入口（`/discussx` → `/planx` → `/implementx` → `/verifyx`）
 > 作为执行层保留；调度层为新增子系统，不修改现有技能生命周期。
 
@@ -45,9 +45,9 @@ x-do-not-delete: |
 
 ## 1. 问题陈述
 
-现有 `lifecycle_profile: my-light` 的设计目标与无人值守循环根本冲突：
+现有 `lifecycle_profile: interactive` 的设计目标与无人值守循环根本冲突：
 
-| my-light 行为 | 对自动化循环的影响 |
+| interactive 行为 | 对自动化循环的影响 |
 |-------------|------------------|
 | closeout advisory（无硬拦） | 循环无法可靠判断"是否完成" |
 | REVIEW_GATE suppressed | 无独立验证者检查循环产出 |
@@ -55,7 +55,7 @@ x-do-not-delete: |
 | Stop 不写 GOAL_CONTINUE | 跨会话状态丢失 |
 | `disable_spawn_first_nudge: true` | 默认不 spawn 子代理 |
 
-**核心矛盾**：my-light 的每个"轻量化设计"都是自动化循环需要的"安全门控"。
+**核心矛盾**：interactive 的每个"轻量化设计"都是自动化循环需要的"安全门控"。
 
 ---
 
@@ -65,7 +65,7 @@ x-do-not-delete: |
 
 | Profile | 用途 | closeout | REVIEW_GATE | spawn-first | 调度能力 |
 |---------|------|----------|-------------|-------------|----------|
-| `my-light`（废弃，不推荐） | 旧交互式，保留向后兼容 | advisory | suppressed | disabled | 拒绝被调度 |
+| `my-light`（已弃用，旧名 → `interactive`） | 保留向后兼容 | advisory | suppressed | disabled | 拒绝被调度 |
 | `interactive` | 取代 my-light，人工在回路中 | advisory | suppressed | disabled | 拒绝被调度 |
 | `loop-auto` | 无人值守循环 | **hard-block** | **mandatory** | **强制** | **完整** |
 | `loop-supervised`（v8.1+） | 循环 + 人工审批门控 | hard-block | mandatory | 强制 | 完整 |

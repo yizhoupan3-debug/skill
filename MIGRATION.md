@@ -97,7 +97,7 @@ just doctor
 
 ## 默认工作流（全宿主）
 
-- **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；全宿主 Stop 上 `REVIEW_GATE` 为 advisory-only（见 [`docs/spec.md`](docs/spec.md) §6.2）；`lifecycle_profile: my-light` 另 suppress review nudge 与 spawn-first。
+- **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；全宿主 Stop 上 `REVIEW_GATE` 为 advisory-only（见 [`docs/spec.md`](docs/spec.md) §6.2）；`lifecycle_profile: interactive` 另 suppress review nudge 与 spawn-first。
 - **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish`（已刷新 Cursor user `framework.mdc` 与 Claude user/project `.claude/*`）；**重启 Cursor**。GSD 整树与 `/gsd-*` runtime 识别已于 **2026-05 彻底移除**。
 - **legacy-gsd / `/gsd-*`**：**已删除**（非冷表、非 CI stub）；hook 与 registry **不再识别**。个人入口仅 My 四命令（下表）。
 - `/autopilot` 已退役；连续执行请用 `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave；goal drive 经 `GOAL_STATE.json`）。
@@ -168,7 +168,7 @@ cd /path/to/project
 | 项 | 说明 |
 |----|------|
 | **Registry** | `review_gate.spawn_first_enabled`（默认 true）、`spawn_first_nudge`（一行文案）、`spawn_first_includes_model_inherit_by_host.cursor`（去重 model inherit nudge）、`subagent_model_inherit_nudge_by_host` |
-| **`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE`** | `0`/`false`/`off`/`no` 关闭 Cursor beforeSubmit model inherit 单行（默认开；与 my-light / REVIEW_GATE 无关） |
+| **`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE`** | `0`/`false`/`off`/`no` 关闭 Cursor beforeSubmit model inherit 单行（默认开；与 interactive / REVIEW_GATE 无关） |
 | **Cursor UPS re-arm** | fresh deep-review cycle 调用 `reset_review_cycle_progress(preserve_session_guards=true)`；保留 `review_pending_cap_refused` 与 open subagent 计数；见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md) |
 | **`ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE`** | `0`/`false`/`off`/`no` **关闭** beforeSubmit/UPS spawn-first 单行 nudge（**零注入**，无 fallback）；**不** 改变 REVIEW_GATE 清门阈值 |
 | **窄范围** | `review ./path`、`small_task`、不用子代理 → **不武装** `review_required`（四宿主 `is_narrow_review_prompt`） |

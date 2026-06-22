@@ -78,7 +78,7 @@ version: unified-v7
 
 | Profile | REVIEW_GATE | AG_FOLLOWUP | closeout | loop_capable | 备注 |
 |---------|:-----------:|:-----------:|:--------:|:------------:|------|
-| interactive | suppressed | advisory | advisory | false | 默认轻量模式（原 my-light） |
+| interactive | suppressed | advisory | advisory | false | 默认轻量模式（原 my-light，已弃用） |
 | loop-auto | **mandatory** | advisory | **hard-block** | true | 自动循环模式，含 cost_budget + kill_switch |
 
 ---

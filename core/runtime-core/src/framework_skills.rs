@@ -107,7 +107,8 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
             );
             String::new()
         });
-        const DEFAULT_HOSTS: &[&str] = &["claude", "codex", "cursor", "opencode"];
+        // Hosts should come from runtime_registry, not be hardcoded here.
+        const DEFAULT_HOSTS: &[&str] = &[];
         serde_json::from_str::<Value>(&reg_content)
             .ok()
             .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())

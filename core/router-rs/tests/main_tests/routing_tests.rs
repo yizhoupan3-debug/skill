@@ -92,7 +92,7 @@ fn stdio_dispatch_domain_classification_covers_known_ops() {
     assert!(is_framework_stdio_op("framework_prompt_compression"));
     assert!(is_framework_stdio_op("framework_hook_evidence_append"));
     assert!(is_framework_stdio_op("framework_goal_drive"));
-    assert!(is_framework_stdio_op("framework_rfv_loop"));
+    assert!(is_framework_stdio_op("framework_quality_gate"));
     assert!(!is_routing_stdio_op("framework_prompt_compression"));
     assert!(!is_runtime_stdio_op("trace_record_event"));
     assert!(matches!(
@@ -116,7 +116,7 @@ fn stdio_dispatch_domain_classification_covers_known_ops() {
         Some(StdioOpDomain::Framework)
     ));
     assert!(matches!(
-        classify_stdio_op("framework_rfv_loop"),
+        classify_stdio_op("framework_quality_gate"),
         Some(StdioOpDomain::Framework)
     ));
 }

@@ -238,6 +238,7 @@ fn external_research_phrase_signals_deep(lower: &str) -> bool {
         || lower.contains("文献")
         || lower.contains("审计")
         || lower.contains("ledger")
+        || lower.contains("quality_gate")
         || lower.contains("rfv")
         || lower.contains("外研")
         || lower.contains("literature")

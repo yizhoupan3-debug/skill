@@ -82,7 +82,7 @@ fn formal_tool_tokens(lower: &str) -> bool {
 }
 
 /// OR of [`text_signals_math_or_formal_checker`] over RFV `goal` and `verify_commands`.
-pub fn rfv_state_signals_math(state: &Value) -> bool {
+pub fn quality_gate_state_signals_math(state: &Value) -> bool {
     if state
         .get("goal")
         .and_then(Value::as_str)
@@ -190,15 +190,15 @@ mod tests {
     }
 
     #[test]
-    fn rfv_state_or_goal_and_commands() {
+    fn quality_gate_or_goal_and_commands() {
         let st = serde_json::json!({
             "goal": "refactor hooks",
             "verify_commands": ["python -c \"import sympy; print(1)\""]
         });
-        assert!(rfv_state_signals_math(&st));
+        assert!(quality_gate_state_signals_math(&st));
         let st2 = serde_json::json!({"goal": "数学归纳", "verify_commands": []});
-        assert!(rfv_state_signals_math(&st2));
+        assert!(quality_gate_state_signals_math(&st2));
         let st3 = serde_json::json!({"goal": "lint only", "verify_commands": ["ruff check"]});
-        assert!(!rfv_state_signals_math(&st3));
+        assert!(!quality_gate_state_signals_math(&st3));
     }
 }

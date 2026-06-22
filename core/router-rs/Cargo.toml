@@ -18,6 +18,7 @@ framework-kernel = { path = "../framework-kernel" }
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 routing-engine = { path = "../routing-engine" }
 runtime-core = { path = "../runtime-core", features = ["test-support"] }
+host-projection = { path = "../host-projection" }
 browser-mcp = { path = "../browser-mcp" }
 libc.workspace = true
 chrono.workspace = true

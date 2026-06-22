@@ -13,3 +13,4 @@ pub mod hooks;
 pub mod host_entrypoint_sync;
 pub mod host_integration;
 pub mod hosts;
+pub mod review_gate_cli;

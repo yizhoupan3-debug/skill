@@ -22,8 +22,8 @@ pub fn run_analyze(
     let mut tool_total = 0usize;
     let mut tool_failures = 0usize;
     let mut hook_counts: HashMap<String, usize> = HashMap::new();
-    let mut rfv_round_total = 0usize;
-    let mut rfv_verdict_by_bucket: HashMap<String, usize> = HashMap::new();
+    let mut qg_round_total = 0usize;
+    let mut qg_verdict_by_bucket: HashMap<String, usize> = HashMap::new();
     let mut skill_usage: HashMap<String, usize> = HashMap::new();
     let mut prediction_outcome_total = 0usize;
     let mut prediction_outcome_matched = 0usize;
@@ -60,9 +60,9 @@ pub fn run_analyze(
             }
             TelemetryEvent::GoalTransition { .. } => {}
             TelemetryEvent::RfvRound { verdict, .. } => {
-                rfv_round_total += 1;
-                let bucket = normalize_rfv_verdict_bucket(verdict);
-                *rfv_verdict_by_bucket.entry(bucket).or_insert(0) += 1;
+                qg_round_total += 1;
+                let bucket = normalize_qg_verdict_bucket(verdict);
+                *qg_verdict_by_bucket.entry(bucket).or_insert(0) += 1;
             }
             TelemetryEvent::DevExempt { .. } => {}
             TelemetryEvent::PredictionOutcome { matched, .. } => {
@@ -87,8 +87,8 @@ pub fn run_analyze(
         "tool_calls": tool_total,
         "tool_failures": tool_failures,
         "hook_fired_by_name": hook_counts,
-        "rfv_round_total": rfv_round_total,
-        "rfv_verdict_by_bucket": rfv_verdict_by_bucket,
+        "qg_round_total": qg_round_total,
+        "qg_verdict_by_bucket": qg_verdict_by_bucket,
         "skill_usage": skill_usage,
         "prediction_outcome_total": prediction_outcome_total,
         "prediction_outcome_matched": prediction_outcome_matched,
@@ -110,7 +110,7 @@ pub fn run_analyze(
     Ok(out_path)
 }
 
-fn normalize_rfv_verdict_bucket(verdict: &str) -> String {
+fn normalize_qg_verdict_bucket(verdict: &str) -> String {
     match verdict.trim().to_ascii_uppercase().as_str() {
         "PASS" => "pass".to_string(),
         "FAIL" => "fail".to_string(),
@@ -146,12 +146,12 @@ mod tests {
             r#"{{"kind":"hook_fired","hook_name":"stop","action":"allow"}}"#
         )
         .unwrap();
-        writeln!(f, r#"{{"kind":"rfv_round","round":1,"verdict":"PASS"}}"#).unwrap();
-        writeln!(f, r#"{{"kind":"rfv_round","round":2,"verdict":"FAIL"}}"#).unwrap();
+        writeln!(f, r#"{{"kind":"quality_gate_round","round":1,"verdict":"PASS"}}"#).unwrap();
+        writeln!(f, r#"{{"kind":"quality_gate_round","round":2,"verdict":"FAIL"}}"#).unwrap();
         let path = run_analyze(&journal, &out, 30, &EvolutionConfig::default()).unwrap();
         let raw = std::fs::read_to_string(path).unwrap();
         assert!(raw.contains("hook_fired_by_name"));
-        assert!(raw.contains("\"rfv_round_total\": 2"));
+        assert!(raw.contains("\"qg_round_total\": 2"));
         assert!(raw.contains("\"pass\": 1"));
         assert!(raw.contains("\"fail\": 1"));
         let _ = std::fs::remove_dir_all(dir);
@@ -219,9 +219,9 @@ mod tests {
     }
 
     #[test]
-    fn normalize_rfv_verdict_bucket_maps_known_values() {
-        assert_eq!(normalize_rfv_verdict_bucket("PASS"), "pass");
-        assert_eq!(normalize_rfv_verdict_bucket("fail"), "fail");
-        assert_eq!(normalize_rfv_verdict_bucket(""), "unknown");
+    fn normalize_qg_verdict_bucket_maps_known_values() {
+        assert_eq!(normalize_qg_verdict_bucket("PASS"), "pass");
+        assert_eq!(normalize_qg_verdict_bucket("fail"), "fail");
+        assert_eq!(normalize_qg_verdict_bucket(""), "unknown");
     }
 }

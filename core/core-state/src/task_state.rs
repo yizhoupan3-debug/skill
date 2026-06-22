@@ -321,25 +321,25 @@ pub struct EvidenceRollup {
 /// - Rollup counters and `depth_score` are **advisory** for hooks/digest unless a ledger enables
 ///   **hard gates** (`GOAL_STATE.completion_gates` on `complete`, `RFV_LOOP_STATE.close_gates` on
 ///   RFV **显式 close** 与 **`max_rounds` 耗尽** 自动 closed 的 `append_round` 收口预览) — those paths read the same aggregate via [`resolve_task_view`].
-/// - `rfv_unknown_round_count` and `rfv_pass_without_evidence_count` are explicitly broken out
+/// - `qg_unknown_round_count` and `qg_pass_without_evidence_count` are explicitly broken out
 ///   so dashboards can flag "RFV says PASS but EVIDENCE shows no successful row in the same
 ///   window" — the cross-check label written by `rfv_loop::cross_link_evidence`.
-/// - `rfv_external_strict_ok_round_count` counts rounds whose `external_research` object passes
+/// - `qg_external_strict_ok_round_count` counts rounds whose `external_research` object passes
 ///   `validate_external_research_strict` while the RFV state has `external_research_strict=true`.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
 pub struct DepthCompliance {
-    pub rfv_pass_round_count: u64,
-    pub rfv_fail_round_count: u64,
-    pub rfv_skipped_round_count: u64,
-    pub rfv_unknown_round_count: u64,
-    pub rfv_pass_without_evidence_count: u64,
-    pub rfv_adversarial_round_count: u64,
-    pub rfv_falsification_test_count: u64,
-    /// RFV rounds with non-null **`external_research`** object (`append_round` 结构化块).
-    pub rfv_external_deep_structured_round_count: u64,
-    /// RFV rounds where `external_research` was an object, task **`external_research_strict`** was
+    pub qg_pass_round_count: u64,
+    pub qg_fail_round_count: u64,
+    pub qg_skipped_round_count: u64,
+    pub qg_unknown_round_count: u64,
+    pub qg_pass_without_evidence_count: u64,
+    pub qg_adversarial_round_count: u64,
+    pub qg_falsification_test_count: u64,
+    /// Quality Gate rounds with non-null **`external_research`** object (`append_round` 结构化块).
+    pub qg_external_deep_structured_round_count: u64,
+    /// Quality Gate rounds where `external_research` was an object, task **`external_research_strict`** was
     /// true at rollup time, and the blob passes [`validate_external_research_strict`].
-    pub rfv_external_strict_ok_round_count: u64,
+    pub qg_external_strict_ok_round_count: u64,
     pub goal_checkpoint_count: u64,
     pub depth_score: u8,
 }
@@ -350,7 +350,7 @@ pub struct DepthCompliance {
 /// `max_rounds` 轮次上限收口）so rollup stays single-sourced. `rfv` is typically `RFV_LOOP_STATE` root; `goal` is optional `GOAL_STATE`.
 pub fn depth_compliance_aggregate(
     goal: Option<&Value>,
-    rfv: Option<&Value>,
+    qg: Option<&Value>,
     evidence_ok: bool,
 ) -> DepthCompliance {
     let mut c = DepthCompliance::default();
@@ -361,7 +361,7 @@ pub fn depth_compliance_aggregate(
         }
 
     let mut strict_task = false;
-    if let Some(r) = rfv {
+    if let Some(r) = qg {
         strict_task = r
             .get("external_research_strict")
             .and_then(Value::as_bool)
@@ -373,10 +373,10 @@ pub fn depth_compliance_aggregate(
                     .and_then(Value::as_array)
                     .is_some_and(|a| !a.is_empty())
                 {
-                    c.rfv_adversarial_round_count += 1;
+                    c.qg_adversarial_round_count += 1;
                 }
                 if let Some(arr) = round.get("falsification_tests").and_then(Value::as_array) {
-                    c.rfv_falsification_test_count += arr.len() as u64;
+                    c.qg_falsification_test_count += arr.len() as u64;
                 }
                 let vr = round
                     .get("verify_result")
@@ -384,10 +384,10 @@ pub fn depth_compliance_aggregate(
                     .unwrap_or("UNKNOWN")
                     .to_ascii_uppercase();
                 match vr.as_str() {
-                    "PASS" => c.rfv_pass_round_count += 1,
-                    "FAIL" => c.rfv_fail_round_count += 1,
-                    "SKIPPED" => c.rfv_skipped_round_count += 1,
-                    _ => c.rfv_unknown_round_count += 1,
+                    "PASS" => c.qg_pass_round_count += 1,
+                    "FAIL" => c.qg_fail_round_count += 1,
+                    "SKIPPED" => c.qg_skipped_round_count += 1,
+                    _ => c.qg_unknown_round_count += 1,
                 }
                 if vr == "PASS"
                     && round
@@ -396,19 +396,19 @@ pub fn depth_compliance_aggregate(
                         .map(|s| s == "no_evidence_window")
                         .unwrap_or(false)
                 {
-                    c.rfv_pass_without_evidence_count += 1;
+                    c.qg_pass_without_evidence_count += 1;
                 }
                 if round
                     .get("external_research")
                     .is_some_and(|v| !v.is_null() && v.is_object())
                 {
-                    c.rfv_external_deep_structured_round_count += 1;
+                    c.qg_external_deep_structured_round_count += 1;
                     if strict_task
                         && let Some(er) = round.get("external_research")
                             && validate_external_research_structured(er).is_ok()
                                 && validate_external_research_strict(er).is_ok()
                             {
-                                c.rfv_external_strict_ok_round_count += 1;
+                                c.qg_external_strict_ok_round_count += 1;
                             }
                 }
             }
@@ -416,7 +416,7 @@ pub fn depth_compliance_aggregate(
     }
 
     let mut score: u8 = 0;
-    if c.rfv_pass_round_count > 0 {
+    if c.qg_pass_round_count > 0 {
         score += 1;
     }
     if evidence_ok {
@@ -426,10 +426,10 @@ pub fn depth_compliance_aggregate(
     // structured external research (strict_task + strict-pass rounds) to ensure pure external research
     // tasks can achieve full score. strict mode additionally counts falsification tests.
     let third_legacy = c.goal_checkpoint_count > 0
-        || c.rfv_adversarial_round_count > 0
-        || (strict_task && c.rfv_external_strict_ok_round_count > 0);
+        || c.qg_adversarial_round_count > 0
+        || (strict_task && c.qg_external_strict_ok_round_count > 0);
     let third = if depth_score_mode_is_strict() {
-        third_legacy || c.rfv_falsification_test_count > 0
+        third_legacy || c.qg_falsification_test_count > 0
     } else {
         third_legacy
     };
@@ -477,7 +477,7 @@ pub fn task_view_has_active_goal_focus_mismatch_note(view: &ResolvedTaskView) ->
         .any(|n| n.starts_with(RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL))
 }
 
-fn rfv_loop_active(state: &Value) -> bool {
+fn qg_active(state: &Value) -> bool {
     state
         .get("loop_status")
         .and_then(Value::as_str)
@@ -486,11 +486,11 @@ fn rfv_loop_active(state: &Value) -> bool {
 
 fn classify_control_mode(
     goal: Option<&Value>,
-    rfv: Option<&Value>,
+    qg: Option<&Value>,
     notes: &mut Vec<String>,
 ) -> TaskControlMode {
     let g_on = goal.is_some_and(goal_state_requests_continuation);
-    let r_on = rfv.is_some_and(rfv_loop_active);
+    let r_on = qg.is_some_and(qg_active);
     match (g_on, r_on) {
         (true, true) => {
             notes.push(
@@ -758,25 +758,25 @@ pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> 
     }
     let dc = view.depth_compliance.as_ref()?;
     let mut out = format!("深度信号: d{}/3", dc.depth_score);
-    if dc.rfv_pass_without_evidence_count > 0 {
+    if dc.qg_pass_without_evidence_count > 0 {
         out.push_str(&format!(
             " · PASS无对照证据={}",
-            dc.rfv_pass_without_evidence_count
+            dc.qg_pass_without_evidence_count
         ));
     }
-    if dc.rfv_external_deep_structured_round_count > 0 {
+    if dc.qg_external_deep_structured_round_count > 0 {
         out.push_str(&format!(
             " · 结构化外研轮次={}",
-            dc.rfv_external_deep_structured_round_count
+            dc.qg_external_deep_structured_round_count
         ));
     }
-    if dc.rfv_external_strict_ok_round_count > 0 {
+    if dc.qg_external_strict_ok_round_count > 0 {
         out.push_str(&format!(
             " · 外研strict通过轮次={}",
-            dc.rfv_external_strict_ok_round_count
+            dc.qg_external_strict_ok_round_count
         ));
     }
-    if dc.rfv_external_deep_structured_round_count > 0 && !depth_score_mode_is_strict() {
+    if dc.qg_external_deep_structured_round_count > 0 && !depth_score_mode_is_strict() {
         out.push_str(DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH);
     }
     Some(out)
@@ -870,10 +870,10 @@ pub fn validate_goal_completion_gates(
             ));
         }
     }
-    if gates.block_on_rfv_pass_without_evidence && dc.rfv_pass_without_evidence_count > 0 {
+    if gates.block_on_rfv_pass_without_evidence && dc.qg_pass_without_evidence_count > 0 {
         return Err(format!(
-            "GOAL completion_gates: block_on_rfv_pass_without_evidence but rfv_pass_without_evidence_count={}",
-            dc.rfv_pass_without_evidence_count
+            "GOAL completion_gates: block_on_rfv_pass_without_evidence but qg_pass_without_evidence_count={}",
+            dc.qg_pass_without_evidence_count
         ));
     }
     Ok(())
@@ -1176,9 +1176,9 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("dc");
-        assert_eq!(dc.rfv_pass_round_count, 1);
-        assert_eq!(dc.rfv_adversarial_round_count, 1);
-        assert_eq!(dc.rfv_falsification_test_count, 2);
+        assert_eq!(dc.qg_pass_round_count, 1);
+        assert_eq!(dc.qg_adversarial_round_count, 1);
+        assert_eq!(dc.qg_falsification_test_count, 2);
         assert_eq!(dc.goal_checkpoint_count, 0);
         assert_eq!(
             dc.depth_score, 2,
@@ -1268,7 +1268,7 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.as_ref().expect("dc");
-        assert_eq!(dc.rfv_external_deep_structured_round_count, 1);
+        assert_eq!(dc.qg_external_deep_structured_round_count, 1);
 
         let hint = depth_compliance_refresh_hint(&v).expect("hint");
         assert!(hint.contains("结构化外研轮次=1"));
@@ -1384,8 +1384,8 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.as_ref().expect("dc");
-        assert_eq!(dc.rfv_external_deep_structured_round_count, 1);
-        assert_eq!(dc.rfv_external_strict_ok_round_count, 1);
+        assert_eq!(dc.qg_external_deep_structured_round_count, 1);
+        assert_eq!(dc.qg_external_strict_ok_round_count, 1);
 
         let hint = depth_compliance_refresh_hint(&v).expect("hint");
         assert!(hint.contains("外研strict通过轮次=1"));
@@ -1444,8 +1444,8 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.as_ref().expect("dc");
-        assert_eq!(dc.rfv_external_deep_structured_round_count, 1);
-        assert_eq!(dc.rfv_external_strict_ok_round_count, 0);
+        assert_eq!(dc.qg_external_deep_structured_round_count, 1);
+        assert_eq!(dc.qg_external_strict_ok_round_count, 0);
 
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1527,9 +1527,9 @@ mod tests {
 
         let v = resolve_task_view(&tmp, Some(tid));
         let dc = v.depth_compliance.expect("depth_compliance present");
-        assert_eq!(dc.rfv_pass_round_count, 1);
-        assert_eq!(dc.rfv_unknown_round_count, 1);
-        assert_eq!(dc.rfv_pass_without_evidence_count, 1);
+        assert_eq!(dc.qg_pass_round_count, 1);
+        assert_eq!(dc.qg_unknown_round_count, 1);
+        assert_eq!(dc.qg_pass_without_evidence_count, 1);
         assert_eq!(dc.goal_checkpoint_count, 1);
         // Score = 3 (pass + evidence_ok + checkpoint).
         assert_eq!(dc.depth_score, 3);
@@ -1546,7 +1546,7 @@ mod tests {
         let v = resolve_task_view(&tmp, Some("t-zero"));
         let dc = v.depth_compliance.expect("depth_compliance present");
         assert_eq!(dc.depth_score, 0);
-        assert_eq!(dc.rfv_pass_round_count, 0);
+        assert_eq!(dc.qg_pass_round_count, 0);
         assert_eq!(dc.goal_checkpoint_count, 0);
         let _ = fs::remove_dir_all(&tmp);
     }

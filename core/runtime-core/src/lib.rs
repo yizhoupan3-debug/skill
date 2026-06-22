@@ -6,7 +6,7 @@
 
 // ── original four ──
 // background_state → extracted to runtime-storage crate
-pub(crate) use rt_storage::background_state;
+pub use rt_storage::background_state as background_state;
 // runtime_envelope_ids, runtime_storage → extracted to runtime-storage crate
 pub use rt_storage::runtime_envelope_ids;
 pub use rt_storage::runtime_storage;
@@ -14,9 +14,9 @@ pub use trace_runtime;
 
 // ── migrated modules (B3) ──
 pub use ::framework_runtime::closeout_enforcement;
-pub(crate) use ::framework_runtime::execution_contract;
+pub use ::framework_runtime::execution_contract;
 pub mod framework_runtime;
-pub(crate) use session_supervisor;
+pub use session_supervisor;
 pub use framework_kernel::framework_profile;
 pub mod quality_gate;
 pub mod schema_drift;
@@ -24,22 +24,22 @@ pub mod schema_drift;
 // ── browser dispatch hook (decouples runtime-core from browser-mcp crate) ──
 pub mod browser_dispatch_hook;
 
-// ── local modules (moved from rt_core_contracts, contract-crate boundary cleanup) ──
+// ── local modules (moved from rt_core_contracts, cleaned up crate boundary) ──
 pub mod kernel_bootstrap;
-pub(crate) mod harness_operator_nudges;
-pub(crate) mod router_rs_observation;
+pub mod harness_operator_nudges;
+pub mod router_rs_observation;
 pub mod session_call_tracker;
-pub(crate) mod framework_skills;
+pub mod framework_skills;
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
 #[allow(unused_imports)]
-pub(crate) use rt_core_contracts::formal_toolchain;
+pub use rt_core_contracts::formal_toolchain;
 pub use rt_core_contracts::harness_contract;
-pub(crate) use rt_core_contracts::harness_context_signals;
-pub(crate) use rt_core_contracts::hook_event_routing;
+pub use rt_core_contracts::harness_context_signals;
+pub use rt_core_contracts::hook_event_routing;
 pub use rt_core_contracts::mcp_pre_guard;
 pub use rt_core_contracts::web_fetch_guard;
-pub(crate) use rt_core_contracts::hook_observation_rules;
+pub use rt_core_contracts::hook_observation_rules;
 
 // ── router_env_flags: re-export from framework-runtime (skipping contracts) ──
 pub mod router_env_flags;
@@ -56,7 +56,7 @@ pub use core_state::state_manager as goal_drive;
 
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
 pub mod hook_timing;
-pub mod review_gate;
+
 pub mod task_command;
 
 // ── migrated supporting modules ──
@@ -66,7 +66,7 @@ pub mod cli;
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
 pub mod eval_route;
-pub(crate) use framework_kernel::framework_host_targets;
+pub use framework_kernel::framework_host_targets;
 pub mod framework_maint;
 pub use host_projection::host_entrypoint_sync;
 pub use host_projection::host_integration;
@@ -118,9 +118,9 @@ pub mod test_env_sync;
 pub mod hook_posttool_normalize;
 
 // ── re-exports from core-policy (crate-internal only) ──
-pub(crate) use core_policy::hook_common;
-pub(crate) use core_policy::hook_policy;
-pub(crate) use core_policy::review_gate_engine;
+pub use core_policy::hook_common;
+pub use core_policy::hook_policy;
+pub use core_policy::review_gate_engine;
 
 // ── crate-level re-exports for `crate::X` path compat ──
 pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;

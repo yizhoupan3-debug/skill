@@ -36,7 +36,7 @@ $$\text{Discuss} \longrightarrow \text{Plan} \longrightarrow \text{Implement} \l
 1. **`/discussx`**：初始需求对齐与技术预研阶段。
 2. **`/planx`**：规划阶段，生成或更新 `artifacts/current/<task_id>/ROADMAP.md` 与 `WAVE_STATE.json`，明确 minimal delta 与 verification plan，并报用户审批。
 3. **`/implementx`**：执行阶段。进入执行区时，需配合 `framework_goal_drive` stdio 以及物化的 `GOAL_STATE.json`。主线程主要负责调度，**一口气**跑完 `WAVE_STATE` 全部的执行 wave。
-   - **执行 Profile 调优**：默认使用 `lifecycle_profile: my-light`。在此配置下 `REVIEW_GATE` Stop advisory nudge 与 spawn-first nudge 关闭，findings-only review 仍可用。见各宿主手册的 Review Gate 小节。
+   - **执行 Profile 调优**：默认使用 `lifecycle_profile: interactive`。在此配置下 `REVIEW_GATE` Stop advisory nudge 与 spawn-first nudge 关闭，findings-only review 仍可用。见各宿主手册的 Review Gate 小节。
 4. **`/verifyx`**：验证与清理收尾阶段。验证完成后，执行 **Post-verify task-dir purge**，对 `artifacts/current/<task_id>/` 目录进行安全清理。
 
 ## Python 环境治理 (Python Environment)

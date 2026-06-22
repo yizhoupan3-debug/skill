@@ -93,9 +93,8 @@ impl ToolHandler for LifecycleTools {
             "session_checkpoint",
             "closeout_gate",
             "goal_state_read",
-            "rfv_loop_status",
             "quality_gate_status",
-            "rfv_loop_manage",
+
             "quality_gate_manage",
             "goal_state_manage",
             "closeout_record_write",

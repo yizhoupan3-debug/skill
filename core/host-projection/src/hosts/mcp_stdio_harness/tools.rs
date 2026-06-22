@@ -906,7 +906,7 @@ pub(super) fn tool_quality_gate_status(arguments: &Value, repo_root: &Path) -> R
     serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
 }
 
-fn parse_rfv_round_argument(value: Option<&Value>) -> Result<u64, String> {
+fn parse_qg_round_argument(value: Option<&Value>) -> Result<u64, String> {
     let Some(v) = value else {
         return Err("append_round requires 'round' argument (integer)".to_string());
     };
@@ -968,7 +968,7 @@ pub(super) fn tool_quality_gate_manage(
             payload["session_id"] = json!(session_id);
         }
         "append_round" => {
-            let round = parse_rfv_round_argument(arguments.get("round"))?;
+            let round = parse_qg_round_argument(arguments.get("round"))?;
             payload["round"] = json!(round);
 
             // Validate required string arguments with specific error messages
@@ -1144,7 +1144,7 @@ pub(super) fn tool_goal_state_manage(
             // Defensive: not in goal_state_manage schema enum, but prevents confusion
             // if a caller sends it here instead of rfv_loop_manage.
             return Err("append_round is not a valid goal_state_manage operation. \
-                 Use rfv_loop_manage with operation=append_round instead."
+                 Use quality_gate_manage with operation=append_round instead."
                 .to_string());
         }
         "pause" | "resume" | "complete" | "clear" => {

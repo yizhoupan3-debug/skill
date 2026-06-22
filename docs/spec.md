@@ -35,7 +35,7 @@ version: "unified-v9"
 runtime-core (~3K LOC, 瘦胶水层)  ← 仅保留 init_hooks + register_*_hooks + telemetry + 闭包注册
 ├── framework_runtime/            ← MCP stdio dispatch + doctor + session artifacts
 ├── cli/                          ← CLI 参数解析
-├── rfv_loop.rs                   ← RFV 循环完整实现
+├── quality_gate.rs               ← RFV 循环完整实现（重命名自 rfv_loop.rs）
 ├── framework_maint.rs            ← 维护命令
 ├── stdio_transport.rs            ← stdio 传输层
 ├── 184 tests

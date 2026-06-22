@@ -173,10 +173,10 @@ fn enforce_rfv_close_gates(
                 dc.depth_score, min
             ));
         }
-    if gates.block_on_rfv_pass_without_evidence && dc.rfv_pass_without_evidence_count > 0 {
+    if gates.block_on_rfv_pass_without_evidence && dc.qg_pass_without_evidence_count > 0 {
         return Err(format!(
-            "RFV close_gates: block_on_rfv_pass_without_evidence but rfv_pass_without_evidence_count={}",
-            dc.rfv_pass_without_evidence_count
+            "RFV close_gates: block_on_rfv_pass_without_evidence but qg_pass_without_evidence_count={}",
+            dc.qg_pass_without_evidence_count
         ));
     }
     Ok(())
@@ -383,7 +383,7 @@ fn value_array_or_empty(payload: &Value, key: &str) -> Result<Vec<Value>, String
 }
 
 fn clamp_max_rounds(raw: u64) -> (u64, bool) {
-    let cap = crate::router_env_flags::router_rs_rfv_max_rounds_cap();
+    let cap = crate::router_env_flags::router_rs_qg_max_rounds_cap();
     if raw > cap { (cap, true) } else { (raw, false) }
 }
 
@@ -412,7 +412,7 @@ fn merge_operator_nudge_refs(resp: &mut Value, repo_root: &Path, state: Option<&
             json!(nudges.rfv_loop_continue_reasoning_depth),
         );
     }
-    if state.is_some_and(crate::harness_context_signals::rfv_state_signals_math)
+    if state.is_some_and(crate::harness_context_signals::quality_gate_state_signals_math)
         && !nudges.math_reasoning_harness_line.is_empty()
     {
         refs.insert(
@@ -619,7 +619,7 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
         "warning": if capped {
             Some(format!(
                 "max_rounds requested {requested_max} exceeds hard cap {}; stored max_rounds={max_rounds}",
-                crate::router_env_flags::router_rs_rfv_max_rounds_cap()
+                crate::router_env_flags::router_rs_qg_max_rounds_cap()
             ))
         } else {
             None
@@ -654,7 +654,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     let max_rounds = obj
         .get("max_rounds")
         .and_then(Value::as_u64)
-        .unwrap_or(crate::router_env_flags::router_rs_rfv_max_rounds_cap());
+        .unwrap_or(crate::router_env_flags::router_rs_qg_max_rounds_cap());
     if round_n > max_rounds {
         return Err(format!("round {round_n} exceeds max_rounds {max_rounds}"));
     }

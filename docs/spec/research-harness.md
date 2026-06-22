@@ -1009,7 +1009,7 @@ v7 引入 `core/research-harness/` crate，将散落在 `runtime-core`、`autore
 | `claims/` | Claim ledger 管理、drift 检测、ceiling 计算 | autoresearch-rs |
 | `log/` | 研究活动日志（SQLite FTS5）、知识图谱、实体提取 | research-log-rs |
 | `citation/` | 引用审计、BibTeX 渲染、DOI 验证 | citation_tool_rs |
-| `review/` | 多轮对抗审稿编排、7 维度、收敛判定 | runtime-core/rfv_loop.rs |
+| `review/` | 多轮对抗审稿编排、7 维度、收敛判定 | runtime-core/quality_gate.rs |
 | `hooks/` | Prose/Adversarial/ActivityLog hooks | runtime-core hooks |
 | `aigc/` | AIGC 检测（n-gram + burstiness + syntactic）、降重 | 新建 |
 | `verification/` | 文献/统计/Prose QC/结构/形式验证 | scripts/verify/*.sh |

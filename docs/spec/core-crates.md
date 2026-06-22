@@ -14,7 +14,7 @@ version: unified-v7
 | 子模块 | 功能 | 核心 API |
 |--------|------|----------|
 | **mod.rs** (goal_state) | Goal 生命周期（start/checkpoint/pause/resume/complete/block/clear） + 证据摘要 | `framework_goal_drive()`, `read_goal_state()`, `goal_state_requests_continuation()`, `task_evidence_success_only_self_attested()` |
-| **rfv_ops.rs** | RFV 状态管理 + 冲突消解 | `read_rfv_loop_state()`, `deactivate_rfv_for_conflict_with_goal_drive()`, `deactivate_goal_for_conflict_with_rfv()` |
+| **quality_gate_ops.rs** | RFV 状态管理 + 冲突消解 | `read_quality_gate_state()`, `deactivate_rfv_for_conflict_with_goal_drive()`, `deactivate_goal_for_conflict_with_rfv()` |
 | **pointer_ops.rs** | active_task.json / focus_task.json 管理 | `read_active_task_id()`, `read_task_pointer_pair()`, `write_active_task_pointer()`, `neutralize_task_pointers_for_task()` |
 | **scrub_ops.rs** | 防欺骗、段落合并、hook 输出清理 | `scrub_spoof_host_followup_lines()`, `merge_hook_nudge_paragraph()`, `scrub_followup_fields_in_hook_output()` |
 | **validation.rs** | 外部研究验证 | `validate_external_research_structured()`, `validate_external_research_strict()`, `source_traceable_heuristic()` |

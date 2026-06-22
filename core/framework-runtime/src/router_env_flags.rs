@@ -235,11 +235,11 @@ fn parse_router_rs_usize_clamped(
     }
 }
 
-/// `ROUTER_RS_RFV_MAX_ROUNDS_CAP`: RFV 循环最大轮次硬上限。
-pub fn router_rs_rfv_max_rounds_cap() -> u64 {
+/// `ROUTER_RS_QG_MAX_ROUNDS_CAP`: Quality Gate 循环最大轮次硬上限。
+pub fn router_rs_qg_max_rounds_cap() -> u64 {
     const MAX_CAP: u64 = 10000;
     const DEFAULT: u64 = 1000;
-    env::var("ROUTER_RS_RFV_MAX_ROUNDS_CAP")
+    env::var("ROUTER_RS_QG_MAX_ROUNDS_CAP")
         .ok()
         .and_then(|raw| raw.trim().parse::<u64>().ok())
         .map(|n| n.min(MAX_CAP))
@@ -379,18 +379,18 @@ mod tests {
     }
 
     #[test]
-    fn rfv_max_rounds_cap_defaults_and_clamped() {
+    fn qg_max_rounds_cap_defaults_and_clamped() {
         let _g = process_env_lock();
-        let prev = env::var_os("ROUTER_RS_RFV_MAX_ROUNDS_CAP");
-        unsafe { env::remove_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP") };
-        assert_eq!(super::router_rs_rfv_max_rounds_cap(), 1000);
-        unsafe { env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", "500") };
-        assert_eq!(super::router_rs_rfv_max_rounds_cap(), 500);
-        unsafe { env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", "20000") };
-        assert_eq!(super::router_rs_rfv_max_rounds_cap(), 10000);
+        let prev = env::var_os("ROUTER_RS_QG_MAX_ROUNDS_CAP");
+        unsafe { env::remove_var("ROUTER_RS_QG_MAX_ROUNDS_CAP") };
+        assert_eq!(super::router_rs_qg_max_rounds_cap(), 1000);
+        unsafe { env::set_var("ROUTER_RS_QG_MAX_ROUNDS_CAP", "500") };
+        assert_eq!(super::router_rs_qg_max_rounds_cap(), 500);
+        unsafe { env::set_var("ROUTER_RS_QG_MAX_ROUNDS_CAP", "20000") };
+        assert_eq!(super::router_rs_qg_max_rounds_cap(), 10000);
         match prev {
-            Some(v) => unsafe { env::set_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP", v) },
-            None => unsafe { env::remove_var("ROUTER_RS_RFV_MAX_ROUNDS_CAP") },
+            Some(v) => unsafe { env::set_var("ROUTER_RS_QG_MAX_ROUNDS_CAP", v) },
+            None => unsafe { env::remove_var("ROUTER_RS_QG_MAX_ROUNDS_CAP") },
         }
     }
 }

@@ -46,7 +46,7 @@ spawned → running → draining → completed
 | 可数深度 lane | `reviewer_lanes`（registry 共用闭集） | 同左 | 同左 | skill + `review-lanes/` |
 | spawn-first | ✅ | ✅ | ✅ | — |
 | Stop 出站 | advisory nudge | advisory nudge | advisory nudge | MCP advisory |
-| my-light | suppress nudge | suppress nudge | suppress nudge | suppress nudge |
+| interactive | suppress nudge | suppress nudge | suppress nudge | suppress nudge |
 
 ---
 
