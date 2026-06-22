@@ -7,3 +7,6 @@
 
 pub mod hooks;
 pub mod hook_dispatch;
+
+#[cfg(test)]
+pub(crate) mod test_helpers;

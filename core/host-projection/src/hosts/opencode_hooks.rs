@@ -18,7 +18,7 @@ use core_policy::hook_common::{
     has_override, normalize_tool_name, saw_reject_reason,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::fs;
 use std::path::Path;
 

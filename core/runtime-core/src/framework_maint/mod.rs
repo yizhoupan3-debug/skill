@@ -264,15 +264,8 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
             "verify_cursor_hooks: .cursor/hooks.json must contain a hooks object".to_string()
         })?;
 
-    const REQUIRED_EVENTS: &[&str] = &[
-        "beforeSubmitPrompt",
-        "stop",
-        "sessionStart",
-        "sessionEnd",
-        "postToolUse",
-        "subagentStart",
-        "subagentStop",
-    ];
+    const REQUIRED_EVENTS: &[&str] =
+        host_projection::hosts::cursor_hooks::CURSOR_HOOKS_REGISTERED_EVENTS;
     const ROUTER_NEEDLE: &str = "cursor-router-rs-hook.sh";
     const LAUNCHER_NEEDLE: &str = "cursor-router-rs-hook.sh";
 
@@ -636,15 +629,7 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         serde_json::from_str(&hooks_text).map_err(|e| format!("verify_codex_hooks: invalid hooks.json: {e}"))?;
     let hooks_obj = hooks_json.as_object()
         .ok_or_else(|| "verify_codex_hooks: hooks.json must be a JSON object".to_string())?;
-    for event in [
-        "SessionStart",
-        "PreToolUse",
-        "UserPromptSubmit",
-        "PostToolUse",
-        "Stop",
-        "SubagentStart",
-        "SubagentStop",
-    ] {
+    for event in host_projection::hosts::codex_hooks::INSTALL_LIFECYCLE_EVENTS {
         if !hooks_obj.contains_key(event) {
             return Err(format!(
                 "verify_codex_hooks: missing Codex hook event: {event}"

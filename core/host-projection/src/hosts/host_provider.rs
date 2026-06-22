@@ -290,6 +290,9 @@ pub fn validate_host_providers_against_registry(
 // ── Shared host_provider macro ──────────────────────────────────────────
 // Generates the common ~80% of HostLifecycle / HostTelemetry / HostProvider impl.
 // Each provider file calls this macro, then adds extra impls manually.
+//
+// Variant `custom_capabilities` generates struct + HostToolExecutor only;
+// caller must manually impl HostProvider::capabilities (for CodexHostProvider).
 #[macro_export]
 macro_rules! impl_host_provider {
     (
@@ -315,6 +318,17 @@ macro_rules! impl_host_provider {
                 }
             }
         }
+    };
+    // Variant: struct + HostToolExecutor only (caller manually impl HostProvider + HostLifecycle)
+    (
+        $struct:ident for $host:literal;
+        custom_capabilities;
+        $(aliases: [$($alias:literal),*];)?
+    ) => {
+        #[derive(Debug, Default, Clone, Copy)]
+        pub struct $struct;
+
+        impl HostToolExecutor for $struct {}
     };
 }
 

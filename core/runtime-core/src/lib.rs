@@ -4,17 +4,12 @@
 //!
 //! Single source of truth for framework_runtime, session_supervisor, and supporting modules.
 
-// ── original four ──
-// background_state → extracted to runtime-storage crate
-pub use rt_storage::background_state as background_state;
-// runtime_envelope_ids, runtime_storage → extracted to runtime-storage crate
-pub use rt_storage::runtime_envelope_ids;
-pub use rt_storage::runtime_storage;
+// ── original four (flattened from runtime-storage) ──
+pub use rt_storage::{background_state, runtime_envelope_ids, runtime_storage};
 pub use trace_runtime;
 
 // ── migrated modules (B3) ──
-pub use ::framework_runtime::closeout_enforcement;
-pub use ::framework_runtime::execution_contract;
+pub use ::framework_runtime::{closeout_enforcement, execution_contract};
 pub mod framework_runtime;
 pub use session_supervisor;
 pub use framework_kernel::framework_profile;
@@ -29,41 +24,30 @@ pub mod infrastructure;
 pub mod exit_gate;
 
 // │  backward-compatible re-exports from subdomain groups ─────────────────────
-pub use exit_gate::quality_gate;
-pub use exit_gate::schema_drift;
-pub use infrastructure::kernel_bootstrap;
-pub use exit_gate::harness_ops as harness_operator_nudges;
-pub use infrastructure::router_rs_obs as router_rs_observation;
-pub use infrastructure::session_call as session_call_tracker;
-pub use infrastructure::framework_skills;
-pub use infrastructure::router_env_flags;
-pub use orchestration::paper_adversarial as paper_adversarial_hook;
-pub use orchestration::paper_prose as paper_prose_hook;
-pub use orchestration::research as research_activity_log;
-pub use infrastructure::stdio_transport;
-pub use infrastructure::telemetry_emit;
-
-// ── local modules (moved from rt_core_contracts, cleaned up crate boundary) ──
-// (all migrated to subdomain groups above)
+pub use exit_gate::{quality_gate, schema_drift, harness_ops as harness_operator_nudges};
+pub use infrastructure::{
+    kernel_bootstrap, router_rs_obs as router_rs_observation,
+    session_call as session_call_tracker, framework_skills, router_env_flags,
+    stdio_transport, telemetry_emit,
+};
+pub use orchestration::{
+    paper_adversarial as paper_adversarial_hook,
+    paper_prose as paper_prose_hook,
+    research as research_activity_log,
+};
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
-pub use rt_core_contracts::formal_toolchain;
-pub use rt_core_contracts::harness_contract;
-pub use rt_core_contracts::harness_context_signals;
-pub use rt_core_contracts::hook_event_routing;
-pub use rt_core_contracts::mcp_pre_guard;
-pub use rt_core_contracts::web_fetch_guard;
-pub use rt_core_contracts::hook_observation_rules;
+pub use rt_core_contracts::{
+    formal_toolchain, harness_contract, harness_context_signals, hook_event_routing,
+    mcp_pre_guard, web_fetch_guard, hook_observation_rules,
+};
 
 // ── re-exports from core-state (flattened) ──
-pub use core_state::utils::atomic_write;
-pub use core_state::utils::path_guard;
-pub use core_state::step_ledger;
-pub(crate) use core_state::task_ledger;
-pub use core_state::task_state;
-pub use core_state::task_state_aggregate;
-pub(crate) use core_state::utils::task_write_lock;
-pub use core_state::state_manager as goal_drive;
+pub use core_state::{
+    step_ledger, task_state, task_state_aggregate,
+    state_manager as goal_drive, utils::{atomic_write, path_guard},
+};
+pub(crate) use core_state::{task_ledger, utils::task_write_lock};
 
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
 pub mod hook_timing;
@@ -122,9 +106,7 @@ pub mod mcp_stdio_test_support;
 #[cfg(test)]
 pub mod test_env_sync;
 
-// ── path-qualified module ──
-#[path = "utils/hook_posttool_normalize.rs"]
-pub mod hook_posttool_normalize;
+// (removed: hook_posttool_normalize was dead code)
 
 // ── re-exports from core-policy (crate-internal only) ──
 pub(crate) use core_policy::hook_common;
@@ -133,10 +115,6 @@ pub(crate) use core_policy::review_gate_engine;
 
 // ── crate-level re-exports for `crate::X` path compat ──
 pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;
-
-// ── host submodule re-exports (for `crate::X` path compat) ──
-#[doc(hidden)]
-pub(crate) use hosts::cursor_hooks;
 
 // ── routing-engine hook registration ──
 use std::sync::OnceLock;
@@ -221,7 +199,7 @@ pub fn register_host_projection_hooks() {
         );
 
         host_projection::hooks::register_review_gate_handler(
-            crate::cursor_hooks::run_cursor_review_gate,
+            host_projection::hosts::cursor_hooks::run_cursor_review_gate,
         );
 
         host_projection::hooks::register_kernel_bootstrap(

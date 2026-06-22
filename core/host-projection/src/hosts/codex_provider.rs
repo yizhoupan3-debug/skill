@@ -4,8 +4,10 @@ use super::host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
 };
 
-#[derive(Debug, Default, Clone, Copy)]
-pub struct CodexHostProvider;
+crate::impl_host_provider! {
+    CodexHostProvider for "codex";
+    custom_capabilities;
+}
 
 impl HostLifecycle for CodexHostProvider {
     fn profile_id(&self) -> &'static str { "codex_profile" }
@@ -43,8 +45,6 @@ impl HostLifecycle for CodexHostProvider {
         Some((args, shell_cmd))
     }
 }
-
-impl HostToolExecutor for CodexHostProvider {}
 
 impl HostTelemetry for CodexHostProvider {
     fn hook_telemetry_surface(&self) -> &'static str { "native-codex" }
