@@ -18,7 +18,6 @@ pub use framework_kernel::framework_profile;
 pub mod browser_dispatch_hook;
 
 // ── subdomain module groups ──
-pub mod behavior;
 pub mod orchestration;
 pub mod infrastructure;
 pub mod exit_gate;

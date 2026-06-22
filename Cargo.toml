@@ -33,8 +33,7 @@ members = [
     "core/research-harness",
     "core/tool-layer",
     "tools/evolution-rs",
-    "tools/codegraph-rs",
-    "tron-search"]
+    "tools/codegraph-rs"]
 exclude = [
     "codex-aggregator"
 ]

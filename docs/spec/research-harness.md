@@ -989,11 +989,9 @@ schema 包含 `workspace_index`、`hub_entries`、`hub_entries_fts` 三张核心
 
 | 关联文档 | 关系 |
 |---------|------|
-| [routing-plugin.md](routing-plugin.md) | §8 路由与插件契约 — research skill 的 L2 路由遵循此规约 |
-| [runtime-subsystems.md](runtime-subsystems.md) | §9 ResearchMode 运行时在此定义 |
-| [auxiliary.md](auxiliary.md) | §14.4 harness_context_signals 中数学信号与 research-discovery `math_background_inquiry` lane 共享 |
-| [observability-testing.md](observability-testing.md) | §17 测试契约包含 autoresearch-rs 覆盖统计；本规约 §19.10 为其科研领域特化 |
-| [security-lifecycle.md](security-lifecycle.md) | §12 closeout 为 research-execution 的验证 gate |
+| `spec.md` | 统一规约：7 层架构、路由与插件契约、运行时、安全生命周期、可观测性 |
+| `core-policy` (代码) | Review gate 状态机、安全策略 |
+| `runtime-core` (代码) | 运行时编排、closeout gate |
 
 ---
 
@@ -1045,4 +1043,4 @@ research-harness
 - `autoresearch-rs` / `research-log-rs` 保留为独立 binary（thin CLI wrapper 待完成）
 - `host-projection` 的 hook 注册可渐进迁移为调用 `research_harness::hooks`
 - 所有现有 MCP tool 名称不变，调用方无感知
-| [loop-architecture.md](loop-architecture.md) | §19.9 research-aware loop 模式在此注册，本规约与 loop 架构通过 LOOP_REGISTRY.json 和 BARRIER_REPORT.json 桥接 |
+| `spec.md` | 7 层模型中的 loop-auto 调度；桥接见 LOOP_REGISTRY.json + BARRIER_REPORT.json |

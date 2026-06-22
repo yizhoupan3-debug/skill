@@ -99,7 +99,7 @@ cargo run --manifest-path tools/evolution-rs/Cargo.toml -- audit --config config
 | 安装 / 升级 / 多机同步 | [getting-started.md](getting-started.md) |
 | 安全（SSRF、MCP 策略、沙箱） | [security.md](security.md) |
 | 备份 / 恢复 / 卸载 | [backup-restore.md](backup-restore.md) |
-| 运维开关组合（profile） | [`spec.md`](../spec.md) §5 + [`framework_profile_contract.md`](../framework_profile_contract.md) |
+| 运维开关组合（profile） | [`spec.md`](../spec.md)（架构原则） |
 | 使用者入门 | [`getting-started.md`](getting-started.md) + [`AGENTS.md`](../../AGENTS.md) |
 
 ---

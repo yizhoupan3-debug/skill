@@ -1,6 +1,6 @@
 # Agent Policy (Cross-Host)
 
-跨宿主叙述性协议真源。各宿主行为差异见 `## 宿主行为差异`。跨宿主实现细节见 `docs/cross-host-architecture.md`。
+跨宿主叙述性协议真源。各宿主行为差异见 `## 宿主行为差异`。
 
 ## Language
 

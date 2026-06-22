@@ -53,6 +53,5 @@ v7/v8 架构中 `runtime-core` 膨胀至 ~7,000+ 行，承担了宿主协调、�
 
 ## Related
 
-- `docs/spec.md` §2 — 架构规约
-- `docs/spec/runtime-subsystems.md` — 架构详细规约
+- `docs/spec.md` — 7 层架构规约
 - `artifacts/current/roadmap-v8.md` §6 — 模块解耦 Wave

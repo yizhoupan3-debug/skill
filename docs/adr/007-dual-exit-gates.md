@@ -2,7 +2,6 @@
 last_verified: "2026-06-22"
 depends_on:
   - ../spec.md
-  - ../spec/security-lifecycle.md
 ---
 
 # ADR-007: 双门退出机制 — 核查门与质量门
@@ -60,6 +59,5 @@ Accepted (2026-06-22).
 
 ## Related
 
-- `docs/spec.md` §6 — Lifecycle 规约
-- `docs/spec/security-lifecycle.md` — Closeout 规约
+- `docs/spec.md` — 生命周期与 closeout 规约
 - `artifacts/current/roadmap-v8.md` §3 — 退出机制重构
