@@ -24,20 +24,25 @@ pub mod schema_drift;
 // ── browser dispatch hook (decouples runtime-core from browser-mcp crate) ──
 pub mod browser_dispatch_hook;
 
-// ── re-exports from rt_core_contracts (flattened, no intermediate contracts module) ──
+// ── local modules (moved from rt_core_contracts, contract-crate boundary cleanup) ──
+pub mod kernel_bootstrap;
+pub(crate) mod harness_operator_nudges;
+pub(crate) mod router_rs_observation;
+pub mod session_call_tracker;
+pub(crate) mod framework_skills;
+
+// ── re-exports from rt_core_contracts (remaining pure contract modules) ──
 #[allow(unused_imports)]
 pub(crate) use rt_core_contracts::formal_toolchain;
 pub use rt_core_contracts::harness_contract;
 pub(crate) use rt_core_contracts::harness_context_signals;
-pub(crate) use rt_core_contracts::harness_operator_nudges;
 pub(crate) use rt_core_contracts::hook_event_routing;
-pub use rt_core_contracts::kernel_bootstrap;
 pub use rt_core_contracts::mcp_pre_guard;
-pub use rt_core_contracts::router_env_flags;
-pub(crate) use rt_core_contracts::framework_skills;
-pub(crate) use rt_core_contracts::router_rs_observation;
-pub use rt_core_contracts::session_call_tracker;
 pub use rt_core_contracts::web_fetch_guard;
+pub(crate) use rt_core_contracts::hook_observation_rules;
+
+// ── router_env_flags: re-export from framework-runtime (skipping contracts) ──
+pub mod router_env_flags;
 
 // ── re-exports from core-state (flattened) ──
 pub use core_state::utils::atomic_write;
@@ -399,3 +404,4 @@ pub fn touch_test_kernel_bootstrap() {
 
 #[cfg(not(test))]
 pub fn touch_test_kernel_bootstrap() {}
+pub use framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY;

@@ -14,20 +14,12 @@ name = "rt_core_contracts"
 path = "src/lib.rs"
 
 [dependencies]
-core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy", features = ["test-sync"] }
-framework-kernel = { path = "../framework-kernel" }
-framework-runtime = { path = "../framework-runtime" }
-host-projection = { path = "../host-projection" }
-routing-engine = { path = "../routing-engine" }
 serde.workspace = true
 serde_json.workspace = true
-chrono = { workspace = true }
-tracing.workspace = true
 regex.workspace = true
-sha2.workspace = true
-fs2.workspace = true
 reqwest.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
 insta.workspace = true
