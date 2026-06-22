@@ -191,9 +191,7 @@ pub fn register_host_projection_hooks() {
             |_output| {},        // strip: no-op
         );
 
-        host_projection::hooks::register_review_gate_handler(
-            host_projection::hosts::host_extensions::cursor::run_cursor_review_gate,
-        );
+        host_projection::hosts::host_extensions::register_host_hooks();
 
         host_projection::hooks::register_kernel_bootstrap(
             kernel_bootstrap::ensure_kernel_bootstrap,

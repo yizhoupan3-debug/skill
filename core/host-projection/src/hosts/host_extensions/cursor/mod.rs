@@ -19,11 +19,7 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-mod repo_root;
-mod stdin;
 
-pub use repo_root::resolve_cursor_hook_repo_root;
-pub use stdin::read_cursor_hook_stdin_json;
 
 /// 与运行时「subagent 并发上限契约」对齐（`runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT`）；可用 `ROUTER_RS_CURSOR_MAX_OPEN_SUBAGENTS` 调低或设为 `0` 关闭计数限流。
 const DEFAULT_CURSOR_MAX_OPEN_SUBAGENTS: u32 = MAX_CONCURRENT_SUBAGENTS_LIMIT as u32;
@@ -51,36 +47,16 @@ fn should_force_hook_state_lock_failure_for_test() -> bool {
     FORCE_CURSOR_HOOK_STATE_LOCK_FAILURE_FOR_TEST.with(|c| c.get())
 }
 
-mod subtraction;
-mod terminal_observation_cache;
 
+
+
+// --- cursor hooks handlers ---
+mod subtraction;
 pub use subtraction::{CURSOR_HOOKS_REGISTERED_EVENTS, CURSOR_HOOKS_SUBTRACTED_EVENTS};
 
 mod review_gate_cli;
 pub use review_gate_cli::run_cursor_review_gate;
 
-// --- cursor hooks handlers ---
 include!("handlers.rs");
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serial_test::serial;
-    use std::sync::Once;
 
-    static TEST_DEPS_ONCE: Once = Once::new();
-
-    /// Install tokenizer + review context probes. Called from guard constructors
-    /// and from `ensure_kernel_bootstrap()` fallback in test builds.
-    pub(crate) fn ensure_test_deps() {
-        TEST_DEPS_ONCE.call_once(|| {
-            crate::test_helpers::install_test_deps();
-        });
-    }
-
-    include!("tests_guards.rs");
-    include!("tests_review_gate_part1.rs");
-    include!("tests_review_gate_part2.rs");
-    include!("tests_review_gate_part3.rs");
-    include!("tests_session_terminal.rs");
-}

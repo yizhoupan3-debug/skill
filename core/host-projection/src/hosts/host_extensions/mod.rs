@@ -72,3 +72,12 @@ pub fn host_registered_events(host_id: &str) -> &'static [&'static str] {
 
 // ── Common imports available to all per-host implementations ──
 // Per-host files should import directly from core_state::utils::json_io
+
+/// Register all host-specific default hooks into the L0 function pointer registry.
+///
+/// Called from L4 runtime-core bootstrap so that L4 code never references
+/// per-host extension functions by name (ADR-010 §4 host isolation).
+pub fn register_host_hooks() {
+    // Review gate handler — cursor-specific implementation lives in L0.
+    crate::hooks::register_review_gate_handler(cursor_impl::run_cursor_review_gate);
+}
