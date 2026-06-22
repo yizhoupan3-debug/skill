@@ -56,6 +56,25 @@ The `latex` module **does not replace** existing `citation/audit.rs`, `citation/
 - `ratex-font` (font metrics and symbol tables from RaTeX)
 - Common workspace deps (anyhow, chrono, reqwest, rusqlite, serde, regex, ...)
 
+**不依赖** `runtime-core` 或 `host-projection`，避免循环依赖。
+`runtime-core` 可通过 trait object 或函数指针调用 `research-harness` 的 hook 接口。
+
+## MCP Tools
+
+通过 `host-projection` 的 `mcp_stdio_harness` 暴露：
+
+- `research_review_dimensions` — 获取审稿维度 prompt + checklist
+- `research_aigc_check` — AIGC 检测（0-100 评分 + 信号列表）
+- `research_aigc_humanize` — AIGC 降重（句法改写/词汇替换）
+- `research_latex_parse` — LaTeX 数学公式 AST 解析
+- `research_latex_render_svg` — LaTeX 公式渲染为 SVG（支持内联/独立模式）
+
+## 向后兼容
+
+- `research-harness` 保留为独立 binary（thin CLI wrapper 待完成）
+- `host-projection` 的 hook 注册可渐进迁移为调用 `research_harness::hooks`
+- 所有现有 MCP tool 名称不变，调用方无感知
+
 ## Building
 
 ```bash

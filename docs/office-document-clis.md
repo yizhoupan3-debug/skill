@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-22"
 depends_on:
-  - ../spec.md
+  - ../adr/010-ideal-architecture-v10.md
   - ../../skills/pdf/SKILL.md
   - ../../skills/doc/SKILL.md
   - ../../skills/primary-runtime/spreadsheets/SKILL.md

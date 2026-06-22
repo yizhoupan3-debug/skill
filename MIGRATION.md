@@ -55,7 +55,7 @@
 |--------|--------|
 | `scripts/router-rs/` | `core/router-rs/` |
 | `scripts/evolution-rs/` | `core/evolution-rs/` |
-| `scripts/autoresearch-rs/` | `core/autoresearch-rs/` |
+| `scripts/autoresearch-rs/` | `core/research-harness/` |
 
 Hook launchers、CI、`Cargo.toml` workspace 已对齐 `core/*`；勿再引用 `scripts/*-rs`。
 
@@ -97,7 +97,7 @@ just doctor
 
 ## 默认工作流（全宿主）
 
-- **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；全宿主 Stop 上 `REVIEW_GATE` 为 advisory-only（见 [`docs/spec.md`](docs/spec.md) §6.2）；`lifecycle_profile: interactive` 另 suppress review nudge 与 spawn-first。
+- **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；全宿主 Stop 上 `REVIEW_GATE` 为 advisory-only（见 [架构规约](docs/adr/010-ideal-architecture-v10.md) §6.2）；`lifecycle_profile: interactive` 另 suppress review nudge 与 spawn-first。
 - **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish`（已刷新 Cursor user `framework.mdc` 与 Claude user/project `.claude/*`）；**重启 Cursor**。GSD 整树与 `/gsd-*` runtime 识别已于 **2026-05 彻底移除**。
 - **legacy-gsd / `/gsd-*`**：**已删除**（非冷表、非 CI stub）；hook 与 registry **不再识别**。个人入口仅 My 四命令（下表）。
 - `/autopilot` 已退役；连续执行请用 `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave；goal drive 经 `GOAL_STATE.json`）。
@@ -245,7 +245,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | active/focus GOAL 分裂 | 有 `continuity:active_goal_missing_focus_has_goal` 时 stdio/任务视图可能拒载错误 focus；用 `framework task-state-resolve` 或修正 `active_task.json`（**无** hook `GOAL_CONTINUE`） |
 | Review soft-nag 超 cap | 超过 `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` 后 `followup_message` 降频；细节进 `additional_context`（**无** goal/RFV hook 续跑可合并） |
 | `SKILL_ROUTING_RUNTIME.scope` | `hot_skill_count`/`full_skill_count` = 热表行数；`manifest_skill_count` = 全 manifest 行数 |
-| 文档真源 | [`docs/spec.md`](docs/spec.md)、[`docs/hosts/`](docs/hosts/)、[`AGENTS.md`](AGENTS.md) |
+| 文档真源 | [架构规约](docs/adr/010-ideal-architecture-v10.md)、[`docs/hosts/`](docs/hosts/)、[`AGENTS.md`](AGENTS.md) |
 
 ## 文档与计划卫生（2026-05-20）
 

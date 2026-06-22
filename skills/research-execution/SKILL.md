@@ -77,7 +77,7 @@ Start by classifying the task into one or more lanes:
 
 - `experiment_design`: variables, controls, ablations, baselines, metrics, sample size, and failure criteria.
 - `math_verification`: assumptions, derivation witnesses, theorem/lemma dependencies, and checker options.
-- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_quality_gate` with `external_mode=modeling` + [math-reasoning-harness.md](../../docs/spec.md) section F.
+- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_quality_gate` with `external_mode=modeling` + [math-reasoning-harness.md](../../docs/adr/010-ideal-architecture-v10.md) section F.
 - `code_verification`: implementation audit, tests, deterministic repro, and benchmark commands.
 - `reproducibility`: environment, data/versioning, seeds, configs, and artifact trace.
 
@@ -177,8 +177,8 @@ When a task spans both skills, the recommended flow is:
 
 ## Cross-references
 
-- Quality Gate research harness: `docs/spec.md` §Quality Gate
-- Math reasoning harness: `docs/spec.md` §Math Reasoning
+- Quality Gate research harness: `docs/adr/010-ideal-architecture-v10.md` §Quality Gate
+- Math reasoning harness: `docs/adr/010-ideal-architecture-v10.md` §Math Reasoning
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - Reproducibility minimum record: [`../experiment-reproducibility/references/research-record-minimum.md`](../experiment-reproducibility/references/research-record-minimum.md)
 - Discovery counterpart: [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md)

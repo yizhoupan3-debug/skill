@@ -4,9 +4,9 @@
 
 | 类别 | 文档 | 说明 |
 |------|------|------|
-| **架构** | [spec.md](spec.md) | 七层模型、架构原则、路由管线约束；框架统一规约 |
-| | [adr/008-seven-layer-architecture.md](adr/008-seven-layer-architecture.md) | ADR：七层架构分离决策 |
-| | [adr/007-dual-exit-gates.md](adr/007-dual-exit-gates.md) | ADR：双退出门机制决策 |
+| **架构** | [adr/010-ideal-architecture-v10.md](adr/010-ideal-architecture-v10.md) | 当前权威架构规约：六层模型、DAG、L4 拆分计划 |
+| | [adr/008-seven-layer-architecture.md](adr/008-seven-layer-architecture.md) | ADR：七层架构分离决策（已落地） |
+| | [adr/007-dual-exit-gates.md](adr/007-dual-exit-gates.md) | ADR：双退出门机制决策（已落地） |
 | **宿主** | [hosts/_common.md](hosts/_common.md) | 四宿主共享内容（身份、路由、Python、进程管理） |
 | | [hosts/hook-hosts.md](hosts/hook-hosts.md) | Hook 宿主手册（Claude/Cursor/Codex 事件矩阵、锁序） |
 | | [hosts/opencode.md](hosts/opencode.md) | OpenCode 宿主操作手册 |
@@ -19,8 +19,8 @@
 
 | 角色 | 推荐阅读顺序 |
 |------|-------------|
-| **框架开发者** | 本索引 → [spec.md](spec.md)（架构） → [hosts/hook-hosts.md](hosts/hook-hosts.md)（宿主） → [../AGENTS.md](../AGENTS.md)（策略） |
-| **Skill 作者** | [../README.md](../README.md) §系统包含内容 → [spec.md](spec.md) §路由 → skills 目录 |
+| **框架开发者** | 本索引 → [adr/010-ideal-architecture-v10.md](adr/010-ideal-architecture-v10.md)（架构） → [hosts/hook-hosts.md](hosts/hook-hosts.md)（宿主） → [../AGENTS.md](../AGENTS.md)（策略） |
+| **Skill 作者** | [../README.md](../README.md) §系统包含内容 → skills 目录 → [../CONTRIBUTING.md](../CONTRIBUTING.md) §Skill 贡献 |
 | **普通用户** | [../README.md](../README.md) → [operations/index.md](operations/index.md)（安装/升级） → [hosts/hook-hosts.md](hosts/hook-hosts.md) |
 | **宿主实现者** | [hosts/_common.md](hosts/_common.md) → [hosts/hook-hosts.md](hosts/hook-hosts.md) → [hosts/opencode.md](hosts/opencode.md) |
 | **顶级策略** | [AGENTS.md](../AGENTS.md) | 跨宿主代理策略（生命周期、语言、CodeGraph、行为差异） |
@@ -39,3 +39,4 @@
 | `operations/backup-restore.md` | `operations/index.md` §备份、恢复与卸载 | 备份优先级、恢复流程 |
 | `operations/security.md` | `operations/index.md` §安全运维 | SSRF、MCP 策略、沙箱 |
 | `spec/research-harness.md` | `research-harness.md`（同级） | 提升到 docs/ 根级 |
+| `spec.md` | `adr/010-ideal-architecture-v10.md` + `AGENTS.md` + `CONTRIBUTING.md` | 架构部分→ADR-010，Review 协议→AGENTS.md，契约漂移规则→CONTRIBUTING.md |

@@ -2,7 +2,7 @@
 last_verified: "2026-06-22"
 depends_on:
   - _common.md
-  - ../spec.md
+  - ../adr/010-ideal-architecture-v10.md
 parent: _common.md
 ---
 

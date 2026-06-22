@@ -19,7 +19,7 @@ is lost when the front door is unified.
 This protocol enforces depth via **gate files + freeze/backjump + lane scope**
 on **manuscript artifacts** — `verify` here is gate-judgment + evidence anchors,
 **not** shell commands. It is **orthogonal** to the RFV reasoning-depth
-contract ([`docs/spec.md)),
+contract ([`docs/adr/010-ideal-architecture-v10.md)),
 which enforces depth via **`verify_commands` + `EVIDENCE_INDEX` rows** on **code**.
 Do not conflate the two: RFV's "PASS" requires executable command exit codes;
 PAPER_GATE's "pass" requires reviewer freeze + evidence-anchor coverage. Use the

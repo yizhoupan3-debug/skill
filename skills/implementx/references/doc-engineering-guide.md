@@ -184,7 +184,7 @@ Proposed | Accepted | Deprecated | Superseded by ADR-NNN
 
 ## API 文档
 
-框架 API 与架构见 [`docs/spec.md`](../../../docs/spec.md)；完整文档索引见 [`docs/README.md`](../../../docs/README.md)。
+框架 API 与架构见 [`docs/adr/010-ideal-architecture-v10.md`](../../../docs/adr/010-ideal-architecture-v10.md)；完整文档索引见 [`docs/README.md`](../../../docs/README.md)。
 
 ## Contributing
 参见 [CONTRIBUTING.md](../../../CONTRIBUTING.md)

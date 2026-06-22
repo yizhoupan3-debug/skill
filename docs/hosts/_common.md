@@ -1,7 +1,7 @@
 ---
 last_verified: "2026-06-22"
 depends_on:
-  - ../spec.md
+  - ../adr/010-ideal-architecture-v10.md
 ---
 
 # 共通宿主内容

@@ -165,7 +165,7 @@ on_verify_fail after retries exhausted
    → 写入 research-state.yaml
 
 2. literature review (自动化学术检索)
-   → Semantic Scholar + arXiv HTTP API（autoresearch-rs 内置，无需 AI 路由）
+   → Semantic Scholar + arXiv HTTP API（research-harness 内置，无需 AI 路由）
    → Top-2 draft claims 各有 3 篇相关论文结果
    → 证据填入 BARRIER_REPORT.json 的 candidates.evidence
 
@@ -274,65 +274,7 @@ artifacts/research-log/
 
 #### 19.5.2 压缩数据库层 — SQLite FTS5
 
-**Schema**：
-
-```sql
-CREATE TABLE exploration_logs (
-    id TEXT PRIMARY KEY,
-    direction TEXT NOT NULL,
-    question TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT,
-    tags TEXT,
-    key_findings TEXT,
-    status TEXT DEFAULT 'active'
-        CHECK(status IN ('active', 'abandoned', 'concluded')),
-    entry_point TEXT,             -- 'manual' | 'barrier_escalation' | 'loop'
-    barrier_id TEXT               -- 关联的 barrier 报告 ID (nullable)
-);
-
-CREATE TABLE exploration_decisions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    log_id TEXT NOT NULL REFERENCES exploration_logs(id),
-    decision TEXT NOT NULL,
-    rationale TEXT,
-    alternatives TEXT,
-    evidence TEXT,
-    timestamp TEXT NOT NULL,
-    outcome TEXT
-);
-
-CREATE TABLE exploration_insights (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    log_id TEXT NOT NULL REFERENCES exploration_logs(id),
-    insight TEXT NOT NULL,
-    confidence TEXT CHECK(confidence IN ('high','medium','low','speculative')),
-    source TEXT,
-    discovered_at TEXT NOT NULL,
-    verified INTEGER DEFAULT 0,
-    cross_refs TEXT               -- JSON array of other log IDs
-);
-
-CREATE TABLE barrier_reports (
-    id TEXT PRIMARY KEY,
-    loop_id TEXT,
-    run_id TEXT,
-    problem TEXT NOT NULL,
-    attempted TEXT,
-    candidates TEXT,
-    recommended TEXT,
-    resolution TEXT,              -- 'resolved' | 'abandoned' | 'pending'
-    resolved_by TEXT,             -- candidate ID
-    resolved_at TEXT,
-    created_at TEXT NOT NULL
-);
-
-CREATE VIRTUAL TABLE exploration_fts USING fts5(
-    direction, question, key_findings,
-    content='exploration_logs',
-    content_rowid='rowid'
-);
-```
+完整 schema 定义见 `core/research-harness/src/log/db.rs` 中的 `SCHEMA_VERSION` 常量和建表语句。
 
 **操作命令**（通过 `cargo run -p research-harness --bin research-log` 调用，亦可从 `cargo run -p research-harness --bin autoresearch -- log:*` 桥接）：
 
@@ -550,7 +492,7 @@ loop barrier escalation → autoresearch init
 
 #### 19.9.1 Loop 模式 Catalog — 新增
 
-`docs/spec/loop-architecture.md` §9.2 开箱模式表应增加：
+loop-engine crate 的 loop mode catalog（见 `core/loop-engine/src/`）中应增加：
 
 | Skill | Cadence | Safety | 产出 | 触发条件 |
 |-------|---------|--------|------|---------|
@@ -650,50 +592,6 @@ Loop Runner 执行 action
 | drift 检测 | 结构偏移/边界违例/问题漂移 三类场景 | 3 cases |
 | loadout 合并 | `default_surface_loadout` + `research_loadout` 同时加载 | 1 case |
 | loop research escalation (new) | loop_runner → autoresearch barrier → 恢复循环 | 1 case |
-
----
-
-### 19.11 抗审查记录：已知框架性问题
-
-> 本节记录对抗审查中发现的框架性问题，部分已在本规约中修复，
-> 部分标注为已知 debt 待后续解决。
-
-#### 19.11.1 ✅ 已修复（在本规约中）
-
-| 问题 | 严重度 | 修复位置 |
-|------|--------|---------|
-| research-discovery `disable-model-invocation: true` → NL 路由命中后也无法触发 | P0 blocker | §19.2.1 → `false` |
-| research-loadout `explicit_opt_in` → 用户不知道要手动激活 | ~~P1~~ ✅ 已修复 | §19.8 → moved to `default_loadouts` |
-| research ↔ loop 完全隔离，无 barrier escalation | P0 | §19.9 新增 |
-| NL 路由 trigger_hints 不覆盖日常用语（"查论文""找文献"） | P2 | §19.2.2 扩展 |
-| autoresearch-rs 无 skill 入口 | P1 | §19.4 |
-| paperplain MCP 未集成到 research-discovery | P2 | §19.2.5 |
-| 科研结果无新鲜度校验 | P2 | §19.2.6 + §19.6 |
-| claim drift 无防护 | P1 | §19.7 |
-
-#### 19.11.2 ⚠️ 已知 debt（本规约不解决）
-
-| 问题 | 严重度 | 原因 |
-|------|--------|------|
-| deep-research workflow（JS）和 research-discovery（MCP+HTTP）使用不同的数据平面 | P3 | 有意图差异（Web 调研 vs 学术文献），不合并，但需更好的入口指引 |
-| autoresearch-rs 仍使用阻塞 HTTP（reqwest blocking），与异步框架不一致 | P2 | 重构成本高，功能不受影响 |
-| loop architecture spec（v8）已实现，research-aware loop 已可用 | ~~P0~~ ✅ 已实现 | `core/loop-engine/` ~2666 LOC，`barrier_escalation()` 在 runner.rs 中通过 shell 调用 autoresearch CLI |
-| BARRIER_REPORT.json 的 evidence 已由 Semantic Scholar + arXiv 自动填充 | ✅ 已修复 | candidates.evidence 现在包含论文标题+URL+作者 |
-| `research-state.yaml` schema 版本为 4，但无 schema 验证 | P2 | 仅靠 `ensure_state_defaults` 做运行时修复 |
-| `ROUTING_SIGNAL_MARKERS.json` 中无 barrier 相关信号定义 | ~~P2~~ ✅ 已修复 | 已新增 `barrier_escalation_signals` 组（17 个 marker） |
-| NL_ROUTE_ADJUSTMENTS.json 被框架阻断直接修改 | ~~P2~~ ✅ 已标注 | barrier 相关 entries 已标注 `_signal_source` 引用 ROUTING_SIGNAL_MARKERS.json#barrier_escalation_signals |
-
-#### 19.11.3 对抗审查结论
-
-**负面**（当前框架的失败点）：
-1. 交互式和自动循环是完全两个世界——但用户的工作流是连续的：写代码→遇到瓶颈→查文献→找到方案→继续写代码。框架没有反映这个连续体。
-2. autoresearch-rs 的功能和定位完全正确，但**接入方式错误**——作为一个需要手动 `cargo run` 的 CLI 无法在日常科研中自然使用。它不是"另一个工具"，而是"如果放弃本地执行改用研究模式时的自然出口"。
-3. research-discovery 的 `user-invocable: false` + `disable-model-invocation: true` 的组合效果是"完全无法被任何方式触发"——这是 self-acknowledged dead skill。
-
-**正面**（这个方向的正确性）：
-1. Barrier Escalation 是 autoresearch 和 loop 的自然交点——不是强行缝合，而是两者各自的内禀需要。
-2. 分层日志（文字层 + SQLite FTS5）是科研的刚性需求——每天的探索需要被记录，但无需记录的探索也要能被检索。
-3. Smoke Test 是数据驱动科研的前提——过期结果污染判断比没有结果更糟糕。
 
 ---
 
@@ -842,7 +740,7 @@ schema 包含 `workspace_index`、`hub_entries`、`hub_entries_fts` 三张核心
 
 | 关联文档 | 关系 |
 |---------|------|
-| `spec.md` | 统一规约：7 层架构、路由与插件契约、运行时、安全生命周期、可观测性 |
+| `docs/adr/010-ideal-architecture-v10.md` | 统一规约：7 层架构、路由与插件契约、运行时、安全生命周期、可观测性 |
 | `core-policy` (代码) | Review gate 状态机、安全策略 |
 | `runtime-core` (代码) | 运行时编排、closeout gate |
 
@@ -850,50 +748,4 @@ schema 包含 `workspace_index`、`hub_entries`、`hub_entries_fts` 三张核心
 
 ### 19.15 统一 Rust Crate 架构（`core/research-harness/`）
 
-v7 引入 `core/research-harness/` crate，将散落在 `runtime-core`、`autoresearch-rs`、`research-log-rs`、`citation_tool_rs` 中的科研逻辑统一到单一 crate。SKILL.md 保留为用户前端，MCP tools 暴露 Rust API。
-
-#### 模块结构
-
-| 模块 | 职责 | 源 |
-|------|------|-----|
-| `search/` | 文献检索（Semantic Scholar, arXiv, paperplain MCP） | autoresearch-rs |
-| `claims/` | Claim ledger 管理、drift 检测、ceiling 计算 | autoresearch-rs |
-| `log/` | 研究活动日志（SQLite FTS5）、知识图谱、实体提取 | research-log-rs |
-| `citation/` | 引用审计、BibTeX 渲染、DOI 验证 | citation_tool_rs |
-| `review/` | 多轮对抗审稿编排、7 维度、收敛判定 | runtime-core/quality_gate.rs |
-| `hooks/` | Prose/Adversarial/ActivityLog hooks | runtime-core hooks |
-| `aigc/` | AIGC 检测（n-gram + burstiness + syntactic）、降重 | 新建 |
-| `verification/` | 文献/统计/Prose QC/结构/形式验证 | scripts/verify/*.sh |
-| `latex/` | LaTeX 数学公式解析与 SVG 渲染（基于 RaTeX） | RaTeX 开源项目 |
-| `types.rs` | 共享类型（Finding, Claim, Paper, AigcResult...） | 新建 |
-
-#### MCP Tools
-
-通过 `host-projection` 的 `mcp_stdio_harness` 暴露：
-
-- `research_review_dimensions` — 获取审稿维度 prompt + checklist
-- `research_aigc_check` — AIGC 检测（0-100 评分 + 信号列表）
-- `research_aigc_humanize` — AIGC 降重（句法改写/词汇替换）
-- `research_latex_parse` — LaTeX 数学公式 AST 解析
-- `research_latex_render_svg` — LaTeX 公式渲染为 SVG（支持内联/独立模式）
-
-#### 依赖关系
-
-```
-research-harness
-    ├── core-state (leaf crate, no cycle risk)
-    ├── loop-engine (通用 loop 调度器)
-    ├── ratex-lexer (LaTeX 词法分析器)
-    ├── ratex-font (字体度量和符号表)
-    └── workspace deps (anyhow, chrono, reqwest, rusqlite, serde, regex, ...)
-```
-
-**不依赖** `runtime-core` 或 `host-projection`，避免循环依赖。
-`runtime-core` 可通过 trait object 或函数指针调用 `research-harness` 的 hook 接口。
-
-#### 向后兼容
-
-- `autoresearch-rs` / `research-log-rs` 保留为独立 binary（thin CLI wrapper 待完成）
-- `host-projection` 的 hook 注册可渐进迁移为调用 `research_harness::hooks`
-- 所有现有 MCP tool 名称不变，调用方无感知
-| `spec.md` | 7 层模型中的 loop-auto 调度；桥接见 LOOP_REGISTRY.json + BARRIER_REPORT.json |
+> 模块结构与依赖关系已迁移至 `core/research-harness/README.md`。

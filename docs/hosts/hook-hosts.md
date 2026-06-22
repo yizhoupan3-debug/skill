@@ -2,7 +2,7 @@
 last_verified: "2026-06-22"
 depends_on:
   - _common.md
-  - ../spec.md
+  - ../adr/010-ideal-architecture-v10.md
 parent: _common.md
 ---
 
@@ -56,32 +56,32 @@ parent: _common.md
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks → `claude-router-rs-hook.sh` → `hook.sh claude <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> claude` | [`claude_hooks.rs`](../../core/host-projection/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks → `claude-router-rs-hook.sh` → `hook.sh claude <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> claude` | [`host_extensions/claude_impl.rs`](../../core/host-projection/src/hosts/host_extensions/claude_impl.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
 | **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
-| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/runtime-core/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（七事件 hook：4 core + 3 optional）、`.claude/.framework-projection.json`（project scope） |
+| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/host-projection/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（七事件 hook：4 core + 3 optional）、`.claude/.framework-projection.json`（project scope） |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK`）；`ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 
 ### Cursor — 7 事件
 
-**默认注册 7 事件**（2026-05-20 减法闭集）：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。已移除：`afterAgentResponse`、`beforeShellExecution`/`afterShellExecution`、`afterFileEdit`、`preCompact`（恢复见 [`MIGRATION.md`](../../MIGRATION.md)）。`postToolUse` 对非门控工具走 **fast-path**（[`post_tool_use_needs_work`](../../core/host-projection/src/hosts/cursor_hooks/handlers.rs)）。
+**默认注册 7 事件**（2026-05-20 减法闭集）：`beforeSubmitPrompt`、`stop`、`sessionStart`、`sessionEnd`、`postToolUse`、`subagentStart`、`subagentStop`。已移除：`afterAgentResponse`、`beforeShellExecution`/`afterShellExecution`、`afterFileEdit`、`preCompact`（恢复见 [`MIGRATION.md`](../../MIGRATION.md)）。`postToolUse` 对非门控工具走 **fast-path**（[`post_tool_use_needs_work`](../../core/host-projection/src/hosts/host_extensions/cursor_impl/handlers.rs)）。
 
 项目 env：[`.cursor/router-rs-hook.env`](../../.cursor/router-rs-hook.env)。
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
 | Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `cursor_hooks::execute_cursor_hook` → `CursorHookHost::dispatch` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`；**`ROUTER_RS_CURSOR_REVIEW_GATE_MODE`**=`strict`（默认 multiset）或 `lite`（仅 `id:` pending）；`framework doctor` 打印 mode；Stop advisory 提示上限 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** |
-| Stop / beforeSubmit 出站 | Same | [`cursor_hooks/`](../../core/host-projection/src/hosts/cursor_hooks/mod.rs) | **interactive Stop 早退**：仅 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`（无 `REVIEW_GATE` / `AG_FOLLOWUP`）；非 interactive 保留完整 Stop 链；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
+| Stop / beforeSubmit 出站 | Same | [`host_extensions/cursor_impl/`](../../core/host-projection/src/hosts/host_extensions/cursor_impl/mod.rs) | **interactive Stop 早退**：仅 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`（无 `REVIEW_GATE` / `AG_FOLLOWUP`）；非 interactive 保留完整 Stop 链；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
 | **Paper prose L4** | beforeSubmit 命中 `has_paper_prose_edit_context` | `paper_prose_hook.rs` | 合并 `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK`，`0` 关）；对抗审稿 opt-in：`ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` |
 | **SessionStart** | 会话启动 | `cursor_hooks`（`handle_session_start`） | **仅** `Repo:` 单行（`ROUTER_RS_OPERATOR_INJECT=0` 时为空）；**无** digest / 无 pointer hint |
 | **运维自检** | 手工排障 | `router-rs framework doctor --repo-root <repo>` | **metadata-only** `generated-artifacts-status`；`ROUTER_RS_TASK_LEDGER_FLOCK` 关闭时打印 WARN |
 
 ### Codex
 
-细则见 [`spec.md`](../spec.md)（工具路由与 Skill 路由双管线）、「主数据流」与 `.codex/hooks.json`。
+细则见 [架构规约](../adr/010-ideal-architecture-v10.md)（工具路由与 Skill 路由双管线）、「主数据流」与 `.codex/hooks.json`。
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项 → `codex-router-rs-hook.sh` → `hook.sh codex <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> codex` | `codex hook`（[`codex_hooks/mod.rs`](../../core/host-projection/src/hosts/codex_hooks/mod.rs)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭 review nudge |
+| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项 → `codex-router-rs-hook.sh` → `hook.sh codex <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> codex` | `codex hook`（[`host_extensions/codex_impl/`](../../core/host-projection/src/hosts/host_extensions/codex_impl/)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭 review nudge |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CODEX_PAPER_PROSE_HOOK`）；`ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 | **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
 | **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
@@ -260,7 +260,7 @@ Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentSta
 ```json
 {
   "lane_id": "w3-lane-codex",
-  "scope_paths": ["core/host-projection/src/hosts/codex_hooks/"],
+  "scope_paths": ["core/host-projection/src/hosts/host_extensions/codex_impl/"],
   "output_path": "artifacts/current/<task_id>/lane-notes/w3-lane-codex.md",
   "max_lines": 15,
   "forbidden": ["paste full transcript to main chat"]

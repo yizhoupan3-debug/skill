@@ -86,7 +86,7 @@ Research bar:
 
 ## Shared persistence contract
 
-Use the runtime artifact protocol in [`../../PAPER_GATE_PROTOCOL.md`](../../PAPER_GATE_PROTOCOL.md).
+Use the runtime artifact protocol in [`paper-gate-protocol.md`](paper-gate-protocol.md).
 
 Key persistence rules:
 

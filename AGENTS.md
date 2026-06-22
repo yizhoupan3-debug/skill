@@ -12,11 +12,11 @@
 
 - **Python 环境（macOS）**：uv-only、默认 3.12、每仓库 `uv.lock`；禁止 `pip`。重度 Python/ML 任务须高频 `gc.collect()` / `torch.mps.empty_cache()`。
 - **Skill Routing**：热入口 `skills/SKILL_ROUTING_RUNTIME.json`；只读命中项 `skill_path`。
-- **Tool Routing**：PreToolUse/PostToolUse hook 覆盖所有工具（含 MCP）。`ToolOrigin` 分类：NativeHost / McpServer / Unknown。MCP 工具安全审查：`dangerous_mcp_tool_reason()`。四宿主 matcher 策略见 `docs/spec.md` ¶ 工具路由 vs Skill 路由。
+- **Tool Routing**：PreToolUse/PostToolUse hook 覆盖所有工具（含 MCP）。`ToolOrigin` 分类：NativeHost / McpServer / Unknown。MCP 工具安全审查：`dangerous_mcp_tool_reason()`。四宿主 matcher 策略见 `docs/research/routing-contracts.md`。
 
 ## Lifecycle
 
-- **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/spec.md`（七层模型与生命周期定位）。
+- **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/adr/010-ideal-architecture-v10.md`（六层模型与生命周期定位）。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
 - **Closeout**：`closeout_gate` / `complete` 为 advisory（`interactive`）。
 
@@ -113,6 +113,32 @@
 - **技能无关性**：无论是否触发了特定技能（如`/implementx`），都必须执行此规则
 - **强制性**：这是硬约束，不是建议，所有宿主必须遵守
 - **自动触发**：不需要用户显式提及 codegraph，系统应自动识别并调用
+
+## Review 通用协议
+
+所有 review 类 skill/workflow 的输出约束与幻觉分类标准。
+
+### 约束：Confirmed-only 输出
+
+最终用户可见输出**只包含 confirmed findings**。confirmed = 事实核查通过（evidence 真实存在且准确）+ 判断通过（是真实问题）。rejected（判断驳回）和 hallucinated（事实核查拦截）不出现在用户输出中。可选统计摘要行：`N confirmed / M rejected / K hallucinated`。
+
+### 幻觉分类标准（hallucination_type）
+
+| 值 | 含义 |
+|----|------|
+| `none` | 事实全部准确 |
+| `code_not_exist` | 引用的源不存在 |
+| `evidence_fabricated` | 源存在但证据捏造/复述 |
+| `wrong_line` | 源存在但位置错误 |
+| `behavior_misrepresented` | 证据正确但行为/现象描述有误 |
+| `evidence_out_of_context` | 证据真实但与 finding 无关 |
+| `source_moved` | 源已重命名/移动 |
+| `partial_hallucination` | 部分准确部分幻觉 |
+| `indeterminate` | 无法确认 |
+
+### 降级策略
+
+Factcheck 工具不可用时：单 finding 标记 `indeterminate` 不进 Verify；全阶段失败则所有 finding 标记 indeterminate，最终输出为空（0 confirmed）。关键：factcheck 整体失败时**不降级为"跳过 factcheck 直接进 Verify"**。
 
 ## 宿主行为差异
 

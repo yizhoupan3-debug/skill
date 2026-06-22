@@ -182,7 +182,7 @@ See `docs/research-harness.md` §19.6 for smoke test specification:
 ## Cross-references
 
 - **Research harness specification**: `docs/research-harness.md` (full §19)
-- **Loop architecture**: spec.md §七层模型 (loop-auto profile, barrier escalation)
+- **Loop architecture**: ADR-010 §六层模型 (loop-auto profile, barrier escalation)
 - **Discovery front door**: `skills/research-discovery/SKILL.md`
 - **Execution back door**: `skills/research-execution/SKILL.md`
 - **Paper manuscript**: `skills/paper-workbench/SKILL.md`

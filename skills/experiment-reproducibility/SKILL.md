@@ -77,7 +77,7 @@ This skill owns **experiment reproducibility management** for research.
 - For Python install/lock/PATH governance (uv-only, no pip), use `$python-env-management` first; this skill owns seeds, data, and experiment records atop a pinned `uv.lock`
 - When invoked as a **gate-chain lane owner** (G2 / G5 / G14 reproducibility
   checks under the manuscript protocol), follow the lane contract in
-  [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md); produce only the
+  [`../paper-workbench/references/paper-gate-protocol.md`](../paper-workbench/references/paper-gate-protocol.md); produce only the
   gate-required reproducibility evidence and hand back to the protocol main
   chain.
 

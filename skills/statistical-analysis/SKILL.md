@@ -171,7 +171,7 @@ assumption check, or interpretation is settled.
 - `$experiment-reproducibility` routes result validation statistics here
 - When invoked as a **gate-chain lane owner** (G2 / G3 / G5 statistical rigor
   checks under the manuscript protocol), follow the lane contract in
-  [`../PAPER_GATE_PROTOCOL.md`](../PAPER_GATE_PROTOCOL.md); produce only the
+  [`../paper-workbench/references/paper-gate-protocol.md`](../paper-workbench/references/paper-gate-protocol.md); produce only the
   gate-required evidence and hand back to the protocol main chain.
 
 ## Trigger examples

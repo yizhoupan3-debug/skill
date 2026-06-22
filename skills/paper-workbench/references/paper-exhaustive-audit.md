@@ -28,7 +28,7 @@ Normative cross-refs (do not redefine here):
 ## When not to use
 
 - **`audit_depth: compact`** or narrow single-dimension asks → use compressed reviewer workflow.
-- Filesystem-backed G0–G14 protocol artifacts → [`../../PAPER_GATE_PROTOCOL.md`](../../PAPER_GATE_PROTOCOL.md)
+- Filesystem-backed G0–G14 protocol artifacts → [`paper-gate-protocol.md`](paper-gate-protocol.md)
   (internal machinery; not the default user-facing exhaustive UI).
 
 ## Execution order
@@ -54,7 +54,7 @@ dimension-grouped **findings** (not a gate state machine report).
 Default: run external calibration when network is available.
 
 - Closest prior work, venue/article-type norms, required baselines, citation currency.
-- Follow [`docs/spec.md)
+- Follow [`docs/adr/010-ideal-architecture-v10.md)
   §A–B: **Claims**, **Contradiction sweep**, **Unknowns**, **retrieval_trace**.
 
 If skipped, output **`skip_reason`** (e.g. offline, user waived, no network) — do not
