@@ -147,28 +147,59 @@ pub trait HostHookConfig: Send + Sync {
 
 /// Core trait: unified hook dispatch for all 4 closed-set hosts.
 ///
-/// Methods are categorized:
-/// - **(A) Pure shared** — default implementations, no override needed
-/// - **(B) Shared + extension** — default skeleton, hosts can layer on top
-/// - **(C) Must implement** — each host provides its own logic
+/// All methods have default implementations. Hosts override only when
+/// they have truly unique protocol requirements — which should be rare.
+/// The goal is that all 4 hosts use the same code path.
 pub trait HostHookDispatcher: HostHookConfig {
-    // ── (C) Must implement ─────────────────────────────────────
+    // ── (A) Pure shared — default implementations, never override ──
 
-    /// PreToolUse: path protection interception.
-    fn handle_pre_tool_use(&self, event: &HookEvent) -> Option<HookOutput>;
+    /// PreToolUse: path protection interception. Default: no-op.
+    /// Codex overrides with custom path protection logic.
+    fn handle_pre_tool_use(&self, _event: &HookEvent) -> Option<HookOutput> {
+        None
+    }
 
     /// UserPromptSubmit: review gate init + context injection.
-    fn handle_user_prompt_submit(&self, event: &HookEvent) -> Option<HookOutput>;
+    /// Default: extract prompt, inject review/advisory context.
+    fn handle_user_prompt_submit(&self, event: &HookEvent) -> Option<HookOutput> {
+        let prompt = extract_prompt_text(event.payload);
+        if is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &prompt) {
+            return None;
+        }
+        let contexts = build_user_prompt_context_injection(
+            event.repo_root,
+            &prompt,
+            self.host_id(),
+            self.host_id(),
+            false,
+            core_policy::hook_common::has_override(&prompt),
+        );
+        if contexts.is_empty() { None } else {
+            Some(HookOutput::AdditionalContext(contexts.join("\n")))
+        }
+    }
 
     /// PostToolUse: evidence collection + subagent tracking.
-    fn handle_post_tool_use(&self, event: &HookEvent) -> Option<HookOutput>;
+    /// Default: record telemetry + auto evidence.
+    fn handle_post_tool_use(&self, event: &HookEvent) -> Option<HookOutput> {
+        crate::hooks::ensure_kernel_bootstrap();
+        let tool_name = crate::hosts::hook_dispatch::extract_tool_name(event.payload);
+        let normalized = core_policy::hook_common::normalize_tool_name(Some(&tool_name));
+        crate::hosts::hook_dispatch::record_tool_call_emission(
+            event.repo_root,
+            &normalized,
+            crate::hooks::extract_post_tool_duration_ms(event.payload).unwrap_or(0),
+            crate::hooks::post_tool_call_succeeded(event.payload),
+        );
+        crate::hosts::hook_dispatch::auto_record_verification_evidence(event.repo_root, event.payload);
+        crate::hosts::hook_dispatch::auto_record_research_activity(event.repo_root, event.payload);
+        None
+    }
 
-    // ── (B) Shared + extension ─────────────────────────────────
+    // ── (B) Shared + extension — default skeleton, host CAN override ──
 
     /// Stop: closeout gate + review gate check.
-    /// Default: closeout_followup check (reference only — all hosts override).
-    /// Claude adds review gate + TouchState; Codex adds phase bump + reject reason;
-    /// Cursor adds goal signals + review gate; OpenCode adds review gate + reject reason.
+    /// Default: closeout_followup check. Hosts with review gates override.
     fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> {
         let completion_text = extract_completion_text(event);
         if let Some(msg) = self.closeout_check(event.repo_root, &completion_text) {
@@ -191,14 +222,12 @@ pub trait HostHookDispatcher: HostHookConfig {
         )))
     }
 
-    // ── (A) Pure shared ────────────────────────────────────────
-
-    /// SubagentStart: default no-op. Cursor/Codex override.
+    /// SubagentStart: default no-op.
     fn handle_subagent_start(&self, _event: &HookEvent) -> Option<HookOutput> {
         None
     }
 
-    /// SubagentStop: default no-op. Cursor overrides.
+    /// SubagentStop: default no-op.
     fn handle_subagent_stop(&self, _event: &HookEvent) -> Option<HookOutput> {
         None
     }
@@ -1687,4 +1716,96 @@ macro_rules! impl_host_config {
         }
         fn log_label(&self) -> &'static str { $label }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::path::Path;
+
+    #[test]
+    fn test_silent_success_returns_empty_json() {
+        assert_eq!(silent_success(), json!({}));
+    }
+
+    #[test]
+    fn test_add_context_formats_correctly() {
+        let result = add_context("TestEvent", "hello world");
+        assert!(result.is_some());
+        let val = result.unwrap();
+        assert_eq!(val["context_append"], "[TestEvent] hello world");
+    }
+
+    #[test]
+    fn test_normalize_path_lexical_removes_dot_segments() {
+        let path = Path::new("a/./b/../c");
+        let result = normalize_path_lexical(path);
+        assert_eq!(result, Path::new("a/c"));
+    }
+
+    #[test]
+    fn test_compact_repo_relative_segments_removes_extra_parent() {
+        let result = compact_repo_relative_segments("a/../../b");
+        assert_eq!(result, Some(PathBuf::from("b")));
+    }
+
+    #[test]
+    fn test_is_host_private_path_matches_dot_claude() {
+        assert!(is_host_private_path("repo/.claude/hooks.json"));
+        assert!(!is_host_private_path("repo/src/main.rs"));
+    }
+
+    #[test]
+    fn test_is_framework_source_path() {
+        assert!(is_framework_source_path("src/main.rs"));
+        assert!(!is_framework_source_path("README.md"));
+    }
+
+    #[test]
+    fn test_bash_command_extracts_from_payload() {
+        let payload = json!({"command": "cargo build"});
+        assert_eq!(bash_command(&payload), Some("cargo build"));
+    }
+
+    #[test]
+    fn test_payload_looks_like_foreign_hook_stdin() {
+        let cursor_payload = json!({
+            "cursor_version": "1.0",
+            "workspace_roots": ["/path"],
+            "hook_event_name": "stop"
+        });
+        assert!(payload_looks_like_foreign_hook_stdin(&cursor_payload));
+        let claude_payload = json!({"event": "stop"});
+        assert!(!payload_looks_like_foreign_hook_stdin(&claude_payload));
+    }
+
+    #[test]
+    fn test_hook_output_to_json_value_covers_all_variants() {
+        let ctx = HookOutput::AdditionalContext("test".to_string());
+        let result = hook_output_to_json_value("E", Some(ctx));
+        assert_eq!(result["context_append"], "[E] test");
+
+        let block = HookOutput::Block { reason: "blocked".to_string() };
+        let result = hook_output_to_json_value("E", Some(block));
+        assert_eq!(result["decision"], "block");
+
+        let deny = HookOutput::Deny { reason: "denied".to_string() };
+        let result = hook_output_to_json_value("E", Some(deny));
+        assert_eq!(result["decision"], "block");
+    }
+
+    #[test]
+    fn test_warn_returns_warning_field() {
+        let warn = HookOutput::Warn { message: "caution".to_string() };
+        let result = hook_output_to_json_value("E", Some(warn));
+        assert_eq!(result["warning"], "caution");
+    }
+
+    #[test]
+    fn test_should_sync_review_gate_detects_review_prompt() {
+        let tmp = std::env::temp_dir();
+        assert!(should_sync_review_gate_on_user_prompt(&tmp, "review this code"));
+        assert!(!should_sync_review_gate_on_user_prompt(&tmp, "hello world"));
+    }
 }

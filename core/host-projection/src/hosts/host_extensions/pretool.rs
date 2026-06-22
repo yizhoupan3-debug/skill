@@ -1,10 +1,9 @@
-//! PreToolUse protection: blocks direct edits to generated Codex agent surfaces.
+//! Shared PreToolUse path protection for all 4 hosts.
 //!
-//! Contains path classification, bash write-target detection, and the PreToolUse
-//! handler that prevents accidental modification of protected files.
+//! Moves Codex's pretool logic into a shared module. Protected paths and
+//! error messages are configurable via parameters — not hardcoded to Codex.
+//! All hosts can use this module for path protection.
 
-use super::install::protected_generated_paths;
-use super::{HOST_ENTRYPOINT_SYNC_HINT, PROTECTED_GENERATED_PREFIXES};
 use regex::Regex;
 use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
@@ -15,46 +14,49 @@ use std::sync::LazyLock;
 // PreToolUse handler
 // ---------------------------------------------------------------------------
 
-pub(super) fn run_pre_tool_use(repo_root: &Path, payload: &Value) -> Result<Option<Value>, String> {
+/// Run PreToolUse path protection with host-specific config.
+/// `protected_paths`: set of repo-relative paths to protect.
+/// `protected_prefixes`: path prefixes to protect.
+/// `entrypoint_hint`: shell command hint for error message (e.g. "codex install").
+pub fn run_pre_tool_use(
+    repo_root: &Path,
+    payload: &Value,
+    protected_paths: &HashSet<String>,
+    protected_prefixes: &[&str],
+    entrypoint_hint: &str,
+) -> Result<Option<Value>, String> {
     let mut rel_paths = HashSet::new();
     for path in iter_payload_paths(payload) {
         rel_paths.insert(relative_candidate_path(&path, repo_root));
     }
     for path in rel_paths.iter().cloned().collect::<Vec<_>>() {
-        if classify_protected_generated_path(&path).is_some() {
-            let message = pre_tool_use_message(&path);
-            return Ok(block_codex_pre_tool_use(message));
+        if classify_protected_path(&path, protected_paths, protected_prefixes).is_some() {
+            let message = pre_tool_use_message(&path, entrypoint_hint);
+            return Ok(Some(block_pre_tool_use(message)));
         }
     }
-    if let Some(path) = bash_generated_write_target(payload) {
-        let message = pre_tool_use_message(&path);
-        return Ok(block_codex_pre_tool_use(message));
+    if let Some(path) = bash_write_target(payload, protected_paths, protected_prefixes) {
+        let message = pre_tool_use_message(&path, entrypoint_hint);
+        return Ok(Some(block_pre_tool_use(message)));
     }
     Ok(None)
 }
 
-pub(super) fn run_codex_pre_tool_use(
-    repo_root: &Path,
-    payload: &Value,
-) -> Result<Option<Value>, String> {
-    run_pre_tool_use(repo_root, payload)
-}
-
-fn block_codex_pre_tool_use(reason: String) -> Option<Value> {
-    Some(json!({
+/// Build a deny response for PreToolUse.
+pub fn block_pre_tool_use(reason: String) -> Value {
+    json!({
         "decision": "block",
         "hookSpecificOutput": {
             "hookEventName": "PreToolUse",
             "permissionDecision": "deny",
             "permissionDecisionReason": reason,
         },
-    }))
+    })
 }
 
-fn pre_tool_use_message(path: &str) -> String {
+fn pre_tool_use_message(path: &str, entrypoint_hint: &str) -> String {
     format!(
-        "[codex-pre-tool-use] blocked direct edits to generated Codex agent surface {path}; rerun `{}` instead.",
-        HOST_ENTRYPOINT_SYNC_HINT
+        "[pre-tool-use] blocked direct edits to protected path {path}; rerun `{entrypoint_hint}` instead."
     )
 }
 
@@ -62,24 +64,26 @@ fn pre_tool_use_message(path: &str) -> String {
 // Path classification
 // ---------------------------------------------------------------------------
 
-pub(super) fn classify_protected_generated_path(path: &str) -> Option<&'static str> {
+/// Check if a path matches any protected path or prefix.
+pub fn classify_protected_path(
+    path: &str,
+    protected_paths: &HashSet<String>,
+    protected_prefixes: &[&str],
+) -> Option<&'static str> {
     let normalized = normalize_repo_relative_path(path);
-    if protected_generated_paths().contains(&normalized.as_str()) {
-        return Some("generated_file");
+    if protected_paths.contains(&normalized) {
+        return Some("protected_file");
     }
-    if PROTECTED_GENERATED_PREFIXES
-        .iter()
-        .any(|prefix| normalized.starts_with(prefix))
-    {
-        return Some("generated_file");
+    if protected_prefixes.iter().any(|prefix| normalized.starts_with(prefix)) {
+        return Some("protected_prefix");
     }
     None
 }
 
 fn relative_candidate_path(path: &str, repo_root: &Path) -> String {
     let candidate = PathBuf::from(path);
-    if candidate.is_absolute()
-        && let Ok(rel) = candidate
+    if candidate.is_absolute() {
+        if let Ok(rel) = candidate
             .canonicalize()
             .unwrap_or(candidate.clone())
             .strip_prefix(
@@ -90,10 +94,12 @@ fn relative_candidate_path(path: &str, repo_root: &Path) -> String {
         {
             return normalize_repo_relative_path(&rel.to_string_lossy());
         }
+    }
     normalize_repo_relative_path(path)
 }
 
-pub(super) fn normalize_repo_relative_path(path: &str) -> String {
+/// Normalize a repo-relative path to a canonical form.
+pub fn normalize_repo_relative_path(path: &str) -> String {
     let normalized = path.replace('\\', "/");
     let mut parts = Vec::new();
     for part in normalized.split('/') {
@@ -122,13 +128,7 @@ pub(super) fn normalize_repo_relative_path(path: &str) -> String {
 
 fn iter_candidate_paths(payload: &Value) -> Vec<String> {
     let mut candidates = Vec::new();
-    for key in [
-        "file_path",
-        "changed_path",
-        "path",
-        "config_path",
-        "target_path",
-    ] {
+    for key in &["file_path", "changed_path", "path", "config_path", "target_path"] {
         if let Some(text) = payload.get(key).and_then(Value::as_str) {
             let normalized = text.replace('\\', "/");
             if !normalized.is_empty() {
@@ -161,21 +161,24 @@ fn iter_payload_paths(payload: &Value) -> Vec<String> {
 // Bash write-target detection
 // ---------------------------------------------------------------------------
 
-fn bash_generated_write_target(payload: &Value) -> Option<String> {
+/// Detect if a Bash command attempts to write to a protected path.
+pub fn bash_write_target(
+    payload: &Value,
+    protected_paths: &HashSet<String>,
+    protected_prefixes: &[&str],
+) -> Option<String> {
     let tool_name = payload.get("tool_name").and_then(Value::as_str)?;
-    if tool_name != "Bash" {
-        return None;
-    }
+    if tool_name != "Bash" { return None; }
     let command = payload
-        .get("tool_input")
-        .and_then(Value::as_object)
-        .and_then(|tool_input| tool_input.get("command"))
+        .get("tool_input").and_then(Value::as_object)
+        .and_then(|ti| ti.get("command"))
         .or_else(|| payload.get("command"))
         .and_then(Value::as_str)?;
     for segment in split_bash_segments(command) {
         let looks_mutating = bash_command_looks_mutating(&segment);
-        for hint in protected_generated_paths() {
-            if bash_segment_mentions_generated_path(&segment, hint)
+        let all_hints: Vec<String> = protected_paths.iter().cloned().chain(protected_prefixes.iter().map(|s| s.to_string())).collect();
+    for hint in &all_hints {
+            if bash_segment_mentions_path(&segment, hint)
                 && (looks_mutating || bash_segment_redirects_to_hint(&segment, hint))
             {
                 return Some(hint.to_string());
@@ -186,50 +189,32 @@ fn bash_generated_write_target(payload: &Value) -> Option<String> {
 }
 
 fn split_bash_segments(command: &str) -> Vec<String> {
-    let chars = command.chars().collect::<Vec<_>>();
+    let chars: Vec<char> = command.chars().collect();
     let mut segments = Vec::new();
     let mut start = 0usize;
     let mut idx = 0usize;
-
     while idx < chars.len() {
         let current = chars[idx];
         let next = chars.get(idx + 1).copied();
         let prev = if idx > 0 { Some(chars[idx - 1]) } else { None };
-        let mut separator_len = 0usize;
-
-        if current == ';' {
-            separator_len = 1;
-        } else if next == Some(current) && matches!(current, '&' | '|') {
-            separator_len = 2;
-        } else if current == '|' && prev != Some('>') {
-            separator_len = 1;
-        }
-
-        if separator_len > 0 {
-            let segment = chars[start..idx].iter().collect::<String>();
-            let trimmed = segment.trim();
-            if !trimmed.is_empty() {
-                segments.push(trimmed.to_string());
-            }
-            idx += separator_len;
+        let mut sep_len = 0usize;
+        if current == ';' { sep_len = 1; }
+        else if next == Some(current) && matches!(current, '&' | '|') { sep_len = 2; }
+        else if current == '|' && prev != Some('>') { sep_len = 1; }
+        if sep_len > 0 {
+            let seg: String = chars[start..idx].iter().collect();
+            let trimmed = seg.trim();
+            if !trimmed.is_empty() { segments.push(trimmed.to_string()); }
+            idx += sep_len;
             start = idx;
             continue;
         }
-
         idx += 1;
     }
-
-    let tail = chars[start..].iter().collect::<String>();
+    let tail: String = chars[start..].iter().collect();
     let trimmed = tail.trim();
-    if !trimmed.is_empty() {
-        segments.push(trimmed.to_string());
-    }
-
-    if segments.is_empty() {
-        vec![command.trim().to_string()]
-    } else {
-        segments
-    }
+    if !trimmed.is_empty() { segments.push(trimmed.to_string()); }
+    if segments.is_empty() { vec![command.trim().to_string()] } else { segments }
 }
 
 static MUTATING_COMMAND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
@@ -237,26 +222,17 @@ static MUTATING_COMMAND_PATTERNS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r"^\s*(mv|cp|install|touch|rm|unlink|truncate)\b",
         r"^\s*ln\b[^\n]*\s-[^\n]*[fs][^\n]*\b",
         r"^\s*git\s+(checkout\s+--|restore\b)",
-        r"\bsed\s+-i\b",
-        r"\bperl\s+-pi\b",
-        r"\bpython3?\s+-c\b",
-        r"\bnode\s+-e\b",
-        r"\bruby\s+-e\b",
-        r"\btee\b",
-        r"\bdd\b",
-    ]
-    .iter()
-    .filter_map(|p| Regex::new(p).ok())
-    .collect()
+        r"\bsed\s+-i\b", r"\bperl\s+-pi\b",
+        r"\bpython3?\s+-c\b", r"\bnode\s+-e\b", r"\bruby\s+-e\b",
+        r"\btee\b", r"\bdd\b",
+    ].iter().filter_map(|p| Regex::new(p).ok()).collect()
 });
 
 fn bash_command_looks_mutating(command: &str) -> bool {
-    MUTATING_COMMAND_PATTERNS
-        .iter()
-        .any(|re| re.is_match(command))
+    MUTATING_COMMAND_PATTERNS.iter().any(|re| re.is_match(command))
 }
 
-fn bash_segment_mentions_generated_path(segment: &str, hint: &str) -> bool {
+fn bash_segment_mentions_path(segment: &str, hint: &str) -> bool {
     segment
         .split(|ch: char| ch.is_whitespace() || matches!(ch, '\'' | '"' | ';' | '&' | '|'))
         .map(|token| token.trim_start_matches('>').trim_start_matches("of="))
@@ -273,15 +249,9 @@ fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
         let regexes = map.entry(hint.to_string()).or_insert_with(|| {
             let escaped = regex::escape(hint);
             let p1 = format!(r#"(>>?|>\|)\s*['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
-            let p2 =
-                format!(r#"\btee\b(?:\s+-a)?\s+['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
-            let p3 =
-                format!(r#"\bdd\b[^\n;&|]*\bof=['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
-            [
-                Regex::new(&p1).unwrap(),
-                Regex::new(&p2).unwrap(),
-                Regex::new(&p3).unwrap(),
-            ]
+            let p2 = format!(r#"\btee\b(?:\s+-a)?\s+['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
+            let p3 = format!(r#"\bdd\b[^\n;&|]*\bof=['\"]?[^'\"\n;&|]*{escaped}[^'\"\n;&|]*['\"]?"#);
+            [Regex::new(&p1).unwrap(), Regex::new(&p2).unwrap(), Regex::new(&p3).unwrap()]
         });
         regexes.iter().any(|re| re.is_match(segment))
     })

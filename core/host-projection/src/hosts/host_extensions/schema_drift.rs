@@ -8,7 +8,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
-use super::ROUTER_RS_HOOK_PROJECTION_VERSION;
+/// Router-rs hook projection version (shared across all hosts).
+pub const ROUTER_RS_HOOK_PROJECTION_VERSION: &str = "v1.0.0";
 
 static DRIFT_CACHE: LazyLock<std::sync::Mutex<(std::time::Instant, Option<String>)>> =
     LazyLock::new(|| {
@@ -18,7 +19,7 @@ static DRIFT_CACHE: LazyLock<std::sync::Mutex<(std::time::Instant, Option<String
         ))
     });
 
-fn projection_version_older(manifest_version: &str, current: &str) -> bool {
+pub fn projection_version_older(manifest_version: &str, current: &str) -> bool {
     fn parse(value: &str) -> Option<(u64, u64, u64)> {
         let cleaned = value.trim().trim_start_matches('v');
         let mut parts = cleaned.split('.');
@@ -34,7 +35,7 @@ fn projection_version_older(manifest_version: &str, current: &str) -> bool {
     }
 }
 
-pub(super) fn projection_drift_warning(repo_root: &Path) -> Option<String> {
+pub fn check_hook_projection_drift(repo_root: &Path) -> Option<String> {
     const CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(300);
     {
         let guard = DRIFT_CACHE.lock().unwrap_or_else(|e| e.into_inner());

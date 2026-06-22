@@ -7,6 +7,8 @@
 //! - Merging existing hooks.json with new entries
 //! - Atomic file writes and lock management
 
+use super::state::lock_is_stale;
+
 use super::{
     CODEX_AGENT_POLICY_PATH, CODEX_HOOK_AUTHORITY, CODEX_HOOKS_PATH, CODEX_HOOKS_README_PATH,
     CodexLifecycleHostKind, HOST_ENTRYPOINT_JSON_RELATIVE_PATHS,
@@ -187,7 +189,6 @@ fn acquire_install_lock(codex_home: &Path) -> Result<HooksInstallLock, String> {
 }
 
 // Re-export from state.rs (used by install tests)
-pub(super) use super::state::lock_is_stale;
 
 // ---------------------------------------------------------------------------
 // Atomic write
@@ -292,7 +293,7 @@ pub fn build_codex_hook_projection() -> Value {
     json!({
         "schema_version": "router-rs-codex-hook-projection-v1",
         "authority": CODEX_HOOK_AUTHORITY,
-        "codex_agent_policy": super::policy_embed::build_codex_agent_policy(),
+        "codex_agent_policy": crate::hosts::host_extensions::codex::build_codex_agent_policy(),
         "codex_hooks_readme": build_codex_hooks_readme(),
         "codex_hooks": build_codex_hook_manifest(),
         "codex_audit_commands": {

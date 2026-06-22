@@ -1,17 +1,16 @@
-//! Contract guard: compares a caller-provided expected contract digest against
-//! the live Rust `framework contract-summary` payload, failing closed on drift
-//! unless the caller sets an explicit contract update intent.
+//! Shared contract guard: detects contract drift across all 4 hosts.
+//! Compares expected contract digest against live framework contract summary.
+//! ALL hosts use this module — not just Codex.
 
-use super::CODEX_HOOK_AUTHORITY;
 use crate::hooks::build_framework_contract_summary_envelope;
 use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::path::Path;
 
-pub(super) fn run_codex_contract_guard(
-    repo_root: &Path,
-    payload: &Value,
-) -> Result<Option<Value>, String> {
+/// Run contract guard: check for drift between expected and live contract.
+/// Returns `Ok(None)` when no drift; `Ok(Some(block))` when drift detected.
+/// Payload keys: `expected_contract_digest`, `contract_update_intent`, etc.
+pub fn run_contract_guard(repo_root: &Path, payload: &Value) -> Result<Option<Value>, String> {
     let envelope = build_framework_contract_summary_envelope(repo_root)?;
     let summary = envelope
         .get("contract_summary")
@@ -44,9 +43,9 @@ pub(super) fn run_codex_contract_guard(
     };
     let mut response = json!({
         "decision": decision,
-        "authority": CODEX_HOOK_AUTHORITY,
+        "authority": "router-rs-contract-guard",
         "contract_guard": {
-            "schema_version": "router-rs-codex-contract-guard-v1",
+            "schema_version": "router-rs-contract-guard-v1",
             "live_contract_digest": live_digest,
             "drift_flags": drift_flags,
             "explicit_contract_update": explicit_update,
@@ -78,7 +77,6 @@ fn detect_contract_drift(summary: &Value, payload: &Value) -> Vec<String> {
             flags.push("contract_digest_drift".to_string());
         }
     }
-
     let live_owner = summary
         .get("primary_owner")
         .and_then(Value::as_str)
@@ -88,7 +86,6 @@ fn detect_contract_drift(summary: &Value, payload: &Value) -> Vec<String> {
         && !live_owner.is_empty() && proposed_owner != live_owner {
             flags.push("owner_drift".to_string());
         }
-
     let contract_active = summary
         .get("contract_guard")
         .and_then(|guard| guard.get("contract_active"))
@@ -105,14 +102,12 @@ fn detect_contract_drift(summary: &Value, payload: &Value) -> Vec<String> {
             && !live_task.is_empty() && proposed_task != live_task {
                 flags.push("scope_drift".to_string());
             }
-
         let live_goal = scalar_contract_text(summary.get("goal"));
         if let Some(proposed_goal) =
             payload_string(payload, "proposed_goal").or_else(|| payload_string(payload, "goal"))
             && !live_goal.is_empty() && proposed_goal != live_goal {
                 flags.push("scope_drift".to_string());
             }
-
         let live_evidence = string_array(summary.get("evidence_required"));
         let proposed_evidence_exists = payload.get("proposed_evidence_required").is_some();
         let proposed_evidence = string_array(payload.get("proposed_evidence_required"));
@@ -123,19 +118,14 @@ fn detect_contract_drift(summary: &Value, payload: &Value) -> Vec<String> {
             flags.push("evidence_drift".to_string());
         }
     }
-
     flags.sort();
     flags.dedup();
     flags
 }
 
 fn payload_string(payload: &Value, key: &str) -> Option<String> {
-    payload
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
+    payload.get(key).and_then(Value::as_str)
+        .map(str::trim).filter(|v| !v.is_empty()).map(ToOwned::to_owned)
 }
 
 fn payload_bool(payload: &Value, key: &str) -> bool {
@@ -145,38 +135,62 @@ fn payload_bool(payload: &Value, key: &str) -> bool {
 fn scalar_contract_text(value: Option<&Value>) -> String {
     match value {
         Some(Value::String(text)) => text.trim().to_string(),
-        Some(Value::Number(number)) => number.to_string(),
-        Some(Value::Bool(flag)) => flag.to_string(),
+        Some(Value::Number(n)) => n.to_string(),
+        Some(Value::Bool(b)) => b.to_string(),
         _ => String::new(),
     }
 }
 
 fn string_array(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::trim)
-                .filter(|item| !item.is_empty())
-                .map(ToOwned::to_owned)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default()
+    value.and_then(Value::as_array).map(|items| {
+        items.iter().filter_map(Value::as_str)
+            .map(str::trim).filter(|i| !i.is_empty())
+            .map(ToOwned::to_owned).collect()
+    }).unwrap_or_default()
 }
 
 fn normalized_string_set(values: &[String]) -> Vec<String> {
     let mut deduped = HashSet::new();
-    let mut normalized = values
-        .iter()
-        .map(|item| item.trim())
-        .filter(|item| !item.is_empty())
-        .filter_map(|item| {
-            let lower = item.to_ascii_lowercase();
+    let mut normalized: Vec<String> = values.iter()
+        .map(|i| i.trim())
+        .filter(|i| !i.is_empty())
+        .filter_map(|i| {
+            let lower = i.to_ascii_lowercase();
             deduped.insert(lower.clone()).then_some(lower)
         })
-        .collect::<Vec<_>>();
+        .collect();
     normalized.sort();
     normalized
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_contract_guard_no_drift() {
+        let summary = json!({
+            "contract_digest": "abc123",
+            "primary_owner": "user",
+            "contract_guard": {"contract_active": false},
+            "prompt_lines": []
+        });
+        let payload = json!({"expected_contract_digest": "abc123"});
+        let flags = detect_contract_drift(&summary, &payload);
+        assert!(flags.is_empty());
+    }
+
+    #[test]
+    fn test_contract_guard_digest_drift() {
+        let summary = json!({
+            "contract_digest": "abc123",
+            "primary_owner": "user",
+            "contract_guard": {"contract_active": false},
+            "prompt_lines": []
+        });
+        let payload = json!({"expected_contract_digest": "xyz789"});
+        let flags = detect_contract_drift(&summary, &payload);
+        assert!(flags.contains(&"contract_digest_drift".to_string()));
+    }
 }

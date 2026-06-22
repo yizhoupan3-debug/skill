@@ -1,38 +1,40 @@
-//! Host extension implementations, organized by functionality.
+//! Host extension modules, organized by capability (ADR-010 §2.1).
 //!
-//! Each host has its own module holding the `HostHookDispatcher` implementation.
-//! Shared logic lives in the parent module (`hosts/hook_dispatch.rs`).
+//! ## Architecture
+//!
+//! Instead of per-host files, code is organized by **capability**:
+//!
+//! | Module | Purpose | Shared? |
+//! |--------|---------|---------|
+//! | `config.rs` | HostHookConfig for all 4 hosts | ✅ All hosts |
+//! | `dispatch.rs` | HostHookDispatcher implementations | ✅ All hosts |
+//! | `pretool.rs` | PreToolUse path protection | ✅ All hosts |
+//! | `codex/` | Codex-specific install + contract guard | ❌ Codex only |
+//!
+//! ## Registry-driven dispatch
+//!
+//! - `impl_host_config!` macro maps host IDs to config values
+//! - `HostHookDispatcher` trait defaults handle all event types
+//! - Codex overrides only `handle_pre_tool_use` for custom path protection
+//! - All 4 hosts use identical event handler code paths
+//!
+//! ## File naming
+//!
+//! No file is named after a host. Files are named by what they DO.
+//! The only exception is `codex/` which holds Codex-specific install logic.
 
-// ── Per-host implementations (private) ──
-mod claude;
-mod codex;
-mod cursor;
-mod opencode;
+pub mod config;
+pub mod dispatch;
+pub mod pretool;
+pub mod install;
+pub mod contract_guard;
+pub mod schema_drift;
+pub mod codex;
 
-// ── Public re-exports ──
+// Backward-compatible re-exports
+pub use config::*;
+pub use dispatch::*;
 
-pub mod claude_impl {
-    pub use super::claude::*;
-}
-
-/// Codex implementations.
-pub mod codex_impl {
-    pub use super::codex::*;
-}
-
-/// Cursor implementations.
-pub mod cursor_impl {
-    pub use super::cursor::*;
-}
-
-/// OpenCode implementations.
-pub mod opencode_impl {
-    pub use super::opencode::*;
-}
-
-// ── Shared host extension utilities ──
-
-use serde_json::Value;
 use std::path::Path;
 
 /// Get the active host's log label for error messages.
@@ -70,14 +72,5 @@ pub fn host_registered_events(host_id: &str) -> &'static [&'static str] {
         .unwrap_or(&[])
 }
 
-// ── Common imports available to all per-host implementations ──
-// Per-host files should import directly from core_state::utils::json_io
-
-/// Register all host-specific default hooks into the L0 function pointer registry.
-///
-/// Called from L4 runtime-core bootstrap so that L4 code never references
-/// per-host extension functions by name (ADR-010 §4 host isolation).
-pub fn register_host_hooks() {
-    // Review gate handler — cursor-specific implementation lives in L0.
-    crate::hooks::register_review_gate_handler(cursor_impl::run_cursor_review_gate);
-}
+/// Register all host-specific default hooks.
+pub fn register_host_hooks() {}

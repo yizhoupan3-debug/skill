@@ -15,7 +15,7 @@ impl HostLifecycle for OpencodeHostProvider {
     fn session_supervisor_driver(&self) -> &'static str { "unsupported" }
     fn context_file(&self) -> &'static str { "AGENTS.md" }
     fn driver_binary(&self) -> &'static str { "opencode" }
-    fn registered_hook_events(&self) -> &'static [&'static str] { super::host_extensions::opencode_impl::OPENCODE_HOOKS_REGISTERED_EVENTS }
+    fn registered_hook_events(&self) -> &'static [&'static str] { crate::hosts::host_extensions::config::OPENCODE_HOOKS_REGISTERED_EVENTS }
 }
 
 impl HostTelemetry for OpencodeHostProvider {

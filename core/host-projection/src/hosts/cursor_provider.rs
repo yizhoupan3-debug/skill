@@ -15,7 +15,7 @@ impl HostLifecycle for CursorHostProvider {
     fn context_file(&self) -> &'static str { "AGENTS.md" }
     fn driver_binary(&self) -> &'static str { "cursor" }
     fn hooks_manifest_path(&self) -> Option<&'static str> { Some(".cursor/hooks.json") }
-    fn registered_hook_events(&self) -> &'static [&'static str] { crate::hosts::host_extensions::cursor_impl::CURSOR_HOOKS_REGISTERED_EVENTS }
+    fn registered_hook_events(&self) -> &'static [&'static str] { crate::hosts::host_extensions::config::CURSOR_HOOKS_REGISTERED_EVENTS }
 }
 
 impl HostTelemetry for CursorHostProvider {

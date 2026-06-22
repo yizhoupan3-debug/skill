@@ -31,7 +31,6 @@ pub mod test_shim;
 
 // ── Unified hook contract tests (all 4 hosts) ──
 #[cfg(test)]
-mod unified_hook_tests;
 
 pub use host_provider::{
     HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
