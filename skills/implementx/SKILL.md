@@ -308,7 +308,7 @@ printf '%s\n' '{"id":1,"op":"framework_goal_drive","payload":{"operation":"start
 | [`skills/planx/SKILL.md`](../planx/SKILL.md) | WAVE_STATE schema / lane 拆分规则 |
 | [`skills/verifyx/SKILL.md`](../verifyx/SKILL.md) | 验证收口 |
 | [`docs/hosts/hook-hosts.md` § 多代理编排](../../docs/hosts/hook-hosts.md) | Codex 端并行执行指引 |
-| [`docs/references/EXECUTION_LADDER.md`](../../AGENTS.md) | 完整执行阶梯规则 |
+| [`AGENTS.md`](../../AGENTS.md) | 完整执行阶梯规则（§ Coding First Principles） |
 | [`references/orchestration-contract.md`](references/orchestration-contract.md) | 外部权威证据表 |
 
 ---

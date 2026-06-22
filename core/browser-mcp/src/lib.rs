@@ -20,9 +20,9 @@ mod tests;
 
 /// Dispatch a browser subcommand (CLI entry point for `router-rs browser ...`).
 pub fn dispatch_browser_command(
-    command: runtime_core::cli::args::BrowserSubcommand,
+    command: framework_kernel::cli_args::BrowserSubcommand,
 ) -> Result<(), String> {
-    use runtime_core::cli::args::BrowserSubcommand;
+    use framework_kernel::cli_args::BrowserSubcommand;
     match command {
         BrowserSubcommand::McpStdio(command) => run_browser_mcp_stdio_loop(
             command.repo_root.as_deref(),

@@ -1,9 +1,0 @@
----
-source: core/runtime-core/src/infrastructure/session_call.rs
-assertion_line: 572
-expression: "(super::SCHEMA_VERSION, super::TRACKER_FILE)"
----
-(
-    "fw-session-call-tracker-v1",
-    "SESSION_CALL_TRACKER.json",
-)

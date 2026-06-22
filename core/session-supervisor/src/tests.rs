@@ -1114,7 +1114,7 @@ fn concurrent_save_store_no_corruption() {
                     worker_id: format!("worker-{i}"),
                     host: "smoke".to_string(),
                     status: "running".to_string(),
-                    updated_at: chrono::Utc::now().to_rfc3339(),
+                    updated_at: framework_kernel::time::now_iso(),
                     ..Default::default()
                 });
                 save_store(&path, &loaded).ok();

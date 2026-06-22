@@ -113,7 +113,7 @@ cargo run -p research-harness --bin research-log -- hub-search "transformer"
 
 - Research log database: `core/research-harness/src/log/`
 - Research workspace CLI: `core/research-harness/src/bin/autoresearch.rs`
-- Harness specification: `docs/spec/research-harness.md` §19
+- Harness specification: `docs/research-harness.md` §19
 - Entity extraction patterns: `core/research-harness/src/log/extract.rs`
 - Graph traversal: `core/research-harness/src/log/graph.rs`
 - Hub indexer: `core/research-harness/src/log/hub.rs`

@@ -16,13 +16,11 @@ codegraph = ["dep:codegraph-rs"]
 
 [dependencies]
 codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
-hook-layer = { path = "../hook-layer" }
 http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
 routing-engine = { path = "../routing-engine" }
-tool-layer = { path = "../tool-layer" }
 chrono.workspace = true
 clap.workspace = true
 fs2.workspace = true

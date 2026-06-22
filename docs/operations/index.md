@@ -4,12 +4,12 @@ scope: modular-ops
 depends_on:
   - ../README.md
   - ../../configs/framework/RUNTIME_REGISTRY.json
-  - ../../artifacts/current/roadmap-v7.md
+  - ../../artifacts/current/roadmap-v9.md
 ---
 
 # 运维手册（按功能模块）
 
-**入口真源**：本目录按 Roadmap v7 **架构治理**（K1–K16）组织运维内容。
+**入口真源**：本目录按 Roadmap v9 **架构治理** 组织运维内容。
 
 **政策与叙事**（生命周期、Closeout、路由规则）仍以仓库根 [`AGENTS.md`](../../AGENTS.md) 为准；本手册只覆盖**操作、配置、排障、路径**。
 
@@ -44,7 +44,39 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 版本升级：`git pull` 后重编 `router-rs`，再对所用宿主重跑 `host-integration install`（或各宿主手册中的 sync 等价命令）。
 
-跨项目引导脚本：`scripts/claude-bootstrap-framework.sh`、`scripts/cursor-bootstrap-framework.sh`（见 [`getting-started.md`](getting-started.md)）。
+### 跨项目引导
+
+```bash
+export SKILL_FRAMEWORK_ROOT=/path/to/skill
+
+./scripts/claude-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"
+./scripts/install-claude.sh --scope user
+
+./scripts/cursor-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
+  framework host-integration install --to cursor --scope user
+```
+
+### Python 环境（macOS）
+
+**uv-only**、Python 3.12、禁止全局 `pip`。详见 `skills/python-env-management/SKILL.md`。
+
+### Office CLI（可选）
+
+```bash
+bash scripts/install-pdf-tool.sh
+bash scripts/install-ooxml-tool.sh
+bash scripts/install-ppt-tool.sh
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+详见 [`office-document-clis.md`](../office-document-clis.md)。
+
+### 性能基准（hook）
+
+```bash
+./scripts/bench-hooks.sh
+```
 
 ---
 
@@ -61,7 +93,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
 
 排障：`no browser-mcp runtime attach artifact` → 检查 `browser-mcp` 启动参数；MCP 路径陈旧 → 重跑 `host-integration install`。
 
-相关路径：`core/browser-mcp/` · `docs/operations/security.md` §SSRF · `RUNTIME_REGISTRY.json` → `managed_mcp_servers.browser-mcp`
+相关路径：`core/browser-mcp/` · 安全策略见 § 安全运维 · `RUNTIME_REGISTRY.json` → `managed_mcp_servers.browser-mcp`
 
 ### B10 — codegraph
 
@@ -96,11 +128,11 @@ cargo run --manifest-path tools/evolution-rs/Cargo.toml -- audit --config config
 
 | 主题 | 文档 |
 |------|------|
-| 安装 / 升级 / 多机同步 | [getting-started.md](getting-started.md) |
-| 安全（SSRF、MCP 策略、沙箱） | [security.md](security.md) |
-| 备份 / 恢复 / 卸载 | [backup-restore.md](backup-restore.md) |
+| 安装 / 升级 / 多机同步 | § 首次安装 + § 多机同步（本文件） |
+| 安全（SSRF、MCP 策略、沙箱） | § 安全运维（本文件） |
+| 备份 / 恢复 / 卸载 | § 备份、恢复与卸载（本文件） |
 | 运维开关组合（profile） | [`spec.md`](../spec.md)（架构原则） |
-| 使用者入门 | [`getting-started.md`](getting-started.md) + [`AGENTS.md`](../../AGENTS.md) |
+| 使用者入门 | [`../README.md`](../../README.md) + [`AGENTS.md`](../../AGENTS.md) |
 
 ---
 
@@ -201,7 +233,7 @@ GOAL_STATE 的状态转换是**惯例约束**（非硬约束）——任何 → 
 
 ### TASK_STATE.json 聚合
 
-TASK_STATE.json 是只读投影（schema v2），聚合：GOAL_STATE + RFV_LOOP_STATE + EVIDENCE_INDEX + STEP_LEDGER + SESSION_SUMMARY + NEXT_ACTIONS + TRACE_METADATA。
+TASK_STATE.json 是只读投影（schema v2），聚合：GOAL_STATE + QUALITY_GATE_STATE + EVIDENCE_INDEX + STEP_LEDGER + SESSION_SUMMARY + NEXT_ACTIONS + TRACE_METADATA。
 
 通过 `ROUTER_RS_TASK_STATE_AGGREGATE_AUTO=1` 启用。
 
@@ -236,6 +268,54 @@ auto_multi_phase 的语义判断完全靠 LLM，Rust 层只做显式关键词匹
 - [ ] Dependabot PR：合并前跑 CI，Cargo.lock 与宿主 hook 路径无漂移
 
 ---
+
+## 备份、恢复与卸载
+
+### 备份优先级
+
+| 路径 | 重要性 | 说明 |
+|------|--------|------|
+| 仓库内宿主投影（`.claude/`、`.cursor/`、`.codex/`、`.opencode/`） | 高 | 建议 Git 管理 |
+| `artifacts/current/<task_id>/` | 中 | 进行中的 goal / RFV / wave |
+| `~/.local/share/skill-framework/bin/router-rs` | 低 | 可重编译 |
+| `artifacts/telemetry/` | 中 | evolution 分析输入 |
+
+### 恢复
+
+1. `git clone` / `git pull` 恢复仓库与投影文件
+2. `cargo build --release` 重建 `router-rs`
+3. `framework host-integration install --to <host_id>` 刷新 MCP / hooks
+4. `framework doctor` 确认无 drift WARN
+
+### 卸载框架投影
+
+按所用宿主删除对应投影目录与 hook 配置（**不**要删除整个仓库）。示例：`rm -rf .cursor/hooks.json .cursor/router-rs-hook.env .cursor/hook-state/`。卸载前备份 `artifacts/current/` 与未提交的宿主 `settings.local.json`。
+
+## 安全运维
+
+### SSRF 与 URL 策略
+
+| 工具 | 防护层 | 覆盖 |
+|------|--------|------|
+| `web_fetch`（MCP） | `web_fetch_guard.rs` | HTTP(S)、IP 黑名单（loopback/private/link-local/CGNAT/metadata）、host 后缀黑名单（`.localhost/.local/.internal`）、DNS pinning、重定向逐跳校验 |
+| `browser_open`（MCP） | `validate_browser_open_url` | 阻断非 http(s) scheme（`file://`/`data:`/`javascript:`）、复用 IP/host 黑名单 |
+| Bash `curl`/`wget` | 宿主 `excludedCommands` / 沙箱 | 沙箱开启时不自动放行 |
+
+**browser_open 已知限制**：`browser_click`/`browser_fill` 可绕过 SSRF guard；CDP 重定向目标未经校验；无 DNS pinning（Chrome 自行解析）。回归：`cargo test --manifest-path core/router-rs/Cargo.toml -- web_fetch_guard`。
+
+### MCP 工具策略
+
+- `session_launch` 的 host 参数禁止元数据端点
+- `browser_get_network` 检测凭证关键词
+- Shell 注入模式检测；危险 git 命令拦截
+
+Smoke：`cargo test -p router-rs smoke_p0_hook_policy`。
+
+### 安全注意事项
+
+- 勿将 `.env`、密钥提交 Git
+- `framework doctor` 不替代渗透测试
+- 详细安全 env 开关：见 [`AGENTS.md`](../../AGENTS.md) § Coding First Principles
 
 ## 文件路径速查
 

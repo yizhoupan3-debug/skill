@@ -150,7 +150,7 @@ fn maybe_record_sandbox_event(
     let event = json!({
         "schema_version": SANDBOX_EVENT_SCHEMA_VERSION,
         "authority": SANDBOX_CONTROL_AUTHORITY,
-        "ts": Utc::now().to_rfc3339(),
+        "ts": framework_kernel::time::now_iso(),
         "kind": response.event_kind,
         "operation": response.operation,
         "sandbox_id": response.sandbox_id,

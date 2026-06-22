@@ -6,6 +6,7 @@ edition = "2024"
 workspace = true
 
 [dependencies]
+core-state = { path = "../core-state" }
 notify.workspace = true
 rayon.workspace = true
 regex.workspace = true

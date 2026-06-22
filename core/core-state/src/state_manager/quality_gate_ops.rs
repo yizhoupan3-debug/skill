@@ -46,7 +46,7 @@ pub(crate) fn deactivate_quality_gate_for_conflict_with_goal_drive(
     obj.insert("superseded_by".to_string(), json!("goal_drive"));
     obj.insert(
         "updated_at".to_string(),
-        json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+        json!(framework_kernel::time::now_iso()),
     );
     write_atomic_json(&path, &state)?;
     Ok(true)

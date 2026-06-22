@@ -26,7 +26,7 @@ fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
 
 fn ensure_state_defaults(state: &Value) -> Value {
     let mut s = state.clone();
-    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let now = framework_kernel::time::now_iso();
     let obj = s.as_object_mut().expect("state must be object");
     for (key, default) in [
         ("hypotheses", json!([])),
@@ -67,7 +67,7 @@ fn arr_mut<'a>(state: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
 }
 
 fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    framework_kernel::time::now_iso()
 }
 
 // ── Query building ──

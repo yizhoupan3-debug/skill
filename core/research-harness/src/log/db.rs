@@ -588,7 +588,7 @@ pub fn upsert_entity(
     metadata: Option<&str>,
 ) -> Result<i64> {
     let mut stmts = Stmts::new(conn)?;
-    stmts.upsert_entity.execute(params![name, kind, description, metadata, chrono::Utc::now().to_rfc3339()])?;
+    stmts.upsert_entity.execute(params![name, kind, description, metadata, framework_kernel::time::now_iso()])?;
     // Return entity ID via a fresh query
     let mut q = stmts.get_entity_by_name.query(params![name])?;
     match q.next()? {
@@ -615,7 +615,7 @@ pub fn insert_entity_relation(
         entry_id,
         confidence,
         metadata,
-        chrono::Utc::now().to_rfc3339(),
+        framework_kernel::time::now_iso(),
     ])?;
     Ok(())
 }
@@ -1027,8 +1027,8 @@ mod tests {
             barrier_id: None,
             importance: 0,
             status: "active".to_string(),
-            created_at: chrono::Utc::now().to_rfc3339(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
+            created_at: framework_kernel::time::now_iso(),
+            updated_at: framework_kernel::time::now_iso(),
         }
     }
 
@@ -1105,7 +1105,7 @@ mod tests {
             id: 0, entry_id: "e1".to_string(), kind: "finding".to_string(),
             content: "attention improves accuracy".to_string(),
             confidence: Some(0.8), metadata: None,
-            created_at: chrono::Utc::now().to_rfc3339(),
+            created_at: framework_kernel::time::now_iso(),
         };
         insert_finding(&conn, &finding).unwrap();
         let results = search_findings(&conn, "attention", None, 10).unwrap();

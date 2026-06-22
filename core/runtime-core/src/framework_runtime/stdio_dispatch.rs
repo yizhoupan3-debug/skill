@@ -198,8 +198,8 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "route_policy" => dispatch_stdio_route_policy(payload),
         "route_snapshot" => dispatch_stdio_route_snapshot(payload),
         "compile_profile_bundle" => dispatch_stdio_compile_profile_bundle(payload),
-        "compile_codex_profile_artifacts" => {
-            dispatch_stdio_compile_codex_profile_artifacts(payload)
+        "compile_profile_artifacts" | "compile_codex_profile_artifacts" => {
+            dispatch_stdio_compile_profile_artifacts(payload)
         }
         "closeout_evaluate" => dispatch_stdio_closeout_evaluate(payload),
         "closeout_contract" => Ok(closeout_enforcement_contract()),
@@ -565,13 +565,13 @@ fn dispatch_stdio_compile_profile_bundle(payload: Value) -> Result<Value, String
     serialize_payload(bundle, "profile bundle")
 }
 
-fn dispatch_stdio_compile_codex_profile_artifacts(payload: Value) -> Result<Value, String> {
+fn dispatch_stdio_compile_profile_artifacts(payload: Value) -> Result<Value, String> {
     let profile_path =
-        required_non_empty_string(&payload, "profile_path", "stdio codex profile artifacts")?;
+        required_non_empty_string(&payload, "profile_path", "stdio profile artifacts")?;
     let full = optional_bool(&payload, "full").unwrap_or(false);
     let profile = load_framework_profile(Path::new(&profile_path))?;
     let artifacts = build_codex_artifact_bundle(profile, full)?;
-    serialize_payload(artifacts, "codex profile artifacts")
+    serialize_payload(artifacts, "host profile artifacts")
 }
 
 fn dispatch_stdio_eval_route(payload: Value) -> Result<Value, String> {

@@ -115,7 +115,7 @@ fn framework_quality_gate_impl(payload: Value) -> Result<Value, String> {
             obj.insert("consecutive_stable_count".to_string(), json!(0u64));
             obj.insert(
                 "updated_at".to_string(),
-                json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)),
+                json!(framework_kernel::time::now_iso()),
             );
             let path = quality_gate_state_path(&repo_root, &task_id)?;
             if let Some(parent) = path.parent() {

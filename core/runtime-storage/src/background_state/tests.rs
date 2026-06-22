@@ -246,7 +246,7 @@ fn concurrent_job_insertions_preserve_all_jobs() {
     // Verify thread safety: multiple threads inserting different jobs
     // should all be present after concurrent access.
     let store = Arc::new(std::sync::Mutex::new(make_test_store()));
-    let now = Utc::now().to_rfc3339();
+    let now = framework_kernel::time::now_iso();
     let handles: Vec<_> = (0..8)
         .map(|i| {
             let store = Arc::clone(&store);
@@ -273,7 +273,7 @@ fn concurrent_job_insertions_preserve_all_jobs() {
 #[test]
 fn state_persistence_roundtrip_via_memory_backend() {
     // Write state via snapshot, then read it back to verify roundtrip
-    let now = Utc::now().to_rfc3339();
+    let now = framework_kernel::time::now_iso();
     let persisted = json!({
         "version": 2,
         "schema_version": BACKGROUND_STATE_SCHEMA_VERSION,

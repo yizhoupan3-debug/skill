@@ -119,7 +119,7 @@ pub fn record_trace_event(
     event.insert("seq".to_string(), json!(payload.seq));
     event.insert("generation".to_string(), json!(payload.generation));
     event.insert("cursor".to_string(), Value::String(cursor));
-    event.insert("ts".to_string(), Value::String(Utc::now().to_rfc3339()));
+    event.insert("ts".to_string(), Value::String(framework_kernel::time::now_iso()));
     event.insert("run_id".to_string(), Value::String(payload.run_id.clone()));
     event.insert(
         "job_id".to_string(),
@@ -368,7 +368,7 @@ pub fn compact_trace_stream(
     );
     snapshot.insert(
         "created_at".to_string(),
-        Value::String(Utc::now().to_rfc3339()),
+        Value::String(framework_kernel::time::now_iso()),
     );
     snapshot.insert(
         "watermark_event_id".to_string(),
@@ -418,7 +418,7 @@ pub fn compact_trace_stream(
         "delta_path": paths.deltas.display().to_string(),
         "artifact_index_path": paths.artifact_index.display().to_string(),
         "state_path": paths.state.display().to_string(),
-        "updated_at": Utc::now().to_rfc3339(),
+        "updated_at": framework_kernel::time::now_iso(),
     });
     let manifest_serialized = pretty_json_line(&manifest)?;
     let writes = vec![
@@ -701,7 +701,7 @@ fn build_artifact_ref(kind: &str, path: &Path, payload: &str, producer: &str) ->
         "uri": path.display().to_string(),
         "digest": sha256_hex(payload.as_bytes()),
         "size_bytes": payload.len(),
-        "created_at": Utc::now().to_rfc3339(),
+        "created_at": framework_kernel::time::now_iso(),
         "producer": producer,
     })
 }
@@ -714,7 +714,7 @@ fn build_external_artifact_ref(path: &str) -> Value {
         "uri": path,
         "digest": sha256_hex(path.as_bytes()),
         "size_bytes": path.len(),
-        "created_at": Utc::now().to_rfc3339(),
+        "created_at": framework_kernel::time::now_iso(),
         "producer": "runtime-trace-recorder-external",
     })
 }

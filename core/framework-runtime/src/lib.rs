@@ -18,7 +18,6 @@ pub mod io_utils;
 pub mod json_io;
 pub mod json_value;
 pub mod live_execute;
-pub mod repo_roots;
 pub mod runtime_view;
 pub mod router_env_flags;
 pub mod sandbox_control;
@@ -48,7 +47,7 @@ pub use execution_contract::{
     normalize_execution_kernel_metadata_contract_value,
     validate_execution_kernel_steady_state_metadata_value,
 };
-pub use repo_roots::{
+pub use framework_kernel::repo_roots::{
     framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,
 };
 pub use pre_tool_use_guard::{

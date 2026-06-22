@@ -782,7 +782,7 @@ fn default_trace_framework_version() -> String {
 }
 
 fn timestamp_now() -> String {
-    Utc::now().to_rfc3339()
+    framework_kernel::time::now_iso()
 }
 
 fn default_trace_runtime_path() -> PathBuf {

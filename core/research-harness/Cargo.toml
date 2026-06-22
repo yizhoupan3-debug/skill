@@ -11,7 +11,10 @@ cli = ["dep:clap"]
 
 [dependencies]
 # framework (leaf crates, no cycle risk)
+core-policy = { path = "../core-policy" }
 core-state = { path = "../core-state" }
+framework-kernel = { path = "../framework-kernel" }
+host-projection = { path = "../host-projection" }
 loop-engine = { path = "../loop-engine" }
 
 # LaTeX (RaTeX)

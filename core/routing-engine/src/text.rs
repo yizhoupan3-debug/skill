@@ -7,9 +7,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 pub fn read_json(path: &Path) -> Result<Value, String> {
-    let text = fs::read_to_string(path)
-        .map_err(|err| format!("failed reading {}: {err}", path.display()))?;
-    serde_json::from_str(&text).map_err(|err| format!("failed parsing {}: {err}", path.display()))
+    core_state::utils::json_io::read_json_strict(path)
 }
 
 pub fn normalize_optional_text(value: Option<String>) -> Option<String> {

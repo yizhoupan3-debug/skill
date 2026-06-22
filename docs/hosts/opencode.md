@@ -126,10 +126,10 @@ OpenCode 的 `OpencodeHostProvider` 实现以下 trait 方法：
 - **Framework projection manifest**: `.opencode/.framework-projection.json`
 - **安装命令**:
   ```bash
-  ./scripts/install-opencode.sh
-  # 或仅全局：./scripts/install-opencode.sh --scope user
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
+    framework host-integration install --to opencode --repo-root "$PWD"
   ```
-- **跨仓库**: `./scripts/install-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`
+- **跨仓库**: 先设 `SKILL_FRAMEWORK_ROOT`，再用 `framework host-integration install --to opencode`（参见 [`operations/index.md`](../operations/index.md) §跨项目引导）。
 
 ## Hook 事件矩阵详细
 

@@ -160,7 +160,7 @@ pub fn filter_queries(
 /// Execute a single smoke test query against the appropriate source.
 pub fn execute_query(query: &SmokeQuery, client: &reqwest::blocking::Client) -> SmokeResult {
     let id = query.id.clone();
-    let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let timestamp = framework_kernel::time::now_iso();
 
     let results = match query.source.as_str() {
         "arxiv" | "all" => arxiv::search(client, &query.query, query.expected_min_results.max(5)),

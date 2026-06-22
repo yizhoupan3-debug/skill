@@ -128,7 +128,7 @@ pub fn now_from_payload(payload: &Value) -> Result<String, String> {
         parse_rfc3339(&now)?;
         return Ok(now);
     }
-    Ok(Utc::now().to_rfc3339())
+    Ok(framework_kernel::time::now_iso())
 }
 
 pub fn add_seconds_rfc3339(now: &str, seconds: i64) -> Result<String, String> {

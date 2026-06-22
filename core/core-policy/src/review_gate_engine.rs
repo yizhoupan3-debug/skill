@@ -10,10 +10,8 @@ pub enum ReviewGateMode {
 }
 
 /// `ROUTER_RS_REVIEW_GATE_MODE=lite` enables lite; unset or `strict` → strict.
-/// Falls back to legacy `ROUTER_RS_CURSOR_REVIEW_GATE_MODE` for backward compat.
 pub fn review_gate_mode() -> ReviewGateMode {
     match std::env::var("ROUTER_RS_REVIEW_GATE_MODE")
-        .or_else(|_| std::env::var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE"))
     {
         Ok(v) if v.trim().eq_ignore_ascii_case("lite") => ReviewGateMode::Lite,
         _ => ReviewGateMode::Strict,
@@ -129,7 +127,7 @@ pub fn review_gate_satisfied(
     })
 }
 
-/// Codex telemetry: countable PostTool evidence before Stop compact (not a gate condition).
+/// Countable review subagent evidence (PostTool evidence before Stop compact).
 pub fn countable_review_subagent_evidence(
     subagent_start_count: u32,
     independent_reviewer_seen: bool,
@@ -137,7 +135,7 @@ pub fn countable_review_subagent_evidence(
     subagent_start_count > 0 || independent_reviewer_seen
 }
 
-/// Bump Codex review phase to 3 when compact findings appear after countable PostTool evidence.
+/// Bump review phase to 3 when compact findings appear after countable PostTool evidence.
 pub fn maybe_bump_review_phase_for_compact_findings(
     review_required: bool,
     review_override: bool,
@@ -170,21 +168,21 @@ mod fork_context_parse_tests {
     fn review_gate_mode_respects_lite_env() {
         let _lock = crate::test_env_sync::process_env_lock();
         crate::test_env_sync::with_env_var(
-            "ROUTER_RS_CURSOR_REVIEW_GATE_MODE",
+            "ROUTER_RS_REVIEW_GATE_MODE",
             "lite",
             || assert_eq!(review_gate_mode(), ReviewGateMode::Lite),
         );
         crate::test_env_sync::with_env_var(
-            "ROUTER_RS_CURSOR_REVIEW_GATE_MODE",
+            "ROUTER_RS_REVIEW_GATE_MODE",
             "LITE",
             || assert_eq!(review_gate_mode(), ReviewGateMode::Lite),
         );
         crate::test_env_sync::with_env_var_removed(
-            "ROUTER_RS_CURSOR_REVIEW_GATE_MODE",
+            "ROUTER_RS_REVIEW_GATE_MODE",
             || assert_eq!(review_gate_mode(), ReviewGateMode::Strict),
         );
         crate::test_env_sync::with_env_var(
-            "ROUTER_RS_CURSOR_REVIEW_GATE_MODE",
+            "ROUTER_RS_REVIEW_GATE_MODE",
             "strict",
             || assert_eq!(review_gate_mode(), ReviewGateMode::Strict),
         );

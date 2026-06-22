@@ -1,34 +1,37 @@
 use serde_json::{Value, json};
 use std::path::Path;
 
-mod alias;
+// ── Modules extracted to framework-extra (L4) ──
+pub use framework_extra::alias;
+pub use framework_extra::closeout;
+pub use framework_extra::contract_summary;
+pub use framework_extra::evidence;
+pub use framework_extra::framework_doctor;
+pub use framework_extra::prompt_compression;
+pub use framework_extra::session_artifacts;
+pub use framework_extra::snapshot;
+pub use framework_extra::statusline;
+pub use framework_extra::util;
+
+// ── Modules that remain in runtime-core (deep coupling) ──
 pub use framework_runtime::constants;
 pub use framework_runtime::evolution_observer;
-mod closeout;
-pub mod contract_summary;
-pub mod evidence;
-mod framework_doctor;
 pub use framework_runtime::io_utils;
 pub use framework_runtime::json_io;
 pub use framework_runtime::json_value;
 pub use framework_runtime::live_execute;
-pub(crate) mod orchestration_controller;
+pub use framework_extra::orchestration_controller;
 pub use framework_runtime::pre_tool_use_guard;
-mod prompt_compression;
-pub use framework_runtime::repo_roots;
+pub use framework_kernel::repo_roots;
 pub mod route_manifest_fallback;
 pub use framework_runtime::runtime_view;
 pub use framework_runtime::sandbox_control;
-pub mod session_artifacts;
-pub mod snapshot;
-mod statusline;
 pub mod stdio_dispatch;
 pub use framework_runtime::stdio_op_registry;
 pub use framework_runtime::trace_attach;
 pub use framework_runtime::trace_stream_io;
 pub use framework_runtime::trace_transport;
 pub use framework_runtime::types;
-mod util;
 
 // Re-export json_io functions needed by cli/common.rs (cycle-breaking extraction).
 pub use json_io::{parse_json_input, print_json_value};

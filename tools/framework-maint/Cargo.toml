@@ -1,0 +1,23 @@
+[package]
+name = "framework-maint"
+version = "0.1.0"
+edition = "2024"
+[lints]
+workspace = true
+
+[dependencies]
+# B0
+core-state = { path = "../../core/core-state" }
+framework-kernel = { path = "../../core/framework-kernel" }
+
+# L0
+host-projection = { path = "../../core/host-projection" }
+
+# L4
+framework-extra = { path = "../../core/framework-extra" }
+framework-runtime = { path = "../../core/framework-runtime" }
+
+# workspace
+serde_json.workspace = true
+tracing.workspace = true
+which.workspace = true

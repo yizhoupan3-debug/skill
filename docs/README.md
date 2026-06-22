@@ -1,15 +1,41 @@
-# 文档
+# 文档体系
 
-**7 层架构**（详见 [spec.md](spec.md)）：
-1. **宿主层** (host-projection) — 轻薄适配器
-2. **路由层** (routing-engine, router-rs) — 意图匹配
-3. **Skill 层** (framework-kernel::skill_lint) — 技能契约
-4. **工具层** (tool-layer) — ToolRegistry
-5. **运行层** (runtime-core) — 编排
-6. **Hook 层** (hook-layer) — 函数指针注册
-7. **Feature 层** (research-harness) — 领域插件
+## 文档地图
 
-**运维**：[operations/index.md](operations/index.md) · [getting-started.md](operations/getting-started.md)
-**宿主手册**：[hosts/_common.md](hosts/_common.md) · [hosts/hook-hosts.md](hosts/hook-hosts.md) · [hosts/opencode.md](hosts/opencode.md)
-**架构决策**：[adr/006-six-layer-architecture.md](adr/006-six-layer-architecture.md) · [adr/007-dual-exit-gates.md](adr/007-dual-exit-gates.md)
-**顶级策略**：[AGENTS.md](../AGENTS.md)（跨宿主执行与语言策略）
+| 类别 | 文档 | 说明 |
+|------|------|------|
+| **架构** | [spec.md](spec.md) | 七层模型、架构原则、路由管线约束；框架统一规约 |
+| | [adr/008-seven-layer-architecture.md](adr/008-seven-layer-architecture.md) | ADR：七层架构分离决策 |
+| | [adr/007-dual-exit-gates.md](adr/007-dual-exit-gates.md) | ADR：双退出门机制决策 |
+| **宿主** | [hosts/_common.md](hosts/_common.md) | 四宿主共享内容（身份、路由、Python、进程管理） |
+| | [hosts/hook-hosts.md](hosts/hook-hosts.md) | Hook 宿主手册（Claude/Cursor/Codex 事件矩阵、锁序） |
+| | [hosts/opencode.md](hosts/opencode.md) | OpenCode 宿主操作手册 |
+| **运维** | [operations/index.md](operations/index.md) | 运维中枢：安装/升级、模块操作、状态管理、备份恢复、安全策略 |
+| **参考** | [office-document-clis.md](office-document-clis.md) | Office 文档 CLI 安装命令速查 |
+| **科研 Harness** | [research-harness.md](research-harness.md) | 科研 Harness 系统总览、研究工作区、日志体系 |
+| | [research/routing-contracts.md](research/routing-contracts.md) | research-discovery / execution 路由契约 |
+
+## 按角色阅读
+
+| 角色 | 推荐阅读顺序 |
+|------|-------------|
+| **框架开发者** | 本索引 → [spec.md](spec.md)（架构） → [hosts/hook-hosts.md](hosts/hook-hosts.md)（宿主） → [../AGENTS.md](../AGENTS.md)（策略） |
+| **Skill 作者** | [../README.md](../README.md) §系统包含内容 → [spec.md](spec.md) §路由 → skills 目录 |
+| **普通用户** | [../README.md](../README.md) → [operations/index.md](operations/index.md)（安装/升级） → [hosts/hook-hosts.md](hosts/hook-hosts.md) |
+| **宿主实现者** | [hosts/_common.md](hosts/_common.md) → [hosts/hook-hosts.md](hosts/hook-hosts.md) → [hosts/opencode.md](hosts/opencode.md) |
+| **顶级策略** | [AGENTS.md](../AGENTS.md) | 跨宿主代理策略（生命周期、语言、CodeGraph、行为差异） |
+
+## 已合并/删除文档记录
+
+以下文件内容已在本次重构中合并：
+
+| 删前路径 | 合并到 | 说明 |
+|----------|--------|------|
+| `references/hook_lock_order.md` | `hosts/hook-hosts.md` §Hook Lock Order | 锁序技术参考 |
+| `references/review-protocol.md` | `spec.md` §Review 通用协议 | Review 幻觉分类与约束 |
+| `operations/getting-started.md` | `operations/index.md` | 安装/升级/跨项目引导（所有独特点已内联） |
+| `operations/state-management.md` | `operations/index.md` §状态管理运维 | TTL、GOAL_STATE、TASK_STATE |
+| `references/codegraph-rules.md` | `AGENTS.md` §CodeGraph 自动触发规则 | 合回 AGENTS.md 恢复连续性 |
+| `operations/backup-restore.md` | `operations/index.md` §备份、恢复与卸载 | 备份优先级、恢复流程 |
+| `operations/security.md` | `operations/index.md` §安全运维 | SSRF、MCP 策略、沙箱 |
+| `spec/research-harness.md` | `research-harness.md`（同级） | 提升到 docs/ 根级 |

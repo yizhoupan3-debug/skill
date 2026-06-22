@@ -23,7 +23,8 @@ version: "unified-v9"
 ├─────────────────────────────────────────────┤
 │ L2 Skill Layer    skill-layer (SKILL.md)    │
 ├─────────────────────────────────────────────┤
-│ L1 Routing Layer  routing-engine, router-rs │
+│ L1 Routing Layer  routing-engine (pure)      │
+│   Entry Point     router-rs (aggregator)     │
 ├─────────────────────────────────────────────┤
 │ L0 Host Layer     host-projection (thin)    │
 └─────────────────────────────────────────────┘
@@ -67,11 +68,11 @@ version: "unified-v9"
 ## 依赖关系约束
 
 ```
-router-rs → runtime-core → host-projection
-                          → core-policy
-                          → routing-engine
-                          → framework-kernel
-                          → framework-runtime, session-supervisor,
+router-rs → runtime-core → host-projection                         ← router-rs is the multi-layer
+                          → core-policy                              entry-point aggregator, not a
+                          → routing-engine                           pure L1 layer. It depends on all
+                          → framework-kernel                         lower layers and exposes the
+                          → framework-runtime, session-supervisor,    unified CLI + MCP interfaces.
                             runtime-storage, trace-runtime (extracted)
                           → tools/codegraph-rs (optional)
                           → browser-mcp (optional)
@@ -81,7 +82,33 @@ B0 core crates 不依赖 `router-rs`；宿主特有逻辑禁止出现在 B0 中�
 
 ## 科研 Harness
 
-Research 子系统提供多轮对抗审稿、文献检索、AIGC 检测能力。详见 [spec/research-harness.md](spec/research-harness.md)。
+Research 子系统提供多轮对抗审稿、文献检索、AIGC 检测能力。详见 [research-harness.md](research-harness.md)。
+
+## Review 通用协议
+
+所有 review 类 skill/workflow 的输出约束与幻觉分类标准。
+
+### 约束：Confirmed-only 输出
+
+最终用户可见输出**只包含 confirmed findings**。confirmed = 事实核查通过（evidence 真实存在且准确）+ 判断通过（是真实问题）。rejected（判断驳回）和 hallucinated（事实核查拦截）不出现在用户输出中。可选统计摘要行：`N confirmed / M rejected / K hallucinated`。
+
+### 幻觉分类标准（hallucination_type）
+
+| 值 | 含义 |
+|----|------|
+| `none` | 事实全部准确 |
+| `code_not_exist` | 引用的源不存在 |
+| `evidence_fabricated` | 源存在但证据捏造/复述 |
+| `wrong_line` | 源存在但位置错误 |
+| `behavior_misrepresented` | 证据正确但行为/现象描述有误 |
+| `evidence_out_of_context` | 证据真实但与 finding 无关 |
+| `source_moved` | 源已重命名/移动 |
+| `partial_hallucination` | 部分准确部分幻觉 |
+| `indeterminate` | 无法确认 |
+
+### 降级策略
+
+Factcheck 工具不可用时：单 finding 标记 `indeterminate` 不进 Verify；全阶段失败则所有 finding 标记 indeterminate，最终输出为空（0 confirmed）。关键：factcheck 整体失败时**不降级为"跳过 factcheck 直接进 Verify"**。
 
 ## 契约漂移规则
 

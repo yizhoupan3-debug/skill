@@ -9,7 +9,6 @@ use runtime_core::framework_runtime::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
 use runtime_core::browser_dispatch_hook;
-use runtime_core::claude_hooks::run_claude_hook_cli;
 use super::args::*;
 use runtime_core::framework_runtime::json_io::{parse_json_input, print_json_value};
 use runtime_core::closeout_enforcement::{
@@ -18,7 +17,8 @@ use runtime_core::closeout_enforcement::{
 };
 #[cfg(feature = "codegraph")]
 use runtime_core::codegraph_mcp::run_codegraph_mcp_stdio_loop;
-use runtime_core::codex_hooks::{
+use host_projection::hosts::host_extensions::claude::run_claude_hook_cli;
+use host_projection::hosts::host_extensions::codex::{
     InstallMode, build_codex_hook_projection, host_entrypoint_provider,
     install_codex_cli_hooks, resolve_codex_home, run_codex_audit_hook,
 };
@@ -35,7 +35,7 @@ use runtime_core::framework_runtime::{
     write_framework_session_artifacts,
 };
 use runtime_core::harness_contract::{harness_contract, lint_skill_contracts};
-use core_policy::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
+use runtime_core::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
 use runtime_core::host_entrypoint_sync::sync_host_entrypoints;
 use runtime_core::host_integration::run_host_integration_from_args;
 use runtime_core::review_gate_cli::run_review_gate;
@@ -50,11 +50,11 @@ use runtime_core::trace_runtime::{
     TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
     record_trace_event,
 };
-use host_projection::hosts::codex_hooks::dispatcher::CodexHookDispatcher;
+use host_projection::hosts::host_extensions::codex::dispatcher::CodexHookDispatcher;
 use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher, HookOutput};
 use host_projection::hooks::{
-    HookObservationHost, attach_router_rs_observation, emit_hook_fired,
-    hook_action_from_optional_output, read_stdin_limited,
+    attach_router_rs_observation, emit_hook_fired,
+    hook_action_from_optional_output, read_stdin_json_limited, read_stdin_limited,
 };
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
@@ -330,7 +330,7 @@ fn scaffold_host_integration(
         (
             format!("core/host-projection/src/hosts/{host_id_camel}_provider.rs"),
             format!(
-                r#"use crate::hosts::host_provider::HostProvider;
+                r#"use runtime_core::hosts::host_provider::HostProvider;
 
 pub struct {hc}HostProvider;
 
@@ -527,7 +527,7 @@ fn dispatch_codex_hook(event: &str, repo_root: Option<&Path>) -> Result<(), Stri
     let mut json_output = codex_hook_output_to_value(output);
 
     // Attach router-rs observation (matches attach_codex_hook_observation in handlers.rs)
-    attach_router_rs_observation(&mut json_output, HookObservationHost::Codex);
+    attach_router_rs_observation(&mut json_output, "codex");
 
     // Emit telemetry
     let telemetry_event = event.to_ascii_lowercase();
@@ -552,15 +552,10 @@ pub fn dispatch_agent_command(host_id: &str, command: GenericAgentCommand) -> Re
         let root = resolve_repo_root_arg(cmd.repo_root.as_deref())?;
         runtime_core::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
     }
-    fn dispatch_codex_agent(cmd: &GenericAgentCommand) -> Result<(), String> {
-        let root = resolve_repo_root_arg(cmd.repo_root.as_deref())?;
-        runtime_core::hosts::codex_agent::run_codex_agent_mcp_loop(Some(&root))
-    }
 
     // Registry-driven dispatch table: add new hosts here.
     const DISPATCH_TABLE: &[(&str, AgentDispatchFn)] = &[
         ("claude", dispatch_claude_agent),
-        ("codex", dispatch_codex_agent),
         ("opencode", dispatch_opencode_agent),
     ];
 
@@ -636,7 +631,7 @@ fn run_opencode_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<()
     runtime_core::hook_timing::mark_hook_start();
     let _result = (|| -> Result<(), String> {
         // Read stdin JSON payload (same pattern as cursor/claude/codex)
-        let payload = runtime_core::cursor_hooks::read_cursor_hook_stdin_json()
+        let payload = read_stdin_json_limited()
             .unwrap_or_else(|_| serde_json::json!({}));
         let repo_root = cli_repo_root
             .map(|p| p.to_path_buf())
@@ -652,7 +647,7 @@ fn run_opencode_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<()
 
         // Dispatch via HostHookDispatcher trait
         use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher};
-        use host_projection::hosts::opencode_hooks::OpencodeHookDispatcher;
+        use host_projection::hosts::host_extensions::opencode::OpencodeHookDispatcher;
 
         let hook_event = HookEvent {
             repo_root: &repo_root,
@@ -886,7 +881,7 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String>
                         .and_then(core_state::goal_prediction::read_goal_prediction);
                     let ctx = CloseoutEvidenceContext {
                         task_id: Some(task_id.trim().to_string()),
-                        evidence_rows_non_empty: rows_non_empty,
+                        _evidence_rows_non_empty: rows_non_empty,
                         has_successful_verification: has_success,
                         goal_prediction,
                     };

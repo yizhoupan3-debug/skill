@@ -10,6 +10,7 @@ name = "browser_mcp"
 path = "src/lib.rs"
 
 [dependencies]
+framework-kernel = { path = "../framework-kernel" }
 http-util = { path = "../http-util" }
 base64.workspace = true
 runtime-core = { path = "../runtime-core" }

@@ -12,22 +12,22 @@
 
 - **Python 环境（macOS）**：uv-only、默认 3.12、每仓库 `uv.lock`；禁止 `pip`。重度 Python/ML 任务须高频 `gc.collect()` / `torch.mps.empty_cache()`。
 - **Skill Routing**：热入口 `skills/SKILL_ROUTING_RUNTIME.json`；只读命中项 `skill_path`。
-- **Tool Routing**：PreToolUse/PostToolUse hook 覆盖所有工具（含 MCP）。`ToolOrigin` 分类：NativeHost / McpServer / Unknown。MCP 工具安全审查：`dangerous_mcp_tool_reason()`。四宿主 matcher 策略见 `docs/spec.md` §2.1。
+- **Tool Routing**：PreToolUse/PostToolUse hook 覆盖所有工具（含 MCP）。`ToolOrigin` 分类：NativeHost / McpServer / Unknown。MCP 工具安全审查：`dangerous_mcp_tool_reason()`。四宿主 matcher 策略见 `docs/spec.md` ¶ 工具路由 vs Skill 路由。
 
 ## Lifecycle
 
-- **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/spec.md` §6。
+- **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/spec.md`（七层模型与生命周期定位）。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
 - **Closeout**：`closeout_gate` / `complete` 为 advisory（`interactive`）。
 
 ## Continuity artifacts（手动画板 only）
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
-- Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`（Quality Gate 新名 `QUALITY_GATE_STATE.json`）；显式 stdio：`framework_goal_drive` / `framework_quality_gate`（原 `framework_rfv_loop`）。
+- Goal 磁盘：`GOAL_STATE.json` / `QUALITY_GATE_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_quality_gate`。
 - **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。
-  - **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `quality_gate_manage`（原 `rfv_loop_manage`）的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。
-  - **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`closeout_gate` / `goal_state_read` / `quality_gate_status`（原 `rfv_loop_status`）的 `task_id` 仍为可选（默认 active task）。
-- 历史 env 名见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)。
+  - **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `quality_gate_manage`的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。
+  - **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`closeout_gate` / `goal_state_read` / `quality_gate_status`的 `task_id` 仍为可选（默认 active task）。
+- 历史 env 名见 [`MIGRATION.md`](MIGRATION.md) 迁移记录。
 
 ## Task Intake
 
@@ -57,72 +57,44 @@
 
 ## CodeGraph 自动触发规则（跨宿主硬约束）
 
-**核心原则**：在该使用codegraph的时候，必须自动调用，即使用户没有明确提及codegraph。
+所有宿主（Claude / Cursor / Codex / OpenCode）必须一致执行。
+
+**核心原则**：在该使用 codegraph 的时候，必须自动调用，即使用户没有明确提及 codegraph。
 
 ### 必触发场景（无条件强制执行）
 
 #### 1. 重构/优化操作
 **触发词**：重构、改写、优化、改进、重写、refactor、rewrite、optimize
 **动作**：调用 `codegraph_impact["目标符号", depth=2]`
-**示例**：
-```
-用户：帮我重构这个函数
-LLM：（自动调用codegraph_impact分析影响范围）→ 根据结果制定重构计划
-```
 
 #### 2. 删除/重命名操作
 **触发词**：删除、移除、重命名、去掉、删掉、delete、remove、rename
 **动作**：调用 `codegraph_callers["目标符号", depth=1]`
-**示例**：
-```
-用户：删除这个公共API
-LLM：（自动调用codegraph_callers检查调用者）→ 确认无遗漏调用者后执行
-```
 
 #### 3. 跨模块修改
 **触发词**：跨模块、公共API、公共函数、公共接口、cross-module、public API
 **动作**：调用 `codegraph_callees["目标符号", depth=2]`
-**示例**：
-```
-用户：修改这个跨模块函数
-LLM：（自动调用codegraph_callees检查下游影响）→ 评估破坏性后执行
-```
 
 #### 4. 影响分析
 **触发词**：影响范围、影响分析、有什么影响、会影响什么、impact analysis、what affects
 **动作**：调用 `codegraph_impact["相关符号", depth=3]`
-**示例**：
-```
-用户：看看这个改动有什么影响
-LLM：（自动调用codegraph_impact分析完整影响范围）→ 报告影响范围
-```
 
 ### 建触发场景（条件触发）
 
 #### 5. 符号定位（当符号不在当前文件时）
 **触发条件**：用户提到不在当前文件的符号
 **动作**：调用 `codegraph_goto_definition["符号名"]`
-**示例**：
-```
-用户：这个handle_request函数在哪里定义的？
-LLM：（自动调用codegraph_goto_definition定位）→ 返回定义位置
-```
 
 #### 6. 死代码检查
 **触发词**：死代码、无用代码、unused code、dead code
 **动作**：调用 `codegraph_dead_code[language=对应语言]`
-**示例**：
-```
-用户：有没有死代码
-LLM：（自动调用codegraph_dead_code检查）→ 返回死代码列表
-```
 
 ### 触发执行规则
 
 1. **自动识别**：从用户输入中识别上述关键词，自动匹配对应工具
-2. **无需询问**：直接调用工具，不需要询问用户是否要使用codegraph
+2. **无需询问**：直接调用工具，不需要询问用户是否要使用 codegraph
 3. **结果整合**：将工具结果整合到响应中，说明影响范围和风险
-4. **强制执行**：所有宿主（claude、cursor、codex、opencode）必须一致执行
+4. **强制执行**：所有宿主必须一致执行
 
 ### 工具映射表
 
@@ -138,9 +110,9 @@ LLM：（自动调用codegraph_dead_code检查）→ 返回死代码列表
 ### 重要说明
 
 - **跨宿主一致性**：所有宿主必须一致执行此规则，不能有宿主差异
-- **技能无关性**：无论是否触发了特定技能（如/implementx），都必须执行此规则
+- **技能无关性**：无论是否触发了特定技能（如`/implementx`），都必须执行此规则
 - **强制性**：这是硬约束，不是建议，所有宿主必须遵守
-- **自动触发**：不需要用户显式提及codegraph，系统应自动识别并调用
+- **自动触发**：不需要用户显式提及 codegraph，系统应自动识别并调用
 
 ## 宿主行为差异
 
@@ -165,7 +137,7 @@ LLM：（自动调用codegraph_dead_code检查）→ 返回死代码列表
 - **策略嵌入**：编译期 `include_str!` 嵌入本文件（`policy_embed.rs` → `codex_agent_policy`）；hook 运行期不读盘。
 - **Hook**：`.codex/hooks.json` + `router-rs codex hook`；清门 **Claude canonical**；Stop **advisory-only** `CODEX_REVIEW_GATE`。
 - **多代理**：`/implementx` 且 `execution_mode=parallel` 时应 spawn lane；深度 review spawn-first（`fork_context=false`）。
-- **stdio 替代 MCP 工具**：`framework_goal_drive` / `framework_quality_gate`（原 `framework_rfv_loop`）；证据 PostTool 追加。
+- **stdio 替代 MCP 工具**：`framework_goal_drive` / `framework_quality_gate`；证据 PostTool 追加。
 
 ### OpenCode
 

@@ -7,8 +7,8 @@ use crate::runtime_registry::{
 use serde_json::{Map, Value, json};
 use std::path::Path;
 
-/// Canonical agent policy path for Codex (mirrors codex_hooks::CODEX_AGENT_POLICY_PATH).
-const CODEX_AGENT_POLICY_PATH: &str = "AGENTS.md";
+/// Canonical agent policy path used across all hosts.
+const AGENT_POLICY_PATH: &str = "AGENTS.md";
 
 pub fn host_targets_supported_host_ids(registry: &Value) -> Result<Vec<String>, String> {
     let out = registry
@@ -157,7 +157,7 @@ pub fn sync_manifest_shared_system_block(repo_root: &Path) -> Result<Value, Stri
     Ok(json!({
         "policy": "host-specific-agent-policy-v1",
         "routing_source_of_truth": "skills/",
-        "agent_policy_entrypoint": CODEX_AGENT_POLICY_PATH,
+        "agent_policy_entrypoint": AGENT_POLICY_PATH,
         "supported_hosts": supported_hosts,
         "host_entrypoints": Value::Object(host_entrypoints),
     }))

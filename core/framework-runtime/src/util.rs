@@ -19,18 +19,9 @@ use std::path::Path;
 
 /// Write text content to a path only if it differs from the existing content.
 /// Returns `true` when the file was actually written.
+/// Delegates to core_state::utils::json_io (ADR §9 canonical).
 pub fn write_text_if_changed_unlocked(path: &Path, content: &str) -> Result<bool, String> {
-    core_state::utils::path_guard::reject_unsafe_path(path)?;
-    let existing = read_text_if_exists(path);
-    if existing == content {
-        return Ok(false);
-    }
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|err| format!("create parent directory failed: {err}"))?;
-    }
-    write_atomic_text(path, content)?;
-    Ok(true)
+    core_state::utils::json_io::write_text_if_changed(path, content)
 }
 
 /// Compute SHA-256 hex digest of a file (used by integration tests across crates).
@@ -43,13 +34,9 @@ pub fn hash_file_for_test(path: &Path) -> Result<String, String> {
 }
 
 /// Write a JSON value to a path, serializing to pretty-printed text first.
+/// Delegates to core_state::utils::json_io (ADR §9 canonical).
 pub fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bool, String> {
-    let serialized = format!(
-        "{}\n",
-        serde_json::to_string_pretty(payload)
-            .map_err(|err| format!("serialize JSON payload failed: {err}"))?
-    );
-    write_text_if_changed_unlocked(path, &serialized)
+    core_state::utils::json_io::write_json_if_changed(path, payload)
 }
 
 /// Local timestamp in RFC 3339 format (seconds precision).

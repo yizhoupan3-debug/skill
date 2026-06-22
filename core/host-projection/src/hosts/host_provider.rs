@@ -72,6 +72,12 @@ pub trait HostLifecycle: Send + Sync {
         HARNESS_CAPABILITIES_FULL
     }
 
+    /// Subagent review types for this host. Default: standard review types.
+    /// Hosts with extended worker types (e.g., Codex) override this.
+    fn subagent_review_types(&self) -> &'static [&'static str] {
+        crate::hosts::hook_dispatch::DEFAULT_REVIEW_TYPES
+    }
+
     /// Project-local hook manifest when the host installs a native hook bundle.
     fn hooks_manifest_path(&self) -> Option<&'static str> {
         None

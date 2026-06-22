@@ -33,6 +33,7 @@ pub mod log;
 pub mod mcp_tools;
 pub mod provenance;
 pub mod render;
+pub mod research_mode;
 pub mod review;
 pub mod search;
 pub mod smoke;

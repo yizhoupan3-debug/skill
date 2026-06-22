@@ -15,6 +15,7 @@
 
 pub mod activity_log;
 pub mod paper_adversarial;
+pub mod paper_block_cache;
 pub mod paper_prose;
 
 use std::path::{Path, PathBuf};
@@ -200,16 +201,6 @@ pub fn merge_hook_context_json(
     format!("{base_json}\n\n--- {hook_name} ---\n{hook_context}")
 }
 
-// ── Include-str templates ──
-
-/// Adversarial review prompt template (embedded at compile time).
-pub const ADVERSARIAL_TEMPLATE: &str =
-    paper_adversarial::ADVERSARIAL_CONTEXT;
-
-/// Prose quality prompt template (embedded at compile time).
-pub const PROSE_TEMPLATE: &str =
-    paper_prose::PROSE_QUALITY_CONTEXT;
-
 // ── Tests ──
 
 #[cfg(test)]
@@ -343,13 +334,5 @@ mod tests {
         let r2 = dispatch_adversarial(ctx);
         assert_eq!(r1, r2); // second call should hit cache
         unsafe { std::env::remove_var("RESEARCH_HOOK_CACHE_DIR") };
-    }
-
-    #[test]
-    fn template_constants_exist() {
-        assert!(!ADVERSARIAL_TEMPLATE.is_empty());
-        assert!(!PROSE_TEMPLATE.is_empty());
-        assert!(ADVERSARIAL_TEMPLATE.contains("PAPER_ADVERSARIAL_HOOK"));
-        assert!(PROSE_TEMPLATE.contains("PAPER_PROSE_QUALITY_HOOK"));
     }
 }

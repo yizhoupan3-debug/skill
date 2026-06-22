@@ -54,7 +54,7 @@ pub use scrub_ops::{
 
 // ── Shared helper ──
 pub(crate) fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    framework_kernel::time::now_iso()
 }
 
 // ── Goal state path ──
@@ -379,7 +379,7 @@ mod tests {
     use serde_json::{Value, json};
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    /// Lock for tests that mutate env vars (CLAUDE_SESSION_ID etc.) to avoid race conditions.
+    /// Lock for tests that mutate env vars (*_SESSION_ID etc.) to avoid race conditions.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]

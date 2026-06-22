@@ -430,7 +430,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
             let tx = crate::task_ledger::LedgerTransaction {
-                ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                ts: framework_kernel::time::now_iso(),
                 tx_type: "goal_state".to_string(),
                 payload: value.clone(),
                 idempotency_key: None,
@@ -487,7 +487,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             }
             write_atomic_json(&path, &state)?;
             let tx = crate::task_ledger::LedgerTransaction {
-                ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+                ts: framework_kernel::time::now_iso(),
                 tx_type: "goal_state".to_string(),
                 payload: state.clone(),
                 idempotency_key: None,
@@ -625,7 +625,7 @@ fn resume_goal_running(
     obj.insert("updated_at".to_string(), json!(now_iso()));
     write_atomic_json(&path, &state)?;
     let tx = crate::task_ledger::LedgerTransaction {
-        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        ts: framework_kernel::time::now_iso(),
         tx_type: "goal_state".to_string(),
         payload: state.clone(),
         idempotency_key: None,
@@ -680,7 +680,7 @@ fn set_terminal_flags(
     obj.insert("updated_at".to_string(), json!(now_iso()));
     write_atomic_json(&path, &state)?;
     let tx = crate::task_ledger::LedgerTransaction {
-        ts: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        ts: framework_kernel::time::now_iso(),
         tx_type: "goal_state".to_string(),
         payload: state.clone(),
         idempotency_key: None,

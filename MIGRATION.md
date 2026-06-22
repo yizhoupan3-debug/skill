@@ -93,7 +93,7 @@ just doctor
 
 - **`.claude/settings.json`** 由 `install --to claude` 材料化（四事件 hook）。
 - **Claude / Codex 退役面**：`claude-desktop`、`codex-app` 已移除；Codex 用 **`codex`**，Claude 用 **`claude`**。
-- 勿再依赖 **`.claude/hooks/router-rs-hook.sh`**（deprecated shim）；真源为 `configs/framework/claude-router-rs-hook.sh` + settings hooks。
+- 勿再依赖 **`.claude/hooks/router-rs-hook.sh`**（deprecated shim）；launcher 真源为 `configs/framework/hook.sh`（各宿主 shim 由 `host-integration install` 生成）。
 
 ## 默认工作流（全宿主）
 
@@ -229,7 +229,7 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 |----|------|
 | 项目 env 真源 | [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env) |
 | 模板 / 新仓库复制 | [`configs/framework/claude-router-rs-hook.env`](configs/framework/claude-router-rs-hook.env) |
-| Launcher | [`configs/framework/claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)（release 优先，与 Cursor 同序） |
+| Launcher | [`configs/framework/hook.sh`](configs/framework/hook.sh)（各宿主 shim 由 `host-integration install` 生成，release 优先，与 Cursor 同序） |
 | 重装 hooks 合并 | `framework host-integration install --to claude --scope project` |
 
 默认 **`ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE=0`**（减 PostTool 证据写盘）。**不要**把 `ROUTER_RS_CURSOR_*` 写入 Claude env（无意义）。

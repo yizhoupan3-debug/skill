@@ -1,0 +1,27 @@
+[package]
+name = "runtime-infra"
+version = "0.1.0"
+edition = "2024"
+[lints]
+workspace = true
+
+[dependencies]
+# B0
+core-state = { path = "../core-state" }
+core-policy = { path = "../core-policy" }
+framework-kernel = { path = "../framework-kernel" }
+
+# L0/L1
+host-projection = { path = "../host-projection" }
+routing-engine = { path = "../routing-engine" }
+
+# L4
+framework-runtime = { path = "../framework-runtime" }
+runtime-exit-gate = { path = "../runtime-exit-gate" }
+runtime-storage = { path = "../runtime-storage" }
+
+# workspace
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+which.workspace = true

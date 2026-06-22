@@ -11,4 +11,8 @@
 
 pub mod hooks;
 pub mod host_entrypoint_sync;
+pub mod host_integration;
 pub mod hosts;
+
+#[cfg(test)]
+pub(crate) mod test_helpers;

@@ -26,7 +26,7 @@ pub fn append_ledger_event(workspace: &Path, kind: &str, payload: Value) -> Resu
     let event = json!({
         "schema_version": "autoresearch-ledger-v1",
         "event_id": format!("evt_{}", chrono::Utc::now().timestamp_millis()),
-        "ts": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "ts": framework_kernel::time::now_iso(),
         "kind": kind,
         "workspace": workspace.display().to_string(),
         "project": workspace.file_name().and_then(|n| n.to_str()).unwrap_or("-"),

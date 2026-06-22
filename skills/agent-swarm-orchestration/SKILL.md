@@ -292,7 +292,7 @@ If the discussion touches current-session execution:
 - **team 概念已废弃**：所有团队级编排通过 `workflow`（JS 编排脚本）+ `subagent`（bounded worker）组合实现。
 - Do not let workers write outside their assigned lane-local scope.
 - Supervisor owns integration and final verification.
-- **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#4-runtime-protocol).
+- **Superior Quality Audit**: For multi-agent swarm architectures, apply the runtime verification gate to verify against [Superior Quality Bar / verification gate criteria](../SKILL_FRAMEWORK_PROTOCOLS.md#1-runtime-protocol).
 
 ## Hooks 集成
 

@@ -34,7 +34,7 @@ fn set_key(value: &mut Value, key: &str, child: Value) {
 }
 
 fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    framework_kernel::time::now_iso()
 }
 
 fn novelty_gate_mut(value: &mut Value) -> Result<&mut serde_json::Map<String, Value>> {

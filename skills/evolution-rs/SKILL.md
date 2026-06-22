@@ -1,11 +1,9 @@
 ---
 name: evolution-rs
 description: |
-  Skill evolution engine — audit usage journal, compute per-skill health scores,
+  Framework-operational tool: audit usage journal, compute per-skill health scores,
   auto-prune zero-usage skills, sync feedback tables, inspect integrity,
   analyze telemetry, snapshot registry state.
-  Use when asked to audit skills, check skill health, clean up unused skills,
-  or maintain the skill registry.
 metadata:
   version: "1.0.0"
   platforms: [supported]
@@ -17,23 +15,9 @@ metadata:
     - health
     - registry
     - maintenance
-trigger_hints:
-  - skill audit
-  - skill health
-  - skill cleanup
-  - skill evolution
-  - evolution engine
-  - telemetry journal
-  - skill 审计
-  - skill 健康评分
-  - skill 维护
-  - 注册表审计
-  - 技能审计
-  - 技能健康
-  - 技能清理
-  - 技能状态
-  - 技能维护
-  - 演化引擎
+session_start: never
+user-invocable: false
+disabled-model-invocation: true
 
 ---
 

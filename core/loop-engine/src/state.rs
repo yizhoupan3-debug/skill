@@ -2,6 +2,9 @@ use crate::types::{LoopError, LoopRunState, CurrentRun, LoopPhase, RunHistoryEnt
 use std::path::{Path, PathBuf};
 use std::fs;
 
+/// Canonical `now_iso` — re-exported from `framework-kernel`.
+pub use framework_kernel::time::now_iso;
+
 /// Filename used for persisting loop run state: `LOOP_RUN_STATE.json`.
 pub const LOOP_RUN_STATE_FILENAME: &str = "LOOP_RUN_STATE.json";
 /// Schema version string written into every LOOP_RUN_STATE.json: `loop-run-state-v1`.
@@ -50,11 +53,6 @@ pub fn lock_path(repo_root: &Path) -> PathBuf {
 /// Return the kill signal file path for a loop: `.loop-kill/{loop_id}`.
 pub fn kill_signal_path(repo_root: &Path, loop_id: &str) -> PathBuf {
     repo_root.join(".loop-kill").join(loop_id)
-}
-
-/// Return the current UTC time as an RFC 3339 string with seconds precision.
-pub fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
 /// Read the persisted loop run state from `LOOP_RUN_STATE.json` on disk.

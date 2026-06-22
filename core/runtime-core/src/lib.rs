@@ -18,27 +18,22 @@ pub use framework_kernel::framework_profile;
 pub mod browser_dispatch_hook;
 
 // ── subdomain module groups ──
-pub mod orchestration;
-pub mod infrastructure;
-pub mod exit_gate;
+pub use runtime_infra as infrastructure;
+pub use runtime_exit_gate as exit_gate;
 
 // │  backward-compatible re-exports from subdomain groups ─────────────────────
 pub use exit_gate::{quality_gate, schema_drift, harness_ops as harness_operator_nudges};
+pub use framework_extra::session_call as session_call_tracker;
 pub use infrastructure::{
-    kernel_bootstrap, router_rs_obs as router_rs_observation,
-    session_call as session_call_tracker, framework_skills, router_env_flags,
+    kernel_bootstrap, framework_skills, router_env_flags,
     stdio_transport, telemetry_emit,
-};
-pub use orchestration::{
-    paper_adversarial as paper_adversarial_hook,
-    paper_prose as paper_prose_hook,
-    research as research_activity_log,
 };
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
 pub use rt_core_contracts::{
     formal_toolchain, harness_contract, harness_context_signals, hook_event_routing,
     mcp_pre_guard, web_fetch_guard, hook_observation_rules,
+    router_rs_obs as router_rs_observation,
 };
 
 // ── re-exports from core-state (flattened) ──
@@ -58,16 +53,15 @@ pub mod task_command;
 // ── migrated supporting modules ──
 // browser_mcp: physically migrated to core/browser-mcp crate (§2.4)
 // Use browser-mcp crate directly; dispatch via browser_dispatch_hook.
-pub mod cli;
+// cli: migrated to router-rs (ADR §10.3)
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
 pub mod eval_route;
 pub use framework_kernel::framework_host_targets;
-pub mod framework_maint;
+pub use framework_maint;
 pub use host_projection::host_entrypoint_sync;
-pub mod host_integration;
+pub use host_projection::host_integration;
 pub use host_projection::hosts;
-mod paper_block_cache;
 pub use routing_engine::route;
 #[cfg(test)]
 mod route_metadata_tests;
@@ -198,7 +192,7 @@ pub fn register_host_projection_hooks() {
         );
 
         host_projection::hooks::register_review_gate_handler(
-            host_projection::hosts::cursor_hooks::run_cursor_review_gate,
+            host_projection::hosts::host_extensions::cursor::run_cursor_review_gate,
         );
 
         host_projection::hooks::register_kernel_bootstrap(
@@ -207,28 +201,34 @@ pub fn register_host_projection_hooks() {
 
         host_projection::hooks::register_paper_hooks(
             |root, prompt, lines, host| {
-                paper_prose_hook::maybe_append_paper_prose_context(root, prompt, lines, host)
-            },
-            |root, output, prompt, followup| {
-                paper_prose_hook::maybe_merge_paper_prose_before_submit(
-                    root, output, prompt, followup,
-                )
-            },
-            |root, prompt, lines, host| {
-                paper_adversarial_hook::maybe_append_paper_adversarial_context(
+                research_harness::hooks::paper_prose::maybe_append_paper_prose_context(
                     root, prompt, lines, host,
                 )
             },
-            |root, output, prompt, followup| {
-                paper_adversarial_hook::maybe_merge_paper_adversarial_before_submit(
-                    root, output, prompt, followup,
+            |root, output, prompt, followup, host| {
+                research_harness::hooks::paper_prose::maybe_merge_paper_prose_before_submit(
+                    root, output, prompt, followup, host,
+                )
+            },
+            |root, prompt, lines, host| {
+                research_harness::hooks::paper_adversarial::maybe_append_paper_adversarial_context(
+                    root, prompt, lines, host,
+                )
+            },
+            |root, output, prompt, followup, host| {
+                research_harness::hooks::paper_adversarial::maybe_merge_paper_adversarial_before_submit(
+                    root, output, prompt, followup, host,
                 )
             },
         );
 
         host_projection::hooks::register_research_activity_hook(
             |root, tool, summary| {
-                research_activity_log::record_research_activity(root, tool, summary)
+                if let Err(e) = research_harness::hooks::activity_log::maybe_log_research_activity(
+                    tool, summary, root,
+                ) {
+                    eprintln!("[research-activity-log] failed: {e}");
+                }
             },
         );
 
@@ -237,7 +237,7 @@ pub fn register_host_projection_hooks() {
             framework_runtime::resolve_repo_root_arg,
             framework_runtime::current_local_timestamp,
             framework_runtime::write_framework_session_artifacts,
-            |records,
+            |records_json,
              runtime_path,
              manifest_path,
              host_id,
@@ -245,8 +245,12 @@ pub fn register_host_projection_hooks() {
              session_id,
              allow_overlay,
              first_turn| {
+                // Deserialize from JSON to avoid L5→L1 dep on routing_engine::SkillRecord
+                let records: Vec<routing_engine::route::SkillRecord> = records_json.iter()
+                    .filter_map(|v| serde_json::from_value(v.clone()).ok())
+                    .collect();
                 framework_runtime::route_task_with_manifest_fallback(
-                    records,
+                    &records,
                     runtime_path,
                     manifest_path,
                     host_id,
@@ -302,7 +306,7 @@ pub fn register_host_projection_hooks() {
 
         // ── Codex hooks duplicate check ──
         ::framework_runtime::hooks::register_codex_hook_duplicate_check(
-            host_projection::hosts::codex_hooks::collect_codex_hooks_duplicate_warnings,
+            host_projection::hosts::host_extensions::codex::collect_codex_hooks_duplicate_warnings,
         );
 
         // ── RFV loop full implementation (supports append_round) ──
@@ -359,6 +363,16 @@ pub fn register_host_projection_hooks() {
         // ── research tool dispatch (L6 decoupled via function-pointer slot) ──
         host_projection::hooks::register_research_tool_dispatch(
             |name, args| research_harness::mcp_tools::handle_research_tool(name, args),
+        );
+
+        // ── stdio transport dispatch (decouples runtime-infra from cli/) ──
+        runtime_infra::stdio_transport::register_stdio_dispatch(
+            crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload,
+            |key| {
+                std::env::var(key)
+                    .ok()
+                    .and_then(|v| v.trim().parse::<usize>().ok())
+            },
         );
     });
 }

@@ -1,6 +1,6 @@
 //! Cross-module test synchronization for process-global environment reads/writes.
 //!
-//! Delegates to `core_policy::test_env_sync` so `main_tests`, `cursor_hooks`, and
+//! Delegates to `core_policy::test_env_sync` so `main_tests`, `host_extensions::cursor`, and
 //! `core-policy` unit tests share one process-wide mutex (parallel `#[test]` safe).
 
 #[cfg(test)]

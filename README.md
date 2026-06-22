@@ -4,7 +4,7 @@
 
 **使用者一页纸**（宿主差异、`REVIEW_GATE` 快查、真源阅读顺序、自检命令）：[`docs/hosts/`](docs/hosts/) + [`AGENTS.md`](AGENTS.md)。
 
-**近期变更（2026-06）**：闭集宿主收敛为 **四宿主**（`codex`、`claude`、`cursor`、`opencode`）；`claude-desktop`、`codex-app`、`codex-cli` 已退役 — 见 [`MIGRATION.md`](MIGRATION.md)。历史变更详见 [`MIGRATION.md`](MIGRATION.md)。文档地图：[`docs/README.md`](docs/README.md)。
+**近期变更（2026-06）**：闭集宿主收敛为 **四宿主**（`codex`、`claude`、`cursor`、`opencode`）；`claude-desktop`、`codex-app`、`codex-cli` 已退役 — 见 [`MIGRATION.md`](MIGRATION.md)。历史变更详见 [`MIGRATION.md`](MIGRATION.md)。文档地图：[`docs/README.md`](docs/README.md)。**想贡献代码？** 见 [`CONTRIBUTING.md`](CONTRIBUTING.md)。
 
 ## 我该怎么入门（两条路径）
 
@@ -18,7 +18,7 @@
   Windows 首次全量验证见下文 **「第一次验证」**；装好后可在仓库根执行：  
   `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
 
-**Office 文档阅读（PDF / DOCX / XLSX / PPTX）**：skill 路由默认 Rust-first，但 CLI **需单独安装**到 `~/.local/bin`（不随 `router-rs` 下发）。在仓库根执行 `bash scripts/install-pdf-tool.sh` 等，或 `just install-office-tools`；详见 [`docs/references/office-document-clis.md`](docs/references/office-document-clis.md)。
+**Office 文档阅读（PDF / DOCX / XLSX / PPTX）**：skill 路由默认 Rust-first，但 CLI **需单独安装**到 `~/.local/bin`（不随 `router-rs` 下发）。在仓库根执行 `bash scripts/install-pdf-tool.sh` 等，或 `just install-office-tools`；详见 [`docs/office-document-clis.md`](docs/office-document-clis.md)。
 
 ## 这套系统包含什么
 
@@ -159,16 +159,16 @@ codex
 
 - Cursor 规则来自 `.cursor/rules/`，对当前工作区（本仓库根目录）生效。
 - Cursor hooks 来自 `.cursor/hooks.json`，对当前工作区会话生效，不是跨所有仓库的全局策略。
-- 本仓库在 `.cursor/hooks.json` 注册 **7 个** hook 事件（减法闭集，见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)），经 [`configs/framework/cursor-router-rs-hook.sh`](configs/framework/cursor-router-rs-hook.sh) 调用 `router-rs cursor hook`；launcher **优先仓库 release**（~8MB），并 `source` [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。关键门控 fail-closed；`postToolUse` 对 `Read` 等走 Rust fast-path。`.cursor/hook-state/` 存门控状态。
+- 本仓库在 `.cursor/hooks.json` 注册 **7 个** hook 事件（减法闭集，见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)），经 shim 脚本调用 `router-rs cursor hook`（共用 [`configs/framework/hook.sh`](configs/framework/hook.sh)，各宿主 shim 由 `host-integration install` 生成）；launcher **优先仓库 release**（~8MB），并 `source` [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。关键门控 fail-closed；`postToolUse` 对 `Read` 等走 Rust fast-path。`.cursor/hook-state/` 存门控状态。
 - 若使用 Codex CLI hooks，状态文件在 `.codex/hook-state/`，与 Cursor 独立。
 - Codex `.codex/hooks.json` 包装脚本解析 `router-rs` 的顺序为：环境变量 **`ROUTER_RS_BIN`**（可执行绝对路径）→ 仓库 `core/router-rs/target/{release,debug}` → 仓库根 `target/{release,debug}` → **`command -v router-rs`**（最后手段；生产环境建议固定前两档之一）。缺少二进制时各生命周期事件一律 fail-closed（单行 JSON `decision:block`）。`.codex/hook-state/` 跨事件串联依赖 stdin 常见字段（`session_id` 等，含 camelCase）或 **`CODEX_SESSION_ID`** / **`CODEX_CONVERSATION_ID`**；需要硬前置时可设 **`ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY=1`**，在无稳定键时阻断 `UserPromptSubmit`/`PostToolUse`/`Stop`。
-- 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `core/runtime-core/src/hosts/cursor_hooks/` 内 handlers），与 Codex 不完全相同。
+- 策略强度：Codex Stop 可 `decision: block`；Cursor 侧为 **followup_message / continue** 语义（见 `core/host-projection/src/hosts/host_extensions/cursor_impl/` 内 handlers），与 Codex 不完全相同。
 - Cursor 技能分为两层：仓库路由技能走 `skills/`（由 `SKILL_ROUTING_RUNTIME.json` 管理）；用户侧/内置技能由 Cursor 自身加载（如 `~/.cursor/skills/` 与 `~/.cursor/skills-cursor/`），不写回本仓库 runtime。
 
 **其它仓库一键接入（跨工作区）**
 
 - 在目标项目根运行：`/path/to/skill/scripts/cursor-bootstrap-framework.sh --framework-root /path/to/skill`（或先 `export SKILL_FRAMEWORK_ROOT=/path/to/skill`）。若脚本不可执行，先：`chmod +x /path/to/skill/scripts/cursor-bootstrap-framework.sh`。
-- 脚本写入 `.cursor/hooks.json`，模板真源为 `configs/framework/cursor-hooks.workspace-template.json`（通过 `configs/framework/cursor-router-rs-hook.sh` 探测 `router-rs`，`--repo-root` 用当前 Cursor 工作区）。
+- 脚本写入 `.cursor/hooks.json`，模板真源为 `configs/framework/cursor-hooks.workspace-template.json`（通过 shim 脚本探测 `router-rs`，各宿主 shim 由 `host-integration install` 生成，底层均委托 [`configs/framework/hook.sh`](configs/framework/hook.sh)）。
 - 将 `skills/` 与 `AGENTS.md` 符号链接到框架仓库；需要与框架根目录等价的托管规则时加 `--with-cursor-rules`；需要与框架根目录共享 `configs/framework/*`（如 `HARNESS_OPERATOR_NUDGES.json`、`PAPER_ADVERSARIAL_HOOK.txt` 等磁盘真源）时加 **`--with-configs`**（否则相关 hooks 仍可用，但会回落到编译期内置默认，不等价于「改 JSON/txt 即生效」）。
 - 安装二进制：`cargo install --path /path/to/skill/core/router-rs`；若可执行文件名不是默认，在环境里设 `ROUTER_RS_BIN`（hooks 内展开）。
 - 与「本仓库 embedded」模式对照：本仓库 `.cursor/hooks.json` 与跨仓模板都走同一个 launcher；跨仓通常依赖 PATH / `ROUTER_RS_BIN` 或 `SKILL_FRAMEWORK_ROOT`。
@@ -178,7 +178,7 @@ codex
 ### Claude（项目级 + 用户级）
 
 - **My 生命周期**（与 Cursor 一致）：`/discussx` → `/planx` → `/implementx` → `/verifyx`；全局叙事在 **`~/.claude/rules/framework.md`**（对齐 `~/.cursor/rules/framework.mdc`）。
-- Hooks：`.claude/settings.json` 合并 **4 事件** → [`claude-router-rs-hook.sh`](configs/framework/claude-router-rs-hook.sh)；env [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env)。
+- Hooks：`.claude/settings.json` 合并 **4 事件** → `claude-router-rs-hook.sh` shim（统一委托 [`configs/framework/hook.sh`](configs/framework/hook.sh)，shim 由 `host-integration install` 生成）；env [`.claude/router-rs-hook.env`](.claude/router-rs-hook.env)。
 - **安装（推荐）**：`cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to claude`（project + user）。详见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)。
 - **其它仓库**：`cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to claude --repo-root "$SKILL_FRAMEWORK_ROOT"`。
 
@@ -189,7 +189,7 @@ codex
 3. **可选符号链接**：按需存在 `.cursor/rules`、`configs` 分别指向框架（`--with-cursor-rules`、`--with-configs`）。
 4. **打开方式**：在 Cursor 中「打开文件夹」选**目标项目根**（含 `.cursor/hooks.json` 的那一层），不要只打开子目录，否则可能找不到 hooks 或 `repo-root` 解析偏离预期。
 5. **常见失败**：hooks 未触发（工作区根不对、或 `.cursor/hooks.json` 缺失）；`router-rs` 未安装或不在 PATH（关键门控事件 fail-closed，telemetry 事件 fail-open）；与 embedded 模式混用（目标仓仍手写 `.../target/release/router-rs` 但从未在该路径构建）。
-6. **（可选）强制技能策略根**：仅在从子目录启动、且父级探测不符合预期时，设置 `CURSOR_PROJECT_ROOT` 或 `SKILL_REPO_ROOT` 指向含 `skills/SKILL_ROUTING_RUNTIME.json` 与 `AGENTS.md` 的目录（实现见 `core/runtime-core/src/skill_repo.rs`）。
+6. **（可选）强制技能策略根**：仅在从子目录启动、且父级探测不符合预期时，设置 `CURSOR_PROJECT_ROOT` 或 `SKILL_REPO_ROOT` 指向含 `skills/SKILL_ROUTING_RUNTIME.json` 与 `AGENTS.md` 的目录（实现见 `core/framework-kernel/src/skill_repo.rs`）。
 
 **建议自检命令序列（可复制）**
 
@@ -313,7 +313,7 @@ PowerShell 用反引号 `` ` `` 续行；Git Bash 用反斜杠 `\` 续行。READ
 
 ## Hook integration quickstart
 
-此仓库使用 Rust `router-rs`（`core/router-rs`）承接 Codex/Cursor/Claude hooks、连续性扩展与 **`router-rs browser mcp-stdio`**。宿主编排以 **Rust 入口为真源**：`.cursor/hooks.json` 只经 `configs/framework/cursor-router-rs-hook.sh` 做二进制发现与 fail-open/fail-closed 分层，业务分支不得写进 shell。
+此仓库使用 Rust `router-rs`（`core/router-rs`）承接 Codex/Cursor/Claude hooks、连续性扩展与 **`router-rs browser mcp-stdio`**。宿主编排以 **Rust 入口为真源**：`.cursor/hooks.json` 只经 shim 脚本（由 `host-integration install` 生成，统一委托 `hook.sh`）做二进制发现与 fail-open/fail-closed 分层，业务分支不得写进 shell。
 
 ### Cursor
 

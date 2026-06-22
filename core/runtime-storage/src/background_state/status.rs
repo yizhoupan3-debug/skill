@@ -2,7 +2,7 @@ use super::types::*;
 use chrono::{DateTime, Utc};
 
 pub(super) fn now_iso() -> String {
-    Utc::now().to_rfc3339()
+    framework_kernel::time::now_iso()
 }
 
 /// Best-effort RFC3339 parse used by the reaper. Non-RFC3339 timestamps

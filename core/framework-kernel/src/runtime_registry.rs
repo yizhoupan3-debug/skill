@@ -27,17 +27,16 @@ pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] = &[
 pub const HOST_HOME_DIRS: &[&str] = &[".claude", ".cursor", ".codex", ".opencode"];
 
 /// Lookup a host's home directory by host ID.
-/// This is a fallback that mirrors `RUNTIME_REGISTRY.json` →
-/// `host_targets.metadata.*.default_home_dir`. Prefer a runtime-registry
-/// lookup when the registry is available.
+/// Data-driven via `HOST_HOME_DIRS` — avoids per-host match arms that must be kept in sync.
+/// Prefer a runtime-registry lookup when the registry is available.
 pub(crate) fn host_home_dir(host_id: &str) -> Option<&'static str> {
-    match host_id {
-        "claude" => Some(".claude"),
-        "cursor" => Some(".cursor"),
-        "codex" => Some(".codex"),
-        "opencode" => Some(".opencode"),
-        _ => None,
-    }
+    HOST_HOME_DIRS
+        .iter()
+        .find(|dir| {
+            let prefix = format!(".{host_id}");
+            **dir == prefix.as_str()
+        })
+        .copied()
 }
 
 /// All known host home directories including legacy/external ones (e.g. `.gemini`).

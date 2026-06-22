@@ -10,7 +10,9 @@ name = "session_supervisor"
 path = "src/lib.rs"
 
 [dependencies]
+core-policy = { path = "../core-policy" }
 core-state = { path = "../core-state" }
+framework-kernel = { path = "../framework-kernel" }
 runtime-storage = { path = "../runtime-storage" }
 chrono.workspace = true
 libc.workspace = true

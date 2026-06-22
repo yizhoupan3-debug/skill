@@ -148,18 +148,18 @@ When a loop-auto cycle hits `consecutive_failures ≥ threshold`:
 7. Output BARRIER_REPORT.json → `artifacts/research-barrier/<barrier-id>/`
 8. Loop runner consumes report → selects candidate → resumes
 
-See `docs/spec/research-harness.md` §19.4.3 for the detailed barrier escalation
+See `docs/research-harness.md` §19.4.3 for the detailed barrier escalation
 contract and BARRIER_REPORT.json schema.
 
 ### Logging layer
 
-See `docs/spec/research-harness.md` §19.5 for the layered logging specification:
+See `docs/research-harness.md` §19.5 for the layered logging specification:
 - Text layer: `artifacts/research-log/YYYY-MM/YYYY-MM-DD_direction-name.md`
 - Compressed DB: SQLite FTS5 (`exploration_logs`, `exploration_decisions`, `exploration_insights`, `barrier_reports`)
 
 ### Smoke test
 
-See `docs/spec/research-harness.md` §19.6 for smoke test specification:
+See `docs/research-harness.md` §19.6 for smoke test specification:
 - Registry: `artifacts/research-log/smoke-tests.json`
 - Execution: `cargo run -p research-harness --bin autoresearch -- smoke-test [--source <src>] [--barrier <id>]`
 - Freshness metadata on every external_research result
@@ -181,7 +181,7 @@ See `docs/spec/research-harness.md` §19.6 for smoke test specification:
 
 ## Cross-references
 
-- **Research harness specification**: `docs/spec/research-harness.md` (full §19)
+- **Research harness specification**: `docs/research-harness.md` (full §19)
 - **Loop architecture**: spec.md §七层模型 (loop-auto profile, barrier escalation)
 - **Discovery front door**: `skills/research-discovery/SKILL.md`
 - **Execution back door**: `skills/research-execution/SKILL.md`

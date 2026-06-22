@@ -164,6 +164,7 @@ dependencies = [
  "base64",
  "chrono",
  "ctor",
+ "framework-kernel",
  "http-util",
  "reqwest",
  "routing-engine",
@@ -372,6 +373,7 @@ name = "core-state"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "framework-kernel",
  "fs2",
  "libc",
  "serde",
@@ -646,6 +648,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "framework-extra"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "core-policy",
+ "core-state",
+ "framework-kernel",
+ "framework-runtime",
+ "hex",
+ "host-projection",
+ "routing-engine",
+ "runtime-core-contracts",
+ "runtime-storage",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tracing",
+]
+
+[[package]]
 name = "framework-kernel"
 version = "0.1.0"
 dependencies = [
@@ -662,6 +684,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "framework-maint"
+version = "0.1.0"
+dependencies = [
+ "core-state",
+ "framework-extra",
+ "framework-kernel",
+ "framework-runtime",
+ "host-projection",
+ "serde_json",
+ "tracing",
+ "which",
+]
+
+[[package]]
 name = "framework-runtime"
 version = "0.1.0"
 dependencies = [
@@ -673,6 +709,7 @@ dependencies = [
  "framework-kernel",
  "fs2",
  "hex",
+ "host-projection",
  "http-util",
  "insta",
  "libc",
@@ -867,22 +904,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
-name = "hook-layer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "core-policy",
- "core-state",
- "framework-kernel",
- "insta",
- "routing-engine",
- "runtime-core-contracts",
- "serde",
- "serde_json",
- "tracing",
-]
-
-[[package]]
 name = "host-projection"
 version = "0.1.0"
 dependencies = [
@@ -893,7 +914,6 @@ dependencies = [
  "core-state",
  "framework-kernel",
  "fs2",
- "hook-layer",
  "http-util",
  "insta",
  "libc",
@@ -904,7 +924,6 @@ dependencies = [
  "serde_json",
  "serial_test",
  "sha2",
- "tool-layer",
  "tracing",
  "which",
 ]
@@ -1351,6 +1370,7 @@ name = "loop-engine"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "framework-kernel",
  "framework-runtime",
  "serde",
  "serde_json",
@@ -1932,8 +1952,11 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "core-policy",
  "core-state",
  "fancy-regex",
+ "framework-kernel",
+ "host-projection",
  "html-escape",
  "loop-engine",
  "ratex-font",
@@ -2006,6 +2029,7 @@ dependencies = [
 name = "routing-engine"
 version = "0.1.0"
 dependencies = [
+ "core-state",
  "insta",
  "notify",
  "rayon",
@@ -2027,7 +2051,9 @@ dependencies = [
  "core-policy",
  "core-state",
  "ctor",
+ "framework-extra",
  "framework-kernel",
+ "framework-maint",
  "framework-runtime",
  "fs2",
  "hex",
@@ -2041,6 +2067,8 @@ dependencies = [
  "research-harness",
  "routing-engine",
  "runtime-core-contracts",
+ "runtime-exit-gate",
+ "runtime-infra",
  "runtime-storage",
  "rusqlite",
  "serde",
@@ -2061,6 +2089,7 @@ version = "0.1.0"
 dependencies = [
  "core-policy",
  "framework-kernel",
+ "host-projection",
  "insta",
  "regex",
  "reqwest",
@@ -2071,12 +2100,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "runtime-exit-gate"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "core-policy",
+ "core-state",
+ "framework-kernel",
+ "framework-runtime",
+ "hex",
+ "host-projection",
+ "runtime-core-contracts",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tracing",
+]
+
+[[package]]
+name = "runtime-infra"
+version = "0.1.0"
+dependencies = [
+ "core-policy",
+ "core-state",
+ "framework-kernel",
+ "framework-runtime",
+ "host-projection",
+ "routing-engine",
+ "runtime-exit-gate",
+ "runtime-storage",
+ "serde",
+ "serde_json",
+ "tracing",
+ "which",
+]
+
+[[package]]
 name = "runtime-storage"
 version = "0.1.0"
 dependencies = [
  "chrono",
  "core-policy",
  "core-state",
+ "framework-kernel",
  "fs2",
  "hex",
  "insta",
@@ -2293,7 +2359,9 @@ name = "session-supervisor"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "core-policy",
  "core-state",
+ "framework-kernel",
  "libc",
  "regex",
  "runtime-storage",
@@ -2629,17 +2697,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
 
 [[package]]
-name = "tool-layer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "serde",
- "serde_json",
- "tracing",
-]
-
-[[package]]
 name = "tower"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2689,6 +2746,7 @@ name = "trace-runtime"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "framework-kernel",
  "hex",
  "runtime-storage",
  "serde",

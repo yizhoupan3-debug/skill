@@ -829,7 +829,7 @@ fn cmd_barrier(
         "consecutive_failures": consecutive_failures,
         "workspace": barrier_dir.display().to_string(),
         "drafted_claims": with_claims.get("novelty_gate").and_then(|g| g.get("draft_claims")).cloned().unwrap_or(json!([])),
-        "created_at": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "created_at": framework_kernel::time::now_iso(),
     });
     let report_path = ws.join(format!(
         "artifacts/research-barrier/{}/BARRIER_REPORT.json",

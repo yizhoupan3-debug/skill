@@ -52,13 +52,13 @@ parent: _common.md
 
 ### Claude — 7 事件（4 core + 3 optional）
 
-**默认注册 7 事件**：4 core 事件（`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`）+ 3 optional 事件（`SessionStart`、`SubagentStart`、`SubagentStop`）。项目 env：[`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)（模板 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)）；launcher **release 优先**（[`claude-router-rs-hook.sh`](../../configs/framework/claude-router-rs-hook.sh)）。
+**默认注册 7 事件**：4 core 事件（`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`）+ 3 optional 事件（`SessionStart`、`SubagentStart`、`SubagentStop`）。项目 env：[`.claude/router-rs-hook.env`](../../.claude/router-rs-hook.env)（模板 [`configs/framework/claude-router-rs-hook.env`](../../configs/framework/claude-router-rs-hook.env)）；launcher **release 优先**（`hook.sh`，各宿主 shim 由 `host-integration install` 生成，见 [`configs/framework/hook.sh`](../../configs/framework/hook.sh)）。
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
 | PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks → `claude-router-rs-hook.sh` → `hook.sh claude <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> claude` | [`claude_hooks.rs`](../../core/host-projection/src/hosts/claude_hooks.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
 | **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
-| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/host-projection/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（七事件 hook：4 core + 3 optional）、`.claude/.framework-projection.json`（project scope） |
+| 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/runtime-core/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（七事件 hook：4 core + 3 optional）、`.claude/.framework-projection.json`（project scope） |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK`）；`ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` opt-in |
 
 ### Cursor — 7 事件
@@ -77,7 +77,7 @@ parent: _common.md
 
 ### Codex
 
-细则见 [`spec.md`](../spec.md) §13、「主数据流」与 `.codex/hooks.json`。
+细则见 [`spec.md`](../spec.md)（工具路由与 Skill 路由双管线）、「主数据流」与 `.codex/hooks.json`。
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
@@ -281,3 +281,51 @@ Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentSta
 | 专用 gate 文件 | `execution-subagent-gate.mdc` + `review-subagent-gate.mdc` | 无 | **无**（本文档为真源） |
 | 模型继承规则 | 禁默认 Sonnet/Claude | N/A | **继承主会话模型**，不显式指定 |
 | 并行 lane 数 | 3–5 | 按需 | **3–5**（同 Cursor） |
+
+---
+
+## Hook Lock Order (router-rs)
+
+Cross-process hook subprocesses serialize continuity writes with **POSIX `flock`**, not `std::sync::Mutex`.
+
+### Layers (low → high)
+
+| Level | Lock file | Scope |
+|-------|-----------|--------|
+| **L1** | `artifacts/current/.router-rs.task-ledger.lock` | All task-ledger writers: `GOAL_STATE`, `QUALITY_GATE_STATE`, `STEP_LEDGER`, session artifact batches, tracker |
+| **L2** | `artifacts/current/.router-rs.<filename>.lock` | Per-artifact RMW (e.g. `EVIDENCE_INDEX.json`) |
+| **L3** | 宿主 session-scoped hook-state lock（如 Cursor: `.cursor/hook-state/review-subagent-<session>.lock`） | 宿主 review gate state |
+
+### Rules
+
+1. **Allowed nesting**: L1 → L2 → L3 (repo flock first, then narrower locks).
+2. **Forbidden**: Hold **L3** while acquiring **L1** (e.g. Stop finalization that touches task-ledger under session hook lock).
+3. **PostTool evidence** (`append_evidence_index_merged_row`): **L2 only while holding the evidence path lock** — must not call `apply_task_ledger_mutation` or acquire **L1** during the L2 RMW block. After **L2 is released**, an independent **L1** `append_transaction` to `TASK_LEDGER.jsonl` is allowed.
+4. **PostTool handler order**: `record_tool_call` (L1) → session lock (L3) → release L3 → evidence (L2 RMW, then optional L1 ledger append) → optional `cargo check` (no lock).
+
+### Impl note: Cursor L3 stale recovery
+
+**仅当 holder PID 已死**时 `remove_file` lock 路径；`age_ms > 30s` 且 PID 仍存活时**只重试、不删路径**。孤儿 lock 文件（无持有者）靠 `try_lock_exclusive` 直接成功。**7d age sweep**（`sweep_stale_hook_state_by_age`）：`.lock` **仅**在 holder PID 已死时可删；存活 holder 不 unlink。SessionEnd 清扫顺序：持锁删 state → `sweep_hook_state_tmp_orphans` → `sweep_stale_hook_state_by_age`。锁不可用则跳过且保留 state 文件。
+
+### Host lock differences
+
+| Host | Session lock behavior |
+|------|------------------------|
+| **Cursor** | `try_lock_exclusive` + stale recovery; up to ~1.5s retry |
+| **Codex** | Unix: **blocking** `flock(LOCK_EX)` on `{state_path}.lock` |
+
+Do not share one lock file between Cursor and Codex.
+
+### Env
+
+| Variable | Default | Effect | 宿主 |
+|----------|---------|--------|------|
+| `ROUTER_RS_TASK_LEDGER_FLOCK` | on | Off → parallel ledger writes (torn JSON risk); `framework doctor` warns | 全宿主 |
+| `ROUTER_RS_HOOK_TIMING` | off | stderr `hook_timing` lines | 全宿主 |
+| `ROUTER_RS_CURSOR_CARGO_CHECK_SYNC` | off | On → blocking `cargo check` in postToolUse (up to 25s) | Cursor |
+| `ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC` | off | On → `sync_all` parent dir after hook-state write | Cursor |
+
+### Related code paths
+
+- [`core/core-state/src/utils/task_write_lock.rs`](../../core/core-state/src/utils/task_write_lock.rs) (L1 contract; `router-rs` re-exports via `core_state`)
+- [`core/host-projection/src/hosts/file_state_lock.rs`](../../core/host-projection/src/hosts/file_state_lock.rs) (跨平台文件锁)

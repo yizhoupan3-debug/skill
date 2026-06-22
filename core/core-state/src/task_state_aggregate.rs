@@ -47,7 +47,7 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
     let payload = json!({
         "schema_version": TASK_STATE_AGGREGATE_SCHEMA_VERSION,
         "task_id": tid,
-        "synced_at": Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        "synced_at": framework_kernel::time::now_iso(),
         "goal_state": goal_state,
         "rfv_loop_state": rfv_loop_state,
         "evidence": {

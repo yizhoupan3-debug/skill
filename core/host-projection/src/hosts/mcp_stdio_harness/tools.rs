@@ -181,8 +181,11 @@ pub(super) fn tool_skill_route(
     let manifest_path = skill_manifest_path(repo_root);
     let records = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))?;
     let records = filter_records_for_host(records.as_ref(), Some(host_id))?;
+    let records_json: Vec<Value> = records.iter()
+        .filter_map(|r| serde_json::to_value(r).ok())
+        .collect();
     let decision = crate::hooks::route_task_with_manifest_fallback(
-        &records,
+        &records_json,
         Some(&runtime_path),
         Some(&manifest_path),
         Some(host_id),

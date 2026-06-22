@@ -80,9 +80,10 @@ pub(crate) fn value_as_string_list(value: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Current UTC time in RFC 3339 format.
+/// Current UTC time in RFC 3339 format (seconds precision).
+/// Delegates to the canonical `framework_kernel::time::now_iso`.
 pub(crate) fn now_iso() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    framework_kernel::time::now_iso()
 }
 
 /// Render a Value as a string (string values pass through, numbers become text).

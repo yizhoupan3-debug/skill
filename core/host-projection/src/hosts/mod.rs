@@ -1,6 +1,4 @@
-pub mod codex_hooks;
 pub mod codex_provider;
-pub mod cursor_hooks;
 pub mod cursor_provider;
 pub mod hook_state_common;
 pub mod host_provider;
@@ -14,13 +12,17 @@ pub mod file_state_lock;
 /// Cross-host worktree auto-save and audit utilities (all 4 hosts).
 pub mod worktree_auto_save;
 
+// ── ADR §2.1 unified hook dispatch ──
+pub mod event_handlers;
+pub mod host_extensions;
+pub mod mcp_pre_guard;
+pub mod stop_dispatch;
+
 // ── Migrated host providers ──
 pub mod claude_agent;
-pub mod claude_hooks;
 pub mod claude_provider;
 pub mod mcp_stdio_harness;
 pub mod opencode_agent;
-pub mod opencode_hooks;
 pub mod opencode_provider;
 
 // ── Test shims ──

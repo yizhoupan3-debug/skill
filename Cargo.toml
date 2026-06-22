@@ -29,10 +29,13 @@ members = [
     "core/browser-mcp",
     "core/host-projection",
     "core/framework-runtime",
+    "core/framework-extra",
+    "core/runtime-exit-gate",
+    "core/runtime-infra",
     "core/loop-engine",
     "core/research-harness",
-    "core/tool-layer",
     "tools/evolution-rs",
+    "tools/framework-maint",
     "tools/codegraph-rs"]
 exclude = [
     "codex-aggregator"

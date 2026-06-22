@@ -170,33 +170,13 @@ if [ ! -x "${ROUTER_RS_BIN:-}" ]; then
   exit 0
 fi
 
-# ── Delegate to router-rs (with timeout guard) ───────────────────
+# ── Delegate to router-rs ────────────────────────────────────────
 # Command format: router-rs-cli host hook --event=<EVENT> --repo-root <ROOT> <HOST_ID>
-_ROUTER_HOOK_TIMEOUT=10
-printf '%s' "$HOOK_PAYLOAD" | "$ROUTER_RS_BIN" host hook --event="$HOOK_EVENT" --repo-root "$ROOT" "$HOST_ID" &
-_ROUTER_PID=$!
-# Timer: sleep + kill, then kill the timer itself so it doesn't linger after router exits
-(sleep "${_ROUTER_HOOK_TIMEOUT}" && kill "${_ROUTER_PID}" 2>/dev/null && kill "$$" 2>/dev/null) &
-_TIMER_PID=$!
-_hook_rc=0
-wait "${_ROUTER_PID}" 2>/dev/null || _hook_rc=$?
-# Kill timer to cancel pending sleep (best-effort; timer may have already exited)
-kill "${_TIMER_PID}" 2>/dev/null || true
-wait "${_TIMER_PID}" 2>/dev/null || true  # reap zombie; suppress set -e
-if [ "$_hook_rc" -eq 137 ] || [ "$_hook_rc" -eq 143 ]; then
-  # 137 = SIGKILL (128+9), 143 = SIGTERM (128+15)
-  echo "[$HOST_ID-hook] router-rs timed out after ${_ROUTER_HOOK_TIMEOUT}s for $HOOK_EVENT" >&2
-  exit 2
-fi
-if [ "$_hook_rc" -ne 0 ]; then
-  if critical_event; then
-    emit_fail_closed
-    exit 2
-  fi
-  printf '%s
-' "[$HOST_ID-hook] router-rs failed for non-critical event $HOOK_EVENT (exit $_hook_rc); fail-open" >&2
-  exit 0
-fi
+# NO background timeout subprocess: router-rs binary handles its own timeouts
+# and the parent process exits naturally via Rust Drop semantics (exit(0) removed).
+# Removing the (sleep+kill) timer saves ~1 fork per hook event (~30ms per event).
+printf '%s' "$HOOK_PAYLOAD" | "$ROUTER_RS_BIN" host hook --event="$HOOK_EVENT" --repo-root "$ROOT" "$HOST_ID"
+
 
 # ── Health monitor (optional) ────────────────────────────────────
 HEALTH_MONITOR="$FW/configs/framework/agent-health-monitor.sh"

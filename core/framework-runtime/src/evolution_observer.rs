@@ -287,7 +287,7 @@ impl TelemetryWriter for FanoutTelemetryWriter {
 }
 
 fn rfc3339_now() -> String {
-    chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    framework_kernel::time::now_iso()
 }
 
 #[cfg(test)]

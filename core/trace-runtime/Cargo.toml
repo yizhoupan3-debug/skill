@@ -6,6 +6,7 @@ edition = "2024"
 workspace = true
 
 [dependencies]
+framework-kernel = { path = "../framework-kernel" }
 runtime-storage = { path = "../runtime-storage" }
 chrono.workspace = true
 hex.workspace = true

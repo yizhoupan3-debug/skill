@@ -81,7 +81,8 @@ pub fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponse
 }
 
 pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
-    let research_mode = infer_research_mode(payload);
+    let payload_json = serde_json::to_value(payload).unwrap_or_default();
+    let research_mode = host_projection::hooks::research_mode_for_request(&payload_json);
     let native_runtime = payload.selected_skill == "none";
     let mut lines = vec![
         "Help with the user's request directly. The route is already chosen, so stay on it."
@@ -107,13 +108,13 @@ pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
         "- Use plain Chinese unless the user asks otherwise, and keep the wording natural."
             .to_string(),
     );
-    if research_mode == ResearchMode::Quick {
+    if research_mode == "quick" {
         lines.push("- Keep the default reply short; only use a list when the content is naturally list-shaped.".to_string());
     } else {
         lines.push("- Use a deep-research structure with explicit sections: Key findings, Evidence, Counter-evidence, Confidence, Open risks.".to_string());
     }
     lines.push("- For closeouts, say what was done, what effect was achieved, and what needs to happen next or that the work is finished.".to_string());
-    if research_mode == ResearchMode::Quick {
+    if research_mode == "quick" {
         lines.push("- Do not default to file inventories, evidence dumps, or step-by-step process retellings unless the user asks for them.".to_string());
     } else {
         lines.push("- For each major claim, include at least two independent evidence anchors and one uncertainty note when evidence is incomplete.".to_string());
@@ -141,7 +142,7 @@ pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     } else {
         lines.push("Use the selected skill to solve the user's actual task.".to_string());
     }
-    lines.push(format!("Execution mode: {}.", research_mode.as_str()));
+    lines.push(format!("Execution mode: {research_mode}."));
     lines.join("\n")
 }
 
@@ -212,107 +213,6 @@ pub struct LiveExecuteResult {
     pub continuation_attempted: bool,
     pub continuation_status: Option<String>,
     pub continuation_error: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ResearchMode {
-    Quick,
-    Deep,
-}
-
-impl ResearchMode {
-    fn as_str(self) -> &'static str {
-        match self {
-            ResearchMode::Quick => "quick",
-            ResearchMode::Deep => "deep",
-        }
-    }
-}
-
-/// `external research` alone matches many integration/API strings; require a second research cue.
-fn external_research_phrase_signals_deep(lower: &str) -> bool {
-    if !lower.contains("external research") {
-        return false;
-    }
-    lower.contains("调研")
-        || lower.contains("文献")
-        || lower.contains("审计")
-        || lower.contains("ledger")
-        || lower.contains("quality_gate")
-        || lower.contains("rfv")
-        || lower.contains("外研")
-        || lower.contains("literature")
-        || lower.contains("unknowns")
-        || lower.contains("contradiction")
-        || lower.contains("auditable")
-        || lower.contains("research-grade")
-        || lower.contains("research grade")
-        || lower.contains("科研级")
-        || lower.contains("deep dive")
-}
-
-/// Narrow host-neutral cues for Execute deep shaping (substring match; ASCII segments may be lowercased).
-pub fn payload_text_signals_deep_research(text: &str) -> bool {
-    text.contains("深度调研")
-        || text.contains("深度研究")
-        || text.contains("deep research")
-        || text.contains("deep dive")
-        || text.contains("literature review")
-        || text.contains("literature-review")
-        || text.contains("文献调研")
-        || external_research_phrase_signals_deep(text)
-        || text.contains("research-grade")
-        || text.contains("research grade")
-        || text.contains("科研级调研")
-}
-
-fn normalize_research_mode_token(value: &str) -> Option<ResearchMode> {
-    let lowered = value.trim().to_ascii_lowercase();
-    if lowered.is_empty() {
-        return None;
-    }
-    match lowered.as_str() {
-        "quick" | "fast" | "lite" | "shallow" => Some(ResearchMode::Quick),
-        "deep" | "deep_research" | "deep-research" => Some(ResearchMode::Deep),
-        _ => None,
-    }
-}
-
-fn infer_research_mode(payload: &ExecuteRequestPayload) -> ResearchMode {
-    if let Some(mode) = payload
-        .research_mode
-        .as_deref()
-        .and_then(normalize_research_mode_token)
-    {
-        return mode;
-    }
-    if let Some(mode) = payload
-        .execution_protocol
-        .as_deref()
-        .and_then(normalize_research_mode_token)
-    {
-        return mode;
-    }
-    let task = payload.task.trim().to_ascii_lowercase();
-    if payload_text_signals_deep_research(&task) {
-        return ResearchMode::Deep;
-    }
-    if task.contains("快查") || task.contains("快速调研") {
-        return ResearchMode::Quick;
-    }
-    for reason in &payload.reasons {
-        if let Some(mode) = normalize_research_mode_token(reason) {
-            return mode;
-        }
-        let lowered = reason.to_ascii_lowercase();
-        if payload_text_signals_deep_research(&lowered) {
-            return ResearchMode::Deep;
-        }
-    }
-    if payload.selected_skill == "implementx" {
-        return ResearchMode::Quick;
-    }
-    ResearchMode::Quick
 }
 
 fn usage_total(usage: Option<&serde_json::Map<String, Value>>, key: &str) -> u64 {
@@ -396,9 +296,10 @@ where
         "role": "user",
         "content": payload.task,
     }));
-    let research_mode = infer_research_mode(payload);
+    let payload_json = serde_json::to_value(payload).unwrap_or_default();
+    let research_mode = host_projection::hooks::research_mode_for_request(&payload_json);
     let mut max_tokens = payload.default_output_tokens;
-    if research_mode == ResearchMode::Deep {
+    if research_mode == "deep" {
         max_tokens = max_tokens.max(1200);
     }
     let request_body = serde_json::json!({
@@ -462,7 +363,7 @@ where
     let mut continuation_status = None;
     let mut continuation_error = None;
     let mut usage_merged: Option<serde_json::Map<String, Value>> = None;
-    if research_mode == ResearchMode::Deep && finish_reason.as_deref() == Some("length") {
+    if research_mode == "deep" && finish_reason.as_deref() == Some("length") {
         continuation_attempted = true;
         let system_anchor = build_compact_anchor(prompt_preview, DEEP_CONTINUATION_ANCHOR_CHARS);
         let task_anchor = build_compact_anchor(&payload.task, DEEP_CONTINUATION_ANCHOR_CHARS);
@@ -646,7 +547,9 @@ pub fn build_live_execute_response(
     metadata.insert("status".to_string(), json!(live_result.status));
     metadata.insert(
         "research_mode".to_string(),
-        Value::String(infer_research_mode(payload).as_str().to_string()),
+        Value::String(host_projection::hooks::research_mode_for_request(
+            &serde_json::to_value(payload).unwrap_or_default(),
+        )),
     );
     metadata.insert(
         "finish_reason".to_string(),

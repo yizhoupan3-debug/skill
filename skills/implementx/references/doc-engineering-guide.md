@@ -183,10 +183,11 @@ Proposed | Accepted | Deprecated | Superseded by ADR-NNN
 \```
 
 ## API 文档
-参见 [API docs](./docs/api.md)
+
+框架 API 与架构见 [`docs/spec.md`](../../../docs/spec.md)；完整文档索引见 [`docs/README.md`](../../../docs/README.md)。
 
 ## Contributing
-参见 [CONTRIBUTING.md](./CONTRIBUTING.md)
+参见 [CONTRIBUTING.md](../../../CONTRIBUTING.md)
 
 ## License
 <license type>

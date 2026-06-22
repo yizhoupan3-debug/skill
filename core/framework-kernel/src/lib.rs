@@ -6,9 +6,11 @@ pub mod repo_roots;
 pub mod router_self;
 pub mod runtime_registry;
 pub mod telemetry;
+pub mod time;
 pub mod tokenizer;
 
 // ── leaf modules migrated from runtime-core ──
+pub mod cli_args;
 pub mod skill_lint;
 pub mod skill_repo;
 pub mod stdio_payload_types;

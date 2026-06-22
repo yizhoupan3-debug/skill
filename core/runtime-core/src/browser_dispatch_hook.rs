@@ -3,7 +3,7 @@
 //! The actual `dispatch_browser_command` implementation lives in the `browser-mcp` crate.
 //! At startup, the binary or router-rs registers the implementation via `set_browser_dispatch`.
 
-use crate::cli::args::BrowserSubcommand;
+use framework_kernel::cli_args::BrowserSubcommand;
 use std::sync::OnceLock;
 
 type BrowserDispatchFn = fn(BrowserSubcommand) -> Result<(), String>;

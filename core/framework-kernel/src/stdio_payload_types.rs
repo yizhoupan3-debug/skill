@@ -307,3 +307,82 @@ pub struct TraceMetadataWriteResponsePayload {
     pub routing_runtime_version: u64,
     pub payload_text: String,
 }
+
+// ── Concurrency defaults (moved from runtime-core/infrastructure/stdio_transport.rs) ──
+
+pub const DEFAULT_ROUTER_STDIO_POOL_SIZE: usize = 8;
+pub const MAX_ROUTER_STDIO_POOL_SIZE: usize = 32;
+
+/// Defaults mirrored from `rt_storage::runtime_envelope_ids`.
+pub const DEFAULT_COMPUTE_THREADS_LOCAL: usize = 8;
+pub const MAX_COMPUTE_THREADS_LOCAL: usize = 32;
+pub const DEFAULT_MAX_BACKGROUND_JOBS_LOCAL: usize = 4;
+pub const MAX_BACKGROUND_JOBS_LIMIT_LOCAL: usize = 16;
+pub const DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS_LOCAL: u64 = 1800;
+pub const DEFAULT_MAX_CONCURRENT_SUBAGENTS_LOCAL: usize = 4;
+pub const MAX_CONCURRENT_SUBAGENTS_LIMIT_LOCAL: usize = 8;
+pub const DEFAULT_SUBAGENT_TIMEOUT_SECONDS_LOCAL: u64 = 600;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct StdioRouterConcurrencyDescriptor {
+    pub default_pool_size: usize,
+    pub max_pool_size: usize,
+    pub env_keys: Vec<&'static str>,
+    pub stdio_max_concurrency_arg: &'static str,
+    pub request_concurrency_field: &'static str,
+    pub scheduling: &'static str,
+    pub backpressure: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ComputeConcurrencyDescriptor {
+    pub default_threads: usize,
+    pub max_threads: usize,
+    pub env_keys: Vec<&'static str>,
+    pub cli_arg: &'static str,
+    pub scheduling: &'static str,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RuntimeConcurrencyDefaultsPayload {
+    pub router_stdio: StdioRouterConcurrencyDescriptor,
+    pub compute: ComputeConcurrencyDescriptor,
+    pub max_background_jobs: usize,
+    pub max_background_jobs_limit: usize,
+    pub background_job_timeout_seconds: u64,
+    pub max_concurrent_subagents: usize,
+    pub max_concurrent_subagents_limit: usize,
+    pub subagent_timeout_seconds: u64,
+}
+
+/// Build a payload describing the framework's concurrency defaults and env-var keys.
+pub fn runtime_concurrency_defaults_payload() -> RuntimeConcurrencyDefaultsPayload {
+    RuntimeConcurrencyDefaultsPayload {
+        router_stdio: StdioRouterConcurrencyDescriptor {
+            default_pool_size: DEFAULT_ROUTER_STDIO_POOL_SIZE,
+            max_pool_size: MAX_ROUTER_STDIO_POOL_SIZE,
+            env_keys: vec![
+                "ROUTER_RS_STDIO_POOL_SIZE",
+                "BROWSER_MCP_ROUTER_STDIO_POOL_SIZE",
+                "CODEX_ROUTER_STDIO_POOL_SIZE",
+            ],
+            stdio_max_concurrency_arg: "--stdio-max-concurrency",
+            request_concurrency_field: "concurrency",
+            scheduling: "bounded FIFO with completion-order response emission",
+            backpressure: "reader stops admitting new work while in-flight requests reach the limit",
+        },
+        compute: ComputeConcurrencyDescriptor {
+            default_threads: DEFAULT_COMPUTE_THREADS_LOCAL,
+            max_threads: MAX_COMPUTE_THREADS_LOCAL,
+            env_keys: vec!["ROUTER_RS_COMPUTE_THREADS", "RAYON_NUM_THREADS"],
+            cli_arg: "--compute-threads",
+            scheduling: "bounded Rayon work-stealing for CPU record scans and batch eval",
+        },
+        max_background_jobs: DEFAULT_MAX_BACKGROUND_JOBS_LOCAL,
+        max_background_jobs_limit: MAX_BACKGROUND_JOBS_LIMIT_LOCAL,
+        background_job_timeout_seconds: DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS_LOCAL,
+        max_concurrent_subagents: DEFAULT_MAX_CONCURRENT_SUBAGENTS_LOCAL,
+        max_concurrent_subagents_limit: MAX_CONCURRENT_SUBAGENTS_LIMIT_LOCAL,
+        subagent_timeout_seconds: DEFAULT_SUBAGENT_TIMEOUT_SECONDS_LOCAL,
+    }
+}
