@@ -4,7 +4,7 @@ include!("handlers/stop_closeout.rs");
 fn release_lock_then_finalize_stop(
     repo_root: &Path,
     output: &mut Value,
-    frame: &core_state::task_state::CursorContinuityFrame,
+    frame: &core_state::task_state::ContinuityFrame,
     lock: &mut Option<LockGuard>,
 ) {
     release_state_lock(lock);

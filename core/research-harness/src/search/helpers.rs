@@ -128,28 +128,6 @@ pub(super) fn value_to_string(value: &Value) -> String {
     }
 }
 
-#[allow(dead_code)]
-pub(super) fn arr<'a>(value: &'a Value, key: &str) -> &'a Vec<Value> {
-    value
-        .get(key)
-        .and_then(Value::as_array)
-        .expect("expected array after defaults")
-}
-
-#[allow(dead_code)]
-pub(super) fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
-    obj_mut(value)
-        .entry(key.to_string())
-        .or_insert_with(|| serde_json::json!([]))
-        .as_array_mut()
-        .expect("expected array")
-}
-
-#[allow(dead_code)]
-pub(super) fn obj_mut(value: &mut Value) -> &mut Map<String, Value> {
-    value.as_object_mut().expect("state must be an object")
-}
-
 // ── External source argument (migrated from cli.rs + arg_impls.rs) ──
 
 /// Source selection for external research queries.

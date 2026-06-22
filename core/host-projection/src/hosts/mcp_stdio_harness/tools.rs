@@ -61,29 +61,7 @@ pub(super) fn handle_tools_call(
         eprintln!("[router-rs warning] record_tool_call failed: {e}");
     }
 
-    let result = match tool_name {
-        "framework_snapshot" => tool_framework_snapshot(arguments, repo_root),
-        "skill_route" => tool_skill_route(arguments, repo_root, host_id),
-        "skill_search" => tool_skill_search(arguments, repo_root, host_id),
-        "skill_read" => tool_skill_read(arguments, repo_root),
-        "skill_route_status" => tool_skill_route_status(repo_root),
-        "record_evidence" => tool_record_evidence(arguments, repo_root),
-        "session_checkpoint" => tool_session_checkpoint(arguments, repo_root),
-        "closeout_gate" => tool_closeout_gate(arguments, repo_root, host_id),
-        "rfv_loop_status" | "quality_gate_status" => tool_rfv_loop_status(arguments, repo_root),
-        "rfv_loop_manage" | "quality_gate_manage" => tool_rfv_loop_manage(arguments, repo_root, connection_session_id),
-        "goal_state_manage" => tool_goal_state_manage(arguments, repo_root, connection_session_id),
-        "goal_state_read" => tool_goal_state_read(arguments, repo_root),
-        "closeout_record_write" => tool_closeout_record_write(arguments, repo_root, host_id),
-        "routing_evolution" => tool_routing_evolution(arguments, repo_root),
-        "web_fetch" => tool_web_fetch(arguments),
-        "research_aigc_check" => tool_research_aigc_check(arguments),
-        "research_aigc_humanize" => tool_research_aigc_humanize(arguments),
-        "research_review_dimensions" => tool_research_review_dimensions(arguments),
-        "research_claim_drift" => tool_research_claim_drift(arguments),
-        "research_review_loop" => tool_research_review_loop(arguments),
-        _ => Err(format!("Unknown tool: {tool_name}")),
-    };
+    let result = dispatch_tool(tool_name, arguments, repo_root, host_id, connection_session_id);
 
     match result {
         Ok(content) => {
@@ -461,9 +439,9 @@ pub(super) fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Resul
         .map(|ec| ec.to_string())
         .unwrap_or_else(|| "null".to_string());
     let honor_note = " (honor-system: not bound to host tool execution — verify independently)";
-    Ok(format!(
+    Ok(json!({"result": format!(
         "Evidence recorded{honor_note}: {tool_name_display} '{command_display}' -> exit={exit_display}"
-    ))
+    )}).to_string())
 }
 
 /// 获取 evidence output 的最大字符数配置。
@@ -512,11 +490,11 @@ pub(super) fn tool_session_checkpoint(
     // H2 FIX: Invalidate caches after checkpoint is written to ensure fresh data on next read
     invalidate_evidence_caches();
 
-    Ok(format!(
+    Ok(json!({"result": format!(
         "Checkpoint written: summary={}, next_actions_count={}",
         summary.chars().count(),
         next_actions.len()
-    ))
+    )}).to_string())
 }
 
 pub(super) fn goal_suggests_review_work(goal_state: &Value) -> bool {
@@ -803,7 +781,8 @@ pub fn tool_closeout_gate(
     repo_root: &Path,
     host_id: &str,
 ) -> Result<String, String> {
-    Ok(evaluate_mcp_closeout_gate(arguments, repo_root, host_id)?.formatted)
+    let verdict = evaluate_mcp_closeout_gate(arguments, repo_root, host_id)?;
+    Ok(json!({"result": verdict.formatted}).to_string())
 }
 
 pub(super) fn tool_closeout_record_write(
@@ -913,6 +892,276 @@ pub(super) fn tool_closeout_record_write(
 
     serde_json::to_string_pretty(&result)
         .map_err(|e| format!("serialize closeout result failed: {e}"))
+}
+
+pub(super) fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+    let task_id = arguments.get("task_id").and_then(Value::as_str);
+    let state = core_state::state_manager::read_goal_state(repo_root, task_id);
+    serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
+}
+
+pub(super) fn tool_quality_gate_status(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+    let task_id = arguments.get("task_id").and_then(Value::as_str);
+    let state = core_state::state_manager::read_rfv_loop_state(repo_root, task_id)?;
+    serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
+}
+
+fn parse_rfv_round_argument(value: Option<&Value>) -> Result<u64, String> {
+    let Some(v) = value else {
+        return Err("append_round requires 'round' argument (integer)".to_string());
+    };
+    if let Some(n) = v.as_u64() {
+        return Ok(n);
+    }
+    if let Some(n) = v.as_i64()
+        && n >= 0 {
+            return Ok(n as u64);
+        }
+    Err("append_round requires 'round' argument (integer)".to_string())
+}
+
+pub(super) fn tool_quality_gate_manage(
+    arguments: &Value,
+    repo_root: &Path,
+    connection_session_id: &str,
+) -> Result<String, String> {
+    let operation = arguments
+        .get("operation")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: operation (string)")?;
+    let task_id = arguments.get("task_id").and_then(Value::as_str);
+
+    // repo_root is a &Path, convert to string for the payload
+    let repo_root_str = repo_root.to_string_lossy().to_string();
+
+    let mut payload = json!({
+        "repo_root": repo_root_str,
+        "operation": operation,
+    });
+    if let Some(tid) = task_id {
+        payload["task_id"] = json!(tid);
+    }
+
+    // Per-operation required fields
+    match operation {
+        "start" => {
+            let goal = arguments
+                .get("goal")
+                .and_then(Value::as_str)
+                .ok_or("start requires 'goal' argument (string)")?;
+            payload["goal"] = json!(goal);
+            if let Some(mr) = arguments.get("max_rounds").and_then(Value::as_u64) {
+                payload["max_rounds"] = json!(mr);
+            }
+            if let Some(er) = arguments
+                .get("allow_external_research")
+                .and_then(Value::as_bool)
+            {
+                payload["allow_external_research"] = json!(er);
+            }
+            // inject connection_session_id if not explicit
+            let session_id = arguments
+                .get("session_id")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or(connection_session_id);
+            payload["session_id"] = json!(session_id);
+        }
+        "append_round" => {
+            let round = parse_rfv_round_argument(arguments.get("round"))?;
+            payload["round"] = json!(round);
+
+            // Validate required string arguments with specific error messages
+            let review_summary = arguments
+                .get("review_summary")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'review_summary' argument (string)")?;
+            payload["review_summary"] = json!(review_summary);
+
+            let fix_summary = arguments
+                .get("fix_summary")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'fix_summary' argument (string)")?;
+            payload["fix_summary"] = json!(fix_summary);
+
+            let verify_result = arguments
+                .get("verify_result")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'verify_result' argument (string)")?;
+            if !matches!(verify_result, "PASS" | "FAIL" | "SKIPPED" | "UNKNOWN") {
+                return Err(format!(
+                    "verify_result must be one of PASS/FAIL/SKIPPED/UNKNOWN, got: {verify_result}"
+                ));
+            }
+            payload["verify_result"] = json!(verify_result);
+
+            let supervisor_decision = arguments
+                .get("supervisor_decision")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'supervisor_decision' argument (string)")?;
+            payload["supervisor_decision"] = json!(supervisor_decision);
+
+            let reason = arguments
+                .get("reason")
+                .and_then(Value::as_str)
+                .ok_or("append_round requires 'reason' argument (string)")?;
+            payload["reason"] = json!(reason);
+        }
+        _ => {
+            return Err(format!(
+                "Unknown RFV loop operation: {operation}. Valid operations: start, append_round"
+            ));
+        }
+    }
+
+    // Prefer runtime-core's full implementation (has append_round support).
+    // Fall back to core-state's lightweight version if runtime-core hook not registered.
+    let result = match crate::hooks::quality_gate_drive_registered() {
+        Some(f) => f(payload)?,
+        None => core_state::rfv_loop::framework_rfv_loop(payload)?,
+    };
+    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+}
+
+pub(super) fn tool_goal_state_manage(
+    arguments: &Value,
+    repo_root: &Path,
+    connection_session_id: &str,
+) -> Result<String, String> {
+    let operation = arguments
+        .get("operation")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: operation")?;
+
+    // Auto-resolve task_id from TASK_POINTERS.json (shared with all other tools)
+    let task_id = match arguments.get("task_id").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+        Some(tid) => tid.to_string(),
+        None => core_state::state_manager::read_primary_task_id(repo_root)
+            .ok_or("No active task_id in TASK_POINTERS.json (start a task first or provide task_id explicitly)")?,
+    };
+
+    let repo_root_str = repo_root.to_string_lossy().to_string();
+
+    let mut payload = json!({
+        "repo_root": repo_root_str,
+        "operation": operation,
+    });
+    payload["task_id"] = json!(task_id);
+
+    match operation {
+        "start" => {
+            let goal = arguments
+                .get("goal")
+                .and_then(Value::as_str)
+                .ok_or("start requires 'goal' argument (string)")?;
+            payload["goal"] = json!(goal);
+
+            // drive_until_done defaults to true (matches core-state behavior)
+            let drive_until_done = arguments
+                .get("drive_until_done")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            payload["drive_until_done"] = json!(drive_until_done);
+
+            // Auto-fill contract fields when drive_until_done=true and not explicitly provided
+            if drive_until_done {
+                if arguments.get("non_goals").is_none() {
+                    payload["non_goals"] = json!(["不处理此 goal 范围外的功能"]);
+                }
+                if arguments.get("done_when").is_none() {
+                    payload["done_when"] = json!([
+                        format!("goal 已完成: {goal}"),
+                        "cargo check / test 通过".to_string(),
+                    ]);
+                }
+                if arguments.get("validation_commands").is_none() {
+                    payload["validation_commands"] =
+                        json!(["cargo check --workspace", "cargo test --workspace"]);
+                }
+            }
+
+            // Pass through explicitly provided contract fields (override defaults)
+            if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {
+                payload["non_goals"] = json!(ng);
+            }
+            if let Some(dw) = arguments.get("done_when").and_then(Value::as_array) {
+                payload["done_when"] = json!(dw);
+            }
+            if let Some(vc) = arguments
+                .get("validation_commands")
+                .and_then(Value::as_array)
+            {
+                payload["validation_commands"] = json!(vc);
+            }
+
+            // pass through optional session_id, or inject connection-level
+            let session_id = arguments
+                .get("session_id")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or(connection_session_id);
+            payload["session_id"] = json!(session_id);
+            // pass-through: downstream state_manager consumes these for start
+            if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {
+                match lp {
+                    "my" | "my-light" | "interactive" | "loop-auto" => {
+                        payload["lifecycle_profile"] = json!(lp);
+                    },
+                    _ => return Err(format!(
+                        "Invalid lifecycle_profile: {lp}. Must be one of: my, my-light, interactive, loop-auto"
+                    )),
+                }
+            }
+            if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {
+                payload["current_horizon"] = json!(ch);
+            }
+            if let Some(cg) = arguments.get("completion_gates") {
+                payload["completion_gates"] = cg.clone();
+            }
+            if let Some(md) = arguments.get("metadata") {
+                payload["metadata"] = md.clone();
+            }
+            if let Some(sf) = arguments.get("set_focus").and_then(Value::as_bool) {
+                payload["set_focus"] = json!(sf);
+            }
+        }
+        "checkpoint" => {
+            let note = arguments
+                .get("note")
+                .and_then(Value::as_str)
+                .ok_or("checkpoint requires 'note' argument (string)")?;
+            payload["note"] = json!(note);
+        }
+        "block" => {
+            let blocker = arguments
+                .get("blocker")
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+                .ok_or("block requires 'blocker' argument (string)")?;
+            payload["blocker"] = json!(blocker);
+        }
+        "append_round" => {
+            // Defensive: not in goal_state_manage schema enum, but prevents confusion
+            // if a caller sends it here instead of rfv_loop_manage.
+            return Err("append_round is not a valid goal_state_manage operation. \
+                 Use rfv_loop_manage with operation=append_round instead."
+                .to_string());
+        }
+        "pause" | "resume" | "complete" | "clear" => {
+            // No additional required args
+        }
+        _ => {
+            return Err(format!(
+                "Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block"
+            ));
+        }
+    }
+
+    let result = core_state::state_manager::framework_goal_drive(payload)?;
+
+    // Invalidate snapshot/task_view caches after goal state write (H3 FIX)
+    invalidate_evidence_caches();
+    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
 pub(super) const WEB_FETCH_MAX_REDIRECTS: usize = 5;
@@ -1386,7 +1635,7 @@ fn routing_calibrate(entries: &[RouteLogEntry]) -> String {
 
 // ── Research Harness MCP Tools ──
 
-fn tool_research_aigc_check(arguments: &Value) -> Result<String, String> {
+pub(super) fn tool_research_aigc_check(arguments: &Value) -> Result<String, String> {
     let text = arguments
         .get("text")
         .and_then(Value::as_str)
@@ -1411,7 +1660,7 @@ fn tool_research_aigc_check(arguments: &Value) -> Result<String, String> {
     .map_err(|e| e.to_string())
 }
 
-fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, String> {
+pub(super) fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, String> {
     let text = arguments
         .get("text")
         .and_then(Value::as_str)
@@ -1443,7 +1692,7 @@ fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, String> {
     .map_err(|e| e.to_string())
 }
 
-fn tool_research_review_dimensions(arguments: &Value) -> Result<String, String> {
+pub(super) fn tool_research_review_dimensions(arguments: &Value) -> Result<String, String> {
     let round = arguments
         .get("round")
         .and_then(Value::as_u64)
@@ -1472,7 +1721,7 @@ fn tool_research_review_dimensions(arguments: &Value) -> Result<String, String> 
     .map_err(|e| e.to_string())
 }
 
-fn tool_research_claim_drift(arguments: &Value) -> Result<String, String> {
+pub(super) fn tool_research_claim_drift(arguments: &Value) -> Result<String, String> {
     let original_claims = arguments
         .get("original_claims")
         .and_then(Value::as_array)
@@ -1510,7 +1759,7 @@ fn tool_research_claim_drift(arguments: &Value) -> Result<String, String> {
     .map_err(|e| e.to_string())
 }
 
-fn tool_research_review_loop(arguments: &Value) -> Result<String, String> {
+pub(super) fn tool_research_review_loop(arguments: &Value) -> Result<String, String> {
     let max_rounds = arguments
         .get("max_rounds")
         .and_then(Value::as_u64)

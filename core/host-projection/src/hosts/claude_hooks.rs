@@ -1139,7 +1139,7 @@ fn hydrate_goal_gate_from_disk_for_claude(
     if !state.goal_drive_entry_active && !goal_drive_entrypoint {
         return;
     }
-    let frame = core_state::task_state::resolve_cursor_continuity_frame(repo_root);
+    let frame = core_state::task_state::resolve_continuity_frame(repo_root);
     let Some((goal, task_id)) = frame.hydration_goal.as_ref() else {
         if goal_drive_entrypoint {
             state.goal_drive_entry_active = false;

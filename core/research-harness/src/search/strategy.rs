@@ -4,15 +4,9 @@
 
 use serde_json::{json, Value};
 
+use crate::util::{str_field, str_field_default};
+
 // ── 自包含辅助函数 ──
-
-fn str_field<'a>(obj: &'a Value, key: &str) -> &'a str {
-    obj.get(key).and_then(Value::as_str).unwrap_or("")
-}
-
-fn str_field_default<'a>(obj: &'a Value, key: &str, default: &'a str) -> &'a str {
-    obj.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()).unwrap_or(default)
-}
 
 /// 提取内容词（去停用词、去短词、去重）。
 fn compact_words(text: &str, limit: usize) -> Vec<String> {
@@ -190,14 +184,6 @@ fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
         .and_then(Value::as_array)
         .map(|a| a.as_slice())
         .unwrap_or(&[])
-}
-
-#[allow(dead_code)]
-fn set_key(state: &mut Value, key: &str, value: Value) {
-    state
-        .as_object_mut()
-        .expect("state must be object")
-        .insert(key.to_string(), value);
 }
 
 // ── State-aware search plan & brief ──

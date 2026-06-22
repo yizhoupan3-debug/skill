@@ -49,7 +49,7 @@ fn merge_session_close_style_nudge_when_soft_terminal(output: &mut Value) {
 fn finalize_stop_hook_outputs(
     _repo_root: &Path,
     output: &mut Value,
-    _frame: &core_state::task_state::CursorContinuityFrame,
+    _frame: &core_state::task_state::ContinuityFrame,
 ) {
     merge_session_close_style_nudge_when_soft_terminal(output);
 }
@@ -122,7 +122,7 @@ fn stop_hard_closeout_followup_for_assistant_response(
     if !completion_claimed_in_text(response_text) {
         return None;
     }
-    let frame = core_state::task_state::resolve_cursor_continuity_frame(repo_root);
+    let frame = core_state::task_state::resolve_continuity_frame(repo_root);
     // Pointer 机制已移除：先尝试 frame，再回退到 task_registry.json
     let tid = frame
         .hydration_goal

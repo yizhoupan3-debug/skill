@@ -884,7 +884,7 @@ fn hydrate_goal_gate_from_disk(
     repo_root: &Path,
     state: &mut ReviewGateState,
     arm_if_goal_file: bool,
-    frame: &core_state::task_state::CursorContinuityFrame,
+    frame: &core_state::task_state::ContinuityFrame,
     goal_drive_entrypoint: bool,
 ) {
     if !state.goal_required
@@ -1035,8 +1035,8 @@ fn try_settle_review_subagent_cycle(
     let Some(k) = cycle_key.as_ref() else {
         return false;
     };
-    let lite = core_policy::review_gate_engine::cursor_review_gate_mode()
-        == core_policy::review_gate_engine::CursorReviewGateMode::Lite
+    let lite = core_policy::review_gate_engine::review_gate_mode()
+        == core_policy::review_gate_engine::ReviewGateMode::Lite
         && core_policy::review_gate_engine::cycle_key_eligible_for_lite(k);
     let pending = if lite {
         &mut state.review_lite_pending_cycle_keys
@@ -1095,8 +1095,8 @@ fn push_review_pending_cycle_key(
     let Some(k) = cycle_key else {
         return PendingCyclePush::AtCap;
     };
-    if core_policy::review_gate_engine::cursor_review_gate_mode()
-        == core_policy::review_gate_engine::CursorReviewGateMode::Lite
+    if core_policy::review_gate_engine::review_gate_mode()
+        == core_policy::review_gate_engine::ReviewGateMode::Lite
     {
         if core_policy::review_gate_engine::cycle_key_eligible_for_lite(&k) {
             if lite_stable_id {

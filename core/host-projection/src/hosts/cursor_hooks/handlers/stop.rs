@@ -1,6 +1,6 @@
 // Stop / preCompact hook handlers (P4 handlers split; closeout in stop_closeout.rs).
 fn handle_stop(repo_root: &Path, event: &Value) -> Value {
-    let frame = core_state::task_state::resolve_cursor_continuity_frame(repo_root);
+    let frame = core_state::task_state::resolve_continuity_frame(repo_root);
     let stop_prompt_for_profile = crate::hosts::hook_dispatch::extract_prompt_text(event);
     if crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &stop_prompt_for_profile) {
         let response_text = agent_response_text(event);

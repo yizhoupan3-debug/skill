@@ -169,8 +169,40 @@ macro_rules! poison_safe_lock {
 
 mod tools;
 use tools::*;
+mod tool_registry;
+use tool_registry::*;
 #[cfg(any(test, feature = "test-support"))]
 pub use tools::{build_evidence_entry, tool_closeout_gate};
+
+/// Dispatch a tool call through the global CompositeRegistry.
+/// Defined in mod.rs so both tools and tool_registry can reference it.
+pub(super) fn dispatch_tool(
+    tool_name: &str,
+    args: &Value,
+    repo_root: &Path,
+    host_id: &str,
+    connection_session_id: &str,
+) -> Result<String, String> {
+    use std::sync::OnceLock;
+
+    static REGISTRY: OnceLock<CompositeRegistry> = OnceLock::new();
+    let registry = REGISTRY.get_or_init(|| {
+        let mut r = CompositeRegistry::new();
+        r.register(FrameworkTools);
+        r.register(RoutingTools);
+        r.register(LifecycleTools);
+        r.register(InfraTools);
+        r.register(ResearchTools);
+        r
+    });
+    let ctx = ToolCallContext {
+        repo_root: repo_root.to_path_buf(),
+        host_id: host_id.to_string(),
+        connection_session_id: connection_session_id.to_string(),
+    };
+    registry.dispatch(tool_name, args, &ctx)
+}
+
 fn get_snapshot_cache() -> &'static Arc<std::sync::RwLock<Option<SnapshotCache>>> {
     SNAPSHOT_CACHE.get_or_init(|| Arc::new(std::sync::RwLock::new(None)))
 }
@@ -614,8 +646,8 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                     },
                 },
                 {
-                    "name": "rfv_loop_status",
-                    "description": "查看 RFV 循环状态。",
+                    "name": "quality_gate_status",
+                    "description": "查看 Quality Gate 循环状态。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -624,8 +656,8 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                     },
                 },
                 {
-                    "name": "rfv_loop_manage",
-                    "description": "管理 RFV 循环 (start|append_round)。",
+                    "name": "quality_gate_manage",
+                    "description": "管理 Quality Gate 循环 (start|append_round)。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -784,12 +816,6 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
             ],
         },
     })
-}
-
-fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
-    let task_id = arguments.get("task_id").and_then(Value::as_str);
-    let state = core_state::state_manager::read_goal_state(repo_root, task_id);
-    serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
 }
 
 fn handle_prompts_list(id: Option<Value>) -> Value {
@@ -1035,270 +1061,6 @@ fn handle_resources_read(id: Option<Value>, request: &Value, repo_root: &Path) -
     })
 }
 
-fn tool_rfv_loop_status(arguments: &Value, repo_root: &Path) -> Result<String, String> {
-    let task_id = arguments.get("task_id").and_then(Value::as_str);
-    let state = core_state::state_manager::read_rfv_loop_state(repo_root, task_id)?;
-    serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
-}
-
-fn parse_rfv_round_argument(value: Option<&Value>) -> Result<u64, String> {
-    let Some(v) = value else {
-        return Err("append_round requires 'round' argument (integer)".to_string());
-    };
-    if let Some(n) = v.as_u64() {
-        return Ok(n);
-    }
-    if let Some(n) = v.as_i64()
-        && n >= 0 {
-            return Ok(n as u64);
-        }
-    Err("append_round requires 'round' argument (integer)".to_string())
-}
-
-fn tool_rfv_loop_manage(
-    arguments: &Value,
-    repo_root: &Path,
-    connection_session_id: &str,
-) -> Result<String, String> {
-    let operation = arguments
-        .get("operation")
-        .and_then(Value::as_str)
-        .ok_or("Missing required argument: operation (string)")?;
-    let task_id = arguments.get("task_id").and_then(Value::as_str);
-
-    // repo_root is a &Path, convert to string for the payload
-    let repo_root_str = repo_root.to_string_lossy().to_string();
-
-    let mut payload = json!({
-        "repo_root": repo_root_str,
-        "operation": operation,
-    });
-    if let Some(tid) = task_id {
-        payload["task_id"] = json!(tid);
-    }
-
-    // Per-operation required fields
-    match operation {
-        "start" => {
-            let goal = arguments
-                .get("goal")
-                .and_then(Value::as_str)
-                .ok_or("start requires 'goal' argument (string)")?;
-            payload["goal"] = json!(goal);
-            if let Some(mr) = arguments.get("max_rounds").and_then(Value::as_u64) {
-                payload["max_rounds"] = json!(mr);
-            }
-            if let Some(er) = arguments
-                .get("allow_external_research")
-                .and_then(Value::as_bool)
-            {
-                payload["allow_external_research"] = json!(er);
-            }
-            // inject connection_session_id if not explicit
-            let session_id = arguments
-                .get("session_id")
-                .and_then(Value::as_str)
-                .filter(|s| !s.trim().is_empty())
-                .unwrap_or(connection_session_id);
-            payload["session_id"] = json!(session_id);
-        }
-        "append_round" => {
-            let round = parse_rfv_round_argument(arguments.get("round"))?;
-            payload["round"] = json!(round);
-
-            // Validate required string arguments with specific error messages
-            let review_summary = arguments
-                .get("review_summary")
-                .and_then(Value::as_str)
-                .ok_or("append_round requires 'review_summary' argument (string)")?;
-            payload["review_summary"] = json!(review_summary);
-
-            let fix_summary = arguments
-                .get("fix_summary")
-                .and_then(Value::as_str)
-                .ok_or("append_round requires 'fix_summary' argument (string)")?;
-            payload["fix_summary"] = json!(fix_summary);
-
-            let verify_result = arguments
-                .get("verify_result")
-                .and_then(Value::as_str)
-                .ok_or("append_round requires 'verify_result' argument (string)")?;
-            if !matches!(verify_result, "PASS" | "FAIL" | "SKIPPED" | "UNKNOWN") {
-                return Err(format!(
-                    "verify_result must be one of PASS/FAIL/SKIPPED/UNKNOWN, got: {verify_result}"
-                ));
-            }
-            payload["verify_result"] = json!(verify_result);
-
-            let supervisor_decision = arguments
-                .get("supervisor_decision")
-                .and_then(Value::as_str)
-                .ok_or("append_round requires 'supervisor_decision' argument (string)")?;
-            payload["supervisor_decision"] = json!(supervisor_decision);
-
-            let reason = arguments
-                .get("reason")
-                .and_then(Value::as_str)
-                .ok_or("append_round requires 'reason' argument (string)")?;
-            payload["reason"] = json!(reason);
-        }
-        _ => {
-            return Err(format!(
-                "Unknown RFV loop operation: {operation}. Valid operations: start, append_round"
-            ));
-        }
-    }
-
-    // Prefer runtime-core's full implementation (has append_round support).
-    // Fall back to core-state's lightweight version if runtime-core hook not registered.
-    let result = match crate::hooks::rfv_loop_drive_registered() {
-        Some(f) => f(payload)?,
-        None => core_state::rfv_loop::framework_rfv_loop(payload)?,
-    };
-    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
-}
-
-fn tool_goal_state_manage(
-    arguments: &Value,
-    repo_root: &Path,
-    connection_session_id: &str,
-) -> Result<String, String> {
-    let operation = arguments
-        .get("operation")
-        .and_then(Value::as_str)
-        .ok_or("Missing required argument: operation")?;
-
-    // Auto-resolve task_id from TASK_POINTERS.json (shared with all other tools)
-    let task_id = match arguments.get("task_id").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
-        Some(tid) => tid.to_string(),
-        None => core_state::state_manager::read_primary_task_id(repo_root)
-            .ok_or("No active task_id in TASK_POINTERS.json (start a task first or provide task_id explicitly)")?,
-    };
-
-    let repo_root_str = repo_root.to_string_lossy().to_string();
-
-    let mut payload = json!({
-        "repo_root": repo_root_str,
-        "operation": operation,
-    });
-    payload["task_id"] = json!(task_id);
-
-    match operation {
-        "start" => {
-            let goal = arguments
-                .get("goal")
-                .and_then(Value::as_str)
-                .ok_or("start requires 'goal' argument (string)")?;
-            payload["goal"] = json!(goal);
-
-            // drive_until_done defaults to true (matches core-state behavior)
-            let drive_until_done = arguments
-                .get("drive_until_done")
-                .and_then(Value::as_bool)
-                .unwrap_or(true);
-            payload["drive_until_done"] = json!(drive_until_done);
-
-            // Auto-fill contract fields when drive_until_done=true and not explicitly provided
-            if drive_until_done {
-                if arguments.get("non_goals").is_none() {
-                    payload["non_goals"] = json!(["不处理此 goal 范围外的功能"]);
-                }
-                if arguments.get("done_when").is_none() {
-                    payload["done_when"] = json!([
-                        format!("goal 已完成: {goal}"),
-                        "cargo check / test 通过".to_string(),
-                    ]);
-                }
-                if arguments.get("validation_commands").is_none() {
-                    payload["validation_commands"] =
-                        json!(["cargo check --workspace", "cargo test --workspace"]);
-                }
-            }
-
-            // Pass through explicitly provided contract fields (override defaults)
-            if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {
-                payload["non_goals"] = json!(ng);
-            }
-            if let Some(dw) = arguments.get("done_when").and_then(Value::as_array) {
-                payload["done_when"] = json!(dw);
-            }
-            if let Some(vc) = arguments
-                .get("validation_commands")
-                .and_then(Value::as_array)
-            {
-                payload["validation_commands"] = json!(vc);
-            }
-
-            // pass through optional session_id, or inject connection-level
-            let session_id = arguments
-                .get("session_id")
-                .and_then(Value::as_str)
-                .filter(|s| !s.trim().is_empty())
-                .unwrap_or(connection_session_id);
-            payload["session_id"] = json!(session_id);
-            // pass-through: downstream state_manager consumes these for start
-            if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {
-                match lp {
-                    "my" | "my-light" | "interactive" | "loop-auto" => {
-                        payload["lifecycle_profile"] = json!(lp);
-                    },
-                    _ => return Err(format!(
-                        "Invalid lifecycle_profile: {lp}. Must be one of: my, my-light, interactive, loop-auto"
-                    )),
-                }
-            }
-            if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {
-                payload["current_horizon"] = json!(ch);
-            }
-            if let Some(cg) = arguments.get("completion_gates") {
-                payload["completion_gates"] = cg.clone();
-            }
-            if let Some(md) = arguments.get("metadata") {
-                payload["metadata"] = md.clone();
-            }
-            if let Some(sf) = arguments.get("set_focus").and_then(Value::as_bool) {
-                payload["set_focus"] = json!(sf);
-            }
-        }
-        "checkpoint" => {
-            let note = arguments
-                .get("note")
-                .and_then(Value::as_str)
-                .ok_or("checkpoint requires 'note' argument (string)")?;
-            payload["note"] = json!(note);
-        }
-        "block" => {
-            let blocker = arguments
-                .get("blocker")
-                .and_then(Value::as_str)
-                .filter(|s| !s.trim().is_empty())
-                .ok_or("block requires 'blocker' argument (string)")?;
-            payload["blocker"] = json!(blocker);
-        }
-        "append_round" => {
-            // Defensive: not in goal_state_manage schema enum, but prevents confusion
-            // if a caller sends it here instead of rfv_loop_manage.
-            return Err("append_round is not a valid goal_state_manage operation. \
-                 Use rfv_loop_manage with operation=append_round instead."
-                .to_string());
-        }
-        "pause" | "resume" | "complete" | "clear" => {
-            // No additional required args
-        }
-        _ => {
-            return Err(format!(
-                "Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block"
-            ));
-        }
-    }
-
-    let result = core_state::state_manager::framework_goal_drive(payload)?;
-
-    // Invalidate snapshot/task_view caches after goal state write (H3 FIX)
-    invalidate_evidence_caches();
-    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
-}
-
 // =============================================================================
 // Test helper functions (used by integration tests in mcp_stdio_harness_tests.rs)
 // =============================================================================
@@ -1338,7 +1100,7 @@ pub fn tool_rfv_loop_manage_test_helper(
     let mut args_with_op = arguments.clone();
     args_with_op["operation"] = json!(operation);
 
-    let result = tool_rfv_loop_manage(&args_with_op, &path, "test-session-auto");
+    let result = tool_quality_gate_manage(&args_with_op, &path, "test-session-auto");
     let _ = std::fs::remove_dir_all(&path);
     result
 }

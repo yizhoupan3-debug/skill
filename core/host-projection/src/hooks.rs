@@ -1625,17 +1625,17 @@ pub fn evaluate_mcp_pre_guard_safe(
         })
 }
 
-// ── RFV loop full implementation hook (registered by runtime-core) ──
-static RFV_LOOP_DRIVE: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
+// ── Quality Gate full implementation hook (registered by runtime-core) ──
+static QUALITY_GATE_DRIVE: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
 
-pub fn register_rfv_loop_drive(func: fn(Value) -> Result<Value, String>) {
-    once_lock_set(&RFV_LOOP_DRIVE, func, "RFV_LOOP_DRIVE");
+pub fn register_quality_gate_drive(func: fn(Value) -> Result<Value, String>) {
+    once_lock_set(&QUALITY_GATE_DRIVE, func, "QUALITY_GATE_DRIVE");
 }
 
-/// Call the registered rfv_loop implementation (runtime-core has append_round support).
+/// Call the registered quality_gate implementation (runtime-core has append_round support).
 /// Returns None if not registered (caller should fall back to core-state).
-pub fn rfv_loop_drive_registered() -> Option<fn(Value) -> Result<Value, String>> {
-    RFV_LOOP_DRIVE.get().copied()
+pub fn quality_gate_drive_registered() -> Option<fn(Value) -> Result<Value, String>> {
+    QUALITY_GATE_DRIVE.get().copied()
 }
 
 #[cfg(test)]

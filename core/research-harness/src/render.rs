@@ -9,18 +9,9 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
+use crate::util::{str_field, str_field_default};
+
 // ── 自包含辅助函数 ──
-
-fn str_field<'a>(obj: &'a Value, key: &str) -> &'a str {
-    obj.get(key).and_then(Value::as_str).unwrap_or("")
-}
-
-fn str_field_default<'a>(obj: &'a Value, key: &str, default: &'a str) -> &'a str {
-    obj.get(key)
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(default)
-}
 
 fn str_key<'a>(state: &'a Value, key: &str) -> &'a str {
     state.get(key).and_then(Value::as_str).unwrap_or("")

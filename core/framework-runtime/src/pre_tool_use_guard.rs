@@ -491,7 +491,7 @@ fn register_test_hooks() {
             registry: || vec![],
         },
         framework_goal_drive: |_| Ok(serde_json::Value::Null),
-        framework_rfv_loop: |_| Ok(serde_json::Value::Null),
+        framework_quality_gate: |_| Ok(serde_json::Value::Null),
         handle_session_supervisor_operation: |_| Ok(serde_json::Value::Null),
         handle_background_state_operation: |_| Ok(serde_json::Value::Null),
         runtime_concurrency_defaults_payload: || serde_json::Value::Null,

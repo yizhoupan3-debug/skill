@@ -1,12 +1,11 @@
 //! Quality Gate loop surface for tests and goal/QG mutex.
 //!
-//! Renamed from `rfv_loop` in v9.1. Old names preserved as deprecated aliases in
-//! `rfv_loop.rs` (re-export shim).
+//! Renamed from `rfv_loop` in v9.1. Old names preserved as deprecated aliases.
+//! See `rfv_ops.rs` and `quality_gate_ops.rs` in state_manager for implementations.
 
 use crate::state_manager::{
-    deactivate_goal_for_conflict_with_rfv as deactivate_goal_for_conflict_with_qg,
-    read_primary_task_id, read_rfv_loop_state as read_quality_gate_state,
-    rfv_loop_state_path as quality_gate_state_path,
+    deactivate_goal_for_conflict_with_quality_gate, quality_gate_state_path, read_primary_task_id,
+    read_quality_gate_state,
 };
 use crate::utils::atomic_write::write_atomic_json;
 use crate::utils::path_guard;
@@ -123,7 +122,7 @@ fn framework_quality_gate_impl(payload: Value) -> Result<Value, String> {
                 std::fs::create_dir_all(parent).map_err(|e| format!("mkdir QG task dir: {e}"))?;
             }
             write_atomic_json(&path, &Value::Object(obj.clone()))?;
-            let goal_state_cleared = deactivate_goal_for_conflict_with_qg(&repo_root, &task_id)?;
+            let goal_state_cleared = deactivate_goal_for_conflict_with_quality_gate(&repo_root, &task_id)?;
             Ok(json!({
                 "ok": true,
                 "operation": operation,

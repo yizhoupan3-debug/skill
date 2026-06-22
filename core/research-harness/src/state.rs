@@ -10,6 +10,8 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
+use crate::util::str_field;
+
 // ── Local helpers ──
 
 fn obj_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
@@ -29,14 +31,6 @@ fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
 
 fn set_key(value: &mut Value, key: &str, child: Value) {
     obj_mut(value).insert(key.to_string(), child);
-}
-
-fn str_field<'a>(value: &'a Value, key: &str) -> &'a str {
-    value.get(key).and_then(Value::as_str).unwrap_or("")
-}
-
-fn str_key<'a>(value: &'a Value, key: &str) -> &'a str {
-    value.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
 fn now_iso() -> String {
@@ -245,7 +239,7 @@ pub fn hydrate_state(state: &Value) -> Result<Value> {
             .or_insert(Value::Null);
         gate.entry("decision").or_insert(Value::Null);
     }
-    let updated_at = str_key(&hydrated, "updated_at").to_string();
+    let updated_at = str_field(&hydrated, "updated_at").to_string();
     for hypothesis in arr_mut(&mut hydrated, "hypotheses") {
         let item = hypothesis
             .as_object_mut()

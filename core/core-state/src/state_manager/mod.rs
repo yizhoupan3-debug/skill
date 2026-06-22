@@ -5,6 +5,7 @@
 
 mod goal_ops;
 mod pointer_ops;
+mod quality_gate_ops;
 mod rfv_ops;
 mod scrub_ops;
 mod validation;
@@ -36,10 +37,16 @@ pub use pointer_ops::{
     sync_task_pointers_after_goal_drive, write_active_task_pointer,
 };
 
-// Re-export from rfv_ops
-pub use rfv_ops::{
-    deactivate_goal_for_conflict_with_rfv, read_rfv_loop_state, rfv_loop_state_path,
+// Re-export from quality_gate_ops (primary names)
+pub use quality_gate_ops::{
+    deactivate_goal_for_conflict_with_quality_gate, quality_gate_state_path, read_quality_gate_state,
 };
+// Deprecated backward compat: `rfv_loop_state_path` → `quality_gate_state_path`
+pub use quality_gate_ops::quality_gate_state_path as rfv_loop_state_path;
+// Deprecated backward compat: `read_rfv_loop_state` → `read_quality_gate_state`
+pub use quality_gate_ops::read_quality_gate_state as read_rfv_loop_state;
+// Deprecated backward compat: `deactivate_goal_for_conflict_with_rfv` → `deactivate_goal_for_conflict_with_quality_gate`
+pub use quality_gate_ops::deactivate_goal_for_conflict_with_quality_gate as deactivate_goal_for_conflict_with_rfv;
 
 // Re-export from goal_ops
 pub use goal_ops::{
@@ -91,13 +98,9 @@ fn goal_state_path_for_nested_under_current(
 
 // ── Session ID / staleness ──
 fn current_env_session_id() -> Option<String> {
-    for env_key in &[
-        "CLAUDE_SESSION_ID",
-        "CURSOR_SESSION_ID",
-        "OPENCODE_SESSION_ID",
-    ] {
-        if let Ok(sid) = std::env::var(env_key) {
-            let trimmed = sid.trim().to_string();
+    for (key, val) in std::env::vars() {
+        if key.ends_with("_SESSION_ID") {
+            let trimmed = val.trim().to_string();
             if !trimmed.is_empty() {
                 return Some(trimmed);
             }

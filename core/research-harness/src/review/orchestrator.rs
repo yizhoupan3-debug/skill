@@ -99,7 +99,7 @@ pub fn build_orchestrator_prompt(
 {manuscript_path}
 
 ## Procedure
-1. Initialize RFV loop via `rfv_loop_manage`:
+1. Initialize Quality Gate loop via `quality_gate_manage`:
    - operation: start
    - goal: "{goal}"
    - max_rounds: 10
@@ -111,7 +111,7 @@ pub fn build_orchestrator_prompt(
    b. Spawn ONE reviewer subagent with the dimension-specific prompt
    c. Receive findings (JSON)
    d. Apply surgical fixes based on findings
-   e. Log round via `rfv_loop_manage`:
+   e. Log round via `quality_gate_manage`:
       - operation: append_round
       - round: N
       - review_summary: summary from reviewer
@@ -123,8 +123,8 @@ pub fn build_orchestrator_prompt(
       - Else → stable_count = 0
       - If stable_count >= 2 → BREAK (converged)
 
-3. Close RFV:
-   - rfv_loop_manage(operation=append_round, supervisor_decision="close")
+3. Close QG:
+   - quality_gate_manage(operation=append_round, supervisor_decision="close")
 
 4. Write closeout record:
    - summary: "Paper revision converged after N rounds"

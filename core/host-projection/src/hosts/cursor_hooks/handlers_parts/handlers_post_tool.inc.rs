@@ -316,7 +316,7 @@ fn maybe_run_cursor_rust_lint(repo_root: &Path, event: &Value) -> Option<String>
 }
 
 fn handle_after_agent_response(repo_root: &Path, event: &Value) -> Value {
-    let frame = core_state::task_state::resolve_cursor_continuity_frame(repo_root);
+    let frame = core_state::task_state::resolve_continuity_frame(repo_root);
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
         return hook_lock_unavailable_notice_json();

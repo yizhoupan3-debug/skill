@@ -17,10 +17,6 @@ use crate::search::strategy::*;
 
 // ── Local helpers ──
 
-fn str_key<'a>(state: &'a Value, key: &str) -> &'a str {
-    state.get(key).and_then(Value::as_str).unwrap_or("")
-}
-
 fn novelty_gate(state: &Value) -> &Value {
     state.get("novelty_gate").unwrap_or(&Value::Null)
 }
@@ -67,7 +63,6 @@ fn ensure_state_defaults(state: &Value) -> Value {
     s
 }
 
-#[allow(dead_code)]
 fn arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
     state
         .get(key)
@@ -84,14 +79,6 @@ fn arr_mut<'a>(state: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
         .or_insert_with(|| json!([]))
         .as_array_mut()
         .expect("expected array")
-}
-
-#[allow(dead_code)]
-fn set_key(state: &mut Value, key: &str, value: Value) {
-    state
-        .as_object_mut()
-        .expect("state must be object")
-        .insert(key.to_string(), value);
 }
 
 fn now_iso() -> String {
@@ -747,7 +734,7 @@ pub fn draft_claims_from_state(
     let mut next_state = ensure_state_defaults(state);
     let question = question_override
         .map(ToString::to_string)
-        .unwrap_or_else(|| str_key(&next_state, "question").to_string());
+        .unwrap_or_else(|| crate::util::str_field(&next_state, "question").to_string());
     let drafts = prioritize_claims(&propose_claims_from_question(&question, count));
     let gate = novelty_gate_mut(&mut next_state);
     gate.insert("draft_claims".into(), json!(drafts));

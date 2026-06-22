@@ -915,8 +915,8 @@ fn review_gate_mode_strict_regression_unset_env() {
     let _env = core_policy::test_env_sync::process_env_lock();
     unsafe { env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE") };
     assert_eq!(
-        core_policy::review_gate_engine::cursor_review_gate_mode(),
-        core_policy::review_gate_engine::CursorReviewGateMode::Strict
+        core_policy::review_gate_engine::review_gate_mode(),
+        core_policy::review_gate_engine::ReviewGateMode::Strict
     );
 }
 
@@ -1242,14 +1242,14 @@ fn review_gate_env_matrix_fixtures_apply_env() {
         if mode.eq_ignore_ascii_case("lite") {
             unsafe { env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE", "lite") };
             assert_eq!(
-                core_policy::review_gate_engine::cursor_review_gate_mode(),
-                core_policy::review_gate_engine::CursorReviewGateMode::Lite
+                core_policy::review_gate_engine::review_gate_mode(),
+                core_policy::review_gate_engine::ReviewGateMode::Lite
             );
         } else {
             unsafe { env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_MODE") };
             assert_eq!(
-                core_policy::review_gate_engine::cursor_review_gate_mode(),
-                core_policy::review_gate_engine::CursorReviewGateMode::Strict
+                core_policy::review_gate_engine::review_gate_mode(),
+                core_policy::review_gate_engine::ReviewGateMode::Strict
             );
         }
         if fork_infer {

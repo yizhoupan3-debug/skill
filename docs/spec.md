@@ -1,13 +1,13 @@
 ---
-last_verified: "2026-06-21"
-version: "unified-v8.5"
+last_verified: "2026-06-22"
+version: "unified-v9"
 ---
 
 # 框架统一规约 (Unified Framework Specification)
 
-> 本文件是框架**总览规约**，覆盖架构总览、设计原则与五层模型。
+> 本文件是框架**总览规约**，覆盖架构总览、设计原则与六层模型（宿主层/运行层/路由层/工具层/Skill层/Feature层）。
 > 各子系统详细规约见下方 `extends` 延伸文档（各自在其领域内为真源）。
-> 实施路线图见 `artifacts/current/roadmap-v8.5.md`（控制面重构）。
+> 实施路线图见 `artifacts/current/roadmap-v9.md`（全栈治理）。
 > v7 路线图已归档：`artifacts/current/roadmap-v7.md`（v7.0-final, 2026-06-18）。
 
 ---
@@ -32,7 +32,7 @@ version: "unified-v8.5"
 ### 1.1 Crate 拓扑 (v7)
 
 ```
-runtime-core (~14K LOC, facade)  ← 核心生命周期/closeout/编排/re-export 子 crate
+runtime-core (~3K LOC, 瘦胶水层)  ← 仅保留 init_hooks + register_*_hooks + telemetry + 闭包注册
 ├── framework_runtime/            ← MCP stdio dispatch + doctor + session artifacts
 ├── cli/                          ← CLI 参数解析
 ├── rfv_loop.rs                   ← RFV 循环完整实现
@@ -41,7 +41,7 @@ runtime-core (~14K LOC, facade)  ← 核心生命周期/closeout/编排/re-expor
 ├── 184 tests
 └── features: codegraph, host-{cursor,claude,codex,opencode}
 
-core/framework-runtime (~5K LOC)  ← 框架运行时核心（从 runtime-core 提取）
+core/framework-runtime (~18.5K LOC)  ← 业务逻辑层（吸收 stdio_dispatch/session_artifacts/evidence/closeout/schema_drift 等14子模块）
 ├── closeout_enforcement.rs       ← hard/soft blocker 分级
 ├── execution_contract.rs         ← 执行契约（前置/后置条件验证）
 ├── pre_tool_use_guard.rs         ← PreToolUse 守卫

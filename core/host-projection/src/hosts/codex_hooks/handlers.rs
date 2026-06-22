@@ -20,7 +20,7 @@ use core_policy::hook_common::{
     has_override, is_reviewer_lane_normalized, normalize_subagent_type, normalize_tool_name,
 };
 use core_policy::review_gate_engine::{
-    ReviewGateFacts, fork_context_from_values, maybe_bump_codex_review_phase_for_compact_findings,
+    ReviewGateFacts, fork_context_from_values, maybe_bump_review_phase_for_compact_findings,
     review_independent_reviewer_evidence,
 };
 use serde_json::{Value, json};
@@ -429,7 +429,7 @@ pub(super) fn handle_codex_stop(repo_root: &Path, event: &Value) -> Option<Value
                     &response_full,
                     core_policy::hook_common::HOOK_SIGNAL_ASSISTANT_TAIL_CHARS,
                 );
-                if let Some(phase) = maybe_bump_codex_review_phase_for_compact_findings(
+                if let Some(phase) = maybe_bump_review_phase_for_compact_findings(
                     state.review_gate.review_required,
                     state.review_gate.review_override,
                     state.phase,

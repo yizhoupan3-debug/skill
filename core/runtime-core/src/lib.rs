@@ -6,7 +6,7 @@
 
 // ── original four ──
 // background_state → extracted to runtime-storage crate
-pub use rt_storage::background_state;
+pub(crate) use rt_storage::background_state;
 // runtime_envelope_ids, runtime_storage → extracted to runtime-storage crate
 pub use rt_storage::runtime_envelope_ids;
 pub use rt_storage::runtime_storage;
@@ -14,9 +14,9 @@ pub use trace_runtime;
 
 // ── migrated modules (B3) ──
 pub use ::framework_runtime::closeout_enforcement;
-pub use ::framework_runtime::execution_contract;
+pub(crate) use ::framework_runtime::execution_contract;
 pub mod framework_runtime;
-pub use session_supervisor;
+pub(crate) use session_supervisor;
 pub use framework_kernel::framework_profile;
 pub mod rfv_loop;
 pub mod schema_drift;
@@ -25,18 +25,17 @@ pub mod schema_drift;
 pub mod browser_dispatch_hook;
 
 // ── re-exports from rt_core_contracts (flattened, no intermediate contracts module) ──
-pub use rt_core_contracts::formal_toolchain;
-pub use rt_core_contracts::framework_skills;
+#[allow(unused_imports)]
+pub(crate) use rt_core_contracts::formal_toolchain;
 pub use rt_core_contracts::harness_contract;
-pub use rt_core_contracts::harness_context_signals;
-pub use rt_core_contracts::harness_operator_nudges;
-pub use rt_core_contracts::hook_event_routing;
-pub use rt_core_contracts::hook_observation_rules;
-pub use rt_core_contracts::hook_outbound_protect;
+pub(crate) use rt_core_contracts::harness_context_signals;
+pub(crate) use rt_core_contracts::harness_operator_nudges;
+pub(crate) use rt_core_contracts::hook_event_routing;
 pub use rt_core_contracts::kernel_bootstrap;
 pub use rt_core_contracts::mcp_pre_guard;
 pub use rt_core_contracts::router_env_flags;
-pub use rt_core_contracts::router_rs_observation;
+pub(crate) use rt_core_contracts::framework_skills;
+pub(crate) use rt_core_contracts::router_rs_observation;
 pub use rt_core_contracts::session_call_tracker;
 pub use rt_core_contracts::web_fetch_guard;
 
@@ -44,10 +43,10 @@ pub use rt_core_contracts::web_fetch_guard;
 pub use core_state::utils::atomic_write;
 pub use core_state::utils::path_guard;
 pub use core_state::step_ledger;
-pub use core_state::task_ledger;
+pub(crate) use core_state::task_ledger;
 pub use core_state::task_state;
 pub use core_state::task_state_aggregate;
-pub use core_state::utils::task_write_lock;
+pub(crate) use core_state::utils::task_write_lock;
 pub use core_state::state_manager as goal_drive;
 
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
@@ -62,7 +61,7 @@ pub mod cli;
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
 pub mod eval_route;
-pub use framework_kernel::framework_host_targets;
+pub(crate) use framework_kernel::framework_host_targets;
 pub mod framework_maint;
 pub use host_projection::host_entrypoint_sync;
 pub use host_projection::host_integration;
@@ -160,6 +159,10 @@ static HOST_PROJECTION_HOOKS_INIT: OnceLock<()> = OnceLock::new();
 
 /// Register host-projection hooks with runtime-core implementations.
 /// Safe to call multiple times; only the first call takes effect.
+///
+/// NOTE: This function is ~209 lines. Consider splitting into per-domain
+/// registration helpers (e.g. `register_runtime_hooks`, `register_paper_hooks`,
+/// `register_web_fetch_hooks`) to keep each registration scope focused.
 pub fn register_host_projection_hooks() {
     HOST_PROJECTION_HOOKS_INIT.get_or_init(|| {
         // ── per-module registration ──
@@ -305,7 +308,7 @@ pub fn register_host_projection_hooks() {
         });
 
         // ── RFV loop full implementation (supports append_round) ──
-        host_projection::hooks::register_rfv_loop_drive(rfv_loop::framework_rfv_loop);
+        host_projection::hooks::register_quality_gate_drive(rfv_loop::framework_rfv_loop);
 
         // ── framework-runtime internal hooks (pre_tool_use_guard, closeout, etc.) ──
         ::framework_runtime::hooks::register(::framework_runtime::hooks::RuntimeCoreHooks {
@@ -335,7 +338,7 @@ pub fn register_host_projection_hooks() {
                 },
             },
             framework_goal_drive: core_state::state_manager::framework_goal_drive,
-            framework_rfv_loop: rfv_loop::framework_rfv_loop,
+            framework_quality_gate: rfv_loop::framework_rfv_loop,
             handle_session_supervisor_operation: session_supervisor::handle_session_supervisor_operation,
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
             runtime_concurrency_defaults_payload: || {

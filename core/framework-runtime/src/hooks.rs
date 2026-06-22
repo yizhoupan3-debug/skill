@@ -74,7 +74,7 @@ impl RuntimeCoreHooks {
     pub fn default_host_id(&self) -> &'static str { (self.host_provider.default_id)() }
     pub fn host_provider_registry(&self) -> Vec<(&'static str, Option<&'static str>)> { (self.host_provider.registry)() }
     pub fn framework_goal_drive(&self, payload: Value) -> Result<Value, String> { (self.framework_goal_drive)(payload) }
-    pub fn framework_rfv_loop(&self, payload: Value) -> Result<Value, String> { (self.framework_rfv_loop)(payload) }
+    pub fn framework_quality_gate(&self, payload: Value) -> Result<Value, String> { (self.framework_quality_gate)(payload) }
     pub fn handle_session_supervisor_operation(&self, payload: Value) -> Result<Value, String> { (self.handle_session_supervisor_operation)(payload) }
     pub fn handle_background_state_operation(&self, payload: Value) -> Result<Value, String> { (self.handle_background_state_operation)(payload) }
     pub fn runtime_concurrency_defaults_payload(&self) -> Value { (self.runtime_concurrency_defaults_payload)() }
@@ -96,7 +96,7 @@ pub struct RuntimeCoreHooks {
 
     // ── Goal / RFV ──
     pub framework_goal_drive: fn(Value) -> Result<Value, String>,
-    pub framework_rfv_loop: fn(Value) -> Result<Value, String>,
+    pub framework_quality_gate: fn(Value) -> Result<Value, String>,
 
     // ── Session / 后台 ──
     pub handle_session_supervisor_operation: fn(Value) -> Result<Value, String>,

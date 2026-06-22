@@ -9,6 +9,8 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::Path;
 
+use crate::util::{str_field, str_field_default};
+
 // ── 自包含辅助函数 ──
 
 fn arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
@@ -27,18 +29,6 @@ fn arr_mut<'a>(state: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
 
 fn set_key(state: &mut Value, key: &str, value: Value) {
     state.as_object_mut().expect("state must be object").insert(key.to_string(), value);
-}
-
-fn str_field<'a>(obj: &'a Value, key: &str) -> &'a str {
-    obj.get(key).and_then(Value::as_str).unwrap_or("")
-}
-
-fn str_field_default<'a>(obj: &'a Value, key: &str, default: &'a str) -> &'a str {
-    obj.get(key).and_then(Value::as_str).filter(|s| !s.is_empty()).unwrap_or(default)
-}
-
-fn str_key<'a>(state: &'a Value, key: &str) -> &'a str {
-    state.get(key).and_then(Value::as_str).unwrap_or("")
 }
 
 fn now_iso() -> String {
@@ -90,23 +80,6 @@ fn merge_string_array(existing: &Value, additions: &[String]) -> Value {
     json!(merged)
 }
 
-#[allow(dead_code)]
-fn value_to_string(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Number(n) => n.to_string(),
-        Value::Bool(b) => b.to_string(),
-        Value::Null => "-".into(),
-        _ => v.to_string(),
-    }
-}
-
-#[allow(dead_code)]
-fn join_string_array(values: &[Value]) -> String {
-    if values.is_empty() { return "_none_".into(); }
-    values.iter().map(|v| v.as_str().unwrap_or("")).collect::<Vec<_>>().join(", ")
-}
-
 fn novelty_gate(state: &Value) -> &Value {
     state.get("novelty_gate").unwrap_or(&Value::Null)
 }
@@ -117,11 +90,6 @@ fn novelty_gate_mut(state: &mut Value) -> &mut Value {
 
 fn novelty_str<'a>(state: &'a Value, key: &str, default: &'a str) -> &'a str {
     novelty_gate(state).get(key).and_then(Value::as_str).unwrap_or(default)
-}
-
-#[allow(dead_code)]
-fn novelty_value(state: &Value, key: &str) -> Value {
-    novelty_gate(state).get(key).cloned().unwrap_or(Value::Null)
 }
 
 fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
@@ -137,9 +105,6 @@ fn slugify(text: &str) -> String {
     let slug = slug.split('-').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("-");
     if slug.is_empty() { "hypothesis".into() } else { slug }
 }
-
-#[allow(dead_code)]
-fn refresh_novelty_views(_state: &mut Value) { /* placeholder */ }
 
 fn ensure_state_defaults(state: &Value) -> Value {
     let mut s = state.clone();
@@ -164,16 +129,6 @@ fn ensure_state_defaults(state: &Value) -> Value {
     obj.entry("created_at").or_insert(json!(now));
     s
 }
-
-#[allow(dead_code)]
-fn repo_root() -> Result<std::path::PathBuf> {
-    std::env::current_dir().map_err(|e| anyhow!("cannot determine repo root: {e}"))
-}
-
-#[allow(dead_code)]
-fn capture_environment_fingerprint(_workspace: &Path) -> Value { Value::Null }
-#[allow(dead_code)]
-fn capture_git_provenance(_workspace: &Path) -> Value { Value::Null }
 
 // ── 常量 ──
 
@@ -569,7 +524,7 @@ pub fn default_state(project: &str, question: &str, mode: &str) -> Value {
 // ── 推荐下一步 ──
 
 pub fn recommend_next_actions(state: &Value) -> Vec<String> {
-    let updated_days = days_since(str_key(state, "updated_at"));
+    let updated_days = days_since(str_field(state, "updated_at"));
     let stale = updated_days.is_some_and(|d| d > STALE_STATE_DAYS);
     if stale || (!arr(state, "run_history").is_empty() && current_context_runs(state).is_empty()) {
         return vec![
@@ -617,7 +572,7 @@ pub struct StateFreshness {
 ///
 /// Returns staleness indicator, history bias risk, and recent activity windows.
 pub fn state_freshness(state: &Value) -> StateFreshness {
-    let updated_at = str_key(state, "updated_at");
+    let updated_at = str_field(state, "updated_at");
     let stale = days_since(updated_at)
         .map(|d| d > STALE_STATE_DAYS)
         .unwrap_or(true);

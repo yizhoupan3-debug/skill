@@ -113,15 +113,15 @@ pub fn verify_rfv_convergence(
     repo_root: &Path,
     task_id: &str,
 ) -> Result<(), Vec<String>> {
-    let rfv_path = repo_root
+    let qg_path = repo_root
         .join("artifacts/current")
         .join(task_id)
         .join("RFV_LOOP_STATE.json");
-    if !rfv_path.is_file() {
-        // No RFV state — not a paper-revision task, or RFV not started. Pass through.
+    if !qg_path.is_file() {
+        // No quality gate state — not a paper-revision task, or QG not started. Pass through.
         return Ok(());
     }
-    let raw = match fs::read_to_string(&rfv_path) {
+    let raw = match fs::read_to_string(&qg_path) {
         Ok(r) => r,
         Err(_) => return Ok(()), // Can't read — not a hard block for non-paper tasks
     };
@@ -134,14 +134,14 @@ pub fn verify_rfv_convergence(
 
     let loop_status = val.get("loop_status").and_then(|v| v.as_str()).unwrap_or("");
     if loop_status != "closed" {
-        violations.push(format!("rfv_loop_not_closed: status={}", loop_status));
+        violations.push(format!("quality_gate_not_closed: status={}", loop_status));
     }
 
     let current_round = val.get("current_round").and_then(|v| v.as_u64()).unwrap_or(0);
     let min_rounds = val.get("min_rounds").and_then(|v| v.as_u64()).unwrap_or(0);
     if current_round < min_rounds {
         violations.push(format!(
-            "rfv_below_min_rounds: current={} min={}",
+            "quality_gate_below_min_rounds: current={} min={}",
             current_round, min_rounds
         ));
     }

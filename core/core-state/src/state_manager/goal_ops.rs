@@ -10,7 +10,7 @@ use tracing::warn;
 use super::pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, sync_task_pointers_after_goal_drive,
 };
-use super::rfv_ops::deactivate_rfv_for_conflict_with_goal_drive;
+use super::quality_gate_ops::deactivate_quality_gate_for_conflict_with_goal_drive;
 use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, now_iso, read_goal_state};
 
 fn resolve_task_id_strict(payload: &Value) -> Result<String, String> {
@@ -79,14 +79,10 @@ fn resolve_session_id(payload: &Value) -> String {
     {
         return sid.to_string();
     }
-    // 2. Environment variables
-    for env_key in &[
-        "CLAUDE_SESSION_ID",
-        "CURSOR_SESSION_ID",
-        "OPENCODE_SESSION_ID",
-    ] {
-        if let Ok(sid) = std::env::var(env_key) {
-            let trimmed = sid.trim().to_string();
+    // 2. Environment variables: scan for any *_SESSION_ID
+    for (key, val) in std::env::vars() {
+        if key.ends_with("_SESSION_ID") {
+            let trimmed = val.trim().to_string();
             if !trimmed.is_empty() {
                 return trimmed;
             }
@@ -444,8 +440,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
             invalidate_route_records_cache_on_write();
-            let rfv_loop_superseded =
-                deactivate_rfv_for_conflict_with_goal_drive(&repo_root, &task_id)?;
+            let quality_gate_superseded =
+                deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
@@ -456,7 +452,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
                 "status": "running",
-                "rfv_loop_superseded": rfv_loop_superseded,
+                "quality_gate_superseded": quality_gate_superseded,
             }))
         }
         "checkpoint" => {
@@ -639,7 +635,7 @@ fn resume_goal_running(
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
     invalidate_route_records_cache_on_write();
-    let rfv_loop_superseded = deactivate_rfv_for_conflict_with_goal_drive(repo_root, &task_id)?;
+    let quality_gate_superseded = deactivate_quality_gate_for_conflict_with_goal_drive(repo_root, &task_id)?;
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     let goal_label = state
         .get("goal")
@@ -652,7 +648,7 @@ fn resume_goal_running(
         "task_id": task_id,
         "goal_state_path": path.display().to_string(),
         "goal_state": state,
-        "rfv_loop_superseded": rfv_loop_superseded,
+        "quality_gate_superseded": quality_gate_superseded,
     }))
 }
 

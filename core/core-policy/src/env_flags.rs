@@ -209,6 +209,22 @@ fn parse_review_gate_stop_max_nudges_cap(raw: Option<&str>) -> Option<u32> {
     Some(8)
 }
 
+/// Read an env var with legacy fallback. Tries new_name first, then old_name.
+/// Logs a deprecation warning on stderr when legacy name is used.
+pub fn env_with_legacy_fallback(new_name: &str, old_name: &str) -> Option<String> {
+    match std::env::var(new_name) {
+        Ok(val) => Some(val),
+        Err(_) => {
+            if let Ok(val) = std::env::var(old_name) {
+                eprintln!("[router-rs] DEPRECATED: use {new_name} instead of {old_name}");
+                Some(val)
+            } else {
+                None
+            }
+        }
+    }
+}
+
 fn parse_usize_clamped(
     canonical_key: &'static str,
     legacy_key: &'static str,

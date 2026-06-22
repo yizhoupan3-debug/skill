@@ -1,5 +1,5 @@
 fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
-    let frame = core_state::task_state::resolve_cursor_continuity_frame(repo_root);
+    let frame = core_state::task_state::resolve_continuity_frame(repo_root);
     let mut lock = acquire_state_lock(repo_root, event);
     if lock.is_none() {
         let (allow_continue, followup) = lock_failure_followup_for_before_submit(repo_root, event);

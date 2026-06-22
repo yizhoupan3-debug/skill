@@ -3,7 +3,7 @@
 //! Design: see `core/core-state/src/task_state.rs` (this file) and
 //! `core/core-state/src/task_state_aggregate.rs` for the three-phase resolve model.
 //! **Writes** serialize via `task_write_lock`
-//! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `CursorContinuityFrame`).
+//! (phase 2); this module only aggregates read models (`ResolvedTaskView`, `ContinuityFrame`).
 
 use crate::state_manager::{
     goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task,
@@ -226,7 +226,7 @@ pub fn maybe_promote_focus_to_active_pointer(repo_root: &Path) -> bool {
 /// - `pointer_view`：`resolve_task_view_with_pointers`（override 无 → active → focus），供续跑合并时与 `active_task` 对齐缓存。
 /// - `hydration_goal`：与 `read_goal_state_for_hydration_from_pointer_ids` 一致（active → focus；不扫 orphan），供 `AG_FOLLOWUP` hydrate；与 `pointer_view` 共用同一 [`read_task_pointers`] 快照。
 #[derive(Debug, Clone)]
-pub struct CursorContinuityFrame {
+pub struct ContinuityFrame {
     pub pointer_view: ResolvedTaskView,
     pub hydration_goal: Option<(serde_json::Value, String)>,
 }
@@ -234,7 +234,7 @@ pub struct CursorContinuityFrame {
 /// beforeSubmit / Stop 入口：一次构建指针视图 + hydration 目标对。
 /// 会话级作用域：默认仅 active/focus 指针 hydration；不扫 orphan。
 /// 遗留 diagnostics scan 仅当 `ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE=1` 显式 opt-in。
-pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFrame {
+pub fn resolve_continuity_frame(repo_root: &Path) -> ContinuityFrame {
     let pointers = read_task_pointers(repo_root);
     let pointer_view = resolve_task_view_with_pointers(repo_root, None, pointers.clone());
     let hydration_goal = crate::state_manager::read_goal_state_for_hydration_from_pointer_ids(
@@ -245,7 +245,7 @@ pub fn resolve_cursor_continuity_frame(repo_root: &Path) -> CursorContinuityFram
     .ok()
     .flatten()
     .or_else(|| goal_hydration_diagnostics_scan_fallback(repo_root));
-    CursorContinuityFrame {
+    ContinuityFrame {
         pointer_view,
         hydration_goal,
     }
@@ -665,7 +665,7 @@ pub fn hydrate_task_state_hybrid(
 }
 
 /// Like [`resolve_task_view`], but uses a caller-supplied [`TaskPointers`] snapshot (e.g. paired
-/// with [`read_goal_state_for_hydration_from_pointer_ids`] in [`resolve_cursor_continuity_frame`]).
+/// with [`read_goal_state_for_hydration_from_pointer_ids`] in [`resolve_continuity_frame`]).
 pub fn resolve_task_view_with_pointers(
     repo_root: &Path,
     task_id_override: Option<&str>,
@@ -1563,7 +1563,7 @@ mod tests {
             r#"{"goal":"orphan","status":"running","drive_until_done":true}"#,
         )
         .unwrap();
-        let frame = resolve_cursor_continuity_frame(&tmp);
+        let frame = resolve_continuity_frame(&tmp);
         assert!(
             frame.pointer_view.task_id.is_none(),
             "stub pointers → no task_id in pointer_view"

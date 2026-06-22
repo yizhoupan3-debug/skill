@@ -70,9 +70,9 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
             warns.push(msg);
         }
     }
-    let review_mode = match crate::review_gate_engine::cursor_review_gate_mode() {
-        crate::review_gate_engine::CursorReviewGateMode::Lite => "lite",
-        crate::review_gate_engine::CursorReviewGateMode::Strict => "strict",
+    let review_mode = match crate::review_gate_engine::review_gate_mode() {
+        crate::review_gate_engine::ReviewGateMode::Lite => "lite",
+        crate::review_gate_engine::ReviewGateMode::Strict => "strict",
     };
     println!(
         "ROUTER_RS_REVIEW_GATE_MODE: {review_mode} (env ROUTER_RS_REVIEW_GATE_MODE, legacy ROUTER_RS_CURSOR_REVIEW_GATE_MODE)"

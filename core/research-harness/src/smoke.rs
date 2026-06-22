@@ -18,20 +18,9 @@ use std::time::Duration;
 
 use crate::search::arxiv;
 use crate::search::semantic_scholar;
+use crate::util::{str_field, str_field_default};
 
 // ── Local helpers ──
-
-fn str_field<'a>(value: &'a Value, key: &str) -> &'a str {
-    value.get(key).and_then(Value::as_str).unwrap_or("")
-}
-
-fn str_field_default<'a>(value: &'a Value, key: &str, default: &'a str) -> &'a str {
-    value
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|s| !s.is_empty())
-        .unwrap_or(default)
-}
 
 fn http_client(timeout_secs: u64) -> Result<reqwest::blocking::Client> {
     reqwest::blocking::Client::builder()
