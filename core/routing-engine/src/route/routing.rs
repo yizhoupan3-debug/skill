@@ -863,6 +863,10 @@ fn hot_qualifies_for_retry(hot: &RouteDecision) -> bool {
             && hot_retry_override_skills()
                 .contains(&hot.selected_skill.as_str()))
         || (hot.selected_skill == "systematic-debugging" && hot.score < 50.0)
+    // ^^ systematic-debugging gets a higher retry threshold (50.0 vs 35.0)
+    // because its gate-purpose (root-cause analysis) benefits from a wider
+    // fallback safety margin — a low hot-score with a different skill shown
+    // by the full manifest is likely a better route.
 }
 
 fn is_significant_score_gap_with_signal(full: &RouteDecision, hot: &RouteDecision) -> bool {

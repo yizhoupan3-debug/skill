@@ -338,6 +338,20 @@ fn load_host_platforms_registry(repo_root: &Path) -> Result<Vec<String>, String>
     Ok(hosts)
 }
 
+/// Walk ancestors from `start` until a directory containing
+/// `configs/framework/RUNTIME_REGISTRY.json` is found.  Returns `None`
+/// if the repo root cannot be determined (e.g. the file was moved or
+/// the project layout does not match expectations).
+fn discover_repo_root(start: &Path) -> Option<PathBuf> {
+    let canonical = fs::canonicalize(start).ok()?;
+    for ancestor in canonical.ancestors() {
+        if ancestor.join("configs/framework/RUNTIME_REGISTRY.json").is_file() {
+            return Some(ancestor.to_path_buf());
+        }
+    }
+    None
+}
+
 /// Expand `["supported"]` / `["all-hosts"]` wildcard in host_platforms to all registered hosts.
 fn expand_supported_host_platforms(records: &mut [SkillRecord], any_sibling_path: &Path) {
     let is_wildcard =
@@ -345,12 +359,10 @@ fn expand_supported_host_platforms(records: &mut [SkillRecord], any_sibling_path
     if !records.iter().any(|r| is_wildcard(&r.host_platforms)) {
         return;
     }
-    let Ok(all_hosts) = any_sibling_path
-        .parent()
-        .and_then(|p| p.parent())
-        .map(load_host_platforms_registry)
-        .unwrap_or(Ok(Vec::new()))
-    else {
+    let Some(repo_root) = discover_repo_root(any_sibling_path) else {
+        return;
+    };
+    let Ok(all_hosts) = load_host_platforms_registry(&repo_root) else {
         return;
     };
     if all_hosts.is_empty() {

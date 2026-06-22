@@ -586,9 +586,6 @@ pub fn build_route_context(query_text: &str, query_token_list: &[String]) -> Rou
     ]
     .iter()
     .any(|marker| {
-        if matches!(*marker, "review") {
-            return text_matches_phrase(query_token_list, marker);
-        }
         query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
     });
     let implementation_requested = [
