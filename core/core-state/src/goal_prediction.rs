@@ -5,7 +5,6 @@ use serde_json::Value;
 
 /// Prediction attached to a macro goal; stored under `GOAL_STATE.extra.prediction`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
 pub struct GoalStatePrediction {
     /// Expected `closeout_record.verification_status` at task completion.
     #[serde(default, skip_serializing_if = "Option::is_none")]

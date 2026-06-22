@@ -9,6 +9,7 @@ pub mod telemetry;
 pub mod tokenizer;
 
 // ── leaf modules migrated from runtime-core ──
+pub mod skill_lint;
 pub mod skill_repo;
 pub mod stdio_payload_types;
 

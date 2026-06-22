@@ -1009,7 +1009,7 @@ pub(super) fn tool_quality_gate_manage(
         }
         _ => {
             return Err(format!(
-                "Unknown RFV loop operation: {operation}. Valid operations: start, append_round"
+                "Unknown quality gate operation: {operation}. Valid operations: start, append_round"
             ));
         }
     }
@@ -1142,7 +1142,7 @@ pub(super) fn tool_goal_state_manage(
         }
         "append_round" => {
             // Defensive: not in goal_state_manage schema enum, but prevents confusion
-            // if a caller sends it here instead of rfv_loop_manage.
+            // if a caller sends it here instead of quality_gate_manage.
             return Err("append_round is not a valid goal_state_manage operation. \
                  Use quality_gate_manage with operation=append_round instead."
                 .to_string());
@@ -1635,173 +1635,3 @@ fn routing_calibrate(entries: &[RouteLogEntry]) -> String {
 
 // ── Research Harness MCP Tools ──
 
-pub(super) fn tool_research_aigc_check(arguments: &Value) -> Result<String, String> {
-    let text = arguments
-        .get("text")
-        .and_then(Value::as_str)
-        .ok_or("research_aigc_check requires 'text' parameter")?;
-    let _language = arguments
-        .get("language")
-        .and_then(Value::as_str)
-        .unwrap_or("en");
-
-    // Delegate to research-harness AIGC detector
-    let config = research_harness::aigc::detector::DetectionConfig::default();
-    let results = research_harness::aigc::detector::detect(text, &config)
-        .map_err(|e| format!("AIGC detection failed: {e}"))?;
-    let score = research_harness::aigc::scorer::score(&results);
-
-    serde_json::to_string_pretty(&json!({
-        "score": score,
-        "ai_probability": score as f64 / 100.0,
-        "segments_analyzed": results.len(),
-        "results": results,
-    }))
-    .map_err(|e| e.to_string())
-}
-
-pub(super) fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, String> {
-    let text = arguments
-        .get("text")
-        .and_then(Value::as_str)
-        .ok_or("research_aigc_humanize requires 'text' parameter")?;
-    let _language = arguments
-        .get("language")
-        .and_then(Value::as_str)
-        .unwrap_or("en");
-    let _preserve_academic = arguments
-        .get("preserve_academic_tone")
-        .and_then(Value::as_bool)
-        .unwrap_or(true);
-
-    let strategies = vec![
-        research_harness::aigc::humanizer::HumanizeStrategy::VocabularySwap,
-        research_harness::aigc::humanizer::HumanizeStrategy::SyntacticRewrite,
-        research_harness::aigc::humanizer::HumanizeStrategy::SentenceVariation,
-    ];
-    let result = research_harness::aigc::humanizer::humanize(text, &strategies)
-        .map_err(|e| format!("AIGC humanization failed: {e}"))?;
-
-    serde_json::to_string_pretty(&json!({
-        "original_length": text.len(),
-        "rewritten_length": result.rewritten.len(),
-        "strategies_applied": result.strategies_applied,
-        "estimated_score_improvement": result.estimated_score_improvement,
-        "rewritten": result.rewritten,
-    }))
-    .map_err(|e| e.to_string())
-}
-
-pub(super) fn tool_research_review_dimensions(arguments: &Value) -> Result<String, String> {
-    let round = arguments
-        .get("round")
-        .and_then(Value::as_u64)
-        .ok_or("research_review_dimensions requires 'round' parameter")?;
-    let manuscript_summary = arguments
-        .get("manuscript_summary")
-        .and_then(Value::as_str)
-        .unwrap_or("(no summary provided)");
-
-    let dim = research_harness::types::ReviewDimension::for_round(round);
-    let prompt = research_harness::review::dimensions::dimension_prompt(&dim);
-    let checklist = research_harness::review::dimensions::dimension_checklist(&dim);
-    let full_prompt = research_harness::review::orchestrator::build_reviewer_prompt(
-        round,
-        &dim,
-        manuscript_summary,
-    );
-
-    serde_json::to_string_pretty(&json!({
-        "round": round,
-        "dimension": dim.display_name(),
-        "prompt": prompt,
-        "checklist": checklist,
-        "full_reviewer_prompt": full_prompt,
-    }))
-    .map_err(|e| e.to_string())
-}
-
-pub(super) fn tool_research_claim_drift(arguments: &Value) -> Result<String, String> {
-    let original_claims = arguments
-        .get("original_claims")
-        .and_then(Value::as_array)
-        .ok_or("research_claim_drift requires 'original_claims' array")?;
-    let current_claims = arguments
-        .get("current_claims")
-        .and_then(Value::as_array)
-        .ok_or("research_claim_drift requires 'current_claims' array")?;
-
-    let parse_claims = |arr: &[Value]| -> Result<Vec<research_harness::types::Claim>, String> {
-        arr.iter()
-            .map(|v| {
-                let id = v.get("id").and_then(Value::as_str).unwrap_or("").to_string();
-                let text = v.get("text").and_then(Value::as_str).unwrap_or("").to_string();
-                Ok(research_harness::types::Claim {
-                    id,
-                    text,
-                    evidence: vec![],
-                    ceiling: research_harness::types::ClaimCeiling::ConferenceReady,
-                })
-            })
-            .collect()
-    };
-
-    let orig = parse_claims(original_claims)?;
-    let curr = parse_claims(current_claims)?;
-
-    let results = research_harness::claims::drift::detect_drift(&orig, &curr)
-        .map_err(|e| e.to_string())?;
-
-    serde_json::to_string_pretty(&json!({
-        "drift_results": results,
-        "total_claims_analyzed": results.len(),
-    }))
-    .map_err(|e| e.to_string())
-}
-
-pub(super) fn tool_research_review_loop(arguments: &Value) -> Result<String, String> {
-    let max_rounds = arguments
-        .get("max_rounds")
-        .and_then(Value::as_u64)
-        .unwrap_or(10);
-    let min_rounds = arguments
-        .get("min_rounds")
-        .and_then(Value::as_u64)
-        .unwrap_or(5);
-    let consecutive_stable = arguments
-        .get("consecutive_stable_required")
-        .and_then(Value::as_u64)
-        .unwrap_or(2);
-
-    let state = research_harness::types::ConvergenceState {
-        min_rounds,
-        consecutive_stable_required: consecutive_stable,
-        consecutive_stable_count: 0,
-        max_rounds,
-        current_round: 0,
-    };
-
-    // Build dimension table for all rounds
-    let dimensions: Vec<Value> = (1..=max_rounds)
-        .map(|round| {
-            let dim = research_harness::types::ReviewDimension::for_round(round);
-            let prompt = research_harness::review::dimensions::dimension_prompt(&dim);
-            json!({
-                "round": round,
-                "dimension": dim.display_name(),
-                "prompt_preview": &prompt[..200.min(prompt.len())],
-            })
-        })
-        .collect();
-
-    serde_json::to_string_pretty(&json!({
-        "convergence_config": {
-            "min_rounds": state.min_rounds,
-            "max_rounds": state.max_rounds,
-            "consecutive_stable_required": state.consecutive_stable_required,
-        },
-        "dimensions": dimensions,
-        "workflow": "spawn reviewer subagent per round → fix findings → check convergence → repeat",
-    }))
-    .map_err(|e| e.to_string())
-}

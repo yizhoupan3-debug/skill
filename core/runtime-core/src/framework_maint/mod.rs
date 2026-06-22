@@ -680,7 +680,9 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         }
     }
 
-    crate::framework_runtime::eprint_codex_hooks_duplicate_warnings(&repo_root);
+    for line in ::framework_runtime::hooks::check_codex_hook_duplicates(&repo_root) {
+        eprintln!("{line}");
+    }
 
     codex_hook_smoke(
         &exe,

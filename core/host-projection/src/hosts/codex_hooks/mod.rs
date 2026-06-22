@@ -1,4 +1,9 @@
 mod state;
+mod hooks_duplicate;
+pub use hooks_duplicate::{
+    collect_codex_hooks_duplicate_warnings, count_codex_hook_router_rs_commands,
+    eprint_codex_hooks_duplicate_warnings,
+};
 pub use state::CodexHookError;
 use state::*;
 

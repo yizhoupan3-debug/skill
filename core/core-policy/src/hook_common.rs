@@ -167,7 +167,8 @@ const REVIEW_GATE_LINE_CLEAR_MARKERS: &[&str] = &["rg_clear", "/rg_clear"];
 /// - 中文用多字短语避免「完成度 / 完成任务拆分」等子串误命中。
 pub const COMPLETION_DETECT_EN: &[&str] = &["done", "finished", "completed", "succeeded", "passed"];
 
-/// 完成宣称（触发 closeout）：不含「验证通过/测试通过」等，避免与 goal verify 聊天轨打架。
+/// 完成宣称（触发 closeout）：不含「验证通过/测试通过」等，避免与 goal verify 聊天轨打架；
+/// 避免「完成度 / 完成任务拆分」等子串误命中。
 pub const COMPLETION_DETECT_ZH_PHRASES: &[&str] =
     &["已完成", "已经完成", "全部完成", "完成了", "搞定"];
 

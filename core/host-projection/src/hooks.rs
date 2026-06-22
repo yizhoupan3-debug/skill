@@ -8,6 +8,19 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+/// Research tool dispatch: injected at startup by runtime-core
+/// to break the L3→L6 dependency direction.
+type ResearchToolDispatchFn = fn(&str, &Value) -> Result<String, String>;
+static RESEARCH_TOOL_DISPATCH: OnceLock<ResearchToolDispatchFn> = OnceLock::new();
+
+pub fn register_research_tool_dispatch(f: ResearchToolDispatchFn) {
+    once_lock_set(&RESEARCH_TOOL_DISPATCH, f, "research_tool_dispatch");
+}
+
+pub fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
+    RESEARCH_TOOL_DISPATCH.get().copied()
+}
+
 // ── Function pointer type aliases (reduce type_complexity warnings) ──
 
 /// Route task with manifest fallback: (records, runtime_path, manifest_path, host_id, query, session_id, allow_overlay, first_turn) -> Result<RouteDecision, String>
@@ -173,9 +186,9 @@ pub struct RouteDecision {
 /// Mirror of `runtime_core::runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT`.
 pub const MAX_CONCURRENT_SUBAGENTS_LIMIT: usize = 24;
 
-/// Mirror of `runtime_core::rfv_loop::RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH`.
-pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
-    "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
+/// Mirror of `runtime_core::quality_gate::QG_EXTERNAL_RESEARCH_SCHEMA_REL_PATH`.
+pub const QG_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
+    "configs/framework/QUALITY_GATE_EXTERNAL_RESEARCH.schema.json";
 
 // ────────────────────────────────────────────────────────────────
 // router_env_flags: thin wrappers over core_policy::env_flags
@@ -863,6 +876,24 @@ pub fn register_research_activity_hook(f: fn(&Path, &str, &str)) {
 pub fn maybe_record_research_activity(repo_root: &Path, tool_name: &str, summary: &str) {
     if let Some(f) = RESEARCH_ACTIVITY.get() {
         f(repo_root, tool_name, summary)
+    }
+}
+
+// ────────────────────────────────────────────────────────────────
+// review_gate: function-pointer proxy (OnceLock)
+// ────────────────────────────────────────────────────────────────
+
+type ReviewGateHandler = fn(event: &str, repo_root: Option<&Path>) -> Result<(), String>;
+static REVIEW_GATE_HANDLER: OnceLock<ReviewGateHandler> = OnceLock::new();
+
+pub fn register_review_gate_handler(handler: ReviewGateHandler) {
+    once_lock_set(&REVIEW_GATE_HANDLER, handler, "REVIEW_GATE_HANDLER");
+}
+
+pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), String> {
+    match REVIEW_GATE_HANDLER.get() {
+        Some(handler) => handler(event, cli_repo_root),
+        None => Err("review gate handler not registered".into()),
     }
 }
 

@@ -9,31 +9,12 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::Path;
 
-use crate::util::{str_field, str_field_default};
+use crate::util::{
+    arr, arr_mut, now_iso, novelty_gate, novelty_gate_mut, set_key, str_field,
+    str_field_default, value_as_string_list,
+};
 
 // ── 自包含辅助函数 ──
-
-fn arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
-    state.get(key).and_then(Value::as_array).map(|a| a.as_slice()).unwrap_or(&[])
-}
-
-fn arr_mut<'a>(state: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
-    state
-        .as_object_mut()
-        .expect("state must be object")
-        .entry(key)
-        .or_insert_with(|| json!([]))
-        .as_array_mut()
-        .expect("{key} must be array")
-}
-
-fn set_key(state: &mut Value, key: &str, value: Value) {
-    state.as_object_mut().expect("state must be object").insert(key.to_string(), value);
-}
-
-fn now_iso() -> String {
-    Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
-}
 
 fn parse_iso_timestamp(ts: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(ts).ok().map(|dt| dt.with_timezone(&Utc))
@@ -54,19 +35,6 @@ fn string_vec(items: &[String]) -> Value {
     json!(items.iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect::<Vec<_>>())
 }
 
-fn value_as_string_list(obj: &Value, key: &str) -> Vec<String> {
-    obj.get(key)
-        .and_then(Value::as_array)
-        .map(|arr| {
-            arr.iter()
-                .filter_map(Value::as_str)
-                .filter(|s| !s.is_empty())
-                .map(ToString::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 fn merge_string_array(existing: &Value, additions: &[String]) -> Value {
     let mut merged: Vec<String> = existing
         .as_array()
@@ -78,14 +46,6 @@ fn merge_string_array(existing: &Value, additions: &[String]) -> Value {
         }
     }
     json!(merged)
-}
-
-fn novelty_gate(state: &Value) -> &Value {
-    state.get("novelty_gate").unwrap_or(&Value::Null)
-}
-
-fn novelty_gate_mut(state: &mut Value) -> &mut Value {
-    state.as_object_mut().expect("state must be object").entry("novelty_gate").or_insert(json!({}))
 }
 
 fn novelty_str<'a>(state: &'a Value, key: &str, default: &'a str) -> &'a str {
@@ -491,7 +451,7 @@ pub fn add_claim_comparison(
         "overlap": overlap, "difference": difference, "confidence": confidence,
         "verdict": verdict, "recorded_at": now_iso(),
     });
-    let gate = novelty_gate_mut(&mut next).as_object_mut().expect("gate must be object");
+    let gate = novelty_gate_mut(&mut next);
     let claims_list;
     {
         let records = gate.entry("claim_records".to_string()).or_insert(json!([])).as_array_mut().expect("claim_records must be an array");
@@ -675,7 +635,7 @@ mod tests {
         let mut s = minimal_state();
         let s2 = add_claim_comparison(&s, "c1", "method", "pw", "low", "diff", "high", "novel", Some("C1"));
         let mut s3 = add_claim_comparison(&s2, "c2", "task", "pw2", "medium", "diff2", "medium", "defensible", Some("C2"));
-        novelty_gate_mut(&mut s3).as_object_mut().unwrap().insert("status".into(), json!("passed"));
+        novelty_gate_mut(&mut s3).insert("status".into(), json!("passed"));
         s3
     }
 

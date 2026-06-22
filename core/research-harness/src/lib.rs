@@ -30,6 +30,7 @@ pub mod claims;
 pub mod hooks;
 pub mod latex;
 pub mod log;
+pub mod mcp_tools;
 pub mod provenance;
 pub mod render;
 pub mod review;

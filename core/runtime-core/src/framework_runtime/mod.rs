@@ -2,7 +2,6 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 mod alias;
-pub use framework_runtime::codex_hooks_duplicate;
 pub use framework_runtime::constants;
 pub use framework_runtime::evolution_observer;
 mod closeout;
@@ -42,7 +41,6 @@ pub use json_value::{
 // Re-exports from existing submodules (backward compat).
 pub use alias::build_framework_alias_envelope;
 pub use constants::FRAMEWORK_ALIAS_SCHEMA_VERSION;
-pub use codex_hooks_duplicate::eprint_codex_hooks_duplicate_warnings;
 pub use constants::{
     FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
     FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,

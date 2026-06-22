@@ -18,10 +18,27 @@ pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] = &[
 ];
 
 /// Host home directories for the four formal hosts.
-/// This is the single source of truth — all code that iterates host directories
-/// should reference this constant rather than hardcoding the list.
+///
+/// **Fallback only** — the authoritative source is
+/// `RUNTIME_REGISTRY.json → host_targets.metadata.*.default_home_dir`.
+/// When adding a new host, update BOTH this map and the registry.
+///
 /// Note: `.gemini` is included for legacy cleanup but is not a formal host.
 pub const HOST_HOME_DIRS: &[&str] = &[".claude", ".cursor", ".codex", ".opencode"];
+
+/// Lookup a host's home directory by host ID.
+/// This is a fallback that mirrors `RUNTIME_REGISTRY.json` →
+/// `host_targets.metadata.*.default_home_dir`. Prefer a runtime-registry
+/// lookup when the registry is available.
+pub(crate) fn host_home_dir(host_id: &str) -> Option<&'static str> {
+    match host_id {
+        "claude" => Some(".claude"),
+        "cursor" => Some(".cursor"),
+        "codex" => Some(".codex"),
+        "opencode" => Some(".opencode"),
+        _ => None,
+    }
+}
 
 /// All known host home directories including legacy/external ones (e.g. `.gemini`).
 /// Use for cleanup/scan operations that should be exhaustive.

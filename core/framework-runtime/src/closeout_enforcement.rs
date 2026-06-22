@@ -17,14 +17,14 @@ pub struct CloseoutCommandRecord {
     #[serde(default)]
     pub exit_code: i64,
     #[serde(default)]
-    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
-    pub duration_ms: Option<i64>,
+    #[serde(rename = "duration_ms")]
+    pub _duration_ms: Option<i64>,
     #[serde(default)]
-    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
-    pub stdout_summary: Option<String>,
+    #[serde(rename = "stdout_summary")]
+    pub _stdout_summary: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
-    pub stderr_summary: Option<String>,
+    #[serde(rename = "stderr_summary")]
+    pub _stderr_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -35,11 +35,11 @@ pub struct CloseoutArtifactRecord {
     #[serde(default)]
     pub exists: bool,
     #[serde(default)]
-    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
-    pub size_bytes: Option<i64>,
+    #[serde(rename = "size_bytes")]
+    pub _size_bytes: Option<i64>,
     #[serde(default)]
-    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
-    pub checks: Vec<String>,
+    #[serde(rename = "checks")]
+    pub _checks: Vec<String>,
 }
 
 /// Deny unknown fields so that typos like `verification_state` (instead of
@@ -55,11 +55,11 @@ pub struct CloseoutRecord {
     #[serde(default)]
     pub task_id: String,
     #[serde(default)]
-    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
-    pub started_at: Option<String>,
+    #[serde(rename = "started_at")]
+    pub _started_at: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
-    pub ended_at: Option<String>,
+    #[serde(rename = "ended_at")]
+    pub _ended_at: Option<String>,
     #[serde(default)]
     pub changed_files: Vec<String>,
     #[serde(default)]
@@ -75,8 +75,8 @@ pub struct CloseoutRecord {
     #[serde(default)]
     pub summary: String,
     #[serde(default)]
-    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
-    pub notes: Option<String>,
+    #[serde(rename = "notes")]
+    pub _notes: Option<String>,
 }
 
 /// Classify a rule name as "hard" (must fix before complete) or "soft" (advisory).
@@ -617,8 +617,7 @@ pub struct CloseoutEvidenceContext {
     pub task_id: Option<String>,
     /// Whether the task's `EVIDENCE_INDEX.json` `artifacts` array is non-empty.
     /// (Reserved: future R-rules may want to flag "rows present but none successful".)
-    #[allow(dead_code)] // CLOSEOUT_RECORD schema - reserved for future use.
-    pub evidence_rows_non_empty: bool,
+    pub _evidence_rows_non_empty: bool,
     /// Whether the task's `EVIDENCE_INDEX.json` has at least one row with
     /// `success==true` or `exit_code==0`.
     pub has_successful_verification: bool,

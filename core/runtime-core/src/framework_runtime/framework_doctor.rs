@@ -192,7 +192,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     );
 
     println!("\n--- Codex hooks duplication (operator) ---");
-    for line in super::codex_hooks_duplicate::collect_codex_hooks_duplicate_warnings(repo_root) {
+    for line in ::framework_runtime::hooks::check_codex_hook_duplicates(repo_root) {
         println!("{line}");
         // Lines from this helper are warnings by convention.
         warns.push(line);

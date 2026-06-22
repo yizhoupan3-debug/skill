@@ -1,8 +1,8 @@
 ---
-last_verified: "2026-06-19"
+last_verified: "2026-06-22"
 depends_on:
   - ../spec.md
-  - ../spec-observability-testing.md
+  - ../spec/observability-testing.md
 ---
 
 # ADR-005: 可观测性 — tracing 选型及埋点策略

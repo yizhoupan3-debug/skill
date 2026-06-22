@@ -56,6 +56,9 @@ mod terminal_observation_cache;
 
 pub use subtraction::{CURSOR_HOOKS_REGISTERED_EVENTS, CURSOR_HOOKS_SUBTRACTED_EVENTS};
 
+mod review_gate_cli;
+pub use review_gate_cli::run_cursor_review_gate;
+
 // --- cursor hooks handlers ---
 include!("handlers.rs");
 

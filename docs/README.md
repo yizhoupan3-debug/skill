@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-19"
+last_verified: "2026-06-22"
 depends_on:
   - spec.md
   - ../AGENTS.md
@@ -38,7 +38,10 @@ depends_on:
 | 安全策略（SSRF、MCP） | [operations/security.md](operations/security.md) |
 | 备份 / 恢复 | [operations/backup-restore.md](operations/backup-restore.md) |
 | 历史迁移 | [`MIGRATION.md`](../MIGRATION.md)、git 历史 |
-| RFV / 数理推理 | `spec.md` + 代码（`core/runtime-core/src/quality_gate.rs`） |
+| Quality Gate / 数理推理 | `spec.md` + 代码（`core/runtime-core/src/quality_gate.rs`） |
+| 跨宿主架构 | [cross-host-architecture.md](cross-host-architecture.md) |
+| Hook 锁层级 | [references/hook_lock_order.md](references/hook_lock_order.md) |
+| ADR 索引 (002-009) | [`002`](adr/002-mcp-native-opencode.md) MCP 原生接入 / [`003`](adr/003-runtime-core-split.md) Runtime Core 拆分 / [`004`](adr/004-error-handling-strategy.md) 错误处理策略 / [`005`](adr/005-observability-tracing.md) 可观测性 Tracing / [`006`](adr/006-six-layer-architecture.md) 六层架构 / [`007`](adr/007-dual-exit-gates.md) 双 Exit Gate / [`008`](adr/008-cross-host-consistency.md) 跨宿主一致性 / [`009`](adr/009-doc-versioning-strategy.md) 文档版本策略 |
 | Python 环境治理 | [`skills/python-env-management/SKILL.md`](../skills/python-env-management/SKILL.md) |
 
 ## 已淘汰叙述

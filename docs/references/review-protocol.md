@@ -92,7 +92,7 @@
 | 文件 | 变更 |
 |------|------|
 | `.claude/workflows/deep-review-template.js` | Synthesize return 对象：`hallucinated` 改为仅返回 `hallucinated_count`；`rejected` 改为仅返回 `rejected_count` |
-| `.claude/workflows/claude-chain-deep-review.js` | 同上 |
+| `.claude/workflows/deep-review-template.js` | 同上 |
 
 ### 4.2 SKILL.md 声明
 

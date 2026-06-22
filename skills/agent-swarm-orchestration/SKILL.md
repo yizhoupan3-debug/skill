@@ -160,7 +160,7 @@ Audit 类 workflow 默认 **findings-only**；修复需用户显式 `/implementx
 - 用户显式要求 **workflow** / **ultracode**，或任务自带 **多阶段审计/审查管道**
 - 需要复用 `.claude/workflows/` 下 JS 编排（Claude）或跨宿主 **workflow_supervisor** 同构执行
 - 用户明确要求多 worker 生命周期、协作拆分或 supervisor 集成时，本 gate 负责判断 bounded sidecars 是否足够
-- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_rfv_loop` 写 `RFV_LOOP_STATE.json`）：契约与模板通过 `framework_rfv_loop` 运行时管理；用户侧入口优先 My 执行区 `/implementx`（`GOAL_STATE.json`、`framework_goal_drive`）；本 gate 仍负责 spawn admission 与 reject reason
+- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_quality_gate` 写 `QUALITY_GATE_STATE.json`（原 `RFV_LOOP_STATE.json`））：契约与模板通过 `framework_quality_gate` 运行时管理；用户侧入口优先 My 执行区 `/implementx`（`GOAL_STATE.json`、`framework_goal_drive`）；本 gate 仍负责 spawn admission 与 reject reason
 
 常见表达：
 - “做一个多 agent 协作框架”

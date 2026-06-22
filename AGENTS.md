@@ -23,10 +23,10 @@
 ## Continuity artifacts（手动画板 only）
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
-- Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_rfv_loop`。
+- Goal/RFV 磁盘：`GOAL_STATE.json` / `RFV_LOOP_STATE.json`（Quality Gate 新名 `QUALITY_GATE_STATE.json`）；显式 stdio：`framework_goal_drive` / `framework_quality_gate`（原 `framework_rfv_loop`）。
 - **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。
-  - **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `rfv_loop_manage` 的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。
-  - **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`closeout_gate` / `goal_state_read` / `rfv_loop_status` 的 `task_id` 仍为可选（默认 active task）。
+  - **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `quality_gate_manage`（原 `rfv_loop_manage`）的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。
+  - **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`closeout_gate` / `goal_state_read` / `quality_gate_status`（原 `rfv_loop_status`）的 `task_id` 仍为可选（默认 active task）。
 - 历史 env 名见 [`docs/references/AGENTS_OPERATOR_SURFACE.md`](docs/references/AGENTS_OPERATOR_SURFACE.md)。
 
 ## Task Intake
@@ -165,7 +165,7 @@ LLM：（自动调用codegraph_dead_code检查）→ 返回死代码列表
 - **策略嵌入**：编译期 `include_str!` 嵌入本文件（`policy_embed.rs` → `codex_agent_policy`）；hook 运行期不读盘。
 - **Hook**：`.codex/hooks.json` + `router-rs codex hook`；清门 **Claude canonical**；Stop **advisory-only** `CODEX_REVIEW_GATE`。
 - **多代理**：`/implementx` 且 `execution_mode=parallel` 时应 spawn lane；深度 review spawn-first（`fork_context=false`）。
-- **stdio 替代 MCP 工具**：`framework_goal_drive` / `framework_rfv_loop`；证据 PostTool 追加。
+- **stdio 替代 MCP 工具**：`framework_goal_drive` / `framework_quality_gate`（原 `framework_rfv_loop`）；证据 PostTool 追加。
 
 ### OpenCode
 

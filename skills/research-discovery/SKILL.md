@@ -179,9 +179,9 @@ the execution lanes with the discovery outputs as context.
 ## Cross-references
 
 - **Academic sources (verified-open retrieval scaffolding)**: [`references/academic-sources.md`](references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates and fan-out patterns for `external_research` lane.
-- RFV research harness: `rfv_loop_harness.md@{$FRAMEWORK_DOCS_GIT_REF}`
-- External research harness: `references/rfv-loop/external-research-harness.md@{$FRAMEWORK_DOCS_GIT_REF}`
-- Math background inquiry (deep): `references/rfv-loop/math-background-inquiry.md@{$FRAMEWORK_DOCS_GIT_REF}`
+- Quality Gate research harness: `docs/spec.md` §Quality Gate
+- External research harness: `docs/spec.md` §External Research
+- Math background inquiry (deep): `docs/spec.md` §Math Background
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - **Verification skills** (load when lane requires):
   - `literature_survey` lane → [`../literature-verification/SKILL.md`](../literature-verification/SKILL.md)

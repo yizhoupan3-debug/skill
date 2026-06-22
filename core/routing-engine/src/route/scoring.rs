@@ -44,19 +44,19 @@ fn score_agent_swarm_signals(
     workflow_orchestration_context: bool,
     parallel_execution_context: bool,
     token_budget_pressure: bool,
-) -> (f64, Vec<String>) {
+    reasons: &mut Vec<String>,
+) -> f64 {
     if record.slug != "agent-swarm-orchestration" {
-        return (0.0, Vec::new());
+        return 0.0;
     }
     if !(bounded_subagent_context
         || workflow_orchestration_context
         || has_parallel_review_candidate_context(query_text, query_token_list)
         || parallel_execution_context)
     {
-        return (0.0, Vec::new());
+        return 0.0;
     }
     let mut delta = w.agent_swarm_boost;
-    let mut reasons = Vec::with_capacity(4);
     reasons.push(
         "Agent-swarm boost applied: multi-agent delegation or worker orchestration wording detected."
             .to_string(),
@@ -82,7 +82,7 @@ fn score_agent_swarm_signals(
                 .to_string(),
         );
     }
-    (delta, reasons)
+    delta
 }
 
 /// Check framework-alias suppression. Returns `Some(candidate)` for early return, `None` otherwise.
@@ -119,32 +119,32 @@ fn score_design_md_signals(
     query_token_list: &[String],
     current_score: f64,
     w: &ScoringWeights,
-) -> (f64, Vec<String>) {
+    reasons: &mut Vec<String>,
+) -> f64 {
     if record.slug != "design-md" {
-        return (0.0, Vec::new());
+        return 0.0;
     }
     if !has_design_contract_context(query_text, query_token_list) {
-        return (0.0, Vec::new());
+        return 0.0;
     }
     if has_design_output_audit_context(query_text, query_token_list)
         || has_design_workflow_protocol_context(query_text, query_token_list)
     {
-        return (0.0, Vec::new());
+        return 0.0;
     }
-    let mut reasons = Vec::with_capacity(1);
     if has_quick_artifact_context(query_text, query_token_list) {
         let new_score = current_score * w.design_md_quick_suppression_factor;
         reasons.push(
             "Design-md quick-task suppression applied: one-off artifact wording should not force a design contract."
                 .to_string(),
         );
-        (new_score - current_score, reasons)
+        new_score - current_score
     } else {
         reasons.push(
             "Design-md boost applied: reusable visual contract or design-token wording detected."
                 .to_string(),
         );
-        (w.design_md_boost, reasons)
+        w.design_md_boost
     }
 }
 
@@ -163,9 +163,9 @@ fn score_gate_name_token_signals(
     query_token_list: &[String],
     query_tokens: &HashSet<&str>,
     w: &ScoringWeights,
-) -> (f64, Vec<String>, usize) {
+    reasons: &mut Vec<String>,
+) -> (f64, usize) {
     let mut delta = 0.0f64;
-    let mut reasons = Vec::with_capacity(4);
     let mut matched_count = 0usize;
 
     // Exact skill name
@@ -244,7 +244,7 @@ fn score_gate_name_token_signals(
         }
     }
 
-    (delta, reasons, matched_count)
+    (delta, matched_count)
 }
 
 /// Score metadata positive triggers, keyword tokens, and alias tokens.
@@ -255,9 +255,9 @@ fn score_metadata_trigger_signals(
     query_tokens: &HashSet<&str>,
     query_token_list: &[String],
     w: &ScoringWeights,
-) -> (f64, Vec<String>, usize) {
+    reasons: &mut Vec<String>,
+) -> (f64, usize) {
     let mut delta = 0.0f64;
-    let mut reasons = Vec::with_capacity(3);
     let mut matched_count = 0usize;
 
     // Metadata positive triggers
@@ -319,7 +319,7 @@ fn score_metadata_trigger_signals(
         matched_count += alias_hits.len();
     }
 
-    (delta, reasons, matched_count)
+    (delta, matched_count)
 }
 
 /// Score session-start and code-review-deep signals. Returns `(delta, reasons)`.
@@ -331,9 +331,9 @@ fn score_session_start_signals(
     first_turn: bool,
     current_score: f64,
     w: &ScoringWeights,
-) -> (f64, Vec<String>) {
+    reasons: &mut Vec<String>,
+) -> f64 {
     let mut delta = 0.0f64;
-    let mut reasons = Vec::with_capacity(2);
 
     if first_turn && current_score > 0.0 {
         if record.session_start_lower == "required" {
@@ -363,7 +363,7 @@ fn score_session_start_signals(
         );
     }
 
-    (delta, reasons)
+    delta
 }
 
 /// Route candidate scoring pipeline (16 steps):
@@ -396,7 +396,7 @@ pub fn score_route_candidate<'a>(
     w: &ScoringWeights,
 ) -> RouteCandidate<'a> {
     let mut score = 0.0f64;
-    let mut reasons = Vec::new();
+    let mut reasons = Vec::with_capacity(8);
     let mut matched_token_count = 0usize;
 
     if let Some(done) = super::nl_route_adjustments::apply_nl_pre_framework_alias_rules(
@@ -426,7 +426,7 @@ pub fn score_route_candidate<'a>(
     let parallel_execution_context = has_parallel_execution_context(query_text, query_token_list);
 
     // --- agent-swarm signals ---
-    let (swarm_delta, swarm_reasons) = score_agent_swarm_signals(
+    score += score_agent_swarm_signals(
         record,
         query_text,
         query_token_list,
@@ -435,9 +435,8 @@ pub fn score_route_candidate<'a>(
         workflow_orchestration_context,
         parallel_execution_context,
         token_budget_pressure,
+        &mut reasons,
     );
-    score += swarm_delta;
-    reasons.extend(swarm_reasons);
 
     // --- framework-alias suppression (early return) ---
     if let Some(done) = check_framework_alias_suppression(
@@ -461,10 +460,7 @@ pub fn score_route_candidate<'a>(
     }
 
     // --- design-md signals ---
-    let (design_delta, design_reasons) =
-        score_design_md_signals(record, query_text, query_token_list, score, w);
-    score += design_delta;
-    reasons.extend(design_reasons);
+    score += score_design_md_signals(record, query_text, query_token_list, score, w, &mut reasons);
 
     if explicit_framework_alias {
         score += w.framework_alias_explicit_boost;
@@ -472,24 +468,19 @@ pub fn score_route_candidate<'a>(
     }
 
     // --- gate / name-token / trigger-hint signals ---
-    let (gate_delta, gate_reasons, gate_count) =
-        score_gate_name_token_signals(record, query_text, query_token_list, query_tokens, w);
+    let (gate_delta, gate_count) =
+        score_gate_name_token_signals(record, query_text, query_token_list, query_tokens, w, &mut reasons);
     score += gate_delta;
-    reasons.extend(gate_reasons);
     matched_token_count += gate_count;
 
     // --- metadata-trigger / keyword / alias signals ---
-    let (meta_delta, meta_reasons, meta_count) =
-        score_metadata_trigger_signals(record, query_tokens, query_token_list, w);
+    let (meta_delta, meta_count) =
+        score_metadata_trigger_signals(record, query_tokens, query_token_list, w, &mut reasons);
     score += meta_delta;
-    reasons.extend(meta_reasons);
     matched_token_count += meta_count;
 
     // --- session-start / code-review-deep signals ---
-    let (start_delta, start_reasons) =
-        score_session_start_signals(record, query_text, query_token_list, first_turn, score, w);
-    score += start_delta;
-    reasons.extend(start_reasons);
+    score += score_session_start_signals(record, query_text, query_token_list, first_turn, score, w, &mut reasons);
 
     if record.owner_lower == "gate" && score > 0.0 {
         score += w.gate_owner_boost;

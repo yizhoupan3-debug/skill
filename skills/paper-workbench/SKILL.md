@@ -338,8 +338,8 @@ When lanes require structured verification, load the corresponding skill:
 ### Loop mode 核心流程
 
 ```
-Step 1: 初始化 RFV 账本
-  rfv_loop_manage(operation=start,
+Step 1: 初始化 Quality Gate 账本
+  quality_gate_manage(operation=start,
     goal="顶刊标准 paper revision — 对抗审稿 → 修复 → 收敛",
     max_rounds=10,
     min_rounds=5,
@@ -364,7 +364,7 @@ Step 2: 多轮循环（一次只 spawn 一个 reviewer subagent）
     基于 findings 执行改稿
 
     # 2c: 记录轮次
-    rfv_loop_manage(operation=append_round,
+    quality_gate_manage(operation=append_round,
       round=round,
       review_summary=..., fix_summary=...,
       adversarial_findings=...,
@@ -375,8 +375,8 @@ Step 2: 多轮循环（一次只 spawn 一个 reviewer subagent）
     ELSE → stable_count = 0
     IF stable_count >= consecutive_stable_required → BREAK（收敛）
 
-Step 3: 关闭 RFV
-  rfv_loop_manage(operation=append_round,
+Step 3: 关闭 Quality Gate
+  quality_gate_manage(operation=append_round,
     round=current_round,
     supervisor_decision="close",
     verify_result="PASS")

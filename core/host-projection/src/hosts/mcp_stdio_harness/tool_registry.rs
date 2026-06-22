@@ -1,12 +1,13 @@
 use super::*;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Context for tool call dispatch.
 pub struct ToolCallContext {
     pub repo_root: std::path::PathBuf,
     pub host_id: String,
-    pub connection_session_id: String,
+    pub connection_session_id: Arc<String>,
 }
 
 /// Trait for a group of related MCP tools.
@@ -106,8 +107,8 @@ impl ToolHandler for LifecycleTools {
             "session_checkpoint" => tool_session_checkpoint(args, &ctx.repo_root),
             "closeout_gate" => tool_closeout_gate(args, &ctx.repo_root, &ctx.host_id),
             "goal_state_read" => tool_goal_state_read(args, &ctx.repo_root),
-            "rfv_loop_status" | "quality_gate_status" => tool_quality_gate_status(args, &ctx.repo_root),
-            "rfv_loop_manage" | "quality_gate_manage" => tool_quality_gate_manage(args, &ctx.repo_root, &ctx.connection_session_id),
+            "quality_gate_status" => tool_quality_gate_status(args, &ctx.repo_root),
+            "quality_gate_manage" => tool_quality_gate_manage(args, &ctx.repo_root, &ctx.connection_session_id),
             "goal_state_manage" => tool_goal_state_manage(args, &ctx.repo_root, &ctx.connection_session_id),
             "closeout_record_write" => tool_closeout_record_write(args, &ctx.repo_root, &ctx.host_id),
             _ => Err(format!("LifecycleTools: unknown tool: {tool_name}")),
@@ -126,33 +127,6 @@ impl ToolHandler for InfraTools {
     }
     fn dispatch(&self, _tool_name: &str, args: &Value, _ctx: &ToolCallContext) -> Result<String, String> {
         tool_web_fetch(args)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// ResearchTools (5 tools — delegates to research-harness, extracted in T1)
-// ---------------------------------------------------------------------------
-
-pub struct ResearchTools;
-impl ToolHandler for ResearchTools {
-    fn tool_names(&self) -> &[&'static str] {
-        &[
-            "research_aigc_check",
-            "research_aigc_humanize",
-            "research_review_dimensions",
-            "research_claim_drift",
-            "research_review_loop",
-        ]
-    }
-    fn dispatch(&self, tool_name: &str, args: &Value, _ctx: &ToolCallContext) -> Result<String, String> {
-        match tool_name {
-            "research_aigc_check" => tool_research_aigc_check(args),
-            "research_aigc_humanize" => tool_research_aigc_humanize(args),
-            "research_review_dimensions" => tool_research_review_dimensions(args),
-            "research_claim_drift" => tool_research_claim_drift(args),
-            "research_review_loop" => tool_research_review_loop(args),
-            _ => Err(format!("ResearchTools: unknown tool: {tool_name}")),
-        }
     }
 }
 

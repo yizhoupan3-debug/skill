@@ -14,22 +14,7 @@ use std::sync::{Arc, OnceLock};
 
 use crate::search::helpers::*;
 use crate::search::strategy::*;
-
-// ── Local helpers ──
-
-fn novelty_gate(state: &Value) -> &Value {
-    state.get("novelty_gate").unwrap_or(&Value::Null)
-}
-
-fn novelty_gate_mut(state: &mut Value) -> &mut serde_json::Map<String, Value> {
-    state
-        .as_object_mut()
-        .expect("state must be object")
-        .entry("novelty_gate".to_string())
-        .or_insert_with(|| json!({}))
-        .as_object_mut()
-        .expect("novelty_gate must be object")
-}
+use crate::util::{novelty_gate, novelty_gate_mut, value_to_string};
 
 fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
     novelty_gate(state)

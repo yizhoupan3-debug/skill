@@ -37,21 +37,6 @@ fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
 }
 
-#[allow(dead_code)]
-fn value_as_string_list(value: &Value, key: &str) -> Vec<String> {
-    value
-        .get(key)
-        .and_then(Value::as_array)
-        .map(|arr| {
-            arr.iter()
-                .filter_map(Value::as_str)
-                .filter(|s| !s.is_empty())
-                .map(ToString::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 fn novelty_gate_mut(value: &mut Value) -> Result<&mut serde_json::Map<String, Value>> {
     obj_mut(value)
         .entry("novelty_gate".to_string())

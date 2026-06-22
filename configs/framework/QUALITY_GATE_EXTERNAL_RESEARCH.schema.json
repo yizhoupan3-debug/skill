@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://local/framework/rfv-external-research-v1",
-  "title": "RFV_APPEND_ROUND_EXTERNAL_RESEARCH",
+  "$id": "https://local/framework/quality-gate-external-research-v1",
+  "title": "QUALITY_GATE_APPEND_ROUND_EXTERNAL_RESEARCH",
   "type": "object",
   "additionalProperties": true,
   "properties": {

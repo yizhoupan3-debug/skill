@@ -2,7 +2,7 @@
 module: runtime-core
 lines: ~20000
 layer: B1
-last_verified: "2026-06-19"
+last_verified: "2026-06-22"
 ---
 
 # runtime-core（B1 层 — facade crate）

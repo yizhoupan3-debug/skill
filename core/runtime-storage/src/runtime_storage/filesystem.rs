@@ -57,9 +57,6 @@ pub fn filesystem_reject_symlink_write_target(path: &Path) -> Result<(), String>
     }
 }
 
-#[allow(dead_code)]
-const FILESYSTEM_TEMP_CREATE_ATTEMPTS: u32 = 128;
-
 /// RAII guard for a cross-process advisory lock keyed by an arbitrary
 /// runtime path. The guard owns a sentinel `.router-rs.<filename>.lock`
 /// file alongside the target; advisory `flock(LOCK_EX)` is held for the
@@ -141,7 +138,6 @@ pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, St
     Ok(RuntimePathLockGuard { _file: file })
 }
 
-#[allow(dead_code)]
 pub fn filesystem_atomic_temp_path(
     parent: &Path,
     file_name: &str,

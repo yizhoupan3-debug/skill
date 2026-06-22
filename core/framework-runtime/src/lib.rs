@@ -12,7 +12,6 @@
 pub mod hooks;
 
 // ── extracted from runtime-core/src/framework_runtime/ ──
-pub mod codex_hooks_duplicate;
 pub mod constants;
 pub mod evolution_observer;
 pub mod io_utils;
@@ -42,7 +41,6 @@ pub use constants::{
     FRAMEWORK_RUNTIME_AUTHORITY, FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION,
     FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, FRAMEWORK_SESSION_ARTIFACT_WRITE_SCHEMA_VERSION,
 };
-pub use codex_hooks_duplicate::eprint_codex_hooks_duplicate_warnings;
 pub use closeout_enforcement::closeout_enforcement_contract;
 pub use execution_contract::{
     build_execution_contract_bundle, decode_execution_response_value,

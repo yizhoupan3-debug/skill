@@ -4,7 +4,7 @@ description: |
   Adversarial multi-pass review-fix-verify with progressive rubric disclosure (supervisor-led).
   Use when the user says `$adversarial-loop`, wants multi-pass adversarial criticism and fixes without
   revealing total iteration budget to the model, or references LOOP_ROUND_COMPLETE / progressive review tiers.
-  Long-running round ledgers use the implicit Rust runtime `framework_rfv_loop` → `RFV_LOOP_STATE.json` (not a hot-routed skill).
+  Long-running round ledgers use the implicit Rust runtime `framework_quality_gate` → `QUALITY_GATE_STATE.json`（原 `RFV_LOOP_STATE.json`） (not a hot-routed skill).
   Do not use for Cursor interval/cron `/loop` wake tasks (see Cursor skills-cursor loop owner).
 routing_layer: L1
 routing_owner: owner
@@ -32,7 +32,7 @@ metadata:
 
 显式入口：`$adversarial-loop`（**监督者**发起；模型默认不可自触发本 skill）。**不要**与 `loop` skill 的 interval `/loop` 唤醒混淆。
 
-**宿主 hook 状态（重要）**：历史上的 `adversarial-loop-<session>.json` 注入路径已从 `router-rs` 移除（仅保留 SessionEnd 清扫与路径常量）。下面的 **轮次标记与 lane 契约仍可作为人工/监督协议**；长轮次、跨会话请用 **`framework_rfv_loop`** 写 `RFV_LOOP_STATE.json`（见 harness 参考 `rfv_loop_harness.md@{$FRAMEWORK_DOCS_GIT_REF}`，**不在热 skill 路由**）。
+**宿主 hook 状态（重要）**：历史上的 `adversarial-loop-<session>.json` 注入路径已从 `router-rs` 移除（仅保留 SessionEnd 清扫与路径常量）。下面的 **轮次标记与 lane 契约仍可作为人工/监督协议**；长轮次、跨会话请用 **`framework_quality_gate`** 写 `QUALITY_GATE_STATE.json`（见 `docs/spec.md` §Quality Gate，**不在热 skill 路由**）。
 
 ## 何时使用
 
@@ -136,7 +136,7 @@ verifier 独立于 reviewer 和 fixer，职责：
 
 ## 模型侧契约
 
-每一轮建议：**独立 reviewer subagent → fixer → verifier**；深度与证据链见 `references/rfv-loop/reasoning-depth-contract.md@{$FRAMEWORK_DOCS_GIT_REF}` 与 lane 模板 `references/rfv-loop/lane-templates.md@{$FRAMEWORK_DOCS_GIT_REF}`。数理题另见 `references/rfv-loop/math-reasoning-harness.md@{$FRAMEWORK_DOCS_GIT_REF}`。
+每一轮建议：**独立 reviewer subagent → fixer → verifier**；深度与证据链见 `docs/spec.md` §Reasoning Depth 与 lane 模板 `docs/spec.md` §Lane Templates。数理题另见 `docs/spec.md` §Math Reasoning。
 
 一轮结束时，助手可输出**独占一行**标记（区分大小写，行内不得有其他字符）：
 
@@ -148,16 +148,16 @@ LOOP_ROUND_COMPLETE
 
 长轮次或跨会话场景下，使用框架运行时的 RFV 循环管理：
 
-- **启动**：`rfv_loop_manage operation=start goal="<审查目标>"`
-- **追加轮次**：`rfv_loop_manage operation=append_round round=N review_summary="..." fix_summary="..."`
-- **查看状态**：`rfv_loop_status`
-- **产物位置**：`artifacts/current/<task_id>/RFV_LOOP_STATE.json`
+- **启动**：`quality_gate_manage operation=start goal="<审查目标>"`
+- **追加轮次**：`quality_gate_manage operation=append_round round=N review_summary="..." fix_summary="..."`
+- **查看状态**：`quality_gate_status`
+- **产物位置**：`artifacts/current/<task_id>/QUALITY_GATE_STATE.json`（原 `RFV_LOOP_STATE.json`）
 
 账本持久化了所有轮次的审查发现、修复摘要和验证结果，支持会话中断后的恢复。
 
 ## Hook 注入内容（历史摘要）
 
-历史行为：在预算内于用户提交时追加 `additional_context`（tier + 对抗强度要求），**不披露**总轮数。当前树默认 **无** 该注入；需要同等能力时请用 **RFV 账本**（`artifacts/current/<task_id>/RFV_LOOP_STATE.json`）+ **`framework_rfv_loop`** stdio 或聊天续跑（**无** `RFV_LOOP_CONTINUE` hook 注入，2026-05 已拔除）。
+历史行为：在预算内于用户提交时追加 `additional_context`（tier + 对抗强度要求），**不披露**总轮数。当前树默认 **无** 该注入；需要同等能力时请用 **Quality Gate 账本**（`artifacts/current/<task_id>/QUALITY_GATE_STATE.json`）+ **`framework_quality_gate`** stdio 或聊天续跑（**无** `RFV_LOOP_CONTINUE` hook 注入，2026-05 已拔除）。
 
 ## 常见使用场景
 
@@ -194,6 +194,6 @@ $adversarial-loop 验证新接口与现有模块的集成
 
 ## 验证
 
-- 轮次账本与 stdio：`framework_rfv_loop`（`cd core/router-rs && cargo test` 覆盖 RFV）
+- 轮次账本与 stdio：`framework_quality_gate`（`cd core/router-rs && cargo test` 覆盖 Quality Gate）
 - 路由元数据中的 skill 注册：`skills/SKILL_ROUTING_RUNTIME.json`
-- Lane 模板与推理深度契约：`docs/references/rfv-loop/lane-templates.md`
+- Lane 模板与推理深度契约：`docs/spec.md` §Lane Templates

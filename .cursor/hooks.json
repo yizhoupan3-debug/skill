@@ -1,53 +1,53 @@
 {
   "version": 1,
-  "_doc": "各事件 stdin → `configs/framework/cursor-router-rs-hook.sh`；launcher 优先 repo release，再 /tmp 与 debug。关键门控事件缺 binary fail-closed。见 `.cursor/router-rs-hook.env` 与本仓 docs/hosts/hook-hosts.md。",
+  "_doc": "各事件 stdin → `configs/framework/hook.sh cursor`；launcher 优先 repo release，再 /tmp 与 debug。关键门控事件缺 binary fail-closed。见 `.cursor/router-rs-hook.env` 与本仓 docs/hosts/hook-hosts.md。",
   "hooks": {
     "beforeSubmitPrompt": [
       {
         "_doc": "Review gate + goal entrypoints: stdin JSON → router-rs BeforeSubmitPrompt",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" BeforeSubmitPrompt",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/hook.sh cursor\" BeforeSubmitPrompt",
         "timeout": 20
       }
     ],
     "stop": [
       {
         "_doc": "Review gate + closeout: stdin JSON → router-rs Stop (no hook GOAL_CONTINUE)",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" Stop",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/hook.sh cursor\" Stop",
         "timeout": 20
       }
     ],
     "sessionStart": [
       {
         "_doc": "TOKEN REDUCTION: compact project briefing (~300 tokens) at session start.",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SessionStart",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/hook.sh cursor\" SessionStart",
         "timeout": 5
       }
     ],
     "sessionEnd": [
       {
         "_doc": "会话结束：清 hook-state（review gate）。ROUTER_RS_CURSOR_KILL_STALE_TERMINALS=0 时不 terminate 终端（见 .cursor/router-rs-hook.env）。",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SessionEnd",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/hook.sh cursor\" SessionEnd",
         "timeout": 20
       }
     ],
     "postToolUse": [
       {
         "_doc": "PostToolUse 门控（subagent multiset / shell 账本）；非门控工具由 router-rs fast-path 跳过。timeout 20s：慢盘/高负载时避免 hook 子进程挂死；见 docs/hosts/hook-hosts.md。",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" PostToolUse",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/hook.sh cursor\" PostToolUse",
         "timeout": 20
       }
     ],
     "subagentStart": [
       {
         "_doc": "更新 review gate：pre-goal subagent 计数 / phase；open subagent 限流。",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SubagentStart",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/hook.sh cursor\" SubagentStart",
         "timeout": 20
       }
     ],
     "subagentStop": [
       {
         "_doc": "subagent 结束：推进 phase，供 Stop/beforeSubmit 门控消费。",
-        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/cursor-router-rs-hook.sh\" SubagentStop",
+        "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}/configs/framework/hook.sh cursor\" SubagentStop",
         "timeout": 20
       }
     ]

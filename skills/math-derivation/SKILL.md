@@ -87,7 +87,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 - The task is ML model math with coding focus (loss function implementation, gradient code) -> answer in the current implementation context; do not route to a retired AI/research skill
 - The task is reviewing paper-level scientific logic -> use `@lane:reviewer` logic mode
 - The task is LaTeX compilation or rendering → answer in the current context（（latex-compile-acceleration 已归档，内联处理） 已归档）
-- The user wants **multi-round** exploration of new structures, conjectures, or lemmas with parallel falsification lanes → use **`framework_rfv_loop`** and [math-reasoning-harness.md](../../docs/spec.md) §D（**not** this skill as the orchestrator); single-round derive/prove stays here.
+- The user wants **multi-round** exploration of new structures, conjectures, or lemmas with parallel falsification lanes → use **`framework_quality_gate`** and [math-reasoning-harness.md](../../docs/spec.md) §D（**not** this skill as the orchestrator); single-round derive/prove stays here.
 - The user wants **mathematical modeling** (formulate ODE/PDE/closure, scaling, regimes) or **deep math background** for unknown properties → use [`$research-discovery`](../../skills/research-discovery/SKILL.md) (`math_modeling` / `math_background_inquiry`) → RFV §F–G; use this skill only for deriving a specific equation or proof step once the model is fixed.
 
 ## Derivation workflow
@@ -121,7 +121,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 12. **Theorem hypothesis verification**: Before applying any named theorem, explicitly verify that all its hypotheses are satisfied in the current context.
 13. **Verified means checker-backed**: Do not call a derivation "verified", "严审通过", or "深度验证" based only on prose. Provide checker output / a runnable command, or mark the verification gap.
 14. **Counterexample probe**: For research-grade critique, attempt at least one counterexample or boundary probe before accepting the claim.
-15. **GOAL/RFV completion gates (harness integration)**: When operating under a `GOAL_STATE` or `RFV_LOOP_STATE`, set `completion_gates: { require_successful_evidence_row: true, min_depth_score: 1 }` to programmatically enforce the checker-backed standard. Without these gates, the harness cannot distinguish verified output from prose. See `docs/spec.md` and `docs/spec.md`.
+15. **GOAL/RFV completion gates (harness integration)**: When operating under a `GOAL_STATE` or `QUALITY_GATE_STATE`（原 `RFV_LOOP_STATE`）, set `completion_gates: { require_successful_evidence_row: true, min_depth_score: 1 }` to programmatically enforce the checker-backed standard. Without these gates, the harness cannot distinguish verified output from prose. See `docs/spec.md` and `docs/spec.md`.
 
 ## Output template
 

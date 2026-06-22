@@ -1043,7 +1043,6 @@ research-harness
 #### 向后兼容
 
 - `autoresearch-rs` / `research-log-rs` 保留为独立 binary（thin CLI wrapper 待完成）
-- `scripts/verify/*.sh` 保留（被验证 skill 引用），Rust 实现为 programmatic API
 - `host-projection` 的 hook 注册可渐进迁移为调用 `research_harness::hooks`
 - 所有现有 MCP tool 名称不变，调用方无感知
 | [loop-architecture.md](loop-architecture.md) | §19.9 research-aware loop 模式在此注册，本规约与 loop 架构通过 LOOP_REGISTRY.json 和 BARRIER_REPORT.json 桥接 |

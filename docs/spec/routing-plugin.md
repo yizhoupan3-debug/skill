@@ -355,7 +355,7 @@ routing_log.2026-06.jsonl  ← 按月归档（自动切割）
 
 - 旧 `signals.rs` 的 `has_*` 函数**不删除**，作为 parity gate fallback 保留。个人场景下 ~1520 行代码不构成维护负担
 - 新代码以独立模块嵌入 `core/routing-engine/src/route/`，与旧代码并行
-- 切换开关：`configs/framework/SRC_CONFIG.json` 中 `"routing_mode": "legacy" | "hybrid" | "src"`
+
 
 #### 打通路径
 
@@ -388,11 +388,8 @@ routing_log.2026-06.jsonl  ← 按月归档（自动切割）
   └─ 写入 SRC_CONFIG.json（阈值更新 + centroid 快照）
 ```
 
-**低成本执行**：Shell 脚本 `scripts/src-evolve.sh`，无服务器，无数据库。跑一次约 30 秒（全量 re-embed 45 skill × 50 utterances）。
-
 #### 回滚
 
-- Centroid 快照存储在 `configs/framework/centroid_snapshots/YYYY-MM-DD.json`（Float32 数组，45 × 384 × 50 ≈ 3.3MB 压缩前）
 - `src-evolve.sh 回滚 --date 2026-06-01` → 恢复 centroid 快照 + 对应 config
 - git revert 恢复代码级回滚
 

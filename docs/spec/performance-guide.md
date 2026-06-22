@@ -3,7 +3,7 @@ parent: docs/spec.md
 version: unified-v7
 ---
 
-## 20. 性能指南（合并自 `docs/architecture/performance-guide.md`）
+## 20. 性能指南
 
 ### 20.1 热点摘要
 

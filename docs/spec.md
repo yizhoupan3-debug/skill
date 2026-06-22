@@ -5,7 +5,7 @@ version: "unified-v9"
 
 # 框架统一规约 (Unified Framework Specification)
 
-> 本文件是框架**总览规约**，覆盖架构总览、设计原则与六层模型（宿主层/运行层/路由层/工具层/Skill层/Feature层）。
+> 本文件是框架**总览规约**，覆盖架构总览、设计原则与七层模型（宿主层/路由层/Skill层/工具层/运行层/Hook层/Feature层）。
 > 各子系统详细规约见下方 `extends` 延伸文档（各自在其领域内为真源）。
 > 实施路线图见 `artifacts/current/roadmap-v9.md`（全栈治理）。
 > v7 路线图已归档：`artifacts/current/roadmap-v7.md`（v7.0-final, 2026-06-18）。
@@ -15,7 +15,7 @@ version: "unified-v9"
 ## 目录
 
 1. [架构总览](#1-架构总览)
-2. [五层模型](#2-五层模型)
+2. [七层模型](#2-七层模型)
 3. [Core Crates](spec/core-crates.md)
 4. [多 Agent 编排契约](spec/multi-agent.md)
 5. [跨宿主统一矩阵](spec/host-matrix.md) + [宿主接入契约](spec/host-matrix.md#7-宿主接入契约)
@@ -29,111 +29,28 @@ version: "unified-v9"
 
 ## 1. 架构总览
 
-### 1.1 Crate 拓扑 (v7)
+### 1.1 Crate 拓扑 (七层)
 
 ```
-runtime-core (~3K LOC, 瘦胶水层)  ← 仅保留 init_hooks + register_*_hooks + telemetry + 闭包注册
-├── framework_runtime/            ← MCP stdio dispatch + doctor + session artifacts
-├── cli/                          ← CLI 参数解析
-├── quality_gate.rs               ← RFV 循环完整实现（重命名自 rfv_loop.rs）
-├── framework_maint.rs            ← 维护命令
-├── stdio_transport.rs            ← stdio 传输层
-├── 184 tests
-└── features: codegraph, host-{cursor,claude,codex,opencode}
-
-core/framework-runtime (~18.5K LOC)  ← 业务逻辑层（吸收 stdio_dispatch/session_artifacts/evidence/closeout/schema_drift 等14子模块）
-├── closeout_enforcement.rs       ← hard/soft blocker 分级
-├── execution_contract.rs         ← 执行契约（前置/后置条件验证）
-├── pre_tool_use_guard.rs         ← PreToolUse 守卫
-├── runtime_view.rs               ← 运行时视图
-├── trace_stream_io.rs / trace_attach.rs / trace_transport.rs
-└── live_execute.rs / sandbox_control.rs / evolution_observer.rs
-
-core/session-supervisor (~5K LOC) ← Worker 生命周期管理（从 runtime-core 提取）
-├── driver.rs                     ← 驱动：codex/cursor/claude
-├── worker.rs                     ← Worker 进程管理
-├── runtime.rs                    ← 运行时管理
-├── process.rs                    ← 原生进程管理
-└── evolution_idle.rs             ← idle 时 evolution 触发
-
-core/runtime-storage (~8K LOC)    ← 状态持久化（从 runtime-core 提取）
-├── runtime_storage/              ← filesystem/sqlite/operation/paths 存储后端
-├── background_state/             ← 后台任务状态管理（control_plane/persist/store/types）
-└── runtime_envelope_ids.rs       ← 运行时信封 ID
-
-core/trace-runtime (~1K LOC)      ← 事件追踪/trace I/O 管道（从 runtime-core 提取）
-└── lib.rs                        ← trace 管道聚合入口
-
-host-projection (~34K LOC)        ← 宿主适配层（已独立）
-├── hosts/                        ← 4 宿主 provider + hooks 实现
-│   ├── claude_hooks.rs           ← PreToolUse/PostToolUse/Stop/SubagentStart-Stop
-│   ├── codex_hooks/              ← Codex native hooks (5K LOC)
-│   ├── cursor_hooks/             ← Cursor agent hooks
-│   ├── opencode_hooks.rs         ← OpenCode MCP stdio hooks
-├── host_integration/             ← projection 安装/移除逻辑
-├── hooks.rs                      ← 函数指针注册表（OnceLock slots）
-└── 536 tests
-
-router-rs (~558 LOC src)         ← CLI + 集成测试
-├── CLI (clap): framework/host-integration/schema-drift
-├── tests/ (275 passed)
-└── features: codegraph, host-*
-
-routing-engine (~8K LOC)          ← 路由评分/信号缓存
-├── route/{eval,scoring,signal_cache}
-├── text.rs                        ← 文本分析（不在 route/ 下）
-└── 78 tests
-
-core-state (~7K LOC)              ← Goal/RFV/Evidence/TaskState
-├── state_manager/（goal/pointer/rfv/scrub/validation 子模块）, task_state.rs, step_ledger.rs
-└── 82 tests
-
-core-policy (~5K LOC)             ← Hook 策略/review gate/注册表
-├── review_gate_engine.rs, hook_review_disk_state.rs
-├── 含 52+ 条正则规则（hook_common + hook_policy + review_routing_signals）
-└── 96 tests
-
-runtime-core-contracts (~3.5K LOC) ← runtime-core 契约/trait（v7 提取）
-├── mcp_pre_guard, web_fetch_guard, session_call_tracker, harness_contract
-├── framework_skills, harness_operator_nudges, hook_event_routing
-├── router_env_flags, kernel_bootstrap, router_rs_observation, snapshots/
-└── 90 tests
-
-framework-kernel (~3.5K LOC)      ← 框架内核（v7 提取）
-├── framework_profile, runtime_registry, skill_repo, repo_roots
-├── router_self, framework_host_targets, tokenizer, telemetry
-└── stdio_payload_types, formal_toolchain
-
-core/loop-engine (~2.4K LOC)     ← 循环调度引擎（9 模块，v8 loop-auto）
-├── runner.rs / dispatcher.rs    ← 主循环 + opencode 子进程
-├── state.rs / safety.rs         ← LOOP_RUN_STATE 持久化 + L1/L2/L3 安全门控
-├── kill_switch.rs / closeout.rs ← .loop-active 锁 + 验证聚合
-├── report.rs                    ← LOOP_REPORT.md 渲染
-└── 44 tests
-
-tools/codegraph-rs (~4.1K LOC)    ← 代码图谱（FTS5 + tree-sitter，位于 tools/）
-├── parser/{rust,typescript,python,go,markdown}
-├── db/{schema,node_ops,fts_ops,skill_ops,index_ops,mcp_tool_ops,stats}
-└── 95 tests
-
-tools/evolution-rs (~2K LOC)      ← 技能进化审计（位于 tools/）
-└── 53 tests
-
-core/research-harness (含 autoresearch CLI) ← 研究工作区控制平面
-├── 模块化架构（state/search/text/provenance）
-└── 164 tests
-
-browser-mcp (~3.5K LOC)           ← 浏览器 MCP（仅浏览器功能）
-├── 15 browser_* MCP tools
-└── 117 tests
-
-research-harness (~4.6K LOC)       ← 科研 harness（统一 crate）
-
-rust_tools/ (6 活跃 MCP crates)
-├── pdf_tool_rs (mcp-pdf)           ├── citation_tool_rs (mcp-citation)
-├── financial_data_rs (mcp-financial) ├── gh_source_gate_rs (mcp-gh-source-gate)
-├── ooxml_parser_rs (mcp-ooxml)     └── pptx_tool_rs (mcp-pptx)
-└── 各自 lib.rs + mcp/mod.rs + mcp_main.rs binary
+┌─────────────────────────────────────────────┐
+│ Feature Layer    research-harness, paper    │
+├─────────────────────────────────────────────┤
+│ Hook Layer       hook-layer (hook registry) │
+├─────────────────────────────────────────────┤
+│ Runtime Layer    runtime-core               │
+│  ├─ Behavior     loop-engine, goal, context │
+│  ├─ Orchestrate  session, multi-agent       │
+│  ├─ Infra        transport, config, telemetry│
+│  └─ Exit Gate    quality-gate, closeout     │
+├─────────────────────────────────────────────┤
+│ Tool Layer       tool-layer (ToolRegistry)  │
+├─────────────────────────────────────────────┤
+│ Skill Layer      skill-layer (SKILL.md mgmt)│
+├─────────────────────────────────────────────┤
+│ Routing Layer    routing-engine, router-rs  │
+├─────────────────────────────────────────────┤
+│ Host Layer       host-projection (thin)     │
+└─────────────────────────────────────────────┘
 ```
 
 > 各 crate 的详细模块拆解、pub API 和技术债见 [`docs/modules/`](modules/) 下对应文档。
@@ -141,7 +58,7 @@ rust_tools/ (6 活跃 MCP crates)
 | 原则 | 含义 |
 |------|------|
 | **单一权威真源** | `RUNTIME_REGISTRY.json` 为宿主闭集唯一权威 |
-| **L4/L5 解耦** | 宿主差异仅存于 L4 适配壳（host-projection） |
+| **L0/L4 解耦** | 宿主差异仅存于 L0 适配壳（host-projection） |
 | **二元编排** | 仅 `subagent` + `workflow`；team 已废弃 |
 | **纯 Rust 隔离** | PID + SQLite |
 | **配置驱动接入** | 新宿主 ≤ 1 天（5 文件：provider + AGENTS + docs + feature + registry） |
@@ -174,16 +91,17 @@ router-rs → runtime-core → host-projection → core-state
 
 ---
 
-## 2. 五层模型
+## 2. 七层模型
 
 | 层 | 职责 | 允许 | 禁止 |
 |----|------|------|------|
-| **L0** | Skill 路由 | 路由信号、评分、准入 | 直接执行工具 |
-| **L1** | Skill 契约 | verify_commands、拒因枚举 | 第二套连续性目录 |
-| **L2** | 连续性工件 | artifacts/current/、EVIDENCE_INDEX schema | 与 L2 schema 冲突的并行真源 |
-| **L3** | CLI 行为 | 门控、证据追加、closeout | 宿主 shell 复制 L3 决策 |
-| **L4** | 宿主适配壳 | argv/stdin/超时/路径转发 | 长段策略 prose |
-| **L5** | 宿主策略 | .mdc、AGENTS* 投影 | 与 L2 冲突的并行真源 |
+| L0 宿主层 | argv/stdin/stdout 协议转换 | 轻量适配，事件映射 | 业务逻辑、路由决策 |
+| L1 路由层 | 意图匹配、skill/tool 路由 | 策略矩阵、评分 | 直接执行工具 |
+| L2 Skill层 | SKILL.md 注入、技能生命周期 | verify_commands、契约 | 第二套连续性目录 |
+| L3 工具层 | ToolRegistry、统一注册/发现 | MCP/原生/插件工具 | 宿主特定逻辑 |
+| L4 运行层 | 层间编排、session 管理 | 行为/编排/基建/退出门 | Feature 逻辑侵入 |
+| L5 Hook层 | 函数指针注册、事件分发 | 49 slots、review gate | 具体业务逻辑 |
+| L6 Feature层 | 领域特化插件 | research-harness/paper | 核心运行时修改 |
 
 ---
 

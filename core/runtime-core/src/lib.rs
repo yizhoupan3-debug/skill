@@ -18,21 +18,35 @@ pub use ::framework_runtime::execution_contract;
 pub mod framework_runtime;
 pub use session_supervisor;
 pub use framework_kernel::framework_profile;
-pub mod quality_gate;
-pub mod schema_drift;
 
 // ── browser dispatch hook (decouples runtime-core from browser-mcp crate) ──
 pub mod browser_dispatch_hook;
 
+// ── subdomain module groups ──
+pub mod behavior;
+pub mod orchestration;
+pub mod infrastructure;
+pub mod exit_gate;
+
+// │  backward-compatible re-exports from subdomain groups ─────────────────────
+pub use behavior::quality_gate;
+pub use exit_gate::schema_drift;
+pub use infrastructure::kernel_bootstrap;
+pub use exit_gate::harness_ops as harness_operator_nudges;
+pub use infrastructure::router_rs_obs as router_rs_observation;
+pub use infrastructure::session_call as session_call_tracker;
+pub use infrastructure::framework_skills;
+pub use infrastructure::router_env_flags;
+pub use orchestration::paper_adversarial as paper_adversarial_hook;
+pub use orchestration::paper_prose as paper_prose_hook;
+pub use orchestration::research as research_activity_log;
+pub use infrastructure::stdio_transport;
+pub use infrastructure::telemetry_emit;
+
 // ── local modules (moved from rt_core_contracts, cleaned up crate boundary) ──
-pub mod kernel_bootstrap;
-pub mod harness_operator_nudges;
-pub mod router_rs_observation;
-pub mod session_call_tracker;
-pub mod framework_skills;
+// (all migrated to subdomain groups above)
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
-#[allow(unused_imports)]
 pub use rt_core_contracts::formal_toolchain;
 pub use rt_core_contracts::harness_contract;
 pub use rt_core_contracts::harness_context_signals;
@@ -40,9 +54,6 @@ pub use rt_core_contracts::hook_event_routing;
 pub use rt_core_contracts::mcp_pre_guard;
 pub use rt_core_contracts::web_fetch_guard;
 pub use rt_core_contracts::hook_observation_rules;
-
-// ── router_env_flags: re-export from framework-runtime (skipping contracts) ──
-pub mod router_env_flags;
 
 // ── re-exports from core-state (flattened) ──
 pub use core_state::utils::atomic_write;
@@ -57,6 +68,8 @@ pub use core_state::state_manager as goal_drive;
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
 pub mod hook_timing;
 
+pub mod review_gate_cli;
+
 pub mod task_command;
 
 // ── migrated supporting modules ──
@@ -69,12 +82,9 @@ pub mod eval_route;
 pub use framework_kernel::framework_host_targets;
 pub mod framework_maint;
 pub use host_projection::host_entrypoint_sync;
-pub use host_projection::host_integration;
+pub mod host_integration;
 pub use host_projection::hosts;
-pub mod paper_adversarial_hook;
 mod paper_block_cache;
-pub mod paper_prose_hook;
-pub mod research_activity_log;
 pub use routing_engine::route;
 #[cfg(test)]
 mod route_metadata_tests;
@@ -107,9 +117,8 @@ pub mod runtime_registry {
 }
 pub use framework_kernel::skill_repo;
 pub use framework_kernel::stdio_payload_types;
+#[cfg(test)]
 pub mod mcp_stdio_test_support;
-pub mod stdio_transport;
-pub mod telemetry_emit;
 #[cfg(test)]
 pub mod test_env_sync;
 
@@ -118,17 +127,21 @@ pub mod test_env_sync;
 pub mod hook_posttool_normalize;
 
 // ── re-exports from core-policy (crate-internal only) ──
-pub use core_policy::hook_common;
-pub use core_policy::hook_policy;
-pub use core_policy::review_gate_engine;
+pub(crate) use core_policy::hook_common;
+pub(crate) use core_policy::hook_policy;
+pub(crate) use core_policy::review_gate_engine;
 
 // ── crate-level re-exports for `crate::X` path compat ──
 pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;
 
 // ── host submodule re-exports (for `crate::X` path compat) ──
+#[doc(hidden)]
 pub use hosts::claude_hooks;
+#[doc(hidden)]
 pub use hosts::codex_hooks;
+#[doc(hidden)]
 pub use hosts::cursor_hooks;
+#[doc(hidden)]
 pub use hosts::mcp_stdio_harness;
 
 // ── routing-engine hook registration ──
@@ -211,6 +224,10 @@ pub fn register_host_projection_hooks() {
         host_projection::hooks::register_router_rs_observation(
             |_output, _host| {}, // attach: no-op (runtime-core handles directly)
             |_output| {},        // strip: no-op
+        );
+
+        host_projection::hooks::register_review_gate_handler(
+            crate::cursor_hooks::run_cursor_review_gate,
         );
 
         host_projection::hooks::register_kernel_bootstrap(
@@ -312,6 +329,11 @@ pub fn register_host_projection_hooks() {
             }
         });
 
+        // ── Codex hooks duplicate check ──
+        ::framework_runtime::hooks::register_codex_hook_duplicate_check(
+            host_projection::hosts::codex_hooks::collect_codex_hooks_duplicate_warnings,
+        );
+
         // ── RFV loop full implementation (supports append_round) ──
         host_projection::hooks::register_quality_gate_drive(quality_gate::framework_quality_gate);
 
@@ -357,11 +379,16 @@ pub fn register_host_projection_hooks() {
                     .map_err(|e| e.to_string())
             },
             generated_artifacts_status_for_repo: |repo_root| {
-                host_projection::host_integration::generated_artifacts_status_for_repo(repo_root)
+                crate::host_integration::generated_artifacts_status_for_repo(repo_root)
                     .map(|v| v.to_string())
             },
             ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
         });
+
+        // ── research tool dispatch (L6 decoupled via function-pointer slot) ──
+        host_projection::hooks::register_research_tool_dispatch(
+            |name, args| research_harness::mcp_tools::handle_research_tool(name, args),
+        );
     });
 }
 

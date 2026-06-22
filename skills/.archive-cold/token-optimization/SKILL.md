@@ -232,6 +232,6 @@ Bash: grep -n "function_name" large_file.rs → Read offset=行号 limit=30
 ## References
 
 - Prompt caching 文档：Anthropic API `cache_control` 参数说明
-- RFV 循环的 token 控制：`docs/rfv_loop_harness.md`
+- Quality Gate 循环的 token 控制：`docs/spec.md` §Quality Gate
 - 子 agent 编排的 token 最小化：`skills/agent-swarm-orchestration/SKILL.md`
 - 路由元数据中的 token 预算标记：`skills/SKILL_ROUTING_RUNTIME.json`

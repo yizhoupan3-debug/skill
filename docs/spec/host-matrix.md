@@ -64,7 +64,7 @@ version: unified-v7
 
 ---
 
-### 6.6 跨宿主去重架构（合并自 `docs/architecture/cross-host-dedup.md`）
+### 6.6 跨宿主去重架构（合并自 `docs/cross-host-architecture.md`）
 
 > **Intent K4**: Eliminate duplicated code across host implementations.
 
@@ -109,7 +109,7 @@ version: unified-v7
 
 宿主特定扩展（如 `subagent_start_count`、`review_phase`）通过 `#[serde(flatten)]` 在各宿主的 state struct 中添加。
 
-### 6.7 宿主注册表规范 (v2)（合并自 `docs/architecture/host-registry.md`）
+### 6.7 宿主注册表规范 (v2)
 
 > **权威真源**: `configs/framework/RUNTIME_REGISTRY.json`
 > **Schema version**: `framework-runtime-registry-v2`

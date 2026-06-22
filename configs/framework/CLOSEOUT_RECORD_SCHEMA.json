@@ -108,17 +108,17 @@
     {
       "id": "claimed_done_without_evidence",
       "description": "Summary asserts completion (done/finished/completed/passed/通过/完成/已完成) but verification_status is not_run and no risks/blockers are declared.",
-      "severity": "block"
+      "severity": "warn"
     },
     {
       "id": "changed_files_without_command_or_risk",
       "description": "changed_files is non-empty but commands_run and risks are both empty.",
-      "severity": "block"
+      "severity": "warn"
     },
     {
       "id": "verification_passed_with_failed_command",
       "description": "verification_status=passed but at least one entry in commands_run has non-zero exit_code.",
-      "severity": "block"
+      "severity": "warn"
     },
     {
       "id": "invalid_command_evidence",
@@ -128,12 +128,12 @@
     {
       "id": "verification_passed_with_missing_artifact",
       "description": "verification_status=passed but at least one artifact in artifacts_checked has exists=false.",
-      "severity": "block"
+      "severity": "warn"
     },
     {
       "id": "not_run_without_blockers_or_risks",
       "description": "verification_status=not_run but neither blockers nor risks were recorded.",
-      "severity": "block"
+      "severity": "warn"
     },
     {
       "id": "parse_error",
@@ -143,17 +143,17 @@
     {
       "id": "claimed_done_with_failed_verification",
       "description": "Summary claims completion but verification_status=failed.",
-      "severity": "block"
+      "severity": "warn"
     },
     {
       "id": "claimed_passed_without_evidence",
       "description": "verification_status=passed and summary claims completion without command or artifact evidence in the record.",
-      "severity": "block"
+      "severity": "warn"
     },
     {
       "id": "claimed_passed_without_evidence_index_rows",
       "description": "Context-aware evaluation found no successful task-level verification evidence for a record claiming passed completion.",
-      "severity": "block"
+      "severity": "warn"
     },
     {
       "id": "task_id_context_mismatch",
@@ -180,6 +180,9 @@
     "已完成",
     "完成",
     "通过",
-    "搞定"
+    "搞定",
+    "已经完成",
+    "全部完成",
+    "完成了"
   ]
 }

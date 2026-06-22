@@ -5,7 +5,7 @@
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" PostToolUse",
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/hook.sh codex\" PostToolUse",
             "statusMessage": "Recording Codex tool evidence",
             "timeout": 5,
             "type": "command"
@@ -18,7 +18,7 @@
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" PreToolUse",
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/hook.sh codex\" PreToolUse",
             "statusMessage": "Checking generated-surface guard",
             "timeout": 8,
             "type": "command"
@@ -31,7 +31,7 @@
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" SessionStart",
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/hook.sh codex\" SessionStart",
             "statusMessage": "Loading Codex live state",
             "timeout": 3,
             "type": "command"
@@ -44,7 +44,7 @@
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" Stop",
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/hook.sh codex\" Stop",
             "statusMessage": "Enforcing Codex review gate",
             "timeout": 8,
             "type": "command"
@@ -56,7 +56,7 @@
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" SubagentStart",
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/hook.sh codex\" SubagentStart",
             "statusMessage": "Recording Codex subagent start",
             "timeout": 5,
             "type": "command"
@@ -68,7 +68,7 @@
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" SubagentStop",
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/hook.sh codex\" SubagentStop",
             "statusMessage": "Recording Codex subagent stop",
             "timeout": 5,
             "type": "command"
@@ -80,7 +80,7 @@
       {
         "hooks": [
           {
-            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/codex-router-rs-hook.sh\" UserPromptSubmit",
+            "command": "/usr/bin/env bash \"${SKILL_FRAMEWORK_ROOT:-${CODEX_PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}/configs/framework/hook.sh codex\" UserPromptSubmit",
             "statusMessage": "Loading Codex turn context",
             "timeout": 8,
             "type": "command"

@@ -6,7 +6,7 @@
 pub use runtime_core::{
     goal_drive, closeout_enforcement, execution_contract, framework_host_targets,
     framework_runtime, harness_context_signals,
-    harness_operator_nudges, hook_event_routing, host_integration, hosts, kernel_bootstrap, mcp_stdio_test_support, router_self, runtime_envelope_ids, runtime_registry, session_call_tracker, session_supervisor, stdio_payload_types, trace_runtime, task_state,
+    harness_operator_nudges, hook_event_routing, hosts, kernel_bootstrap, mcp_stdio_test_support, router_self, runtime_envelope_ids, runtime_registry, session_call_tracker, session_supervisor, stdio_payload_types, trace_runtime, task_state,
 };
 
 // host submodule re-exports

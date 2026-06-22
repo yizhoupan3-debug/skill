@@ -4,7 +4,7 @@
 
 use serde_json::{json, Value};
 
-use crate::util::{str_field, str_field_default};
+use crate::util::{novelty_gate, novelty_gate_mut, str_field, str_field_default};
 
 // ── 自包含辅助函数 ──
 
@@ -166,18 +166,6 @@ pub fn verification_standard_for_priority(priority: &str) -> &'static str {
 
 // ── State-aware novelty gate helpers ──
 
-fn novelty_gate(state: &Value) -> &Value {
-    state.get("novelty_gate").unwrap_or(&Value::Null)
-}
-
-fn novelty_gate_mut(state: &mut Value) -> &mut Value {
-    state
-        .as_object_mut()
-        .expect("state must be object")
-        .entry("novelty_gate")
-        .or_insert(json!({}))
-}
-
 fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
     novelty_gate(state)
         .get(key)
@@ -310,18 +298,12 @@ pub fn refresh_novelty_views(state: &mut Value) {
     let recommended_focus = current_recommended_focus(state);
     let brief = current_brief(state);
     let gate = novelty_gate_mut(state);
-    gate.as_object_mut()
-        .expect("gate must be object")
-        .insert("search_plan".into(), json!(search_plan));
-    gate.as_object_mut()
-        .expect("gate must be object")
-        .insert(
-            "recommended_focus".into(),
-            recommended_focus.map_or(Value::Null, Value::String),
-        );
-    gate.as_object_mut()
-        .expect("gate must be object")
-        .insert("brief".into(), brief.unwrap_or(Value::Null));
+    gate.insert("search_plan".into(), json!(search_plan));
+    gate.insert(
+        "recommended_focus".into(),
+        recommended_focus.map_or(Value::Null, Value::String),
+    );
+    gate.insert("brief".into(), brief.unwrap_or(Value::Null));
 }
 
 // ── 测试 ──

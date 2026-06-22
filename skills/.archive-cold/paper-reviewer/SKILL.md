@@ -224,7 +224,7 @@ access is available.
 
 **Reasoning-depth contract (external lane)** — when network / corpus work is in
 play, align with
-[`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md)
+`docs/spec.md` §Reasoning Depth
 **§A–B** before treating the round as “done”:
 
 - [ ] **Claims**: each material claim is falsifiable and tied to a traceable
@@ -257,7 +257,7 @@ discovery indexes for expansion.
 ### External lane shape (audit depth, parallel with reviewer lens)
 
 Whenever you call network tools for calibration, outputs must resemble the **API-shaped** lane contract in
-[`docs/references/rfv-loop/reasoning-depth-contract.md`](../../docs/references/rfv-loop/reasoning-depth-contract.md) §A–B (`Claims`, **Contradiction sweep**, **Unknowns**) plus **retrieval_trace**: queries or paths used, filtering/exclusion rationale, stale hits rejected.
+`docs/spec.md` §Reasoning Depth §A–B (`Claims`, **Contradiction sweep**, **Unknowns**) plus **retrieval_trace**: queries or paths used, filtering/exclusion rationale, stale hits rejected.
 
 Narrative lit review alone is insufficient if the task was framed as adversarial readiness or “deep external research.”
 

@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-20"
+last_verified: "2026-06-22"
 depends_on:
   - _common.md
   - ../spec.md
@@ -129,7 +129,7 @@ OpenCode 的 `OpencodeHostProvider` 实现以下 trait 方法：
   ./scripts/install-opencode.sh
   # 或仅全局：./scripts/install-opencode.sh --scope user
   ```
-- **跨仓库**: `./scripts/opencode-bootstrap-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`
+- **跨仓库**: `./scripts/install-framework.sh --framework-root "$SKILL_FRAMEWORK_ROOT"`
 
 ## Hook 事件矩阵详细
 

@@ -194,14 +194,19 @@ fn load_snapshot_from_disk(registry_path: &Path) -> Result<ReviewGateSnapshot, S
 fn snapshot(repo_root: Option<&Path>) -> Result<ReviewGateSnapshot, String> {
     let path = registry_json_path(repo_root);
     let key = repo_cache_key(&path);
+    let hit = {
+        let guard = cache()
+            .lock()
+            .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
+        guard.get(&key).cloned()
+    };
+    if let Some(snapshot) = hit {
+        return Ok(snapshot);
+    }
+    let loaded = load_snapshot_from_disk(&path)?;
     let mut guard = cache()
         .lock()
         .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
-    if let Some(hit) = guard.get(&key) {
-        return Ok(hit.clone());
-    }
-    let loaded = load_snapshot_from_disk(&path)?;
-    // Evict all if cache grows unbounded (different repos accumulate)
     if guard.len() >= 64 {
         guard.clear();
     }

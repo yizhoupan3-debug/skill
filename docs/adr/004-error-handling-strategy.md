@@ -1,8 +1,8 @@
 ---
-last_verified: "2026-06-19"
+last_verified: "2026-06-22"
 depends_on:
   - ../spec.md
-  - ../spec-core-crates.md
+  - ../spec/core-crates.md
 ---
 
 # ADR-004: 错误处理策略 — `Result<T, String>` vs `thiserror`

@@ -1,19 +1,14 @@
 //! Codex host MCP stdio agent loop.
 //!
 //! Provides the `skill_route` / `skill_search` / `skill_read` / `framework_snapshot` /
-//! `goal_state_*` / `closeout_*` / `rfv_*` / `record_evidence` / `session_checkpoint`
+//! `goal_state_*` / `closeout_*` / `quality_gate_*` / `record_evidence` / `session_checkpoint`
 //! tools via MCP stdio, using `host_id = "codex"`.
 
-use std::io;
 use std::path::Path;
 
-use crate::hosts::mcp_stdio_harness::run_mcp_stdio;
-use framework_kernel::repo_roots::resolve_repo_root_arg;
+use crate::hosts::run_agent_mcp_loop;
 
 /// Run the MCP stdio agent loop for Codex host.
 pub fn run_codex_agent_mcp_loop(repo_root_arg: Option<&Path>) -> Result<(), String> {
-    let repo_root = resolve_repo_root_arg(repo_root_arg)?;
-    let stdin = io::stdin();
-    let stdout = io::stdout();
-    run_mcp_stdio(stdin.lock(), stdout.lock(), &repo_root, "codex")
+    run_agent_mcp_loop(repo_root_arg, "codex")
 }

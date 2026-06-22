@@ -2,7 +2,7 @@
 last_verified: "2026-06-22"
 depends_on:
   - ../spec.md
-  - ../spec-cross-host.md
+  - ../spec/host-matrix.md
 ---
 
 # ADR-008: 跨宿主一致性统一
@@ -70,6 +70,6 @@ Accepted (2026-06-22).
 ## Related
 
 - `docs/spec.md` §2 — 架构规约
-- `docs/spec-cross-host.md` — 跨宿主规约
+- `docs/spec/host-matrix.md` — 跨宿主规约
 - `docs/cross-host-architecture.md` — 跨宿主架构实现
 - `artifacts/current/roadmap-v8.md` §5 — 跨宿主基础设施 Wave

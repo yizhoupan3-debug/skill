@@ -119,7 +119,7 @@ version: unified-v7
 
 > **已归档** (v6 之前)：`image_gen_rs`, `image_process_rs`, `pubmed_tool_rs`, `ref_corpus_tool_rs`, `screenshot_rs` — 无下游依赖，从 workspace 移除。
 
-### 3.6 模块解耦架构（合并自 `docs/architecture/module-decoupling.md`）
+### 3.6 模块解耦架构（合并自 `docs/spec/runtime-subsystems.md`）
 
 #### 层状依赖图
 

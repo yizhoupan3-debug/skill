@@ -174,7 +174,9 @@ use tool_registry::*;
 #[cfg(any(test, feature = "test-support"))]
 pub use tools::{build_evidence_entry, tool_closeout_gate};
 
-/// Dispatch a tool call through the global CompositeRegistry.
+/// Dispatch a tool call through the global CompositeRegistry,
+/// falling through to the external research-tool handler when
+/// the built-in registry does not recognise the tool name.
 /// Defined in mod.rs so both tools and tool_registry can reference it.
 pub(super) fn dispatch_tool(
     tool_name: &str,
@@ -192,15 +194,26 @@ pub(super) fn dispatch_tool(
         r.register(RoutingTools);
         r.register(LifecycleTools);
         r.register(InfraTools);
-        r.register(ResearchTools);
         r
     });
     let ctx = ToolCallContext {
         repo_root: repo_root.to_path_buf(),
         host_id: host_id.to_string(),
-        connection_session_id: connection_session_id.to_string(),
+        connection_session_id: Arc::new(connection_session_id.to_string()),
     };
-    registry.dispatch(tool_name, args, &ctx)
+
+    let result = registry.dispatch(tool_name, args, &ctx);
+    if result.is_ok() {
+        return result;
+    }
+
+    // Not found in built-in registry → try externally-registered dispatch
+    // (research-harness tools registered via hooks.rs at runtime-core startup)
+    if let Some(dispatch) = crate::hooks::get_research_tool_dispatch() {
+        dispatch(tool_name, args)
+    } else {
+        result
+    }
 }
 
 fn get_snapshot_cache() -> &'static Arc<std::sync::RwLock<Option<SnapshotCache>>> {

@@ -3,8 +3,8 @@
     "nudges": {
         "goal_drive_verbose_reasoning_depth": "推理深度：不靠单模型拉长 CoT；大任务用地平线切片 + 验证写入 EVIDENCE_INDEX/检查点，形成可审计链。",
         "goal_drive_compact_reasoning_depth": "深度：切片 + 验证 + 证据链；避免仅堆长推理。",
-        "math_reasoning_harness_line": "数理：用可检验 witness（极限/特例/双轨）+ 符号或脚本 verifier 定 PASS/FAIL；不靠 prose 冒充证明（见 docs/references/rfv-loop/math-reasoning-harness.md）。收尾前 EVIDENCE_INDEX 需有成功验证行才满足完成门控。",
-        "retrieval_trace_harness_line": "检索：深度外研须含 contradiction_sweep 与可复核 retrieval_trace（检索式、筛选、排除）；定量结论要写清数据版本与可复跑复算命令；缺关键块则 harness 语义上未完成「深度调研」（见 docs/references/rfv-loop/reasoning-depth-contract.md §B）。",
+        "math_reasoning_harness_line": "数理：用可检验 witness（极限/特例/双轨）+ 符号或脚本 verifier 定 PASS/FAIL；不靠 prose 冒充证明。收尾前 EVIDENCE_INDEX 需有成功验证行才满足完成门控。",
+        "retrieval_trace_harness_line": "检索：深度外研须含 contradiction_sweep 与可复核 retrieval_trace（检索式、筛选、排除）；定量结论要写清数据版本与可复跑复算命令；缺关键块则 harness 语义上未完成「深度调研」。",
         "qg_loop_continue_reasoning_depth": "推理深度：不靠单模型拉长 CoT；需要时用 fan-out/fan-in + 可执行验证；证据落在 EVIDENCE_INDEX。",
         "qg_loop_external_struct_hint_line": "外研结构化：本轮 `append_round` 需填 `external_research`，按 `QUALITY_GATE_EXTERNAL_RESEARCH.schema.json` 覆盖 sources、contradiction_sweep、queries_used、unknowns。"
     }

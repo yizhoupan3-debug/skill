@@ -23,6 +23,22 @@ use std::sync::OnceLock;
 
 static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();
 
+// ── Codex hooks duplicate check (function-pointer proxy) ──
+
+type CodexHookDuplicateCheckFn = fn(repo_root: &Path) -> Vec<String>;
+static CODEX_HOOK_DUPLICATE_CHECK: OnceLock<CodexHookDuplicateCheckFn> = OnceLock::new();
+
+pub fn register_codex_hook_duplicate_check(f: CodexHookDuplicateCheckFn) {
+    CODEX_HOOK_DUPLICATE_CHECK.set(f).ok();
+}
+
+pub fn check_codex_hook_duplicates(repo_root: &Path) -> Vec<String> {
+    match CODEX_HOOK_DUPLICATE_CHECK.get() {
+        Some(f) => f(repo_root),
+        None => vec![],
+    }
+}
+
 /// 获取已注册的钩子引用。需在调用其他 framework-runtime 函数前注册。
 /// 返回 `None` 表示尚未注册——调用方应走 fallback/no-op 路径。
 pub fn try_hooks() -> Option<&'static RuntimeCoreHooks> {

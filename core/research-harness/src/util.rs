@@ -3,12 +3,8 @@
 //! Consolidates duplicated helper functions from state, render, smoke,
 //! claims, search, and CLI modules.
 //!
-//! NOTE: Several functions here are duplicated as local helpers in individual
-//! modules. This is tracked as technical debt — the canonical versions should
-//! live here and be imported. Until that refactoring, `#[allow(dead_code)]`
-//! suppresses clippy warnings for the unused copies.
-
-#![allow(dead_code)]
+//! NOTE: Canonical helpers live here; local duplicates in claims/lifecycle.rs
+//! and search modules import from this module.
 
 use serde_json::Value;
 

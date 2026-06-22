@@ -124,8 +124,8 @@ mod smoke_p0_hook_policy_tests;
 mod smoke_p0_atomic_write_tests;
 
 #[cfg(test)]
-#[path = "../tests/smoke_p0_rfv_state_tests.rs"]
-mod smoke_p0_rfv_state_tests;
+#[path = "../tests/smoke_p0_qg_state_tests.rs"]
+mod smoke_p0_qg_state_tests;
 
 #[cfg(test)]
 #[path = "../tests/smoke_p0_task_pointers_tests.rs"]

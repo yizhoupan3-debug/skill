@@ -38,7 +38,7 @@ use crate::harness_contract::{harness_contract, lint_skill_contracts};
 use crate::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
 use crate::host_entrypoint_sync::sync_host_entrypoints;
 use crate::host_integration::run_host_integration_from_args;
-use host_projection::review_gate_cli::run_review_gate;
+use crate::review_gate_cli::run_review_gate;
 use crate::runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, runtime_backend_family_catalog_payload,
     runtime_backend_family_parity_payload, runtime_storage_operation,
