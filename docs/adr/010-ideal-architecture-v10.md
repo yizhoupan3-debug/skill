@@ -1,6 +1,6 @@
 # ADR-010: 框架架构规范
 
-**状态**: 终版 · **日期**: 2026-06-23
+**状态**: 终版 · **日期**: 2026-06-23 · **最后修订**: 2026-06-23 (§2/§3/§5/§8/§11 修正, Phase 1.1+2.1+2.2 落地)
 
 ---
 
@@ -62,13 +62,17 @@ L0 hook 事件到来 ──→ hook_dispatch.rs → 代理函数 → L4 注册�
 
 ```
 L5      Feature Layer (领域插件层)
-         └── research-harness   文献检索、审稿、AIGC、LaTeX
+         └── research-harness   文献检索、审稿、AIGC、LaTeX (feature-gated via router-rs)
 
 L4      Runtime Platform (运行时平台)
          ├── runtime-core           平台聚合 + 上下文工程
          ├── framework-runtime      退出门控 + closeout
+         ├── framework-extra        编排控制面（从 runtime-core 提取）
          ├── loop-engine            RFV 闭环（Goal/进度/RFV 收敛）
+         ├── runtime-exit-gate      质量门控（从 runtime-core 提取）
+         ├── runtime-infra          运行时基础设施（env/path/io/sync/http）
          ├── runtime-storage        SQLite 持久化
+         ├── session-supervisor     Session 监督器
          ├── trace-runtime          运行时追踪
          └── runtime-core-contracts  契约与类型
 
@@ -89,7 +93,6 @@ L0      Host + Hook Layer (宿主适配层)
          │   ├── hooks.rs            OnceLock 函数指针注册表
          │   └── mcp_stdio_harness/  MCP stdio 桥
          ├── host_entrypoint_sync.rs
-         ├── infra/                  B0 级基础设施（§10）
          └── test_helpers.rs
 
 B0      Foundation Layer (基础库)
@@ -97,7 +100,7 @@ B0      Foundation Layer (基础库)
          ├── core-policy             Hook 策略 + Review 守卫
          ├── framework-kernel        框架内核 (repo_roots, runtime_registry)
          ├── telemetry-types         遥测类型
-         └── http-util               HTTP 工具
+         └── http-util               HTTP 客户端工厂 (唯一源)
 ```
 
 ### 2.1 统一 Hook 分派
@@ -225,7 +228,7 @@ L5       ✓   ✓   -   -   ✓   ✓
 |------|------|------|
 | `host_integration/` | 5,707 | → L0 host-projection（零 `crate::` 依赖） |
 | `framework_runtime/` 本地模块 | 6,800 | → `framework-extra` 新 crate（70% 引用是 extern crate re-export） |
-| `infrastructure/` (5 文件零依赖) | 2,041 | → B0 `runtime-infra` |
+| `infrastructure/` (5 文件零依赖) | 2,041 | → L4 `runtime-infra` |
 | `infrastructure/stdio_transport` | 898 | → 函数参数化解耦 cli 引用后并入 runtime-infra |
 | `exit_gate/` | 2,906 | → `runtime-exit-gate` crate（依赖 router_env_flags+resolve_repo_root） |
 | `framework_maint/` | 1,789 | → `tools/framework-maint`（待 host_integration+cli 提取后） |
@@ -233,7 +236,7 @@ L5       ✓   ✓   -   -   ✓   ✓
 | **核心保留** | **~6,000** | lib.rs + eval_route + hook_timing + task_command + browser_dispatch |
 
 **提取顺序**:
-**提取依赖**: host_integration → L0 + infrastructure(5文件) → B0 runtime-infra → exit_gate/framework_maint → framework_runtime/ → cli → router-rs
+**提取依赖**: host_integration → L0 + infrastructure(5文件) → L4 runtime-infra → exit_gate/framework_maint → framework_runtime/ → cli → router-rs
 
 ---
 
@@ -302,11 +305,12 @@ core/
 ├── runtime-exit-gate/        L4  质量门控 (从 runtime-core 提取)
 ├── loop-engine/              L4  RFV 闭环
 ├── runtime-storage/          L4  SQLite 持久化
-├── runtime-infra/            B0  基础设施 (合并碎片, §10)
+├── runtime-infra/            L4  运行时基础设施 (env/path/io/sync/http)
+├── session-supervisor/       L4  Session 监督器
 ├── trace-runtime/            L4  运行时追踪
 ├── runtime-core-contracts/   L4  契约
 │
-├── research-harness/         L5  科研 Feature
+├── research-harness/         L5  科研 Feature (feature-gated, router-rs research 特性)
 │
 ├── browser-mcp/              L3  浏览器 MCP
 ├── router-rs/                L7  CLI 入口
@@ -410,8 +414,8 @@ pub mod http {
 
 | 目标 | 内容 | 行数 | 目标 crate |
 |------|------|------|-----------|
-| **运行时基础设施** | `infrastructure/` 中 5 个零依赖文件 | 2,041 | `runtime-infra` (B0) |
-| **stdio_transport** | 对 cli 有 1 处引用，需通过函数指针解耦 | 898 | `runtime-infra` (B0) |
+| **运行时基础设施** | `infrastructure/` 中 5 个零依赖文件 | 2,041 | `runtime-infra` (L4) |
+| **stdio_transport** | 对 cli 有 1 处引用，需通过函数指针解耦 | 898 | `runtime-infra` (L4) |
 | **退出质量门控** | `exit_gate/` | 2,906 | `runtime-exit-gate` (L4) |
 | **编排控制面** | `framework_runtime/` 本地模块 | 6,800 | `framework-extra` (L4) |
 | **CLI 分发** | `cli/` | 1,954 | `router-rs` (L7) |
@@ -428,7 +432,7 @@ trace-runtime (1,103 行)        ← 运行时追踪
 runtime-core-contracts (1,531)  ← 契约与类型
 framework-extra (6,800 行)      ← 编排控制面（新）
 runtime-exit-gate (2,906 行)    ← 质量门控（新）
-runtime-infra (4,000 行)        ← 基础设施（B0 级）
+runtime-infra (4,000 行)        ← 基础设施（L4 级）
 ```
 
 所有沟通路径：
@@ -439,3 +443,50 @@ runtime-infra (4,000 行)        ← 基础设施（B0 级）
 ---
 
 ## 11. 验收标准
+
+### 11.1 B0 基础层
+
+- [x] 所有 6 个 B0 crate（core-state, core-policy, framework-kernel, telemetry-types, http-util, runtime-infra）存在且 Cargo.toml 合规
+- [x] B0 crate 不依赖 L 层 crate（host-projection, routing-engine, runtime-core, framework-runtime 等）
+- [ ] `runtime-infra` 正式标记为 L4（当前已更正 ADR 文档，未改其 Cargo.toml 依赖）
+
+### 11.2 DAG 依赖方向
+
+- [x] L0→L4/L5 禁止：host-projection 不依赖 L4/L5 crate
+- [x] L1/L3→L4/L5 禁止：routing-engine 不依赖 L4/L5；~~browser-mcp→runtime-core~~ **当前存在违规**（§10.3 待修复）
+- [x] L4→L5 应为 feature-gated：~~runtime-core→research-harness~~ **已修复**（Phase 1.1, 2026-06-23）
+- [x] B0→L 层禁止：全部张 B0 crate 通过
+
+### 11.3 宿主隔离
+
+- [x] 宿主名映射集中在 `framework-kernel/src/runtime_registry.rs` 的数据常量中：`REVIEW_GATE_DISABLE_BY_HOST`、`HOST_SETTINGS_PATHS`、`HOST_ENTRYPOINT_PATHS`、`HOST_CONFIG_DIRS`、`EPHEMERAL_PATH_PATTERNS`
+- [ ] `schema_drift.rs` 的 cursor 特有逻辑待提取到 L0
+- [ ] `runtime-core/lib.rs` cursor/codex 宿主扩展注册封装待完成
+- [ ] `framework_doctor.rs` `cursor-stop-` 前缀待抽象
+
+### 11.4 Runtime-Core 拆分
+
+- [x] `host_integration/` → L0 host-projection
+- [x] `infrastructure/` → runtime-infra
+- [x] `exit_gate/` → runtime-exit-gate
+- [x] `framework_runtime/` 部分 → framework-extra（`route_manifest_fallback` 和 `stdio_dispatch` 未完成迁移）
+- [x] `cli/` → router-rs
+- [x] `framework_maint/` → tools/framework-maint
+
+### 11.5 基础设施唯一性
+
+- [x] `env_enabled_default_*` — 唯一源 `core-policy::env_flags`
+- [x] `repo_roots` — 唯一源 `framework-kernel::repo_roots`
+- [x] `now_iso()` — 唯一源 `framework-kernel::time`（7 处 local fn 全部委托到该源）
+- [x] `atomic_write` — 唯一源 `core-state::utils::atomic_write`
+- [x] `read_stdin_limited` — 唯一源 `host-projection::hooks`
+
+### 11.6 L5 研究隔离
+
+- [x] `ResearchMode`、`infer_research_mode` 等研究关键词已全清除出 L4
+- [x] L5 通过 L0 函数指针注册表回注 hook → runtime-core 无 research-harness 编译期依赖
+
+### 11.7 ADR 文档完整性
+
+- [x] 产物目录（§8）与实际一致，含 session-supervisor
+- [x] 六层图（§2）与实际 crate 列表一致
