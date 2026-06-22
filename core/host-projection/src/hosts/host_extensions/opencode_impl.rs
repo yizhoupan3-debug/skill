@@ -229,6 +229,10 @@ impl HostHookDispatcher for OpencodeHookDispatcher {
         // Shared tool call telemetry (4-host unified)
         hook_dispatch::record_tool_call_emission(event.repo_root, &normalized, duration_ms, succeeded);
 
+        // §4.4: Auto evidence recording (shared across all hosts)
+        hook_dispatch::auto_record_verification_evidence(event.repo_root, event.payload);
+        hook_dispatch::auto_record_research_activity(event.repo_root, event.payload);
+
         // Check if review gate is suppressed
         let prompt = extract_prompt_text(event.payload);
         if is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &prompt) {

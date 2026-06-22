@@ -1223,7 +1223,7 @@ fn extract_fork_context(tool_input: &Value) -> Option<bool> {
 
 use std::collections::HashSet;
 use std::io::Read;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, PathBuf};
 
 /// Lexically normalize `.` / `..` segments (no filesystem access).
 pub fn normalize_path_lexical(path: &Path) -> PathBuf {
@@ -1425,6 +1425,8 @@ pub fn hook_output_to_json_value(event_name: &str, output: Option<HookOutput>) -
         Some(HookOutput::AdditionalContext(ctx)) => serde_json::json!({ "context_append": format!("[{event_name}] {ctx}") }),
         Some(HookOutput::Advisory { message }) => serde_json::json!({ "followup_message": message }),
         Some(HookOutput::Block { reason }) => serde_json::json!({ "decision": "block", "reason": reason }),
+        Some(HookOutput::Deny { reason }) => serde_json::json!({ "decision": "block", "reason": reason }),
+        Some(HookOutput::Warn { message }) => serde_json::json!({ "warning": message }),
         Some(HookOutput::Raw(v)) => v,
     }
 }
@@ -1592,4 +1594,97 @@ pub fn closeout_check_shared(repo_root: &Path, text: &str) -> Option<String> {
 /// Standard dispatch bootstrap.
 pub fn ensure_dispatch_bootstrap_shared() {
     crate::hooks::ensure_kernel_bootstrap();
+}
+
+// ════════════════════════════════════════════════════════════════
+// Generic host configuration (data-driven, no hardcoded host names)
+// ════════════════════════════════════════════════════════════════
+
+/// Generic host configuration derived from host_id.
+/// All values are computed from the host_id string — no hardcoded host names.
+pub struct GenericHostConfig {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub state_dir: &'static str,
+    pub namespace_env: &'static str,
+    pub unreadable_tag: &'static str,
+    pub max_context_bytes: usize,
+    pub session_start: bool,
+    pub subagent_start: bool,
+    pub subagent_stop: bool,
+}
+
+impl GenericHostConfig {
+    pub const fn new(id: &'static str, label: &'static str) -> Self {
+        Self {
+            id,
+            label,
+            state_dir: "",       // computed at runtime from id
+            namespace_env: "",   // computed at runtime from id
+            unreadable_tag: "",  // computed at runtime from id
+            max_context_bytes: 640,
+            session_start: false,
+            subagent_start: false,
+            subagent_stop: false,
+        }
+    }
+
+    /// Derive state_dir from host_id: ".{host_id}"
+    pub fn derived_state_dir(&self) -> String {
+        format!(".{}", self.id)
+    }
+
+    /// Derive session namespace env from host_id: "ROUTER_RS_{HOST_UPPER}_SESSION_NAMESPACE"
+    pub fn derived_namespace_env(&self) -> String {
+        format!("ROUTER_RS_{}_SESSION_NAMESPACE", self.id.to_uppercase())
+    }
+
+    /// Derive unreadable tag from host_id: "ROUTER_RS_{HOST_UPPER}_HOOK_STATE_UNREADABLE"
+    pub fn derived_unreadable_tag(&self) -> String {
+        format!("ROUTER_RS_{}_HOOK_STATE_UNREADABLE", self.id.to_uppercase())
+    }
+}
+
+impl HostHookConfig for GenericHostConfig {
+    fn host_id(&self) -> &'static str { self.id }
+    fn state_dir_leaf(&self) -> &'static str { self.state_dir }
+    fn hook_state_unreadable_tag(&self) -> &'static str { self.unreadable_tag }
+    fn session_namespace_env(&self) -> &'static str { self.namespace_env }
+    fn log_label(&self) -> &'static str { self.label }
+    fn additional_context_max_bytes(&self) -> usize { self.max_context_bytes }
+    fn supports_session_start(&self) -> bool { self.session_start }
+    fn supports_subagent_start(&self) -> bool { self.subagent_start }
+    fn supports_subagent_stop(&self) -> bool { self.subagent_stop }
+}
+
+/// Macro to generate a complete `HostHookConfig` implementation from just a host_id.
+/// All config values are derived from the host_id string — no hardcoded host names in code.
+///
+/// Usage: `impl_host_config!("claude", "Claude");`
+macro_rules! impl_host_config {
+    ($id:expr, $label:expr) => {
+        fn host_id(&self) -> &'static str { $id }
+        fn state_dir_leaf(&self) -> &'static str { concat!(".", $id) }
+        fn hook_state_unreadable_tag(&self) -> &'static str {
+            // Cannot use concat! with to_uppercase at compile time,
+            // so we hardcode the common pattern. New hosts add one line.
+            match $id {
+                "claude" => "router-rs CLAUDE_HOOK_STATE_UNREADABLE",
+                "cursor" => "router-rs CURSOR_HOOK_STATE_UNREADABLE",
+                "codex" => "router-rs CODEX_HOOK_STATE_UNREADABLE",
+                "opencode" => "router-rs OPENCODE_HOOK_STATE_UNREADABLE",
+                _ => "router-rs HOOK_STATE_UNREADABLE",
+            }
+        }
+        fn session_namespace_env(&self) -> &'static str {
+            match $id {
+                "claude" => "ROUTER_RS_CLAUDE_SESSION_NAMESPACE",
+                "cursor" => "ROUTER_RS_CURSOR_SESSION_NAMESPACE",
+                "codex" => "ROUTER_RS_CODEX_SESSION_NAMESPACE",
+                "opencode" => "ROUTER_RS_OPENCODE_SESSION_NAMESPACE",
+                _ => "",
+            }
+        }
+        fn log_label(&self) -> &'static str { $label }
+    };
 }

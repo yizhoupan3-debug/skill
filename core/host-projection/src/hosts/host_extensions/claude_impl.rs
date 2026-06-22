@@ -15,7 +15,7 @@ use core_policy::review_gate_engine::{
 use core_policy::HookReviewDiskCore;
 use serde_json::{Map, Value, json};
 use crate::hosts::hook_dispatch::{
-    HookEvent, HookOutput, HostHookConfig, HostHookDispatcher,
+    impl_host_config, HookEvent, HookOutput, HostHookConfig, HostHookDispatcher,
     add_context, bash_command, closeout_completion_text, collect_path_value,
     collect_payload_paths, compact_repo_relative_segments, extract_output_summary,
     find_numeric_key, first_nonempty_payload_str, hook_output_to_json_value,
@@ -37,6 +37,11 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
+
+/// Hook-state base directory for Claude: `<repo_root>/.claude/hook-state/`
+fn hook_state_base(repo_root: &Path) -> PathBuf {
+    repo_root.join(".claude").join("hook-state")
+}
 #[cfg(not(unix))]
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -853,8 +858,6 @@ impl crate::hosts::stop_dispatch::StopHostOps for ClaudeStopOps {
 
 /// Original Claude Stop implementation — now delegates to unified pipeline.
 
-#[derive(Default)]
-
 /// Hydrate goal gate from disk (GOAL_STATE.json + EVIDENCE_INDEX.json).
 /// Uses the same function-pointer proxy as Cursor; active when runtime-core registers
 /// `evaluate_goal_readiness_from_disk` (no-op in standalone mode).
@@ -1029,8 +1032,6 @@ where
     f()
 }
 
-#[derive(Debug, Clone)]
-
 fn migrate_claude_review_gate_state_to_canonical(
     canonical_path: &Path,
     state: &HookReviewDiskCore,
@@ -1083,9 +1084,6 @@ fn reviewer_lane(tool_input: &Value, payload: &Value) -> bool {
 }
 
 
-fn tool_name_implies_subagent(normalized: &str) -> bool {
-    crate::hosts::hook_dispatch::is_subagent_tool(normalized)
-}
 
 fn record_reviewer_evidence_with_ctx(repo_root: &Path, payload: &Value, ctx: &PostToolContext) {
     let path = &ctx.review_path;

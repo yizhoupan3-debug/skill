@@ -10,6 +10,11 @@ fn handle_post_tool_use(repo_root: &Path, event: &Value) -> Value {
         hooks::extract_post_tool_duration_ms(event).unwrap_or(0),
         hooks::post_tool_call_succeeded(event),
     );
+
+    // §4.4: Auto evidence recording (shared across all hosts)
+    crate::hosts::hook_dispatch::auto_record_verification_evidence(repo_root, event);
+    crate::hosts::hook_dispatch::auto_record_research_activity(repo_root, event);
+
     let review_armed_peek = peek_review_hard_armed(repo_root, event);
 
     if review_armed_peek {

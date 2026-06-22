@@ -288,6 +288,10 @@ pub(super) fn handle_codex_posttooluse(repo_root: &Path, event: &Value) -> Optio
         hooks::post_tool_call_succeeded(event),
     );
 
+    // §4.4: Auto evidence recording (shared across all hosts)
+    hook_dispatch::auto_record_verification_evidence(repo_root, event);
+    hook_dispatch::auto_record_research_activity(repo_root, event);
+
     let prompt_for_profile = extract_prompt_text(event);
     if hook_dispatch::is_review_gate_suppressed("codex", Some(repo_root), &prompt_for_profile) {
         clear_codex_review_gate_hook_state(repo_root, event);

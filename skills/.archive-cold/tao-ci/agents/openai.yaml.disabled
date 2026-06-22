@@ -1,4 +1,0 @@
-interface:
-  display_name: "Tao-ci"
-  short_description: "Tailored professor outreach emails"
-  default_prompt: "Use $tao-ci to draft a low-AIGC plain-text outreach email for a named professor from an attached workbook, with line 1 as the email address and line 2 as the subject, and optionally open the enterprise mailbox compose page with attachments."
