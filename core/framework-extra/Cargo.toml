@@ -17,6 +17,8 @@ runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-storage = { path = "../runtime-storage" }
 routing-engine = { path = "../routing-engine" }
 host-projection = { path = "../host-projection" }
+# L4 (runtime infrastructure)
+runtime-infra = { path = "../runtime-infra" }
 
 # workspace
 chrono.workspace = true

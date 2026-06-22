@@ -23,7 +23,7 @@ pub use framework_runtime::live_execute;
 pub use framework_extra::orchestration_controller;
 pub use framework_runtime::pre_tool_use_guard;
 pub use framework_kernel::repo_roots;
-pub mod route_manifest_fallback;
+pub use framework_extra::route_manifest_fallback;
 pub use framework_runtime::runtime_view;
 pub use framework_runtime::sandbox_control;
 pub mod stdio_dispatch;

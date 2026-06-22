@@ -13,6 +13,7 @@ pub mod evidence;
 pub mod framework_doctor;
 pub mod orchestration_controller;
 pub mod prompt_compression;
+pub mod route_manifest_fallback;
 pub mod session_artifacts;
 pub mod snapshot;
 pub mod statusline;
