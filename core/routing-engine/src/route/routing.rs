@@ -21,6 +21,11 @@ use super::types::{
 /// Shared skeleton for every RouteDecision — avoids repeated `.to_string()` on static constants
 /// per construction site (saves ~21 String allocs across 7 call sites).  Override
 /// skill-specific fields with struct update syntax.
+///
+/// NOTE: `route_snapshot` is intentionally NOT built here — callers that need it
+/// (i.e. `make_no_hit_decision`) build it manually. The hit-path callers
+/// (`route_task`, `build_fuzzy_rescue_decision`) always override `route_snapshot`
+/// via struct update syntax, so building it in the skeleton would be wasted work.
 fn route_decision_skeleton(
     query: &str,
     session_id: &str,
@@ -42,14 +47,8 @@ fn route_decision_skeleton(
         reasons: reasons.clone(),
         matched_token_count: 0,
         fuzzy_match: false,
-        route_snapshot: build_route_snapshot(
-            "rust",
-            NO_SKILL_SELECTED,
-            None,
-            "runtime",
-            0.0,
-            &reasons,
-        ),
+        // route_snapshot is set by each caller — see NOTE above.
+        route_snapshot: RouteDecisionSnapshotPayload::default(),
     }
 }
 
@@ -61,7 +60,16 @@ fn make_no_hit_decision(
     route_context: RouteContextPayload,
     reasons: Vec<String>,
 ) -> RouteDecision {
-    route_decision_skeleton(query, session_id, route_context, reasons)
+    let mut decision = route_decision_skeleton(query, session_id, route_context, reasons);
+    decision.route_snapshot = build_route_snapshot(
+        "rust",
+        &decision.selected_skill,
+        None,
+        "runtime",
+        0.0,
+        &decision.reasons,
+    );
+    decision
 }
 use rayon::prelude::*;
 use std::cmp::Ordering;
@@ -505,34 +513,65 @@ pub fn route_task(
 /// Overlay records (`owner_lower == "overlay"`) carry trigger hints and
 /// slugs that users may include in prompts, but that should not affect
 /// primary-owner scoring.  This function collects all such terms and
-/// replaces each with a single space, then collapses runs of whitespace.
+/// removes them via token-level matching (rather than raw substring
+/// replacement) to avoid mangling legitimate query words.
 fn primary_owner_query_text(query: &str, records: &[SkillRecord], allow_overlay: bool) -> String {
     if !allow_overlay {
         return query.to_string();
     }
     // Collect overlay trigger hints and slug forms (minimum length > 3
     // to avoid stripping very short tokens that could be legitimate
-    // query words).
-    let mut patterns: Vec<String> = Vec::new();
+    // query words).  Store normalized forms for token-level matching.
+    let mut overlay_terms: Vec<String> = Vec::new();
     for record in records.iter().filter(|record| is_overlay_record(record)) {
         for hint in &record.trigger_hints {
             if hint.len() > 3 {
-                patterns.push(hint.clone());
+                overlay_terms.push(normalize_text(hint));
             }
         }
         if record.slug.len() > 3 {
-            patterns.push(record.slug.clone());
+            overlay_terms.push(normalize_text(&record.slug));
         }
         let slug_spaced = record.slug.replace('-', " ");
         if slug_spaced.len() > 3 {
-            patterns.push(slug_spaced);
+            overlay_terms.push(normalize_text(&slug_spaced));
         }
     }
-    let mut text = query.to_string();
-    for pattern in &patterns {
-        text = text.replace(pattern.as_str(), " ");
+    if overlay_terms.is_empty() {
+        return query.to_string();
     }
-    text.split_whitespace().collect::<Vec<_>>().join(" ")
+
+    // Token-level removal: normalize + tokenize the query, then skip
+    // tokens that form overlay phrases (contiguous token sequences).
+    // Uses the same tokenization as the routing scoring pipeline so
+    // the removal is semantically consistent with later scoring steps.
+    let query_tokens = tokenize_route_text(query);
+    let mut keep = Vec::with_capacity(query_tokens.len());
+    let mut pos = 0usize;
+    while pos < query_tokens.len() {
+        let mut skip = 0usize;
+        for term in &overlay_terms {
+            let phrase_tokens: Vec<String> = tokenize_route_text(term);
+            if phrase_tokens.is_empty() || phrase_tokens.len() > query_tokens.len() - pos {
+                continue;
+            }
+            let is_match = phrase_tokens
+                .iter()
+                .enumerate()
+                .all(|(offset, pt)| query_tokens[pos + offset] == *pt);
+            if is_match {
+                skip = phrase_tokens.len();
+                break;
+            }
+        }
+        if skip > 0 {
+            pos += skip;
+        } else {
+            keep.push(query_tokens[pos].clone());
+            pos += 1;
+        }
+    }
+    keep.join(" ")
 }
 
 /// Layer-based penalty applied during fuzzy rescue to discourage
@@ -563,6 +602,12 @@ fn fuzzy_rescue_best_match<'a>(
         
 }
 
+/// Gate skills excluded from fuzzy rescue when a matching gate context (e.g. CI)
+/// is detected.  These skills have dedicated gate handlers that should take
+/// precedence over fuzzy fallback.  When the list grows, migrate to a
+/// data-driven field in SKILL_ROUTING_METADATA.json.
+const CI_GATE_FUZZY_RESCUE_EXCLUDED: &[&str] = &["gh-address-comments"];
+
 fn fuzzy_rescue_primary_record<'a>(
     records: &'a [SkillRecord],
     query: &str,
@@ -575,7 +620,7 @@ fn fuzzy_rescue_primary_record<'a>(
             if is_overlay_record(record) {
                 return false;
             }
-            if ci_gate && record.slug == "gh-address-comments" {
+            if ci_gate && CI_GATE_FUZZY_RESCUE_EXCLUDED.contains(&record.slug.as_str()) {
                 return false;
             }
             true
@@ -781,33 +826,123 @@ fn is_explicit_manifest_upgrade(hot: &RouteDecision, full: &RouteDecision) -> bo
             && hot.overlay_skill.is_none())
 }
 
-fn is_same_skill_with_extra_overlay(hot: &RouteDecision, full: &RouteDecision) -> bool {
-    full.selected_skill == hot.selected_skill
-        && full.overlay_skill.is_some()
-        && hot.overlay_skill.is_none()
+/// Skills that qualify for retry even at scores < 35.0 (narrow-gate retry).
+/// Consolidates what were previously scattered hardcoded slug checks.
+fn hot_retry_override_skills() -> &'static [&'static str] {
+    &[
+        "agent-swarm-orchestration",
+        "doc",
+        "design-md",
+        "pdf",
+        "sentry",
+    ]
+}
+
+/// Skills that use a low-score override in manifest fallback decisions.
+/// Maps skill slug → minimum score for override eligibility.
+fn low_score_override_skills() -> &'static [(&'static str, f64)] {
+    &[("deepinterview", 20.0)]
+}
+
+/// Gate skills whose own owners gate_retrigger_on_hot (session_start "required" + gate).
+/// These block manifest fallback decisions from other owners.
+fn is_runtime_required_gate(slug: &str, runtime_records: &[SkillRecord]) -> bool {
+    runtime_records
+        .iter()
+        .find(|record| record.slug == slug)
+        .is_some_and(|record| {
+            record.session_start_lower == "required"
+                && (record.owner_lower == "gate" || record.gate_lower != "none")
+        })
 }
 
 fn hot_qualifies_for_retry(hot: &RouteDecision) -> bool {
     route_decision_is_no_hit(hot)
         || hot.score < 25.0
         || (hot.score < 35.0
-            && matches!(
-                hot.selected_skill.as_str(),
-                "agent-swarm-orchestration" | "doc" | "design-md" | "pdf" | "sentry"
-            ))
-        || hot.selected_skill == "systematic-debugging"
+            && hot_retry_override_skills()
+                .contains(&hot.selected_skill.as_str()))
+        || (hot.selected_skill == "systematic-debugging" && hot.score < 50.0)
 }
 
 fn is_significant_score_gap_with_signal(full: &RouteDecision, hot: &RouteDecision) -> bool {
     full.score >= hot.score + 8.0 && has_non_generic_manifest_signal(full)
 }
 
-fn is_low_score_deepinterview_override(full: &RouteDecision) -> bool {
-    full.score >= 20.0 && matches!(full.selected_skill.as_str(), "deepinterview")
+fn is_low_score_override(full: &RouteDecision) -> bool {
+    low_score_override_skills()
+        .iter()
+        .any(|&(slug, min_score)| {
+            full.selected_skill == slug && full.score >= min_score
+        })
 }
 
 fn is_minimal_score_without_signal(full: &RouteDecision) -> bool {
-    full.score <= 10.0 && !matches!(full.selected_skill.as_str(), "deepinterview")
+    full.score <= 10.0 && !is_low_score_override(full)
+}
+
+/// Consolidation of visual-review / systematic-debugging / screenshot gate-block exceptions.
+/// Returns `true` when the gate block should NOT apply (i.e. the manifest decision is allowed).
+fn runtime_gate_block_exception(
+    hot_decision: &RouteDecision,
+    full_decision: &RouteDecision,
+) -> bool {
+    // visual-review → screenshot: allow fallback unless in audit protocol
+    if hot_decision.selected_skill == "visual-review"
+        && full_decision.selected_skill == "screenshot"
+        && hot_decision.route_context.execution_protocol != "audit"
+    {
+        return true;
+    }
+
+    // visual-review → systematic-debugging: allow when hot qualifies for retry
+    if hot_decision.selected_skill == "visual-review"
+        && full_decision.selected_skill == "systematic-debugging"
+        && should_retry_with_manifest(hot_decision)
+    {
+        return true;
+    }
+
+    // skill-framework-developer override: always allow when higher-scored with signal
+    if full_decision.selected_skill == "skill-framework-developer"
+        && full_decision.score > hot_decision.score
+        && has_non_generic_manifest_signal(full_decision)
+    {
+        return true;
+    }
+
+    false
+}
+
+fn is_same_skill_with_extra_overlay(hot: &RouteDecision, full: &RouteDecision) -> bool {
+    full.selected_skill == hot.selected_skill
+        && full.overlay_skill.is_some()
+        && hot.overlay_skill.is_none()
+}
+
+/// Check whether the runtime gate blocks a manifest fallback owner from being selected.
+/// First checks for exception cases (visual-review↔screenshot, etc.), then falls back
+/// to the standard required-gate check.
+fn runtime_gate_blocks_manifest_owner(
+    hot_decision: &RouteDecision,
+    full_decision: &RouteDecision,
+    runtime_records: &[SkillRecord],
+) -> bool {
+    if route_decision_is_no_hit(hot_decision)
+        || hot_decision.selected_skill == full_decision.selected_skill
+        || full_decision
+            .reasons
+            .iter()
+            .any(|reason| reason.contains("Framework alias entrypoint matched explicitly"))
+    {
+        return false;
+    }
+
+    if runtime_gate_block_exception(hot_decision, full_decision) {
+        return false;
+    }
+
+    is_runtime_required_gate(&hot_decision.selected_skill, runtime_records)
 }
 
 pub fn should_accept_manifest_fallback(
@@ -833,16 +968,16 @@ pub fn should_accept_manifest_fallback(
         return is_significant_score_gap_with_signal(full_decision, hot_decision);
     }
 
+    if is_minimal_score_without_signal(full_decision) {
+        return false;
+    }
+
     // should_retry = true with hot qualifying for retry
     if should_retry && full_decision.score > hot_decision.score {
         return true;
     }
 
-    if is_minimal_score_without_signal(full_decision) {
-        return false;
-    }
-
-    if is_low_score_deepinterview_override(full_decision) {
+    if is_low_score_override(full_decision) {
         return true;
     }
 
@@ -853,55 +988,6 @@ pub fn should_accept_manifest_fallback(
     full_decision.score > hot_decision.score
         || (full_decision.score == hot_decision.score
             && full_decision.selected_skill != hot_decision.selected_skill)
-}
-
-fn runtime_gate_blocks_manifest_owner(
-    hot_decision: &RouteDecision,
-    full_decision: &RouteDecision,
-    runtime_records: &[SkillRecord],
-) -> bool {
-    if route_decision_is_no_hit(hot_decision)
-        || hot_decision.selected_skill == full_decision.selected_skill
-        || full_decision
-            .reasons
-            .iter()
-            .any(|reason| reason.contains("Framework alias entrypoint matched explicitly"))
-    {
-        return false;
-    }
-
-    if hot_decision.selected_skill == "visual-review"
-        && full_decision.selected_skill == "screenshot"
-        && hot_decision.route_context.execution_protocol != "audit"
-    {
-        return false;
-    }
-
-    if hot_decision.selected_skill == "visual-review"
-        && full_decision.selected_skill == "systematic-debugging"
-        && should_retry_with_manifest(hot_decision)
-    {
-        return false;
-    }
-
-    if full_decision.selected_skill == "skill-framework-developer"
-        && full_decision.score > hot_decision.score
-        && has_non_generic_manifest_signal(full_decision)
-    {
-        return false;
-    }
-
-    is_runtime_required_gate(&hot_decision.selected_skill, runtime_records)
-}
-
-fn is_runtime_required_gate(slug: &str, runtime_records: &[SkillRecord]) -> bool {
-    runtime_records
-        .iter()
-        .find(|record| record.slug == slug)
-        .is_some_and(|record| {
-            record.session_start_lower == "required"
-                && (record.owner_lower == "gate" || record.gate_lower != "none")
-        })
 }
 
 #[cfg(test)]

@@ -4,12 +4,14 @@
 
 use super::*;
 use framework_kernel::skill_repo::skill_routing_runtime_json;
-use routing_engine::route::{
-    build_search_results_payload, filter_record_indices_for_host, load_records_cached_for_stdio,
-    search_skills_subset,
-};
 use serde_json::{Map, Value, json};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// In-memory fallback for `first_turn` detection when the tracker file is unavailable.
+/// Once `skill_route` succeeds once, this is set to `true` and the fallback value
+/// for `read_tracker_state` errors becomes `false` (not first turn).
+static SKILL_ROUTE_EVER_CALLED: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn handle_tools_call(
     id: Option<Value>,
@@ -167,49 +169,49 @@ pub(super) fn tool_skill_route(
 
     // Dynamically determine first_turn: true only if no routing tools have been called yet.
     // This prevents stale routing behavior on subsequent calls within the same session.
-    let first_turn = read_tracker_state(repo_root)
+    //
+    // Uses SKILL_ROUTE_EVER_CALLED as in-memory backup when the tracker file is
+    // unavailable (corrupted, lock contention, etc.) — avoids falsely returning
+    // first_turn=true on a tracker read error after the first successful route.
+    let tracker_first_turn = read_tracker_state(repo_root)
         .map(|state| {
             let per_tool = state.get("per_tool").and_then(|v| v.as_object());
             let has_routing = per_tool
                 .map(|m| m.contains_key("skill_route"))
                 .unwrap_or(false);
             !has_routing
-        })
-        .unwrap_or(true); // Default to first_turn=true on error
+        });
+    let first_turn = match tracker_first_turn {
+        Ok(v) => v,
+        Err(_) => {
+            // Tracker unavailable — rely on the in-memory flag.
+            // If we have ever successfully completed a route call, this is NOT the first turn.
+            let ever_called = SKILL_ROUTE_EVER_CALLED.load(Ordering::Relaxed);
+            if ever_called {
+                false
+            } else {
+                // First encounter: default to first_turn=true so session-start boosts
+                // are applied. On success, the flag below will be set to true.
+                true
+            }
+        }
+    };
 
-    let runtime_path = skill_routing_runtime_json(repo_root);
-    let manifest_path = skill_manifest_path(repo_root);
-    let records = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))?;
-    let records = filter_records_for_host(records.as_ref(), Some(host_id))?;
-    let records_json: Vec<Value> = records.iter()
-        .filter_map(|r| serde_json::to_value(r).ok())
-        .collect();
-    let decision = crate::hooks::route_task_with_manifest_fallback(
-        &records_json,
-        Some(&runtime_path),
-        Some(&manifest_path),
-        Some(host_id),
+    let route_result = crate::hooks::mcp_tool_skill_route(
         query,
-        "session",
-        true, // allow_overlay: true
+        host_id,
         first_turn,
-    )?;
-    if decision.selected_skill == "none" || decision.selected_skill.is_empty() {
-        return Ok(json!({
-            "routed": false,
-            "skill_slug": null,
-            "skill_path": null,
-            "match_reason": "no match",
-        })
-        .to_string());
+        &repo_root.to_string_lossy(),
+    );
+
+    // On success, mark that we've completed a route call.
+    // This ensures that if the tracker fails later, the in-memory fallback
+    // correctly reports first_turn=false.
+    if route_result.is_ok() {
+        SKILL_ROUTE_EVER_CALLED.store(true, Ordering::Relaxed);
     }
-    Ok(json!({
-        "routed": true,
-        "skill_slug": decision.selected_skill,
-        "skill_path": decision.selected_skill_path,
-        "match_reason": decision.reasons.first().cloned().unwrap_or_default(),
-    })
-    .to_string())
+
+    route_result
 }
 
 pub(super) fn tool_skill_search(
@@ -241,11 +243,7 @@ pub(super) fn tool_skill_search(
             manifest_path.display()
         ));
     }
-    let records = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))?;
-    let host_indices = filter_record_indices_for_host(records.as_ref(), Some(effective_host))?;
-    let rows = search_skills_subset(records.as_ref(), Some(&host_indices), query, limit);
-    let results = build_search_results_payload(query, rows);
-    serde_json::to_string(&results).map_err(|e| e.to_string())
+    crate::hooks::mcp_tool_search_skills(query, limit, effective_host, &repo_root.to_string_lossy())
 }
 
 pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
@@ -289,6 +287,7 @@ fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
         || clean.contains('/')
         || clean.contains('\\')
         || clean.contains("..")
+        || clean.contains('\0')
         || clean.starts_with('.')
     {
         return Err(format!("invalid skill slug: {slug}"));
@@ -297,14 +296,29 @@ fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
     let manifest_path = skill_manifest_path(repo_root);
     if manifest_path.is_file()
         && let Some(path) = skill_body_path_from_manifest(repo_root, &manifest_path, clean)? {
-            return Ok(path);
+            return finalize_skill_path(repo_root, &path, slug);
         }
 
     let path = repo_root.join("skills").join(clean).join("SKILL.md");
+    finalize_skill_path(repo_root, &path, slug)
+}
+
+/// Validate the resolved skill path stays within the repo root.
+/// Returns the path on success.
+fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<PathBuf, String> {
+    use core_state::utils::path_guard::{path_is_within_repo_root, reject_unsafe_path};
+
+    reject_unsafe_path(path)?;
     if !path.is_file() {
         return Err(format!("skill body not found: {}", path.display()));
     }
-    Ok(path)
+    if !path_is_within_repo_root(repo_root, path) {
+        return Err(format!(
+            "skill path for {slug} escapes repo root: {}",
+            path.display()
+        ));
+    }
+    Ok(path.to_path_buf())
 }
 
 fn skill_body_path_from_manifest(
@@ -312,7 +326,7 @@ fn skill_body_path_from_manifest(
     manifest_path: &Path,
     slug: &str,
 ) -> Result<Option<PathBuf>, String> {
-    let payload = routing_engine::route::read_json(manifest_path)?;
+    let payload = core_state::utils::json_io::read_json_strict(manifest_path)?;
     let keys = payload
         .get("keys")
         .and_then(Value::as_array)
@@ -1023,6 +1037,10 @@ pub(super) fn tool_quality_gate_manage(
         Some(f) => f(payload)?,
         None => core_state::quality_gate::framework_quality_gate(payload)?,
     };
+
+    // Invalidate snapshot/task_view caches after quality gate state change
+    invalidate_evidence_caches();
+
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }
 
@@ -1338,12 +1356,25 @@ pub(super) fn tool_routing_evolution(
     let mut entries: Vec<RouteLogEntry> = Vec::new();
 
     for line in reader.lines() {
-        let line = line.map_err(|e| format!("read journal line: {e}"))?;
+        let line = match line {
+            Ok(l) => l,
+            Err(e) => {
+                eprintln!("[router-rs warning] routing_evolution: read journal line failed: {e}");
+                continue;
+            }
+        };
         if line.trim().is_empty() {
             continue;
         }
-        let entry: RouteLogEntry =
-            serde_json::from_str(&line).map_err(|e| format!("parse journal line: {e}"))?;
+        let entry: RouteLogEntry = match serde_json::from_str(&line) {
+            Ok(e) => e,
+            Err(e) => {
+                eprintln!(
+                    "[router-rs warning] routing_evolution: skip unparseable journal line: {e}"
+                );
+                continue;
+            }
+        };
         if entry.kind.as_deref() != Some("route_decision") {
             continue;
         }

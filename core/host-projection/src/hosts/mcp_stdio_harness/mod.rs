@@ -17,7 +17,6 @@ use core_policy::review_gate_engine::{
     fork_context_from_values, review_independent_reviewer_evidence,
 };
 use core_state::task_state::resolve_task_view;
-use routing_engine::route::filter_records_for_host;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
@@ -1302,5 +1301,28 @@ mod tests {
             parse_content_length("Content-Length: 1048576").unwrap(),
             1_048_576
         );
+    }
+
+    #[test]
+    fn parse_content_length_htab_after_colon() {
+        // HTAB (tab) after colon is valid per RFC 7230 OWS
+        // Current impl handles this via .trim()
+        assert_eq!(parse_content_length("Content-Length:\t42").unwrap(), 42);
+    }
+
+    #[test]
+    fn parse_content_length_htab_before_colon_rejected() {
+        // HTAB before colon is valid per RFC 7230 OWS but current impl rejects it.
+        // This test documents the behavior gap — see ADR if needed.
+        assert!(parse_content_length("Content-Length\t: 42").is_err());
+    }
+
+    #[test]
+    fn parse_content_length_mixed_ows() {
+        // Multiple spaces before colon (OWS)
+        // Note: current impl only handles single-space-before-colon.
+        // Parsing falls through to Err, which is safe (no silent misparse).
+        let result = parse_content_length("Content-Length  : 42");
+        assert!(result.is_err());
     }
 }

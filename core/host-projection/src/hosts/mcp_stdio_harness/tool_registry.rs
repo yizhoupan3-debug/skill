@@ -33,6 +33,12 @@ impl CompositeRegistry {
     pub fn register(&mut self, handler: impl ToolHandler + 'static) {
         let idx = self.handlers.len();
         for name in handler.tool_names() {
+            if self.name_to_handler.contains_key(name) {
+                eprintln!(
+                    "[router-rs warning] CompositeRegistry: duplicate tool name '{name}' \
+                     registered — existing handler will be overwritten"
+                );
+            }
             self.name_to_handler.insert(name, idx);
         }
         self.handlers.push(Box::new(handler));

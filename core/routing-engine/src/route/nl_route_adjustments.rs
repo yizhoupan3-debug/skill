@@ -750,4 +750,44 @@ mod tests {
         }"#;
         assert!(compile_nl_route_adjustments(j).is_err());
     }
+
+    /// Validate NL boost cap consistency against `MAX_NL_BOOST_ACCUMULATION`.
+    ///
+    /// **Hard checks** (panic):
+    /// - No single boost delta exceeds the cap (otherwise the cap in
+    ///   `apply_rule_list` would silently truncate the intended boost).
+    ///
+    /// **Soft warnings** (printed, non-blocking):
+    /// - Cumulative deltas per slug per phase exceeding the cap, indicating
+    ///   that some rules in the phase will be runtime-clipped.  Config authors
+    ///   should review rule ordering when cumulative deltas are high.
+    ///
+    /// **Cross-reference**: If [`ScoringWeights`] weight values change
+    /// significantly (e.g. max possible base score doubles), re-evaluate
+    /// this constant (see doc comment on `MAX_NL_BOOST_ACCUMULATION`).
+    #[test]
+    fn nl_boost_cap_cross_reference() {
+        let nl = compiled_nl();
+        for (phase_name, rules) in [("pre", &nl.pre), ("post", &nl.post)] {
+            let mut slug_totals: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
+            for rule in rules {
+                if let CompiledAction::Boost { delta, .. } = &rule.action {
+                    assert!(
+                        *delta <= MAX_NL_BOOST_ACCUMULATION,
+                        "{phase_name} phase rule for {:?} has delta {delta} > MAX_NL_BOOST_ACCUMULATION ({MAX_NL_BOOST_ACCUMULATION})",
+                        rule.record.slug,
+                    );
+                    let key = rule.record.slug.clone().unwrap_or_else(|| "*".to_string());
+                    *slug_totals.entry(key).or_insert(0.0) += delta;
+                }
+            }
+            for (slug, total) in &slug_totals {
+                if *total > MAX_NL_BOOST_ACCUMULATION {
+                    println!(
+                        "INFO: {phase_name} phase: {slug} cumulative boost {total} > cap {MAX_NL_BOOST_ACCUMULATION} (runtime clips this)"
+                    );
+                }
+            }
+        }
+    }
 }

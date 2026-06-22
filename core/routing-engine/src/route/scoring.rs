@@ -366,6 +366,78 @@ fn score_session_start_signals(
     delta
 }
 
+/// Score visual-review signals: boost when first turn + concrete visual evidence context,
+/// or apply weak factor suppression when no explicit visual markers are present.
+#[inline]
+fn score_visual_review_signals(
+    record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+    first_turn: bool,
+    current_score: f64,
+    w: &ScoringWeights,
+    reasons: &mut Vec<String>,
+) -> f64 {
+    if record.slug != "visual-review" || current_score <= 0.0 {
+        return 0.0;
+    }
+
+    let mut delta = 0.0;
+    let visual_evidence_review_context =
+        has_visual_evidence_review_context(query_text, query_token_list);
+    let redesign_context = text_matches_phrase(query_token_list, "重新梳理")
+        || text_matches_phrase(query_token_list, "改版")
+        || text_matches_phrase(query_token_list, "redesign");
+
+    if first_turn && visual_evidence_review_context && !redesign_context {
+        delta += w.visual_review_boost;
+        reasons.push(
+            "Visual-review boost applied: visible UI evidence and concrete visual findings requested."
+                .to_string(),
+        );
+    }
+
+    let markers = super::nl_route_adjustments::visual_evidence_markers();
+    if !markers
+        .iter()
+        .any(|marker| query_text.contains(marker.as_str()))
+    {
+        // Weak match: reduce the entire score (applied as delta to the running total).
+        let previous = current_score + delta;
+        let reduced = previous * w.visual_review_weak_factor;
+        let weak_delta = reduced - previous;
+        delta += weak_delta;
+        reasons.push(
+            "Visual-review weak match: no explicit visual evidence, reduced score.".to_string(),
+        );
+    }
+
+    delta
+}
+
+/// Score paper-workbench signals: boost when review-driven manuscript revision intent detected.
+#[inline]
+fn score_paper_workbench_signals(
+    record: &SkillRecord,
+    query_text: &str,
+    query_token_list: &[String],
+    w: &ScoringWeights,
+    reasons: &mut Vec<String>,
+) -> f64 {
+    if record.slug != "paper-workbench" {
+        return 0.0;
+    }
+    if has_paper_review_revision_intent(query_text, query_token_list) {
+        reasons.push(
+            "Paper workbench boost applied: review-driven manuscript revision intent detected."
+                .to_string(),
+        );
+        w.paper_workbench_boost
+    } else {
+        0.0
+    }
+}
+
 /// Route candidate scoring pipeline (16 steps):
 ///   1. NL pre-framework-alias rules (apply_nl_pre_framework_alias_rules)
 ///   2. Agent-swarm signal scoring (score_agent_swarm_signals)
@@ -486,36 +558,8 @@ pub fn score_route_candidate<'a>(
         score += w.gate_owner_boost;
     }
 
-    let visual_evidence_review_context =
-        has_visual_evidence_review_context(query_text, query_token_list);
-    let redesign_context = text_matches_phrase(query_token_list, "重新梳理")
-        || text_matches_phrase(query_token_list, "改版")
-        || text_matches_phrase(query_token_list, "redesign");
-
-    if record.slug == "visual-review"
-        && first_turn
-        && visual_evidence_review_context
-        && !redesign_context
-    {
-        score += w.visual_review_boost;
-        reasons.push(
-            "Visual-review boost applied: visible UI evidence and concrete visual findings requested."
-                .to_string(),
-        );
-    }
-
-    if record.slug == "visual-review" && score > 0.0 {
-        let markers = super::nl_route_adjustments::visual_evidence_markers();
-        if !markers
-            .iter()
-            .any(|marker| query_text.contains(marker.as_str()))
-        {
-            score *= w.visual_review_weak_factor;
-            reasons.push(
-                "Visual-review weak match: no explicit visual evidence, reduced score.".to_string(),
-            );
-        }
-    }
+    // --- visual-review signals (hardcoded slug — see score_visual_review_signals) ---
+    score += score_visual_review_signals(record, query_text, query_token_list, first_turn, score, w, &mut reasons);
 
     if !record.do_not_use_tokens.is_empty() && score > 0.0 {
         let negative_hits: Vec<&str> = record
@@ -537,15 +581,8 @@ pub fn score_route_candidate<'a>(
         }
     }
 
-    if record.slug == "paper-workbench"
-        && has_paper_review_revision_intent(query_text, query_token_list)
-    {
-        score += w.paper_workbench_boost;
-        reasons.push(
-            "Paper workbench boost applied: review-driven manuscript revision intent detected."
-                .to_string(),
-        );
-    }
+    // --- paper-workbench boost (hardcoded slug — see score_paper_workbench_signals) ---
+    score += score_paper_workbench_signals(record, query_text, query_token_list, w, &mut reasons);
 
     // --- codegraph readiness signal ---
     if has_codegraph_index_context(query_text, query_token_list) {

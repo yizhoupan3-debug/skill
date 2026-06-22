@@ -103,6 +103,23 @@ pub struct RecordsCacheState {
     pub fifo: VecDeque<RecordsCacheKey>,
 }
 
+/// Default snapshot: engine="rust", selected_skill=NO_SKILL_SELECTED, layer="runtime", score=0.0.
+impl Default for RouteDecisionSnapshotPayload {
+    fn default() -> Self {
+        Self {
+            engine: "rust".to_string(),
+            selected_skill: String::from("none"),
+            overlay_skill: None,
+            layer: "runtime".to_string(),
+            score: 0.0,
+            score_bucket: String::new(),
+            reasons: Vec::new(),
+            matched_token_count: 0,
+            reasons_class: String::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RouteDecisionSnapshotPayload {
     pub engine: String,
