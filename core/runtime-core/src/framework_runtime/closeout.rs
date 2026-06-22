@@ -181,7 +181,7 @@ pub fn evaluate_closeout_record_file_for_task(
         .and_then(core_state::goal_prediction::read_goal_prediction);
     let ctx = CloseoutEvidenceContext {
         task_id: Some(tid.to_string()),
-        evidence_rows_non_empty: rows_non_empty,
+        _evidence_rows_non_empty: rows_non_empty,
         has_successful_verification: has_success,
         goal_prediction,
     };
@@ -277,7 +277,7 @@ pub(super) fn enforce_closeout_for_session_payload(payload: &Value) -> Result<Op
             .and_then(core_state::goal_prediction::read_goal_prediction);
         let ctx = CloseoutEvidenceContext {
             task_id: Some(task_id_str.trim().to_string()),
-            evidence_rows_non_empty: rows_non_empty,
+            _evidence_rows_non_empty: rows_non_empty,
             has_successful_verification: has_success,
             goal_prediction,
         };

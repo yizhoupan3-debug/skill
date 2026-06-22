@@ -1,0 +1,11 @@
+---
+source: core/hook-layer/src/hooks.rs
+assertion_line: 1730
+expression: variants
+---
+[
+    Cursor,
+    Codex,
+    Claude,
+    OpenCode,
+]

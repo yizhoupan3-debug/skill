@@ -16,6 +16,7 @@ codegraph = ["dep:codegraph-rs"]
 
 [dependencies]
 codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
+hook-layer = { path = "../hook-layer" }
 http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }

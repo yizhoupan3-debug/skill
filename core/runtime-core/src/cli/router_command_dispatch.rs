@@ -9,7 +9,6 @@ use crate::framework_runtime::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
 use crate::browser_dispatch_hook;
-use crate::claude_hooks::run_claude_hook_cli;
 use super::args::*;
 use crate::framework_runtime::json_io::{parse_json_input, print_json_value};
 use crate::closeout_enforcement::{
@@ -18,7 +17,8 @@ use crate::closeout_enforcement::{
 };
 #[cfg(feature = "codegraph")]
 use crate::codegraph_mcp::run_codegraph_mcp_stdio_loop;
-use crate::codex_hooks::{
+use host_projection::hosts::claude_hooks::run_claude_hook_cli;
+use host_projection::hosts::codex_hooks::{
     InstallMode, build_codex_hook_projection, host_entrypoint_provider,
     install_codex_cli_hooks, resolve_codex_home, run_codex_audit_hook,
 };
@@ -54,7 +54,7 @@ use host_projection::hosts::codex_hooks::dispatcher::CodexHookDispatcher;
 use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher, HookOutput};
 use host_projection::hooks::{
     HookObservationHost, attach_router_rs_observation, emit_hook_fired,
-    hook_action_from_optional_output, read_stdin_limited,
+    hook_action_from_optional_output, read_stdin_json_limited, read_stdin_limited,
 };
 
 use crate::runtime_storage::RuntimeStorageRequestPayload;
@@ -631,7 +631,7 @@ fn run_opencode_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<()
     crate::hook_timing::mark_hook_start();
     let _result = (|| -> Result<(), String> {
         // Read stdin JSON payload (same pattern as cursor/claude/codex)
-        let payload = crate::cursor_hooks::read_cursor_hook_stdin_json()
+        let payload = read_stdin_json_limited()
             .unwrap_or_else(|_| serde_json::json!({}));
         let repo_root = cli_repo_root
             .map(|p| p.to_path_buf())
@@ -881,7 +881,7 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String>
                         .and_then(core_state::goal_prediction::read_goal_prediction);
                     let ctx = CloseoutEvidenceContext {
                         task_id: Some(task_id.trim().to_string()),
-                        evidence_rows_non_empty: rows_non_empty,
+                        _evidence_rows_non_empty: rows_non_empty,
                         has_successful_verification: has_success,
                         goal_prediction,
                     };

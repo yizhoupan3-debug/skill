@@ -329,6 +329,14 @@ impl HostHookConfig for ClaudeHookDispatcher {
     fn hook_state_unreadable_tag(&self) -> &'static str { CLAUDE_HOOK_STATE_UNREADABLE }
     fn session_namespace_env(&self) -> &'static str { "ROUTER_RS_CLAUDE_SESSION_NAMESPACE" }
     fn log_label(&self) -> &'static str { "claude" }
+
+    fn take_audit_result(&self, repo_root: &Path) -> Option<String> {
+        crate::hosts::worktree_auto_save::take_audit_result(repo_root, self.host_id())
+    }
+    fn ensure_dispatch_bootstrap(&self) { crate::hooks::ensure_kernel_bootstrap() }
+    fn closeout_check(&self, repo_root: &Path, text: &str) -> Option<String> {
+        crate::hooks::closeout_stop_followup_for_completion_text(repo_root, text)
+    }
 }
 
 /// Convert Claude-specific hook JSON to unified HookOutput.

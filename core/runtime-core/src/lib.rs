@@ -29,7 +29,7 @@ pub mod infrastructure;
 pub mod exit_gate;
 
 // │  backward-compatible re-exports from subdomain groups ─────────────────────
-pub use behavior::quality_gate;
+pub use exit_gate::quality_gate;
 pub use exit_gate::schema_drift;
 pub use infrastructure::kernel_bootstrap;
 pub use exit_gate::harness_ops as harness_operator_nudges;
@@ -136,13 +136,7 @@ pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fal
 
 // ── host submodule re-exports (for `crate::X` path compat) ──
 #[doc(hidden)]
-pub use hosts::claude_hooks;
-#[doc(hidden)]
-pub use hosts::codex_hooks;
-#[doc(hidden)]
-pub use hosts::cursor_hooks;
-#[doc(hidden)]
-pub use hosts::mcp_stdio_harness;
+pub(crate) use hosts::cursor_hooks;
 
 // ── routing-engine hook registration ──
 use std::sync::OnceLock;

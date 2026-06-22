@@ -8,6 +8,7 @@
 //! delegating to the individual `super::handle_*` functions.
 
 use serde_json::{json, Value};
+use std::path::Path;
 
 use super::super::hook_dispatch::{HookEvent, HookOutput, HostHookConfig, HostHookDispatcher};
 
@@ -23,6 +24,14 @@ impl HostHookConfig for CursorHookDispatcher {
     fn supports_session_start(&self) -> bool { true }
     fn supports_subagent_start(&self) -> bool { true }
     fn supports_subagent_stop(&self) -> bool { true }
+
+    fn take_audit_result(&self, repo_root: &Path) -> Option<String> {
+        crate::hosts::worktree_auto_save::take_audit_result(repo_root, self.host_id())
+    }
+    fn ensure_dispatch_bootstrap(&self) { crate::hooks::ensure_kernel_bootstrap() }
+    fn closeout_check(&self, repo_root: &Path, text: &str) -> Option<String> {
+        crate::hooks::closeout_stop_followup_for_completion_text(repo_root, text)
+    }
 }
 
 /// Convert a `Value` returned by a cursor handler into `Option<HookOutput>`.

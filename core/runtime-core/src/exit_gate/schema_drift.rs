@@ -1,7 +1,7 @@
 //! Task / harness schema drift: capture baselines and compare on verify.
 
 use crate::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION;
-use crate::cursor_hooks::{CURSOR_HOOKS_REGISTERED_EVENTS, CURSOR_HOOKS_SUBTRACTED_EVENTS};
+use host_projection::hosts::cursor_hooks::{CURSOR_HOOKS_REGISTERED_EVENTS, CURSOR_HOOKS_SUBTRACTED_EVENTS};
 use crate::router_rs_observation::ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION;
 use chrono::Utc;
 use hex;

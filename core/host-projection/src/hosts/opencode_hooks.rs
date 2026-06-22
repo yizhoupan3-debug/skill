@@ -125,6 +125,14 @@ impl HostHookConfig for OpencodeHookDispatcher {
     fn supports_subagent_stop(&self) -> bool {
         true
     }
+
+    fn take_audit_result(&self, repo_root: &Path) -> Option<String> {
+        crate::hosts::worktree_auto_save::take_audit_result(repo_root, self.host_id())
+    }
+    fn ensure_dispatch_bootstrap(&self) { crate::hooks::ensure_kernel_bootstrap() }
+    fn closeout_check(&self, repo_root: &Path, text: &str) -> Option<String> {
+        crate::hooks::closeout_stop_followup_for_completion_text(repo_root, text)
+    }
 }
 
 impl HostHookDispatcher for OpencodeHookDispatcher {

@@ -131,6 +131,16 @@ pub trait HostHookConfig: Send + Sync {
     fn take_audit_result(&self, _repo_root: &Path) -> Option<String> {
         None
     }
+
+    /// Called at the start of `dispatch()` to ensure kernel bootstrap.
+    /// Default no-op. Host-projection overrides to call `host_projection::hooks::ensure_kernel_bootstrap`.
+    fn ensure_dispatch_bootstrap(&self) {}
+
+    /// Closeout stop-followup check for completion text patterns.
+    /// Default no-op. Host-projection overrides to call `host_projection::hooks::closeout_stop_followup_for_completion_text`.
+    fn closeout_check(&self, _repo_root: &Path, _text: &str) -> Option<String> {
+        None
+    }
 }
 
 /// Core trait: unified hook dispatch for all 4 closed-set hosts.
@@ -159,10 +169,7 @@ pub trait HostHookDispatcher: HostHookConfig {
     /// Cursor adds goal signals + review gate; OpenCode adds review gate + reject reason.
     fn handle_stop(&self, event: &HookEvent) -> Option<HookOutput> {
         let completion_text = extract_completion_text(event);
-        if let Some(msg) = crate::hooks::closeout_stop_followup_for_completion_text(
-            event.repo_root,
-            &completion_text,
-        ) {
+        if let Some(msg) = self.closeout_check(event.repo_root, &completion_text) {
             return Some(HookOutput::Block { reason: msg });
         }
         None
@@ -195,9 +202,9 @@ pub trait HostHookDispatcher: HostHookConfig {
     }
 
     /// Unified dispatch entry. All hosts use the same routing logic.
-    /// Calls `ensure_kernel_bootstrap()` before dispatching to host handlers.
+    /// Calls `self.ensure_dispatch_bootstrap()` before dispatching to host handlers.
     fn dispatch(&self, event: &HookEvent) -> Option<HookOutput> {
-        crate::hooks::ensure_kernel_bootstrap();
+        self.ensure_dispatch_bootstrap();
         let normalized = normalize_event_name(event.event_name);
         debug!(event = %normalized, host = %self.host_id(), "hook dispatch");
         let output = match normalized.as_ref() {

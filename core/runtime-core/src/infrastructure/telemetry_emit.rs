@@ -139,7 +139,7 @@ pub fn framework_quality_gate(payload: Value) -> Result<Value, String> {
         .unwrap_or("status")
         .trim()
         .to_ascii_lowercase();
-    let result = crate::quality_gate::framework_quality_gate(payload)?;
+    let result = crate::exit_gate::quality_gate::framework_quality_gate(payload)?;
     if result.get("ok") == Some(&json!(true)) {
         emit_hook_fired("quality_gate", &operation);
     }

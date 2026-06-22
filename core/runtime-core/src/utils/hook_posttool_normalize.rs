@@ -24,7 +24,7 @@ pub fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
     {
         out.insert("tool_input".to_string(), merged_input);
     }
-    if let Some(s) = crate::cursor_hooks::extract_first_session_string(event) {
+    if let Some(s) = host_projection::hosts::cursor_hooks::extract_first_session_string(event) {
         out.insert("session_id".to_string(), json!(s));
     }
     Value::Object(out)

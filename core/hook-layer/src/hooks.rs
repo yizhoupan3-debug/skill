@@ -1,8 +1,7 @@
-//! host-projection hooks proxy layer.
+//! hook-layer: 函数指针注册表、hook 分发、路由分发。
 //!
-//! host-projection cannot depend on runtime-core (circular dep), so this module provides
-//! function-pointer slots for runtime-core functionality that cursor_hooks / codex_hooks need.
-//! The host application registers real implementations at startup via `register_*` functions.
+//! runtime-core 依赖的 function-pointer slots 注册表。
+//! 宿主应用在启动时通过 `register_*` 函数注入真实实现。
 
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -36,7 +35,7 @@ type AppendEvidenceFn = fn(&Path, Option<&str>, serde_json::Map<String, Value>) 
 
 /// Register a `OnceLock` cell with consistent diagnostics on double-registration.
 /// In `#[cfg(test)]` mode, includes a backtrace to help debug conflicting registrations.
-pub(crate) fn once_lock_set<T>(lock: &OnceLock<T>, value: T, name: &str) {
+pub fn once_lock_set<T>(lock: &OnceLock<T>, value: T, name: &str) {
     lock.set(value).unwrap_or_else(|_| {
         #[cfg(test)]
         {
@@ -643,35 +642,13 @@ pub fn strip_router_rs_observation(output: &mut Value) {
 //
 // The authoritative implementation lives in runtime-core-contracts (hook_outbound_protect.rs),
 // which runtime-core re-exports and registers via register_hook_outbound_protect().
-// host-projection provides a cfg(test)-only registration slot for unit tests that need
-// to verify protection behavior without pulling in the full runtime-core stack.
-//
-// All 4 hosts deploy through runtime-core at runtime, so protection is always active.
-// If host-projection is ever used standalone, protection would be absent — this is acceptable
-// because the standalone deployment model does not exist today.
+// ────────────────────────────────────────────────────────────────
+// hook_outbound_protect: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-#[cfg(not(test))]
-pub fn hook_outbound_line_is_framework_protected(_line: &str) -> bool {
-    false
-}
-
-#[cfg(not(test))]
-pub fn truncate_hook_outbound_lines_preserving(
-    combined: &str,
-    _max_bytes: usize,
-    _suffix: &str,
-) -> String {
-    combined.to_string()
-}
-
-// In tests, use a static override so test registrations can inject behavior.
-#[cfg(test)]
 static OUTBOUND_PROTECTED: OnceLock<fn(&str) -> bool> = OnceLock::new();
-#[cfg(test)]
 static TRUNCATE_OUTBOUND: OnceLock<fn(&str, usize, &str) -> String> = OnceLock::new();
 
-#[cfg(test)]
 pub fn register_hook_outbound_protect(
     is_protected: fn(&str) -> bool,
     truncate: fn(&str, usize, &str) -> String,
@@ -680,12 +657,10 @@ pub fn register_hook_outbound_protect(
     once_lock_set(&TRUNCATE_OUTBOUND, truncate, "TRUNCATE_OUTBOUND");
 }
 
-#[cfg(test)]
 pub fn hook_outbound_line_is_framework_protected(line: &str) -> bool {
     OUTBOUND_PROTECTED.get().map(|f| f(line)).unwrap_or(false)
 }
 
-#[cfg(test)]
 pub fn truncate_hook_outbound_lines_preserving(
     combined: &str,
     max_bytes: usize,
@@ -722,34 +697,12 @@ pub fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
 }
 
 // ────────────────────────────────────────────────────────────────
-// ship_readiness: default policy (register removed — was never called in production)
+// ship_readiness: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-#[cfg(not(test))]
-pub fn evaluate_goal_readiness_from_disk(
-    _repo_root: &Path,
-    _goal: &Value,
-    _task_id: &str,
-) -> GoalReadiness {
-    GoalReadiness::default()
-}
-
-#[cfg(not(test))]
-pub fn goal_stop_followup_line(
-    _contract: bool,
-    _progress: bool,
-    _verification: bool,
-    _goal_followup_count: u32,
-) -> String {
-    String::new()
-}
-
-#[cfg(test)]
 static EVAL_GOAL_READINESS: OnceLock<fn(&Path, &Value, &str) -> GoalReadiness> = OnceLock::new();
-#[cfg(test)]
 static GOAL_STOP_FOLLOWUP: OnceLock<fn(bool, bool, bool, u32) -> String> = OnceLock::new();
 
-#[cfg(test)]
 pub fn register_ship_readiness(
     evaluate: fn(&Path, &Value, &str) -> GoalReadiness,
     followup: fn(bool, bool, bool, u32) -> String,
@@ -758,7 +711,6 @@ pub fn register_ship_readiness(
     once_lock_set(&GOAL_STOP_FOLLOWUP, followup, "GOAL_STOP_FOLLOWUP");
 }
 
-#[cfg(test)]
 pub fn evaluate_goal_readiness_from_disk(
     repo_root: &Path,
     goal: &Value,
@@ -770,7 +722,6 @@ pub fn evaluate_goal_readiness_from_disk(
         .unwrap_or_default()
 }
 
-#[cfg(test)]
 pub fn goal_stop_followup_line(
     contract: bool,
     progress: bool,
@@ -876,12 +827,16 @@ pub fn register_kernel_bootstrap(f: fn()) {
     once_lock_set(&ENSURE_KERNEL, f, "ENSURE_KERNEL");
 }
 
-pub fn ensure_kernel_bootstrap() {
+pub(crate) fn ensure_kernel_bootstrap() {
     if let Some(f) = ENSURE_KERNEL.get() { f() }
-    // In test builds, install the test deps (tokenizer, review context probes)
-    // as a fallback when no real kernel bootstrap is registered.
     #[cfg(test)]
     install_test_deps();
+}
+
+/// Public entry point that only calls the registered kernel bootstrap function (if any).
+/// Host-projection wraps this with its own `#[cfg(test)] install_test_deps()`.
+pub fn ensure_kernel_bootstrap_registered() {
+    if let Some(f) = ENSURE_KERNEL.get() { f() }
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -890,7 +845,7 @@ pub fn ensure_kernel_bootstrap() {
 
 /// Test-only env lock. Shares the same `OnceLock<Mutex<()>>` as `runtime-core` via `core-policy`.
 #[cfg(test)]
-pub fn harness_nudges_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn harness_nudges_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
     core_policy::test_env_sync::harness_nudges_env_test_lock()
 }
 
@@ -903,7 +858,7 @@ pub fn harness_nudges_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
 /// This replaces the `kernel_bootstrap::ensure_kernel_bootstrap()` call that
 /// runtime-core tests rely on.
 #[cfg(test)]
-pub fn install_test_deps() {
+pub(crate) fn install_test_deps() {
     use std::sync::Once;
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
