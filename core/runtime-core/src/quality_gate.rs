@@ -1,4 +1,4 @@
-//! Quality Gate 多轮闭环：Rust 真源 `QUALITY_GATE_STATE.json` + stdio，支撑长任务轮次账本与宿主并行 lane 之后的 supervisor 合并落盘。
+//! Review-Fix-Verify 多轮闭环：Rust 真源 `RFV_LOOP_STATE.json` + stdio，支撑长任务轮次账本与宿主并行 lane 之后的 supervisor 合并落盘。
 
 pub use core_state::state_manager::read_quality_gate_state;
 
@@ -12,8 +12,8 @@ use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-pub const QUALITY_GATE_STATE_FILENAME: &str = "RFV_LOOP_STATE.json"; // 磁盘文件名兼容
-pub const QUALITY_GATE_SCHEMA_VERSION: &str = "router-rs-rfv-loop-v1";
+pub const RFV_LOOP_STATE_FILENAME: &str = "RFV_LOOP_STATE.json";
+pub const QUALITY_GATE_LOOP_SCHEMA_VERSION: &str = "router-rs-rfv-loop-v1";
 /// Repo-relative path; keep in sync with `cursor_hooks` merge logic that surfaces this substring.
 pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
     "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
@@ -82,7 +82,7 @@ fn normalize_verify_result(raw: &str) -> Result<String, String> {
 /// Optional hard gates on RFV **收口轮**预览（`append_round`）：supervisor 显式 **`close`/`closed`**，
 /// 或 **`max_rounds` 耗尽**（`round_n >= max_rounds` 且非 block）自动记 `closed` 时同样校验。
 #[derive(Debug, Clone)]
-struct QualityGateCloseGates {
+struct RfvCloseGates {
     enabled: bool,
     require_last_round_verify_pass: bool,
     min_depth_score: Option<u8>,
@@ -90,13 +90,13 @@ struct QualityGateCloseGates {
     require_external_research_object_when_strict_on_close: bool,
 }
 
-fn parse_close_gates(state: &Map<String, Value>) -> Option<QualityGateCloseGates> {
+fn parse_close_gates(state: &Map<String, Value>) -> Option<RfvCloseGates> {
     let raw = state.get("close_gates")?;
     if raw.is_null() {
         return None;
     }
     let o = raw.as_object()?;
-    Some(QualityGateCloseGates {
+    Some(RfvCloseGates {
         enabled: o.get("enabled").and_then(Value::as_bool).unwrap_or(true),
         require_last_round_verify_pass: o
             .get("require_last_round_verify_pass")
@@ -117,12 +117,12 @@ fn parse_close_gates(state: &Map<String, Value>) -> Option<QualityGateCloseGates
     })
 }
 
-fn enforce_quality_gate_close_gates(
+fn enforce_rfv_close_gates(
     repo_root: &Path,
     task_id: &str,
     preview_rfv: &Map<String, Value>,
     closing_round: &Map<String, Value>,
-    gates: &QualityGateCloseGates,
+    gates: &RfvCloseGates,
 ) -> Result<(), String> {
     if !gates.enabled {
         return Ok(());
@@ -350,7 +350,7 @@ pub fn quality_gate_state_path(repo_root: &Path, task_id: &str) -> Result<PathBu
     Ok(repo_root
         .join("artifacts/current")
         .join(tid)
-        .join(QUALITY_GATE_STATE_FILENAME))
+        .join(RFV_LOOP_STATE_FILENAME))
 }
 
 fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
@@ -406,10 +406,10 @@ fn resolve_framework_quality_gate_repo(payload: &Value) -> Result<PathBuf, Strin
 fn merge_operator_nudge_refs(resp: &mut Value, repo_root: &Path, state: Option<&Value>) {
     let nudges = crate::harness_operator_nudges::resolve_harness_operator_nudges(repo_root);
     let mut refs = Map::new();
-    if !nudges.quality_gate_continue_reasoning_depth.is_empty() {
+    if !nudges.rfv_loop_continue_reasoning_depth.is_empty() {
         refs.insert(
-            "quality_gate_continue_reasoning_depth".to_string(),
-            json!(nudges.quality_gate_continue_reasoning_depth),
+            "rfv_loop_continue_reasoning_depth".to_string(),
+            json!(nudges.rfv_loop_continue_reasoning_depth),
         );
     }
     if state.is_some_and(crate::harness_context_signals::rfv_state_signals_math)
@@ -427,7 +427,7 @@ fn merge_operator_nudge_refs(resp: &mut Value, repo_root: &Path, state: Option<&
     }
 }
 
-/// stdio: `framework_quality_gate`
+/// stdio：`framework_quality_gate`
 pub fn framework_quality_gate(payload: Value) -> Result<Value, String> {
     let operation = payload
         .get("operation")
@@ -520,7 +520,7 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
         .unwrap_or(true);
 
     let mut obj = Map::new();
-    obj.insert("schema_version".to_string(), json!(QUALITY_GATE_SCHEMA_VERSION));
+    obj.insert("schema_version".to_string(), json!(QUALITY_GATE_LOOP_SCHEMA_VERSION));
     obj.insert("goal".to_string(), json!(goal));
     obj.insert("max_rounds".to_string(), json!(max_rounds));
     obj.insert("max_rounds_requested".to_string(), json!(requested_max));
@@ -603,7 +603,7 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
     if let Err(e) =
         crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
     {
-        tracing::error!(task_id = %task_id, error = %e, "failed to append rfv transaction to TASK_LEDGER");
+        tracing::error!(task_id = %task_id, error = %e, "failed to append quality_gate transaction to TASK_LEDGER");
     }
     let goal_state_cleared =
         crate::goal_drive::deactivate_goal_for_conflict_with_quality_gate(repo_root, &task_id)?;
@@ -641,7 +641,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     crate::path_guard::validate_task_id_component(&task_id)?;
     let path = quality_gate_state_path(repo_root, &task_id)?;
     let mut state = read_quality_gate_state(repo_root, Some(&task_id))?
-        .ok_or_else(|| format!("QUALITY_GATE_STATE missing at {}", path.display()))?;
+        .ok_or_else(|| format!("RFV_LOOP_STATE missing at {}", path.display()))?;
 
     let round_n = payload
         .get("round")
@@ -650,7 +650,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
 
     let obj = state
         .as_object_mut()
-        .ok_or_else(|| "QUALITY_GATE_STATE root must be object".to_string())?;
+        .ok_or_else(|| "RFV_LOOP_STATE root must be object".to_string())?;
     let max_rounds = obj
         .get("max_rounds")
         .and_then(Value::as_u64)
@@ -782,7 +782,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         let rounds = obj
             .get_mut("rounds")
             .and_then(|r| r.as_array_mut())
-            .ok_or_else(|| "QUALITY_GATE_STATE.rounds missing".to_string())?;
+            .ok_or_else(|| "RFV_LOOP_STATE.rounds missing".to_string())?;
         rounds.push(entry);
     }
 
@@ -798,7 +798,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
                 .ok_or_else(|| {
                     "RFV close_gates: internal error resolving closing round".to_string()
                 })?;
-            if let Err(e) = enforce_quality_gate_close_gates(repo_root, &task_id, obj, closing, g) {
+            if let Err(e) = enforce_rfv_close_gates(repo_root, &task_id, obj, closing, g) {
                 obj.get_mut("rounds")
                     .and_then(|r| r.as_array_mut())
                     .map(|a| a.pop());
@@ -820,7 +820,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
                     "RFV close_gates: internal error resolving closing round (max_rounds)"
                         .to_string()
                 })?;
-            if let Err(e) = enforce_quality_gate_close_gates(repo_root, &task_id, obj, closing, g) {
+            if let Err(e) = enforce_rfv_close_gates(repo_root, &task_id, obj, closing, g) {
                 obj.get_mut("rounds")
                     .and_then(|r| r.as_array_mut())
                     .map(|a| a.pop());
@@ -849,19 +849,12 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         && !effective_close
     {
         Some(
-            "RFV loop reached max_rounds without close_gates configuration; closing without gate verification. Consider configuring close_gates for future loops.",
+            "Quality Gate loop reached max_rounds without close_gates configuration; closing without gate verification. Consider configuring close_gates for future loops.",
         )
     } else {
         None
     };
 
-    let (close_goal_text, close_rounds_final) = if loop_status == "closed" {
-        let goal_text = obj.get("goal").and_then(Value::as_str).unwrap_or("").to_string();
-        let rounds_final = obj.get("rounds").and_then(Value::as_array).map(|a| a.len()).unwrap_or(0);
-        (Some(goal_text), rounds_final)
-    } else {
-        (None, 0)
-    };
     // Emit convergence info in response for observability
     let convergence_info = json!({
         "min_rounds": min_rounds,
@@ -883,21 +876,11 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     if let Err(e) =
         crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
     {
-        tracing::error!(task_id = %task_id, error = %e, "failed to append rfv transaction to TASK_LEDGER");
+        tracing::error!(task_id = %task_id, error = %e, "failed to append quality_gate transaction to TASK_LEDGER");
     }
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
         repo_root, &task_id,
     );
-
-    // B4: On quality gate close, write a quality_gate_closed entry to EVIDENCE_INDEX
-    if let Some(goal_text) = close_goal_text {
-        if let Err(e) = ::framework_runtime::verification_gate::append_quality_gate_evidence(
-            repo_root, &task_id, &goal_text, close_rounds_final,
-        ) {
-            tracing::warn!(task_id = %task_id, error = %e, "failed to append quality_gate_closed evidence to EVIDENCE_INDEX");
-        }
-    }
-
     let mut resp = json!({
         "ok": true,
         "operation": "append_round",
@@ -910,7 +893,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     resp["convergence"] = convergence_info;
     merge_operator_nudge_refs(&mut resp, repo_root, Some(&state));
     resp["quality_gate_state"] = state;
-    crate::telemetry_emit::emit_quality_gate_round(round_n as u32, &verify_result);
+    crate::telemetry_emit::emit_rfv_round(round_n as u32, &verify_result);
     Ok(resp)
 }
 
@@ -965,7 +948,7 @@ mod tests {
             .as_nanos();
         let repo = std::env::temp_dir().join(format!("router-rs-rfv-{suffix}"));
         let _ = fs::remove_dir_all(&repo);
-        fs::create_dir_all(repo.join("artifacts/current/qg-task")).expect("mkdir");
+        fs::create_dir_all(repo.join("artifacts/current/rfv-task")).expect("mkdir");
         let skill_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let nudge_src = skill_root.join("configs/framework/HARNESS_OPERATOR_NUDGES.json");
         fs::create_dir_all(repo.join("configs/framework")).expect("nudge dir");
@@ -976,7 +959,7 @@ mod tests {
         .expect("copy harness nudges fixture");
         fs::write(
             repo.join("artifacts/current/active_task.json"),
-            r#"{"task_id":"qg-task"}"#,
+            r#"{"task_id":"rfv-task"}"#,
         )
         .expect("pointer");
 
@@ -984,7 +967,7 @@ mod tests {
         framework_quality_gate(json!({
             "repo_root": rr,
             "operation": "start",
-            "task_id": "qg-task",
+            "task_id": "rfv-task",
             "goal": "harden loop",
             "max_rounds": 100,
             "allow_external_research": true,
@@ -996,7 +979,7 @@ mod tests {
         framework_quality_gate(json!({
             "repo_root": rr,
             "operation": "append_round",
-            "task_id": "qg-task",
+            "task_id": "rfv-task",
             "round": 1u64,
             "review_summary": "r1",
             "external_research_summary": "web: none",
@@ -1145,7 +1128,7 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
-    /// RFV 与 GOAL 同 task 互斥：RFV start 将已存在的 GOAL_STATE 标记为 superseded。
+    /// RFV 与 GOAL 同 task 互斥：RFV start 应删除已存在的 GOAL_STATE。
     #[test]
     fn rfv_start_clears_goal_same_task() {
         let suffix = SystemTime::now()
@@ -1186,6 +1169,7 @@ mod tests {
         }))
         .expect("rfv start");
         assert_eq!(out["goal_state_cleared"], json!(true));
+        // Goal state is now marked superseded rather than deleted (symmetric with goal supersede RFV)
         assert!(
             gpath.is_file(),
             "GOAL_STATE should still exist after RFV supersede"

@@ -18,7 +18,7 @@ pub(crate) use ::framework_runtime::execution_contract;
 pub mod framework_runtime;
 pub(crate) use session_supervisor;
 pub use framework_kernel::framework_profile;
-pub mod rfv_loop;
+pub mod quality_gate;
 pub mod schema_drift;
 
 // ── browser dispatch hook (decouples runtime-core from browser-mcp crate) ──
@@ -308,7 +308,7 @@ pub fn register_host_projection_hooks() {
         });
 
         // ── RFV loop full implementation (supports append_round) ──
-        host_projection::hooks::register_quality_gate_drive(rfv_loop::framework_rfv_loop);
+        host_projection::hooks::register_quality_gate_drive(quality_gate::framework_quality_gate);
 
         // ── framework-runtime internal hooks (pre_tool_use_guard, closeout, etc.) ──
         ::framework_runtime::hooks::register(::framework_runtime::hooks::RuntimeCoreHooks {
@@ -338,7 +338,7 @@ pub fn register_host_projection_hooks() {
                 },
             },
             framework_goal_drive: core_state::state_manager::framework_goal_drive,
-            framework_quality_gate: rfv_loop::framework_rfv_loop,
+            framework_quality_gate: quality_gate::framework_quality_gate,
             handle_session_supervisor_operation: session_supervisor::handle_session_supervisor_operation,
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
             runtime_concurrency_defaults_payload: || {

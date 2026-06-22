@@ -130,8 +130,8 @@ pub fn emit_hook_timing_telemetry(
     );
 }
 
-/// RFV stdio wrapper: ensures bootstrap and emits operation-level `hook_fired` (round detail via `emit_rfv_round`).
-pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
+/// Quality Gate stdio wrapper: ensures bootstrap and emits operation-level `hook_fired`.
+pub fn framework_quality_gate(payload: Value) -> Result<Value, String> {
     crate::kernel_bootstrap::ensure_kernel_bootstrap();
     let operation = payload
         .get("operation")
@@ -139,9 +139,9 @@ pub fn framework_rfv_loop(payload: Value) -> Result<Value, String> {
         .unwrap_or("status")
         .trim()
         .to_ascii_lowercase();
-    let result = crate::rfv_loop::framework_rfv_loop(payload)?;
+    let result = crate::quality_gate::framework_quality_gate(payload)?;
     if result.get("ok") == Some(&json!(true)) {
-        emit_hook_fired("rfv_loop", &operation);
+        emit_hook_fired("quality_gate", &operation);
     }
     Ok(result)
 }

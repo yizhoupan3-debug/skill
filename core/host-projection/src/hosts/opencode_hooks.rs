@@ -18,7 +18,7 @@ use core_policy::hook_common::{
     has_override, normalize_tool_name, saw_reject_reason,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::fs;
 use std::path::Path;
 
@@ -43,8 +43,6 @@ pub const OPENCODE_HOOKS_REGISTERED_EVENTS: &[&str] = &[
 
 const OPENCODE_HOOK_STATE_UNREADABLE: &str =
     "router-rs OPENCODE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
-
-const OPENCODE_REVIEW_GATE_TAG: &str = "opencode-review-gate";
 
 /// Shared state configuration for opencode hook state.
 fn state_config() -> HookStateConfig {

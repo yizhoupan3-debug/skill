@@ -902,7 +902,7 @@ pub(super) fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Resul
 
 pub(super) fn tool_quality_gate_status(arguments: &Value, repo_root: &Path) -> Result<String, String> {
     let task_id = arguments.get("task_id").and_then(Value::as_str);
-    let state = core_state::state_manager::read_rfv_loop_state(repo_root, task_id)?;
+    let state = core_state::state_manager::read_quality_gate_state(repo_root, task_id)?;
     serde_json::to_string_pretty(&state).map_err(|e| e.to_string())
 }
 
@@ -1018,7 +1018,7 @@ pub(super) fn tool_quality_gate_manage(
     // Fall back to core-state's lightweight version if runtime-core hook not registered.
     let result = match crate::hooks::quality_gate_drive_registered() {
         Some(f) => f(payload)?,
-        None => core_state::rfv_loop::framework_rfv_loop(payload)?,
+        None => core_state::quality_gate::framework_quality_gate(payload)?,
     };
     serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
 }

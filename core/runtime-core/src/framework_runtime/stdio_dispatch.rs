@@ -344,7 +344,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
         "framework_goal_drive" => {
             crate::telemetry_emit::framework_goal_drive(payload)
         }
-        "framework_rfv_loop" => crate::telemetry_emit::framework_rfv_loop(payload),
+        "framework_rfv_loop" | "framework_quality_gate" => crate::telemetry_emit::framework_quality_gate(payload),
         "framework_alias" => dispatch_stdio_framework_alias(payload),
         "task_ledger_dispatch" => task_command::dispatch_task_ledger_command_envelope(payload),
         _ => Err(format!("unsupported framework stdio operation: {op}")),

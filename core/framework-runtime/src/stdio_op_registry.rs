@@ -75,7 +75,7 @@ const FRAMEWORK_STDIO_OPS: &[&str] = &[
     "framework_session_artifact_write",
     "framework_hook_evidence_append",
     "framework_goal_drive",
-    "framework_rfv_loop",
+    "framework_quality_gate",
     "framework_alias",
     "task_ledger_dispatch",
 ];

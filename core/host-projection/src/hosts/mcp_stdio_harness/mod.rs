@@ -1090,7 +1090,7 @@ pub fn tool_closeout_record_write_for_test(
 }
 
 #[cfg(any(test, feature = "test-support"))]
-pub fn tool_rfv_loop_manage_test_helper(
+pub fn tool_quality_gate_manage_test_helper(
     arguments: &Value,
     operation: &str,
 ) -> Result<String, String> {

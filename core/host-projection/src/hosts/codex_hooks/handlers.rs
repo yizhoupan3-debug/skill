@@ -191,9 +191,9 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
         clear_codex_review_gate_hook_state(repo_root, event);
         return None;
     }
-    let my_light = core_policy::hook_common::is_interactive_profile(Some(repo_root), &prompt);
+    let interactive = core_policy::hook_common::is_interactive_profile(Some(repo_root), &prompt);
     let mut facts = ReviewGateFacts::from_prompt(&prompt);
-    if my_light {
+    if interactive {
         facts.review_required = false;
     }
     let state = CodexLifecycleContextState {
@@ -213,7 +213,7 @@ pub(super) fn handle_codex_userpromptsubmit(repo_root: &Path, event: &Value) -> 
         let mut next = state.clone();
         if let Some(prev) = loaded {
             next.seq = prev.seq.saturating_add(1);
-            if my_light || narrow {
+            if interactive || narrow {
                 next.review_gate.review_required = false;
                 next.review_gate.independent_reviewer_seen = false;
                 next.phase = 0;

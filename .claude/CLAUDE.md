@@ -5,7 +5,7 @@
 
 # Claude Code（本项目）
 
-跨宿主 **`AGENTS.md`**；宿主差异 **`AGENTS_CLAUDE.md`**；手册 **`docs/hosts/_common.md`** / **`docs/hosts/hook-hosts.md`**。
+跨宿主 **`AGENTS.md`**（宿主差异见该文件内「宿主行为差异」节）；手册 **`docs/hosts/_common.md`** / **`docs/hosts/hook-hosts.md`**。
 
 ## 语言（硬约束）
 

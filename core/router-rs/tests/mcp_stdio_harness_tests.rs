@@ -659,7 +659,7 @@ mod parameter_validation_tests {
     #[test]
     fn rfv_start_requires_goal_argument() {
         let args = json!({});
-        let result = crate::mcp_stdio_harness::tool_rfv_loop_manage_test_helper(&args, "start");
+        let result = crate::mcp_stdio_harness::tool_quality_gate_manage_test_helper(&args, "start");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("goal"));
@@ -669,7 +669,7 @@ mod parameter_validation_tests {
     fn rfv_append_round_requires_all_arguments() {
         let args = json!({"round": 1});
         let result =
-            crate::mcp_stdio_harness::tool_rfv_loop_manage_test_helper(&args, "append_round");
+            crate::mcp_stdio_harness::tool_quality_gate_manage_test_helper(&args, "append_round");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("review_summary"));
@@ -679,7 +679,7 @@ mod parameter_validation_tests {
     fn unknown_rfv_operation_returns_error() {
         let args = json!({});
         let result =
-            crate::mcp_stdio_harness::tool_rfv_loop_manage_test_helper(&args, "invalid_operation");
+            crate::mcp_stdio_harness::tool_quality_gate_manage_test_helper(&args, "invalid_operation");
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Unknown RFV loop operation"));

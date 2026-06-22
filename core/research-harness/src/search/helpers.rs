@@ -8,7 +8,7 @@
 
 use anyhow::{Context, Result};
 use reqwest::blocking::Client;
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::OnceLock;
 use std::time::Duration;

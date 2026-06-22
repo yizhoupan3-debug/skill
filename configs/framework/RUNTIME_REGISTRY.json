@@ -360,8 +360,6 @@
         "closeout_record_write",
         "record_evidence",
         "session_checkpoint",
-        "rfv_loop_manage",
-        "rfv_loop_status",
         "quality_gate_manage",
         "quality_gate_status",
         "routing_evolution",

@@ -961,7 +961,7 @@ pub fn merge_review_gate_on_user_prompt(
         };
     }
 
-    let my_light = core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt);
+    let interactive = core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt);
     let goal_drive = core_policy::hook_common::is_framework_goal_entry_prompt(prompt);
     let narrow = core_policy::hook_common::is_narrow_review_prompt(prompt);
     let review_arms = core_policy::hook_common::is_review_prompt(prompt) && !goal_drive;
@@ -969,7 +969,7 @@ pub fn merge_review_gate_on_user_prompt(
 
     let mut core = prev.clone();
 
-    if my_light || goal_drive || narrow {
+    if interactive || goal_drive || narrow {
         core.review_required = false;
         core.independent_reviewer_seen = false;
     } else {
@@ -980,7 +980,7 @@ pub fn merge_review_gate_on_user_prompt(
     }
     core.review_override = core.review_override || override_now;
 
-    let fresh_cycle = review_arms && !override_now && !my_light && !goal_drive && !narrow;
+    let fresh_cycle = review_arms && !override_now && !interactive && !goal_drive && !narrow;
 
     ReviewGateMergeResult {
         core,

@@ -26,7 +26,6 @@
 
 use core_state::utils::atomic_write::write_atomic_text;
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 use tracing::debug;
 

@@ -6,7 +6,7 @@
 //!
 //! Design: see `task_state.rs` §5 阶段 3.
 
-use crate::state_manager::read_rfv_loop_state;
+use crate::state_manager::read_quality_gate_state;
 use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::utils::atomic_write::write_atomic_json;
 use crate::utils::path_guard::{safe_task_id_component, validate_task_id_component};
@@ -34,7 +34,7 @@ pub fn sync_task_state_aggregate(repo_root: &Path, task_id: &str) -> Result<(), 
     }
     validate_task_id_component(tid)?;
     let goal_state = read_goal_state(repo_root, Some(tid)).unwrap_or(None);
-    let rfv_loop_state = read_rfv_loop_state(repo_root, Some(tid)).unwrap_or(None);
+    let rfv_loop_state = read_quality_gate_state(repo_root, Some(tid)).unwrap_or(None);
     let (evidence_rows, evidence_ok) = task_evidence_artifacts_summary_for_task(repo_root, tid);
     let step_ledger = crate::step_ledger::summarize_step_ledger_for_task(repo_root, tid);
 

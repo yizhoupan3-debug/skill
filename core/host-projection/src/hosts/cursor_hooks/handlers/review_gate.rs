@@ -894,7 +894,7 @@ fn hydrate_goal_gate_from_disk(
     {
         return;
     }
-    let Some((goal, task_id)) = frame.hydration_goal.as_ref() else {
+    let Some((_goal, task_id)) = frame.hydration_goal.as_ref() else {
         // Stop-only: missing/unparseable pointers or verifyx purge removed GOAL_STATE while
         // hook-state may still carry goal drive arms from /implementx|/verifyx.
         if arm_if_goal_file {

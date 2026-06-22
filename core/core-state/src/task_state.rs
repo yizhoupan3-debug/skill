@@ -9,7 +9,7 @@ use crate::state_manager::{
     goal_state_requests_continuation, read_goal_state, task_evidence_artifacts_summary_for_task,
 };
 use crate::state_manager::{
-    read_rfv_loop_state, validate_external_research_strict, validate_external_research_structured,
+    read_quality_gate_state, validate_external_research_strict, validate_external_research_structured,
 };
 
 use serde::Serialize;
@@ -446,8 +446,7 @@ pub fn depth_compliance_aggregate(
 pub enum TaskControlMode {
     Idle,
     GoalDrive,
-    RfvLoop,
-    Conflict { reason: String },
+    QualityGate,    Conflict { reason: String },
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -503,7 +502,7 @@ fn classify_control_mode(
             }
         }
         (true, false) => TaskControlMode::GoalDrive,
-        (false, true) => TaskControlMode::RfvLoop,
+        (false, true) => TaskControlMode::QualityGate,
         (false, false) => TaskControlMode::Idle,
     }
 }
@@ -618,7 +617,7 @@ pub fn hydrate_task_state_hybrid(
             Ok(g) => goal_state = g,
             Err(e) => push_resolution_read_err(&mut resolution_notes, "goal_state_read_failed", e),
         }
-        match read_rfv_loop_state(repo_root, Some(task_id)) {
+        match read_quality_gate_state(repo_root, Some(task_id)) {
             Ok(v) => rfv_loop_state = v,
             Err(e) => {
                 push_resolution_read_err(&mut resolution_notes, "rfv_loop_state_read_failed", e)

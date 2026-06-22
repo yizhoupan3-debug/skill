@@ -215,7 +215,7 @@ fn apply_claude_review_gate_user_prompt(
     prompt: &str,
 ) -> Result<HookReviewDiskCore, String> {
     let path = review_state_path(repo_root, payload);
-    let my_light = core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt);
+    let interactive = core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt);
     let narrow = is_narrow_review_prompt(prompt);
     let goal_drive = core_policy::hook_common::is_framework_goal_entry_prompt(prompt);
     let review_arms = is_review_prompt(prompt) && !goal_drive;
@@ -233,7 +233,7 @@ fn apply_claude_review_gate_user_prompt(
             AgentDiskState::Absent => HookReviewDiskCore::default(),
             AgentDiskState::Ok(s) => s,
         };
-        if my_light || goal_drive || narrow {
+        if interactive || goal_drive || narrow {
             state.review_required = false;
             state.independent_reviewer_seen = false;
         } else {
@@ -816,10 +816,7 @@ fn run_user_prompt_submit(repo_root: &Path, payload: &Value) -> Option<Value> {
 }
 
 /// Pre-computed context for a single PostToolUse hook invocation.
-/// Avoids repeated `session_key` computation and path building across
-/// `record_reviewer_evidence` and `persist_touch_state`.
 struct PostToolContext {
-    session_key: String,
     review_path: PathBuf,
     touch_path: PathBuf,
 }
@@ -830,7 +827,7 @@ impl PostToolContext {
         let base = hook_state_base(repo_root);
         let review_path = base.join(core_policy::hook_review_subagent_state_basename(&key));
         let touch_path = base.join(format!("hook_state_{key}.json"));
-        Self { session_key: key, review_path, touch_path }
+        Self { review_path, touch_path }
     }
 }
 
@@ -856,6 +853,7 @@ fn record_evidence_and_persist_touch_state(
 }
 
 /// Backwards-compatible wrapper for tests: persists touch state without reviewer evidence.
+#[cfg(test)]
 fn persist_touch_state(
     repo_root: &Path,
     payload: &Value,
@@ -922,9 +920,8 @@ fn run_post_tool_use(repo_root: &Path, payload: &Value) -> Option<Value> {
 
 
 /// Pre-computed context for a single Stop hook invocation.
-/// Avoids repeated session_key computation and canonicalize syscalls.
+/// Avoids repeated path building and canonicalize syscalls.
 struct StopContext {
-    session_key: String,
     review_path: PathBuf,
     touch_path: PathBuf,
     legacy_review_gate_path: PathBuf,
@@ -942,7 +939,6 @@ impl StopContext {
         let touch_path = base.join(format!("hook_state_{key}.json"));
         let legacy_touch_path = base.join("hook_state.json");
         Self {
-            session_key: key,
             review_path,
             touch_path,
             legacy_review_gate_path,
@@ -1376,42 +1372,6 @@ fn load_review_gate_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<Ho
     AgentDiskState::Absent
 }
 
-fn load_touch_state_disk(repo_root: &Path, payload: &Value) -> AgentDiskState<TouchState> {
-    let path = touch_state_path(repo_root, payload);
-    if !path.is_file() {
-        return AgentDiskState::Absent;
-    }
-    let raw = match fs::read_to_string(&path) {
-        Ok(s) => s,
-        Err(_) => return AgentDiskState::Unreadable,
-    };
-    if raw.trim().is_empty() {
-        return AgentDiskState::Unreadable;
-    }
-    let payload_val: Value = match serde_json::from_str(&raw) {
-        Ok(v) => v,
-        Err(_) => return AgentDiskState::Unreadable,
-    };
-    AgentDiskState::Ok(TouchState {
-        settings: payload_val
-            .get("settings")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        framework: payload_val
-            .get("framework")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        settings_validated: payload_val
-            .get("settings_validated")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-        framework_tested: payload_val
-            .get("framework_tested")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
-    })
-}
-
 fn write_review_state_unlocked(path: &Path, state: &HookReviewDiskCore) -> Result<(), String> {
     let mut to_write = state.clone();
     to_write.bump_version_for_save();
@@ -1580,6 +1540,7 @@ fn legacy_touch_state_path(repo_root: &Path) -> PathBuf {
     hook_state_base(repo_root).join("hook_state.json")
 }
 
+#[cfg(test)]
 fn touch_state_path(repo_root: &Path, payload: &Value) -> PathBuf {
     hook_state_base(repo_root).join(format!(
         "hook_state_{}.json",

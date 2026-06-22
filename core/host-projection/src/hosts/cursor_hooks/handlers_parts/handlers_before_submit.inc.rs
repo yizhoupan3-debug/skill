@@ -35,10 +35,10 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
     let user_gate_override = has_override(&text);
 
     let prior_review_required = state.core.review_required;
-    let my_light = core_policy::hook_common::is_interactive_profile(Some(repo_root), &text);
+    let interactive = core_policy::hook_common::is_interactive_profile(Some(repo_root), &text);
     let review_gate_live = !crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &text);
     let mut fresh_review_cycle = false;
-    if my_light {
+    if interactive {
         state.core.review_required = false;
         reset_review_cycle_progress(&mut state, false);
     } else {
@@ -59,7 +59,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
         state.core.goal_drive_entry_active = true;
     }
     state.goal_required =
-        state.goal_required || (goal_drive_entrypoint && !my_light);
+        state.goal_required || (goal_drive_entrypoint && !interactive);
     let disk_goal = frame.hydration_goal.is_some();
     if !disk_goal {
         state.core.goal_contract_seen =
@@ -118,7 +118,7 @@ fn handle_before_submit(repo_root: &Path, event: &Value) -> Value {
             Some(repo_root),
             "cursor",
         );
-    if !my_light
+    if !interactive
         && !crate::hosts::hook_dispatch::is_review_gate_suppressed("cursor", Some(repo_root), &text)
         && review
         && goal_drive_entrypoint

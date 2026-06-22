@@ -6,7 +6,6 @@
 mod goal_ops;
 mod pointer_ops;
 mod quality_gate_ops;
-mod rfv_ops;
 mod scrub_ops;
 mod validation;
 
@@ -41,13 +40,6 @@ pub use pointer_ops::{
 pub use quality_gate_ops::{
     deactivate_goal_for_conflict_with_quality_gate, quality_gate_state_path, read_quality_gate_state,
 };
-// Deprecated backward compat: `rfv_loop_state_path` → `quality_gate_state_path`
-pub use quality_gate_ops::quality_gate_state_path as rfv_loop_state_path;
-// Deprecated backward compat: `read_rfv_loop_state` → `read_quality_gate_state`
-pub use quality_gate_ops::read_quality_gate_state as read_rfv_loop_state;
-// Deprecated backward compat: `deactivate_goal_for_conflict_with_rfv` → `deactivate_goal_for_conflict_with_quality_gate`
-pub use quality_gate_ops::deactivate_goal_for_conflict_with_quality_gate as deactivate_goal_for_conflict_with_rfv;
-
 // Re-export from goal_ops
 pub use goal_ops::{
     framework_goal_drive, task_evidence_artifacts_summary_for_task,
@@ -841,7 +833,7 @@ mod tests {
         fs::create_dir_all(repo.join("artifacts/current/mx-task")).expect("mkdir");
         let rr = repo.display().to_string();
 
-        crate::rfv_loop::framework_rfv_loop(json!({
+        crate::quality_gate::framework_quality_gate(json!({
             "repo_root": rr.clone(),
             "operation": "start",
             "task_id": "mx-task",
@@ -861,9 +853,9 @@ mod tests {
             "drive_until_done": true,
         }))
         .expect("goal start");
-        assert_eq!(ag["rfv_loop_superseded"], json!(true));
+        assert_eq!(ag["quality_gate_superseded"], json!(true));
 
-        let rfv_path = rfv_loop_state_path(&repo, "mx-task").expect("rfv path");
+        let rfv_path = quality_gate_state_path(&repo, "mx-task").expect("rfv path");
         let raw = fs::read_to_string(&rfv_path).expect("read rfv");
         let v: Value = serde_json::from_str(&raw).expect("parse rfv");
         assert_eq!(v["loop_status"], json!("superseded"));
@@ -987,7 +979,7 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
         fs::create_dir_all(repo.join("artifacts/current/rfv-task")).expect("mkdir");
 
-        let path = rfv_loop_state_path(&repo, "rfv-task").expect("path");
+        let path = quality_gate_state_path(&repo, "rfv-task").expect("path");
         let state = json!({
             "schema_version": "router-rs-rfv-loop-v1",
             "loop_status": "active",
@@ -995,23 +987,23 @@ mod tests {
         });
         crate::utils::atomic_write::write_atomic_json(&path, &state).expect("write rfv");
 
-        let read = read_rfv_loop_state(&repo, Some("rfv-task"))
+        let read = read_quality_gate_state(&repo, Some("rfv-task"))
             .expect("read")
             .expect("some");
         assert_eq!(read["loop_status"], json!("active"));
 
-        let via_active = read_rfv_loop_state(&repo, Some("rfv-task"))
+        let via_active = read_quality_gate_state(&repo, Some("rfv-task"))
             .expect("read active")
             .expect("some");
         assert_eq!(via_active["goal"], json!("g"));
 
         assert!(
-            read_rfv_loop_state(&repo, Some("missing-task"))
+            read_quality_gate_state(&repo, Some("missing-task"))
                 .expect("read missing")
                 .is_none()
         );
 
-        let err = read_rfv_loop_state(&repo, Some("   ")).expect_err("empty override");
+        let err = read_quality_gate_state(&repo, Some("   ")).expect_err("empty override");
         assert!(err.contains("empty"));
 
         let _ = fs::remove_dir_all(&repo);
@@ -1037,13 +1029,13 @@ mod tests {
         )
         .expect("goal");
 
-        let changed = deactivate_goal_for_conflict_with_rfv(&repo, "g-rfv").expect("deactivate");
+        let changed = deactivate_goal_for_conflict_with_quality_gate(&repo, "g-rfv").expect("deactivate");
         assert!(changed);
         let st = read_goal_state(&repo, Some("g-rfv"))
             .expect("read")
             .expect("state");
         assert_eq!(st["status"], json!("superseded"));
-        assert_eq!(st["metadata"]["superseded_by"], json!("rfv_loop"));
+        assert_eq!(st["metadata"]["superseded_by"], json!("quality_gate"));
 
         let _ = fs::remove_dir_all(&repo);
     }

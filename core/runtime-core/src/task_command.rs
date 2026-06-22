@@ -13,7 +13,7 @@ pub const TASK_LEDGER_COMMAND_ENVELOPE_SCHEMA: &str = "router-rs-task-ledger-com
 #[derive(Debug, Clone)]
 pub enum TaskLedgerCommand {
     GoalDrive(Value),
-    RfvLoop(Value),
+    QualityGate(Value),
     SessionArtifacts(Value),
     HookEvidenceAppend(Value),
 }
@@ -44,7 +44,7 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
 
     match kind.to_ascii_lowercase().as_str() {
         "goal_drive" => Ok(TaskLedgerCommand::GoalDrive(payload)),
-        "rfv_loop" => Ok(TaskLedgerCommand::RfvLoop(payload)),
+        "rfv_loop" | "quality_gate" => Ok(TaskLedgerCommand::QualityGate(payload)),
         "session_artifacts" => Ok(TaskLedgerCommand::SessionArtifacts(payload)),
         "hook_evidence_append" => Ok(TaskLedgerCommand::HookEvidenceAppend(payload)),
         _ => Err(format!("task_ledger_command: unknown kind {kind:?}")),
@@ -55,7 +55,7 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
 pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, String> {
     match cmd {
         TaskLedgerCommand::GoalDrive(p) => crate::telemetry_emit::framework_goal_drive(p),
-        TaskLedgerCommand::RfvLoop(p) => crate::telemetry_emit::framework_rfv_loop(p),
+        TaskLedgerCommand::QualityGate(p) => crate::telemetry_emit::framework_quality_gate(p),
         TaskLedgerCommand::SessionArtifacts(p) => {
             crate::framework_runtime::write_framework_session_artifacts(p)
         }
