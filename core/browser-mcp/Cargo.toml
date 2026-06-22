@@ -12,9 +12,9 @@ path = "src/lib.rs"
 [dependencies]
 framework-kernel = { path = "../framework-kernel" }
 http-util = { path = "../http-util" }
+host-projection = { path = "../host-projection" }
+runtime-core-contracts = { path = "../runtime-core-contracts" }
 base64.workspace = true
-runtime-core = { path = "../runtime-core" }
-routing-engine = { path = "../routing-engine" }
 chrono.workspace = true
 reqwest.workspace = true
 rusqlite.workspace = true

@@ -1,9 +1,8 @@
 // MCP 常量、transport、JSON-RPC、`BrowserRuntime`/会话类型与 `struct CdpClient`（须整体移动，不得在函数中途截断）。
-use runtime_core::stdio_payload_types::TraceStreamInspectRequestPayload;
-use runtime_core::framework_runtime::{
+use framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload;
+use host_projection::hooks::{
     attach_runtime_event_transport, inspect_trace_stream,
 };
-use runtime_core::framework_runtime::resolve_repo_root_arg;
 use chrono::{Local, SecondsFormat};
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
@@ -239,7 +238,7 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         .unwrap_or_else(|| json!({}));
 
     let pre_guard =
-        runtime_core::mcp_pre_guard::evaluate_mcp_pre_guard_safe(&tool_name, &arguments, &runtime.repo_root);
+        host_projection::hooks::evaluate_mcp_pre_guard_safe(&tool_name, &arguments, &runtime.repo_root);
     if pre_guard.blocked {
         let reason = pre_guard
             .reason

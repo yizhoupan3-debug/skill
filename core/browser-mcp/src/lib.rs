@@ -33,7 +33,7 @@ pub fn dispatch_browser_command(
             ),
         ),
         BrowserSubcommand::ResolveAttachArtifact(command) => {
-            let repo_root = runtime_core::framework_runtime::resolve_repo_root_arg(
+            let repo_root = framework_kernel::repo_roots::resolve_repo_root_arg(
                 command.repo_root.as_deref(),
             )?;
             let Some(path) =
@@ -47,8 +47,8 @@ pub fn dispatch_browser_command(
     }
 }
 
-/// Register this crate's dispatch function with runtime-core's browser_dispatch_hook.
+/// Register this crate's dispatch function with host-projection's browser_dispatch_hook.
 /// Call once at startup (e.g., in router-rs-cli main or router-rs lib init).
 pub fn register_browser_dispatch() {
-    runtime_core::browser_dispatch_hook::set_browser_dispatch(dispatch_browser_command);
+    host_projection::hooks::set_browser_dispatch(dispatch_browser_command);
 }

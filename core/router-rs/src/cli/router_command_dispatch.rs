@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use runtime_core::framework_runtime::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
-use runtime_core::browser_dispatch_hook;
+use host_projection::hooks;
 use super::args::*;
 use runtime_core::framework_runtime::json_io::{parse_json_input, print_json_value};
 use runtime_core::closeout_enforcement::{
@@ -786,7 +786,7 @@ pub fn dispatch_codegraph_command(command: CodegraphSubcommand) -> Result<(), St
 }
 
 pub fn dispatch_browser_command(command: BrowserSubcommand) -> Result<(), String> {
-    browser_dispatch_hook::dispatch_browser_command(command)
+    hooks::dispatch_browser_command(command)
 }
 
 pub fn dispatch_profile_command(command: ProfileSubcommand) -> Result<(), String> {

@@ -1246,6 +1246,65 @@ pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), 
     }
 }
 
+// ── Browser dispatch (moved from runtime-core to break L3→L4 dep) ──
+
+type BrowserDispatchFn = fn(framework_kernel::cli_args::BrowserSubcommand) -> Result<(), String>;
+static BROWSER_DISPATCH: OnceLock<BrowserDispatchFn> = OnceLock::new();
+
+/// Register the browser command dispatch function (call once at startup).
+pub fn set_browser_dispatch(f: BrowserDispatchFn) {
+    if BROWSER_DISPATCH.set(f).is_err() {
+        tracing::warn!("BROWSER_DISPATCH already registered — second call ignored");
+    }
+}
+
+/// Dispatch a browser subcommand. Returns `Err` if no dispatch function was registered.
+pub fn dispatch_browser_command(
+    command: framework_kernel::cli_args::BrowserSubcommand,
+) -> Result<(), String> {
+    match BROWSER_DISPATCH.get() {
+        Some(f) => f(command),
+        None => Err(
+            "browser-mcp dispatch not registered; call set_browser_dispatch() at startup"
+                .to_string(),
+        ),
+    }
+}
+
+// ── Runtime trace transport proxies (break browser-mcp L3→L4 dep) ──
+
+type AttachRuntimeEventTransportFn = fn(Value) -> Result<Value, String>;
+static ATTACH_RUNTIME_EVENT_TRANSPORT: OnceLock<AttachRuntimeEventTransportFn> = OnceLock::new();
+
+pub fn register_attach_runtime_event_transport(f: AttachRuntimeEventTransportFn) {
+    once_lock_set(&ATTACH_RUNTIME_EVENT_TRANSPORT, f, "ATTACH_RUNTIME_EVENT_TRANSPORT");
+}
+
+pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
+    ATTACH_RUNTIME_EVENT_TRANSPORT
+        .get()
+        .map(|f| f(payload))
+        .unwrap_or_else(|| Err("attach_runtime_event_transport not registered".into()))
+}
+
+type InspectTraceStreamFn = fn(
+    framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
+) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload, String>;
+static INSPECT_TRACE_STREAM: OnceLock<InspectTraceStreamFn> = OnceLock::new();
+
+pub fn register_inspect_trace_stream(f: InspectTraceStreamFn) {
+    once_lock_set(&INSPECT_TRACE_STREAM, f, "INSPECT_TRACE_STREAM");
+}
+
+pub fn inspect_trace_stream(
+    payload: framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
+) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload, String> {
+    INSPECT_TRACE_STREAM
+        .get()
+        .map(|f| f(payload))
+        .unwrap_or_else(|| Err("inspect_trace_stream not registered".into()))
+}
+
 // ── Mirror type structural canary tests ──
 
 #[cfg(test)]

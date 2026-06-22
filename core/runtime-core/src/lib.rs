@@ -327,6 +327,14 @@ pub fn register_host_projection_hooks() {
             ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
         });
 
+        // ── Runtime trace transport proxies (for L3 browser-mcp) ──
+        host_projection::hooks::register_attach_runtime_event_transport(
+            |payload| ::framework_runtime::trace_attach::attach_runtime_event_transport(payload),
+        );
+        host_projection::hooks::register_inspect_trace_stream(
+            ::framework_runtime::trace_stream_io::inspect_trace_stream,
+        );
+
         // ── stdio transport dispatch (decouples runtime-infra from cli/) ──
         runtime_infra::stdio_transport::register_stdio_dispatch(
             crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload,

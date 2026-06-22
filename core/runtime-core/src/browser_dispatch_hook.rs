@@ -1,29 +1,20 @@
-//! Browser command dispatch hook (decouples runtime-core from browser-mcp crate).
+//! Browser command dispatch hook — backward-compat delegate.
 //!
-//! The actual `dispatch_browser_command` implementation lives in the `browser-mcp` crate.
-//! At startup, the binary or router-rs registers the implementation via `set_browser_dispatch`.
+//! The OnceLock + setter/getter moved to `host-projection/src/hooks.rs` (L0)
+//! to break the L3→L4 DAG violation (browser-mcp→runtime-core).
+//! This file is kept as a backward-compat shim; new code should use
+//! `host_projection::hooks::set_browser_dispatch` / `dispatch_browser_command` directly.
 
 use framework_kernel::cli_args::BrowserSubcommand;
-use std::sync::OnceLock;
-
-type BrowserDispatchFn = fn(BrowserSubcommand) -> Result<(), String>;
-
-static BROWSER_DISPATCH: OnceLock<BrowserDispatchFn> = OnceLock::new();
 
 /// Register the browser command dispatch function (call once at startup).
-pub fn set_browser_dispatch(f: BrowserDispatchFn) {
-    if BROWSER_DISPATCH.set(f).is_err() {
-        tracing::warn!("BROWSER_DISPATCH already registered — second call ignored");
-    }
+/// Delegates to `host_projection::hooks::set_browser_dispatch`.
+pub fn set_browser_dispatch(f: fn(BrowserSubcommand) -> Result<(), String>) {
+    host_projection::hooks::set_browser_dispatch(f);
 }
 
-/// Dispatch a browser subcommand. Returns `Err` if no dispatch function was registered.
+/// Dispatch a browser subcommand.
+/// Delegates to `host_projection::hooks::dispatch_browser_command`.
 pub fn dispatch_browser_command(command: BrowserSubcommand) -> Result<(), String> {
-    match BROWSER_DISPATCH.get() {
-        Some(f) => f(command),
-        None => Err(
-            "browser-mcp dispatch not registered; call set_browser_dispatch() at startup"
-                .to_string(),
-        ),
-    }
+    host_projection::hooks::dispatch_browser_command(command)
 }
