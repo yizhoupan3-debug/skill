@@ -451,8 +451,7 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
                                 .get("task_id")
                                 .and_then(|v| v.as_str())
                                 .unwrap_or_default();
-                            if (tid.starts_with("cursor-stop-")
-                                || tid.starts_with("session-checkpoint-"))
+                            if framework_kernel::runtime_registry::is_ephemeral_task_id(tid)
                                 && tid
                                     != core_state::state_manager::CONTINUITY_SESSION_CHECKPOINT_TASK_ID
                             {

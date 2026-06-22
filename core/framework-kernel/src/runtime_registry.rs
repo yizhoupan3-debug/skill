@@ -91,6 +91,14 @@ pub const HOST_CONFIG_DIRS: &[(&str, &str)] = &[
     ("codex", ".codex"),
 ];
 
+/// Ephemeral task ID prefixes that should not be treated as real task IDs.
+///
+/// Task IDs starting with these prefixes are auto-generated session artifacts
+/// rather than user-initiated tasks. Returns true for known ephemeral patterns.
+pub fn is_ephemeral_task_id(tid: &str) -> bool {
+    tid.starts_with("cursor-stop-") || tid.starts_with("session-checkpoint-")
+}
+
 // ---------------------------------------------------------------------------
 // Typed registry subset (host integration)
 // ---------------------------------------------------------------------------
