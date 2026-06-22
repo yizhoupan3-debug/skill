@@ -199,39 +199,6 @@ pub fn register_host_projection_hooks() {
             kernel_bootstrap::ensure_kernel_bootstrap,
         );
 
-        host_projection::hooks::register_paper_hooks(
-            |root, prompt, lines, host| {
-                research_harness::hooks::paper_prose::maybe_append_paper_prose_context(
-                    root, prompt, lines, host,
-                )
-            },
-            |root, output, prompt, followup, host| {
-                research_harness::hooks::paper_prose::maybe_merge_paper_prose_before_submit(
-                    root, output, prompt, followup, host,
-                )
-            },
-            |root, prompt, lines, host| {
-                research_harness::hooks::paper_adversarial::maybe_append_paper_adversarial_context(
-                    root, prompt, lines, host,
-                )
-            },
-            |root, output, prompt, followup, host| {
-                research_harness::hooks::paper_adversarial::maybe_merge_paper_adversarial_before_submit(
-                    root, output, prompt, followup, host,
-                )
-            },
-        );
-
-        host_projection::hooks::register_research_activity_hook(
-            |root, tool, summary| {
-                if let Err(e) = research_harness::hooks::activity_log::maybe_log_research_activity(
-                    tool, summary, root,
-                ) {
-                    eprintln!("[research-activity-log] failed: {e}");
-                }
-            },
-        );
-
         // ── extra hooks (runtime, web fetch, mcp guard, env flags) ──
         host_projection::hooks::register_framework_runtime_extra(
             framework_runtime::resolve_repo_root_arg,
@@ -359,11 +326,6 @@ pub fn register_host_projection_hooks() {
             },
             ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
         });
-
-        // ── research tool dispatch (L6 decoupled via function-pointer slot) ──
-        host_projection::hooks::register_research_tool_dispatch(
-            |name, args| research_harness::mcp_tools::handle_research_tool(name, args),
-        );
 
         // ── stdio transport dispatch (decouples runtime-infra from cli/) ──
         runtime_infra::stdio_transport::register_stdio_dispatch(

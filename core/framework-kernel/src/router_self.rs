@@ -293,8 +293,7 @@ pub fn resolve_router_rs_test_bin() -> PathBuf {
 }
 
 pub fn is_ephemeral_router_rs_path(path: &str) -> bool {
-    path.contains("cursor-sandbox-cache")
-        || path.contains("/tmp/skill-cargo-target")
+    crate::runtime_registry::EPHEMERAL_PATH_PATTERNS.iter().any(|p| path.contains(p))
         || path.starts_with("/tmp/")
 }
 

@@ -69,7 +69,7 @@ pub fn resolve_subagent_binary() -> Result<String, LoopError> {
             return Ok(bin);
         }
     Err(LoopError::SpawnFailed(
-        "opencode binary not found. Set ROUTER_RS_SUBAGENT_BIN.".to_string(),
+        "subagent binary not found. Set ROUTER_RS_SUBAGENT_BIN.".to_string(),
     ))
 }
 

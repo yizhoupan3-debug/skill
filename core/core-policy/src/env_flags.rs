@@ -121,22 +121,14 @@ pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
         .any(|env| env_explicitly_enabled(env))
 }
 
-/// Per-host review gate disable env var mapping.
-/// Legacy `ROUTER_RS_{HOST}_REVIEW_GATE_DISABLE` names are part of the operator
-/// contract (docs §5) — do not rename. Add new hosts by appending rows.
-const REVIEW_GATE_DISABLE_BY_HOST: &[(&str, &str)] = &[
-    ("cursor", ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV),
-    ("codex", ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV),
-    ("claude", ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV),
-    ("opencode", ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE_ENV),
-];
-
-/// Emergency review-gate disable for hook hosts (`cursor` / `codex` / `claude`).
+/// Emergency review-gate disable for hook hosts.
 ///
 /// Canonical `ROUTER_RS_REVIEW_GATE_DISABLE` applies to all; legacy per-host env still honored.
-/// Per-host match arms are intentional: operators need granular emergency disable per host without
-/// affecting others. These env var names are part of the operator contract (docs §5) and cannot be
-/// replaced by registry queries without breaking existing CI/operator scripts.
+/// Per-host env var names are part of the operator contract (docs §5) and cannot be replaced by
+/// registry queries without breaking existing CI/operator scripts.
+///
+/// Host→env mapping lives in `framework_kernel::runtime_registry::REVIEW_GATE_DISABLE_BY_HOST`
+/// to avoid host-name hardcoding in B0.
 pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
     #[cfg(test)]
     if let Some(v) = test_review_gate_disabled_override() {
@@ -145,7 +137,7 @@ pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
     if env_enabled_default_false(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) {
         return true;
     }
-    REVIEW_GATE_DISABLE_BY_HOST
+    framework_kernel::runtime_registry::REVIEW_GATE_DISABLE_BY_HOST
         .iter()
         .find(|(id, _)| *id == host_id)
         .map(|(_, env)| {

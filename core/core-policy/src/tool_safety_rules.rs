@@ -37,36 +37,36 @@ pub fn is_cross_host_or_retired_surface(path: &str) -> bool {
 // ── Host-specific path lists (Phase 4 S2) ──
 
 /// Settings-guarded paths per host.
+///
+/// Data sourced from `framework_kernel::runtime_registry` (single source of truth).
 pub fn settings_guarded_paths(host_id: &str) -> &'static [&'static str] {
-    match host_id {
-        "claude" => &[".claude/settings.json", ".claude/settings.local.json"],
-        "opencode" => &[".opencode/opencode.json", ".opencode/opencode.jsonc"],
-        "cursor" => &[".cursor/settings.json"],
-        "codex" => &[".codex/settings.json"],
-        _ => &[],
-    }
+    framework_kernel::runtime_registry::HOST_SETTINGS_PATHS
+        .iter()
+        .find(|(id, _)| *id == host_id)
+        .map(|(_, paths)| *paths)
+        .unwrap_or(&[])
 }
 
 /// Generated entrypoint paths per host.
+///
+/// Data sourced from `framework_kernel::runtime_registry`.
 pub fn generated_entrypoint_paths(host_id: &str) -> &'static [&'static str] {
-    match host_id {
-        "claude" => &[".claude/CLAUDE.md"],
-        "opencode" => &["AGENTS.md"],
-        "cursor" => &[".cursor/rules/"],
-        "codex" => &[".codex/hooks.json"],
-        _ => &[],
-    }
+    framework_kernel::runtime_registry::HOST_ENTRYPOINT_PATHS
+        .iter()
+        .find(|(id, _)| *id == host_id)
+        .map(|(_, paths)| *paths)
+        .unwrap_or(&[])
 }
 
 /// Host private config directory leaf name per host.
+///
+/// Data sourced from `framework_kernel::runtime_registry`.
 pub fn host_private_config_dir(host_id: &str) -> &'static str {
-    match host_id {
-        "claude" => ".claude",
-        "opencode" => ".opencode",
-        "cursor" => ".cursor",
-        "codex" => ".codex",
-        _ => "",
-    }
+    framework_kernel::runtime_registry::HOST_CONFIG_DIRS
+        .iter()
+        .find(|(id, _)| *id == host_id)
+        .map(|(_, dir)| *dir)
+        .unwrap_or("")
 }
 
 /// Check if a path is a host-specific generated entrypoint (parameterized).

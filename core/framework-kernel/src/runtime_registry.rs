@@ -44,6 +44,53 @@ pub(crate) fn host_home_dir(host_id: &str) -> Option<&'static str> {
 pub const ALL_KNOWN_HOST_DIRS: &[&str] = &[".claude", ".cursor", ".codex", ".opencode", ".gemini"];
 pub const HOST_ADAPTER_CONTRACT_PATH: &str = "docs/spec.md";
 
+/// Ephemeral path patterns that should not be treated as permanent repos.
+///
+/// Used by `is_ephemeral_router_rs_path()` to detect CI/sandbox/temp build roots.
+/// Patterns are deliberately substring-based to catch nested variants.
+pub const EPHEMERAL_PATH_PATTERNS: &[&str] = &[
+    "cursor-sandbox-cache",
+    "/tmp/skill-cargo-target",
+];
+
+/// Per-host review gate disable env var mapping.
+///
+/// Legacy `ROUTER_RS_{HOST}_REVIEW_GATE_DISABLE` names are part of the operator
+/// contract (docs §5) — do not rename. Add new hosts by appending rows.
+///
+/// Note: the env-var name constants themselves remain in `core-policy::env_flags`
+/// as env-flag definitions; only the host→env mapping table lives here.
+pub const REVIEW_GATE_DISABLE_BY_HOST: &[(&str, &str)] = &[
+    ("cursor", "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE"),
+    ("codex", "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
+    ("claude", "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
+    ("opencode", "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE"),
+];
+
+/// Per-host settings-guarded config file paths.
+pub const HOST_SETTINGS_PATHS: &[(&str, &[&str])] = &[
+    ("claude", &[".claude/settings.json", ".claude/settings.local.json"]),
+    ("opencode", &[".opencode/opencode.json", ".opencode/opencode.jsonc"]),
+    ("cursor", &[".cursor/settings.json"]),
+    ("codex", &[".codex/settings.json"]),
+];
+
+/// Per-host generated entrypoint paths.
+pub const HOST_ENTRYPOINT_PATHS: &[(&str, &[&str])] = &[
+    ("claude", &[".claude/CLAUDE.md"]),
+    ("opencode", &["AGENTS.md"]),
+    ("cursor", &[".cursor/rules/"]),
+    ("codex", &[".codex/hooks.json"]),
+];
+
+/// Per-host private config directory leaf names.
+pub const HOST_CONFIG_DIRS: &[(&str, &str)] = &[
+    ("claude", ".claude"),
+    ("opencode", ".opencode"),
+    ("cursor", ".cursor"),
+    ("codex", ".codex"),
+];
+
 // ---------------------------------------------------------------------------
 // Typed registry subset (host integration)
 // ---------------------------------------------------------------------------

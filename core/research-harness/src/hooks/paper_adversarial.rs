@@ -50,11 +50,6 @@ pub fn paper_adversarial_hook_requested(host: &str) -> bool {
     operator_inject_globally_enabled() && core_policy::env_flags::env_enabled_default_false(paper_adversarial_env_var(host))
 }
 
-/// Shorthand: cursor-specific adversarial hook check.
-pub fn cursor_paper_adversarial_hook_requested() -> bool {
-    paper_adversarial_hook_requested("cursor")
-}
-
 /// 轻量启发：检测用户提示是否涉及论文审稿/返修。
 pub fn prompt_signals_manuscript_work(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
@@ -324,7 +319,7 @@ mod tests {
         let prior_hook = std::env::var(hook_var).ok();
         unsafe { std::env::set_var("ROUTER_RS_OPERATOR_INJECT", "0") };
         unsafe { std::env::set_var(hook_var, "1") };
-        assert!(!cursor_paper_adversarial_hook_requested());
+        assert!(!paper_adversarial_hook_requested("cursor"));
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
         restore_env(hook_var, prior_hook);
     }
@@ -337,7 +332,7 @@ mod tests {
         let prior_hook = std::env::var(hook_var).ok();
         unsafe { std::env::remove_var("ROUTER_RS_OPERATOR_INJECT") };
         unsafe { std::env::remove_var(hook_var) };
-        assert!(!cursor_paper_adversarial_hook_requested());
+        assert!(!paper_adversarial_hook_requested("cursor"));
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
         restore_env(hook_var, prior_hook);
     }

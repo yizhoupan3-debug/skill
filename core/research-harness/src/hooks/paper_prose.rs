@@ -46,11 +46,6 @@ pub fn paper_prose_hook_requested(host: &str) -> bool {
     operator_inject_globally_enabled() && core_policy::env_flags::env_enabled_default_true(paper_prose_env_var(host))
 }
 
-/// Shorthand: cursor-specific prose hook check.
-pub fn cursor_paper_prose_hook_requested() -> bool {
-    paper_prose_hook_requested("cursor")
-}
-
 /// 信号检测：用户提示是否涉及论文写作/润色。
 pub fn prompt_signals_prose_work(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
@@ -235,7 +230,7 @@ mod tests {
         )
         .unwrap();
 
-        assert!(cursor_paper_prose_hook_requested());
+        assert!(paper_prose_hook_requested("cursor"));
         let mut out = json!({ "continue": true });
         maybe_merge_paper_prose_before_submit(&tmp, &mut out, "英文论文润色 abstract", false, "cursor");
         let ctx = out
@@ -259,7 +254,7 @@ mod tests {
         std::fs::create_dir_all(tmp.join("configs/framework")).unwrap();
         std::fs::write(tmp.join(REL_PATH), format!("{PREFIX_LINE}\n\n正文。")).unwrap();
 
-        assert!(!cursor_paper_prose_hook_requested());
+        assert!(!paper_prose_hook_requested("cursor"));
         let mut out = json!({ "continue": true });
         maybe_merge_paper_prose_before_submit(&tmp, &mut out, "SCI润色 abstract", false, "cursor");
         assert!(out.get("additional_context").is_none());

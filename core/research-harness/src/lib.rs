@@ -43,3 +43,10 @@ pub mod types;
 pub mod util;
 pub mod verification;
 pub mod workspace;
+
+/// Register all research hooks into the L0 function-pointer registry.
+///
+/// Must be called once during application bootstrap, after `runtime_core::init_hooks()`.
+/// Safe to call multiple times — internal `OnceLock` guards make repeated
+/// registration calls no-ops.
+pub use hooks::init::init_hooks;

@@ -14,6 +14,7 @@
 //! - `RESEARCH_HOOK_CACHE_TTL_SECS=<n>` — cache TTL in seconds (default 3600)
 
 pub mod activity_log;
+pub mod init;
 pub mod paper_adversarial;
 pub mod paper_block_cache;
 pub mod paper_prose;

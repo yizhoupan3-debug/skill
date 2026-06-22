@@ -20,6 +20,7 @@ routing-engine = { path = "../routing-engine" }
 runtime-core = { path = "../runtime-core", features = ["test-support"] }
 host-projection = { path = "../host-projection" }
 browser-mcp = { path = "../browser-mcp" }
+research-harness = { path = "../research-harness", optional = true }
 libc.workspace = true
 chrono.workspace = true
 clap.workspace = true
@@ -48,12 +49,14 @@ default = [
     "host-claude",
     "host-opencode",
     "host-codex",
+    "research",
 ]
 host-cursor = []
 host-claude = []
 host-opencode = []
 host-codex = []
 codegraph = ["runtime-core/codegraph"]
+research = ["dep:research-harness"]
 
 [dev-dependencies]
 serial_test = "3"

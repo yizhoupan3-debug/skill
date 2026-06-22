@@ -11,6 +11,12 @@ fn main() -> Result<(), String> {
     // but explicit init is safer and makes dependencies clear.
     runtime_core::init_hooks();
 
+    // Register research hooks if the `research` feature is enabled.
+    // This keeps runtime-core (L4) decoupled from research-harness (L5)
+    // — research hooks register themselves directly into the L0 registry.
+    #[cfg(feature = "research")]
+    research_harness::init_hooks();
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()

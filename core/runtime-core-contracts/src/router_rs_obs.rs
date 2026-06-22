@@ -109,8 +109,8 @@ fn compute_blocking(output: &Value, gate: Option<&GateClassified>) -> bool {
 
     match gate.map(|g| g.code.as_str()) {
         Some(
-            "review_gate" | "codex_review_gate" | "claude_review_gate" | "ag_followup"
-            | "closeout_followup" | "subagent_limit",
+            gate if gate.ends_with("_review_gate")
+                || matches!(gate, "ag_followup" | "closeout_followup" | "subagent_limit"),
         ) => {
             if continue_true {
                 base
