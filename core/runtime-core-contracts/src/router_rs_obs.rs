@@ -237,8 +237,8 @@ mod tests {
     fn classifies_review_gate_followup() {
         let followup = format!(
             "router-rs REVIEW_GATE incomplete phase=0 {} {}",
-            host_projection::hosts::cursor_hooks::REVIEW_GATE_FOLLOWUP_NEED_SEGMENT,
-            host_projection::hosts::cursor_hooks::REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
+            host_projection::hosts::hook_dispatch::REVIEW_GATE_FOLLOWUP_NEED_SEGMENT,
+            host_projection::hosts::hook_dispatch::REVIEW_GATE_FOLLOWUP_HINT_SEGMENT
         );
         let v = json!({
             "continue": false,

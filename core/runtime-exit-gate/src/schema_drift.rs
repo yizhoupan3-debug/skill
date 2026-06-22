@@ -1,7 +1,8 @@
 //! Task / harness schema drift: capture baselines and compare on verify.
+//!
+//! Cursor-specific hooks snapshot logic lives in
+//! `host-projection/src/hosts/host_extensions/cursor/schema_drift.rs` (L0).
 
-use framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION;
-use host_projection::hosts::host_extensions::cursor::{CURSOR_HOOKS_REGISTERED_EVENTS, CURSOR_HOOKS_SUBTRACTED_EVENTS};
 use chrono::Utc;
 use hex;
 use serde::{Deserialize, Serialize};
@@ -14,23 +15,13 @@ pub const SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION: &str = "schema-drift-baseline-v1
 pub const SCHEMA_DRIFT_CHECK_RESPONSE_SCHEMA_VERSION: &str = "schema-drift-check-response-v1";
 pub const ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION: &str = "router-rs-hook-observation-v1";
 
-const GATE_TIMEOUT_SECS: &[(&str, u64)] = &[
-    ("beforeSubmitPrompt", 20),
-    ("stop", 20),
-    ("postToolUse", 20),
-    ("subagentStart", 20),
-    ("subagentStop", 20),
-    ("sessionStart", 5),
-    ("sessionEnd", 15),
-];
+// ── Types ──
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SchemaDriftContract {
     pub schema_version: String,
     pub baseline_schema_version: String,
     pub check_response_schema_version: String,
-    pub cursor_hooks_required: Vec<String>,
-    pub cursor_hooks_forbidden: Vec<String>,
     pub baseline_relative_path: String,
 }
 
@@ -39,31 +30,9 @@ pub fn schema_drift_contract() -> SchemaDriftContract {
         schema_version: "schema-drift-contract-v1".to_string(),
         baseline_schema_version: SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION.to_string(),
         check_response_schema_version: SCHEMA_DRIFT_CHECK_RESPONSE_SCHEMA_VERSION.to_string(),
-        cursor_hooks_required: CURSOR_HOOKS_REGISTERED_EVENTS
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect(),
-        cursor_hooks_forbidden: CURSOR_HOOKS_SUBTRACTED_EVENTS
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect(),
         baseline_relative_path: "artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json"
             .to_string(),
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct CursorHooksDriftSnapshot {
-    pub registered_events: Vec<String>,
-    pub forbidden_still_registered: Vec<String>,
-    pub missing_required: Vec<String>,
-    pub matches_workspace_template: bool,
-    #[serde(default)]
-    pub hook_command_issues: Vec<String>,
-    #[serde(default)]
-    pub gate_timeout_issues: Vec<String>,
-    #[serde(default)]
-    pub hooks_template_parity_issues: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -86,7 +55,9 @@ pub struct SchemaDriftBaseline {
     pub schema_version: String,
     pub recorded_at: String,
     pub task_id: String,
-    pub cursor_hooks: CursorHooksDriftSnapshot,
+    /// Host-specific hooks snapshot (opaque JSON blob from L0 host extension).
+    /// No L4 code inspects this struct; comparison is `Value` equality.
+    pub cursor_hooks: Value,
     pub task_artifacts: TaskArtifactsDriftSnapshot,
     pub contracts: ContractVersionsSnapshot,
 }
@@ -108,6 +79,8 @@ pub struct SchemaDriftCheckResponse {
     pub drift: Vec<SchemaDriftDriftItem>,
 }
 
+// ── Utilities ──
+
 pub fn resolve_task_id_for_schema_drift(
     _repo_root: &Path,
     task_id: Option<&str>,
@@ -127,143 +100,51 @@ pub fn baseline_path(repo_root: &Path, task_id: &str) -> PathBuf {
         .join("SCHEMA_DRIFT_BASELINE.json")
 }
 
-fn read_hooks_doc(path: &Path) -> Result<Value, String> {
-    let raw = fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))
+// ── Hooks snapshot via L0 cursor extension ──
+
+fn snapshot_cursor_hooks_json(repo_root: &Path) -> Result<Value, String> {
+    let snap = host_projection::hosts::host_extensions::cursor_impl::schema_drift::snapshot_cursor_hooks(repo_root)?;
+    serde_json::to_value(snap).map_err(|e| format!("serialize cursor_hooks: {e}"))
 }
 
-fn read_hooks_event_keys(path: &Path) -> Result<Vec<String>, String> {
-    let doc = read_hooks_doc(path)?;
-    let mut keys: Vec<String> = doc
-        .get("hooks")
-        .and_then(Value::as_object)
-        .map(|o| o.keys().cloned().collect())
-        .unwrap_or_default();
-    keys.sort();
-    Ok(keys)
+fn cursor_hooks_json_ok(hooks: &Value) -> bool {
+    let Some(s) = hooks.as_object() else { return false };
+    s.get("forbidden_still_registered")
+        .and_then(Value::as_array)
+        .map(|a| a.is_empty())
+        .unwrap_or(false)
+        && s.get("missing_required")
+            .and_then(Value::as_array)
+            .map(|a| a.is_empty())
+            .unwrap_or(false)
+        && s.get("hook_command_issues")
+            .and_then(Value::as_array)
+            .map(|a| a.is_empty())
+            .unwrap_or(false)
+        && s.get("gate_timeout_issues")
+            .and_then(Value::as_array)
+            .map(|a| a.is_empty())
+            .unwrap_or(false)
+        && s.get("hooks_template_parity_issues")
+            .and_then(Value::as_array)
+            .map(|a| a.is_empty())
+            .unwrap_or(false)
 }
 
-fn first_hook_entry<'a>(
-    hooks: &'a serde_json::Map<String, Value>,
-    event: &str,
-) -> Option<&'a Value> {
-    hooks.get(event)?.as_array()?.first()
-}
-
-fn audit_hooks_doc(label: &str, doc: &Value) -> (Vec<String>, Vec<String>) {
-    let mut command_issues = Vec::new();
-    let mut timeout_issues = Vec::new();
-    let Some(hooks) = doc.get("hooks").and_then(Value::as_object) else {
-        return (
-            vec![format!("{label}: missing hooks object")],
-            timeout_issues,
-        );
-    };
-    for (ev, want) in GATE_TIMEOUT_SECS {
-        let Some(entry) = first_hook_entry(hooks, ev) else {
-            continue;
-        };
-        let cmd = entry.get("command").and_then(Value::as_str).unwrap_or("");
-        if !cmd.contains("cursor-router-rs-hook.sh") {
-            command_issues.push(format!(
-                "{label}: {ev} must invoke cursor-router-rs-hook.sh"
-            ));
-        }
-        let timeout = entry.get("timeout").and_then(Value::as_u64);
-        if timeout != Some(*want) {
-            timeout_issues.push(format!(
-                "{label}: {ev} timeout must be {want}s (got {timeout:?})"
-            ));
-        }
-    }
-    (command_issues, timeout_issues)
-}
-
-fn compare_hooks_template_parity(hooks_doc: &Value, template_doc: &Value) -> Vec<String> {
-    let mut issues = Vec::new();
-    let (Some(hooks), Some(template)) = (
-        hooks_doc.get("hooks").and_then(Value::as_object),
-        template_doc.get("hooks").and_then(Value::as_object),
-    ) else {
-        issues.push("hooks vs template: missing hooks object".to_string());
-        return issues;
-    };
-
-    let mut h_keys: Vec<_> = hooks.keys().cloned().collect();
-    h_keys.sort();
-    let mut t_keys: Vec<_> = template.keys().cloned().collect();
-    t_keys.sort();
-    if h_keys != t_keys {
-        issues.push(format!(
-            "event key mismatch: hooks={h_keys:?} template={t_keys:?}"
-        ));
-    }
-
-    for ev in h_keys.iter().filter(|k| template.contains_key(*k)) {
-        let (Some(he), Some(te)) = (first_hook_entry(hooks, ev), first_hook_entry(template, ev))
-        else {
-            issues.push(format!("{ev}: missing hook entry in hooks or template"));
-            continue;
-        };
-        let hc = he.get("command").and_then(Value::as_str).unwrap_or("");
-        let tc = te.get("command").and_then(Value::as_str).unwrap_or("");
-        if hc != tc {
-            issues.push(format!(
-                "command mismatch on {ev}: hooks={hc:?} template={tc:?}"
-            ));
-        }
-        let ht = he.get("timeout");
-        let tt = te.get("timeout");
-        if ht != tt {
-            issues.push(format!(
-                "timeout mismatch on {ev}: hooks={ht:?} template={tt:?}"
-            ));
-        }
-    }
-    issues
-}
-
-pub fn snapshot_cursor_hooks(repo_root: &Path) -> Result<CursorHooksDriftSnapshot, String> {
-    let hooks_path = repo_root.join(".cursor/hooks.json");
-    let template_path = repo_root.join("configs/framework/cursor-hooks.workspace-template.json");
-    let registered = read_hooks_event_keys(&hooks_path)?;
-    let template_keys = read_hooks_event_keys(&template_path)?;
-    let hooks_doc = read_hooks_doc(&hooks_path)?;
-    let (mut hook_command_issues, mut gate_timeout_issues) =
-        audit_hooks_doc(".cursor/hooks.json", &hooks_doc);
-    let mut hooks_template_parity_issues = Vec::new();
-    if template_path.is_file() {
-        if let Ok(template_doc) = read_hooks_doc(&template_path) {
-            let (cmd_i, to_i) = audit_hooks_doc("workspace-template", &template_doc);
-            hook_command_issues.extend(cmd_i);
-            gate_timeout_issues.extend(to_i);
-            hooks_template_parity_issues = compare_hooks_template_parity(&hooks_doc, &template_doc);
-        }
-    } else {
-        hooks_template_parity_issues
-            .push("missing configs/framework/cursor-hooks.workspace-template.json".to_string());
-    }
-    let missing_required: Vec<String> = CURSOR_HOOKS_REGISTERED_EVENTS
-        .iter()
-        .filter(|ev| !registered.contains(&ev.to_string()))
-        .map(|s| (*s).to_string())
-        .collect();
-    let forbidden_still_registered: Vec<String> = CURSOR_HOOKS_SUBTRACTED_EVENTS
-        .iter()
-        .filter(|ev| registered.contains(&ev.to_string()))
-        .map(|s| (*s).to_string())
-        .collect();
-    let keys_match = registered == template_keys;
-    Ok(CursorHooksDriftSnapshot {
-        registered_events: registered.clone(),
-        forbidden_still_registered,
-        missing_required,
-        matches_workspace_template: keys_match && hooks_template_parity_issues.is_empty(),
-        hook_command_issues,
-        gate_timeout_issues,
-        hooks_template_parity_issues,
+/// Fallback hooks snapshot used when the real snapshot fails.
+fn fallback_cursor_hooks_json() -> Value {
+    json!({
+        "registered_events": [],
+        "forbidden_still_registered": ["snapshot_failed"],
+        "missing_required": [],
+        "matches_workspace_template": false,
+        "hook_command_issues": ["snapshot_failed"],
+        "gate_timeout_issues": [],
+        "hooks_template_parity_issues": [],
     })
 }
+
+// ── Task artifacts snapshot ──
 
 fn md_heading_lines(path: &Path) -> Vec<String> {
     let Ok(raw) = fs::read_to_string(path) else {
@@ -320,15 +201,17 @@ pub fn snapshot_task_artifacts(repo_root: &Path, task_id: &str) -> TaskArtifacts
     }
 }
 
+// ── Baseline I/O ──
+
 pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBaseline, String> {
     Ok(SchemaDriftBaseline {
         schema_version: SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION.to_string(),
         recorded_at: framework_kernel::time::now_iso(),
         task_id: task_id.to_string(),
-        cursor_hooks: snapshot_cursor_hooks(repo_root)?,
+        cursor_hooks: snapshot_cursor_hooks_json(repo_root)?,
         task_artifacts: snapshot_task_artifacts(repo_root, task_id),
         contracts: ContractVersionsSnapshot {
-            closeout_record: CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+            closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
             hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
         },
     })
@@ -367,34 +250,17 @@ fn drift_item(
     }
 }
 
-fn cursor_hooks_snapshot_ok(s: &CursorHooksDriftSnapshot) -> bool {
-    s.forbidden_still_registered.is_empty()
-        && s.missing_required.is_empty()
-        && s.hook_command_issues.is_empty()
-        && s.gate_timeout_issues.is_empty()
-        && s.hooks_template_parity_issues.is_empty()
-}
+// ── Baseline check ──
 
 pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftCheckResponse {
     let path = baseline_path(repo_root, task_id);
     let baseline_present = path.is_file();
     let mut drift = Vec::new();
 
-    let current_hooks = snapshot_cursor_hooks(repo_root).unwrap_or(CursorHooksDriftSnapshot {
-        registered_events: vec![],
-        forbidden_still_registered: vec!["snapshot_failed".to_string()],
-        missing_required: CURSOR_HOOKS_REGISTERED_EVENTS
-            .iter()
-            .map(|s| (*s).to_string())
-            .collect(),
-        matches_workspace_template: false,
-        hook_command_issues: vec!["snapshot_failed".to_string()],
-        gate_timeout_issues: vec![],
-        hooks_template_parity_issues: vec![],
-    });
+    let current_hooks = snapshot_cursor_hooks_json(repo_root).unwrap_or_else(|_| fallback_cursor_hooks_json());
     let current_artifacts = snapshot_task_artifacts(repo_root, task_id);
     let current_contracts = ContractVersionsSnapshot {
-        closeout_record: CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+        closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
         hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
     };
 
@@ -476,8 +342,8 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     }
 
     let ok = drift.is_empty()
-        && cursor_hooks_snapshot_ok(&baseline.cursor_hooks)
-        && cursor_hooks_snapshot_ok(&current_hooks)
+        && cursor_hooks_json_ok(&baseline.cursor_hooks)
+        && cursor_hooks_json_ok(&current_hooks)
         && current_artifacts.headings_match
         && (!current_artifacts.evidence_index_present
             || current_artifacts.evidence_index_has_artifacts_array);
@@ -491,6 +357,8 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
         drift,
     }
 }
+
+// ── Tests ──
 
 #[cfg(test)]
 fn seven_event_hooks_json(command: &str) -> String {
@@ -597,7 +465,7 @@ mod tests {
         let task = "t-mismatch";
         seed_task_artifacts(&repo, task);
         write_baseline(&repo, task).unwrap();
-        let snap = snapshot_cursor_hooks(&repo).unwrap();
+        let snap = host_projection::hosts::host_extensions::cursor_impl::schema_drift::snapshot_cursor_hooks(&repo).unwrap();
         assert!(
             !snap.hooks_template_parity_issues.is_empty(),
             "parity issues={:?}",

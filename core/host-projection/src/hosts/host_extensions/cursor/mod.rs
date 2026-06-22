@@ -56,6 +56,8 @@ pub use subtraction::{CURSOR_HOOKS_REGISTERED_EVENTS, CURSOR_HOOKS_SUBTRACTED_EV
 
 mod review_gate_cli;
 pub use review_gate_cli::run_cursor_review_gate;
+pub mod schema_drift;
+
 
 include!("handlers.rs");
 
