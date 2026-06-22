@@ -21,12 +21,12 @@ fn dispatch(host_id: &str, event: &str, repo_root: &Path, payload: &Value) -> Va
                 "subagent.stop" | "SubagentStop" => "subagent-stop",
                 other => other,
             };
-            crate::hosts::host_extensions::claude::dispatch_claude_hook_payload_for_test(
+            crate::hosts::host_extensions::claude_impl::dispatch_claude_hook_payload_for_test(
                 canonical, repo_root, payload,
             )
         }
         "cursor" => {
-            crate::hosts::host_extensions::cursor::dispatch_cursor_hook_event(repo_root, event, payload)
+            crate::hosts::host_extensions::cursor_impl::dispatch_cursor_hook_event(repo_root, event, payload)
         }
         "codex" => {
             // Codex lifecycle hook expects specific event names in payload.
@@ -47,7 +47,7 @@ fn dispatch(host_id: &str, event: &str, repo_root: &Path, payload: &Value) -> Va
                 obj.entry("session_id".to_string())
                     .or_insert(json!("test-session-unified"));
             }
-            crate::hosts::host_extensions::codex::handlers::run_codex_lifecycle_context_hook_for_state_dir(
+            crate::hosts::host_extensions::codex_impl::handlers::run_codex_lifecycle_context_hook_for_state_dir(
                 repo_root,
                 &codex_payload,
                 ".codex",
@@ -56,7 +56,7 @@ fn dispatch(host_id: &str, event: &str, repo_root: &Path, payload: &Value) -> Va
             .unwrap_or_else(|| json!({}))
         }
         "opencode" => {
-            crate::hosts::host_extensions::opencode::dispatch_opencode_hook_event(repo_root, event, payload)
+            crate::hosts::host_extensions::opencode_impl::dispatch_opencode_hook_event(repo_root, event, payload)
         }
         _ => panic!("unknown host_id: {host_id}"),
     }

@@ -13,8 +13,8 @@ impl HostLifecycle for CodexHostProvider {
     fn profile_id(&self) -> &'static str { "codex_profile" }
     fn session_supervisor_driver(&self) -> &'static str { "codex_driver" }
     fn context_file(&self) -> &'static str { "AGENTS.md" }
-    fn hooks_manifest_path(&self) -> Option<&'static str> { Some(crate::hosts::host_extensions::codex::CODEX_HOOKS_PATH) }
-    fn registered_hook_events(&self) -> &'static [&'static str] { &crate::hosts::host_extensions::codex::INSTALL_LIFECYCLE_EVENTS }
+    fn hooks_manifest_path(&self) -> Option<&'static str> { Some(crate::hosts::host_extensions::codex_impl::CODEX_HOOKS_PATH) }
+    fn registered_hook_events(&self) -> &'static [&'static str] { &crate::hosts::host_extensions::codex_impl::INSTALL_LIFECYCLE_EVENTS }
     fn driver_binary(&self) -> &'static str { "codex" }
     fn driver_supports_resume(&self) -> bool { true }
     fn subagent_review_types(&self) -> &'static [&'static str] {

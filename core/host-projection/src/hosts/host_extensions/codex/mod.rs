@@ -104,7 +104,7 @@ const CODEX_STRINGS: HostStrings = HostStrings {
     stop_hook_active_bypass_env: "ROUTER_RS_CODEX_STOP_HOOK_ACTIVE_BYPASS",
     require_stable_session_key_env: "ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY",
     hook_state_salt_env: "ROUTER_RS_CODEX_HOOK_STATE_SALT",
-    hook_state_unreadable_tag: "CODEX_HOOK_STATE_UNREADABLE",
+    hook_state_unreadable_tag: "CODEX_HOOK_STATE_UNREADABLE",  // from impl_host_config!
     lifecycle_label: "Codex",
     spawn_first_host_id: "codex",
 };

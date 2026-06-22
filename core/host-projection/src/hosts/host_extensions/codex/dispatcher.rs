@@ -41,45 +41,8 @@ fn cod_ex_session_key_error() -> String {
 pub struct CodexHookDispatcher;
 
 impl HostHookConfig for CodexHookDispatcher {
-    fn host_id(&self) -> &'static str {
-        "codex"
-    }
-
-    fn state_dir_leaf(&self) -> &'static str {
-        ".codex"
-    }
-
-    fn hook_state_unreadable_tag(&self) -> &'static str {
-        "CODEX_HOOK_STATE_UNREADABLE"
-    }
-
-    fn session_namespace_env(&self) -> &'static str {
-        "ROUTER_RS_CODEX_SESSION_NAMESPACE"
-    }
-
-    fn log_label(&self) -> &'static str {
-        "codex"
-    }
-
-    fn supports_session_start(&self) -> bool {
-        true
-    }
-
-    fn supports_subagent_start(&self) -> bool {
-        true
-    }
-
-    fn supports_subagent_stop(&self) -> bool {
-        true
-    }
-
-    fn take_audit_result(&self, repo_root: &Path) -> Option<String> {
-        crate::hosts::worktree_auto_save::take_audit_result(repo_root, self.host_id())
-    }
-    fn ensure_dispatch_bootstrap(&self) { crate::hooks::ensure_kernel_bootstrap() }
-    fn closeout_check(&self, repo_root: &Path, text: &str) -> Option<String> {
-        crate::hooks::closeout_stop_followup_for_completion_text(repo_root, text)
-    }
+    crate::impl_host_config!("codex", "Codex");
+    fn additional_context_max_bytes(&self) -> usize { 640 }
 }
 
 impl HostHookDispatcher for CodexHookDispatcher {

@@ -16,15 +16,10 @@ use crate::hosts::hook_dispatch::{HookEvent, HookOutput, HostHookConfig, HostHoo
 pub struct CursorHookDispatcher;
 
 impl HostHookConfig for CursorHookDispatcher {
-    fn host_id(&self) -> &'static str { "cursor" }
-    fn state_dir_leaf(&self) -> &'static str { ".cursor" }
-    fn hook_state_unreadable_tag(&self) -> &'static str { "CURSOR_HOOK_STATE_UNREADABLE" }
-    fn session_namespace_env(&self) -> &'static str { "ROUTER_RS_CURSOR_SESSION_NAMESPACE" }
-    fn log_label(&self) -> &'static str { "cursor" }
+    crate::impl_host_config!("cursor", "Cursor");
     fn supports_session_start(&self) -> bool { true }
     fn supports_subagent_start(&self) -> bool { true }
     fn supports_subagent_stop(&self) -> bool { true }
-
 }
 
 /// Convert a `Value` returned by a cursor handler into `Option<HookOutput>`.

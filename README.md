@@ -18,7 +18,7 @@
   Windows 首次全量验证见下文 **「第一次验证」**；装好后可在仓库根执行：  
   `cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework doctor --repo-root "$PWD"` 做人读自检（生成物为 **metadata-only** 快探针；全量 drift 见 `framework maint update-one-shot`）。
 
-**Office 文档阅读（PDF / DOCX / XLSX / PPTX）**：skill 路由默认 Rust-first，但 CLI **需单独安装**到 `~/.local/bin`（不随 `router-rs` 下发）。在仓库根执行 `bash scripts/install-pdf-tool.sh` 等，或 `just install-office-tools`；详见 [`docs/office-document-clis.md`](docs/office-document-clis.md)。
+**Office 文档阅读（PDF / DOCX / XLSX / PPTX）**：skill 路由默认 Rust-first，但 CLI **需单独安装**到 `~/.local/bin`（不随 `router-rs` 下发）。在仓库根执行 `bash scripts/install-pdf-tool.sh` 等，或 `just install-office-tools`。
 
 ## 这套系统包含什么
 

@@ -15,7 +15,7 @@ use core_policy::review_gate_engine::{
 use core_policy::HookReviewDiskCore;
 use serde_json::{Map, Value, json};
 use crate::hosts::hook_dispatch::{
-    impl_host_config, HookEvent, HookOutput, HostHookConfig, HostHookDispatcher,
+    HookEvent, HookOutput, HostHookConfig, HostHookDispatcher,
     add_context, bash_command, closeout_completion_text, collect_path_value,
     collect_payload_paths, compact_repo_relative_segments, extract_output_summary,
     find_numeric_key, first_nonempty_payload_str, hook_output_to_json_value,
@@ -294,12 +294,7 @@ fn canonical_stdio_agent_hook_command(command: &str) -> Result<&'static str, Str
 pub struct ClaudeHookDispatcher;
 
 impl HostHookConfig for ClaudeHookDispatcher {
-    fn host_id(&self) -> &'static str { "claude" }
-    fn state_dir_leaf(&self) -> &'static str { ".claude" }
-    fn hook_state_unreadable_tag(&self) -> &'static str { CLAUDE_HOOK_STATE_UNREADABLE }
-    fn session_namespace_env(&self) -> &'static str { "ROUTER_RS_CLAUDE_SESSION_NAMESPACE" }
-    fn log_label(&self) -> &'static str { "claude" }
-
+    crate::impl_host_config!("claude", "Claude");
 }
 
 
@@ -1184,38 +1179,9 @@ fn persist_touch_state_with_ctx(
         }
 }
 
-fn load_review_gate_disk_with_ctx(_repo_root: &Path, ctx: &StopContext) -> AgentDiskState<HookReviewDiskCore> {
-    match read_review_gate_file(&ctx.review_path) {
-        AgentDiskState::Ok(state) => return AgentDiskState::Ok(state),
-        AgentDiskState::Unreadable => return AgentDiskState::Unreadable,
-        AgentDiskState::Absent => {}
-    }
-    for legacy_path in [&ctx.legacy_review_gate_path, &ctx.legacy_review_flat_path] {
-        match read_review_gate_file(legacy_path) {
-            AgentDiskState::Ok(state) => {
-                return migrate_claude_review_gate_state_to_canonical(&ctx.review_path, &state);
-            }
-            AgentDiskState::Unreadable => return AgentDiskState::Unreadable,
-            AgentDiskState::Absent => {}
-        }
-    }
-    AgentDiskState::Absent
-}
 
-fn load_touch_state_disk_with_ctx(ctx: &StopContext) -> AgentDiskState<TouchState> {
-    load_touch_state_from_path(&ctx.touch_path)
-}
 
-fn clear_review_state_with_ctx(ctx: &StopContext) {
-    let _ = fs::remove_file(&ctx.review_path);
-    let _ = fs::remove_file(&ctx.legacy_review_gate_path);
-    let _ = fs::remove_file(&ctx.legacy_review_flat_path);
-}
 
-fn clear_touch_state_with_ctx(ctx: &StopContext) {
-    let _ = fs::remove_file(&ctx.touch_path);
-    let _ = fs::remove_file(&ctx.legacy_touch_path);
-}
 
 
 

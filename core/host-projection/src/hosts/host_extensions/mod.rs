@@ -1,38 +1,33 @@
-//! Host-specific extension points (ADR §2.1).
+//! Host extension implementations, organized by functionality.
 //!
-//! Single module containing all host-specific behavior.
-//! Core event pipeline lives in unified handlers (stop_dispatch, event_handlers);
-//! host differences (state management, tool mappings, signal extraction) live here
-//! as private implementation modules. The public API provides unified dispatch.
+//! Each host has its own module holding the `HostHookDispatcher` implementation.
+//! Shared logic lives in the parent module (`hosts/hook_dispatch.rs`).
 
 // ── Per-host implementations (private) ──
-mod claude_impl;
-mod codex_impl;
-mod cursor_impl;
-mod opencode_impl;
+mod claude;
+mod codex;
+mod cursor;
+mod opencode;
 
-// ── Public re-exports for external consumers ──
-// These are the public APIs that other modules need access to.
-// The goal is to eventually move all this logic into unified handlers.
+// ── Public re-exports ──
 
-/// Claude-specific implementations.
-pub mod claude {
-    pub use super::claude_impl::*;
+pub mod claude_impl {
+    pub use super::claude::*;
 }
 
-/// Codex-specific implementations.
-pub mod codex {
-    pub use super::codex_impl::*;
+/// Codex implementations.
+pub mod codex_impl {
+    pub use super::codex::*;
 }
 
-/// Cursor-specific implementations.
-pub mod cursor {
-    pub use super::cursor_impl::*;
+/// Cursor implementations.
+pub mod cursor_impl {
+    pub use super::cursor::*;
 }
 
-/// OpenCode-specific implementations.
-pub mod opencode {
-    pub use super::opencode_impl::*;
+/// OpenCode implementations.
+pub mod opencode_impl {
+    pub use super::opencode::*;
 }
 
 // ── Shared host extension utilities ──

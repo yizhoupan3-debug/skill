@@ -5,14 +5,11 @@
 | 类别 | 文档 | 说明 |
 |------|------|------|
 | **架构** | [adr/010-ideal-architecture-v10.md](adr/010-ideal-architecture-v10.md) | 当前权威架构规约：六层模型、DAG、L4 拆分计划 |
-| | [adr/008-seven-layer-architecture.md](adr/008-seven-layer-architecture.md) | ADR：七层架构分离决策（已落地） |
-| | [adr/007-dual-exit-gates.md](adr/007-dual-exit-gates.md) | ADR：双退出门机制决策（已落地） |
 | **宿主** | [hosts/_common.md](hosts/_common.md) | 四宿主共享内容（身份、路由、Python、进程管理） |
 | | [hosts/hook-hosts.md](hosts/hook-hosts.md) | Hook 宿主手册（Claude/Cursor/Codex 事件矩阵、锁序） |
 | | [hosts/opencode.md](hosts/opencode.md) | OpenCode 宿主操作手册 |
-| **运维** | [operations/index.md](operations/index.md) | 运维中枢：安装/升级、模块操作、状态管理、备份恢复、安全策略 |
-| **参考** | [office-document-clis.md](office-document-clis.md) | Office 文档 CLI 安装命令速查 |
-| **科研 Harness** | [research-harness.md](research-harness.md) | 科研 Harness 系统总览、研究工作区、日志体系 |
+| **运维** | [operations/index.md](operations/index.md) | 运维中枢：安装/升级、模块操作、状态管理、工具安装、安全策略 |
+| **科研** | [research-harness.md](research-harness.md) | 科研 Harness 系统总览、研究工作区、日志体系 |
 | | [research/routing-contracts.md](research/routing-contracts.md) | research-discovery / execution 路由契约 |
 
 ## 按角色阅读

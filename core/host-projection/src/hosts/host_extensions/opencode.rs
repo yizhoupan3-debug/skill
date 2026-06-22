@@ -41,16 +41,13 @@ pub const OPENCODE_HOOKS_REGISTERED_EVENTS: &[&str] = &[
     "shell.env",
 ];
 
-const OPENCODE_HOOK_STATE_UNREADABLE: &str =
-    "router-rs OPENCODE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions";
-
 /// Shared state configuration for opencode hook state.
 fn state_config() -> HookStateConfig {
     HookStateConfig {
         host_id: "opencode",
         state_dir_leaf: ".opencode",
         state_filename: "review-subagent-state.json",
-        unreadable_tag: OPENCODE_HOOK_STATE_UNREADABLE,
+        unreadable_tag: "router-rs OPENCODE_HOOK_STATE_UNREADABLE need=repair_hook_state_json_or_permissions",
     }
 }
 
@@ -90,25 +87,7 @@ pub struct OpencodeHookState {
 pub struct OpencodeHookDispatcher;
 
 impl HostHookConfig for OpencodeHookDispatcher {
-    fn host_id(&self) -> &'static str {
-        "opencode"
-    }
-
-    fn state_dir_leaf(&self) -> &'static str {
-        ".opencode"
-    }
-
-    fn hook_state_unreadable_tag(&self) -> &'static str {
-        OPENCODE_HOOK_STATE_UNREADABLE
-    }
-
-    fn session_namespace_env(&self) -> &'static str {
-        "ROUTER_RS_OPENCODE_SESSION_NAMESPACE"
-    }
-
-    fn log_label(&self) -> &'static str {
-        "opencode"
-    }
+    crate::impl_host_config!("opencode", "OpenCode");
 
     fn additional_context_max_bytes(&self) -> usize {
         640
@@ -125,7 +104,6 @@ impl HostHookConfig for OpencodeHookDispatcher {
     fn supports_subagent_stop(&self) -> bool {
         true
     }
-
 }
 
 impl HostHookDispatcher for OpencodeHookDispatcher {

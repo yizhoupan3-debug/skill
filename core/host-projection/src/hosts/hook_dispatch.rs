@@ -1661,19 +1661,19 @@ impl HostHookConfig for GenericHostConfig {
 /// All config values are derived from the host_id string — no hardcoded host names in code.
 ///
 /// Usage: `impl_host_config!("claude", "Claude");`
+#[macro_export]
 macro_rules! impl_host_config {
     ($id:expr, $label:expr) => {
         fn host_id(&self) -> &'static str { $id }
         fn state_dir_leaf(&self) -> &'static str { concat!(".", $id) }
         fn hook_state_unreadable_tag(&self) -> &'static str {
-            // Cannot use concat! with to_uppercase at compile time,
-            // so we hardcode the common pattern. New hosts add one line.
+            // Raw uppercase tag without "router-rs" prefix (callers format as needed).
             match $id {
-                "claude" => "router-rs CLAUDE_HOOK_STATE_UNREADABLE",
-                "cursor" => "router-rs CURSOR_HOOK_STATE_UNREADABLE",
-                "codex" => "router-rs CODEX_HOOK_STATE_UNREADABLE",
-                "opencode" => "router-rs OPENCODE_HOOK_STATE_UNREADABLE",
-                _ => "router-rs HOOK_STATE_UNREADABLE",
+                "claude" => "CLAUDE_HOOK_STATE_UNREADABLE",
+                "cursor" => "CURSOR_HOOK_STATE_UNREADABLE",
+                "codex" => "CODEX_HOOK_STATE_UNREADABLE",
+                "opencode" => "OPENCODE_HOOK_STATE_UNREADABLE",
+                _ => "HOOK_STATE_UNREADABLE",
             }
         }
         fn session_namespace_env(&self) -> &'static str {

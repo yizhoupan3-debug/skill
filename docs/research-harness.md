@@ -2,7 +2,7 @@
 parent: docs/README.md
 depends_on:
   - research/routing-contracts.md
-version: unified-v9
+version: unified-v9（精简版）
 ---
 
 ## 19. 科研 Harness 系统 (Research Harness)
@@ -145,74 +145,8 @@ alias_tokens:
 
 #### 19.4.3 barrier_escalation lane 详细契约
 
-这是 autoresearch 与 loop 工程统一的核心桥梁。
-
-**触发条件**（loop → autoresearch）：
-
-```
-on_verify_fail after retries exhausted
-    → closeout 记录含 "hard_barrier" 标签
-    → loop runner 检测到 consecutive_failures ≥ threshold
-    → 自动调用: autoresearch barrier <problem-description>
-```
-
-**执行流程**：
-
-```
-1. autoresearch barrier init
-   → 创建临时研究 workspace
-   → 填充 barrier description + 失败实验上下文
-   → 写入 research-state.yaml
-
-2. literature review (自动化学术检索)
-   → Semantic Scholar + arXiv HTTP API（research-harness 内置，无需 AI 路由）
-   → Top-2 draft claims 各有 3 篇相关论文结果
-   → 证据填入 BARRIER_REPORT.json 的 candidates.evidence
-
-3. hypothesis generation
-   → draft-claims from state
-   → 生成 3-5 候选假设 + 每条的 evidence 列表
-
-4. feasibility scan
-   → 对每个假设做 quick check
-   → 标记 high/medium/low 可行性
-
-5. return to loop
-   → 输出 structured barrier report:
-     - barrier: 原始问题
-     - attempted: 已尝试的方案
-     - candidates: 候选方案列表（含可行性评估）
-     - recommended: 推荐优先级
-   → loop runner 读取报告 → 选择候选 → 继续执行
-```
-
-**输出格式**：
-
-```json
-{
-  "schema_version": "barrier-report-v1",
-  "barrier": "原始问题描述",
-  "context": {
-    "loop_id": "loop-xxx",
-    "run_id": "run-yyy",
-    "action_id": "action-zzz",
-    "consecutive_failures": 3
-  },
-  "attempted": ["方法A: 失败原因", "方法B: 失败原因"],
-  "candidates": [
-    {
-      "id": "c1",
-      "hypothesis": "候选假设",
-      "confidence": "medium",
-      "evidence": ["paper1: xxx", "paper2: yyy"],
-      "expected_effort": "2h",
-      "risk": "low: 已有成熟工具链"
-    }
-  ],
-  "recommended": ["c1", "c3"],
-  "generated_at": "ISO8601"
-}
-```
+这是 autoresearch 与 loop 工程统一的核心桥梁，详见 `skills/autoresearch/SKILL.md` 中的 barrier escalation section。
+输出格式为 BARRIER_REPORT.json（schema_version: barrier-report-v1）。
 
 #### 19.4.4 后端实现
 
@@ -276,38 +210,14 @@ artifacts/research-log/
 
 完整 schema 定义见 `core/research-harness/src/log/db.rs` 中的 `SCHEMA_VERSION` 常量和建表语句。
 
-**操作命令**（通过 `cargo run -p research-harness --bin research-log` 调用，亦可从 `cargo run -p research-harness --bin autoresearch -- log:*` 桥接）：
-
-```
-cargo run -p research-harness --bin research-log -- record [--direction <name>] [--question <text>] [--entry-point <manual|barrier_escalation|loop>] [--barrier-id <id>]
-                                                                 # 记录当前探索（文字层 + SQLite）
-cargo run -p research-harness --bin research-log -- search <query> [--direction <dir>] [--status <active|abandoned|concluded>] [--limit <N>]
-                                                                 # 跨方向 FTS5 检索
-cargo run -p research-harness --bin research-log -- add-finding --entry-id <id> --kind <kind> --content <text> [--confidence <0-1>]
-                                                                 # 记录新发现/insight（kind: insight | claim | risk | todo）
-cargo run -p research-harness --bin research-log -- connect <log-id-a> <log-id-b> [--relation <text>] [--notes <text>]
-                                                                 # 连接两个研究方向
-cargo run -p research-harness --bin research-log -- barrier [--loop-id <id>]                         # 查询 barrier 报告列表（按 loop 或全部）
-cargo run -p research-harness --bin research-log -- render <entry-id> [--write] [--output <path>]    # 渲染单篇日志为 Markdown
-cargo run -p research-harness --bin research-log -- export --format <json|csv|obsidian> [--output <path>]
-                                                                 # 导出日志集（JSON / CSV / Obsidian MD）
-cargo run -p research-harness --bin research-log -- status                                           # 显示日志库状态（大小、条目数、WAL 模式）
-cargo run -p research-harness --bin research-log -- consolidate                                      # 整理 activity log 文件
-
-**Knowledge Graph 命令（§19.13）**：
-cargo run -p research-harness --bin research-log -- neighbors <entry-id> [--relation] [--limit]       # 显示 entry 的直接连接
-cargo run -p research-harness --bin research-log -- path --from <id> --to <id> [--max-depth]          # BFS 最短路径
-cargo run -p research-harness --bin research-log -- viz [--entry-id] [--max-depth] [--format text|dot] # 知识图谱可视化（ASCII / Graphviz DOT）
-cargo run -p research-harness --bin research-log -- graph-stats                                       # 全图统计（节点/边/密度/关系分布）
-cargo run -p research-harness --bin research-log -- route --barrier-id <id> [--max-depth]              # Barrier 路径追溯
-cargo run -p research-harness --bin research-log -- extract-entities <entry-id>                        # 自动提取 entry 中的知识实体
-cargo run -p research-harness --bin research-log -- add-entity <name> [--kind] [--description]         # 手动添加知识实体
-cargo run -p research-harness --bin research-log -- search-entities <query> [--limit]                  # FTS5 实体搜索
-cargo run -p research-harness --bin research-log -- entry-entities <entry-id>                          # 显示 entry 关联的实体
-cargo run -p research-harness --bin research-log -- hub-register [--path] [--name]                     # 注册到跨工作区 Hub
-cargo run -p research-harness --bin research-log -- hub-search <query> [--limit]                       # 跨工作区 FTS5 搜索
-cargo run -p research-harness --bin research-log -- hub-list                                           # 列出已注册的工作区
-```
+**操作命令**（通过 `cargo run -p research-harness --bin research-log -- <subcommand>` 调用）：
+- `record` — 记录探索
+- `search <query>` — FTS5 检索
+- `add-finding --entry-id <id>` — 记录发现
+- `connect <a> <b>` — 连接两个方向
+- `barrier [--loop-id]` — 查询 barrier 报告
+- `export --format <json|csv|obsidian>` — 导出日志
+- `neighbors/path/viz/graph-stats/route` — 知识图谱遍历（见 §19.13）
 
 > **注意**：`log:route <barrier-id>`（从 barrier 追溯完整研究路径）已通过 `research-log route --barrier-id <id>` 实现，见 §19.13。
 
@@ -401,57 +311,20 @@ active_hypothesis:
 
 #### 19.7.2 drift 检测算法
 
-```
-function detect_claim_drift(state):
-    1. 比较 current_direction.original_question 与 active_hypothesis 的文本相似度
-       - 若 < 0.5 → 标记为 structure drift
-    2. 检查最近 N 条 run_history 是否在 falsifiable_prediction 的 perimeter 内
-       - 若 ≥2 条超出 → 标记为 perimeter breach
-    3. 检查最近 N 条 run_history 是否仍回答 original_question
-       - 若描述的问题与 original_question 不同 → 标记为 question drift
-    4. 聚合 drift_score = w1*structure + w2*perimeter + w3*question
-    5. 若 drift_score > DRIFT_THRESHOLD → 输出警告 + 追加 deviation_log
-```
+对 `current_direction.original_question` 与 `active_hypothesis` 做三类偏移检测：
+- **structure drift**：原始问题与当前假设的语义相似度 < 0.5
+- **perimeter breach**：最近运行记录超出 falsifiable_prediction 的 perimeter
+- **question drift**：运行描述的问题与 original_question 偏离
+
+聚合三项加权得分得到 `drift_score`，超过阈值则输出警告并追加 `deviation_log`。
 
 #### 19.7.3 阈值与响应
 
-| drift_score | 级别 | 响应 |
-|-------------|------|------|
-| < 0.3 | 正常 | 静默记录 |
-| 0.3–0.6 | 注意 | 输出提示 + 追加 deviation_log |
-| 0.6–0.8 | 警告 | 输出警告 + `deviation_warning_count++` |
-| ≥ 0.8 或 `deviation_warning_count ≥ 3` | 强制 | 阻断执行，要求用户确认 |
+`drift_score` 分为四个级别：< 0.3 静默记录，0.3–0.6 输出提示，0.6–0.8 警告并递增 `deviation_warning_count`，≥ 0.8 或累计警告 ≥ 3 阻断执行并等待确认。
 
-#### 19.7.4 reflect 命令的 drift 输出格式
+#### 19.7.4 循环中的 drift 检测
 
-```
-╔══════════════════════════════════════════╗
-║         Claim Drift 检测报告             ║
-╠══════════════════════════════════════════╣
-║ 原始问题: XXX 方法能否提升 YYY 泛化性能  ║
-║ 当前假设: ZZZ 条件下 accuracy 提升 5%    ║
-║ ────────────────────────────────────────── ║
-║ 结构偏移: 0.1 (正常)                      ║
-║ 边界违例: 0.7 ⚠️ 最近运行超出 perimeter  ║
-║ 问题漂移: 0.2 (正常)                      ║
-║ ────────────────────────────────────────── ║
-║ 综合评分: 0.45 (注意)                     ║
-║ 累计警告: 2 / 3                           ║
-║ ────────────────────────────────────────── ║
-║ 建议: 检查实验是否仍然在 perimeter 内     ║
-╚══════════════════════════════════════════╝
-```
-
-#### 19.7.5 循环中的 drift 检测
-
-当 autoresearch 被 loop runner 通过 barrier escalation 调用时，drift 检测有额外规则：
-
-```
-loop barrier escalation → autoresearch init
-    → 自动执行 drift 检测（以 barrier 描述为 original_question）
-    → 若 drift_score > 0.6 → 追加到 barrier report 的 attempted 列表
-    → 重新聚焦后再执行 external_research
-```
+当 autoresearch 被 loop runner 通过 barrier escalation 调用时，自动执行 drift 检测（以 barrier 描述为 original_question），若 drift_score > 0.6 则追加到 barrier report 的 attempted 列表。
 
 ---
 
@@ -488,9 +361,9 @@ loop barrier escalation → autoresearch init
 
 > 本节定义 autoresearch 与 loop 工程统一的**核心契约**。
 > 背景：当 loop-auto 循环遇到硬指标突破不了时，需要自动升级为系统化研究，
-> 找到候选方案后恢复循环。这是本文档新增的最重要的框架级变更。
+> 找到候选方案后恢复循环。
 
-#### 19.9.1 Loop 模式 Catalog — 新增
+#### 19.9.1 Loop 模式 Catalog
 
 loop-engine crate 的 loop mode catalog（见 `core/loop-engine/src/`）中应增加：
 
@@ -503,23 +376,7 @@ loop-engine crate 的 loop mode catalog（见 `core/loop-engine/src/`）中应�
 
 #### 19.9.2 LOOP_REGISTRY.json 扩展
 
-```json
-{
-  "loop_id": "my-experiment",
-  "profile": "loop-auto",
-  "research_enabled": true,            // 新字段：启用 research escalation
-  "research": {
-    "barrier_threshold": 3,             // 连续失败 N 次后触发
-    "escalation_target": "autoresearch",
-    "max_research_time_min": 30,        // 研究阶段最长耗时
-    "auto_resume": true,                // 研究产出候选后自动恢复循环
-    "require_human_approval": false      // 是否需要在候选方案上人工确认
-  },
-  "scope_based_safety": { ... },
-  "cost_budget": { ... },
-  "notification": { ... }
-}
-```
+在 `configs/framework/LOOP_REGISTRY.json` 中增加 `research` 节字段：`barrier_threshold`（连续失败 N 次后触发）、`escalation_target`、`max_research_time_min`、`auto_resume`、`require_human_approval`。
 
 #### 19.9.3 状态真源与路径
 
@@ -529,53 +386,23 @@ artifacts/
 │   ├── LOOP_RUN_STATE.json
 │   ├── evidence/<action-id>/
 │   └── reports/<run-id>.md
-│
 ├── research-barrier/                   ← barrier 爆发的研究工件
 │   └── <barrier-id>/
 │       ├── BARRIER_REPORT.json         ← §19.4.3 格式
 │       ├── research-state.yaml         ← autoresearch 状态
 │       └── smoke-test-results.jsonl    ← barrier 触发时的快照
-│
 ├── research-log/                        ← §19.5 分层日志
-│   ├── INDEX.md
-│   ├── YYYY-MM/
-│   └── tags/
-│
-└── current/<task_id>/                  ← 现有 closeout 路径
+└── current/<task_id>/                   ← 现有 closeout 路径
     └── closeout/<task_id>.json
 ```
 
-#### 19.9.4 执行流程（完整）
+#### 19.9.4 执行流程
 
-```
-Loop Runner 执行 action
-    → action FAIL × N (N ≡ barrier_threshold)
-    → runner 检测到 consecutive_failures ≥ N
-    → 检查 LOOP_REGISTRY.research_enabled
-    →
-    ├── enabled:
-    │   → 构造 barrier description（含 loop_id + run_id + action_id + 失败上下文）
-    │   → shell: autoresearch barrier <description>
-    │   → autoresearch 执行 §19.4.3 barrier_escalation 流程
-    │   → 产出 BARRIER_REPORT.json 到 artifacts/research-barrier/<barrier-id>/
-    │   → runner 读取 BARRIER_REPORT.json
-    │   → 若 auto_resume:
-    │       → 从 recommended 选第一个
-    │       → 构造新 action（safety 降一级）
-    │       → 继续 DISPATCHING
-    │   → 若 !auto_resume:
-    │       → ESCALATED（等人）
-    │
-    └── disabled:
-        → 按现有 escalation 路径（retry / escalate / record_and_skip）
-```
+Loop Runner 检测到 consecutive_failures ≥ barrier_threshold 后，若 LOOP_REGISTRY.research_enabled 为 true，则构造 barrier description 并调用 `autoresearch barrier <description>`。autoresearch 执行 barrier escalation 流程（§19.4.3）并产出 BARRIER_REPORT.json。runner 读取报告后根据 auto_resume 配置自动选择推荐候选恢复循环，或进入 ESCALATED（等人）状态。若 research_enabled 为 false，则按现有 escalation 路径处理。
 
 #### 19.9.5 Loop 安全越界保护
 
-当 research escalation 修改了 loop scope 外的文件时：
-- **不阻止**（研究阶段可能需要修改配置/依赖）
-- 但 barrier 报告中要明确标注 "out_of_scope_changes: [文件列表]"
-- 恢复循环时，loop runner 对 out-of-scope 变更做 `git stash`（不销毁，仅隔离）
+research escalation 允许修改 loop scope 外的文件，但 barrier 报告中需标注 out_of_scope_changes。恢复循环时 loop runner 对 out-of-scope 变更做 `git stash`（不销毁，仅隔离）。
 
 ---
 
@@ -617,86 +444,17 @@ Loop Runner 执行 action
 
 ### 19.13 Research Knowledge Graph
 
-> 本节定义 Research Knowledge Graph（RKG）的功能契约：在扁平日志之上建立可查询的图结构，
-> 包括条目关系遍历、知识实体提取、跨工作区索引、图可视化和 barrier 路径追溯。
+> 在扁平日志之上建立可查询的图结构，包括条目关系遍历、知识实体提取、跨工作区索引、图可视化和 barrier 路径追溯。
 
 #### 19.13.1 系统设计
 
-```
-连接存储（connections 表）
-    │ 条目 A ──[supports]──→ 条目 B
-    │ 条目 A ──[extends]───→ 条目 C
-    ▼
-图遍历引擎（graph.rs）
-    │ load_full_graph / load_subgraph
-    │ get_neighbors / find_path（BFS）
-    │ bfs_traverse / dfs_traverse
-    │ trace_barrier_route
-    ▼
-实体提取（extract.rs）
-    │ 5 组 regex 模式：method / dataset / metric / model / tool
-    │ entities 表 + entity_relations 表 + entities_fts
-    ▼
-跨工作区 Hub（hub.rs）
-    │ ~/.claude/research-knowledge-hub.db
-    │ 跨工作区搜索 + 统一索引
-    ▼
-可视化（viz 命令）
-    │ ASCII box-drawing / Graphviz DOT
-```
+系统由五层组成：connections 存储（条目间关系）、graph 遍历引擎（BFS/最短路径等）、实体提取（5 组 regex）、跨工作区 Hub（`~/.claude/research-knowledge-hub.db`）、可视化（ASCII / Graphviz DOT）。完整架构见 `core/research-harness/src/log/`。
 
 #### 19.13.2 核心数据结构
 
-**connections 表扩展**（v2→v3 migration）：
-- `weight REAL DEFAULT 1.0` — 边权重，影响图遍历优先级
-- `confidence REAL` — 关系置信度 0.0-1.0
+connections 表（v2→v3 migration）增加 `weight` 和 `confidence` 字段。entities、entity_relations、entry_entities 三表的完整 schema 见 `core/research-harness/src/log/db.rs` 中的建表语句。
 
-**entities 表**：
-```sql
-CREATE TABLE entities (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    kind TEXT NOT NULL,  -- method|dataset|theorem|metric|concept|tool|author|model|other
-    description TEXT,
-    metadata TEXT,        -- JSON
-    created_at TEXT NOT NULL
-);
-CREATE VIRTUAL TABLE entities_fts USING fts5(name, description, tokenize='unicode61');
-```
-
-**entity_relations 表**：
-```sql
-CREATE TABLE entity_relations (
-    id INTEGER PRIMARY KEY,
-    entity_id_a INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
-    entity_id_b INTEGER NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
-    relation TEXT NOT NULL,  -- uses|trains-on|evaluates|improves|depends-on|contradicts|is-a|part-of
-    entry_id TEXT REFERENCES entries(id),
-    confidence REAL,
-    metadata TEXT,
-    created_at TEXT NOT NULL,
-    UNIQUE(entity_id_a, entity_id_b, relation)
-);
-```
-
-**entry_entities 表**（条目 ↔ 实体关联）：
-```sql
-CREATE TABLE entry_entities (
-    entry_id TEXT NOT NULL REFERENCES entries(id),
-    entity_id INTEGER NOT NULL REFERENCES entities(id),
-    role TEXT NOT NULL DEFAULT 'mentioned',  -- primary|mentioned|derived|compared
-    PRIMARY KEY (entry_id, entity_id)
-);
-```
-
-#### 19.13.3 图遍历算法
-
-- **BFS 邻接加载**: 从 connections 表加载全部连接，构建内存邻接表（`HashMap<String, Vec<(neighbor, relation, weight, confidence)>>`）
-- **最短路径**: BFS 无权最短路径，支持 `max_depth` 上限
-- **子图抽取**: 从中心节点出发 BFS N 跳，过滤关联连接
-- **Barrier 追溯**: 从 barrier_reports 表出发，找到关联条目，加载子图
-
-#### 19.13.4 CLI 命令
+#### 19.13.3 CLI 命令
 
 所有命令通过 `research-log <subcommand>` 或 `autoresearch log:<subcommand>` 调用：
 
@@ -717,15 +475,11 @@ CREATE TABLE entry_entities (
 | `hub-search <query>` | 跨工作区搜索 |
 | `hub-list` | 列出工作区 |
 
-#### 19.13.5 跨工作区 Hub
+#### 19.13.4 跨工作区 Hub 与实体提取
 
-Hub 数据库位于 `~/.claude/research-knowledge-hub.db`，不绑定到单个 workspace。
-schema 包含 `workspace_index`、`hub_entries`、`hub_entries_fts` 三张核心表。
-用作"全局研究记忆"——跨项目搜索相关的工作、方法、线索。
+Hub 数据库位于 `~/.claude/research-knowledge-hub.db`，用作全局研究记忆。schema 包含 `workspace_index`、`hub_entries`、`hub_entries_fts` 三张核心表。
 
-#### 19.13.6 实体提取策略
-
-无外部 NLP 依赖。5 组 hardcoded regex 覆盖量化金融/ML 常见 vocabulary：
+实体提取无外部 NLP 依赖。5 组 hardcoded regex 覆盖量化金融/ML 常见 vocabulary：
 - **method** (30+): CNN, LSTM, Transformer, EWMA, PCA, GARCH, Attention, LoRA...
 - **dataset** (15+): SQuAD, ImageNet, MNIST, CIFAR, GLUE, CRSP, Compustat...
 - **metric** (35+): accuracy, F1, AUC, Sharpe, IC, Rank IC, MSE, KL divergence...

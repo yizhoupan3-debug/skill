@@ -4,7 +4,6 @@ scope: modular-ops
 depends_on:
   - ../README.md
   - ../../configs/framework/RUNTIME_REGISTRY.json
-  - ../../artifacts/current/roadmap-v9.md
 ---
 
 # 运维手册（按功能模块）
@@ -69,8 +68,6 @@ bash scripts/install-ooxml-tool.sh
 bash scripts/install-ppt-tool.sh
 export PATH="$HOME/.local/bin:$PATH"
 ```
-
-详见 [`office-document-clis.md`](../office-document-clis.md)。
 
 ### 性能基准（hook）
 

@@ -220,3 +220,35 @@ skills/my-skill/
 ```
 
 主文件通过 [`SKILL_MAINTENANCE_GUIDE.md`](skills/SKILL_MAINTENANCE_GUIDE.md) 引用，Claude 仅在需要时读取。
+
+### 改 Skill 必查
+
+- 触发词是否变化 → 更新 description
+- 边界是否变化 → 同步改 `SKILL_ROUTING_RUNTIME.json` / `SKILL_MANIFEST.json`，再 `framework skills refresh --write --write-companions`
+- 是否引入第二份 live source → 删除多余副本
+- 是否需要刷新 Claude 可见入口 → 运行 `codex host-integration install-skills --repo-root "$PWD" install`
+
+### 边界重叠处理
+
+默认 **incumbent-first**：优先修改旧 skill。仅当 owner/gate/overlay 角色变化、运行时差异明显、或旧 skill 触发精度严重受损时才新建。
+
+### Description 写法
+
+```
+[角色] + [领域名词] + [用户自然说法] + [边界词]
+```
+
+- 第一行 brief：≤ 120 chars
+- 整体推荐：180–450 chars，> 600 chars 视为偏重
+- 覆盖用户真实说法（中英混合）
+- session_start 为 required/preferred 时，必须包含 "每轮对话开始 / first-turn / conversation start"
+
+### Git 安全基线
+
+该仓库高频变更且可能同时存在多个 worktree。做清理、切分提交、rebase、stash 前，先运行：
+
+```bash
+git status --short --branch
+git diff --stat
+git worktree list --porcelain
+```
