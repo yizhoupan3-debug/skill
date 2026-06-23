@@ -14,23 +14,23 @@ pub use framework_extra::statusline;
 pub use framework_extra::util;
 
 // ── Modules that remain in runtime-core (deep coupling) ──
-pub use framework_runtime::constants;
-pub use framework_runtime::evolution_observer;
-pub use framework_runtime::io_utils;
-pub use framework_runtime::json_io;
-pub use framework_runtime::json_value;
-pub use framework_runtime::live_execute;
+pub use fr_utils::constants;
+pub use fr_exec::evolution_observer;
+pub use fr_utils::io_utils;
+pub use fr_utils::json_io;
+pub use fr_utils::json_value;
+pub use fr_exec::live_execute;
 pub use framework_extra::orchestration_controller;
-pub use framework_runtime::pre_tool_use_guard;
+pub use fr_contracts::pre_tool_use_guard;
 pub use framework_kernel::repo_roots;
-pub use framework_runtime::runtime_view;
-pub use framework_runtime::sandbox_control;
+pub use fr_exec::runtime_view;
+pub use fr_exec::sandbox_control;
 pub mod stdio_dispatch;
-pub use framework_runtime::stdio_op_registry;
-pub use framework_runtime::trace_attach;
-pub use framework_runtime::trace_stream_io;
-pub use framework_runtime::trace_transport;
-pub use framework_runtime::types;
+pub use fr_utils::stdio_op_registry;
+pub use fr_exec::trace_attach;
+pub use fr_exec::trace_stream_io;
+pub use fr_exec::trace_transport;
+pub use fr_utils::types;
 
 // Re-export json_io functions needed by cli/common.rs (cycle-breaking extraction).
 pub use json_io::{parse_json_input, print_json_value};

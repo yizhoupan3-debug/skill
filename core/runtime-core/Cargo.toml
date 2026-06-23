@@ -16,8 +16,12 @@ core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 framework-extra = { path = "../framework-extra" }
 framework-kernel = { path = "../framework-kernel" }
+framework-runtime-hooks = { path = "../framework-runtime-hooks" }
 framework-maint = { path = "../../tools/framework-maint" }
 host-projection = { path = "../host-projection" }
+fr-utils = { path = "../fr-utils" }
+fr-contracts = { path = "../fr-contracts" }
+fr-exec = { path = "../fr-exec" }
 routing-engine = { path = "../routing-engine" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-exit-gate = { path = "../runtime-exit-gate" }
@@ -42,7 +46,6 @@ tracing.workspace = true
 which.workspace = true
 ctor = "0.2"
 codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
-framework-runtime = { path = "../framework-runtime" }
 loop-engine = { path = "../loop-engine" }
 
 [build-dependencies]

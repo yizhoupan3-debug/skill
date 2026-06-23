@@ -549,22 +549,6 @@
             "notes": "冷表 skill；manifest L4 层路由；AGENTS 要求显式 $python-env-management"
         },
         {
-            "id": "discussx-slash-cursor",
-            "category": "explicit-framework-command",
-            "task": "/discussx",
-            "host_id": "cursor",
-            "expected_owner": "discussx",
-            "notes": "My lifecycle discuss entry on cursor"
-        },
-        {
-            "id": "planx-slash-cursor",
-            "category": "explicit-framework-command",
-            "task": "/planx",
-            "host_id": "cursor",
-            "expected_owner": "planx",
-            "notes": "My lifecycle plan entry on cursor"
-        },
-        {
             "id": "fuzzy-rescue-code-bug-review",
             "category": "fuzzy-rescue",
             "task": "帮我 review 这段代码，找出 bug 和逻辑错误",

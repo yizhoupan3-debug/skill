@@ -28,11 +28,9 @@
       "entry_map": "skills/research-discovery/SKILL.md"
     },
     "implementation_loadout": {
-      "description": "My execution stack: implementx, verifyx, code-review-deep, gitx.",
+      "description": "My execution stack: code-review-deep, gitx.",
       "tier_activation": "explicit_opt_in",
       "skill_slugs": [
-        "implementx",
-        "verifyx",
         "code-review-deep",
         "gitx",
         "plan-mode"

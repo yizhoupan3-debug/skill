@@ -5,7 +5,7 @@ description: |
   默认 findings-only，可选自动修复模式。
   与 code-review-deep 互补：review = 审查专家，simplify = 质量门。
   不用于找 bug 或安全漏洞——那属于 code-review-deep。
-  集成框架生命周期：implementx → simplify → verifyx。
+  集成框架生命周期：实现 → simplify → 验证。
 routing_layer: L2
 routing_owner: owner
 routing_gate: none
@@ -362,19 +362,19 @@ make test
 | **审查立场** | hostile-but-fair 对抗式 | 行为守恒 constructive |
 | **子代理** | 并行 reviewer（read-only） | 三维度并行（read-only findings） |
 | **产出** | severity-sorted findings | dimensional findings + 修复建议 |
-| **生命周期位置** | implementx 前后均可 | implementx → simplify → verifyx |
+| **生命周期位置** | 前后均可 | 实现 → simplify → 验证 |
 | **风险等级** | medium | low（默认）/ medium（--apply） |
 
 ### 串联使用
 
 ```
-/implementx (实现)
+/实现 (实现)
     ↓
 /code-review-deep (深度审查 — 正确性/安全)
     ↓
 /simplify (质量门 — 复用/质量/效率)
     ↓
-/verifyx (验证)
+/验证 (验证)
     ↓
 commit
 ```

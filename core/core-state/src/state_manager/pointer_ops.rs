@@ -249,7 +249,7 @@ pub fn sync_task_pointers_after_goal_drive(
     Ok(())
 }
 
-/// Remove active/focus pointers when they reference `task_id` (verifyx / complete / clear).
+/// Remove active/focus pointers when they reference `task_id` (complete / clear).
 pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Result<(), String> {
     // Update TASK_POINTERS.json (Phase 3C consolidated file)
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");

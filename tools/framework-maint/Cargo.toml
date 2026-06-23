@@ -15,7 +15,6 @@ host-projection = { path = "../../core/host-projection" }
 
 # L4
 framework-extra = { path = "../../core/framework-extra" }
-framework-runtime = { path = "../../core/framework-runtime" }
 
 # workspace
 serde_json.workspace = true

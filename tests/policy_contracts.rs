@@ -81,10 +81,6 @@ const RETIRED_RUNTIME_OWNED_SKILL_SLUGS: &[&str] = &[
 ];
 
 const FRAMEWORK_COMMAND_IDS: &[&str] = &[
-    "discussx",
-    "planx",
-    "implementx",
-    "verifyx",
     "deepinterview",
     "gitx",
     "update",
@@ -194,7 +190,7 @@ fn plan_mode_keeps_review_optional_and_review_only() {
         "Continuity artifacts",
         "Closeout",
         "Skill Routing",
-        "/discussx",
+        "Goal/RFV",
     ] {
         assert!(agents.contains(marker), "missing AGENTS marker: {marker}");
     }
@@ -1315,8 +1311,8 @@ fn host_projection_narrative_covers_installable_hosts() {
         .as_str()
         .expect("default_lifecycle_paragraph");
     assert!(
-        default.contains("/discussx"),
-        "default_lifecycle_paragraph must reference /discussx"
+        default.contains("My lifecycle") || default.contains("Default lifecycle"),
+        "default_lifecycle_paragraph must reference My lifecycle or Default lifecycle"
     );
     let by_host = narrative["lifecycle_by_host"]
         .as_object()
@@ -1340,8 +1336,8 @@ fn host_projection_narrative_covers_installable_hosts() {
             .and_then(Value::as_str)
             .unwrap_or_else(|| panic!("lifecycle_by_host missing installable host {host_id}"));
         assert!(
-            paragraph.contains("/discussx") || paragraph.contains("Default lifecycle"),
-            "{host_id}: lifecycle paragraph must reference My lifecycle (/discussx or Default lifecycle)"
+            paragraph.contains("My lifecycle") || paragraph.contains("Default lifecycle"),
+            "{host_id}: lifecycle paragraph must reference My lifecycle or Default lifecycle"
         );
     }
 }
@@ -2019,73 +2015,6 @@ fn framework_aliases_reference_manifest_skills() {
             );
         }
     }
-}
-
-/// `research_contract` is narrative for hosts/docs; router-rs Execute embeds deep prompt text in
-/// `runtime_ops.inc` instead of parsing this JSON at runtime.
-#[test]
-fn my_goal_persistence_contract_documents_execution_zone() {
-    let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
-    let gp = registry
-        .get("framework_commands")
-        .and_then(|fc| fc.get("implementx"))
-        .and_then(|g| g.get("goal_persistence"))
-        .expect("framework_commands.implementx.goal_persistence");
-    let eps = gp
-        .get("execution_entrypoints")
-        .and_then(|v| v.as_array())
-        .expect("execution_entrypoints array");
-    assert!(eps.iter().any(|v| v.as_str() == Some("/implementx")));
-    assert!(eps.iter().any(|v| v.as_str() == Some("/verifyx")));
-    let leader = gp
-        .get("continuation_hook_leader")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    assert!(
-        leader.contains("framework_goal_drive") && !leader.contains("GOAL_CONTINUE"),
-        "continuation_hook_leader should be stdio-only: {leader}"
-    );
-    assert!(
-        registry
-            .get("framework_commands")
-            .and_then(|fc| fc.get("autopilot"))
-            .is_none()
-    );
-}
-
-/// Legacy GSD framework_command removed; My implementx is the published execution surface.
-#[test]
-fn my_framework_commands_exclude_legacy_gsd() {
-    let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
-    assert!(
-        registry["framework_commands"].get("gsd").is_none(),
-        "framework_commands.gsd must be removed"
-    );
-    let my_impl = &registry["framework_commands"]["implementx"];
-    assert!(
-        my_impl
-            .get("surface_publish")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true),
-        "implementx defaults to surface_publish true"
-    );
-}
-
-#[test]
-fn discussx_skill_forbids_pre_exec_drive_until_done_true() {
-    let text = read_text(&project_root().join("skills/discussx/SKILL.md"));
-    assert!(
-        !text.contains("\"drive_until_done\":true"),
-        "discussx must not embed drive_until_done:true in stdio example"
-    );
-    assert!(
-        !text.contains("\"drive_until_done\": true"),
-        "discussx must not embed drive_until_done: true in stdio example"
-    );
-    assert!(
-        text.contains("drive_until_done: false") || text.contains("drive_until_done\": false"),
-        "discussx must show drive_until_done:false"
-    );
 }
 
 fn key_index(keys: &[serde_json::Value], name: &str) -> usize {

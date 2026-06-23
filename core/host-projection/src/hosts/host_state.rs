@@ -69,8 +69,6 @@ pub fn load_touch_state_from_path(touch_path: &Path) -> AgentDiskState<TouchStat
 /// Determine if review gate should sync on UserPromptSubmit.
 pub fn should_sync_review_gate_on_user_prompt(repo_root: &Path, prompt: &str) -> bool {
     core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt)
-        || core_policy::hook_common::is_framework_goal_entry_prompt(prompt)
-        || core_policy::hook_common::is_my_pre_execution_entry_prompt(prompt)
         || core_policy::hook_common::is_narrow_review_prompt(prompt)
         || core_policy::hook_common::is_review_prompt(prompt)
         || core_policy::hook_common::has_override(prompt)

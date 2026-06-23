@@ -204,7 +204,7 @@ fn install_native_integration_idempotent() {
     );
     write_text(
         &repo_root.join("configs/framework/RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v2","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md","host_entrypoints":{"codex":"/implementx"}}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v2","framework_commands":{"gitx":{"canonical_owner":"gitx","skill_path":"skills/gitx/SKILL.md","host_entrypoints":{"codex":"/gitx"}}}}"#,
     );
     write_text(
         &repo_root.join("skills/optional-heavy/SKILL.md"),
@@ -2083,7 +2083,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
             },
             "host_projections": {"cursor": {"profile_id": "repo-cursor"}},
             "workspace_bootstrap_defaults": {"skills": {"source_rel": "repo-skills"}},
-            "framework_commands": {"implementx": {"canonical_owner": "repo-owner"}}
+            "framework_commands": {"gitx": {"canonical_owner": "repo-owner"}}
         }))
         .unwrap(),
     );
@@ -2093,7 +2093,7 @@ fn runtime_registry_prefers_repo_local_registry_for_explicit_repo_root() {
         "repo-cursor"
     );
     assert_eq!(
-        payload["framework_commands"]["implementx"]["canonical_owner"],
+        payload["framework_commands"]["gitx"]["canonical_owner"],
         "repo-owner"
     );
 }
@@ -2104,20 +2104,19 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
     let aliases = &payload["framework_commands"];
     assert!(aliases.get("autopilot").is_none());
     assert!(aliases.get("gsd").is_none());
-    assert_eq!(aliases["implementx"]["canonical_owner"], "implementx");
+    assert_eq!(aliases["gitx"]["canonical_owner"], "gitx");
     assert_eq!(
-        aliases["implementx"]["host_entrypoints"]["codex"],
-        "/implementx"
+        aliases["gitx"]["host_entrypoints"]["codex"],
+        "/gitx"
     );
     assert_eq!(
-        aliases["implementx"]["host_entrypoints"]["cursor"],
-        "/implementx"
+        aliases["gitx"]["host_entrypoints"]["cursor"],
+        "/gitx"
     );
-    let implementx_eps = aliases["implementx"]["goal_persistence"]["execution_entrypoints"]
+    let gitx_eps = aliases["gitx"]["goal_persistence"]["execution_entrypoints"]
         .as_array()
-        .expect("implementx execution_entrypoints should be an array");
-    assert!(implementx_eps.contains(&json!("/implementx")));
-    assert!(implementx_eps.contains(&json!("/verifyx")));
+        .expect("gitx execution_entrypoints should be an array");
+    assert!(gitx_eps.contains(&json!("/gitx")));
     assert_eq!(
         aliases["deepinterview"]["host_entrypoints"]["codex"],
         "/deepinterview"
@@ -2174,9 +2173,9 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         ])
     );
     assert!(payload.get("mcp_clients").is_none());
-    let implementx = &aliases["implementx"];
-    assert_eq!(implementx["canonical_owner"], "implementx");
-    let gp = implementx["goal_persistence"]
+    let gitx_cmd = &aliases["gitx"];
+    assert_eq!(gitx_cmd["canonical_owner"], "gitx");
+    let gp = gitx_cmd["goal_persistence"]
         .as_object()
         .expect("goal_persistence");
     let leader = gp

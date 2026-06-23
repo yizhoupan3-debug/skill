@@ -644,8 +644,6 @@ fn framework_command_aliases_require_literal_entrypoints() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
     let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
-    assert!(records.iter().any(|record| record.slug == "implementx"));
-    assert!(records.iter().any(|record| record.slug == "discussx"));
     assert!(!records.iter().any(|record| record.slug == "autopilot"));
     assert!(records.iter().any(|record| record.slug == "deepinterview"));
     assert!(records.iter().any(|record| record.slug == "gitx"));
@@ -670,13 +668,13 @@ fn framework_command_aliases_require_literal_entrypoints() {
         Some(&runtime_path),
         None,
         None,
-        "/implementx",
-        "alias-my-implement",
+        "/gitx",
+        "alias-my-gitx",
         true,
         true,
     )
-    .expect("route explicit my-implement alias");
-    assert_eq!(my_exec.selected_skill, "implementx");
+    .expect("route explicit gitx alias");
+    assert_eq!(my_exec.selected_skill, "gitx");
 
     let team_alias_err = crate::framework_runtime::build_framework_alias_envelope(
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),

@@ -14,7 +14,7 @@
 | **末条收口** | 调研合成 + 工作区无意外改动（`git status --porcelain` 为空，或输出仅含 `overview` 已声明允许回写的路径，须与窄例外单句一致） | 计划 vs 实际 + **Git 状态证据**（如 `git status --short --branch`、`git diff --stat`；宿主支持时可用 `/gitx plan`） |
 | **下游** | 完成后**另开** `plan_profile: execution`（或缺省）写实现 todos | 通常即为终态；如再分阶段，可拆为多份顺序 `execution` 计划 |
 
-**与 lifecycle 执行区衔接**：`plan_profile: research` **不得**与宏任务写入在同一回合、同一武装语义下混用；调研收口后**另开** execution（或缺省）计划，或用户显式 `/implementx` 启动 goal。execution 的 `Done when` / Horizon 可与 `GOAL_STATE.json` 契约对齐。宿主同轮混写行为见 [`docs/hosts/`](../../../docs/hosts/)。
+**与 lifecycle 执行区衔接**：`plan_profile: research` **不得**与宏任务写入在同一回合、同一武装语义下混用；调研收口后**另开** execution（或缺省）计划，或用户显式启动 goal。execution 的 `Done when` / Horizon 可与 `GOAL_STATE.json` 契约对齐。宿主同轮混写行为见 [`docs/hosts/`](../../../docs/hosts/)。
 
 ---
 

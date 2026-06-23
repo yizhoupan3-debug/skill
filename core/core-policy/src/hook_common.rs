@@ -446,31 +446,15 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
         .into_owned()
 }
 
-fn framework_goal_drive_entry_re() -> &'static Regex {
+fn framework_non_goal_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/(?:implementx|verifyx)\b").expect("invalid regex"))
+    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/(gitx|update)\b").expect("invalid regex"))
 }
 
-fn framework_implement_entry_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/implementx\b").expect("invalid regex"))
-}
-
-fn my_pre_execution_entry_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/(?:discussx|planx)\b").expect("invalid regex"))
-}
-
-fn my_lifecycle_entry_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(r"(?i)(^|\s)/(?:discussx|planx|implementx|verifyx)\b").expect("invalid regex")
-    })
-}
-
-/// Any `/discussx|planx|implementx|verifyx` personal lifecycle slash command.
-pub fn is_my_lifecycle_entry_prompt(text: &str) -> bool {
-    my_lifecycle_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
+/// Framework slash commands that may arm delegation (excludes goal-only entries).
+pub fn is_framework_non_goal_entrypoint_prompt(text: &str) -> bool {
+    let sanitized = strip_quoted_or_codeblock_or_url(text);
+    framework_non_goal_entry_re().is_match(&sanitized)
 }
 
 /// True when the current session is in an interactive profile.
@@ -480,82 +464,19 @@ pub fn is_my_lifecycle_entry_prompt(text: &str) -> bool {
 ///
 /// Detection (in priority order):
 /// 1. Thread-local `TEST_INTERACTIVE_OVERRIDE` (testing only)
-/// 2. Prompt matches `/discussx|planx|implementx|verifyx`
-/// 3. (Future) GOAL_STATE.lifecycle_profile == "interactive" via repo_root
+/// 2. (Future) GOAL_STATE.lifecycle_profile == "interactive" via repo_root
 ///
 /// Cf. docs/spec/loop-architecture.md §2.1
-pub fn is_interactive_profile(repo_root: Option<&std::path::Path>, text: &str) -> bool {
+pub fn is_interactive_profile(repo_root: Option<&std::path::Path>, _text: &str) -> bool {
     if let Some(v) = TEST_INTERACTIVE_OVERRIDE.with(|c| c.get()) {
         return v;
-    }
-    if is_my_lifecycle_entry_prompt(text) {
-        return true;
     }
     let Some(_root) = repo_root else {
         return false;
     };
     // Single-conversation mode: no pointer fallback for goal state lookup.
-    // lifecycle_profile is detected from prompt patterns above.
     // (Future: check GOAL_STATE.lifecycle_profile for "interactive")
     false
-}
-
-/// Hook nudge for my-* pre-execution (read-only product surface).
-pub const MY_PRE_EXECUTION_HOOK_NUDGE: &str = "My lifecycle pre-execution (/discussx, /planx): product repo READ-ONLY. Write only under artifacts/current/<task_id>/ and planning docs. No drive_until_done until /implementx.";
-
-/// Hook nudge when my lifecycle goal drive is armed.
-pub const MY_GOAL_DRIVE_HOOK_NUDGE: &str = "My lifecycle goal drive (/implementx, /verifyx): persist artifacts/current/<task_id>/GOAL_STATE.json and follow the matched skill_path (skills/implementx/SKILL.md or skills/verifyx/SKILL.md).";
-
-/// Hook nudge when my-implement arms goal drive (one-breath all waves).
-pub const MY_IMPLEMENT_GOAL_DRIVE_HOOK_NUDGE: &str = "My lifecycle implement (/implementx): run ALL waves in WAVE_STATE.json without pausing at wave boundaries; main thread schedules lanes only; lane-notes on disk. See skills/implementx/SKILL.md.";
-
-fn framework_non_goal_entry_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/(gitx|update)\b").expect("invalid regex"))
-}
-
-/// Execution-zone `/implementx|verifyx` — arms goal continuity gates (all hosts' hooks).
-pub fn is_framework_goal_entry_prompt(text: &str) -> bool {
-    framework_goal_drive_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
-}
-
-/// `/implementx` only — one-breath WAVE_STATE nudge (distinct from verifyx goal drive).
-pub fn is_framework_implement_entry_prompt(text: &str) -> bool {
-    framework_implement_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
-}
-
-fn framework_verify_entry_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/verifyx\b").expect("invalid regex"))
-}
-
-/// `/verifyx` only — verify+ship goal drive (distinct from implement one-breath nudge).
-pub fn is_my_verify_entry_prompt(text: &str) -> bool {
-    framework_verify_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
-}
-
-/// Goal-drive hook nudge: implement one-breath vs verify+ship generic.
-pub fn my_goal_drive_hook_nudge_for_prompt(text: &str) -> &'static str {
-    if is_framework_implement_entry_prompt(text) {
-        MY_IMPLEMENT_GOAL_DRIVE_HOOK_NUDGE
-    } else if is_my_verify_entry_prompt(text) {
-        // Currently same text as the generic goal-drive nudge, but kept as a
-        // separate branch so verifyx can get a distinct nudge in the future.
-        MY_GOAL_DRIVE_HOOK_NUDGE
-    } else {
-        MY_GOAL_DRIVE_HOOK_NUDGE
-    }
-}
-
-/// `/discussx`, `/planx` — planning only; never goal drive.
-pub fn is_my_pre_execution_entry_prompt(text: &str) -> bool {
-    my_pre_execution_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
-}
-
-/// Framework slash commands that may arm delegation (excludes goal-only entries).
-pub fn is_framework_non_goal_entrypoint_prompt(text: &str) -> bool {
-    let sanitized = strip_quoted_or_codeblock_or_url(text);
-    framework_non_goal_entry_re().is_match(&sanitized) && !is_framework_goal_entry_prompt(text)
 }
 
 pub fn is_narrow_review_prompt(text: &str) -> bool {
@@ -988,8 +909,8 @@ mod tests {
         );
         assert!(is_review_prompt("Please do a code review of this change."));
         assert!(
-            is_review_prompt("请全面review这个路由系统 /implementx 修复刚发现的问题"),
-            "dual review+implementx with routing anchor must still count as review prompt"
+            is_review_prompt("请全面review这个路由系统 /gitx 修复刚发现的问题"),
+            "dual review+gitx with routing anchor must still count as review prompt"
         );
         assert!(
             !is_review_prompt(
@@ -1000,40 +921,17 @@ mod tests {
     }
 
     #[test]
-    fn my_pre_execution_does_not_arm_goal_drive_entry() {
-        assert!(is_my_pre_execution_entry_prompt("/discussx"));
-        assert!(is_my_pre_execution_entry_prompt("/planx"));
-        assert!(!is_framework_goal_entry_prompt("/discussx"));
-        assert!(!is_framework_goal_entry_prompt("/planx"));
-        assert!(is_framework_goal_entry_prompt("/implementx"));
-        assert!(is_framework_goal_entry_prompt("/verifyx"));
-        assert!(!is_framework_goal_entry_prompt("/autopilot"));
-        assert!(!is_framework_goal_entry_prompt("/autopilot-quick"));
-        assert!(!is_my_pre_execution_entry_prompt("/implementx"));
-    }
-
-    #[test]
-    fn my_lifecycle_entry_and_goal_drive() {
-        assert!(is_my_lifecycle_entry_prompt("/implementx"));
-        assert!(is_my_lifecycle_entry_prompt("/discussx"));
-        assert!(is_framework_goal_entry_prompt("/implementx"));
-        assert!(is_framework_goal_entry_prompt("/verifyx"));
-        assert!(is_my_pre_execution_entry_prompt("/discussx"));
-        assert!(is_my_pre_execution_entry_prompt("/planx"));
-        assert!(!is_framework_goal_entry_prompt("/discussx"));
-    }
-
-    #[test]
-    fn should_inject_subagent_model_inherit_for_implementx_and_review() {
+    fn should_inject_subagent_model_inherit_for_review_and_delegation() {
         let _lock = crate::test_env_sync::process_env_lock();
         let key = "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
         let prev = std::env::var_os(key);
         unsafe { std::env::set_var(key, "1") };
+        // Delegation arm triggers inject
         assert!(should_inject_subagent_model_inherit_nudge(
-            "/implementx",
+            "implement the feature",
+            false,
             false,
             true,
-            false,
             false
         ));
         assert!(should_inject_subagent_model_inherit_nudge(
@@ -1086,12 +984,11 @@ mod tests {
     }
 
     #[test]
-    fn is_interactive_profile_prompt_match_returns_true_without_root() {
-        // Prompt matching (/implementx) activates interactive even without repo_root
-        assert!(is_interactive_profile(None, "/implementx 继续"));
-        assert!(is_interactive_profile(None, "/discussx 讨论架构"));
-        assert!(is_interactive_profile(None, "/planx"));
-        assert!(is_interactive_profile(None, "/verifyx"));
+    fn is_interactive_profile_returns_false_without_root() {
+        assert!(!is_interactive_profile(None, "/implementx 继续"));
+        assert!(!is_interactive_profile(None, "/discussx 讨论架构"));
+        assert!(!is_interactive_profile(None, "/planx"));
+        assert!(!is_interactive_profile(None, "/verifyx"));
     }
 
     #[test]
@@ -1104,15 +1001,15 @@ mod tests {
     #[test]
     fn is_interactive_profile_test_override_takes_priority() {
         let _lock = crate::test_env_sync::process_env_lock();
-        // Override to false even though prompt matches /implementx
+        // Override to false
         set_test_interactive_override(Some(false));
         assert!(!is_interactive_profile(None, "/implementx"));
         // Override to true even for non-lifecycle prompt
         set_test_interactive_override(Some(true));
         assert!(is_interactive_profile(None, "random text"));
-        // Clear override, prompt match works again
+        // Clear override, returns false
         set_test_interactive_override(None);
-        assert!(is_interactive_profile(None, "/implementx"));
+        assert!(!is_interactive_profile(None, "/implementx"));
     }
 
     #[test]

@@ -16,7 +16,7 @@
 
 ## Lifecycle
 
-- **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/adr/010-ideal-architecture-v10.md`（L0–L7 八层分层模型与生命周期定位）。
+- **Lifecycle**：无固定阶段 lifecycle。详见 `docs/adr/010-ideal-architecture-v10.md`（L0–L7 八层分层模型与生命周期定位）。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
 - **Closeout**：`closeout_gate` / `complete` 为 advisory（`interactive`）。
 
@@ -110,7 +110,7 @@
 ### 重要说明
 
 - **跨宿主一致性**：所有宿主必须一致执行此规则，不能有宿主差异
-- **技能无关性**：无论是否触发了特定技能（如`/implementx`），都必须执行此规则
+- **技能无关性**：无论是否触发了特定技能，都必须执行此规则
 - **强制性**：这是硬约束，不是建议，所有宿主必须遵守
 - **自动触发**：不需要用户显式提及 codegraph，系统应自动识别并调用
 
@@ -146,7 +146,7 @@ Factcheck 工具不可用时：单 finding 标记 `indeterminate` 不进 Verify�
 
 ### Claude
 
-- **PreToolUse 硬阻断**：未物化 `GOAL_STATE.json` 或未授权执行区 → 硬阻断。遭遇阻断时 `/discussx` 或 `/planx` 自愈，勿盲目重试。
+- **PreToolUse 硬阻断**：未物化 `GOAL_STATE.json` 或未授权执行区 → 硬阻断。遭遇阻断时重新评估任务或请求用户指导，勿盲目重试。
 - **Review gate**：Stop `REVIEW_GATE` advisory-only；**无** `rg_clear` 粘贴面（须完成可数 reviewer lane 或自然语言 override）。
 - **框架命令流**：无 `AG_FOLLOWUP` / `updateCurrentStep`；续跑 `framework_goal_drive` + `artifacts/current/<task_id>/` 手动画板。
 - **interactive**：suppress spawn-first 与 review Stop nudge（skill 层 findings-only 仍适用）。
@@ -162,7 +162,7 @@ Factcheck 工具不可用时：单 finding 标记 `indeterminate` 不进 Verify�
 
 - **策略嵌入**：编译期 `include_str!` 嵌入本文件（`policy_embed.rs` → `codex_agent_policy`）；hook 运行期不读盘。
 - **Hook**：`.codex/hooks.json` + `router-rs codex hook`；清门 **Claude canonical**；Stop **advisory-only** `CODEX_REVIEW_GATE`。
-- **多代理**：`/implementx` 且 `execution_mode=parallel` 时应 spawn lane；深度 review spawn-first（`fork_context=false`）。
+- **多代理**：`execution_mode=parallel` 时应 spawn lane；深度 review spawn-first（`fork_context=false`）。
 - **stdio 替代 MCP 工具**：`framework_goal_drive` / `framework_quality_gate`；证据 PostTool 追加。
 
 ### OpenCode

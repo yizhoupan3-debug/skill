@@ -230,20 +230,6 @@
       []
     ],
     [
-      "discussx",
-      "none",
-      "Personal lifecycle discuss — requirement",
-      [
-        "/discussx",
-        "discussx"
-      ],
-      "skills/discussx/SKILL.md",
-      "framework_command",
-      "L0",
-      "owner",
-      []
-    ],
-    [
       "doc",
       "artifact",
       "Handle layout-aware Word .docx creation,",
@@ -406,30 +392,6 @@
       "skills/gitx/SKILL.md",
       "framework_command",
       "L2",
-      "owner",
-      []
-    ],
-    [
-      "implementx",
-      "none",
-      "Personal lifecycle implement — one-breat",
-      [
-        "/implementx",
-        "implementx",
-        "写 README",
-        "补文档",
-        "API 文档",
-        "写 ADR",
-        "生成 changelog",
-        "onboarding guide",
-        "文档完整性",
-        "documentation",
-        "readme",
-        "api docs"
-      ],
-      "skills/implementx/SKILL.md",
-      "framework_command",
-      "L0",
       "owner",
       []
     ],
@@ -617,20 +579,6 @@
       "skills/plan-mode/SKILL.md",
       "skill",
       "L1",
-      "owner",
-      []
-    ],
-    [
-      "planx",
-      "none",
-      "Personal lifecycle plan — ROADMAP and WA",
-      [
-        "/planx",
-        "planx"
-      ],
-      "skills/planx/SKILL.md",
-      "framework_command",
-      "L0",
       "owner",
       []
     ],
@@ -1008,20 +956,6 @@
         "同步投影"
       ],
       "skills/update/SKILL.md",
-      "framework_command",
-      "L0",
-      "owner",
-      []
-    ],
-    [
-      "verifyx",
-      "none",
-      "Personal lifecycle verify+ship — evidenc",
-      [
-        "/verifyx",
-        "verifyx"
-      ],
-      "skills/verifyx/SKILL.md",
       "framework_command",
       "L0",
       "owner",

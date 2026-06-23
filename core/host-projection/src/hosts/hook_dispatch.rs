@@ -698,7 +698,7 @@ fn default_subagent_review_types() -> &'static [&'static str] {
             // Registry unavailable — use built-in defaults.
             types.extend_from_slice(&[
                 "explore", "explorer", "general-purpose", "deep-review-agent",
-                "review", "verifyx-agent", "plan",
+                "review", "plan",
             ]);
         }
         types
@@ -1042,7 +1042,7 @@ pub fn shared_stop_review_output_lint_suppressed(
 /// Unified goal gate update — **single implementation for all 4 hosts**.
 ///
 /// Call this from each host's Stop/PostTool handler. It:
-/// 1. Detects goal drive entry from prompt (via `is_framework_goal_entry_prompt`)
+/// 1. Detects goal drive entry from prompt
 /// 2. Detects goal signals from response text (contract / progress / verify)
 /// 3. Optionally reads disk state via `hooks::evaluate_goal_readiness_from_disk` (more precise)
 /// 4. Updates `HookReviewDiskCore` fields in-place
@@ -1333,7 +1333,7 @@ pub fn evaluate_stop_decision(
 }
 
 /// Detect if the user is explicitly invoking plan mode in the prompt.
-/// Covers: /planx, /discussx, "写plan", "给plan", "plan mode", "做计划", "制定计划" etc.
+/// Covers: "写plan", "给plan", "plan mode", "做计划", "制定计划" etc.
 fn is_plan_keyword_in_prompt(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
     lower.contains("plan mode")

@@ -507,10 +507,6 @@ mod route_metadata_tests {
         fs::remove_dir_all(root).expect("cleanup route root");
     }
 
-    // NOTE: retired_implementx_slash_commands_do_not_route_to_goal_drive_owner test
-    // remains in runtime-core because it depends on route_task_with_manifest_fallback
-    // which is defined in runtime-core's framework_runtime module.
-
     #[test]
     fn load_records_prefers_default_runtime_even_with_explicit_manifest() {
         let root = temp_route_path("runtime-first-manifest");
@@ -541,7 +537,7 @@ mod route_metadata_tests {
 
         let loaded = load_records(None, Some(&manifest_path)).expect("load records");
         assert!(
-            loaded.iter().any(|record| record.slug == "implementx"),
+            loaded.iter().any(|record| record.slug == "gitx"),
             "default runtime hot index should be preferred when available"
         );
         assert!(

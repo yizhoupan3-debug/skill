@@ -150,8 +150,8 @@ mod tests {
         json!({
             "keys": ["slug", "description", "trigger_hints", "priority", "skill_path"],
             "skills": [
-                ["implementx", "Implement changes", ["implement", "code", "write"], "P0", "skills/implementx/SKILL.md"],
-                ["planx", "Plan implementation", ["plan", "design", "architect"], "P0", "skills/planx/SKILL.md"],
+                ["gitx", "Git workflow commands", ["git", "branch", "merge"], "P0", "skills/gitx/SKILL.md"],
+                ["simplify", "Review for simplification", ["simplify", "cleanup", "refactor"], "P0", "skills/simplify/SKILL.md"],
                 ["deep-research", "Deep research", ["research", "investigate", "analyze"], "P1", "skills/deep-research/SKILL.md"]
             ]
         })
@@ -173,9 +173,9 @@ mod tests {
         init_schema(&conn).expect("init schema");
         ingest_skills(&conn, &sample_manifest()).expect("ingest");
 
-        let skill = find_skill_by_slug(&conn, "implementx");
+        let skill = find_skill_by_slug(&conn, "gitx");
         assert!(skill.is_some());
-        assert_eq!(skill.unwrap().symbol, "implementx");
+        assert_eq!(skill.unwrap().symbol, "gitx");
 
         assert!(find_skill_by_slug(&conn, "nonexistent").is_none());
         assert!(find_skill_by_slug(&conn, "").is_none());

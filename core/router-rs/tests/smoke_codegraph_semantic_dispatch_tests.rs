@@ -135,7 +135,7 @@ fn codegraph_host_projections_register_mcp_codegraph_smoke() {
     }
 }
 
-const CODEGRAPH_SKILL_SLUGS: &[&str] = &["planx", "implementx", "verifyx", "code-review-deep"];
+const CODEGRAPH_SKILL_SLUGS: &[&str] = &["code-review-deep"];
 
 fn assert_manifest_codegraph_tools_resolve(registry: &Value, payload: &Value, slug: &str) {
     let allowed = manifest_allowed_tools_for_slug(payload, slug);

@@ -885,109 +885,6 @@ fn write_framework_alias_registry_fixture(repo_root: &Path) {
 }
 
 
-#[test]
-fn framework_alias_builds_compact_implementx_payload() {
-    let repo_root = std::env::temp_dir().join(format!(
-        "router-rs-alias-fixture-{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("clock before epoch")
-            .as_nanos()
-    ));
-    let task_root = repo_root
-        .join("artifacts")
-        .join("current")
-        .join("active-bootstrap-repair-20260418210000");
-    fs::create_dir_all(&task_root).expect("create task root");
-    fs::create_dir_all(repo_root.join("artifacts").join("current")).expect("create current root");
-    fs::write(
-        task_root.join("SESSION_SUMMARY.md"),
-        "- task: active bootstrap repair\n- phase: implementation\n- status: in_progress\n",
-    )
-    .expect("write session summary");
-    fs::write(
-        task_root.join("NEXT_ACTIONS.json"),
-        r#"{"next_actions":["Patch classifier","Run MCP regression tests"]}"#,
-    )
-    .expect("write next actions");
-    fs::write(task_root.join("EVIDENCE_INDEX.json"), r#"{"artifacts":[]}"#)
-        .expect("write evidence index");
-    fs::write(
-        task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"active bootstrap repair","matched_skills":["implementx"]}"#,
-    )
-    .expect("write trace metadata");
-    write_framework_alias_registry_fixture(&repo_root);
-    fs::write(
-        repo_root
-            .join("artifacts")
-            .join("current")
-            .join("active_task.json"),
-        r#"{"task_id":"active-bootstrap-repair-20260418210000","task":"active bootstrap repair"}"#,
-    )
-    .expect("write active task");
-    fs::write(
-            repo_root.join(".supervisor_state.json"),
-            r#"{
-                "task_id":"active-bootstrap-repair-20260418210000",
-                "task_summary":"active bootstrap repair",
-                "active_phase":"implementation",
-                "verification":{"verification_status":"in_progress"},
-                "continuity":{"story_state":"active","resume_allowed":true},
-                "execution_contract":{"acceptance_criteria":["completed tasks never appear as current execution"]}
-            }"#,
-        )
-        .expect("write supervisor state");
-
-    let payload = build_framework_alias_envelope(
-        &repo_root,
-        "implementx",
-        FrameworkAliasBuildOptions {
-            max_lines: 4,
-            compact: false,
-            host_id: None,
-        },
-    )
-    .expect("build alias payload");
-    let alias = payload
-        .get("alias")
-        .and_then(Value::as_object)
-        .expect("alias payload");
-    let prompt = alias
-        .get("entry_prompt")
-        .and_then(Value::as_str)
-        .expect("entry prompt");
-
-    assert_eq!(
-        payload["schema_version"],
-        json!(FRAMEWORK_ALIAS_SCHEMA_VERSION)
-    );
-    assert_eq!(alias["name"], json!("implementx"));
-    assert_eq!(alias["host_entrypoint"], json!("/implementx"));
-    assert_eq!(alias["compact"], json!(false));
-    assert!(prompt.contains("My") || prompt.contains("/implementx"));
-    assert!(prompt.contains("本地 Rust"));
-    assert!(prompt.contains("路由："));
-    assert_eq!(
-        alias["state_machine"]["current_state"],
-        json!("resume_requires_repair")
-    );
-    assert_eq!(
-        alias["state_machine"]["recommended_action"],
-        json!("repair_continuity_then_resume")
-    );
-    assert_eq!(alias["state_machine"]["evidence_missing"], json!(true));
-    assert_eq!(
-        alias["entry_contract"]["context"]["execution_readiness"],
-        json!("use-alias-default")
-    );
-    assert_eq!(
-        alias["entry_contract"]["route_rules"][0],
-        json!("主 owner -> `implementx`")
-    );
-
-    let _ = fs::remove_dir_all(&repo_root);
-}
 
 
 #[test]
@@ -1072,10 +969,6 @@ fn framework_alias_builds_compact_deepinterview_payload() {
     assert_eq!(alias["compact"], json!(false));
     assert_eq!(alias["canonical_owner"], json!("deepinterview"));
     assert_eq!(
-        alias["state_machine"]["handoff"]["rules"][1]["target"],
-        json!("implementx")
-    );
-    assert_eq!(
         alias["entry_contract"]["route_rules"][0],
         json!("主 owner -> `deepinterview`")
     );
@@ -1100,7 +993,7 @@ fn framework_alias_fails_closed_for_missing_alias_record() {
     fs::create_dir_all(&registry_dir).expect("create registry dir");
     fs::write(
         registry_dir.join("RUNTIME_REGISTRY.json"),
-        r#"{"schema_version":"framework-runtime-registry-v2","framework_commands":{"implementx":{"canonical_owner":"implementx","skill_path":"skills/implementx/SKILL.md"}}}"#,
+        r#"{"schema_version":"framework-runtime-registry-v2","framework_commands":{"gitx":{"canonical_owner":"gitx","skill_path":"skills/gitx/SKILL.md"}}}"#,
     )
     .expect("write registry");
 
@@ -1149,7 +1042,7 @@ fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
         .expect("write evidence index");
     fs::write(
         task_root.join("TRACE_METADATA.json"),
-        r#"{"task":"active bootstrap repair","matched_skills":["implementx"]}"#,
+        r#"{"task":"active bootstrap repair","matched_skills":["gitx"]}"#,
     )
     .expect("write trace metadata");
     write_framework_alias_registry_fixture(&repo_root);
@@ -1176,7 +1069,7 @@ fn framework_alias_compact_payload_omits_duplicate_prompt_fields() {
 
     let payload = build_framework_alias_envelope(
         &repo_root,
-        "implementx",
+        "gitx",
         FrameworkAliasBuildOptions {
             max_lines: 3,
             compact: true,

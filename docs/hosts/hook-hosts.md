@@ -204,12 +204,12 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 
 #### Cursor 排障
 
-**症状**：对话像被掐断、无法提交、子代理 `permission: deny`、Stop 后需手动 `/implementx` 续跑。
+**症状**：对话像被掐断、无法提交、子代理 `permission: deny`、Stop 后需手动续跑。
 
 | 现象 | 常见根因 | 处理 |
 |------|----------|------|
-| Stop 后任务未完成 | **无** hook `GOAL_CONTINUE`（2026-05 已删） | `/implementx` + `framework_goal_drive` stdio + `artifacts/current/<task_id>/` |
-| Stop 后出现 `router-rs REVIEW_GATE` / `AG_FOLLOWUP` | 非 **interactive** 且 review 未清门（advisory nudge，非硬拦） | 先 spawn `fork_context=false` 深度 lane；或 `rg_clear` / 拆开 review 与 `/implementx` |
+| Stop 后任务未完成 | **无** hook `GOAL_CONTINUE`（2026-05 已删） | `framework_goal_drive` stdio + `artifacts/current/<task_id>/` |
+| Stop 后出现 `router-rs REVIEW_GATE` / `AG_FOLLOWUP` | 非 **interactive** 且 review 未清门（advisory nudge，非硬拦） | 先 spawn `fork_context=false` 深度 lane；或 `rg_clear` / 拆开 review |
 | `beforeSubmit` 无法继续（`continue:false`） | hook-state 锁/持久化失败 | 查 `.cursor/hook-state` 权限；应急 `ROUTER_RS_HOOK_STATE_FAIL_OPEN=1` |
 | 子代理 `permission: deny`（open count） | 重复 `subagentStart` 或 session 分片 | 看 `review-subagent-*.json` 的 `active_subagent_count` vs pending；升级后旧 state 可删或等新会话 |
 | `router-rs: binary moved to router-rs-cli` | `.env` 文件 `ROUTER_RS_BIN` 指向 redirect shim | 更新 `ROUTER_RS_BIN` 为 `router-rs-cli` 路径；`hook.sh resolve_bin()` 已自动跳过 shim |
@@ -250,7 +250,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentStart`/`subagentStop` hook 做硬门控不同，Codex 端的多代理行为由文档契约与 agent 自觉驱动。
 
 **并行执行指引**：
-- `/implementx` 且 `execution_mode=parallel` 时，主线程**应主动 spawn 子代理**并行执行各 lane，主线程仅担任 scheduler（coordinator visible content ≤35% of turn）
+- 当 `execution_mode=parallel` 时，主线程**应主动 spawn 子代理**并行执行各 lane，主线程仅担任 scheduler（coordinator visible content ≤35% of turn）
 - 深度 review：非 interactive 时默认 spawn-first 配对审稿（`fork_context=false` 只读 reviewer）；interactive 下仍可按需 spawn
 - ≥2 独立子问题时默认并行；通常 3–5 个 `fork_context=false` lane
 - 窄范围（单文件、`small_task`）：可不 spawn，但不应以此为默认习惯

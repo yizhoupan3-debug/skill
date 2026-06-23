@@ -1,4 +1,4 @@
-use crate::hook_common::{has_override, is_framework_goal_entry_prompt, is_review_prompt};
+use crate::hook_common::{has_override, is_review_prompt};
 use serde_json::Value;
 use tracing::debug;
 
@@ -32,7 +32,7 @@ pub struct ReviewGateFacts {
 impl ReviewGateFacts {
     pub fn from_prompt(prompt: &str) -> Self {
         Self {
-            review_required: is_review_prompt(prompt) && !is_framework_goal_entry_prompt(prompt),
+            review_required: is_review_prompt(prompt),
             review_override: has_override(prompt),
             independent_reviewer_seen: false,
         }
@@ -316,19 +316,6 @@ mod fork_context_parse_tests {
         assert!(review_gate_satisfied(true, false, true));
         assert!(review_gate_satisfied(true, true, false));
         assert!(review_gate_satisfied(false, false, false));
-    }
-
-    #[test]
-    fn review_gate_facts_suppresses_review_when_goal_drive_in_same_prompt() {
-        install_review_prompt_test_deps();
-        let dual =
-            ReviewGateFacts::from_prompt("请全面review这个仓库 /implementx 修复刚发现的问题");
-        assert!(
-            !dual.review_required,
-            "goal drive entry must suppress review arming in facts"
-        );
-        let review_only = ReviewGateFacts::from_prompt("全面review这个仓库");
-        assert!(review_only.review_required);
     }
 
     #[test]

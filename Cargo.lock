@@ -774,27 +774,9 @@ dependencies = [
  "core-state",
  "framework-extra",
  "framework-kernel",
- "framework-runtime",
  "host-projection",
  "serde_json",
  "tracing",
-]
-
-[[package]]
-name = "framework-runtime"
-version = "0.1.0"
-dependencies = [
- "fr-contracts",
- "fr-exec",
- "fr-utils",
- "framework-kernel",
- "framework-runtime-hooks",
- "host-projection",
- "http-util",
- "insta",
- "runtime-storage",
- "serde_json",
- "trace-runtime",
 ]
 
 [[package]]
@@ -2136,10 +2118,13 @@ dependencies = [
  "core-policy",
  "core-state",
  "ctor",
+ "fr-contracts",
+ "fr-exec",
+ "fr-utils",
  "framework-extra",
  "framework-kernel",
  "framework-maint",
- "framework-runtime",
+ "framework-runtime-hooks",
  "fs2",
  "hex",
  "host-projection",

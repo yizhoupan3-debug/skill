@@ -16,7 +16,7 @@ parent: _common.md
 
 ## 能力边界与 Harness 入口
 
-- **任务推进**: `/implementx` + `framework_goal_drive` stdio
+- **任务推进**: `framework_goal_drive` stdio
 - **任务状态**: `artifacts/current/<task_id>/GOAL_STATE.json`
 - **门控模式**: shell hook（hook.sh → router-rs-cli）+ MCP 工具层双通道。`tool.execute.before` 经 hook.sh 路由到 Rust `OpenCodeDispatcher`，等价 PreToolUse；`session.idle` 等价 Stop；closeout/review 在 MCP 工具层实现
 

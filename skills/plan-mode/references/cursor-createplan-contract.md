@@ -37,7 +37,7 @@ Cursor 官方说明：计划默认保存在**用户目录**，需**「Save to wo
 
 ## 4. Cursor Plan Build 与 lifecycle goal 门控
 
-Cursor Plan Build **不**自动武装 lifecycle goal 门控。连续执行仅由用户显式 **`/implementx`**（及 `/verifyx`）启动。
+Cursor Plan Build **不**自动武装 lifecycle goal 门控。连续执行仅由用户显式启动。
 
 - Pre-goal 提示见 **`ROUTER_RS_PRE_GOAL_ENABLED`**。
 

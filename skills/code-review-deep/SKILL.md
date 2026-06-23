@@ -69,7 +69,7 @@ Judgment-focused review for code and change sets **without** rewriting by defaul
 
 ## Default posture
 
-- **Findings-only by default (hard stop)**: On a review request, **do not** edit files, add tests, run fix commits, open PRs, or continue into implement / `/implementx` / gitx / loop unless the user **explicitly** exits review-only (e.g. "fix these findings", "implement", "merge", "commit"). End with findings (+ optional one-line verdict), not execution.
+- **Findings-only by default (hard stop)**: On a review request, **do not** edit files, add tests, run fix commits, open PRs, or continue into implement / gitx / loop unless the user **explicitly** exits review-only (e.g. "fix these findings", "implement", "merge", "commit"). End with findings (+ optional one-line verdict), not execution.
 - Assume a **hostile but fair** reviewer: maximize plausible failure under real abuse, regressions, flaky ops, closest prior API expectations, dependency churn, or incomplete tests.
 - **Compact default output = less prose, not shallower reasoning.** Analysis standard is unchanged: choose lenses internally, exhaust findings **within each selected lens**, apply the severity evidence gate.
 - **Lens catalog, not a fixed runway**: choose lenses from [`references/review-dimensions.md`](references/review-dimensions.md). When the user asks to **cover all dimensions** / **全维度**, apply the full catalog **and** use the **full report profile**.

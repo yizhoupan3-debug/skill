@@ -5,7 +5,7 @@
 
 Use this repository's shared framework runtime.
 
-**Default lifecycle: My** — `/discussx` → `/planx` → `/implementx` → `/verifyx`。Goal/RFV via `framework_goal_drive` stdio；`closeout_gate`/complete 为 advisory（不阻断）。
+**Lifecycle：无固定阶段**。Goal/RFV via `framework_goal_drive` stdio；`closeout_gate`/complete 为 advisory（不阻断）。
 
 **Hooks**: PreToolUse/PostToolUse/Stop/UserPromptSubmit 已安装（`claude-router-rs-hook.sh`），运行于 advisory 模式。
 

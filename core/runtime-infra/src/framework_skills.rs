@@ -39,22 +39,6 @@ pub fn validate_skills(repo_root: &Path) -> Result<(), String> {
 
     let disk_slugs = discover_skill_md_slugs(&skills_root)?;
     let runtime_slugs = skill_slugs_from_index(&runtime)?;
-    for slug in ["discussx", "planx", "implementx", "verifyx"] {
-        if !runtime_slugs.contains(slug) {
-            errors.push(format!(
-                "runtime missing expected my-lifecycle framework_command slug: {slug}"
-            ));
-        }
-    }
-
-    let manifest_slugs = skill_slugs_from_index(&manifest)?;
-    for slug in ["discussx", "planx", "implementx", "verifyx"] {
-        if !manifest_slugs.contains(slug) {
-            errors.push(format!(
-                "manifest missing My lifecycle slug {slug}; edit skills/SKILL_MANIFEST.json then framework skills refresh --write --write-companions"
-            ));
-        }
-    }
 
     if errors.is_empty() {
         eprintln!(

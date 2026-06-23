@@ -506,33 +506,6 @@ use crate::route::has_paper_review_judgment_context;
     }
 
     #[test]
-    fn retired_implementx_slash_commands_do_not_route_to_goal_drive_owner() {
-        let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../skills/SKILL_ROUTING_RUNTIME.json");
-        let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
-        assert!(!records.iter().any(|record| record.slug == "autopilot"));
-        // /autopilot* retired slash commands removed from aliases
-        {
-            let query = "/retired-implementx-route";
-            let decision = route_task_with_manifest_fallback(
-                &records,
-                Some(&runtime_path),
-                None,
-                None,
-                query,
-                "retired-implementx-route",
-                false,
-                true,
-            )
-            .expect("route decision");
-            assert_ne!(
-                decision.selected_skill, "autopilot",
-                "retired command must not select retired owner for {query}: {decision:?}"
-            );
-        }
-    }
-
-    #[test]
     fn load_records_prefers_default_runtime_even_with_explicit_manifest() {
         let root = temp_route_path("runtime-first-manifest");
         let skills_root = root.join("skills");
@@ -562,7 +535,7 @@ use crate::route::has_paper_review_judgment_context;
 
         let loaded = load_records(None, Some(&manifest_path)).expect("load records");
         assert!(
-            loaded.iter().any(|record| record.slug == "implementx"),
+            loaded.iter().any(|record| record.slug == "gitx"),
             "default runtime hot index should be preferred when available"
         );
         assert!(

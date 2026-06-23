@@ -35,7 +35,6 @@ members = [
     "core/trace-runtime",
     "core/browser-mcp",
     "core/host-projection",
-    "core/framework-runtime",
     "core/framework-runtime-hooks",
     "core/framework-extra",
     "core/runtime-exit-gate",

@@ -1,4 +1,4 @@
-//! Framework command alias envelopes (`/implementx`, `deepinterview`, …).
+//! Framework command alias envelopes (`deepinterview`, …).
 
 use serde_json::{Map, Value, json};
 use std::fs;
@@ -341,29 +341,13 @@ fn build_framework_alias_entry_contract(
     let execution_readiness = "use-alias-default";
     let mut route_rules = Vec::new();
     let summary = match alias_name {
-        "implementx" => {
-            let owner = alias_record_text(alias_record, &["canonical_owner"]);
-            route_rules.push(format!("主 owner -> `{owner}`"));
-            if evidence_missing {
-                route_rules
-                    .push("缺少验证证据 -> 先补 QA / Validation，再决定是否 closeout".to_string());
-            }
-            if !missing_recovery_anchors.is_empty() {
-                route_rules.push(format!(
-                    "恢复锚点缺失 -> 先补 {}",
-                    missing_recovery_anchors.join(", ")
-                ));
-            }
-            "进入 My 执行流（/implementx）。本仓原生执行流启动，状态、恢复和续跑都走本地 Rust/continuity。"
-                .to_string()
-        }
         "deepinterview" => {
             let owner = alias_record_text(alias_record, &["canonical_owner"]);
             let review_lanes = alias_record_list(alias_record, &["review_lanes"]);
             route_rules.push(format!("主 owner -> `{owner}`"));
             route_rules.push("每轮只问一个问题".to_string());
             route_rules.push("先查仓库证据，再问用户".to_string());
-            route_rules.push("清晰度过线后 handoff 到 `/implementx`".to_string());
+            route_rules.push("清晰度过线后 handoff 到执行 skill".to_string());
             if !review_lanes.is_empty() {
                 route_rules.push(format!("review lanes -> {}", review_lanes.join(", ")));
             }
@@ -451,24 +435,6 @@ fn build_framework_alias_state_machine(
         })
         .unwrap_or_default();
     let (current_state, recommended_action, resume_mode, resume_reason) = match state.as_str() {
-        "active"
-            if alias_name == "implementx"
-                && evidence_missing
-                && !is_terminal(&verification_status, TERMINAL_VERIFICATION_STATUSES) =>
-        {
-            (
-                "resume_active_needs_verification".to_string(),
-                "verify_before_done".to_string(),
-                "continue-current-task".to_string(),
-                "implementation is active but verification evidence is still missing".to_string(),
-            )
-        }
-        "active" if alias_name == "implementx" && !missing_recovery_anchors.is_empty() => (
-            "resume_active_missing_anchors".to_string(),
-            "repair_recovery_anchors_then_resume".to_string(),
-            "repair-continuity".to_string(),
-            "active continuity is missing required recovery anchors".to_string(),
-        ),
         "active" => (
             "resume_active".to_string(),
             if alias_name == "deepinterview" {
@@ -519,7 +485,7 @@ fn build_framework_alias_state_machine(
                 },
                 {
                     "when": "clarity is high enough to execute",
-                    "target": "implementx",
+                    "target": "direct-execution",
                     "action": "handoff_to_execution",
                 }
             ]

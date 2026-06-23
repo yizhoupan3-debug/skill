@@ -4,7 +4,7 @@
 |-------|-------|
 | **Task ID** | `{{TASK_ID}}` |
 | **Based on** | REQUIREMENTS.md, STATE.md |
-| **Status** | planned (`/planx`) |
+| **Status** | planned |
 
 ## 1. Overview
 

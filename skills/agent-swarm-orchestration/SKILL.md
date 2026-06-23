@@ -117,15 +117,12 @@ Sidecar 模式的压缩契约仍见下文 **Main-thread compression contract**�
 
 所有宿主共享统一 team 文件系统（`artifacts/teams/`），互操作不受限。
 
-## Boundary: implementx / verifyx
+## Orchestration boundary
 
 | 入口 | 职责 |
 |------|------|
 | **本 skill** | 模式选择、team 触发、spawn admission、team/sidecar 编排形态 |
-| **`/implementx`** | `WAVE_STATE.json` 产品交付 wave；主线程调度 **实现** lane |
-| **`/verifyx`** | 证据与 closeout |
-
-Audit 类 team 默认 **findings-only**；修复需用户显式 `/implementx` 或「按 findings 改」。Team 不替换 implementx wave 调度。
+| **owner skill** | 具体任务执行（实现、验证等由最窄 skill owner 负责） |
 
 ## 深度对抗 review：选型表（HARD）
 
@@ -134,9 +131,8 @@ Audit 类 team 默认 **findings-only**；修复需用户显式 `/implementx` �
 | 多 agent **团队审查**（Scan→Merge→Verify→Synthesize） | **team 模式** + `artifacts/teams/` | 所有宿主: `team_native` | 单 agent 批量验证 + `BATCH_VERDICT_SCHEMA` |
 | **Hook 可数**深度 review、PR/全仓、spawn-first gate | **`$code-review-deep`** | `deep-reviewer` / `general-purpose` lane +（非 interactive）REVIEW_GATE | skill 层 findings-only + 多 lens |
 | 窄范围单文件 review | 主线程或 sidecar | 无 team | 可选 |
-| 产品交付 wave（实现+验证） | **`/implementx`** | `WAVE_STATE.json` lane | verify_commands，非 audit pipeline |
 
-**注意**：team 路径的 Verify 产物在 `artifacts/teams/<team_id>/messages/`；code-review-deep 产物在 review lane-notes。同一任务只选**一条** audit 主路径，除非用户显式要求两阶段（先 team audit 再 implementx 修复）。Workflow（JS 编排）已彻底移除。
+**注意**：team 路径的 Verify 产物在 `artifacts/teams/<team_id>/messages/`；code-review-deep 产物在 review lane-notes。同一任务只选**一条** audit 主路径，除非用户显式要求两阶段（先 team audit 再 owner skill 修复）。Workflow（JS 编排）已彻底移除。
 
 ## When to use
 
@@ -154,7 +150,7 @@ Audit 类 team 默认 **findings-only**；修复需用户显式 `/implementx` �
 - 用户要设计 agent supervisor、coordinator、manager-worker 架构
 - 用户显式要求 **team** / **多 agent 团队**，或任务自带多阶段审计/审查管道
 - 用户明确要求多 worker 生命周期、协作拆分或 supervisor 集成时，本 gate 负责判断 bounded sidecars 或 team 是否足够
-- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_quality_gate` 写 `QUALITY_GATE_STATE.json`）：契约与模板通过 `framework_quality_gate` 运行时管理；用户侧入口优先 My 执行区 `/implementx`（`GOAL_STATE.json`、`framework_goal_drive`）；本 gate 仍负责 spawn admission 与 reject reason
+- 用户要固定 **review → fix → verify** 多轮闭环（可外加与 review **并行**的 **external research** lane，且大 `max_rounds` 时用 `framework_quality_gate` 写 `QUALITY_GATE_STATE.json`）：契约与模板通过 `framework_quality_gate` 运行时管理；用户侧入口优先 My 执行区（`GOAL_STATE.json`、`framework_goal_drive`）；本 gate 仍负责 spawn admission 与 reject reason
 
 常见表达：
 - “做一个多 agent 协作框架”

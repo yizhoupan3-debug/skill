@@ -47,9 +47,7 @@
 ```text
 L0  agent-swarm-orchestration, gh-address-comments, gh-fix-ci, sentry,
     skill-framework-developer, systematic-debugging, update
-    (+ hot framework commands: discussx, planx, implementx, verifyx)
 L1  deepinterview, citation-management, plan-mode
-    [absorbed: documentation-engineering → implementx/references/ + trigger_hints]
 L2  code-review-deep, gitx, paper-workbench, research-discovery, research-execution
     (reroute alias: paper-writing → paper-workbench/SKILL.md)
 L3  design-md, diagramming, doc, experiment-reproducibility, infographic,
@@ -68,7 +66,7 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 | 层 | 做主 owner 的条件 | 不要误用 |
 |---|---|---|
 | **L0** | 任务本身是 skill 治理、路由、触发修复、框架自优化，或需要跨文件长周期的内核级指挥 (`runtime execution controller`) | 不要把普通实现问题抬到 L0 |
-| **L1** | 执行方式是核心：计划、TDD、调试、重构、文档 | 根因已知时别默认 debugging；文档工程方法论已注入 implementx |
+| **L1** | 执行方式是核心：计划、TDD、调试、重构、文档 | 根因已知时别默认 debugging |
 | **L2** | 技术底座或运行时问题 | 语言/框架语义问题走更窄 skill |
 | **L3** | 明确的平台、工具、产物、领域边界 | 不要把 L3 当泛化兜底 |
 | **L4** | 高语义专业任务 | 不要用 L4 替代前置 gate |
@@ -81,8 +79,6 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 - `systematic-debugging` vs `sentry` → sentry 仅在有 Sentry 平台数据时触发（gate=source）；systematic-debugging 处理无 Sentry 的通用调试（gate=evidence）
 - `systematic-debugging` vs `gh-fix-ci` → gh-fix-ci 管 CI 修复（已知是 CI 问题，需 GitHub source）；systematic-debugging 管根因调查（不知是否 CI 问题）
 - `systematic-debugging` vs `code-review-deep` → 根因未知的运行时故障 vs 已知代码的质量审查
-- `systematic-debugging` vs `implementx` → 调查阶段（根因未知）vs 执行阶段（根因已知，动手修）
-- `systematic-debugging` vs `verifyx` → 诊断（找根因）vs 验证（确认修复成功）
 - `infographic` vs `diagramming` → HTML 信息图（浏览器渲染，富视觉）vs Mermaid/Graphviz（文本语法，可粘贴 Markdown）
 - `infographic` vs `scientific-figure-plotting` → 静态信息图/知识卡片（HTML）vs 代码驱动科研图表（matplotlib）
 - `infographic` vs `slides` → 单页信息图 vs 多页演示文稿

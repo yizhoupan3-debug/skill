@@ -1,0 +1,66 @@
+{
+  "schema_version": "tool-registry-v1",
+  "description": "Business tool registry for tool routing pipeline. Each tool maps to a rust_tools/ binary with MCP endpoint.",
+  "tools": [
+    {
+      "slug": "pptx-tool",
+      "kind": "tool",
+      "binary": "pptx_tool_rs",
+      "mcp_endpoint": "mcp-pptx",
+      "description": "PPT/PPTX layout-aware reading and generation",
+      "trigger_hints": ["ppt", "pptx", "slides", "presentation", "幻灯片", "演示文稿", "beamer"],
+      "gate": "artifact",
+      "host_platforms": ["claude", "cursor", "opencode", "codex"]
+    },
+    {
+      "slug": "pdf-tool",
+      "kind": "tool",
+      "binary": "pdf_tool_rs",
+      "mcp_endpoint": "mcp-pdf",
+      "description": "PDF layout-aware reading, editing, and review",
+      "trigger_hints": ["pdf", "PDF", "文档", "论文", "paper"],
+      "gate": "artifact",
+      "host_platforms": ["claude", "cursor", "opencode", "codex"]
+    },
+    {
+      "slug": "citation-tool",
+      "kind": "tool",
+      "binary": "citation_tool_rs",
+      "mcp_endpoint": "mcp-citation",
+      "description": "Academic citation formatting and management",
+      "trigger_hints": ["citation", "引用", "参考文献", "bibliography", "cite"],
+      "gate": "source",
+      "host_platforms": ["claude", "cursor", "opencode", "codex"]
+    },
+    {
+      "slug": "financial-data-tool",
+      "kind": "tool",
+      "binary": "financial_data_rs",
+      "mcp_endpoint": "mcp-financial",
+      "description": "Financial data retrieval and analysis",
+      "trigger_hints": ["financial", "finance", "股票", "财报", "金融", "行情"],
+      "gate": "source",
+      "host_platforms": ["claude", "cursor", "opencode", "codex"]
+    },
+    {
+      "slug": "gh-source-gate-tool",
+      "kind": "tool",
+      "binary": "gh_source_gate_rs",
+      "mcp_endpoint": "mcp-gh-source",
+      "description": "GitHub source code access gate",
+      "trigger_hints": ["github source", "源码", "source code", "repo"],
+      "gate": "source",
+      "host_platforms": ["claude", "cursor", "opencode", "codex"]
+    },
+    {
+      "slug": "ooxml-parser-tool",
+      "kind": "tool",
+      "binary": "ooxml_parser_rs",
+      "mcp_endpoint": "mcp-ooxml",
+      "description": "OOXML (Office Open XML) document parsing",
+      "trigger_hints": ["ooxml", "office xml", "docx", "xlsx"],
+      "gate": "artifact",
+      "host_platforms": ["claude", "cursor", "opencode", "codex"]
+    }
+  ]
+}

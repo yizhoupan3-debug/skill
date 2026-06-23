@@ -86,18 +86,6 @@
       "kind": "skill",
       "skill_path": "skills/diagramming/SKILL.md"
     },
-    "discussx": {
-      "host_support": {
-        "platforms": [
-          "claude",
-          "codex",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/discussx/SKILL.md"
-    },
     "doc": {
       "host_support": {
         "platforms": [
@@ -181,18 +169,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/gitx/SKILL.md"
-    },
-    "implementx": {
-      "host_support": {
-        "platforms": [
-          "claude",
-          "codex",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/implementx/SKILL.md"
     },
     "infographic": {
       "host_support": {
@@ -289,18 +265,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/plan-mode/SKILL.md"
-    },
-    "planx": {
-      "host_support": {
-        "platforms": [
-          "claude",
-          "codex",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/planx/SKILL.md"
     },
     "prose-verification": {
       "host_support": {
@@ -505,18 +469,6 @@
       },
       "kind": "skill",
       "skill_path": "skills/update/SKILL.md"
-    },
-    "verifyx": {
-      "host_support": {
-        "platforms": [
-          "claude",
-          "codex",
-          "cursor",
-          "opencode"
-        ]
-      },
-      "kind": "skill",
-      "skill_path": "skills/verifyx/SKILL.md"
     },
     "visual-review": {
       "host_support": {

@@ -1,8 +1,8 @@
 # Schema drift — task headings contract
 
 **Owner**: `core/runtime-core/src/schema_drift.rs`  
-**Evidence protocol**: `skills/verifyx/references/evidence-protocol.md`  
-**Verify skill**: `skills/verifyx/SKILL.md`
+**Evidence protocol**: 项目通用 evidence 协议（见 `docs/` 目录）  
+**Verification**: 项目通用验证流程
 
 ## Task artifact headings
 
@@ -14,4 +14,4 @@ cargo run --manifest-path core/router-rs/Cargo.toml -- schema-drift baseline --r
 
 ## Post-verify purge
 
-After `/verifyx` PASS and closeout write, remove `artifacts/current/<task_id>/` entirely. See `skills/verifyx/SKILL.md` § Post-verify task-dir purge.
+After verification PASS and closeout write, remove `artifacts/current/<task_id>/` entirely. See verification skill documentation for task-dir purge details.

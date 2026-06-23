@@ -168,6 +168,6 @@ echo "==> status" >&2
   --artifact-root "$PROJECT_ROOT/artifacts"
 
 echo "" >&2
-echo "Done. Claude: confirm ~/.claude/rules/framework.md mentions /discussx (not /gsd-*)." >&2
+echo "Done. Claude: confirm ~/.claude/rules/framework.md lifecycle is set." >&2
 echo "Re-run after framework updates:" >&2
 echo "  $FRAMEWORK_ROOT/scripts/install-claude.sh" >&2

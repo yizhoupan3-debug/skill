@@ -327,31 +327,6 @@
       null
     ],
     [
-      "discussx",
-      "L0",
-      "owner",
-      "none",
-      "P1",
-      "Personal lifecycle discuss — requirements, decisions-only chat, doc-only.",
-      "n/a",
-      [
-        "/discussx",
-        "discussx"
-      ],
-      "runtime",
-      0,
-      "skills/discussx/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "framework_command",
-      null,
-      "haiku"
-    ],
-    [
       "doc",
       "L3",
       "gate",
@@ -585,65 +560,6 @@
       ],
       "framework_command",
       null,
-      null
-    ],
-    [
-      "implementx",
-      "L0",
-      "owner",
-      "none",
-      "P1",
-      "Personal lifecycle implement — one-breath all waves, multi-agent, main thread scheduler only.",
-      "n/a",
-      [
-        "/implementx",
-        "API 文档",
-        "api docs",
-        "documentation",
-        "implementx",
-        "onboarding guide",
-        "readme",
-        "写 ADR",
-        "写 README",
-        "文档完整性",
-        "生成 changelog",
-        "补文档"
-      ],
-      "runtime",
-      0,
-      "skills/implementx/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "framework_command",
-      [
-        "mcp__mcp-codegraph__codegraph_search",
-        "mcp__mcp-codegraph__codegraph_callers",
-        "mcp__mcp-codegraph__codegraph_callees",
-        "mcp__mcp-codegraph__codegraph_impact",
-        "mcp__mcp-codegraph__codegraph_node",
-        "mcp__mcp-codegraph__codegraph_status",
-        "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition",
-        "mcp__router-rs-framework__goal_state_manage",
-        "mcp__router-rs-framework__goal_state_read",
-        "mcp__router-rs-framework__record_evidence",
-        "mcp__router-rs-framework__session_checkpoint",
-        "mcp__router-rs-framework__closeout_gate",
-        "mcp__router-rs-framework__closeout_record_write",
-        "mcp__router-rs-framework__quality_gate_manage",
-        "mcp__router-rs-framework__quality_gate_status",
-        "mcp__router-rs-framework__skill_route",
-        "mcp__router-rs-framework__skill_search",
-        "mcp__router-rs-framework__skill_read",
-        "mcp__router-rs-framework__framework_snapshot",
-        "mcp__router-rs-framework__skill_route_status",
-        "mcp__router-rs-framework__routing_evolution",
-        "mcp__router-rs-framework__web_fetch"
-      ],
       null
     ],
     [
@@ -929,46 +845,6 @@
       "skill",
       null,
       null
-    ],
-    [
-      "planx",
-      "L0",
-      "owner",
-      "none",
-      "P1",
-      "Personal lifecycle plan — ROADMAP and WAVE_STATE DAG, doc-only. My lifecycle 专用，产出 ROADMAP + WAVE_STATE DAG。",
-      "n/a",
-      [
-        "/planx",
-        "planx"
-      ],
-      "runtime",
-      0,
-      "skills/planx/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "framework_command",
-      [
-        "mcp__mcp-codegraph__codegraph_search",
-        "mcp__mcp-codegraph__codegraph_callers",
-        "mcp__mcp-codegraph__codegraph_callees",
-        "mcp__mcp-codegraph__codegraph_impact",
-        "mcp__mcp-codegraph__codegraph_node",
-        "mcp__mcp-codegraph__codegraph_status",
-        "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition",
-        "mcp__router-rs-framework__skill_route",
-        "mcp__router-rs-framework__skill_search",
-        "mcp__router-rs-framework__skill_read",
-        "mcp__router-rs-framework__framework_snapshot",
-        "mcp__router-rs-framework__skill_route_status",
-        "mcp__router-rs-framework__routing_evolution"
-      ],
-      "sonnet"
     ],
     [
       "prose-verification",
@@ -1619,55 +1495,6 @@
       null
     ],
     [
-      "verifyx",
-      "L0",
-      "owner",
-      "none",
-      "P1",
-      "Personal lifecycle verify+ship — evidence, closeout, goal complete in one command.",
-      "n/a",
-      [
-        "/verifyx",
-        "verifyx"
-      ],
-      "runtime",
-      0,
-      "skills/verifyx/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "framework_command",
-      [
-        "mcp__mcp-codegraph__codegraph_search",
-        "mcp__mcp-codegraph__codegraph_callers",
-        "mcp__mcp-codegraph__codegraph_callees",
-        "mcp__mcp-codegraph__codegraph_impact",
-        "mcp__mcp-codegraph__codegraph_node",
-        "mcp__mcp-codegraph__codegraph_status",
-        "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition",
-        "mcp__router-rs-framework__goal_state_manage",
-        "mcp__router-rs-framework__goal_state_read",
-        "mcp__router-rs-framework__record_evidence",
-        "mcp__router-rs-framework__session_checkpoint",
-        "mcp__router-rs-framework__closeout_gate",
-        "mcp__router-rs-framework__closeout_record_write",
-        "mcp__router-rs-framework__quality_gate_manage",
-        "mcp__router-rs-framework__quality_gate_status",
-        "mcp__router-rs-framework__skill_route",
-        "mcp__router-rs-framework__skill_search",
-        "mcp__router-rs-framework__skill_read",
-        "mcp__router-rs-framework__framework_snapshot",
-        "mcp__router-rs-framework__skill_route_status",
-        "mcp__router-rs-framework__routing_evolution",
-        "mcp__router-rs-framework__web_fetch"
-      ],
-      null
-    ],
-    [
       "visual-review",
       "L3",
       "gate",
@@ -1748,9 +1575,9 @@
       null
     ]
   ],
-  "full_skill_count": 47,
-  "hot_skill_count": 47,
-  "manifest_skill_count": 47,
+  "full_skill_count": 43,
+  "hot_skill_count": 43,
+  "manifest_skill_count": 43,
   "version": 2,
   "default_host_platforms": [
     "claude",

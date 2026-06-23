@@ -61,28 +61,11 @@ pub fn once_lock_set<T>(lock: &OnceLock<T>, value: T, name: &str) {
 pub type HookObservationHost = &'static str;
 
 /// Type alias for backward compatibility with function pointer signatures.
-pub type HookObservationHostType = &'static str;
-
-/// Validate that a host_id is one of the known hosts.
-/// Delegates to the build-time-generated HostProvider registry
-/// (source: RUNTIME_REGISTRY.json host_targets.supported).
-pub fn hook_observation_host_from_id(host_id: &str) -> Option<&'static str> {
-    let registry = crate::hosts::host_provider_registry();
-    registry.iter().find(|p| p.host_id() == host_id).map(|p| p.host_id())
-}
-
 /// Canonical host ID for paper prose/adversarial hooks.
 pub type PaperProseHookHost = &'static str;
 
 /// Type alias for backward compatibility with function pointer signatures.
 pub type PaperProseHookHostType = &'static str;
-
-/// Validate that a host_id is a known host for paper hooks.
-/// Delegates to the build-time-generated HostProvider registry.
-pub fn paper_prose_host_from_id(host_id: &str) -> Option<&'static str> {
-    let registry = crate::hosts::host_provider_registry();
-    registry.iter().find(|p| p.host_id() == host_id).map(|p| p.host_id())
-}
 
 /// Per-host env var controlling prose hook injection.
 /// Generated from RUNTIME_REGISTRY.json host_targets.metadata.*.paper_prose_env.

@@ -39,7 +39,7 @@ pub struct HookReviewDiskCore {
     #[serde(default)]
     pub reject_reason_seen: bool,
     // ── Goal tracking fields (serde default = backward compat with v1) ──
-    /// `/implementx` or `/verifyx` has been invoked in this session.
+    /// Goal drive entry has been invoked in this session.
     #[serde(default)]
     pub goal_drive_entry_active: bool,
     /// Structured goal contract has been seen in assistant response.

@@ -9,7 +9,7 @@ pub use rt_storage::{background_state, runtime_envelope_ids, runtime_storage};
 pub use trace_runtime;
 
 // ── migrated modules (B3) ──
-pub use ::framework_runtime::{closeout_enforcement, execution_contract};
+pub use fr_contracts::{closeout_enforcement, execution_contract};
 pub mod framework_runtime;
 pub use session_supervisor;
 pub use framework_kernel::framework_profile;
@@ -24,7 +24,7 @@ pub use framework_extra::session_call as session_call_tracker;
 pub use infrastructure::{
     kernel_bootstrap, framework_skills, stdio_transport, telemetry_emit,
 };
-pub use ::framework_runtime::router_env_flags::*;
+pub use fr_exec::router_env_flags::*;
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
 pub use rt_core_contracts::{
@@ -302,8 +302,8 @@ pub fn register_host_projection_hooks() {
         );
 
         // ── framework-runtime internal hooks (pre_tool_use_guard, closeout, etc.) ──
-        ::framework_runtime::hooks::register(::framework_runtime::hooks::RuntimeCoreHooks {
-            telemetry: ::framework_runtime::hooks::TelemetryHooks {
+        framework_runtime_hooks::register(framework_runtime_hooks::RuntimeCoreHooks {
+            telemetry: framework_runtime_hooks::TelemetryHooks {
                 hook_fired: telemetry_emit::emit_hook_fired,
                 tool_call: |tool, count, blocked| {
                     telemetry_emit::emit_tool_call(tool, count as u64, blocked);
@@ -312,7 +312,7 @@ pub fn register_host_projection_hooks() {
                 prediction_outcome: |_task_id, _checks_summary, _verification_status, _checks_count| {},
                 rfv_round: telemetry_emit::emit_rfv_round,
             },
-            host_provider: ::framework_runtime::hooks::HostProviderHooks {
+            host_provider: framework_runtime_hooks::HostProviderHooks {
                 for_routing_spelling: |host_id| {
                     host_id.and_then(|id| {
                         hosts::host_provider::host_provider_for_routing_spelling(id)
@@ -351,10 +351,10 @@ pub fn register_host_projection_hooks() {
 
         // ── Runtime trace transport proxies (for L3 browser-mcp) ──
         host_projection::hooks::register_attach_runtime_event_transport(
-            |payload| ::framework_runtime::trace_attach::attach_runtime_event_transport(payload),
+            |payload| fr_exec::trace_attach::attach_runtime_event_transport(payload),
         );
         host_projection::hooks::register_inspect_trace_stream(
-            ::framework_runtime::trace_stream_io::inspect_trace_stream,
+            fr_exec::trace_stream_io::inspect_trace_stream,
         );
 
         // ── stdio transport dispatch (decouples runtime-infra from cli/) ──
@@ -408,4 +408,4 @@ pub fn touch_test_kernel_bootstrap() {
 
 #[cfg(not(test))]
 pub fn touch_test_kernel_bootstrap() {}
-pub use framework_runtime::FRAMEWORK_RUNTIME_AUTHORITY;
+pub use fr_utils::constants::FRAMEWORK_RUNTIME_AUTHORITY;

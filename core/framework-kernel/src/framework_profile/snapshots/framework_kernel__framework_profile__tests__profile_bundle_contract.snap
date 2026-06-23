@@ -192,12 +192,8 @@ expression: json
     "framework_profile_version": "0.1.0",
     "host_alias_entrypoints": {
       "deepinterview": "/deepinterview",
-      "discussx": "/discussx",
       "gitx": "/gitx",
-      "implementx": "/implementx",
-      "planx": "/planx",
-      "update": "/update",
-      "verifyx": "/verifyx"
+      "update": "/update"
     },
     "host_family": "shared-rust-core",
     "host_payload": {

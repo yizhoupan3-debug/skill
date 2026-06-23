@@ -29,7 +29,7 @@ depends_on:
 
 ## 默认生命周期 (Lifecycle)
 
-完整定义见 [`AGENTS.md`](../../AGENTS.md) §Lifecycle。四宿主统一：`/discussx` → `/planx` → `/implementx` → `/verifyx`。执行 Profile 调优（`interactive` 等）见各宿主手册的 Review Gate 小节。
+完整定义见 [`AGENTS.md`](../../AGENTS.md) §Lifecycle。执行 Profile 调优（`interactive` 等）见各宿主手册的 Review Gate 小节。
 
 ## Python 环境治理 (Python Environment)
 

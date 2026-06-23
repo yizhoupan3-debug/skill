@@ -21,7 +21,7 @@ fn rust_contracts_doc_no_longer_uses_stale_transition_wording() {
 }
 
 #[test]
-fn host_and_contract_docs_avoid_stale_codex_and_planx_wording() {
+fn host_and_contract_docs_avoid_stale_codex_wording() {
     let root = project_root();
     let mut paths = vec!["docs/spec.md".to_string(), "AGENTS.md".to_string()];
     let hosts_dir = root.join("docs/hosts");
@@ -51,12 +51,6 @@ fn host_and_contract_docs_avoid_stale_codex_and_planx_wording() {
     assert!(
         !joined.contains("AGENTS.md bootstrap"),
         "stale Codex bootstrap wording in host/contract docs"
-    );
-
-    let planx_impl = Regex::new(r"(?is)/planx[^\n]{0,400}implementation_plan\.md").unwrap();
-    assert!(
-        !planx_impl.is_match(&joined),
-        "stale /planx + implementation_plan.md pairing in host/contract docs"
     );
 }
 

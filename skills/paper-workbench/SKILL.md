@@ -228,7 +228,7 @@ claim_lock_status:
 
 ## Verification and closeout
 
-Before claiming a revision is done, verify that all `edit_scope` items are addressed and the claim ledger reflects actual changes. The `verifyx` closeout gate checks for evidence rows and successful verification commands.
+Before claiming a revision is done, verify that all `edit_scope` items are addressed and the claim ledger reflects actual changes. Ensure evidence rows and verification commands confirm the revision.
 
 ## Ref-first manuscript workflow
 
