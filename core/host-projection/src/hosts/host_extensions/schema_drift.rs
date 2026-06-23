@@ -269,3 +269,71 @@ pub fn host_hooks_json_ok(hooks: &Value) -> bool {
             .map(|a| a.is_empty())
             .unwrap_or(false)
 }
+
+// ---------------------------------------------------------------------------
+// Unified host projection verification (registry-driven)
+// ---------------------------------------------------------------------------
+
+/// Unified verification of a host's projection installation.
+///
+/// All host-specific data (hooks path, events, launcher) is derived from the
+/// HostProvider registry. No per-host hardcoded paths or match arms.
+///
+/// Checks:
+/// 1. If host has hooks_manifest_path → verify hooks.json exists and has correct structure
+/// 2. If host has registered_hook_events → verify all events are registered in hooks.json
+/// 3. Launcher command pattern derived from host_id
+pub fn verify_host_projection(repo_root: &Path, host_id: &str) -> Result<(), String> {
+    let provider = crate::hosts::host_provider_for_id(host_id)
+        .ok_or_else(|| format!("verify_host_projection: unknown host {host_id}"))?;
+
+    let hooks_manifest_path = provider.hooks_manifest_path();
+
+    // If host has hooks.json, verify it
+    if let Some(hooks_rel) = hooks_manifest_path {
+        let hooks_path = repo_root.join(hooks_rel);
+        if !hooks_path.is_file() {
+            return Err(format!(
+                "verify_{host_id}: missing {hooks_rel}"
+            ));
+        }
+
+        let text = std::fs::read_to_string(&hooks_path)
+            .map_err(|e| format!("verify_{host_id}: read {hooks_rel}: {e}"))?;
+        let payload: Value = serde_json::from_str(&text)
+            .map_err(|e| format!("verify_{host_id}: parse {hooks_rel}: {e}"))?;
+        let hooks = payload
+            .get("hooks")
+            .and_then(Value::as_object)
+            .ok_or_else(|| {
+                format!("verify_{host_id}: {hooks_rel} must contain a hooks object")
+            })?;
+
+        let expected_events = provider.registered_hook_events();
+        let launcher_needle = format!("{host_id}-router-rs-hook.sh");
+
+        for event in expected_events {
+            let entries = hooks
+                .get(*event)
+                .and_then(Value::as_array)
+                .filter(|a| !a.is_empty())
+                .ok_or_else(|| format!("verify_{host_id}: missing hook event {event}"))?;
+            let cmds: Vec<&str> = entries
+                .iter()
+                .filter_map(|entry| entry.get("command").and_then(Value::as_str))
+                .collect();
+            if cmds.is_empty() {
+                return Err(format!(
+                    "verify_{host_id}: event {event} must contain command hooks"
+                ));
+            }
+            if !cmds.iter().any(|c| c.contains(&launcher_needle)) {
+                return Err(format!(
+                    "verify_{host_id}: {event} must invoke `{launcher_needle}` (see {hooks_rel})"
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}

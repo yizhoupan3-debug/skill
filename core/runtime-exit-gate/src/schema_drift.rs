@@ -117,20 +117,26 @@ fn fallback_host_hooks_json() -> Value {
     })
 }
 
-/// Snapshot a host's hooks using the shared L0 function.
-/// All host-specific data (paths, events, cmd fragment) is sourced from the HostProvider registry.
-fn snapshot_host_hooks_json_for(repo_root: &Path, host_id: &str) -> Result<Value, String> {
-    let hooks_path = format!(".{}/hooks.json", host_id);
-    let template_path = format!("configs/framework/{}-hooks.workspace-template.json", host_id);
-    let cmd_fragment = format!("{}-router-rs-hook.sh", host_id);
-    shared_schema_drift::snapshot_host_hooks_json(
-        repo_root,
-        Path::new(&hooks_path),
-        Path::new(&template_path),
-        host_projection::hosts::host_extensions::config::host_registered_hook_events(host_id),
-        &[],  // no forbidden events for generic path
-        &cmd_fragment,
-    )
+/// Snapshot all hosts' hooks using the shared L0 function.
+/// Iterates ALL_HOST_IDS from the registry — no host-specific hardcoding.
+fn snapshot_all_host_hooks(repo_root: &Path) -> Value {
+    let mut map = serde_json::Map::new();
+    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        let hooks_path = format!(".{}/hooks.json", host_id);
+        let template_path = format!("configs/framework/{}-hooks.workspace-template.json", host_id);
+        let cmd_fragment = format!("{host_id}-router-rs-hook.sh");
+        let snap = shared_schema_drift::snapshot_host_hooks_json(
+            repo_root,
+            Path::new(&hooks_path),
+            Path::new(&template_path),
+            host_projection::hosts::host_extensions::config::host_registered_hook_events(host_id),
+            &[],
+            &cmd_fragment,
+        )
+        .unwrap_or_else(|_| fallback_host_hooks_json());
+        map.insert(host_id.to_string(), snap);
+    }
+    Value::Object(map)
 }
 
 /// Check whether a host hooks snapshot JSON blob is valid.
@@ -203,7 +209,7 @@ pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBase
         schema_version: SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION.to_string(),
         recorded_at: framework_kernel::time::now_iso(),
         task_id: task_id.to_string(),
-        host_hooks: snapshot_host_hooks_json_for(repo_root, "cursor")?,
+        host_hooks: snapshot_all_host_hooks(repo_root),
         task_artifacts: snapshot_task_artifacts(repo_root, task_id),
         contracts: ContractVersionsSnapshot {
             closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
@@ -252,7 +258,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     let baseline_present = path.is_file();
     let mut drift = Vec::new();
 
-    let current_hooks = snapshot_host_hooks_json_for(repo_root, "cursor").unwrap_or_else(|_| fallback_host_hooks_json());
+    let current_hooks = snapshot_all_host_hooks(repo_root);
     let current_artifacts = snapshot_task_artifacts(repo_root, task_id);
     let current_contracts = ContractVersionsSnapshot {
         closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
@@ -374,9 +380,10 @@ fn seven_event_hooks_json(command: &str) -> String {
 
 #[cfg(test)]
 fn write_minimal_seven_event_hooks(repo: &Path, hooks_command: &str, template_command: &str) {
-    fs::create_dir_all(repo.join(".cursor")).unwrap();
+    let dotdir = framework_kernel::runtime_registry::host_private_config_dir("cursor");
+    fs::create_dir_all(repo.join(dotdir)).unwrap();
     fs::write(
-        repo.join(".cursor/hooks.json"),
+        repo.join(format!("{dotdir}/hooks.json")),
         seven_event_hooks_json(hooks_command),
     )
     .unwrap();
@@ -460,9 +467,10 @@ mod tests {
         let task = "t-mismatch";
         seed_task_artifacts(&repo, task);
         write_baseline(&repo, task).unwrap();
+        let dotdir = framework_kernel::runtime_registry::host_private_config_dir("cursor");
         let snap = host_projection::hosts::host_extensions::schema_drift::snapshot_host_hooks(
             &repo,
-            Path::new(".cursor/hooks.json"),
+            Path::new(&format!("{dotdir}/hooks.json")),
             Path::new("configs/framework/cursor-hooks.workspace-template.json"),
             host_projection::hosts::host_extensions::config::host_registered_hook_events("cursor"),
             host_projection::hosts::host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,

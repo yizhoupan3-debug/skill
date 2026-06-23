@@ -5,7 +5,7 @@
 //! Set `ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS=1` to also run `autoresearch_cli` (network / arXiv).
 
 use framework_kernel::cli_args::{
-    InstallCodexUserHooksArgs, MaintRepoArgs, MaintRootsArgs, MaintSubcommand, UpdateAuditArgs,
+    MaintRepoArgs, MaintRootsArgs, MaintSubcommand, UpdateAuditArgs,
 };
 use host_projection::host_integration::{
     cargo_router_rs_executable, resolve_maint_roots, run_host_integration_from_args,
@@ -22,10 +22,16 @@ pub fn dispatch(command: MaintSubcommand) -> Result<(), String> {
     match command {
         MaintSubcommand::RefreshHostProjections(args) => refresh_host_projections(args),
         MaintSubcommand::VerifyCursorHooks(args) => {
-            verify_cursor_hooks(repo_from_maint_repo_args(&args)?)
+            host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
+                &repo_from_maint_repo_args(&args)?,
+                "cursor",
+            )
         }
         MaintSubcommand::VerifyCodexHooks(args) => {
-            verify_codex_hooks(repo_from_maint_repo_args(&args)?)
+            host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
+                &repo_from_maint_repo_args(&args)?,
+                "codex",
+            )
         }
         MaintSubcommand::UpdateOneShot(args) => update_one_shot(args),
         MaintSubcommand::UpdateAudit(args) => update_audit(args),
@@ -36,7 +42,6 @@ pub fn dispatch(command: MaintSubcommand) -> Result<(), String> {
         MaintSubcommand::PrintLocalHomes(args) => {
             print_local_homes(repo_from_maint_repo_args(&args)?)
         }
-        MaintSubcommand::InstallCodexUserHooks(args) => install_codex_user_hooks(args),
         MaintSubcommand::ContinuityAudit(args) => {
             let root = repo_from_maint_repo_args(&args)?;
             framework_extra::framework_doctor::run_continuity_audit(&root).map(|_| ())
@@ -162,7 +167,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     }
 
     verify_installable_projections(&fw, &installable_tools)?;
-    verify_claude_user_projection(&fw)?;
+    host_projection::hosts::host_extensions::schema_drift::verify_host_projection(&fw, "claude")?;
     eprintln!(
         "ok: refreshed installable host projections (cursor=user; claude=project+user; others=project): {}",
         installable_tools.join(", ")
@@ -202,611 +207,26 @@ fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String>
     Ok(tools)
 }
 
-/// Verify function type for host projection verification.
-type VerifyFn = fn(&Path) -> Result<(), String>;
-
+/// Verify host projections using the unified registry-driven verifier.
+/// All host-specific data (hooks path, events, launcher) is derived from
+/// the HostProvider registry via `verify_host_projection`.
 fn verify_installable_projections(repo_root: &Path, tools: &[String]) -> Result<(), String> {
-    let registry = build_verify_registry(repo_root)?;
     for tool in tools {
-        if let Some(verify_fn) = registry.get(tool) {
-            verify_fn(repo_root)?;
-        } else {
-            eprintln!("warn: no verifier registered for install tool `{tool}`, skipping");
-        }
-    }
-    Ok(())
-}
-
-/// Build the verify registry from RUNTIME_REGISTRY at runtime.
-/// New hosts only need an entry in RUNTIME_REGISTRY + a `verify_*_projection` fn
-/// in this module; no changes to dispatch logic.
-fn build_verify_registry(
-    repo_root: &Path,
-) -> Result<std::collections::BTreeMap<String, VerifyFn>, String> {
-    let pairs = framework_kernel::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
-        repo_root,
-    )?;
-    let mut map = std::collections::BTreeMap::new();
-    // Registry-driven dispatch table: add new hosts here.
-    const VERIFY_TABLE: &[(&str, VerifyFn)] = &[
-        ("codex", |root| verify_codex_hooks(root.to_path_buf())),
-        ("cursor", |root| verify_cursor_hooks(root.to_path_buf())),
-        ("claude", verify_claude_projection),
-        ("opencode", verify_opencode_projection),
-    ];
-    for (host_id, tool) in pairs {
-        if let Some((_, verify_fn)) = VERIFY_TABLE.iter().find(|(id, _)| *id == host_id.as_str()) {
-            map.insert(tool, *verify_fn);
-        }
-    }
-    Ok(map)
-}
-
-fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
-    let dotdir = framework_kernel::runtime_registry::host_private_config_dir("cursor");
-    let hooks_json = repo_root.join(format!("{dotdir}/hooks.json"));
-    let harness = repo_root.join("configs/framework/HARNESS_OPERATOR_NUDGES.json");
-    for path in [&hooks_json, &harness] {
-        if !path.is_file() {
-            return Err(format!("verify_cursor_hooks: missing {}", path.display()));
-        }
-    }
-
-    let text = fs::read_to_string(&hooks_json).map_err(|e| e.to_string())?;
-    let payload: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-    let hooks = payload
-        .get("hooks")
-        .and_then(Value::as_object)
-        .ok_or_else(|| {
-            format!("verify_cursor_hooks: {dotdir}/hooks.json must contain a hooks object")
-        })?;
-
-    let required_events = host_projection::hosts::host_extensions::config::host_registered_hook_events("cursor");
-    let router_needle = format!("{dotdir}-router-rs-hook.sh").replace('.', "");
-    let launcher_needle = router_needle.clone();
-
-    for event in required_events {
-        let entries = hooks
-            .get(*event)
-            .and_then(Value::as_array)
-            .filter(|a| !a.is_empty())
-            .ok_or_else(|| format!("verify_cursor_hooks: missing hook event {event}"))?;
-        let cmds: Vec<&str> = entries
+        // tool is an install_tool name (e.g. "cursor", "claude").
+        // Resolve to host_id via registry, then verify.
+        let host_id = framework_kernel::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(repo_root)?
             .iter()
-            .filter_map(|entry| entry.get("command").and_then(Value::as_str))
-            .collect();
-        if cmds.is_empty() {
-            return Err(format!(
-                "verify_cursor_hooks: event {event} must contain command hooks"
-            ));
-        }
-        if !cmds
-            .iter()
-            .any(|c| c.contains(&router_needle) || c.contains(&launcher_needle))
-        {
-            return Err(format!(
-                "verify_cursor_hooks: {event} must invoke `{router_needle}` or `{launcher_needle}` (see hooks.json)"
-            ));
-        }
-    }
-
-    verify_cursor_launcher_fail_closed(&repo_root)?;
-    run_cursor_smoke_session_start(&repo_root)?;
-    eprintln!("verify_cursor_hooks: ok");
-    Ok(())
-}
-
-fn verify_cursor_launcher_fail_closed(repo_root: &Path) -> Result<(), String> {
-    let launcher = repo_root.join("configs/framework/cursor-router-rs-hook.sh");
-    if !launcher.is_file() {
-        return Err(format!(
-            "verify_cursor_hooks: missing launcher {}",
-            launcher.display()
-        ));
-    }
-    let script = fs::read_to_string(&launcher).map_err(|e| e.to_string())?;
-    for needle in [
-        "emit_fail_closed_json",
-        "exit 2",
-        "\\\"continue\\\":false",
-        "beforesubmitprompt",
-    ] {
-        if !script.contains(needle) {
-            return Err(format!(
-                "verify_cursor_hooks: launcher must contain `{needle}` (fail-closed contract)"
-            ));
-        }
-    }
-
-    let empty_ws =
-        std::env::temp_dir().join(format!("verify-cursor-launcher-{}", std::process::id()));
-    fs::create_dir_all(&empty_ws).map_err(|e| e.to_string())?;
-    let empty_target = empty_ws.join("no-router-rs-target");
-    fs::create_dir_all(&empty_target).map_err(|e| e.to_string())?;
-
-    const CRITICAL_EVENTS: &[(&str, &str)] = &[
-        ("BeforeSubmitPrompt", "continue:false"),
-        ("PostToolUse", "continue:false"),
-        ("SubagentStart", "permission:deny"),
-        ("SubagentStop", "continue:false"),
-        ("Stop", "continue:false"),
-    ];
-    let empty_home = empty_ws.join("home");
-    fs::create_dir_all(&empty_home).map_err(|e| e.to_string())?;
-    for (event, contract) in CRITICAL_EVENTS {
-        let output = Command::new("/bin/bash")
-            .arg(&launcher)
-            .arg(event)
-            .env_remove("ROUTER_RS_BIN")
-            .env("CARGO_TARGET_DIR", &empty_target)
-            .env("PATH", "/usr/bin:/bin")
-            .env("HOME", &empty_home)
-            .env("CURSOR_WORKSPACE_ROOT", &empty_ws)
-            .env("SKILL_FRAMEWORK_ROOT", &empty_ws)
-            .output()
-            .map_err(|e| e.to_string())?;
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        if output.status.code() != Some(2) {
-            return Err(format!(
-                "verify_cursor_hooks: launcher missing binary must exit 2 for {event} (got {:?}); stdout={stdout}",
-                output.status.code()
-            ));
-        }
-        match *contract {
-            "continue:false" if !stdout.contains("\"continue\":false") => {
-                return Err(format!(
-                    "verify_cursor_hooks: {event} fail-closed must emit continue:false; stdout={stdout}"
-                ));
-            }
-            "permission:deny" if !stdout.contains("\"permission\":\"deny\"") => {
-                return Err(format!(
-                    "verify_cursor_hooks: {event} fail-closed must emit permission deny; stdout={stdout}"
-                ));
-            }
-            _ => {}
-        }
+            .find(|(_, t)| t == tool)
+            .map(|(id, _)| id.clone())
+            .unwrap_or_else(|| tool.clone());
+        host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
+            repo_root,
+            &host_id,
+        )?;
     }
     Ok(())
 }
 
-fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
-    let dotdir = framework_kernel::runtime_registry::host_private_config_dir("claude");
-    let rule = repo_root.join(format!("{dotdir}/rules/framework.md"));
-    let settings = repo_root.join(format!("{dotdir}/settings.json"));
-    let manifest = repo_root.join(format!("{dotdir}/.framework-projection.json"));
-    for path in [&rule, &settings, &manifest] {
-        if !path.is_file() {
-            return Err(format!(
-                "verify_claude_projection: missing {}",
-                path.display()
-            ));
-        }
-    }
-    let rule_text = fs::read_to_string(&rule).map_err(|e| e.to_string())?;
-    if !rule_text.contains("host_projection: claude") {
-        return Err(
-            format!("verify_claude_projection: {dotdir}/rules/framework.md must declare claude projection"),
-        );
-    }
-    let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
-    let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
-    if manifest_json.get("host_projection").and_then(Value::as_str) != Some("claude") {
-        return Err(
-            format!("verify_claude_projection: {dotdir}/.framework-projection.json must declare claude")
-                .to_string(),
-        );
-    }
-    let settings_text = fs::read_to_string(&settings).map_err(|e| e.to_string())?;
-    let settings_json: Value = serde_json::from_str(&settings_text).map_err(|e| e.to_string())?;
-    for event in ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop"] {
-        let has_hook = settings_json
-            .get("hooks")
-            .and_then(|hooks| hooks.get(event))
-            .map(|value| {
-                let serialized = value.to_string();
-                (serialized.contains("router-rs") && serialized.contains("claude hook"))
-                    || serialized.contains("claude-router-rs-hook.sh")
-            })
-            .unwrap_or(false);
-        if !has_hook {
-            return Err(format!(
-                "verify_claude_projection: .claude/settings.json missing router-rs hook for {event}"
-            ));
-        }
-    }
-    if !rule_text.contains("/discussx") {
-        return Err(
-            "verify_claude_code_projection: .claude/rules/framework.md must reference My lifecycle (/discussx)"
-                .to_string(),
-        );
-    }
-    if rule_text.contains("/gsd-") {
-        return Err(
-            "verify_claude_code_projection: .claude/rules/framework.md must not reference retired /gsd-*"
-                .to_string(),
-        );
-    }
-    eprintln!("verify_claude_code_projection: ok");
-    Ok(())
-}
-
-fn claude_rule_has_stale_gsd_narrative(text: &str) -> bool {
-    text.contains("/gsd-")
-        || (text.contains("GOAL_CONTINUE") && !text.contains("does not inject GOAL_CONTINUE"))
-}
-
-fn verify_claude_user_projection(_framework_root: &Path) -> Result<(), String> {
-    let claude_home = claude_home_path()?;
-    let rule = claude_home.join("rules").join("framework.md");
-    if !rule.is_file() {
-        return Err(format!(
-            "verify_claude_user_projection: missing {} — run ./scripts/install-claude.sh --scope user",
-            rule.display()
-        ));
-    }
-    let text = fs::read_to_string(&rule).map_err(|e| e.to_string())?;
-    if !text.contains("host_projection: claude") {
-        return Err(format!(
-            "verify_claude_user_projection: {} must declare claude (run install-claude.sh --scope user)",
-            rule.display()
-        ));
-    }
-    if claude_rule_has_stale_gsd_narrative(&text) {
-        return Err(format!(
-            "verify_claude_user_projection: {} stale GSD/GOAL_CONTINUE narrative — run ./scripts/install-claude.sh --scope user",
-            rule.display()
-        ));
-    }
-    if !text.contains("/discussx") {
-        return Err(format!(
-            "verify_claude_user_projection: {} missing My lifecycle — run ./scripts/install-claude.sh --scope user",
-            rule.display()
-        ));
-    }
-    eprintln!("verify_claude_user_projection: ok ({})", rule.display());
-    Ok(())
-}
-
-fn verify_opencode_projection(repo_root: &Path) -> Result<(), String> {
-    let roots = host_projection::host_integration::resolve_projection_roots(
-        None,
-        Some(repo_root),
-        None,
-        None,
-        None,
-        None,
-        None,
-        None,
-    )?;
-
-    let mut last_error = None;
-    for scope in ["project", "user"] {
-        match verify_opencode_projection_scope(&roots, scope) {
-            Ok(()) => {
-                eprintln!("verify_opencode_projection: ok");
-                return Ok(());
-            }
-            Err(e) => {
-                last_error = Some(e);
-            }
-        }
-    }
-
-    Err(last_error.unwrap_or_else(|| {
-        "verify_opencode_projection: failed to resolve projection roots".to_string()
-    }))
-}
-
-fn verify_opencode_projection_scope(
-    roots: &host_projection::host_integration::ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<(), String> {
-    let dotdir = framework_kernel::runtime_registry::host_private_config_dir("opencode");
-    let config = if scope == "user" {
-        roots
-            .account_home_root
-            .join(".config/opencode/opencode.json")
-    } else {
-        roots.project_root.join(format!("{dotdir}/opencode.json"))
-    };
-    let manifest = if scope == "user" {
-        roots
-            .account_home_root
-            .join(".config/opencode/.framework-projection.json")
-    } else {
-        roots
-            .project_root
-            .join(format!("{dotdir}/.framework-projection.json"))
-    };
-
-    for path in [&config, &manifest] {
-        if !path.is_file() {
-            return Err(format!(
-                "verify_opencode_projection: missing {} in scope {}",
-                path.display(),
-                scope
-            ));
-        }
-    }
-
-    let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
-    let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
-    let host_projection = manifest_json
-        .get("host_projection")
-        .and_then(Value::as_str)
-        .unwrap_or("");
-    if host_projection != "opencode" {
-        return Err(format!(
-            "verify_opencode_projection: manifest must declare opencode in scope {}",
-            scope
-        ));
-    }
-
-    let config_text = fs::read_to_string(&config).map_err(|e| e.to_string())?;
-    let registry =
-        framework_kernel::runtime_registry::load_runtime_registry_payload(&roots.project_root)
-            .map_err(|e| format!("verify_opencode_projection: {e}"))?;
-    let required_mcps = framework_kernel::runtime_registry::managed_mcp_server_ids(&registry);
-    for mcp_id in &required_mcps {
-        if !config_text.contains(mcp_id) {
-            return Err(format!(
-                "verify_opencode_projection: opencode.json must register {} in scope {}",
-                mcp_id, scope
-            ));
-        }
-    }
-
-    Ok(())
-}
-
-fn run_cursor_smoke_session_start(repo_root: &Path) -> Result<(), String> {
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let status = Command::new(&exe)
-        .args([
-            "host",
-            "cursor",
-            "hook",
-            "--event=SessionStart",
-            "--repo-root",
-            &repo_root.to_string_lossy(),
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::inherit())
-        .status()
-        .map_err(|e| e.to_string())?;
-    if !status.success() {
-        return Err(format!(
-            "verify_cursor_hooks: cursor hook SessionStart smoke failed: {status}"
-        ));
-    }
-    Ok(())
-}
-
-fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
-    let dotdir = framework_kernel::runtime_registry::host_private_config_dir("codex");
-    eprintln!("Verifying Codex hook projection ({dotdir})");
-    let exe = resolve_router_rs_binary(&repo_root)?;
-    for rel in [
-        format!("{dotdir}/config.toml"),
-        format!("{dotdir}/hooks.json"),
-        format!("{dotdir}/README.md"),
-        "AGENTS.md".to_string(),
-    ] {
-        let p = repo_root.join(&rel);
-        if !p.is_file() {
-            return Err(format!("verify_codex_hooks: missing {}", p.display()));
-        }
-    }
-
-    let config =
-        fs::read_to_string(repo_root.join(format!("{dotdir}/config.toml"))).map_err(|e| e.to_string())?;
-    if !config.contains("hooks = true") {
-        return Err(format!("verify_codex_hooks: {dotdir}/config.toml must enable hooks"));
-    }
-    if config.contains("codex_hooks") {
-        return Err(
-            format!("verify_codex_hooks: {dotdir}/config.toml must not use deprecated codex_hooks"),
-        );
-    }
-    let registry = framework_kernel::runtime_registry::load_runtime_registry_payload(&repo_root)
-        .map_err(|e| format!("verify_codex_hooks: {e}"))?;
-    let required_mcps = framework_kernel::runtime_registry::managed_mcp_server_ids(&registry);
-    for mcp_id in &required_mcps {
-        if !config.contains(mcp_id) {
-            return Err(format!(
-                "verify_codex_hooks: {dotdir}/config.toml must register MCP server {mcp_id}"
-            ));
-        }
-    }
-
-    let hooks_text =
-        fs::read_to_string(repo_root.join(format!("{dotdir}/hooks.json"))).map_err(|e| e.to_string())?;
-    // Parse JSON for structural validation instead of fragile string matching
-    let hooks_json: serde_json::Value =
-        serde_json::from_str(&hooks_text).map_err(|e| format!("verify_codex_hooks: invalid hooks.json: {e}"))?;
-    let hooks_obj = hooks_json.as_object()
-        .ok_or_else(|| "verify_codex_hooks: hooks.json must be a JSON object".to_string())?;
-    for &event in host_projection::hosts::host_extensions::config::host_registered_hook_events("codex") {
-        if !hooks_obj.contains_key(event) {
-            return Err(format!(
-                "verify_codex_hooks: missing Codex hook event: {event}"
-            ));
-        }
-    }
-    if hooks_text.contains("scripts/codex_hook_entrypoint.sh") {
-        return Err(
-            format!("verify_codex_hooks: {dotdir}/hooks.json must call router-rs codex hook directly"),
-        );
-    }
-
-    let readme =
-        fs::read_to_string(repo_root.join(format!("{dotdir}/README.md"))).map_err(|e| e.to_string())?;
-    const STALE_HOST_MARKERS: &[&str] = &[
-        "sessionEnd",
-        "Kiro",
-        "qoder",
-        "qoderwork",
-        "antigravity", // intentionally retained: guard against stale hooks referencing retired hosts
-        "trae",
-    ];
-    for marker in STALE_HOST_MARKERS {
-        if hooks_text.contains(marker) {
-            return Err(format!(
-                "verify_codex_hooks: Codex hook projection contains stale marker `{marker}`"
-            ));
-        }
-        if readme.contains(marker) {
-            return Err(format!(
-                "verify_codex_hooks: Codex README contains stale marker `{marker}`"
-            ));
-        }
-    }
-
-    for line in ::framework_runtime::hooks::check_hook_duplicates(&repo_root) {
-        eprintln!("{line}");
-    }
-
-    codex_hook_smoke(
-        &exe,
-        &repo_root,
-        "SessionStart",
-        r#"{"hook_event_name":"SessionStart","session_id":"verify-session","source":"startup"}"#,
-    )?;
-    codex_hook_smoke(
-        &exe,
-        &repo_root,
-        "PreToolUse",
-        r#"{"hook_event_name":"PreToolUse","session_id":"verify-session","tool_name":"functions.exec_command","tool_input":{"cmd":"true"}}"#,
-    )?;
-    codex_hook_smoke(
-        &exe,
-        &repo_root,
-        "UserPromptSubmit",
-        r#"{"hook_event_name":"UserPromptSubmit","session_id":"verify-session","prompt":"全面 review 这个 PR"}"#,
-    )?;
-    codex_hook_smoke_expect(
-        &exe,
-        &repo_root,
-        "Stop",
-        r#"{"hook_event_name":"Stop","session_id":"verify-session","prompt":"继续"}"#,
-        |stdout| {
-            if !stdout.contains("CODEX_REVIEW_GATE") {
-                return Err(format!(
-                    "verify_codex_hooks: Stop without reviewer must emit CODEX_REVIEW_GATE advisory: {stdout}"
-                ));
-            }
-            if stdout.contains(r#""decision":"block"#) && stdout.contains("CODEX_REVIEW_GATE") {
-                return Err(format!(
-                    "verify_codex_hooks: review gate Stop must be advisory-only (no decision:block): {stdout}"
-                ));
-            }
-            Ok(())
-        },
-    )?;
-    codex_hook_smoke_expect(
-        &exe,
-        &repo_root,
-        "PostToolUse",
-        r#"{"hook_event_name":"PostToolUse","session_id":"verify-session","prompt":"全面review","tool_name":"Task","tool_input":{"subagent_type":"general-purpose","fork_context":false}}"#,
-        |stdout| {
-            if !stdout.trim().is_empty() && stdout.contains("block") {
-                return Err(format!(
-                    "verify_codex_hooks: PostTool deep lane unexpected block: {stdout}"
-                ));
-            }
-            Ok(())
-        },
-    )?;
-    codex_hook_smoke_expect(
-        &exe,
-        &repo_root,
-        "UserPromptSubmit",
-        r#"{"hook_event_name":"UserPromptSubmit","session_id":"verify-compact-only","prompt":"全面review"}"#,
-        |_| Ok(()),
-    )?;
-    codex_hook_smoke_expect(
-        &exe,
-        &repo_root,
-        "Stop",
-        r#"{"hook_event_name":"Stop","session_id":"verify-compact-only","prompt":"继续","response":"[P1] core/runtime-core/src/hosts/codex_hooks/mod.rs:1 — verify-codex-hooks wave-2 compact must not clear without PostTool evidence"}"#,
-        |stdout| {
-            if !stdout.contains("CODEX_REVIEW_GATE incomplete") {
-                return Err(format!(
-                    "verify_codex_hooks: compact alone must not clear gate without countable PostTool evidence: {stdout}"
-                ));
-            }
-            Ok(())
-        },
-    )?;
-
-    eprintln!("Codex hook projection verified");
-    Ok(())
-}
-
-fn codex_hook_smoke(
-    exe: &Path,
-    repo_root: &Path,
-    label: &str,
-    json_line: &str,
-) -> Result<(), String> {
-    codex_hook_smoke_expect(exe, repo_root, label, json_line, |_| Ok(()))
-}
-
-fn codex_hook_smoke_expect(
-    exe: &Path,
-    repo_root: &Path,
-    label: &str,
-    json_line: &str,
-    check_stdout: impl FnOnce(&str) -> Result<(), String>,
-) -> Result<(), String> {
-    let mut child = Command::new(exe)
-        .args([
-            "host",
-            "codex",
-            "hook",
-            "--event",
-            label,
-            "--repo-root",
-            &repo_root.to_string_lossy(),
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::inherit())
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(format!("{json_line}\n").as_bytes())
-            .map_err(|e| e.to_string())?;
-    }
-    let output = child.wait_with_output().map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err(format!(
-            "verify_codex_hooks: smoke {label} exited {}",
-            output.status
-        ));
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    check_stdout(&stdout)
-}
-
-fn resolve_router_rs_binary(repo_root: &Path) -> Result<PathBuf, String> {
-    if let Ok(p) = std::env::current_exe()
-        && p.file_name()
-            .and_then(|s| s.to_str())
-            .map(|n| n == "router-rs" || n.contains("router-rs"))
-            .unwrap_or(false)
-        {
-            return Ok(p);
-        }
-    cargo_router_rs_executable(repo_root)
-        .or_else(|| which::which("router-rs").ok())
-        .ok_or_else(|| {
-            "router-rs binary not found; build with: cargo build --manifest-path core/router-rs/Cargo.toml"
-                .to_string()
-        })
-}
 
 fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
     let (fw, art) = resolve_maint_roots(
@@ -1314,59 +734,6 @@ fn print_local_homes(fw: PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-fn install_codex_user_hooks(args: InstallCodexUserHooksArgs) -> Result<(), String> {
-    let fw = resolve_maint_roots(args.framework_root.as_deref(), None)?.0;
-    let manifest = fw.join("core/router-rs/Cargo.toml");
-
-    // Prefer existing dev binary (typically already built before `maint install-*` nested under
-    // `cargo test`). Avoid unconditional `--release`; it contends forever on Cargo package locks.
-    let bin = match cargo_router_rs_executable(&fw) {
-        Some(p) if p.is_file() => p,
-        _ => {
-            eprintln!("Building router-rs (dev) for codex hook install...");
-            run_cargo(
-                &fw,
-                &[
-                    "build",
-                    "--manifest-path",
-                    manifest.to_string_lossy().as_ref(),
-                ],
-            )?;
-            cargo_router_rs_executable(&fw).ok_or_else(|| {
-                "router-rs binary missing after dev build (check cargo metadata target_directory)"
-                    .to_string()
-            })?
-        }
-    };
-    let codex_home = match args.codex_home.clone() {
-        Some(p) => p,
-        None => std::env::var_os("HOME")
-            .map(|h| PathBuf::from(h).join(".codex"))
-            .ok_or_else(|| "HOME not set; pass --codex-home".to_string())?,
-    };
-    fs::create_dir_all(&codex_home).map_err(|e| e.to_string())?;
-    let status = Command::new(&bin)
-        .args([
-            "host",
-            "codex",
-            "install-hooks",
-            "--codex-home",
-            codex_home.to_string_lossy().as_ref(),
-            "--apply",
-        ])
-        .status()
-        .map_err(|e| e.to_string())?;
-    if !status.success() {
-        return Err(format!("codex install-hooks failed: {status}"));
-    }
-    eprintln!(
-        "Installed codex hooks into {}\n- {}\n- {}",
-        codex_home.display(),
-        codex_home.join("config.toml").display(),
-        codex_home.join("hooks.json").display()
-    );
-    Ok(())
-}
 
 fn run_cargo(repo_root: &Path, args: &[&str]) -> Result<(), String> {
     let status = Command::new("cargo")

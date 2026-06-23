@@ -20,4 +20,3 @@ framework-runtime = { path = "../../core/framework-runtime" }
 # workspace
 serde_json.workspace = true
 tracing.workspace = true
-which.workspace = true

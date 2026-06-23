@@ -120,7 +120,6 @@ pub enum MaintSubcommand {
     CleanRustTargets(MaintRepoArgs),
     /// Print `export CODEX_HOME=…` / `CURSOR_HOME=…` for repo-local session homes.
     PrintLocalHomes(MaintRepoArgs),
-    InstallCodexUserHooks(InstallCodexUserHooksArgs),
     /// Check task pointers, registry consistency, and identify orphan directories.
     ContinuityAudit(MaintRepoArgs),
     /// Clean stale hook-state files older than TTL (default 7 days).
@@ -180,14 +179,6 @@ pub struct UpdateAuditArgs {
     pub repo_root: Option<PathBuf>,
     #[arg(long)]
     pub framework_root: Option<PathBuf>,
-}
-
-#[derive(Args, Debug, Clone)]
-pub struct InstallCodexUserHooksArgs {
-    #[arg(long)]
-    pub framework_root: Option<PathBuf>,
-    #[arg(long)]
-    pub codex_home: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug, Clone)]

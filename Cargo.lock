@@ -695,7 +695,6 @@ dependencies = [
  "host-projection",
  "serde_json",
  "tracing",
- "which",
 ]
 
 [[package]]
