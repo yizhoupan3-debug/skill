@@ -2,6 +2,7 @@
   "review_gate_regexes": [
     "(?i)\\b(code|security|architecture|architect)\\s+review\\b",
     "(?i)\\breview\\s+this\\s+(pr|pull request)\\b",
+    "(?i)\\breview\\s+this\\s+(code|change|diff|patch|file|function|method|class)\\b",
     "(?i)\\breview\\s+(my\\s+)?(pr|pull request)\\b",
     "(?i)\\b(pr|pull request)\\s+review\\b",
     "(?i)\\breview\\s+(code|security|architecture)\\b",

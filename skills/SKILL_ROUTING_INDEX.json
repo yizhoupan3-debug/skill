@@ -10,7 +10,8 @@
     "path",
     "kind",
     "layer",
-    "owner"
+    "owner",
+    "skill_flags"
   ],
   "skills": [
     [
@@ -33,7 +34,12 @@
       "skills/agent-swarm-orchestration/SKILL.md",
       "skill",
       "L0",
-      "gate"
+      "gate",
+      [
+        "scoring:agent_swarm",
+        "behavior:agent_swarm_owner",
+        "behavior:hot_retry_eligible"
+      ]
     ],
     [
       "algo-trading",
@@ -68,7 +74,8 @@
       "skills/algo-trading/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "citation-management",
@@ -89,8 +96,9 @@
       ],
       "skills/citation-management/SKILL.md",
       "skill",
-      "L1",
-      "owner"
+      "L2",
+      "owner",
+      []
     ],
     [
       "code-review-deep",
@@ -117,7 +125,11 @@
       "skills/code-review-deep/SKILL.md",
       "skill",
       "L2",
-      "owner"
+      "owner",
+      [
+        "scoring:code_review_deep",
+        "behavior:code_review_deep_overlay"
+      ]
     ],
     [
       "deep-research",
@@ -141,7 +153,8 @@
       "skills/deep-research/SKILL.md",
       "skill",
       "L2",
-      "user"
+      "user",
+      []
     ],
     [
       "deepinterview",
@@ -156,7 +169,10 @@
       "skills/deepinterview/SKILL.md",
       "framework_command",
       "L1",
-      "owner"
+      "owner",
+      [
+        "behavior:low_score_override:20.0"
+      ]
     ],
     [
       "design-md",
@@ -180,7 +196,12 @@
       "skills/design-md/SKILL.md",
       "skill",
       "L3",
-      "gate"
+      "gate",
+      [
+        "scoring:design_md",
+        "behavior:hot_retry_eligible",
+        "artifact_exception:design_md_suppress"
+      ]
     ],
     [
       "diagramming",
@@ -205,7 +226,8 @@
       "skills/diagramming/SKILL.md",
       "skill",
       "L3",
-      "owner"
+      "owner",
+      []
     ],
     [
       "discussx",
@@ -218,7 +240,8 @@
       "skills/discussx/SKILL.md",
       "framework_command",
       "L0",
-      "owner"
+      "owner",
+      []
     ],
     [
       "doc",
@@ -238,7 +261,10 @@
       "skills/doc/SKILL.md",
       "skill",
       "L3",
-      "gate"
+      "gate",
+      [
+        "behavior:hot_retry_eligible"
+      ]
     ],
     [
       "email-template",
@@ -260,7 +286,8 @@
       "skills/email-template/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "experiment-reproducibility",
@@ -285,7 +312,8 @@
       "skills/experiment-reproducibility/SKILL.md",
       "skill",
       "L3",
-      "owner"
+      "owner",
+      []
     ],
     [
       "formal-verification",
@@ -302,7 +330,8 @@
       "skills/formal-verification/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "gh-address-comments",
@@ -327,7 +356,10 @@
       "skills/gh-address-comments/SKILL.md",
       "skill",
       "L0",
-      "gate"
+      "gate",
+      [
+        "behavior:ci_gate_fuzzy_rescue_excluded"
+      ]
     ],
     [
       "gh-fix-ci",
@@ -358,7 +390,10 @@
       "skills/gh-fix-ci/SKILL.md",
       "skill",
       "L0",
-      "gate"
+      "gate",
+      [
+        "behavior:nl_exempt_framework_alias"
+      ]
     ],
     [
       "gitx",
@@ -371,7 +406,8 @@
       "skills/gitx/SKILL.md",
       "framework_command",
       "L2",
-      "owner"
+      "owner",
+      []
     ],
     [
       "implementx",
@@ -394,7 +430,8 @@
       "skills/implementx/SKILL.md",
       "framework_command",
       "L0",
-      "owner"
+      "owner",
+      []
     ],
     [
       "infographic",
@@ -413,7 +450,8 @@
       "skills/infographic/SKILL.md",
       "skill",
       "L3",
-      "owner"
+      "owner",
+      []
     ],
     [
       "literature-verification",
@@ -430,7 +468,8 @@
       "skills/literature-verification/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "math-derivation",
@@ -451,7 +490,8 @@
       "skills/math-derivation/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "mcp-server-management",
@@ -470,52 +510,51 @@
       "skills/mcp-server-management/SKILL.md",
       "skill",
       "L3",
-      "owner"
+      "owner",
+      []
     ],
     [
       "paper-workbench",
       "none",
-      "Unified front door for paper work. Use w",
+      "论文全流程前门：自动路由 reviewer/writer lane，一站式审稿、返修、投稿。按顶刊/顶会标准把关，支持 rebuttal、R&R、cover letter 全流程。",
       [
-        "论文写作",
-        "写论文",
-        "论文润色",
-        "英文论文润色",
+        "改稿",
+        "CCF-A 论文",
         "SCI润色",
+        "paper review",
+        "top-tier paper",
+        "严审",
+        "先审再改",
+        "全文审核",
+        "写 rebuttal",
+        "写论文",
+        "只改摘要",
+        "大面积重构",
         "学术润色",
         "帮我审这篇 paper",
         "帮我审这篇论文",
-        "paper review",
-        "严审",
-        "能不能投",
         "投稿前把关",
-        "全文审核",
-        "根据 reviewer comments 改论文",
         "按审稿意见改论文",
-        "缩口径",
-        "写 rebuttal",
         "整体推进这篇论文",
-        "先审再改",
-        "顶刊标准",
-        "顶会标准",
-        "top-tier paper",
-        "CCF-A 论文",
+        "根据 reviewer comments 改论文",
         "精准修改",
-        "大面积重构",
-        "只改摘要",
-        "顶刊标准改稿",
+        "缩口径",
+        "能不能投",
+        "英文论文润色",
+        "论文写作",
+        "论文润色",
+        "顶会标准",
         "顶会标准改稿",
-        "Nature",
-        "Science",
-        "Cell",
-        "NeurIPS",
-        "ICML",
-        "ICLR"
+        "顶刊标准",
+        "顶刊标准改稿"
       ],
       "skills/paper-workbench/SKILL.md",
       "skill",
       "L2",
-      "owner"
+      "owner",
+      [
+        "scoring:paper_workbench"
+      ]
     ],
     [
       "paper-writing",
@@ -534,7 +573,8 @@
       "skills/paper-workbench/SKILL.md",
       "skill",
       "L2",
-      "owner"
+      "owner",
+      []
     ],
     [
       "pdf",
@@ -553,7 +593,10 @@
       "skills/pdf/SKILL.md",
       "skill",
       "L3",
-      "gate"
+      "gate",
+      [
+        "behavior:hot_retry_eligible"
+      ]
     ],
     [
       "plan-mode",
@@ -574,7 +617,8 @@
       "skills/plan-mode/SKILL.md",
       "skill",
       "L1",
-      "owner"
+      "owner",
+      []
     ],
     [
       "planx",
@@ -587,7 +631,8 @@
       "skills/planx/SKILL.md",
       "framework_command",
       "L0",
-      "owner"
+      "owner",
+      []
     ],
     [
       "prose-verification",
@@ -604,7 +649,8 @@
       "skills/prose-verification/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "python-env-management",
@@ -627,7 +673,8 @@
       "skills/python-env-management/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "reproducibility-verification",
@@ -643,7 +690,8 @@
       "skills/reproducibility-verification/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "research-discovery",
@@ -676,7 +724,8 @@
       "skills/research-discovery/SKILL.md",
       "skill",
       "L2",
-      "owner"
+      "owner",
+      []
     ],
     [
       "research-execution",
@@ -706,7 +755,8 @@
       "skills/research-execution/SKILL.md",
       "skill",
       "L2",
-      "owner"
+      "owner",
+      []
     ],
     [
       "scientific-figure-plotting",
@@ -727,7 +777,8 @@
       "skills/scientific-figure-plotting/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "sentry",
@@ -744,7 +795,10 @@
       "skills/sentry/SKILL.md",
       "skill",
       "L0",
-      "gate"
+      "gate",
+      [
+        "behavior:hot_retry_eligible"
+      ]
     ],
     [
       "simplify",
@@ -766,7 +820,8 @@
       "skills/simplify/SKILL.md",
       "skill",
       "L2",
-      "owner"
+      "owner",
+      []
     ],
     [
       "skill-framework-developer",
@@ -792,7 +847,11 @@
       "skills/skill-framework-developer/SKILL.md",
       "skill",
       "L0",
-      "owner"
+      "owner",
+      [
+        "behavior:framework_review_overlay",
+        "behavior:gate_exception_framework_dev"
+      ]
     ],
     [
       "slides",
@@ -811,7 +870,10 @@
       "skills/slides/SKILL.md",
       "skill",
       "L3",
-      "gate"
+      "gate",
+      [
+        "artifact_exception:slides_design_contract"
+      ]
     ],
     [
       "spreadsheets",
@@ -829,7 +891,8 @@
       "skills/primary-runtime/spreadsheets/SKILL.md",
       "skill",
       "L3",
-      "gate"
+      "gate",
+      []
     ],
     [
       "statistical-analysis",
@@ -855,7 +918,8 @@
       "skills/statistical-analysis/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "statistical-verification",
@@ -872,7 +936,8 @@
       "skills/statistical-verification/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "structure-verification",
@@ -889,7 +954,8 @@
       "skills/structure-verification/SKILL.md",
       "skill",
       "L4",
-      "owner"
+      "owner",
+      []
     ],
     [
       "tikz-paper-figure",
@@ -918,7 +984,8 @@
       "skills/tikz-paper-figure/SKILL.md",
       "skill",
       "L3",
-      "owner"
+      "owner",
+      []
     ],
     [
       "update",
@@ -943,7 +1010,8 @@
       "skills/update/SKILL.md",
       "framework_command",
       "L0",
-      "owner"
+      "owner",
+      []
     ],
     [
       "verifyx",
@@ -956,7 +1024,8 @@
       "skills/verifyx/SKILL.md",
       "framework_command",
       "L0",
-      "owner"
+      "owner",
+      []
     ],
     [
       "visual-review",
@@ -978,7 +1047,12 @@
       "skills/visual-review/SKILL.md",
       "skill",
       "L3",
-      "gate"
+      "gate",
+      [
+        "scoring:visual_review",
+        "behavior:gate_exception_visual_screenshot",
+        "behavior:gate_exception_visual_debugging"
+      ]
     ],
     [
       "autoresearch",
@@ -1007,7 +1081,8 @@
       "skills/autoresearch/SKILL.md",
       "skill",
       "L2",
-      "owner"
+      "owner",
+      []
     ],
     [
       "research-knowledge-graph",
@@ -1040,7 +1115,8 @@
       "skills/research-knowledge-graph/SKILL.md",
       "skill",
       "L2",
-      "owner"
+      "owner",
+      []
     ],
     [
       "systematic-debugging",
@@ -1065,7 +1141,10 @@
       "skills/systematic-debugging/SKILL.md",
       "skill",
       "L0",
-      "gate"
+      "gate",
+      [
+        "behavior:systematic_debugging_high_threshold"
+      ]
     ]
   ]
 }

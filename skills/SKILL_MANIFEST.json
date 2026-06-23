@@ -627,7 +627,22 @@
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
         "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition"
+        "mcp__mcp-codegraph__codegraph_goto_definition",
+        "mcp__router-rs-framework__goal_state_manage",
+        "mcp__router-rs-framework__goal_state_read",
+        "mcp__router-rs-framework__record_evidence",
+        "mcp__router-rs-framework__session_checkpoint",
+        "mcp__router-rs-framework__closeout_gate",
+        "mcp__router-rs-framework__closeout_record_write",
+        "mcp__router-rs-framework__quality_gate_manage",
+        "mcp__router-rs-framework__quality_gate_status",
+        "mcp__router-rs-framework__skill_route",
+        "mcp__router-rs-framework__skill_search",
+        "mcp__router-rs-framework__skill_read",
+        "mcp__router-rs-framework__framework_snapshot",
+        "mcp__router-rs-framework__skill_route_status",
+        "mcp__router-rs-framework__routing_evolution",
+        "mcp__router-rs-framework__web_fetch"
       ],
       null
     ],
@@ -945,7 +960,13 @@
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
         "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition"
+        "mcp__mcp-codegraph__codegraph_goto_definition",
+        "mcp__router-rs-framework__skill_route",
+        "mcp__router-rs-framework__skill_search",
+        "mcp__router-rs-framework__skill_read",
+        "mcp__router-rs-framework__framework_snapshot",
+        "mcp__router-rs-framework__skill_route_status",
+        "mcp__router-rs-framework__routing_evolution"
       ],
       "sonnet"
     ],
@@ -1627,7 +1648,22 @@
         "mcp__mcp-codegraph__codegraph_node",
         "mcp__mcp-codegraph__codegraph_status",
         "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition"
+        "mcp__mcp-codegraph__codegraph_goto_definition",
+        "mcp__router-rs-framework__goal_state_manage",
+        "mcp__router-rs-framework__goal_state_read",
+        "mcp__router-rs-framework__record_evidence",
+        "mcp__router-rs-framework__session_checkpoint",
+        "mcp__router-rs-framework__closeout_gate",
+        "mcp__router-rs-framework__closeout_record_write",
+        "mcp__router-rs-framework__quality_gate_manage",
+        "mcp__router-rs-framework__quality_gate_status",
+        "mcp__router-rs-framework__skill_route",
+        "mcp__router-rs-framework__skill_search",
+        "mcp__router-rs-framework__skill_read",
+        "mcp__router-rs-framework__framework_snapshot",
+        "mcp__router-rs-framework__skill_route_status",
+        "mcp__router-rs-framework__routing_evolution",
+        "mcp__router-rs-framework__web_fetch"
       ],
       null
     ],
@@ -1713,9 +1749,9 @@
     ]
   ],
   "full_skill_count": 47,
-  "hot_skill_count": 11,
+  "hot_skill_count": 47,
   "manifest_skill_count": 47,
-  "version": 1,
+  "version": 2,
   "default_host_platforms": [
     "claude",
     "codex",

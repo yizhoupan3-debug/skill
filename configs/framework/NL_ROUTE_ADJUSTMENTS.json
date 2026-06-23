@@ -190,8 +190,8 @@
       },
       "action": {
         "type": "boost",
-        "delta": 36.0,
-        "reason": "Copywriting boost applied: general copywriting wording detected."
+        "delta": 0.0,
+        "reason": "Copywriting context detected but no dedicated copywriting skill — zero boost (informational only)."
       },
       "record": {
         "slug": "paper-workbench"

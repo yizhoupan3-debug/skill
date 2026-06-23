@@ -24,7 +24,8 @@
     "host_platforms",
     "kind",
     "allowedTools",
-    "model"
+    "model",
+    "skill_flags"
   ],
   "skills": [
     [
@@ -59,7 +60,12 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "scoring:agent_swarm",
+        "behavior:agent_swarm_owner",
+        "behavior:hot_retry_eligible"
+      ]
     ],
     [
       "algo-trading",
@@ -111,7 +117,8 @@
         "Write",
         "Edit"
       ],
-      null
+      null,
+      []
     ],
     [
       "autoresearch",
@@ -157,7 +164,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "citation-management",
@@ -191,7 +199,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "code-review-deep",
@@ -242,7 +251,11 @@
         "mcp__mcp-codegraph__codegraph_dead_code",
         "mcp__mcp-codegraph__codegraph_goto_definition"
       ],
-      null
+      null,
+      [
+        "scoring:code_review_deep",
+        "behavior:code_review_deep_overlay"
+      ]
     ],
     [
       "deep-research",
@@ -278,7 +291,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "deepinterview",
@@ -305,7 +319,10 @@
       ],
       "framework_command",
       null,
-      null
+      null,
+      [
+        "behavior:low_score_override:20.0"
+      ]
     ],
     [
       "design-md",
@@ -341,7 +358,12 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "scoring:design_md",
+        "behavior:hot_retry_eligible",
+        "artifact_exception:design_md_suppress"
+      ]
     ],
     [
       "diagramming",
@@ -378,7 +400,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "discussx",
@@ -403,7 +426,8 @@
       ],
       "framework_command",
       null,
-      "haiku"
+      "haiku",
+      []
     ],
     [
       "doc",
@@ -434,7 +458,10 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "behavior:hot_retry_eligible"
+      ]
     ],
     [
       "email-template",
@@ -468,7 +495,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "experiment-reproducibility",
@@ -505,7 +533,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "formal-verification",
@@ -534,7 +563,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "gh-address-comments",
@@ -571,7 +601,10 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "behavior:ci_gate_fuzzy_rescue_excluded"
+      ]
     ],
     [
       "gh-fix-ci",
@@ -614,7 +647,10 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "behavior:nl_exempt_framework_alias"
+      ]
     ],
     [
       "gitx",
@@ -639,7 +675,8 @@
       ],
       "framework_command",
       null,
-      null
+      null,
+      []
     ],
     [
       "implementx",
@@ -698,7 +735,8 @@
         "mcp__router-rs-framework__routing_evolution",
         "mcp__router-rs-framework__web_fetch"
       ],
-      null
+      null,
+      []
     ],
     [
       "infographic",
@@ -729,7 +767,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "literature-verification",
@@ -758,7 +797,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "math-derivation",
@@ -791,7 +831,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "mcp-server-management",
@@ -822,7 +863,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "paper-workbench",
@@ -881,7 +923,10 @@
         "WebSearch",
         "WebFetch"
       ],
-      null
+      null,
+      [
+        "scoring:paper_workbench"
+      ]
     ],
     [
       "paper-writing",
@@ -918,7 +963,8 @@
         "WebSearch",
         "WebFetch"
       ],
-      null
+      null,
+      []
     ],
     [
       "pdf",
@@ -949,7 +995,10 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "behavior:hot_retry_eligible"
+      ]
     ],
     [
       "plan-mode",
@@ -982,7 +1031,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "planx",
@@ -1022,7 +1072,8 @@
         "mcp__router-rs-framework__skill_route_status",
         "mcp__router-rs-framework__routing_evolution"
       ],
-      "sonnet"
+      "sonnet",
+      []
     ],
     [
       "prose-verification",
@@ -1051,7 +1102,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "python-env-management",
@@ -1086,7 +1138,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "reproducibility-verification",
@@ -1114,7 +1167,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "research-discovery",
@@ -1159,7 +1213,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "research-execution",
@@ -1201,7 +1256,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "research-knowledge-graph",
@@ -1246,7 +1302,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "scientific-figure-plotting",
@@ -1279,7 +1336,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "sentry",
@@ -1308,7 +1366,10 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "behavior:hot_retry_eligible"
+      ]
     ],
     [
       "simplify",
@@ -1350,7 +1411,8 @@
         "Grep",
         "Agent"
       ],
-      null
+      null,
+      []
     ],
     [
       "skill-framework-developer",
@@ -1388,7 +1450,11 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "behavior:framework_review_overlay",
+        "behavior:gate_exception_framework_dev"
+      ]
     ],
     [
       "systematic-debugging",
@@ -1425,7 +1491,10 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "behavior:systematic_debugging_high_threshold"
+      ]
     ],
     [
       "slides",
@@ -1461,7 +1530,10 @@
         "Edit",
         "Bash"
       ],
-      null
+      null,
+      [
+        "artifact_exception:slides_design_contract"
+      ]
     ],
     [
       "spreadsheets",
@@ -1491,7 +1563,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "statistical-analysis",
@@ -1529,7 +1602,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "statistical-verification",
@@ -1558,7 +1632,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "structure-verification",
@@ -1587,7 +1662,8 @@
       ],
       "skill",
       null,
-      null
+      null,
+      []
     ],
     [
       "tikz-paper-figure",
@@ -1633,7 +1709,8 @@
         "Edit",
         "Bash"
       ],
-      null
+      null,
+      []
     ],
     [
       "update",
@@ -1670,7 +1747,8 @@
       ],
       "framework_command",
       null,
-      null
+      null,
+      []
     ],
     [
       "verifyx",
@@ -1719,7 +1797,8 @@
         "mcp__router-rs-framework__routing_evolution",
         "mcp__router-rs-framework__web_fetch"
       ],
-      null
+      null,
+      []
     ],
     [
       "visual-review",
@@ -1753,7 +1832,12 @@
       ],
       "skill",
       null,
-      null
+      null,
+      [
+        "scoring:visual_review",
+        "behavior:gate_exception_visual_screenshot",
+        "behavior:gate_exception_visual_debugging"
+      ]
     ]
   ],
   "default_host_platforms": [

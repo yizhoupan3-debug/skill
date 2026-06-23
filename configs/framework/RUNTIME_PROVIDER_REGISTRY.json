@@ -293,5 +293,6 @@
       "failure_taxonomy_rollup"
     ],
     "notes": "Governance evaluation loop for routing accuracy, skill contract quality, and trajectory health monitoring. Currently documented but not executed."
-  }
+  },
+  "lifecycle": "document-only"
 }

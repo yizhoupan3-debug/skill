@@ -532,5 +532,6 @@
     }
   },
   "source_of_truth": false,
-  "version": 1
+  "version": 1,
+  "lifecycle": "write-only"
 }

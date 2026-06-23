@@ -21,7 +21,7 @@
   "alias_hits_per_hit": 4.0,
   "session_start_required_boost": 8.0,
   "session_start_preferred_boost": 3.0,
-  "code_review_deep_boost": 22.0,
+  "code_review_deep_boost": 40.0,
   "gate_owner_boost": 5.0,
   "visual_review_boost": 36.0,
   "visual_review_weak_factor": 0.5,
