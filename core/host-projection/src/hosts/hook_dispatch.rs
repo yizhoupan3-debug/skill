@@ -163,6 +163,7 @@ pub trait HostHookDispatcher: HostHookConfig {
     /// Default: extract prompt, inject review/advisory context.
     fn handle_user_prompt_submit(&self, event: &HookEvent) -> Option<HookOutput> {
         let prompt = extract_prompt_text(event.payload);
+
         if is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &prompt) {
             return None;
         }
@@ -1177,7 +1178,7 @@ pub fn record_tool_call_emission(repo_root: &Path, tool_name: &str, duration_ms:
 /// Merge review gate state on UserPromptSubmit (pure logic, no I/O).
 ///
 /// All 4 hosts share this core sequence:
-/// 1. my_light / goal_drive / narrow → suppress review (clear `review_required` + `independent_reviewer_seen`)
+/// 1. interactive / goal_drive / narrow → suppress review (clear `review_required` + `independent_reviewer_seen`)
 /// 2. review_arms && !override_now → clear `independent_reviewer_seen` (fresh cycle)
 /// 3. Accumulate: `review_required = prev || review_arms`, `review_override = prev || override_now`
 ///
@@ -1332,6 +1333,73 @@ pub fn evaluate_stop_decision(
     StopDecision::Clean
 }
 
+/// Detect if the user is explicitly invoking plan mode in the prompt.
+/// Covers: /planx, /discussx, "写plan", "plan mode", "做计划", "制定计划" etc.
+fn is_plan_keyword_in_prompt(text: &str) -> bool {
+    if core_policy::hook_common::is_my_pre_execution_entry_prompt(text) {
+        return true;
+    }
+    let lower = text.to_ascii_lowercase();
+    lower.contains("plan mode")
+        || lower.contains("写plan")
+        || lower.contains("做计划")
+        || lower.contains("制定计划")
+        || lower.contains("先规划")
+        || lower.contains("先计划")
+        || lower.contains("let's plan")
+        || lower.contains("lets plan")
+}
+
+/// Extract the new constraint phrase from a scope-change message.
+/// Strips common scope-change markers and returns the remaining meaningful text
+/// (truncated to 120 chars for done_when readability).
+fn extract_scope_change_constraint(text: &str) -> String {
+    let trimmed = text.trim();
+
+    // Strip whole-phrase scope-change markers (ZH), longest-first
+    const ZH_MARKERS: &[&str] = &[
+        "另外还需要", "另外还要", "另外需要", "另外要",
+        "顺便说一下", "顺便提一下", "顺便优化", "顺便修复",
+        "补充一下", "补充说明",
+        "等一下", "对了",
+        "追加要求", "增加约束",
+        "另外", "顺便", "补充", "追加", "额外",
+    ];
+    let mut stripped = trimmed;
+    for marker in ZH_MARKERS {
+        if let Some(rest) = stripped.strip_prefix(marker) {
+            stripped = rest;
+            break;
+        }
+    }
+
+    // Strip English markers, longest-first
+    const EN_MARKERS: &[&str] = &[
+        "one more thing", "apart from that", "by the way",
+        "additionally", "also need", "also want",
+    ];
+    for marker in EN_MARKERS {
+        if let Some(rest) = stripped.strip_prefix(marker) {
+            stripped = rest;
+            break;
+        }
+    }
+
+    // Strip leading punctuation and whitespace
+    let stripped = stripped
+        .trim_start_matches(|c: char| c.is_ascii_whitespace() || c == '：' || c == ':' || c == '，' || c == ',' || c == '。' || c == '.');
+
+    // Take first sentence or 120 chars, whichever is shorter
+    let end = stripped
+        .find(|c: char| c == '。' || c == '.' || c == '\n')
+        .unwrap_or(stripped.len());
+    let end = end.min(120);
+    // Use floor_char_boundary to avoid splitting UTF-8 multi-byte characters
+    let safe_end = stripped.floor_char_boundary(end);
+    let result = stripped[..safe_end].trim();
+    result.to_string()
+}
+
 /// Build UserPromptSubmit additional context (spawn-first nudge + paper context).
 /// All 4 hosts inject the same context sequence. Returns empty vec if nothing to inject.
 pub fn build_user_prompt_context_injection(
@@ -1358,26 +1426,51 @@ pub fn build_user_prompt_context_injection(
     crate::hooks::maybe_append_paper_adversarial_context(repo_root, prompt, &mut contexts, paper_host);
     crate::hooks::maybe_append_paper_prose_context(repo_root, prompt, &mut contexts, paper_host);
 
-    // Goal auto-detect: suggest goal creation for complex tasks, or amend for scope changes
-    let goal_result = core_policy::goal_auto_detect::analyze_complexity(prompt);
-    if !goal_result.is_complex && goal_result.is_scope_change {
-        // Scope change detected — suggest amendment if there's an active goal
+    // Auto-amend: when scope change is detected and there's an active goal,
+    // append the new constraint to done_when so the model incorporates it.
+    // SKIP if user is invoking plan mode (plan and goal are mutually exclusive).
+    let is_plan_invocation = core_policy::hook_common::is_my_pre_execution_entry_prompt(prompt)
+        || is_plan_keyword_in_prompt(prompt);
+    if !is_plan_invocation {
         if let Ok(Some(goal)) = core_state::state_manager::read_goal_state(repo_root, None) {
-            if core_state::state_manager::goal_state_requests_continuation(&goal) {
-                contexts.push("[Goal Amendment] 检测到目标范围可能变化。如需调整当前 Goal 的 done_when/non_goals，请说明变更内容。".to_string());
+        let goal_running = goal.get("status").and_then(Value::as_str) == Some("running");
+        let goal_driving = goal.get("drive_until_done").and_then(Value::as_bool) == Some(true);
+        let not_stale = goal.get("stale").and_then(Value::as_bool) != Some(true);
+        if goal_running && goal_driving && not_stale {
+            let goal_result = core_policy::goal_auto_detect::analyze_complexity(prompt);
+            if goal_result.is_scope_change {
+                let constraint = extract_scope_change_constraint(prompt);
+                if !constraint.is_empty() {
+                    let task_id = goal.get("task_id").and_then(Value::as_str).unwrap_or("");
+                    if !task_id.is_empty() {
+                        let mut done_when: Vec<String> = goal
+                            .get("done_when")
+                            .and_then(Value::as_array)
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(str::to_string))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        if !done_when.iter().any(|d| d == &constraint) {
+                            done_when.push(constraint.clone());
+                            let done_when_values: Vec<Value> =
+                                done_when.iter().map(|s| Value::String(s.clone())).collect();
+                            let amend_payload = serde_json::json!({
+                                "repo_root": repo_root.to_string_lossy().to_string(),
+                                "operation": "amend",
+                                "task_id": task_id,
+                                "done_when": done_when_values,
+                            });
+                            let _ = core_state::state_manager::framework_goal_drive(amend_payload);
+                            contexts.push(format!(
+                                "[Goal Amendment] 已自动追加完成条件: 「{constraint}」"
+                            ));
+                        }
+                    }
+                }
             }
         }
-    } else if goal_result.is_complex {
-        // Complex task detected — suggest goal creation if no active goal
-        let has_active = match core_state::state_manager::read_goal_state(repo_root, None) {
-            Ok(Some(g)) => core_state::state_manager::goal_state_requests_continuation(&g),
-            _ => false,
-        };
-        if !has_active {
-            contexts.push(
-                "[Goal Suggestion] 检测到这是一个复杂任务。建议创建 Goal contract (目标/非目标/完成条件) 来跟踪进度和退出条件。\
-                确认请回复 Goal 定义或说「开始」。".to_string(),
-            );
         }
     }
 

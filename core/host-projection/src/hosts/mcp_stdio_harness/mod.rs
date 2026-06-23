@@ -5,7 +5,7 @@
 //!
 //! 架构约束：MCP 不支持工具拦截，PreToolUse guards 不可用；closeout / review 门控在 MCP 工具层
 //! 报告 findings。`RUNTIME_REGISTRY.host_projections.*.harness_capability_exceptions` 为叙事真源
-//! （`closeout_evidence_hooks=unsupported` → 非 my-light 时 MCP 层 hard_block 元数据；my-light advisory）。
+//! （`closeout_evidence_hooks=unsupported` → 非 interactive 时 MCP 层 hard_block 元数据；interactive advisory）。
 //!
 //! 与 CLI 共享 L2/L3 手动画板（evidence、goal state、路由、snapshot），出站为 MCP JSON-RPC。
 
@@ -741,7 +741,8 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             "done_when": {"type": "array", "items": {"type": "string"}},
                             "validation_commands": {"type": "array", "items": {"type": "string"}},
                             "drive_until_done": {"type": "boolean"},
-                            "lifecycle_profile": {"type": "string", "enum": ["my", "my-light", "interactive", "loop-auto"]},
+                            "lifecycle_profile": {"type": "string", "enum": ["interactive", "loop-auto"]},
+                            "goal_type": {"type": "string", "enum": ["linear", "loop"], "description": "Goal execution type: linear (default, plan→execute→review) or loop (review→implement cycle via loop engine)"},
                             "current_horizon": {"type": "string"},
                             "completion_gates": {"type": "object"},
                             "metadata": {"type": "object"},

@@ -9,14 +9,14 @@ use std::cell::Cell;
 use std::sync::OnceLock;
 
 thread_local! {
-    static TEST_MY_LIGHT_OVERRIDE: Cell<Option<bool>> = const { Cell::new(None) };
+    static TEST_INTERACTIVE_OVERRIDE: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
 /// Test-only override for [`is_interactive_profile`] (also used by `router-rs` host hook tests).
 /// Thread-local so parallel `#[test]` threads do not race.
 #[doc(hidden)]
-pub fn set_test_my_light_override(v: Option<bool>) {
-    TEST_MY_LIGHT_OVERRIDE.with(|c| c.set(v));
+pub fn set_test_interactive_override(v: Option<bool>) {
+    TEST_INTERACTIVE_OVERRIDE.with(|c| c.set(v));
 }
 
 /// Default UTF-8 **char** budget for assistant text on hook signal / lint paths (all hosts).
@@ -473,19 +473,19 @@ pub fn is_my_lifecycle_entry_prompt(text: &str) -> bool {
     my_lifecycle_entry_re().is_match(&strip_quoted_or_codeblock_or_url(text))
 }
 
-/// True when the current session is in an interactive profile (my-light or interactive).
+/// True when the current session is in an interactive profile.
 ///
-/// Interactive profiles (my-light / interactive) suppress review-gate hard block,
+/// Interactive profiles suppress review-gate hard block,
 /// disable spawn-first nudge, and reject being scheduled by the Loop Engine.
 ///
 /// Detection (in priority order):
-/// 1. Thread-local `TEST_MY_LIGHT_OVERRIDE` (testing only)
+/// 1. Thread-local `TEST_INTERACTIVE_OVERRIDE` (testing only)
 /// 2. Prompt matches `/discussx|planx|implementx|verifyx`
-/// 3. (Future) GOAL_STATE.lifecycle_profile == "interactive" | "my-light" via repo_root
+/// 3. (Future) GOAL_STATE.lifecycle_profile == "interactive" via repo_root
 ///
 /// Cf. docs/spec/loop-architecture.md §2.1
 pub fn is_interactive_profile(repo_root: Option<&std::path::Path>, text: &str) -> bool {
-    if let Some(v) = TEST_MY_LIGHT_OVERRIDE.with(|c| c.get()) {
+    if let Some(v) = TEST_INTERACTIVE_OVERRIDE.with(|c| c.get()) {
         return v;
     }
     if is_my_lifecycle_entry_prompt(text) {
@@ -496,7 +496,7 @@ pub fn is_interactive_profile(repo_root: Option<&std::path::Path>, text: &str) -
     };
     // Single-conversation mode: no pointer fallback for goal state lookup.
     // lifecycle_profile is detected from prompt patterns above.
-    // (Future: check GOAL_STATE.lifecycle_profile for "interactive" or "my-light")
+    // (Future: check GOAL_STATE.lifecycle_profile for "interactive")
     false
 }
 
@@ -581,7 +581,7 @@ pub fn is_narrow_review_prompt(text: &str) -> bool {
     narrow_review_prefix_re().is_match(text)
 }
 
-/// Whether beforeSubmit may inject the subagent model inherit one-liner (independent of my-light / REVIEW_GATE).
+/// Whether beforeSubmit may inject the subagent model inherit one-liner (independent of interactive / REVIEW_GATE).
 pub fn should_inject_subagent_model_inherit_nudge(
     prompt_text: &str,
     user_gate_override: bool,
@@ -610,7 +610,7 @@ pub fn should_inject_spawn_first_review_nudge(
     {
         // Interactive profiles suppress spawn-first nudge.
         // The "interactive" profile entry in RUNTIME_REGISTRY.json always
-        // has disable_spawn_first_nudge: true (same as deprecated my-light).
+        // has disable_spawn_first_nudge: true.
         return false;
     }
     crate::env_flags::router_rs_review_spawn_first_nudge_enabled()
@@ -624,7 +624,7 @@ pub fn review_gate_advisory_only() -> bool {
     true
 }
 
-/// Whether the full review-gate Stop path is suppressed (my-light profile or env disable via host
+/// Whether the full review-gate Stop path is suppressed (interactive profile or env disable via host
 /// `*_review_gate_suppressed`): skips arming **and** Stop nudges, not merely hard block.
 /// When [`review_gate_advisory_only`] is true, non-suppressed hosts still inject advisory text.
 pub fn review_gate_hard_block_disabled(repo_root: Option<&std::path::Path>, text: &str) -> bool {
@@ -1105,23 +1105,23 @@ mod tests {
     fn is_interactive_profile_test_override_takes_priority() {
         let _lock = crate::test_env_sync::process_env_lock();
         // Override to false even though prompt matches /implementx
-        set_test_my_light_override(Some(false));
+        set_test_interactive_override(Some(false));
         assert!(!is_interactive_profile(None, "/implementx"));
         // Override to true even for non-lifecycle prompt
-        set_test_my_light_override(Some(true));
+        set_test_interactive_override(Some(true));
         assert!(is_interactive_profile(None, "random text"));
         // Clear override, prompt match works again
-        set_test_my_light_override(None);
+        set_test_interactive_override(None);
         assert!(is_interactive_profile(None, "/implementx"));
     }
 
     #[test]
-    fn review_gate_hard_block_disabled_false_when_not_my_light() {
+    fn review_gate_hard_block_disabled_false_when_not_interactive() {
         let _lock = crate::test_env_sync::process_env_lock();
-        set_test_my_light_override(Some(false));
+        set_test_interactive_override(Some(false));
         assert!(!review_gate_hard_block_disabled(None, "fix the bug"));
         assert!(!review_gate_hard_block_disabled(None, "/implementx"));
-        set_test_my_light_override(None);
+        set_test_interactive_override(None);
     }
 
     #[test]
@@ -1130,13 +1130,13 @@ mod tests {
     }
 
     #[test]
-    fn review_gate_hard_block_disabled_true_when_my_light_active() {
+    fn review_gate_hard_block_disabled_true_when_interactive_active() {
         let _lock = crate::test_env_sync::process_env_lock();
-        set_test_my_light_override(Some(true));
-        // Advisory-only: my-light active → hard block disabled
+        set_test_interactive_override(Some(true));
+        // Advisory-only: interactive active → hard block disabled
         assert!(review_gate_hard_block_disabled(None, "/implementx"));
         assert!(review_gate_hard_block_disabled(None, "random text"));
-        set_test_my_light_override(None);
+        set_test_interactive_override(None);
     }
 
     #[tokio::test]

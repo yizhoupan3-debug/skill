@@ -7,6 +7,7 @@ pub mod closeout;
 pub mod dispatcher;
 pub mod env_flags;
 pub mod report;
+pub mod drift;
 
 pub use runner::preflight_profile_check;
 pub use types::{

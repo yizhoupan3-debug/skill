@@ -79,7 +79,7 @@ impl SafetyLevel {
 /// Determines loop behaviour (scheduling, closeout enforcement, review gating, budgets).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoopProfileConfig {
-    /// profile 标识符（"loop-auto" / "interactive" / "my-light"）
+    /// profile 标识符（"loop-auto" / "interactive"）
     pub profile: String,
     /// 是否可被循环调度器调度
     pub loop_capable: bool,
@@ -324,6 +324,53 @@ pub struct AggregateActionEntry {
     pub merged: Option<bool>,
 }
 
+/// Anti-drift check state, persisted in LoopRunState.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AntiDriftState {
+    /// Review cycles completed since last drift check (or since loop start).
+    #[serde(default)]
+    pub review_cycle_count: u32,
+    /// Interval at which drift checks fire (default: 3).
+    #[serde(default = "default_drift_check_interval")]
+    pub check_interval: u32,
+    /// Original goal snapshot (text) at loop start, for comparison.
+    #[serde(default)]
+    pub original_goal_snapshot: Option<String>,
+    /// Most recent drift check result.
+    #[serde(default)]
+    pub last_drift_check: Option<DriftCheckResult>,
+    /// History of all drift checks performed (capped at 20 entries).
+    #[serde(default)]
+    pub drift_check_history: Vec<DriftCheckResult>,
+}
+
+impl Default for AntiDriftState {
+    fn default() -> Self {
+        Self {
+            review_cycle_count: 0,
+            check_interval: 3,
+            original_goal_snapshot: None,
+            last_drift_check: None,
+            drift_check_history: Vec::new(),
+        }
+    }
+}
+
+fn default_drift_check_interval() -> u32 {
+    3
+}
+
+/// Result of a single drift check.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DriftCheckResult {
+    pub checked_at: String,
+    pub review_cycle: u32,
+    pub drift_detected: bool,
+    pub drift_score: f64,
+    pub drift_type: String,
+    pub detail: String,
+}
+
 // ── Loop Run State ──
 
 /// Runtime persistent structure serialised as LOOP_RUN_STATE.json (§5.2).
@@ -342,6 +389,8 @@ pub struct LoopRunState {
     pub history: Vec<RunHistoryEntry>,
     #[serde(default)]
     pub circuit_breaker: CircuitBreaker,
+    #[serde(default)]
+    pub anti_drift: AntiDriftState,
     pub last_refreshed_at: String,
 }
 
@@ -540,7 +589,7 @@ mod tests {
     fn test_loop_error_display() {
         let err = LoopError::ProfileMismatch("interactive not schedulable".into());
         assert!(err.to_string().contains("Profile mismatch"));
-        let err2 = LoopError::UnknownProfile("my-light".into());
+        let err2 = LoopError::UnknownProfile("unknown-profile".into());
         assert!(err2.to_string().contains("Unknown profile"));
     }
 }

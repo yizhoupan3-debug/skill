@@ -1,5 +1,6 @@
 ---
 source: core/core-policy/src/hook_policy.rs
+assertion_line: 1428
 expression: hook_policy_contract()
 ---
 Object {
@@ -19,6 +20,8 @@ Object {
             String("session_resume_due"),
             String("session_terminate"),
             String("background_terminate"),
+            String("preview_eval"),
+            String("preview_start"),
         ],
         "shell_injection_in_args": Bool(true),
     },

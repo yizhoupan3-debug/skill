@@ -527,13 +527,12 @@ pub(super) fn task_lifecycle_profile(task_view: &core_state::task_state::Resolve
         .as_ref()
         .and_then(|g| g.get("lifecycle_profile"))
         .and_then(Value::as_str)
-        .unwrap_or("my-light")
+        .unwrap_or("interactive")
 }
 
-/// Returns true when the lifecycle_profile string represents an interactive profile
-/// (either "my-light" — deprecated alias — or "interactive").
+/// Returns true when the lifecycle_profile string represents an interactive profile.
 pub(super) fn is_interactive_lifecycle_profile(profile: &str) -> bool {
-    profile == "my-light" || profile == "interactive"
+    profile == "interactive"
 }
 
 pub(super) fn mcp_closeout_gate_mode_narrative(
@@ -543,7 +542,7 @@ pub(super) fn mcp_closeout_gate_mode_narrative(
     lifecycle_profile: &str,
 ) -> String {
     if is_interactive_lifecycle_profile(lifecycle_profile) {
-        return "interactive/my-light: MCP hard block disabled — closeout_gate reports findings only (advisory).".to_string();
+        return "interactive: MCP hard block disabled — closeout_gate reports findings only (advisory).".to_string();
     }
     framework_kernel::runtime_registry::harness_capability_exception_rationale(
         repo_root,
@@ -1121,13 +1120,24 @@ pub(super) fn tool_goal_state_manage(
                 .unwrap_or(connection_session_id);
             payload["session_id"] = json!(session_id);
             // pass-through: downstream state_manager consumes these for start
+            // Validate goal_type if provided
+            if let Some(gt) = arguments.get("goal_type").and_then(Value::as_str) {
+                match gt {
+                    "linear" | "loop" => {
+                        payload["goal_type"] = serde_json::json!(gt);
+                    }
+                    _ => return Err(format!(
+                        "Invalid goal_type: {gt}. Must be one of: linear, loop"
+                    )),
+                }
+            }
             if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {
                 match lp {
-                    "my" | "my-light" | "interactive" | "loop-auto" => {
+                    "interactive" | "loop-auto" => {
                         payload["lifecycle_profile"] = json!(lp);
                     },
                     _ => return Err(format!(
-                        "Invalid lifecycle_profile: {lp}. Must be one of: my, my-light, interactive, loop-auto"
+                        "Invalid lifecycle_profile: {lp}. Must be one of: interactive, loop-auto"
                     )),
                 }
             }

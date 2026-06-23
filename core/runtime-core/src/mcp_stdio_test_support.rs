@@ -24,7 +24,7 @@ pub fn seed_skill_routing_runtime(repo: &Path) {
     }
 }
 
-/// Copy `RUNTIME_REGISTRY.json` so MCP tests resolve `lifecycle_profiles` (e.g. my-light).
+/// Copy `RUNTIME_REGISTRY.json` so MCP tests resolve `lifecycle_profiles` (e.g. interactive).
 pub fn seed_runtime_registry(repo: &Path) {
     let dest_dir = repo.join("configs/framework");
     let _ = std::fs::create_dir_all(&dest_dir);

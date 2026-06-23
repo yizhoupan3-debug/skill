@@ -57,6 +57,7 @@
         "mcp_config_key": "mcpServers",
         "config_path": "mcp.json",
         "override_build_driver_args": false,
+        "legacy_allowed_generated_paths": [],
         "batch_execution": false,
         "cron_execution": false,
         "ci_runner": false,
@@ -81,7 +82,14 @@
         "session_key_scan_tool_input": true,
         "session_start": true,
         "subagent_start": true,
-        "subagent_stop": true
+        "subagent_stop": true,
+        "subtracted_events": [
+          "afterAgentResponse",
+          "beforeShellExecution",
+          "afterShellExecution",
+          "afterFileEdit",
+          "preCompact"
+        ]
       },
       "opencode": {
         "display_name": "OpenCode",
@@ -125,6 +133,7 @@
         "mcp_config_key": "mcpServers",
         "config_path": ".opencode/opencode.json",
         "override_build_driver_args": false,
+        "legacy_allowed_generated_paths": [],
         "batch_execution": false,
         "cron_execution": false,
         "ci_runner": false,
@@ -207,6 +216,18 @@
         "mcp_config_key": "mcp_servers",
         "config_path": ".codex/config.toml",
         "override_build_driver_args": true,
+        "driver_arg_template": {
+          "always_args": ["-C", "<cwd>"],
+          "resume_subcommand": "resume",
+          "resume_last_flag": "--last",
+          "prompt_inline": true,
+          "binary": "codex"
+        },
+        "legacy_allowed_generated_paths": [
+          ".codex/host_entrypoints_sync_manifest.json",
+          ".codex/README.md",
+          ".codex/prompts/framework.md"
+        ],
         "batch_execution": true,
         "cron_execution": true,
         "ci_runner": true,
@@ -274,6 +295,16 @@
         "mcp_config_key": "",
         "config_path": ".claude/settings.json",
         "override_build_driver_args": true,
+        "driver_arg_template": {
+          "always_args": ["--print"],
+          "resume_flag": "--resume",
+          "prompt_flag": "-p",
+          "cwd_flag": null,
+          "binary": "claude"
+        },
+        "legacy_allowed_generated_paths": [
+          ".claude/.framework-projection-desktop.json"
+        ],
         "batch_execution": false,
         "cron_execution": false,
         "ci_runner": false,
@@ -383,12 +414,6 @@
     ]
   },
   "lifecycle_profiles": {
-    "my-light": {
-      "disable_spawn_first_nudge": true,
-      "closeout_enforcement": "advisory",
-      "loop_capable": false,
-      "comment": "deprecated — use interactive instead"
-    },
     "interactive": {
       "disable_spawn_first_nudge": true,
       "closeout_enforcement": "advisory",
@@ -938,6 +963,10 @@
     ".codex",
     ".opencode",
     ".gemini"
+  ],
+  "retired_host_legacy_paths": [
+    ".gemini/settings.json",
+    ".gemini/mcp.json"
   ],
   "ephemeral_task_prefixes": [
     "cursor-stop-",

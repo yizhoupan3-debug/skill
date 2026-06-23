@@ -86,3 +86,19 @@ pub struct GoalCompletionGates {
     pub min_goal_checkpoints: Option<u64>,
     pub block_on_rfv_pass_without_evidence: bool,
 }
+
+/// Goal execution type: determines the goal lifecycle strategy.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GoalType {
+    /// Linear goal: plan → execute → review. Default when absent.
+    Linear,
+    /// Loop goal: review → implement (with task splitting), uses loop engine.
+    Loop,
+}
+
+impl Default for GoalType {
+    fn default() -> Self {
+        GoalType::Linear
+    }
+}

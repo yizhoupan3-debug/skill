@@ -620,7 +620,7 @@ pub fn install_opencode_projection(
     let framework_payload = host_router_rs_framework_payload(
         roots,
         "opencode",
-        "Framework snapshot, skill routing, goal/closeout gating (MCP advisory for my-light)",
+        "Framework snapshot, skill routing, goal/closeout gating (MCP advisory for interactive)",
     );
     let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
     entries.insert("router-rs-framework".to_string(), framework_payload);
@@ -952,7 +952,7 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
 
 - 四事件：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`（`.claude/settings.json` + `router-rs claude hook`）。
 - Goal/Quality Gate：`framework_goal_drive` / `framework_quality_gate` stdio + `artifacts/current/<task_id>/`。
-- 默认 **`lifecycle_profile: my-light`**：closeout/complete 为 advisory，suppress review Stop nudge；非 my-light 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/spec.md` §6）。
+- 默认 **`lifecycle_profile: interactive`**：closeout/complete 为 advisory，suppress review Stop nudge；非 interactive 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/spec.md` §6）。
 - 检查点：`session_checkpoint`（非自动）。
 - Goal 自动触发：`UserPromptSubmit` 检测复杂任务（自然语言+启发式）→ 注入 goal 建议上下文；`has_structured_goal_contract` 已扩展为在 regex 失败时回退到复杂度分析。
 - Goal amend：`goal_state_manage(operation="amend")` 更新 goal 字段，保留 checkpoints；scope change 检测自动触发 `[Goal Amendment]` 上下文注入。

@@ -70,18 +70,6 @@ fn codex_docs_document_review_gate_env_and_session() {
 }
 
 #[test]
-fn runtime_registry_my_light_lifecycle_profile_review_fields() {
-    let root = project_root();
-    let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
-    let my_light = &registry["lifecycle_profiles"]["my-light"];
-    assert_eq!(my_light["disable_spawn_first_nudge"], true);
-    assert!(
-        my_light.get("commands").is_none(),
-        "my-light commands list is doc-only; Rust uses prompt/GOAL_STATE profile detection"
-    );
-}
-
-#[test]
 fn runtime_registry_host_projections_split_harness_capabilities() {
     let schema = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY_SCHEMA.json"));
     let policy = schema

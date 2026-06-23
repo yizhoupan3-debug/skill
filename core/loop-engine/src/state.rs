@@ -1,4 +1,4 @@
-use crate::types::{LoopError, LoopRunState, CurrentRun, LoopPhase, RunHistoryEntry, CircuitBreaker};
+use crate::types::{LoopError, LoopRunState, CurrentRun, LoopPhase, RunHistoryEntry, CircuitBreaker, AntiDriftState};
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -92,6 +92,7 @@ pub fn create_initial_state(loop_id: &str, profile: &str) -> LoopRunState {
         current_run: None,
         history: Vec::new(),
         circuit_breaker: CircuitBreaker::default(),
+        anti_drift: AntiDriftState::default(),
         last_refreshed_at: now,
     }
 }

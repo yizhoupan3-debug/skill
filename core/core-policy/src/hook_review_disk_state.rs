@@ -265,7 +265,7 @@ pub fn review_stop_blocks_with_reject_escape(fields: &HookReviewGateFields) -> b
 
 /// Claude-canonical Stop review advisory: `Some(nudge_line)` when armed gate unsatisfied.
 ///
-/// Host transport must check suppression (`*_review_gate_suppressed`: env disable + my-light)
+/// Host transport must check suppression (`*_review_gate_suppressed`: env disable + interactive)
 /// before calling. Pending multiset / phase are **not** inputs (telemetry only on Cursor).
 pub fn hook_review_stop_advisory_needed(
     fields: &HookReviewGateFields,

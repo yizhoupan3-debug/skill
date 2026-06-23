@@ -1005,9 +1005,9 @@ mod claude_desktop_hard_blocking_tests {
     }
 
     #[test]
-    fn desktop_allows_unsatisfied_under_my_light_profile() {
+    fn desktop_allows_unsatisfied_under_interactive_profile() {
         let repo = test_repo_dir();
-        let task_id = "desktop-my-light";
+        let task_id = "desktop-interactive";
         std::fs::write(
             repo.join("artifacts/current/active_task.json"),
             format!(r#"{{"task_id":"{task_id}"}}"#),
@@ -1017,7 +1017,7 @@ mod claude_desktop_hard_blocking_tests {
         std::fs::create_dir_all(&task_dir).unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-goal-v1","status":"running","lifecycle_profile":"my-light","goal":"x"}"#,
+            r#"{"schema_version":"router-rs-goal-v1","status":"running","lifecycle_profile":"interactive","goal":"x"}"#,
         )
         .unwrap();
         let req = json!({

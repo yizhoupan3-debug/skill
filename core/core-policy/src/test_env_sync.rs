@@ -51,7 +51,7 @@ pub fn process_env_lock() -> ProcessEnvLockGuard {
         v
     });
     if depth == 1 {
-        crate::hook_common::set_test_my_light_override(None);
+        crate::hook_common::set_test_interactive_override(None);
         ProcessEnvLockGuard(Some(lock_env_mutex()))
     } else {
         ProcessEnvLockGuard(None)

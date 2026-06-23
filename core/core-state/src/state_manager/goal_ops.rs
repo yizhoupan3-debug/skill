@@ -195,6 +195,14 @@ fn apply_optional_goal_fields_from_payload(obj: &mut Map<String, Value>, payload
     {
         obj.insert("lifecycle_profile".to_string(), json!(lp));
     }
+    if let Some(gt) = payload
+        .get("goal_type")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        obj.insert("goal_type".to_string(), json!(gt));
+    }
     if let Some(st) = payload
         .get("status")
         .and_then(Value::as_str)
@@ -666,6 +674,15 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                     .map(|s| json!(s))
                     .collect();
                 obj.insert("validation_commands".to_string(), json!(cleaned));
+                has_amend = true;
+            }
+            if let Some(gt) = payload
+                .get("goal_type")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                obj.insert("goal_type".to_string(), json!(gt));
                 has_amend = true;
             }
 

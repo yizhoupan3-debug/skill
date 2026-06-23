@@ -20,11 +20,11 @@ use std::path::Path;
 use std::time::Instant;
 
 /// Check whether a loop entry's profile is schedulable.
-/// Returns an error for interactive / my-light profiles which cannot be scheduled for unattended execution.
+/// Returns an error for interactive profiles which cannot be scheduled for unattended execution.
 pub fn preflight_profile_check(entry: &LoopRegistryEntry) -> Result<(), LoopError> {
     match entry.profile.as_str() {
-        "interactive" | "my-light" => Err(LoopError::ProfileMismatch(
-            "interactive/my-light profile is not schedulable. \
+        "interactive" => Err(LoopError::ProfileMismatch(
+            "interactive profile is not schedulable. \
              Use loop-auto for unattended execution."
                 .to_string(),
         )),
@@ -67,6 +67,10 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
 
     let run_id = generate_run_id(loop_id);
     start_new_run(&mut state, &run_id);
+    // Initialize anti-drift original goal snapshot on first run
+    if state.anti_drift.original_goal_snapshot.is_none() {
+        state.anti_drift.original_goal_snapshot = read_goal_snapshot(ctx.repo_root, entry);
+    }
     transition_phase(&mut state, LoopPhase::Pending);
 
     if ctx.dry_run {
@@ -270,6 +274,32 @@ fn run_loop_inner(
                 violations.join(", ")
             );
             aggregate.overall_status = "fail".to_string();
+        }
+    }
+
+    // Anti-drift check: after each review cycle, increment counter
+    // and fire drift check every N cycles (default 3).
+    state.anti_drift.review_cycle_count += 1;
+    if crate::drift::should_check_drift(&state.anti_drift) {
+        if let Some(current_goal) = read_goal_snapshot(ctx.repo_root, entry) {
+            let result = crate::drift::perform_drift_check(
+                &mut state.anti_drift,
+                &current_goal,
+            );
+            tracing::warn!(
+                "[loop-engine] anti-drift check at cycle {}: drift_detected={}, score={:.2}",
+                result.review_cycle,
+                result.drift_detected,
+                result.drift_score
+            );
+            state.anti_drift.last_drift_check = Some(result.clone());
+            state.anti_drift.drift_check_history.push(result);
+            // Cap history to last 20 entries to prevent state file bloat
+            let max_history = 20;
+            if state.anti_drift.drift_check_history.len() > max_history {
+                let drain_count = state.anti_drift.drift_check_history.len() - max_history;
+                state.anti_drift.drift_check_history.drain(..drain_count);
+            }
         }
     }
 
@@ -648,6 +678,18 @@ pub fn run_loop_kill_all(repo_root: &Path) -> Result<(), LoopError> {
     Ok(())
 }
 
+/// Read the current goal text from GOAL_STATE.json for drift comparison.
+fn read_goal_snapshot(repo_root: &Path, entry: &LoopRegistryEntry) -> Option<String> {
+    let goal_path = repo_root
+        .join("artifacts")
+        .join("current")
+        .join(&entry.loop_id)
+        .join("GOAL_STATE.json");
+    let raw = std::fs::read_to_string(&goal_path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    val.get("goal").and_then(|g| g.as_str()).map(String::from)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -684,14 +726,6 @@ mod tests {
     #[test]
     fn test_rejects_interactive() {
         let entry = make_entry("interactive");
-        let result = preflight_profile_check(&entry);
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), LoopError::ProfileMismatch(_)));
-    }
-
-    #[test]
-    fn test_rejects_my_light() {
-        let entry = make_entry("my-light");
         let result = preflight_profile_check(&entry);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), LoopError::ProfileMismatch(_)));

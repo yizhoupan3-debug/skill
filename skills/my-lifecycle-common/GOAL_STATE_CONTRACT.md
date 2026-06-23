@@ -22,6 +22,15 @@
 | `lifecycle_profile` | `interactive` | 全阶段固定 |
 | `drive_until_done` | `false`（discuss/plan/verify）· `true`（implement） | implement 阶段启动时显式设为 `true` |
 
+## goal_type 字段（可选）
+
+| 值 | 说明 | 行为差异 |
+|------|------|----------|
+| `linear`（默认） | 线性目标：有计划，执行到底，结束审查 | 拆分任务 → 完成任务 → 结束 review |
+| `loop` | 循环目标：抽象目标，review → implement 循环 | 使用 loop engine，每 3 轮 review 后触发 anti-drift 检查 |
+
+当 `goal_type` 缺省时，行为等同 `linear`（向后兼容）。
+
 ## 操作语义
 
 | operation | 阶段 | 说明 |

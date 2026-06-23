@@ -56,6 +56,21 @@ pub fn render_loop_report(
         ));
     }
 
+    // Anti-drift checks section
+    if !state.anti_drift.drift_check_history.is_empty() {
+        md.push_str("\n## Anti-Drift Checks\n\n");
+        md.push_str(&format!(
+            "Review cycle interval: {}\n\n",
+            state.anti_drift.check_interval
+        ));
+        for check in &state.anti_drift.drift_check_history {
+            md.push_str(&format!(
+                "- Cycle {}: drift_detected={}, score={:.2}, type={}\n",
+                check.review_cycle, check.drift_detected, check.drift_score, check.drift_type
+            ));
+        }
+    }
+
     md
 }
 
@@ -156,6 +171,7 @@ mod tests {
             current_run: None,
             history: vec![],
             circuit_breaker: CircuitBreaker::default(),
+            anti_drift: AntiDriftState::default(),
             last_refreshed_at: "2026-06-16T06:00:05Z".into(),
         }
     }
