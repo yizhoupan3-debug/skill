@@ -6,10 +6,8 @@
 //!
 //! | Module | Purpose |
 //! |--------|---------|
-//! | `config.rs` | HostHookConfig for all 4 hosts |
 //! | `dispatch.rs` | HostHookDispatcher implementations |
 //! | `pretool.rs` | PreToolUse path protection |
-//! | `contract_guard.rs` | Contract guard event handling |
 //! | `schema_drift.rs` | Hook schema drift detection |
 //!
 //! All host lifecycle data (profile_id, driver_binary, registered_hook_events, etc.)
@@ -17,14 +15,28 @@
 //! and `host-projection/build.rs`. CLI hook dispatch is registry-driven via
 //! `host_provider_registry().dispatcher()`. No per-host source files remain.
 
-pub mod config;
 pub mod dispatch;
 pub mod pretool;
-pub mod contract_guard;
 pub mod schema_drift;
 
+// ── HostHookConfig constants (merged from config.rs) ──
+
+/// Get the registered hook events for a host from the HostProvider registry.
+/// Used by runtime-exit-gate schema drift validation.
+pub fn host_registered_hook_events(host_id: &str) -> &'static [&'static str] {
+    crate::hosts::host_provider_for_id(host_id)
+        .map(|p| p.registered_hook_events())
+        .unwrap_or(&[])
+}
+
+/// Events removed from default .cursor/hooks.json (dispatch defaults to no-op).
+/// Handler implementations remain in L0 for recovery paths.
+pub const CURSOR_HOOKS_SUBTRACTED_EVENTS: &[&str] = &[
+    "afterAgentResponse", "beforeShellExecution", "afterShellExecution",
+    "afterFileEdit", "preCompact",
+];
+
 // Backward-compatible re-exports
-pub use config::*;
 pub use dispatch::*;
 
 /// Get the active host's log label for error messages.

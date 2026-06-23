@@ -8,25 +8,24 @@ pub mod capability_overrides;
 /// Unified hook dispatch trait + shared utilities for all 4 hosts.
 pub mod hook_dispatch;
 
+/// Shared state management (AgentDiskState, TouchState, review state).
+pub mod host_state;
+
+/// Generic host configuration (data-driven, no hardcoded host names).
+pub mod generic_config;
+
 /// Cross-host file state lock abstraction.
 pub mod file_state_lock;
 
 /// Cross-host worktree auto-save and audit utilities (all 4 hosts).
 pub mod worktree_auto_save;
 
-/// Shared hook state version adapter (used by codex).
-pub mod hook_state_common;
-
 // ── ADR §2.1 unified hook dispatch ──
-pub mod event_handlers;
 pub mod host_extensions;
-pub mod mcp_pre_guard;
 pub mod stop_dispatch;
 
-// ── Host agents (MCP agent loop hosts: claude, codex, opencode) ──
-pub mod claude_agent;
+// ── MCP agent loop (registry-driven: all hosts via run_agent_mcp_loop) ──
 pub mod mcp_stdio_harness;
-pub mod opencode_agent;
 
 // ── Test shims ──
 #[cfg(any(test, feature = "test-support"))]
@@ -43,7 +42,7 @@ pub use host_provider::{
     register_agent_dispatchers, register_hook_dispatchers,
 };
 
-// ── Shared MCP agent loop (3 hosts: claude, codex, opencode) ──
+// ── Shared MCP agent loop (registry-driven: host_id from RUNTIME_REGISTRY) ──
 
 use std::io;
 use std::path::Path;
