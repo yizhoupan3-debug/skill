@@ -2,7 +2,7 @@
 name = "framework-runtime"
 version = "0.1.0"
 edition = "2024"
-
+description = "L3 facade over fr-utils(L1), fr-contracts(L2), fr-exec(L3)"
 [lints]
 workspace = true
 
@@ -11,28 +11,16 @@ name = "framework_runtime"
 path = "src/lib.rs"
 
 [dependencies]
-http-util = { path = "../http-util" }
-core-state = { path = "../core-state" }
-core-policy = { path = "../core-policy" }
+fr-utils = { path = "../fr-utils" }
+fr-contracts = { path = "../fr-contracts" }
+fr-exec = { path = "../fr-exec" }
 framework-kernel = { path = "../framework-kernel" }
 framework-runtime-hooks = { path = "../framework-runtime-hooks" }
 host-projection = { path = "../host-projection" }
-routing-engine = { path = "../routing-engine" }
+http-util = { path = "../http-util" }
 runtime-storage = { path = "../runtime-storage" }
 trace-runtime = { path = "../trace-runtime" }
-chrono.workspace = true
-clap.workspace = true
-hex.workspace = true
-libc.workspace = true
-serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
-tracing.workspace = true
-ctor = "0.2"
-fs2.workspace = true
-reqwest.workspace = true
 
 [dev-dependencies]
-core-policy = { path = "../core-policy", features = ["test-sync"] }
 insta.workspace = true
-serde_json.workspace = true
