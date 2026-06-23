@@ -165,9 +165,9 @@ pub fn router_rs_hook_outbound_context_max_bytes() -> usize {
         .unwrap_or(8192)
 }
 
+/// Delegates to core-policy's canonical implementation (single source of truth).
 pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
+    core_policy::env_flags::router_rs_review_fork_context_missing_infer_false_enabled()
 }
 
 pub fn router_rs_pre_goal_enabled() -> bool {

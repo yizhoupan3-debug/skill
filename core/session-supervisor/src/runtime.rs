@@ -84,6 +84,14 @@ pub fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), Str
     Ok(())
 }
 
+/// Insert or update a worker record in the supervisor store.
+///
+/// # Concurrency safety
+/// This function takes `&mut SessionSupervisorStore` (exclusive access to the in-memory store).
+/// All callers in `handle_session_supervisor_operation` acquire a POSIX `flock`
+/// (`acquire_runtime_path_lock`) before calling this, ensuring cross-process
+/// mutual exclusion on the backing file. Callers outside that path must provide
+/// their own synchronization.
 pub fn upsert_worker(store: &mut SessionSupervisorStore, worker: WorkerSessionRecord) {
     if let Some(existing) = store
         .workers

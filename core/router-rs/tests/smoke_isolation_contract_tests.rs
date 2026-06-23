@@ -5,16 +5,19 @@ use std::path::Path;
 
 use core_policy::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy};
 use core_policy::review_gate_engine::{
-    fork_context_from_values, independent_context_fork, review_independent_reviewer_evidence,
+    fork_context_from_values, fork_context_false_means_independent, review_independent_reviewer_evidence,
 };
 use serde_json::json;
 
 /// `fork_context: false` means independent reviewer/subagent context across Cursor/Codex/Claude spellings.
+///
+/// ⚠️ 命名反转说明：`fork_context=false` 在 Claude 生态中表示"独立上下文"，
+/// 这和 `fork_context_false_means_independent` 的函数名直接对应。
 #[test]
 fn subagent_context_isolation_smoke() {
-    assert!(independent_context_fork(Some(false)));
-    assert!(!independent_context_fork(Some(true)));
-    assert!(!independent_context_fork(None));
+    assert!(fork_context_false_means_independent(Some(false)));
+    assert!(!fork_context_false_means_independent(Some(true)));
+    assert!(!fork_context_false_means_independent(None));
 
     let isolated_inputs = [
         json!({"subagent_type": "general-purpose", "fork_context": false}),

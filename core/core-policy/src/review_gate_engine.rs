@@ -70,20 +70,29 @@ pub fn fork_context_from_values(primary: &Value, secondary: Option<&Value>) -> O
         .and_then(fork_context_value_as_bool)
 }
 
-/// 是否将子代理视为「独立 fork」：`fork_context`/`forkContext` **仅当**可解析为布尔 **`false`**（即 `Some(false)`）时为真。
+/// 检查 `fork_context` 是否表示「独立 fork」。
 ///
-/// **`None`（字段缺失）不为真**（本函数）。缺字段推断见 [`review_independent_fork`]（env 默认关，Claude 语义）。
-pub fn independent_context_fork(fork: Option<bool>) -> bool {
+/// # ⚠️ 命名反转说明
+/// Claude Code 生态中 `fork_context` 的语义是反直觉的：
+/// - `fork_context=false` → "此 subagent 已 fork 出独立上下文" → **是独立 review**
+/// - `fork_context=true`  → "此 subagent 未 fork，共享主上下文" → 不是独立 review
+///
+/// 这是因为 `fork_context` 字段最初的含义是"是否需要从主上下文 fork 出来"：
+/// 已经独立运行的 subagent 不需要再 fork，所以设为 `false`。
+/// 这是一个历史命名错误，为保持向后兼容保留此约定。
+pub fn fork_context_false_means_independent(fork: Option<bool>) -> bool {
     matches!(fork, Some(false))
 }
 
 /// Canonical cross-host: independent fork when `fork_context` parses as **`false`**, or when
 /// missing on a reviewer lane and [`router_rs_review_fork_context_missing_infer_false_enabled`].
+///
+/// 参考 [`fork_context_false_means_independent`] 的命名反转说明。
 pub fn review_independent_fork(fork: Option<bool>, reviewer_lane: bool) -> bool {
     if !reviewer_lane {
         return false;
     }
-    if independent_context_fork(fork) {
+    if fork_context_false_means_independent(fork) {
         return true;
     }
     if fork == Some(true) {

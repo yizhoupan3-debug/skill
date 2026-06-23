@@ -39,6 +39,17 @@ pub struct RunContext<'a> {
     pub entry: &'a LoopRegistryEntry,
     pub dry_run: bool,
     pub timeout: Option<std::time::Duration>,
+    /// Max remaining recursion depth for research-escalation auto-restart.
+    /// Decremented on each recursive call; `run_loop` returns `ResearchEscalation`
+    /// instead of recursing when this reaches 0.
+    pub depth_remaining: u32,
+}
+
+impl RunContext<'_> {
+    #[allow(dead_code)]
+    pub fn default_max_depth() -> u32 {
+        5
+    }
 }
 
 /// Execute a full loop run: profile check, discovery, preflight, dispatch, verification, and closeout.
@@ -116,12 +127,20 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
                 tracing::error!("failed to release lock on research escalation: {e}");
             }
 
+            let remaining = ctx.depth_remaining;
+            if remaining == 0 {
+                return Err(LoopError::ResearchEscalation(
+                    "max recursion depth reached for research escalation auto-restart".to_string(),
+                ));
+            }
+
             // Recursively restart with a new run — candidates become the new action set
             let new_ctx = RunContext {
                 entry,
                 repo_root: ctx.repo_root,
                 dry_run: ctx.dry_run,
                 timeout: ctx.timeout,
+                depth_remaining: remaining - 1,
             };
             run_loop(&new_ctx)
         }
@@ -297,6 +316,18 @@ impl BarrierResult {
     }
 }
 
+/// Resolve the autoresearch binary path.
+/// Prefers `ROUTER_RS_AUTORESEARCH_BIN` env var; falls back to `cargo run` slow-path.
+fn resolve_autoresearch_binary() -> Result<String, LoopError> {
+    if let Ok(bin) = std::env::var("ROUTER_RS_AUTORESEARCH_BIN")
+        && !bin.is_empty()
+    {
+        return Ok(bin);
+    }
+    // Fallback: return None as a signal to use cargo run slow-path
+    Ok(String::new())
+}
+
 /// Execute barrier escalation: shell out to `autoresearch barrier --problem <desc>`.
 fn barrier_escalation(
     entry: &LoopRegistryEntry,
@@ -311,17 +342,28 @@ fn barrier_escalation(
         entry.skill.as_deref().unwrap_or("none"),
     );
 
-    // Shell out to autoresearch barrier CLI with proper --problem flag
-    let output = std::process::Command::new("cargo")
-        .args([
-            "run", "-p", "research-harness", "--bin", "autoresearch", "--", "barrier",
-            "--problem", &problem,
-            "--loop-id", loop_id,
-            "--run-id", run_id,
-        ])
-        .current_dir(repo_root)
-        .output()
-        .map_err(|e| LoopError::ActionFailed(format!("barrier escalation failed: {e}")))?;
+    // Use pre-compiled binary if available (via ROUTER_RS_AUTORESEARCH_BIN),
+    // otherwise fall back to cargo run slow-path.
+    let autoresearch_bin = resolve_autoresearch_binary()?;
+    let output = if autoresearch_bin.is_empty() {
+        // Slow-path: compile and run via cargo
+        std::process::Command::new("cargo")
+            .args([
+                "run", "-p", "research-harness", "--bin", "autoresearch", "--", "barrier",
+                "--problem", &problem,
+                "--loop-id", loop_id,
+                "--run-id", run_id,
+            ])
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| LoopError::ActionFailed(format!("barrier escalation failed: {e}")))?
+    } else {
+        std::process::Command::new(&autoresearch_bin)
+            .args(["barrier", "--problem", &problem, "--loop-id", loop_id, "--run-id", run_id])
+            .current_dir(repo_root)
+            .output()
+            .map_err(|e| LoopError::ActionFailed(format!("barrier escalation failed: {e}")))?
+    };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -422,14 +464,9 @@ fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> R
                     .map_err(|e| LoopError::Io(format!("discovery collect: {e}")))?;
             }
             None => {
-                if crate::kill_switch::is_kill_signal_active(
-                    repo_root,
-                    &entry.loop_id,
-                ) {
-                    // Best-effort cleanup: file may already be removed by another process.
-                    if let Err(e) = crate::kill_switch::clear_kill_signal(repo_root, &entry.loop_id) {
-                        tracing::debug!("clear_kill_signal (best-effort): {e}");
-                    }
+                if crate::kill_switch::take_kill_signal(repo_root, &entry.loop_id)
+                    .unwrap_or(false)
+                {
                     child.kill().map_err(|e| LoopError::Io(format!("discovery kill: {e}")))?;
                     child.wait().map_err(|e| LoopError::Io(format!("discovery wait: {e}")))?;
                     return Err(LoopError::KillSignaled(format!(

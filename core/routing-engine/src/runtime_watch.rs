@@ -56,34 +56,52 @@ impl RoutingRuntimeWatch {
 
         let watch_path = path.clone();
         thread::spawn(move || {
-            let Ok(mut watcher) = RecommendedWatcher::new(
-                move |res: Result<Event, notify::Error>| {
-                    let Ok(event) = res else {
-                        return;
-                    };
-                    let reload = matches!(
-                        event.kind,
-                        EventKind::Modify(_) | EventKind::Create(_) | EventKind::Any
-                    );
-                    if reload
-                        && let Ok(snapshot) = load_snapshot(&watch_path) {
-                            let _ = tx.send(snapshot);
-                        }
-                },
-                Config::default(),
-            ) else {
-                tracing::warn!("[routing-engine] notify watcher init failed");
-                return;
-            };
-            if let Err(err) = watcher.watch(&path, RecursiveMode::NonRecursive) {
-                tracing::warn!(
-                    "[routing-engine] watch {} failed: {err}",
-                    path.display()
-                );
-                return;
-            }
+            let mut backoff: u64 = 1;
             loop {
-                thread::sleep(Duration::from_secs(3600));
+                let wp = watch_path.clone();
+                let tx_c = tx.clone();
+                let Ok(mut watcher) = RecommendedWatcher::new(
+                    move |res: Result<Event, notify::Error>| {
+                        let Ok(event) = res else {
+                            return;
+                        };
+                        let reload = matches!(
+                            event.kind,
+                            EventKind::Modify(_) | EventKind::Create(_)
+                        );
+                        if reload
+                            && let Ok(snapshot) = load_snapshot(&wp) {
+                                let _ = tx_c.send(snapshot);
+                            }
+                    },
+                    Config::default(),
+                ) else {
+                    tracing::warn!(
+                        "[routing-engine] notify watcher init failed (retry in {backoff}s)"
+                    );
+                    thread::sleep(Duration::from_secs(backoff));
+                    backoff = (backoff * 2).min(300);
+                    continue;
+                };
+                if let Err(err) = watcher.watch(&path, RecursiveMode::NonRecursive) {
+                    tracing::warn!(
+                        "[routing-engine] watch {} failed: {err} (retry in {backoff}s)",
+                        path.display()
+                    );
+                    thread::sleep(Duration::from_secs(backoff));
+                    backoff = (backoff * 2).min(300);
+                    continue;
+                }
+                // Watcher active — ping the file periodically to detect stale watchers,
+                // and check if the sender has been dropped (process shutdown).
+                backoff = 1;
+                if tx.is_closed() {
+                    return;
+                }
+                thread::sleep(Duration::from_secs(300));
+                if let Ok(snapshot) = load_snapshot(&watch_path) {
+                    let _ = tx.send(snapshot);
+                }
             }
         });
 

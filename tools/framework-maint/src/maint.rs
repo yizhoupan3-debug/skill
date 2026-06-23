@@ -21,16 +21,10 @@ use std::process::{Command, Stdio};
 pub fn dispatch(command: MaintSubcommand) -> Result<(), String> {
     match command {
         MaintSubcommand::RefreshHostProjections(args) => refresh_host_projections(args),
-        MaintSubcommand::VerifyCursorHooks(args) => {
+        MaintSubcommand::VerifyHostHooks { host_id, args } => {
             host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
                 &repo_from_maint_repo_args(&args)?,
-                "cursor",
-            )
-        }
-        MaintSubcommand::VerifyCodexHooks(args) => {
-            host_projection::hosts::host_extensions::schema_drift::verify_host_projection(
-                &repo_from_maint_repo_args(&args)?,
-                "codex",
+                &host_id,
             )
         }
         MaintSubcommand::UpdateOneShot(args) => update_one_shot(args),
@@ -134,13 +128,8 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     )?;
 
     let installable_tools = installable_projection_tools(&fw)?;
-    // claude uses projection manifests under `.claude/`.
-    let projection_tools: Vec<String> = installable_tools
-        .iter()
-        .filter(|tool| tool.as_str() != "codex")
-        .cloned()
-        .collect();
-    for tool in &projection_tools {
+    // All installable hosts use projection install — codex included.
+    for tool in &installable_tools {
         for scope in projection_install_scopes_for_tool(tool) {
             let mut install_args = vec![
                 "framework".to_string(),
@@ -167,7 +156,10 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     }
 
     verify_installable_projections(&fw, &installable_tools)?;
-    host_projection::hosts::host_extensions::schema_drift::verify_host_projection(&fw, "claude")?;
+    // Verify all installable hosts
+    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        host_projection::hosts::host_extensions::schema_drift::verify_host_projection(&fw, host_id)?;
+    }
     eprintln!(
         "ok: refreshed installable host projections (cursor=user; claude=project+user; others=project): {}",
         installable_tools.join(", ")
@@ -294,45 +286,35 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
 
     if host_skills_publish_enabled() {
         eprintln!(
-            "ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS → host-integration install-skills + Claude user projections"
+            "ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS → host-integration install-skills + user projections"
         );
-        let codex_home = codex_home_path()?;
-        let cursor_home = cursor_home_path()?;
-        let claude_home = claude_home_path()?;
-        run_router(
-            &fw,
-            &[
-                "framework",
-                "host-integration",
-                "install-skills",
-                "--framework-root",
-                fw.to_string_lossy().as_ref(),
-                "--project-root",
-                fw.to_string_lossy().as_ref(),
-                "--artifact-root",
-                art.to_string_lossy().as_ref(),
-                "--codex-home",
-                codex_home.to_string_lossy().as_ref(),
-                "--cursor-home",
-                cursor_home.to_string_lossy().as_ref(),
-                "--claude-home",
-                claude_home.to_string_lossy().as_ref(),
-                "install",
-            ],
-        )?;
-        // Install host-specific projections for all hosts with user scopes
-        let host_homes = {
-            let mut m = std::collections::HashMap::new();
-            m.insert("codex", &codex_home as &Path);
-            m.insert("cursor", &cursor_home as &Path);
-            m.insert("claude", &claude_home as &Path);
-            m
-        };
+        // Build host-home args dynamically from registry
+        let mut host_home_args: Vec<String> = Vec::new();
+        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+            let home = host_home_path(host_id)?;
+            host_home_args.push(format!("--{host_id}-home"));
+            host_home_args.push(home.to_string_lossy().into_owned());
+        }
+        let host_home_arg_refs: Vec<&str> = host_home_args.iter().map(String::as_str).collect();
+        let mut skill_args = vec![
+            "framework".to_string(),
+            "host-integration".to_string(),
+            "install-skills".to_string(),
+            "--framework-root".to_string(),
+            fw.to_string_lossy().into_owned(),
+            "--project-root".to_string(),
+            fw.to_string_lossy().into_owned(),
+            "--artifact-root".to_string(),
+            art.to_string_lossy().into_owned(),
+        ];
+        skill_args.extend(host_home_args.clone());
+        skill_args.push("install".to_string());
+        let skill_arg_refs: Vec<&str> = skill_args.iter().map(String::as_str).collect();
+        run_router(&fw, &skill_arg_refs)?;
+
+        // Install host-specific projections for all hosts
         for tool in framework_kernel::runtime_registry::ALL_HOST_IDS {
-            let home = match host_homes.get(tool) {
-                Some(h) => h.to_path_buf(),
-                None => host_home_path(tool)?,
-            };
+            let home = host_home_path(tool)?;
             for scope in projection_install_scopes_for_tool(tool) {
                 let home_flag = format!("--{tool}-home");
                 run_router(
@@ -678,9 +660,7 @@ fn cap_values(mut values: Vec<Value>, max: usize) -> Vec<Value> {
     values
 }
 
-fn codex_home_path() -> Result<PathBuf, String> { host_home_path("codex") }
-fn cursor_home_path() -> Result<PathBuf, String> { host_home_path("cursor") }
-fn claude_home_path() -> Result<PathBuf, String> { host_home_path("claude") }
+// host_home_path(host_id) is the single generic entry point (above).
 
 /// Generic host home path resolution: checks `$HOST_HOME` env var,
 /// falls back to `$HOME/<config_dir>` from RUNTIME_REGISTRY.json.

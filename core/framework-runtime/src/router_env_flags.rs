@@ -69,14 +69,13 @@ pub fn router_rs_hook_state_fail_open_enabled() -> bool {
 }
 
 /// Cross-host: missing `fork_context` on countable reviewer lane may infer independent fork.
-/// Canonical `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` explicit opt-in still wins;
-/// legacy `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` **unset = on** (Cursor 历史默认).
-/// Deprecated: prefer canonical `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`.
+///
+/// 将到 core-policy 的规范实现（单一真源）。
+/// 所有宿主统一通过 `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 控制。
+/// Cursor 的 legacy 环境变量 `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`
+/// 也在 core-policy 中处理（但默认关闭；Cursor 用户需显式设置）。
 pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
-    if router_rs_env_enabled_default_false("ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE") {
-        return true;
-    }
-    router_rs_env_enabled_default_true("ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE")
+    core_policy::env_flags::router_rs_review_fork_context_missing_infer_false_enabled()
 }
 
 /// `ROUTER_RS_TASK_LEDGER_FLOCK`：是否对「任务账本」写入使用 flock sentinel。

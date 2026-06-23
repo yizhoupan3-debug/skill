@@ -19,7 +19,7 @@ pub use state::{
 pub use safety::{parse_safety_level, assign_safety_for_action, assign_safety_for_file};
 pub use kill_switch::{
     acquire_lock, release_lock, read_lock_info,
-    write_kill_signal, clear_kill_signal, is_kill_signal_active,
+    write_kill_signal, clear_kill_signal, is_kill_signal_active, take_kill_signal,
 };
 pub use closeout::{verify_closeout_value, verify_closeout_with_evidence, verify_evidence_index, read_action_record, build_aggregate, aggregate_passes};
 pub use dispatcher::{build_handoff, resolve_subagent_binary, run_action_sync, run_action_dry_run, check_scope_compliance, SubagentResult};

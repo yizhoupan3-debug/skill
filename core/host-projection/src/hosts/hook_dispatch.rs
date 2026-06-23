@@ -562,21 +562,46 @@ pub fn borrow_response_text<'a>(payload: &'a Value) -> Option<&'a str> {
 /// Re-export from core-policy (single source of truth).
 pub use core_policy::subagent::{SUBAGENT_TOOL_NAMES, is_subagent_tool};
 
+/// Canonical subagent review type names, sourced from `RUNTIME_REGISTRY.json`
+/// host providers. Falls back to the static list when registry data is unavailable.
+///
+/// ⚠️ 此列表是真源列表，应与 `RUNTIME_REGISTRY.json` 中各 host 的
+/// `subagent_review_types` 字段保持一致。新增类型时应同时更新 registry JSON。
+fn default_subagent_review_types() -> &'static [&'static str] {
+    static TYPES: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+    TYPES.get_or_init(|| {
+        // Collect all unique subagent_review_types from registry-backed host providers.
+        // This ensures the registry is the single source of truth.
+        let mut types: Vec<&'static str> = Vec::new();
+        for host_id in &["claude", "cursor", "codex", "opencode"] {
+            if let Some(provider) = crate::hosts::host_provider_for_id(host_id) {
+                for t in provider.subagent_review_types() {
+                    if !types.contains(t) {
+                        types.push(t);
+                    }
+                }
+            }
+        }
+        if types.is_empty() {
+            // Registry unavailable — use built-in defaults.
+            types.extend_from_slice(&[
+                "explore", "explorer", "general-purpose", "deep-review-agent",
+                "review", "verifyx-agent", "plan", "claude",
+            ]);
+        }
+        types
+    })
+}
+
 /// Recognized subagent type names for review gate tracking.
-pub const SUBAGENT_REVIEW_TYPES: &[&str] = &[
-    "explore",
-    "explorer",
-    "general-purpose",
-    "deep-review-agent",
-    "review",
-    "verifyx-agent",
-    "plan",
-    "claude",
-];
+pub fn subagent_review_types() -> &'static [&'static str] {
+    default_subagent_review_types()
+}
 
 /// Extract and normalize subagent type from tool input fields.
 pub fn recognize_subagent_type(tool_input: &Value) -> Option<String> {
     use core_policy::hook_common::normalize_subagent_type;
+    let review_types = subagent_review_types();
     let typed_fields = [
         tool_input.get("subagent_type").and_then(Value::as_str),
         tool_input.get("agent_type").and_then(Value::as_str),
@@ -586,7 +611,7 @@ pub fn recognize_subagent_type(tool_input: &Value) -> Option<String> {
     typed_fields
         .into_iter()
         .map(|field| normalize_subagent_type(field))
-        .find(|normalized| SUBAGENT_REVIEW_TYPES.contains(&normalized.as_str()))
+        .find(|normalized| review_types.contains(&normalized.as_str()))
 }
 
 /// Compute review lane and parallel lane bits from subagent kind.
@@ -594,27 +619,41 @@ pub fn subagent_lane_bits(kind: Option<&str>) -> (bool, bool) {
     let Some(k) = kind else {
         return (false, false);
     };
-    let review_lane = SUBAGENT_REVIEW_TYPES.contains(&k);
+    let review_types = subagent_review_types();
+    let review_lane = review_types.contains(&k);
     let parallel_lane = matches!(k, "general-purpose" | "deep-review-agent" | "claude");
     (review_lane, parallel_lane)
 }
 
 /// Default review types (used by most hosts).
-pub const DEFAULT_REVIEW_TYPES: &[&str] = SUBAGENT_REVIEW_TYPES;
+pub fn default_review_types() -> &'static [&'static str] {
+    subagent_review_types()
+}
 
 /// Extended review types (includes worker/shell variants for hosts that use them).
-pub const EXTENDED_REVIEW_TYPES: &[&str] = &[
-    "explore", "explorer", "general-purpose", "generalpurpose",
-    "default", "shell", "worker", "browser-use", "browseruse",
-    "ci-investigator", "ciinvestigator", "best-of-n-runner", "bestofnrunner",
-    "cursor-guide", "cursorguide",
-];
+pub fn extended_review_types() -> &'static [&'static str] {
+    static EXTENDED: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+    EXTENDED.get_or_init(|| {
+        let mut types: Vec<&'static str> = subagent_review_types().to_vec();
+        for t in &[
+            "generalpurpose", "default", "shell", "worker",
+            "browser-use", "browseruse", "ci-investigator", "ciinvestigator",
+            "best-of-n-runner", "bestofnrunner", "cursor-guide", "cursorguide",
+        ] {
+            if !types.contains(t) {
+                types.push(t);
+            }
+        }
+        types
+    })
+}
 
 /// Compute review lane and parallel lane bits using a provided review type set.
 pub fn subagent_lane_bits_with_types(kind: Option<&str>, review_types: &[&str]) -> (bool, bool) {
     let Some(k) = kind else { return (false, false); };
     let review_lane = review_types.contains(&k);
-    let parallel_lane = SUBAGENT_REVIEW_TYPES.contains(&k);
+    let parallel_types = subagent_review_types();
+    let parallel_lane = parallel_types.contains(&k);
     (review_lane, parallel_lane)
 }
 
@@ -622,7 +661,7 @@ pub fn subagent_lane_bits_with_types(kind: Option<&str>, review_types: &[&str]) 
 pub fn subagent_lane_bits_for_host(kind: Option<&str>, host_id: &str) -> (bool, bool) {
     let review_types = crate::hosts::host_provider_for_id(host_id)
         .map(|p| p.subagent_review_types())
-        .unwrap_or(DEFAULT_REVIEW_TYPES);
+        .unwrap_or_else(default_review_types);
     subagent_lane_bits_with_types(kind, review_types)
 }
 
@@ -1225,24 +1264,10 @@ pub fn detect_reviewer_evidence(
 }
 
 /// Extract fork_context from tool input (tries multiple field names).
+/// Delegates to `fork_context_from_values` from core-policy (single source of truth).
 /// Returns `None` if field is absent or unparseable (Claude semantics: absent ≠ false).
 fn extract_fork_context(tool_input: &Value) -> Option<bool> {
-    tool_input
-        .get("fork_context")
-        .or_else(|| tool_input.get("forkContext"))
-        .and_then(|v| {
-            if let Some(b) = v.as_bool() {
-                Some(b)
-            } else if let Some(s) = v.as_str() {
-                match s {
-                    "true" | "1" | "yes" => Some(true),
-                    "false" | "0" | "no" => Some(false),
-                    _ => None,
-                }
-            } else {
-                None
-            }
-        })
+    core_policy::review_gate_engine::fork_context_from_values(tool_input, None)
 }
 
 // ════════════════════════════════════════════════════════════════

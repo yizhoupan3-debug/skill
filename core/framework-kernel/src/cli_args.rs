@@ -110,8 +110,15 @@ pub struct SearchCommand {
 pub enum MaintSubcommand {
     /// Rebuild router-rs, `framework sync-entrypoints`, non-Codex framework installs, verify projections.
     RefreshHostProjections(MaintRootsArgs),
-    VerifyCursorHooks(MaintRepoArgs),
-    VerifyCodexHooks(MaintRepoArgs),
+    /// Verify a host's hook projection installation (registry-driven).
+    #[command(name = "verify-host-hooks")]
+    VerifyHostHooks {
+        /// Host ID to verify (e.g. cursor, claude, codex, opencode).
+        #[arg(long)]
+        host_id: String,
+        #[command(flatten)]
+        args: MaintRepoArgs,
+    },
     /// Refresh → skill-compiler --apply → cargo test → generated-artifacts-status (optional host publish).
     UpdateOneShot(MaintRootsArgs),
     /// Dry-run `/update` repository knowledge/hygiene audit; prints JSON and does not delete files.
@@ -526,15 +533,6 @@ pub struct FrameworkTaskStateAggregateSyncCommand {
     pub task_id: Option<String>,
 }
 
-
-
-#[derive(Args, Debug, Clone)]
-pub struct CursorHookCommand {
-    #[arg(long)]
-    pub event: String,
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
-}
 
 
 

@@ -60,6 +60,23 @@ pub fn clear_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopErro
     }
 }
 
+/// Atomically check for and consume a kill signal in a single filesystem operation.
+///
+/// Unlike the two-step `is_kill_signal_active()` → `clear_kill_signal()` pattern,
+/// this function uses one `remove_file` syscall and returns `true` only when the
+/// file actually existed. This eliminates the TOCTOU window where another process
+/// could write a new signal between check and clear.
+///
+/// Returns `Ok(true)` if a signal was present and removed, `Ok(false)` if none.
+pub fn take_kill_signal(repo_root: &Path, loop_id: &str) -> Result<bool, LoopError> {
+    let path = kill_signal_path(repo_root, loop_id);
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(LoopError::Io(format!("take kill signal {}: {e}", path.display()))),
+    }
+}
+
 /// Remove all kill signal files by deleting the entire `.loop-kill/` directory.
 /// Use during loop runner shutdown cleanup.
 pub fn clear_all_kill_signals(repo_root: &Path) -> Result<(), LoopError> {

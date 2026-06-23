@@ -1,7 +1,8 @@
 use crate::types::{LoopAction, LoopError};
-use crate::kill_switch::{is_kill_signal_active, clear_kill_signal};
+use crate::kill_switch::take_kill_signal;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -9,6 +10,50 @@ use std::time::{Duration, Instant};
 pub const DEFAULT_ACTION_TIMEOUT_SECS: u64 = 600;
 /// Interval in seconds between kill signal polls and subagent process checks.
 pub const KILL_POLL_INTERVAL_SECS: u64 = 5;
+
+/// Max concurrent subagent processes (configurable via `ROUTER_RS_SUBAGENT_MAX_CONCURRENT`).
+fn max_concurrent_procs() -> u32 {
+    let default: u32 = 4;
+    std::env::var("ROUTER_RS_SUBAGENT_MAX_CONCURRENT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(default)
+        .max(1)
+}
+
+/// Global semaphore guarding concurrent subagent OS process count.
+fn subagent_semaphore() -> &'static Mutex<u32> {
+    static SEM: std::sync::OnceLock<Mutex<u32>> = std::sync::OnceLock::new();
+    SEM.get_or_init(|| Mutex::new(max_concurrent_procs()))
+}
+
+/// RAII guard: acquires a subagent permit on construction, releases on drop.
+/// Blocks with backoff sleep until capacity is available.
+struct SubagentPermit<'a> {
+    sem: &'a Mutex<u32>,
+}
+
+impl<'a> SubagentPermit<'a> {
+    fn acquire(sem: &'a Mutex<u32>) -> Self {
+        let mut backoff_ms = 50;
+        loop {
+            let mut count = sem.lock().unwrap();
+            if *count > 0 {
+                *count -= 1;
+                return Self { sem };
+            }
+            drop(count);
+            thread::sleep(Duration::from_millis(backoff_ms));
+            backoff_ms = (backoff_ms * 2).min(2000);
+        }
+    }
+}
+
+impl Drop for SubagentPermit<'_> {
+    fn drop(&mut self) {
+        *self.sem.lock().unwrap() += 1;
+    }
+}
 
 /// Result of a subagent action execution, wrapping success/failure status and stdout/stderr output.
 pub struct SubagentResult {
@@ -85,6 +130,9 @@ pub fn run_action_sync(
     let binary = resolve_subagent_binary()?;
     let timeout_duration = timeout.unwrap_or(Duration::from_secs(DEFAULT_ACTION_TIMEOUT_SECS));
 
+    // Acquire a global concurrency permit before spawning the OS process.
+    let _permit = SubagentPermit::acquire(subagent_semaphore());
+
     let mut child = Command::new(&binary)
         .args(["-p", &handoff])
         .current_dir(repo_root)
@@ -108,8 +156,7 @@ pub fn run_action_sync(
                 });
             }
             None => {
-                if is_kill_signal_active(repo_root, loop_id) {
-                    let _ = clear_kill_signal(repo_root, loop_id);
+                if take_kill_signal(repo_root, loop_id).unwrap_or(false) {
                     child.kill().map_err(|e| LoopError::Io(format!("kill: {e}")))?;
                     child.wait().map_err(|e| LoopError::Io(format!("wait after kill: {e}")))?;
                     return Err(LoopError::KillSignaled(format!(
