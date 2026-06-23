@@ -30,7 +30,7 @@ use runtime_core::framework_runtime::{
     write_framework_session_artifacts,
 };
 use runtime_core::harness_contract::{harness_contract, lint_skill_contracts};
-use runtime_core::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
+use core_policy::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
 use runtime_core::host_entrypoint_sync::sync_host_entrypoints;
 use runtime_core::host_integration::run_host_integration_from_args;
 use runtime_core::review_gate_cli::run_review_gate;
@@ -92,16 +92,14 @@ fn resolve_host_entrypoint_provider(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| runtime_core::hosts::default_host_id());
-    // Currently only codex has a concrete entrypoint provider.
-    // Future hosts add their own providers here via the registry pattern.
     match runtime_core::hosts::host_provider_for_routing_spelling(resolved) {
-        Some(provider) if provider.host_id() == "codex" || provider.install_tool() == "codex" => {
-            host_entrypoint_provider(repo_root)
+        Some(provider) => {
+            let _ = repo_root;
+            Err(format!(
+                "host '{}' does not yet have a registered entrypoint provider",
+                provider.host_id()
+            ))
         }
-        Some(provider) => Err(format!(
-            "host '{}' does not yet have an entrypoint provider; only codex is currently supported",
-            provider.host_id()
-        )),
         None => Err(format!(
             "unknown host-id '{resolved}' for sync-entrypoints; not found in host_provider_registry"
         )),
@@ -460,30 +458,28 @@ pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Resu
 }
 
 /// Register all hook and agent dispatch functions into the host-projection registry.
-/// Called once during CLI bootstrap.
+/// Hook dispatchers are registered for ALL hosts from ALL_HOST_IDS (registry-driven).
+/// Agent dispatchers are registered for all hosts (delegates to generic run_agent_mcp_loop).
 pub fn ensure_host_dispatchers_registered() {
-    // Hook dispatchers — all hosts route to dispatch_host_hook (registry-driven via HostProvider::dispatcher)
+    // Hook dispatchers — all hosts route to dispatch_host_hook
     use host_projection::hosts::HookDispatchFn;
-    let hook_entries: Vec<(&'static str, HookDispatchFn)> = vec![
-        ("cursor", |host_id, event, repo| dispatch_host_hook(host_id, event, repo)),
-        ("claude", |host_id, event, repo| dispatch_host_hook(host_id, event, repo)),
-        ("opencode", |host_id, event, repo| dispatch_host_hook(host_id, event, repo)),
-        ("codex", |host_id, event, repo| dispatch_host_hook(host_id, event, repo)),
-    ];
+    let hook_entries: Vec<(&'static str, HookDispatchFn)> =
+        framework_kernel::runtime_registry::ALL_HOST_IDS
+            .iter()
+            .map(|&host_id| (host_id, (|hid, ev, repo| dispatch_host_hook(hid, ev, repo)) as HookDispatchFn))
+            .collect();
     host_projection::hosts::register_hook_dispatchers(hook_entries);
 
-    // Agent dispatchers
+    // Agent dispatchers — all hosts delegate to generic run_agent_mcp_loop
     use host_projection::hosts::AgentDispatchFn;
-    let agent_entries: Vec<(&'static str, AgentDispatchFn)> = vec![
-        ("claude", |repo| {
-            let root = resolve_repo_root_arg(repo)?;
-            runtime_core::hosts::claude_agent::run_claude_agent_mcp_loop(Some(&root))
-        }),
-        ("opencode", |repo| {
-            let root = resolve_repo_root_arg(repo)?;
-            runtime_core::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
-        }),
-    ];
+    let agent_entries: Vec<(&'static str, AgentDispatchFn)> =
+        framework_kernel::runtime_registry::ALL_HOST_IDS
+            .iter()
+            .map(|&host_id| (host_id, (|host_id, repo| {
+                let root = resolve_repo_root_arg(repo)?;
+                runtime_core::hosts::run_agent_mcp_loop(Some(&root), host_id)
+            }) as AgentDispatchFn))
+            .collect();
     host_projection::hosts::register_agent_dispatchers(agent_entries);
 }
 
@@ -524,18 +520,48 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
     // Convert HookOutput -> JSON value
     let mut json_output = hook_output_to_value(output);
 
-    // Attach router-rs observation
-    attach_router_rs_observation(&mut json_output, host_id);
+    // Attach router-rs observation (resolve 'static host_id from provider registry)
+    if let Some(provider) = host_projection::hosts::host_provider_for_routing_spelling(host_id) {
+        attach_router_rs_observation(&mut json_output, provider.host_id());
+    }
 
     // Emit telemetry
     let telemetry_event = event.to_ascii_lowercase();
     if telemetry_event.contains("tool") {
-        emit_hook_fired("tool", &repo_root);
+        emit_hook_fired(&telemetry_event, hook_action_from_optional_output(Some(&json_output)));
     }
 
     print_json_value(&json_output)?;
     Ok(())
 }
+
+/// Unified host command dispatcher (registry-driven: Hook / Agent).
+pub fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
+    match command {
+        HostCommand::Hook { host_id, command } => dispatch_hook_command(&host_id, command),
+        HostCommand::Agent { host_id, command } => dispatch_agent_command(&host_id, command),
+    }
+}
+
+/// Agent dispatch routed by host_id via dispatch registry.
+pub fn dispatch_agent_command(host_id: &str, command: GenericAgentCommand) -> Result<(), String> {
+    let f = host_projection::hosts::find_agent_dispatch(host_id).ok_or_else(|| {
+        format!(
+            "agent dispatch not implemented for host `{host_id}`; \
+             add an agent dispatch entry in ensure_host_dispatchers_registered()"
+        )
+    })?;
+    f(host_id, command.repo_root.as_deref())
+}
+
+/// Unified diagnostic command dispatcher (merged: profile, browser)
+pub fn dispatch_diagnose_command(command: DiagnoseCommand) -> Result<(), String> {
+    match command {
+        DiagnoseCommand::Profile { command } => dispatch_profile_command(command),
+        DiagnoseCommand::Browser { command } => dispatch_browser_command(command),
+    }
+}
+
 pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
     match command {
         TraceCommand::RecordEvent(command) => {

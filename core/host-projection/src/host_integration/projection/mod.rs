@@ -736,11 +736,6 @@ pub fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> 
         .find(|adapter| adapter.tool == normalized)
 }
 
-pub fn projection_adapter_for_raw(raw: &str) -> Option<&'static HostProjectionAdapter> {
-    let normalized = raw.trim().to_lowercase();
-    KNOWN_PROJECTION_TOOLS.iter().find(|adapter| adapter.tool == normalized)
-}
-
 pub fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, String> {
     let pairs = framework_kernel::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
         framework_root,

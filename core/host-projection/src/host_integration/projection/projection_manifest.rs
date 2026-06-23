@@ -772,7 +772,7 @@ pub fn install_skills_projection_tools(
 }
 
 pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
-    if let Some(adapter) = projection_adapter_for_raw(raw) {
+    if let Some(adapter) = projection_adapter(raw) {
         return Ok(adapter.tool.to_string());
     }
     let known = projection_supported_tools_for_message(framework_root);
@@ -785,13 +785,10 @@ pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, S
 }
 
 pub fn projection_supported_tools_for_message(framework_root: &Path) -> Vec<String> {
-    
     registry_projection_tools(framework_root).unwrap_or_else(|_| {
-        vec![
-            "cursor".to_string(),
-            "claude".to_string(),
-            "opencode".to_string(),
-            "codex".to_string(),
-        ]
+        framework_kernel::runtime_registry::ALL_HOST_IDS
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     })
 }

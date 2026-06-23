@@ -223,7 +223,9 @@ pub type HookDispatchFn =
     fn(host_id: &str, event: &str, repo_root: Option<&std::path::Path>) -> Result<(), String>;
 
 /// Generic agent dispatch function signature.
-pub type AgentDispatchFn = fn(repo_root: Option<&std::path::Path>) -> Result<(), String>;
+/// Matches host_id (from registration) + repo_root to run the agent MCP loop.
+pub type AgentDispatchFn =
+    fn(host_id: &str, repo_root: Option<&std::path::Path>) -> Result<(), String>;
 
 static HOOK_DISPATCH_REGISTRY: OnceLock<Vec<(&'static str, HookDispatchFn)>> = OnceLock::new();
 static AGENT_DISPATCH_REGISTRY: OnceLock<Vec<(&'static str, AgentDispatchFn)>> = OnceLock::new();

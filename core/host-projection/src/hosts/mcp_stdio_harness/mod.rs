@@ -46,20 +46,10 @@ const WEB_FETCH_MAX_BYTES_DEFAULT: usize = 50_000;
 const WEB_FETCH_TIMEOUT_SECS: u64 = 30;
 
 /// Shared host display label for MCP-hosted sessions.
-/// Used by closeout hard-block and advisory review gate prompts (review never hard-blocks Stop).
-/// Resolved from HostProvider registry; falls back to "MCP Host" for unknown hosts.
+/// Delegates to host_extensions::host_log_label(); falls back to "MCP Host" for unknown hosts.
 fn mcp_host_display_label(host_id: &str) -> String {
-    crate::hosts::host_provider_for_id(host_id)
-        .map(|p| {
-            // Capitalize first letter of host_id as display name
-            let id = p.host_id();
-            let mut chars = id.chars();
-            match chars.next() {
-                Some(c) => format!("{}{}", c.to_uppercase(), chars.as_str()),
-                None => "MCP Host".to_string(),
-            }
-        })
-        .unwrap_or_else(|| "MCP Host".to_string())
+    let label = crate::hosts::host_extensions::host_log_label(host_id);
+    if label == host_id { "MCP Host".to_string() } else { label }
 }
 
 fn list_known_task_ids(repo_root: &Path) -> Vec<String> {

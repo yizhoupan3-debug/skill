@@ -47,13 +47,18 @@ pub fn build_profile_bundle(profile: FrameworkProfileContract) -> Result<Profile
     let workspace_bootstrap = compile_workspace_bootstrap(&profile);
     let shared_contract =
         build_shared_contract(&profile, &normalized_mcp_servers, &workspace_bootstrap);
+    // Use the first supported host from the registry as the default profile host.
     let host_specs = load_host_profile_specs()?;
+    let default_host = crate::runtime_registry::ALL_HOST_IDS
+        .first()
+        .ok_or_else(|| "RUNTIME_REGISTRY host_targets.supported is empty".to_string())?;
     let codex_spec = host_specs
         .iter()
-        .find(|spec| spec.host_key == "codex")
+        .find(|spec| spec.host_key == *default_host)
         .ok_or_else(|| {
-            "RUNTIME_REGISTRY host_projections must include codex for legacy codex_profile"
-                .to_string()
+            format!(
+                "RUNTIME_REGISTRY host_projections must include {default_host} for legacy codex_profile"
+            )
         })?;
     let codex_host_payload = codex_spec.build_payload();
     let mut host_payloads = Map::new();

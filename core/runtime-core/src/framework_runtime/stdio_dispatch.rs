@@ -570,7 +570,7 @@ fn dispatch_stdio_compile_profile_artifacts(payload: Value) -> Result<Value, Str
         required_non_empty_string(&payload, "profile_path", "stdio profile artifacts")?;
     let full = optional_bool(&payload, "full").unwrap_or(false);
     let profile = load_framework_profile(Path::new(&profile_path))?;
-    let artifacts = build_codex_artifact_bundle(profile, full)?;
+    let artifacts = build_profile_artifact_bundle(profile, full)?;
     serialize_payload(artifacts, "host profile artifacts")
 }
 

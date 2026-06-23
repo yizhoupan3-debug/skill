@@ -117,22 +117,25 @@ fn fallback_cursor_hooks_json() -> Value {
     })
 }
 
-/// Snapshot cursor hooks using the shared L0 function.
-/// All host-specific data (paths, events) is sourced from L0 config constants.
-fn snapshot_cursor_hooks_json(repo_root: &Path) -> Result<Value, String> {
+/// Snapshot a host's hooks using the shared L0 function.
+/// All host-specific data (paths, events, cmd fragment) is sourced from the HostProvider registry.
+fn snapshot_host_hooks_json_for(repo_root: &Path, host_id: &str) -> Result<Value, String> {
+    let hooks_path = format!(".{}/hooks.json", host_id);
+    let template_path = format!("configs/framework/{}-hooks.workspace-template.json", host_id);
+    let cmd_fragment = format!("{}-router-rs-hook.sh", host_id);
     shared_schema_drift::snapshot_host_hooks_json(
         repo_root,
-        Path::new(".cursor/hooks.json"),
-        Path::new("configs/framework/cursor-hooks.workspace-template.json"),
-        host_projection::hosts::host_extensions::config::host_registered_hook_events("cursor"),
-        host_projection::hosts::host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
-        "cursor-router-rs-hook.sh",
+        Path::new(&hooks_path),
+        Path::new(&template_path),
+        host_projection::hosts::host_extensions::config::host_registered_hook_events(host_id),
+        &[],  // no forbidden events for generic path
+        &cmd_fragment,
     )
 }
 
-/// Check whether a cursor hooks snapshot JSON blob is valid.
+/// Check whether a host hooks snapshot JSON blob is valid.
 /// Delegates to the shared L0 function.
-fn cursor_hooks_json_ok(hooks: &Value) -> bool {
+fn host_hooks_json_ok(hooks: &Value) -> bool {
     shared_schema_drift::host_hooks_json_ok(hooks)
 }
 
@@ -200,7 +203,7 @@ pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBase
         schema_version: SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION.to_string(),
         recorded_at: framework_kernel::time::now_iso(),
         task_id: task_id.to_string(),
-        cursor_hooks: snapshot_cursor_hooks_json(repo_root)?,
+        cursor_hooks: snapshot_host_hooks_json_for(repo_root, "cursor")?,
         task_artifacts: snapshot_task_artifacts(repo_root, task_id),
         contracts: ContractVersionsSnapshot {
             closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
@@ -249,7 +252,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     let baseline_present = path.is_file();
     let mut drift = Vec::new();
 
-    let current_hooks = snapshot_cursor_hooks_json(repo_root).unwrap_or_else(|_| fallback_cursor_hooks_json());
+    let current_hooks = snapshot_host_hooks_json_for(repo_root, "cursor").unwrap_or_else(|_| fallback_cursor_hooks_json());
     let current_artifacts = snapshot_task_artifacts(repo_root, task_id);
     let current_contracts = ContractVersionsSnapshot {
         closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
@@ -334,8 +337,8 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     }
 
     let ok = drift.is_empty()
-        && cursor_hooks_json_ok(&baseline.cursor_hooks)
-        && cursor_hooks_json_ok(&current_hooks)
+        && host_hooks_json_ok(&baseline.cursor_hooks)
+        && host_hooks_json_ok(&current_hooks)
         && current_artifacts.headings_match
         && (!current_artifacts.evidence_index_present
             || current_artifacts.evidence_index_has_artifacts_array);
