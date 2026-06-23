@@ -416,18 +416,7 @@ commit
 
 ## 跨宿主兼容
 
-| 宿主 | 支持状态 | 说明 |
-|------|----------|------|
-| **Claude CLI** | 完全支持 | Agent subagent 并行 + Bash 测试门控 |
-| **Cursor** | 完全支持 | Task subagent 并行 + 测试门控 |
-| **Codex** | 支持 | 按需路由加载 |
-
-### 宿主差异
-
-- **Claude**: 使用 `Agent` 工具 spawn 三维度子代理；PostToolUse hook 可记录简化证据
-- **Cursor**: 使用 `Task` 工具 spawn 子代理；lane 命名遵循 Cursor 规范
-
-所有宿主共享同一份 `SKILL.md`，行为契约和测试门控逻辑不变。
+所有宿主共享同一份 `SKILL.md`，通过子代理并行执行三维度简化（具体子代理接入方式因宿主而异，见 `RUNTIME_REGISTRY.json`），行为契约和测试门控逻辑不变。
 
 ## References
 

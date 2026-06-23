@@ -86,8 +86,8 @@ bridge_behavior: mobile_complete_once
 ## Review 深度与宿主并行审阅
 
 - **默认**：**不是**从全仓无死角通读起手；顺序是：**诊断 → worktree/stash 与提交面厘清** → **对拟提交的 diff 做深度 review**（完整 checklist）→ fix → 验证 → 收口写入。未完成 checklist 中与本次提交面相称的条目前，不进入 **commit / merge（写历史）/ push**。
-- **`/gitx plan`** **不**再表示“更深的例外档”；与裸 `/gitx` **同档**。
-- 宿主若对 `/gitx` 启用并行 reviewer lane，属于执行面上的评审分路，**不改变**上述顺序。**Cursor**：当任务适合并行审阅时，可拆 **并行 reviewer lane**（与仓库 `.cursor/rules` 中与 **review-subagent-gate** 一致的宿主默认一致），专注于风险与 diff 阅读理解；**改仓库与同一提交临界区仍由收口主线程串行**，避免分叉式改同一文件的写入冲突。
+- **`/gitx plan`** **不**再表示”更深的例外档”；与裸 `/gitx` **同档**。
+- 宿主若对 `/gitx` 启用并行 reviewer lane，属于执行面上的评审分路，**不改变**上述顺序。当宿主支持并行审阅时，可拆 **并行 reviewer lane**，专注于风险与 diff 阅读理解；**改仓库与同一提交临界区仍由收口主线程串行**，避免分叉式改同一文件的写入冲突。
 
 ## 深度 review checklist（默认 `/gitx`；`/gitx plan` 等价）
 

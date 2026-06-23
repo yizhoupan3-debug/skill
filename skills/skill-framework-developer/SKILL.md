@@ -43,8 +43,8 @@ metadata:
   version: "3.3.1"
   platforms: [supported]
   tags:
-    - codex
-    - cursor
+    - multi-host
+    - host-agnostic
     - skill-authoring
     - routing
     - trigger-debugging

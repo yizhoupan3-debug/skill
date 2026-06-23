@@ -39,13 +39,13 @@ metadata:
 
 ## When to use vs plan-mode
 
-- **planx**（本 skill）：my lifecycle 标准计划层，产出 `ROADMAP.md` + `WAVE_STATE.json`，必须在 `/discussx` 之后由用户显式触发。**不适用于 Cursor Plan 模式**。
-- **plan-mode**（`skills/plan-mode/`）：跨宿主 Plan 闸门，覆盖 Cursor CreatePlan、调研计划、可验收 todo。**不适用于 my lifecycle 的 wave/phase 编排**。
-- 两者**互斥**：同一任务只用其一。my lifecycle 用 planx，Cursor Plan 模式用 plan-mode。
+- **planx**（本 skill）：my lifecycle 标准计划层，产出 `ROADMAP.md` + `WAVE_STATE.json`，必须在 `/discussx` 之后由用户显式触发。**不适用于宿主原生 Plan 模式（如 Cursor CreatePlan）**。
+- **plan-mode**（`skills/plan-mode/`）：跨宿主 Plan 闸门，覆盖宿主原生 Plan 模式（如 Cursor CreatePlan）、调研计划、可验收 todo。**不适用于 my lifecycle 的 wave/phase 编排**。
+- 两者**互斥**：同一任务只用其一。my lifecycle 用 planx，宿主原生 Plan 模式用 plan-mode。
 
 ## Do not use
 
-- 用户在 Cursor Plan 模式下需要策划文档闸门 → 使用 `plan-mode`
+- 用户在宿主原生 Plan 模式下需要策划文档闸门 → 使用 `plan-mode`
 - 任务不涉及 my lifecycle 的 phase/wave 规划 → 使用 `plan-mode` 或直接实现
 
 **Inputs**: `REQUIREMENTS.md`, `DECISIONS.md`, `OPEN_QUESTIONS.md` (carry unresolved items into plan scope or wave notes).
