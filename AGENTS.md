@@ -16,7 +16,7 @@
 
 ## Lifecycle
 
-- **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/adr/010-ideal-architecture-v10.md`（六层模型与生命周期定位）。
+- **Default lifecycle**：`/discussx` → `/planx` → `/implementx` → `/verifyx`。详见 `docs/adr/010-ideal-architecture-v10.md`（L0–L7 八层分层模型与生命周期定位）。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
 - **Closeout**：`closeout_gate` / `complete` 为 advisory（`interactive`）。
 
