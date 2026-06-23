@@ -21,9 +21,7 @@ use serde_json::Value;
 use std::path::Path;
 use std::sync::OnceLock;
 
-static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();
-
-// ── Hook duplicate check (generic fn-pointer proxy; legacy "codex" naming removed) ──
+// ── Hook duplicate check (generic fn-pointer proxy) ──
 
 type HookDuplicateCheckFn = fn(repo_root: &Path) -> Vec<String>;
 static HOOK_DUPLICATE_CHECK: OnceLock<HookDuplicateCheckFn> = OnceLock::new();
@@ -44,6 +42,8 @@ pub fn check_hook_duplicates(repo_root: &Path) -> Vec<String> {
 pub fn try_hooks() -> Option<&'static RuntimeCoreHooks> {
     RUNTIME_CORE_HOOKS.get()
 }
+
+static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();
 
 /// 获取已注册的钩子。需在调用其他 framework-runtime 函数前注册。
 ///

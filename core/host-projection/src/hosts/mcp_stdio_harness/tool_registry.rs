@@ -44,6 +44,10 @@ impl CompositeRegistry {
         self.handlers.push(Box::new(handler));
     }
 
+    pub fn contains(&self, tool_name: &str) -> bool {
+        self.name_to_handler.contains_key(tool_name)
+    }
+
     pub fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
         if let Some(&idx) = self.name_to_handler.get(tool_name) {
             self.handlers[idx].dispatch(tool_name, args, ctx)

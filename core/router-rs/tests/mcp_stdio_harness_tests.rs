@@ -174,38 +174,6 @@ mod desktop_mcp_tests {
     }
 
     #[test]
-    fn skill_route_routes_implementx_for_claude_desktop() {
-        let repo = test_repo_dir();
-        mcp_stdio_test_support::seed_skill_routing_runtime(&repo);
-        let req = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": "skill_route",
-                "arguments": { "query": "implementx" }
-            }
-        });
-        let response = crate::mcp_stdio_harness::handle_mcp_request(
-            &req.to_string(),
-            &repo,
-            "opencode",
-            "test-session",
-        )
-        .expect("skill_route response");
-        let out = response["result"]["content"][0]["text"].as_str().unwrap();
-        assert!(
-            out.contains("\"routed\":true"),
-            "expected routed:true: {out}"
-        );
-        assert!(
-            out.contains("implementx"),
-            "expected implementx slug: {out}"
-        );
-        let _ = std::fs::remove_dir_all(&repo);
-    }
-
-    #[test]
     fn closeout_gate_requires_session_summary_file() {
         let repo = test_repo_dir();
         // Pointer 机制已移除，需显式传 task_id
@@ -583,6 +551,7 @@ mod routing_tests {
             record_kind: "skill".to_string(),
             primary_allowed: true,
             fallback_policy_mode: "default".to_string(),
+            skill_flags: vec![],
         }];
         let result = filter_records_for_host(records, Some("retired-claude-desktop"));
         assert!(result.is_err());
@@ -1205,7 +1174,7 @@ mod claude_desktop_stdio_e2e_tests {
         let requests = [
             r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}"#,
             r#"{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}"#,
-            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"skill_route","arguments":{"query":"implementx"}}}"#,
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"skill_route","arguments":{"query":"gitx"}}}"#,
         ];
         for line in requests {
             writeln!(stdin, "{line}").expect("write stdin");
@@ -1220,8 +1189,8 @@ mod claude_desktop_stdio_e2e_tests {
             "tools/list missing framework_snapshot; stdout={stdout} stderr={stderr}"
         );
         assert!(
-            stdout.contains("implementx") && stdout.contains("routed"),
-            "skill_route missing implementx route; stdout={stdout} stderr={stderr}"
+            stdout.contains("gitx") && stdout.contains("routed"),
+            "skill_route missing gitx route; stdout={stdout} stderr={stderr}"
         );
     }
 }

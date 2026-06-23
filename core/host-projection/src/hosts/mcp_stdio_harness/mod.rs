@@ -208,9 +208,11 @@ pub(super) fn dispatch_tool(
         connection_session_id: Arc::new(connection_session_id.to_string()),
     };
 
-    let result = registry.dispatch(tool_name, args, &ctx);
-    if result.is_ok() {
-        return result;
+    // Check if the tool is registered in the built-in registry.
+    // Only fall through to external dispatch for truly unregistered tools;
+    // registered tools that return Err have a business error that must propagate.
+    if registry.contains(tool_name) {
+        return registry.dispatch(tool_name, args, &ctx);
     }
 
     // Not found in built-in registry → try externally-registered dispatch
@@ -218,7 +220,7 @@ pub(super) fn dispatch_tool(
     if let Some(dispatch) = crate::hooks::get_research_tool_dispatch() {
         dispatch(tool_name, args)
     } else {
-        result
+        Err(format!("Unknown tool: {tool_name}"))
     }
 }
 
