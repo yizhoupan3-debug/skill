@@ -2,14 +2,15 @@
 
 > Extracted from SKILL.md to reduce token consumption at routing time.
 
-## Orchestration modes (workflow vs sidecar)
+## Orchestration modes (team vs sidecar)
 
-跨宿主 **workflow** 与 **sidecar** 的统一前门见 SKILL 正文 **Orchestration mode selection**。细则：
+跨宿主 **team** 与 **sidecar** 的统一前门见 SKILL 正文 **Orchestration mode selection**。细则：
 
 - 触发与优先级：[orchestration-mode.md](./orchestration-mode.md)
-- 非 Claude 按 JS 派发：[workflow-supervisor-protocol.md](./workflow-supervisor-protocol.md)
-- `.claude/workflows` 模板表：[workflow-template-catalog.md](./workflow-template-catalog.md)
-- JS API / 四阶段：[workflow-script-conventions.md](./workflow-script-conventions.md)
+- 核心实现：`core/session-supervisor/src/team_manager.rs`
+- Agent 生命周期跟踪：`core/session-supervisor/src/process.rs`
+- Artifact 路径：`artifacts/teams/`
+- **Workflow（JS 编排）已彻底移除**，所有多 agent 协作统一使用 team 模型。
 
 ## First Decision: Do You Even Need Multiple Agents?
 

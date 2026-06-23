@@ -8,7 +8,7 @@ parent: _common.md
 
 # OpenCode 宿主操作手册
 
-**闭集 id**: `opencode` · **传输**: native-opencode（JS/TS 插件 hook + MCP 双通道） · **权威**: `RUNTIME_REGISTRY.json` → `host_projections.opencode`
+**闭集 id**: `opencode` · **传输**: native-opencode（Rust hook（hook.sh → router-rs-cli）+ MCP 双通道） · **权威**: `RUNTIME_REGISTRY.json` → `host_projections.opencode`
 
 **共通内容**（代理身份与画风、Skill 路由、默认生命周期、Python 环境、进程管理与性能调优）见 [`_common.md`](_common.md)。
 
@@ -18,21 +18,20 @@ parent: _common.md
 
 - **任务推进**: `/implementx` + `framework_goal_drive` stdio
 - **任务状态**: `artifacts/current/<task_id>/GOAL_STATE.json`
-- **门控模式**: 插件 hook + MCP 工具层双通道。`tool.execute.before` 可 throw 阻断工具执行（等价 PreToolUse）；`session.idle` 等价 Stop；closeout/review 在 MCP 工具层实现
+- **门控模式**: shell hook（hook.sh → router-rs-cli）+ MCP 工具层双通道。`tool.execute.before` 经 hook.sh 路由到 Rust `OpenCodeDispatcher`，等价 PreToolUse；`session.idle` 等价 Stop；closeout/review 在 MCP 工具层实现
 
-## 插件 Hook 系统
+## Shell Hook 系统
 
-OpenCode 通过 JS/TS 插件系统提供完整 hook 生命周期。插件调用 `router-rs-cli host hook --event=<event> --repo-root <cwd> opencode`（与其它宿主共用 `hook.sh` 的统一命令格式）：
+OpenCode 通过 `hook.sh` 统一调用 `router-rs-cli host hook --event=<event> --repo-root <cwd> opencode`（与 Claude/Cursor/Codex 共用同一 shell hook 入口）：
 
-| OpenCode Hook | 等价于 | router-rs 命令 |
+| OpenCode 事件 | 等价于 | hook.sh 事件名 |
 |---|---|---|
-| `tool.execute.before` | PreToolUse | `router-rs-cli host hook --event=PreToolUse --repo-root <cwd> opencode` |
-| `tool.execute.after` | PostToolUse | `router-rs-cli host hook --event=PostToolUse --repo-root <cwd> opencode` |
-| `session.idle` | Stop | `router-rs-cli host hook --event=Stop --repo-root <cwd> opencode` |
-| `permission.asked` / `permission.replied` | Permission hooks | 权限拦截 |
-| `shell.env` | 环境注入 | 注入 `SKILL_FRAMEWORK_ROOT` / `OPENCODE_PROJECT_ROOT` |
+| `tool.execute.before` | PreToolUse | `tool.execute.before` |
+| `tool.execute.after` | PostToolUse | `tool.execute.after` |
+| `session.idle` | Stop | `session.idle` |
+| `session.created` | SessionStart | `session.created` |
 
-插件加载顺序：全局配置 → 项目配置 → `~/.config/opencode/plugins/` → `.opencode/plugins/`
+Rust 侧 `OpenCodeDispatcher` 实现 `HostHookDispatcher` trait，处理 PreToolUse 路径保护、Stop 统一流水线等。
 
 ## opencode.json 配置结构
 
@@ -50,7 +49,7 @@ OpenCode 通过 JS/TS 插件系统提供完整 hook 生命周期。插件调用 
 
 - 三类: Allow / Ask / Deny；权限分类: read, write, run, browser
 - 框架 MCP server 通常注册为 project scope 的 `mcp`
-- `permission.asked` / `permission.replied` 插件 hook 可拦截权限请求
+- `permission.asked` / `permission.replied` hook 可拦截权限请求
 
 ## 自定义 Agent 管理
 
@@ -58,29 +57,28 @@ OpenCode 通过 JS/TS 插件系统提供完整 hook 生命周期。插件调用 
 - 通过 `opencode.json` 的 `agents` 字段显式声明
 - Harness 投影通过 `.opencode/` 目录注入框架 agent
 
-## Fail-open / Fail-closed 设计意图
+## Fail-closed 安全策略
 
-OpenCode 采用**分层安全策略**：插件层 **fail-open**（JS/TS 插件 hook 失败不阻断编辑器），hook 脚本层对 critical events（`tool.execute.before`、`tool.execute.after`、`session.idle`、`session.created`）仍 **fail-closed**（router-rs 不可用时返回 `decision:block`）。这与 Claude / Cursor / Codex 的纯 fail-closed 策略不同（见 [`hook-hosts.md`](hook-hosts.md) §Fail-open / Fail-closed 比较）。
+OpenCode 采用与 Claude / Cursor / Codex 一致的 **fail-closed** 策略：hook 脚本层对 critical events（`tool.execute.before`、`tool.execute.after`、`session.idle`、`session.created`）在 router-rs 不可用时返回 `decision:block`。
 
-**设计理由**：OpenCode 的插件 hook 系统通过 JS/TS 运行时执行，hook 失败不应阻断核心编辑器功能。MCP 工具层（`framework_snapshot`、`skill_route` 等）独立于 hook 系统，hook 缺失不影响 MCP 功能。
+**设计理由**：OpenCode 的 hook 通过 `hook.sh` → `router-rs-cli` 调用 Rust `OpenCodeDispatcher`，与其他三宿主共享同一 fail-closed 路径。MCP 工具层（`framework_snapshot`、`skill_route` 等）独立于 hook 系统，hook 缺失不影响 MCP 功能。
 
-## 架构对比：TS/JS 插件 vs Rust Native Hook
+## 与其他宿主的架构对齐
 
-OpenCode 的 hook 处理层在 **TS/JS 插件系统**中执行，而非 Rust 侧。这与 cursor/claude/codex 三宿主的 Rust hook 分发有本质差异：
+OpenCode 的 hook 处理层在 **Rust 侧**（`host-projection` crate 的 `OpenCodeDispatcher`），与其他三宿主（Claude/Cursor/Codex）完全一致：
 
-| 维度 | cursor/claude/codex | opencode |
-|------|--------------------------|----------|
-| Hook 运行时 | Rust（`host-projection` crate） | JS/TS 插件运行时 |
-| PreToolUse | `PreToolUse` 事件 | `tool.execute.before` 插件事件 |
-| PostToolUse | `PostToolUse` 事件 | `tool.execute.after` 插件事件 |
-| Stop | `Stop` 事件 | `session.idle` 插件事件 |
-| 权限守卫 | Rust 侧实现 | `permission.asked` / `permission.replied` 插件事件 |
-| Rust 侧 dispatch | 数千行 | 不需要（插件层处理） |
-| Provider trait | 完整实现 | 完整实现（v7 已对齐） |
+| 维度 | Claude/Cursor/Codex | OpenCode |
+|------|---------------------|----------|
+| Hook 入口 | `hook.sh` → `router-rs-cli` | `hook.sh` → `router-rs-cli` |
+| Hook 运行时 | Rust（`host-projection` crate） | Rust（`host-projection` crate） |
+| PreToolUse | `HostHookDispatcher::handle_pre_tool_use()` | 同左（`OpenCodeDispatcher` 覆盖） |
+| Stop | `run_unified_stop()` 13步流水线 | 同左 |
+| fail 模式 | fail-closed | fail-closed |
+| Provider trait | 完整实现 | 完整实现 |
 | `has_native_hook` | `true` | `true` |
 | `harness_capabilities` | FULL | FULL |
 
-OpenCode 是 **hook 体系宿主**，只是 hook 处理层在插件系统而非 Rust。Provider trait、harness capabilities 和注册表元数据与其他三宿主完全一致。
+OpenCode 是 **hook 体系宿主**，hook 处理层在 Rust 侧，与其他三宿主完全对齐。
 
 ## Session/Review 状态管理
 
@@ -114,8 +112,8 @@ OpenCode 的 `OpencodeHostProvider` 实现以下 trait 方法：
 
 `AGENTS.md` 是唯一的策略真源文件，OpenCode 宿主行为差异内嵌于 `AGENTS.md` § 宿主行为差异 / OpenCode：
 
-- **MCP-native 架构**：通过 JS/TS 插件系统提供 hook，同时通过 `opencode.json` → MCP 提供框架工具
-- **权限策略**：fail-open（插件层；hook 脚本层对 critical events 仍 fail-closed）
+- **shell hook + MCP 双通道**：通过 hook.sh → router-rs-cli 提供 hook，同时通过 `opencode.json` → MCP 提供框架工具
+- **权限策略**：fail-closed（hook 脚本层对 critical events fail-closed，与其他宿主一致）
 - **与其他宿主的差异**：opencode 的 `has_hard_gate_hooks` 为 `false`（无 Rust 侧 hard gate），closeout evidence hooks 通过 MCP 工具层实现
 
 ## 安装与文件分布

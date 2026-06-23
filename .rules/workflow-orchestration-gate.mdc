@@ -1,24 +1,24 @@
 ---
-description: Cross-host workflow orchestration when user mentions workflow or ultracode (agent-swarm gate)
+description: Cross-host orchestration gate when user mentions workflow/team/ultracode (agent-swarm gate)
 alwaysApply: true
 ---
 
-# Workflow Orchestration Gate（Cursor）
+# Orchestration Gate（Cross-host）
 
-跨宿主基线见 [AGENTS.md](../../AGENTS.md)、[docs/spec.md §架构](../../docs/spec.md)、[docs/spec.md §策略](../../docs/spec.md)、[docs/spec.md §统一规范](../../docs/spec.md)；编排细则见 [agent-swarm-orchestration/SKILL.md](../../skills/agent-swarm-orchestration/SKILL.md)、[workflow-supervisor-protocol.md](../../skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md)。
+跨宿主基线见 [AGENTS.md](../../AGENTS.md)；编排细则见 [agent-swarm-orchestration/SKILL.md](../../skills/agent-swarm-orchestration/SKILL.md)。
 
 ## 何时生效（当前用户消息）
 
-当用户消息含 **workflow 编排意图**（如 `workflow`、`ultracode`、`用 workflow`、`workflow 编排`、`.claude/workflows`），且**不是**仅指 GitHub Actions / CI workflow 失败时：
+当用户消息含 **编排意图**（如 `team`、`多 agent 团队`、`agent 编排`、`workflow`、`ultracode`），且**不是**仅指 GitHub Actions / CI workflow 失败时：
 
 ## 硬约束
 
-1. **立即 Read** `skills/agent-swarm-orchestration/SKILL.md`（Orchestration mode / Workflow triggers / Main-thread contract 三节）。
+1. **立即 Read** `skills/agent-swarm-orchestration/SKILL.md`（Orchestration mode / Team triggers / Main-thread contract 三节）。
 2. 首行输出机读：`orchestration: { mode, trigger, reason }`。
-3. **Cursor** 上 `mode` 必须为 **`workflow_supervisor`**（无 `import 'workflow'` 运行时）；按 [workflow-supervisor-protocol.md](../../skills/agent-swarm-orchestration/references/workflow-supervisor-protocol.md) 执行，编排真源为 `.claude/workflows/*.js` 的 `meta.phases`。
-4. 主线程**仅调度**；每 phase 写 `artifacts/current/<task_id>/lane-notes/phase-<slug>.json`；禁止在聊天粘贴子 agent 全文。
-5. 显式入口：**`/workflow`**（编排意图入口；NL 路由至 `agent-swarm-orchestration`）。**Read** `skills/agent-swarm-orchestration/SKILL.md`（Orchestration mode / Workflow triggers / Main-thread contract）。`/team` 已退役（fail-closed），勿作入口。
+3. 任何宿主上 `mode` 可选 **`team`**（`session-supervisor` team API）或 `sidecar`（bounded subagent）。**Workflow（JS 编排）已彻底移除**，不要再引用 `.claude/workflows/` 或 `workflow-supervisor-protocol`。
+4. Team 模式下：通过 `artifacts/teams/` 文件系统管理团队；agent 间通信通过 `team_send_message` / `team_read_messages`。
+5. 所有 agent 完成时必须 `team_remove_member` 或 `agent_unregister`，确保资源释放。
 
-## 非 workflow 轮次
+## 非编排轮次
 
 未满足上文「何时生效」时，本节不追加行为。

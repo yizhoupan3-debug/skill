@@ -53,10 +53,7 @@ scoping, experiment design, or manuscript work.
 
 **四宿主统一**：NL 热路由与本 skill 相同；非手稿科研总地图见
 [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md) 与
-[`../research-execution/SKILL.md`](../research-execution/SKILL.md)。Claude
-另可用 native workflow：`.claude/workflows/deep-research.js`；Cursor 等宿主按
-[`../agent-swarm-orchestration/references/workflow-supervisor-protocol.md`](../agent-swarm-orchestration/references/workflow-supervisor-protocol.md)
-手调度。
+[`../research-execution/SKILL.md`](../research-execution/SKILL.md)。
 
 ## When to use
 
@@ -89,13 +86,13 @@ If the question is underspecified (e.g., "what car to buy" without budget, use c
 
 ## Execution workflow
 
-**必须先调用 workflow**：在 Claude 宿主上，优先使用 `Workflow` 工具运行
-`.claude/workflows/deep-research.js`（并行搜索 + schema 校验 + 自动去重 + 对抗验证 +
-recovery trace）。仅当 workflow 不可用（非 Claude 宿主或未加载 workflow 模块）
-时才按以下手工阶段执行。
+**并行 Agent 编排**：使用并行 agent 执行以下阶段
+（宿主支持时，搜索阶段可并行 fan-out，验证阶段串行），或按以下阶段顺序执行为一个
+紧凑研究流程。
 
-The harness runs as a workflow using `browser-mcp` tools (web search + web fetch)
-or the native `.claude/workflows/deep-research.js` pipeline.
+The harness runs as a multi-stage execution using `WebSearch` and `WebFetch` tools:
+- Search and Extract phases use parallel agents for throughput
+- Verify and Synthesize phases run sequentially after evidence is gathered
 
 ### Phase 1: Plan — Decompose into search vectors
 
@@ -168,7 +165,7 @@ Return:
 
 ## Hard constraints
 
-- **必须先调用 workflow**：在 Claude 宿主上 Workflow 工具可用时，用 `.claude/workflows/deep-research.js` 而非手工逐阶段执行。
+- **并行 Agent 编排**：搜索阶段使用并行 subagents 加速；验证/综合阶段串行。
 - Do not fabricate claims or citations. Every factual assertion in the report must trace to a fetched source.
 - Do not present unverified or single-source claims as established facts; label them clearly.
 - Do not skip the adversarial verification phase — every claim must pass cross-reference before appearing in the report body.
@@ -206,8 +203,8 @@ findings as context.
 ## Cross-references
 
 - Academic sources (when academic APIs are needed): [`../research-discovery/references/academic-sources.md`](../research-discovery/references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates.
-- Deep research workflow implementation: `.claude/workflows/deep-research.js`
-- Workflow supervisor protocol (non-Claude hosts): [`../agent-swarm-orchestration/references/workflow-supervisor-protocol.md`](../agent-swarm-orchestration/references/workflow-supervisor-protocol.md)
+- Team orchestration API: `core/session-supervisor/src/team_manager.rs` — team-based multi-agent orchestration (replaces deprecated JS workflow model).
+- Agent lifecycle tracking: `core/session-supervisor/src/process.rs` — agent health registry for monitoring active subagents.
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - Discovery counterpart: [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md)
 - Execution counterpart: [`../research-execution/SKILL.md`](../research-execution/SKILL.md)

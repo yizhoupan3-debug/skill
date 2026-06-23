@@ -167,7 +167,7 @@ Factcheck 工具不可用时：单 finding 标记 `indeterminate` 不进 Verify�
 
 ### OpenCode
 
-- **插件 hook + MCP 双通道**：通过 JS/TS 插件系统提供 hook（`tool.execute.before`、`tool.execute.after`、`session.idle` 等），同时通过 `opencode.json` → MCP 提供框架工具。
+- **shell hook + MCP 双通道**：通过 hook.sh → router-rs-cli 提供 hook（`tool.execute.before`、`tool.execute.after`、`session.idle` 等），同时通过 `opencode.json` → MCP 提供框架工具。
 - **Review / closeout**：清门 **Claude canonical**；Stop review **advisory-only**（MCP `ADVISORY`）；非 interactive 时 MCP 可对**未满足 closeout 证据** hard-block。
-- **权限策略**：**fail-open**（插件层；hook 脚本层对 critical events 仍 fail-closed）。
+- **权限策略**：**fail-closed**（hook 脚本层对 critical events fail-closed）。
 - **安装**：`framework host-integration install --to opencode --repo-root "$PWD"`。

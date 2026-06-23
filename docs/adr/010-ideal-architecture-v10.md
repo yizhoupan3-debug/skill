@@ -27,7 +27,7 @@
 ```
 P1. 每层职责唯一，不越界
 P2. 宿主差异仅存于 L0 适配壳
-P3. 依赖方向单向向下（Lⱼ → Lᵢ 当 i < j，L0 为最底层）
+P3. 依赖方向单向向下（Lⱼ → Lᵢ 当 i <= j，L0 为最底层）
 P4. 禁止循环依赖
 P5. 跨层通信通过共享类型（L0）或函数指针（L5 注册表），不在高层硬编码低层细节
 P6. L0–L7 运行时层承载实质运行域（Kernel/IO/Contracts/Execution/State/Hook/Orchestration/Bridge）
@@ -69,34 +69,36 @@ L6      Orchestration              session-supervisor,        多 Agent + RFV �
                                     framework-extra
 
 L5      Hook Infrastructure        host-projection/hooks,     事件路由、观测埋点、
-                                    framework-runtime-hooks,    fn-pointer 注册
-                                    runtime-exit-gate,
+                                    runtime-exit-gate,          fn-pointer 消费端
                                     runtime-core-contracts/
                                       hook_* + router_rs_obs
 
-L4      State Management           core-state                 Goal/QG/Task 状态机、
-                                                               step ledger、exit gates
+L4      State Management           core-state,                Goal/QG/Task 状态机、
+                                    routing-engine              step ledger、路由决策
 
-L3      Execution                  framework-runtime           LLM 执行、沙箱控制、
-                                      (live_execute,           运行时视图、环境标志
-                                       sandbox_control,
-                                       runtime_view,
-                                       router_env_flags)
+L3      Execution                  fr-exec,                   LLM 执行、沙箱控制、
+                                    framework-runtime           运行时视图、环境标志
+                                      (facade → fr-exec)
 
-L2      Contracts                  runtime-core-contracts,    验证规则、守卫合约
-                                      closeout_enforcement,
-                                      execution_contract,
-                                      pre_tool_use_guard
+L2      Contracts                  fr-contracts,              验证规则、守卫合约
+                                    core-state-types,           纯类型定义（L2 共享）
+                                    runtime-core-contracts
 
-L1      IO & Persistence           runtime-storage,           JSON/文件/存储后端、
-                                    trace-runtime,             trace 录制
-                                    framework-runtime/
-                                      io_utils, json_value
+L1      IO & Persistence           fr-utils,                  JSON/文件/存储后端、
+                                    runtime-storage,            trace 录制、IO 工具
+                                    trace-runtime
 
-L0      Kernel (B0)                framework-kernel (缩),    纯抽象、共享类型、
-                                    core-policy,               策略规则、时间工具
-                                    telemetry-types
+L0      Kernel (B0)                framework-kernel,          纯抽象、共享类型、
+                                    core-policy,                策略规则、时间工具
+                                    core-state-utils,           IO/path/JSONL 原语
+                                    framework-runtime-hooks,    fn-pointer 注册表 (OnceLock)
+                                    telemetry-types,            遥测事件类型
+                                    http-util                   HTTP 客户端工厂
 ```
+
+> **2026-06-23 修订说明**: framework-runtime 已物理拆分为 fr-utils(L1) + fr-contracts(L2) + fr-exec(L3)，
+> framework-runtime 保留为向后兼容 facade。core-state-utils(L0) 和 core-state-types(L2) 从 core-state 提取。
+> routing-engine 归入 L4。framework-runtime-hooks (L5) 的 OnceLock fn-pointer 注册表是 ADR §1.2 许可的跨层例外。
 
 ### 2.1 与用户视角层的对应关系
 
@@ -225,22 +227,21 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 |------|-------|------|
 | **L0** Kernel | `core-policy` | Hook 策略、Review 守卫、env_flags |
 | | `framework-kernel` | 时间工具、telemetry trait、tokenizer trait、repo_roots、json_value |
+| | `core-state-utils` | IO/path/JSONL 原语（atomic_write, path_guard, json_io, task_write_lock） |
+| | `framework-runtime-hooks` | fn-pointer 注册表 (OnceLock)，跨层通信中枢 |
 | | `telemetry-types` | 遥测事件类型 |
 | | `http-util` | HTTP 客户端工厂 |
-| **L1** IO & Persistence | `runtime-storage` | 文件系统/SQLite/内存后端、路径解析 |
+| **L1** IO & Persistence | `fr-utils` | JSON Value 提取、IO 工具、常量、类型、env_flags |
+| | `runtime-storage` | 文件系统/SQLite/内存后端、路径解析 |
 | | `trace-runtime` | Trace 录制、压紧 |
-| | `framework-runtime/json_value` | JSON Value 提取工具 |
-| **L2** Contracts | `runtime-core-contracts` | hook 事件路由、观测规则、出站保护、URL 守卫 |
-| | `framework-runtime/closeout_enforcement` | Closeout 验证 |
-| | `framework-runtime/execution_contract` | 执行合约 |
-| | `framework-runtime/pre_tool_use_guard` | 工具守卫 |
-| **L3** Execution | `framework-runtime/live_execute` | LLM 实时执行 |
-| | `framework-runtime/sandbox_control` | 沙箱状态机 |
-| | `framework-runtime/runtime_view` | 运行时视图 |
-| | `framework-runtime/router_env_flags` | 环境标志 |
+| **L2** Contracts | `fr-contracts` | Closeout 验证、执行合约、工具守卫 |
+| | `core-state-types` | 纯类型定义（task_state_types, exit_gate_types, goal_prediction） |
+| | `runtime-core-contracts` | hook 事件路由、观测规则、出站保护、URL 守卫 |
+| **L3** Execution | `fr-exec` | LLM 实时执行、沙箱状态机、运行时视图、环境标志、trace I/O |
+| | `framework-runtime` | L3 facade（向后兼容 re-export） |
 | **L4** State | `core-state` | Goal/QG/Task 状态机、step_ledger、exit gates |
-| **L5** Hook | `host-projection` | Hook 分派、宿主扩展、MCP stdio 桥 |
-| | `framework-runtime-hooks` | RuntimeCoreHooks 注册 (OnceLock) |
+| | `routing-engine` | 路由评估、信号检测、评分、路由决策 |
+| **L5** Hook | `host-projection` | Hook 分派、宿主扩展、MCP stdio 桥（依赖 core-state L4） |
 | | `runtime-exit-gate` | Quality gate RFV 循环 |
 | | `runtime-core-contracts/hook_*` | 事件路由规则、观测埋点 |
 | **L6** Orchestration | `loop-engine` | RFV 闭环 |
@@ -249,8 +250,9 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | **L7** Bridge | `runtime-core` | 平台聚合 + stdio 分发 + 上下文工程 |
 | | `runtime-infra` | 运行时初始化、stdio 传输 |
 
-> **说明**：`framework-runtime` 已拆分至 L1/L2/L3，`core-state` 从 B0 移至 L4，
-> `runtime-infra/router_env_flags` 门面已删除、`runtime-core/router_env_flags` 直连 framework-runtime。
+> **说明**：framework-runtime 已物理拆分为 fr-utils(L1) + fr-contracts(L2) + fr-exec(L3)，
+> 保留为向后兼容 facade。core-state-utils(L0) 和 core-state-types(L2) 从 core-state 提取。
+> routing-engine 归入 L4。framework-runtime-hooks (L5) 的 OnceLock fn-pointer 注册表是 §1.2 许可的跨层例外。
 
 ---
 
@@ -325,25 +327,30 @@ L5 不得自行实现以下基础设施——直接调用 L0/L4 的统一版本�
 ```
 core/
 ├── core-state/               L4  State Management
+├── core-state-utils/         L0  IO/path/JSONL 原语（从 core-state 提取）
+├── core-state-types/         L2  纯类型定义（从 core-state 提取）
 ├── core-policy/              L0  Kernel (策略)
 ├── framework-kernel/         L0  Kernel (time/tokenizer/telemetry/json_value)
+├── framework-runtime-hooks/  L0  fn-pointer 注册表 (OnceLock)
 ├── telemetry-types/          L0  Kernel (类型)
 ├── http-util/                L0  Kernel (HTTP 工具)
 │
 ├── host-projection/          L5  Hook 分派 + 宿主扩展
-├── framework-runtime-hooks/  L5  Hook 注册表
 ├── runtime-exit-gate/        L5  Quality Gate RFV
 │
+├── fr-utils/                 L1  IO 工具、常量、类型（从 framework-runtime 提取）
+├── fr-contracts/             L2  合约/守卫（从 framework-runtime 提取）
+├── fr-exec/                  L3  执行引擎（从 framework-runtime 提取）
+├── framework-runtime/        L3  facade（向后兼容 re-export）
 ├── runtime-core-contracts/   L2  Contracts (合约/守卫)
 ├── runtime-storage/          L1  IO & Persistence
 ├── trace-runtime/            L1  IO & Persistence (Trace)
 │
+├── routing-engine/           L4  路由评估/评分/决策
 ├── runtime-infra/            L5  Hook 层初始化
 ├── runtime-core/             L7  Bridge (调度/聚合)
 │
-├── framework-runtime/        L1+L2+L3  执行引擎
 ├── framework-extra/          L6  Orchestration
-│
 ├── loop-engine/              L6  Orchestration (RFV)
 ├── session-supervisor/       L6  Orchestration
 │
@@ -429,7 +436,7 @@ pub mod http {
 
 ## 10. Runtime-Core 内部结构
 
-`runtime-core` 是 L4 的平台聚合入口。它的**最终结构**如下：
+`runtime-core` 是 L7 Bridge 层的平台聚合入口。它的**最终结构**如下：
 
 ### 10.1 核心保留 (~6,000 行)
 
@@ -452,14 +459,14 @@ pub mod http {
 
 | 目标 | 内容 | 行数 | 目标 crate |
 |------|------|------|-----------|
-| **运行时基础设施** | `infrastructure/` 中 5 个零依赖文件 | 2,041 | `runtime-infra` (L4) |
-| **stdio_transport** | 对 cli 有 1 处引用，需通过函数指针解耦 | 898 | `runtime-infra` (L4) |
+| **运行时基础设施** | `infrastructure/` 中 5 个零依赖文件 | 2,041 | `runtime-infra` (L5) |
+| **stdio_transport** | 对 cli 有 1 处引用，需通过函数指针解耦 | 898 | `runtime-infra` (L5) |
 | **退出质量门控** | `exit_gate/` | 2,906 | `runtime-exit-gate` (L4) |
 | **编排控制面** | `framework_runtime/` 本地模块 | 6,800 | `framework-extra` (L4) |
 | **CLI 分发** | `cli/` | 1,954 | `router-rs` (L7) |
 | **运维工具** | `framework_maint/` | 1,789 | `tools/framework-maint` |
 
-### 10.4 提取后的最终 L4 平台
+### 10.4 提取后的最终 L7 Bridge 层
 
 ```
 runtime-core (~6,000 行)        ← 编排核心
@@ -484,17 +491,41 @@ runtime-infra (4,000 行)        ← 基础设施（L4 级）
 
 ### 11.1 L0 Kernel
 
-- [x] 所有 L0 crate（core-policy, framework-kernel, telemetry-types, http-util）存在且 Cargo.toml 合规
+- [x] 所有 L0 crate（core-policy, framework-kernel, core-state-utils, telemetry-types, http-util）存在且 Cargo.toml 合规
 - [x] L0 crate 不依赖 L1–L7 crate（runtime-storage, runtime-core, framework-runtime, host-projection 等）
 - [x] `runtime-infra` 标记为 L5 启动层
 
+### 11.1a framework-runtime 拆分（2026-06-23）
+
+- [x] fr-utils (L1) 存在：json_value, json_io, types, constants, stdio_op_registry, io_utils, util, env_flags, hooks
+- [x] fr-contracts (L2) 存在：closeout_enforcement, execution_contract, pre_tool_use_guard
+- [x] fr-exec (L3) 存在：live_execute, sandbox_control, runtime_view, router_env_flags, trace_stream_io, trace_attach, trace_transport, evolution_observer
+- [x] framework-runtime 保留为 L3 facade，所有 pub mod re-export 到子 crate
+- [x] 下游 crate（runtime-exit-gate, loop-engine, runtime-infra, framework-extra, research-harness）已直迁到子 crate，不再依赖 facade
+- [x] runtime-core (L7) 保留 framework-runtime facade 依赖（L7→L3 合法），作为二级 re-export 聚合入口
+
+### 11.1b core-state 拆分（2026-06-23）
+
+- [x] core-state-utils (L0) 存在：atomic_write, path_guard, json_io, read_bounded, task_write_lock, jsonl_maintenance
+- [x] core-state-utils 不依赖任何内部 crate（零内部依赖）
+- [x] core-state-types (L2) 存在：task_state_types, exit_gate_types, goal_prediction
+- [x] core-state-types 仅依赖 serde + serde_json（零内部依赖）
+- [x] core-state 通过 re-export 保持向后兼容（core_state::utils::*, core_state::goal_prediction::*, core_state::task_state::*）
+
+### 11.1c routing-engine 分级（2026-06-23）
+
+- [x] routing-engine 归入 L4 State Management
+- [x] routing-engine 仅依赖 core-state-utils (L0)（原依赖 core-state → 改为 core-state-utils）
+
 ### 11.2 DAG 依赖方向
 
-- [x] L0→L4/L5 禁止：host-projection 不依赖 L4/L5 crate
-- [x] L1/L3→L4/L5 禁止：routing-engine 不依赖 L4/L5；~~browser-mcp→runtime-core~~ **已修复**（Phase 1.1, 2026-06-23，改为 `runtime-core-contracts`）
-- [x] L4→L5 应为 feature-gated：~~runtime-core→research-harness~~ **已修复**（Phase 1.1, 2026-06-23）
-- [x] L0→L 层禁止：全部 L0 crate 通过
-- [x] **L0→L1 DAG 违规已修复**（Phase 7, 2026-06-23）：host-projection (L0) 不再依赖 `routing-engine` (L1)。5 个路由函数通过 L4 `runtime-core` 的 fn ptr 注册解耦。`routing-engine` 已从 `host-projection/Cargo.toml` 移除。
+- [x] L0 crate 无上层依赖：core-state-utils, framework-kernel, core-policy, framework-runtime-hooks, telemetry-types, http-util 均仅依赖同层或外部 crate
+- [x] L1/L2 crate 不依赖 L3+：fr-utils(L1), runtime-storage(L1), trace-runtime(L1), fr-contracts(L2), core-state-types(L2), runtime-core-contracts(L2) 合规
+- [x] L5 host-projection 依赖 core-state(L4)：**合规**（L5→L4 按 DAG 矩阵允许），已从旧版 L0 错误标注修正
+- [x] framework-runtime-hooks 降级为 L0：纯 fn-pointer 注册表 (OnceLock)，零业务逻辑，L0→L0 无违规
+- [x] ~~browser-mcp→runtime-core~~ **已修复**（Phase 1.1, 2026-06-23，改为 `runtime-core-contracts`）
+- [x] ~~runtime-core→research-harness~~ **已修复**（Phase 1.1, 2026-06-23，改为 feature-gated）
+- [x] **host-projection→routing-engine DAG 违规已修复**（Phase 7, 2026-06-23）：5 个路由函数通过 L4 `runtime-core` 的 fn ptr 注册解耦
 
 ### 11.3 宿主隔离
 

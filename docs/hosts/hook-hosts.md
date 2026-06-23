@@ -8,7 +8,7 @@ parent: _common.md
 
 # Hook 宿主手册 (Hook Hosts)
 
-本文档覆盖 **Claude** / **Cursor** / **Codex** 三宿主。**OpenCode** 因架构差异（JS/TS 插件系统：插件层 fail-open，hook 脚本层对 critical events 仍 fail-closed）单独见 [`opencode.md`](opencode.md)。
+本文档覆盖 **Claude** / **Cursor** / **Codex** / **OpenCode** 四宿主。四宿主共用 `hook.sh` → `router-rs-cli` 统一 hook 入口，OpenCode 的 `OpenCodeDispatcher` 已与 Claude/Cursor/Codex 完全对齐（fail-closed、Rust 侧 dispatch）。详见 [`opencode.md`](opencode.md)。
 
 **共通内容**（代理身份与画风、Skill 路由、默认生命周期、Python 环境、进程管理与性能调优）见 [`_common.md`](_common.md)。
 
@@ -109,7 +109,7 @@ parent: _common.md
 | Claude | `""` (全局) | `""` (全局) | ✅ | 全局触发 + Rust 层运行时过滤 |
 | Cursor | 无 PreToolUse 事件 | 全局触发（无 matcher） | ✅ | postToolUse 无 matcher 限制 |
 | Codex | `""` (全局) | `""` (全局) | ✅ | 全局触发 + Rust 层运行时过滤 |
-| OpenCode | 全局（TS 插件） | 全局（TS 插件） | ✅ | 插件拦截所有 tool.execute 事件 |
+| OpenCode | `""` (全局) | `""` (全局) | ✅ | 全局触发 + Rust 层运行时过滤 |
 
 ### Claude Code Matcher 语法
 

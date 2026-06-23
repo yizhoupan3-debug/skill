@@ -65,9 +65,9 @@ autoresearch (skill wrapper)
     → research-state.yaml (研究状态真源)
     → research-discovery / research-execution (§19.4.4 handoff)
 
-deep-research (独立 skill，Web 优先)
+deep-research（独立 skill，Web 优先）
     → browser-mcp (web_search + web_fetch)
-    → .claude/workflows/deep-research.js (native workflow)
+    → `skill_route` → 主线程并行 agent 编排
 
 loop-auto + research 模式 (§19.9)
     → LOOP_REGISTRY.json (注册)

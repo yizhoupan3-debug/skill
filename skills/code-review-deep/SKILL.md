@@ -107,24 +107,22 @@ For broad/deep/PR-level review, spawn **a single serial** read-only reviewer (`f
 
 ### REVIEW_GATE clearance
 
-**Cursor**: countable reviewer evidence per wave-2 (`start_count>=1`, multiset drained, no compact-alone forgery). `lifecycle_profile: interactive` does **not** hard-block Stop.
+各宿主的 countable reviewer evidence 判定逻辑统一由 `RUNTIME_REGISTRY.json` 的 `review_gate` 配置定义。`lifecycle_profile: interactive` 在所有宿主上均不硬阻塞 Stop。
 
-**Claude**: `PostToolUse` observes `claude_reviewer_lanes` (registry `review_gate.claude_reviewer_lanes`) with `fork_context` parsed as logical `false`. Stop hard-blocks before `independent_reviewer_seen`. `interactive` / `ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE=1` disables hard-block.
-
-**Host countable evidence**: the subagent lane (after normalization) must be in `RUNTIME_REGISTRY.json` -> `review_gate.reviewer_lanes`. `explore`, `ci-investigator`, `cursor-guide`, and custom lane names **do not count** on Cursor — even with `fork_context=false`.
+**Host countable evidence**: the subagent lane (after normalization) must be in `RUNTIME_REGISTRY.json` -> `review_gate.reviewer_lanes`. `explore`, `ci-investigator`, and custom lane names **do not count** — even with `fork_context=false`.
 
 Lane outputs must cite **locations** (paths + anchors / symbols).
 
 ## Factcheck gate（source-level ground truth）
 
-Deep review workflow（`claude-chain-deep-review`、`deep-review-template`）在 Merge 和 Verify 之间插入独立 **Factcheck 阶段**，专门拦截幻觉 finding：
+Deep review 在 Merge 和 Verify 之间插入独立 **Factcheck 阶段**，专门拦截幻觉 finding：
 
 - **职责边界**：Factcheck agent **只核查事实**（代码是否存在、evidence 是否原文引用、行号是否准确、行为描述是否与代码一致），**不做判断**（是否是 bug、severity 如何）。
 - **幻觉分类**：`code_not_exist`（代码不存在）、`evidence_fabricated`（evidence 为捏造/复述）、`wrong_line`（行号偏差）、`behavior_misrepresented`（行为描述有误）、`partial_hallucination`（部分准确部分幻觉）、`none`（全部准确）。
 - **拦截规则**：`code_exists=false` 或 `evidence_accurate=false` 的 finding 标记为 hallucinated，**不进入 Verify 阶段**。`behavior_misrepresented` 附带修正描述后可选进入 Verify。
 - **独立性**：Factcheck agent 与 Scan agent 必须是不同的 agent 实例（pipeline 自动保证）。Factcheck 不复用 Scan 的上下文，避免循环确认。
-- **输出 schema**：`FACTCHECK_VERDICT_SCHEMA`（定义在 `workflow-helpers.js`），包含 `code_exists`、`evidence_accurate`、`line_accurate`、`behavior_accurate`、`hallucination_type`、`actual_code`、`actual_behavior`。
-- **Skill 层 spawn**：非 workflow 上下文（如主会话直接 spawn review subagent）可使用 `factcheck-verifier` agent 定义（`.claude/agents/factcheck-verifier.md`），工具限制为 Read + Bash（只读）。
+- **Schema**：`FACTCHECK_VERDICT_SCHEMA`（`{ is_accurate: bool, errors: [{ quote, correction, severity }], reasoning: string }`）。
+- **Skill 层 spawn**：主会话直接 spawn review subagent 时可使用 `factcheck-verifier` agent 定义（agent 路径见 `RUNTIME_REGISTRY.json` → `agents.factcheck_verifier`），工具限制为 Read + Bash（只读）。
 
 ## CodeGraph 增强分析
 
