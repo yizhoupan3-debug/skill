@@ -1,5 +1,6 @@
 // CDP/Chrome 助手、Attach 候选、skill 路由与 MCP 收尾工具函数。
 use std::net::TcpListener;
+use framework_kernel::json_value::optional_bool;
 
 /// RAII guard: kills a Chrome child process and removes its temp dir on drop (unless consumed).
 struct CleanupGuard<'a> {
@@ -923,11 +924,6 @@ fn optional_string(payload: &Value, key: &str) -> Option<String> {
         .filter(|value| !value.is_empty())
         .map(str::to_string)
 }
-
-fn optional_bool(payload: &Value, key: &str) -> Option<bool> {
-    payload.get(key).and_then(Value::as_bool)
-}
-
 fn optional_u64(payload: &Value, key: &str) -> Result<Option<u64>, Value> {
     match payload.get(key) {
         None => Ok(None),
@@ -1028,9 +1024,7 @@ fn to_text_lines(text: &str) -> Vec<String> {
 }
 
 fn current_local_timestamp() -> String {
-    Local::now()
-        .to_rfc3339_opts(SecondsFormat::Secs, false)
-        .to_string()
+    framework_kernel::time::current_local_timestamp()
 }
 
 fn now_millis() -> u128 {

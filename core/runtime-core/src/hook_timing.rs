@@ -4,6 +4,8 @@ use std::cell::Cell;
 use std::time::Instant;
 use tracing::debug;
 
+use crate::router_rs_hook_timing_enabled;
+
 thread_local! {
     static HOOK_STARTED: Cell<Option<Instant>> = const { Cell::new(None) };
     static LOCK_WAIT_MS: Cell<u64> = const { Cell::new(0) };
@@ -11,28 +13,28 @@ thread_local! {
 }
 
 pub fn mark_hook_start() {
-    if !crate::router_env_flags::router_rs_hook_timing_enabled() {
+    if !router_rs_hook_timing_enabled() {
         return;
     }
     HOOK_STARTED.with(|c| c.set(Some(Instant::now())));
 }
 
 pub fn add_lock_wait_ms(ms: u64) {
-    if ms == 0 || !crate::router_env_flags::router_rs_hook_timing_enabled() {
+    if ms == 0 || !router_rs_hook_timing_enabled() {
         return;
     }
     LOCK_WAIT_MS.with(|c| c.set(c.get().saturating_add(ms)));
 }
 
 pub fn add_cargo_check_ms(ms: u64) {
-    if ms == 0 || !crate::router_env_flags::router_rs_hook_timing_enabled() {
+    if ms == 0 || !router_rs_hook_timing_enabled() {
         return;
     }
     CARGO_CHECK_MS.with(|c| c.set(c.get().saturating_add(ms)));
 }
 
 pub fn emit_hook_timing_line(event: &str) {
-    if !crate::router_env_flags::router_rs_hook_timing_enabled() {
+    if !router_rs_hook_timing_enabled() {
         return;
     }
     let duration_ms = HOOK_STARTED
@@ -73,7 +75,7 @@ mod tests {
     fn hook_timing_env_enabled_and_emits_on_stderr() {
         let _g = process_env_lock();
         unsafe { std::env::set_var("ROUTER_RS_HOOK_TIMING", "1") };
-        assert!(crate::router_env_flags::router_rs_hook_timing_enabled());
+        assert!(router_rs_hook_timing_enabled());
 
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
         let repo = repo.canonicalize().expect("repo root");

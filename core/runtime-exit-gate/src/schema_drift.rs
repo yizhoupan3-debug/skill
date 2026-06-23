@@ -474,6 +474,7 @@ mod tests {
             Path::new("configs/framework/cursor-hooks.workspace-template.json"),
             host_projection::hosts::host_extensions::config::host_registered_hook_events("cursor"),
             host_projection::hosts::host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
+            "cursor-router-rs-hook.sh",
         )
         .unwrap();
         assert!(

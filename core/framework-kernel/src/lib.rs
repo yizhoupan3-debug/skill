@@ -8,6 +8,7 @@ pub mod runtime_registry;
 pub mod telemetry;
 pub mod time;
 pub mod tokenizer;
+pub mod json_value;
 
 // ── leaf modules migrated from runtime-core ──
 pub mod cli_args;
@@ -27,3 +28,5 @@ pub use tokenizer::{
     TokenizerProvider, has_parallel_review_candidate_context, install_tokenizer_provider,
     tokenize_query,
 };
+pub use json_value::*;
+pub use time::current_local_timestamp;

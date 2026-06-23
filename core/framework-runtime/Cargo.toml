@@ -15,6 +15,7 @@ http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
+framework-runtime-hooks = { path = "../framework-runtime-hooks" }
 host-projection = { path = "../host-projection" }
 routing-engine = { path = "../routing-engine" }
 runtime-storage = { path = "../runtime-storage" }

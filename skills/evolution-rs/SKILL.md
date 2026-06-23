@@ -17,7 +17,7 @@ metadata:
     - maintenance
 session_start: never
 user-invocable: false
-disabled-model-invocation: true
+disable-model-invocation: true
 
 ---
 

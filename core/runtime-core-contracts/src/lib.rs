@@ -12,4 +12,3 @@ pub mod hook_observation_rules;
 pub mod hook_outbound_protect;
 pub mod mcp_pre_guard;
 pub mod web_fetch_guard;
-pub mod router_rs_obs;

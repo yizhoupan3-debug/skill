@@ -8,7 +8,7 @@ routing_layer: L0
 routing_owner: owner
 routing_gate: none
 routing_priority: P1
-session_start: n/a
+session_start: never
 user-invocable: false
 disable-model-invocation: true
 short_description: Refresh key docs, git tracking, and stale/dead repo surfaces; framework checks when applicable.

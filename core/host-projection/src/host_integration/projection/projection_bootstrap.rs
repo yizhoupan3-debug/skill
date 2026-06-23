@@ -26,7 +26,7 @@ pub fn workspace_name_from_root(repo_root: &Path) -> String {
 }
 
 pub fn current_local_timestamp() -> String {
-    Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+    framework_kernel::time::current_local_timestamp()
 }
 
 pub fn safe_slug(label: &str) -> String {

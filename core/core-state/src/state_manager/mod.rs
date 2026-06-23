@@ -18,7 +18,7 @@ use std::time::SystemTime;
 pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
 pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-goal-v1";
 pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
-pub const QUALITY_GATE_STATE_FILENAME: &str = "QUALITY_GATE_STATE.json";
+pub const QUALITY_GATE_STATE_FILENAME: &str = "RFV_LOOP_STATE.json";
 pub const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
 // LEGACY_GOAL_DRIVE_PARAGRAPH_PREFIX removed — no callers, legacy prefix from retired goal-drive paragraph format.
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
@@ -829,14 +829,22 @@ mod tests {
         fs::create_dir_all(repo.join("artifacts/current/mx-task")).expect("mkdir");
         let rr = repo.display().to_string();
 
-        crate::quality_gate::framework_quality_gate(json!({
-            "repo_root": rr.clone(),
-            "operation": "start",
-            "task_id": "mx-task",
-            "goal": "rfv phase",
-            "max_rounds": 3u64,
-        }))
-        .expect("rfv start");
+        // Write RFV state file directly (quality_gate module is being deleted;
+        // this test only needs a valid RFV state file on disk).
+        let rfv_path = quality_gate_state_path(&repo, "mx-task").expect("rfv path");
+        if let Some(parent) = rfv_path.parent() {
+            fs::create_dir_all(parent).expect("mkdir rfv dir");
+        }
+        crate::utils::atomic_write::write_atomic_json(
+            &rfv_path,
+            &json!({
+                "schema_version": "router-rs-rfv-loop-v1",
+                "goal": "rfv phase",
+                "loop_status": "active",
+                "max_rounds": 3u64,
+            }),
+        )
+        .expect("write rfv state");
 
         let ag = framework_goal_drive(json!({
             "repo_root": rr,

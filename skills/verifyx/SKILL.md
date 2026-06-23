@@ -63,7 +63,7 @@ Verify 阶段开始前，检查 EVIDENCE_INDEX 中的调试记录是否包含：
 - Append each run to `EVIDENCE_INDEX.json` `artifacts[]` rows (`command_preview`, `recorded_at`, `exit_code`, `success`, optional `kind` / `lifecycle_command` / `tags`)
 - `VERIFY_REPORT.md` summary on disk
 
-### 1.5 Sync lifecycle state (HARD)
+### 1a. Sync lifecycle state (HARD)
 
 - Read `artifacts/current/<task_id>/WAVE_STATE.json`
 - Set `global_status` to `completed`（若 implement 已收尾但字段仍为 `running` / `in_progress`）

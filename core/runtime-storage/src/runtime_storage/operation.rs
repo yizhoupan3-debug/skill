@@ -1,23 +1,7 @@
 use crate::runtime_envelope_ids::{
     RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_STORAGE_AUTHORITY, RUNTIME_STORAGE_SCHEMA_VERSION,
 };
-
-type FrameworkResult<T> = Result<T, String>;
-
-fn framework_error(msg: impl Into<String>) -> String {
-    msg.into()
-}
-
-/// Extract a non-empty trimmed string from a JSON payload (inlined from cli::runtime_ops).
-fn required_non_empty_string(payload: &Value, key: &str, context: &str) -> FrameworkResult<String> {
-    payload
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
-        .ok_or_else(|| framework_error(format!("{context} requires non-empty {key}")))
-}
+use framework_kernel::json_value::required_non_empty_string;
 use super::backend::{
     RUNTIME_CHECKPOINT_CONTROL_PLANE_COMPILER_AUTHORITY, normalized_backend_family,
     runtime_backend_capabilities, runtime_backend_capabilities_payload,

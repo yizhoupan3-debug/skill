@@ -65,10 +65,7 @@ trigger_hints:
 Rust 实现：`research_harness::verification::formal`（通过 MCP tool 或直接调用）
 
 ```
-# 量纲一致性检查（MCP）：
-research_aigc_check / research_review_dimensions 获取维度 prompt
-
-# 编程方式调用：
+# 量纲一致性检查：
 research_harness::verification::formal::check_dimensional_consistency(equation)
 ```
 

@@ -336,7 +336,16 @@
     },
     {
       "when": {
-        "signal": "has_paper_ref_first_workflow_context"
+        "all": [
+          {
+            "signal": "has_paper_ref_first_workflow_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
+          }
+        ]
       },
       "action": {
         "type": "boost",
@@ -494,7 +503,16 @@
     },
     {
       "when": {
-        "signal": "has_paper_workbench_frontdoor_context"
+        "all": [
+          {
+            "signal": "has_paper_workbench_frontdoor_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
+          }
+        ]
       },
       "action": {
         "type": "boost",
@@ -507,7 +525,16 @@
     },
     {
       "when": {
-        "signal": "has_paper_review_judgment_context"
+        "all": [
+          {
+            "signal": "has_paper_review_judgment_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
+          }
+        ]
       },
       "action": {
         "type": "boost",
@@ -532,7 +559,16 @@
     },
     {
       "when": {
-        "signal": "has_paper_figure_layout_review_context"
+        "all": [
+          {
+            "signal": "has_paper_figure_layout_review_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
+          }
+        ]
       },
       "action": {
         "type": "boost",
@@ -545,11 +581,20 @@
     },
     {
       "when": {
-        "signal": "has_paper_logic_evidence_review_context"
+        "all": [
+          {
+            "signal": "has_paper_logic_evidence_review_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
+          }
+        ]
       },
       "action": {
         "type": "boost",
-        "delta": 72.0,
+        "delta": 60.0,
         "reason": "Paper-workbench boost applied: claim/evidence alignment review (inline paper-reviewer)."
       },
       "record": {
@@ -564,12 +609,17 @@
           },
           {
             "signal": "has_paper_prose_negation_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
           }
         ]
       },
       "action": {
         "type": "boost",
-        "delta": 74.0,
+        "delta": 60.0,
         "reason": "Paper-workbench boost applied: review-only paper judgment (prose negation)."
       },
       "record": {
@@ -581,17 +631,35 @@
         "slug": "paper-workbench"
       },
       "when": {
-        "signal": "has_paper_direct_revision_context"
+        "all": [
+          {
+            "signal": "has_paper_direct_revision_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
+          }
+        ]
       },
       "action": {
         "type": "boost",
-        "delta": 82.0,
+        "delta": 60.0,
         "reason": "Paper-workbench boost applied: direct reviewer-comment manuscript revision (inline paper-reviser)."
       }
     },
     {
       "when": {
-        "signal": "has_paper_writing_context"
+        "all": [
+          {
+            "signal": "has_paper_writing_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
+          }
+        ]
       },
       "action": {
         "type": "boost",
@@ -604,11 +672,20 @@
     },
     {
       "when": {
-        "signal": "has_paper_prose_edit_context"
+        "all": [
+          {
+            "signal": "has_paper_prose_edit_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
+          }
+        ]
       },
       "action": {
         "type": "boost",
-        "delta": 82.0,
+        "delta": 60.0,
         "reason": "Paper-workbench boost: prose edit / pasted manuscript / colloquial rewrite — auto prose-quality-gate (no user tokens required)."
       },
       "record": {
@@ -623,12 +700,17 @@
           },
           {
             "signal": "has_paper_context"
+          },
+          {
+            "not": {
+              "signal": "has_math_review_context"
+            }
           }
         ]
       },
       "action": {
         "type": "boost",
-        "delta": 70.0,
+        "delta": 60.0,
         "reason": "Paper-workbench boost: manuscript prose naturalization (not documentation-engineering)."
       },
       "record": {

@@ -1,6 +1,7 @@
 use crate::utils::path_guard::{safe_task_id_component, validate_task_id_component};
 
 use serde_json::{Map, Value, json};
+use framework_kernel::json_value::{required_non_empty_string, optional_non_empty_string};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
@@ -523,21 +524,6 @@ fn resolve_task_id_from_payload(repo_root: &Path, payload: &Value) -> Result<Str
         })?;
     validate_task_id_component(&task_id).map(str::to_string)
 }
-
-fn required_non_empty_string(payload: &Value, key: &str, context: &str) -> Result<String, String> {
-    optional_non_empty_string(payload, key)
-        .ok_or_else(|| format!("{context} requires non-empty {key}"))
-}
-
-fn optional_non_empty_string(payload: &Value, key: &str) -> Option<String> {
-    payload
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-}
-
 fn value_text(value: Option<&Value>) -> String {
     value
         .and_then(Value::as_str)

@@ -16,7 +16,6 @@ path = "src/lib.rs"
 [dependencies]
 core-policy = { path = "../core-policy", features = ["test-sync"] }
 framework-kernel = { path = "../framework-kernel" }
-host-projection = { path = "../host-projection" }
 serde.workspace = true
 serde_json.workspace = true
 regex.workspace = true

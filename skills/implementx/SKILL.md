@@ -236,7 +236,7 @@ coordinator **不得**将 subagent 全量 output 注入主 context；只读 lane
 
 ---
 
-## 7. CodeGraph 集成
+## 6. CodeGraph 集成
 
 以下高风险操作 **coordinator 必须在 spawn subagent 前**调用 codegraph 工具：
 
@@ -254,7 +254,7 @@ coordinator **不得**将 subagent 全量 output 注入主 context；只读 lane
 
 ---
 
-## 8. External Research Lane (OPTIONAL)
+## 7. External Research Lane (OPTIONAL)
 
 当 wave 包含 review / research 子任务时，可与 implementation 并行 spawn：
 
@@ -271,7 +271,7 @@ coordinator **不得**将 subagent 全量 output 注入主 context；只读 lane
 
 ---
 
-## 7. Artifact System (HARD)
+## 8. Artifact System (HARD)
 
 | 产物 | 写者 | 读者 |
 |------|------|------|

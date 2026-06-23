@@ -135,7 +135,10 @@ impl PartialEq for SearchHeapEntry {
 
 impl Ord for SearchHeapEntry {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.key.cmp(&other.key)
+        // Reversed: BinaryHeap is a max-heap; reversed Ord makes it a min-heap,
+        // so peek() returns the lowest-ranked element — the correct behavior for
+        // a top-k filter where we pop the lowest-rank to keep the best.
+        other.key.cmp(&self.key)
     }
 }
 

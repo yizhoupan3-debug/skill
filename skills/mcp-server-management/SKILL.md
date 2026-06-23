@@ -14,7 +14,7 @@ routing_layer: L3
 routing_owner: owner
 routing_gate: none
 routing_priority: P2
-session_start: n/a
+session_start: never
 user-invocable: false
 disable-model-invocation: true
 trigger_hints:

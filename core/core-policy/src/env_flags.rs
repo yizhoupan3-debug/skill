@@ -254,6 +254,19 @@ fn parse_usize_clamped(
     }
 }
 
+// ── Safe env var wrappers (eliminates ~100 unsafe blocks across crates) ──
+
+/// Set an environment variable. Wraps `std::env::set_var` (unsafe due to
+/// thread-safety concern) into a single call site, reducing repeated unsafe blocks.
+pub fn set_env(key: &str, val: &str) {
+    unsafe { std::env::set_var(key, val) }
+}
+
+/// Remove an environment variable.
+pub fn unset_env(key: &str) {
+    unsafe { std::env::remove_var(key) }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -5,6 +5,8 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+pub use framework_kernel::json_value::{required_non_empty_string, optional_non_empty_string, optional_bool};
+
 use crate::types::{
     SESSION_SUPERVISOR_STORE_SCHEMA_VERSION, SessionSupervisorStore, WorkerEvent,
     WorkerSessionRecord,
@@ -149,34 +151,6 @@ pub fn parse_rfc3339(value: &str) -> Result<DateTime<Utc>, String> {
         .map(|dt| dt.with_timezone(&Utc))
         .map_err(|err| format!("invalid RFC3339 timestamp {value:?}: {err}"))
 }
-
-pub fn required_non_empty_string(
-    payload: &Value,
-    key: &str,
-    context: &str,
-) -> Result<String, String> {
-    optional_non_empty_string(payload, key)
-        .ok_or_else(|| format!("{context} requires a non-empty {key}"))
-}
-
-pub fn optional_non_empty_string(payload: &Value, key: &str) -> Option<String> {
-    payload
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .and_then(|value| {
-            if value.is_empty() {
-                None
-            } else {
-                Some(value.to_string())
-            }
-        })
-}
-
-pub fn optional_bool(payload: &Value, key: &str) -> Option<bool> {
-    payload.get(key).and_then(Value::as_bool)
-}
-
 pub fn optional_i64(payload: &Value, key: &str) -> Option<i64> {
     payload.get(key).and_then(Value::as_i64)
 }

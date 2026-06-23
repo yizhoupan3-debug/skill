@@ -9,7 +9,8 @@
 
 #![recursion_limit = "256"]
 
-pub mod hooks;
+// hooks re-exported from L5 crate (framework-runtime-hooks).
+pub use framework_runtime_hooks as hooks;
 
 // ── extracted from runtime-core/src/framework_runtime/ ──
 pub mod constants;

@@ -25,15 +25,14 @@ pub use runtime_exit_gate as exit_gate;
 pub use exit_gate::{quality_gate, schema_drift, harness_ops as harness_operator_nudges};
 pub use framework_extra::session_call as session_call_tracker;
 pub use infrastructure::{
-    kernel_bootstrap, framework_skills, router_env_flags,
-    stdio_transport, telemetry_emit,
+    kernel_bootstrap, framework_skills, stdio_transport, telemetry_emit,
 };
+pub use ::framework_runtime::router_env_flags::*;
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
 pub use rt_core_contracts::{
     formal_toolchain, harness_contract, harness_context_signals, hook_event_routing,
     mcp_pre_guard, web_fetch_guard, hook_observation_rules,
-    router_rs_obs as router_rs_observation,
 };
 
 // ── re-exports from core-state (flattened) ──
@@ -64,32 +63,6 @@ pub use routing_engine::route;
 #[cfg(test)]
 mod route_metadata_tests;
 pub use framework_kernel::router_self;
-// runtime_registry: explicit re-exports from framework-kernel (no glob)
-// + review gate additions from core-policy (separated by source)
-pub mod runtime_registry {
-    // ── framework-kernel re-exports ──
-    pub use framework_kernel::runtime_registry::{
-        ALL_KNOWN_HOST_DIRS, DEFAULT_MANAGED_MCP_SERVER_IDS, HOST_ADAPTER_CONTRACT_PATH,
-        RUNTIME_REGISTRY_PATH, RUNTIME_REGISTRY_SCHEMA_VERSION,
-        RuntimeRegistry, RuntimeSkillsDefaults, RuntimeWorkspaceBootstrapDefaults,
-        closeout_evidence_hooks_unsupported_on_host, harness_capability_exception_entry,
-        harness_capability_exception_rationale, host_projection_object,
-        load_runtime_registry, load_runtime_registry_json,
-        load_runtime_registry_payload, load_runtime_registry_payload_if_repo_local,
-        managed_mcp_server_for_tool, managed_mcp_server_ids,
-        parse_host_mcp_tool_fqn, resolves_managed_mcp_tool,
-        runtime_registry_path,
-    };
-    // ── core-policy review gate re-exports ──
-    pub use core_policy::registry_review_gate::{
-        HookRegistryRepoGuard, check_review_gate_registry_snapshot, clear_hook_registry_repo_root,
-        is_reviewer_lane_from_registry, lifecycle_profile_disables_spawn_first_nudge,
-        review_spawn_first_enabled, review_spawn_first_nudge_line,
-        review_subagent_model_inherit_nudge_line, reviewer_lanes_prompt_lines,
-        reviewer_lanes_sorted, set_hook_registry_repo_root,
-        spawn_first_includes_model_inherit_for_host,
-    };
-}
 pub use framework_kernel::skill_repo;
 pub use framework_kernel::stdio_payload_types;
 #[cfg(test)]

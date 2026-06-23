@@ -116,7 +116,7 @@ pub fn verify_rfv_convergence(
     let qg_path = repo_root
         .join("artifacts/current")
         .join(task_id)
-        .join("RFV_LOOP_STATE.json");
+        .join(core_state::state_manager::QUALITY_GATE_STATE_FILENAME);
     if !qg_path.is_file() {
         // No quality gate state — not a paper-revision task, or QG not started. Pass through.
         return Ok(());

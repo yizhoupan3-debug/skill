@@ -1023,11 +1023,17 @@ pub(super) fn tool_quality_gate_manage(
         }
     }
 
-    // Prefer runtime-core's full implementation (has append_round support).
-    // Fall back to core-state's lightweight version if runtime-core hook not registered.
+    // Delegate to the registered quality gate hook from runtime-core
+    // (runtime_exit_gate::quality_gate::framework_quality_gate).
+    // If not registered (edge case, e.g. tests without runtime-core boot),
+    // return an error since core-state no longer provides a standalone fallback.
     let result = match crate::hooks::quality_gate_drive_registered() {
         Some(f) => f(payload)?,
-        None => core_state::quality_gate::framework_quality_gate(payload)?,
+        None => {
+            return Err("framework_quality_gate runtime-core hook not registered; \
+                         runtime-core::boot() must be called before quality gate operations"
+                .to_string());
+        }
     };
 
     // Invalidate snapshot/task_view caches after quality gate state change

@@ -166,12 +166,16 @@ pub trait HostHookDispatcher: HostHookConfig {
         if is_review_gate_suppressed(self.host_id(), Some(event.repo_root), &prompt) {
             return None;
         }
+        // Compute review_required from the prompt (was previously hardcoded false,
+        // making spawn-first review nudge permanently disabled — P1.6).
+        let review_required = core_policy::hook_common::is_review_prompt(&prompt)
+            && !core_policy::hook_common::is_framework_goal_entry_prompt(&prompt);
         let contexts = build_user_prompt_context_injection(
             event.repo_root,
             &prompt,
             self.host_id(),
             self.host_id(),
-            false,
+            review_required,
             core_policy::hook_common::has_override(&prompt),
         );
         if contexts.is_empty() { None } else {
@@ -1455,7 +1459,14 @@ pub fn extract_output_summary(payload: &Value, max_chars: usize) -> Option<Strin
     let text = payload.get("output").or_else(|| payload.get("result"))
         .and_then(Value::as_str)?;
     if text.is_empty() { return None; }
-    let trimmed = if text.len() > max_chars { &text[..max_chars] } else { text };
+    let trimmed = if text.len() > max_chars {
+        let limit = max_chars.min(text.len());
+        // Use floor_char_boundary to avoid panic on multi-byte UTF-8 boundaries.
+        let boundary = text.floor_char_boundary(limit);
+        &text[..boundary]
+    } else {
+        text
+    };
     Some(trimmed.to_string())
 }
 

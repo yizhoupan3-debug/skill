@@ -53,7 +53,6 @@ allowed_tools:
   - mcp__mcp-codegraph__codegraph_impact
   - mcp__mcp-codegraph__codegraph_node
   - mcp__mcp-codegraph__codegraph_status
-  - mcp__mcp-codegraph__codegraph_callees
   - mcp__mcp-codegraph__codegraph_dead_code
   - mcp__mcp-codegraph__codegraph_goto_definition
 ---

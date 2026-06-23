@@ -9,7 +9,6 @@ use crate::constants::TASK_REGISTRY_SCHEMA_VERSION;
 use crate::json_value::{
     first_nonempty, nonempty_string, safe_slug, value_bool_or_none, value_text,
 };
-use chrono::{Local, SecondsFormat};
 use hex;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -40,9 +39,7 @@ pub fn write_json_if_changed_unlocked(path: &Path, payload: &Value) -> Result<bo
 }
 
 /// Local timestamp in RFC 3339 format (seconds precision).
-pub fn current_local_timestamp() -> String {
-    Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
-}
+pub use framework_kernel::time::current_local_timestamp;
 
 /// Extract and validate a required text field from a JSON payload.
 pub fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, String> {

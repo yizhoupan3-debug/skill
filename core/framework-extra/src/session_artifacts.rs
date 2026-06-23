@@ -13,10 +13,7 @@ use framework_runtime::types::{
     ArtifactPaths, ArtifactPayloads, SessionArtifactWritePlan, SupervisorStateInput,
     TaskRegistryEntry,
 };
-use chrono::{Local, SecondsFormat};
-use hex;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -696,20 +693,14 @@ fn normalized_string_array(value: Option<&Value>) -> Option<Vec<Value>> {
 }
 
 fn current_local_timestamp() -> String {
-    Local::now().to_rfc3339_opts(SecondsFormat::Secs, false)
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(bytes);
-    hex::encode(hasher.finalize())
+    framework_kernel::time::current_local_timestamp()
 }
 
 pub(super) use core_state::utils::json_io::{write_json_if_changed, write_text_if_changed};
 
 pub(super) fn current_file_hash(path: &Path) -> Result<Option<String>, String> {
     match fs::read(path) {
-        Ok(bytes) => Ok(Some(sha256_hex(&bytes))),
+        Ok(bytes) => Ok(Some(framework_runtime::sha256_hex(&bytes))),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(format!(
             "read file hash failed for {}: {err}",

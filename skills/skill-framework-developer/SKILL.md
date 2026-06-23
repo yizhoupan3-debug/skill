@@ -69,7 +69,8 @@ artifact_outputs:
 bridge_behavior: mobile_complete_once
 
 ---
-- **Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results)** → runtime verification gate
+
+**Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results) → runtime verification gate**
 
 # skill-framework-developer
 

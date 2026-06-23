@@ -4,6 +4,5 @@
 
 pub mod framework_skills;
 pub mod kernel_bootstrap;
-pub mod router_env_flags;
 pub mod stdio_transport;
 pub mod telemetry_emit;

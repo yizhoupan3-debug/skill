@@ -1,0 +1,13 @@
+[package]
+name = "framework-runtime-hooks"
+version = "0.1.0"
+edition = "2024"
+
+[lints]
+workspace = true
+
+[lib]
+name = "framework_runtime_hooks"
+
+[dependencies]
+serde_json.workspace = true

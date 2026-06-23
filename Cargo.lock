@@ -707,6 +707,7 @@ dependencies = [
  "core-state",
  "ctor",
  "framework-kernel",
+ "framework-runtime-hooks",
  "fs2",
  "hex",
  "host-projection",
@@ -721,6 +722,13 @@ dependencies = [
  "sha2",
  "trace-runtime",
  "tracing",
+]
+
+[[package]]
+name = "framework-runtime-hooks"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -1369,6 +1377,7 @@ name = "loop-engine"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "core-state",
  "framework-kernel",
  "framework-runtime",
  "serde",
@@ -2090,7 +2099,6 @@ version = "0.1.0"
 dependencies = [
  "core-policy",
  "framework-kernel",
- "host-projection",
  "insta",
  "regex",
  "reqwest",
@@ -2746,7 +2754,6 @@ checksum = "8df9b6e13f2d32c91b9bd719c00d1958837bc7dec474d94952798cc8e69eeec3"
 name = "trace-runtime"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "framework-kernel",
  "hex",
  "runtime-storage",
