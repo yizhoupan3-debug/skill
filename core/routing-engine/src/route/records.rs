@@ -92,7 +92,7 @@ fn load_records_from_index(path: &Path) -> Result<Vec<SkillRecord>, String> {
         .and_then(Value::as_array)
         .ok_or_else(|| format!("index missing keys: {}", path.display()))?;
 
-    let mut index = build_key_index(keys, path)?;
+    let index = build_key_index(keys, path)?;
 
     let idx_slug = *index
         .get("slug")
@@ -772,7 +772,7 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String
         .and_then(Value::as_array)
         .ok_or_else(|| format!("runtime index missing keys: {}", path.display()))?;
 
-    let mut index = build_key_index(keys, path)?;
+    let index = build_key_index(keys, path)?;
 
     let idx_slug = *index
         .get("slug")

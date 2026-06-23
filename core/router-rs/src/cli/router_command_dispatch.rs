@@ -830,6 +830,7 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
                 entry,
                 dry_run: args.dry_run,
                 timeout: Some(timeout),
+                depth_remaining: loop_engine::runner::RunContext::default_max_depth(),
             };
             let aggregate = loop_engine::runner::run_loop(&ctx)
                 .map_err(|e| format!("loop run failed: {e}"))?;

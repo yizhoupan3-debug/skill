@@ -1,5 +1,5 @@
 //! MPSC telemetry pipeline: workers enqueue, Log Aggregator serializes disk writes.
-use chrono::Utc;
+
 use serde::Serialize;
 use std::fs::{self, OpenOptions};
 use std::io::Write;

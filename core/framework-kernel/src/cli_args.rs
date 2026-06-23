@@ -29,12 +29,6 @@ pub enum RouterCommand {
         #[command(subcommand)]
         command: BrowserSubcommand,
     },
-    /// CodeGraph MCP utilities (independent process; feature `codegraph`).
-    #[cfg(feature = "codegraph")]
-    Codegraph {
-        #[command(subcommand)]
-        command: CodegraphSubcommand,
-    },
     /// Diagnostic commands: profile, browser
     Diagnose {
         #[command(subcommand)]
@@ -317,19 +311,6 @@ pub enum ProfileSubcommand {
 pub enum BrowserSubcommand {
     McpStdio(BrowserMcpStdioCommand),
     ResolveAttachArtifact(BrowserResolveAttachCommand),
-}
-
-#[cfg(feature = "codegraph")]
-#[derive(Subcommand, Debug, Clone)]
-pub enum CodegraphSubcommand {
-    McpStdio(CodegraphMcpStdioCommand),
-}
-
-#[cfg(feature = "codegraph")]
-#[derive(Args, Debug, Clone)]
-pub struct CodegraphMcpStdioCommand {
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug, Clone)]

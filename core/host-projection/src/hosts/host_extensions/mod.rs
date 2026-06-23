@@ -27,8 +27,6 @@ pub mod schema_drift;
 pub use config::*;
 pub use dispatch::*;
 
-use std::path::Path;
-
 /// Get the active host's log label for error messages.
 pub fn host_log_label(host_id: &str) -> String {
     crate::hosts::host_provider_for_id(host_id)

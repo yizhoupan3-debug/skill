@@ -4,8 +4,7 @@
 //! This module re-exports for backward compatibility and adds CLI-specific helpers.
 
 use serde::Serialize;
-use serde_json::Value;
-use std::path::Path;
+
 
 // ── Canonical re-exports from B0 ──
 pub use core_state::utils::json_io::{

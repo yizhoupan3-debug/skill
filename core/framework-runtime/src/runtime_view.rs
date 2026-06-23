@@ -659,16 +659,9 @@ fn registry_rows_from_payload(payload: &Value) -> Vec<Value> {
 
 fn normalize_task_registry_rows(
     focus_task_id: String,
-    mut rows: Vec<Value>,
+    rows: Vec<Value>,
 ) -> (Value, Vec<String>, Vec<String>) {
     crate::util::normalize_task_registry_rows(focus_task_id, rows)
-}
-
-fn registry_task_sort_key(row: &Value) -> String {
-    first_nonempty(&[
-        value_text(row.get("updated_at")),
-        value_text(row.get("task_id")),
-    ])
 }
 
 fn normalize_supervisor_state(payload: &Value) -> Map<String, Value> {

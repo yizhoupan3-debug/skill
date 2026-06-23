@@ -309,6 +309,7 @@ fn build_compact_continuity(continuity: &Value) -> Value {
 }
 
 /// Build code_index snapshot from codegraph database (when feature enabled).
+#[allow(unexpected_cfgs)]
 #[cfg(feature = "codegraph")]
 fn codegraph_index_snapshot(repo_root: &Path) -> Value {
     match codegraph_rs::CodeGraphIndex::open(repo_root) {
@@ -381,6 +382,7 @@ fn codegraph_index_snapshot(repo_root: &Path) -> Value {
     }
 }
 
+#[allow(unexpected_cfgs)]
 #[cfg(not(feature = "codegraph"))]
 fn codegraph_index_snapshot(_repo_root: &Path) -> Value {
     json!({"enabled": false})

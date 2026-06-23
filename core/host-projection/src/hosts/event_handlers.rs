@@ -3,11 +3,11 @@
 //! All hosts share the same event handling pipeline. Host-specific differences
 //! are injected via the HostProvider trait.
 
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::path::Path;
 
 /// Unified UserPromptSubmit handler.
-pub fn handle_user_prompt_submit(repo_root: &Path, payload: &Value, host_id: &str) -> Option<Value> {
+pub fn handle_user_prompt_submit(_repo_root: &Path, payload: &Value, _host_id: &str) -> Option<Value> {
     crate::hooks::ensure_kernel_bootstrap();
 
     let prompt = crate::hosts::hook_dispatch::extract_prompt_text(payload);
@@ -22,7 +22,7 @@ pub fn handle_user_prompt_submit(repo_root: &Path, payload: &Value, host_id: &st
 }
 
 /// Unified PostToolUse handler.
-pub fn handle_post_tool_use(repo_root: &Path, payload: &Value, host_id: &str) -> Option<Value> {
+pub fn handle_post_tool_use(repo_root: &Path, payload: &Value, _host_id: &str) -> Option<Value> {
     crate::hooks::ensure_kernel_bootstrap();
 
     // Evidence tracking (shared)

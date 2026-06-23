@@ -5,7 +5,6 @@
 //! cannot be generated (subtracted-events list) and the generated hook
 //! events accessor for runtime-exit-gate schema drift validation.
 
-use crate::hosts::hook_dispatch::HostHookConfig;
 
 // ── Registered hook events ──
 

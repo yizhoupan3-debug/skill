@@ -2,8 +2,6 @@
 //!
 //! Delegates to `core_policy::env_flags` for the canonical implementations.
 
-use std::env;
-
 const ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE_ENV: &str =
     "ROUTER_RS_SESSION_SUPERVISOR_REAL_PROCESS_SMOKE";
 

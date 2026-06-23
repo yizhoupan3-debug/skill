@@ -3,7 +3,7 @@
 //! Cursor-specific hooks snapshot logic lives in
 //! `host-projection/src/hosts/host_extensions/cursor/schema_drift.rs` (L0).
 
-use chrono::Utc;
+
 use hex;
 use host_projection::hosts::host_extensions::schema_drift as shared_schema_drift;
 use serde::{Deserialize, Serialize};

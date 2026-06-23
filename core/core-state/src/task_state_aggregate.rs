@@ -10,7 +10,7 @@ use crate::state_manager::read_quality_gate_state;
 use crate::state_manager::{read_goal_state, task_evidence_artifacts_summary_for_task};
 use crate::utils::atomic_write::write_atomic_json;
 use crate::utils::path_guard::{safe_task_id_component, validate_task_id_component};
-use chrono::Utc;
+
 use serde_json::json;
 use std::path::{Path, PathBuf};
 

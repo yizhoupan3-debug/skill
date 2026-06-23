@@ -125,9 +125,6 @@ pub fn workspace_name_from_root(repo_root: &Path) -> String {
     runtime_view::workspace_name_from_root(repo_root)
 }
 
-/// Stable task id when no active/focus pointer exists (review-only sessions).
-pub(crate) const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
-
 /// 带可选 task_id 的版本（用于 Desktop MCP session_checkpoint tool）。
 ///
 /// `repointer_focus`: when true, rewrite active/focus/supervisor (explicit user checkpoint).

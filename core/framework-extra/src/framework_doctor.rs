@@ -38,7 +38,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
         Err(e) => tracing::warn!(error = %e, "failed to check broken symlinks"),
     }
 
-    let mut checks: Vec<(String, std::path::PathBuf)> = vec![
+    let checks: Vec<(String, std::path::PathBuf)> = vec![
         ("AGENTS.md".to_string(), repo_root.join("AGENTS.md")),
         (
             "skills/SKILL_ROUTING_RUNTIME.json".to_string(),

@@ -5,7 +5,7 @@ use framework_runtime::constants::{
     TERMINAL_STORY_STATES, TERMINAL_VERIFICATION_STATUSES, TRACE_METADATA_FILENAME,
     TRACE_METADATA_SCHEMA_VERSION,
 };
-use framework_runtime::json_io::{read_json_strict, read_text_if_exists};
+use framework_runtime::json_io::read_json_strict;
 use framework_runtime::json_value::{
     nonempty_string, safe_slug, value_bool_or_none, value_string_list, value_text,
 };

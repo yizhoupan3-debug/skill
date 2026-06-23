@@ -41,8 +41,6 @@ pub use core_state::{
     step_ledger, task_state, task_state_aggregate,
     state_manager as goal_drive, utils::{atomic_write, path_guard},
 };
-pub(crate) use core_state::{task_ledger, utils::task_write_lock};
-
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
 pub mod hook_timing;
 
@@ -102,9 +100,7 @@ pub mod test_env_sync;
 // (removed: hook_posttool_normalize was dead code)
 
 // ── re-exports from core-policy (crate-internal only) ──
-pub(crate) use core_policy::hook_common;
 pub(crate) use core_policy::hook_policy;
-pub(crate) use core_policy::review_gate_engine;
 
 // ── crate-level re-exports for `crate::X` path compat ──
 pub use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;

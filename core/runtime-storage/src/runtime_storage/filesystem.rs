@@ -138,25 +138,6 @@ pub fn acquire_runtime_path_lock(path: &Path) -> Result<RuntimePathLockGuard, St
     Ok(RuntimePathLockGuard { _file: file })
 }
 
-pub fn filesystem_atomic_temp_path(
-    parent: &Path,
-    file_name: &str,
-    nanos: u128,
-    pid: u32,
-    attempt: u32,
-) -> PathBuf {
-    let mut digest = Sha256::new();
-    digest.update(file_name.as_bytes());
-    digest.update(b"\x1e");
-    digest.update(nanos.to_le_bytes());
-    digest.update(b"\x1e");
-    digest.update(pid.to_le_bytes());
-    digest.update(b"\x1e");
-    digest.update(attempt.to_le_bytes());
-    let tag = hex::encode(digest.finalize());
-    parent.join(format!(".router-rs.{file_name}.{tag}.tmp"))
-}
-
 pub fn filesystem_write_text_inner(
     path: &Path,
     payload_text: &str,
