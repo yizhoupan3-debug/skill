@@ -144,6 +144,14 @@ core/router-rs/.claude/
 
 # Agent health monitor state (host-agnostic, generated at runtime)
 .framework/agent-health/
+**/.framework/registry.json
+
+# Teams registry (generated at runtime)
+artifacts/teams/
+
+# Runtime evolution artifacts (generated at runtime)
+core/router-rs/artifacts/evolution/
+core/session-supervisor/artifacts/evolution/
 
 # Cursor hook backups
 .cursor/hooks.json.orig

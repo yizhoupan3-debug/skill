@@ -563,8 +563,17 @@ pub fn score_route_candidate<'a>(
         score += w.gate_owner_boost;
     }
 
-    // --- visual-review signals (hardcoded slug — see score_visual_review_signals) ---
+    // --- visual-review signals ---
     score += score_visual_review_signals(record, query_text, query_token_list, first_turn, score, w, &mut reasons);
+
+    // --- design contract override: suppress artifact-gate skills when design contract context ---
+    let has_slides_design_contract_flag = has_skill_flag(record, "artifact_exception:slides_design_contract");
+    let has_design_ctx = has_design_contract_context(query_text, query_token_list);
+    let has_design_neg = has_design_contract_negation_context(query_text, query_token_list);
+    if has_slides_design_contract_flag && has_design_ctx && !has_design_neg {
+        score = 0.0;
+        reasons.push("Design contract override: suppressed artifact-gate skill when design contract context detected.".to_string());
+    }
 
     if !record.do_not_use_tokens.is_empty() && score > 0.0 {
         let negative_hits: Vec<&str> = record
