@@ -3,8 +3,10 @@
 //! Enable via `core-policy` feature `dev-exempt` and `ROUTER_RS_DEV_EXEMPT=1`.
 
 /// Prefixes compared after `fs::canonicalize` (symlink-safe).
+/// All known host home dirs + build artifacts.
 #[cfg(feature = "dev-exempt")]
-pub const EXEMPT_PATH_PREFIXES: &[&str] = &["artifacts", "target", ".cursor", ".claude"];
+pub const EXEMPT_PATH_PREFIXES: &[&str] =
+    &["artifacts", "target", ".cursor", ".claude", ".codex", ".opencode"];
 
 #[cfg(not(feature = "dev-exempt"))]
 pub const EXEMPT_PATH_PREFIXES: &[&str] = &[];

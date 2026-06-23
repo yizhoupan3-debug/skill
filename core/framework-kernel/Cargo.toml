@@ -15,6 +15,9 @@ telemetry-types = { path = "../telemetry-types" }
 tracing.workspace = true
 which.workspace = true
 
+[build-dependencies]
+serde_json.workspace = true
+
 [dev-dependencies]
 insta.workspace = true
 tokio.workspace = true

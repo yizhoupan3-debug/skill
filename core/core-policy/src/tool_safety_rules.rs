@@ -17,8 +17,20 @@ pub const FRAMEWORK_GUARDED_PREFIXES: &[&str] = &[
 // ── Framework source prefixes ──
 pub const FRAMEWORK_SOURCE_PREFIXES: &[&str] = &["core/router-rs/", "configs/framework/"];
 
-// ── Cross-host surfaces ──
-pub const CROSS_HOST_SURFACES: &[&str] = &[".codex/hooks.json"];
+// ── Cross-host surfaces (registry-driven: all hosts' hooks.json + .mcp.json) ──
+// Dynamically checks host home directories from RUNTIME_REGISTRY via generated host_home_dirs().
+
+/// Check if a path is a cross-host or retired surface (e.g. hooks.json under any host dir).
+pub fn is_cross_host_or_retired_surface(path: &str) -> bool {
+    // Check per-host hooks.json under each host home dir
+    for home_dir in framework_kernel::runtime_registry::host_home_dirs() {
+        let hooks_json = format!("{home_dir}/hooks.json");
+        if path == hooks_json || path.starts_with(&format!("{hooks_json}/")) {
+            return true;
+        }
+    }
+    false
+}
 
 /// Check if a path is a framework-guarded path.
 pub fn is_framework_guarded_path(path: &str) -> bool {
@@ -38,35 +50,23 @@ pub fn is_cross_host_or_retired_surface(path: &str) -> bool {
 
 /// Settings-guarded paths per host.
 ///
-/// Data sourced from `framework_kernel::runtime_registry` (single source of truth).
+/// Generated from `RUNTIME_REGISTRY.json host_targets.metadata.*.settings_paths`.
 pub fn settings_guarded_paths(host_id: &str) -> &'static [&'static str] {
-    framework_kernel::runtime_registry::HOST_SETTINGS_PATHS
-        .iter()
-        .find(|(id, _)| *id == host_id)
-        .map(|(_, paths)| *paths)
-        .unwrap_or(&[])
+    framework_kernel::runtime_registry::settings_guarded_paths(host_id)
 }
 
 /// Generated entrypoint paths per host.
 ///
-/// Data sourced from `framework_kernel::runtime_registry`.
+/// Generated from `RUNTIME_REGISTRY.json host_targets.metadata.*.entrypoint_paths`.
 pub fn generated_entrypoint_paths(host_id: &str) -> &'static [&'static str] {
-    framework_kernel::runtime_registry::HOST_ENTRYPOINT_PATHS
-        .iter()
-        .find(|(id, _)| *id == host_id)
-        .map(|(_, paths)| *paths)
-        .unwrap_or(&[])
+    framework_kernel::runtime_registry::generated_entrypoint_paths(host_id)
 }
 
 /// Host private config directory leaf name per host.
 ///
-/// Data sourced from `framework_kernel::runtime_registry`.
+/// Generated from `RUNTIME_REGISTRY.json host_targets.metadata.*.config_dir`.
 pub fn host_private_config_dir(host_id: &str) -> &'static str {
-    framework_kernel::runtime_registry::HOST_CONFIG_DIRS
-        .iter()
-        .find(|(id, _)| *id == host_id)
-        .map(|(_, dir)| *dir)
-        .unwrap_or("")
+    framework_kernel::runtime_registry::host_private_config_dir(host_id)
 }
 
 /// Check if a path is a host-specific generated entrypoint (parameterized).

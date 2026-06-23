@@ -265,7 +265,7 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
         })?;
 
     const REQUIRED_EVENTS: &[&str] =
-        host_projection::hosts::cursor_hooks::CURSOR_HOOKS_REGISTERED_EVENTS;
+        host_projection::hosts::host_extensions::config::CURSOR_HOOKS_REGISTERED_EVENTS;
     const ROUTER_NEEDLE: &str = "cursor-router-rs-hook.sh";
     const LAUNCHER_NEEDLE: &str = "cursor-router-rs-hook.sh";
 
@@ -629,7 +629,7 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         serde_json::from_str(&hooks_text).map_err(|e| format!("verify_codex_hooks: invalid hooks.json: {e}"))?;
     let hooks_obj = hooks_json.as_object()
         .ok_or_else(|| "verify_codex_hooks: hooks.json must be a JSON object".to_string())?;
-    for event in host_projection::hosts::codex_hooks::INSTALL_LIFECYCLE_EVENTS {
+    for &event in host_projection::hosts::host_extensions::host_registered_events("codex") {
         if !hooks_obj.contains_key(event) {
             return Err(format!(
                 "verify_codex_hooks: missing Codex hook event: {event}"
@@ -665,7 +665,7 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
         }
     }
 
-    for line in ::framework_runtime::hooks::check_codex_hook_duplicates(&repo_root) {
+    for line in ::framework_runtime::hooks::check_hook_duplicates(&repo_root) {
         eprintln!("{line}");
     }
 
@@ -1515,12 +1515,12 @@ mod tests {
 
     #[test]
     fn host_home_dirs_match_registry() {
-        let registry = framework_kernel::runtime_registry::HOST_HOME_DIRS;
+        let registry = framework_kernel::runtime_registry::host_home_dirs();
         let all_known = framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS;
         for host in registry {
             assert!(
                 all_known.contains(host),
-                "{host} in HOST_HOME_DIRS but not in ALL_KNOWN_HOST_DIRS"
+                "{host} in host_home_dirs() but not in ALL_KNOWN_HOST_DIRS"
             );
         }
     }

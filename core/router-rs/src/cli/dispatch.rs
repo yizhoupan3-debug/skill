@@ -2,7 +2,7 @@
 
 use super::args::*;
 use runtime_core::framework_runtime::print_json_value;
-use runtime_core::framework_runtime::route_manifest_fallback::{
+use framework_extra::route_manifest_fallback::{
     manifest_fallback_path, route_task_with_manifest_fallback,
 };
 #[cfg(feature = "codegraph")]
@@ -63,7 +63,10 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
             Ok(())
         }
         RouterCommand::Framework { command } => dispatch_framework_command(command),
-        RouterCommand::Host { command } => dispatch_host_command(command),
+        RouterCommand::Host { command } => {
+            super::router_command_dispatch::ensure_host_dispatchers_registered();
+            dispatch_host_command(command)
+        }
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
         RouterCommand::Browser { command } => dispatch_browser_command(command),

@@ -1,10 +1,25 @@
 //! Disk-primary [`RUNTIME_REGISTRY.json`](../../../configs/framework/RUNTIME_REGISTRY.json) loader.
 //! Unified entry for hook hot paths, host targets, and host integration (ADR-005).
+//!
+//! ## Generated tables
+//!
+//! Per-host lookup functions (`host_private_config_dir`, `review_gate_disable_env`,
+//! `paper_prose_env`, `paper_adversarial_env`, `settings_guarded_paths`,
+//! `generated_entrypoint_paths`) and constants (`ALL_KNOWN_HOST_DIRS`,
+//! `EPHEMERAL_PATH_PATTERNS`, `EPHEMERAL_TASK_PREFIXES`) are **generated** from
+//! `configs/framework/RUNTIME_REGISTRY.json` at compile time. Adding a new host
+//! requires only editing the registry — the generated code stays in sync automatically.
 
 use serde::Deserialize;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+// ── Generated host tables (compile-time from RUNTIME_REGISTRY.json) ──
+// Includes: ALL_KNOWN_HOST_DIRS, EPHEMERAL_PATH_PATTERNS, EPHEMERAL_TASK_PREFIXES,
+// is_ephemeral_task_id, host_home_dirs, host_private_config_dir, review_gate_disable_env,
+// paper_prose_env, paper_adversarial_env, settings_guarded_paths, generated_entrypoint_paths.
+include!(concat!(env!("OUT_DIR"), "/generated_host_tables.rs"));
 
 pub const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v2";
 pub const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
@@ -17,87 +32,8 @@ pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] = &[
     "paperplain",
 ];
 
-/// Host home directories for the four formal hosts.
-///
-/// **Fallback only** — the authoritative source is
-/// `RUNTIME_REGISTRY.json → host_targets.metadata.*.default_home_dir`.
-/// When adding a new host, update BOTH this map and the registry.
-///
-/// Note: `.gemini` is included for legacy cleanup but is not a formal host.
-pub const HOST_HOME_DIRS: &[&str] = &[".claude", ".cursor", ".codex", ".opencode"];
-
-/// Lookup a host's home directory by host ID.
-/// Data-driven via `HOST_HOME_DIRS` — avoids per-host match arms that must be kept in sync.
-/// Prefer a runtime-registry lookup when the registry is available.
-pub(crate) fn host_home_dir(host_id: &str) -> Option<&'static str> {
-    HOST_HOME_DIRS
-        .iter()
-        .find(|dir| {
-            let prefix = format!(".{host_id}");
-            **dir == prefix.as_str()
-        })
-        .copied()
-}
-
-/// All known host home directories including legacy/external ones (e.g. `.gemini`).
-/// Use for cleanup/scan operations that should be exhaustive.
-pub const ALL_KNOWN_HOST_DIRS: &[&str] = &[".claude", ".cursor", ".codex", ".opencode", ".gemini"];
+/// Path to the host adapter contract spec (relative to framework root).
 pub const HOST_ADAPTER_CONTRACT_PATH: &str = "docs/spec.md";
-
-/// Ephemeral path patterns that should not be treated as permanent repos.
-///
-/// Used by `is_ephemeral_router_rs_path()` to detect CI/sandbox/temp build roots.
-/// Patterns are deliberately substring-based to catch nested variants.
-pub const EPHEMERAL_PATH_PATTERNS: &[&str] = &[
-    "cursor-sandbox-cache",
-    "/tmp/skill-cargo-target",
-];
-
-/// Per-host review gate disable env var mapping.
-///
-/// Legacy `ROUTER_RS_{HOST}_REVIEW_GATE_DISABLE` names are part of the operator
-/// contract (docs §5) — do not rename. Add new hosts by appending rows.
-///
-/// Note: the env-var name constants themselves remain in `core-policy::env_flags`
-/// as env-flag definitions; only the host→env mapping table lives here.
-pub const REVIEW_GATE_DISABLE_BY_HOST: &[(&str, &str)] = &[
-    ("cursor", "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE"),
-    ("codex", "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
-    ("claude", "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE"),
-    ("opencode", "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE"),
-];
-
-/// Per-host settings-guarded config file paths.
-pub const HOST_SETTINGS_PATHS: &[(&str, &[&str])] = &[
-    ("claude", &[".claude/settings.json", ".claude/settings.local.json"]),
-    ("opencode", &[".opencode/opencode.json", ".opencode/opencode.jsonc"]),
-    ("cursor", &[".cursor/settings.json"]),
-    ("codex", &[".codex/settings.json"]),
-];
-
-/// Per-host generated entrypoint paths.
-pub const HOST_ENTRYPOINT_PATHS: &[(&str, &[&str])] = &[
-    ("claude", &[".claude/CLAUDE.md"]),
-    ("opencode", &["AGENTS.md"]),
-    ("cursor", &[".cursor/rules/"]),
-    ("codex", &[".codex/hooks.json"]),
-];
-
-/// Per-host private config directory leaf names.
-pub const HOST_CONFIG_DIRS: &[(&str, &str)] = &[
-    ("claude", ".claude"),
-    ("opencode", ".opencode"),
-    ("cursor", ".cursor"),
-    ("codex", ".codex"),
-];
-
-/// Ephemeral task ID prefixes that should not be treated as real task IDs.
-///
-/// Task IDs starting with these prefixes are auto-generated session artifacts
-/// rather than user-initiated tasks. Returns true for known ephemeral patterns.
-pub fn is_ephemeral_task_id(tid: &str) -> bool {
-    tid.starts_with("cursor-stop-") || tid.starts_with("session-checkpoint-")
-}
 
 // ---------------------------------------------------------------------------
 // Typed registry subset (host integration)

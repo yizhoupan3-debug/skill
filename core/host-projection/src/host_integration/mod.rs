@@ -293,7 +293,7 @@ mod tests {
         );
         assert!(
             !cmd.contains("grep -Eq"),
-            "Cursor stdin prefilter must not short-circuit before router-rs (see host_extensions::claude payload_looks_like_foreign_hook_stdin): {cmd}"
+            "Cursor stdin prefilter must not short-circuit before router-rs (see host_extensions dispatch pattern): {cmd}"
         );
     }
 

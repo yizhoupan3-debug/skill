@@ -2,34 +2,26 @@
 //!
 //! ## Architecture
 //!
-//! Instead of per-host files, code is organized by **capability**:
+//! Code is organized by **capability**, not by host:
 //!
-//! | Module | Purpose | Shared? |
-//! |--------|---------|---------|
-//! | `config.rs` | HostHookConfig for all 4 hosts | ✅ All hosts |
-//! | `dispatch.rs` | HostHookDispatcher implementations | ✅ All hosts |
-//! | `pretool.rs` | PreToolUse path protection | ✅ All hosts |
-//! | `codex/` | Codex-specific install + contract guard | ❌ Codex only |
+//! | Module | Purpose |
+//! |--------|---------|
+//! | `config.rs` | HostHookConfig for all 4 hosts |
+//! | `dispatch.rs` | HostHookDispatcher implementations |
+//! | `pretool.rs` | PreToolUse path protection |
+//! | `contract_guard.rs` | Contract guard event handling |
+//! | `schema_drift.rs` | Hook schema drift detection |
 //!
-//! ## Registry-driven dispatch
-//!
-//! - `impl_host_config!` macro maps host IDs to config values
-//! - `HostHookDispatcher` trait defaults handle all event types
-//! - Codex overrides only `handle_pre_tool_use` for custom path protection
-//! - All 4 hosts use identical event handler code paths
-//!
-//! ## File naming
-//!
-//! No file is named after a host. Files are named by what they DO.
-//! The only exception is `codex/` which holds Codex-specific install logic.
+//! All host lifecycle data (profile_id, driver_binary, registered_hook_events, etc.)
+//! is now generated from `RUNTIME_REGISTRY.json` via `host_targets.metadata.*`
+//! and `host-projection/build.rs`. CLI hook dispatch is registry-driven via
+//! `host_provider_registry().dispatcher()`. No per-host source files remain.
 
 pub mod config;
 pub mod dispatch;
 pub mod pretool;
-pub mod install;
 pub mod contract_guard;
 pub mod schema_drift;
-pub mod codex;
 
 // Backward-compatible re-exports
 pub use config::*;
@@ -73,4 +65,9 @@ pub fn host_registered_events(host_id: &str) -> &'static [&'static str] {
 }
 
 /// Register all host-specific default hooks.
+///
+/// Called once during L4 bootstrap (runtime-core/lib.rs). Encapsulates host
+/// extension setup that only needs L0-level access. L4→L0/L4 fn ptr
+/// registrations remain in runtime-core's init sequence as prescribed by
+/// ADR-010 §1.2 (registration direction L4→L0, not hardcoded in L0).
 pub fn register_host_hooks() {}

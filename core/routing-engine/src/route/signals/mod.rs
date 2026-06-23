@@ -349,7 +349,10 @@ pub fn has_rendered_visual_evidence_context(query_text: &str, query_token_list: 
     direct_evidence || has_existing_image_file_context(query_text, query_token_list)
 }
 
-pub fn has_existing_image_file_context(query_text: &str, query_token_list: &[String]) -> bool {
+/// Check whether user mentions existing image files (screenshots, exported
+/// charts) that suggest they want a visual review.
+/// Only called from `has_rendered_visual_evidence_context` above.
+pub(crate) fn has_existing_image_file_context(query_text: &str, query_token_list: &[String]) -> bool {
     let has_image_extension = [".png", ".jpg", ".jpeg"]
         .iter()
         .any(|marker| query_text.contains(marker))

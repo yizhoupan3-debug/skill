@@ -63,15 +63,12 @@ pub type HookObservationHost = &'static str;
 /// Type alias for backward compatibility with function pointer signatures.
 pub type HookObservationHostType = &'static str;
 
-/// Validate that a host_id is one of the four known hosts.
+/// Validate that a host_id is one of the known hosts.
+/// Delegates to the build-time-generated HostProvider registry
+/// (source: RUNTIME_REGISTRY.json host_targets.supported).
 pub fn hook_observation_host_from_id(host_id: &str) -> Option<&'static str> {
-    match host_id {
-        "cursor" => Some("cursor"),
-        "codex" => Some("codex"),
-        "claude" => Some("claude"),
-        "opencode" => Some("opencode"),
-        _ => None,
-    }
+    let registry = crate::hosts::host_provider_registry();
+    registry.iter().find(|p| p.host_id() == host_id).map(|p| p.host_id())
 }
 
 /// Canonical host ID for paper prose/adversarial hooks.
@@ -81,36 +78,22 @@ pub type PaperProseHookHost = &'static str;
 pub type PaperProseHookHostType = &'static str;
 
 /// Validate that a host_id is a known host for paper hooks.
+/// Delegates to the build-time-generated HostProvider registry.
 pub fn paper_prose_host_from_id(host_id: &str) -> Option<&'static str> {
-    match host_id {
-        "cursor" => Some("cursor"),
-        "codex" => Some("codex"),
-        "claude" => Some("claude"),
-        "opencode" => Some("opencode"),
-        _ => None,
-    }
+    let registry = crate::hosts::host_provider_registry();
+    registry.iter().find(|p| p.host_id() == host_id).map(|p| p.host_id())
 }
 
 /// Per-host env var controlling prose hook injection.
+/// Generated from RUNTIME_REGISTRY.json host_targets.metadata.*.paper_prose_env.
 pub fn paper_prose_env_var(host: &str) -> &'static str {
-    match host {
-        "cursor" => "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
-        "codex" => "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
-        "claude" => "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
-        "opencode" => "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK",
-        _ => "",
-    }
+    framework_kernel::runtime_registry::paper_prose_env(host)
 }
 
 /// Per-host env var controlling adversarial review hook injection.
+/// Generated from RUNTIME_REGISTRY.json host_targets.metadata.*.paper_adversarial_env.
 pub fn paper_adversarial_env_var(host: &str) -> &'static str {
-    match host {
-        "cursor" => "ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK",
-        "codex" => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
-        "claude" => "ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK",
-        "opencode" => "ROUTER_RS_OPENCODE_PAPER_ADVERSARIAL_HOOK",
-        _ => "",
-    }
+    framework_kernel::runtime_registry::paper_adversarial_env(host)
 }
 
 /// Goal readiness flags used by review gate handlers.
@@ -1230,6 +1213,43 @@ pub fn register_research_tool_dispatch(f: ResearchToolDispatchFn) {
 
 pub fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
     RESEARCH_TOOL_DISPATCH.get().copied()
+}
+
+// ── MCP routing: decouple L0→L1 DAG violation (ADR-010 §11.2) ──
+//
+// These fn ptrs break the compile-time dependency from host-projection (L0)
+// to routing-engine (L1). L4 (runtime-core) registers the routing-engine
+// implementations during bootstrap. L0 calls through the fn ptr and receives
+// JSON — no routing-engine types cross the boundary.
+
+/// MCP tool skill route: route a query to the best matching skill.
+type McpToolSkillRouteFn = fn(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String, String>;
+static MCP_TOOL_SKILL_ROUTE: OnceLock<McpToolSkillRouteFn> = OnceLock::new();
+
+pub fn register_mcp_tool_skill_route(f: McpToolSkillRouteFn) {
+    once_lock_set(&MCP_TOOL_SKILL_ROUTE, f, "mcp_tool_skill_route");
+}
+
+pub fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String, String> {
+    match MCP_TOOL_SKILL_ROUTE.get() {
+        Some(f) => f(query, host_id, first_turn, repo_root),
+        None => Err("skill_route not available (not registered)".to_string()),
+    }
+}
+
+/// MCP tool search skills: search skills by query string.
+type McpToolSearchSkillsFn = fn(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String, String>;
+static MCP_TOOL_SEARCH_SKILLS: OnceLock<McpToolSearchSkillsFn> = OnceLock::new();
+
+pub fn register_mcp_tool_search_skills(f: McpToolSearchSkillsFn) {
+    once_lock_set(&MCP_TOOL_SEARCH_SKILLS, f, "mcp_tool_search_skills");
+}
+
+pub fn mcp_tool_search_skills(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String, String> {
+    match MCP_TOOL_SEARCH_SKILLS.get() {
+        Some(f) => f(query, limit, effective_host, repo_root),
+        None => Err("search_skills not available (not registered)".to_string()),
+    }
 }
 
 type ReviewGateHandler = fn(event: &str, repo_root: Option<&Path>) -> Result<(), String>;

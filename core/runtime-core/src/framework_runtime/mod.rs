@@ -23,7 +23,6 @@ pub use framework_runtime::live_execute;
 pub use framework_extra::orchestration_controller;
 pub use framework_runtime::pre_tool_use_guard;
 pub use framework_kernel::repo_roots;
-pub use framework_extra::route_manifest_fallback;
 pub use framework_runtime::runtime_view;
 pub use framework_runtime::sandbox_control;
 pub mod stdio_dispatch;
@@ -66,8 +65,8 @@ pub use prompt_compression::build_framework_prompt_compression_envelope;
 pub use repo_roots::{
     framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,
 };
-pub use route_manifest_fallback::route_task_with_manifest_fallback;
-pub use route_manifest_fallback::{
+pub use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
+pub use framework_extra::route_manifest_fallback::{
     manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
 };
 pub use sandbox_control::build_sandbox_control_response;

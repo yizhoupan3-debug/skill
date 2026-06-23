@@ -1,81 +1,271 @@
-//! Projection drift detection: warns when the installed Codex hook manifest
-//! is older than the compiled-in projection version.
+//! Host hooks snapshot for schema drift: capture and compare hook configurations.
+//!
+//! All host-specific data (hook paths, events) is passed as parameters —
+//! not hardcoded. L4 runtime-exit-gate stores the result as an opaque JSON blob
+//! and compares for equality; it never inspects the struct directly.
+//!
+//! ## Usage
+//!
+//! ```ignore
+//! let snap = snapshot_host_hooks(
+//!     repo_root,
+//!     ".cursor/hooks.json",
+//!     "configs/framework/cursor-hooks.workspace-template.json",
+//!     &host_extensions::config::CURSOR_HOOKS_REGISTERED_EVENTS,
+//!     &host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
+//! )?;
+//! ```
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
-use std::fs;
-use std::io;
-use std::path::{Path, PathBuf};
-use std::sync::LazyLock;
+use std::path::Path;
 
-/// Router-rs hook projection version (shared across all hosts).
-pub const ROUTER_RS_HOOK_PROJECTION_VERSION: &str = "v1.0.0";
+// ---------------------------------------------------------------------------
+// Snapshot type
+// ---------------------------------------------------------------------------
 
-static DRIFT_CACHE: LazyLock<std::sync::Mutex<(std::time::Instant, Option<String>)>> =
-    LazyLock::new(|| {
-        std::sync::Mutex::new((
-            std::time::Instant::now() - std::time::Duration::from_secs(600),
-            None,
-        ))
-    });
-
-pub fn projection_version_older(manifest_version: &str, current: &str) -> bool {
-    fn parse(value: &str) -> Option<(u64, u64, u64)> {
-        let cleaned = value.trim().trim_start_matches('v');
-        let mut parts = cleaned.split('.');
-        Some((
-            parts.next()?.parse().ok()?,
-            parts.next()?.parse().ok()?,
-            parts.next()?.parse().ok()?,
-        ))
-    }
-    match (parse(manifest_version), parse(current)) {
-        (Some(found), Some(expected)) => found < expected,
-        _ => true,
-    }
+/// Snapshot of a host's hook configuration for schema drift comparison.
+/// L4 code stores this as an opaque JSON blob; equality comparison is
+/// `Value`-level. Test code may inspect individual fields.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HostHooksSnapshot {
+    pub registered_events: Vec<String>,
+    pub forbidden_still_registered: Vec<String>,
+    pub missing_required: Vec<String>,
+    pub matches_workspace_template: bool,
+    #[serde(default)]
+    pub hook_command_issues: Vec<String>,
+    #[serde(default)]
+    pub gate_timeout_issues: Vec<String>,
+    #[serde(default)]
+    pub hooks_template_parity_issues: Vec<String>,
 }
 
-pub fn check_hook_projection_drift(repo_root: &Path) -> Option<String> {
-    const CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(300);
-    {
-        let guard = DRIFT_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        if guard.0.elapsed() < CACHE_TTL {
-            return guard.1.clone();
-        }
-    }
-    let warning = "[router-rs] hook projection drift detected; consider re-running `router-rs framework maint install-codex-user-hooks`.".to_string();
-    let local_codex_home = repo_root.join("codex-home");
-    let manifest_path = if local_codex_home.is_dir() {
-        local_codex_home.join(".router-rs-install.manifest.json")
-    } else {
-        let codex_home = env::var_os("CODEX_HOME")
-            .map(PathBuf::from)
-            .or_else(|| env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")))?;
-        if !codex_home.is_dir() {
-            return None;
-        }
-        codex_home.join(".router-rs-install.manifest.json")
-    };
-    let text = match fs::read_to_string(manifest_path) {
-        Ok(v) => v,
-        Err(err) if err.kind() == io::ErrorKind::NotFound => return None,
-        Err(_) => return Some(warning),
-    };
-    let manifest: Value = match serde_json::from_str(&text) {
-        Ok(v) => v,
-        Err(_) => return Some(warning),
-    };
-    let projection = manifest
-        .get("projection_version")
-        .and_then(Value::as_str)
+/// Check whether a hooks snapshot is "ok" (no issues).
+pub fn host_hooks_snapshot_ok(s: &HostHooksSnapshot) -> bool {
+    s.forbidden_still_registered.is_empty()
+        && s.missing_required.is_empty()
+        && s.hook_command_issues.is_empty()
+        && s.gate_timeout_issues.is_empty()
+        && s.hooks_template_parity_issues.is_empty()
+}
+
+// ---------------------------------------------------------------------------
+// Gate timeout expectations (shared across all hosts that use the same format)
+// ---------------------------------------------------------------------------
+
+const GATE_TIMEOUT_SECS: &[(&str, u64)] = &[
+    ("beforeSubmitPrompt", 20),
+    ("stop", 20),
+    ("postToolUse", 20),
+    ("subagentStart", 20),
+    ("subagentStop", 20),
+    ("sessionStart", 5),
+    ("sessionEnd", 15),
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn read_hooks_doc(path: &Path) -> Result<Value, String> {
+    let raw =
+        std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))
+}
+
+fn read_hooks_event_keys(path: &Path) -> Result<Vec<String>, String> {
+    let doc = read_hooks_doc(path)?;
+    let mut keys: Vec<String> = doc
+        .get("hooks")
+        .and_then(Value::as_object)
+        .map(|o| o.keys().cloned().collect())
         .unwrap_or_default();
-    let result = if projection_version_older(projection, ROUTER_RS_HOOK_PROJECTION_VERSION) {
-        Some(warning)
-    } else {
-        None
+    keys.sort();
+    Ok(keys)
+}
+
+fn first_hook_entry<'a>(
+    hooks: &'a serde_json::Map<String, Value>,
+    event: &str,
+) -> Option<&'a Value> {
+    hooks.get(event)?.as_array()?.first()
+}
+
+fn audit_hooks_doc(label: &str, doc: &Value, expected_cmd_fragment: &str) -> (Vec<String>, Vec<String>) {
+    let mut command_issues = Vec::new();
+    let mut timeout_issues = Vec::new();
+    let Some(hooks) = doc.get("hooks").and_then(Value::as_object) else {
+        return (
+            vec![format!("{label}: missing hooks object")],
+            timeout_issues,
+        );
     };
-    if let Ok(mut guard) = DRIFT_CACHE.lock() {
-        *guard = (std::time::Instant::now(), result.clone());
+    for (ev, want) in GATE_TIMEOUT_SECS {
+        let Some(entry) = first_hook_entry(hooks, ev) else {
+            continue;
+        };
+        let cmd = entry.get("command").and_then(Value::as_str).unwrap_or("");
+        if !cmd.contains(expected_cmd_fragment) {
+            command_issues.push(format!("{label}: {ev} must invoke {expected_cmd_fragment}"));
+        }
+        let timeout = entry.get("timeout").and_then(Value::as_u64);
+        if timeout != Some(*want) {
+            timeout_issues.push(format!(
+                "{label}: {ev} timeout must be {want}s (got {timeout:?})"
+            ));
+        }
     }
-    result
+    (command_issues, timeout_issues)
+}
+
+fn compare_hooks_template_parity(hooks_doc: &Value, template_doc: &Value) -> Vec<String> {
+    let mut issues = Vec::new();
+    let (Some(hooks), Some(template)) = (
+        hooks_doc.get("hooks").and_then(Value::as_object),
+        template_doc.get("hooks").and_then(Value::as_object),
+    ) else {
+        issues.push("hooks vs template: missing hooks object".to_string());
+        return issues;
+    };
+
+    let mut h_keys: Vec<_> = hooks.keys().cloned().collect();
+    h_keys.sort();
+    let mut t_keys: Vec<_> = template.keys().cloned().collect();
+    t_keys.sort();
+    if h_keys != t_keys {
+        issues.push(format!(
+            "event key mismatch: hooks={h_keys:?} template={t_keys:?}"
+        ));
+    }
+
+    for ev in h_keys.iter().filter(|k| template.contains_key(*k)) {
+        let (Some(he), Some(te)) = (first_hook_entry(hooks, ev), first_hook_entry(template, ev))
+        else {
+            issues.push(format!("{ev}: missing hook entry in hooks or template"));
+            continue;
+        };
+        let hc = he.get("command").and_then(Value::as_str).unwrap_or("");
+        let tc = te.get("command").and_then(Value::as_str).unwrap_or("");
+        if hc != tc {
+            issues.push(format!(
+                "command mismatch on {ev}: hooks={hc:?} template={tc:?}"
+            ));
+        }
+        let ht = he.get("timeout");
+        let tt = te.get("timeout");
+        if ht != tt {
+            issues.push(format!(
+                "timeout mismatch on {ev}: hooks={ht:?} template={tt:?}"
+            ));
+        }
+    }
+    issues
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+/// Snapshot a host's hook configuration for schema drift comparison.
+///
+/// # Parameters
+///
+/// - `hooks_path` — repo-root-relative path to the host's hooks.json (e.g. `.cursor/hooks.json`)
+/// - `template_path` — repo-root-relative path to the workspace template (e.g. `configs/framework/cursor-hooks.workspace-template.json`)
+/// - `expected_events` — events that the host must register (e.g. `CURSOR_HOOKS_REGISTERED_EVENTS`)
+/// - `forbidden_events` — events that must NOT be registered (e.g. `CURSOR_HOOKS_SUBTRACTED_EVENTS`)
+pub fn snapshot_host_hooks(
+    repo_root: &Path,
+    hooks_path: &Path,
+    template_path: &Path,
+    expected_events: &[&str],
+    forbidden_events: &[&str],
+    expected_cmd_fragment: &str,
+) -> Result<HostHooksSnapshot, String> {
+    let abs_hooks = repo_root.join(hooks_path);
+    let abs_template = repo_root.join(template_path);
+
+    let registered = read_hooks_event_keys(&abs_hooks)?;
+    let template_keys = read_hooks_event_keys(&abs_template)?;
+    let hooks_doc = read_hooks_doc(&abs_hooks)?;
+    let (mut hook_command_issues, mut gate_timeout_issues) =
+        audit_hooks_doc(&hooks_path.display().to_string(), &hooks_doc, expected_cmd_fragment);
+    let mut hooks_template_parity_issues = Vec::new();
+    if abs_template.is_file() {
+        if let Ok(template_doc) = read_hooks_doc(&abs_template) {
+            let (cmd_i, to_i) = audit_hooks_doc(
+                &template_path.display().to_string(),
+                &template_doc,
+                expected_cmd_fragment,
+            );
+            hook_command_issues.extend(cmd_i);
+            gate_timeout_issues.extend(to_i);
+            hooks_template_parity_issues =
+                compare_hooks_template_parity(&hooks_doc, &template_doc);
+        }
+    } else {
+        hooks_template_parity_issues.push(format!(
+            "missing {}",
+            template_path.display()
+        ));
+    }
+    let missing_required: Vec<String> = expected_events
+        .iter()
+        .filter(|ev| !registered.contains(&ev.to_string()))
+        .map(|s| (*s).to_string())
+        .collect();
+    let forbidden_still_registered: Vec<String> = forbidden_events
+        .iter()
+        .filter(|ev| registered.contains(&ev.to_string()))
+        .map(|s| (*s).to_string())
+        .collect();
+    let keys_match = registered == template_keys;
+    Ok(HostHooksSnapshot {
+        registered_events: registered,
+        forbidden_still_registered,
+        missing_required,
+        matches_workspace_template: keys_match && hooks_template_parity_issues.is_empty(),
+        hook_command_issues,
+        gate_timeout_issues,
+        hooks_template_parity_issues,
+    })
+}
+
+/// Build a JSON Value blob from a host hooks snapshot (for baseline storage).
+pub fn snapshot_host_hooks_json(
+    repo_root: &Path,
+    hooks_path: &Path,
+    template_path: &Path,
+    expected_events: &[&str],
+    forbidden_events: &[&str],
+    expected_cmd_fragment: &str,
+) -> Result<Value, String> {
+    let snap = snapshot_host_hooks(repo_root, hooks_path, template_path, expected_events, forbidden_events, expected_cmd_fragment)?;
+    serde_json::to_value(snap).map_err(|e| format!("serialize snapshot: {e}"))
+}
+
+/// Check a host hooks snapshot JSON blob for validity.
+pub fn host_hooks_json_ok(hooks: &Value) -> bool {
+    let Some(s) = hooks.as_object() else { return false };
+    s.get("forbidden_still_registered")
+        .and_then(Value::as_array)
+        .map(|a| a.is_empty())
+        .unwrap_or(false)
+        && s.get("missing_required")
+            .and_then(Value::as_array)
+            .map(|a| a.is_empty())
+            .unwrap_or(false)
+        && s.get("hook_command_issues")
+            .and_then(Value::as_array)
+            .map(|a| a.is_empty())
+            .unwrap_or(false)
+        && s.get("gate_timeout_issues")
+            .and_then(Value::as_array)
+            .map(|a| a.is_empty())
+            .unwrap_or(false)
+        && s.get("hooks_template_parity_issues")
+            .and_then(Value::as_array)
+            .map(|a| a.is_empty())
+            .unwrap_or(false)
 }

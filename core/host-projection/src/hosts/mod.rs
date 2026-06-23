@@ -1,7 +1,9 @@
-pub mod codex_provider;
-pub mod cursor_provider;
-pub mod hook_state_common;
+/// Registry-generated host provider structs and trait impls.
+/// Source: configs/framework/RUNTIME_REGISTRY.json -> host_targets.metadata
 pub mod host_provider;
+
+/// Host-specific logic overrides organized by capability, not by host.
+pub mod capability_overrides;
 
 /// Unified hook dispatch trait + shared utilities for all 4 hosts.
 pub mod hook_dispatch;
@@ -12,31 +14,33 @@ pub mod file_state_lock;
 /// Cross-host worktree auto-save and audit utilities (all 4 hosts).
 pub mod worktree_auto_save;
 
+/// Shared hook state version adapter (used by codex).
+pub mod hook_state_common;
+
 // ── ADR §2.1 unified hook dispatch ──
 pub mod event_handlers;
 pub mod host_extensions;
 pub mod mcp_pre_guard;
 pub mod stop_dispatch;
 
-// ── Migrated host providers ──
+// ── Host agents (MCP agent loop hosts: claude, codex, opencode) ──
 pub mod claude_agent;
-pub mod claude_provider;
 pub mod mcp_stdio_harness;
 pub mod opencode_agent;
-pub mod opencode_provider;
 
 // ── Test shims ──
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_shim;
 
 // ── Unified hook contract tests (all 4 hosts) ──
-#[cfg(test)]
 
 pub use host_provider::{
-    HostCapabilities, HostLifecycle, HostProvider, HostTelemetry, HostToolExecutor,
-    default_host_id, host_lifecycle_for_id, host_provider_for_id, host_provider_for_install_tool,
+    AgentDispatchFn, HookDispatchFn, HostCapabilities, HostLifecycle, HostProvider,
+    HostTelemetry, HostToolExecutor, default_host_id, find_agent_dispatch, find_hook_dispatch,
+    host_lifecycle_for_id, host_provider_for_id, host_provider_for_install_tool,
     host_provider_for_routing_spelling, host_provider_registry, host_provider_routing_aliases,
     host_provider_strict_pre_tool_fallback_hint, host_telemetry_for_id, host_tool_executor_for_id,
+    register_agent_dispatchers, register_hook_dispatchers,
 };
 
 // ── Shared MCP agent loop (3 hosts: claude, codex, opencode) ──

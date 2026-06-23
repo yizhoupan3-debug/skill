@@ -12,7 +12,7 @@ use super::{
 };
 use crate::goal_drive;
 use crate::background_state::handle_background_state_operation;
-use super::route_manifest_fallback::{manifest_fallback_path, route_task_with_manifest_fallback};
+use framework_extra::route_manifest_fallback::{manifest_fallback_path, route_task_with_manifest_fallback};
 use super::stdio_op_registry::{
     dispatch_runtime_output_mode_stdio, handles_runtime_output_stdio_op,
 };
@@ -30,7 +30,7 @@ use crate::execution_contract::{
     validate_execution_kernel_steady_state_metadata_value,
 };
 use crate::framework_profile::{
-    build_codex_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
+    build_profile_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
     load_framework_profile,
 };
 use crate::hook_event_routing::hook_event_routing_contract;
@@ -198,7 +198,7 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "route_policy" => dispatch_stdio_route_policy(payload),
         "route_snapshot" => dispatch_stdio_route_snapshot(payload),
         "compile_profile_bundle" => dispatch_stdio_compile_profile_bundle(payload),
-        "compile_profile_artifacts" | "compile_codex_profile_artifacts" => {
+        "compile_profile_artifacts" => {
             dispatch_stdio_compile_profile_artifacts(payload)
         }
         "closeout_evaluate" => dispatch_stdio_closeout_evaluate(payload),

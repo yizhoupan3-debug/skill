@@ -27,6 +27,7 @@ pub mod trace_attach;
 pub mod trace_stream_io;
 pub mod trace_transport;
 pub mod types;
+pub mod util;
 
 // ── extracted from runtime-core/src/contracts/ ──
 pub mod closeout_enforcement;

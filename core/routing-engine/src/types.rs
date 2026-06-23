@@ -92,6 +92,12 @@ pub struct RecordsCacheEntry {
     pub manifest_mtime: Option<SystemTime>,
     pub metadata_mtime: Option<SystemTime>,
     pub index_mtime: Option<SystemTime>,
+    /// Wall-clock time when this entry was inserted/last-refreshed.
+    /// Used as the eviction tiebreaker when the FIFO queue is drained:
+    /// the entry with the oldest `inserted_at` is evicted first,
+    /// preventing recently-loaded entries from being immediately evicted
+    /// even if their backing files have old modification timestamps.
+    pub inserted_at: SystemTime,
     pub records: Arc<Vec<SkillRecord>>,
 }
 

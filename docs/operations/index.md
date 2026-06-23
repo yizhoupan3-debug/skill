@@ -128,7 +128,7 @@ cargo run --manifest-path tools/evolution-rs/Cargo.toml -- audit --config config
 | 安装 / 升级 / 多机同步 | § 首次安装 + § 多机同步（本文件） |
 | 安全（SSRF、MCP 策略、沙箱） | § 安全运维（本文件） |
 | 备份 / 恢复 / 卸载 | § 备份、恢复与卸载（本文件） |
-| 运维开关组合（profile） | [架构规约](adr/010-ideal-architecture-v10.md)（架构原则） |
+| 运维开关组合（profile） | [架构规约](../adr/010-ideal-architecture-v10.md)（架构原则） |
 | 使用者入门 | [`../README.md`](../../README.md) + [`AGENTS.md`](../../AGENTS.md) |
 
 ---

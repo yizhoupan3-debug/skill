@@ -23,17 +23,17 @@ use std::sync::OnceLock;
 
 static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();
 
-// ── Codex hooks duplicate check (function-pointer proxy) ──
+// ── Hook duplicate check (generic fn-pointer proxy; legacy "codex" naming removed) ──
 
-type CodexHookDuplicateCheckFn = fn(repo_root: &Path) -> Vec<String>;
-static CODEX_HOOK_DUPLICATE_CHECK: OnceLock<CodexHookDuplicateCheckFn> = OnceLock::new();
+type HookDuplicateCheckFn = fn(repo_root: &Path) -> Vec<String>;
+static HOOK_DUPLICATE_CHECK: OnceLock<HookDuplicateCheckFn> = OnceLock::new();
 
-pub fn register_codex_hook_duplicate_check(f: CodexHookDuplicateCheckFn) {
-    CODEX_HOOK_DUPLICATE_CHECK.set(f).ok();
+pub fn register_hook_duplicate_check(f: HookDuplicateCheckFn) {
+    HOOK_DUPLICATE_CHECK.set(f).ok();
 }
 
-pub fn check_codex_hook_duplicates(repo_root: &Path) -> Vec<String> {
-    match CODEX_HOOK_DUPLICATE_CHECK.get() {
+pub fn check_hook_duplicates(repo_root: &Path) -> Vec<String> {
+    match HOOK_DUPLICATE_CHECK.get() {
         Some(f) => f(repo_root),
         None => vec![],
     }

@@ -137,7 +137,7 @@ Claude 执行的具体步骤。
 明确列出不应使用此 skill 的场景。
 
 ## References
-- [参考文档](SKILL_MAINTENANCE_GUIDE.md)
+- [参考文档](../skills/SKILL_ROUTING_LAYERS.md)
 ```
 
 ### Frontmatter 字段说明
@@ -219,7 +219,7 @@ skills/my-skill/
     checklist.md    # 检查清单
 ```
 
-主文件通过 [`SKILL_MAINTENANCE_GUIDE.md`](skills/SKILL_MAINTENANCE_GUIDE.md) 引用，Claude 仅在需要时读取。
+主文件通过 [`SKILL_ROUTING_LAYERS.md`](skills/SKILL_ROUTING_LAYERS.md) 引用扩展参考，Claude 仅在需要时读取。
 
 ### 改 Skill 必查
 

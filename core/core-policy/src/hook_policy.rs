@@ -25,12 +25,20 @@ pub const HOOK_POLICY_SCHEMA_VERSION: &str = "router-rs-hook-policy-v1";
 pub const HOOK_POLICY_AUTHORITY: &str = "rust-hook-policy";
 
 const RETIRED_PROTECTED_GLOBS: &[&str] = &["plugins/skill-framework-native/**"];
-const PROTECTED_GENERATED_PATHS: &[&str] = &[
-    "AGENTS.md",
-    ".codex/hooks.json",
-    ".codex/README.md",
-    ".codex/host_entrypoints_sync_manifest.json",
-];
+
+/// Framework-protected generated paths — AGENTS.md + all hosts' entrypoint_paths.
+/// Values sourced from RUNTIME_REGISTRY.json host_targets.metadata.*.entrypoint_paths (generated).
+fn protected_generated_paths() -> Vec<&'static str> {
+    let mut paths = vec!["AGENTS.md"];
+    for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+        for ep in framework_kernel::runtime_registry::generated_entrypoint_paths(host_id) {
+            if !ep.is_empty() && !paths.contains(ep) {
+                paths.push(ep);
+            }
+        }
+    }
+    paths
+}
 
 /// Input payload for a hook policy evaluation.
 /// Describes the host operation being performed (bash command, file path,
@@ -283,7 +291,7 @@ pub fn classify_protected_path<'a>(
     let source_repo = repo_root
         .zip(runtime_root)
         .is_none_or(|(repo, runtime)| same_path(repo, runtime));
-    if source_repo && PROTECTED_GENERATED_PATHS.contains(&relative.as_str()) {
+    if source_repo && protected_generated_paths().iter().any(|p| *p == relative.as_str()) {
         return Some("generated_host_entrypoint");
     }
     if source_repo

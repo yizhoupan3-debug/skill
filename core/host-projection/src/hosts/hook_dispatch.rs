@@ -1374,10 +1374,10 @@ pub fn is_generated_entrypoint(path: &str) -> bool {
     path.contains("hook") && (path.ends_with(".sh") || path.ends_with(".json"))
 }
 
-/// Check if a path is host-private state (data-driven via HOST_HOME_DIRS).
+/// Check if a path is host-private state (data-driven via generated `host_home_dirs`).
 pub fn is_host_private_path(path: &str) -> bool {
     if path.contains("/hook-state/") { return true; }
-    for dir in framework_kernel::runtime_registry::HOST_HOME_DIRS.iter() {
+    for dir in framework_kernel::runtime_registry::host_home_dirs() {
         if path.contains(&format!("/{dir}/")) { return true; }
     }
     false
@@ -1696,23 +1696,10 @@ macro_rules! impl_host_config {
         fn host_id(&self) -> &'static str { $id }
         fn state_dir_leaf(&self) -> &'static str { concat!(".", $id) }
         fn hook_state_unreadable_tag(&self) -> &'static str {
-            // Raw uppercase tag without "router-rs" prefix (callers format as needed).
-            match $id {
-                "claude" => "CLAUDE_HOOK_STATE_UNREADABLE",
-                "cursor" => "CURSOR_HOOK_STATE_UNREADABLE",
-                "codex" => "CODEX_HOOK_STATE_UNREADABLE",
-                "opencode" => "OPENCODE_HOOK_STATE_UNREADABLE",
-                _ => "HOOK_STATE_UNREADABLE",
-            }
+            framework_kernel::runtime_registry::hook_state_unreadable_tag($id)
         }
         fn session_namespace_env(&self) -> &'static str {
-            match $id {
-                "claude" => "ROUTER_RS_CLAUDE_SESSION_NAMESPACE",
-                "cursor" => "ROUTER_RS_CURSOR_SESSION_NAMESPACE",
-                "codex" => "ROUTER_RS_CODEX_SESSION_NAMESPACE",
-                "opencode" => "ROUTER_RS_OPENCODE_SESSION_NAMESPACE",
-                _ => "",
-            }
+            framework_kernel::runtime_registry::session_namespace_env($id)
         }
         fn log_label(&self) -> &'static str { $label }
     };

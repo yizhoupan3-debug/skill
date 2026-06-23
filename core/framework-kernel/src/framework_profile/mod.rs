@@ -131,7 +131,7 @@ pub fn build_profile_bundle(profile: FrameworkProfileContract) -> Result<Profile
     })
 }
 
-pub fn build_codex_artifact_bundle(
+pub fn build_profile_artifact_bundle(
     profile: FrameworkProfileContract,
     full: bool,
 ) -> Result<Map<String, Value>, String> {

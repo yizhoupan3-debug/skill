@@ -72,7 +72,7 @@ pub mod runtime_registry {
     // ── framework-kernel re-exports ──
     pub use framework_kernel::runtime_registry::{
         ALL_KNOWN_HOST_DIRS, DEFAULT_MANAGED_MCP_SERVER_IDS, HOST_ADAPTER_CONTRACT_PATH,
-        HOST_HOME_DIRS, RUNTIME_REGISTRY_PATH, RUNTIME_REGISTRY_SCHEMA_VERSION,
+        RUNTIME_REGISTRY_PATH, RUNTIME_REGISTRY_SCHEMA_VERSION,
         RuntimeRegistry, RuntimeSkillsDefaults, RuntimeWorkspaceBootstrapDefaults,
         closeout_evidence_hooks_unsupported_on_host, harness_capability_exception_entry,
         harness_capability_exception_rationale, host_projection_object,
@@ -107,7 +107,7 @@ pub(crate) use core_policy::hook_policy;
 pub(crate) use core_policy::review_gate_engine;
 
 // ── crate-level re-exports for `crate::X` path compat ──
-pub use framework_runtime::route_manifest_fallback::route_task_with_manifest_fallback;
+pub use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 
 // ── routing-engine hook registration ──
 use std::sync::OnceLock;
@@ -269,9 +269,64 @@ pub fn register_host_projection_hooks() {
             }
         });
 
-        // ── Codex hooks duplicate check ──
-        ::framework_runtime::hooks::register_codex_hook_duplicate_check(
-            host_projection::hosts::host_extensions::codex::collect_codex_hooks_duplicate_warnings,
+        // ── MCP routing: decouple L0→L1 DAG (ADR-010 §11.2) ──
+        // host-projection (L0) calls these fn ptrs instead of depending on
+        // routing-engine (L1) at compile time. The actual routing-engine
+        // types never cross the fn ptr boundary — only JSON strings do.
+        host_projection::hooks::register_mcp_tool_skill_route(
+            |query: &str, host_id: &str, first_turn: bool, repo_root: &str| {
+                let repo_root = std::path::Path::new(repo_root);
+                let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
+                let records = routing_engine::route::load_records_cached_for_stdio(
+                    Some(&runtime_path), None,
+                )?;
+                let records = routing_engine::route::filter_records_for_host(
+                    records.as_ref(), Some(host_id),
+                )?;
+                let records_json: Vec<serde_json::Value> = records.iter()
+                    .filter_map(|r| serde_json::to_value(r).ok())
+                    .collect();
+                let decision = host_projection::hooks::route_task_with_manifest_fallback(
+                    &records_json,
+                    Some(&runtime_path),
+                    None,
+                    Some(host_id),
+                    query,
+                    "session",
+                    true,
+                    first_turn,
+                )?;
+                if decision.selected_skill.is_empty() || decision.selected_skill == "none" {
+                    serde_json::to_string(&serde_json::json!({
+                        "routed": false, "skill_slug": null,
+                        "skill_path": null, "match_reason": "no match",
+                    })).map_err(|e| e.to_string())
+                } else {
+                    serde_json::to_string(&serde_json::json!({
+                        "routed": true,
+                        "skill_slug": decision.selected_skill,
+                        "skill_path": decision.selected_skill_path,
+                        "match_reason": decision.reasons.first().cloned().unwrap_or_default(),
+                    })).map_err(|e| e.to_string())
+                }
+            },
+        );
+        host_projection::hooks::register_mcp_tool_search_skills(
+            |query: &str, limit: usize, effective_host: &str, repo_root: &str| {
+                let repo_root = std::path::Path::new(repo_root);
+                let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
+                let records = routing_engine::route::load_records_cached_for_stdio(
+                    Some(&runtime_path), None,
+                )?;
+                let host_indices = routing_engine::route::filter_record_indices_for_host(
+                    records.as_ref(), Some(effective_host),
+                )?;
+                let rows = routing_engine::route::search_skills_subset(
+                    records.as_ref(), Some(&host_indices), query, limit,
+                );
+                let results = routing_engine::route::build_search_results_payload(query, rows);
+                serde_json::to_string(&results).map_err(|e| e.to_string())
+            },
         );
 
         // ── RFV loop full implementation (supports append_round) ──

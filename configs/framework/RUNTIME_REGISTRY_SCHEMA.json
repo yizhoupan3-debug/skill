@@ -23,7 +23,33 @@
     "projection_status",
     "installable",
     "host_entrypoints",
-    "default_framework_command"
+    "default_framework_command",
+    "config_dir",
+    "review_gate_disable_env",
+    "paper_prose_env",
+    "paper_adversarial_env",
+    "settings_paths",
+    "entrypoint_paths",
+    "profile_id",
+    "driver_binary",
+    "driver_supports_resume",
+    "hook_telemetry_surface",
+    "observation_host_id",
+    "hooks_manifest_path",
+    "registered_hook_events",
+    "mcp_config_key",
+    "config_path",
+    "override_build_driver_args",
+    "override_extract_observation",
+    "batch_execution",
+    "cron_execution",
+    "ci_runner",
+    "non_interactive_entrypoint",
+    "external_session_supervisor",
+    "rate_limit_auto_resume",
+    "session_supervisor_driver",
+    "context_file",
+    "dispatcher_type"
   ],
   "install_tools": [
     "cursor",
@@ -51,5 +77,10 @@
   "required_review_gate_fields": [
     "reviewer_lanes"
   ],
-  "registry_review_gate_notes": "RUNTIME_REGISTRY.json must include review_gate.reviewer_lanes (non-empty string array): the single cross-host countable independent reviewer lane closed-set (Claude Code canonical). Legacy deep_gate_lanes / claude_reviewer_lanes are removed; all hook and MCP hosts read reviewer_lanes only."
+  "registry_review_gate_notes": "RUNTIME_REGISTRY.json must include review_gate.reviewer_lanes (non-empty string array): the single cross-host countable independent reviewer lane closed-set (Claude Code canonical). Legacy deep_gate_lanes / claude_reviewer_lanes are removed; all hook and MCP hosts read reviewer_lanes only.",
+  "top_level_notes": {
+    "all_known_host_dirs": "All known host state directories for cleanup scanning (includes legacy .gemini).",
+    "ephemeral_task_prefixes": "Task ID prefixes treated as ephemeral session artifacts rather than real tasks.",
+    "ephemeral_path_patterns": "Path patterns for ephemeral/sandbox build root detection."
+  }
 }

@@ -13,14 +13,10 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Map host_id to its config directory (mirrors host_config_dir in projection_host_ops).
-fn host_config_dir(host_id: &str) -> &str {
-    match host_id {
-        "cursor" => ".cursor",
-        "codex" => ".codex",
-        "opencode" => ".opencode",
-        _ => ".claude",
-    }
+/// Map host_id to its config directory via registry.
+/// Returns empty string for unknown hosts.
+fn host_config_dir(host_id: &str) -> &'static str {
+    framework_kernel::runtime_registry::host_private_config_dir(host_id)
 }
 
 /// Return the per-host hook-state directory leaf, e.g. ".claude/hook-state".

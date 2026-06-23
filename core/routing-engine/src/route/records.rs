@@ -64,6 +64,20 @@ fn index_sibling_path(runtime_path: &Path) -> Option<PathBuf> {
         .map(|parent| parent.join("SKILL_ROUTING_INDEX.json"))
 }
 
+/// Create a `(key → position)` index from a JSON `keys` array.
+fn build_key_index(keys: &[Value], path: &Path) -> Result<HashMap<String, usize>, String> {
+    let mut index: HashMap<String, usize> = HashMap::new();
+    for (pos, key) in keys.iter().enumerate() {
+        if let Some(raw) = key.as_str() {
+            index.insert(raw.to_string(), pos);
+        }
+    }
+    if index.is_empty() {
+        return Err(format!("empty keys array: {}", path.display()));
+    }
+    Ok(index)
+}
+
 /// Parse the lightweight index file (`SKILL_ROUTING_INDEX.json`).
 /// The index has the same array-of-arrays format but with fewer keys and
 /// truncated description / trigger_hints fields.
@@ -78,12 +92,7 @@ fn load_records_from_index(path: &Path) -> Result<Vec<SkillRecord>, String> {
         .and_then(Value::as_array)
         .ok_or_else(|| format!("index missing keys: {}", path.display()))?;
 
-    let mut index: HashMap<String, usize> = HashMap::new();
-    for (idx, key) in keys.iter().enumerate() {
-        if let Some(raw) = key.as_str() {
-            index.insert(raw.to_string(), idx);
-        }
-    }
+    let mut index = build_key_index(keys, path)?;
 
     let idx_slug = *index
         .get("slug")
@@ -132,7 +141,7 @@ fn load_records_from_index(path: &Path) -> Result<Vec<SkillRecord>, String> {
     // Merge sidecar metadata (same as full runtime path).
     let mut records = collect_skill_records_from_rows(rows, indexes);
     let mut meta = HashMap::new();
-    merge_sidecar_route_metadata_from_runtime(path, &mut meta)?;
+    merge_sidecar_route_metadata(path, route_metadata_sidecar_for_runtime, &mut meta)?;
     apply_manifest_route_meta(&mut records, &meta);
     Ok(records)
 }
@@ -527,12 +536,14 @@ fn records_cache_state() -> &'static RwLock<RecordsCacheState> {
 fn evict_records_cache_over_capacity(state: &mut RecordsCacheState) {
     while state.map.len() > RECORDS_CACHE_MAX_KEYS {
         let Some(candidate) = state.fifo.pop_front() else {
-            // 当 fifo 耗尽，按文件 mtime 淘汰最旧的条目（LRU by file age）
+            // 当 fifo 耗尽，按插入时间（inserted_at）淘汰最旧的条目。
+            // 使用 inserted_at（加载时间）而非文件 mtime，避免刚加载的条目
+            // 因文件 mtime 很旧而被立即淘汰导致的缓存颠簸。
             let oldest_key = state
                 .map
                 .iter()
-                .map(|(k, v)| (k.clone(), min_entry_mtime(v).unwrap_or(u64::MAX)))
-                .min_by_key(|(_, mtime)| *mtime)
+                .map(|(k, v)| (k.clone(), v.inserted_at))
+                .min_by_key(|(_, inserted_at)| *inserted_at)
                 .map(|(k, _)| k);
             if let Some(key) = oldest_key {
                 state.map.remove(&key);
@@ -544,24 +555,6 @@ fn evict_records_cache_over_capacity(state: &mut RecordsCacheState) {
             continue;
         }
     }
-}
-
-/// Returns the effective "age" of a cache entry based on its mtimes.
-/// None mtimes are treated as u64::MAX (oldest/evict-first).
-fn min_entry_mtime(entry: &RecordsCacheEntry) -> Option<u64> {
-    use std::time::SystemTime;
-    [
-        entry.runtime_mtime,
-        entry.manifest_mtime,
-        entry.metadata_mtime,
-        entry.index_mtime,
-    ]
-    .into_iter()
-    .filter_map(|t| {
-        t.and_then(|st| st.duration_since(SystemTime::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-    })
-    .min()
 }
 
 /// Invalidate all records cache entries (full flush).
@@ -611,11 +604,13 @@ pub fn load_records_cached_for_stdio_resolved(
     }
 
     let records = Arc::new(load_records(runtime_path, manifest_path)?);
+    let now = SystemTime::now();
     let entry = RecordsCacheEntry {
         runtime_mtime,
         manifest_mtime,
         metadata_mtime,
         index_mtime,
+        inserted_at: now,
         records: Arc::clone(&records),
     };
     let mut state = records_cache_state().write().map_err(|e| {
@@ -642,11 +637,7 @@ fn load_manifest_route_meta(path: &Path) -> Result<HashMap<String, RouteMetadata
         .and_then(Value::as_array)
         .ok_or_else(|| format!("manifest missing keys: {}", path.display()))?;
 
-    let key_index = keys
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, key)| key.as_str().map(|raw| (raw.to_string(), idx)))
-        .collect::<HashMap<_, _>>();
+    let key_index = build_key_index(keys, path)?;
 
     let idx_slug = *key_index
         .get("slug")
@@ -680,15 +671,18 @@ fn load_manifest_route_meta(path: &Path) -> Result<HashMap<String, RouteMetadata
             },
         );
     }
-    merge_sidecar_route_metadata(path, &mut meta)?;
+    merge_sidecar_route_metadata(path, route_metadata_sidecar_path, &mut meta)?;
     Ok(meta)
 }
 
+/// Merge route metadata from a sidecar JSON file.
+/// `config_path` is passed to `sidecar_fn` to locate the sidecar.
 fn merge_sidecar_route_metadata(
-    manifest_path: &Path,
+    config_path: &Path,
+    sidecar_fn: fn(&Path) -> Option<PathBuf>,
     meta: &mut HashMap<String, RouteMetadataPatch>,
 ) -> Result<(), String> {
-    let Some(sidecar) = route_metadata_sidecar_path(manifest_path) else {
+    let Some(sidecar) = sidecar_fn(config_path) else {
         return Ok(());
     };
     if !sidecar.is_file() {
@@ -778,12 +772,7 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String
         .and_then(Value::as_array)
         .ok_or_else(|| format!("runtime index missing keys: {}", path.display()))?;
 
-    let mut index: HashMap<String, usize> = HashMap::new();
-    for (idx, key) in keys.iter().enumerate() {
-        if let Some(raw) = key.as_str() {
-            index.insert(raw.to_string(), idx);
-        }
-    }
+    let mut index = build_key_index(keys, path)?;
 
     let idx_slug = *index
         .get("slug")
@@ -836,24 +825,9 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String
 
     let mut records = collect_skill_records_from_rows(rows, indexes);
     let mut meta = HashMap::new();
-    merge_sidecar_route_metadata_from_runtime(path, &mut meta)?;
+    merge_sidecar_route_metadata(path, route_metadata_sidecar_for_runtime, &mut meta)?;
     apply_manifest_route_meta(&mut records, &meta);
     Ok(records)
-}
-
-fn merge_sidecar_route_metadata_from_runtime(
-    runtime_path: &Path,
-    meta: &mut HashMap<String, RouteMetadataPatch>,
-) -> Result<(), String> {
-    let Some(sidecar) = route_metadata_sidecar_for_runtime(runtime_path) else {
-        return Ok(());
-    };
-    if !sidecar.is_file() {
-        return Ok(());
-    }
-    let payload = read_json(&sidecar)?;
-    merge_route_metadata_payload(&payload, meta)?;
-    Ok(())
 }
 
 pub fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, String> {
@@ -867,11 +841,7 @@ pub fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, Strin
         .and_then(Value::as_array)
         .ok_or_else(|| format!("manifest missing keys: {}", path.display()))?;
 
-    let key_index = keys
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, key)| key.as_str().map(|raw| (raw.to_string(), idx)))
-        .collect::<HashMap<_, _>>();
+    let key_index = build_key_index(keys, path)?;
 
     let idx_slug = *key_index
         .get("slug")

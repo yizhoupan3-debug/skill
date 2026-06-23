@@ -207,7 +207,7 @@ cd /path/to/project
 
 **门控 `timeout`**：`beforeSubmitPrompt` / `stop` / `postToolUse` / `subagentStart` / `subagentStop` 均为 **20s**（`sessionStart` 5s、`sessionEnd` 15s）。`postToolUse` 超时会导致 review multiset / shell 账本不完整 — 见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)「对话中断排障」。
 
-**模板同步**：[`configs/framework/cursor-hooks.workspace-template.json`](configs/framework/cursor-hooks.workspace-template.json) 须与 [`.cursor/hooks.json`](.cursor/hooks.json) 一致（`bash scripts/ci/check-cursor-hooks-parity.sh`；事件列表真源：`router-rs schema-drift contract` ↔ [`subtraction.rs`](core/host-projection/src/hosts/cursor_hooks/subtraction.rs)）。
+**模板同步**：[`configs/framework/cursor-hooks.workspace-template.json`](configs/framework/cursor-hooks.workspace-template.json) 须与 [`.cursor/hooks.json`](.cursor/hooks.json) 一致（`bash scripts/ci/check-cursor-hooks-parity.sh`；事件列表真源：`router-rs schema-drift contract` ↔ `core/host-projection/src/hosts/host_extensions/schema_drift.rs`）。
 
 **内存相关**：见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)「内存 / release」；项目 env [`.cursor/router-rs-hook.env`](.cursor/router-rs-hook.env)。
 

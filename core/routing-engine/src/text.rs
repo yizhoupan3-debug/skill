@@ -45,6 +45,7 @@ pub fn normalize_text(text: &str) -> String {
     if trimmed.is_empty() {
         return String::new();
     }
+    // Phase 1: lowercase and collapse whitespace runs.
     let mut result = String::with_capacity(trimmed.len());
     let mut prev_whitespace = false;
     for ch in trimmed.chars() {
@@ -58,7 +59,28 @@ pub fn normalize_text(text: &str) -> String {
             prev_whitespace = false;
         }
     }
-    result
+    // Phase 2: insert spaces at ASCII ↔ CJK boundaries so mixed tokens
+    // like "sci润色" become "sci 润色" and tokenize into two matchable
+    // tokens ([sci] [润色]) that text_matches_phrase can find.
+    // Without this, the token regex (which alternates between ASCII and
+    // CJK branches) would still split at the boundary, but the original
+    // mixed marker (e.g. "sci润色") would not be a substring of the
+    // normalized query text, breaking the contains() fallback.
+    let mut spaced = String::with_capacity(result.len() + 4);
+    let mut prev_cjk_flag: Option<bool> = None;
+    for ch in result.chars() {
+        let is_cjk = ('\u{4e00}'..='\u{9fff}').contains(&ch);
+        if let Some(prev) = prev_cjk_flag {
+            if prev != is_cjk && ch != ' ' {
+                spaced.push(' ');
+            }
+        }
+        spaced.push(ch);
+        if ch != ' ' {
+            prev_cjk_flag = Some(is_cjk);
+        }
+    }
+    spaced
 }
 
 pub fn tokenize_query(text: &str) -> Vec<String> {
@@ -77,7 +99,7 @@ pub fn tokenize_query(text: &str) -> Vec<String> {
 fn token_regex() -> &'static Regex {
     static TOKEN_REGEX: OnceLock<Regex> = OnceLock::new();
     TOKEN_REGEX.get_or_init(|| {
-        Regex::new(r"[A-Za-z0-9.+#/-]+|[\u{4e00}-\u{9fff}]{2,}").expect("token regex")
+        Regex::new(r"[A-Za-z0-9.+#/-]+|[\u{4e00}-\u{9fff}]+").expect("token regex")
     })
 }
 
@@ -153,6 +175,10 @@ pub fn split_phrases(text: &str) -> Vec<String> {
 
 pub fn phrase_token_matches(task_token: &str, phrase_token: &str) -> bool {
     if wordlike_token_regex().is_match(phrase_token) {
+        task_token == phrase_token
+    } else if phrase_token.chars().count() == 1 {
+        // Single CJK char guard: exact match only, avoiding false
+        // positives from contains (e.g. "味" matching "味道").
         task_token == phrase_token
     } else {
         task_token.contains(phrase_token)

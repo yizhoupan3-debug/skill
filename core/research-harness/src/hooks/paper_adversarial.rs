@@ -191,13 +191,7 @@ mod tests {
     use std::sync::{Mutex, OnceLock};
 
     fn paper_adversarial_env_var(host: &str) -> &'static str {
-        match host {
-            "cursor" => "ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK",
-            "codex" => "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
-            "claude" => "ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK",
-            "opencode" => "ROUTER_RS_OPENCODE_PAPER_ADVERSARIAL_HOOK",
-            _ => "ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK",
-        }
+        host_projection::hooks::paper_adversarial_env_var(host)
     }
 
     fn env_test_lock() -> &'static Mutex<()> {

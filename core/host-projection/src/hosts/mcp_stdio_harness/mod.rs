@@ -1,4 +1,4 @@
-//! MCP stdio harness: Opencode 共用 stdio transport。
+//! MCP stdio harness: 共用 stdio transport。
 //!
 //! MCP 服务器（stdio transport），提供 tools / prompts / resources 三类端点，
 //! 替代 shell hook 协议（PreToolUse / UserPromptSubmit / PostToolUse / Stop）。
@@ -8,6 +8,23 @@
 //! （`closeout_evidence_hooks=unsupported` → 非 my-light 时 MCP 层 hard_block 元数据；my-light advisory）。
 //!
 //! 与 CLI 共享 L2/L3 手动画板（evidence、goal state、路由、snapshot），出站为 MCP JSON-RPC。
+
+// ── Environment-cache macro ────────────────────────────────────────────
+/// Cache an env-var–parsed numeric value in a `OnceLock`.
+/// `$typ` must implement `FromStr` (parsed via `.ok()`), and the `$default`
+/// literal must be coercible to `$typ`.
+macro_rules! env_cache_typed {
+    ($typ:ty, $env:literal, $default:expr) => {{
+        static CACHED: OnceLock<$typ> = OnceLock::new();
+        *CACHED.get_or_init(|| {
+            std::env::var($env)
+                .ok()
+                .and_then(|v| v.parse::<$typ>().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or($default)
+        })
+    }};
+}
 
 // route_task_with_manifest_fallback — not needed in host-projection; skill routing via framework_kernel
 // framework_runtime functions accessed via crate::hooks
@@ -248,14 +265,7 @@ pub fn reset_rate_limiter_for_test() {
 /// Get snapshot cache TTL from environment variable.
 /// Default: 30 seconds. Env: ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS
 fn snapshot_cache_ttl_secs() -> u64 {
-    static CACHED: OnceLock<u64> = OnceLock::new();
-    *CACHED.get_or_init(|| {
-        std::env::var("ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .filter(|&n| n > 0)
-            .unwrap_or(30)
-    })
+    env_cache_typed!(u64, "ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS", 30)
 }
 
 /// Maximum number of entries in the TASK_VIEW_CACHE to prevent unbounded memory growth.
@@ -282,14 +292,7 @@ fn evict_task_view_cache_if_needed(
 /// Get task view cache TTL from environment variable.
 /// Default: 5 seconds. Env: ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS
 fn task_view_cache_ttl_secs() -> u64 {
-    static CACHED: OnceLock<u64> = OnceLock::new();
-    *CACHED.get_or_init(|| {
-        std::env::var("ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS")
-            .ok()
-            .and_then(|v| v.parse::<u64>().ok())
-            .filter(|&n| n > 0)
-            .unwrap_or(5)
-    })
+    env_cache_typed!(u64, "ROUTER_RS_DESKTOP_TASK_VIEW_CACHE_TTL_SECS", 5)
 }
 
 /// Get cached task view with configurable TTL (default 5 seconds).

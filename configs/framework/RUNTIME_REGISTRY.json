@@ -17,7 +17,7 @@
     "metadata": {
       "cursor": {
         "display_name": "Cursor",
-        "transport_type": "hook",
+        "transport_type": "cursor-agent",
         "config_format": "mdc",
         "home_env_var": "CURSOR_HOME",
         "default_home_dir": ".cursor",
@@ -28,7 +28,47 @@
         "host_entrypoints": [
           "AGENTS.md",
           ".cursor/rules/*.mdc"
-        ]
+        ],
+        "config_dir": ".cursor",
+        "review_gate_disable_env": "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE",
+        "paper_prose_env": "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
+        "paper_adversarial_env": "ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK",
+        "settings_paths": [
+          ".cursor/settings.json"
+        ],
+        "entrypoint_paths": [
+          ".cursor/rules/"
+        ],
+        "profile_id": "cursor_profile",
+        "driver_binary": "cursor",
+        "driver_supports_resume": false,
+        "hook_telemetry_surface": "cursor-agent",
+        "observation_host_id": "cursor",
+        "hooks_manifest_path": ".cursor/hooks.json",
+        "registered_hook_events": [
+          "beforeSubmitPrompt",
+          "stop",
+          "sessionStart",
+          "sessionEnd",
+          "postToolUse",
+          "subagentStart",
+          "subagentStop"
+        ],
+        "mcp_config_key": "mcpServers",
+        "config_path": "mcp.json",
+        "override_build_driver_args": false,
+        "override_extract_observation": false,
+        "batch_execution": false,
+        "cron_execution": false,
+        "ci_runner": false,
+        "non_interactive_entrypoint": false,
+        "external_session_supervisor": false,
+        "rate_limit_auto_resume": false,
+        "session_supervisor_driver": "unsupported",
+        "context_file": "AGENTS.md",
+        "dispatcher_type": "CursorDispatcher",
+        "hook_state_unreadable_tag": "CURSOR_HOOK_STATE_UNREADABLE",
+        "session_namespace_env": "ROUTER_RS_CURSOR_SESSION_NAMESPACE"
       },
       "opencode": {
         "display_name": "OpenCode",
@@ -40,11 +80,54 @@
         "projection_status": "implemented",
         "installable": true,
         "default_framework_command": "implementx",
-        "host_entrypoints": ".opencode/opencode.json"
+        "host_entrypoints": ".opencode/opencode.json",
+        "config_dir": ".opencode",
+        "review_gate_disable_env": "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE",
+        "paper_prose_env": "ROUTER_RS_OPENCODE_PAPER_PROSE_HOOK",
+        "paper_adversarial_env": "ROUTER_RS_OPENCODE_PAPER_ADVERSARIAL_HOOK",
+        "settings_paths": [
+          ".opencode/opencode.json",
+          ".opencode/opencode.jsonc"
+        ],
+        "entrypoint_paths": [
+          "AGENTS.md"
+        ],
+        "profile_id": "opencode_profile",
+        "driver_binary": "opencode",
+        "driver_supports_resume": false,
+        "hook_telemetry_surface": "native-opencode",
+        "observation_host_id": "opencode",
+        "hooks_manifest_path": null,
+        "registered_hook_events": [
+          "tool.execute.before",
+          "tool.execute.after",
+          "session.idle",
+          "session.created",
+          "session.deleted",
+          "permission.asked",
+          "permission.replied",
+          "file.edited",
+          "shell.env"
+        ],
+        "mcp_config_key": "mcpServers",
+        "config_path": ".opencode/opencode.json",
+        "override_build_driver_args": false,
+        "override_extract_observation": true,
+        "batch_execution": false,
+        "cron_execution": false,
+        "ci_runner": false,
+        "non_interactive_entrypoint": false,
+        "external_session_supervisor": false,
+        "rate_limit_auto_resume": false,
+        "session_supervisor_driver": "unsupported",
+        "context_file": "AGENTS.md",
+        "dispatcher_type": "OpenCodeDispatcher",
+        "hook_state_unreadable_tag": "OPENCODE_HOOK_STATE_UNREADABLE",
+        "session_namespace_env": "ROUTER_RS_OPENCODE_SESSION_NAMESPACE"
       },
       "codex": {
         "display_name": "Codex",
-        "transport_type": "hook",
+        "transport_type": "native-codex",
         "config_format": "json",
         "home_env_var": "CODEX_HOME",
         "default_home_dir": ".codex",
@@ -52,11 +135,68 @@
         "projection_status": "implemented",
         "installable": true,
         "default_framework_command": "implementx",
-        "host_entrypoints": "AGENTS.md"
+        "host_entrypoints": "AGENTS.md",
+        "config_dir": ".codex",
+        "review_gate_disable_env": "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE",
+        "paper_prose_env": "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
+        "paper_adversarial_env": "ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK",
+        "settings_paths": [
+          ".codex/settings.json"
+        ],
+        "entrypoint_paths": [
+          ".codex/hooks.json"
+        ],
+        "profile_id": "codex_profile",
+        "driver_binary": "codex",
+        "driver_supports_resume": true,
+        "hook_telemetry_surface": "native-codex",
+        "observation_host_id": "codex",
+        "hooks_manifest_path": ".codex/hooks.json",
+        "registered_hook_events": [
+          "SessionStart",
+          "PreToolUse",
+          "UserPromptSubmit",
+          "PostToolUse",
+          "Stop",
+          "SubagentStart",
+          "SubagentStop"
+        ],
+        "subagent_review_types": [
+          "explore",
+          "explorer",
+          "general-purpose",
+          "generalpurpose",
+          "default",
+          "shell",
+          "worker",
+          "browser-use",
+          "browseruse",
+          "ci-investigator",
+          "ciinvestigator",
+          "best-of-n-runner",
+          "bestofnrunner",
+          "cursor-guide",
+          "cursorguide"
+        ],
+        "mcp_config_key": "mcp_servers",
+        "config_path": ".codex/config.toml",
+        "override_build_driver_args": true,
+        "override_extract_observation": false,
+        "batch_execution": true,
+        "cron_execution": true,
+        "ci_runner": true,
+        "non_interactive_entrypoint": true,
+        "external_session_supervisor": true,
+        "rate_limit_auto_resume": true,
+        "session_supervisor_driver": "codex_driver",
+        "context_file": "AGENTS.md",
+        "dispatcher_type": "CodexDispatcher",
+        "hook_state_unreadable_tag": "CODEX_HOOK_STATE_UNREADABLE",
+        "session_namespace_env": "ROUTER_RS_CODEX_SESSION_NAMESPACE"
       },
       "claude": {
         "display_name": "Claude",
-        "transport_type": "hook",
+        "transport_type": "anthropic-claude",
         "config_format": "json",
         "home_env_var": "CLAUDE_HOME",
         "default_home_dir": ".claude",
@@ -68,7 +208,45 @@
           "AGENTS.md",
           ".claude/rules/framework.md",
           ".claude/settings.json"
-        ]
+        ],
+        "config_dir": ".claude",
+        "review_gate_disable_env": "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
+        "paper_prose_env": "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
+        "paper_adversarial_env": "ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK",
+        "settings_paths": [
+          ".claude/settings.json",
+          ".claude/settings.local.json"
+        ],
+        "entrypoint_paths": [
+          ".claude/CLAUDE.md"
+        ],
+        "profile_id": "claude_profile",
+        "driver_binary": "claude",
+        "driver_supports_resume": true,
+        "hook_telemetry_surface": "anthropic-claude",
+        "observation_host_id": "claude",
+        "hooks_manifest_path": null,
+        "registered_hook_events": [
+          "pre-tool-use",
+          "user-prompt-submit",
+          "post-tool-use",
+          "stop"
+        ],
+        "mcp_config_key": "",
+        "config_path": ".claude/settings.json",
+        "override_build_driver_args": true,
+        "override_extract_observation": true,
+        "batch_execution": false,
+        "cron_execution": false,
+        "ci_runner": false,
+        "non_interactive_entrypoint": false,
+        "external_session_supervisor": false,
+        "rate_limit_auto_resume": false,
+        "session_supervisor_driver": "mcp_bridge",
+        "context_file": "AGENTS.md",
+        "dispatcher_type": "ClaudeDispatcher",
+        "hook_state_unreadable_tag": "CLAUDE_HOOK_STATE_UNREADABLE",
+        "session_namespace_env": "ROUTER_RS_CLAUDE_SESSION_NAMESPACE"
       }
     },
     "host_providers": {
@@ -696,5 +874,20 @@
         "paperplain"
       ]
     }
-  }
+  },
+  "all_known_host_dirs": [
+    ".claude",
+    ".cursor",
+    ".codex",
+    ".opencode",
+    ".gemini"
+  ],
+  "ephemeral_task_prefixes": [
+    "cursor-stop-",
+    "session-checkpoint-"
+  ],
+  "ephemeral_path_patterns": [
+    "cursor-sandbox-cache",
+    "/tmp/skill-cargo-target"
+  ]
 }

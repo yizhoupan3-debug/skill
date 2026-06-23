@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 
 use crate::log::db;
 
-const HUB_FILENAME: &str = ".claude/research-knowledge-hub.db";
+const HUB_FILENAME: &str = ".router-rs/research-knowledge-hub.db";
 
 fn hub_path() -> Result<PathBuf> {
     let home = std::env::var("HOME")

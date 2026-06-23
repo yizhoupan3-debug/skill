@@ -38,7 +38,7 @@ pub fn resolve_worktree_cwd(
             return cwd.to_string();
         }
         let wt_path = std::path::Path::new(cwd)
-            .join(std::env::var("ROUTER_RS_WORKTREE_DIR").unwrap_or_else(|_| ".claude/worktrees".to_string()))
+            .join(std::env::var("ROUTER_RS_WORKTREE_DIR").unwrap_or_else(|_| ".router-rs/worktrees".to_string()))
             .join(name);
         return wt_path.to_string_lossy().to_string();
     }

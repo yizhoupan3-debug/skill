@@ -17,14 +17,9 @@ use runtime_core::closeout_enforcement::{
 };
 #[cfg(feature = "codegraph")]
 use runtime_core::codegraph_mcp::run_codegraph_mcp_stdio_loop;
-use host_projection::hosts::host_extensions::claude::run_claude_hook_cli;
-use host_projection::hosts::host_extensions::codex::{
-    InstallMode, build_codex_hook_projection, host_entrypoint_provider,
-    install_codex_cli_hooks, resolve_codex_home, run_codex_audit_hook,
-};
 use runtime_core::eval_route::{eval_route_contract, run_eval_route};
 use runtime_core::framework_profile::{
-    build_codex_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
+    build_profile_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
     load_framework_profile,
 };
 use runtime_core::framework_runtime::{
@@ -50,7 +45,6 @@ use runtime_core::trace_runtime::{
     TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
     record_trace_event,
 };
-use host_projection::hosts::host_extensions::codex::dispatcher::CodexHookDispatcher;
 use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher, HookOutput};
 use host_projection::hooks::{
     attach_router_rs_observation, emit_hook_fired,
@@ -59,7 +53,7 @@ use host_projection::hooks::{
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
 
-fn codex_hook_output_to_value(output: Option<HookOutput>) -> Value {
+fn hook_output_to_value(output: Option<HookOutput>) -> Value {
     match output {
         None | Some(HookOutput::None) => json!({}),
         Some(HookOutput::Raw(val)) => val,
@@ -452,53 +446,54 @@ host_id: {hid}
     }))
 }
 
-/// Generic hook dispatch routed by host_id via dispatch table.
+/// Generic hook dispatch routed by host_id via dispatch registry.
+/// Dispatchers are registered once at first call from the host layer types.
 #[tracing::instrument(level = "info", skip_all, fields(host_id))]
 pub fn dispatch_hook_command(host_id: &str, command: GenericHookCommand) -> Result<(), String> {
-    type HookDispatchFn = fn(&GenericHookCommand) -> Result<(), String>;
-
-    fn dispatch_cursor(cmd: &GenericHookCommand) -> Result<(), String> {
-        run_review_gate(&cmd.event, cmd.repo_root.as_deref())
-    }
-    fn dispatch_claude(cmd: &GenericHookCommand) -> Result<(), String> {
-        run_claude_hook_cli(&cmd.event, cmd.repo_root.as_deref())
-    }
-    fn dispatch_opencode(cmd: &GenericHookCommand) -> Result<(), String> {
-        run_opencode_hook_cli(&cmd.event, cmd.repo_root.as_deref())
-    }
-    fn dispatch_codex(cmd: &GenericHookCommand) -> Result<(), String> {
-        dispatch_codex_hook(cmd.event.as_str(), cmd.repo_root.as_deref())
-    }
-
-    // Registry-driven dispatch table: add new hosts here.
-    const DISPATCH_TABLE: &[(&str, HookDispatchFn)] = &[
-        ("cursor", dispatch_cursor),
-        ("claude", dispatch_claude),
-        ("opencode", dispatch_opencode),
-        ("codex", dispatch_codex),
-    ];
-
-    DISPATCH_TABLE
-        .iter()
-        .find(|(id, _)| *id == host_id)
-        .map(|(_, f)| f(&command))
-        .unwrap_or_else(|| Err(format!("hook dispatch not implemented for host `{host_id}`")))
+    let f = host_projection::hosts::find_hook_dispatch(host_id).ok_or_else(|| {
+        format!(
+            "hook dispatch not implemented for host `{host_id}`; \
+             add a dispatch entry in the registration init"
+        )
+    })?;
+    f(host_id, &command.event, command.repo_root.as_deref())
 }
 
-/// Hook dispatch for Codex via `CodexHookDispatcher` (unified trait dispatch).
-///
-/// Contract-guard is not a lifecycle event — keep existing `run_codex_audit_hook` path.
-/// All lifecycle events (pretooluse, userpromptsubmit, posttooluse, stop, sessionstart,
-/// subagentstart, subagentstop) are routed via `CodexHookDispatcher.dispatch()`.
-fn dispatch_codex_hook(event: &str, repo_root: Option<&Path>) -> Result<(), String> {
-    let repo_root = resolve_repo_root_arg(repo_root)?;
+/// Register all hook and agent dispatch functions into the host-projection registry.
+/// Called once during CLI bootstrap.
+pub fn ensure_host_dispatchers_registered() {
+    // Hook dispatchers — all hosts route to dispatch_host_hook (registry-driven via HostProvider::dispatcher)
+    use host_projection::hosts::HookDispatchFn;
+    let hook_entries: Vec<(&'static str, HookDispatchFn)> = vec![
+        ("cursor", |host_id, event, repo| dispatch_host_hook(host_id, event, repo)),
+        ("claude", |host_id, event, repo| dispatch_host_hook(host_id, event, repo)),
+        ("opencode", |host_id, event, repo| dispatch_host_hook(host_id, event, repo)),
+        ("codex", |host_id, event, repo| dispatch_host_hook(host_id, event, repo)),
+    ];
+    host_projection::hosts::register_hook_dispatchers(hook_entries);
 
-    // Contract-guard is not a lifecycle event; keep existing path.
-    if event.trim().eq_ignore_ascii_case("contract-guard") {
-        let payload = run_codex_audit_hook(event, &repo_root)?;
-        print_json_value(&payload.unwrap_or_else(|| json!({})))?;
-        std::process::exit(0);
-    }
+    // Agent dispatchers
+    use host_projection::hosts::AgentDispatchFn;
+    let agent_entries: Vec<(&'static str, AgentDispatchFn)> = vec![
+        ("claude", |repo| {
+            let root = resolve_repo_root_arg(repo)?;
+            runtime_core::hosts::claude_agent::run_claude_agent_mcp_loop(Some(&root))
+        }),
+        ("opencode", |repo| {
+            let root = resolve_repo_root_arg(repo)?;
+            runtime_core::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
+        }),
+    ];
+    host_projection::hosts::register_agent_dispatchers(agent_entries);
+}
+
+/// Generic host hook dispatch via `HostProvider::dispatcher()`.
+///
+/// All lifecycle events (pretooluse, userpromptsubmit, posttooluse, stop, sessionstart,
+/// subagentstart, subagentstop) are routed via the host's `HostHookDispatcher::dispatch()`.
+/// Each host returns its registered dispatcher from the host provider registry.
+fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> Result<(), String> {
+    let repo_root = resolve_repo_root_arg(repo_root)?;
 
     // Bootstrap for lifecycle events
     runtime_core::kernel_bootstrap::ensure_kernel_bootstrap();
@@ -515,192 +510,32 @@ fn dispatch_codex_hook(event: &str, repo_root: Option<&Path>) -> Result<(), Stri
             .map_err(|err| format!("stdin_json_invalid: {err}"))?
     };
 
-    // Dispatch via CodexHookDispatcher (unified trait dispatch replaces hand-written match)
+    // Dispatch via host provider's registered HostHookDispatcher
+    let provider = host_projection::hosts::host_provider_for_routing_spelling(host_id)
+        .ok_or_else(|| format!("unknown host: {host_id}"))?;
+    let dispatcher = provider.dispatcher();
     let hook_event = HookEvent {
         repo_root: &repo_root,
         event_name: event,
         payload: &payload,
     };
-    let output = CodexHookDispatcher.dispatch(&hook_event);
+    let output = dispatcher.dispatch(&hook_event);
 
-    // Convert HookOutput → JSON value
-    let mut json_output = codex_hook_output_to_value(output);
+    // Convert HookOutput -> JSON value
+    let mut json_output = hook_output_to_value(output);
 
-    // Attach router-rs observation (matches attach_codex_hook_observation in handlers.rs)
-    attach_router_rs_observation(&mut json_output, "codex");
+    // Attach router-rs observation
+    attach_router_rs_observation(&mut json_output, host_id);
 
     // Emit telemetry
     let telemetry_event = event.to_ascii_lowercase();
-    emit_hook_fired(&telemetry_event, hook_action_from_optional_output(Some(&json_output)));
-    runtime_core::hook_timing::emit_hook_timing_line(&telemetry_event);
+    if telemetry_event.contains("tool") {
+        emit_hook_fired("tool", &repo_root);
+    }
 
-    // Print JSON output
     print_json_value(&json_output)?;
-    std::process::exit(0);
+    Ok(())
 }
-
-/// Generic agent dispatch routed by host_id via dispatch table.
-#[tracing::instrument(level = "info", skip_all, fields(host_id))]
-pub fn dispatch_agent_command(host_id: &str, command: GenericAgentCommand) -> Result<(), String> {
-    type AgentDispatchFn = fn(&GenericAgentCommand) -> Result<(), String>;
-
-    fn dispatch_claude_agent(cmd: &GenericAgentCommand) -> Result<(), String> {
-        let root = resolve_repo_root_arg(cmd.repo_root.as_deref())?;
-        runtime_core::hosts::claude_agent::run_claude_agent_mcp_loop(Some(&root))
-    }
-    fn dispatch_opencode_agent(cmd: &GenericAgentCommand) -> Result<(), String> {
-        let root = resolve_repo_root_arg(cmd.repo_root.as_deref())?;
-        runtime_core::hosts::opencode_agent::run_opencode_mcp_loop(Some(&root))
-    }
-
-    // Registry-driven dispatch table: add new hosts here.
-    const DISPATCH_TABLE: &[(&str, AgentDispatchFn)] = &[
-        ("claude", dispatch_claude_agent),
-        ("opencode", dispatch_opencode_agent),
-    ];
-
-    DISPATCH_TABLE
-        .iter()
-        .find(|(id, _)| *id == host_id)
-        .map(|(_, f)| f(&command))
-        .unwrap_or_else(|| {
-            Err(format!(
-                "agent dispatch not implemented for host `{host_id}`"
-            ))
-        })
-}
-
-/// Unified host command dispatcher (registry-driven: Codex / Hook / Agent).
-#[tracing::instrument(level = "info", skip_all)]
-pub fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
-    match command {
-        HostCommand::Codex { command } => dispatch_codex_command(command),
-        HostCommand::Hook { host_id, command } => dispatch_hook_command(&host_id, command),
-        HostCommand::Agent { host_id, command } => dispatch_agent_command(&host_id, command),
-    }
-}
-
-/// Unified diagnostic command dispatcher (merged: profile, browser)
-pub fn dispatch_diagnose_command(command: DiagnoseCommand) -> Result<(), String> {
-    match command {
-        DiagnoseCommand::Profile { command } => dispatch_profile_command(command),
-        DiagnoseCommand::Browser { command } => dispatch_browser_command(command),
-    }
-}
-
-pub fn dispatch_codex_command(command: CodexSubcommand) -> Result<(), String> {
-    match command {
-        CodexSubcommand::HookProjection => print_json_value(&build_codex_hook_projection()),
-        CodexSubcommand::Check(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let provider = host_entrypoint_provider(&repo_root)?;
-            print_json_value(&sync_host_entrypoints(&repo_root, false, provider)?)
-        }
-        CodexSubcommand::Hook(command) => {
-            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
-            let event_name = command
-                .event
-                .or(command.name)
-                .ok_or("hook event required")?;
-            let payload = run_codex_audit_hook(&event_name, &repo_root)?;
-            print_json_value(&payload.unwrap_or_else(|| json!({})))?;
-            std::process::exit(0);
-        }
-        CodexSubcommand::HostIntegration(command) => {
-            let payload = run_host_integration_from_args(&command.args)?;
-            print_json_value(&payload)
-        }
-        CodexSubcommand::InstallHooks(command) => {
-            let resolved_codex_home = resolve_codex_home(command.codex_home.as_deref())?;
-            let mode = if command.check {
-                InstallMode::Check
-            } else {
-                InstallMode::Apply
-            };
-            let repo_root = command
-                .repo_root
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or(PathBuf::from(".")));
-            let payload = install_codex_cli_hooks(&resolved_codex_home, &repo_root, mode)?;
-            print_json_value(&payload)
-        }
-    }
-}
-/// Run opencode hook event dispatch via stdin JSON payload.
-fn run_opencode_hook_cli(event: &str, cli_repo_root: Option<&Path>) -> Result<(), String> {
-    runtime_core::kernel_bootstrap::ensure_kernel_bootstrap();
-    runtime_core::hook_timing::mark_hook_start();
-    let _result = (|| -> Result<(), String> {
-        // Read stdin JSON payload (same pattern as cursor/claude/codex)
-        let payload = read_stdin_json_limited()
-            .unwrap_or_else(|_| serde_json::json!({}));
-        let repo_root = cli_repo_root
-            .map(|p| p.to_path_buf())
-            .or_else(|| {
-                payload
-                    .get("cwd")
-                    .and_then(serde_json::Value::as_str)
-                    .map(std::path::PathBuf::from)
-            })
-            .or_else(|| std::env::current_dir().ok())
-            .ok_or("repo_root required")?;
-        let _registry_guard = runtime_core::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
-
-        // Dispatch via HostHookDispatcher trait
-        use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher};
-        use host_projection::hosts::host_extensions::opencode::OpencodeHookDispatcher;
-
-        let hook_event = HookEvent {
-            repo_root: &repo_root,
-            event_name: event,
-            payload: &payload,
-        };
-        let dispatcher = OpencodeHookDispatcher;
-        let output = dispatcher.dispatch(&hook_event);
-
-        // Serialize output
-        let json_output = match output {
-            Some(hook_output) => {
-                use host_projection::hosts::hook_dispatch::HookOutput;
-                match hook_output {
-                    HookOutput::AdditionalContext(ctx) => serde_json::json!({
-                        "hookSpecificOutput": { "additionalContext": ctx }
-                    }),
-                    HookOutput::Deny { reason } => serde_json::json!({
-                        "decision": "deny",
-                        "reason": reason,
-                    }),
-                    HookOutput::Warn { message } => serde_json::json!({
-                        "decision": "allow",
-                        "warning": message,
-                    }),
-                    HookOutput::Block { reason } => serde_json::json!({
-                        "decision": "block",
-                        "reason": reason,
-                    }),
-                    HookOutput::Advisory { message } => serde_json::json!({
-                        "decision": "allow",
-                        "advisory": message,
-                    }),
-                    HookOutput::Raw(value) => value,
-                    HookOutput::None => serde_json::json!({}),
-                }
-            }
-            None => serde_json::json!({}),
-        };
-
-        let mut stdout = std::io::stdout();
-        let serialized = serde_json::to_string(&json_output).map_err(|e| e.to_string())?;
-        stdout
-            .write_all(format!("{serialized}\n").as_bytes())
-            .map_err(|e| e.to_string())?;
-        Ok(())
-    })();
-    runtime_core::hook_timing::emit_hook_timing_line(event);
-    // Force immediate exit — skip background thread cleanup (file watcher, telemetry).
-    // Hook processes are short-lived fire-and-forget; background threads are not needed.
-    std::process::exit(0);
-}
-
 pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
     match command {
         TraceCommand::RecordEvent(command) => {
@@ -797,7 +632,7 @@ pub fn dispatch_profile_command(command: ProfileSubcommand) -> Result<(), String
         }
         ProfileSubcommand::Artifacts(command) => {
             let profile = load_framework_profile(&command.framework_profile)?;
-            print_json_value(&build_codex_artifact_bundle(profile, command.full)?)
+            print_json_value(&build_profile_artifact_bundle(profile, command.full)?)
         }
     }
 }

@@ -166,17 +166,45 @@ L5       ✓   ✓   -   -   ✓   ✓
 
 宿主逻辑 = 硬编码宿主名 / `ROUTER_RS_{HOST}_*` 环境变量 / 宿主特有分支。
 
-| 允许位置 | 说明 |
-|---------|------|
-| `host-projection/src/hosts/host_extensions.rs` | 宿主差异扩展 |
-| `host-projection/src/hosts/hook_dispatch.rs` | 事件归一化 |
-| `framework-kernel/runtime_registry.rs` | 数据驱动映射 |
-| 所有 B0/L1/L3/L4/L5 | ❌ 不应出现宿主名 |
+### 4.1 注册表驱动架构（Round8+ 完整实施）
 
-宿主身份传递路径：
+所有宿主元数据从 `configs/framework/RUNTIME_REGISTRY.json` **编译期生成**：
+
+| 生成目标 | 源字段 | 产物 |
+|---------|--------|------|
+| `framework-kernel/build.rs` | `host_targets.metadata.*` (全部) | `generated_host_tables.rs`: `ALL_HOST_IDS`, `host_private_config_dir()`, `review_gate_disable_env()`, `paper_prose_env()`, `paper_adversarial_env()`, `settings_guarded_paths()`, `generated_entrypoint_paths()`, `hook_state_unreadable_tag()`, `session_namespace_env()`, `is_ephemeral_task_id()`, `host_home_dirs()`, `ALL_KNOWN_HOST_DIRS`, `EPHEMERAL_PATH_PATTERNS`, `EPHEMERAL_TASK_PREFIXES` |
+| `host-projection/build.rs` | `host_targets.supported`, `host_targets.host_providers`, `host_targets.metadata.*` | `generated_host_providers.rs`: provider struct 定义 + `HostLifecycle`/`HostTelemetry`/`HostProvider` trait impl（全部从注册表生成） |
+| CLI hook/agent dispatch | `host_provider_registry()` | `register_hook_dispatchers()` / `register_agent_dispatchers()` 注册表模式 |
+
+### 4.2 允许宿主知识的位置
+
+| 位置 | 说明 | 状态 |
+|------|------|------|
+| `RUNTIME_REGISTRY.json` | 唯一真相源 | ✅ 所有宿主元数据 |
+| `host-projection/` (L0) | 宿主适配层 | ✅ `capability_overrides.rs` (CLI args, observation surfaces), `config.rs`, `dispatch.rs` |
+| `host-projection/host_integration/` | 投影操作 | ✅ 已注册表驱动 |
+| `framework-kernel/build.rs` | 编译期生成 | ✅ 生成表格 + 函数 |
+| `host-projection/build.rs` | 编译期生成 | ✅ 生成 provider struct + trait impl |
+| B0/L1/L3/L4/L5 其他 | ❌ 不应出现宿主名 | ✅ 已验证干净 |
+
+### 4.3 宿主身份传递路径
+
 ```
 用户输入 → AGENTS.md → L1 skill routing → L4 session (通过 HostProvider trait)
+                                            ↓
+                              host_provider_registry() 查找
+                                            ↓
+                              provider.dispatcher() → HostHookDispatcher::dispatch()
 ```
+
+### 4.4 添加新宿主清单
+
+编辑 `RUNTIME_REGISTRY.json` 的唯一字段：
+1. `host_targets.supported` 添加 host_id
+2. `host_targets.metadata.<host_id>` 添加所有 20+ 个字段
+3. `host_targets.host_providers.<host_id>` 添加 Rust 模块路径
+4. `all_known_host_dirs` 添加目录
+5. 重编译 → 所有代码自动生成
 
 ---
 
@@ -254,8 +282,9 @@ research = ["dep:research-harness"]
 
 ### 7.2 宿主隔离
 
-- env var 名称映射委托给 L0 的 `paper_prose_env_var()` / `paper_adversarial_env_var()`
+- env var 名称映射委托给 L0 的 `paper_prose_env_var()` / `paper_adversarial_env_var()`（从 RUNTIME_REGISTRY.json 生成）
 - 宿主 id 通过函数指针参数接收，不做分支逻辑
+- L5 不包含宿主特定路径（`.claude/`, `.cursor/` 等）——数据库路径已迁移为 `~/.router-rs/`（Round8）
 
 ### 7.3 不重复实现 L0/L4 已有功能
 
@@ -336,7 +365,7 @@ tools/
 | JSON 泛型 I/O | `framework-runtime/src/json_io.rs` | read/write/if-exists |
 | 原子写入 (temp+rename+fsync) | `core-state/src/utils/atomic_write.rs` | 崩溃安全的文件写入 |
 | `now_iso()` | `framework-kernel`（统一源） | UTC ISO 8601 时间戳 |
-| HTTP 客户端工厂 | `http-util`（统一源） | 缓存 `reqwest::Client` |
+| HTTP 代理 URL 缓存 | `http-util`（统一源） | 缓存 `HTTPS_PROXY`/`HTTP_PROXY` 环境变量解析结果（`cached_proxy_url()`） |
 | 追加锁 `OnceLock<Mutex<()>>` | 合并到 `runtime-infra::sync::file_append_lock` | 进程内追加写入串行化 |
 | 退避公式 | `runtime-infra::compute::exponential_backoff` | 几何退避计算 |
 
@@ -383,7 +412,8 @@ pub mod compute {
 }
 
 pub mod http {
-    pub fn cached_client(timeout: Duration) -> &'static Client;
+    /// 缓存代理 URL。检查 HTTPS_PROXY → HTTP_PROXY → ALL_PROXY。
+    /// 实际实现在独立的 `http-util` crate 中。
 }
 ```
 
@@ -446,32 +476,40 @@ runtime-infra (4,000 行)        ← 基础设施（L4 级）
 
 ### 11.1 B0 基础层
 
-- [x] 所有 6 个 B0 crate（core-state, core-policy, framework-kernel, telemetry-types, http-util, runtime-infra）存在且 Cargo.toml 合规
-- [x] B0 crate 不依赖 L 层 crate（host-projection, routing-engine, runtime-core, framework-runtime 等）
-- [ ] `runtime-infra` 正式标记为 L4（当前已更正 ADR 文档，未改其 Cargo.toml 依赖）
+- [x] 所有 5 个纯 B0 crate（core-state, core-policy, framework-kernel, telemetry-types, http-util）存在且 Cargo.toml 合规
+- [x] 纯 B0 crate 不依赖 L 层 crate（host-projection, routing-engine, runtime-core, framework-runtime 等）
+- [x] `runtime-infra` 标记为 L4 依赖层（Cargo.toml 已标注 `description = "L4 运行时基础设施"`；其实际依赖包含 L0/L1/L4 crate，归类为 L4 而非 B0）
 
 ### 11.2 DAG 依赖方向
 
 - [x] L0→L4/L5 禁止：host-projection 不依赖 L4/L5 crate
-- [x] L1/L3→L4/L5 禁止：routing-engine 不依赖 L4/L5；~~browser-mcp→runtime-core~~ **当前存在违规**（§10.3 待修复）
+- [x] L1/L3→L4/L5 禁止：routing-engine 不依赖 L4/L5；~~browser-mcp→runtime-core~~ **已修复**（Phase 1.1, 2026-06-23，改为 `runtime-core-contracts`）
 - [x] L4→L5 应为 feature-gated：~~runtime-core→research-harness~~ **已修复**（Phase 1.1, 2026-06-23）
-- [x] B0→L 层禁止：全部张 B0 crate 通过
+- [x] B0→L 层禁止：全部 B0 crate 通过
+- [x] **L0→L1 DAG 违规已修复**（Phase 7, 2026-06-23）：host-projection (L0) 不再依赖 `routing-engine` (L1)。5 个路由函数通过 L4 `runtime-core` 的 fn ptr 注册解耦。`routing-engine` 已从 `host-projection/Cargo.toml` 移除。
 
 ### 11.3 宿主隔离
 
-- [x] 宿主名映射集中在 `framework-kernel/src/runtime_registry.rs` 的数据常量中：`REVIEW_GATE_DISABLE_BY_HOST`、`HOST_SETTINGS_PATHS`、`HOST_ENTRYPOINT_PATHS`、`HOST_CONFIG_DIRS`、`EPHEMERAL_PATH_PATTERNS`
-- [ ] `schema_drift.rs` 的 cursor 特有逻辑待提取到 L0
-- [ ] `runtime-core/lib.rs` cursor/codex 宿主扩展注册封装待完成
-- [ ] `framework_doctor.rs` `cursor-stop-` 前缀待抽象
+- [x] 宿主名映射已完全迁移至 `configs/framework/RUNTIME_REGISTRY.json` 生成：`framework-kernel/build.rs` 在编译时读取注册表，生成 `generated_host_tables.rs`，包含 `host_private_config_dir()`、`review_gate_disable_env()`、`settings_guarded_paths()`、`generated_entrypoint_paths()`、`is_ephemeral_task_id()` 以及 `ALL_KNOWN_HOST_DIRS`、`EPHEMERAL_PATH_PATTERNS` 等常量（Round8, 2026-06-23）。添加新宿主只需编辑注册表 <code>→</code> 重新编译，自动保持同步。
+- [x] **per-host provider 文件彻底消除**（Round8, 2026-06-23）：删除 `cursor_provider.rs`、`claude_provider.rs`、`opencode_provider.rs`、`codex_provider.rs`。所有 `HostLifecycle`/`HostTelemetry`/`HostProvider`/`HostCapabilities` 数据（共 ~180 行纯数据）推进 `RUNTIME_REGISTRY.json` 的 `host_targets.metadata`，由 `host-projection/build.rs` 编译期生成完整 provider struct 定义和 trait impl。剩余的逻辑函数（`build_driver_args`、`extract_observation_surfaces`）按能力独立到 `capability_overrides.rs`，内部以 host_id match 分派，消除 per-host 文件命名。
+- [x] `schema_drift.rs` 的 cursor 特有逻辑提取到 L0（Phase 5, 2026-06-23：`host-projection/src/hosts/host_extensions/schema_drift.rs`）
+- [x] `runtime-core/lib.rs` cursor/codex 宿主扩展注册封装（Round7 #3+#4：通过 `register_host_hooks()` 封装，codex duplicate check 作为标准 L4→L4 fn ptr 注册留在 init 序列中）
+- [x] `framework_doctor.rs` `cursor-stop-` 前缀抽象：`is_ephemeral_task_id()` 已迁移至注册表生成（Round7 #8 + Round8, 2026-06-23：前缀从 `RUNTIME_REGISTRY.json` `ephemeral_task_prefixes` 生成）
+- [x] **宿主分派 CLI dispatch table 消除**（Round8, 2026-06-23）：`router_command_dispatch.rs` 中的 `dispatch_hook_command` 和 `dispatch_agent_command` 不再使用 `const DISPATCH_TABLE` 硬编码，改为 `register_hook_dispatchers()` / `find_hook_dispatch()` 注册表模式。`codex/` 子模块（`install.rs`, `mod.rs`）和 `host_extensions/install.rs` 已删除，Codex CLI hooks 安装已被通用投影机制取代。
+- [x] **命名残差清理**（Round8, 2026-06-23）：`evidence.rs` 中 3 个 codex 私有函数重命名为泛型名；`framework-runtime/hooks.rs` 中 `CodexHookDuplicateCheckFn` → `HookDuplicateCheckFn`；`framework-profile/mod.rs` 中 `build_codex_artifact_bundle` → `build_profile_artifact_bundle`；`stdio_op_registry.rs` 中 `"compile_codex_profile_artifacts"` 别名已移除。
+- [x] **上层硬编码宿主路径迁移**（Round8, 2026-06-23）：`hook_policy.rs` 中 `PROTECTED_GENERATED_PATHS` 从硬编码 codex 列表改为 `protected_generated_paths()` 动态遍历 `ALL_HOST_IDS`；`tool_safety_rules.rs` 中 `CROSS_HOST_SURFACES` 从硬编码 `.codex/hooks.json` 改为 `host_home_dirs()` 动态遍历；`worktree_auto_save.rs` 中 `host_config_dir()` match 改为 `host_private_config_dir()` 注册表函数；`dev_exempt.rs` 中豁免列表补全全部宿主目录；`driver.rs` 工作树默认路径从 `.claude/worktrees` 迁移为 `.router-rs/worktrees`；`research-harness/hub.rs` 数据库路径从 `.claude/` 迁移为 `.router-rs/`。
+- [x] **`impl_host_config!` 宏内部硬编码消除**（Round8, 2026-06-23）：`hook_state_unreadable_tag` 和 `session_namespace_env` 的 4-宿主 match 替换为 `framework_kernel::runtime_registry::hook_state_unreadable_tag()` 和 `session_namespace_env()` 生成函数。对应字段已加入 `RUNTIME_REGISTRY.json` 的 `host_targets.metadata.*`。
 
 ### 11.4 Runtime-Core 拆分
 
 - [x] `host_integration/` → L0 host-projection
 - [x] `infrastructure/` → runtime-infra
 - [x] `exit_gate/` → runtime-exit-gate
-- [x] `framework_runtime/` 部分 → framework-extra（`route_manifest_fallback` 和 `stdio_dispatch` 未完成迁移）
+- [x] `framework_runtime/` 部分 → framework-extra（`route_manifest_fallback` 已迁移（Phase 4, 2026-06-23）并删除 runtime-core 孤儿 re-export；`stdio_dispatch` 因深耦合 runtime-core 内部 37+ 个 `crate::` 引用，不宜机械迁移——留作架构债务，见下文）
 - [x] `cli/` → router-rs
 - [x] `framework_maint/` → tools/framework-maint
+
+> **关于 stdio_dispatch：** 该模块（587 行）是 runtime-core 的编排中枢，深度依赖 `goal_drive`、`closeout_enforcement`、`execution_contract`、`route`、`runtime_storage`、`session_supervisor`、`trace_runtime`、`kernel_bootstrap` 等 runtime-core 内部模块。不做机械迁移。长期方案应是逐步分解为更薄的注册式分派器。
 
 ### 11.5 基础设施唯一性
 

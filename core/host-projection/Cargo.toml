@@ -20,7 +20,6 @@ http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
-routing-engine = { path = "../routing-engine" }
 chrono.workspace = true
 clap.workspace = true
 fs2.workspace = true

@@ -26,7 +26,7 @@ const ROUTING_STDIO_OPS: &[&str] = &[
     "route_policy",
     "route_snapshot",
     "compile_profile_bundle",
-    "compile_codex_profile_artifacts",
+    "compile_profile_artifacts",
     "closeout_evaluate",
     "closeout_contract",
     "hook_event_routing_contract",

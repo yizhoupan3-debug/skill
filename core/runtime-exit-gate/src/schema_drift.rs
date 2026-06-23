@@ -5,6 +5,7 @@
 
 use chrono::Utc;
 use hex;
+use host_projection::hosts::host_extensions::schema_drift as shared_schema_drift;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -100,38 +101,10 @@ pub fn baseline_path(repo_root: &Path, task_id: &str) -> PathBuf {
         .join("SCHEMA_DRIFT_BASELINE.json")
 }
 
-// ── Hooks snapshot via L0 cursor extension ──
-
-fn snapshot_cursor_hooks_json(repo_root: &Path) -> Result<Value, String> {
-    let snap = host_projection::hosts::host_extensions::cursor_impl::schema_drift::snapshot_cursor_hooks(repo_root)?;
-    serde_json::to_value(snap).map_err(|e| format!("serialize cursor_hooks: {e}"))
-}
-
-fn cursor_hooks_json_ok(hooks: &Value) -> bool {
-    let Some(s) = hooks.as_object() else { return false };
-    s.get("forbidden_still_registered")
-        .and_then(Value::as_array)
-        .map(|a| a.is_empty())
-        .unwrap_or(false)
-        && s.get("missing_required")
-            .and_then(Value::as_array)
-            .map(|a| a.is_empty())
-            .unwrap_or(false)
-        && s.get("hook_command_issues")
-            .and_then(Value::as_array)
-            .map(|a| a.is_empty())
-            .unwrap_or(false)
-        && s.get("gate_timeout_issues")
-            .and_then(Value::as_array)
-            .map(|a| a.is_empty())
-            .unwrap_or(false)
-        && s.get("hooks_template_parity_issues")
-            .and_then(Value::as_array)
-            .map(|a| a.is_empty())
-            .unwrap_or(false)
-}
+// ── Hooks snapshot via L0 shared schema_drift module ──
 
 /// Fallback hooks snapshot used when the real snapshot fails.
+/// The `["snapshot_failed"]` array ensures `host_hooks_json_ok` returns false.
 fn fallback_cursor_hooks_json() -> Value {
     json!({
         "registered_events": [],
@@ -142,6 +115,25 @@ fn fallback_cursor_hooks_json() -> Value {
         "gate_timeout_issues": [],
         "hooks_template_parity_issues": [],
     })
+}
+
+/// Snapshot cursor hooks using the shared L0 function.
+/// All host-specific data (paths, events) is sourced from L0 config constants.
+fn snapshot_cursor_hooks_json(repo_root: &Path) -> Result<Value, String> {
+    shared_schema_drift::snapshot_host_hooks_json(
+        repo_root,
+        Path::new(".cursor/hooks.json"),
+        Path::new("configs/framework/cursor-hooks.workspace-template.json"),
+        host_projection::hosts::host_extensions::config::CURSOR_HOOKS_REGISTERED_EVENTS,
+        host_projection::hosts::host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
+        "cursor-router-rs-hook.sh",
+    )
+}
+
+/// Check whether a cursor hooks snapshot JSON blob is valid.
+/// Delegates to the shared L0 function.
+fn cursor_hooks_json_ok(hooks: &Value) -> bool {
+    shared_schema_drift::host_hooks_json_ok(hooks)
 }
 
 // ── Task artifacts snapshot ──
@@ -465,7 +457,14 @@ mod tests {
         let task = "t-mismatch";
         seed_task_artifacts(&repo, task);
         write_baseline(&repo, task).unwrap();
-        let snap = host_projection::hosts::host_extensions::cursor_impl::schema_drift::snapshot_cursor_hooks(&repo).unwrap();
+        let snap = host_projection::hosts::host_extensions::schema_drift::snapshot_host_hooks(
+            &repo,
+            Path::new(".cursor/hooks.json"),
+            Path::new("configs/framework/cursor-hooks.workspace-template.json"),
+            host_projection::hosts::host_extensions::config::CURSOR_HOOKS_REGISTERED_EVENTS,
+            host_projection::hosts::host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
+        )
+        .unwrap();
         assert!(
             !snap.hooks_template_parity_issues.is_empty(),
             "parity issues={:?}",

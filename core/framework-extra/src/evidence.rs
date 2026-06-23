@@ -25,7 +25,7 @@ fn continuity_post_tool_evidence_env_enabled() -> bool {
     framework_runtime::router_env_flags::router_rs_continuity_post_tool_evidence_enabled()
 }
 
-fn extract_codex_shell_command_preview(event: &Value) -> Option<String> {
+fn extract_shell_command_preview(event: &Value) -> Option<String> {
     let input = event.get("tool_input").and_then(Value::as_object)?;
     let cmd = input
         .get("command")
@@ -90,7 +90,7 @@ fn coerce_duration_ms_value(value: Option<&Value>) -> Option<u64> {
 }
 
 /// Parse `tool_output` JSON string once; returns `None` when the field is missing, not a string,
-/// or fails to parse. Used by `extract_post_tool_duration_ms` and `extract_codex_tool_exit_hint`
+/// or fails to parse. Used by `extract_post_tool_duration_ms` and `extract_tool_exit_hint`
 /// to avoid double-parsing the same payload.
 fn parse_tool_output_json(event: &Value) -> Option<&'static Value> {
     // Leak the parsed Value so it lives for 'static — small one-shot objects in hook path.
@@ -144,7 +144,7 @@ pub fn post_tool_call_succeeded(event: &Value) -> bool {
     if event.get("error").is_some_and(|v| !v.is_null()) {
         return false;
     }
-    match extract_codex_tool_exit_hint(event) {
+    match extract_tool_exit_hint(event) {
         Some(0) => true,
         Some(_) => false,
         None => true,
@@ -152,7 +152,7 @@ pub fn post_tool_call_succeeded(event: &Value) -> bool {
 }
 
 /// Extract exit code from a Codex `PostToolUse` payload (compatible with nested `tool_output` / JSON strings).
-fn extract_codex_tool_exit_hint(event: &Value) -> Option<i64> {
+fn extract_tool_exit_hint(event: &Value) -> Option<i64> {
     let candidates: [&Option<&Value>; 7] = [
         &event.get("exit_code"),
         &event.get("exitCode"),
@@ -381,7 +381,7 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
     }))
 }
 
-fn codex_tool_name_normalized(event: &Value) -> String {
+fn tool_name_normalized(event: &Value) -> String {
     event
         .get("tool_name")
         .or(event.get("tool"))
@@ -601,11 +601,11 @@ pub fn try_append_post_tool_shell_evidence(
     if !continuity_post_tool_evidence_env_enabled() {
         return Ok(());
     }
-    let tool_name = codex_tool_name_normalized(event);
+    let tool_name = tool_name_normalized(event);
     if !tool_name_is_shell_like(&tool_name) {
         return Ok(());
     }
-    let Some(command_preview) = extract_codex_shell_command_preview(event) else {
+    let Some(command_preview) = extract_shell_command_preview(event) else {
         return Ok(());
     };
     let command_lower = command_preview.to_ascii_lowercase();
@@ -618,7 +618,7 @@ pub fn try_append_post_tool_shell_evidence(
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    let exit_hint = extract_codex_tool_exit_hint(event);
+    let exit_hint = extract_tool_exit_hint(event);
     let mut entry = Map::new();
     entry.insert("kind".to_string(), json!(kind));
     entry.insert("tool_name".to_string(), json!(tool_name));

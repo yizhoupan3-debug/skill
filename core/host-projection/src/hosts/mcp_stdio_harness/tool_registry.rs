@@ -63,6 +63,7 @@ impl ToolHandler for FrameworkTools {
         &["framework_snapshot"]
     }
     fn dispatch(&self, _tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
+        // Registry already matched tool_name; FrameworkTools only registers one tool.
         tool_framework_snapshot(args, &ctx.repo_root)
     }
 }
@@ -132,6 +133,7 @@ impl ToolHandler for InfraTools {
         &["web_fetch"]
     }
     fn dispatch(&self, _tool_name: &str, args: &Value, _ctx: &ToolCallContext) -> Result<String, String> {
+        // Registry already matched tool_name; InfraTools only registers one tool.
         tool_web_fetch(args)
     }
 }

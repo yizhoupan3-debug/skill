@@ -38,27 +38,20 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
         Err(e) => tracing::warn!(error = %e, "failed to check broken symlinks"),
     }
 
-    let checks = [
-        ("AGENTS.md", repo_root.join("AGENTS.md")),
+    let mut checks: Vec<(String, std::path::PathBuf)> = vec![
+        ("AGENTS.md".to_string(), repo_root.join("AGENTS.md")),
         (
-            "skills/SKILL_ROUTING_RUNTIME.json",
+            "skills/SKILL_ROUTING_RUNTIME.json".to_string(),
             repo_root.join("skills").join("SKILL_ROUTING_RUNTIME.json"),
         ),
         (
-            "configs/framework/RUNTIME_REGISTRY.json",
+            "configs/framework/RUNTIME_REGISTRY.json".to_string(),
             repo_root
                 .join("configs")
                 .join("framework")
                 .join("RUNTIME_REGISTRY.json"),
         ),
     ];
-
-    // Data-driven host hooks check (ADR §4: no hardcoded host names in L4)
-    for host_dir in framework_kernel::runtime_registry::HOST_HOME_DIRS.iter() {
-        let label = format!("{}/hooks.json", host_dir);
-        let path = repo_root.join(host_dir).join("hooks.json");
-        path_checks.push((label, path));
-    }
 
     println!("\n--- path checks ---");
     match core_policy::registry_review_gate::check_review_gate_registry_snapshot(repo_root) {
@@ -136,7 +129,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
             installable.join("|")
         );
         // Data-driven deprecated shim check across all host directories (ADR §4)
-        for host_dir in framework_kernel::runtime_registry::HOST_HOME_DIRS.iter() {
+        for host_dir in framework_kernel::runtime_registry::host_home_dirs().iter() {
             let deprecated_shim = repo_root
                 .join(host_dir)
                 .join("hooks")
@@ -195,7 +188,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     );
 
     println!("\n--- Codex hooks duplication (operator) ---");
-    for line in ::framework_runtime::hooks::check_codex_hook_duplicates(repo_root) {
+    for line in ::framework_runtime::hooks::check_hook_duplicates(repo_root) {
         println!("{line}");
         // Lines from this helper are warnings by convention.
         warns.push(line);

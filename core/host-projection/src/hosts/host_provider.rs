@@ -180,7 +180,32 @@ pub trait HostProvider: HostLifecycle + HostToolExecutor + HostTelemetry {
     }
 
     fn capabilities(&self) -> HostCapabilities;
+
+    /// Hook event dispatcher for this host. Each host maps to a concrete
+    /// dispatcher type (CursorDispatcher, ClaudeDispatcher, etc.) that
+    /// implements HostHookDispatcher.
+    /// Used by CLI dispatch to avoid hardcoded host match arms.
+    fn dispatcher(&self) -> Box<dyn crate::hosts::hook_dispatch::HostHookDispatcher> {
+        Box::new(NullHostDispatcher { host_id: self.host_id() })
+    }
 }
+
+/// Minimal dispatcher used as default when a HostProvider does not override
+/// `dispatcher()`. Always returns None for all events (no-op).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct NullHostDispatcher {
+    host_id: &'static str,
+}
+
+impl crate::hosts::hook_dispatch::HostHookConfig for NullHostDispatcher {
+    fn host_id(&self) -> &'static str { self.host_id }
+    fn state_dir_leaf(&self) -> &'static str { "" }
+    fn hook_state_unreadable_tag(&self) -> &'static str { "null" }
+    fn session_namespace_env(&self) -> &'static str { "" }
+    fn log_label(&self) -> &'static str { self.host_id }
+}
+
+impl crate::hosts::hook_dispatch::HostHookDispatcher for NullHostDispatcher {}
 
 /// Closed-set fast path for `pre_tool_use_guard` (no registry disk read).
 pub fn host_provider_strict_pre_tool_fallback_hint(host_id: &str) -> Option<bool> {
@@ -189,6 +214,52 @@ pub fn host_provider_strict_pre_tool_fallback_hint(host_id: &str) -> Option<bool
 }
 
 include!(concat!(env!("OUT_DIR"), "/generated_host_providers.rs"));
+
+// ── Hook/Agent dispatch registration (eliminates per-host DISPATCH_TABLE in CLI layer) ──
+
+/// Generic hook dispatch function signature.
+/// Each host's CLI hook handler conforms to `fn(host_id, event, repo_root) -> Result<(), String>`.
+pub type HookDispatchFn =
+    fn(host_id: &str, event: &str, repo_root: Option<&std::path::Path>) -> Result<(), String>;
+
+/// Generic agent dispatch function signature.
+pub type AgentDispatchFn = fn(repo_root: Option<&std::path::Path>) -> Result<(), String>;
+
+static HOOK_DISPATCH_REGISTRY: OnceLock<Vec<(&'static str, HookDispatchFn)>> = OnceLock::new();
+static AGENT_DISPATCH_REGISTRY: OnceLock<Vec<(&'static str, AgentDispatchFn)>> = OnceLock::new();
+
+/// Register hook dispatch functions for all supported hosts.
+/// Called once during CLI bootstrap (router-rs), before any hook dispatch.
+/// Panics on double-registration (design contract: single init).
+pub fn register_hook_dispatchers(entries: Vec<(&'static str, HookDispatchFn)>) {
+    let existing = HOOK_DISPATCH_REGISTRY.set(entries);
+    assert!(existing.is_ok(), "hook dispatch registry already initialized");
+}
+
+/// Register agent dispatch functions for all supported hosts.
+/// Called once during CLI bootstrap. Panics on double-registration.
+pub fn register_agent_dispatchers(entries: Vec<(&'static str, AgentDispatchFn)>) {
+    let existing = AGENT_DISPATCH_REGISTRY.set(entries);
+    assert!(existing.is_ok(), "agent dispatch registry already initialized");
+}
+
+/// Find a hook dispatch function by host_id. Returns None for unknown hosts.
+pub fn find_hook_dispatch(host_id: &str) -> Option<HookDispatchFn> {
+    HOOK_DISPATCH_REGISTRY
+        .get_or_init(Vec::new)
+        .iter()
+        .find(|(id, _)| *id == host_id)
+        .map(|(_, f)| *f)
+}
+
+/// Find an agent dispatch function by host_id.
+pub fn find_agent_dispatch(host_id: &str) -> Option<AgentDispatchFn> {
+    AGENT_DISPATCH_REGISTRY
+        .get_or_init(Vec::new)
+        .iter()
+        .find(|(id, _)| *id == host_id)
+        .map(|(_, f)| *f)
+}
 
 static HOST_PROVIDER_REGISTRY: OnceLock<Vec<Box<dyn HostProvider>>> = OnceLock::new();
 
@@ -291,51 +362,6 @@ pub fn validate_host_providers_against_registry(
         }
     }
     Ok(())
-}
-
-// ── Shared host_provider macro ──────────────────────────────────────────
-// Generates the common ~80% of HostLifecycle / HostTelemetry / HostProvider impl.
-// Each provider file calls this macro, then adds extra impls manually.
-//
-// Variant `custom_capabilities` generates struct + HostToolExecutor only;
-// caller must manually impl HostProvider::capabilities (for CodexHostProvider).
-#[macro_export]
-macro_rules! impl_host_provider {
-    (
-        $struct:ident for $host:literal;
-        capabilities { mcp_key: $mcp_key:literal; transport: $transport:literal; config: $config:literal; }
-        $(aliases: [$($alias:literal),*];)?
-    ) => {
-        #[derive(Debug, Default, Clone, Copy)]
-        pub struct $struct;
-
-        impl HostToolExecutor for $struct {}
-
-        impl HostProvider for $struct {
-            fn host_id(&self) -> &'static str { $host }
-            fn install_tool(&self) -> &'static str { $host }
-            $(fn aliases(&self) -> &'static [&'static str] { &[$($alias),*] })?
-            fn capabilities(&self) -> HostCapabilities {
-                HostCapabilities {
-                    mcp_config_key: $mcp_key,
-                    transport_type: $transport,
-                    config_path: $config,
-                    ..Default::default()
-                }
-            }
-        }
-    };
-    // Variant: struct + HostToolExecutor only (caller manually impl HostProvider + HostLifecycle)
-    (
-        $struct:ident for $host:literal;
-        custom_capabilities;
-        $(aliases: [$($alias:literal),*];)?
-    ) => {
-        #[derive(Debug, Default, Clone, Copy)]
-        pub struct $struct;
-
-        impl HostToolExecutor for $struct {}
-    };
 }
 
 #[cfg(test)]

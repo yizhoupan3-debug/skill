@@ -47,11 +47,21 @@ const ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
 const ROUTER_RS_OPENCODE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
     "ROUTER_RS_OPENCODE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE";
 
-const ROUTER_RS_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_REVIEW_GATE_DISABLE";
-const ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE";
-const ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE";
-const ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE";
-const ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE";
+/// Canonical review-gate disable env (all hosts).
+pub(crate) const ROUTER_RS_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_REVIEW_GATE_DISABLE";
+/// Legacy per-host review-gate disable env names. Production code uses
+/// `framework_kernel::runtime_registry::REVIEW_GATE_DISABLE_BY_HOST` for
+/// host-specific disable; these constants are kept for test reference only.
+/// The per-host env strings were previously duplicated in this module and
+/// in framework-kernel — the canonical source is now `REVIEW_GATE_DISABLE_BY_HOST`.
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) const ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE";
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) const ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE";
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) const ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE";
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) const ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE";
 
 const ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV: &str = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
 const ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV: &str =
@@ -127,8 +137,7 @@ pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
 /// Per-host env var names are part of the operator contract (docs §5) and cannot be replaced by
 /// registry queries without breaking existing CI/operator scripts.
 ///
-/// Host→env mapping lives in `framework_kernel::runtime_registry::REVIEW_GATE_DISABLE_BY_HOST`
-/// to avoid host-name hardcoding in B0.
+/// Host→env mapping is generated from `RUNTIME_REGISTRY.json host_targets.metadata.*.review_gate_disable_env`.
 pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
     #[cfg(test)]
     if let Some(v) = test_review_gate_disabled_override() {
@@ -137,23 +146,21 @@ pub fn router_rs_review_gate_disabled_for_host(host_id: &str) -> bool {
     if env_enabled_default_false(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) {
         return true;
     }
-    framework_kernel::runtime_registry::REVIEW_GATE_DISABLE_BY_HOST
-        .iter()
-        .find(|(id, _)| *id == host_id)
-        .map(|(_, env)| {
-            let disabled = env_enabled_default_false(env);
-            if disabled {
-                static WARNED: std::sync::Once = std::sync::Once::new();
-                WARNED.call_once(|| {
-                    tracing::warn!(
-                        "[router-rs] deprecate: {env} is a legacy per-host env var; \
-                         use ROUTER_RS_REVIEW_GATE_DISABLE=1 to disable for all hosts"
-                    );
-                });
-            }
-            disabled
-        })
-        .unwrap_or(false)
+    let env = framework_kernel::runtime_registry::review_gate_disable_env(host_id);
+    if env.is_empty() {
+        return false;
+    }
+    let disabled = env_enabled_default_false(env);
+    if disabled {
+        static WARNED: std::sync::Once = std::sync::Once::new();
+        WARNED.call_once(|| {
+            tracing::warn!(
+                "[router-rs] deprecate: {env} is a legacy per-host env var; \
+                 use ROUTER_RS_REVIEW_GATE_DISABLE=1 to disable for all hosts"
+            );
+        });
+    }
+    disabled
 }
 
 /// Max entries in `review_subagent_pending_cycle_keys` (default **32**).

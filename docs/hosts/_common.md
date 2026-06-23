@@ -73,7 +73,8 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-
 | 分发层 | `core/host-projection/src/hosts/hook_dispatch.rs` | 统一 hook 事件路由、文本提取（`extract_prompt_text`、`extract_response_text`、`extract_tool_name/input`）、上下文压缩（`compact_contexts`）、goal gate（`update_goal_gate`、`goal_gate_satisfied`）、review gate（`is_review_gate_suppressed`、`shared_tracks_goal`、`shared_goal_is_satisfied`） |
 | 状态层 | `core/host-projection/src/hosts/hook_state_common.rs` | 状态版本 trait、`HookReviewDiskCore` 共用结构（含 goal gate 字段） |
 | 锁层 | `core/host-projection/src/hosts/file_state_lock.rs` | 跨平台文件锁（`acquire_file_lock_with_config`）、进程存活检测（`is_process_alive`）、时间工具（`now_millis`）、锁元数据解析（`parse_lock_metadata`） |
-| Provider 层 | `core/host-projection/src/hosts/host_provider.rs` | 宿主元数据注册表 |
+| Provider 层 | `core/host-projection/src/hosts/host_provider.rs` | 宿主元数据注册表（编译期从 `RUNTIME_REGISTRY.json` 生成） |
+| Provider 层 | `core/framework-kernel/build.rs` → `generated_host_tables.rs` | 宿主路径/环境变量常量编译期生成：`host_private_config_dir()`、`review_gate_disable_env()`、`settings_guarded_paths()`、`generated_entrypoint_paths()`、`is_ephemeral_task_id()`、`host_home_dirs()` 及 `ALL_KNOWN_HOST_DIRS`、`EPHEMERAL_PATH_PATTERNS`、`EPHEMERAL_TASK_PREFIXES` 常量。所有宿主名映射已在 `core/host-projection/src/hooks.rs` 中消除，改为委托 Provider 注册表或生成函数。添加新宿主只需编辑 `RUNTIME_REGISTRY.json`。 |
 | 启动器 | `configs/framework/hook.sh` | 统一 shell 启动器（4 宿主共用） |
 
 ### 中立配置目录

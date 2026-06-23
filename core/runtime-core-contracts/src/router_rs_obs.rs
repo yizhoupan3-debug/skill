@@ -108,10 +108,10 @@ fn compute_blocking(output: &Value, gate: Option<&GateClassified>) -> bool {
     let base = permission_deny || decision_block || continue_false;
 
     match gate.map(|g| g.code.as_str()) {
-        Some(
-            gate if gate.ends_with("_review_gate")
-                || matches!(gate, "ag_followup" | "closeout_followup" | "subagent_limit"),
-        ) => {
+        Some(gate)
+            if gate.ends_with("_review_gate")
+                || matches!(gate, "ag_followup" | "closeout_followup" | "subagent_limit") =>
+        {
             if continue_true {
                 base
             } else {

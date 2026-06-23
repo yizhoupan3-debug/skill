@@ -22,7 +22,9 @@ fn tool_research_aigc_check(arguments: &Value) -> Result<String, String> {
         .get("text")
         .and_then(Value::as_str)
         .ok_or("research_aigc_check requires 'text' parameter")?;
-    let _language = arguments
+    // TODO: DetectionConfig currently uses Default; wire language param once
+    // the detector supports locale-aware thresholds (DetectionConfig has no language field yet).
+    let _ = arguments
         .get("language")
         .and_then(Value::as_str)
         .unwrap_or("en");
@@ -46,11 +48,13 @@ fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, String> {
         .get("text")
         .and_then(Value::as_str)
         .ok_or("research_aigc_humanize requires 'text' parameter")?;
-    let _language = arguments
+    // TODO: humanize_with_config supports HumanizeConfig (locale, tone); wire these
+    // when the MCP contract and HumanizeConfig locale field are finalized.
+    let _ = arguments
         .get("language")
         .and_then(Value::as_str)
         .unwrap_or("en");
-    let _preserve_academic = arguments
+    let _ = arguments
         .get("preserve_academic_tone")
         .and_then(Value::as_bool)
         .unwrap_or(true);

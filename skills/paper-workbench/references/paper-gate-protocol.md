@@ -4,7 +4,7 @@ This file defines the shared gate-chain contract used by `$paper-workbench` and
 `$paper-reviewer`.
 
 **Stack map / when to open this file**: see
-[`paper-workbench/references/RESEARCH_PAPER_STACK.md`](paper-workbench/references/RESEARCH_PAPER_STACK.md)
+[`RESEARCH_PAPER_STACK.md`](RESEARCH_PAPER_STACK.md)
 (L3 only — multi-turn disk state).
 
 `$paper-workbench` is the default front door (the only hot-route user entry in
@@ -51,9 +51,9 @@ Default external response should stay compact:
 Manuscript edits from `$paper-workbench` and `$paper-writing`
 must respect **`edit_scope`** so localized polish is not collapsed into
 whole-paper refactoring. Prose touches must follow
-[`paper-workbench/references/prose-chain-contract.md`](paper-workbench/references/prose-chain-contract.md)
+[`prose-chain-contract.md`](prose-chain-contract.md)
 (`language_register`, ladder, `prose_qc`). Canonical edit contract:
-[`paper-workbench/references/edit-scope-gate.md`](paper-workbench/references/edit-scope-gate.md).
+[`edit-scope-gate.md`](edit-scope-gate.md).
 
 - **`surgical`**: bounded slices only; `lane_scope` is the disk-backed form of
   this gate.
@@ -71,7 +71,7 @@ claims to limitations must not be the silent default when the active gate
 failure is a **B-tier closable evidence gap**. Before freezing a downgrade,
 the main chain should record **evidence-first options** (minimal add-on
 experiments/analyses) and why they are infeasible or rejected — see
-[`paper-workbench/references/claim-evidence-ladder.md`](paper-workbench/references/claim-evidence-ladder.md).
+[`claim-evidence-ladder.md`](claim-evidence-ladder.md).
 User-explicit "no more experiments" overrides this ordering.
 
 ## 1. Root Artifact Layout

@@ -1,4 +1,5 @@
 // MCP 常量、transport、JSON-RPC、`BrowserRuntime`/会话类型与 `struct CdpClient`（须整体移动，不得在函数中途截断）。
+use framework_kernel::repo_roots::resolve_repo_root_arg;
 use framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload;
 use host_projection::hooks::{
     attach_runtime_event_transport, inspect_trace_stream,

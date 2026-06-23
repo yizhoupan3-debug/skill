@@ -9,7 +9,7 @@ pub mod runtime_ops;
 pub use common::{
     configure_compute_parallelism, env_usize,
 };
-pub use runtime_core::framework_runtime::route_manifest_fallback::{
+pub use framework_extra::route_manifest_fallback::{
     manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
     route_task_with_manifest_fallback,
 };

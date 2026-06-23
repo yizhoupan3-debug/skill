@@ -321,6 +321,11 @@ pub fn filter_records_for_host(
         .collect())
 }
 
+/// Filter the overlay slug to prevent a skill from overlaying itself.
+fn filter_overlay_self(overlay: Option<String>, slug: &str) -> Option<String> {
+    overlay.filter(|item| item != slug)
+}
+
 pub fn route_task(
     records: &[SkillRecord],
     query: &str,
@@ -474,32 +479,29 @@ pub fn route_task(
         None
     };
 
-    let filtered_overlay = overlay
-        .as_ref()
-        .filter(|item| *item != &selected.record.slug)
-        .cloned();
+    let filtered_overlay = filter_overlay_self(overlay, &selected.record.slug);
+    let snapshot_overlay: Option<&str> = filtered_overlay.as_deref();
     let compact_reasons = compact_route_reasons(
         &selected.reasons.iter().map(|s| s.as_str()).collect::<Vec<_>>()
     );
 
+    let route_snapshot = build_route_snapshot(
+        "rust",
+        &selected.record.slug,
+        snapshot_overlay,
+        &selected.record.layer,
+        round2(selected.score),
+        &compact_reasons,
+    );
     let skeleton = route_decision_skeleton(query, session_id, route_context, compact_reasons.clone());
     Ok(RouteDecision {
         selected_skill: selected.record.slug.clone(),
         selected_skill_path: selected.record.skill_path.clone(),
-        overlay_skill: filtered_overlay,
+                overlay_skill: filtered_overlay.clone(),
         layer: selected.record.layer.clone(),
         score: round2(selected.score),
         matched_token_count: selected.matched_token_count,
-        route_snapshot: build_route_snapshot(
-            "rust",
-            &selected.record.slug,
-            overlay
-                .as_deref()
-                .filter(|item| *item != selected.record.slug.as_str()),
-            &selected.record.layer,
-            round2(selected.score),
-            &compact_reasons,
-        ),
+        route_snapshot,
         reasons: compact_reasons,
         ..skeleton
     })
@@ -663,25 +665,20 @@ fn build_fuzzy_rescue_decision(
     } else {
         None
     };
-    let filtered_overlay = overlay
-        .as_ref()
-        .filter(|item| *item != &record.slug)
-        .cloned();
+    let filtered_overlay = filter_overlay_self(overlay, &record.slug);
     let fuzzy_reasons = compact_route_reasons(&[reason_line]);
     let skeleton = route_decision_skeleton(query, session_id, route_context, fuzzy_reasons.clone());
     RouteDecision {
         selected_skill: record.slug.clone(),
         selected_skill_path: record.skill_path.clone(),
-        overlay_skill: filtered_overlay,
+                overlay_skill: filtered_overlay.clone(),
         layer: record.layer.clone(),
         score: round2(sim * 100.0),
         fuzzy_match: true,
         route_snapshot: build_route_snapshot(
             "rust",
             &record.slug,
-            overlay
-                .as_deref()
-                .filter(|item| *item != record.slug.as_str()),
+            filtered_overlay.as_deref(),
             &record.layer,
             round2(sim * 100.0),
             &fuzzy_reasons,

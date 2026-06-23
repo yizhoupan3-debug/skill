@@ -464,14 +464,7 @@ pub(super) fn tool_record_evidence(arguments: &Value, repo_root: &Path) -> Resul
 /// 获取 evidence output 的最大字符数配置。
 /// 默认 2000 字符，可通过 `ROUTER_RS_EVIDENCE_OUTPUT_MAX_CHARS` 环境变量覆盖。
 pub(super) fn evidence_output_max_chars() -> usize {
-    static CACHED: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *CACHED.get_or_init(|| {
-        std::env::var("ROUTER_RS_EVIDENCE_OUTPUT_MAX_CHARS")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .filter(|&n| n > 0)
-            .unwrap_or(2000)
-    })
+    env_cache_typed!(usize, "ROUTER_RS_EVIDENCE_OUTPUT_MAX_CHARS", 2000)
 }
 
 pub(super) fn tool_session_checkpoint(
@@ -753,8 +746,7 @@ pub fn evaluate_mcp_closeout_gate(
 
     let formatted = format!("[Closeout Gate] {verdict_label}\n\n{}", findings.join("\n"));
 
-    let _hard_block =
-        mcp_closeout_hard_block_metadata(repo_root, host_id, lifecycle_profile, all_clear);
+    let _ = mcp_closeout_hard_block_metadata(repo_root, host_id, lifecycle_profile, all_clear);
 
     // §4.1: 持久化 review gate 状态到 artifacts/current/<task_id>/review_gate.json
     persist_review_gate_status(repo_root, task_id, all_clear, &findings, lifecycle_profile);

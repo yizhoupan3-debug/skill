@@ -17,7 +17,7 @@ pub(super) use crate::cli::route_task_with_manifest_fallback;
 pub(super) use crate::cli::args::{
     BackgroundControlRequestPayload, SandboxControlRequestPayload,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
-    RouterCommand, HostCommand, CodexSubcommand,
+    RouterCommand, HostCommand,
 };
 pub(super) use crate::cli::Cli;
 pub(super) use crate::route::ROUTE_REPORT_SCHEMA_VERSION;

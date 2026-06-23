@@ -920,7 +920,6 @@ dependencies = [
  "libc",
  "regex",
  "reqwest",
- "routing-engine",
  "serde",
  "serde_json",
  "serial_test",

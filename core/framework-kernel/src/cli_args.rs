@@ -280,13 +280,8 @@ pub struct GenericAgentCommand {
 /// Registry-driven host commands.
 ///
 /// Generic `Hook` and `Agent` variants eliminate per-host enum variants.
-/// `Codex` retains its own variant due to unique subcommands (HookProjection, InstallHooks).
 #[derive(Subcommand, Debug, Clone)]
 pub enum HostCommand {
-    Codex {
-        #[command(subcommand)]
-        command: CodexSubcommand,
-    },
     /// Run a hook event for any hook-capable host (cursor, claude, opencode, codex).
     Hook {
         host_id: String,
@@ -299,15 +294,6 @@ pub enum HostCommand {
         #[command(flatten)]
         command: GenericAgentCommand,
     },
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum CodexSubcommand {
-    HookProjection,
-    Check(RepoRootCommand),
-    Hook(CodexHookCommand),
-    HostIntegration(ForwardedArgsCommand),
-    InstallHooks(InstallHooksCommand),
 }
 
 /// Diagnostic commands (merged: profile, browser)
@@ -500,19 +486,7 @@ pub struct SyncEntrypointsCommand {
     pub host_id: Option<String>,
 }
 
-#[derive(Args, Debug, Clone)]
-pub struct InstallHooksCommand {
-    #[arg(long)]
-    pub codex_home: Option<PathBuf>,
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
-    /// Apply changes (default when neither --apply nor --check given).
-    #[arg(long)]
-    pub apply: bool,
-    /// Dry-run: report what would change without writing (mutually exclusive with --apply).
-    #[arg(long, conflicts_with = "apply")]
-    pub check: bool,
-}
+
 
 #[derive(Args, Debug, Clone)]
 pub struct JsonInputCommand {
@@ -561,17 +535,7 @@ pub struct FrameworkTaskStateAggregateSyncCommand {
     pub task_id: Option<String>,
 }
 
-#[derive(Args, Debug, Clone)]
-pub struct CodexHookCommand {
-    /// Hook name (positional, kept for backwards compat)
-    #[arg(value_name = "EVENT", required_unless_present = "event")]
-    pub name: Option<String>,
-    /// Hook name (alias of positional)
-    #[arg(long, conflicts_with = "name")]
-    pub event: Option<String>,
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
-}
+
 
 #[derive(Args, Debug, Clone)]
 pub struct CursorHookCommand {
@@ -581,25 +545,9 @@ pub struct CursorHookCommand {
     pub repo_root: Option<PathBuf>,
 }
 
-#[derive(Args, Debug, Clone)]
-pub struct ClaudeHookCommand {
-    #[arg(long)]
-    pub event: String,
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
-}
 
-#[derive(Args, Debug, Clone)]
-pub struct ClaudeHookDirectCommand {
-    /// Hook event name (PreToolUse, PostToolUse, Stop, etc.)
-    pub event: String,
-    /// Override repo root (default: CLAUDE_PROJECT_ROOT env or git rev-parse)
-    #[arg(long)]
-    pub repo_root: Option<PathBuf>,
-    /// Path to .env file (default: <repo_root>/.claude/router-rs-hook.env)
-    #[arg(long)]
-    pub env_file: Option<PathBuf>,
-}
+
+
 
 #[derive(Args, Debug, Clone)]
 pub struct ForwardedArgsCommand {

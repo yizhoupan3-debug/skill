@@ -177,7 +177,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- `
 
 ## 修改或新增 skill
 
-与 [`skills/SKILL_MAINTENANCE_GUIDE.md`](skills/SKILL_MAINTENANCE_GUIDE.md) 一致；摘要如下：
+与 [`skills/SKILL_ROUTING_LAYERS.md`](skills/SKILL_ROUTING_LAYERS.md) 一致；摘要如下：
 
 1. 创建 `skills/<skill-name>/SKILL.md`（frontmatter + `## When to use` / `## Do not use`）。
 2. **手改**热路由真源：`skills/SKILL_ROUTING_RUNTIME.json`、`skills/SKILL_MANIFEST.json`（slug、trigger、path 与 frontmatter 对齐）。
