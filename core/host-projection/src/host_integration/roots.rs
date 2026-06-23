@@ -573,19 +573,32 @@ pub fn resolve_projection_roots(
     };
 
     // Build host home roots map from registry-driven host list + explicit overrides.
-    let host_overrides: [(&str, Option<&Path>, &str, &str); 4] = [
-        ("codex", codex_home, "CODEX_HOME", ".codex"),
-        ("cursor", cursor_home, "CURSOR_HOME", ".cursor"),
-        ("claude", claude_home, "CLAUDE_HOME", ".claude"),
-        ("opencode", opencode_home, "OPENCODE_HOME", ".opencode"),
-    ];
-    let mut host_home_roots = BTreeMap::new();
-    for (host_id, explicit, env_var, default_leaf) in &host_overrides {
-        host_home_roots.insert(
-            host_id.to_string(),
-            resolve_host_home(*explicit, shared_home, env_var, default_leaf)?,
-        );
-    }
+    // Host ids, env vars, and default leafs are all derived from RUNTIME_REGISTRY.json.
+    let host_home_roots = {
+        let mut m = BTreeMap::new();
+        // Map explicit CLI overrides by host_id for lookup
+        let explicit_overrides: std::collections::HashMap<&str, Option<&Path>> = [
+            ("codex", codex_home),
+            ("cursor", cursor_home),
+            ("claude", claude_home),
+            ("opencode", opencode_home),
+        ]
+        .into_iter()
+        .collect();
+        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+            let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
+            let default_leaf = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+            if default_leaf.is_empty() {
+                continue;
+            }
+            let explicit = explicit_overrides.get(host_id).and_then(|o| *o);
+            m.insert(
+                host_id.to_string(),
+                resolve_host_home(explicit, shared_home, env_var, default_leaf)?,
+            );
+        }
+        m
+    };
 
     Ok(ResolvedProjectionRoots {
         framework_root,

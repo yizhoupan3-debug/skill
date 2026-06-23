@@ -245,10 +245,12 @@ pub fn projection_manifest_path(
             .join(manifest_name);
     }
     // Project scope: use .<host_dir> under project_root.
-    // Host dir mapping: host_id -> dotfile name (e.g. "claude" -> ".claude")
-    let host_dir = match host_projection {
-        "claude" => ".claude".to_string(),
-        other => format!(".{other}"),
+    // Host dir mapping from RUNTIME_REGISTRY.json host_targets.metadata.*.config_dir.
+    let host_dir = framework_kernel::runtime_registry::host_private_config_dir(host_projection);
+    let host_dir = if host_dir.is_empty() {
+        format!(".{host_projection}")
+    } else {
+        host_dir.to_string()
     };
     roots.project_root.join(&host_dir).join(manifest_name)
 }

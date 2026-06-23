@@ -200,6 +200,20 @@ pub struct ProjectionCommand {
     dry_run: bool,
 }
 
+impl ProjectionCommand {
+    /// Check if the host-specific home CLI argument is set for a given host_id.
+    /// Registry-driven: uses host_private_config_dir to determine which field to check.
+    pub fn host_home_is_set(&self, host_id: &str) -> bool {
+        match host_id {
+            "codex" => self.codex_home.is_some(),
+            "cursor" => self.cursor_home.is_some(),
+            "claude" => self.claude_home.is_some(),
+            "opencode" => self.opencode_home.is_some(),
+            _ => false,
+        }
+    }
+}
+
 #[derive(clap::Args, Debug, Clone)]
 pub struct ProjectionStatusCommand {
     #[arg(long, alias = "repo-root")]

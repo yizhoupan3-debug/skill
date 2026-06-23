@@ -252,6 +252,20 @@ fn main() {
     out.push_str("        _ => \"\",\n");
     out.push_str("    }\n}\n\n");
 
+    // home_env_var
+    out.push_str("pub fn home_env_var(host_id: &str) -> &'static str {\n");
+    out.push_str("    match host_id {\n");
+    for id in &supported {
+        if let Some(env) = metadata.get(id.as_str())
+            .and_then(|m| m.get("home_env_var"))
+            .and_then(serde_json::Value::as_str)
+        {
+            out.push_str(&format!("        \"{id}\" => \"{env}\",\n"));
+        }
+    }
+    out.push_str("        _ => \"\",\n");
+    out.push_str("    }\n}\n\n");
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     fs::write(out_dir.join("generated_host_tables.rs"), out)
         .expect("write generated_host_tables.rs");

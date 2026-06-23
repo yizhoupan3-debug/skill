@@ -397,14 +397,7 @@ pub fn validate_cleanup_scope(
             .unwrap_or(tool.as_str());
         let env_var = format!("{}_HOME", host_id.to_uppercase().replace('-', "_"));
         // Check: --home flag, host-specific --<host>-home CLI arg, or $HOST_HOME env var.
-        // The CLI arg check mirrors the old per-host *_home_explicit() functions.
-        let host_cli_home_set = match host_id {
-            "codex" => command.codex_home.is_some(),
-            "cursor" => command.cursor_home.is_some(),
-            "claude" => command.claude_home.is_some(),
-            "opencode" => command.opencode_home.is_some(),
-            _ => false,
-        };
+        let host_cli_home_set = command.host_home_is_set(host_id);
         let explicit_home =
             command.home.is_some() || host_cli_home_set || std::env::var_os(&env_var).is_some();
         if !explicit_home {
@@ -562,7 +555,8 @@ pub fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> Pat
             .account_home_root
             .join(".config/opencode/opencode.json")
     } else {
-        roots.project_root.join(".opencode/opencode.json")
+        let dotdir = framework_kernel::runtime_registry::host_private_config_dir("opencode");
+        roots.project_root.join(format!("{dotdir}/opencode.json"))
     }
 }
 
