@@ -11,7 +11,7 @@
 //!     repo_root,
 //!     ".cursor/hooks.json",
 //!     "configs/framework/cursor-hooks.workspace-template.json",
-//!     &host_extensions::config::CURSOR_HOOKS_REGISTERED_EVENTS,
+//!     &host_extensions::config::host_registered_hook_events("cursor"),
 //!     &host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
 //! )?;
 //! ```
@@ -173,7 +173,7 @@ fn compare_hooks_template_parity(hooks_doc: &Value, template_doc: &Value) -> Vec
 ///
 /// - `hooks_path` — repo-root-relative path to the host's hooks.json (e.g. `.cursor/hooks.json`)
 /// - `template_path` — repo-root-relative path to the workspace template (e.g. `configs/framework/cursor-hooks.workspace-template.json`)
-/// - `expected_events` — events that the host must register (e.g. `CURSOR_HOOKS_REGISTERED_EVENTS`)
+/// - `expected_events` — events that the host must register (from host_registered_hook_events())
 /// - `forbidden_events` — events that must NOT be registered (e.g. `CURSOR_HOOKS_SUBTRACTED_EVENTS`)
 pub fn snapshot_host_hooks(
     repo_root: &Path,

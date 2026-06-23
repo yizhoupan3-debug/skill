@@ -43,31 +43,6 @@ pub fn host_log_label(host_id: &str) -> String {
         .unwrap_or_else(|| host_id.to_string())
 }
 
-/// Check if the host supports hard gate hooks.
-pub fn host_has_hard_gate(host_id: &str) -> bool {
-    crate::hosts::host_provider_for_id(host_id)
-        .map(|p| p.has_hard_gate_hooks())
-        .unwrap_or(false)
-}
-
-/// Check if closeout evidence hooks are supported for this host.
-pub fn host_closeout_evidence_supported(host_id: &str) -> bool {
-    crate::hosts::host_provider_for_id(host_id)
-        .map(|p| p.closeout_evidence_hooks_supported())
-        .unwrap_or(false)
-}
-
-/// Get the registered hook events for a host.
-pub fn host_registered_events(host_id: &str) -> &'static [&'static str] {
-    crate::hosts::host_provider_for_id(host_id)
-        .map(|p| p.registered_hook_events())
-        .unwrap_or(&[])
-}
-
-/// Register all host-specific default hooks.
-///
-/// Called once during L4 bootstrap (runtime-core/lib.rs). Encapsulates host
-/// extension setup that only needs L0-level access. L4→L0/L4 fn ptr
-/// registrations remain in runtime-core's init sequence as prescribed by
-/// ADR-010 §1.2 (registration direction L4→L0, not hardcoded in L0).
-pub fn register_host_hooks() {}
+// host_has_hard_gate, host_closeout_evidence_supported, host_registered_events,
+// and register_host_hooks were removed in Round8 — callers now use
+// host_provider_for_id() trait methods directly.

@@ -5,7 +5,6 @@
 //! No other host overrides any event handler — they all use the same code path.
 
 use crate::hosts::hook_dispatch::{HookEvent, HookOutput, HostHookConfig, HostHookDispatcher};
-use super::config::{ClaudeConfig, CodexConfig, CursorConfig, OpenCodeConfig};
 use super::pretool;
 
 // ── Claude dispatcher ──

@@ -124,7 +124,7 @@ fn snapshot_cursor_hooks_json(repo_root: &Path) -> Result<Value, String> {
         repo_root,
         Path::new(".cursor/hooks.json"),
         Path::new("configs/framework/cursor-hooks.workspace-template.json"),
-        host_projection::hosts::host_extensions::config::CURSOR_HOOKS_REGISTERED_EVENTS,
+        host_projection::hosts::host_extensions::config::host_registered_hook_events("cursor"),
         host_projection::hosts::host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
         "cursor-router-rs-hook.sh",
     )
@@ -461,7 +461,7 @@ mod tests {
             &repo,
             Path::new(".cursor/hooks.json"),
             Path::new("configs/framework/cursor-hooks.workspace-template.json"),
-            host_projection::hosts::host_extensions::config::CURSOR_HOOKS_REGISTERED_EVENTS,
+            host_projection::hosts::host_extensions::config::host_registered_hook_events("cursor"),
             host_projection::hosts::host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
         )
         .unwrap();
