@@ -124,10 +124,9 @@ fn write_focus_task_pointer_minimal(
     task_id: &str,
     task_label: &str,
 ) -> Result<(), String> {
-    use super::now_iso;
     crate::utils::path_guard::validate_task_id_component(task_id)?;
     let mut pointers = load_task_pointers_json(repo_root)?;
-    let updated_at = now_iso();
+    let updated_at = framework_kernel::time::now_iso();
     if let Some(obj) = pointers.as_object_mut() {
         obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
         obj.insert("focus_task_id".to_string(), json!(task_id));

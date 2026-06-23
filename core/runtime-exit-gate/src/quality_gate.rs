@@ -3,8 +3,10 @@
 pub use core_state::state_manager::read_quality_gate_state;
 
 use core_state::utils::atomic_write::write_atomic_json;
+#[allow(unused_imports)] // consumed by #[cfg(test)] via `use super::*`
 use core_state::state_manager::{
-    validate_external_research_strict, validate_external_research_structured,
+    source_traceable_heuristic, validate_external_research_strict,
+    validate_external_research_structured,
 };
 use framework_kernel::repo_roots::resolve_repo_root_arg;
 use serde_json::{Map, Value, json};
@@ -21,41 +23,6 @@ pub const EXTERNAL_RESEARCH_STRICT_TRACE_MIN_LEN: usize = 40;
 /// Allowed `verify_result` enum (uppercase).
 /// `append_round` rejects values outside this set so PASS/FAIL is auditable, not free-form.
 pub const ALLOWED_VERIFY_RESULTS: &[&str] = &["PASS", "FAIL", "SKIPPED", "UNKNOWN"];
-
-/// Heuristic: source string looks like a machine-checkable external pointer (URL, DOI, arXiv, …).
-pub fn source_traceable_heuristic(s: &str) -> bool {
-    let t = s.trim();
-    if t.is_empty() {
-        return false;
-    }
-    let lower = t.to_ascii_lowercase();
-    if lower.starts_with("http://") || lower.starts_with("https://") {
-        return true;
-    }
-    if lower.starts_with("doi:10.") {
-        return true;
-    }
-    if lower.starts_with("10.") && lower.contains('/') {
-        return true;
-    }
-    for prefix in [
-        "arxiv:",
-        "pmid:",
-        "isbn:",
-        "dataset:",
-        "official_doc:",
-        "huggingface:",
-        "hf:",
-        "github:",
-        "kaggle:",
-        "geojson:",
-    ] {
-        if lower.starts_with(prefix) {
-            return true;
-        }
-    }
-    false
-}
 
 fn external_research_strict_from_loaded_state(obj: &Map<String, Value>) -> bool {
     match obj.get("external_research_strict") {

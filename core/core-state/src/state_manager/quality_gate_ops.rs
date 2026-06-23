@@ -6,14 +6,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::pointer_ops::read_active_task_id;
-use super::{goal_state_path_for_task, now_iso, read_goal_state};
+use super::{goal_state_path_for_task, read_goal_state, QUALITY_GATE_STATE_FILENAME};
 
 pub fn quality_gate_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
     let tid = crate::utils::path_guard::validate_task_id_component(task_id)?;
     Ok(repo_root
         .join("artifacts/current")
         .join(tid)
-        .join("RFV_LOOP_STATE.json"))
+        .join(QUALITY_GATE_STATE_FILENAME))
 }
 
 pub(crate) fn deactivate_quality_gate_for_conflict_with_goal_drive(
@@ -31,10 +31,10 @@ pub(crate) fn deactivate_quality_gate_for_conflict_with_goal_drive(
         return Ok(false);
     }
     let mut state = read_quality_gate_state(repo_root, Some(task_id))?
-        .ok_or_else(|| format!("RFV_LOOP_STATE missing at {}", path.display()))?;
+        .ok_or_else(|| format!("QUALITY_GATE_STATE missing at {}", path.display()))?;
     let obj = state
         .as_object_mut()
-        .ok_or_else(|| "RFV_LOOP_STATE root must be object".to_string())?;
+        .ok_or_else(|| "QUALITY_GATE_STATE root must be object".to_string())?;
     let active = obj
         .get("loop_status")
         .and_then(Value::as_str)
@@ -71,7 +71,7 @@ pub fn deactivate_goal_for_conflict_with_quality_gate(
         .ok_or_else(|| "GOAL_STATE missing for QG conflict resolution".to_string())?;
     if let Some(obj) = state.as_object_mut() {
         obj.insert("status".to_string(), json!("superseded"));
-        obj.insert("updated_at".to_string(), json!(now_iso()));
+        obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
         obj.entry("metadata".to_string())
             .or_insert_with(|| json!({}))
             .as_object_mut()
@@ -99,13 +99,13 @@ pub fn read_quality_gate_state(
         t
     };
     crate::utils::path_guard::validate_task_id_component(&task_id)
-        .map_err(|e| format!("framework_quality_gate: invalid task_id for RFV_LOOP_STATE path: {e}"))?;
+        .map_err(|e| format!("framework_quality_gate: invalid task_id for QUALITY_GATE_STATE path: {e}"))?;
     let path = quality_gate_state_path(repo_root, &task_id)?;
     if !path.is_file() {
         return Ok(None);
     }
-    let raw = fs::read_to_string(&path).map_err(|err| format!("read RFV_LOOP_STATE: {err}"))?;
+    let raw = fs::read_to_string(&path).map_err(|err| format!("read QUALITY_GATE_STATE: {err}"))?;
     let value: Value =
-        serde_json::from_str(&raw).map_err(|err| format!("parse RFV_LOOP_STATE: {err}"))?;
+        serde_json::from_str(&raw).map_err(|err| format!("parse QUALITY_GATE_STATE: {err}"))?;
     Ok(Some(value))
 }

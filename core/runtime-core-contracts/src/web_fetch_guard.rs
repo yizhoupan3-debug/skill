@@ -189,32 +189,6 @@ pub fn resolve_web_fetch_addresses(
     Ok(addrs)
 }
 
-// ── String-returning wrappers for host-projection hooks ──
-// host-projection cannot depend on reqwest types in its hook signatures;
-// these wrappers convert reqwest::Url → String and SocketAddr → String.
-
-pub fn validate_and_resolve_web_fetch_url_as_strings(
-    url: &str,
-) -> Result<(String, Vec<String>), String> {
-    let (parsed, addrs) = validate_and_resolve_web_fetch_url(url)?;
-    let addr_strs = addrs.iter().map(|a| a.to_string()).collect();
-    Ok((parsed.to_string(), addr_strs))
-}
-
-pub fn resolve_web_fetch_redirect_as_string(base: &str, location: &str) -> Result<String, String> {
-    let base_url = reqwest::Url::parse(base)
-        .map_err(|e| format!("web_fetch redirect base URL invalid: {e}"))?;
-    resolve_web_fetch_redirect(&base_url, location)
-}
-
-pub fn resolve_web_fetch_addresses_as_strings(
-    host: &str,
-    port: u16,
-) -> Result<Vec<String>, String> {
-    let addrs = resolve_web_fetch_addresses(host, port)?;
-    Ok(addrs.iter().map(|a| a.to_string()).collect())
-}
-
 /// Validates URLs for `browser_open` - blocks non-http(s) schemes (`file://`,
 /// `data:`, `javascript:`, etc.) and reuses the web_fetch SSRF guards
 /// (private IPs, metadata endpoints, blocked host suffixes).

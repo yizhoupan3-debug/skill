@@ -11,7 +11,7 @@ use super::pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, sync_task_pointers_after_goal_drive,
 };
 use super::quality_gate_ops::deactivate_quality_gate_for_conflict_with_goal_drive;
-use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, now_iso, read_goal_state};
+use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, read_goal_state};
 
 fn resolve_task_id_strict(payload: &Value) -> Result<String, String> {
     payload
@@ -132,7 +132,7 @@ fn base_goal_object(
     );
     m.insert("checkpoints".to_string(), json!([]));
     m.insert("blocker".to_string(), Value::Null);
-    m.insert("updated_at".to_string(), json!(now_iso()));
+    m.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
     m
 }
 
@@ -475,14 +475,14 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 .and_then(|c| c.as_array_mut())
                 .ok_or_else(|| "GOAL_STATE.checkpoints corrupt".to_string())?;
             arr.push(json!({
-                "at": now_iso(),
+                "at": framework_kernel::time::now_iso(),
                 "note": note,
                 "type": payload.get("checkpoint_type").and_then(Value::as_str).unwrap_or("milestone"),
                 "done_when_covers": payload.get("done_when_covers").cloned().unwrap_or(json!([])),
                 "evidence_refs": payload.get("evidence_refs").cloned().unwrap_or(json!([])),
             }));
             if let Some(o) = state.as_object_mut() {
-                o.insert("updated_at".to_string(), json!(now_iso()));
+                o.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
                 crate::goal_prediction::merge_prediction_from_payload(o, &payload);
             }
             write_atomic_json(&path, &state)?;
@@ -622,7 +622,7 @@ fn resume_goal_running(
         .ok_or_else(|| "GOAL_STATE root must be object".to_string())?;
     obj.insert("status".to_string(), json!("running"));
     obj.insert("drive_until_done".to_string(), json!(drive_until_done));
-    obj.insert("updated_at".to_string(), json!(now_iso()));
+    obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
     write_atomic_json(&path, &state)?;
     let tx = crate::task_ledger::LedgerTransaction {
         ts: framework_kernel::time::now_iso(),
@@ -677,7 +677,7 @@ fn set_terminal_flags(
         None if status == "blocked" => None,
         None => obj.insert("blocker".to_string(), Value::Null),
     };
-    obj.insert("updated_at".to_string(), json!(now_iso()));
+    obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
     write_atomic_json(&path, &state)?;
     let tx = crate::task_ledger::LedgerTransaction {
         ts: framework_kernel::time::now_iso(),

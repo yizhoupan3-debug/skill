@@ -18,6 +18,7 @@ use std::time::SystemTime;
 pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
 pub const GOAL_STATE_SCHEMA_VERSION: &str = "router-rs-goal-v1";
 pub const EVIDENCE_INDEX_FILENAME: &str = "EVIDENCE_INDEX.json";
+pub const QUALITY_GATE_STATE_FILENAME: &str = "QUALITY_GATE_STATE.json";
 pub const REQUIRES_COMPLETION_EVIDENCE_KEY: &str = "requires_completion_evidence";
 // LEGACY_GOAL_DRIVE_PARAGRAPH_PREFIX removed — no callers, legacy prefix from retired goal-drive paragraph format.
 pub const CONTINUITY_SESSION_CHECKPOINT_TASK_ID: &str = "continuity-session";
@@ -51,11 +52,6 @@ pub use scrub_ops::{
     merge_hook_nudge_paragraph, scrub_followup_fields_in_hook_output,
     scrub_spoof_host_followup_lines, strip_followup_paragraphs_with_line_prefix,
 };
-
-// ── Shared helper ──
-pub(crate) fn now_iso() -> String {
-    framework_kernel::time::now_iso()
-}
 
 // ── Goal state path ──
 pub fn goal_state_path_for_task(
@@ -949,7 +945,7 @@ mod tests {
         )
         .expect("evidence");
         fs::write(
-            repo.join("artifacts/current/gok/RFV_LOOP_STATE.json"),
+            repo.join("artifacts/current/gok/QUALITY_GATE_STATE.json"),
             r#"{"schema_version":"router-rs-rfv-loop-v1","loop_status":"active","goal":"g","max_rounds":3,"current_round":1,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
         )
         .expect("rfv");
@@ -1120,7 +1116,7 @@ mod tests {
             "validation_commands": [],
             "checkpoints": [],
             "blocker": null,
-            "updated_at": now_iso(),
+            "updated_at": framework_kernel::time::now_iso(),
         });
         crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
 
@@ -1202,7 +1198,7 @@ mod tests {
             "validation_commands": [],
             "checkpoints": [],
             "blocker": null,
-            "updated_at": now_iso(),
+            "updated_at": framework_kernel::time::now_iso(),
         });
         crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
 

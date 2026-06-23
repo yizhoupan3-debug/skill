@@ -105,7 +105,7 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
     );
     entry.insert(
         "recorded_at".to_string(),
-        Value::String(crate::state_manager::now_iso()),
+        Value::String(framework_kernel::time::now_iso()),
     );
     entry.insert("task_id".to_string(), Value::String(task_id.clone()));
     entry.insert("step_id".to_string(), Value::String(step_id));
@@ -136,7 +136,7 @@ fn append_step_ledger_entry(payload: Value) -> Result<Value, String> {
         let inner_changed = append_jsonl_entry(&path, &entry_value, idempotency_key.as_deref())?;
         if inner_changed {
             let tx = crate::task_ledger::LedgerTransaction {
-                ts: crate::state_manager::now_iso(),
+                ts: framework_kernel::time::now_iso(),
                 tx_type: "step".to_string(),
                 payload: entry_value.clone(),
                 idempotency_key: idempotency_key.clone(),

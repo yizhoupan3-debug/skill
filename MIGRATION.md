@@ -77,7 +77,7 @@ Hook launchers、CI、`Cargo.toml` workspace 已对齐 `core/*`；勿再引用 `
 ```bash
 export SKILL_FRAMEWORK_ROOT="${SKILL_FRAMEWORK_ROOT:-/path/to/Developer/skill}"
 cd "$SKILL_FRAMEWORK_ROOT"
-just publish    # 或：ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS=1 … update-one-shot
+just publish    # 或：router-rs framework maint update-one-shot
 just doctor
 ```
 

@@ -234,11 +234,11 @@ PowerShell 用反引号 `` ` `` 续行；Git Bash 用反斜杠 `\` 续行。READ
 宿主 hook 的安装、事件矩阵与门控行为完整说明见 [`docs/hosts/hook-hosts.md`](docs/hosts/hook-hosts.md)。
 
 ```bash
-# Cursor hooks 自检
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
+# 宿主 hooks 自检（以 cursor 为例；替换 --host-id 可检其他宿主）
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-host-hooks --host-id cursor
 
-# Codex 用户级 hooks 安装
-cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint install-codex-user-hooks
+# 宿主投影安装（所有 installable 宿主）
+cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration install --to codex --scope user
 
 # 全局安装 router-rs（推荐每台机器一次）
 cargo install --path core/router-rs --locked --force

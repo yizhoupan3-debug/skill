@@ -56,7 +56,7 @@ parent: _common.md
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks → `claude-router-rs-hook.sh` → `hook.sh claude <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> claude` | [`hosts/claude_provider.rs`](../../core/host-projection/src/hosts/claude_provider.rs) | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
+| PreTool / Stop 守卫、settings 变更提示 | 宿主 hooks → `claude-router-rs-hook.sh` → `hook.sh claude <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> claude` | [`host_provider.rs` 生成 + `dispatch_host_hook` 统一分派](../../core/host-projection/src/hosts/host_provider.rs)。provider struct 和 trait impl 由 `build.rs` 从 `RUNTIME_REGISTRY.json` 编译期生成。 | `.claude/hook-state/review_gate_*.json`、`.claude/hook-state/hook_state_*.json`（Cursor 指纹 payload 静默忽略）；出站 Claude hook JSON |
 | **Claude Stop × `.claude` 状态 JSON** | Stop | `claude_hooks::run_stop` | `hook-state/review_gate_*.json` / `hook_state_*.json` 缺失不单独拦截；**已存在但不可读或损坏**：**fail-closed**，`stopReason` 含 `CLAUDE_HOOK_STATE_UNREADABLE` |
 | 投影规则与 hook 绑定 | `router-rs framework host-integration install --to claude` | [`host_integration/mod.rs`](../../core/host-projection/src/host_integration/mod.rs) | `.claude/rules/framework.md`、`.claude/settings.json`（七事件 hook：4 core + 3 optional）、`.claude/.framework-projection.json`（project scope） |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK`）；`ROUTER_RS_CLAUDE_PAPER_ADVERSARIAL_HOOK=1` opt-in |
@@ -69,7 +69,7 @@ parent: _common.md
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `cursor_hooks::execute_cursor_hook` → `CursorHookHost::dispatch` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`；**`ROUTER_RS_CURSOR_REVIEW_GATE_MODE`**=`strict`（默认 multiset）或 `lite`（仅 `id:` pending）；`framework doctor` 打印 mode；Stop advisory 提示上限 **`ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES`** |
+| Review / subagent 门控、beforeSubmit/Stop | `router-rs cursor hook <event>` | `cursor_hooks::execute_cursor_hook` → `CursorHookHost::dispatch` → `dispatch_cursor_hook_event` | `.cursor/hook-state/review-subagent-*.json`；**`ROUTER_RS_REVIEW_GATE_MODE`**=`strict`（默认 multiset）或 `lite`（仅 `id:` pending）；`framework doctor` 打印 mode；Stop advisory 提示上限 **`ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES`** |
 | Stop / beforeSubmit 出站 | Same | [`host_extensions/`](../../core/host-projection/src/hosts/host_extensions/dispatch.rs) | **interactive Stop 早退**：仅 `CLOSEOUT_FOLLOWUP` + `SESSION_CLOSE_STYLE`（无 `REVIEW_GATE` / `AG_FOLLOWUP`）；非 interactive 保留完整 Stop 链；**不**合并 `GOAL_CONTINUE` / `RFV_LOOP_CONTINUE` |
 | **Paper prose L4** | beforeSubmit 命中 `has_paper_prose_edit_context` | `paper_prose_hook.rs` | 合并 `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CURSOR_PAPER_PROSE_HOOK`，`0` 关）；对抗审稿 opt-in：`ROUTER_RS_CURSOR_PAPER_ADVERSARIAL_HOOK=1` |
 | **SessionStart** | 会话启动 | `cursor_hooks`（`handle_session_start`） | **仅** `Repo:` 单行（`ROUTER_RS_OPERATOR_INJECT=0` 时为空）；**无** digest / 无 pointer hint |
@@ -81,11 +81,10 @@ parent: _common.md
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要写盘 / 产出 |
 |--------|----------|----------------|-----------------|
-| PostTool 证据、`CODEX_REVIEW_GATE` | 配置项 → `codex-router-rs-hook.sh` → `hook.sh codex <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> codex` | `codex hook`（[`host_extensions/codex/`](../../core/host-projection/src/hosts/host_extensions/codex/)） | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门；`ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` 关闭 review nudge |
+| PostTool 证据、review gate | 配置项 → `codex-router-rs-hook.sh` → `hook.sh codex <event>` → `router-rs-cli host hook --event=<event> --repo-root <root> codex` | [`dispatch_host_hook` 统一分派](../../core/host-projection/src/hosts/host_extensions/dispatch.rs)。provider struct 由 `build.rs` 从 `RUNTIME_REGISTRY.json` 生成，`dispatcher()` 返回 `CodexDispatcher`，事件经由 `HostHookDispatcher::dispatch()` 统一路由。 | **opt-in** `EVIDENCE_INDEX` 追加；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`；wave-2：PostTool 深度 lane → `phase≥2`，Stop compact/rg_clear 清门 |
 | **Paper prose L4** | `UserPromptSubmit` 写作/润色语境 | `paper_prose_hook.rs` | `PAPER_PROSE_QUALITY_HOOK`（**默认开**：`ROUTER_RS_CODEX_PAPER_PROSE_HOOK`）；`ROUTER_RS_CODEX_PAPER_ADVERSARIAL_HOOK=1` opt-in |
-| **Codex hook stdout** | 任一 hook 进程退出 0 | `dispatch_codex_command` → `codex_hook_stdout_payload` | **始终**打印单行紧凑 JSON；无附带输出时为 **`{}`** |
-| **Codex Stop × `.codex/hook-state`** | Stop 事件 | `handle_codex_stop` | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
-| 宿主入口对齐 | `router-rs framework sync-entrypoints --host-id codex` | shared `host_entrypoint_sync` + Codex provider | 生成 `.codex/hooks.json`、`.codex/README.md` 及 **`host_entrypoints_sync_manifest`**；**[`AGENTS.md`](../../AGENTS.md)** 为唯一策略真源、不由 sync 覆盖 |
+| **Codex Stop × `.codex/hook-state`** | Stop 事件 | [`stop_dispatch.rs` 统一 Stop 管线](../../core/host-projection/src/hosts/stop_dispatch.rs) | 状态文件缺失：不据此拦截；状态不可读（损坏 JSON / IO）：**fail-closed**，`followup_message` 含 `CODEX_HOOK_STATE_UNREADABLE` |
+| 宿主入口对齐 | `router-rs framework sync-entrypoints --host-id codex` | shared `host_entrypoint_sync` + 注册表 provider | 生成 `.codex/hooks.json`、`.codex/README.md` 及 **`host_entrypoints_sync_manifest`**；**[`AGENTS.md`](../../AGENTS.md)** 为唯一策略真源、不由 sync 覆盖 |
 
 **统一原则**：宿主配置命令须 **短命 + 超时**；语义在 Rust，不在 shell 脚本分支。
 
@@ -190,17 +189,17 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 - **能力边界**：7 事件 hook；Stop `REVIEW_GATE` 全局 advisory-only（对齐 [`AGENTS.md` § Cursor](../../AGENTS.md)）；`lifecycle_profile: interactive` suppress `REVIEW_GATE` / spawn-first nudge
 - **自检命令**：
   ```bash
-  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-cursor-hooks
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-host-hooks --host-id cursor
   cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework host-integration status
   cargo test --manifest-path core/router-rs/Cargo.toml host_integration
   ```
 - **Cursor 独有环境变量**：
   - `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` — 自动注入子代理继承主会话模型
-  - `ROUTER_RS_CURSOR_REVIEW_GATE_MODE` — `strict`（默认 multiset）或 `lite`
-  - `ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES` — Stop advisory 提示上限
-  - `ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` — 缺省 `fork_context` 推断
-  - `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` — 磁盘 GOAL_STATE 严格模式
-  - `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN` — 应急 fail-open
+  - `ROUTER_RS_REVIEW_GATE_MODE` — `strict`（默认 multiset）或 `lite`
+  - `ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES` — Stop advisory 提示上限
+  - `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` — 缺省 `fork_context` 推断
+  - `ROUTER_RS_PRE_GOAL_STRICT_DISK` — 磁盘 GOAL_STATE 严格模式
+  - `ROUTER_RS_HOOK_STATE_FAIL_OPEN` — 应急 fail-open
   - `ROUTER_RS_CURSOR_SESSION_NAMESPACE` — 多聊天隔离
 
 #### Cursor 排障
@@ -211,7 +210,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 |------|----------|------|
 | Stop 后任务未完成 | **无** hook `GOAL_CONTINUE`（2026-05 已删） | `/implementx` + `framework_goal_drive` stdio + `artifacts/current/<task_id>/` |
 | Stop 后出现 `router-rs REVIEW_GATE` / `AG_FOLLOWUP` | 非 **interactive** 且 review 未清门（advisory nudge，非硬拦） | 先 spawn `fork_context=false` 深度 lane；或 `rg_clear` / 拆开 review 与 `/implementx` |
-| `beforeSubmit` 无法继续（`continue:false`） | hook-state 锁/持久化失败 | 查 `.cursor/hook-state` 权限；应急 `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1` |
+| `beforeSubmit` 无法继续（`continue:false`） | hook-state 锁/持久化失败 | 查 `.cursor/hook-state` 权限；应急 `ROUTER_RS_HOOK_STATE_FAIL_OPEN=1` |
 | 子代理 `permission: deny`（open count） | 重复 `subagentStart` 或 session 分片 | 看 `review-subagent-*.json` 的 `active_subagent_count` vs pending；升级后旧 state 可删或等新会话 |
 | `router-rs: binary moved to router-rs-cli` | `.env` 文件 `ROUTER_RS_BIN` 指向 redirect shim | 更新 `ROUTER_RS_BIN` 为 `router-rs-cli` 路径；`hook.sh resolve_bin()` 已自动跳过 shim |
 | PostTool 卡 ~20s | L1/L3 争用或 armed 全路径 L3 | 默认已修 L3→L1 逆序；仍慢则 w2 压测后可将 gate timeout 提到 25（见 `.cursor/hooks.json`） |
@@ -223,8 +222,8 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 - **router-rs 缺失**：critical 事件 **fail-closed**（`continue:false` / 工具拒绝）；确保 `core/router-rs/target/release/router-rs` 存在或 `ROUTER_RS_BIN` 指向二进制。
 - **SESSION_CLOSE_STYLE**：每轮 Stop 可能注入软提示；不需要时设 `ROUTER_RS_OPERATOR_INJECT=0`。
 - **session_key 升级**：修复后 hook-state 文件名 hash 可能变化；首会话门控状态重置，可用 `rg_clear` 或删 `.cursor/hook-state/review-subagent-*.json`（仅本机调试）。
-- **`fork_context` 缺省**：默认 **`ROUTER_RS_CURSOR_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 开启**时可推断 `false`；关闭后仅布尔 `false` 计独立证据。显式 `fork_context: true` 永不算。
-- **磁盘 `GOAL_STATE` 与 pre-goal**：默认 strict；legacy 宽松设 `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK=0|false|off|no`。
+- **`fork_context` 缺省**：默认 **`ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` 开启**时可推断 `false`；关闭后仅布尔 `false` 计独立证据。显式 `fork_context: true` 永不算。
+- **磁盘 `GOAL_STATE` 与 pre-goal**：默认 strict；legacy 宽松设 `ROUTER_RS_PRE_GOAL_STRICT_DISK=0|false|off|no`。
 - **`cursor-router-rs-hook.sh` exit code**：critical 事件（beforeSubmit/Stop/postToolUse/subagentStart/subagentStop）在 `router-rs` 缺失时 **fail-closed**；其余 **fail-open**。
 - **fail-closed 出站字段（按事件）**：beforeSubmit / PostTool（review-armed 锁失败）/ Stop（部分路径）→ `"continue": false`；subagentStart（限额/锁失败）→ `"permission": "deny"`。launcher 缺 binary 时 PostTool 亦 `continue:false`。
 - **仿宿主续跑行**：聊天区无 `router-rs ` 前缀的仿机读行勿当 hook 真源；以 hook stdout JSON 为准。
@@ -235,14 +234,14 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- codex sync --re
 - **能力边界**：事件驱动（review gate + evidence）；SessionStart **不**注入 continuity digest / `GOAL_CONTINUE`
 - **独有 Session Supervisor**：原生进程生命周期管理（`launch` / `resume` / `terminate` / `mark_blocked` / `resume_due`）
 - **独有环境变量**：
-  - `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` — **默认开**（`unset` = 开）。PostTool 深度 lane 且省略 `fork_context` 时可计为独立 reviewer 证据。设 `0`/`false`/`off`/`no` 则要求 JSON 显式 `fork_context: false`
+  - `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE` — **默认开**（`unset` = 开）。PostTool 深度 lane 且省略 `fork_context` 时可计为独立 reviewer 证据。设 `0`/`false`/`off`/`no` 则要求 JSON 显式 `fork_context: false`（legacy `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）
   - `ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY` — 规定会话交互过程中要求稳定的 Session Key
   - `ROUTER_RS_CODEX_HOOK_STATE_SALT` — hook 状态存取盐（salt）
-  - `ROUTER_RS_CODEX_REVIEW_GATE_DISABLE=1` — 关闭 review nudge
+  - `ROUTER_RS_REVIEW_GATE_DISABLE` — 关闭 review nudge
 - **会话周期**：UserPromptSubmit 重新武装 (re-arm) 机制 — 每次 UPS 后重设拦截门控
 - **自检命令**：
   ```bash
-  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-codex-hooks
+  cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework maint verify-host-hooks --host-id codex
   cargo run --release --manifest-path core/router-rs/Cargo.toml -- framework skills validate
   ```
 
@@ -260,7 +259,7 @@ Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentSta
 ```json
 {
   "lane_id": "w3-lane-codex",
-  "scope_paths": ["core/host-projection/src/hosts/host_extensions/codex_impl/"],
+  "scope_paths": ["core/host-projection/src/hosts/host_extensions/dispatch.rs"],
   "output_path": "artifacts/current/<task_id>/lane-notes/w3-lane-codex.md",
   "max_lines": 15,
   "forbidden": ["paste full transcript to main chat"]
@@ -270,7 +269,7 @@ Codex CLI **积极鼓励多代理并行执行**。与 Cursor 通过 `subagentSta
 | 约束 | 说明 |
 |------|------|
 | 写入 disjoint | 各 lane 仅写 `scope_paths` 内文件，不修改共享 continuity artifact |
-| `fork_context` | 深度 reviewer 必须显式 `fork_context: false`；env `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`（默认开）可推断 |
+| `fork_context` | 深度 reviewer 必须显式 `fork_context: false`；env `ROUTER_RS_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`（默认开，legacy `ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE`）可推断 |
 | review 只读 | 默认 review-only，禁止默认改代码（除非用户显式要求） |
 
 **与 Cursor / Claude 的关键差异**：
@@ -322,8 +321,8 @@ Do not share one lock file between Cursor and Codex.
 |----------|---------|--------|------|
 | `ROUTER_RS_TASK_LEDGER_FLOCK` | on | Off → parallel ledger writes (torn JSON risk); `framework doctor` warns | 全宿主 |
 | `ROUTER_RS_HOOK_TIMING` | off | stderr `hook_timing` lines | 全宿主 |
-| `ROUTER_RS_CURSOR_CARGO_CHECK_SYNC` | off | On → blocking `cargo check` in postToolUse (up to 25s) | Cursor |
-| `ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC` | off | On → `sync_all` parent dir after hook-state write | Cursor |
+| `ROUTER_RS_CARGO_CHECK_SYNC` | off | On → blocking `cargo check` in postToolUse (up to 25s) | Cursor |
+| `ROUTER_RS_HOOK_STATE_DIR_SYNC` | off | On → `sync_all` parent dir after hook-state write | Cursor |
 
 ### Related code paths
 

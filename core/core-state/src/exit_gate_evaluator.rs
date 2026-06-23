@@ -1,3 +1,4 @@
+// NOTE: v9 roadmap预留 — ExitGateEvaluator/NoopExitGateEvaluator 当前无外部引用。若近期不启用应考虑删除。
 //! Exit gate evaluator trait for dual-gate goal completion.
 //!
 //! **v9 退出门架构**：Goal complete 时必须通过两个独立门：

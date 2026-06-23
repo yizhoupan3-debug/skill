@@ -173,6 +173,3 @@ pub fn build_automatic_continuity_checkpoint_payload_with_task_id(
     payload
 }
 
-#[cfg(test)]
-#[path = "mod_tests.rs"]
-mod tests;

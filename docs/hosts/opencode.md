@@ -135,15 +135,15 @@ OpenCode 的 `OpencodeHostProvider` 实现以下 trait 方法：
 
 | 关注点 | 典型触发 | router-rs 路径 | 主要产出 |
 |--------|----------|----------------|---------|
-| PreToolUse 守卫 | `tool.execute.before` | `opencode_hooks.rs` | 路径保护、框架数据源保护 |
-| PostToolUse 证据 | `tool.execute.after` | `opencode_hooks.rs` | `EVIDENCE_INDEX.json` 自动记录 |
-| UserPromptSubmit 上下文 | `beforeSubmitPrompt` | `opencode_hooks.rs` | review gate nudge、goal context、paper prose |
-| Stop closeout | `session.idle` | `opencode_hooks.rs` | review gate 状态检查、closeout advisory |
-| SessionStart | `session.created` | `opencode_hooks.rs` | 框架上下文注入 |
-| SubagentStart/Stop | `subagent.start/stop` | `opencode_hooks.rs` | 子代理生命周期遥测 |
-| Permission hooks | `permission.asked/replied` | `opencode_hooks.rs` | 权限拦截 |
-| Shell env | `shell.env` | `opencode_hooks.rs` | 环境变量注入 |
-| File edited | `file.edited` | `opencode_hooks.rs` | 文件变更追踪 |
+| PreToolUse 守卫 | `tool.execute.before` | [`hosts/hook_dispatch.rs`](../../core/host-projection/src/hosts/hook_dispatch.rs) — 统一 `HostHookDispatcher::dispatch()`，所有 4 宿主共享同一 path | 路径保护、框架数据源保护 |
+| PostToolUse 证据 | `tool.execute.after` | 同上 | `EVIDENCE_INDEX.json` 自动记录 |
+| UserPromptSubmit 上下文 | `beforeSubmitPrompt` | 同上 | review gate nudge、goal context、paper prose |
+| Stop closeout | `session.idle` | [`hosts/stop_dispatch.rs`](../../core/host-projection/src/hosts/stop_dispatch.rs) — 统一 Stop 管线 | review gate 状态检查、closeout advisory |
+| SessionStart | `session.created` | `hosts/hook_dispatch.rs` | 框架上下文注入 |
+| SubagentStart/Stop | `subagent.start/stop` | 同上 | 子代理生命周期遥测 |
+| Permission hooks | `permission.asked/replied` | 同上 | 权限拦截 |
+| Shell env | `shell.env` | 同上 | 环境变量注入 |
+| File edited | `file.edited` | 同上 | 文件变更追踪 |
 
 **环境变量**：
 - `ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE=1` — 紧急禁用 review gate
