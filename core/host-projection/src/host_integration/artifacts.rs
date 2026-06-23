@@ -260,21 +260,48 @@ pub fn normalize_generated_artifact_text(content: &str, roots: &[&Path]) -> Stri
 }
 
 pub fn allowed_dot_generated_artifact(path: &str) -> bool {
+    use framework_kernel::runtime_registry::{
+        ALL_HOST_IDS, generated_entrypoint_paths, settings_guarded_paths,
+    };
+
+    // Registry-driven: every host's settings_paths and entrypoint_paths.
+    for &host_id in ALL_HOST_IDS {
+        for sp in settings_guarded_paths(host_id) {
+            if path == *sp {
+                return true;
+            }
+        }
+        for ep in generated_entrypoint_paths(host_id) {
+            if path == *ep {
+                return true;
+            }
+        }
+        // Every host gets its own .framework-projection.json manifest.
+        let cfg = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+        if !cfg.is_empty() {
+            let manifest = format!("{cfg}/{FRAMEWORK_PROJECTION_MANIFEST_NAME}");
+            if path == manifest {
+                return true;
+            }
+            // Claude-specific desktop projection manifest.
+            if host_id == "claude" {
+                let desktop = format!("{cfg}/.framework-projection-desktop.json");
+                if path == desktop {
+                    return true;
+                }
+            }
+        }
+    }
+
+    // Non-registry extras: hosts not yet in the registry (gemini) or
+    // codex-specific generated docs that predate the registry.
     matches!(
         path,
-        ".codex/host_entrypoints_sync_manifest.json"
+        ".gemini/settings.json"
+            | ".gemini/mcp.json"
+            | ".codex/host_entrypoints_sync_manifest.json"
             | ".codex/README.md"
             | ".codex/prompts/framework.md"
-            | ".claude/rules/framework.md"
-            | ".claude/settings.json"
-            | ".claude/.framework-projection.json"
-            | ".claude/CLAUDE.md"
-            | ".claude/mcp.json"
-            | ".claude/.framework-projection-desktop.json"
-            | ".gemini/settings.json"
-            | ".gemini/mcp.json"
-            | ".opencode/opencode.json"
-            | ".opencode/.framework-projection.json"
     )
 }
 

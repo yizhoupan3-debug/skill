@@ -318,7 +318,7 @@ mod tests {
         assert_eq!(canonical_tool_name("claude", &root).unwrap(), "claude");
 
         let err = canonical_tool_name("unknown-host", &root).expect_err("unknown host must fail");
-        for tool in ["cursor", "claude", "opencode", "codex"] {
+        for &tool in framework_kernel::runtime_registry::ALL_HOST_IDS {
             assert!(
                 err.contains(tool),
                 "expected supported tool {tool} in error: {err}"
@@ -332,15 +332,11 @@ mod tests {
         let root = repo_root();
 
         validate_projection_adapters_against_registry(&root).unwrap();
-        assert_eq!(
-            registry_projection_tools(&root).unwrap(),
-            vec![
-                "cursor".to_string(),
-                "claude".to_string(),
-                "opencode".to_string(),
-                "codex".to_string(),
-            ]
-        );
+        let expected: Vec<String> = framework_kernel::runtime_registry::ALL_HOST_IDS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert_eq!(registry_projection_tools(&root).unwrap(), expected);
     }
 
     #[test]
