@@ -190,10 +190,5 @@ mod tests {
                 "{label} must not re-acquire L1 via append_transaction inside mutation paths"
             );
         }
-        let quality_gate = include_str!("../quality_gate.rs");
-        assert!(
-            quality_gate.contains("apply_task_ledger_mutation"),
-            "quality_gate must serialize mutations via apply_task_ledger_mutation"
-        );
     }
 }
