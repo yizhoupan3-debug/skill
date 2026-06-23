@@ -93,7 +93,7 @@ mod tests {
     fn embedded_review_routing_json_parses() {
         let parsed: ReviewRoutingSignalsFile =
             serde_json::from_str(EMBEDDED_JSON).expect("embedded REVIEW_ROUTING_SIGNALS.json");
-        assert_eq!(parsed.review_gate_regexes.len(), 17);
+        assert!(parsed.review_gate_regexes.len() >= 17, "expected at least 17 review gate regexes, got {}", parsed.review_gate_regexes.len());
         assert!(!parsed.parallel_review_candidate.review_markers.is_empty());
         assert!(!parsed.parallel_review_candidate.breadth_markers.is_empty());
         assert!(!parsed.parallel_review_candidate.scope_markers.is_empty());

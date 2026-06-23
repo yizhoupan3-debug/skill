@@ -322,3 +322,71 @@ Smoke：`cargo test -p router-rs smoke_p0_hook_policy`。
 | 任务物化 | `artifacts/current/<task_id>/` |
 | Skill 路由 | `skills/SKILL_ROUTING_RUNTIME.json` |
 | 稳定二进制 | `~/.local/share/skill-framework/bin/router-rs` |
+
+---
+
+## Goal 生命周期（v2 — 2026-06）
+
+### 核心变更
+
+| 能力 | 说明 | 对应代码路径 |
+|------|------|-------------|
+| 复杂度自动检测 | `UserPromptSubmit` hook 使用 `analyze_complexity()` 检测复杂任务并注入 goal 建议上下文 | `core/core-policy/src/goal_auto_detect.rs` |
+| Goal amend | `goal_state_manage(operation="amend")` 更新 goal/non_goals/done_when，保留 checkpoints | `core/core-state/src/state_manager/goal_ops.rs` |
+| 严格退出验证 | Stop 管线从磁盘读取 `done_when` 与响应内容比对，列出未完成项（advisory，不 hard block） | `core/host-projection/src/hosts/stop_dispatch.rs` |
+| 完成后自动归档 | `complete` 操作标记 `archived: true`，不再物理删除 GOAL_STATE.json | `core/core-state/src/state_manager/goal_ops.rs:554` |
+| 单 session 管理 | goal 仅在创建它的 session 中活跃；跨 session 目标标记为 stale，不自动恢复 | `core/core-state/src/state_manager/mod.rs:105` |
+
+### 完整生命周期
+
+```
+用户输入 → 复杂度检测 → goal 确认
+    → start (drive_until_done=true)
+    → 工作中 → checkpoint × N（PostToolUse 自动触发）
+    → scope change detected → amend（保留进度）
+    → done_when 全覆盖 + EVIDENCE 通过 → complete → archived
+    → 可开启下一个 goal
+```
+
+### 复杂度检测指标（≥2 项命中 → complex）
+
+1. 实现动词（实现/重构/添加/modify/implement 等）
+2. 文件路径引用（≥2 处）
+3. 任务描述长度（中文>80字符，英文>150字符）
+4. 结构化 markers（Goal:/Non-goals:/Done when:）
+5. 多步骤描述（≥3 个 bullet/编号）
+6. 跨文件/跨 crate 引用
+
+### Scope Change 检测
+
+当已有活跃 goal 且用户消息包含以下关键词时触发 `[Goal Amendment]` 上下文注入：
+
+- 中文：增加/修改/补充/额外/调整/还要/但是/不过/另外/顺便/追加/变更/改动
+- English：apart from/also need/additionally/one more thing/actually/instead/change/update/modify
+
+### 退出条件验证（Advisory）
+
+Stop 管线在 goal 未满足时：
+1. 读取磁盘 GOAL_STATE.json 的 `done_when` 数组
+2. 与 response_text 做子串匹配（每个 done_when 项独立匹配）
+3. 计算覆盖率
+4. 生成精确的 followup 消息，列出未完成项
+
+**示例 followup**：
+```
+Goal progress: 2/4 done_when completed, 1 checkpoint. Still missing:
+- 已修复 P0 并提交
+- cargo test 全部通过
+Continue working.
+```
+
+### Amend 操作
+
+`goal_state_manage(operation="amend")` 接受以下可选字段：
+- `goal` — 更新目标描述
+- `non_goals` — 更新非目标列表
+- `done_when` — 更新退出条件列表（完全替换，非追加）
+- `validation_commands` — 更新验证命令
+- `keep_progress` — `true`（默认）保留现有 checkpoints；`false` 清空 checkpoints
+
+**状态要求**：goal 必须处于 running/paused/blocked 状态，不能 amend completed/stale 的 goal。

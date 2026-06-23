@@ -458,6 +458,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
         "checkpoint" => {
             let task_id = resolve_task_id_strict(&payload)?;
             crate::utils::path_guard::validate_task_id_component(&task_id)?;
+            let quality_gate_superseded =
+                deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
             let note = payload
                 .get("note")
                 .and_then(Value::as_str)
@@ -505,6 +507,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 "operation": "checkpoint",
                 "task_id": task_id,
                 "goal_state_path": path.display().to_string(),
+                "quality_gate_superseded": quality_gate_superseded,
             }))
         }
         "pause" => set_terminal_flags(
@@ -552,12 +555,29 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 None,
             )?;
             neutralize_task_pointers_for_task(&repo_root, &task_id)?;
-            // Auto-delete GOAL_STATE.json after successful completion (session-scoped goal)
+            // Mark GOAL_STATE.json as archived (do NOT delete — preserve for tooling/queries)
             let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
-            if goal_path.is_file()
-                && let Err(e) = fs::remove_file(&goal_path) {
-                    warn!("failed to remove completed GOAL_STATE.json: {e}");
+            if goal_path.is_file() {
+                match fs::read_to_string(&goal_path) {
+                    Ok(raw) => {
+                        if let Ok(mut goal_val) = serde_json::from_str::<Value>(&raw) {
+                            if let Some(obj) = goal_val.as_object_mut() {
+                                obj.insert("archived".to_string(), json!(true));
+                                obj.insert(
+                                    "completed_at".to_string(),
+                                    json!(framework_kernel::time::now_iso()),
+                                );
+                                obj.insert(
+                                    "updated_at".to_string(),
+                                    json!(framework_kernel::time::now_iso()),
+                                );
+                                let _ = write_atomic_json(&goal_path, &goal_val);
+                            }
+                        }
+                    }
+                    Err(e) => warn!("failed to read GOAL_STATE.json for archive annotation: {e}"),
                 }
+            }
             Ok(out)
         }
         "block" => {
@@ -578,6 +598,120 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             )
         }
         "clear" => clear_goal_state(&repo_root, Some(resolve_task_id_strict(&payload)?)),
+        "amend" => {
+            let task_id = resolve_task_id_strict(&payload)?;
+            crate::utils::path_guard::validate_task_id_component(&task_id)?;
+            let path = goal_state_path_for_task(&repo_root, &task_id)?;
+            let mut state = read_goal_state(&repo_root, Some(&task_id))?
+                .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
+            let obj = state
+                .as_object_mut()
+                .ok_or_else(|| "GOAL_STATE root must be object".to_string())?;
+
+            // Only mutable states can be amended
+            let status = obj.get("status").and_then(Value::as_str).unwrap_or("");
+            if status == "completed"
+                || obj.get("archived").and_then(Value::as_bool).unwrap_or(false)
+            {
+                return Err(
+                    "framework_goal_drive amend: cannot amend a completed/archived goal"
+                        .to_string(),
+                );
+            }
+            // Stale goals from another session cannot be amended
+            if obj.get("stale").and_then(Value::as_bool).unwrap_or(false) {
+                return Err(
+                    "framework_goal_drive amend: cannot amend a stale goal (session_id mismatch)"
+                        .to_string(),
+                );
+            }
+
+            let keep_progress = payload
+                .get("keep_progress")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let mut has_amend = false;
+
+            if let Some(v) = payload
+                .get("goal")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            {
+                obj.insert("goal".to_string(), json!(v));
+                has_amend = true;
+            }
+            if let Some(arr) = payload.get("non_goals").and_then(Value::as_array) {
+                let cleaned: Vec<Value> = arr
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(|s| json!(s))
+                    .collect();
+                obj.insert("non_goals".to_string(), json!(cleaned));
+                has_amend = true;
+            }
+            if let Some(arr) = payload.get("done_when").and_then(Value::as_array) {
+                let cleaned: Vec<Value> = arr
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(|s| json!(s))
+                    .collect();
+                obj.insert("done_when".to_string(), json!(cleaned));
+                has_amend = true;
+            }
+            if let Some(arr) = payload.get("validation_commands").and_then(Value::as_array) {
+                let cleaned: Vec<Value> = arr
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(|s| json!(s))
+                    .collect();
+                obj.insert("validation_commands".to_string(), json!(cleaned));
+                has_amend = true;
+            }
+
+            if !keep_progress {
+                obj.insert("checkpoints".to_string(), json!([]));
+            }
+
+            if !has_amend {
+                return Err(
+                    "framework_goal_drive amend requires at least one field to update: \
+                     goal, non_goals, done_when, or validation_commands"
+                        .to_string(),
+                );
+            }
+
+            obj.insert(
+                "amended_at".to_string(),
+                json!(framework_kernel::time::now_iso()),
+            );
+            obj.insert(
+                "updated_at".to_string(),
+                json!(framework_kernel::time::now_iso()),
+            );
+
+            write_atomic_json(&path, &state)?;
+            let tx = crate::task_ledger::LedgerTransaction {
+                ts: framework_kernel::time::now_iso(),
+                tx_type: "goal_state".to_string(),
+                payload: state.clone(),
+                idempotency_key: None,
+                seq: None,
+                schema_version: Some(1),
+            };
+            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+            invalidate_route_records_cache_on_write();
+            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
+                &repo_root, &task_id,
+            );
+            Ok(json!({
+                "ok": true,
+                "operation": "amend",
+                "task_id": task_id,
+                "goal_state_path": path.display().to_string(),
+            }))
+        }
         _ => Err(format!(
             "framework_goal_drive: unknown operation '{operation}'"
         )),

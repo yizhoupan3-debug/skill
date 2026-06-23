@@ -231,7 +231,12 @@ pub fn has_structured_goal_contract(text: &str) -> bool {
     let validation_ok = nonempty_inline_heading_any(text, "Validation commands")
         || nonempty_inline_heading_any(text, "验证命令");
     let done_when_items = count_done_when_items(text);
-    goal_ok && non_goals_ok && validation_ok && done_when_items >= 2
+    if goal_ok && non_goals_ok && validation_ok && done_when_items >= 2 {
+        return true;
+    }
+    // Fallback: if the text passes the heuristic complexity analyzer, treat it
+    // as having an implicit contract (supplementary signal for auto-detected goals).
+    crate::goal_auto_detect::analyze_complexity(text).is_complex
 }
 
 /// Check if a heading has non-empty inline content after `:`.

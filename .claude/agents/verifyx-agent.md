@@ -31,6 +31,7 @@ Verify + ship in one pass. Profile: `interactive` (advisory closeout).
 ### 1. Verify
 
 - Read `GOAL_STATE.json` and `ROADMAP.md` for validation commands.
+- If `GOAL_STATE.json` has `archived: true`, the goal was already completed — skip goal completion in step 3.
 - Run each validation command; record exit code and output.
 - Append each run to `EVIDENCE_INDEX.json` artifacts[] (command_preview,
   recorded_at, exit_code, success, kind, lifecycle_command, tags).
@@ -53,6 +54,13 @@ Verify + ship in one pass. Profile: `interactive` (advisory closeout).
 
 - Call `goal_state_manage(operation="complete")`.
 - If closeout_gate reports blockers, surface them and ask user before proceeding.
+
+### 3.5 Goal Amend (if scope changed)
+
+If the user's scope or requirements changed during the session:
+- Call `goal_state_manage(operation="amend")` with updated `goal`, `non_goals`, `done_when`, and/or `validation_commands`.
+- `amend` preserves existing checkpoints by default (set `keep_progress: false` to reset).
+- Do NOT call `amend` on a completed goal — it will fail.
 
 ### 4. Post-verify Purge (deferred by default)
 

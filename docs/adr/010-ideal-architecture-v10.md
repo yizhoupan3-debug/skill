@@ -540,3 +540,16 @@ runtime-infra (4,000 行)        ← 基础设施（L4 级）
 
 - [x] 产物目录（§8）与实际一致，含 session-supervisor
 - [x] 八层运行时图（§2）与实际 crate 列表一致
+
+### 追加：Goal 全周期治理（2026-06-23）
+
+**背景**：基于全面审计（P1×4、P2×6），重构 Goal 生命周期管理系统。
+
+**关键决策**：
+1. `complete` 不再物理删除 GOAL_STATE.json，改为标记 `archived: true`
+2. `TASK_POINTERS.json` 读取增加 `tasks[0]` 回退和 `task_registry.json` 回退
+3. `completion_gates` 兼容数组格式（旧数据）
+4. 新增 `amend` 操作，支持自然语言 scope change
+5. 复杂度检测引擎 `goal_auto_detect` 主动检测复杂任务
+6. Stop 管线增加磁盘驱动的 `done_when` 比对
+7. 模型侧 `has_structured_goal_contract` 扩展为 regex + 复杂度分析双模式

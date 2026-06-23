@@ -10,13 +10,13 @@
 //! 4. Build host-specific context (paths, session key)
 //! 5. Load review gate + touch state from disk
 //! 6. Extract prompt, response, stop signal
-//! 7. Apply override + reject detection (shared)
+//! 7. Load review state + apply override + reject detection
 //! 8. Goal gate evaluation (shared)
 //! 9. Review gate evaluation (shared) + followup tracking
-//! 10. Touch state checks (shared advisory)
-//! 11. Review output lint (shared)
+//! 10. Goal followup check (shared)
+//! 11. Touch state checks (shared advisory)
 //! 12. Conditional state cleanup
-//! 13. Build response with followup_message
+//! 13. Review output lint (shared)
 
 use crate::hosts::hook_dispatch;
 use serde_json::{Value, json};
@@ -101,7 +101,7 @@ pub fn run_unified_stop(
         );
         return add_context(
             "Stop",
-            "[advisory] hook-state unreadable; clearing stale files.",
+            "[advisory] review_gate state unreadable; data will be overwritten on next UserPromptSubmit.",
         );
     }
     if matches!(touch_load, DiskState::Unreadable) {
@@ -171,18 +171,92 @@ pub fn run_unified_stop(
         return add_context("Stop", reason);
     }
 
-    // ── 10. Goal followup check (shared) ──
-    if review_state.tracks_goal() && !review_state.goal_is_satisfied() {
+    // ── 10. Goal followup check (shared) + disk-driven done_when validation ──
+    let goal_is_satisfied = review_state.goal_is_satisfied();
+
+    // Try to read GOAL_STATE from disk for done_when validation
+    let done_when_coverage = goal_is_satisfied.then(|| {
+        // Only run disk validation if the base signals are satisfied
+        core_state::state_manager::read_goal_state(repo_root, None).ok().flatten().and_then(|goal| {
+            let done_when = goal.get("done_when").and_then(Value::as_array)?;
+            if done_when.is_empty() { return None; }
+            let total = done_when.len();
+            let covered = done_when.iter().filter(|item| {
+                item.as_str().map(|s| response_text.contains(s)).unwrap_or(false)
+            }).count();
+            Some((covered, total, done_when.clone()))
+        })
+    }).flatten();
+
+    if review_state.tracks_goal() && !goal_is_satisfied {
         review_state.followup_count += 1;
         review_state.goal_followup_count += 1;
         let _ = write_review_state(&review_path, &review_state);
-        let message = format!(
-            "Goal not yet satisfied (contract={}, progress={}, verify={}). Continue working.",
-            review_state.goal_contract_seen,
-            review_state.goal_progress_seen,
-            review_state.goal_verify_or_block_seen,
-        );
+        let message = if let Some((covered, total, items)) = &done_when_coverage {
+            let mut msg = format!("Goal not yet satisfied (contract={}, progress={}, verify={}). done_when: {covered}/{total} covered, continue working.",
+                review_state.goal_contract_seen,
+                review_state.goal_progress_seen,
+                review_state.goal_verify_or_block_seen,
+            );
+            // List uncovered done_when items (up to 3)
+            let uncovered: Vec<&str> = items.iter()
+                .filter_map(|item| item.as_str())
+                .filter(|s| !response_text.contains(s))
+                .take(3)
+                .collect();
+            if !uncovered.is_empty() {
+                msg.push_str(&format!(" Still missing: {}", uncovered.join("; ")));
+            }
+            msg
+        } else {
+            format!("Goal not yet satisfied (contract={}, progress={}, verify={}). Continue working.",
+                review_state.goal_contract_seen,
+                review_state.goal_progress_seen,
+                review_state.goal_verify_or_block_seen,
+            )
+        };
         return add_context("Stop", &message);
+    }
+
+    // Advisory: even if signals are satisfied, check done_when coverage ≥50%
+    if goal_is_satisfied
+        && let Some((covered, total, _)) = &done_when_coverage
+            && *total > 0 && (*covered as f64 / *total as f64) < 0.5 {
+                let message = format!(
+                    "Goal signals satisfied but done_when coverage is low ({covered}/{total}). \
+                     Verify all completion conditions before completing. Still missing items may remain.",
+                );
+                return add_context("Stop", &message);
+            }
+
+    // ── 10b. Auto-complete detection ──
+    // When goal signals are satisfied and all done_when (if any) are 100% covered,
+    // suggest completion and optionally probe for next goal.
+    if goal_is_satisfied && review_state.tracks_goal() {
+        let all_done = done_when_coverage
+            .as_ref()
+            .map(|(c, t, _)| *t == 0 || *c >= *t)
+            .unwrap_or(true);
+        if all_done {
+            // Resolve task_id via pointer (same strategy used in goal ops)
+            let task_id = core_state::state_manager::read_primary_task_id(repo_root)
+                .unwrap_or_default();
+            if !task_id.is_empty() {
+                let complete_payload = serde_json::json!({
+                    "repo_root": repo_root.to_string_lossy().to_string(),
+                    "operation": "complete",
+                    "task_id": task_id,
+                });
+                if let Err(e) = core_state::state_manager::framework_goal_drive(complete_payload) {
+                    tracing::warn!("auto-complete failed: {e}");
+                }
+            }
+            // After completion, check if the conversation describes a new complex task
+            let next_goal = core_policy::goal_auto_detect::analyze_complexity(&prompt);
+            if next_goal.is_complex {
+                return add_context("Stop", "[Goal Suggestion] 前一个任务已完成。检测到新的复杂任务，是否创建新 Goal？");
+            }
+        }
     }
 
     // ── 11. Touch state checks (shared advisory) ──

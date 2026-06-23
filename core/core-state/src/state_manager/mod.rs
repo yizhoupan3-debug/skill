@@ -808,12 +808,16 @@ mod tests {
             "task_id": "nogate",
         }))
         .expect("complete without evidence");
-        // complete auto-deletes GOAL_STATE.json
+        // complete archives GOAL_STATE.json (does not delete)
         let goal_path = goal_state_path_for_task(&repo, "nogate").expect("goal path");
         assert!(
-            !goal_path.is_file(),
-            "GOAL_STATE should be deleted after complete"
+            goal_path.is_file(),
+            "GOAL_STATE should persist (archived) after complete"
         );
+        let archived = read_goal_state(&repo, Some("nogate"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(archived["archived"], json!(true));
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -953,7 +957,7 @@ mod tests {
         )
         .expect("evidence");
         fs::write(
-            repo.join("artifacts/current/gok/QUALITY_GATE_STATE.json"),
+            repo.join("artifacts/current/gok").join(QUALITY_GATE_STATE_FILENAME),
             r#"{"schema_version":"router-rs-rfv-loop-v1","loop_status":"active","goal":"g","max_rounds":3,"current_round":1,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
         )
         .expect("rfv");
@@ -964,12 +968,17 @@ mod tests {
             "task_id": "gok",
         }))
         .expect("complete ok");
-        // complete auto-deletes GOAL_STATE.json
+        // complete archives GOAL_STATE.json (does not delete)
         let goal_path = goal_state_path_for_task(&repo, "gok").expect("goal path");
         assert!(
-            !goal_path.is_file(),
-            "GOAL_STATE should be deleted after complete"
+            goal_path.is_file(),
+            "GOAL_STATE should persist (archived) after complete"
         );
+        let archived = read_goal_state(&repo, Some("gok"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(archived["archived"], json!(true));
+        assert!(archived.get("completed_at").and_then(Value::as_str).is_some());
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1083,7 +1092,7 @@ mod tests {
         )
         .expect("evidence");
 
-        // Complete and verify GOAL_STATE.json is deleted
+        // Complete and verify GOAL_STATE.json is archived (not deleted)
         framework_goal_drive(json!({
             "repo_root": rr,
             "operation": "complete",
@@ -1092,9 +1101,15 @@ mod tests {
         .expect("complete");
         let goal_path = goal_state_path_for_task(&repo, "sess-task").expect("goal path");
         assert!(
-            !goal_path.is_file(),
-            "GOAL_STATE.json should be deleted after complete"
+            goal_path.is_file(),
+            "GOAL_STATE.json should persist (archived) after complete"
         );
+        // Verify archive markers
+        let archived = read_goal_state(&repo, Some("sess-task"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(archived["archived"], json!(true));
+        assert!(archived.get("completed_at").and_then(Value::as_str).is_some());
 
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1150,6 +1165,15 @@ mod tests {
     /// session-scoped: same session_id is NOT stale
     #[test]
     fn goal_read_not_stale_when_session_id_matches() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // Clear all *_SESSION_ID env vars that could trigger staleness
+        let session_vars: Vec<String> = std::env::vars()
+            .filter(|(k, _)| k.ends_with("_SESSION_ID"))
+            .map(|(k, _)| k)
+            .collect();
+        for k in &session_vars {
+            unsafe { std::env::remove_var(k) };
+        }
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
@@ -1238,5 +1262,330 @@ mod tests {
         goal.as_object_mut().unwrap().remove("stale");
         goal.as_object_mut().unwrap().remove("stale_reason");
         assert!(goal_state_requests_continuation(&goal));
+    }
+
+    #[test]
+    fn amend_updates_fields_and_preserves_checkpoints() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-amend-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/amend-task")).expect("mkdir");
+        let rr = repo.display().to_string();
+
+        // Start a goal
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "amend-task",
+            "goal": "original goal",
+            "non_goals": ["original non-goal"],
+            "done_when": ["original done1", "original done2"],
+            "validation_commands": ["cargo check"],
+            "drive_until_done": false,
+        }))
+        .expect("start");
+
+        // Add a checkpoint
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "checkpoint",
+            "task_id": "amend-task",
+            "note": "first milestone",
+        }))
+        .expect("checkpoint");
+
+        // Amend: update goal and done_when, keep progress
+        let amend_result = framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "amend",
+            "task_id": "amend-task",
+            "goal": "updated goal",
+            "done_when": ["new done1", "new done2", "new done3"],
+        }))
+        .expect("amend");
+        assert_eq!(amend_result["ok"], json!(true));
+
+        // Read back and verify
+        let st = read_goal_state(&repo, Some("amend-task"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["goal"], json!("updated goal"));
+        assert_eq!(st["non_goals"][0], json!("original non-goal"), "non_goals should be preserved");
+        assert_eq!(st["done_when"].as_array().map(|a| a.len()), Some(3), "done_when should be replaced");
+        // Checkpoints should be preserved
+        assert_eq!(st["checkpoints"].as_array().map(|a| a.len()), Some(1), "checkpoints preserved");
+        assert_eq!(st["checkpoints"][0]["note"], json!("first milestone"));
+        // Status should remain running
+        assert_eq!(st["status"], json!("running"));
+        // Amend marker should be set
+        assert!(st.get("amended_at").and_then(Value::as_str).is_some());
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn amend_rejected_for_completed_goal() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-amend-fail-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/amend-done")).expect("mkdir");
+        let rr = repo.display().to_string();
+
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "amend-done",
+            "goal": "finish fast",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["echo ok"],
+            "drive_until_done": false,
+        }))
+        .expect("start");
+
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "complete",
+            "task_id": "amend-done",
+        }))
+        .expect("complete");
+
+        // Amend should fail on completed goal
+        let err = framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "amend",
+            "task_id": "amend-done",
+            "goal": "new goal",
+        }))
+        .expect_err("amend should fail on completed");
+        assert!(err.contains("cannot amend a completed"), "err: {err}");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// Full lifecycle: start → checkpoint → amend (keep_progress default) →
+    /// checkpoint → complete → verify archived: true, GOAL_STATE.json still on disk.
+    #[test]
+    fn goal_full_lifecycle_start_checkpoint_amend_complete_archived() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-lifecycle-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/lifecycle-task")).expect("mkdir");
+        let rr = repo.display().to_string();
+
+        // 1. Start a goal with drive_until_done: false
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "lifecycle-task",
+            "goal": "original goal",
+            "non_goals": ["unrelated"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["echo ok"],
+            "drive_until_done": false,
+        }))
+        .expect("start");
+
+        // 2. checkpoint("milestone 1")
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "checkpoint",
+            "task_id": "lifecycle-task",
+            "note": "milestone 1",
+        }))
+        .expect("checkpoint 1");
+
+        // 3. amend: update goal + done_when, keep_progress defaults to true
+        let amend_result = framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "amend",
+            "task_id": "lifecycle-task",
+            "goal": "updated goal",
+            "done_when": ["new d1", "new d2", "new d3"],
+        }))
+        .expect("amend");
+        assert_eq!(amend_result["ok"], json!(true));
+
+        // 4. checkpoint("milestone 2") after amend
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "checkpoint",
+            "task_id": "lifecycle-task",
+            "note": "milestone 2",
+        }))
+        .expect("checkpoint 2");
+
+        // 5. complete
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "complete",
+            "task_id": "lifecycle-task",
+        }))
+        .expect("complete");
+
+        // 6. Verify
+        let goal_path = goal_state_path_for_task(&repo, "lifecycle-task").expect("goal path");
+        assert!(goal_path.is_file(), "GOAL_STATE.json must still exist after complete");
+
+        let state = read_goal_state(&repo, Some("lifecycle-task"))
+            .expect("read goal state")
+            .expect("state exists");
+        assert_eq!(state["archived"], json!(true), "archived must be true");
+        assert!(
+            state.get("completed_at").and_then(Value::as_str).is_some(),
+            "completed_at must be present"
+        );
+        assert_eq!(state["status"], json!("completed"));
+        assert_eq!(state["goal"], json!("updated goal"), "amend goal must persist");
+        assert_eq!(
+            state["checkpoints"].as_array().map(|a| a.len()),
+            Some(2),
+            "two checkpoints expected"
+        );
+        assert_eq!(state["drive_until_done"], json!(false));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// complete does not delete GOAL_STATE.json — it is archived in place.
+    #[test]
+    fn complete_preserves_goal_state_file() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-complete-preserves-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/cp-task")).expect("mkdir");
+        let rr = repo.display().to_string();
+
+        // Start with requires_completion_evidence: false so we can complete without evidence
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "cp-task",
+            "goal": "preserve file test",
+            "drive_until_done": false,
+            "requires_completion_evidence": false,
+        }))
+        .expect("start");
+
+        let goal_path = goal_state_path_for_task(&repo, "cp-task").expect("path");
+        assert!(goal_path.is_file(), "GOAL_STATE.json must exist before complete");
+
+        // Capture raw content hash (length as proxy) before complete
+        let raw_before = fs::read_to_string(&goal_path).expect("read before");
+
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "complete",
+            "task_id": "cp-task",
+        }))
+        .expect("complete");
+
+        // File must still physically exist
+        assert!(
+            goal_path.is_file(),
+            "GOAL_STATE.json must be physically present after complete"
+        );
+
+        // Verify archived: true and structural fields
+        let state = read_goal_state(&repo, Some("cp-task"))
+            .expect("read after complete")
+            .expect("state exists");
+        assert_eq!(state["archived"], json!(true));
+        assert!(state.get("completed_at").and_then(Value::as_str).is_some());
+        assert_eq!(state["status"], json!("completed"));
+
+        // File content changed (archived status injected)
+        let raw_after = fs::read_to_string(&goal_path).expect("read after");
+        assert_ne!(raw_before, raw_after, "file content must change after archiving");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    /// amend with keep_progress: false clears existing checkpoints.
+    #[test]
+    fn amend_clears_checkpoints_when_keep_progress_false() {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-amend-clear-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/ac-task")).expect("mkdir");
+        let rr = repo.display().to_string();
+
+        // Start
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "ac-task",
+            "goal": "clear test",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["echo ok"],
+            "drive_until_done": false,
+        }))
+        .expect("start");
+
+        // Add two checkpoints
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "checkpoint",
+            "task_id": "ac-task",
+            "note": "cp 1",
+        }))
+        .expect("cp1");
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "checkpoint",
+            "task_id": "ac-task",
+            "note": "cp 2",
+        }))
+        .expect("cp2");
+
+        // Verify checkpoints exist before amend
+        let before = read_goal_state(&repo, Some("ac-task"))
+            .expect("read before")
+            .expect("state");
+        assert_eq!(
+            before["checkpoints"].as_array().map(|a| a.len()),
+            Some(2),
+            "should have 2 checkpoints before amend"
+        );
+
+        // Amend with keep_progress: false
+        let amend_result = framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "amend",
+            "task_id": "ac-task",
+            "goal": "cleared goal",
+            "keep_progress": false,
+        }))
+        .expect("amend");
+        assert_eq!(amend_result["ok"], json!(true));
+
+        // Verify checkpoints cleared
+        let after = read_goal_state(&repo, Some("ac-task"))
+            .expect("read after")
+            .expect("state");
+        assert_eq!(
+            after["checkpoints"].as_array().map(|a| a.len()),
+            Some(0),
+            "checkpoints must be cleared when keep_progress is false"
+        );
+        assert_eq!(after["goal"], json!("cleared goal"));
+
+        let _ = fs::remove_dir_all(&repo);
     }
 }

@@ -597,6 +597,10 @@ pub fn hydrate_task_state_hybrid(
             && let Ok(agg) = serde_json::from_str::<Value>(&raw) {
                 goal_state = agg.get("goal_state").cloned().filter(|v| !v.is_null());
                 rfv_loop_state = agg.get("rfv_loop_state").cloned().filter(|v| !v.is_null());
+                // Fallback: old TASK_STATE.json had quality_gate_state key
+                if rfv_loop_state.is_none() {
+                    rfv_loop_state = agg.get("quality_gate_state").cloned().filter(|v| !v.is_null());
+                }
                 if let Some(ev) = agg.get("evidence") {
                     evidence_rows_non_empty = ev
                         .get("evidence_rows_non_empty")
@@ -799,28 +803,41 @@ pub fn parse_goal_completion_gates(goal: &Value) -> Option<GoalCompletionGates> 
     if raw.is_null() {
         return None;
     }
-    let o = raw.as_object()?;
-    let enabled = o.get("enabled").and_then(Value::as_bool).unwrap_or(true);
-    let min_depth_score = o
-        .get("min_depth_score")
-        .and_then(Value::as_u64)
-        .map(|u| u.min(3) as u8);
-    let require_successful_evidence_row = o
-        .get("require_successful_evidence_row")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let min_goal_checkpoints = o.get("min_goal_checkpoints").and_then(Value::as_u64);
-    let block_on_rfv_pass_without_evidence = o
-        .get("block_on_rfv_pass_without_evidence")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    Some(GoalCompletionGates {
-        enabled,
-        min_depth_score,
-        require_successful_evidence_row,
-        min_goal_checkpoints,
-        block_on_rfv_pass_without_evidence,
-    })
+    // Object format: advanced gates with explicit fields
+    if let Some(o) = raw.as_object() {
+        let enabled = o.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+        let min_depth_score = o
+            .get("min_depth_score")
+            .and_then(Value::as_u64)
+            .map(|u| u.min(3) as u8);
+        let require_successful_evidence_row = o
+            .get("require_successful_evidence_row")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let min_goal_checkpoints = o.get("min_goal_checkpoints").and_then(Value::as_u64);
+        let block_on_rfv_pass_without_evidence = o
+            .get("block_on_rfv_pass_without_evidence")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        return Some(GoalCompletionGates {
+            enabled,
+            min_depth_score,
+            require_successful_evidence_row,
+            min_goal_checkpoints,
+            block_on_rfv_pass_without_evidence,
+        });
+    }
+    // Array format (legacy): treat as basic metadata with no advanced constraints
+    if raw.as_array().is_some_and(|a| !a.is_empty()) {
+        return Some(GoalCompletionGates {
+            enabled: true,
+            min_depth_score: None,
+            require_successful_evidence_row: false,
+            min_goal_checkpoints: None,
+            block_on_rfv_pass_without_evidence: false,
+        });
+    }
+    None
 }
 
 /// Enforce `completion_gates` against [`resolve_task_view`] output (same rollup as L3 digest).
@@ -1124,7 +1141,7 @@ mod tests {
         )
         .unwrap();
         fs::write(
-            task_dir.join("QUALITY_GATE_STATE.json"),
+            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-rfv-loop-v1",
                 "loop_status": "active",
@@ -1151,7 +1168,7 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join("QUALITY_GATE_STATE.json"),
+            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-rfv-loop-v1",
                 "loop_status": "active",
@@ -1201,7 +1218,7 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join("QUALITY_GATE_STATE.json"),
+            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-rfv-loop-v1",
                 "loop_status": "active",
@@ -1250,7 +1267,7 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join("QUALITY_GATE_STATE.json"),
+            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-rfv-loop-v1",
                 "loop_status": "active",
@@ -1302,7 +1319,7 @@ mod tests {
         let task_dir = tmp.join("artifacts/current").join(tid);
         fs::create_dir_all(&task_dir).unwrap();
         fs::write(
-            task_dir.join("QUALITY_GATE_STATE.json"),
+            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-rfv-loop-v1",
                 "loop_status": "active",
@@ -1351,7 +1368,7 @@ mod tests {
         fs::create_dir_all(&task_dir).unwrap();
         let t40 = "0123456789012345678901234567890123456789";
         fs::write(
-            task_dir.join("QUALITY_GATE_STATE.json"),
+            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-rfv-loop-v1",
                 "external_research_strict": true,
@@ -1411,7 +1428,7 @@ mod tests {
         fs::create_dir_all(&task_dir).unwrap();
         let t40 = "0123456789012345678901234567890123456789";
         fs::write(
-            task_dir.join("QUALITY_GATE_STATE.json"),
+            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-rfv-loop-v1",
                 "external_research_strict": false,
@@ -1503,7 +1520,7 @@ mod tests {
         .unwrap();
         // RFV with PASS round + UNKNOWN round + a no_evidence_window flag.
         fs::write(
-            task_dir.join("QUALITY_GATE_STATE.json"),
+            task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
                 "schema_version": "router-rs-rfv-loop-v1",
                 "loop_status": "active",
