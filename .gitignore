@@ -47,6 +47,7 @@ output/
 .claude/.framework-projection-desktop.json
 .claude/rules/framework.md
 .claude/router-rs-hook.env
+.framework/
 .claude/settings.json
 .claude/hook-state/
 .claude/review_gate_*.json
