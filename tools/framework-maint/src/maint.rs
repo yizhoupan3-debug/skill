@@ -175,22 +175,18 @@ fn maint_skip_user_projection() -> bool {
     std::env::var_os("ROUTER_RS_MAINT_SKIP_USER_PROJECTION").is_some()
 }
 
-/// Install scopes per tool. Cursor is user-only; most tools default to project-only.
-/// Claude has a special case: project+user unless `ROUTER_RS_MAINT_SKIP_USER_PROJECTION` is set.
-const INSTALL_SCOPES_BY_TOOL: &[(&str, &[&str])] = &[("cursor", &["user"])];
-
+/// Install scopes per tool from RUNTIME_REGISTRY.json host_targets.metadata.*.install_scopes.
+/// Fallback: ["project"].
 fn projection_install_scopes_for_tool(tool: &str) -> Vec<&'static str> {
-    if let Some((_, scopes)) = INSTALL_SCOPES_BY_TOOL.iter().find(|(t, _)| *t == tool) {
-        return scopes.to_vec();
+    let scopes = framework_kernel::runtime_registry::install_scopes(tool);
+    if scopes.is_empty() {
+        return vec!["project"];
     }
-    if tool == "claude" {
-        return if maint_skip_user_projection() {
-            vec!["project"]
-        } else {
-            vec!["project", "user"]
-        };
+    // Special case: skip user scope if env var is set
+    if scopes.contains(&"user") && maint_skip_user_projection() {
+        return vec!["project"];
     }
-    vec!["project"]
+    scopes.to_vec()
 }
 
 fn installable_projection_tools(repo_root: &Path) -> Result<Vec<String>, String> {
@@ -247,7 +243,8 @@ fn build_verify_registry(
 }
 
 fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
-    let hooks_json = repo_root.join(".cursor/hooks.json");
+    let dotdir = framework_kernel::runtime_registry::host_private_config_dir("cursor");
+    let hooks_json = repo_root.join(format!("{dotdir}/hooks.json"));
     let harness = repo_root.join("configs/framework/HARNESS_OPERATOR_NUDGES.json");
     for path in [&hooks_json, &harness] {
         if !path.is_file() {
@@ -261,12 +258,12 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
         .get("hooks")
         .and_then(Value::as_object)
         .ok_or_else(|| {
-            "verify_cursor_hooks: .cursor/hooks.json must contain a hooks object".to_string()
+            format!("verify_cursor_hooks: {dotdir}/hooks.json must contain a hooks object")
         })?;
 
     let required_events = host_projection::hosts::host_extensions::config::host_registered_hook_events("cursor");
-    const ROUTER_NEEDLE: &str = "cursor-router-rs-hook.sh";
-    const LAUNCHER_NEEDLE: &str = "cursor-router-rs-hook.sh";
+    let router_needle = format!("{dotdir}-router-rs-hook.sh").replace('.', "");
+    let launcher_needle = router_needle.clone();
 
     for event in required_events {
         let entries = hooks
@@ -285,10 +282,10 @@ fn verify_cursor_hooks(repo_root: PathBuf) -> Result<(), String> {
         }
         if !cmds
             .iter()
-            .any(|c| c.contains(ROUTER_NEEDLE) || c.contains(LAUNCHER_NEEDLE))
+            .any(|c| c.contains(&router_needle) || c.contains(&launcher_needle))
         {
             return Err(format!(
-                "verify_cursor_hooks: {event} must invoke `{ROUTER_NEEDLE}` or `{LAUNCHER_NEEDLE}` (see hooks.json)"
+                "verify_cursor_hooks: {event} must invoke `{router_needle}` or `{launcher_needle}` (see hooks.json)"
             ));
         }
     }
@@ -373,9 +370,10 @@ fn verify_cursor_launcher_fail_closed(repo_root: &Path) -> Result<(), String> {
 }
 
 fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
-    let rule = repo_root.join(".claude/rules/framework.md");
-    let settings = repo_root.join(".claude/settings.json");
-    let manifest = repo_root.join(".claude/.framework-projection.json");
+    let dotdir = framework_kernel::runtime_registry::host_private_config_dir("claude");
+    let rule = repo_root.join(format!("{dotdir}/rules/framework.md"));
+    let settings = repo_root.join(format!("{dotdir}/settings.json"));
+    let manifest = repo_root.join(format!("{dotdir}/.framework-projection.json"));
     for path in [&rule, &settings, &manifest] {
         if !path.is_file() {
             return Err(format!(
@@ -387,15 +385,14 @@ fn verify_claude_projection(repo_root: &Path) -> Result<(), String> {
     let rule_text = fs::read_to_string(&rule).map_err(|e| e.to_string())?;
     if !rule_text.contains("host_projection: claude") {
         return Err(
-            "verify_claude_projection: .claude/rules/framework.md must declare claude projection"
-                .to_string(),
+            format!("verify_claude_projection: {dotdir}/rules/framework.md must declare claude projection"),
         );
     }
     let manifest_text = fs::read_to_string(&manifest).map_err(|e| e.to_string())?;
     let manifest_json: Value = serde_json::from_str(&manifest_text).map_err(|e| e.to_string())?;
     if manifest_json.get("host_projection").and_then(Value::as_str) != Some("claude") {
         return Err(
-            "verify_claude_projection: .claude/.framework-projection.json must declare claude"
+            format!("verify_claude_projection: {dotdir}/.framework-projection.json must declare claude")
                 .to_string(),
         );
     }
@@ -504,12 +501,13 @@ fn verify_opencode_projection_scope(
     roots: &host_projection::host_integration::ResolvedProjectionRoots,
     scope: &str,
 ) -> Result<(), String> {
+    let dotdir = framework_kernel::runtime_registry::host_private_config_dir("opencode");
     let config = if scope == "user" {
         roots
             .account_home_root
             .join(".config/opencode/opencode.json")
     } else {
-        roots.project_root.join(".opencode/opencode.json")
+        roots.project_root.join(format!("{dotdir}/opencode.json"))
     };
     let manifest = if scope == "user" {
         roots
@@ -518,7 +516,7 @@ fn verify_opencode_projection_scope(
     } else {
         roots
             .project_root
-            .join(".opencode/.framework-projection.json")
+            .join(format!("{dotdir}/.framework-projection.json"))
     };
 
     for path in [&config, &manifest] {
@@ -586,28 +584,29 @@ fn run_cursor_smoke_session_start(repo_root: &Path) -> Result<(), String> {
 }
 
 fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
-    eprintln!("Verifying Codex hook projection");
+    let dotdir = framework_kernel::runtime_registry::host_private_config_dir("codex");
+    eprintln!("Verifying Codex hook projection ({dotdir})");
     let exe = resolve_router_rs_binary(&repo_root)?;
     for rel in [
-        ".codex/config.toml",
-        ".codex/hooks.json",
-        ".codex/README.md",
-        "AGENTS.md",
+        format!("{dotdir}/config.toml"),
+        format!("{dotdir}/hooks.json"),
+        format!("{dotdir}/README.md"),
+        "AGENTS.md".to_string(),
     ] {
-        let p = repo_root.join(rel);
+        let p = repo_root.join(&rel);
         if !p.is_file() {
             return Err(format!("verify_codex_hooks: missing {}", p.display()));
         }
     }
 
     let config =
-        fs::read_to_string(repo_root.join(".codex/config.toml")).map_err(|e| e.to_string())?;
+        fs::read_to_string(repo_root.join(format!("{dotdir}/config.toml"))).map_err(|e| e.to_string())?;
     if !config.contains("hooks = true") {
-        return Err("verify_codex_hooks: .codex/config.toml must enable hooks".into());
+        return Err(format!("verify_codex_hooks: {dotdir}/config.toml must enable hooks"));
     }
     if config.contains("codex_hooks") {
         return Err(
-            "verify_codex_hooks: .codex/config.toml must not use deprecated codex_hooks".into(),
+            format!("verify_codex_hooks: {dotdir}/config.toml must not use deprecated codex_hooks"),
         );
     }
     let registry = framework_kernel::runtime_registry::load_runtime_registry_payload(&repo_root)
@@ -616,13 +615,13 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
     for mcp_id in &required_mcps {
         if !config.contains(mcp_id) {
             return Err(format!(
-                "verify_codex_hooks: .codex/config.toml must register MCP server {mcp_id}"
+                "verify_codex_hooks: {dotdir}/config.toml must register MCP server {mcp_id}"
             ));
         }
     }
 
     let hooks_text =
-        fs::read_to_string(repo_root.join(".codex/hooks.json")).map_err(|e| e.to_string())?;
+        fs::read_to_string(repo_root.join(format!("{dotdir}/hooks.json"))).map_err(|e| e.to_string())?;
     // Parse JSON for structural validation instead of fragile string matching
     let hooks_json: serde_json::Value =
         serde_json::from_str(&hooks_text).map_err(|e| format!("verify_codex_hooks: invalid hooks.json: {e}"))?;
@@ -637,12 +636,12 @@ fn verify_codex_hooks(repo_root: PathBuf) -> Result<(), String> {
     }
     if hooks_text.contains("scripts/codex_hook_entrypoint.sh") {
         return Err(
-            "verify_codex_hooks: .codex/hooks.json must call router-rs codex hook directly".into(),
+            format!("verify_codex_hooks: {dotdir}/hooks.json must call router-rs codex hook directly"),
         );
     }
 
     let readme =
-        fs::read_to_string(repo_root.join(".codex/README.md")).map_err(|e| e.to_string())?;
+        fs::read_to_string(repo_root.join(format!("{dotdir}/README.md"))).map_err(|e| e.to_string())?;
     const STALE_HOST_MARKERS: &[&str] = &[
         "sessionEnd",
         "Kiro",
@@ -901,8 +900,21 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
                 "install",
             ],
         )?;
-        for tool in ["claude"] {
+        // Install host-specific projections for all hosts with user scopes
+        let host_homes = {
+            let mut m = std::collections::HashMap::new();
+            m.insert("codex", &codex_home as &Path);
+            m.insert("cursor", &cursor_home as &Path);
+            m.insert("claude", &claude_home as &Path);
+            m
+        };
+        for tool in framework_kernel::runtime_registry::ALL_HOST_IDS {
+            let home = match host_homes.get(tool) {
+                Some(h) => h.to_path_buf(),
+                None => host_home_path(tool)?,
+            };
             for scope in projection_install_scopes_for_tool(tool) {
+                let home_flag = format!("--{tool}-home");
                 run_router(
                     &fw,
                     &[
@@ -915,8 +927,8 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
                         fw.to_string_lossy().as_ref(),
                         "--artifact-root",
                         art.to_string_lossy().as_ref(),
-                        "--claude-home",
-                        claude_home.to_string_lossy().as_ref(),
+                        &home_flag,
+                        home.to_string_lossy().as_ref(),
                         "--scope",
                         scope,
                         "--to",
@@ -1246,25 +1258,22 @@ fn cap_values(mut values: Vec<Value>, max: usize) -> Vec<Value> {
     values
 }
 
-fn codex_home_path() -> Result<PathBuf, String> {
-    std::env::var_os("CODEX_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".codex")))
-        .ok_or_else(|| "CODEX_HOME or HOME must be set for host skill publish".to_string())
-}
+fn codex_home_path() -> Result<PathBuf, String> { host_home_path("codex") }
+fn cursor_home_path() -> Result<PathBuf, String> { host_home_path("cursor") }
+fn claude_home_path() -> Result<PathBuf, String> { host_home_path("claude") }
 
-fn cursor_home_path() -> Result<PathBuf, String> {
-    std::env::var_os("CURSOR_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cursor")))
-        .ok_or_else(|| "CURSOR_HOME or HOME must be set for host skill publish".to_string())
-}
-
-fn claude_home_path() -> Result<PathBuf, String> {
-    std::env::var_os("CLAUDE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".claude")))
-        .ok_or_else(|| "CLAUDE_HOME or HOME must be set for host skill publish".to_string())
+/// Generic host home path resolution: checks `$HOST_HOME` env var,
+/// falls back to `$HOME/<config_dir>` from RUNTIME_REGISTRY.json.
+fn host_home_path(host_id: &str) -> Result<PathBuf, String> {
+    let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
+    if !env_var.is_empty() {
+        if let Some(path) = std::env::var_os(env_var) {
+            return Ok(PathBuf::from(path));
+        }
+    }
+    std::env::var_os("HOME")
+        .map(|h| PathBuf::from(h).join(framework_kernel::runtime_registry::host_private_config_dir(host_id)))
+        .ok_or_else(|| format!("{env_var} or HOME must be set for host skill publish"))
 }
 
 fn autoresearch_integration_tests_enabled() -> bool {
@@ -1286,18 +1295,18 @@ fn host_skills_publish_enabled() -> bool {
 }
 
 fn print_local_homes(fw: PathBuf) -> Result<(), String> {
-    let codex = fw.join(".local/codex-home");
-    let cursor = fw.join(".local/cursor-home");
-    fs::create_dir_all(&codex).map_err(|e| e.to_string())?;
-    fs::create_dir_all(&cursor).map_err(|e| e.to_string())?;
-    let claude = std::env::var_os("HOME")
-        .map(|h| PathBuf::from(h).join(".claude"))
-        .unwrap_or_else(|| fw.join(".local/claude-home"));
-    println!("export CODEX_HOME={}", codex.display());
-    println!("export CURSOR_HOME={}", cursor.display());
-    println!("export CLAUDE_HOME={}", claude.display());
+    for host_dir in framework_kernel::runtime_registry::host_home_dirs() {
+        let host_id = host_dir.trim_start_matches('.');
+        let local = fw.join(format!(".local/{host_id}-home"));
+        fs::create_dir_all(&local).map_err(|e| e.to_string())?;
+        let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
+        let home = std::env::var_os(&env_var)
+            .map(PathBuf::from)
+            .unwrap_or_else(|| local.clone());
+        println!("export {env_var}={}", home.display());
+    }
     println!(
-        "# note: GUI apps may need launching from this shell to inherit CODEX_HOME / CURSOR_HOME / CLAUDE_HOME"
+        "# note: GUI apps may need launching from this shell to inherit host HOME vars"
     );
     println!(
         "# Claude Desktop MCP (macOS): ~/Library/Application Support/Claude/claude_desktop_config.json"

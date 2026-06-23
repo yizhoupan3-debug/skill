@@ -266,6 +266,25 @@ fn main() {
     out.push_str("        _ => \"\",\n");
     out.push_str("    }\n}\n\n");
 
+    // install_scopes — returns &'static [&'static str] for a host_id
+    out.push_str("pub fn install_scopes(host_id: &str) -> &'static [&'static str] {\n");
+    out.push_str("    match host_id {\n");
+    for id in &supported {
+        if let Some(arr) = metadata.get(id.as_str())
+            .and_then(|m| m.get("install_scopes"))
+            .and_then(serde_json::Value::as_array)
+        {
+            let items: Vec<String> = arr.iter()
+                .filter_map(|v| v.as_str().map(|s| format!("\"{s}\"")))
+                .collect();
+            if !items.is_empty() {
+                out.push_str(&format!("        \"{id}\" => &[{}],\n", items.join(", ")));
+            }
+        }
+    }
+    out.push_str("        _ => &[\"project\"],\n");
+    out.push_str("    }\n}\n\n");
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     fs::write(out_dir.join("generated_host_tables.rs"), out)
         .expect("write generated_host_tables.rs");

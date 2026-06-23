@@ -49,7 +49,8 @@
     "rate_limit_auto_resume",
     "session_supervisor_driver",
     "context_file",
-    "dispatcher_type"
+    "dispatcher_type",
+    "install_scopes"
   ],
   "install_tools": [
     "cursor",

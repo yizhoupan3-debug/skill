@@ -58,7 +58,7 @@ pub struct SchemaDriftBaseline {
     pub task_id: String,
     /// Host-specific hooks snapshot (opaque JSON blob from L0 host extension).
     /// No L4 code inspects this struct; comparison is `Value` equality.
-    pub cursor_hooks: Value,
+    pub host_hooks: Value,
     pub task_artifacts: TaskArtifactsDriftSnapshot,
     pub contracts: ContractVersionsSnapshot,
 }
@@ -105,7 +105,7 @@ pub fn baseline_path(repo_root: &Path, task_id: &str) -> PathBuf {
 
 /// Fallback hooks snapshot used when the real snapshot fails.
 /// The `["snapshot_failed"]` array ensures `host_hooks_json_ok` returns false.
-fn fallback_cursor_hooks_json() -> Value {
+fn fallback_host_hooks_json() -> Value {
     json!({
         "registered_events": [],
         "forbidden_still_registered": ["snapshot_failed"],
@@ -203,7 +203,7 @@ pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBase
         schema_version: SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION.to_string(),
         recorded_at: framework_kernel::time::now_iso(),
         task_id: task_id.to_string(),
-        cursor_hooks: snapshot_host_hooks_json_for(repo_root, "cursor")?,
+        host_hooks: snapshot_host_hooks_json_for(repo_root, "cursor")?,
         task_artifacts: snapshot_task_artifacts(repo_root, task_id),
         contracts: ContractVersionsSnapshot {
             closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
@@ -252,7 +252,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     let baseline_present = path.is_file();
     let mut drift = Vec::new();
 
-    let current_hooks = snapshot_host_hooks_json_for(repo_root, "cursor").unwrap_or_else(|_| fallback_cursor_hooks_json());
+    let current_hooks = snapshot_host_hooks_json_for(repo_root, "cursor").unwrap_or_else(|_| fallback_host_hooks_json());
     let current_artifacts = snapshot_task_artifacts(repo_root, task_id);
     let current_contracts = ContractVersionsSnapshot {
         closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
@@ -322,7 +322,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
         };
     }
 
-    if let Some(item) = drift_item("cursor_hooks", &baseline.cursor_hooks, &current_hooks) {
+    if let Some(item) = drift_item("host_hooks", &baseline.host_hooks, &current_hooks) {
         drift.push(item);
     }
     if let Some(item) = drift_item(
@@ -337,7 +337,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     }
 
     let ok = drift.is_empty()
-        && host_hooks_json_ok(&baseline.cursor_hooks)
+        && host_hooks_json_ok(&baseline.host_hooks)
         && host_hooks_json_ok(&current_hooks)
         && current_artifacts.headings_match
         && (!current_artifacts.evidence_index_present

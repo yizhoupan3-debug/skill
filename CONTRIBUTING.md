@@ -33,6 +33,20 @@
 
 依赖方向：`router-rs` → `runtime-core` → `host-projection`, `core-policy`, `routing-engine`, `framework-kernel`。B0 crates（`core-policy`/`routing-engine`/`framework-kernel`）不依赖 `router-rs`。
 
+## 注册表驱动架构
+
+所有宿主元数据从 `configs/framework/RUNTIME_REGISTRY.json` 的 `host_targets.metadata.*` 生成。
+
+### 添加新宿主
+
+1. 在 `RUNTIME_REGISTRY.json` 的 `host_targets.supported` 数组中添加新的 host_id
+2. 在 `host_targets.metadata` 中添加对应的完整字段（参考现有宿主）
+3. 在 `host_targets.host_providers` 中添加 provider 声明（`dispatcher_type` 等）
+4. 运行 `cargo build` — `framework-kernel/build.rs` 和 `host-projection/build.rs` 自动生成所有代码
+5. 运行 `cargo test` — 合约测试验证注册表一致性
+
+**零手动 Rust 代码变更** — 所有 provider struct、trait impl、常量和查找函数均从注册表自动生成。
+
 ## 快速开始
 
 ```bash

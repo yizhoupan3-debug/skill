@@ -68,7 +68,10 @@
         "context_file": "AGENTS.md",
         "dispatcher_type": "CursorDispatcher",
         "hook_state_unreadable_tag": "CURSOR_HOOK_STATE_UNREADABLE",
-        "session_namespace_env": "ROUTER_RS_CURSOR_SESSION_NAMESPACE"
+        "session_namespace_env": "ROUTER_RS_CURSOR_SESSION_NAMESPACE",
+        "install_scopes": [
+          "user"
+        ]
       },
       "opencode": {
         "display_name": "OpenCode",
@@ -123,7 +126,10 @@
         "context_file": "AGENTS.md",
         "dispatcher_type": "OpenCodeDispatcher",
         "hook_state_unreadable_tag": "OPENCODE_HOOK_STATE_UNREADABLE",
-        "session_namespace_env": "ROUTER_RS_OPENCODE_SESSION_NAMESPACE"
+        "session_namespace_env": "ROUTER_RS_OPENCODE_SESSION_NAMESPACE",
+        "install_scopes": [
+          "project"
+        ]
       },
       "codex": {
         "display_name": "Codex",
@@ -192,7 +198,10 @@
         "context_file": "AGENTS.md",
         "dispatcher_type": "CodexDispatcher",
         "hook_state_unreadable_tag": "CODEX_HOOK_STATE_UNREADABLE",
-        "session_namespace_env": "ROUTER_RS_CODEX_SESSION_NAMESPACE"
+        "session_namespace_env": "ROUTER_RS_CODEX_SESSION_NAMESPACE",
+        "install_scopes": [
+          "project"
+        ]
       },
       "claude": {
         "display_name": "Claude",
@@ -246,7 +255,11 @@
         "context_file": "AGENTS.md",
         "dispatcher_type": "ClaudeDispatcher",
         "hook_state_unreadable_tag": "CLAUDE_HOOK_STATE_UNREADABLE",
-        "session_namespace_env": "ROUTER_RS_CLAUDE_SESSION_NAMESPACE"
+        "session_namespace_env": "ROUTER_RS_CLAUDE_SESSION_NAMESPACE",
+        "install_scopes": [
+          "project",
+          "user"
+        ]
       }
     },
     "host_providers": {
