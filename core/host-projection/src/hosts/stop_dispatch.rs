@@ -139,8 +139,7 @@ pub fn run_unified_stop(
     hook_dispatch::apply_override_and_reject(&mut review_state, &prompt, &stop_signal);
 
     // ── 8. Goal gate evaluation (shared) ──
-    let goal_drive_entrypoint =
-        core_policy::hook_common::is_framework_goal_entry_prompt(&prompt);
+    let goal_drive_entrypoint = false;
     hook_dispatch::update_goal_gate(
         &mut review_state,
         &prompt,

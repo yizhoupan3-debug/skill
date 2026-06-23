@@ -169,8 +169,7 @@ pub trait HostHookDispatcher: HostHookConfig {
         }
         // Compute review_required from the prompt (was previously hardcoded false,
         // making spawn-first review nudge permanently disabled — P1.6).
-        let review_required = core_policy::hook_common::is_review_prompt(&prompt)
-            && !core_policy::hook_common::is_framework_goal_entry_prompt(&prompt);
+        let review_required = core_policy::hook_common::is_review_prompt(&prompt);
         let contexts = build_user_prompt_context_injection(
             event.repo_root,
             &prompt,
@@ -1212,9 +1211,9 @@ pub fn merge_review_gate_on_user_prompt(
     }
 
     let interactive = core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt);
-    let goal_drive = core_policy::hook_common::is_framework_goal_entry_prompt(prompt);
+    let goal_drive = false;
     let narrow = core_policy::hook_common::is_narrow_review_prompt(prompt);
-    let review_arms = core_policy::hook_common::is_review_prompt(prompt) && !goal_drive;
+    let review_arms = core_policy::hook_common::is_review_prompt(prompt);
     let override_now = core_policy::hook_common::has_override(prompt);
 
     let mut core = prev.clone();
@@ -1302,7 +1301,7 @@ pub fn evaluate_stop_decision(
     apply_override_and_reject(core, prompt, stop_signal);
 
     // 3. Goal gate update
-    let goal_entry = core_policy::hook_common::is_framework_goal_entry_prompt(prompt);
+    let goal_entry = false;
     update_goal_gate(core, prompt, response_text, goal_entry);
 
     // 4. Review gate
@@ -1334,14 +1333,12 @@ pub fn evaluate_stop_decision(
 }
 
 /// Detect if the user is explicitly invoking plan mode in the prompt.
-/// Covers: /planx, /discussx, "写plan", "plan mode", "做计划", "制定计划" etc.
+/// Covers: /planx, /discussx, "写plan", "给plan", "plan mode", "做计划", "制定计划" etc.
 fn is_plan_keyword_in_prompt(text: &str) -> bool {
-    if core_policy::hook_common::is_my_pre_execution_entry_prompt(text) {
-        return true;
-    }
     let lower = text.to_ascii_lowercase();
     lower.contains("plan mode")
         || lower.contains("写plan")
+        || lower.contains("给plan")
         || lower.contains("做计划")
         || lower.contains("制定计划")
         || lower.contains("先规划")
@@ -1429,8 +1426,7 @@ pub fn build_user_prompt_context_injection(
     // Auto-amend: when scope change is detected and there's an active goal,
     // append the new constraint to done_when so the model incorporates it.
     // SKIP if user is invoking plan mode (plan and goal are mutually exclusive).
-    let is_plan_invocation = core_policy::hook_common::is_my_pre_execution_entry_prompt(prompt)
-        || is_plan_keyword_in_prompt(prompt);
+    let is_plan_invocation = is_plan_keyword_in_prompt(prompt);
     if !is_plan_invocation {
         if let Ok(Some(goal)) = core_state::state_manager::read_goal_state(repo_root, None) {
         let goal_running = goal.get("status").and_then(Value::as_str) == Some("running");

@@ -35,6 +35,35 @@ impl StopHostOps for RegistryDispatcher {
         extract_session_key(payload, "", fallback, self.config.scan_tool_input)
     }
     fn stop_signal_text(&self, payload: &Value) -> String { stop_signal_text_from_payload(payload) }
+
+    /// Hydrate goal gate from disk: when GOAL_STATE shows the goal is no longer
+    /// driving (completed / blocked / drive_until_done=false), clear the stale
+    /// `goal_drive_entry_active` flag so the goal gate doesn't block unrelated
+    /// prompts (e.g. entering plan mode).
+    fn hydrate_goal_gate_from_disk(
+        &self,
+        repo_root: &std::path::Path,
+        state: &mut core_policy::hook_review_disk_state::HookReviewDiskCore,
+        _goal_drive_entrypoint: bool,
+    ) {
+        if !state.goal_drive_entry_active {
+            return; // nothing to clear
+        }
+        let goal = match core_state::state_manager::read_goal_state(repo_root, None) {
+            Ok(Some(g)) => g,
+            _ => return,
+        };
+        let driving = goal.get("drive_until_done").and_then(Value::as_bool).unwrap_or(false);
+        let status = goal.get("status").and_then(Value::as_str).unwrap_or("");
+        let running = status == "running";
+        // Clear the stale flag when the goal is no longer driving the session.
+        if !driving || !running {
+            state.goal_drive_entry_active = false;
+            state.goal_contract_seen = false;
+            state.goal_progress_seen = false;
+            state.goal_verify_or_block_seen = false;
+        }
+    }
 }
 
 impl HostHookDispatcher for RegistryDispatcher {
