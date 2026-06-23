@@ -6,7 +6,35 @@ pub const SESSION_SUPERVISOR_STORE_SCHEMA_VERSION: &str = "router-rs-session-sup
 pub const SESSION_SUPERVISOR_AUTHORITY: &str = "rust-session-supervisor";
 pub(crate) const DEFAULT_BACKOFF_SECONDS: i64 = 300;
 /// Workers without a live process that stay in active statuses longer than this are reaped on `list`.
-pub(crate) const DEFAULT_WORKER_STALE_AFTER_SECS: i64 = 300;
+pub(crate) const DEFAULT_WORKER_STALE_AFTER_SECS: i64 = 60;
+
+/// Agent health tracking entry: records subagent lifecycle.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentHealthEntry {
+    pub agent_id: String,
+    pub host_id: String,
+    pub status: String, // running | completed | failed | interrupted
+    pub spawned_at: String,
+    pub completed_at: Option<String>,
+    pub error: Option<String>,
+    pub spawned_by_tool: String, // "agent" | "task" | "workflow"
+}
+
+impl AgentHealthEntry {
+    pub fn is_alive(&self) -> bool {
+        matches!(self.status.as_str(), "running")
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        matches!(self.status.as_str(), "completed" | "failed" | "interrupted")
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentHealthStore {
+    pub schema_version: String,
+    pub agents: Vec<AgentHealthEntry>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SessionSupervisorStore {

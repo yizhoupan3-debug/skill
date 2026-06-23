@@ -181,9 +181,8 @@ pub trait HostProvider: HostLifecycle + HostToolExecutor + HostTelemetry {
 
     fn capabilities(&self) -> HostCapabilities;
 
-    /// Hook event dispatcher for this host. Each host maps to a concrete
-    /// dispatcher type (CursorDispatcher, ClaudeDispatcher, etc.) that
-    /// implements HostHookDispatcher.
+    /// Hook event dispatcher for this host. Returns a `RegistryDispatcher`
+    /// configured from RUNTIME_REGISTRY.json fields.
     /// Used by CLI dispatch to avoid hardcoded host match arms.
     fn dispatcher(&self) -> Box<dyn crate::hosts::hook_dispatch::HostHookDispatcher> {
         Box::new(NullHostDispatcher { host_id: self.host_id() })
@@ -437,26 +436,39 @@ mod tests {
     #[test]
     #[serial]
     fn all_host_capabilities_match_expected_values() {
-        let cases: &[(&str, &str, &str, &str, bool)] = &[
-            // (host_id, transport_type, config_path_contains, session_supervisor, has_worktree)
-            ("cursor", "cursor-agent", "mcp.json", "unsupported", true),
-            (
-                "claude",
-                "anthropic-claude",
-                ".claude/settings.json",
-                "mcp_bridge",
-                true,
-            ),
-            (
-                "opencode",
-                "native-opencode",
-                ".opencode/opencode.json",
-                "unsupported",
-                true,
-            ),
-            ("codex", "native-codex", "config.toml", "codex_driver", true),
+        // Load transport_type and session_supervisor_driver from RUNTIME_REGISTRY.json
+        // so the test stays in sync with the single source of truth.
+        let framework_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("..");
+        let registry =
+            framework_kernel::runtime_registry::load_runtime_registry_payload(&framework_root)
+                .expect("load RUNTIME_REGISTRY.json");
+        let metadata = registry
+            .get("host_targets")
+            .and_then(|ht| ht.get("metadata"))
+            .and_then(|m| m.as_object())
+            .expect("host_targets.metadata");
+        let cases: &[(&str, &str, bool)] = &[
+            // (host_id, config_path_contains, has_worktree)
+            ("cursor", "mcp.json", true),
+            ("claude", ".claude/settings.json", true),
+            ("opencode", ".opencode/opencode.json", true),
+            ("codex", "config.toml", true),
         ];
-        for &(host_id, transport, config_contains, supervisor, worktree) in cases {
+        for &(host_id, config_contains, worktree) in cases {
+            let host_meta = metadata
+                .get(host_id)
+                .unwrap_or_else(|| panic!("metadata missing host_id `{host_id}`"));
+            let expected_transport = host_meta
+                .get("transport_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or_else(|| panic!("{host_id}: metadata missing transport_type"));
+            let expected_supervisor = host_meta
+                .get("session_supervisor_driver")
+                .and_then(|v| v.as_str())
+                .unwrap_or_else(|| panic!("{host_id}: metadata missing session_supervisor_driver"));
+
             let provider = host_provider_for_id(host_id).expect(host_id);
             let caps = provider.capabilities();
             assert!(caps.has_native_hook, "{host_id}: has_native_hook");
@@ -465,14 +477,17 @@ mod tests {
                 caps.supports_worktree, worktree,
                 "{host_id}: supports_worktree"
             );
-            assert_eq!(caps.transport_type, transport, "{host_id}: transport_type");
+            assert_eq!(
+                caps.transport_type, expected_transport,
+                "{host_id}: transport_type"
+            );
             assert!(
                 caps.config_path.contains(config_contains),
                 "{host_id}: config_path"
             );
             assert_eq!(
                 provider.session_supervisor_driver(),
-                supervisor,
+                expected_supervisor,
                 "{host_id}: supervisor"
             );
             // All 4 hosts share these via trait defaults

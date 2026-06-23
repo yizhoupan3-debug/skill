@@ -3468,11 +3468,28 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
         "nl_route_adjustments must register has_paper_prose_negation_context"
     );
     let hooks_rs = read_text(&root.join("core/host-projection/src/hooks.rs"));
-    for env in [
-        "ROUTER_RS_CURSOR_PAPER_PROSE_HOOK",
-        "ROUTER_RS_CODEX_PAPER_PROSE_HOOK",
-        "ROUTER_RS_CLAUDE_PAPER_PROSE_HOOK",
-    ] {
+    // Collect paper_prose_env values from RUNTIME_REGISTRY.json → host_targets.metadata
+    let registry_path = root.join("configs/framework/RUNTIME_REGISTRY.json");
+    let registry_text = fs::read_to_string(&registry_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", registry_path.display()));
+    let registry: serde_json::Value =
+        serde_json::from_str(&registry_text).expect("parse RUNTIME_REGISTRY.json");
+    let metadata = registry
+        .get("host_targets")
+        .and_then(|ht| ht.get("metadata"))
+        .and_then(|m| m.as_object())
+        .expect("host_targets.metadata");
+    let paper_prose_envs: Vec<String> = metadata
+        .values()
+        .filter_map(|h| h.get("paper_prose_env"))
+        .filter_map(|v| v.as_str())
+        .map(String::from)
+        .collect();
+    assert!(
+        !paper_prose_envs.is_empty(),
+        "RUNTIME_REGISTRY.json host_targets.metadata must declare at least one paper_prose_env"
+    );
+    for env in &paper_prose_envs {
         assert!(
             hooks_rs.contains(env),
             "host-projection/src/hooks.rs must declare {env} (v6: moved from paper_prose_hook.rs)"

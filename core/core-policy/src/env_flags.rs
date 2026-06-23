@@ -32,6 +32,8 @@ pub fn test_review_gate_disabled_override() -> Option<bool> {
 }
 
 const ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV: &str = "ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE";
+const ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str =
+    "ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE";
 const ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV: &str =
     "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
 const ROUTER_RS_TASK_LEDGER_FLOCK_ENV: &str = "ROUTER_RS_TASK_LEDGER_FLOCK";
@@ -49,19 +51,6 @@ const ROUTER_RS_OPENCODE_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE_ENV: &str =
 
 /// Canonical review-gate disable env (all hosts).
 pub(crate) const ROUTER_RS_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_REVIEW_GATE_DISABLE";
-/// Legacy per-host review-gate disable env names. Production code uses
-/// `framework_kernel::runtime_registry::REVIEW_GATE_DISABLE_BY_HOST` for
-/// host-specific disable; these constants are kept for test reference only.
-/// The per-host env strings were previously duplicated in this module and
-/// in framework-kernel — the canonical source is now `REVIEW_GATE_DISABLE_BY_HOST`.
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) const ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE";
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) const ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE";
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) const ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE";
-#[cfg_attr(not(test), allow(dead_code))]
-pub(crate) const ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE_ENV: &str = "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE";
 
 const ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV: &str = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
 const ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV: &str =
@@ -101,7 +90,12 @@ pub fn router_rs_review_spawn_first_nudge_enabled() -> bool {
     env_enabled_default_true(ROUTER_RS_REVIEW_SPAWN_FIRST_NUDGE_ENV)
 }
 
+/// Canonical `ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE`; legacy `ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` still honored.
+/// Canonical explicitly set wins over legacy; unset falls through to legacy.
 pub fn router_rs_subagent_model_inherit_nudge_enabled() -> bool {
+    if std::env::var(ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE_ENV).is_ok() {
+        return env_enabled_default_true(ROUTER_RS_SUBAGENT_MODEL_INHERIT_NUDGE_ENV);
+    }
     env_enabled_default_true(ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE_ENV)
 }
 
@@ -277,10 +271,10 @@ mod tests {
         let _g = process_env_lock();
         let keys = [
             ROUTER_RS_REVIEW_GATE_DISABLE_ENV,
-            ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE_ENV,
-            ROUTER_RS_CODEX_REVIEW_GATE_DISABLE_ENV,
-            ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV,
-            ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE_ENV,
+            "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE",
+            "ROUTER_RS_CODEX_REVIEW_GATE_DISABLE",
+            "ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE",
+            "ROUTER_RS_OPENCODE_REVIEW_GATE_DISABLE",
         ];
         let prev: Vec<_> = keys.iter().map(|k| (*k, env::var_os(k))).collect();
         for key in keys {
@@ -290,7 +284,7 @@ mod tests {
         unsafe { env::set_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV, "1") };
         assert!(router_rs_review_gate_disabled_for_host("codex"));
         unsafe { env::remove_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) };
-        unsafe { env::set_var(ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE_ENV, "true") };
+        unsafe { env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", "true") };
         assert!(router_rs_review_gate_disabled_for_host("claude"));
         for (key, val) in prev {
             match val {

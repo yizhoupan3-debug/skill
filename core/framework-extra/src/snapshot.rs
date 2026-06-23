@@ -3,13 +3,13 @@
 //! Functions for building the runtime snapshot envelope (`build_framework_runtime_snapshot_envelope`
 //! and `build_framework_runtime_snapshot_envelope_with_level`) as well as internal helpers.
 
-use framework_runtime::constants::{
+use fr_utils::constants::{
     FRAMEWORK_RUNTIME_AUTHORITY, FRAMEWORK_RUNTIME_SNAPSHOT_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME,
     NEXT_ACTIONS_FILENAME, EVIDENCE_INDEX_FILENAME, TRACE_METADATA_FILENAME,
     SUPERVISOR_STATE_FILENAME, TASK_REGISTRY_SCHEMA_VERSION,
 };
-use framework_runtime::json_value::{nonempty_string, value_text};
-use framework_runtime::runtime_view;
+use fr_utils::json_value::{nonempty_string, value_text};
+use fr_exec::runtime_view;
 use serde_json::{Value, json};
 use std::path::Path;
 use tracing::instrument;
@@ -134,7 +134,7 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
 
     let mut runtime_snapshot = json!({
         "ok": true,
-        "workspace": framework_runtime::runtime_view::workspace_name_from_root(repo_root),
+        "workspace": fr_exec::runtime_view::workspace_name_from_root(repo_root),
         "detail_level": if is_full { "full" } else { "summary" },
         "control_plane_present": snapshot.task_pointers_present
             && !snapshot.supervisor_state.is_empty(),

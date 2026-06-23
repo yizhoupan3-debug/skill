@@ -198,7 +198,7 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
         "warning": if capped {
             Some(format!(
                 "max_rounds requested {requested_max} exceeds hard cap {}; stored max_rounds={max_rounds}",
-                framework_runtime::router_env_flags::router_rs_qg_max_rounds_cap()
+                fr_exec::router_env_flags::router_rs_qg_max_rounds_cap()
             ))
         } else {
             None
@@ -233,7 +233,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     let max_rounds = obj
         .get("max_rounds")
         .and_then(Value::as_u64)
-        .unwrap_or(framework_runtime::router_env_flags::router_rs_qg_max_rounds_cap());
+        .unwrap_or(fr_exec::router_env_flags::router_rs_qg_max_rounds_cap());
     if round_n > max_rounds {
         return Err(format!("round {round_n} exceeds max_rounds {max_rounds}"));
     }

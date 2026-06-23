@@ -187,13 +187,32 @@ fn main() {
             ));
         }
 
-        if meta_bool(id, "override_extract_observation") {
+        // Generate observation surface extraction from registry fields.
+        let obs_followup_keys = meta_arr(id, "observation_followup_keys");
+        let obs_additional_pointer = meta_str(id, "observation_additional_pointer");
+        let obs_additional_fallback = meta_str(id, "observation_additional_fallback_key");
+
+        if !obs_followup_keys.is_empty() {
+            // Build followup key chain: output.get("k1").or_else(|| output.get("k2"))...
+            let key_checks: String = obs_followup_keys.iter().map(|k| {
+                format!("output.get(\"{k}\")")
+            }).collect::<Vec<_>>().join(".or_else(|| ");
+            let close_parens: String = (0..obs_followup_keys.len() - 1).map(|_| ')').collect();
+            let key_chain = format!("{key_checks}{close_parens}.and_then(serde_json::Value::as_str).map(|s| s.to_string())");
+
+            // Build additional extraction
+            let additional = if obs_additional_fallback.is_empty() || obs_additional_fallback == "null" {
+                format!("output.pointer(\"{obs_additional_pointer}\").and_then(serde_json::Value::as_str).map(|s| s.to_string())")
+            } else {
+                format!("output.pointer(\"{obs_additional_pointer}\").or_else(|| output.get(\"{obs_additional_fallback}\")).and_then(serde_json::Value::as_str).map(|s| s.to_string())")
+            };
+
             methods.push_str(&format!(
-                "{0}    fn extract_observation_surfaces(\
-                 {0}        &self, output: &serde_json::Value,\
-                 {0}    ) -> (Option<String>, Option<String>) {{\
-                 {0}        super::capability_overrides::host_extract_observation_surfaces(\"{id}\", output)\
-                 {0}    }}", nl
+                "{0}    fn extract_observation_surfaces(&self, output: &serde_json::Value) -> (Option<String>, Option<String>) {{\
+                 {0}        let followup = {1};\
+                 {0}        let additional = {2};\
+                 {0}        (followup, additional)\
+                 {0}    }}", nl, key_chain, additional
             ));
         }
 
@@ -227,10 +246,32 @@ fn main() {
             "{nl}    fn capabilities(&self) -> HostCapabilities {{{nl}        HostCapabilities {{{nl}            mcp_config_key: \"{mcp}\",{nl}            transport_type: \"{trans}\",{nl}            config_path: \"{cfg}\",{caps_lines}{nl}            ..Default::default()\
              {nl}        }}{nl}    }}"
         ));
+        // Build RegistryDispatcher initialization from registry fields
+        let session_start = meta_bool(id, "session_start");
+        let subagent_start = meta_bool(id, "subagent_start");
+        let subagent_stop = meta_bool(id, "subagent_stop");
+        let pretool_protection = meta_bool(id, "pretool_path_protection");
+        let pretool_hint = meta_str(id, "pretool_entrypoint_hint");
+        let scan_tool_input = meta_bool(id, "session_key_scan_tool_input");
+
         out.push_str(&format!(
             "{nl}    fn dispatcher(&self) -> Box<dyn super::hook_dispatch::HostHookDispatcher> {{\
-             {nl}        Box::new(super::host_extensions::dispatch::{dispatcher_type})\
-             {nl}    }}", dispatcher_type = meta_str(id, "dispatcher_type")
+             {nl}        Box::new(super::host_extensions::dispatch::RegistryDispatcher {{\
+             {nl}            config: super::generic_config::GenericHostConfig {{\
+             {nl}                id: \"{id}\",\
+             {nl}                label: \"{label}\",\
+             {nl}                state_dir: \".{id}\",\
+             {nl}                session_start: {session_start},\
+             {nl}                subagent_start: {subagent_start},\
+             {nl}                subagent_stop: {subagent_stop},\
+             {nl}                pretool_path_protection: {pretool_protection},\
+             {nl}                pretool_entrypoint_hint: \"{pretool_hint}\",\
+             {nl}                scan_tool_input: {scan_tool_input},\
+             {nl}                ..super::generic_config::GenericHostConfig::new(\"{id}\", \"{label}\")\
+             {nl}            }},\
+             {nl}        }})\
+             {nl}    }}",
+            label = pascal(id)
         ));
         out.push_str(&format!("{nl}}}{nl}"));
     }

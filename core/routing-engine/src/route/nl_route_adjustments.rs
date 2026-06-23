@@ -138,6 +138,13 @@ nl_signals! {
     "should_suppress_non_target_artifact_gate"     => rec_qt_ql: nl_sig_should_suppress_non_target_artifact_gate => should_suppress_non_target_artifact_gate,
 }
 
+/// Returns the schema version constant embedded at compile time for
+/// `NL_ROUTE_ADJUSTMENTS.json`. Used by integration tests to verify
+/// the embedded JSON matches the disk file.
+pub fn embedded_schema_version() -> &'static str {
+    EXPECTED_SCHEMA
+}
+
 /// Sorted JSON array of every `NL_SIGNAL_REGISTRY[].name` for policy tests / CI (`router-rs framework nl-route-signal-registry-contract`).
 pub fn nl_route_signal_registry_names_json() -> String {
     let mut names: Vec<&'static str> = NL_SIGNAL_REGISTRY.iter().map(|e| e.name).collect();

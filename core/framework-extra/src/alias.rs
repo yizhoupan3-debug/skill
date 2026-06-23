@@ -5,14 +5,14 @@ use std::fs;
 use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
-use framework_runtime::constants::{
+use fr_utils::constants::{
     FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY, TERMINAL_VERIFICATION_STATUSES,
 };
-use framework_runtime::types::FrameworkAliasBuildOptions;
-use framework_runtime::runtime_view::{
+use fr_utils::types::FrameworkAliasBuildOptions;
+use fr_exec::runtime_view::{
     classify_runtime_continuity, load_framework_runtime_view, workspace_name_from_root,
 };
-use framework_runtime::json_value::{stable_line_items, value_string_list, value_text};
+use fr_utils::json_value::{stable_line_items, value_string_list, value_text};
 use crate::util::{is_terminal, supervisor_contract};
 
 fn string_or_null(value: String) -> Value {
@@ -740,7 +740,7 @@ pub(super) fn estimate_token_count(text: &str) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::estimate_token_count;
+    use super::estimate_token_count;
 
     #[test]
     fn ascii_text_uses_original_heuristic() {

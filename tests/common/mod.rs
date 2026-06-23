@@ -134,6 +134,25 @@ pub fn assert_canonical_closed_set_host_ids(supported: &[&str]) {
     }
 }
 
+/// Verify `CANONICAL_HOST_IDS` matches `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`.
+#[test]
+fn canonical_host_ids_match_runtime_registry() {
+    let root = project_root();
+    let registry_path = root.join("configs/framework/RUNTIME_REGISTRY.json");
+    let text = fs::read_to_string(&registry_path)
+        .unwrap_or_else(|err| panic!("failed to read {}: {err}", registry_path.display()));
+    let json: Value = serde_json::from_str(&text).expect("parse RUNTIME_REGISTRY.json");
+    let supported: Vec<&str> = json
+        .get("host_targets")
+        .and_then(|ht| ht.get("supported"))
+        .and_then(|s| s.as_array())
+        .expect("host_targets.supported must be an array")
+        .iter()
+        .map(|v| v.as_str().expect("supported id must be string"))
+        .collect();
+    assert_canonical_closed_set_host_ids(&supported);
+}
+
 pub fn write_text(path: &Path, content: &str) {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).unwrap_or_else(|err| {

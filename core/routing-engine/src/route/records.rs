@@ -135,6 +135,7 @@ fn load_records_from_index(path: &Path) -> Result<Vec<SkillRecord>, String> {
             .or_else(|| index.get("source_position"))
             .copied(),
         record_kind: index.get("kind").copied(),
+        skill_flags: index.get("skill_flags").copied(),
         ..indexes
     };
 
@@ -196,6 +197,7 @@ fn inline_skill_record(row: &Value) -> Result<SkillRecord, String> {
         trigger_hints: skill.trigger_hints,
         host_platforms: Vec::new(),
         record_kind: "skill".to_string(),
+        skill_flags: Vec::new(),
     }))
 }
 
@@ -258,6 +260,12 @@ fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes
             .map(value_to_string)
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| "skill".to_string()),
+        skill_flags: indexes
+            .skill_flags
+            .and_then(|idx| row.get(idx))
+            .filter(|value| value.is_array())
+            .map(value_to_string_list)
+            .unwrap_or_default(),
     })
 }
 
@@ -820,6 +828,7 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String
             .or_else(|| index.get("source_position"))
             .copied(),
         record_kind: index.get("kind").copied(),
+        skill_flags: index.get("skill_flags").copied(),
         ..indexes
     };
 
@@ -881,6 +890,7 @@ pub fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, Strin
         skill_path: key_index.get("skill_path").copied(),
         host_platforms: key_index.get("host_platforms").copied(),
         record_kind: key_index.get("kind").copied(),
+        skill_flags: key_index.get("skill_flags").copied(),
         ..indexes
     };
 

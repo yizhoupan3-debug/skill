@@ -727,11 +727,11 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "goal_state_manage",
-                    "description": "管理 Goal 状态 (start|checkpoint|pause|resume|complete|clear|block)。",
+                    "description": "管理 Goal 状态 (start|checkpoint|pause|resume|complete|clear|block|amend)。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
-                            "operation": {"type": "string", "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear", "block"]},
+                            "operation": {"type": "string", "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear", "block", "amend"]},
                             "task_id": {"type": "string"},
                             "session_id": {"type": "string"},
                             "goal": {"type": "string"},
@@ -746,6 +746,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             "completion_gates": {"type": "object"},
                             "metadata": {"type": "object"},
                             "set_focus": {"type": "boolean"},
+                            "keep_progress": {"type": "boolean"},
                         },
                         "required": ["operation"],
                     },

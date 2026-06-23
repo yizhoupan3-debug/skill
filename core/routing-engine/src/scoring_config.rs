@@ -19,6 +19,15 @@ const RUNTIME_CONFIG_PATH: &str = concat!(
     "/../../configs/scoring_weights.json"
 );
 
+const EXPECTED_SCHEMA: &str = "scoring-weights-v1";
+
+/// Returns the schema version constant embedded at compile time for
+/// `scoring_weights.json`. Used by integration tests to verify
+/// the embedded JSON matches the disk file.
+pub fn embedded_schema_version() -> &'static str {
+    EXPECTED_SCHEMA
+}
+
 /// All tuneable numeric weights for the routing scoring pipeline.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ScoringWeights {

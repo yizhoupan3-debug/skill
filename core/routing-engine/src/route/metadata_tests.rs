@@ -374,6 +374,7 @@ mod route_metadata_tests {
                 trigger_hints: vec!["codex only".to_string()],
                 host_platforms: vec!["codex".to_string()],
                 record_kind: "skill".to_string(),
+                skill_flags: Vec::new(),
             }),
             skill_record_from_raw(RawSkillRecord {
                 slug: "all-command".to_string(),
@@ -391,6 +392,7 @@ mod route_metadata_tests {
                 trigger_hints: vec!["/all-command".to_string()],
                 host_platforms: Vec::new(),
                 record_kind: "framework_command".to_string(),
+                skill_flags: Vec::new(),
             }),
         ];
 
@@ -619,6 +621,7 @@ mod route_metadata_tests {
             trigger_hints: vec!["$paper-reviewer".to_string(), "/paper-reviewer".to_string()],
             host_platforms: vec!["codex".to_string()],
             record_kind: "skill".to_string(),
+            skill_flags: Vec::new(),
         });
         assert!(!record.framework_alias_entrypoints.is_empty());
         let query = normalize_text("用 paper-reviewer 逻辑模式看一下 claim/evidence");

@@ -59,13 +59,13 @@ fn bootstrap_core() {
 fn bootstrap_telemetry() {
     let journal = PathBuf::from("artifacts/telemetry/events.jsonl");
     let handle = LogAggregator::start(&journal);
-    let observer = framework_runtime::evolution_observer::EvolutionObserver::new(
-        framework_runtime::evolution_observer::EvolutionObserverConfig {
+    let observer = fr_exec::evolution_observer::EvolutionObserver::new(
+        fr_exec::evolution_observer::EvolutionObserverConfig {
             alerts_path: PathBuf::from("artifacts/evolution/alerts.jsonl"),
             ..Default::default()
         },
     );
-    let fanout = framework_runtime::evolution_observer::FanoutTelemetryWriter::new(
+    let fanout = fr_exec::evolution_observer::FanoutTelemetryWriter::new(
         handle.writer(),
         observer,
     );

@@ -3,10 +3,10 @@
 use serde_json::{Value, json};
 
 use crate::alias;
-use framework_runtime::constants::{
+use fr_utils::constants::{
     FRAMEWORK_PROMPT_COMPRESSION_AUTHORITY, FRAMEWORK_PROMPT_COMPRESSION_SCHEMA_VERSION,
 };
-use framework_runtime::json_value::value_text;
+use fr_utils::json_value::value_text;
 
 pub fn build_framework_prompt_compression_envelope(
     payload: Value,

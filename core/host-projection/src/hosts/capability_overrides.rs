@@ -1,12 +1,9 @@
 //! Host-specific capability overrides organized by capability, not by host.
 //!
-//! These functions cannot be registry-driven because they contain control flow:
-//! - `build_driver_args`: each host has unique CLI argument syntax
-//! - `extract_observation_surfaces`: each host emits hook output with different JSON keys
-//!
-//! Both functions dispatch on `host_id` and are called from the generated
-//! `HostLifecycle` / `HostTelemetry` impls when the `override_*` field is
-//! `true` in `RUNTIME_REGISTRY.json host_targets.metadata.<host>`.
+//! Only `build_driver_args` remains — it contains per-host CLI argument syntax
+//! that cannot be expressed as simple registry templates (Codex has conditional
+//! resume logic). All other overrides have been moved to registry-driven code
+//! generation (observation surfaces, dispatcher config, etc.).
 
 use serde_json::Value;
 
@@ -75,69 +72,4 @@ fn build_codex_args(
     }
     let shell_cmd = format!("codex {}", args.join(" "));
     (args, shell_cmd)
-}
-
-// ── extract_observation_surfaces ───────────────────────────────────────────
-
-/// Extract followup and additional_context surfaces from hook output JSON.
-///
-/// Each host's hook output has different JSON key conventions:
-/// - Claude: 5-level fallback chain (`stopReason` -> `systemMessage` -> `followup_message` -> `message` -> `reason`)
-/// - OpenCode: flat root-level `followup_message` + `additional_context` (no pointer)
-/// - Others: use the `HostTelemetry` trait default (pointer to `/hookSpecificOutput/additionalContext` with `additional_context` fallback)
-pub fn host_extract_observation_surfaces(
-    host_id: &str,
-    output: &Value,
-) -> (Option<String>, Option<String>) {
-    match host_id {
-        "claude" => extract_claude_surfaces(output),
-        "opencode" => extract_opencode_surfaces(output),
-        _ => extract_default_surfaces(output),
-    }
-}
-
-fn extract_claude_surfaces(output: &Value) -> (Option<String>, Option<String>) {
-    let followup = output
-        .get("stopReason")
-        .or_else(|| output.get("systemMessage"))
-        .or_else(|| output.get("followup_message"))
-        .and_then(Value::as_str)
-        .map(|s| s.to_string())
-        .or_else(|| {
-            output
-                .get("message")
-                .or_else(|| output.get("reason"))
-                .and_then(Value::as_str)
-                .map(|s| s.to_string())
-        });
-    let additional = output
-        .pointer("/hookSpecificOutput/additionalContext")
-        .and_then(Value::as_str)
-        .map(|s| s.to_string());
-    (followup, additional)
-}
-
-fn extract_opencode_surfaces(output: &Value) -> (Option<String>, Option<String>) {
-    let followup = output
-        .get("followup_message")
-        .and_then(Value::as_str)
-        .map(|s| s.to_string());
-    let additional = output
-        .get("additional_context")
-        .and_then(Value::as_str)
-        .map(|s| s.to_string());
-    (followup, additional)
-}
-
-fn extract_default_surfaces(output: &Value) -> (Option<String>, Option<String>) {
-    let followup = output
-        .get("followup_message")
-        .and_then(Value::as_str)
-        .map(|s| s.to_string());
-    let additional = output
-        .pointer("/hookSpecificOutput/additionalContext")
-        .or_else(|| output.get("additional_context"))
-        .and_then(Value::as_str)
-        .map(|s| s.to_string());
-    (followup, additional)
 }

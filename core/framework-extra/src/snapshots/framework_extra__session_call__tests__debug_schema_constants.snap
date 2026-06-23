@@ -1,0 +1,8 @@
+---
+source: core/framework-extra/src/session_call.rs
+expression: "(super::SCHEMA_VERSION, super::TRACKER_FILE)"
+---
+(
+    "fw-session-call-tracker-v1",
+    "SESSION_CALL_TRACKER.json",
+)

@@ -129,7 +129,7 @@ fn snapshot_all_host_hooks(repo_root: &Path) -> Value {
             repo_root,
             Path::new(&hooks_path),
             Path::new(&template_path),
-            host_projection::hosts::host_extensions::config::host_registered_hook_events(host_id),
+            host_projection::hosts::host_extensions::host_registered_hook_events(host_id),
             &[],
             &cmd_fragment,
         )
@@ -212,7 +212,7 @@ pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBase
         host_hooks: snapshot_all_host_hooks(repo_root),
         task_artifacts: snapshot_task_artifacts(repo_root, task_id),
         contracts: ContractVersionsSnapshot {
-            closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+            closeout_record: fr_contracts::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
             hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
         },
     })
@@ -261,7 +261,7 @@ pub fn check_against_baseline(repo_root: &Path, task_id: &str) -> SchemaDriftChe
     let current_hooks = snapshot_all_host_hooks(repo_root);
     let current_artifacts = snapshot_task_artifacts(repo_root, task_id);
     let current_contracts = ContractVersionsSnapshot {
-        closeout_record: framework_runtime::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
+        closeout_record: fr_contracts::closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION.to_string(),
         hook_observation: ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION.to_string(),
     };
 
@@ -472,8 +472,8 @@ mod tests {
             &repo,
             Path::new(&format!("{dotdir}/hooks.json")),
             Path::new("configs/framework/cursor-hooks.workspace-template.json"),
-            host_projection::hosts::host_extensions::config::host_registered_hook_events("cursor"),
-            host_projection::hosts::host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
+            host_projection::hosts::host_extensions::host_registered_hook_events("cursor"),
+            host_projection::hosts::host_extensions::CURSOR_HOOKS_SUBTRACTED_EVENTS,
             "cursor-router-rs-hook.sh",
         )
         .unwrap();

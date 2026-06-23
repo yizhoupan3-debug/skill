@@ -12,11 +12,13 @@ use crate::state_manager::{
     read_quality_gate_state, validate_external_research_strict, validate_external_research_structured,
 };
 
-use serde::Serialize;
 #[cfg(not(test))]
 use std::sync::OnceLock;
 use serde_json::Value;
 use std::path::Path;
+
+// Re-export pure type definitions from core-state-types (L2) for backward compatibility.
+pub use core_state_types::task_state_types::*;
 
 // Cached env var lookups — avoid repeated OS syscalls in hot paths.
 // Disabled in test builds so tests can set env vars per-test.
@@ -225,12 +227,6 @@ pub fn maybe_promote_focus_to_active_pointer(repo_root: &Path) -> bool {
 ///
 /// - `pointer_view`：`resolve_task_view_with_pointers`（override 无 → active → focus），供续跑合并时与 `active_task` 对齐缓存。
 /// - `hydration_goal`：与 `read_goal_state_for_hydration_from_pointer_ids` 一致（active → focus；不扫 orphan），供 `AG_FOLLOWUP` hydrate；与 `pointer_view` 共用同一 [`read_task_pointers`] 快照。
-#[derive(Debug, Clone)]
-pub struct ContinuityFrame {
-    pub pointer_view: ResolvedTaskView,
-    pub hydration_goal: Option<(serde_json::Value, String)>,
-}
-
 /// beforeSubmit / Stop 入口：一次构建指针视图 + hydration 目标对。
 /// 会话级作用域：默认仅 active/focus 指针 hydration；不扫 orphan。
 /// 遗留 diagnostics scan 仅当 `ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE=1` 显式 opt-in。
@@ -286,62 +282,12 @@ fn goal_diagnostics_scan_hydrate_enabled() -> bool {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct TaskPointers {
-    pub active_task_id: Option<String>,
-    pub focus_task_id: Option<String>,
-}
-
 /// `active_task.json` / `focus_task.json` 一次成对读取（比两次独立 open 的半态窗口更小）。
 pub fn read_task_pointers(repo_root: &Path) -> TaskPointers {
     TaskPointers {
         active_task_id: crate::state_manager::read_active_task_id(repo_root),
         focus_task_id: crate::state_manager::read_focus_task_id(repo_root),
     }
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct EvidenceRollup {
-    pub task_id: String,
-    pub evidence_rows_non_empty: bool,
-    pub has_successful_verification: bool,
-}
-
-/// Aggregate "depth compliance" view (P1-A): cross-cuts RFV rounds, EVIDENCE_INDEX, and
-/// goal checkpoints into a single read-only score. Consumers (closeout enforcement,
-/// SessionStart digest, statusline) can inspect `depth_score` instead of re-deriving the
-/// same booleans separately.
-///
-/// `depth_score` ∈ {0, 1, 2, 3}:
-/// - 1 point: at least one RFV round with `verify_result=PASS`.
-/// - 1 point: at least one successful EVIDENCE_INDEX row (`success==true` or `exit_code==0`).
-/// - 1 point: at least one goal checkpoint recorded (model wrote progress at least once).
-///
-/// Notes:
-/// - Rollup counters and `depth_score` are **advisory** for hooks/digest unless a ledger enables
-///   **hard gates** (`GOAL_STATE.completion_gates` on `complete`, `RFV_LOOP_STATE.close_gates` on
-///   RFV **显式 close** 与 **`max_rounds` 耗尽** 自动 closed 的 `append_round` 收口预览) — those paths read the same aggregate via [`resolve_task_view`].
-/// - `qg_unknown_round_count` and `qg_pass_without_evidence_count` are explicitly broken out
-///   so dashboards can flag "RFV says PASS but EVIDENCE shows no successful row in the same
-///   window" — the cross-check label written by `rfv_loop::cross_link_evidence`.
-/// - `qg_external_strict_ok_round_count` counts rounds whose `external_research` object passes
-///   `validate_external_research_strict` while the RFV state has `external_research_strict=true`.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
-pub struct DepthCompliance {
-    pub qg_pass_round_count: u64,
-    pub qg_fail_round_count: u64,
-    pub qg_skipped_round_count: u64,
-    pub qg_unknown_round_count: u64,
-    pub qg_pass_without_evidence_count: u64,
-    pub qg_adversarial_round_count: u64,
-    pub qg_falsification_test_count: u64,
-    /// Quality Gate rounds with non-null **`external_research`** object (`append_round` 结构化块).
-    pub qg_external_deep_structured_round_count: u64,
-    /// Quality Gate rounds where `external_research` was an object, task **`external_research_strict`** was
-    /// true at rollup time, and the blob passes [`validate_external_research_strict`].
-    pub qg_external_strict_ok_round_count: u64,
-    pub goal_checkpoint_count: u64,
-    pub depth_score: u8,
 }
 
 /// Roll up RFV rounds + optional GOAL checkpoints + evidence_ok into [`DepthCompliance`].
@@ -438,36 +384,6 @@ pub fn depth_compliance_aggregate(
     }
     c.depth_score = score;
     c
-}
-
-/// High-level macro-controller mode for the resolved task id.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum TaskControlMode {
-    Idle,
-    GoalDrive,
-    QualityGate,    Conflict { reason: String },
-}
-
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
-pub struct ResolvedTaskView {
-    pub schema_version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub task_id: Option<String>,
-    pub pointers: TaskPointers,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub goal_state: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rfv_loop_state: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub evidence: Option<EvidenceRollup>,
-    /// Aggregate depth-compliance view (P1-A); always present alongside `evidence` for tasks
-    /// with a resolved id. `None` when no task id resolves.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub depth_compliance: Option<DepthCompliance>,
-    pub control_mode: TaskControlMode,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub resolution_notes: Vec<String>,
 }
 
 /// True when [`ResolvedTaskView::resolution_notes`] carries the active/focus GOAL observability short code.
@@ -784,16 +700,6 @@ pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> 
         out.push_str(DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH);
     }
     Some(out)
-}
-
-/// Optional hard gates for `framework_goal_drive` **`operation=complete`** (stored on `GOAL_STATE`).
-#[derive(Debug, Clone)]
-pub struct GoalCompletionGates {
-    pub enabled: bool,
-    pub min_depth_score: Option<u8>,
-    pub require_successful_evidence_row: bool,
-    pub min_goal_checkpoints: Option<u64>,
-    pub block_on_rfv_pass_without_evidence: bool,
 }
 
 /// Parse `GOAL_STATE.completion_gates`. Missing / null → **off** (no gate). Object with

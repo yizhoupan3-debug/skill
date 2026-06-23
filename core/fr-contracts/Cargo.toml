@@ -1,0 +1,24 @@
+[package]
+name = "fr-contracts"
+version = "0.1.0"
+edition = "2024"
+description = "L2 contracts: closeout enforcement, execution contract, pre-tool-use guard"
+[lints]
+workspace = true
+
+[dependencies]
+fr-utils = { path = "../fr-utils" }
+core-policy = { path = "../core-policy" }
+core-state-types = { path = "../core-state-types" }
+framework-kernel = { path = "../framework-kernel" }
+hex.workspace = true
+framework-runtime-hooks = { path = "../framework-runtime-hooks" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+ctor = "0.2"
+insta.workspace = true
+tempfile.workspace = true

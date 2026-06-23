@@ -38,7 +38,7 @@ const SCHEMA_VERSION: &str = "fw-session-call-tracker-v1";
 const FLUSH_INTERVAL_SECS: u64 = 5;
 
 fn cap_per_tool_keys(per_tool: &mut serde_json::Map<String, Value>) {
-    let max_keys = framework_runtime::router_env_flags::router_rs_session_call_tracker_tool_keys_max();
+    let max_keys = fr_exec::router_env_flags::router_rs_session_call_tracker_tool_keys_max();
     if per_tool.len() <= max_keys {
         return;
     }
@@ -495,7 +495,7 @@ mod tests {
     fn per_tool_cap_evicts_lowest_count() {
         let repo = test_repo("cap");
         init_tracker(&repo).unwrap();
-        let max = framework_runtime::router_env_flags::router_rs_session_call_tracker_tool_keys_max();
+        let max = fr_exec::router_env_flags::router_rs_session_call_tracker_tool_keys_max();
         for i in 0..=max {
             record_tool_call(&repo, &format!("tool_{i}"), None).unwrap();
         }

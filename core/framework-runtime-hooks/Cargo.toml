@@ -2,6 +2,7 @@
 name = "framework-runtime-hooks"
 version = "0.1.0"
 edition = "2024"
+description = "L0 fn-pointer registry (OnceLock) — cross-layer communication, zero business logic"
 
 [lints]
 workspace = true

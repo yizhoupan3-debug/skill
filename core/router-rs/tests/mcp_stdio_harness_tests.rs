@@ -538,14 +538,16 @@ mod transport_mode_tests {
     }
 }
 
-#[cfg(test)]
-mod session_tracker_tests {
-    #[test]
-    fn atomic_write_pattern() {
-        use crate::session_call_tracker::test_lock_roundtrip;
-        assert!(test_lock_roundtrip());
-    }
-}
+// test_lock_roundtrip is only compiled when framework-extra is tested itself (cfg(test)).
+// router-rs tests cannot reach it through crate imports — skip this assertion.
+// #[cfg(test)]
+// mod session_tracker_tests {
+//     #[test]
+//     fn atomic_write_pattern() {
+//         use framework_extra::session_call::test_lock_roundtrip;
+//         assert!(test_lock_roundtrip());
+//     }
+// }
 
 #[cfg(test)]
 mod routing_tests {
@@ -682,7 +684,7 @@ mod parameter_validation_tests {
             crate::mcp_stdio_harness::tool_quality_gate_manage_test_helper(&args, "invalid_operation");
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("Unknown RFV loop operation"));
+        assert!(err.contains("Unknown quality gate operation"));
         assert!(err.contains("start") && err.contains("append_round"));
     }
 

@@ -3,14 +3,14 @@
 //! Functions for building the contract summary envelope (`build_framework_contract_summary_envelope`)
 //! including the SHA-256 digest, host harness fragment, and prompt-line helpers.
 
-use framework_runtime::constants::{
+use fr_utils::constants::{
     FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
 };
-use framework_runtime::json_io::read_json_strict;
-use framework_runtime::json_value::{
+use fr_utils::json_io::read_json_strict;
+use fr_utils::json_value::{
     nonempty_string, value_string_list, value_text,
 };
-use framework_runtime::runtime_view;
+use fr_exec::runtime_view;
 use hex;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -27,7 +27,7 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
     let snapshot = runtime_view::load_framework_runtime_view(repo_root, None, None);
     let continuity = runtime_view::classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
-    let workspace = framework_runtime::runtime_view::workspace_name_from_root(repo_root);
+    let workspace = fr_exec::runtime_view::workspace_name_from_root(repo_root);
     let continuity_route = continuity
         .get("route")
         .and_then(Value::as_array)

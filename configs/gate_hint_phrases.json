@@ -1,0 +1,10 @@
+{
+  "schema_version": "gate-hint-phrases-v1",
+  "source": "RUNTIME_REGISTRY.json gate_hint_phrases",
+  "phrases": {
+    "source": ["官方", "官方文档", "文档", "docs", "readme", "api", "openai", "github", "look up", "search"],
+    "artifact": ["pdf", "docx", "xlsx", "ppt", "pptx", "excel", "spreadsheet", "word 文档", "word 文件", "表格", "工作簿", "幻灯片", "演示文稿", "presentation", "deck", "slide deck"],
+    "evidence": ["报错", "失败", "崩", "截图", "渲染", "日志", "traceback", "error", "bug", "why", "为什么"],
+    "delegation": ["sidecar", "subagent", "delegation", "并行 sidecar", "multiagent", "multi-agent", "多 agent", "子代理", "主线程", "local-supervisor", "跨文件", "长运行"]
+  }
+}

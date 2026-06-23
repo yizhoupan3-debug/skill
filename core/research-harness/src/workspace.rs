@@ -10,19 +10,18 @@ use std::fs;
 use std::path::Path;
 
 /// Write content to a file only if it doesn't already exist.
+/// Delegates to core-state's write_text_if_changed for atomic write safety.
 pub fn write_if_missing(path: &Path, content: String) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
     if !path.exists() {
-        fs::write(path, content)?;
+        core_state::utils::json_io::write_text_if_changed(path, &content)
+            .map_err(|e| anyhow::anyhow!("{e}"))?;
     }
     Ok(())
 }
 
 /// Append a JSONL ledger event to `run-ledger.jsonl`.
+/// Uses framework-runtime's process-locked append for crash-safe multi-process writes.
 pub fn append_ledger_event(workspace: &Path, kind: &str, payload: Value) -> Result<()> {
-    use std::io::Write;
     let event = json!({
         "schema_version": "autoresearch-ledger-v1",
         "event_id": format!("evt_{}", chrono::Utc::now().timestamp_millis()),
@@ -33,24 +32,19 @@ pub fn append_ledger_event(workspace: &Path, kind: &str, payload: Value) -> Resu
         "payload": payload,
     });
     let target = workspace.join("run-ledger.jsonl");
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let mut handle = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(target)?;
-    writeln!(handle, "{}", serde_json::to_string(&event)?)?;
+    let payload_line = format!("{}\n", serde_json::to_string(&event)?);
+    fr_utils::io_utils::append_text_with_process_lock(&target, &payload_line, "ledger_event")
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(())
 }
 
 /// Append a section to `research-log.md`.
+/// Uses framework-runtime's process-locked append for crash-safe multi-process writes.
 pub fn append_research_log(
     workspace: &Path,
     heading: &str,
     bullets: Vec<String>,
 ) -> Result<()> {
-    use std::io::Write;
     let log_path = workspace.join("research-log.md");
     let date = chrono::Local::now().format("%Y-%m-%d");
     let mut lines = vec![
@@ -62,11 +56,9 @@ pub fn append_research_log(
         lines.push(format!("- {bullet}"));
     }
     lines.push(String::new());
-    let mut handle = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(log_path)?;
-    write!(handle, "{}", lines.join("\n"))?;
+    let content = lines.join("\n");
+    fr_utils::io_utils::append_text_with_process_lock(&log_path, &content, "research_log")
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
     Ok(())
 }
 

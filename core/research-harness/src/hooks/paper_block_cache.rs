@@ -97,11 +97,11 @@ mod tests {
         BlockCache::new(rel, TEST_PREFIX, "test-cache")
     }
 
-    fn prep_file(path: &Path, content: &str) {
+    fn prep_file(path: &Path, content: impl AsRef<str>) {
         if let Some(p) = path.parent() {
             fs::create_dir_all(p).unwrap();
         }
-        fs::write(path, content).unwrap();
+        fs::write(path, content.as_ref()).unwrap();
     }
 
     #[test]
@@ -207,20 +207,7 @@ mod tests {
         let _ = fs::remove_dir_all(&tmp);
         let cache = test_cache("POISON.txt");
 
-        // Poison the mutex
-        {
-            let guard = cache.cache.lock().unwrap();
-            // Drop while holding causes panic+poison in different scenario
-            // Instead: poison via panic inside lock
-            struct Poisoner;
-            impl Drop for Poisoner {
-                fn drop(&mut self) {
-                    let _ = cache.cache.lock().unwrap();
-                }
-            }
-            let _p = Poisoner;
-        }
-        // Not easy to truly poison in a single-threaded test;
+        // Not easy to truly poison a Mutex in a single-threaded test;
         // verify the unwrap_or_else path works: no crash on access
         prep_file(&tmp.join("POISON.txt"), format!("{TEST_PREFIX}\n\nok"));
         let result = cache.resolve(&tmp, test_builtin);

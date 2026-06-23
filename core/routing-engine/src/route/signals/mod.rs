@@ -15,7 +15,7 @@
 //! if it needs **Rust-only helpers or record-aware logic**, keep a `has_*` here and cross-link in
 //! `NL_ROUTE_ADJUSTMENTS.json` docs when relevant.
 use super::aliases::framework_alias_requires_explicit_call;
-use super::constants::ARTIFACT_GATE_PHRASES;
+use super::gate_hints::gate_hint_phrases;
 use super::text::text_matches_phrase;
 use super::types::{RouteContextPayload, SkillRecord};
 use regex::Regex;
@@ -169,6 +169,11 @@ const SIGNAL_DEFS: &[SignalDef] = &[
         "worker write scope", "worker write scopes", "workflow 协作",
         "团队编排", "多 worker", "worker 生命周期",
         "supervisor-led", "supervisor led",
+        // Team orchestration (replaces deprecated JS workflow model)
+        "team orchestration", "team 编排", "team mode", "team 模式",
+        "team manager", "team supervisor", "用 team",
+        "agent communication", "agent 通信", "多 agent 团队",
+        "agent team", "agent team", "inter-agent",
     ]),
     sig!("explicit_prose_polish", markers => &[
         "润色", "文字精修", "sci润色", "sci 润色", "英文论文润色",
@@ -505,7 +510,7 @@ pub fn should_route_to_gh_fix_ci(query_text: &str, query_token_list: &[String]) 
 
 
 pub fn artifact_gate_matches_query(query_token_list: &[String]) -> bool {
-    ARTIFACT_GATE_PHRASES
+    gate_hint_phrases("artifact")
         .iter()
         .any(|phrase| text_matches_phrase(query_token_list, phrase))
 }

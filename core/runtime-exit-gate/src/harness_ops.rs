@@ -3,7 +3,7 @@
 //! Truth source: `configs/framework/HARNESS_OPERATOR_NUDGES.json` under repo root.
 //! Disable all injected nudges: `ROUTER_RS_HARNESS_OPERATOR_NUDGES=0` (same soft-off tokens as other `ROUTER_RS_*` defaults).
 
-use framework_runtime::router_env_flags::{
+use fr_exec::router_env_flags::{
     router_rs_env_enabled_default_true, router_rs_operator_inject_globally_enabled,
 };
 use serde::Deserialize;

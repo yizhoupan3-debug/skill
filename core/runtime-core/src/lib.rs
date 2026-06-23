@@ -14,9 +14,6 @@ pub mod framework_runtime;
 pub use session_supervisor;
 pub use framework_kernel::framework_profile;
 
-// ── browser dispatch hook (decouples runtime-core from browser-mcp crate) ──
-pub mod browser_dispatch_hook;
-
 // ── subdomain module groups ──
 pub use runtime_infra as infrastructure;
 pub use runtime_exit_gate as exit_gate;
@@ -65,7 +62,7 @@ mod route_metadata_tests;
 pub use framework_kernel::router_self;
 pub use framework_kernel::skill_repo;
 pub use framework_kernel::stdio_payload_types;
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub mod mcp_stdio_test_support;
 #[cfg(test)]
 pub mod test_env_sync;
@@ -298,6 +295,11 @@ pub fn register_host_projection_hooks() {
 
         // ── RFV loop full implementation (supports append_round) ──
         host_projection::hooks::register_quality_gate_drive(quality_gate::framework_quality_gate);
+
+        // ── session-supervisor op dispatch (for MCP tools) ──
+        host_projection::hooks::register_session_supervisor_op(
+            session_supervisor::handle_session_supervisor_operation,
+        );
 
         // ── framework-runtime internal hooks (pre_tool_use_guard, closeout, etc.) ──
         ::framework_runtime::hooks::register(::framework_runtime::hooks::RuntimeCoreHooks {

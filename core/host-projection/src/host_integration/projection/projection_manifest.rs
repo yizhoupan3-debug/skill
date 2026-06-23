@@ -454,7 +454,7 @@ pub fn cursor_mcp_entry_is_framework_owned_stale(existing: &Value, framework_roo
 }
 
 pub fn remove_cursor_mcp_server(path: &Path, framework_root: &Path) -> Result<bool, String> {
-    mcp_json_remove_servers(path, framework_root, McpConfigFormat::CURSOR)
+    mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_SNAKE_CASE)
 }
 
 pub fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String> {
@@ -683,7 +683,7 @@ pub fn install_claude_mcp_server(
 }
 
 pub fn remove_claude_mcp_server(path: &Path, framework_root: &Path) -> Result<bool, String> {
-    mcp_json_remove_servers(path, framework_root, McpConfigFormat::CLAUDE)
+    mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_CAMEL_CASE)
 }
 
 pub fn render_cursor_framework_entrypoint(

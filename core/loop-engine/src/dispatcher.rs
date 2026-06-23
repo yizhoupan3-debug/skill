@@ -1,5 +1,4 @@
 use crate::types::{LoopAction, LoopError};
-use crate::kill_switch::take_kill_signal;
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
@@ -11,20 +10,10 @@ pub const DEFAULT_ACTION_TIMEOUT_SECS: u64 = 600;
 /// Interval in seconds between kill signal polls and subagent process checks.
 pub const KILL_POLL_INTERVAL_SECS: u64 = 5;
 
-/// Max concurrent subagent processes (configurable via `ROUTER_RS_SUBAGENT_MAX_CONCURRENT`).
-fn max_concurrent_procs() -> u32 {
-    let default: u32 = 4;
-    std::env::var("ROUTER_RS_SUBAGENT_MAX_CONCURRENT")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(default)
-        .max(1)
-}
-
 /// Global semaphore guarding concurrent subagent OS process count.
 fn subagent_semaphore() -> &'static Mutex<u32> {
     static SEM: std::sync::OnceLock<Mutex<u32>> = std::sync::OnceLock::new();
-    SEM.get_or_init(|| Mutex::new(max_concurrent_procs()))
+    SEM.get_or_init(|| Mutex::new(crate::env_flags::max_concurrent_procs()))
 }
 
 /// RAII guard: acquires a subagent permit on construction, releases on drop.
@@ -60,6 +49,48 @@ pub struct SubagentResult {
     pub success: bool,
     pub stdout: String,
     pub stderr: String,
+}
+
+/// Poll a subprocess until completion, kill signal, or deadline.
+///
+/// Eliminates the repeated try_wait → kill_signal → deadline poll loop
+/// that was duplicated between `runner.rs` (discovery) and `dispatcher.rs` (action execution).
+///
+/// Returns `Ok(output)` on natural completion, `Err(KillSignaled)` when the
+/// loop's kill signal fires, or `Err(Timeout)` when the deadline is reached.
+pub(crate) fn poll_subprocess(
+    mut child: std::process::Child,
+    repo_root: &Path,
+    loop_id: &str,
+    label: &str,
+    deadline: Instant,
+    timeout_duration: Duration,
+) -> Result<std::process::Output, LoopError> {
+    loop {
+        match child.try_wait().map_err(|e| LoopError::Io(format!("{label} try_wait: {e}")))? {
+            Some(_status) => {
+                return child
+                    .wait_with_output()
+                    .map_err(|e| LoopError::Io(format!("{label} collect: {e}")));
+            }
+            None => {
+                if crate::kill_switch::take_kill_signal(repo_root, loop_id).unwrap_or(false) {
+                    child.kill().map_err(|e| LoopError::Io(format!("{label} kill: {e}")))?;
+                    child.wait().map_err(|e| LoopError::Io(format!("{label} wait: {e}")))?;
+                    return Err(LoopError::KillSignaled(format!(
+                        "{label} killed by loop {loop_id} signal",
+                    )));
+                }
+                if Instant::now() > deadline {
+                    child.kill().map_err(|e| LoopError::Io(format!("{label} kill timeout: {e}")))?;
+                    child.wait()
+                        .map_err(|e| LoopError::Io(format!("{label} wait timeout: {e}")))?;
+                    return Err(LoopError::Timeout(timeout_duration.as_secs()));
+                }
+                thread::sleep(Duration::from_secs(KILL_POLL_INTERVAL_SECS));
+            }
+        }
+    }
 }
 
 impl SubagentResult {
@@ -109,13 +140,7 @@ pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String
 /// Resolve the subagent binary path from `ROUTER_RS_SUBAGENT_BIN` env var.
 /// Returns an error if the env var is not set or is empty.
 pub fn resolve_subagent_binary() -> Result<String, LoopError> {
-    if let Ok(bin) = std::env::var("ROUTER_RS_SUBAGENT_BIN")
-        && !bin.is_empty() {
-            return Ok(bin);
-        }
-    Err(LoopError::SpawnFailed(
-        "subagent binary not found. Set ROUTER_RS_SUBAGENT_BIN.".to_string(),
-    ))
+    crate::env_flags::subagent_binary().map_err(LoopError::SpawnFailed)
 }
 
 /// Execute a single action synchronously through a subagent process, with kill-signal and timeout support.
@@ -142,37 +167,20 @@ pub fn run_action_sync(
         .map_err(|e| LoopError::SpawnFailed(format!("{binary}: {e}")))?;
 
     let deadline = Instant::now() + timeout_duration;
-    let poll_interval = Duration::from_secs(KILL_POLL_INTERVAL_SECS);
 
-    loop {
-        match child.try_wait().map_err(|e| LoopError::Io(format!("try_wait: {e}")))? {
-            Some(_status) => {
-                let output = child.wait_with_output()
-                    .map_err(|e| LoopError::Io(format!("collect output: {e}")))?;
-                return Ok(SubagentResult {
-                    success: output.status.success(),
-                    stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-                    stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-                });
-            }
-            None => {
-                if take_kill_signal(repo_root, loop_id).unwrap_or(false) {
-                    child.kill().map_err(|e| LoopError::Io(format!("kill: {e}")))?;
-                    child.wait().map_err(|e| LoopError::Io(format!("wait after kill: {e}")))?;
-                    return Err(LoopError::KillSignaled(format!(
-                        "action {} killed by loop {} signal",
-                        action.action_id, loop_id,
-                    )));
-                }
-                if Instant::now() > deadline {
-                    child.kill().map_err(|e| LoopError::Io(format!("kill timeout: {e}")))?;
-                    child.wait().map_err(|e| LoopError::Io(format!("wait after timeout: {e}")))?;
-                    return Err(LoopError::Timeout(timeout_duration.as_secs()));
-                }
-                thread::sleep(poll_interval);
-            }
-        }
-    }
+    let output = poll_subprocess(
+        child,
+        repo_root,
+        loop_id,
+        &action.action_id,
+        deadline,
+        timeout_duration,
+    )?;
+    return Ok(SubagentResult {
+        success: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    });
 }
 
 /// Generate a dry-run description string for an action (no subagent is launched).

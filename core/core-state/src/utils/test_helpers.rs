@@ -3,7 +3,6 @@
 use std::path::PathBuf;
 
 /// Create a unique temporary directory path for tests.
-/// Uses nanosecond timestamp to avoid collisions between parallel tests.
 pub fn unique_repo(label: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
         "router-rs-{label}-{}",

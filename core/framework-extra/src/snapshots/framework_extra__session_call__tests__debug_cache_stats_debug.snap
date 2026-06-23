@@ -1,0 +1,10 @@
+---
+source: core/framework-extra/src/session_call.rs
+expression: stats
+---
+CacheStats {
+    cache_read_input_tokens: 500,
+    cache_creation_input_tokens: 200,
+    input_tokens: 1000,
+    output_tokens: 300,
+}

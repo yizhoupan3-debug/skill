@@ -21,6 +21,10 @@ use std::path::{Path, PathBuf};
 // paper_prose_env, paper_adversarial_env, settings_guarded_paths, generated_entrypoint_paths.
 include!(concat!(env!("OUT_DIR"), "/generated_host_tables.rs"));
 
+// ── Generated stdio op tables (compile-time from RUNTIME_REGISTRY.json) ──
+// Includes: classify_stdio_op_registry, STDIO_OP_DOMAINS.
+include!(concat!(env!("OUT_DIR"), "/generated_stdio_tables.rs"));
+
 pub const RUNTIME_REGISTRY_SCHEMA_VERSION: &str = "framework-runtime-registry-v2";
 pub const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
 

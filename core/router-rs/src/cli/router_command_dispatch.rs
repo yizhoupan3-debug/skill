@@ -494,7 +494,7 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
     // Bootstrap for lifecycle events
     runtime_core::kernel_bootstrap::ensure_kernel_bootstrap();
     runtime_core::hook_timing::mark_hook_start();
-    let _registry_guard = runtime_core::runtime_registry::HookRegistryRepoGuard::new(&repo_root);
+    let _registry_guard = core_policy::registry_review_gate::HookRegistryRepoGuard::new(&repo_root);
 
     // Read stdin payload (shared 4 MiB limited reader)
     let mut stdin = std::io::stdin().lock();

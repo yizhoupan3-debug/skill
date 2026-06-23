@@ -259,10 +259,12 @@ pub fn should_defer_to_artifact_gate(
     if query_text.contains(&explicit_entry) {
         return false;
     }
-    if record.slug == "ppt-beamer" && super::design::has_beamer_slide_context(query_text, query_token_list) {
+    if record.skill_flags.iter().any(|f| f == "artifact_exception:ppt_beamer")
+        && super::design::has_beamer_slide_context(query_text, query_token_list)
+    {
         return false;
     }
-    if record.slug == "source-slide-formats"
+    if record.skill_flags.iter().any(|f| f == "artifact_exception:source_slide_formats")
         && super::design::has_source_slide_format_context(query_text, query_token_list)
     {
         return false;
@@ -283,7 +285,7 @@ pub fn should_suppress_non_target_artifact_gate(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    if record.slug == "design-md"
+    if record.skill_flags.iter().any(|f| f == "artifact_exception:design_md_suppress")
         && super::design::has_design_contract_context(query_text, query_token_list)
         && !super::design::has_design_contract_negation_context(query_text, query_token_list)
     {
@@ -301,7 +303,7 @@ pub fn should_prefer_design_contract_over_artifact(
     query_text: &str,
     query_token_list: &[String],
 ) -> bool {
-    record.slug == "slides"
+    record.skill_flags.iter().any(|f| f == "artifact_exception:slides_design_contract")
         && super::design::has_design_contract_context(query_text, query_token_list)
         && !super::design::has_design_contract_negation_context(query_text, query_token_list)
 }

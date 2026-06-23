@@ -1,8 +1,8 @@
 //! Quality Gate 多轮闭环：Rust 真源 `RFV_LOOP_STATE.json` + stdio，支撑长任务轮次账本与宿主并行 lane 之后的 supervisor 合并落盘。
 
 pub use core_state::state_manager::read_quality_gate_state;
-// QUALITY_GATE_STATE_FILENAME is imported from core_state to stay in sync with read/write paths.
-pub use core_state::state_manager::QUALITY_GATE_STATE_FILENAME;
+// QUALITY_GATE_STATE_FILENAME is imported via core_state::state_manager::quality_gate_state_path.
+// quality_gate_state_path is re-exported below.
 
 use core_state::utils::atomic_write::write_atomic_json;
 #[allow(unused_imports)] // consumed by tests via `use super::*`
@@ -117,13 +117,8 @@ fn has_ab_level_findings(findings: &[Value]) -> bool {
     })
 }
 
-pub fn quality_gate_state_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
-    let tid = core_state::utils::path_guard::validate_task_id_component(task_id)?;
-    Ok(repo_root
-        .join("artifacts/current")
-        .join(tid)
-        .join(QUALITY_GATE_STATE_FILENAME))
-}
+/// Re-export canonical path from core-state (single source of truth).
+pub use core_state::state_manager::quality_gate_state_path;
 
 fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
     payload
@@ -155,7 +150,7 @@ fn value_array_or_empty(payload: &Value, key: &str) -> Result<Vec<Value>, String
 }
 
 fn clamp_max_rounds(raw: u64) -> (u64, bool) {
-    let cap = framework_runtime::router_env_flags::router_rs_qg_max_rounds_cap();
+    let cap = fr_exec::router_env_flags::router_rs_qg_max_rounds_cap();
     if raw > cap { (cap, true) } else { (raw, false) }
 }
 

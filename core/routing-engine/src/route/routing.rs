@@ -609,10 +609,8 @@ fn fuzzy_rescue_best_match<'a>(
 
 /// Gate skills excluded from fuzzy rescue when a matching gate context (e.g. CI)
 /// is detected.  These skills have dedicated gate handlers that should take
-/// precedence over fuzzy fallback.  When the list grows, migrate to a
-/// data-driven field in SKILL_ROUTING_METADATA.json.
-const CI_GATE_FUZZY_RESCUE_EXCLUDED: &[&str] = &["gh-address-comments"];
-
+/// precedence over fuzzy fallback.  Controlled by the
+/// `behavior:ci_gate_fuzzy_rescue_excluded` skill flag.
 fn fuzzy_rescue_primary_record<'a>(
     records: &'a [SkillRecord],
     query: &str,
@@ -625,7 +623,7 @@ fn fuzzy_rescue_primary_record<'a>(
             if is_overlay_record(record) {
                 return false;
             }
-            if ci_gate && CI_GATE_FUZZY_RESCUE_EXCLUDED.contains(&record.slug.as_str()) {
+            if ci_gate && has_skill_flag(record, "behavior:ci_gate_fuzzy_rescue_excluded") {
                 return false;
             }
             true
@@ -751,14 +749,30 @@ pub fn build_route_snapshot(
     }
 }
 
+/// Check if a skill record in `records` matching the decision's selected_skill has a specific flag.
+fn decision_has_skill_flag(decision: &RouteDecision, records: &[SkillRecord], flag: &str) -> bool {
+    records
+        .iter()
+        .any(|r| r.slug == decision.selected_skill && has_skill_flag(r, flag))
+}
+
+/// Shared helper: check if a SkillRecord has a specific flag.
+fn has_skill_flag(record: &SkillRecord, flag: &str) -> bool {
+    record.skill_flags.iter().any(|f| f == flag)
+}
+
 pub fn should_retry_with_manifest(decision: &RouteDecision) -> bool {
+    should_retry_with_manifest_records(decision, &[])
+}
+
+pub fn should_retry_with_manifest_records(decision: &RouteDecision, records: &[SkillRecord]) -> bool {
     if route_decision_is_no_hit(decision) {
         return true;
     }
     if decision.score < 35.0 {
         return true;
     }
-    if decision.selected_skill == "visual-review" {
+    if decision_has_skill_flag(decision, records, "behavior:gate_exception_visual_screenshot") {
         return decision.route_context.execution_protocol != "audit"
             || !visual_review_has_concrete_visual_signal(decision);
     }
@@ -826,22 +840,17 @@ fn is_explicit_manifest_upgrade(hot: &RouteDecision, full: &RouteDecision) -> bo
             && hot.overlay_skill.is_none())
 }
 
-/// Skills that qualify for retry even at scores < 35.0 (narrow-gate retry).
-/// Consolidates what were previously scattered hardcoded slug checks.
-fn hot_retry_override_skills() -> &'static [&'static str] {
-    &[
-        "agent-swarm-orchestration",
-        "doc",
-        "design-md",
-        "pdf",
-        "sentry",
-    ]
-}
-
 /// Skills that use a low-score override in manifest fallback decisions.
-/// Maps skill slug → minimum score for override eligibility.
-fn low_score_override_skills() -> &'static [(&'static str, f64)] {
-    &[("deepinterview", 20.0)]
+/// Driven by `behavior:low_score_override:*` skill flag prefix.
+fn find_low_score_override_min_score(records: &[SkillRecord]) -> Option<f64> {
+    records
+        .iter()
+        .find_map(|r| {
+            r.skill_flags.iter().find_map(|f| {
+                f.strip_prefix("behavior:low_score_override:")
+                    .and_then(|s| s.parse::<f64>().ok())
+            })
+        })
 }
 
 /// Gate skills whose own owners gate_retrigger_on_hot (session_start "required" + gate).
@@ -856,13 +865,14 @@ fn is_runtime_required_gate(slug: &str, runtime_records: &[SkillRecord]) -> bool
         })
 }
 
-fn hot_qualifies_for_retry(hot: &RouteDecision) -> bool {
+fn hot_qualifies_for_retry(hot: &RouteDecision, records: &[SkillRecord]) -> bool {
     route_decision_is_no_hit(hot)
         || hot.score < 25.0
         || (hot.score < 35.0
-            && hot_retry_override_skills()
-                .contains(&hot.selected_skill.as_str()))
-        || (hot.selected_skill == "systematic-debugging" && hot.score < 50.0)
+            && records
+                .iter()
+                .any(|r| r.slug == hot.selected_skill && has_skill_flag(r, "behavior:hot_retry_eligible")))
+        || (decision_has_skill_flag(hot, records, "behavior:systematic_debugging_high_threshold") && hot.score < 50.0)
     // ^^ systematic-debugging gets a higher retry threshold (50.0 vs 35.0)
     // because its gate-purpose (root-cause analysis) benefits from a wider
     // fallback safety margin — a low hot-score with a different skill shown
@@ -873,16 +883,17 @@ fn is_significant_score_gap_with_signal(full: &RouteDecision, hot: &RouteDecisio
     full.score >= hot.score + 8.0 && has_non_generic_manifest_signal(full)
 }
 
-fn is_low_score_override(full: &RouteDecision) -> bool {
-    low_score_override_skills()
+fn is_low_score_override(full: &RouteDecision, records: &[SkillRecord]) -> bool {
+    records
         .iter()
-        .any(|&(slug, min_score)| {
-            full.selected_skill == slug && full.score >= min_score
+        .any(|r| {
+            r.slug == full.selected_skill && find_low_score_override_min_score(std::slice::from_ref(r))
+                .is_some_and(|min_score| full.score >= min_score)
         })
 }
 
-fn is_minimal_score_without_signal(full: &RouteDecision) -> bool {
-    full.score <= 10.0 && !is_low_score_override(full)
+fn is_minimal_score_without_signal(full: &RouteDecision, records: &[SkillRecord]) -> bool {
+    full.score <= 10.0 && !is_low_score_override(full, records)
 }
 
 /// Consolidation of visual-review / systematic-debugging / screenshot gate-block exceptions.
@@ -890,9 +901,10 @@ fn is_minimal_score_without_signal(full: &RouteDecision) -> bool {
 fn runtime_gate_block_exception(
     hot_decision: &RouteDecision,
     full_decision: &RouteDecision,
+    runtime_records: &[SkillRecord],
 ) -> bool {
     // visual-review → screenshot: allow fallback unless in audit protocol
-    if hot_decision.selected_skill == "visual-review"
+    if decision_has_skill_flag(hot_decision, runtime_records, "behavior:gate_exception_visual_screenshot")
         && full_decision.selected_skill == "screenshot"
         && hot_decision.route_context.execution_protocol != "audit"
     {
@@ -900,15 +912,15 @@ fn runtime_gate_block_exception(
     }
 
     // visual-review → systematic-debugging: allow when hot qualifies for retry
-    if hot_decision.selected_skill == "visual-review"
+    if decision_has_skill_flag(hot_decision, runtime_records, "behavior:gate_exception_visual_debugging")
         && full_decision.selected_skill == "systematic-debugging"
-        && should_retry_with_manifest(hot_decision)
+        && should_retry_with_manifest_records(hot_decision, runtime_records)
     {
         return true;
     }
 
     // skill-framework-developer override: always allow when higher-scored with signal
-    if full_decision.selected_skill == "skill-framework-developer"
+    if decision_has_skill_flag(full_decision, runtime_records, "behavior:gate_exception_framework_dev")
         && full_decision.score > hot_decision.score
         && has_non_generic_manifest_signal(full_decision)
     {
@@ -942,7 +954,7 @@ fn runtime_gate_blocks_manifest_owner(
         return false;
     }
 
-    if runtime_gate_block_exception(hot_decision, full_decision) {
+    if runtime_gate_block_exception(hot_decision, full_decision, runtime_records) {
         return false;
     }
 
@@ -968,11 +980,11 @@ pub fn should_accept_manifest_fallback(
         return true;
     }
 
-    if !should_retry || !hot_qualifies_for_retry(hot_decision) {
+    if !should_retry || !hot_qualifies_for_retry(hot_decision, runtime_records) {
         return is_significant_score_gap_with_signal(full_decision, hot_decision);
     }
 
-    if is_minimal_score_without_signal(full_decision) {
+    if is_minimal_score_without_signal(full_decision, runtime_records) {
         return false;
     }
 
@@ -981,7 +993,7 @@ pub fn should_accept_manifest_fallback(
         return true;
     }
 
-    if is_low_score_override(full_decision) {
+    if is_low_score_override(full_decision, runtime_records) {
         return true;
     }
 
@@ -1036,6 +1048,40 @@ mod should_retry_with_manifest_tests {
         }
     }
 
+    fn make_visual_review_record() -> SkillRecord {
+        SkillRecord {
+            slug: "visual-review".to_string(),
+            skill_path: None,
+            layer: "L3".to_string(),
+            owner: "gate".to_string(),
+            gate: "evidence".to_string(),
+            priority: "P1".to_string(),
+            session_start: "required".to_string(),
+            summary: String::new(),
+            slug_lower: "visual-review".to_string(),
+            owner_lower: "gate".to_string(),
+            gate_lower: "evidence".to_string(),
+            session_start_lower: "required".to_string(),
+            gate_phrases: vec![],
+            trigger_hints: vec![],
+            name_tokens: HashSet::new(),
+            keyword_tokens: HashSet::new(),
+            alias_tokens: HashSet::new(),
+            do_not_use_tokens: HashSet::new(),
+            framework_alias_entrypoints: vec![],
+            metadata_positive_triggers: vec![],
+            host_platforms: vec![],
+            record_kind: "skill".to_string(),
+            primary_allowed: true,
+            fallback_policy_mode: "eligible-in-runtime".to_string(),
+            skill_flags: vec![
+                "scoring:visual_review".to_string(),
+                "behavior:gate_exception_visual_screenshot".to_string(),
+                "behavior:gate_exception_visual_debugging".to_string(),
+            ],
+        }
+    }
+
     #[test]
     fn low_score_triggers_retry() {
         let decision = make_decision("doc", 20.0, "L1", "four_step");
@@ -1076,7 +1122,7 @@ mod should_retry_with_manifest_tests {
     #[test]
     fn visual_review_non_audit_triggers_retry_even_with_high_score() {
         let decision = make_decision("visual-review", 90.0, "L1", "four_step");
-        assert!(should_retry_with_manifest(&decision));
+        assert!(should_retry_with_manifest_records(&decision, &[make_visual_review_record()]));
     }
 
     #[test]
@@ -1085,7 +1131,7 @@ mod should_retry_with_manifest_tests {
         decision
             .reasons
             .push("Visual-review boost applied: visible UI evidence and concrete visual findings requested.".to_string());
-        assert!(!should_retry_with_manifest(&decision));
+        assert!(!should_retry_with_manifest_records(&decision, &[make_visual_review_record()]));
     }
 
     #[test]
@@ -1100,7 +1146,7 @@ mod should_retry_with_manifest_tests {
         decision
             .reasons
             .push("Trigger hint matched: review.".to_string());
-        assert!(should_retry_with_manifest(&decision));
+        assert!(should_retry_with_manifest_records(&decision, &[make_visual_review_record()]));
     }
 
     #[test]
@@ -1151,6 +1197,11 @@ mod should_retry_with_manifest_tests {
             record_kind: "skill".to_string(),
             primary_allowed: true,
             fallback_policy_mode: "eligible-in-runtime".to_string(),
+            skill_flags: vec![
+                "scoring:visual_review".to_string(),
+                "behavior:gate_exception_visual_screenshot".to_string(),
+                "behavior:gate_exception_visual_debugging".to_string(),
+            ],
         }];
         assert!(should_retry_with_manifest(&hot));
         assert!(should_accept_manifest_fallback(

@@ -3,6 +3,11 @@
 //! Shared across all 4 hosts for PreToolUse path guarding.
 
 // ── Framework guarded prefixes ──
+// Lifecycle classification (2026-06-23 audit):
+//   - write-only:  SKILL_TIERS.json, SKILL_HEALTH_MANIFEST.json, SKILL_PLUGIN_CATALOG.json
+//     Written by `router-rs framework skills refresh`, never read as data by the runtime.
+//   - document-only: RUNTIME_PROVIDER_REGISTRY.json — declared in hook_policy, does not
+//     drive routing or hook execution. See hook_policy.rs provider_registry_policy.
 pub const FRAMEWORK_GUARDED_PREFIXES: &[&str] = &[
     "configs/framework/",
     "skills/SKILL_PLUGIN_CATALOG.json",
@@ -12,6 +17,18 @@ pub const FRAMEWORK_GUARDED_PREFIXES: &[&str] = &[
     "skills/SKILL_APPROVAL_POLICY.json",
     "skills/SKILL_ROUTING_INDEX.md",
     "skills/SKILL_TIERS.json",
+];
+
+/// Auxiliary JSON files that are write-only (generated, never read by the runtime).
+pub const WRITE_ONLY_AUXILIARY_FILES: &[&str] = &[
+    "skills/SKILL_TIERS.json",
+    "skills/SKILL_HEALTH_MANIFEST.json",
+    "skills/SKILL_PLUGIN_CATALOG.json",
+];
+
+/// Auxiliary JSON files that are document-only (policy declaration, no runtime effect).
+pub const DOCUMENT_ONLY_AUXILIARY_FILES: &[&str] = &[
+    "configs/framework/RUNTIME_PROVIDER_REGISTRY.json",
 ];
 
 // ── Framework source prefixes ──

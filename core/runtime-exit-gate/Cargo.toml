@@ -12,7 +12,8 @@ core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
 
 # L4
-framework-runtime = { path = "../framework-runtime" }
+fr-contracts = { path = "../fr-contracts" }
+fr-exec = { path = "../fr-exec" }
 host-projection = { path = "../host-projection" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 

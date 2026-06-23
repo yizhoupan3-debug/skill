@@ -355,7 +355,6 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 name = "core-policy"
 version = "0.1.0"
 dependencies = [
- "core-state",
  "framework-kernel",
  "insta",
  "mockall",
@@ -373,12 +372,34 @@ name = "core-state"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "core-state-types",
+ "core-state-utils",
  "framework-kernel",
  "fs2",
  "libc",
  "serde",
  "serde_json",
  "sha2",
+ "tracing",
+]
+
+[[package]]
+name = "core-state-types"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "core-state-utils"
+version = "0.1.0"
+dependencies = [
+ "fs2",
+ "insta",
+ "libc",
+ "serde",
+ "serde_json",
  "tracing",
 ]
 
@@ -639,6 +660,63 @@ dependencies = [
 ]
 
 [[package]]
+name = "fr-contracts"
+version = "0.1.0"
+dependencies = [
+ "core-policy",
+ "core-state-types",
+ "ctor",
+ "fr-utils",
+ "framework-kernel",
+ "framework-runtime-hooks",
+ "hex",
+ "insta",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "fr-exec"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "core-policy",
+ "core-state-types",
+ "core-state-utils",
+ "fr-contracts",
+ "fr-utils",
+ "framework-kernel",
+ "host-projection",
+ "http-util",
+ "reqwest",
+ "runtime-storage",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "trace-runtime",
+ "tracing",
+]
+
+[[package]]
+name = "fr-utils"
+version = "0.1.0"
+dependencies = [
+ "core-state-utils",
+ "framework-kernel",
+ "fs2",
+ "hex",
+ "libc",
+ "runtime-storage",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "fragile"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -654,10 +732,14 @@ dependencies = [
  "chrono",
  "core-policy",
  "core-state",
+ "fr-contracts",
+ "fr-exec",
+ "fr-utils",
  "framework-kernel",
- "framework-runtime",
+ "framework-runtime-hooks",
  "hex",
  "host-projection",
+ "insta",
  "routing-engine",
  "runtime-core-contracts",
  "runtime-infra",
@@ -665,6 +747,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "trace-runtime",
  "tracing",
 ]
 
@@ -701,27 +784,17 @@ dependencies = [
 name = "framework-runtime"
 version = "0.1.0"
 dependencies = [
- "chrono",
- "clap",
- "core-policy",
- "core-state",
- "ctor",
+ "fr-contracts",
+ "fr-exec",
+ "fr-utils",
  "framework-kernel",
  "framework-runtime-hooks",
- "fs2",
- "hex",
  "host-projection",
  "http-util",
  "insta",
- "libc",
- "reqwest",
- "routing-engine",
  "runtime-storage",
- "serde",
  "serde_json",
- "sha2",
  "trace-runtime",
- "tracing",
 ]
 
 [[package]]
@@ -1378,8 +1451,8 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "core-state",
+ "fr-contracts",
  "framework-kernel",
- "framework-runtime",
  "serde",
  "serde_json",
  "sha2",
@@ -1963,6 +2036,7 @@ dependencies = [
  "core-policy",
  "core-state",
  "fancy-regex",
+ "fr-utils",
  "framework-kernel",
  "host-projection",
  "html-escape",
@@ -2040,7 +2114,7 @@ dependencies = [
 name = "routing-engine"
 version = "0.1.0"
 dependencies = [
- "core-state",
+ "core-state-utils",
  "insta",
  "notify",
  "rayon",
@@ -2115,8 +2189,9 @@ dependencies = [
  "chrono",
  "core-policy",
  "core-state",
+ "fr-contracts",
+ "fr-exec",
  "framework-kernel",
- "framework-runtime",
  "hex",
  "host-projection",
  "runtime-core-contracts",
@@ -2132,8 +2207,9 @@ version = "0.1.0"
 dependencies = [
  "core-policy",
  "core-state",
+ "fr-exec",
+ "fr-utils",
  "framework-kernel",
- "framework-runtime",
  "host-projection",
  "routing-engine",
  "runtime-exit-gate",
@@ -2150,7 +2226,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "core-policy",
- "core-state",
+ "core-state-utils",
  "framework-kernel",
  "fs2",
  "hex",
@@ -2434,6 +2510,8 @@ name = "skill-rust-test-harness"
 version = "0.1.0"
 dependencies = [
  "regex",
+ "routing-engine",
+ "runtime-core-contracts",
  "rusqlite",
  "serde_json",
  "serde_yml",

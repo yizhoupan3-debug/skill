@@ -5,6 +5,11 @@ edition = "2024"
 [lints]
 workspace = true
 
+[features]
+default = []
+codegraph = []
+test-support = []
+
 [dependencies]
 # B0
 core-state = { path = "../core-state" }
@@ -12,7 +17,11 @@ core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
 
 # L4
-framework-runtime = { path = "../framework-runtime" }
+fr-utils = { path = "../fr-utils" }
+fr-contracts = { path = "../fr-contracts" }
+fr-exec = { path = "../fr-exec" }
+framework-runtime-hooks = { path = "../framework-runtime-hooks" }
+trace-runtime = { path = "../trace-runtime" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-storage = { path = "../runtime-storage" }
 routing-engine = { path = "../routing-engine" }
@@ -27,3 +36,6 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+insta.workspace = true

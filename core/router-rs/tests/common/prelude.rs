@@ -6,18 +6,21 @@
 pub use runtime_core::{
     goal_drive, closeout_enforcement, execution_contract, framework_host_targets,
     framework_runtime, harness_context_signals,
-    harness_operator_nudges, hook_event_routing, hosts, kernel_bootstrap, mcp_stdio_test_support, router_self, runtime_envelope_ids, runtime_registry, session_call_tracker, session_supervisor, stdio_payload_types, trace_runtime, task_state,
+    harness_operator_nudges, hook_event_routing, hosts, kernel_bootstrap, router_self, runtime_envelope_ids, session_call_tracker, session_supervisor, stdio_payload_types, trace_runtime, task_state,
+    mcp_stdio_test_support,
 };
 
-// host submodule re-exports
+pub use framework_kernel::runtime_registry;
+
+// host submodule re-exports (registry-driven: single RegistryDispatcher for all hosts)
 pub use runtime_core::hosts::{
-    cursor_hooks, mcp_stdio_harness, opencode_hooks,
+    mcp_stdio_harness,
+    host_extensions::dispatch::RegistryDispatcher,
 };
 
 // specific function / constant re-exports
 pub use runtime_core::{
     background_state::handle_background_state_operation,
-    cli::runtime_ops::write_text_payload,
     execution_contract::{
         EXECUTION_AUTHORITY,
         EXECUTION_MODEL_ID_SOURCE, EXECUTION_SCHEMA_VERSION,
@@ -38,7 +41,7 @@ pub use runtime_core::{
         normalize_chat_completions_endpoint, perform_live_execute_with_sender,
         validate_live_execute_aggregator_base_url,
     },
-    framework_runtime::route_manifest_fallback::resolve_runtime_declared_manifest_fallback,
+    framework_runtime::resolve_runtime_declared_manifest_fallback,
     framework_runtime::trace_attach::{
         attach_runtime_event_transport, subscribe_attached_runtime_events,
     },
@@ -47,6 +50,7 @@ pub use runtime_core::{
         write_trace_metadata,
     },
     framework_runtime::sha256_hex,
+    framework_runtime::trace_transport::write_text_payload,
     route::{
         ROUTE_AUTHORITY, ROUTE_SNAPSHOT_SCHEMA_VERSION,
         RouteSnapshotEnvelopePayload, build_route_diff_report, build_route_policy,

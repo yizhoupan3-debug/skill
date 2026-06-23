@@ -10,40 +10,9 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
-use crate::util::str_field;
+use crate::util::{obj_mut, arr_mut, set_key, now_iso, novelty_gate_mut, str_field};
 
 // ── Local helpers ──
-
-fn obj_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
-    value
-        .as_object_mut()
-        .expect("state must be an object — likely corrupted research-state.yaml")
-}
-
-fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
-    let entry = obj_mut(value)
-        .entry(key.to_string())
-        .or_insert_with(|| json!([]));
-    entry
-        .as_array_mut()
-        .unwrap_or_else(|| panic!("expected '{key}' to be an array in state — likely corrupted research-state.yaml"))
-}
-
-fn set_key(value: &mut Value, key: &str, child: Value) {
-    obj_mut(value).insert(key.to_string(), child);
-}
-
-fn now_iso() -> String {
-    framework_kernel::time::now_iso()
-}
-
-fn novelty_gate_mut(value: &mut Value) -> Result<&mut serde_json::Map<String, Value>> {
-    obj_mut(value)
-        .entry("novelty_gate".to_string())
-        .or_insert_with(|| json!({}))
-        .as_object_mut()
-        .ok_or_else(|| anyhow::anyhow!("novelty_gate must be object"))
-}
 
 // ── Constants ──
 
@@ -214,7 +183,7 @@ pub fn hydrate_state(state: &Value) -> Result<Value> {
         root.entry("updated_at").or_insert(created_at);
     }
     {
-        let gate = novelty_gate_mut(&mut hydrated)?;
+        let gate = novelty_gate_mut(&mut hydrated);
         gate.entry("status").or_insert(json!("pending"));
         gate.entry("claims").or_insert(json!([]));
         gate.entry("claim_records").or_insert(json!([]));
@@ -278,14 +247,9 @@ pub fn dump_state(path: &Path, state: &Value) -> Result<()> {
     set_key(&mut state_to_write, "next_actions", json!(actions));
     let rendered = serde_yml::to_string(&state_to_write)?;
 
-    // Atomic write: write to temp file in same directory, then rename
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    let mut tmp = tempfile::NamedTempFile::new_in(parent)
-        .context("failed to create temp file for atomic state write")?;
-    std::io::Write::write_all(&mut tmp, rendered.as_bytes())
-        .context("failed to write state to temp file")?;
-    tmp.persist(path)
-        .context("failed to atomically rename temp file to state path")?;
+    // Atomic write via core-standard write_atomic_text (POSIX rename for crash safety).
+    core_state::utils::atomic_write::write_atomic_text(path, &rendered)
+        .map_err(|e| anyhow::anyhow!("atomic write failed for {}: {e}", path.display()))?;
     Ok(())
 }
 

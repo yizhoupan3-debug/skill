@@ -3,12 +3,12 @@
 //! Functions for extracting tool execution metadata, appending evidence to
 //! `EVIDENCE_INDEX.json`, and heuristics for detecting verification commands.
 
-use framework_runtime::constants::{
+use fr_utils::constants::{
     EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
     FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, SESSION_SUMMARY_FILENAME, TASK_POINTERS_FILENAME,
 };
-use framework_runtime::json_io::read_json_strict;
-use framework_runtime::json_value::value_text;
+use fr_utils::json_io::read_json_strict;
+use fr_utils::json_value::value_text;
 use framework_kernel::repo_roots::resolve_repo_root_arg;
 use serde_json::{Map, Value, json};
 use std::fs;
@@ -22,7 +22,7 @@ use crate::util::{
 const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
 
 fn continuity_post_tool_evidence_env_enabled() -> bool {
-    framework_runtime::router_env_flags::router_rs_continuity_post_tool_evidence_enabled()
+    fr_exec::router_env_flags::router_rs_continuity_post_tool_evidence_enabled()
 }
 
 fn extract_shell_command_preview(event: &Value) -> Option<String> {
@@ -704,7 +704,7 @@ mod shell_command_verification_heuristic_tests {
 
     #[test]
     fn test_physical_artifact_checks() {
-        use crate::detect_and_verify_physical_artifact;
+        use super::detect_and_verify_physical_artifact;
         let temp_dir = std::env::temp_dir().join(format!(
             "router-rs-test-artifact-{}",
             std::time::SystemTime::now()

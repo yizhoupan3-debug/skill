@@ -654,6 +654,10 @@ const HIGH_RISK_MCP_TOOLS: &[(&str, &str)] = &[
         r"^preview_eval$",
         "preview_eval executes arbitrary JavaScript in the preview page — RCE risk if expression is untrusted.",
     ),
+    (
+        r"^preview_start$",
+        "preview_start can execute arbitrary commands via runtimeExecutable/runtimeArgs — equivalent to shell exec.",
+    ),
 ];
 
 /// MCP-specific arg-level risk patterns.
@@ -809,7 +813,7 @@ pub fn hook_policy_contract() -> Value {
         ],
         "provider_registry_policy": "configs/framework/RUNTIME_PROVIDER_REGISTRY.json is document-only and does not drive hook execution ranking.",
         "mcp_safety_details": {
-            "high_risk_tools": ["session_launch", "session_resume_due", "session_terminate", "background_terminate"],
+            "high_risk_tools": ["session_launch", "session_resume_due", "session_terminate", "background_terminate", "preview_eval", "preview_start"],
             "arg_risk_coverage": ["browser_get_network", "browser_fill", "session_launch", "session_mark_blocked", "web_fetch", "browser_save_session", "browser_restore_session"],
             "shell_injection_in_args": true
         },

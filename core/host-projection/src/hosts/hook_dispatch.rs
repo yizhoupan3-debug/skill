@@ -183,8 +183,8 @@ pub trait HostHookDispatcher: HostHookConfig {
         }
     }
 
-    /// PostToolUse: evidence collection + subagent tracking.
-    /// Default: record telemetry + auto evidence.
+    /// PostToolUse: evidence collection + subagent tracking + auto-checkpoint.
+    /// Default: record telemetry + auto evidence + progress checkpoint.
     fn handle_post_tool_use(&self, event: &HookEvent) -> Option<HookOutput> {
         crate::hooks::ensure_kernel_bootstrap();
         let tool_name = crate::hosts::hook_dispatch::extract_tool_name(event.payload);
@@ -195,8 +195,47 @@ pub trait HostHookDispatcher: HostHookConfig {
             crate::hooks::extract_post_tool_duration_ms(event.payload).unwrap_or(0),
             crate::hooks::post_tool_call_succeeded(event.payload),
         );
-        crate::hosts::hook_dispatch::auto_record_verification_evidence(event.repo_root, event.payload);
-        crate::hosts::hook_dispatch::auto_record_research_activity(event.repo_root, event.payload);
+        crate::hosts::host_state::auto_record_verification_evidence(event.repo_root, event.payload);
+        crate::hosts::host_state::auto_record_research_activity(event.repo_root, event.payload);
+
+        // Auto-register subagent in health registry when a subagent tool is called.
+        // This covers hosts (like Claude) that don't fire SubagentStart/SubagentStop events.
+        if core_policy::subagent::is_subagent_tool(&normalized) {
+            let agent_id = extract_subagent_id_from_payload(event.payload)
+                .unwrap_or_else(|| format!("agent-{}", std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
+            let now = framework_kernel::time::now_iso();
+            let payload = serde_json::json!({
+                "operation": "agent_register",
+                "agent_id": agent_id,
+                "host_id": self.host_id(),
+                "tool_type": format!("post_tool_use:{normalized}"),
+                "now": now,
+            });
+            if let Some(result) = crate::hooks::session_supervisor_op(payload) {
+                match result {
+                    Ok(_) => debug!("PostToolUse: registered subagent {agent_id}"),
+                    Err(e) => eprintln!("[router-rs warning] PostToolUse: agent_register failed: {e}"),
+                }
+            }
+        }
+
+        // Auto-checkpoint: if there's an active goal and the tool call succeeded,
+        // record a basic progress checkpoint (advisory, best-effort).
+        if crate::hooks::post_tool_call_succeeded(event.payload)
+            && let Ok(Some(goal)) = core_state::state_manager::read_goal_state(event.repo_root, None)
+            && core_state::state_manager::goal_state_requests_continuation(&goal)
+        {
+            let note = format!("auto-checkpoint: tool={normalized}");
+            let payload = serde_json::json!({
+                "repo_root": event.repo_root.to_string_lossy().to_string(),
+                "operation": "checkpoint",
+                "note": note,
+            });
+            // Best-effort: failure to checkpoint should not disrupt PostToolUse flow.
+            let _ = core_state::state_manager::framework_goal_drive(payload);
+        }
+
         None
     }
 
@@ -215,24 +254,93 @@ pub trait HostHookDispatcher: HostHookConfig {
     /// SessionStart: context injection.
     /// Default: operator_inject check + repo context.
     fn handle_session_start(&self, event: &HookEvent) -> Option<HookOutput> {
-        if !crate::hooks::router_rs_operator_inject_globally_enabled() {
-            return None;
+        let mut contexts = Vec::new();
+
+        if crate::hooks::router_rs_operator_inject_globally_enabled() {
+            contexts.push(format!("Repo: {}", event.repo_root.display()));
         }
-        let ctx = format!("Repo: {}", event.repo_root.display());
-        Some(HookOutput::AdditionalContext(truncate_bytes(
-            &ctx,
-            self.additional_context_max_bytes(),
-            "...",
-        )))
+
+        // Detect stale goals from a previous session and warn the user
+        if let Ok(Some(goal)) = core_state::state_manager::read_goal_state(event.repo_root, None) {
+            if goal.get("stale").and_then(Value::as_bool).unwrap_or(false) {
+                let stale_reason = goal
+                    .get("stale_reason")
+                    .and_then(Value::as_str)
+                    .unwrap_or("previous session");
+                let goal_text = goal
+                    .get("goal")
+                    .and_then(Value::as_str)
+                    .unwrap_or("(unnamed)");
+                contexts.push(format!(
+                    "[Continuity] 检测到前一个 session 的未完成 Goal: 「{goal_text}」({stale_reason})。\
+                     如需清除请调用 goal_state_manage(operation=clear)。"
+                ));
+            }
+        }
+
+        if contexts.is_empty() {
+            None
+        } else {
+            let ctx = contexts.join("\n");
+            Some(HookOutput::AdditionalContext(truncate_bytes(
+                &ctx,
+                self.additional_context_max_bytes(),
+                "...",
+            )))
+        }
     }
 
-    /// SubagentStart: default no-op.
-    fn handle_subagent_start(&self, _event: &HookEvent) -> Option<HookOutput> {
+    /// SubagentStart: register agent in session-supervisor health registry.
+    fn handle_subagent_start(&self, event: &HookEvent) -> Option<HookOutput> {
+        let agent_id = extract_subagent_id_from_payload(event.payload)
+            .unwrap_or_else(|| format!("agent-{}", std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
+        let host_id = self.host_id();
+        let now = framework_kernel::time::now_iso();
+        let payload = serde_json::json!({
+            "operation": "agent_register",
+            "agent_id": agent_id,
+            "host_id": host_id,
+            "tool_type": "subagent_start_hook",
+            "now": now,
+        });
+        if let Some(result) = crate::hooks::session_supervisor_op(payload) {
+            match result {
+                Ok(_) => debug!("SubagentStart: registered agent {agent_id}"),
+                Err(e) => eprintln!("[router-rs warning] SubagentStart: agent_register failed: {e}"),
+            }
+        }
         None
     }
 
-    /// SubagentStop: default no-op.
-    fn handle_subagent_stop(&self, _event: &HookEvent) -> Option<HookOutput> {
+    /// SubagentStop: unregister agent in session-supervisor health registry.
+    fn handle_subagent_stop(&self, event: &HookEvent) -> Option<HookOutput> {
+        let agent_id = extract_subagent_id_from_payload(event.payload);
+        if agent_id.is_none() {
+            debug!("SubagentStop: no agent_id in payload, skipping unregister");
+            return None;
+        }
+        let agent_id = agent_id.unwrap();
+        let now = framework_kernel::time::now_iso();
+        let terminal_status = if payload_signal_contains_failure(event.payload) {
+            "failed"
+        } else {
+            "completed"
+        };
+        let error = extract_subagent_error_from_payload(event.payload);
+        let payload = serde_json::json!({
+            "operation": "agent_unregister",
+            "agent_id": agent_id,
+            "terminal_status": terminal_status,
+            "error": error,
+            "now": now,
+        });
+        if let Some(result) = crate::hooks::session_supervisor_op(payload) {
+            match result {
+                Ok(_) => debug!("SubagentStop: unregistered agent {agent_id} ({terminal_status})"),
+                Err(e) => eprintln!("[router-rs warning] SubagentStop: agent_unregister failed: {e}"),
+            }
+        }
         None
     }
 
@@ -505,7 +613,7 @@ pub fn extract_completion_text(event: &HookEvent) -> String {
 }
 
 /// Shared stop signal text: combines prompt + assistant response for gate detection.
-/// Used by Claude, Codex, OpenCode Stop handlers. Cursor uses `hook_event_signal_text` with scrape.
+/// Used by all 4 hosts (Claude, Codex, OpenCode, Cursor).
 pub fn stop_signal_text_from_payload(payload: &Value) -> String {
     let prompt = extract_prompt_text(payload);
     let response = extract_response_text(payload);
@@ -577,7 +685,7 @@ fn default_subagent_review_types() -> &'static [&'static str] {
         // Collect all unique subagent_review_types from registry-backed host providers.
         // This ensures the registry is the single source of truth.
         let mut types: Vec<&'static str> = Vec::new();
-        for host_id in &["claude", "cursor", "codex", "opencode"] {
+        for &host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
             if let Some(provider) = crate::hosts::host_provider_for_id(host_id) {
                 for t in provider.subagent_review_types() {
                     if !types.contains(t) {
@@ -590,7 +698,7 @@ fn default_subagent_review_types() -> &'static [&'static str] {
             // Registry unavailable — use built-in defaults.
             types.extend_from_slice(&[
                 "explore", "explorer", "general-purpose", "deep-review-agent",
-                "review", "verifyx-agent", "plan", "claude",
+                "review", "verifyx-agent", "plan",
             ]);
         }
         types
@@ -625,7 +733,7 @@ pub fn subagent_lane_bits(kind: Option<&str>) -> (bool, bool) {
     };
     let review_types = subagent_review_types();
     let review_lane = review_types.contains(&k);
-    let parallel_lane = matches!(k, "general-purpose" | "deep-review-agent" | "claude");
+    let parallel_lane = matches!(k, "general-purpose" | "deep-review-agent");
     (review_lane, parallel_lane)
 }
 
@@ -1250,6 +1358,29 @@ pub fn build_user_prompt_context_injection(
     crate::hooks::maybe_append_paper_adversarial_context(repo_root, prompt, &mut contexts, paper_host);
     crate::hooks::maybe_append_paper_prose_context(repo_root, prompt, &mut contexts, paper_host);
 
+    // Goal auto-detect: suggest goal creation for complex tasks, or amend for scope changes
+    let goal_result = core_policy::goal_auto_detect::analyze_complexity(prompt);
+    if !goal_result.is_complex && goal_result.is_scope_change {
+        // Scope change detected — suggest amendment if there's an active goal
+        if let Ok(Some(goal)) = core_state::state_manager::read_goal_state(repo_root, None) {
+            if core_state::state_manager::goal_state_requests_continuation(&goal) {
+                contexts.push("[Goal Amendment] 检测到目标范围可能变化。如需调整当前 Goal 的 done_when/non_goals，请说明变更内容。".to_string());
+            }
+        }
+    } else if goal_result.is_complex {
+        // Complex task detected — suggest goal creation if no active goal
+        let has_active = match core_state::state_manager::read_goal_state(repo_root, None) {
+            Ok(Some(g)) => core_state::state_manager::goal_state_requests_continuation(&g),
+            _ => false,
+        };
+        if !has_active {
+            contexts.push(
+                "[Goal Suggestion] 检测到这是一个复杂任务。建议创建 Goal contract (目标/非目标/完成条件) 来跟踪进度和退出条件。\
+                确认请回复 Goal 定义或说「开始」。".to_string(),
+            );
+        }
+    }
+
     contexts
 }
 
@@ -1281,38 +1412,36 @@ fn extract_fork_context(tool_input: &Value) -> Option<bool> {
 
 use std::collections::HashSet;
 use std::io::Read;
-use std::path::{Component, PathBuf};
+use std::path::PathBuf;
 
 /// Lexically normalize `.` / `..` segments (no filesystem access).
+/// Delegates to `pretool::normalize_repo_relative_path` for canonical path normalization.
 pub fn normalize_path_lexical(path: &Path) -> PathBuf {
-    let mut out = PathBuf::new();
-    for comp in path.components() {
-        match comp {
-            Component::Prefix(_) | Component::RootDir => { out.push(comp); }
-            Component::CurDir => {}
-            Component::ParentDir => {
-                if out.file_name().is_some() { out.pop(); } else { out.push(".."); }
-            }
-            Component::Normal(c) => out.push(c),
-        }
-    }
-    out
+    PathBuf::from(
+        crate::hosts::host_extensions::pretool::normalize_repo_relative_path(
+            &path.to_string_lossy(),
+        ),
+    )
 }
 
 /// Collapse `.` / `..` in a relative path string. Extra `..` at virtual root are ignored.
+/// (i.e. `a/../../b` normalizes to `b`, matching the original manual implementation.)
 pub fn compact_repo_relative_segments(rel_raw: &str) -> Option<PathBuf> {
-    let mut out = PathBuf::new();
-    for comp in Path::new(rel_raw).components() {
-        match comp {
-            Component::CurDir => {}
-            Component::Normal(s) => out.push(s),
-            Component::ParentDir => {
-                if out.file_name().is_some() { out.pop(); }
-            }
-            _ => {}
-        }
+    let normalized = crate::hosts::host_extensions::pretool::normalize_repo_relative_path(rel_raw);
+    // Strip leading ".." components: they represent paths that went above
+    // the virtual root, which should be treated as at-root for relative purposes.
+    let mut s = normalized.as_str();
+    while let Some(rest) = s.strip_prefix("../") {
+        s = rest;
     }
-    if out.as_os_str().is_empty() { None } else { Some(out) }
+    if let Some(rest) = s.strip_prefix("..") {
+        s = rest;
+    }
+    if s.is_empty() || s == "." {
+        None
+    } else {
+        Some(PathBuf::from(s))
+    }
 }
 
 /// Build a `context_append` JSON output for a hook event.
@@ -1524,221 +1653,59 @@ pub fn payload_looks_like_foreign_hook_stdin(payload: &Value) -> bool {
         && payload.get("workspace_roots").and_then(Value::as_array).is_some_and(|a| !a.is_empty())
 }
 
+// ── Re-exports from sub-modules (backward compat) ──
 
-// ════════════════════════════════════════════════════════════════
-// Shared state management & evidence recording (migrated from host_extensions)
-// ════════════════════════════════════════════════════════════════
+pub use crate::hosts::generic_config::GenericHostConfig;
+pub use crate::hosts::host_state::{
+    auto_record_research_activity, auto_record_verification_evidence, closeout_check_shared,
+    ensure_dispatch_bootstrap_shared, load_touch_state_from_path, read_review_gate_file,
+    should_sync_review_gate_on_user_prompt, write_review_state_unlocked, AgentDiskState,
+    TouchState,
+};
 
-/// Generic disk state indicator for hook state files.
-pub enum AgentDiskState<T> {
-    Absent,
-    Ok(T),
-    Unreadable,
-}
+// ── Subagent payload extraction helpers ──
 
-/// Shared touch state tracking (settings/framework file modifications).
-#[derive(Default, serde::Serialize, serde::Deserialize)]
-pub struct TouchState {
-    pub settings: bool,
-    pub framework: bool,
-    pub settings_validated: bool,
-    pub framework_tested: bool,
-}
-
-/// Build a deny response for PreToolUse.
-pub fn deny_pre_tool_use(reason: String) -> Option<Value> {
-    Some(serde_json::json!({
-        "suppressOutput": true,
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        },
-    }))
-}
-
-/// Write HookReviewDiskCore to disk with version bump.
-pub fn write_review_state_unlocked(path: &Path, state: &core_policy::HookReviewDiskCore) -> Result<(), String> {
-    let mut to_write = state.clone();
-    to_write.bump_version_for_save();
-    let mut body = serde_json::to_string(&to_write).map_err(|e| e.to_string())?;
-    body.push('\n');
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(path, &body).map_err(|e| e.to_string())
-}
-
-/// Read HookReviewDiskCore from disk with migration support.
-pub fn read_review_gate_file(path: &Path) -> AgentDiskState<core_policy::HookReviewDiskCore> {
-    if !path.is_file() {
-        return AgentDiskState::Absent;
-    }
-    let raw = match std::fs::read_to_string(path) {
-        Ok(s) => s,
-        Err(_) => return AgentDiskState::Unreadable,
-    };
-    if raw.trim().is_empty() {
-        return AgentDiskState::Unreadable;
-    }
-    let value: Value = match serde_json::from_str(&raw) {
-        Ok(v) => v,
-        Err(_) => return AgentDiskState::Unreadable,
-    };
-    AgentDiskState::Ok(core_policy::migrate_hook_review_disk_core(&value))
-}
-
-/// Read TouchState from disk.
-pub fn load_touch_state_from_path(touch_path: &Path) -> AgentDiskState<TouchState> {
-    if !touch_path.is_file() {
-        return AgentDiskState::Absent;
-    }
-    match std::fs::read_to_string(touch_path) {
-        Ok(text) => match serde_json::from_str(&text) {
-            Ok(state) => AgentDiskState::Ok(state),
-            Err(_) => AgentDiskState::Unreadable,
-        },
-        Err(_) => AgentDiskState::Unreadable,
-    }
-}
-
-/// Determine if review gate should sync on UserPromptSubmit.
-pub fn should_sync_review_gate_on_user_prompt(repo_root: &Path, prompt: &str) -> bool {
-    core_policy::hook_common::is_interactive_profile(Some(repo_root), prompt)
-        || core_policy::hook_common::is_framework_goal_entry_prompt(prompt)
-        || core_policy::hook_common::is_my_pre_execution_entry_prompt(prompt)
-        || core_policy::hook_common::is_narrow_review_prompt(prompt)
-        || core_policy::hook_common::is_review_prompt(prompt)
-        || core_policy::hook_common::has_override(prompt)
-}
-
-/// Auto-record verification evidence from a Bash tool call.
-pub fn auto_record_verification_evidence(repo_root: &Path, payload: &Value) {
-    let tool_name = payload.get("tool_name").and_then(Value::as_str).unwrap_or_default();
-    let Some(command) = bash_command(payload) else { return; };
-    let cmd_trimmed = command.trim();
-    if !is_verification_command(tool_name, cmd_trimmed) { return; }
-    let exit_code = payload_exit_code(payload);
-    let output_summary = extract_output_summary(payload, 500);
-    let mut entry = serde_json::Map::new();
-    entry.insert("kind".to_string(), serde_json::json!("auto_evidence"));
-    entry.insert("source".to_string(), serde_json::json!("post_tool_use_auto"));
-    entry.insert("tool_name".to_string(), serde_json::json!("Bash"));
-    entry.insert("command_preview".to_string(), serde_json::json!(cmd_trimmed));
-    entry.insert("recorded_at".to_string(), serde_json::json!(crate::hooks::current_local_timestamp()));
-    if let Some(ec) = exit_code {
-        entry.insert("exit_code".to_string(), serde_json::json!(ec));
-        entry.insert("success".to_string(), serde_json::json!(ec == 0));
-    }
-    if let Some(ref text) = output_summary {
-        entry.insert("output".to_string(), serde_json::json!(text));
-    }
-    let _ = crate::hooks::append_evidence_index(repo_root, None, entry);
-}
-
-/// Auto-record research activity from tool calls.
-pub fn auto_record_research_activity(repo_root: &Path, payload: &Value) {
-    let tool_name = payload.get("tool_name").or_else(|| payload.get("tool"))
-        .and_then(Value::as_str).unwrap_or_default();
-    let summary = match tool_name {
-        "Bash" => bash_command(payload).unwrap_or_default().to_string(),
-        "WebFetch" | "web_fetch" => payload.get("tool_input")
-            .and_then(|ti| ti.get("url")).and_then(Value::as_str)
-            .unwrap_or_default().to_string(),
-        other => other.to_string(),
-    };
-    if summary.is_empty() || summary == tool_name { return; }
-    crate::hooks::maybe_record_research_activity(repo_root, tool_name, &summary);
-}
-
-/// Standard closeout check (delegates to hooks proxy).
-pub fn closeout_check_shared(repo_root: &Path, text: &str) -> Option<String> {
-    crate::hooks::closeout_stop_followup_for_completion_text(repo_root, text)
-}
-
-/// Standard dispatch bootstrap.
-pub fn ensure_dispatch_bootstrap_shared() {
-    crate::hooks::ensure_kernel_bootstrap();
-}
-
-// ════════════════════════════════════════════════════════════════
-// Generic host configuration (data-driven, no hardcoded host names)
-// ════════════════════════════════════════════════════════════════
-
-/// Generic host configuration derived from host_id.
-/// All values are computed from the host_id string — no hardcoded host names.
-pub struct GenericHostConfig {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub state_dir: &'static str,
-    pub namespace_env: &'static str,
-    pub unreadable_tag: &'static str,
-    pub max_context_bytes: usize,
-    pub session_start: bool,
-    pub subagent_start: bool,
-    pub subagent_stop: bool,
-}
-
-impl GenericHostConfig {
-    pub const fn new(id: &'static str, label: &'static str) -> Self {
-        Self {
-            id,
-            label,
-            state_dir: "",       // computed at runtime from id
-            namespace_env: "",   // computed at runtime from id
-            unreadable_tag: "",  // computed at runtime from id
-            max_context_bytes: 640,
-            session_start: false,
-            subagent_start: false,
-            subagent_stop: false,
+/// Extract agent_id from a SubagentStart/SubagentStop payload.
+/// Tries: `agent_id`, `subagent_id`, `task_id`, `id`, or a `name` field.
+fn extract_subagent_id_from_payload(payload: &Value) -> Option<String> {
+    for key in &["agent_id", "subagent_id", "task_id", "id"] {
+        if let Some(s) = payload.get(*key).and_then(Value::as_str).filter(|s| !s.is_empty()) {
+            return Some(s.to_string());
+        }
+        // Also check nested `params` object (some hosts wrap inside params)
+        if let Some(s) = payload.get("params")
+            .and_then(|p| p.get(*key))
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            return Some(s.to_string());
         }
     }
-
-    /// Derive state_dir from host_id: ".{host_id}"
-    pub fn derived_state_dir(&self) -> String {
-        format!(".{}", self.id)
-    }
-
-    /// Derive session namespace env from host_id: "ROUTER_RS_{HOST_UPPER}_SESSION_NAMESPACE"
-    pub fn derived_namespace_env(&self) -> String {
-        format!("ROUTER_RS_{}_SESSION_NAMESPACE", self.id.to_uppercase())
-    }
-
-    /// Derive unreadable tag from host_id: "ROUTER_RS_{HOST_UPPER}_HOOK_STATE_UNREADABLE"
-    pub fn derived_unreadable_tag(&self) -> String {
-        format!("ROUTER_RS_{}_HOOK_STATE_UNREADABLE", self.id.to_uppercase())
-    }
+    None
 }
 
-impl HostHookConfig for GenericHostConfig {
-    fn host_id(&self) -> &'static str { self.id }
-    fn state_dir_leaf(&self) -> &'static str { self.state_dir }
-    fn hook_state_unreadable_tag(&self) -> &'static str { self.unreadable_tag }
-    fn session_namespace_env(&self) -> &'static str { self.namespace_env }
-    fn log_label(&self) -> &'static str { self.label }
-    fn additional_context_max_bytes(&self) -> usize { self.max_context_bytes }
-    fn supports_session_start(&self) -> bool { self.session_start }
-    fn supports_subagent_start(&self) -> bool { self.subagent_start }
-    fn supports_subagent_stop(&self) -> bool { self.subagent_stop }
+/// Extract error message from a SubagentStop payload.
+fn extract_subagent_error_from_payload(payload: &Value) -> Option<String> {
+    for key in &["error", "error_message", "reason"] {
+        if let Some(s) = payload.get(*key).and_then(Value::as_str).filter(|s| !s.is_empty()) {
+            return Some(s.to_string());
+        }
+    }
+    None
 }
 
-/// Macro to generate a complete `HostHookConfig` implementation from just a host_id.
-/// All config values are derived from the host_id string — no hardcoded host names in code.
-///
-/// Usage: `impl_host_config!("claude", "Claude");`
-#[macro_export]
-macro_rules! impl_host_config {
-    ($id:expr, $label:expr) => {
-        fn host_id(&self) -> &'static str { $id }
-        fn state_dir_leaf(&self) -> &'static str { concat!(".", $id) }
-        fn hook_state_unreadable_tag(&self) -> &'static str {
-            framework_kernel::runtime_registry::hook_state_unreadable_tag($id)
-        }
-        fn session_namespace_env(&self) -> &'static str {
-            framework_kernel::runtime_registry::session_namespace_env($id)
-        }
-        fn log_label(&self) -> &'static str { $label }
-    };
+/// Check if the payload signal text contains failure indicators.
+fn payload_signal_contains_failure(payload: &Value) -> bool {
+    let signal = payload.get("signal").and_then(Value::as_str).unwrap_or("");
+    let error = payload.get("error").and_then(Value::as_str).unwrap_or("");
+    let status = payload.get("status").and_then(Value::as_str).unwrap_or("");
+    let text = format!("{signal} {error} {status}");
+    let lower = text.to_ascii_lowercase();
+    lower.contains("error")
+        || lower.contains("failed")
+        || lower.contains("timeout")
+        || lower.contains("killed")
+        || lower.contains("interrupted")
 }
 
 #[cfg(test)]
@@ -1827,6 +1794,7 @@ mod tests {
 
     #[test]
     fn test_should_sync_review_gate_detects_review_prompt() {
+        crate::hooks::ensure_kernel_bootstrap();
         let tmp = std::env::temp_dir();
         assert!(should_sync_review_gate_on_user_prompt(&tmp, "review this code"));
         assert!(!should_sync_review_gate_on_user_prompt(&tmp, "hello world"));

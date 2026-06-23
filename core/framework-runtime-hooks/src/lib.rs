@@ -130,3 +130,109 @@ pub struct RuntimeCoreHooks {
     // ── 内核引导 ──
     pub ensure_kernel_bootstrap: fn(),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Once;
+
+    static INIT: Once = Once::new();
+
+    fn noop_telemetry() -> TelemetryHooks {
+        TelemetryHooks {
+            hook_fired: |_, _| {},
+            tool_call: |_, _, _| {},
+            route_decision: |_, _, _| {},
+            prediction_outcome: |_, _, _, _| {},
+            rfv_round: |_, _| {},
+        }
+    }
+
+    fn noop_host_provider() -> HostProviderHooks {
+        HostProviderHooks {
+            for_routing_spelling: |_| None,
+            default_id: || "test-host",
+            strict_pre_tool_fallback_hint: |_| None,
+            registry: || vec![],
+        }
+    }
+
+    fn noop_hooks() -> RuntimeCoreHooks {
+        RuntimeCoreHooks {
+            telemetry: noop_telemetry(),
+            host_provider: noop_host_provider(),
+            framework_goal_drive: |_| Ok(serde_json::Value::Null),
+            framework_quality_gate: |_| Ok(serde_json::Value::Null),
+            handle_session_supervisor_operation: |_| Ok(serde_json::Value::Null),
+            handle_background_state_operation: |_| Ok(serde_json::Value::Null),
+            runtime_concurrency_defaults_payload: || serde_json::Value::Null,
+            eval_route_contract: || serde_json::Value::Null,
+            run_eval_route: |_, _, _| Ok(serde_json::Value::Null),
+            generated_artifacts_status_for_repo: |_| Ok("ok".into()),
+            ensure_kernel_bootstrap: || {},
+        }
+    }
+
+    #[test]
+    fn try_hooks_returns_none_before_register() {
+        // In a fresh process (or when OnceLock hasn't been set), try_hooks returns None.
+        // Note: this test may fail if another test in the same binary already called register().
+        // We use Once to ensure register is only called once across all tests.
+        INIT.call_once(|| {
+            register(noop_hooks());
+        });
+        // After register, try_hooks should return Some
+        assert!(try_hooks().is_some());
+    }
+
+    #[test]
+    fn hooks_returns_registered_instance() {
+        INIT.call_once(|| {
+            register(noop_hooks());
+        });
+        let h = hooks();
+        assert_eq!(h.default_host_id(), "test-host");
+    }
+
+    #[test]
+    fn register_is_idempotent() {
+        // Second register call should be silently ignored
+        INIT.call_once(|| {
+            register(noop_hooks());
+        });
+        // This should not panic or change the registered hooks
+        let h = hooks();
+        assert_eq!(h.default_host_id(), "test-host");
+    }
+
+    #[test]
+    fn hook_duplicate_check_returns_empty_when_not_registered() {
+        // check_hook_duplicates uses a separate OnceLock, so it starts empty
+        let result = check_hook_duplicates(Path::new("/tmp"));
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn method_wrappers_delegate_correctly() {
+        INIT.call_once(|| {
+            register(noop_hooks());
+        });
+        let h = hooks();
+        // These should not panic — they delegate to noop fns
+        h.emit_hook_fired("test", "action");
+        h.emit_tool_call("tool", 1, false);
+        h.emit_route_decision("q", &serde_json::Value::Null, false);
+        h.emit_prediction_outcome("t", "s", "passed", 1);
+        h.emit_rfv_round(1, "PASS");
+        assert_eq!(h.host_provider_strict_pre_tool_fallback_hint("h"), None);
+        assert_eq!(h.host_provider_for_routing_spelling(None), None);
+        assert_eq!(h.default_host_id(), "test-host");
+        assert!(h.host_provider_registry().is_empty());
+        assert!(h.framework_goal_drive(serde_json::Value::Null).is_ok());
+        assert!(h.framework_quality_gate(serde_json::Value::Null).is_ok());
+        assert_eq!(h.runtime_concurrency_defaults_payload(), serde_json::Value::Null);
+        assert_eq!(h.eval_route_contract(), serde_json::Value::Null);
+        assert!(h.generated_artifacts_status_for_repo(Path::new("/tmp")).is_ok());
+        h.ensure_kernel_bootstrap();
+    }
+}

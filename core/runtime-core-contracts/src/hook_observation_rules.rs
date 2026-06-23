@@ -196,6 +196,13 @@ pub fn classify_followup_first_line(line: &str) -> Option<GateClassified> {
     None
 }
 
+/// Returns the schema version constant embedded at compile time for
+/// `ROUTER_RS_HOOK_OBSERVATION_RULES.json`. Used by integration tests to verify
+/// the embedded JSON matches the disk file.
+pub fn embedded_schema_version() -> &'static str {
+    EXPECTED_SCHEMA
+}
+
 pub fn classify_additional_context(text: &str) -> Option<GateClassified> {
     let rules = parsed_rules();
     let mut picked: Option<(u8, GateClassified)> = None;

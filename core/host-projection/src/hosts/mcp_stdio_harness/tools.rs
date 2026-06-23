@@ -1169,9 +1169,28 @@ pub(super) fn tool_goal_state_manage(
         "pause" | "resume" | "complete" | "clear" => {
             // No additional required args
         }
+        "amend" => {
+            // Optional fields: goal, non_goals, done_when, validation_commands, keep_progress
+            // At least one must be provided (enforced by core-state framework_goal_drive)
+            if let Some(ng) = arguments.get("non_goals").and_then(Value::as_array) {
+                payload["non_goals"] = json!(ng);
+            }
+            if let Some(dw) = arguments.get("done_when").and_then(Value::as_array) {
+                payload["done_when"] = json!(dw);
+            }
+            if let Some(vc) = arguments.get("validation_commands").and_then(Value::as_array) {
+                payload["validation_commands"] = json!(vc);
+            }
+            if let Some(g) = arguments.get("goal").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
+                payload["goal"] = json!(g);
+            }
+            if let Some(kp) = arguments.get("keep_progress").and_then(Value::as_bool) {
+                payload["keep_progress"] = json!(kp);
+            }
+        }
         _ => {
             return Err(format!(
-                "Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block"
+                "Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block, amend"
             ));
         }
     }

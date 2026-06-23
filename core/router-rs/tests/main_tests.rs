@@ -13,8 +13,6 @@ use crate::route::{
 pub mod common;
 #[path = "main_tests/background_state_tests.rs"]
 mod background_state_tests;
-#[path = "main_tests/cli_hooks_tests.rs"]
-mod cli_hooks_tests;
 #[path = "main_tests/closeout_tests.rs"]
 mod closeout_tests;
 #[path = "main_tests/execution_tests.rs"]

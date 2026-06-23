@@ -1,0 +1,29 @@
+[package]
+name = "fr-exec"
+version = "0.1.0"
+edition = "2024"
+description = "L3 execution: live execute, sandbox, runtime view, trace, env flags"
+[lints]
+workspace = true
+
+[dependencies]
+fr-utils = { path = "../fr-utils" }
+fr-contracts = { path = "../fr-contracts" }
+core-state-utils = { path = "../core-state-utils" }
+core-state-types = { path = "../core-state-types" }
+core-policy = { path = "../core-policy" }
+framework-kernel = { path = "../framework-kernel" }
+host-projection = { path = "../host-projection" }
+http-util = { path = "../http-util" }
+runtime-storage = { path = "../runtime-storage" }
+trace-runtime = { path = "../trace-runtime" }
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+reqwest.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+core-policy = { path = "../core-policy", features = ["test-sync"] }
+tempfile.workspace = true

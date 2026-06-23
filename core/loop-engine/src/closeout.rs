@@ -3,7 +3,7 @@ use crate::types::{
     LoopError,
 };
 use crate::state::closeout_path;
-use framework_runtime::closeout_enforcement::evaluate_closeout_record_value;
+use fr_contracts::closeout_enforcement::evaluate_closeout_record_value;
 use std::path::Path;
 use std::fs;
 
@@ -452,7 +452,7 @@ mod tests {
         // Loop-engine path (delegates to framework-runtime)
         let le_resp = verify_closeout_value(&record);
         // Direct framework-runtime path
-        let fr_resp = framework_runtime::closeout_enforcement::evaluate_closeout_record_value(
+        let fr_resp = fr_contracts::closeout_enforcement::evaluate_closeout_record_value(
             record.clone(),
         ).expect("framework-runtime should return Ok");
         let fr_allowed = fr_resp
@@ -476,7 +476,7 @@ mod tests {
             "risks": []
         });
         let le_resp = verify_closeout_value(&record);
-        let fr_resp = framework_runtime::closeout_enforcement::evaluate_closeout_record_value(
+        let fr_resp = fr_contracts::closeout_enforcement::evaluate_closeout_record_value(
             record.clone(),
         ).expect("framework-runtime should return Ok");
         let fr_allowed = fr_resp

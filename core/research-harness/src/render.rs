@@ -9,31 +9,11 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 
-use crate::util::{str_field, str_field_default};
+use crate::util::{
+    arr, novelty_gate, str_field, str_field_default, value_as_string_list, value_to_string,
+};
 
 // ── 自包含辅助函数 ──
-
-fn str_key<'a>(state: &'a Value, key: &str) -> &'a str {
-    state.get(key).and_then(Value::as_str).unwrap_or("")
-}
-
-fn arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
-    state
-        .get(key)
-        .and_then(Value::as_array)
-        .map(|a| a.as_slice())
-        .unwrap_or(&[])
-}
-
-fn value_to_string(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Number(n) => n.to_string(),
-        Value::Bool(b) => b.to_string(),
-        Value::Null => "-".into(),
-        _ => v.to_string(),
-    }
-}
 
 fn join_string_array(values: &[Value]) -> String {
     let joined = values
@@ -46,23 +26,6 @@ fn join_string_array(values: &[Value]) -> String {
     } else {
         joined
     }
-}
-
-fn value_as_string_list(obj: &Value, key: &str) -> Vec<String> {
-    obj.get(key)
-        .and_then(Value::as_array)
-        .map(|arr| {
-            arr.iter()
-                .filter_map(Value::as_str)
-                .filter(|s| !s.is_empty())
-                .map(ToString::to_string)
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn novelty_gate(state: &Value) -> &Value {
-    state.get("novelty_gate").unwrap_or(&Value::Null)
 }
 
 fn novelty_str<'a>(state: &'a Value, key: &str, default: &'a str) -> &'a str {
@@ -651,7 +614,7 @@ pub fn render_current_context_summary(state: &Value) -> String {
         "## Managed Current Context".into(),
         String::new(),
         "- source of truth: `research-state.yaml`".into(),
-        format!("- state updated_at: {}", str_key(state, "updated_at")),
+        format!("- state updated_at: {}", str_field(state, "updated_at")),
         format!(
             "- freshness: {}",
             if freshness.stale { "stale" } else { "fresh" }
@@ -1114,8 +1077,8 @@ pub fn format_resume(state: &Value) -> String {
     let freshness = crate::claims::lifecycle::state_freshness(state);
     let brief = crate::search::strategy::current_brief(state);
     let mut lines = vec![
-        format!("question: {}", str_key(state, "question")),
-        format!("stage: {}", str_key(state, "stage")),
+        format!("question: {}", str_field(state, "question")),
+        format!("stage: {}", str_field(state, "stage")),
         format!("novelty_gate: {}", novelty_str(state, "status", "-")),
         format!(
             "novelty_assessment: {}",
@@ -1201,10 +1164,10 @@ pub fn format_resume(state: &Value) -> String {
 
 pub fn format_status(state: &Value) -> String {
     let mut lines = vec![
-        format!("project: {}", str_key(state, "project")),
-        format!("stage: {}", str_key(state, "stage")),
-        format!("status: {}", str_key(state, "status")),
-        format!("mode: {}", str_key(state, "mode")),
+        format!("project: {}", str_field(state, "project")),
+        format!("stage: {}", str_field(state, "stage")),
+        format!("status: {}", str_field(state, "status")),
+        format!("mode: {}", str_field(state, "mode")),
         format!(
             "active_hypothesis: {}",
             state

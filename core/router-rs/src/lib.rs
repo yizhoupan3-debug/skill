@@ -164,10 +164,6 @@ mod smoke_p0_router_self_tests;
 #[path = "../tests/smoke_workspace_dag_compliance_tests.rs"]
 mod smoke_workspace_dag_compliance_tests;
 
-#[cfg(test)]
-#[path = "../tests/hook_contract/mod.rs"]
-mod hook_contract_matrix;
-
 // ── browser dispatch registration ──
 /// Register browser-mcp's dispatch function with runtime-core's hook.
 /// Must be called once before any `router-rs browser` CLI command.

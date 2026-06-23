@@ -12,20 +12,19 @@ pub fn router_rs_session_supervisor_real_process_smoke_enabled() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn unset_means_disabled_for_default_false() {
         let key = "ROUTER_RS_UNITTEST_DEFAULT_FALSE_UNSET";
-        unsafe { env::remove_var(key) };
+        unsafe { std::env::remove_var(key) };
         assert!(!core_policy::env_flags::env_enabled_default_false(key));
     }
 
     #[test]
     fn one_true_enable_default_false() {
         let key = "ROUTER_RS_UNITTEST_DEFAULT_FALSE_ONE";
-        unsafe { env::set_var(key, "1") };
+        unsafe { std::env::set_var(key, "1") };
         assert!(core_policy::env_flags::env_enabled_default_false(key));
-        unsafe { env::remove_var(key) };
+        unsafe { std::env::remove_var(key) };
     }
 }

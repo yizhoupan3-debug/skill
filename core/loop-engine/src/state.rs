@@ -69,28 +69,14 @@ pub fn read_loop_state(repo_root: &Path, loop_id: &str) -> Result<Option<LoopRun
     Ok(Some(state))
 }
 
-/// Atomically write the loop run state to `LOOP_RUN_STATE.json` using a temp-file + rename strategy.
+/// Atomically write the loop run state to `LOOP_RUN_STATE.json` using
+/// core-state's canonical atomic write (fsync + POSIX rename).
 pub fn write_loop_state(repo_root: &Path, loop_id: &str, state: &LoopRunState) -> Result<(), LoopError> {
     let path = loop_state_path(repo_root, loop_id);
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| LoopError::Io(format!("mkdir {}: {e}", parent.display())))?;
-    }
     let text = serde_json::to_string_pretty(state)
         .map_err(|e| LoopError::Serde(format!("serialize state: {e}")))?;
-
-    let tmp_path = path.with_extension(format!(
-        "json.tmp-{}-{}",
-        std::process::id(),
-        chrono::Utc::now().timestamp_millis(),
-    ));
-    fs::write(&tmp_path, &text)
-        .map_err(|e| LoopError::Io(format!("write tmp {}: {e}", tmp_path.display())))?;
-
-    fs::rename(&tmp_path, &path)
-        .map_err(|e| LoopError::Io(format!("rename {} -> {}: {e}", tmp_path.display(), path.display())))?;
-
-    Ok(())
+    core_state::utils::atomic_write::write_atomic_text(&path, &text)
+        .map_err(LoopError::Io)
 }
 
 /// Create a new initial `LoopRunState` with the given loop ID and profile.

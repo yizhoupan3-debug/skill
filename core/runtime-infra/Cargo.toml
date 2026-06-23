@@ -17,7 +17,8 @@ host-projection = { path = "../host-projection" }
 routing-engine = { path = "../routing-engine" }
 
 # L4
-framework-runtime = { path = "../framework-runtime" }
+fr-exec = { path = "../fr-exec" }
+fr-utils = { path = "../fr-utils" }
 runtime-exit-gate = { path = "../runtime-exit-gate" }
 runtime-storage = { path = "../runtime-storage" }
 

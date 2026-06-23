@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::sync::OnceLock;
 
 /// Read and parse JSON from a file path. Can be used as `crate::text::read_json`.
-pub use core_state::utils::json_io::read_json_strict as read_json;
+pub use core_state_utils::json_io::read_json_strict as read_json;
 
 pub fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value.and_then(|raw| {

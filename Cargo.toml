@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 
 [dev-dependencies]
+routing-engine = { path = "core/routing-engine" }
+rt-core-contracts = { path = "core/runtime-core-contracts", package = "runtime-core-contracts" }
 serde_json.workspace = true
 serde_yml.workspace = true
 tempfile.workspace = true
@@ -16,6 +18,11 @@ rusqlite.workspace = true
 [workspace]
 members = [
     "core/core-state",
+    "core/core-state-utils",
+    "core/core-state-types",
+    "core/fr-utils",
+    "core/fr-contracts",
+    "core/fr-exec",
     "core/framework-kernel",
     "core/telemetry-types",
     "core/core-policy",

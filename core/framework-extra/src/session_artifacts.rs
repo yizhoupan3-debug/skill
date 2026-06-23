@@ -1,15 +1,16 @@
-use framework_runtime::constants::{
+use fr_utils::constants::{
     CURRENT_ARTIFACT_DIR, EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
     NEXT_ACTIONS_FILENAME, SESSION_SUMMARY_FILENAME, SUPERVISOR_STATE_FILENAME,
     SUPERVISOR_STATE_SCHEMA_VERSION, TASK_POINTERS_FILENAME, TASK_POINTERS_SCHEMA_VERSION,
     TERMINAL_STORY_STATES, TERMINAL_VERIFICATION_STATUSES, TRACE_METADATA_FILENAME,
     TRACE_METADATA_SCHEMA_VERSION,
 };
-use framework_runtime::json_io::read_json_strict;
-use framework_runtime::json_value::{
+use fr_utils::json_io::read_json_strict;
+use fr_utils::json_value::{
     nonempty_string, safe_slug, value_bool_or_none, value_string_list, value_text,
 };
-use framework_runtime::types::{
+use fr_utils::util::{defaulted_payload_text, required_payload_text};
+use fr_utils::types::{
     ArtifactPaths, ArtifactPayloads, SessionArtifactWritePlan, SupervisorStateInput,
     TaskRegistryEntry,
 };
@@ -470,24 +471,6 @@ fn session_artifact_payloads(payload: &Value) -> (Vec<String>, Vec<Value>) {
     (next_actions, evidence)
 }
 
-fn required_payload_text(payload: &Value, key: &str, context: &str) -> Result<String, String> {
-    let value = value_text(payload.get(key));
-    if value.is_empty() {
-        Err(format!("{context} requires {key}"))
-    } else {
-        Ok(value)
-    }
-}
-
-fn defaulted_payload_text(payload: &Value, key: &str, fallback: &str) -> String {
-    let value = value_text(payload.get(key));
-    if value.is_empty() {
-        fallback.to_string()
-    } else {
-        value
-    }
-}
-
 fn resolve_session_task_id(payload: &Value, task: &str) -> String {
     let direct = safe_slug(&value_text(payload.get("task_id")));
     let candidate = if direct.is_empty() {
@@ -656,8 +639,8 @@ fn normalized_continuity(existing: Option<&Value>, status: &str) -> Value {
         .and_then(Value::as_object)
         .cloned()
         .unwrap_or_default();
-    let terminal = crate::util::is_terminal(status, framework_runtime::constants::TERMINAL_VERIFICATION_STATUSES)
-        || crate::util::is_terminal(status, framework_runtime::constants::TERMINAL_STORY_STATES);
+    let terminal = crate::util::is_terminal(status, fr_utils::constants::TERMINAL_VERIFICATION_STATUSES)
+        || crate::util::is_terminal(status, fr_utils::constants::TERMINAL_STORY_STATES);
     payload.insert(
         "story_state".to_string(),
         Value::String(if terminal { "completed" } else { "active" }.to_string()),
@@ -700,7 +683,7 @@ pub(super) use core_state::utils::json_io::{write_json_if_changed, write_text_if
 
 pub(super) fn current_file_hash(path: &Path) -> Result<Option<String>, String> {
     match fs::read(path) {
-        Ok(bytes) => Ok(Some(framework_runtime::sha256_hex(&bytes))),
+        Ok(bytes) => Ok(Some(trace_runtime::sha256_hex(&bytes))),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(format!(
             "read file hash failed for {}: {err}",

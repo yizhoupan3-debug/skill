@@ -143,7 +143,7 @@ fn filesystem_write_text_retries_temp_on_create_new_collision() {
     let parent = target.parent().expect("parent");
     let nanos = 9_876_543_210u128;
     let pid = std::process::id();
-    let blocking_tmp = filesystem_atomic_temp_path(parent, file_name, nanos, pid, 0);
+    let blocking_tmp = parent.join(format!(".router-rs.{file_name}.{nanos}.{pid}.0.tmp"));
     fs::write(&blocking_tmp, b"block").expect("seed blocking temp");
 
     filesystem_write_text_inner(&target, "ok", nanos)
@@ -1613,24 +1613,6 @@ fn path_value_returns_string_or_null() {
 }
 
 // ── filesystem internals ──
-
-#[test]
-fn filesystem_atomic_temp_path_is_deterministic_for_same_input() {
-    let parent = Path::new("/tmp");
-    let p1 = filesystem_atomic_temp_path(parent, "test.json", 100, 1, 0);
-    let p2 = filesystem_atomic_temp_path(parent, "test.json", 100, 1, 0);
-    assert_eq!(p1, p2);
-    assert!(p1.to_string_lossy().contains(".router-rs."));
-    assert!(p1.to_string_lossy().ends_with(".tmp"));
-}
-
-#[test]
-fn filesystem_atomic_temp_path_varies_by_attempt() {
-    let parent = Path::new("/tmp");
-    let p0 = filesystem_atomic_temp_path(parent, "f.txt", 100, 1, 0);
-    let p1 = filesystem_atomic_temp_path(parent, "f.txt", 100, 1, 1);
-    assert_ne!(p0, p1);
-}
 
 #[test]
 fn filesystem_write_text_creates_file_and_parent() {

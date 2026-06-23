@@ -16,6 +16,7 @@ core-state = { path = "../core-state" }
 framework-kernel = { path = "../framework-kernel" }
 host-projection = { path = "../host-projection" }
 loop-engine = { path = "../loop-engine" }
+fr-utils = { path = "../fr-utils" }
 
 # LaTeX (RaTeX)
 ratex-lexer = "0.1.11"

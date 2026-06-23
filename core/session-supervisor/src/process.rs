@@ -1,12 +1,11 @@
 use std::fs::OpenOptions;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::Duration;
 
-use crate::types::DriverCommandSpec;
-use crate::types::WorkerSessionRecord;
+use crate::types::{AgentHealthEntry, AgentHealthStore, DriverCommandSpec, WorkerSessionRecord};
 
 pub struct ProcessLaunchResult {
     pub pid: u32,
@@ -235,4 +234,140 @@ fn wait_for_child(pid: u32, block: bool) -> bool {
             _ => return false,
         }
     }
+}
+
+// ── Agent health tracking ─────────────────────────────────────────
+
+const AGENT_HEALTH_REL_PATH: &str = ".framework/agent-health/registry.json";
+
+fn agent_health_path(repo_root: &Path) -> PathBuf {
+    repo_root.join(AGENT_HEALTH_REL_PATH)
+}
+
+fn load_agent_health_raw(path: &Path) -> Result<AgentHealthStore, String> {
+    if !path.is_file() {
+        return Ok(AgentHealthStore::default());
+    }
+    let raw = std::fs::read_to_string(path)
+        .map_err(|e| format!("read agent health registry failed: {e}"))?;
+    serde_json::from_str(&raw)
+        .map_err(|e| format!("parse agent health registry failed: {e}"))
+}
+
+fn save_agent_health_raw(path: &Path, store: &AgentHealthStore) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create agent health dir failed: {e}"))?;
+    }
+    let payload = serde_json::to_string_pretty(store)
+        .map_err(|e| format!("serialize agent health failed: {e}"))?;
+    std::fs::write(path, &payload)
+        .map_err(|e| format!("write agent health failed: {e}"))
+}
+
+/// Acquire a cross-process lock on the agent health registry, then call `f`
+/// with an `&mut AgentHealthStore`. The lock is held for the entire cycle.
+fn with_agent_health<F, T>(repo_root: &Path, f: F) -> Result<T, String>
+where
+    F: FnOnce(&mut AgentHealthStore) -> Result<T, String>,
+{
+    let path = agent_health_path(repo_root);
+    let _lock = rt_storage::runtime_storage::acquire_runtime_path_lock(&path)?;
+    let mut store = load_agent_health_raw(&path)?;
+    let result = f(&mut store)?;
+    save_agent_health_raw(&path, &store)?;
+    Ok(result)
+}
+
+/// Register an agent as alive in the health registry.
+pub fn register_agent_alive(
+    repo_root: &Path,
+    agent_id: &str,
+    host_id: &str,
+    spawned_by_tool: &str,
+    now: &str,
+) -> Result<(), String> {
+    with_agent_health(repo_root, |store| {
+        store.agents.retain(|a| a.agent_id != agent_id);
+        store.agents.push(AgentHealthEntry {
+            agent_id: agent_id.to_string(),
+            host_id: host_id.to_string(),
+            status: "running".to_string(),
+            spawned_at: now.to_string(),
+            completed_at: None,
+            error: None,
+            spawned_by_tool: spawned_by_tool.to_string(),
+        });
+        Ok(())
+    })
+}
+
+/// Mark an agent as completed/failed/interrupted.
+pub fn unregister_agent(
+    repo_root: &Path,
+    agent_id: &str,
+    terminal_status: &str,
+    error: Option<&str>,
+    now: &str,
+) -> Result<(), String> {
+    with_agent_health(repo_root, |store| {
+        let mut found = false;
+        for agent in &mut store.agents {
+            if agent.agent_id == agent_id && agent.is_alive() {
+                agent.status = terminal_status.to_string();
+                agent.completed_at = Some(now.to_string());
+                agent.error = error.map(String::from);
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            store.agents.push(AgentHealthEntry {
+                agent_id: agent_id.to_string(),
+                host_id: String::new(),
+                status: terminal_status.to_string(),
+                spawned_at: String::new(),
+                completed_at: Some(now.to_string()),
+                error: error.map(String::from),
+                spawned_by_tool: "unmanaged".to_string(),
+            });
+        }
+        Ok(())
+    })
+}
+
+/// Reap all stale agents (completed/failed/interrupted) outside a retention window.
+pub fn reap_stale_agents(
+    repo_root: &Path,
+    retention_seconds: i64,
+) -> Result<usize, String> {
+    with_agent_health(repo_root, |store| {
+        let before = store.agents.len();
+        let deadline = framework_kernel::time::now_iso();
+        store.agents.retain(|a| {
+            if !a.is_terminal() {
+                return true;
+            }
+            if let Some(ref completed) = a.completed_at {
+                if let (Ok(c_dt), Ok(d_dt)) = (
+                    chrono::DateTime::parse_from_rfc3339(completed),
+                    chrono::DateTime::parse_from_rfc3339(&deadline),
+                ) {
+                    return d_dt.signed_duration_since(c_dt).num_seconds() < retention_seconds;
+                }
+            }
+            false
+        });
+        let reaped = before - store.agents.len();
+        Ok(reaped)
+    })
+}
+
+/// List all currently running agents.
+pub fn list_running_agents(repo_root: &Path) -> Result<Vec<AgentHealthEntry>, String> {
+    with_agent_health(repo_root, |store| {
+        let mut running: Vec<_> = store.agents.iter().filter(|a| a.is_alive()).cloned().collect();
+        running.sort_by(|a, b| b.spawned_at.cmp(&a.spawned_at));
+        Ok(running)
+    })
 }

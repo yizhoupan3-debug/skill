@@ -9,25 +9,6 @@ pub const PROFILE_COMPILE_AUTHORITY: &str = "rust-route-compiler";
 
 pub(super) const NO_SKILL_SELECTED: &str = "none";
 
-pub(super) const ARTIFACT_GATE_PHRASES: [&str; 16] = [
-    "pdf",
-    "docx",
-    "xlsx",
-    "ppt",
-    "pptx",
-    "excel",
-    "spreadsheet",
-    "word 文档",
-    "word 文件",
-    "表格",
-    "工作簿",
-    "幻灯片",
-    "演示文稿",
-    "presentation",
-    "deck",
-    "slide deck",
-];
-
 pub(super) const PARALLEL_RECORD_SCAN_MIN: usize = 48;
 
 /// Max distinct `(runtime_path, manifest_path)` entries kept for `load_records_cached_for_stdio`.

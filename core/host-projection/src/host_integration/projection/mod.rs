@@ -160,15 +160,14 @@ impl McpConfigFormat {
     pub const CURSOR: Self = Self::Json {
         top_level_key: "mcp_servers",
     };
-    /// Claude and OpenCode use `mcpServers` (camelCase).
-    pub const CLAUDE: Self = Self::Json {
+    /// JSON config with camelCase `mcpServers` key (Claude, OpenCode, `.mcp.json`).
+    pub const JSON_CAMEL_CASE: Self = Self::Json {
         top_level_key: "mcpServers",
     };
-    pub const OPENCODE: Self = Self::Json {
-        top_level_key: "mcpServers",
+    /// JSON config with snake_case `mcp_servers` key (Cursor).
+    pub const JSON_SNAKE_CASE: Self = Self::Json {
+        top_level_key: "mcp_servers",
     };
-    /// Codex uses TOML sections with managed-by markers.
-    pub const CODEX: Self = Self::Toml;
 }
 
 /// Insert/update managed MCP servers into a JSON config file.
@@ -515,8 +514,8 @@ pub fn default_projection_tools_for_scope(
 ) -> Result<Vec<String>, String> {
     let mut tools = registry_projection_tools(framework_root)?;
     if canonical_scope(scope)? == "project" {
-        // Claude Code 不支持 project scope 的 host projection（仅 user scope 生效）
-        tools.retain(|tool| tool != "claude");
+        // Exclude hosts whose projection is user-scope only (registry: `install_scopes: ["user"]`).
+        tools.retain(|tool| !tool_force_user_scope(tool));
     }
     Ok(tools)
 }
@@ -639,7 +638,7 @@ pub fn install_opencode_projection(
             .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
     }
     let manifest_key_paths =
-        mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::OPENCODE)?;
+        mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::JSON_CAMEL_CASE)?;
     let manifest_changed = write_projection_manifest(
         roots,
         "opencode",
@@ -708,7 +707,7 @@ pub fn remove_opencode_projection(
         config_removed = mcp_json_remove_servers(
             &config_path,
             &roots.framework_root,
-            McpConfigFormat::OPENCODE,
+            McpConfigFormat::JSON_CAMEL_CASE,
         )?;
     }
 
@@ -786,14 +785,21 @@ pub fn canonical_scope(scope: &str) -> Result<&'static str, String> {
     }
 }
 
-/// Cursor framework rules (`framework.mdc`) and browser MCP projection are **user-scope only**.
-/// Project repos keep `.cursor/hooks.json` and harness gate rules locally.
+/// Returns the effective scope for a tool: user-scope-only hosts always return "user",
+/// others defer to the requested scope. Reads `install_scopes` from RUNTIME_REGISTRY.
 pub fn projection_scope_for_tool(tool: &str, scope: &str) -> Result<&'static str, String> {
-    if tool == "cursor" {
+    if tool_force_user_scope(tool) {
         let _ = canonical_scope(scope)?;
         return Ok("user");
     }
     canonical_scope(scope)
+}
+
+/// Returns true if this tool's projection is user-scope only (not available at project scope).
+/// Reads `install_scopes` from RUNTIME_REGISTRY: hosts with `["user"]` only are excluded from project scope.
+fn tool_force_user_scope(tool: &str) -> bool {
+    let scopes = framework_kernel::runtime_registry::install_scopes(tool);
+    scopes.len() == 1 && scopes[0] == "user"
 }
 
 pub fn install_projection_tool(
@@ -1093,7 +1099,7 @@ pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Resu
 /// Remove all managed MCP entries from project-root `.mcp.json`.
 pub fn remove_project_mcp_json_entries(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
     let path = roots.project_root.join(".mcp.json");
-    mcp_json_remove_servers(&path, &roots.framework_root, McpConfigFormat::CLAUDE)
+    mcp_json_remove_servers(&path, &roots.framework_root, McpConfigFormat::JSON_CAMEL_CASE)
 }
 
 fn merge_codegraph_into_mcp_servers_map(

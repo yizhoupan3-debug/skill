@@ -1,5 +1,6 @@
 ---
 source: core/routing-engine/src/route/scoring.rs
+assertion_line: 1013
 expression: results
 ---
 [
@@ -12,7 +13,7 @@ expression: results
           "Trigger hint matched: SCI润色.",
           "Description keywords matched: sci, 润色."
         ],
-        "score": 108.0,
+        "score": 86.0,
         "slug": "paper-workbench"
       }
     ]

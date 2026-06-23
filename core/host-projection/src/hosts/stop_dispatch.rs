@@ -34,8 +34,11 @@ pub trait StopHostOps {
     /// Log label for error messages (e.g., "Claude", "Cursor").
     fn log_label(&self) -> &'static str;
 
-    /// Hook-state base directory relative to repo_root (e.g., ".claude/hook-state").
-    fn hook_state_base(&self, repo_root: &Path) -> PathBuf;
+    /// Hook-state base directory relative to repo_root.
+    /// Default: `.claude/hook-state` (shared across all hosts for cross-host state continuity).
+    fn hook_state_base(&self, repo_root: &Path) -> PathBuf {
+        repo_root.join(".claude").join("hook-state")
+    }
 
     /// Session key for state file naming.
     fn session_key(&self, repo_root: &Path, payload: &Value) -> String;

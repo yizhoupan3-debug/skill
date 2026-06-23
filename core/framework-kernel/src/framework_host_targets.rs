@@ -2,7 +2,7 @@
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`.
 
 use crate::runtime_registry::{
-    HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH, load_runtime_registry_json,
+    ALL_HOST_IDS, HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH, load_runtime_registry_json,
 };
 use serde_json::{Map, Value, json};
 use std::path::Path;
@@ -283,10 +283,7 @@ mod tests {
         let reg = load_runtime_registry_json(&root).expect("registry");
         for (host_id, tool) in pairs {
             assert!(
-                matches!(
-                    tool.as_str(),
-                    "codex" | "cursor" | "claude" | "opencode"
-                ),
+                ALL_HOST_IDS.contains(&tool.as_str()),
                 "unexpected mapping {host_id} -> {tool}"
             );
             assert_eq!(

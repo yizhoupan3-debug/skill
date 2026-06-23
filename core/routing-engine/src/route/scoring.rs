@@ -33,6 +33,11 @@ use crate::hooks::is_review_prompt;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
+/// Check if a skill record has a specific flag.
+fn has_skill_flag(record: &SkillRecord, flag: &str) -> bool {
+    record.skill_flags.iter().any(|f| f == flag)
+}
+
 /// Score agent-swarm related signals. Returns `(delta, reasons)`.
 #[inline]
 fn score_agent_swarm_signals(
@@ -46,7 +51,7 @@ fn score_agent_swarm_signals(
     token_budget_pressure: bool,
     reasons: &mut Vec<String>,
 ) -> f64 {
-    if record.slug != "agent-swarm-orchestration" {
+    if !has_skill_flag(record, "scoring:agent_swarm") {
         return 0.0;
     }
     if !(bounded_subagent_context
@@ -95,7 +100,7 @@ fn check_framework_alias_suppression<'a>(
 ) -> Option<RouteCandidate<'a>> {
     if framework_alias_requires_explicit_call(record) && !explicit_framework_alias {
         let ci_gate_nl_routing =
-            record.slug == "gh-fix-ci" && should_route_to_gh_fix_ci(query_text, query_token_list);
+            has_skill_flag(record, "behavior:nl_exempt_framework_alias") && should_route_to_gh_fix_ci(query_text, query_token_list);
         if !ci_gate_nl_routing {
             return Some(RouteCandidate {
                 record,
@@ -121,7 +126,7 @@ fn score_design_md_signals(
     w: &ScoringWeights,
     reasons: &mut Vec<String>,
 ) -> f64 {
-    if record.slug != "design-md" {
+    if !has_skill_flag(record, "scoring:design_md") {
         return 0.0;
     }
     if !has_design_contract_context(query_text, query_token_list) {
@@ -351,7 +356,7 @@ fn score_session_start_signals(
         }
     }
 
-    if record.slug == "code-review-deep"
+    if has_skill_flag(record, "scoring:code_review_deep")
         && first_turn
         && is_review_prompt(query_text)
         && !has_paper_context(query_text, query_token_list)
@@ -378,7 +383,7 @@ fn score_visual_review_signals(
     w: &ScoringWeights,
     reasons: &mut Vec<String>,
 ) -> f64 {
-    if record.slug != "visual-review" || current_score <= 0.0 {
+    if !has_skill_flag(record, "scoring:visual_review") || current_score <= 0.0 {
         return 0.0;
     }
 
@@ -424,7 +429,7 @@ fn score_paper_workbench_signals(
     w: &ScoringWeights,
     reasons: &mut Vec<String>,
 ) -> f64 {
-    if record.slug != "paper-workbench" {
+    if !has_skill_flag(record, "scoring:paper_workbench") {
         return 0.0;
     }
     if has_paper_review_revision_intent(query_text, query_token_list) {
@@ -656,7 +661,7 @@ pub fn pick_owner<'a>(
     let (winner_idx, extra_reason): (usize, Option<String>) =
         // Agent-swarm special case
         if let Some(idx) = gate_idx
-            && candidates[idx].record.slug == "agent-swarm-orchestration"
+            && candidates[idx].record.skill_flags.iter().any(|f| f == "behavior:agent_swarm_owner")
                 && candidates[idx].score >= w.agent_swarm_candidate_threshold
                 && !has_plan_mode_owner_context(query_text, query_token_list)
                 && !has_systematic_debug_context(query_text, query_token_list)
@@ -790,11 +795,11 @@ pub fn pick_overlay(
     query_tokens: &[String],
     selected_skill: &SkillRecord,
 ) -> Option<String> {
-    if selected_skill.slug == "skill-framework-developer"
+    if has_skill_flag(selected_skill, "behavior:framework_review_overlay")
         && has_framework_review_overlay_context(query_text, query_tokens)
         && records
             .iter()
-            .any(|record| record.slug == "code-review-deep")
+            .any(|record| has_skill_flag(record, "behavior:code_review_deep_overlay"))
     {
         return Some("code-review-deep".to_string());
     }

@@ -156,8 +156,8 @@ pub fn filesystem_write_text_inner(
     let _path_lock = acquire_runtime_path_lock(path)?;
     filesystem_reject_symlink_write_target(path)?;
 
-    // Delegate to core-state's canonical atomic write (temp + write + fsync + rename + fsync_parent_dir).
-    core_state::utils::atomic_write::write_atomic_text(path, payload_text)
+    // Delegate to core-state-utils's canonical atomic write (temp + write + fsync + rename + fsync_parent_dir).
+    core_state_utils::atomic_write::write_atomic_text(path, payload_text)
 }
 
 #[tracing::instrument(level = "debug", skip_all)]

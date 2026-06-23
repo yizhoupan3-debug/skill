@@ -900,8 +900,42 @@ pub fn register_kernel_bootstrap(f: fn()) {
     once_lock_set(&ENSURE_KERNEL, f, "ENSURE_KERNEL");
 }
 
-pub(crate) fn ensure_kernel_bootstrap() {
+pub fn ensure_kernel_bootstrap() {
     if let Some(f) = ENSURE_KERNEL.get() { f() }
+    // Register research mode inference (idempotent via OnceLock).
+    // Production CLI uses research_harness::init_hooks(); this is the fallback.
+    static RESEARCH_MODE_INIT: std::sync::Once = std::sync::Once::new();
+    RESEARCH_MODE_INIT.call_once(|| {
+        register_research_mode_inference(|payload: &serde_json::Value| {
+            if let Some(mode) = payload.get("research_mode").and_then(serde_json::Value::as_str) {
+                let m = mode.trim().to_ascii_lowercase();
+                if m.contains("deep") || m.contains("深度") {
+                    return "deep".to_string();
+                }
+                return "quick".to_string();
+            }
+            let task = payload.get("task").and_then(serde_json::Value::as_str)
+                .unwrap_or("").to_ascii_lowercase();
+            // Deep mode signals: specific research-intensive phrases only.
+            // "external research" alone is NOT a deep signal — it needs "literature review" etc.
+            if task.contains("deep dive") || task.contains("深度调研") || task.contains("深度研究")
+                || task.contains("literature review") || task.contains("文献综述")
+            {
+                return "deep".to_string();
+            }
+            if let Some(reasons) = payload.get("reasons").and_then(serde_json::Value::as_array) {
+                for r in reasons {
+                    if let Some(s) = r.as_str() {
+                        let low = s.to_ascii_lowercase();
+                        if low.contains("deep") || low.contains("literature review") || low.contains("深度研究") {
+                            return "deep".to_string();
+                        }
+                    }
+                }
+            }
+            "quick".to_string()
+        });
+    });
     #[cfg(test)]
     crate::test_helpers::install_test_deps();
 }
@@ -1205,6 +1239,23 @@ pub fn quality_gate_drive_registered() -> Option<fn(Value) -> Result<Value, Stri
 /// Research tool dispatch: injected at startup by runtime-core
 /// to break the L3→L6 dependency direction.
 type ResearchToolDispatchFn = fn(&str, &Value) -> Result<String, String>;
+
+// ── Session supervisor operation hook ──
+// Registered by runtime-core at startup. Allows MCP tools to call session_supervisor ops
+// without host-projection depending on session-supervisor crate directly.
+
+static SESSION_SUPERVISOR_OP: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
+
+/// Register the session-supervisor operation handler. Called once at startup.
+pub fn register_session_supervisor_op(f: fn(Value) -> Result<Value, String>) {
+    SESSION_SUPERVISOR_OP.set(f).ok();
+    eprintln!("[router-rs info] session_supervisor_op: registered");
+}
+
+/// Dispatch a session-supervisor operation. Returns None if not registered.
+pub fn session_supervisor_op(payload: Value) -> Option<Result<Value, String>> {
+    SESSION_SUPERVISOR_OP.get().map(|f| f(payload))
+}
 static RESEARCH_TOOL_DISPATCH: OnceLock<ResearchToolDispatchFn> = OnceLock::new();
 
 pub fn register_research_tool_dispatch(f: ResearchToolDispatchFn) {

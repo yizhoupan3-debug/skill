@@ -94,7 +94,7 @@ pub fn install_cursor_projection(
             managed_files.push(mcp_path.to_string_lossy().to_string());
             managed_key_paths.extend(mcp_json_managed_key_paths(
                 &roots.framework_root,
-                McpConfigFormat::CURSOR,
+                McpConfigFormat::JSON_SNAKE_CASE,
             )?);
         }
         mcp = json!({
@@ -471,7 +471,7 @@ pub fn install_claude_projection(
         .collect();
     manifest_key_paths.extend(mcp_json_managed_key_paths(
         &roots.framework_root,
-        McpConfigFormat::CLAUDE,
+        McpConfigFormat::JSON_CAMEL_CASE,
     )?);
     let manifest_changed = write_projection_manifest(
         roots,

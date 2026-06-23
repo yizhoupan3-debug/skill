@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 
-use framework_runtime::execution_contract::{
+use fr_contracts::execution_contract::{
     EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY, EXECUTION_SCHEMA_VERSION,
     build_execution_kernel_contracts_by_mode, build_execution_kernel_metadata_contract,
     build_steady_state_execution_kernel_metadata,
@@ -31,8 +31,8 @@ use framework_kernel::stdio_payload_types::{
 };
 use framework_kernel::stdio_payload_types::runtime_concurrency_defaults_payload;
 
-use framework_runtime::constants::FRAMEWORK_RUNTIME_AUTHORITY;
-use framework_runtime::json_value::required_non_empty_string;
+use fr_utils::constants::FRAMEWORK_RUNTIME_AUTHORITY;
+use fr_utils::json_value::required_non_empty_string;
 
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
     BackgroundControlEffectPlanPayload {

@@ -5,6 +5,7 @@ pub mod safety;
 pub mod kill_switch;
 pub mod closeout;
 pub mod dispatcher;
+pub mod env_flags;
 pub mod report;
 
 pub use runner::preflight_profile_check;

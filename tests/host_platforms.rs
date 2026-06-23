@@ -18,6 +18,10 @@ pub fn normalize_skill_host_platforms(
     if default_supported_hosts.is_empty() {
         return Err("default_supported_hosts must be non-empty".to_string());
     }
+    let supported_set: BTreeSet<&str> = default_supported_hosts
+        .iter()
+        .map(|s| s.as_str())
+        .collect();
     let mut out: BTreeSet<String> = BTreeSet::new();
     for s in raw {
         let t = s.trim().to_ascii_lowercase();
@@ -30,26 +34,22 @@ pub fn normalize_skill_host_platforms(
                     out.insert(h.clone());
                 }
             }
-            "codex" => {
-                out.insert("codex".to_string());
-            }
             "codex-cli" => {
                 out.insert("codex".to_string());
             }
             "codex-app" => {
                 return Err(format!(
-                    "retired host platform token `{t}` (closed-set ids: codex, cursor, claude, opencode)"
+                    "retired host platform token `{t}` (closed-set ids: {})",
+                    default_supported_hosts.join(", ")
                 ));
             }
-            "claude" => {
-                out.insert("claude".to_string());
-            }
-            "cursor" | "opencode" => {
-                out.insert(t);
+            host if supported_set.contains(host) => {
+                out.insert(host.to_string());
             }
             other => {
                 return Err(format!(
-                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex, codex-cli, cursor, claude, opencode)"
+                    "unknown host platform token `{other}` (allowed raw: supported, all-hosts, codex-cli, {})",
+                    default_supported_hosts.join(", ")
                 ));
             }
         }

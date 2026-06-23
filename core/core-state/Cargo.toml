@@ -7,6 +7,8 @@ workspace = true
 
 [dependencies]
 chrono.workspace = true
+core-state-types = { path = "../core-state-types" }
+core-state-utils = { path = "../core-state-utils" }
 framework-kernel = { path = "../framework-kernel" }
 fs2.workspace = true
 libc.workspace = true

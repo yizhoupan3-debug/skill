@@ -15,7 +15,6 @@ fn cli_backward_compat_top_level_commands_smoke() {
         &["router-rs", "route", "plan mode"],
         &["router-rs", "search", "workflow", "--limit", "3"],
         &["router-rs", "framework", "doctor", "--repo-root", "."],
-        &["router-rs", "host", "codex", "hook", "--event", "Stop"],
         &["router-rs", "host", "hook", "cursor", "--event", "stop"],
         &[
             "router-rs",
@@ -67,8 +66,7 @@ fn cli_backward_compat_top_level_commands_smoke() {
                 command: FrameworkCommand::Doctor(_),
             } => {}
             RouterCommand::Host { command } => match command {
-                HostCommand::Codex { .. }
-                | HostCommand::Hook { .. }
+                HostCommand::Hook { .. }
                 | HostCommand::Agent { .. } => {}
             },
             RouterCommand::Storage { .. } | RouterCommand::Diagnose { .. } => {}

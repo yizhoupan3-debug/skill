@@ -32,6 +32,7 @@ pub struct SkillRecord {
     pub record_kind: String,
     pub primary_allowed: bool,
     pub fallback_policy_mode: String,
+    pub skill_flags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,6 +341,7 @@ pub struct RawSkillRecord {
     pub trigger_hints: Vec<String>,
     pub host_platforms: Vec<String>,
     pub record_kind: String,
+    pub skill_flags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -389,6 +391,7 @@ pub struct RecordRowIndexes {
     pub record_kind: Option<usize>,
     pub priority: Option<usize>,
     pub session_start: Option<usize>,
+    pub skill_flags: Option<usize>,
     pub required_max: usize,
 }
 
@@ -412,6 +415,7 @@ impl RecordRowIndexes {
             record_kind: None,
             priority,
             session_start,
+            skill_flags: None,
             required_max,
         }
     }

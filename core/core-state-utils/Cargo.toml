@@ -1,0 +1,17 @@
+[package]
+name = "core-state-utils"
+version = "0.1.0"
+edition = "2024"
+description = "L0 IO/path/JSONL utilities extracted from core-state — pure helpers, zero business logic"
+[lints]
+workspace = true
+
+[dependencies]
+fs2.workspace = true
+libc.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+insta.workspace = true

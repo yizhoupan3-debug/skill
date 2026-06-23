@@ -1463,7 +1463,7 @@ fn runtime_control_plane_payload_is_rust_owned() {
     assert_eq!(
         payload["services"]["middleware"]["subagent_limit_contract"]
             ["max_concurrent_subagents_limit"],
-        json!(MAX_CONCURRENT_SUBAGENTS_LIMIT)
+        json!(framework_kernel::stdio_payload_types::MAX_CONCURRENT_SUBAGENTS_LIMIT_LOCAL)
     );
     assert_eq!(
         payload["runtime_host"]["shutdown_order"][0],

@@ -1,6 +1,6 @@
 //! Human-readable checks for `router-rs framework doctor`.
 
-use framework_runtime::router_env_flags::router_rs_task_ledger_flock_enabled;
+use fr_exec::router_env_flags::router_rs_task_ledger_flock_enabled;
 use core_state::task_state::resolve_task_view;
 use serde_json::{Value, json};
 use std::fs;
@@ -188,7 +188,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     );
 
     println!("\n--- Codex hooks duplication (operator) ---");
-    for line in ::framework_runtime::hooks::check_hook_duplicates(repo_root) {
+    for line in framework_runtime_hooks::check_hook_duplicates(repo_root) {
         println!("{line}");
         // Lines from this helper are warnings by convention.
         warns.push(line);
@@ -614,6 +614,6 @@ mod tests {
             .join("../..")
             .canonicalize()
             .expect("skill repo root");
-        run_framework_doctor(&root).expect("doctor");
+        super::run_framework_doctor(&root).expect("doctor");
     }
 }

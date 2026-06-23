@@ -7,8 +7,8 @@
 mod aliases;
 mod constants;
 mod eval;
-mod gate_hints;
-mod nl_route_adjustments;
+pub mod gate_hints;
+pub mod nl_route_adjustments;
 mod policy;
 pub mod records;
 pub mod routing;

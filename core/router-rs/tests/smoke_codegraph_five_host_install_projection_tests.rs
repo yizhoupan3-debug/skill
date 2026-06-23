@@ -52,14 +52,10 @@ mod five_host_install_projection {
             project_root: project_root.clone(),
             artifact_root: project_root.join("artifacts"),
             account_home_root: home.clone(),
-            host_home_roots: [
-                ("codex".into(), home.join(".codex")),
-                ("cursor".into(), home.join(".cursor")),
-                ("claude".into(), home.join(".claude")),
-                ("opencode".into(), home.join(".opencode")),
-            ]
-            .into_iter()
-            .collect(),
+            host_home_roots: framework_kernel::runtime_registry::ALL_HOST_IDS
+                .iter()
+                .map(|id| (id.to_string(), home.join(format!(".{id}"))))
+                .collect(),
         };
         (root, roots)
     }

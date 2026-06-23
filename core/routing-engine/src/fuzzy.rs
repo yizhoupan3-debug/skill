@@ -214,6 +214,7 @@ mod tests {
             record_kind: "skill".to_string(),
             primary_allowed: true,
             fallback_policy_mode: "default".to_string(),
+            skill_flags: Vec::new(),
         }
     }
 }

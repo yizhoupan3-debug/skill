@@ -22,6 +22,7 @@ pub fn skill_record_from_raw(raw: RawSkillRecord) -> SkillRecord {
         trigger_hints,
         host_platforms,
         record_kind,
+        skill_flags,
     } = raw;
     let slug_lower = normalize_text(&slug);
     let owner_lower = normalize_text(&owner);
@@ -75,6 +76,7 @@ pub fn skill_record_from_raw(raw: RawSkillRecord) -> SkillRecord {
         record_kind,
         primary_allowed: true,
         fallback_policy_mode: "eligible-in-runtime".to_string(),
+        skill_flags,
     }
 }
 

@@ -1,0 +1,11 @@
+[package]
+name = "core-state-types"
+version = "0.1.0"
+edition = "2024"
+description = "L2 pure type definitions extracted from core-state — no business logic, zero internal deps"
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

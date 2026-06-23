@@ -3,12 +3,12 @@
 //! Functions for evaluating closeout records, checking environment-level
 //! enforcement gates, and caching task-registry lookups.
 
-use framework_runtime::closeout_enforcement::{
+use fr_contracts::closeout_enforcement::{
     CloseoutEvidenceContext, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
 };
-use framework_runtime::constants::CLOSEOUT_COMPLETION_STATUSES;
-use framework_runtime::json_value::value_text;
+use fr_utils::constants::CLOSEOUT_COMPLETION_STATUSES;
+use fr_utils::json_value::value_text;
 use serde_json::Value;
 use std::fs;
 use std::path::{Path, PathBuf};

@@ -8,6 +8,7 @@ mod driver;
 mod evolution_idle;
 mod process;
 mod runtime;
+pub mod team_manager;
 mod types;
 mod worker;
 
@@ -18,6 +19,9 @@ pub mod hooks;
 pub mod router_env_flags;
 
 pub use types::{SESSION_SUPERVISOR_AUTHORITY, SESSION_SUPERVISOR_SCHEMA_VERSION};
+pub use types::WorkerSessionRecord;
+pub use types::AgentHealthEntry;
+pub use types::AgentHealthStore;
 pub use worker::classify_rate_limit_block;
 
 use evolution_idle::maybe_trigger_evolution_on_idle;
@@ -113,6 +117,10 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
                 reconcile_process_state(worker);
             }
             save_store(&state_path, &store)?;
+            // Side-effect: reap stale agent health entries
+            if let Ok(cwd) = std::env::current_dir() {
+                let _ = process::reap_stale_agents(&cwd, stale_after_secs);
+            }
             let evolution_idle = evolution_idle_side_effect(&payload, &store.workers);
             Ok(json!({
                 "schema_version": SESSION_SUPERVISOR_SCHEMA_VERSION,
@@ -217,6 +225,206 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
                 "evolution_idle": evolution_idle,
             }))
         }
+
+        // ═══ Agent health operations ═══
+        "agent_register" => {
+            let agent_id = required_non_empty_string(&payload, "agent_id", "agent health")?;
+            let host_id = required_non_empty_string(&payload, "host_id", "agent health")?;
+            let tool_type = required_non_empty_string(&payload, "tool_type", "agent health").unwrap_or_else(|_| "agent".to_string());
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            process::register_agent_alive(&cwd, &agent_id, &host_id, &tool_type, &now)?;
+            Ok(json!({
+                "operation": operation,
+                "agent_id": agent_id,
+                "registered": true,
+            }))
+        }
+        "agent_unregister" => {
+            let agent_id = required_non_empty_string(&payload, "agent_id", "agent health")?;
+            let terminal_status = payload.get("terminal_status")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .unwrap_or_else(|| "completed".to_string());
+            let error = payload.get("error")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from);
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            process::unregister_agent(&cwd, &agent_id, &terminal_status, error.as_deref(), &now)?;
+            Ok(json!({
+                "operation": operation,
+                "agent_id": agent_id,
+                "terminal_status": terminal_status,
+            }))
+        }
+        "agent_list_running" => {
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let agents = process::list_running_agents(&cwd)?;
+            Ok(json!({
+                "operation": operation,
+                "running_agents": agents,
+                "count": agents.len(),
+            }))
+        }
+        "agent_reap_stale" => {
+            let retention_secs = runtime::optional_i64(&payload, "retention_seconds").unwrap_or(0);
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let reaped = process::reap_stale_agents(&cwd, retention_secs)?;
+            Ok(json!({
+                "operation": operation,
+                "reaped_count": reaped,
+            }))
+        }
+
+        // ═══ Team operations ═══
+        "team_create" => {
+            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
+            let name = payload.get("name")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .unwrap_or_else(|| team_id.clone());
+            let supervisor = payload.get("supervisor_agent_id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from);
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let team = team_manager::create_team(&cwd, &team_id, &name, supervisor.as_deref(), &now)?;
+            Ok(json!({
+                "operation": operation,
+                "team_id": team_id,
+                "team": team,
+            }))
+        }
+        "team_add_member" => {
+            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
+            let agent_id = required_non_empty_string(&payload, "agent_id", "team")?;
+            let role = payload.get("role")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .unwrap_or_else(|| "worker".to_string());
+            let host_id = required_non_empty_string(&payload, "host_id", "team")?;
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let member = team_manager::add_team_member(&cwd, &team_id, &agent_id, &role, &host_id, &now)?;
+            Ok(json!({
+                "operation": operation,
+                "team_id": team_id,
+                "agent_id": agent_id,
+                "member": member,
+            }))
+        }
+        "team_remove_member" => {
+            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
+            let agent_id = required_non_empty_string(&payload, "agent_id", "team")?;
+            let terminal_status = payload.get("terminal_status")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .unwrap_or_else(|| "interrupted".to_string());
+            let error = payload.get("error")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from);
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            team_manager::remove_team_member(&cwd, &team_id, &agent_id, &terminal_status, error.as_deref(), &now)?;
+            Ok(json!({
+                "operation": operation,
+                "team_id": team_id,
+                "agent_id": agent_id,
+                "removed": true,
+            }))
+        }
+        "team_complete" => {
+            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let team = team_manager::complete_team(&cwd, &team_id, &now)?;
+            Ok(json!({
+                "operation": operation,
+                "team_id": team_id,
+                "team": team,
+            }))
+        }
+        "team_send_message" => {
+            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
+            let from_agent = required_non_empty_string(&payload, "from_agent", "team")?;
+            let to_agent = payload.get("to_agent")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from);
+            let msg_kind = payload.get("kind")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .unwrap_or_else(|| "command".to_string());
+            let msg_payload = payload.get("payload").cloned().unwrap_or_default();
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let msg = team_manager::send_message(&cwd, &team_id, &from_agent, to_agent.as_deref(), &msg_kind, msg_payload, &now)?;
+            Ok(json!({
+                "operation": operation,
+                "team_id": team_id,
+                "message": msg,
+            }))
+        }
+        "team_read_messages" => {
+            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
+            let agent_id = required_non_empty_string(&payload, "agent_id", "team")?;
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let messages = team_manager::read_my_messages(&cwd, &team_id, &agent_id)?;
+            Ok(json!({
+                "operation": operation,
+                "team_id": team_id,
+                "agent_id": agent_id,
+                "messages": messages,
+                "count": messages.len(),
+            }))
+        }
+        "team_alive_members" => {
+            let team_id = required_non_empty_string(&payload, "team_id", "team")?;
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let alive = team_manager::team_alive_members(&cwd, &team_id)?;
+            Ok(json!({
+                "operation": operation,
+                "team_id": team_id,
+                "alive_members": alive,
+            }))
+        }
+        "team_list" => {
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let team_id_filter = payload.get("team_id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty());
+            let teams = team_manager::team_list(&cwd, team_id_filter)?;
+            Ok(json!({
+                "operation": operation,
+                "teams": teams,
+                "count": teams.len(),
+            }))
+        }
+        "team_reap_stale" => {
+            let retention_secs = runtime::optional_i64(&payload, "retention_seconds").unwrap_or(0);
+            let cwd = std::env::current_dir()
+                .map_err(|e| format!("read cwd failed: {e}"))?;
+            let reaped = team_manager::reap_stale_teams(&cwd, retention_secs)?;
+            Ok(json!({
+                "operation": operation,
+                "reaped_teams": reaped,
+            }))
+        }
+
         other => Err(format!("Unsupported session supervisor operation: {other}")),
     }
 }

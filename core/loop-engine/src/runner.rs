@@ -46,7 +46,7 @@ pub struct RunContext<'a> {
 }
 
 impl RunContext<'_> {
-    #[allow(dead_code)]
+    /// Default max recursion depth for research-escalation auto-restart.
     pub fn default_max_depth() -> u32 {
         5
     }
@@ -319,13 +319,7 @@ impl BarrierResult {
 /// Resolve the autoresearch binary path.
 /// Prefers `ROUTER_RS_AUTORESEARCH_BIN` env var; falls back to `cargo run` slow-path.
 fn resolve_autoresearch_binary() -> Result<String, LoopError> {
-    if let Ok(bin) = std::env::var("ROUTER_RS_AUTORESEARCH_BIN")
-        && !bin.is_empty()
-    {
-        return Ok(bin);
-    }
-    // Fallback: return None as a signal to use cargo run slow-path
-    Ok(String::new())
+    Ok(crate::env_flags::autoresearch_binary())
 }
 
 /// Execute barrier escalation: shell out to `autoresearch barrier --problem <desc>`.
@@ -455,34 +449,16 @@ fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> R
     // the per-action timeout. If a configurable discovery timeout is needed,
     // add a `discovery_timeout` field to `RunContext` / `LoopRegistryEntry`.
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
-    let poll_interval = std::time::Duration::from_secs(dispatcher::KILL_POLL_INTERVAL_SECS);
+    let timeout_duration = std::time::Duration::from_secs(300);
 
-    let output = loop {
-        match child.try_wait().map_err(|e| LoopError::Io(format!("discovery try_wait: {e}")))? {
-            Some(_status) => {
-                break child.wait_with_output()
-                    .map_err(|e| LoopError::Io(format!("discovery collect: {e}")))?;
-            }
-            None => {
-                if crate::kill_switch::take_kill_signal(repo_root, &entry.loop_id)
-                    .unwrap_or(false)
-                {
-                    child.kill().map_err(|e| LoopError::Io(format!("discovery kill: {e}")))?;
-                    child.wait().map_err(|e| LoopError::Io(format!("discovery wait: {e}")))?;
-                    return Err(LoopError::KillSignaled(format!(
-                        "discovery for loop {} killed by signal",
-                        entry.loop_id,
-                    )));
-                }
-                if std::time::Instant::now() > deadline {
-                    child.kill().map_err(|e| LoopError::Io(format!("discovery kill timeout: {e}")))?;
-                    child.wait().map_err(|e| LoopError::Io(format!("discovery wait timeout: {e}")))?;
-                    return Err(LoopError::Timeout(300));
-                }
-                std::thread::sleep(poll_interval);
-            }
-        }
-    };
+    let output = crate::dispatcher::poll_subprocess(
+        child,
+        repo_root,
+        &entry.loop_id,
+        "discovery",
+        deadline,
+        timeout_duration,
+    )?;
 
     if !output.status.success() {
         tracing::warn!(
@@ -572,11 +548,7 @@ fn assign_safety_levels(
 fn check_budget_preflight(profile: &LoopProfileConfig) -> Result<(), LoopError> {
     if let Some(ref budget) = profile.cost_budget
         && let Some(max_tokens) = budget.tokens_per_run {
-            // Read the hard upper limit from environment, defaulting to 10 million tokens.
-            let hard_limit: u64 = std::env::var("ROUTER_RS_LOOP_MAX_TOKENS_PER_RUN")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(10_000_000);
+            let hard_limit = crate::env_flags::max_tokens_per_run_hard_limit();
 
             tracing::info!(
                 "budget preflight: tokens_per_run={max_tokens}, hard_limit={hard_limit}",

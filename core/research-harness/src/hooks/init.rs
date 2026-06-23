@@ -49,4 +49,7 @@ pub fn init_hooks() {
 
     // ── Research tool dispatch ──
     hooks::register_research_tool_dispatch(|name, args| crate::mcp_tools::handle_research_tool(name, args));
+
+    // ── Research mode inference (deep/quick) ──
+    crate::research_mode::register_research_mode_inference();
 }

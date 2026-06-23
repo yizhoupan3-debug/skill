@@ -1,0 +1,18 @@
+---
+source: core/fr-contracts/src/closeout_enforcement/tests.rs
+expression: record
+---
+CloseoutRecord {
+    schema_version: "",
+    task_id: "",
+    _started_at: None,
+    _ended_at: None,
+    changed_files: [],
+    commands_run: [],
+    artifacts_checked: [],
+    verification_status: "",
+    blockers: [],
+    risks: [],
+    summary: "",
+    _notes: None,
+}
