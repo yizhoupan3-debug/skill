@@ -29,10 +29,13 @@ pub struct ValidationReport {
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Validate a skill name/slug: must be non-empty, no path traversal, no path separators.
+/// Validate a skill name/slug: must be non-empty, no path traversal, no path separators, no control characters.
 pub fn validate_skill_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("skill name must not be empty".into());
+    }
+    if name.chars().any(|c| c.is_control()) {
+        return Err(format!("skill name `{name}` must not contain control characters"));
     }
     if name.contains("..") {
         return Err(format!("skill name `{name}` must not contain '..' (path traversal)"));
@@ -49,57 +52,39 @@ pub fn validate_skill_name(name: &str) -> Result<(), String> {
 /// Run all validations against a repo root.
 ///
 /// Checks:
-/// 1. Runtime and manifest JSON files exist
-/// 2. Every skill_path in runtime/manifest points to an existing file
-/// 3. Every slug in runtime exists in manifest (RUNTIME ⊆ MANIFEST)
-/// 4. Every on-disk SKILL.md passes frontmatter schema validation
-/// 5. Frontmatter name matches slug
-/// 6. Optional generated files exist (as warnings)
-/// 7. Disk vs runtime slug cross-reference
+/// 1. Runtime JSON file exists
+/// 2. Every skill_path in runtime points to an existing file
+/// 3. Every on-disk SKILL.md passes frontmatter schema validation
+/// 4. Frontmatter name matches slug
+/// 5. Optional generated files exist (as warnings)
+/// 6. Disk vs runtime slug cross-reference
 pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, String> {
     let skills_root = paths::skills_root(repo_root);
     let runtime_path = paths::runtime_json(repo_root);
-    let manifest_path = paths::manifest_json(repo_root);
 
     // 1. Check required files exist
-    for path in [&runtime_path, &manifest_path] {
-        if !path.is_file() {
-            return Err(format!(
-                "framework skills validate: missing {}",
-                path.display()
-            ));
-        }
+    if !runtime_path.is_file() {
+        return Err(format!(
+            "framework skills validate: missing {}",
+            runtime_path.display()
+        ));
     }
 
     let runtime: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&runtime_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-    let manifest: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?)
             .map_err(|e| e.to_string())?;
 
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
     // 2. Check skill_path references exist
-    for (label, doc) in [("runtime", &runtime), ("manifest", &manifest)] {
-        collect_missing_skill_paths(repo_root, doc, label, &mut errors);
-    }
+    collect_missing_skill_paths(repo_root, &runtime, "runtime", &mut errors);
 
-    // 3. RUNTIME ⊆ MANIFEST (slug set check)
-    let runtime_slugs: HashSet<String> = columnar::extract_slugs(&runtime).into_iter().collect();
-    let manifest_slugs: HashSet<String> = columnar::extract_slugs(&manifest).into_iter().collect();
-
-    for slug in &runtime_slugs {
-        if !manifest_slugs.contains(slug) {
-            errors.push(format!("slug `{slug}` in RUNTIME but not in MANIFEST"));
-        }
-    }
-
-    // 4. Disk slug discovery
+    // 4. Disk slug discovery + cross-reference
     let disk_slugs = discovery::discover_skill_md_slugs(&skills_root)
         .map_err(|e| e.to_string())?;
     let disk_set: HashSet<&String> = disk_slugs.iter().collect();
+    let runtime_slugs: HashSet<String> = columnar::extract_slugs(&runtime).into_iter().collect();
 
     // 5. Frontmatter schema validation
     for slug in &disk_slugs {
@@ -135,11 +120,8 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, String> {
 
     // 7. Check optional generated files exist (as warnings)
     let optional_files = [
-        ("SKILL_ROUTING_INDEX.json", paths::index_json(repo_root)),
         ("SKILL_TIERS.json", paths::tiers_json(repo_root)),
         ("SKILL_HEALTH_MANIFEST.json", paths::health_json(repo_root)),
-        ("SKILL_APPROVAL_POLICY.json", paths::approval_json(repo_root)),
-        ("SKILL_PLUGIN_CATALOG.json", paths::plugin_catalog_json(repo_root)),
         ("SKILL_LOADOUTS.json", paths::loadouts_json(repo_root)),
     ];
     for (name, path) in optional_files {

@@ -9,6 +9,7 @@
 
 use crate::frontmatter_parser;
 use crate::paths;
+use core_state::utils::atomic_write::write_atomic_text;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
@@ -197,7 +198,7 @@ pub fn generate_frontmatter(
 
         // Write (if not dry-run)
         if !dry_run {
-            fs::write(&skill_md_path, &new_content)
+            write_atomic_text(&skill_md_path, &new_content)
                 .map_err(|e| format!("{current_slug}: write failed: {e}"))?;
         }
 
