@@ -277,7 +277,6 @@ fn main() {
     }
 
     // ── Registry ──
-    let ids_literal: Vec<String> = supported.iter().map(|id| format!("\"{}\"", id)).collect();
     let push_body: String = supported.iter()
         .map(|id| format!("    providers.push(Box::new({}HostProvider));", pascal(id)))
         .collect::<Vec<_>>()
@@ -285,14 +284,11 @@ fn main() {
 
     out.push_str(&format!(
         "\n\
-         #[allow(dead_code)]\n\
-         pub(crate) const REGISTRY_SUPPORTED_HOST_IDS: &[&str] = &[{}];\n\n\
          pub(crate) fn push_registered_host_providers(\n\
          providers: &mut Vec<Box<dyn super::HostProvider>>,\n\
          ) {{\n\
          {push_body}\n\
          }}\n",
-        ids_literal.join(", ")
     ));
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));

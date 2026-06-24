@@ -39,11 +39,6 @@ pub struct DeleteResult {
 #[derive(Debug)]
 pub enum DeleteError {
     SkillNotFound(String),
-    /// Another skill declares a `requires` dependency on this slug.
-    DependencyConflict {
-        slug: String,
-        depended_on_by: Vec<String>,
-    },
     /// Skill appears in one or more loadouts.
     LoadoutConflict {
         slug: String,
@@ -56,13 +51,6 @@ impl fmt::Display for DeleteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::SkillNotFound(s) => write!(f, "skill not found: {s}"),
-            Self::DependencyConflict {
-                slug,
-                depended_on_by,
-            } => write!(
-                f,
-                "cannot delete `{slug}`: depended on by: {depended_on_by:?}"
-            ),
             Self::LoadoutConflict { slug, loadouts } => {
                 write!(f, "cannot delete `{slug}`: referenced in loadouts: {loadouts:?}")
             }
@@ -156,12 +144,11 @@ pub fn delete_skill(
     }
 
     // Perform deletion
-    let files_deleted: Vec<PathBuf> = Vec::new(); // could enumerate for logging
     fs::remove_dir_all(&skill_dir).map_err(DeleteError::Io)?;
 
     Ok(DeleteResult {
         skill_dir,
-        files_deleted,
+        files_deleted: vec![],
         backup_path,
         warnings,
     })

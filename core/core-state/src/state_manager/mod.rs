@@ -897,7 +897,7 @@ mod tests {
         crate::utils::atomic_write::write_atomic_json(
             &rfv_path,
             &json!({
-                "schema_version": "router-rs-rfv-loop-v1",
+                "schema_version": "router-rs-quality-gate-v1",
                 "goal": "rfv phase",
                 "loop_status": "active",
                 "max_rounds": 3u64,
@@ -1013,7 +1013,7 @@ mod tests {
         .expect("evidence");
         fs::write(
             repo.join("artifacts/current/gok").join(QUALITY_GATE_STATE_FILENAME),
-            r#"{"schema_version":"router-rs-rfv-loop-v1","loop_status":"active","goal":"g","max_rounds":3,"current_round":1,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
+            r#"{"schema_version":"router-rs-quality-gate-v1","loop_status":"active","goal":"g","max_rounds":3,"current_round":1,"rounds":[{"round":1,"verify_result":"PASS"}]}"#,
         )
         .expect("rfv");
         crate::task_state_aggregate::sync_task_state_aggregate(&repo, "gok").expect("sync agg");
@@ -1049,7 +1049,7 @@ mod tests {
 
         let path = quality_gate_state_path(&repo, "rfv-task").expect("path");
         let state = json!({
-            "schema_version": "router-rs-rfv-loop-v1",
+            "schema_version": "router-rs-quality-gate-v1",
             "loop_status": "active",
             "goal": "g",
         });

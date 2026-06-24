@@ -6,7 +6,8 @@ use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
 use fr_utils::constants::{
-    FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
+    FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_ALIAS_STATE_MACHINE_SCHEMA_VERSION,
+    FRAMEWORK_RUNTIME_AUTHORITY,
 };
 use fr_utils::types::FrameworkAliasBuildOptions;
 use fr_exec::runtime_view::{
@@ -521,7 +522,7 @@ fn build_framework_alias_state_machine(
         );
     }
     json!({
-        "schema_version": "framework-alias-state-machine-v1",
+        "schema_version": FRAMEWORK_ALIAS_STATE_MACHINE_SCHEMA_VERSION,
         "current_state": current_state,
         "recommended_action": recommended_action,
         "verification_status": if verification_status.is_empty() { Value::Null } else { Value::String(verification_status) },

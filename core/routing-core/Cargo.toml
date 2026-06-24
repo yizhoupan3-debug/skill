@@ -2,7 +2,7 @@
 name = "routing-core"
 version = "0.1.0"
 edition = "2024"
-description = "Shared routing primitives: fuzzy matching, tokenization, and RoutableRecord trait for skill and tool routing."
+description = "Shared routing primitives: fuzzy matching (trigram Jaccard) for skill and tool routing."
 [lints]
 workspace = true
 

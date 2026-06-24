@@ -462,23 +462,28 @@ impl BackgroundStateStore {
 
     pub(super) fn compact_terminal_over_capacity(&mut self, capacity_limit: Option<usize>) {
         let limit = self.resolved_capacity_limit(capacity_limit);
-        if self.jobs.len() <= limit {
-            return;
-        }
-        let mut terminal_jobs = self
-            .jobs
-            .values()
-            .filter(|job| is_terminal_status(&job.status))
-            .map(|job| (job.updated_at.clone(), job.job_id.clone()))
-            .collect::<Vec<_>>();
-        terminal_jobs.sort();
-        let remove_count = self
-            .jobs
-            .len()
-            .saturating_sub(limit)
-            .min(terminal_jobs.len());
-        for (_, job_id) in terminal_jobs.into_iter().take(remove_count) {
-            self.jobs.remove(&job_id);
+        // Loop in case a single pass cannot remove enough terminal jobs to
+        // reach the limit (e.g. 200 terminal + 800 active, limit=500 →
+        // first pass removes 200, totals 800, still over).
+        loop {
+            if self.jobs.len() <= limit {
+                break;
+            }
+            let mut terminal_jobs = self
+                .jobs
+                .values()
+                .filter(|job| is_terminal_status(&job.status))
+                .map(|job| (job.updated_at.clone(), job.job_id.clone()))
+                .collect::<Vec<_>>();
+            if terminal_jobs.is_empty() {
+                break; // No more terminal jobs to remove.
+            }
+            terminal_jobs.sort();
+            for (_, job_id) in terminal_jobs {
+                self.jobs.remove(&job_id);
+            }
+            // Re-check; may need another pass if active jobs transitioned
+            // to terminal between now and the next load cycle.
         }
     }
 

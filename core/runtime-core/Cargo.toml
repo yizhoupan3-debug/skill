@@ -49,6 +49,7 @@ ctor = "0.2"
 codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
 loop-engine = { path = "../loop-engine" }
 mcp-tool-registry = { path = "../mcp-tool-registry" }
+tool-routing-engine = { path = "../tool-routing-engine" }
 
 [build-dependencies]
 serde_json.workspace = true

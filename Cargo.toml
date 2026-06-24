@@ -48,6 +48,8 @@ members = [
     "tools/codegraph-rs",
     "core/mcp-tool-registry",
     "core/skill-layer",
+    "core/routing-core",
+    "core/tool-routing-engine",
     "core/http-util"]
 exclude = [
     "codex-aggregator"

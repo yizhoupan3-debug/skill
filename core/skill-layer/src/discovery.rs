@@ -1,7 +1,4 @@
 //! Skill discovery: find SKILL.md files, resolve slugs, safe path resolution.
-//!
-//! Extracted from `runtime-infra::framework_skills`, `host-projection::tools`,
-//! and `framework-kernel::skill_repo`.
 
 use crate::paths;
 use std::collections::BTreeSet;

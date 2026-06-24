@@ -12,6 +12,8 @@ use framework_kernel::stdio_payload_types::TraceStreamReplayRequestPayload;
 use fr_utils::json_value::{nested_non_empty_string, optional_bool, optional_non_empty_string};
 use super::trace_stream_io::replay_trace_stream;
 
+const ATTACH_DESCRIPTOR_SCHEMA_VERSION: &str = "runtime-event-attach-descriptor-v1";
+
 fn descriptor_mapping<'a>(
     attach_descriptor: &'a Value,
     field_name: &str,
@@ -97,7 +99,7 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
         .get("schema_version")
         .and_then(Value::as_str);
     if let Some(schema_version) = schema_version
-        && schema_version != "runtime-event-attach-descriptor-v1" {
+        && schema_version != ATTACH_DESCRIPTOR_SCHEMA_VERSION {
             return Err(format!(
                 "Unsupported runtime event attach descriptor schema: {schema_version:?}"
             ));
@@ -647,7 +649,7 @@ pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
     let cleanup_semantics = "no_persisted_state";
     let recommended_entrypoint = "describe_runtime_event_handoff";
     let attach_descriptor = json!({
-        "schema_version": "runtime-event-attach-descriptor-v1",
+        "schema_version": ATTACH_DESCRIPTOR_SCHEMA_VERSION,
         "attach_mode": "process_external_artifact_replay",
         "artifact_backend_family": artifact_backend_family.clone(),
         "source_transport_method": source_transport_method,

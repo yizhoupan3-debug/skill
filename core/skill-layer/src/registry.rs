@@ -5,6 +5,8 @@
 //! and on-disk SKILL.md files, then provides a single query API.
 
 use crate::columnar;
+#[cfg(test)]
+use crate::constants;
 use crate::frontmatter::SkillFrontmatter;
 use crate::frontmatter_parser;
 use crate::paths;
@@ -31,17 +33,6 @@ pub struct SkillRegistryEntry {
     pub kind: String,
     pub skill_flags: Vec<String>,
     pub frontmatter: Option<SkillFrontmatter>,
-    pub tier: SkillTier,
-}
-
-/// Skill tier classification.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum SkillTier {
-    Core,
-    #[default]
-    Optional,
-    Deprecated,
-    Experimental,
 }
 
 /// Consistency issue found during cross-source validation.
@@ -98,33 +89,6 @@ fn load_rows(path: &Path) -> Result<HashMap<String, Vec<serde_json::Value>>, Reg
     Ok(columnar::load_columnar_rows(&doc))
 }
 
-/// Load tier data from SKILL_TIERS.json.
-fn load_tiers(path: &Path) -> HashMap<String, SkillTier> {
-    let mut tiers = HashMap::new();
-    if !path.exists() {
-        return tiers;
-    }
-    if let Ok(text) = fs::read_to_string(path) {
-        if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) {
-            if let Some(core) = doc.get("core").and_then(|v| v.as_array()) {
-                for s in core {
-                    if let Some(slug) = s.as_str() {
-                        tiers.insert(slug.to_string(), SkillTier::Core);
-                    }
-                }
-            }
-            if let Some(optional) = doc.get("optional").and_then(|v| v.as_array()) {
-                for s in optional {
-                    if let Some(slug) = s.as_str() {
-                        tiers.entry(slug.to_string()).or_insert(SkillTier::Optional);
-                    }
-                }
-            }
-        }
-    }
-    tiers
-}
-
 // ---------------------------------------------------------------------------
 // SkillRegistry
 // ---------------------------------------------------------------------------
@@ -157,7 +121,6 @@ impl SkillRegistry {
         let runtime_path = paths::runtime_json(&self.repo_root);
         let doc: serde_json::Value = serde_json::from_str(&fs::read_to_string(&runtime_path)?)?;
         let keys = columnar::parse_columnar_keys(&doc);
-        let tier_map = load_tiers(&paths::tiers_json(&self.repo_root));
 
         let mut entries = Vec::new();
         if let Some(skills_arr) = doc["skills"].as_array() {
@@ -178,8 +141,6 @@ impl SkillRegistry {
                     None
                 };
 
-                let tier = tier_map.get(&slug).cloned().unwrap_or_default();
-
                 entries.push(SkillRegistryEntry {
                     slug,
                     skill_path: columnar::col_string(&row_vals, &keys, "skill_path"),
@@ -193,7 +154,6 @@ impl SkillRegistry {
                     kind: columnar::col_string(&row_vals, &keys, "kind").unwrap_or_else(|| "skill".into()),
                     skill_flags: columnar::col_str_vec(&row_vals, &keys, "skill_flags"),
                     frontmatter,
-                    tier,
                 });
             }
         }
@@ -309,7 +269,7 @@ mod tests {
             .map(|s| serde_json::json!([s, "L2", "owner", "none"]))
             .collect();
         let doc = serde_json::json!({
-            "schema_version": "skill-routing-runtime-v3",
+            "schema_version": constants::SCHEMA_RUNTIME,
             "keys": keys,
             "skills": skills
         });
@@ -341,7 +301,7 @@ mod tests {
         create_minimal_runtime(&skills_root, &["orphan"]);
 
         let manifest = serde_json::json!({
-            "schema_version": "skill-manifest-v2",
+            "schema_version": constants::SCHEMA_MANIFEST,
             "keys": ["slug"],
             "skills": [["orphan"]]
         });

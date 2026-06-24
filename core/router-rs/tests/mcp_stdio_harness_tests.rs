@@ -506,17 +506,6 @@ mod transport_mode_tests {
     }
 }
 
-// test_lock_roundtrip is only compiled when framework-extra is tested itself (cfg(test)).
-// router-rs tests cannot reach it through crate imports — skip this assertion.
-// #[cfg(test)]
-// mod session_tracker_tests {
-//     #[test]
-//     fn atomic_write_pattern() {
-//         use framework_extra::session_call::test_lock_roundtrip;
-//         assert!(test_lock_roundtrip());
-//     }
-// }
-
 #[cfg(test)]
 mod routing_tests {
     use std::collections::HashSet;

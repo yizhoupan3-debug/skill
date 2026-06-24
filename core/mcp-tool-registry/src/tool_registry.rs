@@ -4,7 +4,6 @@
 //! file are picked up at most 60s after the last load, without requiring a restart
 //! or manual `invalidate_tool_cache` call.
 
-use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -14,7 +13,7 @@ use serde_json::Value;
 
 use crate::tool_types::McpToolRecord;
 
-const EXPECTED_SCHEMA: &str = "mcp-tool-registry-v1";
+pub const EXPECTED_SCHEMA: &str = "mcp-tool-registry-v1";
 
 /// Default TTL for the cached registry (60 seconds).
 const CACHE_TTL_SECS: u64 = 60;
@@ -77,7 +76,8 @@ fn cache() -> &'static std::sync::RwLock<Option<CacheEntry>> {
 ///
 /// First call loads from disk; subsequent calls within `CACHE_TTL_SECS` return
 /// the cached result. After the TTL expires, the next call reloads from disk.
-/// If a reload fails, the stale cached data is still returned (with a warning).
+/// Returns `Err` on reload failure (stale cache data is preserved, so a
+/// subsequent call after the TTL will retry).
 pub fn load_tool_records_cached(registry_path: &Path) -> Result<Vec<McpToolRecord>, String> {
     let now = Instant::now();
 
@@ -125,8 +125,6 @@ fn parse_tool_record(row: &Value, keys: &[String], index: usize) -> Result<McpTo
 
     let mut record = McpToolRecord {
         slug: String::new(),
-        slug_lower: String::new(),
-        display_name_lower: String::new(),
         display_name: String::new(),
         description: String::new(),
         layer: String::new(),
@@ -134,11 +132,6 @@ fn parse_tool_record(row: &Value, keys: &[String], index: usize) -> Result<McpTo
         owner: String::new(),
         gate: "none".to_string(),
         trigger_hints: Vec::new(),
-        name_tokens: HashSet::new(),
-        keyword_tokens: HashSet::new(),
-        desc_tokens: HashSet::new(),
-        alias_tokens: HashSet::new(),
-        do_not_use_tokens: HashSet::new(),
         host_platforms: Vec::new(),
         mcp_server: String::new(),
         tool_flags: Vec::new(),
@@ -214,7 +207,6 @@ fn parse_tool_record(row: &Value, keys: &[String], index: usize) -> Result<McpTo
         return Err(format!("tool record at index {index} missing slug"));
     }
 
-    McpToolRecord::derive_tokens(&mut record);
     Ok(record)
 }
 

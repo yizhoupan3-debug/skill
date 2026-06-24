@@ -1,6 +1,9 @@
 use serde_json::{Map, Value, json};
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
+
+use rt_storage::runtime_storage::acquire_runtime_path_lock;
 
 use super::{
     TRACE_COMPACT_SCHEMA_VERSION, TRACE_COMPACTION_ARTIFACT_REF_SCHEMA_VERSION,
@@ -286,8 +289,15 @@ pub fn compact_trace_stream(
         },
     ];
     if payload.write_outputs {
+        // Cross-process serialisation: prevents two compaction runs from racing
+        // on the same stream's manifest + snapshot + state files.
+        let _manifest_lock =
+            acquire_runtime_path_lock(&paths.manifest).map_err(|err| {
+                format!("acquire compaction lock for {} failed: {err}", paths.manifest.display())
+            })?;
+
         for write in &writes {
-            write_text(Path::new(&write.path), &write.payload_text)?;
+            atomic_write_text(Path::new(&write.path), &write.payload_text)?;
         }
     }
 
@@ -487,12 +497,57 @@ fn pretty_json_line(value: &Value) -> Result<String, String> {
         .map_err(|err| format!("serialize trace payload failed: {err}"))
 }
 
-fn write_text(path: &Path, payload: &str) -> Result<(), String> {
+fn atomic_write_text(path: &Path, payload: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!("create trace parent failed for {}: {err}", parent.display())
-        })?;
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create parent failed for {}: {err}", parent.display()))?;
     }
-    fs::write(path, payload)
-        .map_err(|err| format!("write trace payload failed for {}: {err}", path.display()))
+
+    // Atomic write via temp file + fsync + rename.  Without this, a crash
+    // between the fs::write and the manifest update could leave compaction
+    // artifacts in an inconsistent state.
+    let tmp_path = {
+        let base = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("trace-payload");
+        path.with_extension(format!(
+            "{}.compact.tmp-{}",
+            base,
+            std::process::id(),
+        ))
+    };
+    // Create + write + fsync the temp file.
+    {
+        let mut f = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(&tmp_path)
+            .map_err(|err| format!("create tmp {} failed: {err}", tmp_path.display()))?;
+        f.write_all(payload.as_bytes())
+            .map_err(|err| format!("write tmp {} failed: {err}", tmp_path.display()))?;
+        f.sync_all()
+            .map_err(|err| format!("fsync tmp {} failed: {err}", tmp_path.display()))?;
+    }
+    // Atomic rename to target path.
+    fs::rename(&tmp_path, path)
+        .map_err(|err| {
+            let _ = fs::remove_file(&tmp_path);
+            format!(
+                "rename {} -> {} failed: {err}",
+                tmp_path.display(),
+                path.display()
+            )
+        })?;
+
+    // Best-effort parent directory fsync so the rename survives a power loss.
+    if let Some(parent) = path.parent() {
+        // Opening a directory as a file works on Linux/macOS for fsync.
+        if let Ok(dir) = fs::File::open(parent) {
+            let _ = dir.sync_all();
+        }
+    }
+
+    Ok(())
 }

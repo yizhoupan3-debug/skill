@@ -51,12 +51,15 @@ use host_projection::hooks::{
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
 
-fn hook_output_to_value(output: Option<HookOutput>) -> Value {
+fn hook_output_to_value(output: Option<HookOutput>, event_name: &str) -> Value {
     match output {
         None | Some(HookOutput::None) => json!({}),
         Some(HookOutput::Raw(val)) => val,
         Some(HookOutput::AdditionalContext(ctx)) => json!({
-            "hookSpecificOutput": { "additionalContext": ctx }
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "additionalContext": ctx,
+            }
         }),
         Some(HookOutput::Deny { reason }) => json!({
             "decision": "block",
@@ -68,13 +71,22 @@ fn hook_output_to_value(output: Option<HookOutput>) -> Value {
         }),
         Some(HookOutput::Block { reason }) => json!({
             "decision": "block",
-            "followup_message": reason,
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "additionalContext": reason,
+            },
         }),
         Some(HookOutput::Advisory { message }) => json!({
-            "followup_message": message,
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "additionalContext": message,
+            },
         }),
         Some(HookOutput::Warn { message }) => json!({
-            "warning": message,
+            "hookSpecificOutput": {
+                "hookEventName": event_name,
+                "additionalContext": message,
+            },
         }),
     }
 }
@@ -522,7 +534,7 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
     let output = dispatcher.dispatch(&hook_event);
 
     // Convert HookOutput -> JSON value
-    let mut json_output = hook_output_to_value(output);
+    let mut json_output = hook_output_to_value(output, event);
 
     // Attach router-rs observation (resolve 'static host_id from provider registry)
     if let Some(provider) = host_projection::hosts::host_provider_for_routing_spelling(host_id) {

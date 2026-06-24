@@ -193,7 +193,7 @@ fn tool_route_tool(args: &Value, ctx_repo_root: &std::path::Path) -> Result<Stri
         .and_then(|v| v.as_str())
         .ok_or("route_tool: missing 'query' parameter")?;
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
-    let decision = mcp_tool_registry::route_tool(query, &registry_path, None)?
+    let decision = tool_routing_engine::routing::route_tool(query, &registry_path, None)?
         .ok_or_else(|| format!("route_tool: no matching tool found for query '{query}'"))?;
     serde_json::to_string(&decision).map_err(|e| e.to_string())
 }
@@ -209,7 +209,7 @@ fn tool_search_tools(args: &Value, ctx_repo_root: &std::path::Path) -> Result<St
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
         .map_err(|e| format!("search_tools: failed to load registry: {e}"))?;
-    let results = mcp_tool_registry::search_tools(query, &records, top_k);
+    let results = tool_routing_engine::search::search_tools(query, &records, top_k);
     serde_json::to_string(&results).map_err(|e| e.to_string())
 }
 
@@ -225,7 +225,7 @@ fn tool_registry_status() -> Result<String, String> {
     let independent = records.iter().filter(|r| r.layer == "independent").count();
     let external = records.iter().filter(|r| r.layer == "external").count();
     let status = serde_json::json!({
-        "schema_version": "mcp-tool-registry-v1",
+        "schema_version": mcp_tool_registry::EXPECTED_SCHEMA,
         "total_count": total,
         "builtin_count": builtin,
         "research_count": research,

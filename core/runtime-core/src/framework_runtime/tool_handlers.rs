@@ -614,7 +614,6 @@ fn routing_extract(entries: &[RouteLogEntry]) -> String {
             "skill": e.skill,
             "confidence": e.confidence,
             "reroute": e.reroute,
-            "reasons": e.reasons,
         })
     }).collect();
 

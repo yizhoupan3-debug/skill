@@ -173,7 +173,7 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
     write_atomic_json(&path, &value)?;
     let tx = core_state::task_ledger::LedgerTransaction {
         ts: framework_kernel::time::now_iso(),
-        tx_type: "quality_gate_state".to_string(),
+        tx_type: "rfv_loop_state".to_string(),
         payload: value.clone(),
         idempotency_key: None,
         seq: None,
@@ -444,7 +444,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     write_atomic_json(&path, &state)?;
     let tx = core_state::task_ledger::LedgerTransaction {
         ts: framework_kernel::time::now_iso(),
-        tx_type: "quality_gate_state".to_string(),
+        tx_type: "rfv_loop_state".to_string(),
         payload: state.clone(),
         idempotency_key: None,
         seq: None,

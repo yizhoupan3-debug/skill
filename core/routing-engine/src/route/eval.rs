@@ -15,11 +15,14 @@ use super::types::{
     RoutingEvalMetricsPayload, RoutingEvalReportPayload, RoutingEvalResultPayload, SkillRecord,
 };
 
+const ROUTING_EVAL_CASES_SCHEMA_VERSION: &str = "routing-eval-cases-v1";
+const ROUTING_EVAL_REPORT_SCHEMA_VERSION: &str = "routing-eval-v1";
+
 pub fn load_routing_eval_cases(path: &Path) -> Result<RoutingEvalCasesPayload, String> {
     let payload = read_json(path)?;
     let cases = serde_json::from_value::<RoutingEvalCasesPayload>(payload)
         .map_err(|err| format!("failed parsing {}: {err}", path.display()))?;
-    if cases.schema_version != "routing-eval-cases-v1" {
+    if cases.schema_version != ROUTING_EVAL_CASES_SCHEMA_VERSION {
         return Err(format!(
             "routing eval case file returned an unknown schema: {:?}",
             cases.schema_version
@@ -196,7 +199,7 @@ pub fn evaluate_routing_cases(
     }
 
     Ok(RoutingEvalReportPayload {
-        schema_version: "routing-eval-v1".to_string(),
+        schema_version: ROUTING_EVAL_REPORT_SCHEMA_VERSION.to_string(),
         metrics,
         results,
     })

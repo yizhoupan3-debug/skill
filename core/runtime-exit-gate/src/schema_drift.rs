@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 pub const SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION: &str = "schema-drift-baseline-v1";
 pub const SCHEMA_DRIFT_CHECK_RESPONSE_SCHEMA_VERSION: &str = "schema-drift-check-response-v1";
+pub const SCHEMA_DRIFT_CONTRACT_SCHEMA_VERSION: &str = "schema-drift-contract-v1";
 pub const ROUTER_RS_HOOK_OBSERVATION_SCHEMA_VERSION: &str = "router-rs-hook-observation-v1";
 
 // ── Types ──
@@ -28,7 +29,7 @@ pub struct SchemaDriftContract {
 
 pub fn schema_drift_contract() -> SchemaDriftContract {
     SchemaDriftContract {
-        schema_version: "schema-drift-contract-v1".to_string(),
+        schema_version: SCHEMA_DRIFT_CONTRACT_SCHEMA_VERSION.to_string(),
         baseline_schema_version: SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION.to_string(),
         check_response_schema_version: SCHEMA_DRIFT_CHECK_RESPONSE_SCHEMA_VERSION.to_string(),
         baseline_relative_path: "artifacts/current/<task_id>/SCHEMA_DRIFT_BASELINE.json"

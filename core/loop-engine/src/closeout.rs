@@ -7,6 +7,8 @@ use fr_contracts::closeout_enforcement::evaluate_closeout_record_value;
 use std::path::Path;
 use std::fs;
 
+const LOOP_CLOSEOUT_AGGREGATE_SCHEMA_VERSION: &str = "loop-closeout-aggregate-v1";
+
 #[derive(Debug, Clone)]
 /// Response from a closeout verification, indicating whether closeout is allowed
 /// and listing any violations found.
@@ -195,7 +197,7 @@ pub fn build_aggregate(
     results: Vec<(String, AggregateActionResult)>,
 ) -> LoopCloseoutAggregate {
     let mut aggregate = LoopCloseoutAggregate {
-        schema_version: "loop-closeout-aggregate-v1".to_string(),
+        schema_version: LOOP_CLOSEOUT_AGGREGATE_SCHEMA_VERSION.to_string(),
         run_id: run_id.to_string(),
         loop_id: loop_id.to_string(),
         overall_status: "pass".to_string(),

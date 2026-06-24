@@ -200,11 +200,8 @@ pub mod tests;
 
 // Re-export all pub items from submodules so internal sibling calls work
 // and external paths remain unchanged.
-pub use evidence::EvidenceReadError;
+pub use close_gates::{parse_close_gates, enforce_rfv_close_gates};
+pub use evidence::{cross_link_evidence, EvidenceReadError};
 pub use flow::framework_quality_gate;
 
-// Internal re-exports so sibling submodules (flow.rs) can access these via `use super::*`.
-#[allow(unused_imports)]
-use close_gates::{parse_close_gates, enforce_rfv_close_gates};
-#[allow(unused_imports)]
-use evidence::cross_link_evidence;
+

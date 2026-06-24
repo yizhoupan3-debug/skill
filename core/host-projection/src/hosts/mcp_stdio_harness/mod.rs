@@ -610,7 +610,7 @@ fn research_tool_schemas() -> Vec<Value> {
     vec![
         json!({
             "name": "research_aigc_check",
-            "description": "AIGC 检测:返回 AI 概率评分(0-100)和逐段分析。",
+            "description": "检测文本是否由 AI 生成，返回概率评分和逐段分析。",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -622,7 +622,7 @@ fn research_tool_schemas() -> Vec<Value> {
         }),
         json!({
             "name": "research_aigc_humanize",
-            "description": "AIGC 降重:句法改写/词汇替换/句式多样化。",
+            "description": "对 AI 生成文本进行句法改写和词汇替换降重。",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -635,7 +635,7 @@ fn research_tool_schemas() -> Vec<Value> {
         }),
         json!({
             "name": "research_review_dimensions",
-            "description": "获取审稿维度 prompt (round 1-7+)。",
+            "description": "获取多轮对抗审稿的维度 prompt。",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -704,6 +704,7 @@ fn task_crud_tool_schemas() -> Vec<Value> {
                 "properties": {
                     "task_id": {"type": "string"},
                 },
+                "required": ["task_id"],
             },
         }),
         json!({

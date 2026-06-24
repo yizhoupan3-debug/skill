@@ -4,8 +4,7 @@
     "total_count": 54,
     "builtin_count": 15,
     "research_count": 5,
-    "browser_count": 15,
-    "codegraph_count": 8,
+    "independent_count": 23,
     "external_count": 11
   },
   "keys": [
@@ -55,13 +54,16 @@
         ],
         "properties": {
           "operation": {
-            "type": "string"
+            "type": "string",
+            "description": "操作类型：start/checkpoint/pause/resume/complete/clear/block/amend"
           },
           "goal": {
-            "type": "string"
+            "type": "string",
+            "description": "目标文本内容"
           },
           "task_id": {
-            "type": "string"
+            "type": "string",
+            "description": "任务 ID"
           }
         }
       }
@@ -93,7 +95,8 @@
         "type": "object",
         "properties": {
           "task_id": {
-            "type": "string"
+            "type": "string",
+            "description": "任务 ID"
           }
         }
       }
@@ -128,13 +131,16 @@
         ],
         "properties": {
           "operation": {
-            "type": "string"
+            "type": "string",
+            "description": "操作类型：start/append_round"
           },
           "task_id": {
-            "type": "string"
+            "type": "string",
+            "description": "任务 ID"
           },
           "goal": {
-            "type": "string"
+            "type": "string",
+            "description": "目标描述文本"
           }
         }
       }
@@ -166,7 +172,8 @@
         "type": "object",
         "properties": {
           "task_id": {
-            "type": "string"
+            "type": "string",
+            "description": "任务 ID"
           }
         }
       }
@@ -201,16 +208,20 @@
         ],
         "properties": {
           "tool_name": {
-            "type": "string"
+            "type": "string",
+            "description": "触发证据记录的工具名称"
           },
           "command": {
-            "type": "string"
+            "type": "string",
+            "description": "执行的命令预览"
           },
           "exit_code": {
-            "type": "integer"
+            "type": "integer",
+            "description": "命令退出码"
           },
           "output": {
-            "type": "string"
+            "type": "string",
+            "description": "命令输出摘要"
           }
         }
       }
@@ -245,16 +256,19 @@
         ],
         "properties": {
           "summary": {
-            "type": "string"
+            "type": "string",
+            "description": "会话摘要文本"
           },
           "next_actions": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "下一步行动列表"
           },
           "task_id": {
-            "type": "string"
+            "type": "string",
+            "description": "任务 ID"
           }
         }
       }
@@ -286,10 +300,12 @@
         "type": "object",
         "properties": {
           "task_id": {
-            "type": "string"
+            "type": "string",
+            "description": "任务 ID"
           },
           "reviewer_lane": {
-            "type": "string"
+            "type": "string",
+            "description": "审稿通道（如 light/deep）"
           }
         }
       }
@@ -325,31 +341,37 @@
         ],
         "properties": {
           "task_id": {
-            "type": "string"
+            "type": "string",
+            "description": "任务 ID"
           },
           "summary": {
-            "type": "string"
+            "type": "string",
+            "description": "收尾摘要"
           },
           "verification_status": {
-            "type": "string"
+            "type": "string",
+            "description": "验证状态：passed/failed/skipped"
           },
           "changed_files": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "变更文件列表"
           },
           "blockers": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "阻塞项列表"
           },
           "risks": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "风险项列表"
           }
         }
       }
@@ -381,7 +403,8 @@
         "type": "object",
         "properties": {
           "detail_level": {
-            "type": "string"
+            "type": "string",
+            "description": "快照详细级别：summary/full"
           }
         }
       }
@@ -416,10 +439,12 @@
         ],
         "properties": {
           "skill": {
-            "type": "string"
+            "type": "string",
+            "description": "技能名称或路径"
           },
           "maxChars": {
-            "type": "integer"
+            "type": "integer",
+            "description": "最大返回字符数"
           }
         }
       }
@@ -454,7 +479,8 @@
         ],
         "properties": {
           "query": {
-            "type": "string"
+            "type": "string",
+            "description": "自然语言查询文本"
           }
         }
       }
@@ -489,13 +515,16 @@
         ],
         "properties": {
           "query": {
-            "type": "string"
+            "type": "string",
+            "description": "搜索查询文本"
           },
           "hostId": {
-            "type": "string"
+            "type": "string",
+            "description": "宿主平台 ID（claude/cursor/opencode/codex）"
           },
           "limit": {
-            "type": "integer"
+            "type": "integer",
+            "description": "最大返回结果数"
           }
         }
       }
@@ -558,10 +587,12 @@
         ],
         "properties": {
           "url": {
-            "type": "string"
+            "type": "string",
+            "description": "要抓取的 URL 地址"
           },
           "max_bytes": {
-            "type": "integer"
+            "type": "integer",
+            "description": "最大返回字节数"
           }
         }
       }
@@ -597,13 +628,16 @@
         ],
         "properties": {
           "operation": {
-            "type": "string"
+            "type": "string",
+            "description": "操作类型：stats/analyze/extract/calibrate"
           },
           "skill": {
-            "type": "string"
+            "type": "string",
+            "description": "技能名称过滤"
           },
           "days": {
-            "type": "integer"
+            "type": "integer",
+            "description": "分析时间范围（天数）"
           }
         }
       }

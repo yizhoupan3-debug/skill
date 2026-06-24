@@ -86,6 +86,8 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | L5 | `runtime-core-contracts` | L2 定义被 L5 消费 |
 | L4 | `core-state` | Task 状态机与 Goal/RFV（组件表见下） |
 | L4 | `routing-engine` | Skill 路由匹配与评分 |
+| L4 | `tool-routing-engine` | Tool 路由评分与搜索 |
+| L4 | `routing-core` | 路由共享原语（trigram fuzzy 匹配） |
 | L4 | `skill-layer` | Skill schema、validation、dependency mgmt |
 | L3 | `fr-exec` | LLM 实时执行、沙箱状态机 |
 | L3 | `browser-mcp` | 浏览器自动化 MCP 服务 |

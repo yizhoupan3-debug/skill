@@ -87,8 +87,6 @@ pub const CONTINUITY_ACTIVE_FOCUS_GOAL_MISMATCH_HINT_ZH: &str = concat!(
     "若仍未修复请核对 `artifacts/current/active_task.json`。",
 );
 
-// CONTINUITY_ACTIVE_NOT_DRIVING_FOCUS_DRIVES_HINT_ZH: removed — no callers, hint text retained for reference only in comments.
-
 /// Pushes [`RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL`] when appropriate. Active may still
 /// have RFV or other task-scoped state with no readable GOAL; the note is about pointers vs
 /// hydration, not "goal_drive-only".
@@ -572,7 +570,7 @@ pub fn hydrate_task_state_hybrid(
             "goal_state" => {
                 goal_state = Some(tx.payload).filter(|v| !v.is_null());
             }
-            "rfv_loop_state" => {
+            "rfv_loop_state" | "quality_gate_state" => {
                 rfv_loop_state = Some(tx.payload).filter(|v| !v.is_null());
             }
             "evidence" => {
@@ -1059,7 +1057,7 @@ mod tests {
         fs::write(
             task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-rfv-loop-v1",
+                "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
                 "goal": "g",
                 "max_rounds": 3,
@@ -1086,7 +1084,7 @@ mod tests {
         fs::write(
             task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-rfv-loop-v1",
+                "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
                 "goal": "g",
                 "max_rounds": 3,
@@ -1136,7 +1134,7 @@ mod tests {
         fs::write(
             task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-rfv-loop-v1",
+                "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
                 "goal": "g",
                 "max_rounds": 3,
@@ -1185,7 +1183,7 @@ mod tests {
         fs::write(
             task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-rfv-loop-v1",
+                "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
                 "goal": "g",
                 "max_rounds": 3,
@@ -1237,7 +1235,7 @@ mod tests {
         fs::write(
             task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-rfv-loop-v1",
+                "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
                 "goal": "g",
                 "max_rounds": 3,
@@ -1286,7 +1284,7 @@ mod tests {
         fs::write(
             task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-rfv-loop-v1",
+                "schema_version": "router-rs-quality-gate-v1",
                 "external_research_strict": true,
                 "loop_status": "active",
                 "goal": "g",
@@ -1346,7 +1344,7 @@ mod tests {
         fs::write(
             task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-rfv-loop-v1",
+                "schema_version": "router-rs-quality-gate-v1",
                 "external_research_strict": false,
                 "loop_status": "active",
                 "goal": "g",
@@ -1438,7 +1436,7 @@ mod tests {
         fs::write(
             task_dir.join(crate::state_manager::QUALITY_GATE_STATE_FILENAME),
             serde_json::to_string_pretty(&json!({
-                "schema_version": "router-rs-rfv-loop-v1",
+                "schema_version": "router-rs-quality-gate-v1",
                 "loop_status": "active",
                 "goal": "g",
                 "max_rounds": 5,

@@ -270,13 +270,9 @@ fn append_jsonl_entry(
     file.sync_all()
         .map_err(|err| format!("sync step ledger {} failed: {err}", path.display()))?;
 
-    // Auto-compact when the file grows past 100 lines.
-    // Truncate corrupt tail first so compact accurate line counts.
-    if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(path) {
-        tracing::warn!(error = %e, "truncate_corrupt_tail failed for STEP_LEDGER");
-    }
-    if let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(path, 100) {
-        tracing::warn!(error = %e, "compact_jsonl_if_needed failed for STEP_LEDGER");
+    // Auto-compact when the file grows past 300 lines.
+    if let Err(e) = crate::utils::jsonl_maintenance::truncate_and_compact(path, 300) {
+        tracing::warn!(error = %e, "truncate_and_compact failed for STEP_LEDGER");
     }
 
     Ok(true)

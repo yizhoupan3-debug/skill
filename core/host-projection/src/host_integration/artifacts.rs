@@ -283,18 +283,12 @@ pub fn allowed_dot_generated_artifact(path: &str) -> bool {
             if path == manifest {
                 return true;
             }
-            // Claude-specific desktop projection manifest.
-            if host_id == "claude" {
-                let desktop = format!("{cfg}/.framework-projection-desktop.json");
-                if path == desktop {
-                    return true;
-                }
-            }
         }
     }
 
-    // Non-registry extras: hosts not yet in the registry (gemini) or
-    // codex-specific generated docs that predate the registry.
+    // Pre-registry legacy generated paths (hardcoded; covered by all_known_host_dirs
+    // for scan coverage). The `.gemini/*` entries were formerly in the registry's
+    // retired_host_legacy_paths field, removed as dead data.
     matches!(
         path,
         ".gemini/settings.json"

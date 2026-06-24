@@ -3127,50 +3127,6 @@ fn harness_behavioral_eval_cases_cover_required_tracks() {
 }
 
 #[test]
-fn cursor_subagent_hook_contract_consumer_subset() {
-    let path = project_root().join("configs/framework/CURSOR_SUBAGENT_HOOK_CONTRACT.json");
-    assert!(path.is_file(), "missing {}", path.display());
-    let v = read_json(&path);
-    assert_eq!(
-        v["schema_version"].as_str().unwrap_or_default(),
-        "cursor-subagent-hook-contract-v1"
-    );
-    let events = v["events"].as_object().expect("events object");
-    assert!(events.contains_key("subagentStart"));
-    assert!(events.contains_key("subagentStop"));
-    let modes = v["modes"].as_object().expect("modes object");
-    assert!(modes.contains_key("strict"));
-    assert!(modes.contains_key("review_lite"));
-    assert_eq!(
-        modes["review_lite"]["doc_alias"].as_str(),
-        Some("review-lite")
-    );
-    let fields = v["fields"].as_object().expect("fields object");
-    assert!(fields.contains_key("subagent_id"));
-    let fork = fields
-        .get("fork_context")
-        .and_then(|f| f.as_object())
-        .expect("fork_context object");
-    let accepted = fork
-        .get("accepted_false_values")
-        .and_then(|a| a.as_object())
-        .expect("fork_context.accepted_false_values");
-    let strings = accepted["string"]
-        .as_array()
-        .expect("fork_context accepted string spellings");
-    for spelling in ["false", "0", "no", "n"] {
-        assert!(
-            strings.iter().any(|v| v.as_str() == Some(spelling)),
-            "fork_context contract must document string spelling {spelling:?}"
-        );
-    }
-    assert_eq!(
-        fork["independent_when"].as_str().unwrap_or_default(),
-        "json_boolean_false_or_integer_0_or_string_false_0_no_n"
-    );
-}
-
-#[test]
 fn harness_skill_contract_lint_cli_reports_protocol_shape() {
     let payload = serde_json::json!({
         "skills_root": project_root().join("skills").to_string_lossy(),

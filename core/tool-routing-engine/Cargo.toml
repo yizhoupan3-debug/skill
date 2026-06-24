@@ -1,20 +1,17 @@
 [package]
-name = "routing-engine"
+name = "tool-routing-engine"
 version = "0.1.0"
 edition = "2024"
-description = "Skill routing engine: 16-step scoring pipeline, routing, search, and evaluation for skill routing."
+description = "Tool routing engine: scoring pipeline, routing, and search for MCP tools."
 [lints]
 workspace = true
 
 [dependencies]
 core-state-utils = { path = "../core-state-utils" }
 routing-core = { path = "../routing-core" }
-notify.workspace = true
-rayon.workspace = true
-regex.workspace = true
+mcp-tool-registry = { path = "../mcp-tool-registry" }
 serde.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

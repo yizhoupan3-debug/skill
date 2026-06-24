@@ -1,55 +1,45 @@
 #!/usr/bin/env bash
-# Unified router-rs hook launcher.
+# Unified router-rs hook launcher (registry-driven, zero host-level defaults).
 # Usage: hook.sh <host_id> <event>
 #   stdin: payload JSON
-#   host_id: claude | codex | cursor | opencode
 set -euo pipefail
 
 HOST_ID="${1:?usage: hook.sh <host_id> <event>}"
 HOOK_EVENT="${2:?usage: hook.sh <host_id> <event>}"
 HOOK_PAYLOAD="$(cat)"
 
-# ── Host-specific configuration ──────────────────────────────────
-case "$HOST_ID" in
-  claude)
-    ROOT_ENV_VAR="CLAUDE_PROJECT_ROOT"
-    ROOT_FALLBACK='git rev-parse --show-toplevel 2>/dev/null || pwd'
-    CRITICAL_EVENTS="pretooluse|userpromptsubmit|posttooluse|stop"
-    FAIL_MSG='router-rs binary unavailable for Claude hook'
-    FAIL_JSON='{"decision":"block","reason":"FAIL_MSG","suppressOutput":true}'
-    ;;
-  codex)
-    ROOT_ENV_VAR="CODEX_PROJECT_ROOT"
-    ROOT_FALLBACK='git rev-parse --show-toplevel 2>/dev/null || pwd'
-    CRITICAL_EVENTS="sessionstart|pretooluse|userpromptsubmit|posttooluse|stop"
-    FAIL_MSG='router-rs binary unavailable for critical Codex hook; fail-closed instead of silently bypassing gate enforcement'
-    FAIL_JSON='{"decision":"block","reason":"FAIL_MSG","suppressOutput":true}'
-    ;;
-  cursor)
-    ROOT_ENV_VAR="CURSOR_WORKSPACE_ROOT"
-    ROOT_FALLBACK='git rev-parse --show-toplevel 2>/dev/null || echo "$PWD"'
-    CRITICAL_EVENTS="beforesubmitprompt|stop|posttooluse|subagentstart|subagentstop"
-    FAIL_MSG='router-rs binary unavailable for critical Cursor hook; fail-closed instead of silently bypassing gate enforcement'
-    CURSOR_FORMAT=1
-    ;;
-  opencode)
-    ROOT_ENV_VAR="OPENCODE_PROJECT_ROOT"
-    ROOT_FALLBACK='git rev-parse --show-toplevel 2>/dev/null || pwd'
-    CRITICAL_EVENTS="tool.execute.before|tool.execute.after|session.idle|session.created"
-    FAIL_MSG='router-rs binary unavailable for critical OpenCode hook; fail-closed instead of silently bypassing gate enforcement'
-    FAIL_JSON='{"decision":"block","reason":"FAIL_MSG","suppressOutput":true}'
-    ;;
-  *)
-    echo "Unknown host_id: $HOST_ID" >&2
-    exit 1
-    ;;
-esac
+# ── Find registry relative to this script ───────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REGISTRY_PATH="${RUNTIME_REGISTRY_JSON:-$SCRIPT_DIR/RUNTIME_REGISTRY.json}"
+
+if ! command -v jq &>/dev/null || [ ! -r "$REGISTRY_PATH" ]; then
+  echo "[hook] registry unavailable" >&2
+  echo '{"decision":"block","reason":"hook registry unavailable","suppressOutput":true}'
+  exit 2
+fi
+
+if ! jq -e --arg h "$HOST_ID" '.host_targets.metadata | has($h)' "$REGISTRY_PATH" &>/dev/null; then
+  echo "[hook] unknown host_id: $HOST_ID" >&2
+  exit 1
+fi
+
+# ── Read all host config from registry (single jq call, zero local defaults) ──
+{ read -r ROOT_ENV_VAR; read -r ROOT_FALLBACK_CMD; read -r CRITICAL_EVENTS; read -r FAIL_MSG; read -r FAIL_JSON_TEMPLATE; } < <(
+  jq -r --arg h "$HOST_ID" '
+    .host_targets.metadata[$h].hook_launcher |
+    .root_env_var, .root_fallback_cmd, .critical_events, .fail_msg, .fail_json_template
+  ' "$REGISTRY_PATH"
+)
 
 # ── Resolve project root ─────────────────────────────────────────
-ROOT="${!ROOT_ENV_VAR:-$(eval "$ROOT_FALLBACK")}"
+ROOT="${!ROOT_ENV_VAR:-$(eval "$ROOT_FALLBACK_CMD")}"
+if [ -z "$ROOT" ] || [ ! -d "$ROOT" ]; then
+  echo "[$HOST_ID-hook] cannot resolve project root" >&2
+  exit 2
+fi
 FW="${SKILL_FRAMEWORK_ROOT:-$ROOT}"
 
-# ── Source host-specific env if exists (unified for all hosts) ───
+# ── Source host-specific env if exists ───────────────────────────
 HOST_ENV_FILE="$ROOT/.$HOST_ID/router-rs-hook.env"
 if [ -r "$HOST_ENV_FILE" ]; then
   set -a
@@ -64,75 +54,47 @@ critical_event() {
   [[ "$ev" =~ ^($CRITICAL_EVENTS)$ ]]
 }
 
-# ── Fail-closed JSON emitter ─────────────────────────────────────
+# ── Fail-closed JSON emitter (host-agnostic, uses registry template) ──
 emit_fail_closed() {
-  if [ "${CURSOR_FORMAT:-}" = "1" ]; then
-    local ev; ev="$(printf '%s' "$HOOK_EVENT" | tr '[:upper:]' '[:lower:]')"
-    case "$ev" in
-      beforesubmitprompt)
-        printf '%s\n' "{\"continue\":false,\"followup_message\":\"$FAIL_MSG\",\"user_message\":\"$FAIL_MSG\"}" ;;
-      subagentstart)
-        printf '%s\n' "{\"permission\":\"deny\",\"followup_message\":\"$FAIL_MSG\",\"user_message\":\"$FAIL_MSG\"}" ;;
-      *)
-        printf '%s\n' "{\"continue\":false,\"followup_message\":\"$FAIL_MSG\",\"user_message\":\"$FAIL_MSG\"}" ;;
-    esac
-  else
-    local json="${FAIL_JSON//FAIL_MSG/$FAIL_MSG}"
-    printf '%s\n' "$json"
-  fi
+  local tmpl="${FAIL_JSON_TEMPLATE:-{\"decision\":\"block\",\"reason\":\"{{MSG}}\",\"suppressOutput\":true}}"
+  local msg="${FAIL_MSG:-router-rs binary unavailable}"
+  local json="${tmpl//\{\{MSG\}\}/$msg}"
+  printf '%s\n' "$json"
 }
 
 # ── Binary resolution ────────────────────────────────────────────
-# Performance: skip --help subprocess for -cli binaries (they can't be the shim).
 is_redirect_shim() {
   case "$1" in *-cli) return 1 ;; esac
-  "$1" --help 2>&1 | grep -q "binary moved"
+  # Read first lines instead of running --help (avoids forking a heavy binary).
+  head -n 10 "$1" 2>/dev/null | grep -q "binary moved"
 }
 
 resolve_bin() {
   local bin="${ROUTER_RS_BIN:-}"
-
-  # If env var is set, verify it's not the redirect shim
   if [ -n "$bin" ] && [ -x "$bin" ]; then
-    if is_redirect_shim "$bin"; then
-      bin=""
-    fi
+    is_redirect_shim "$bin" && bin="" || true
   elif [ -n "$bin" ]; then
     bin=""
   fi
+  [ -n "$bin" ] && { printf '%s' "$bin"; return; }
 
-  # Early return if env var resolved successfully
-  if [ -n "$bin" ]; then
-    printf '%s' "$bin"
-    return
-  fi
-
-  # Prefer router-rs-cli over router-rs (which is now a redirect shim)
   if [ -x "${HOME:-}/.local/bin/router-rs-cli" ]; then
-    printf '%s' "${HOME}/.local/bin/router-rs-cli"
-    return
+    printf '%s' "${HOME}/.local/bin/router-rs-cli"; return
   fi
   if [ -x "${HOME:-}/.local/bin/router-rs" ] && ! is_redirect_shim "${HOME}/.local/bin/router-rs"; then
-    printf '%s' "${HOME}/.local/bin/router-rs"
-    return
+    printf '%s' "${HOME}/.local/bin/router-rs"; return
   fi
 
   local candidate
   candidate="$(command -v router-rs-cli 2>/dev/null || true)"
-  if [ -n "$candidate" ]; then
-    printf '%s' "$candidate"
-    return
-  fi
+  [ -n "$candidate" ] && { printf '%s' "$candidate"; return; }
   candidate="$(command -v router-rs 2>/dev/null || true)"
-  if [ -n "$candidate" ] && ! is_redirect_shim "$candidate"; then
-    printf '%s' "$candidate"
-    return
-  fi
+  [ -n "$candidate" ] && ! is_redirect_shim "$candidate" && { printf '%s' "$candidate"; return; }
 
-  local CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}"
+  local cargo_target_dir="${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}"
   for candidate in \
-    "$CARGO_TARGET_DIR/release/router-rs-cli" \
-    "$CARGO_TARGET_DIR/debug/router-rs-cli" \
+    "$cargo_target_dir/release/router-rs-cli" \
+    "$cargo_target_dir/debug/router-rs-cli" \
     "$ROOT/core/router-rs/target/release/router-rs-cli" \
     "$FW/core/router-rs/target/release/router-rs-cli" \
     "$ROOT/core/router-rs/target/debug/router-rs-cli" \
@@ -141,8 +103,8 @@ resolve_bin() {
     "$ROOT/target/debug/router-rs-cli" \
     "$FW/target/release/router-rs-cli" \
     "$FW/target/debug/router-rs-cli" \
-    "$CARGO_TARGET_DIR/release/router-rs" \
-    "$CARGO_TARGET_DIR/debug/router-rs" \
+    "$cargo_target_dir/release/router-rs" \
+    "$cargo_target_dir/debug/router-rs" \
     "$ROOT/core/router-rs/target/release/router-rs" \
     "$FW/core/router-rs/target/release/router-rs" \
     "$ROOT/core/router-rs/target/debug/router-rs" \
@@ -152,10 +114,7 @@ resolve_bin() {
     "$FW/target/release/router-rs" \
     "$FW/target/debug/router-rs"
   do
-    if [ -x "$candidate" ]; then
-      printf '%s' "$candidate"
-      return
-    fi
+    [ -x "$candidate" ] && { printf '%s' "$candidate"; return; }
   done
 }
 
@@ -166,30 +125,29 @@ if [ ! -x "${ROUTER_RS_BIN:-}" ]; then
     emit_fail_closed
     exit 2
   fi
-  printf '%s\n' "[$HOST_ID-hook] router-rs binary unavailable for telemetry event $HOOK_EVENT; fail-open" >&2
+  printf '%s\n' "[$HOST_ID-hook] router-rs binary unavailable for $HOOK_EVENT; fail-open" >&2
   exit 0
 fi
 
 # ── Delegate to router-rs ────────────────────────────────────────
-# Command format: router-rs-cli host hook --event=<EVENT> --repo-root <ROOT> <HOST_ID>
-# NO background timeout subprocess: router-rs binary handles its own timeouts
-# and the parent process exits naturally via Rust Drop semantics (exit(0) removed).
-# Removing the (sleep+kill) timer saves ~1 fork per hook event (~30ms per event).
 printf '%s' "$HOOK_PAYLOAD" | "$ROUTER_RS_BIN" host hook --event="$HOOK_EVENT" --repo-root "$ROOT" "$HOST_ID"
-
 
 # ── Health monitor (optional) ────────────────────────────────────
 HEALTH_MONITOR="$FW/configs/framework/agent-health-monitor.sh"
 if [ -x "$HEALTH_MONITOR" ]; then
   case "$(printf '%s' "$HOOK_EVENT" | tr '[:upper:]' '[:lower:]')" in
     subagentstart)
-      AGENT_NAME=$(printf '%s' "$HOOK_PAYLOAD" | jq -r '.tool_name // "unknown"' 2>/dev/null || echo "unknown")
-      AGENT_ID=$(printf '%s' "$HOOK_PAYLOAD" | jq -r '(.tool_input.name // .tool_input.description // ("agent-" + ($$ | tostring)))' 2>/dev/null || echo "agent-$$")
-      "$HEALTH_MONITOR" start "$AGENT_NAME" "$AGENT_ID" >/dev/null 2>&1 || true
+      (
+        AGENT_NAME=$(printf '%s' "$HOOK_PAYLOAD" | jq -r '.tool_name // "unknown"' 2>/dev/null || echo "unknown")
+        AGENT_ID=$(printf '%s' "$HOOK_PAYLOAD" | jq -r '(.tool_input.name // .tool_input.description // ("agent-" + ($$ | tostring)))' 2>/dev/null || echo "agent-$$")
+        "$HEALTH_MONITOR" start "$AGENT_NAME" "$AGENT_ID"
+      ) >/dev/null 2>&1 || true
       ;;
     subagentstop)
-      AGENT_ID=$(printf '%s' "$HOOK_PAYLOAD" | jq -r '(.tool_input.name // .tool_input.description // ("agent-" + ($$ | tostring)))' 2>/dev/null || echo "agent-$$")
-      "$HEALTH_MONITOR" stop "$AGENT_ID" >/dev/null 2>&1 || true
+      (
+        AGENT_ID=$(printf '%s' "$HOOK_PAYLOAD" | jq -r '(.tool_input.name // .tool_input.description // ("agent-" + ($$ | tostring)))' 2>/dev/null || echo "agent-$$")
+        "$HEALTH_MONITOR" stop "$AGENT_ID"
+      ) >/dev/null 2>&1 || true
       ;;
   esac
 fi

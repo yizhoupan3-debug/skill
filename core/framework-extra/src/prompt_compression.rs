@@ -56,7 +56,12 @@ fn compress_prompt_with_rust_policy(prompt: &str, token_budget: usize) -> Value 
     }
 
     let lines = prompt.lines().collect::<Vec<_>>();
-    let target_chars = token_budget.saturating_mul(4).max(1);
+    // Use 3 chars/token as a conservative estimate (≈ Claude's tokeniser average,
+    // slightly below the 4-char rule-of-thumb) so the char-based truncation stays
+    // safely within `token_budget` even when the actual text is token-dense (CJK,
+    // base64, etc.).  The decision gate above (estimate_token_count) is a separate
+    // heuristic — this char budget is the truncation bound, not the decision metric.
+    let target_chars = token_budget.saturating_mul(3).max(1);
     let (output, strategy, omitted_sections) = if lines.len() >= 6 {
         let head = lines
             .iter()
@@ -105,7 +110,8 @@ fn compress_prompt_with_rust_policy(prompt: &str, token_budget: usize) -> Value 
 }
 
 fn enforce_prompt_budget(output: String, token_budget: usize) -> String {
-    let max_chars = token_budget.saturating_mul(4).max(1);
+    // Same 3 chars/token as the primary compression path.
+    let max_chars = token_budget.saturating_mul(3).max(1);
     let marker = "\n[truncated tail]";
     // Use char_indices().nth() to avoid a separate chars().count() traversal
     // when the output already fits within budget (common case).

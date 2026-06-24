@@ -39,6 +39,7 @@ pub fn task_ledger_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, Stri
 ///   near the end; rare worst-case still O(n) but constant-factor much smaller
 ///   because we skip full `serde_json::from_str` until a substring match).
 /// - `seq` is derived from line count, not from a parsed `Vec`.
+/// - Compaction reuses the in-memory post-append content, avoiding a file re-read.
 pub fn append_transaction_assuming_l1_held(
     repo_root: &Path,
     task_id: &str,
@@ -49,6 +50,8 @@ pub fn append_transaction_assuming_l1_held(
         fs::create_dir_all(parent)
             .map_err(|err| format!("failed to create dir {}: {err}", parent.display()))?;
     }
+
+    let mut compacted_inline = false;
 
     // Read-first pattern: avoids TOCTOU between is_file() and open().
     // When the file exists, content is already in hand; when NotFound, create fresh.
@@ -105,6 +108,41 @@ pub fn append_transaction_assuming_l1_held(
                 .map_err(|err| format!("failed to write transaction: {err}"))?;
             file.sync_all()
                 .map_err(|e| format!("fsync task_ledger failed: {e}"))?;
+            drop(file);
+
+            // ── compact using in-memory content (avoids re-read) ─────────────
+            // Append the serialized new line to the pre-append content so the
+            // compaction function sees the full post-append file state.
+            content.push_str(&serialized);
+            content.push('\n');
+
+            match crate::utils::jsonl_maintenance::compact_jsonl_with_content(
+                &path, &content, 300,
+            ) {
+                Ok(true) => {
+                    // Compaction renumbers seq to 0,1,2,…N-1. Sync the aggregate
+                    // immediately so TASK_STATE.json.last_seq matches the post-compact
+                    // file.  Without this, a crash between compact and the caller's
+                    // aggregate sync would leave last_seq > all post-compact seq,
+                    // causing ledger replay to skip every row on recovery.
+                    if let Err(e) =
+                        crate::task_state_aggregate::sync_task_state_aggregate(repo_root, task_id)
+                    {
+                        tracing::warn!(
+                            error = %e,
+                            "sync_task_state_aggregate failed after TASK_LEDGER compaction",
+                        );
+                    }
+                }
+                Ok(false) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "compact_jsonl_with_content failed for TASK_LEDGER",
+                    );
+                }
+            }
+            compacted_inline = true;
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             // File does not exist yet — first entry, seq = 0.
@@ -128,9 +166,11 @@ pub fn append_transaction_assuming_l1_held(
         Err(e) => return Err(format!("failed to read task ledger: {e}")),
     }
 
-    // Auto-compact when the file grows past 100 lines.
-    if let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(&path, 100) {
-        tracing::warn!(error = %e, "compact_jsonl_if_needed failed for TASK_LEDGER");
+    // Fallback compaction for the NotFound branch (first entry, 1 line — won't trigger).
+    if !compacted_inline {
+        if let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(&path, 300) {
+            tracing::warn!(error = %e, "compact_jsonl_if_needed failed for TASK_LEDGER");
+        }
     }
 
     Ok(())

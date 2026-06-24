@@ -4,8 +4,8 @@
 //! `EVIDENCE_INDEX.json`, and heuristics for detecting verification commands.
 
 use fr_utils::constants::{
-    EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION,
-    FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY, SESSION_SUMMARY_FILENAME, TASK_POINTERS_FILENAME,
+    EVIDENCE_INDEX_FILENAME, EVIDENCE_INDEX_SCHEMA_VERSION, FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
+    HOOK_EVIDENCE_APPEND_SCHEMA_VERSION, SESSION_SUMMARY_FILENAME, TASK_POINTERS_FILENAME,
 };
 use fr_utils::json_io::read_json_strict;
 use fr_utils::json_value::value_text;
@@ -343,7 +343,7 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
             "ok": true,
             "skipped": true,
             "reason": "command_preview did not match verification heuristics",
-            "schema_version": "router-rs-hook-evidence-append-v1",
+            "schema_version": HOOK_EVIDENCE_APPEND_SCHEMA_VERSION,
             "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
         }));
     }
@@ -376,7 +376,7 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
     Ok(json!({
         "ok": true,
         "skipped": false,
-        "schema_version": "router-rs-hook-evidence-append-v1",
+        "schema_version": HOOK_EVIDENCE_APPEND_SCHEMA_VERSION,
         "authority": FRAMEWORK_SESSION_ARTIFACT_WRITE_AUTHORITY,
     }))
 }

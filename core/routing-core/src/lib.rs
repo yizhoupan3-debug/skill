@@ -2,15 +2,14 @@
 //!
 //! Shared routing primitives for the Routing Layer.
 //!
-//! Provides:
-//! - `fuzzy` — trigram-based fuzzy matching (extracted from routing-engine and mcp-tool-registry)
-//! - `types` — `RoutableRecord` trait for unified scoring pipeline
+//! Provides trigram-based fuzzy matching used by both skill routing
+//! (`routing-engine`) and tool routing (`tool-routing-engine`).
 //!
-//! Both skill routing (`routing-engine`) and tool routing (`mcp-tool-registry`)
-//! depend on this crate for shared utilities.
+//! ## Re-exports
+//!
+//! - `fuzzy::extract_trigrams`, `fuzzy::jaccard_similarity`,
+//!   `fuzzy::trigram_similarity`, `fuzzy::best_fuzzy_jaccard`
 
 pub mod fuzzy;
-pub mod types;
 
-pub use fuzzy::{best_fuzzy_score, extract_trigrams, jaccard_similarity};
-pub use types::RoutableRecord;
+pub use fuzzy::{best_fuzzy_jaccard, extract_trigrams, jaccard_similarity};

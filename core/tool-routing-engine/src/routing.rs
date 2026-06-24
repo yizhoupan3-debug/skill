@@ -10,9 +10,11 @@
 
 use crate::fuzzy::best_fuzzy_score;
 use crate::scoring_config::tool_scoring_weights;
-use crate::tool_types::{
-    is_ascii_word, tokenize_text, McpToolDecision, McpToolRecord, ToolCandidate,
-};
+use crate::types::{McpToolDecision, ToolCandidate};
+use core_state_utils::text_utils::is_ascii_word;
+use core_state_utils::text_utils::tokenize_cjk_aware as tokenize_text;
+use mcp_tool_registry::McpToolRecord;
+use std::collections::HashSet;
 
 const DECISION_SCHEMA_VERSION: &str = "1.0.0";
 
@@ -34,7 +36,7 @@ pub fn route_tool(
             query.len()
         ));
     }
-    let records = crate::tool_registry::load_tool_records(registry_path)?;
+    let records = mcp_tool_registry::load_tool_records(registry_path)?;
     Ok(route_tool_from_records(query, &records, host_id))
 }
 
@@ -141,12 +143,46 @@ pub(crate) fn score_tool(
     query_tokens: &[String],
     weights: &crate::scoring_config::ToolScoringWeights,
 ) -> (f64, Vec<String>, usize) {
+    // Pre-compute routing tokens from the raw record (tool layer no longer
+    // embeds these fields; derivation happens here in the routing layer).
+    let slug_lower = record.slug.to_lowercase();
+    let display_name_lower = record.display_name.to_lowercase();
+
+    let name_tokens: HashSet<String> = slug_lower
+        .split(|c: char| c == '-' || c == '_')
+        .filter(|t| !t.is_empty())
+        .map(|t| t.to_string())
+        .collect();
+
+    let keyword_tokens: HashSet<String> = record
+        .trigger_hints
+        .iter()
+        .flat_map(|hint| tokenize_text(&hint.to_lowercase()))
+        .collect();
+
+    let desc_tokens: HashSet<String> = tokenize_text(&record.description.to_lowercase())
+        .into_iter()
+        .collect();
+
+    let alias_tokens: HashSet<String> = tokenize_text(&display_name_lower)
+        .into_iter()
+        .collect();
+
+    let do_not_use_tokens: HashSet<String> =
+        if record.tool_flags.iter().any(|f| f == "deprecated") {
+            let mut tokens = name_tokens.clone();
+            tokens.insert("deprecated".to_string());
+            tokens
+        } else {
+            HashSet::new()
+        };
+
     let mut score = 0.0f64;
     let mut reasons = Vec::new();
     let mut matched_token_count = 0usize;
 
     // Step 1: Exact name match (slug or display_name)
-    if record.slug_lower == query_lower || record.display_name_lower == query_lower {
+    if slug_lower == query_lower || display_name_lower == query_lower {
         score += weights.exact_name_boost;
         reasons.push("exact_name_match".to_string());
     }
@@ -154,7 +190,7 @@ pub(crate) fn score_tool(
     // Step 2: Name token matching
     let name_match_count = query_tokens
         .iter()
-        .filter(|qt| record.name_tokens.contains(qt.as_str()))
+        .filter(|qt| name_tokens.contains(qt.as_str()))
         .count();
     if name_match_count > 0 {
         score += weights.name_tokens_base + weights.name_tokens_per_token * (name_match_count as f64);
@@ -165,7 +201,7 @@ pub(crate) fn score_tool(
     // Step 3: Display name matching (tool-specific: Chinese display names like "PDF 文本提取")
     let display_match_count = query_tokens
         .iter()
-        .filter(|qt| record.alias_tokens.contains(qt.as_str()))
+        .filter(|qt| alias_tokens.contains(qt.as_str()))
         .count();
     if display_match_count > 0 {
         score += weights.display_name_per_match * (display_match_count as f64);
@@ -195,7 +231,7 @@ pub(crate) fn score_tool(
     // Step 5: Keyword + Alias token matching
     let keyword_match_count = query_tokens
         .iter()
-        .filter(|qt| record.keyword_tokens.contains(qt.as_str()))
+        .filter(|qt| keyword_tokens.contains(qt.as_str()))
         .count();
     if keyword_match_count > 0 {
         let kw_score =
@@ -207,7 +243,7 @@ pub(crate) fn score_tool(
 
     let alias_match_count = query_tokens
         .iter()
-        .filter(|qt| record.alias_tokens.contains(qt.as_str()))
+        .filter(|qt| alias_tokens.contains(qt.as_str()))
         .count();
     if alias_match_count > 0 && keyword_match_count == 0 {
         // Only add alias score when keywords didn't fire (avoid double-count)
@@ -220,7 +256,7 @@ pub(crate) fn score_tool(
     // Step 6: Description token matching
     let desc_match_count = query_tokens
         .iter()
-        .filter(|qt| record.desc_tokens.contains(qt.as_str()))
+        .filter(|qt| desc_tokens.contains(qt.as_str()))
         .count();
     if desc_match_count > 0 {
         let desc_score =
@@ -230,10 +266,10 @@ pub(crate) fn score_tool(
     }
 
     // Step 7: do-not-use penalty (for deprecated tools)
-    if !record.do_not_use_tokens.is_empty() && score > 0.0 {
+    if !do_not_use_tokens.is_empty() && score > 0.0 {
         let negative_hits: Vec<&str> = query_tokens
             .iter()
-            .filter(|qt| record.do_not_use_tokens.contains(qt.as_str()))
+            .filter(|qt| do_not_use_tokens.contains(qt.as_str()))
             .map(|s| s.as_str())
             .collect();
         if !negative_hits.is_empty() {
@@ -266,14 +302,10 @@ pub(crate) fn score_tool(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tool_types::McpToolRecord;
-    use std::collections::HashSet;
 
-    fn test_record(slug: &str, name_tokens: &[&str], keywords: &[&str]) -> McpToolRecord {
-        let mut record = McpToolRecord {
+    fn test_tool_record(slug: &str, keywords: &[&str]) -> McpToolRecord {
+        McpToolRecord {
             slug: slug.to_string(),
-            slug_lower: String::new(),
-            display_name_lower: String::new(),
             display_name: format!("Display {slug}"),
             description: format!("Description for {slug}"),
             layer: "builtin".to_string(),
@@ -281,30 +313,18 @@ mod tests {
             owner: "framework".to_string(),
             gate: "none".to_string(),
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
-            name_tokens: name_tokens.iter().map(|s| s.to_string()).collect(),
-            keyword_tokens: HashSet::new(),
-            desc_tokens: HashSet::new(),
-            alias_tokens: HashSet::new(),
-            do_not_use_tokens: HashSet::new(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
             tool_flags: vec![],
             input_schema_json: None,
-        };
-        record.name_tokens = name_tokens.iter().map(|s| s.to_string()).collect();
-        McpToolRecord::derive_tokens(&mut record);
-        record
+        }
     }
 
     #[test]
     fn exact_match_wins() {
         let records = vec![
-            test_record("pdf_read", &["pdf", "read"], &["pdf", "PDF"]),
-            test_record(
-                "browser_screenshot",
-                &["browser", "screenshot"],
-                &["截图", "浏览器"],
-            ),
+            test_tool_record("pdf_read", &["pdf", "PDF"]),
+            test_tool_record("browser_screenshot", &["截图", "浏览器"]),
         ];
         let decision = route_tool_from_records("pdf_read", &records, None);
         assert!(decision.is_some());
@@ -314,12 +334,8 @@ mod tests {
     #[test]
     fn keyword_match_returns_something() {
         let records = vec![
-            test_record("pdf_read", &["pdf", "read"], &["pdf", "文档"]),
-            test_record(
-                "browser_screenshot",
-                &["browser", "screenshot"],
-                &["截图", "浏览器"],
-            ),
+            test_tool_record("pdf_read", &["pdf", "文档"]),
+            test_tool_record("browser_screenshot", &["截图", "浏览器"]),
         ];
         let decision = route_tool_from_records("帮我处理 PDF 文档", &records, None);
         assert!(decision.is_some());
@@ -329,25 +345,21 @@ mod tests {
 
     #[test]
     fn empty_query_returns_none() {
-        let records = vec![test_record("pdf_read", &["pdf"], &["pdf"])];
+        let records = vec![test_tool_record("pdf_read", &["pdf"])];
         assert!(route_tool_from_records("", &records, None).is_none());
     }
 
     #[test]
     fn no_match_returns_none() {
-        let records = vec![test_record("pdf_read", &["pdf"], &["pdf"])];
+        let records = vec![test_tool_record("pdf_read", &["pdf"])];
         assert!(route_tool_from_records("hello world", &records, None).is_none());
     }
 
     #[test]
     fn host_filter_penalizes_mismatch() {
         let records = vec![
-            test_record("pdf_read", &["pdf"], &["pdf"]),
-            test_record(
-                "browser_screenshot",
-                &["browser", "screenshot"],
-                &["截图", "浏览器"],
-            ),
+            test_tool_record("pdf_read", &["pdf"]),
+            test_tool_record("browser_screenshot", &["截图", "浏览器"]),
         ];
         // Query matches "screenshot" but host is "cursor" — pdf_read has host_platforms=["claude"]
         // Both should be penalized
@@ -357,9 +369,8 @@ mod tests {
 
     #[test]
     fn fuzzy_rescue_handles_typo() {
-        let records = vec![test_record(
+        let records = vec![test_tool_record(
             "browser_screenshot",
-            &["browser", "screenshot"],
             &["截图", "screenshot"],
         )];
         // "screeenshot" is a typo of the trigger hint "screenshot"
@@ -372,10 +383,8 @@ mod tests {
 
     #[test]
     fn display_name_matching_works() {
-        let mut r = test_record("pdf_read", &["pdf", "read"], &["pdf"]);
+        let mut r = test_tool_record("pdf_read", &["pdf"]);
         r.display_name = "PDF 文本提取".to_string();
-        r.display_name_lower = r.display_name.to_lowercase();
-        r.alias_tokens = tokenize_text(&r.display_name_lower).into_iter().collect();
         let records = vec![r];
         // Query matches the Chinese display name
         let decision = route_tool_from_records("文本提取", &records, None);

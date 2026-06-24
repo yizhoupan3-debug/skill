@@ -42,6 +42,34 @@ pub const EVIDENCE_INDEX_SCHEMA_VERSION: &str = "evidence-index-v2";
 pub const TRACE_METADATA_SCHEMA_VERSION: &str = "trace-metadata-v2";
 pub const SUPERVISOR_STATE_SCHEMA_VERSION: &str = "supervisor-state-v2";
 pub const TASK_REGISTRY_SCHEMA_VERSION: &str = "task-registry-v1";
+
+// ---------------------------------------------------------------------------
+// Evidence / hook schema versions (previously inline strings)
+// ---------------------------------------------------------------------------
+
+/// Evidence append hook — used by `framework-extra/src/evidence.rs`.
+pub const HOOK_EVIDENCE_APPEND_SCHEMA_VERSION: &str = "router-rs-hook-evidence-append-v1";
+
+// ---------------------------------------------------------------------------
+// Framework-extra schema versions (previously inline strings)
+// ---------------------------------------------------------------------------
+
+/// Next-actions artifact schema — used by `framework-extra/src/session_artifacts.rs`.
+pub const NEXT_ACTIONS_SCHEMA_VERSION: &str = "next-actions-v2";
+/// Framework alias state machine schema — used by `framework-extra/src/alias.rs`.
+pub const FRAMEWORK_ALIAS_STATE_MACHINE_SCHEMA_VERSION: &str = "framework-alias-state-machine-v1";
+/// Runtime sandbox lifecycle schema — used by `framework-extra/src/orchestration_controller.rs`.
+pub const RUNTIME_SANDBOX_LIFECYCLE_SCHEMA_VERSION: &str = "runtime-sandbox-lifecycle-v1";
+/// Runtime background orchestration schema — used by `framework-extra/src/orchestration_controller.rs`.
+pub const RUNTIME_BACKGROUND_ORCHESTRATION_SCHEMA_VERSION: &str =
+    "runtime-background-orchestration-v1";
+/// Runtime event sink schema — used by `framework-extra/src/orchestration_controller.rs`.
+pub const RUNTIME_EVENT_SINK_SCHEMA_VERSION: &str = "runtime-event-sink-v1";
+/// Runtime event stream schema — used by `framework-extra/src/orchestration_controller.rs`.
+pub const RUNTIME_EVENT_STREAM_SCHEMA_VERSION: &str = "runtime-event-stream-v1";
+/// Runtime event handoff schema — used by `framework-extra/src/orchestration_controller.rs`.
+pub const RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION: &str = "runtime-event-handoff-v1";
+
 pub const TERMINAL_STORY_STATES: &[&str] = &[
     "completed",
     "finalized",

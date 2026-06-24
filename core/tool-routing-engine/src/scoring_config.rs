@@ -34,7 +34,6 @@ pub struct ToolScoringWeights {
     pub layer_penalties: HashMap<String, f64>,
     /// Minimum Jaccard similarity for fuzzy rescue (0.0–1.0).
     #[serde(default = "default_fuzzy_min")]
-    #[allow(dead_code)]
     pub fuzzy_min_similarity: f64,
 }
 

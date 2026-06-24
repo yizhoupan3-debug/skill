@@ -262,19 +262,19 @@ pub fn register_and_generate(
         row[i] = json!(opts.description);
     }
     if let Some(&i) = col_idx.get("layer") {
-        row[i] = json!(crate::frontmatter::RoutingLayer::L3);
+        row[i] = json!(routing_layer_str(opts.routing_layer));
     }
     if let Some(&i) = col_idx.get("owner") {
-        row[i] = json!("owner");
+        row[i] = json!(routing_owner_str(opts.routing_owner));
     }
     if let Some(&i) = col_idx.get("gate") {
-        row[i] = json!("none");
+        row[i] = json!(routing_gate_str(opts.routing_gate));
     }
     if let Some(&i) = col_idx.get("priority") {
-        row[i] = json!("P2");
+        row[i] = json!(routing_priority_str(opts.routing_priority));
     }
     if let Some(&i) = col_idx.get("session_start") {
-        row[i] = json!("n/a");
+        row[i] = json!(session_start_str(opts.session_start));
     }
     if let Some(&i) = col_idx.get("trigger_hints") {
         row[i] = json!(opts.trigger_hints);

@@ -28,7 +28,7 @@ fn rfv_state_read_round_trip_smoke() {
 
     let path = quality_gate_state_path(&repo, "rfv-task").expect("path");
     let state = json!({
-        "schema_version": "router-rs-rfv-loop-v1",
+        "schema_version": "router-rs-quality-gate-v1",
         "loop_status": "active",
         "goal": "prove convergence",
     });

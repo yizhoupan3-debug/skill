@@ -1,8 +1,9 @@
 //! Tool search API: top-k matching results from the unified registry.
 
-use crate::tool_types::{tokenize_text, McpToolRecord};
-use crate::tool_routing::score_tool;
+use crate::routing::score_tool;
 use crate::scoring_config::tool_scoring_weights;
+use core_state_utils::text_utils::tokenize_cjk_aware as tokenize_text;
+use mcp_tool_registry::McpToolRecord;
 
 /// A single search result with score and matched tokens.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -75,14 +76,10 @@ pub fn search_tools(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tool_types::McpToolRecord;
-    use std::collections::HashSet;
 
-    fn test_record(slug: &str, keywords: &[&str]) -> McpToolRecord {
-        let mut record = McpToolRecord {
+    fn test_tool_record(slug: &str, keywords: &[&str]) -> McpToolRecord {
+        McpToolRecord {
             slug: slug.to_string(),
-            slug_lower: String::new(),
-            display_name_lower: String::new(),
             display_name: format!("Display {slug}"),
             description: format!("Description for {slug}"),
             layer: "builtin".to_string(),
@@ -90,27 +87,20 @@ mod tests {
             owner: "framework".to_string(),
             gate: "none".to_string(),
             trigger_hints: keywords.iter().map(|s| s.to_string()).collect(),
-            name_tokens: HashSet::new(),
-            keyword_tokens: HashSet::new(),
-            desc_tokens: HashSet::new(),
-            alias_tokens: HashSet::new(),
-            do_not_use_tokens: HashSet::new(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
             tool_flags: vec![],
             input_schema_json: None,
-        };
-        McpToolRecord::derive_tokens(&mut record);
-        record
+        }
     }
 
     #[test]
     fn search_returns_top_k() {
         let records = vec![
-            test_record("pdf_read", &["pdf", "文档"]),
-            test_record("pdf_write", &["pdf", "写入"]),
-            test_record("browser_screenshot", &["截图", "浏览器"]),
-            test_record("browser_click", &["点击", "浏览器"]),
+            test_tool_record("pdf_read", &["pdf", "文档"]),
+            test_tool_record("pdf_write", &["pdf", "写入"]),
+            test_tool_record("browser_screenshot", &["截图", "浏览器"]),
+            test_tool_record("browser_click", &["点击", "浏览器"]),
         ];
         let results = search_tools("pdf", &records, 2);
         assert_eq!(results.len(), 2);
@@ -119,13 +109,13 @@ mod tests {
 
     #[test]
     fn search_empty_query() {
-        let records = vec![test_record("pdf_read", &["pdf"])];
+        let records = vec![test_tool_record("pdf_read", &["pdf"])];
         assert!(search_tools("", &records, 10).is_empty());
     }
 
     #[test]
     fn search_zero_top_k() {
-        let records = vec![test_record("pdf_read", &["pdf"])];
+        let records = vec![test_tool_record("pdf_read", &["pdf"])];
         assert!(search_tools("pdf", &records, 0).is_empty());
     }
 }

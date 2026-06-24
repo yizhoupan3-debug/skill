@@ -11,6 +11,11 @@ use fr_contracts::execution_contract::{
     build_steady_state_execution_kernel_metadata,
 };
 use routing_engine::route::ROUTE_AUTHORITY;
+use fr_utils::constants::{
+    FRAMEWORK_RUNTIME_AUTHORITY, RUNTIME_BACKGROUND_ORCHESTRATION_SCHEMA_VERSION,
+    RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION, RUNTIME_EVENT_SINK_SCHEMA_VERSION,
+    RUNTIME_EVENT_STREAM_SCHEMA_VERSION, RUNTIME_SANDBOX_LIFECYCLE_SCHEMA_VERSION,
+};
 use rt_storage::runtime_envelope_ids::{
     BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION,
     RUNTIME_CONTROL_PLANE_AUTHORITY, RUNTIME_CONTROL_PLANE_SCHEMA_VERSION,
@@ -31,7 +36,6 @@ use framework_kernel::stdio_payload_types::{
 };
 use framework_kernel::stdio_payload_types::runtime_concurrency_defaults_payload;
 
-use fr_utils::constants::FRAMEWORK_RUNTIME_AUTHORITY;
 use fr_utils::json_value::required_non_empty_string;
 
 fn background_effect_plan(next_step: &str) -> BackgroundControlEffectPlanPayload {
@@ -664,7 +668,7 @@ pub fn build_runtime_control_plane_payload() -> Value {
             "kernel_mode_support": ["dry_run", "live"],
             "execution_schema_version": EXECUTION_SCHEMA_VERSION,
             "sandbox_lifecycle_contract": {
-                "schema_version": "runtime-sandbox-lifecycle-v1",
+                "schema_version": RUNTIME_SANDBOX_LIFECYCLE_SCHEMA_VERSION,
                 "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
                 "role": "sandbox-lifecycle-control",
                 "projection": "rust-native-projection",
@@ -712,7 +716,7 @@ pub fn build_runtime_control_plane_payload() -> Value {
             "projection": "rust-native-projection",
             "delegate_kind": "rust-background-control-policy",
             "orchestration_contract": {
-                "schema_version": "runtime-background-orchestration-v1",
+                "schema_version": RUNTIME_BACKGROUND_ORCHESTRATION_SCHEMA_VERSION,
                 "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
                 "role": "background-orchestration-control",
                 "projection": "rust-native-projection",
@@ -988,9 +992,9 @@ pub fn build_runtime_observability_exporter_descriptor() -> Value {
         "dashboard_schema_version": RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION,
         "signal_vocabulary": RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
         "export_path": "jsonl-plus-otel",
-        "jsonl_sink_schema_version": "runtime-event-sink-v1",
-        "trace_stream_schema_version": "runtime-event-stream-v1",
-        "trace_handoff_schema_version": "runtime-event-handoff-v1",
+        "jsonl_sink_schema_version": RUNTIME_EVENT_SINK_SCHEMA_VERSION,
+        "trace_stream_schema_version": RUNTIME_EVENT_STREAM_SCHEMA_VERSION,
+        "trace_handoff_schema_version": RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION,
         "ownership_lane": "rust-contract-lane",
         "producer_owner": "rust-control-plane",
         "producer_authority": RUNTIME_CONTROL_PLANE_AUTHORITY,

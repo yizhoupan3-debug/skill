@@ -1,62 +1,18 @@
 //! Trigram-based fuzzy matching fallback for skill routing.
 //!
-//! When exact token matching yields no hit or a low-confidence hit,
-//! this module computes trigram Jaccard similarity between the query
-//! and each skill record's `trigger_hints` to find the closest match.
+//! Wraps `routing-core` trigram primitives with skill-record-specific logic.
+//! The core trigram extraction and Jaccard similarity live in `routing-core`;
+//! this module adds CJK-aware normalization and the `SkillRecord`-specific
+//! `fuzzy_fallback_score` function.
 
 use super::text::normalize_text;
 use super::types::SkillRecord;
-use std::collections::HashSet;
 
 /// Minimum trigram similarity required for a fuzzy match to be accepted.
 pub const FUZZY_MIN_SIMILARITY: f64 = 0.4;
 
-/// Extract the set of character-level trigrams from a normalized string.
-///
-/// Uses Unicode-safe iteration (`.chars()`). A string shorter than 3
-/// characters yields a single trigram equal to the entire string so
-/// that very short queries still participate in matching.
-fn extract_trigrams(text: &str) -> HashSet<String> {
-    let chars: Vec<char> = text.chars().collect();
-    if chars.len() < 3 {
-        let mut set = HashSet::new();
-        if !text.is_empty() {
-            set.insert(text.to_string());
-        }
-        return set;
-    }
-    chars
-        .windows(3)
-        .map(|window| window.iter().collect())
-        .collect()
-}
-
-/// Compute Jaccard similarity between two trigram sets.
-///
-/// Returns 0.0 when both sets are empty (avoiding 0/0).
-fn jaccard_similarity(a: &HashSet<String>, b: &HashSet<String>) -> f64 {
-    if a.is_empty() && b.is_empty() {
-        return 0.0;
-    }
-    let intersection = a.intersection(b).count();
-    let union = a.union(b).count();
-    if union == 0 {
-        return 0.0;
-    }
-    intersection as f64 / union as f64
-}
-
-/// Compute trigram similarity between two raw strings.
-///
-/// Both inputs are normalized (lowercased, whitespace-collapsed) before
-/// trigram extraction. Returns a Jaccard similarity in [0.0, 1.0].
-pub fn trigram_similarity(a: &str, b: &str) -> f64 {
-    let norm_a = normalize_text(a);
-    let norm_b = normalize_text(b);
-    let trigrams_a = extract_trigrams(&norm_a);
-    let trigrams_b = extract_trigrams(&norm_b);
-    jaccard_similarity(&trigrams_a, &trigrams_b)
-}
+/// Re-export core trigram primitives from routing-core.
+pub use routing_core::fuzzy::{extract_trigrams, jaccard_similarity, trigram_similarity};
 
 /// Compute the best fuzzy fallback score for a query against a single
 /// skill record by comparing against all its `trigger_hints`.
@@ -86,84 +42,7 @@ pub fn fuzzy_fallback_score(query: &str, record: &SkillRecord) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_extract_trigrams_basic() {
-        let trigrams = extract_trigrams("hello");
-        assert!(trigrams.contains("hel"));
-        assert!(trigrams.contains("ell"));
-        assert!(trigrams.contains("llo"));
-        assert_eq!(trigrams.len(), 3);
-    }
-
-    #[test]
-    fn test_extract_trigrams_short_string() {
-        let trigrams = extract_trigrams("ab");
-        assert_eq!(trigrams.len(), 1);
-        assert!(trigrams.contains("ab"));
-    }
-
-    #[test]
-    fn test_extract_trigrams_empty() {
-        let trigrams = extract_trigrams("");
-        assert!(trigrams.is_empty());
-    }
-
-    #[test]
-    fn test_extract_trigrams_unicode() {
-        let trigrams = extract_trigrams("代码审查");
-        assert_eq!(trigrams.len(), 2); // "代码审", "码审查"
-    }
-
-    #[test]
-    fn test_jaccard_identical() {
-        let a: HashSet<String> = ["abc", "bcd"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(jaccard_similarity(&a, &a.clone()), 1.0);
-    }
-
-    #[test]
-    fn test_jaccard_disjoint() {
-        let a: HashSet<String> = ["abc"].iter().map(|s| s.to_string()).collect();
-        let b: HashSet<String> = ["xyz"].iter().map(|s| s.to_string()).collect();
-        assert_eq!(jaccard_similarity(&a, &b), 0.0);
-    }
-
-    #[test]
-    fn test_jaccard_empty_sets() {
-        let a: HashSet<String> = HashSet::new();
-        assert_eq!(jaccard_similarity(&a, &a.clone()), 0.0);
-    }
-
-    #[test]
-    fn test_jaccard_partial_overlap() {
-        let a: HashSet<String> = ["abc", "bcd", "cde"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        let b: HashSet<String> = ["bcd", "cde", "def"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        // intersection = {bcd, cde} = 2, union = {abc, bcd, cde, def} = 4
-        assert_eq!(jaccard_similarity(&a, &b), 0.5);
-    }
-
-    #[test]
-    fn test_trigram_similarity_identical() {
-        assert_eq!(trigram_similarity("hello world", "hello world"), 1.0);
-    }
-
-    #[test]
-    fn test_trigram_similarity_similar() {
-        let sim = trigram_similarity("code review", "code reviewing");
-        assert!(sim > 0.5, "expected >0.5, got {sim}");
-    }
-
-    #[test]
-    fn test_trigram_similarity_different() {
-        let sim = trigram_similarity("hello", "zzzzz");
-        assert_eq!(sim, 0.0);
-    }
+    use std::collections::HashSet;
 
     #[test]
     fn test_fuzzy_fallback_score_with_hints() {

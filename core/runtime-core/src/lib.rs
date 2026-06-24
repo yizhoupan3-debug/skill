@@ -116,6 +116,19 @@ pub(crate) fn register_tool_registry_hooks() {
                 let path = std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH);
                 Some(path)
             },
+        )
+        .ok(); // ignore Err if already registered
+    });
+}
+
+// ── tool-routing-engine hooks registration ──
+static TOOL_ROUTING_HOOKS_INIT: OnceLock<()> = OnceLock::new();
+
+/// Register tool-routing-engine hooks with runtime-core implementations.
+/// Safe to call multiple times; only the first call takes effect.
+fn register_tool_routing_engine_hooks() {
+    TOOL_ROUTING_HOOKS_INIT.get_or_init(|| {
+        tool_routing_engine::hooks::register_hooks(
             // discover_scoring_weights_path: resolve from FRAMEWORK_ROOT
             || {
                 let root = std::env::var("FRAMEWORK_ROOT").ok()?;
@@ -421,6 +434,7 @@ pub fn register_host_projection_hooks() {
 pub fn init_hooks() {
     register_routing_hooks();
     register_tool_registry_hooks();
+    register_tool_routing_engine_hooks();
     register_host_projection_hooks();
 }
 

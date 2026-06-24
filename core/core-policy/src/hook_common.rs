@@ -170,7 +170,7 @@ pub const COMPLETION_DETECT_EN: &[&str] = &["done", "finished", "completed", "su
 /// 完成宣称（触发 closeout）：不含「验证通过/测试通过」等，避免与 goal verify 聊天轨打架；
 /// 避免「完成度 / 完成任务拆分」等子串误命中。
 pub const COMPLETION_DETECT_ZH_PHRASES: &[&str] =
-    &["已完成", "已经完成", "全部完成", "完成了", "搞定"];
+    &["已完成", "已经完成", "全部完成", "完成了", "搞定", "完成", "通过"];
 
 /// 仅用于无磁盘 GOAL 时的聊天 progress/verify 提示（不进 closeout 词表）。
 pub const GOAL_CHAT_VERIFY_ZH_PHRASES: &[&str] = &["验证通过", "测试通过", "审核通过", "已通过"];
