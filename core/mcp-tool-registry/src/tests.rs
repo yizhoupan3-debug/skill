@@ -6,6 +6,8 @@ mod routing_tests {
     fn test_record(slug: &str, display: &str, keywords: &[&str]) -> McpToolRecord {
         let mut record = McpToolRecord {
             slug: slug.to_string(),
+            slug_lower: String::new(),
+            display_name_lower: String::new(),
             display_name: display.to_string(),
             description: format!("Tool: {display}"),
             layer: "builtin".to_string(),
@@ -16,9 +18,12 @@ mod routing_tests {
             name_tokens: HashSet::new(),
             keyword_tokens: HashSet::new(),
             desc_tokens: HashSet::new(),
+            alias_tokens: HashSet::new(),
+            do_not_use_tokens: HashSet::new(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
             tool_flags: vec![],
+            input_schema_json: None,
         };
         McpToolRecord::derive_tokens(&mut record);
         record
@@ -39,7 +44,7 @@ mod routing_tests {
     #[test]
     fn route_exact_match() {
         let records = make_records();
-        let decision = crate::tool_routing::route_tool_from_records("pdf-read", &records);
+        let decision = crate::tool_routing::route_tool_from_records("pdf-read", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "pdf-read");
     }
@@ -47,7 +52,7 @@ mod routing_tests {
     #[test]
     fn route_chinese_keyword() {
         let records = make_records();
-        let decision = crate::tool_routing::route_tool_from_records("帮我截图", &records);
+        let decision = crate::tool_routing::route_tool_from_records("帮我截图", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "browser-screenshot");
     }
@@ -55,11 +60,7 @@ mod routing_tests {
     #[test]
     fn route_browser_action() {
         let records = make_records();
-        // "点击浏览器按钮" — both browser-click and browser-screenshot match "browser" name token
-        // and both have CJK trigger hints. browser-screenshot matches "浏览器" (3 keyword hits)
-        // while browser-click matches "点击" (2 keyword hits). The result depends on scoring weights.
-        // Use "click 按钮" to clearly target browser-click via English trigger hint.
-        let decision = crate::tool_routing::route_tool_from_records("click 按钮", &records);
+        let decision = crate::tool_routing::route_tool_from_records("click 按钮", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "browser-click");
     }
@@ -67,7 +68,7 @@ mod routing_tests {
     #[test]
     fn route_web_fetch() {
         let records = make_records();
-        let decision = crate::tool_routing::route_tool_from_records("抓取网页内容", &records);
+        let decision = crate::tool_routing::route_tool_from_records("抓取网页内容", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "web-fetch");
     }
@@ -75,7 +76,7 @@ mod routing_tests {
     #[test]
     fn route_code_search() {
         let records = make_records();
-        let decision = crate::tool_routing::route_tool_from_records("搜索代码", &records);
+        let decision = crate::tool_routing::route_tool_from_records("搜索代码", &records, None);
         assert!(decision.is_some());
         assert_eq!(decision.unwrap().selected_tool, "codegraph-search");
     }
@@ -91,6 +92,26 @@ mod routing_tests {
     #[test]
     fn route_empty_returns_none() {
         let records = make_records();
-        assert!(crate::tool_routing::route_tool_from_records("", &records).is_none());
+        assert!(crate::tool_routing::route_tool_from_records("", &records, None).is_none());
+    }
+
+    #[test]
+    fn route_host_filter() {
+        let records = make_records();
+        // Pass a non-matching host_id; all test records have host_platforms=["claude"],
+        // so "cursor" should penalize all
+        let decision = crate::tool_routing::route_tool_from_records("PDF 文档", &records, Some("cursor"));
+        assert!(decision.is_none());
+    }
+
+    #[test]
+    fn route_fuzzy_typo() {
+        let records = make_records();
+        // "screeenshot" typo should fuzzy-match to "browser-screenshot"
+        let decision = crate::tool_routing::route_tool_from_records("screeenshot", &records, None);
+        assert!(decision.is_some(), "typo should fuzzy-match");
+        let d = decision.unwrap();
+        assert!(d.fuzzy_match, "should be flagged as fuzzy match");
+        assert_eq!(d.selected_tool, "browser-screenshot");
     }
 }

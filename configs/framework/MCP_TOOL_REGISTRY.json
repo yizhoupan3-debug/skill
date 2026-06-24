@@ -19,7 +19,8 @@
     "trigger_hints",
     "host_platforms",
     "mcp_server",
-    "tool_flags"
+    "tool_flags",
+    "input_schema"
   ],
   "tools": [
     [
@@ -46,7 +47,24 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "operation"
+        ],
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        }
+      }
     ],
     [
       "goal_state_read",
@@ -70,7 +88,15 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          }
+        }
+      }
     ],
     [
       "quality_gate_manage",
@@ -94,7 +120,24 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "operation"
+        ],
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          }
+        }
+      }
     ],
     [
       "quality_gate_status",
@@ -118,7 +161,15 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          }
+        }
+      }
     ],
     [
       "record_evidence",
@@ -141,7 +192,28 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "tool_name",
+          "command"
+        ],
+        "properties": {
+          "tool_name": {
+            "type": "string"
+          },
+          "command": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "output": {
+            "type": "string"
+          }
+        }
+      }
     ],
     [
       "session_checkpoint",
@@ -165,7 +237,27 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "summary"
+        ],
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "next_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "task_id": {
+            "type": "string"
+          }
+        }
+      }
     ],
     [
       "closeout_gate",
@@ -189,7 +281,18 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "reviewer_lane": {
+            "type": "string"
+          }
+        }
+      }
     ],
     [
       "closeout_record_write",
@@ -212,7 +315,44 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "task_id",
+          "summary",
+          "verification_status"
+        ],
+        "properties": {
+          "task_id": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "verification_status": {
+            "type": "string"
+          },
+          "changed_files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
     ],
     [
       "framework_snapshot",
@@ -236,7 +376,15 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "properties": {
+          "detail_level": {
+            "type": "string"
+          }
+        }
+      }
     ],
     [
       "skill_read",
@@ -260,7 +408,21 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "skill"
+        ],
+        "properties": {
+          "skill": {
+            "type": "string"
+          },
+          "maxChars": {
+            "type": "integer"
+          }
+        }
+      }
     ],
     [
       "skill_route",
@@ -284,7 +446,18 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        }
+      }
     ],
     [
       "skill_search",
@@ -308,7 +481,24 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string"
+          },
+          "hostId": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          }
+        }
+      }
     ],
     [
       "skill_route_status",
@@ -331,7 +521,11 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "properties": {}
+      }
     ],
     [
       "web_fetch",
@@ -356,7 +550,21 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "max_bytes": {
+            "type": "integer"
+          }
+        }
+      }
     ],
     [
       "routing_evolution",
@@ -381,7 +589,24 @@
         "codex"
       ],
       "router-rs",
-      []
+      [],
+      {
+        "type": "object",
+        "required": [
+          "operation"
+        ],
+        "properties": {
+          "operation": {
+            "type": "string"
+          },
+          "skill": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer"
+          }
+        }
+      }
     ],
     [
       "research_aigc_check",

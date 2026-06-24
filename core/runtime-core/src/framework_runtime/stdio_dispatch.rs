@@ -357,7 +357,7 @@ fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, String
         "route_tool" => {
             let query = required_non_empty_string(&payload, "query", "stdio route_tool")?;
             let registry_path = resolve_tool_registry_path_from_payload(&payload)?;
-            let decision = mcp_tool_registry::route_tool(&query, &registry_path)?
+            let decision = mcp_tool_registry::route_tool(&query, &registry_path, None)?
                 .ok_or_else(|| format!("route_tool: no matching tool found for query '{query}'"))?;
             serde_json::to_value(&decision).map_err(|e| e.to_string())
         }
@@ -369,7 +369,7 @@ fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, String
             let registry_path = resolve_tool_registry_path_from_payload(&payload)?;
             let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
                 .map_err(|e| format!("search_tools: {e}"))?;
-            let results = mcp_tool_registry::search_tools(&query, records, top_k);
+            let results = mcp_tool_registry::search_tools(&query, &records, top_k);
             serde_json::to_value(&results).map_err(|e| e.to_string())
         }
         "tool_registry_status" => {

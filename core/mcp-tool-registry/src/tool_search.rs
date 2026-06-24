@@ -24,7 +24,11 @@ const MAX_TOP_K: usize = 100;
 
 /// Search tools by query, returning top-k results sorted by score.
 /// Uses the same scoring pipeline as route_tool for consistency.
-pub fn search_tools(query: &str, records: &[McpToolRecord], top_k: usize) -> Vec<ToolSearchResult> {
+pub fn search_tools(
+    query: &str,
+    records: &[McpToolRecord],
+    top_k: usize,
+) -> Vec<ToolSearchResult> {
     if records.is_empty() || query.trim().is_empty() || top_k == 0 {
         return Vec::new();
     }
@@ -77,6 +81,8 @@ mod tests {
     fn test_record(slug: &str, keywords: &[&str]) -> McpToolRecord {
         let mut record = McpToolRecord {
             slug: slug.to_string(),
+            slug_lower: String::new(),
+            display_name_lower: String::new(),
             display_name: format!("Display {slug}"),
             description: format!("Description for {slug}"),
             layer: "builtin".to_string(),
@@ -87,9 +93,12 @@ mod tests {
             name_tokens: HashSet::new(),
             keyword_tokens: HashSet::new(),
             desc_tokens: HashSet::new(),
+            alias_tokens: HashSet::new(),
+            do_not_use_tokens: HashSet::new(),
             host_platforms: vec!["claude".to_string()],
             mcp_server: "router-rs".to_string(),
             tool_flags: vec![],
+            input_schema_json: None,
         };
         McpToolRecord::derive_tokens(&mut record);
         record

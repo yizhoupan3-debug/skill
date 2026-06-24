@@ -1,18 +1,24 @@
 {
-  "schema_version": "tool-scoring-weights-v1",
+  "schema_version": "tool-scoring-weights-v2",
   "exact_name_boost": 100.0,
-  "name_tokens_base": 3.0,
-  "name_tokens_per_token": 8.0,
-  "trigger_hint_per_match": 15.0,
-  "keyword_per_match": 3.0,
-  "keyword_max": 20.0,
+  "display_name_per_match": 8.0,
+  "name_tokens_base": 14.0,
+  "name_tokens_per_token": 4.0,
+  "trigger_hint_per_match": 20.0,
+  "keyword_per_keyword": 3.0,
+  "keyword_max": 24.0,
+  "alias_hits_base": 12.0,
+  "alias_hits_per_hit": 4.0,
   "description_per_match": 1.0,
   "description_max": 15.0,
+  "do_not_use_penalty_max_ratio": 0.3,
+  "do_not_use_penalty_per_hit": 5.0,
   "layer_penalties": {
     "builtin": 0.0,
     "research": 0.0,
     "external": -2.0,
     "external-binary": -2.0,
     "independent": -1.0
-  }
+  },
+  "fuzzy_min_similarity": 0.35
 }

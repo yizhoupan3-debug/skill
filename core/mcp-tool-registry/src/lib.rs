@@ -6,6 +6,7 @@
 //! across dispatch domains (CompositeRegistry, Research, Browser-MCP, External binaries,
 //! codegraph-rs).
 
+pub mod fuzzy;
 pub mod hooks;
 pub(crate) mod scoring_config;
 pub mod tool_registry;
@@ -15,10 +16,10 @@ pub mod tool_types;
 
 use std::path::PathBuf;
 
-pub use tool_types::{McpToolDecision, McpToolRecord};
+pub use tool_types::{McpToolDecision, McpToolInputSchema, McpToolRecord};
 pub use tool_routing::route_tool;
 pub use tool_search::{search_tools, ToolSearchResult};
-pub use tool_registry::{load_tool_records, load_tool_records_cached};
+pub use tool_registry::{load_tool_records, load_tool_records_cached, invalidate_tool_cache};
 
 /// Resolve the path to MCP_TOOL_REGISTRY.json.
 /// Uses the hooks-injected path if available, otherwise returns the default.

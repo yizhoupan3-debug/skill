@@ -14,6 +14,12 @@ pub use core_state_utils::text_utils::tokenize_cjk_aware as tokenize_text;
 pub struct McpToolRecord {
     /// Unique tool identifier (e.g. "pdf_read", "browser_screenshot").
     pub slug: String,
+    /// Pre-computed lowercase slug for O(1) exact matching.
+    #[serde(default, skip)]
+    pub slug_lower: String,
+    /// Pre-computed lowercase display_name.
+    #[serde(default, skip)]
+    pub display_name_lower: String,
     /// Human-readable name (e.g. "PDF 文本提取").
     pub display_name: String,
     /// Detailed description of the tool's capability.
@@ -36,25 +42,47 @@ pub struct McpToolRecord {
     /// Pre-computed to avoid re-tokenizing on every scoring call.
     #[serde(default, skip)]
     pub desc_tokens: HashSet<String>,
+    /// Tokenized display_name for alias matching (auto-derived from display_name).
+    #[serde(default, skip)]
+    pub alias_tokens: HashSet<String>,
+    /// Tokens that indicate this tool should NOT be used (auto-derived from tool_flags "deprecated").
+    #[serde(default, skip)]
+    pub do_not_use_tokens: HashSet<String>,
     /// Supported host platforms.
     pub host_platforms: Vec<String>,
     /// Target MCP server process name (e.g. "router-rs", "browser-mcp", "mcp-pdf").
     pub mcp_server: String,
     /// Extension flags for specialized routing behavior.
-    /// **Phase 2 预留**：当前未被评分管道使用，用于未来扩展（如 `"deprecated"`、`"experimental"`、`"host_filtered"` 等标记）。
+    /// e.g. "deprecated" (auto-blacklist), "experimental", "host_filtered".
     #[serde(default)]
     pub tool_flags: Vec<String>,
+    /// JSON Schema for composite-domain tools (used to generate MCP tools/list response).
+    /// Only populated for `dispatch_domain == "composite"` tools.
+    #[serde(default)]
+    pub input_schema_json: Option<McpToolInputSchema>,
+}
+
+/// JSON Schema for a composite-domain MCP tool's input parameters.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpToolInputSchema {
+    #[serde(rename = "type")]
+    pub schema_type: String,
+    #[serde(default)]
+    pub properties: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
+    pub required: Vec<String>,
 }
 
 impl McpToolRecord {
-    /// Build name_tokens, keyword_tokens, and desc_tokens from slug, trigger_hints, and description.
-    /// Uses CJK-aware tokenization so Chinese trigger hints produce
-    /// single-character tokens that match CJK query tokens.
+    /// Build all derived fields (name_tokens, keyword_tokens, desc_tokens, alias_tokens,
+    /// do_not_use_tokens, slug_lower, display_name_lower).
     pub fn derive_tokens(record: &mut McpToolRecord) {
+        record.slug_lower = record.slug.to_lowercase();
+        record.display_name_lower = record.display_name.to_lowercase();
+
         // name_tokens: split slug on - and _ (no CJK in slugs)
         record.name_tokens = record
-            .slug
-            .to_lowercase()
+            .slug_lower
             .split(|c: char| c == '-' || c == '_')
             .filter(|t| !t.is_empty())
             .map(|t| t.to_string())
@@ -75,6 +103,19 @@ impl McpToolRecord {
         record.desc_tokens = tokenize_text(&record.description.to_lowercase())
             .into_iter()
             .collect();
+
+        // alias_tokens: pre-tokenize display_name for alias matching (CJK-aware)
+        record.alias_tokens = tokenize_text(&record.display_name_lower)
+            .into_iter()
+            .collect();
+
+        // do_not_use_tokens: auto-derive from tool_flags "deprecated"
+        record.do_not_use_tokens = HashSet::new();
+        if record.tool_flags.iter().any(|f| f == "deprecated") {
+            // Add the slug and common skip-phrases as do-not-use tokens
+            record.do_not_use_tokens = record.name_tokens.clone();
+            record.do_not_use_tokens.insert("deprecated".to_string());
+        }
     }
 }
 
@@ -88,6 +129,9 @@ pub struct McpToolDecision {
     pub matched_token_count: usize,
     pub dispatch_domain: String,
     pub mcp_server: String,
+    /// True if this decision was produced by fuzzy (trigram) rescue.
+    #[serde(default)]
+    pub fuzzy_match: bool,
 }
 
 /// A candidate tool with its score during routing.

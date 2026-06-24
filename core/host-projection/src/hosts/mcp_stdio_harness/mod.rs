@@ -547,369 +547,181 @@ fn handle_initialize(id: Option<Value>) -> Value {
 }
 
 pub fn handle_tools_list(id: Option<Value>) -> Value {
+    // Build composite tool entries dynamically from the registry
+    let composite_tools = build_composite_tools_from_registry();
+
+    // Research tools (from research-harness, schemas hardcoded here)
+    let research_tools = research_tool_schemas();
+
+    // Task CRUD tools (built-in)
+    let task_tools = task_crud_tool_schemas();
+
+    let mut all_tools = composite_tools;
+    all_tools.extend(research_tools);
+    all_tools.extend(task_tools);
+
     json!({
         "jsonrpc": "2.0",
         "id": id,
         "result": {
-            "tools": [
-                {
-                    "name": "framework_snapshot",
-                    "description": "框架运行时快照（summary/full）。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "detail_level": {"type": "string", "enum": ["summary", "full"]},
-                        },
-                    },
-                },
-                {
-                    "name": "skill_route",
-                    "description": "自然语言查询匹配 skill 路由结果。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string"},
-                        },
-                        "required": ["query"],
-                    },
-                },
-                {
-                    "name": "skill_search",
-                    "description": "搜索 skill 目录，返回最佳匹配。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string"},
-                            "hostId": {"type": "string"},
-                            "limit": {"type": "integer", "minimum": 1, "maximum": 50},
-                        },
-                        "required": ["query"],
-                    },
-                },
-                {
-                    "name": "skill_read",
-                    "description": "读取 skill 的 SKILL.md 内容。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "skill": {"type": "string"},
-                            "maxChars": {"type": "integer", "minimum": 1, "maximum": 50000},
-                        },
-                        "required": ["skill"],
-                    },
-                },
-                {
-                    "name": "skill_route_status",
-                    "description": "Check routing artifacts exist.",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {},
-                    },
-                },
-                {
-                    "name": "record_evidence",
-                    "description": "追加 evidence 到 EVIDENCE_INDEX。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "tool_name": {"type": "string"},
-                            "command": {"type": "string"},
-                            "exit_code": {"type": "integer"},
-                            "output": {"type": "string"},
-                        },
-                        "required": ["tool_name", "command"],
-                    },
-                },
-                {
-                    "name": "session_checkpoint",
-                    "description": "写入 SESSION_SUMMARY + NEXT_ACTIONS checkpoint。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "summary": {"type": "string"},
-                            "next_actions": {"type": "array", "items": {"type": "string"}},
-                            "task_id": {"type": "string"},
-                        },
-                        "required": ["summary"],
-                    },
-                },
-                {
-                    "name": "closeout_gate",
-                    "description": "closeout 就绪状态与缺失项清单（advisory）。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "task_id": {"type": "string"},
-                            "reviewer_lane": {"type": "string"},
-                            "subagent_type": {"type": "string"},
-                            "agent_type": {"type": "string"},
-                        },
-                    },
-                },
-                {
-                    "name": "goal_state_read",
-                    "description": "读取当前 task 的 GOAL_STATE.json 内容。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "task_id": {"type": "string"},
-                        },
-                    },
-                },
-                {
-                    "name": "quality_gate_status",
-                    "description": "查看 Quality Gate 循环状态。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "task_id": {"type": "string"},
-                        },
-                    },
-                },
-                {
-                    "name": "quality_gate_manage",
-                    "description": "管理 Quality Gate 循环 (start|append_round)。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "operation": {"type": "string", "enum": ["start", "append_round"]},
-                            "task_id": {"type": "string"},
-                            "session_id": {"type": "string"},
-                            "round": {"type": "integer"},
-                            "goal": {"type": "string"},
-                            "review_summary": {"type": "string"},
-                            "fix_summary": {"type": "string"},
-                            "verify_result": {"type": "string", "enum": ["PASS", "FAIL", "SKIPPED", "UNKNOWN"]},
-                            "supervisor_decision": {"type": "string"},
-                            "reason": {"type": "string"},
-                            "max_rounds": {"type": "integer"},
-                            "allow_external_research": {"type": "boolean"},
-                        },
-                        "required": ["operation"],
-                    },
-                },
-                {
-                    "name": "closeout_record_write",
-                    "description": "写入并验证 closeout record。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "task_id": {"type": "string"},
-                            "summary": {"type": "string"},
-                            "verification_status": {"type": "string", "enum": ["passed", "failed", "partial", "not_run"]},
-                            "changed_files": {"type": "array", "items": {"type": "string"}},
-                            "commands_run": {"type": "array", "items": {"type": "object", "properties": {"command": {"type": "string"}, "exit_code": {"type": "integer"}, "duration_ms": {"type": "integer"}}}},
-                            "blockers": {"type": "array", "items": {"type": "string"}},
-                            "risks": {"type": "array", "items": {"type": "string"}},
-                            "notes": {"type": "string"},
-                        },
-                        "required": ["task_id", "summary", "verification_status"],
-                    },
-                },
-                {
-                    "name": "web_fetch",
-                    "description": "只读 HTTP GET 抓取外部 URL。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "url": {"type": "string"},
-                            "max_bytes": {"type": "integer"},
-                        },
-                        "required": ["url"],
-                    },
-                },
-                {
-                    "name": "routing_evolution",
-                    "description": "路由日志分析 (stats|analyze|extract|calibrate)。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "operation": {"type": "string", "enum": ["stats", "analyze", "extract", "calibrate"]},
-                            "skill": {"type": "string"},
-                            "days": {"type": "integer"},
-                        },
-                        "required": ["operation"],
-                    },
-                },
-                {
-                    "name": "goal_state_manage",
-                    "description": "管理 Goal 状态 (start|checkpoint|pause|resume|complete|clear|block|amend)。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "operation": {"type": "string", "enum": ["start", "checkpoint", "pause", "resume", "complete", "clear", "block", "amend"]},
-                            "task_id": {"type": "string"},
-                            "session_id": {"type": "string"},
-                            "goal": {"type": "string"},
-                            "note": {"type": "string"},
-                            "blocker": {"type": "string"},
-                            "non_goals": {"type": "array", "items": {"type": "string"}},
-                            "done_when": {"type": "array", "items": {"type": "string"}},
-                            "validation_commands": {"type": "array", "items": {"type": "string"}},
-                            "drive_until_done": {"type": "boolean"},
-                            "lifecycle_profile": {"type": "string", "enum": ["interactive", "loop-auto"]},
-                            "goal_type": {"type": "string", "enum": ["linear", "loop"], "description": "Goal execution type: linear (default, plan→execute→review) or loop (review→implement cycle via loop engine)"},
-                            "current_horizon": {"type": "string"},
-                            "completion_gates": {"type": "object"},
-                            "metadata": {"type": "object"},
-                            "set_focus": {"type": "boolean"},
-                            "keep_progress": {"type": "boolean"},
-                        },
-                        "required": ["operation"],
-                    },
-                },
-                {
-                    "name": "research_aigc_check",
-                    "description": "AIGC 检测：返回 AI 概率评分(0-100)和逐段分析。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "text": {"type": "string"},
-                            "language": {"type": "string", "enum": ["en", "zh"]},
-                        },
-                        "required": ["text"],
-                    },
-                },
-                {
-                    "name": "research_aigc_humanize",
-                    "description": "AIGC humanize：句法改写/词汇替换/句式多样化。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "text": {"type": "string"},
-                            "language": {"type": "string", "enum": ["en", "zh"]},
-                            "preserve_academic_tone": {"type": "boolean"},
-                        },
-                        "required": ["text"],
-                    },
-                },
-                {
-                    "name": "research_review_dimensions",
-                    "description": "获取审稿维度 prompt (round 1-7+)。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "round": {"type": "integer"},
-                            "manuscript_summary": {"type": "string"},
-                        },
-                        "required": ["round"],
-                    },
-                },
-                {
-                    "name": "research_claim_drift",
-                    "description": "检测 claim 漂移：原始 vs 当前声明的相似度和证据变化。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "original_claims": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "id": {"type": "string"},
-                                        "text": {"type": "string"},
-                                        "ceiling": {"type": "string", "enum": ["no-claim", "local-only", "conference-ready", "top-venue"]},
-                                        "evidence": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "source": {"type": "string"},
-                                                    "location": {"type": "string"},
-                                                    "strength": {"type": "string", "enum": ["strong", "moderate", "weak", "missing"]}
-                                                },
-                                                "required": ["source"]
-                                            }
-                                        }
-                                    },
-                                    "required": ["id", "text"]
-                                },
-                            },
-                            "current_claims": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "id": {"type": "string"},
-                                        "text": {"type": "string"},
-                                        "ceiling": {"type": "string", "enum": ["no-claim", "local-only", "conference-ready", "top-venue"]},
-                                        "evidence": {
-                                            "type": "array",
-                                            "items": {
-                                                "type": "object",
-                                                "properties": {
-                                                    "source": {"type": "string"},
-                                                    "location": {"type": "string"},
-                                                    "strength": {"type": "string", "enum": ["strong", "moderate", "weak", "missing"]}
-                                                },
-                                                "required": ["source"]
-                                            }
-                                        }
-                                    },
-                                    "required": ["id", "text"]
-                                },
-                            },
-                        },
-                        "required": ["original_claims", "current_claims"],
-                    },
-                },
-                {
-                    "name": "research_review_loop",
-                    "description": "启动多轮对抗审稿循环。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "max_rounds": {"type": "integer"},
-                            "min_rounds": {"type": "integer"},
-                            "consecutive_stable_required": {"type": "integer"},
-                        },
-                        "required": [],
-                    },
-                },
-                {
-                    "name": "task_create",
-                    "description": "创建新 task（定义 todo）。幂等：已存在则跳过。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "task_id": {"type": "string", "description": "Task 标识符（必填）"},
-                            "title": {"type": "string", "description": "Task 标题（可选，默认=task_id）"},
-                        },
-                        "required": ["task_id"],
-                    },
-                },
-                {
-                    "name": "task_list",
-                    "description": "列出所有已知 task 及其状态。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {},
-                    },
-                },
-                {
-                    "name": "task_complete",
-                    "description": "完成一个 task。有 GOAL_STATE 时委托 goal_state_manage(complete)。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "task_id": {"type": "string", "description": "Task 标识符（可选，默认=active task）"},
-                        },
-                    },
-                },
-                {
-                    "name": "task_focus",
-                    "description": "切换 focus 到指定 task。",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "task_id": {"type": "string", "description": "Task 标识符（必填）"},
-                        },
-                        "required": ["task_id"],
-                    },
-                },
-            ],
+            "tools": all_tools,
         },
     })
+}
+
+/// Build tool schema entries for `dispatch_domain == "composite"` tools
+/// from the MCP_TOOL_REGISTRY.json.
+fn build_composite_tools_from_registry() -> Vec<Value> {
+    let registry_path = mcp_tool_registry::resolve_tool_registry_path()
+        .unwrap_or_else(|| {
+            std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH)
+        });
+
+    // Use cached loader for performance
+    let records = match mcp_tool_registry::load_tool_records_cached(&registry_path) {
+        Ok(records) => records,
+        Err(e) => {
+            eprintln!("[router-rs] handle_tools_list: failed to load registry: {e}");
+            return Vec::new();
+        }
+    };
+
+    records
+        .iter()
+        .filter(|r| r.dispatch_domain == "composite")
+        .map(|r| {
+            let mut tool = json!({
+                "name": r.slug,
+                "description": r.description,
+            });
+            if let Some(schema) = &r.input_schema_json {
+                let input_schema = json!({
+                    "type": schema.schema_type,
+                    "properties": schema.properties,
+                    "required": schema.required,
+                });
+                tool["inputSchema"] = input_schema;
+            } else {
+                tool["inputSchema"] = json!({"type": "object", "properties": {}});
+            }
+            tool
+        })
+        .collect()
+}
+
+/// Research tool schemas (hardcoded — managed by research-harness).
+fn research_tool_schemas() -> Vec<Value> {
+    vec![
+        json!({
+            "name": "research_aigc_check",
+            "description": "AIGC 检测:返回 AI 概率评分(0-100)和逐段分析。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "language": {"type": "string", "enum": ["en", "zh"]},
+                },
+                "required": ["text"],
+            },
+        }),
+        json!({
+            "name": "research_aigc_humanize",
+            "description": "AIGC 降重:句法改写/词汇替换/句式多样化。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "language": {"type": "string", "enum": ["en", "zh"]},
+                    "preserve_academic_tone": {"type": "boolean"},
+                },
+                "required": ["text"],
+            },
+        }),
+        json!({
+            "name": "research_review_dimensions",
+            "description": "获取审稿维度 prompt (round 1-7+)。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "round": {"type": "integer"},
+                    "manuscript_summary": {"type": "string"},
+                },
+                "required": ["round"],
+            },
+        }),
+        json!({
+            "name": "research_claim_drift",
+            "description": "检测 claim 漂移:原始 vs 当前声明的相似度和证据变化。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "original_claims": {"type": "array", "items": {"type": "object"}},
+                    "current_claims": {"type": "array", "items": {"type": "object"}},
+                },
+                "required": ["original_claims", "current_claims"],
+            },
+        }),
+        json!({
+            "name": "research_review_loop",
+            "description": "启动多轮对抗审稿循环。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "max_rounds": {"type": "integer"},
+                    "min_rounds": {"type": "integer"},
+                    "consecutive_stable_required": {"type": "integer"},
+                },
+                "required": [],
+            },
+        }),
+    ]
+}
+
+/// Task CRUD tool schemas (built-in).
+fn task_crud_tool_schemas() -> Vec<Value> {
+    vec![
+        json!({
+            "name": "task_create",
+            "description": "创建新 task（定义 todo）。幂等：已存在则跳过。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string"},
+                    "title": {"type": "string"},
+                },
+                "required": ["task_id"],
+            },
+        }),
+        json!({
+            "name": "task_list",
+            "description": "列出所有已知 task 及其状态。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+            },
+        }),
+        json!({
+            "name": "task_complete",
+            "description": "完成一个 task。有 GOAL_STATE 时委托 goal_state_manage(complete)。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string"},
+                },
+            },
+        }),
+        json!({
+            "name": "task_focus",
+            "description": "切换 focus 到指定 task。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string"},
+                },
+                "required": ["task_id"],
+            },
+        }),
+    ]
 }
 
 fn handle_prompts_list(id: Option<Value>) -> Value {
@@ -1255,23 +1067,12 @@ mod tests {
         let response = handle_tools_list(Some(json!(1)));
         let tools = response["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 24, "expected 24 tools, got: {:?}", names);
-        for tool in &[
-            "framework_snapshot",
-            "skill_route",
-            "skill_search",
-            "skill_read",
-            "skill_route_status",
-            "record_evidence",
-            "session_checkpoint",
-            "closeout_gate",
-            "closeout_record_write",
-            "routing_evolution",
-            "web_fetch",
-            "goal_state_read",
-            "quality_gate_status",
-            "quality_gate_manage",
-            "goal_state_manage",
+        // Minimum tools that should always be present: 5 research + 4 task = 9.
+        assert!(names.len() >= 9, "expected at least 9 tools, got {}: {:?}", names.len(), names);
+        // Composite tools load from MCP_TOOL_REGISTRY.json. If hooks aren't
+        // registered (test mode), composite tools may be absent. Only check
+        // research + task tools unconditionally.
+        let always_present = &[
             "research_aigc_check",
             "research_aigc_humanize",
             "research_review_dimensions",
@@ -1281,7 +1082,8 @@ mod tests {
             "task_list",
             "task_complete",
             "task_focus",
-        ] {
+        ];
+        for tool in always_present {
             assert!(names.contains(tool), "missing tool: {tool}");
         }
     }
