@@ -272,23 +272,6 @@ pub fn resolve_maint_roots(
     Ok((framework_root, artifact_root))
 }
 
-/// Detect the redirect shim stub left after v5 migration (prints "moved" and exits 1).
-/// Mirrors `router_self::is_redirect_shim` but lives here to avoid pulling in
-/// `CARGO_MANIFEST_DIR`-dependent test helpers.
-fn is_redirect_shim(candidate: &std::path::Path) -> bool {
-    let Ok(out) = std::process::Command::new(candidate)
-        .arg("--help")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output()
-    else {
-        return false;
-    };
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    stderr.contains("binary moved to router-rs-cli")
-}
-
 pub fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
     let manifest = framework_root.join("core/router-rs/Cargo.toml");
     if !manifest.is_file() {
@@ -311,15 +294,9 @@ pub fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
     let meta: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
     let td = meta.get("target_directory")?.as_str()?;
     let base = PathBuf::from(td);
-    // Prefer router-rs-cli (actual binary); fall back to router-rs but skip redirect shims.
-    for tail in [
-        "release/router-rs-cli",
-        "debug/router-rs-cli",
-        "release/router-rs",
-        "debug/router-rs",
-    ] {
+    for tail in ["release/router-rs-cli", "debug/router-rs-cli"] {
         let candidate = base.join(tail);
-        if candidate.is_file() && !is_redirect_shim(&candidate) {
+        if candidate.is_file() {
             return Some(candidate);
         }
     }
@@ -352,7 +329,7 @@ pub fn resolve_mcp_router_rs_command(framework_root: &Path) -> McpRouterRsComman
             return McpRouterRsCommand::Absolute(PathBuf::from(trimmed));
         }
     }
-    if let Ok(exe) = which::which("router-rs") {
+    if let Ok(exe) = which::which("router-rs-cli") {
         let path_text = exe.to_string_lossy();
         if !is_ephemeral_executable_path(&path_text)
             && !is_repo_build_executable_path(&path_text, framework_root)
@@ -369,7 +346,7 @@ pub fn resolve_mcp_router_rs_command(framework_root: &Path) -> McpRouterRsComman
 
 pub fn mcp_router_rs_command_value(command: &McpRouterRsCommand) -> Value {
     match command {
-        McpRouterRsCommand::OnPath => json!("router-rs"),
+        McpRouterRsCommand::OnPath => json!("router-rs-cli"),
         McpRouterRsCommand::Absolute(path) => json!(path.to_string_lossy()),
         McpRouterRsCommand::CargoBootstrap => json!("cargo"),
     }
@@ -389,7 +366,7 @@ pub fn ensure_router_rs_installed_for_mcp_with_roots(
 
 pub fn resolve_stable_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
     match resolve_mcp_router_rs_command(framework_root) {
-        McpRouterRsCommand::OnPath => which::which("router-rs").ok(),
+        McpRouterRsCommand::OnPath => which::which("router-rs-cli").ok(),
         McpRouterRsCommand::Absolute(path) => Some(path),
         McpRouterRsCommand::CargoBootstrap => None,
     }
@@ -511,10 +488,10 @@ pub fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> 
         }
         return Ok(());
     }
-    if cmd == "router-rs" {
-        if which::which("router-rs").is_err() {
+    if cmd == "router-rs-cli" {
+        if which::which("router-rs-cli").is_err() {
             return Err(
-                "router-rs is not found on system PATH; run `router-rs self install`".to_string(),
+                "router-rs-cli is not found on system PATH; run `router-rs-cli self install`".to_string(),
             );
         }
         return Ok(());

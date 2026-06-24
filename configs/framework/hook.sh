@@ -63,33 +63,17 @@ emit_fail_closed() {
 }
 
 # ── Binary resolution ────────────────────────────────────────────
-is_redirect_shim() {
-  case "$1" in *-cli) return 1 ;; esac
-  # Read first lines instead of running --help (avoids forking a heavy binary).
-  head -n 10 "$1" 2>/dev/null | grep -q "binary moved"
-}
-
 resolve_bin() {
   local bin="${ROUTER_RS_BIN:-}"
-  if [ -n "$bin" ] && [ -x "$bin" ]; then
-    is_redirect_shim "$bin" && bin="" || true
-  elif [ -n "$bin" ]; then
-    bin=""
-  fi
-  [ -n "$bin" ] && { printf '%s' "$bin"; return; }
+  [ -n "$bin" ] && [ -x "$bin" ] && { printf '%s' "$bin"; return; }
 
   if [ -x "${HOME:-}/.local/bin/router-rs-cli" ]; then
     printf '%s' "${HOME}/.local/bin/router-rs-cli"; return
-  fi
-  if [ -x "${HOME:-}/.local/bin/router-rs" ] && ! is_redirect_shim "${HOME}/.local/bin/router-rs"; then
-    printf '%s' "${HOME}/.local/bin/router-rs"; return
   fi
 
   local candidate
   candidate="$(command -v router-rs-cli 2>/dev/null || true)"
   [ -n "$candidate" ] && { printf '%s' "$candidate"; return; }
-  candidate="$(command -v router-rs 2>/dev/null || true)"
-  [ -n "$candidate" ] && ! is_redirect_shim "$candidate" && { printf '%s' "$candidate"; return; }
 
   local cargo_target_dir="${CARGO_TARGET_DIR:-/tmp/skill-cargo-target}"
   for candidate in \
@@ -102,17 +86,7 @@ resolve_bin() {
     "$ROOT/target/release/router-rs-cli" \
     "$ROOT/target/debug/router-rs-cli" \
     "$FW/target/release/router-rs-cli" \
-    "$FW/target/debug/router-rs-cli" \
-    "$cargo_target_dir/release/router-rs" \
-    "$cargo_target_dir/debug/router-rs" \
-    "$ROOT/core/router-rs/target/release/router-rs" \
-    "$FW/core/router-rs/target/release/router-rs" \
-    "$ROOT/core/router-rs/target/debug/router-rs" \
-    "$FW/core/router-rs/target/debug/router-rs" \
-    "$ROOT/target/release/router-rs" \
-    "$ROOT/target/debug/router-rs" \
-    "$FW/target/release/router-rs" \
-    "$FW/target/debug/router-rs"
+    "$FW/target/debug/router-rs-cli"
   do
     [ -x "$candidate" ] && { printf '%s' "$candidate"; return; }
   done

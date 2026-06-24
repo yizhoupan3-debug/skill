@@ -13,11 +13,9 @@ fn pick_router_rs_under_target_dir(base: &Path) -> Option<PathBuf> {
     [
         base.join("debug/router-rs-cli"),
         base.join("release/router-rs-cli"),
-        base.join("debug/router-rs"),
-        base.join("release/router-rs"),
     ]
     .into_iter()
-    .find(|candidate| candidate.is_file() && !is_redirect_shim(candidate))
+    .find(|candidate| candidate.is_file())
 }
 
 /// Align with `host_integration::cargo_router_rs_executable`: same `cargo metadata` target dir
@@ -51,7 +49,7 @@ pub fn browser_mcp_server_payload_like_host(framework_root: &Path) -> Value {
     } else {
         None
     };
-    let exe = from_metadata.or_else(|| which::which("router-rs").ok());
+    let exe = from_metadata.or_else(|| which::which("router-rs-cli").ok());
     let args = vec![
         json!("browser"),
         json!("mcp-stdio"),
@@ -326,20 +324,6 @@ fn cargo_target_dir_from_config(root: &Path) -> Option<PathBuf> {
     None
 }
 
-fn is_redirect_shim(candidate: &Path) -> bool {
-    let Ok(out) = std::process::Command::new(candidate)
-        .arg("--help")
-        .stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
-        .output()
-    else {
-        return false;
-    };
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    stderr.contains("binary moved to router-rs-cli")
-}
-
 fn resolve_router_rs_binary() -> Option<PathBuf> {
     let root = project_root();
     // Session-local `CARGO_TARGET_DIR`: pick under that tree first when the binary exists (matches
@@ -363,24 +347,14 @@ fn resolve_router_rs_binary() -> Option<PathBuf> {
     {
         return Some(path);
     }
-    if let Some(path) = std::env::var_os("CARGO_BIN_EXE_router-rs").map(PathBuf::from)
-        && path.is_file()
-        && !is_redirect_shim(&path)
-    {
-        return Some(path);
-    }
     [
         root.join("target/debug/router-rs-cli"),
         root.join("target/release/router-rs-cli"),
         root.join("core/router-rs/target/debug/router-rs-cli"),
         root.join("core/router-rs/target/release/router-rs-cli"),
-        root.join("target/debug/router-rs"),
-        root.join("target/release/router-rs"),
-        root.join("core/router-rs/target/debug/router-rs"),
-        root.join("core/router-rs/target/release/router-rs"),
     ]
     .into_iter()
-    .find(|candidate| candidate.is_file() && !is_redirect_shim(candidate))
+    .find(|candidate| candidate.is_file())
 }
 
 pub fn router_rs_json(args: &[&str]) -> Value {

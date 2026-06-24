@@ -48,21 +48,15 @@ fi
 ROUTER_RS_BIN="${ROUTER_RS_BIN:-}"
 TARGET_DIR="${CARGO_TARGET_DIR:-}"
 for candidate in \
-  ${TARGET_DIR:+"$TARGET_DIR/release/router-rs"} \
-  ${TARGET_DIR:+"$TARGET_DIR/debug/router-rs"} \
-  "/tmp/skill-${UID:-0}-cargo-target/release/router-rs" \
-  "/tmp/skill-${UID:-0}-cargo-target/debug/router-rs" \
   "$REPO_ROOT/core/router-rs/target/release/router-rs-cli" \
-  "$REPO_ROOT/core/router-rs/target/debug/router-rs-cli" \
-  "$REPO_ROOT/core/router-rs/target/release/router-rs" \
-  "$REPO_ROOT/core/router-rs/target/debug/router-rs"
+  "$REPO_ROOT/core/router-rs/target/debug/router-rs-cli"
 do
   if [[ -z "$ROUTER_RS_BIN" && -x "$candidate" ]]; then
     ROUTER_RS_BIN="$candidate"
   fi
 done
 if [[ -z "$ROUTER_RS_BIN" ]]; then
-  ROUTER_RS_BIN="$(command -v router-rs-cli 2>/dev/null || command -v router-rs 2>/dev/null || true)"
+  ROUTER_RS_BIN="$(command -v router-rs-cli 2>/dev/null || true)"
 fi
 if [[ ! -x "$ROUTER_RS_BIN" ]]; then
   echo "bench-hooks: router-rs binary not found; run: cargo build --manifest-path core/router-rs/Cargo.toml --release" >&2

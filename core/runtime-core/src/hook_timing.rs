@@ -82,27 +82,6 @@ mod tests {
         let repo = repo.canonicalize().expect("repo root");
         let bin = resolve_router_rs_test_bin();
 
-        // Skip if the binary is a redirect shim (post-migration stub).
-        let probe = Command::new(&bin)
-            .arg("--help")
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output();
-        if let Ok(out) = probe {
-            let combined = format!(
-                "{}{}",
-                String::from_utf8_lossy(&out.stdout),
-                String::from_utf8_lossy(&out.stderr)
-            );
-            if combined.contains("moved") || combined.contains("router-rs-cli") {
-                eprintln!(
-                    "skip: router-rs binary is a redirect shim; hook timing e2e test requires the real binary"
-                );
-                return;
-            }
-        }
-
         let out = Command::new(bin)
             .args([
                 "host",
