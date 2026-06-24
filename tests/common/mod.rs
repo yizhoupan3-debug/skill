@@ -62,7 +62,7 @@ pub fn browser_mcp_server_payload_like_host(framework_root: &Path) -> Value {
             "args": args,
         }),
         None => json!({
-            "command": "router-rs",
+            "command": "router-rs-cli",
             "args": args,
         }),
     }

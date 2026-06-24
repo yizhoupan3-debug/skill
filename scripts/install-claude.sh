@@ -51,11 +51,11 @@ resolve_framework_root() {
 
 router_rs_cmd() {
   local candidates=()
-  candidates+=("$FRAMEWORK_ROOT/core/router-rs/target/release/router-rs")
+  candidates+=("$FRAMEWORK_ROOT/core/router-rs/target/release/router-rs-cli")
   if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-    candidates+=("${CARGO_TARGET_DIR}/release/router-rs")
+    candidates+=("${CARGO_TARGET_DIR}/release/router-rs-cli")
   fi
-  candidates+=("/tmp/skill-${UID:-0}-cargo-target/release/router-rs")
+  candidates+=("/tmp/skill-${UID:-0}-cargo-target/release/router-rs-cli")
   local c
   for c in "${candidates[@]}"; do
     if [[ -x "$c" ]]; then
@@ -67,8 +67,8 @@ router_rs_cmd() {
     echo "$ROUTER_RS_BIN"
     return
   fi
-  if command -v router-rs >/dev/null 2>&1; then
-    command -v router-rs
+  if command -v router-rs-cli >/dev/null 2>&1; then
+    command -v router-rs-cli
     return
   fi
   echo "error: router-rs not found; build: cargo build --release --manifest-path core/router-rs/Cargo.toml" >&2
@@ -82,7 +82,7 @@ ensure_router_rs() {
   if [[ -n "${ROUTER_RS_BIN:-}" && -x "$ROUTER_RS_BIN" ]]; then
     return
   fi
-  if command -v router-rs >/dev/null 2>&1; then
+  if command -v router-rs-cli >/dev/null 2>&1; then
     return
   fi
   echo "==> building router-rs (release)..." >&2
@@ -99,7 +99,6 @@ install_host() {
     --artifact-root "$PROJECT_ROOT/artifacts" \
     --scope "$scope" \
     --to "$tool"
-}
 
 FRAMEWORK_ROOT_ARG=""
 PROJECT_ROOT=""
