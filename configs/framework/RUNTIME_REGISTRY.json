@@ -273,9 +273,7 @@
           ".claude/settings.json",
           ".claude/settings.local.json"
         ],
-        "entrypoint_paths": [
-          ".claude/CLAUDE.md"
-        ],
+        "entrypoint_paths": [],
         "profile_id": "claude_profile",
         "driver_binary": "claude",
         "driver_supports_resume": true,

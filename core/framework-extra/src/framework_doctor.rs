@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
+use core_policy::doc_registry;
 use serde::Serialize;
 
 /// Structured result for `router-rs framework doctor`.
@@ -80,6 +81,70 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
         println!("{label}: {status} ({})", path.display());
     }
 
+    println!("\n--- docs governance (reports/plans) ---");
+    for dir_key in doc_registry::all_dirs() {
+        let dir_path = repo_root.join(dir_key);
+        if dir_path.is_dir() {
+            println!("{dir_key}: ok (directory exists)");
+        } else if dir_path.is_file() {
+            let msg = format!("{dir_key}: is a file, should be a directory");
+            println!("WARN: {msg}");
+            warns.push(msg);
+        } else {
+            let msg = format!("{dir_key}: missing — create directory");
+            println!("WARN: {msg}");
+            warns.push(msg);
+        }
+    }
+    for dir_key in doc_registry::all_dirs() {
+        let dir_path = repo_root.join(dir_key);
+        if !dir_path.is_dir() {
+            continue;
+        }
+        match std::fs::read_dir(&dir_path) {
+            Ok(entries) => {
+                for entry in entries.flatten() {
+                    let fname_str = entry.file_name().to_string_lossy().into_owned();
+                    if !fname_str.ends_with(".md") {
+                        continue;
+                    }
+                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        continue;
+                    }
+                    let stem_end = fname_str.len().checked_sub(3).unwrap_or(0);
+                    if stem_end < 10 {
+                        let msg = format!("{dir_key}/{fname_str}: filename too short for convention {{topic}}-{{YYYY-MM-DD}}.md");
+                        println!("WARN: {msg}");
+                        warns.push(msg);
+                        continue;
+                    }
+                    let suffix = &fname_str[(stem_end - 10)..stem_end];
+                    let is_date = suffix.len() == 10
+                        && suffix.as_bytes()[0].is_ascii_digit()
+                        && suffix.as_bytes()[1].is_ascii_digit()
+                        && suffix.as_bytes()[2].is_ascii_digit()
+                        && suffix.as_bytes()[3].is_ascii_digit()
+                        && suffix.as_bytes()[4] == b'-'
+                        && suffix.as_bytes()[5].is_ascii_digit()
+                        && suffix.as_bytes()[6].is_ascii_digit()
+                        && suffix.as_bytes()[7] == b'-'
+                        && suffix.as_bytes()[8].is_ascii_digit()
+                        && suffix.as_bytes()[9].is_ascii_digit();
+                    if !is_date {
+                        let msg = format!("{dir_key}/{fname_str}: does not follow convention {{topic}}-{{YYYY-MM-DD}}.md");
+                        println!("WARN: {msg}");
+                        warns.push(msg);
+                    }
+                }
+            }
+            Err(e) => {
+                let msg = format!("{dir_key}: read error ({e})");
+                println!("WARN: {msg}");
+                warns.push(msg);
+            }
+        }
+    }
+
     println!("\n--- host install projections (optional in framework source repo) ---");
     // Build check list dynamically from RUNTIME_REGISTRY.json host_entrypoints.
     let mut host_install_checks: Vec<(String, std::path::PathBuf)> = Vec::new();
@@ -136,7 +201,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
                 .join("router-rs-hook.sh");
             if deprecated_shim.is_file() {
                 let msg = format!(
-                    "deprecated shim still present at {} — prefer {}/settings.json hooks (see docs/hosts/hook-hosts.md)",
+                    "deprecated shim still present at {} — prefer {}/settings.json hooks (see AGENTS.md)",
                     deprecated_shim.display(),
                     host_dir,
                 );

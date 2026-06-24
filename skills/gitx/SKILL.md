@@ -1,52 +1,36 @@
 ---
+allowed_tools:
+- shell
+- git
+- python
+approval_required_tools:
+- git push
+description: Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - git
+  - git-closeout
+  - review
+  - commit
+  - worktree
+  - push
+  version: '1.0.3'
 name: gitx
-description: |
-  Git 主入口。Use when the user says `/gitx` or natural `gitx`, or
-  needs branch、merge、rebase、push、worktree、仓库收口、推送失败排查等 Git 实操。
-  This skill owns practical Git work in this repo, from quick diagnosis to end-to-end closeout.
+network_access: conditional
+risk: medium
+routing_gate: none
 routing_layer: L2
 routing_owner: owner
-routing_gate: none
 routing_priority: P1
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
 short_description: Run the Git closeout workflow with deep review on the substantive diff before commit/merge/push.
+source: runtime
 trigger_hints:
-  - /gitx
-  - /gitx plan
-  - gitx
-  - 规划后收口
-  - git 一条龙
-  - review 修复 整理 提交 推送
-  - 合并分支
-  - merge branch
-  - 合并 worktree 并推送
-allowed_tools:
-  - shell
-  - git
-  - python
-approval_required_tools:
-  - git push
-metadata:
-  version: "1.0.3"
-  platforms: [supported]
-  tags:
-    - git
-    - git-closeout
-    - review
-    - commit
-    - worktree
-    - push
-risk: medium
-source: local
-filesystem_scope:
-  - repo
-network_access: conditional
-bridge_behavior: mobile_complete_once
-
+- /gitx
+- gitx
 ---
-
 # gitx
 
 `gitx` 是 Git 收口快捷入口。推荐显式入口：`/gitx`（不再使用 `$gitx`）。

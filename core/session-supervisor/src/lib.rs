@@ -230,7 +230,10 @@ pub fn handle_session_supervisor_operation(payload: Value) -> Result<Value, Stri
         "agent_register" => {
             let agent_id = required_non_empty_string(&payload, "agent_id", "agent health")?;
             let host_id = required_non_empty_string(&payload, "host_id", "agent health")?;
-            let tool_type = required_non_empty_string(&payload, "tool_type", "agent health").unwrap_or_else(|_| "agent".to_string());
+            let tool_type = required_non_empty_string(&payload, "tool_type", "agent health").unwrap_or_else(|_| {
+                tracing::warn!("agent_register missing tool_type, defaulting to 'agent'");
+                "agent".to_string()
+            });
             let cwd = std::env::current_dir()
                 .map_err(|e| format!("read cwd failed: {e}"))?;
             process::register_agent_alive(&cwd, &agent_id, &host_id, &tool_type, &now)?;

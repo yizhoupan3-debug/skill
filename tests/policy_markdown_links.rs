@@ -115,7 +115,6 @@ fn collect_policy_markdown_files(root: &Path) -> Vec<PathBuf> {
     }
     for name in [
         "AGENTS.md",
-        "MIGRATION.md",
         "README.md",
     ] {
         let p = root.join(name);

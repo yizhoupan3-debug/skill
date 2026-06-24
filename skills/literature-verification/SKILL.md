@@ -1,29 +1,30 @@
 ---
+description: 'Literature verification capability: DOI reachability, citation-claim alignment, contradiction sweep, closest work identification, coverage scoring.'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - literature
+  - citation
+  - verification
+  - research
+  version: '1.0.0'
 name: literature-verification
-description: |
-  无状态内部 skill：验证文献引用的可靠性、claim-文献对齐度和覆盖完整性。
-  由 research-discovery、paper-workbench 内联调用，不由用户直接触发。
+risk: low
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
-risk: low
 source: local
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [literature, citation, verification, research]
 trigger_hints:
-  - 验证文献引用
-  - 文献覆盖度
-  - contradiction sweep
-  - closest work 识别
-  - DOI 可达性
+- DOI验证
+- citation verification
+- contradiction sweep
+- literature check
+- 引用审查
+- 文献验证
 ---
-
 # Literature Verification
 
 无状态能力 skill：对文献引用进行端到端可靠性验证。不独立编排会话，仅作为前门 skill 的内联验证步骤。

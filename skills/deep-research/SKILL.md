@@ -1,48 +1,39 @@
 ---
+description: Deep research harness — fan-out web searches, fetch sources, verify claims, synthesize cited report.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - research
+  - harness
+  - web
+  - fact-check
+  - multi-source
+  version: '1.1.0'
 name: deep-research
-description: |
-  Deep research harness — fan-out web searches, fetch sources, adversarially verify claims,
-  synthesize a cited report. Use for requests like "帮我深度研究一下 XX", "做一个关于 XX 的全面调研",
-  "fact check XX", "web research on XX", "多源验证一下这个说法".
-  BEFORE invoking, check if the question is specific enough to research directly —
-  if underspecified (e.g., "what car to buy" without budget/use-case/region),
-  ask 2-3 clarifying questions to narrow scope. Then pass the refined question as args.
-  **不适用于**：学术文献综述、理论背景调研、研究方向探索、数学背景查询（这些属于 research-discovery）。
+risk: low
+routing_gate: approve
 routing_layer: L2
 routing_owner: user
-routing_gate: approve
 routing_priority: P2
 session_start: preferred
-user-invocable: true
-disable-model-invocation: true
 short_description: Deep research harness — web-first multi-source fact-checked report
-trigger_hints:
-  - deep research
-  - web research
-  - fact check
-  - 网络调研
-  - 信息收集
-  - 多源验证
-  - 网络信息验证
-  - 帮我查一下
-  - 搜索并汇总
-  - web search report
-  - investigate claims
-  - verify claims
-trigger_hints_long: references/trigger-hints-long.md
-metadata:
-  version: "1.1.0"
-  platforms: [supported]
-  tags:
-    - research
-    - harness
-    - web
-    - fact-check
-    - multi-source
-risk: low
 source: local
+trigger_hints:
+- deep research
+- deep-research
+- web research
+- fact check
+- 网络调研
+- 信息收集
+- 多源验证
+- 网络信息验证
+- 帮我查一下
+- 搜索并汇总
+- web search report
+- investigate claims
+- verify claims
 ---
-
 # Deep Research
 
 This skill provides a **web-first deep research harness** that fans out across

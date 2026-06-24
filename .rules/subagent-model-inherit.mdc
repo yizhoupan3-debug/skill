@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Subagent Model Inherit（仅 Cursor）
 
-跨宿主基线见 [AGENTS.md](../../AGENTS.md) · [docs/spec.md §策略](../../docs/spec.md) · [docs/spec.md §架构](../../docs/spec.md)；lane/并行度见 [execution-subagent-gate.mdc](execution-subagent-gate.mdc)。本节只约束 **子代理模型选择**。
+跨宿主基线见 [AGENTS.md](../../AGENTS.md) · [docs/architecture.md](../../docs/architecture.md)；lane/并行度见 [execution-subagent-gate.mdc](execution-subagent-gate.mdc)。本节只约束 **子代理模型选择**。
 
 ## 硬约束
 

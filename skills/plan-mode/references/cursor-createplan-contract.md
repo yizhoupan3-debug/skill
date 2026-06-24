@@ -21,7 +21,7 @@
 Cursor 官方说明：计划默认保存在**用户目录**，需**「Save to workspace」** 才进入工作区以便版本管理与团队共享。
 
 - 权威草稿与链接建议存放于 **`.cursor/plans/`**（宿主工作区路径）。
-- `docs/plans/` 此前用于索引与指针，已清理。内部 todo 与文件不同步等宿主/社区讨论，参见 [`MIGRATION.md`](../../../MIGRATION.md)。
+- `docs/plans/` 此前用于索引与指针，已清理。
 
 ---
 
@@ -95,5 +95,5 @@ Cursor Plan Build **不**自动武装 lifecycle goal 门控。连续执行仅由
 - `skills/plan-mode/SKILL.md` — 跨宿主通用 plan-mode 规范（四元组、profile、继承面完整定义）。
 - `.cursor/rules/cursor-plan-output.mdc` — Cursor alwaysApply 下对 CreatePlan 产出的硬自检清单。
 - `.cursor/rules/session-close-summary.mdc` — Cursor 收尾回复风格约束。
-- `docs/plans/` 已清理（见 [`MIGRATION.md`](../../../MIGRATION.md)）。
+- `docs/plans/` 已清理。
 - [`skills/gitx/SKILL.md`](../../gitx/SKILL.md) — `/gitx` / `/gitx plan` 收口契约。

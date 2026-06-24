@@ -16,7 +16,7 @@ pub fn has_mcp_tool_invocation_intent(query_text: &str, _query_token_list: &[Str
     }
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?i)\b(use|invoke|call|run|打开|调用|使用)\b.*\b(mcp|tool|browser|paperplain|codegraph|浏览器)\b")
+        Regex::new(r"(?i)(?:\b(?:use|invoke|call|run)\b.*\b(?:mcp|tool|browser|paperplain|codegraph)\b|(?:打开|调用|使用).*(?:mcp|tool|browser|paperplain|codegraph|浏览器))")
             .expect("invalid mcp tool intent regex")
     })
     .is_match(query_text)

@@ -1,33 +1,36 @@
 ---
-name: mcp-server-management
-description: |
+description: |-
   创建、配置、调试和注册 MCP server，实现 AI agent 工具集成。
   覆盖 stdio/SSE/streamable-http 三种传输模式，Python FastMCP 和 Rust 两种主流实现，
-  以及宿主集成（MCP client 配置）、MCP Registry 注册、调试故障排查全流程。
+  以及 Claude Code / Claude Desktop 集成、MCP Registry 注册、调试故障排查全流程。
 metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [mcp, mcp-server, tool-integration, fastmcp, model-context-protocol]
+  platforms:
+  - supported
+  tags:
+  - mcp
+  - mcp-server
+  - tool-integration
+  - fastmcp
+  - model-context-protocol
+  version: '1.0.0'
+name: mcp-server-management
 risk: low
-source: local
+routing_gate: none
 routing_layer: L3
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
-session_start: never
-user-invocable: false
-disable-model-invocation: true
+session_start: n/a
+source: project
 trigger_hints:
-  - MCP server
-  - 创建 MCP
-  - MCP 调试
-  - MCP 注册
-  - MCP 配置
-  - tool server
-  - MCP 开发
-  - model context protocol
+- MCP server
+- MCP 开发
+- MCP 注册
+- MCP 调试
+- MCP 配置
+- model context protocol
+- tool server
+- 创建 MCP
 ---
-
 ## 概述
 
 MCP (Model Context Protocol) 是 AI agent 连接外部工具和数据的事实标准协议。

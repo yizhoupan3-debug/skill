@@ -112,7 +112,9 @@ fn parse_ledger_markdown(content: &str) -> Result<Vec<Claim>> {
                 };
 
                 let source_loc = after_bracket.trim();
-                let (source, location) = if let Some(paren_start) = source_loc.find('(') {
+                let (source, location) = if let Some(paren_start) = source_loc.rfind('(') {
+                    // Use rfind to handle source names that contain parentheses:
+                    // only the LAST parenthetical is the location.
                     let source = source_loc[..paren_start].trim().to_string();
                     let location = source_loc[paren_start + 1..]
                         .trim_end_matches(')')

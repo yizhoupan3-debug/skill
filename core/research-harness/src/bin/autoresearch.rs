@@ -565,7 +565,7 @@ fn cmd_compare_claim(
         confidence,
         verdict,
         claim_id.as_deref(),
-    );
+    )?;
     dump_state(&ws, &next)?;
     println!("Claim comparison recorded.");
     Ok(())

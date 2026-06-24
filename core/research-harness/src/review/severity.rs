@@ -1,6 +1,6 @@
 //! 严重度分级 — 基于关键词启发式的 finding 分类。
 //!
-//! 与 severity-spec.md 对齐：P0（一票否决）、A（核心硬伤）、B（需补充）、Warning（隐晦警告）、C（打磨）。
+//! - P0（一票否决）、A（核心硬伤）、B（需补充）、Warning（隐晦警告）、C（打磨）。
 
 use crate::types::Severity;
 

@@ -46,9 +46,3 @@ pub fn dispatch_browser_command(
         }
     }
 }
-
-/// Register this crate's dispatch function with host-projection's browser_dispatch_hook.
-/// Call once at startup (e.g., in router-rs-cli main or router-rs lib init).
-pub fn register_browser_dispatch() {
-    host_projection::hooks::set_browser_dispatch(dispatch_browser_command);
-}

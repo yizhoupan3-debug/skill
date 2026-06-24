@@ -1052,7 +1052,7 @@ pub fn format_reflection_note(decision: &Value) -> String {
         "",
         str_field_default(
             decision,
-            "reason",
+            "interpretation",
             "_Mechanistic explanation or best current guess._",
         ),
         "",

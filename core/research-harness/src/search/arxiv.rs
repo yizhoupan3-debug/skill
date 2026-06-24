@@ -18,7 +18,7 @@ use crate::search::helpers::*;
 ///
 /// Retries up to 3 times with exponential backoff on transient errors (503, timeout).
 pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
-    let mut last_err = None;
+    let mut first_non_transient: Option<anyhow::Error> = None;
     for attempt in 0..3 {
         match try_search(client, query, limit) {
             Ok(results) => return Ok(results),
@@ -28,15 +28,20 @@ pub fn search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
                 let is_transient = msg.contains("503") || msg.contains("502")
                     || msg.contains("timeout") || msg.contains("connection");
                 if is_transient && attempt < 2 {
-                    last_err = Some(e);
                     std::thread::sleep(std::time::Duration::from_millis(500 * (1 << attempt)));
                     continue;
                 }
-                return Err(e);
+                if !is_transient && first_non_transient.is_none() {
+                    first_non_transient = Some(anyhow::anyhow!("{msg}"));
+                }
+                if let Some(ctx) = first_non_transient {
+                    return Err(ctx);
+                }
+                return Err(anyhow::anyhow!("arXiv search failed: {msg}"));
             }
         }
     }
-    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("arXiv search failed after 3 attempts")))
+    Err(anyhow::anyhow!("arXiv search failed after 3 retries"))
 }
 
 fn try_search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> {
@@ -44,7 +49,7 @@ fn try_search(client: &Client, query: &str, limit: usize) -> Result<Vec<Value>> 
         .get(ARXIV_BASE_URL)
         .header(USER_AGENT, "research-harness/0.1")
         .query(&[
-            ("search_query", format!("all:{query}")),
+            ("search_query", format!("all:\"{query}\"")),
             ("start", "0".to_string()),
             ("max_results", normalize_limit(limit).to_string()),
             ("sortBy", "relevance".to_string()),

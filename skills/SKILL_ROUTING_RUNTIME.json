@@ -1,14 +1,4 @@
 {
-  "version": 3,
-  "schema_version": "skill-routing-runtime-v3",
-  "scope": {
-    "fallback_manifest": "skills/SKILL_MANIFEST.json",
-    "full_skill_count": 43,
-    "hot_skill_count": 43,
-    "manifest_skill_count": 43,
-    "kind": "hot",
-    "policy": "hot routing surface only: full_skill_count and hot_skill_count count rows in this file; manifest_skill_count is skills/SKILL_MANIFEST.json row count (cold + hot). Route/search may load the fallback manifest after runtime-owned skills are excluded."
-  },
   "keys": [
     "slug",
     "layer",
@@ -23,9 +13,17 @@
     "skill_path",
     "host_platforms",
     "kind",
-    "allowedTools",
-    "model",
-    "skill_flags"
+    "skill_flags",
+    "short_description",
+    "tags",
+    "when_to_use",
+    "do_not_use",
+    "metadata",
+    "risk",
+    "allowed_tools",
+    "runtime_requirements",
+    "network_access",
+    "approval_required_tools"
   ],
   "skills": [
     [
@@ -59,13 +57,31 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "scoring:agent_swarm",
         "behavior:agent_swarm_owner",
         "behavior:hot_retry_eligible"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "agent",
+          "team",
+          "orchestration"
+        ],
+        "version": "4.0.0"
+      },
+      "medium",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "algo-trading",
@@ -111,14 +127,32 @@
         "opencode"
       ],
       "skill",
-      [
-        "Bash",
-        "Read",
-        "Write",
-        "Edit"
-      ],
+      [],
       null,
-      []
+      null,
+      null,
+      null,
+      {
+        "category": "finance",
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "algo-trading",
+          "quant",
+          "backtesting",
+          "strategy-design",
+          "execution",
+          "risk-management",
+          "factor-research"
+        ],
+        "version": "3.0.0"
+      },
+      "high",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "autoresearch",
@@ -163,9 +197,30 @@
         "opencode"
       ],
       "skill",
+      [],
+      "Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation",
       null,
       null,
-      []
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "research",
+          "workspace",
+          "claims",
+          "hypotheses",
+          "logs",
+          "barrier"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "citation-management",
@@ -198,9 +253,30 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "citation",
+          "bibliography",
+          "bibtex",
+          "reference",
+          "doi",
+          "academic"
+        ],
+        "version": "2.4.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "code-review-deep",
@@ -239,6 +315,28 @@
       ],
       "skill",
       [
+        "scoring:code_review_deep",
+        "behavior:code_review_deep_overlay"
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "code-review",
+          "security",
+          "correctness",
+          "delegation",
+          "adversarial-review"
+        ],
+        "version": "2.1.0"
+      },
+      "medium",
+      [
         "Read",
         "Bash",
         "Agent",
@@ -252,10 +350,8 @@
         "mcp__mcp-codegraph__codegraph_goto_definition"
       ],
       null,
-      [
-        "scoring:code_review_deep",
-        "behavior:code_review_deep_overlay"
-      ]
+      null,
+      null
     ],
     [
       "deep-research",
@@ -290,9 +386,29 @@
         "opencode"
       ],
       "skill",
+      [],
+      "Deep research harness — web-first multi-source fact-checked report",
       null,
       null,
-      []
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "research",
+          "harness",
+          "web",
+          "fact-check",
+          "multi-source"
+        ],
+        "version": "1.1.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "deepinterview",
@@ -318,11 +434,34 @@
         "opencode"
       ],
       "framework_command",
-      null,
-      null,
       [
         "behavior:low_score_override:20.0"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "deepinterview",
+          "review",
+          "alias",
+          "convergence"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      [
+        "shell",
+        "git",
+        "python"
+      ],
+      null,
+      null,
+      []
     ],
     [
       "design-md",
@@ -357,12 +496,37 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "scoring:design_md",
         "behavior:hot_retry_eligible",
         "artifact_exception:design_md_suppress"
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "design-system",
+          "design-md",
+          "design-tokens",
+          "ui-design",
+          "acceptance"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      [
+        "shell",
+        "browser"
+      ],
+      null,
+      "conditional",
+      [
+        "network install"
       ]
     ],
     [
@@ -399,9 +563,30 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "diagramming",
+          "flowchart",
+          "research-diagram",
+          "technical-roadmap",
+          "sequence-diagram",
+          "erd"
+        ],
+        "version": "2.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "doc",
@@ -431,10 +616,41 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "behavior:hot_retry_eligible"
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "docx",
+          "word",
+          "rust",
+          "pagination",
+          "document-layout"
+        ],
+        "version": "2.0.0"
+      },
+      "low",
+      [
+        "shell",
+        "rust"
+      ],
+      {
+        "commands": [
+          "cargo",
+          "soffice",
+          "pdftoppm"
+        ]
+      },
+      "conditional",
+      [
+        "file overwrite"
       ]
     ],
     [
@@ -468,9 +684,29 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "email",
+          "html-email",
+          "mjml",
+          "react-email",
+          "newsletter"
+        ],
+        "version": "1.0.0"
+      },
+      null,
+      null,
+      null,
+      null,
+      null
     ],
     [
       "experiment-reproducibility",
@@ -506,9 +742,30 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "reproducibility",
+          "experiment-tracking",
+          "environment",
+          "seed",
+          "data-versioning",
+          "mlops"
+        ],
+        "version": "1.0.3"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "formal-verification",
@@ -536,9 +793,30 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "math",
+          "formal",
+          "verification",
+          "CAS",
+          "SMT",
+          "research"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "gh-address-comments",
@@ -574,10 +852,43 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "behavior:ci_gate_fuzzy_rescue_excluded"
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "short-description": "Address comments in a GitHub PR review",
+        "tags": [
+          "github",
+          "pull-request",
+          "review-comments",
+          "gh-cli",
+          "code-review"
+        ],
+        "version": "2.0.0"
+      },
+      "medium",
+      [
+        "shell",
+        "git",
+        "rust"
+      ],
+      {
+        "commands": [
+          "cargo",
+          "gh",
+          "git"
+        ]
+      },
+      "conditional",
+      [
+        "git push"
       ]
     ],
     [
@@ -620,10 +931,42 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "behavior:nl_exempt_framework_alias"
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "github",
+          "ci",
+          "github-actions",
+          "gh-cli",
+          "pull-request"
+        ],
+        "version": "2.0.0"
+      },
+      null,
+      [
+        "shell",
+        "git",
+        "rust"
+      ],
+      {
+        "commands": [
+          "cargo",
+          "gh",
+          "git"
+        ]
+      },
+      "conditional",
+      [
+        "git push"
       ]
     ],
     [
@@ -648,9 +991,36 @@
         "opencode"
       ],
       "framework_command",
+      [],
+      "Run the Git closeout workflow with deep review on the substantive diff before commit/merge/push.",
       null,
       null,
-      []
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "git",
+          "git-closeout",
+          "review",
+          "commit",
+          "worktree",
+          "push"
+        ],
+        "version": "1.0.3"
+      },
+      "medium",
+      [
+        "shell",
+        "git",
+        "python"
+      ],
+      null,
+      "conditional",
+      [
+        "git push"
+      ]
     ],
     [
       "infographic",
@@ -680,9 +1050,29 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "infographic",
+          "html",
+          "data-visualization",
+          "knowledge-card",
+          "visual-summary"
+        ],
+        "version": "1.0.1"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "literature-verification",
@@ -710,9 +1100,28 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "literature",
+          "citation",
+          "verification",
+          "research"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "math-derivation",
@@ -744,9 +1153,34 @@
         "opencode"
       ],
       "skill",
+      [],
+      "Execute rigorous mathematical derivations and proofs",
       null,
       null,
-      []
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "mathematics",
+          "proof",
+          "derivation",
+          "theorem",
+          "LaTeX",
+          "formal-reasoning",
+          "inequality",
+          "ODE",
+          "PDE",
+          "convergence"
+        ],
+        "version": "2.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "mcp-server-management",
@@ -776,9 +1210,29 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "mcp",
+          "mcp-server",
+          "tool-integration",
+          "fastmcp",
+          "model-context-protocol"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "paper-workbench",
@@ -830,17 +1284,32 @@
       ],
       "skill",
       [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "WebSearch",
-        "WebFetch"
+        "scoring:paper_workbench"
       ],
       null,
-      [
-        "scoring:paper_workbench"
-      ]
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "paper",
+          "manuscript",
+          "review",
+          "revise",
+          "submission",
+          "orchestrator",
+          "top-tier"
+        ],
+        "version": "1.16.0"
+      },
+      "medium",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "paper-writing",
@@ -869,16 +1338,17 @@
         "opencode"
       ],
       "skill",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "WebSearch",
-        "WebFetch"
-      ],
+      [],
       null,
-      []
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
     ],
     [
       "pdf",
@@ -908,10 +1378,40 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "behavior:hot_retry_eligible"
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "pdf",
+          "rendering",
+          "layout",
+          "typography",
+          "reportlab"
+        ],
+        "version": "2.1.0"
+      },
+      "low",
+      [
+        "shell",
+        "rust",
+        "python"
+      ],
+      {
+        "commands": [
+          "pdf"
+        ]
+      },
+      "conditional",
+      [
+        "file overwrite"
       ]
     ],
     [
@@ -944,9 +1444,28 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "plan",
+          "workflow",
+          "gate",
+          "closeout"
+        ],
+        "version": "2.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "prose-verification",
@@ -974,9 +1493,29 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "prose",
+          "writing",
+          "verification",
+          "style",
+          "research"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "python-env-management",
@@ -1010,9 +1549,31 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "python",
+          "uv",
+          "packaging",
+          "macos",
+          "path",
+          "venv",
+          "reproducibility"
+        ],
+        "version": "1.1.1"
+      },
+      "medium",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "reproducibility-verification",
@@ -1039,9 +1600,28 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "reproducibility",
+          "verification",
+          "environment",
+          "research"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "research-discovery",
@@ -1085,9 +1665,29 @@
         "opencode"
       ],
       "skill",
+      [],
+      "Research discovery, literature survey, and theory-background router",
       null,
       null,
-      []
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "research",
+          "literature-research",
+          "discovery",
+          "survey",
+          "theory-background"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "research-execution",
@@ -1128,9 +1728,30 @@
         "opencode"
       ],
       "skill",
+      [],
+      "Research execution lanes — experiment design, math, code, reproducibility",
       null,
       null,
-      []
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "research",
+          "experiment-design",
+          "math",
+          "modeling",
+          "reproducibility",
+          "execution"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "research-knowledge-graph",
@@ -1174,9 +1795,29 @@
         "opencode"
       ],
       "skill",
+      [],
+      "Research Knowledge Graph — navigate, visualize, trace connections",
       null,
       null,
-      []
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "research",
+          "knowledge-graph",
+          "graph",
+          "entities",
+          "hub"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "scientific-figure-plotting",
@@ -1208,9 +1849,36 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "scientific-figures",
+          "plotting",
+          "matplotlib",
+          "seaborn",
+          "publication",
+          "charts"
+        ],
+        "version": "1.2.0"
+      },
+      "medium",
+      null,
+      {
+        "python": [
+          "matplotlib",
+          "numpy",
+          "scienceplots"
+        ]
+      },
+      null,
+      null
     ],
     [
       "sentry",
@@ -1238,10 +1906,36 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "behavior:hot_retry_eligible"
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "sentry",
+          "production-errors",
+          "triage",
+          "error-monitoring",
+          "incident-debugging"
+        ],
+        "version": "2.1.0"
+      },
+      "medium",
+      [
+        "shell",
+        "python",
+        "web"
+      ],
+      null,
+      "required",
+      [
+        "authenticated web access"
       ]
     ],
     [
@@ -1275,6 +1969,25 @@
         "opencode"
       ],
       "skill",
+      [],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "code-quality",
+          "simplification",
+          "refactoring",
+          "quality-gate",
+          "parallel-agents"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
       [
         "Read",
         "Write",
@@ -1285,7 +1998,8 @@
         "Agent"
       ],
       null,
-      []
+      null,
+      null
     ],
     [
       "skill-framework-developer",
@@ -1322,11 +2036,39 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "behavior:framework_review_overlay",
         "behavior:gate_exception_framework_dev"
+      ],
+      "Design and tune cross-host skill routing and framework behavior",
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "multi-host",
+          "host-agnostic",
+          "skill-authoring",
+          "routing",
+          "trigger-debugging",
+          "skill-splitting",
+          "first-turn-routing"
+        ],
+        "version": "3.3.1"
+      },
+      "low",
+      [
+        "shell",
+        "git",
+        "python"
+      ],
+      null,
+      "conditional",
+      [
+        "git push"
       ]
     ],
     [
@@ -1363,10 +2105,36 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "behavior:systematic_debugging_high_threshold"
+      ],
+      "Investigate unknown failures before fixing",
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "debugging",
+          "root-cause-analysis",
+          "reproduction",
+          "hypothesis-testing",
+          "incident-triage"
+        ],
+        "version": "2.5.0"
+      },
+      "low",
+      [
+        "shell",
+        "browser",
+        "python"
+      ],
+      null,
+      "conditional",
+      [
+        "gui automation"
       ]
     ],
     [
@@ -1398,14 +2166,36 @@
       ],
       "skill",
       [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash"
+        "artifact_exception:slides_design_contract"
       ],
       null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "powerpoint",
+          "ppt",
+          "pptx",
+          "slides",
+          "presentation",
+          "rust-ppt",
+          "proxy"
+        ],
+        "version": "2.7.0"
+      },
+      "medium",
       [
-        "artifact_exception:slides_design_contract"
+        "shell",
+        "cargo"
+      ],
+      null,
+      "conditional",
+      [
+        "file overwrite"
       ]
     ],
     [
@@ -1435,9 +2225,17 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
     ],
     [
       "statistical-analysis",
@@ -1474,9 +2272,30 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "statistics",
+          "hypothesis-testing",
+          "effect-size",
+          "bayesian",
+          "regression",
+          "research"
+        ],
+        "version": "1.0.2"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "statistical-verification",
@@ -1504,9 +2323,28 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "statistics",
+          "verification",
+          "audit",
+          "research"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "structure-verification",
@@ -1534,9 +2372,29 @@
         "opencode"
       ],
       "skill",
+      [],
       null,
       null,
-      []
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "structure",
+          "verification",
+          "LaTeX",
+          "format",
+          "research"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      null,
+      null,
+      null,
+      null
     ],
     [
       "tikz-paper-figure",
@@ -1576,14 +2434,32 @@
         "opencode"
       ],
       "skill",
+      [],
+      "Convert AI/raster drafts into paper-ready TikZ standalone figures",
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "tikz",
+          "latex",
+          "standalone",
+          "paper-figure",
+          "figure-conversion"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
       [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash"
+        "shell",
+        "browser"
       ],
       null,
-      []
+      null,
+      null
     ],
     [
       "update",
@@ -1619,9 +2495,36 @@
         "opencode"
       ],
       "framework_command",
+      [],
+      "Refresh key docs, git tracking, and stale/dead repo surfaces; framework checks when applicable.",
       null,
       null,
-      []
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "maintenance",
+          "docs",
+          "research-docs",
+          "git-tracking",
+          "cleanup",
+          "contracts",
+          "router-rs"
+        ],
+        "version": "3.0.0"
+      },
+      "medium",
+      [
+        "shell",
+        "git"
+      ],
+      null,
+      "local",
+      [
+        "git push"
+      ]
     ],
     [
       "visual-review",
@@ -1654,19 +2557,40 @@
         "opencode"
       ],
       "skill",
-      null,
-      null,
       [
         "scoring:visual_review",
         "behavior:gate_exception_visual_screenshot",
         "behavior:gate_exception_visual_debugging"
+      ],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "visual",
+          "review",
+          "screenshot",
+          "screenshot-ui",
+          "chart",
+          "accessibility",
+          "evidence"
+        ],
+        "version": "2.2.1"
+      },
+      null,
+      [
+        "shell",
+        "browser"
+      ],
+      null,
+      "conditional",
+      [
+        "gui automation"
       ]
     ]
-  ],
-  "default_host_platforms": [
-    "claude",
-    "codex",
-    "cursor",
-    "opencode"
   ]
 }

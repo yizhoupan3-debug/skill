@@ -1,42 +1,41 @@
 ---
-name: scientific-figure-plotting
-description: |
-  Create, refactor, and review code-generated scientific figures for papers
-  using matplotlib, seaborn, plotnine, or related Python plotting tools. Use for
-  科研出图, publication charts, journal style figures, statistical annotations,
-  colorblind-safe palettes, Raincloud/Ridge plots, or CJK font troubleshooting.
-routing_layer: L4
-routing_owner: owner
-routing_gate: none
-routing_priority: P2
-session_start: preferred
-user-invocable: false
-disable-model-invocation: true
-trigger_hints:
-  - scientific figures
+description: Create, refactor, and review code-generated scientific figures for papers using matplotlib, seaborn, plotnine, or related Python plotting tools. Use for 科研出图, publication charts, journal style figures
+metadata:
+  platforms:
+  - supported
+  tags:
+  - scientific-figures
   - plotting
   - matplotlib
   - seaborn
   - publication
   - charts
-  - 科研出图
-  - statistical annotations
-  - colorblind-safe palettes
-  - CJK font
+  version: '1.2.0'
+name: scientific-figure-plotting
+risk: medium
+routing_gate: none
+routing_layer: L4
+routing_owner: owner
+routing_priority: P2
 runtime_requirements:
   python:
-    - matplotlib
-    - numpy
-    - scienceplots
-metadata:
-  version: "1.2.0"
-  platforms: [supported]
-  tags: [scientific-figures, plotting, matplotlib, seaborn, publication, charts]
-risk: medium
-source: local
-
+  - matplotlib
+  - numpy
+  - scienceplots
+session_start: preferred
+source: project
+trigger_hints:
+- CJK font
+- charts
+- colorblind-safe palettes
+- matplotlib
+- plotting
+- publication
+- scientific figures
+- seaborn
+- statistical annotations
+- 科研出图
 ---
-
 # scientific-figure-plotting
 
 This skill owns paper-grade scientific figure code and review. It should

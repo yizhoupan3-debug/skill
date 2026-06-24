@@ -130,7 +130,7 @@ fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result
         return Ok(());
     }
     let mut lines = String::new();
-    for event in buffer.drain(..) {
+    for event in buffer.iter() {
         let line = JournalLine {
             ts: crate::time::now_iso(),
             event: &event,
@@ -150,6 +150,7 @@ fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result
         file.sync_all().map_err(|e| format!("sync journal: {e}"))?;
     }
     write_atomic_snapshot(journal_path)?;
+    buffer.clear();
     Ok(())
 }
 

@@ -21,6 +21,11 @@ const BUILTIN_TXT: &str =
 static BUILTIN_BLOCK: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| BUILTIN_TXT.trim().to_string());
 
+/// Access the compiled-in builtin block directly (no disk lookup).
+pub fn builtin_block() -> String {
+    BUILTIN_BLOCK.clone()
+}
+
 static BLOCK_CACHE: BlockCache = BlockCache::new(REL_PATH, PREFIX_LINE, "paper prose");
 
 // ── Per-host environment variable mapping ──

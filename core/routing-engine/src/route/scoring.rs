@@ -405,7 +405,13 @@ fn score_visual_review_signals(
     let markers = super::nl_route_adjustments::visual_evidence_markers();
     if !markers
         .iter()
-        .any(|marker| query_text.contains(marker.as_str()))
+        .any(|marker| {
+            // Short ASCII-only markers (≤2 chars) must only match at token level
+            // to avoid false positives (e.g. "ui" in "guide"/"quick"/"build").
+            let use_contains = marker.len() > 2 || !marker.chars().all(|c| c.is_ascii());
+            (use_contains && query_text.contains(marker.as_str()))
+                || text_matches_phrase(query_token_list, marker)
+        })
     {
         // Weak match: reduce the entire score (applied as delta to the running total).
         let previous = current_score + delta;

@@ -66,7 +66,7 @@
     "env": "ROUTER_RS_CURSOR_OPEN_SUBAGENT_STALE_AFTER_SECS",
     "prune_pending_when_no_open": true,
     "disable_values": ["0", "false", "off", "no"],
-    "details": "docs/spec/runtime-subsystems.md §5 env table"
+    "details": "docs/architecture.md §4 (host isolation)"
   },
   "wave2_requires_live_evidence": {
     "excludes": "compact bump alone without live subagent evidence; Stop advisory nudge uses independent_reviewer_seen (Claude canonical; pending/phase telemetry only)"

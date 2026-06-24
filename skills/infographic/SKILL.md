@@ -1,42 +1,33 @@
 ---
+description: 'Generate HTML/CSS/JS infographics: knowledge cards, data summary posters, single-page long-form visuals.'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - infographic
+  - html
+  - data-visualization
+  - knowledge-card
+  - visual-summary
+  version: '1.0.1'
 name: infographic
-description: |
-  Generate HTML/CSS/JS infographics — single-page long-form visuals, knowledge cards, and data summary posters.
-  Use when the user asks to create "信息图", "infographic", "一图读懂", "知识卡片",
-  "数据长图", "summary poster", or needs a structured visual data summary rendered
-  as a self-contained HTML file that can be screenshotted or exported to PDF/PNG.
+risk: low
+routing_gate: none
 routing_layer: L3
 routing_owner: owner
-routing_gate: none
 routing_priority: P3
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
-trigger_hints:
-  - 信息图
-  - infographic
-  - 一图读懂
-  - 知识卡片
-  - 数据长图
-  - summary poster
-  - exported to PDF
-  - PNG
-  - html
-  - data visualization
-metadata:
-  version: "1.0.1"
-  platforms: [supported]
-  tags:
-    - infographic
-    - html
-    - data-visualization
-    - knowledge-card
-    - visual-summary
-risk: low
 source: local
-
+trigger_hints:
+- data visualization
+- infographic
+- summary poster
+- 一图读懂
+- 信息图
+- 单页长图
+- 数据长图
+- 知识卡片
 ---
-
 # Infographic
 
 Generate self-contained HTML infographics — single-page long-form data visuals,

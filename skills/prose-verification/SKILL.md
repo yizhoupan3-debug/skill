@@ -1,29 +1,31 @@
 ---
+description: 'Prose verification capability: terminology consistency, style guide compliance, claim drift detection, language register, hedging appropriateness.'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - prose
+  - writing
+  - verification
+  - style
+  - research
+  version: '1.0.0'
 name: prose-verification
-description: |
-  无状态内部 skill：验证论文/申请书文稿的术语一致性、风格合规、claim drift、
-  语言注册和 hedging 适度性。  由 paper-workbench 内联调用。
+risk: low
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
-risk: low
 source: local
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [prose, writing, verification, style, research]
 trigger_hints:
-  - 文稿质量验证
-  - 术语一致性检查
-  - claim drift 检测
-  - 风格合规
-  - hedging 适度性
+- claim drift
+- prose check
+- writing verification
+- 文体验证
+- 术语一致性
+- 风格检查
 ---
-
 # Prose Verification
 
 无状态能力 skill：对文稿做语言质量门禁检查。不独立编排会话。

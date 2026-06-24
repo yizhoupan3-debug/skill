@@ -102,7 +102,10 @@ pub fn read_lock_info(repo_root: &Path) -> Result<Option<LockInfo>, LoopError> {
     };
     let lock: LoopLock = serde_json::from_str(&raw)
         .map_err(|e| LoopError::Serde(format!("parse lock {}: {e}", path.display())))?;
-    let epoch = parse_iso_epoch(&lock.acquired_at).unwrap_or(0);
+    let epoch = parse_iso_epoch(&lock.acquired_at).unwrap_or_else(|| {
+        tracing::warn!(acquired_at = %lock.acquired_at, "failed to parse lock acquired_at, defaulting to 0");
+        0
+    });
     Ok(Some(LockInfo { lock, acquired_epoch: epoch }))
 }
 

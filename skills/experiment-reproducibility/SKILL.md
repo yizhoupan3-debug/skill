@@ -1,50 +1,40 @@
 ---
+description: 'Ensure and manage research experiment reproducibility: environment capture, random seed management, data versioning, configuration tracking, result validation, and artifact archival. Use when the user'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - reproducibility
+  - experiment-tracking
+  - environment
+  - seed
+  - data-versioning
+  - mlops
+  version: '1.0.3'
 name: experiment-reproducibility
-description: |
-  Ensure and manage research experiment reproducibility: environment capture,
-  random seed management, data versioning, configuration tracking, result
-  validation, and artifact archival. Use when the user asks "怎么保证可复现",
-  "环境管理", "随机种子", "数据版本控制", "实验配置", "reproducibility",
-  "environment snapshot", "seed management", "DVC", "MLflow tracking",
-  "实验记录", or needs systematic experiment reproducibility procedures
-  rather than one-off model training.
+risk: low
+routing_gate: none
 routing_layer: L3
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: false
-disable-model-invocation: true
+source: project
 trigger_hints:
-  - 怎么保证可复现
-  - 环境管理
-  - 随机种子
-  - 数据版本控制
-  - 实验配置
-  - reproducibility
-  - environment snapshot
-  - seed management
-  - DVC
-  - MLflow tracking
-  - 预注册
-  - 方案偏离
-  - 主分析
-  - 探索性分析
-metadata:
-  version: "1.0.3"
-  platforms: [supported]
-  tags:
-    - reproducibility
-    - experiment-tracking
-    - environment
-    - seed
-    - data-versioning
-    - mlops
-risk: low
-source: local
-
+- DVC
+- MLflow tracking
+- environment snapshot
+- reproducibility
+- seed management
+- 主分析
+- 实验配置
+- 怎么保证可复现
+- 探索性分析
+- 数据版本控制
+- 方案偏离
+- 实验环境管理
+- 随机种子
+- 预注册
 ---
-
 # Experiment Reproducibility
 
 This skill owns **experiment reproducibility management** for research.

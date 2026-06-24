@@ -49,7 +49,7 @@ pub async fn resolve_doi(doi: &str) -> Result<Paper> {
     // 尝试通过 CrossRef API 获取元数据
     let url = format!("https://api.crossref.org/works/{}", clean_doi);
     let client = reqwest::Client::builder()
-        .user_agent("research-harness/0.1 (mailto:research@example.com)")
+        .user_agent("research-harness/0.1 (arXiv API; research assistant)")
         .timeout(std::time::Duration::from_secs(10))
         .build()?;
 

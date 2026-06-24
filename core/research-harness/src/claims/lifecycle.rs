@@ -57,37 +57,17 @@ fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
 }
 
 fn slugify(text: &str) -> String {
-    let slug: String = text
-        .to_ascii_lowercase()
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect();
-    let slug = slug.split('-').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("-");
-    if slug.is_empty() { "hypothesis".into() } else { slug }
+    crate::text::slugify(text)
 }
 
-fn ensure_state_defaults(state: &Value) -> Value {
-    let mut s = state.clone();
-    let obj = s.as_object_mut().expect("state must be object");
-    let now = framework_kernel::time::now_iso();
-    for (key, default) in [
-        ("hypotheses", json!([])),
-        ("hypothesis_backlog", json!([])),
-        ("run_history", json!([])),
-        ("decisions", json!([])),
-        ("evidence_index", json!([])),
-        ("external_research", json!([])),
-        ("blockers", json!([])),
-        ("next_actions", json!([])),
-    ] {
-        obj.entry(key).or_insert(default);
-    }
-    obj.entry("novelty_gate").or_insert(json!({
-        "status": "pending", "claims": [], "claim_records": [], "draft_claims": []
-    }));
-    obj.entry("updated_at").or_insert(json!(now));
-    obj.entry("created_at").or_insert(json!(now));
-    s
+fn ensure_state_defaults(state: &Value) -> Result<Value> {
+    // Propagate hydration errors: silent fallback would lose data (A2).
+    crate::state::hydrate_state(state).map_err(|e| {
+        anyhow::anyhow!(
+            "ensure_state_defaults: hydrate_state failed: {e}. \
+             State may be corrupt (non-object in hypotheses/run_history/etc)."
+        )
+    })
 }
 
 // ── 常量 ──
@@ -240,7 +220,7 @@ pub struct HypothesisInput<'a> {
 }
 
 pub fn add_hypothesis(state: &Value, input: HypothesisInput<'_>) -> Result<Value> {
-    let mut next = ensure_state_defaults(state);
+    let mut next = ensure_state_defaults(state)?;
     let id = input.hypothesis_id.map(ToString::to_string).unwrap_or_else(|| {
         let slug = slugify(input.claim);
         if slug.len() <= 40 {
@@ -304,7 +284,7 @@ pub struct RecordRunInput<'a> {
 }
 
 pub fn record_run(state: &Value, input: &RecordRunInput<'_>, _workspace: &Path) -> Result<Value> {
-    let mut next = ensure_state_defaults(state);
+    let mut next = ensure_state_defaults(state)?;
     let Some(index) = find_hypothesis_index(&next, input.hypothesis_id) else {
         bail!("Unknown hypothesis: {}", input.hypothesis_id);
     };
@@ -361,7 +341,7 @@ pub struct RunAnnotationInput<'a> {
 }
 
 pub fn annotate_run(state: &Value, run_id: &str, input: RunAnnotationInput<'_>) -> Result<Value> {
-    let mut next = ensure_state_defaults(state);
+    let mut next = ensure_state_defaults(state)?;
     let Some(record) = arr_mut(&mut next, "run_history").iter_mut().find(|r| r.get("run_id").and_then(Value::as_str) == Some(run_id)) else {
         bail!("Unknown run id: {run_id}");
     };
@@ -385,7 +365,7 @@ pub fn reflect(
     state: &Value, hypothesis_id: &str, direction: &str, reason: &str,
     next_step: Option<&str>, activate_hypothesis: Option<&str>,
 ) -> Result<Value> {
-    let mut next = ensure_state_defaults(state);
+    let mut next = ensure_state_defaults(state)?;
     let Some(index) = find_hypothesis_index(&next, hypothesis_id) else { bail!("Unknown hypothesis: {hypothesis_id}"); };
     let status = find_hypothesis(&next, hypothesis_id).and_then(|h| h.get("status")).and_then(Value::as_str).unwrap_or("-");
     if status != "needs_reflection" { bail!("Hypothesis {hypothesis_id} must be in needs_reflection, current: {status}"); }
@@ -398,7 +378,7 @@ pub fn reflect(
     let run_id = str_field(latest_run, "run_id").to_string();
     let decision = json!({
         "hypothesis_id": hypothesis_id, "run_id": run_id, "direction": direction,
-        "reason": reason, "next_step": next_step,
+        "reason": reason, "interpretation": reason, "next_step": next_step,
         "recorded_at": framework_kernel::time::now_iso(),
     });
     arr_mut(&mut next, "decisions").push(decision);
@@ -420,6 +400,7 @@ pub fn reflect(
             transition_hypothesis(&mut next, index, "parked", Some(reason))?;
         }
         _ => {
+            tracing::warn!("[research-harness] reflect: unknown direction '{direction}', falling back to active");
             set_key(&mut next, "stage", json!(STAGE_INNER_LOOP));
             transition_hypothesis(&mut next, index, "active", Some(reason))?;
         }
@@ -443,8 +424,8 @@ pub fn reflect(
 pub fn add_claim_comparison(
     state: &Value, claim: &str, axis: &str, closest_prior_work: &str,
     overlap: &str, difference: &str, confidence: &str, verdict: &str, claim_id: Option<&str>,
-) -> Value {
-    let mut next = ensure_state_defaults(state);
+) -> Result<Value> {
+    let mut next = ensure_state_defaults(state)?;
     let id = claim_id.map(ToString::to_string).unwrap_or_else(|| format!("C{}", novelty_arr(&next, "claim_records").len() + 1));
     let record = json!({
         "claim_id": id, "claim": claim, "axis": axis, "closest_prior_work": closest_prior_work,
@@ -463,7 +444,7 @@ pub fn add_claim_comparison(
         claims_list = records.iter().map(|r| str_field(r, "claim").to_string()).collect::<Vec<_>>();
     }
     gate.insert("claims".into(), json!(claims_list));
-    next
+    Ok(next)
 }
 
 // ── 默认状态 ──
@@ -633,8 +614,8 @@ mod tests {
 
     fn gate_passed_state() -> Value {
         let mut s = minimal_state();
-        let s2 = add_claim_comparison(&s, "c1", "method", "pw", "low", "diff", "high", "novel", Some("C1"));
-        let mut s3 = add_claim_comparison(&s2, "c2", "task", "pw2", "medium", "diff2", "medium", "defensible", Some("C2"));
+        let s2 = add_claim_comparison(&s, "c1", "method", "pw", "low", "diff", "high", "novel", Some("C1")).unwrap();
+        let mut s3 = add_claim_comparison(&s2, "c2", "task", "pw2", "medium", "diff2", "medium", "defensible", Some("C2")).unwrap();
         novelty_gate_mut(&mut s3).insert("status".into(), json!("passed"));
         s3
     }
@@ -772,7 +753,7 @@ mod tests {
     #[test]
     fn add_claim_comparison_creates_record() {
         let s = minimal_state();
-        let updated = add_claim_comparison(&s, "my claim", "method", "pw", "low", "diff", "high", "novel", Some("C1"));
+        let updated = add_claim_comparison(&s, "my claim", "method", "pw", "low", "diff", "high", "novel", Some("C1")).unwrap();
         let records = novelty_arr(&updated, "claim_records");
         assert_eq!(records.len(), 1);
         assert_eq!(records[0].get("claim_id").and_then(Value::as_str), Some("C1"));

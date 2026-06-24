@@ -2,6 +2,7 @@
 mod common;
 
 use common::{project_root, read_text};
+use core_policy::doc_registry;
 use regex::Regex;
 
 #[test]
@@ -23,7 +24,7 @@ fn rust_contracts_doc_no_longer_uses_stale_transition_wording() {
 #[test]
 fn host_and_contract_docs_avoid_stale_codex_wording() {
     let root = project_root();
-    let mut paths = vec!["docs/spec.md".to_string(), "AGENTS.md".to_string()];
+    let mut paths = vec![doc_registry::DOC_ARCHITECTURE.to_string(), doc_registry::AGENTS_MD.to_string()];
     let hosts_dir = root.join("docs/hosts");
     if hosts_dir.is_dir() {
         for entry in std::fs::read_dir(&hosts_dir).expect("read docs/hosts") {
@@ -57,10 +58,7 @@ fn host_and_contract_docs_avoid_stale_codex_wording() {
 #[test]
 fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
     let root = project_root();
-    let scoped_docs = [
-        "docs/spec.md",
-        "docs/framework_profile_contract.md",
-    ];
+    let scoped_docs = doc_registry::all_keys();
     let joined = scoped_docs
         .iter()
         .map(|path| read_text(&root.join(path)))
@@ -84,16 +82,16 @@ fn top_level_docs_do_not_revive_removed_legacy_python_work_as_active() {
 }
 
 fn rust_contracts_doc() -> String {
-    // Content merged into spec.md after v6.5 consolidation
-    read_text(&project_root().join("docs/spec.md"))
+    // Content originally in spec.md, now in architecture.md
+    read_text(&project_root().join(doc_registry::DOC_ARCHITECTURE))
 }
 
 #[test]
 fn harness_policy_map_documents_ship_readiness_stop_orchestration() {
-    // Content merged into spec.md after v6.5 consolidation
-    let spec = read_text(&project_root().join("docs/spec.md"));
+    // Content originally in spec.md, now in architecture.md
+    let doc = read_text(&project_root().join(doc_registry::DOC_ARCHITECTURE));
     assert!(
-        spec.contains("ship_readiness") || spec.contains("Stop") || spec.contains("closeout"),
-        "spec.md must document Stop/closeout orchestration"
+        doc.contains("ship_readiness") || doc.contains("Stop") || doc.contains("closeout"),
+        "architecture.md must document Stop/closeout orchestration"
     );
 }

@@ -1,42 +1,34 @@
 ---
+description: Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration. Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundar
+metadata:
+  platforms:
+  - supported
+  tags:
+  - agent
+  - team
+  - orchestration
+  version: '4.0.0'
 name: agent-swarm-orchestration
-description: |
-  多 agent 编排选择——stay local / sidecar / team。team 是多 agent 编排的真源，
-  通过 artifacts/teams/ 文件系统实现成员管理与 agent 间通信。
-  适用于多 agent、team、swarm、orchestrator 类请求。
 risk: medium
-source: community-adapted
+routing_gate: delegation
 routing_layer: L0
 routing_owner: gate
-routing_gate: delegation
 routing_priority: P1
 session_start: required
-user-invocable: false
-disable-model-invocation: false
+source: project
 trigger_hints:
-  - 多 agent 协作
-  - agent 编排
-  - swarm architecture
-  - agent orchestrator
-  - task routing system
-  - planner-coder-reviewer
-  - shared agent memory
-  - agent supervisor
-  - multi-agent team
-  - 多 agent 执行
-  - 多阶段流程
-  - manager-worker
-  - 多 agent 团队
-metadata:
-  version: "4.0.0"
-  platforms: [supported]
-  tags:
-    - agent
-    - team
-    - orchestration
-
+- /workflow
+- agent orchestrator
+- agent supervisor
+- agent 编排
+- multi-agent workflow
+- planner-coder-reviewer
+- shared agent memory
+- swarm architecture
+- task routing system
+- 多 agent 协作
+- 多 agent 执行
 ---
-
 ## Quick Ref
 - **Purpose**: 多 agent 编排选择——local / sidecar / team 模式，判定 spawn admission 与团队执行面
 - **Key Rules**: 默认保守不自动升格 team；3 模式优先级 explicit_team > auto_multi_phase > sidecar > local；spawn 需满足 admission 条件；**team 为多 agent 编排的真源，替代已移除的 workflow**
@@ -223,7 +215,7 @@ Allow bounded sidecars when at least one condition is true:
 
 For these allowed cases, the supervisor should spawn sidecars promptly and keep local ownership of integration and final verification.
 
-Parallel **review / external research** lanes must stay **read-biased**; **verifier** (or supervisor-run commands) owns **executable** pass/fail. **推理深度**见 [推理深度契约](../../docs/adr/010-ideal-architecture-v10.md)（分工 + `EVIDENCE_INDEX`，非单模型长 CoT）。Without at least one bounded `verify_commands` (or equivalent hook-visible checks), treat as **`verification_missing`** for write-heavy spawns.
+Parallel **review / external research** lanes must stay **read-biased**; **verifier** (or supervisor-run commands) owns **executable** pass/fail. **推理深度**见 [推理深度契约](../../docs/architecture.md)（分工 + `EVIDENCE_INDEX`，非单模型长 CoT）。Without at least one bounded `verify_commands` (or equivalent hook-visible checks), treat as **`verification_missing`** for write-heavy spawns.
 
 Reject spawning with an explicit reason:
 

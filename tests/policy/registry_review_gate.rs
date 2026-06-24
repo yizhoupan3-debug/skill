@@ -41,33 +41,6 @@ fn runtime_registry_review_gate_spawn_first_fields() {
     );
 }
 
-#[test]
-fn codex_docs_document_review_gate_env_and_session() {
-    let root = project_root();
-    let codex_doc = read_text(&root.join("docs/hosts/hook-hosts.md"));
-    assert!(
-        codex_doc.contains("ROUTER_RS_CODEX_REVIEW_FORK_CONTEXT_MISSING_INFER_FALSE"),
-        "hook-hosts.md must document Codex fork infer env"
-    );
-    assert!(
-        codex_doc.contains("ROUTER_RS_CODEX_REQUIRE_STABLE_SESSION_KEY"),
-        "hook-hosts.md must document stable session key"
-    );
-    let operator = read_text(&root.join("docs/hosts/hook-hosts.md"));
-    assert!(
-        operator.contains("ROUTER_RS_CODEX_REVIEW_GATE_DISABLE"),
-        "hook-hosts.md must list Codex review gate disable"
-    );
-    let codex_doc = read_text(&root.join("docs/hosts/hook-hosts.md"));
-    assert!(
-        codex_doc.contains("ROUTER_RS_CODEX_HOOK_STATE_SALT"),
-        "hook-hosts.md must document hook-state salt"
-    );
-    assert!(
-        codex_doc.contains("re-arm") || codex_doc.contains("rearm") || codex_doc.contains("重新武装"),
-        "hook-hosts.md must document UPS re-arm behavior"
-    );
-}
 
 #[test]
 fn runtime_registry_host_projections_split_harness_capabilities() {

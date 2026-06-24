@@ -1,29 +1,32 @@
 ---
+description: 'Formal verification capability: CAS identity simplification, SMT consistency, witness validation, dimensional analysis, step dependency checking.'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - math
+  - formal
+  - verification
+  - CAS
+  - SMT
+  - research
+  version: '1.0.0'
 name: formal-verification
-description: |
-  无状态内部 skill：用 CAS / SMT / witness 和量纲检查验证数学推导的正确性。
-  由 research-execution 内联调用，不由用户直接触发。
+risk: low
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
-risk: low
 source: local
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [math, formal, verification, CAS, SMT, research]
 trigger_hints:
-  - 数学推导验证
-  - CAS 化简
-  - SMT 检查
-  - 量纲检查
-  - witness 一致性
+- CAS验证
+- SMT检查
+- formal verification
+- witness验证
+- 形式验证
+- 量纲检查
 ---
-
 # Formal Verification
 
 无状态能力 skill：对数学推导和公式做形式化验证。不独立编排会话。

@@ -43,7 +43,10 @@ fn canonicalize_best_effort(path: &Path) -> Option<PathBuf> {
 fn path_matches_exempt_prefix(canonical: &Path, repo_root: &Path) -> bool {
     let repo = match fs::canonicalize(repo_root) {
         Ok(p) => p,
-        Err(_) => repo_root.to_path_buf(),
+        Err(_) => {
+            tracing::warn!(path = %repo_root.display(), "failed to canonicalize repo_root, using as-is");
+            repo_root.to_path_buf()
+        }
     };
     // Paths outside the repo are never exempt.
     let Some(rel) = canonical.strip_prefix(&repo).ok() else {

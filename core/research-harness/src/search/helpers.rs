@@ -144,8 +144,9 @@ impl ExternalSourceArg {
 // ── Deduplication ──
 
 /// Deduplicate search results by (source, title) key (case-insensitive).
+/// Preserves original order (uses Vec position check instead of HashSet).
 pub(super) fn dedupe_research_results(results: Vec<Value>) -> Vec<Value> {
-    let mut seen = HashSet::new();
+    let mut seen = Vec::new();
     let mut deduped = Vec::new();
     for result in results {
         let key = format!(
@@ -153,7 +154,8 @@ pub(super) fn dedupe_research_results(results: Vec<Value>) -> Vec<Value> {
             str_field_default(&result, "source", "-").to_lowercase(),
             str_field_default(&result, "title", "-").to_lowercase()
         );
-        if seen.insert(key) {
+        if !seen.contains(&key) {
+            seen.push(key);
             deduped.push(result);
         }
     }

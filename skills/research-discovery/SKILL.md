@@ -1,75 +1,48 @@
 ---
+description: 'Research discovery front door: deep topic investigation, literature/survey, theory landscape, theorem applicability, math-background inquiry for unknown properties, and research-question scoping.'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - research
+  - literature-research
+  - discovery
+  - survey
+  - theory-background
+  version: '1.0.0'
 name: research-discovery
-description: |
-  Research discovery front door: deep topic investigation, literature/survey,
-  theory landscape, theorem applicability, math-background inquiry for unknown
-  properties (analogies with breaks_when), and research-question scoping.
-  Use for requests like "深度调研这个科研方向", "这个问题该用什么数学理论",
-  "未知性质怎么找数学背景", "文献综述", or "做一个 research harness".
-  **不适用于**：Web 信息搜索、事实核查、多源验证（这些属于 deep-research）。
+risk: low
+routing_gate: none
 routing_layer: L2
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: false
-disable-model-invocation: false
 short_description: Research discovery, literature survey, and theory-background router
-trigger_hints:
-  - 科研
-  - 调研方向
-  - 文献综述
-  - 研究方向
-  - 知识地图
-  - 主题深挖
-  - 研究综述
-  - 相关定理
-  - 理论背景
-  - 数学背景
-  - 用什么数学
-  - 该用什么理论
-  - 学术深调研
-  - 学术调研方向
-  - research workbench
-  - 类比
-  - 未知性质
-  - 性质不清楚
-  - 非手稿科研
-  - survey
-  - landscape
-  - related work
-  - knowledge gap
-  - closest work
-  # 日常用语扩展
-  - 查论文
-  - 找文献
-  - 有哪些论文
-  - 这个方向
-  - 学术调研
-  - 学术搜索
-  - 最新进展
-  - paper search
-  - literature
-  - state of the art
-  # barrier 信号扩展（loop escalation 入口）
-  - 突破不了
-  - 硬指标
-  - 无法突破
-  - 瓶颈
-  - 卡住了
-  - roadblock
-  - stuck
-  - 这个方向走不通
-trigger_hints_long: references/trigger-hints-long.md
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [research, literature-research, discovery, survey, theory-background]
-risk: low
 source: local
-
+trigger_hints:
+- closest work
+- knowledge gap
+- landscape
+- related work
+- survey
+- 主题深挖
+- 性质不清楚
+- 数学背景
+- 文献综述
+- 未知性质
+- 学术深调研
+- 学术调研方向
+- 理论背景
+- 用什么数学
+- 相关定理
+- 知识地图
+- 研究方向
+- 研究综述
+- 类比
+- 该用什么理论
+- 调研方向
+- 非手稿科研
 ---
-
 # Research Discovery
 
 This skill is the **front door for research discovery work**: deep topic
@@ -109,7 +82,7 @@ Start by classifying the task into one or more lanes:
 
 - `research_question`: research objective, novelty claim, and decision the work must support.
 - `external_research`: literature, standards, datasets, repositories, or prior-art lookup when allowed or necessary. Use [`references/academic-sources.md`](references/academic-sources.md) for the five verified-open retrieval sources (arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ); fan out across sources for thorough coverage.
-- `math_background_inquiry`: theory landscape for unknown properties (`theory_background` with `theorem_applicability`, `cross_domain_bridges`, `proof_strategy_hints`, multi-source `retrieval_fanout_plan`); multi-round -> RFV `external_mode=math_background` + [math-background-inquiry.md](../../docs/adr/010-ideal-architecture-v10.md); conjectures -> §D `conjecture_list`. **Mandatory**: every analogy has `breaks_when`; named theorems have `applies_when`/`fails_when`; retrieval fans out arXiv+OpenAlex/CrossRef per [academic-sources.md](references/academic-sources.md).
+- `math_background_inquiry`: theory landscape for unknown properties (`theory_background` with `theorem_applicability`, `cross_domain_bridges`, `proof_strategy_hints`, multi-source `retrieval_fanout_plan`); multi-round -> RFV `external_mode=math_background` + [math-background-inquiry.md](../../docs/architecture.md); conjectures -> §D `conjecture_list`. **Mandatory**: every analogy has `breaks_when`; named theorems have `applies_when`/`fails_when`; retrieval fans out arXiv+OpenAlex/CrossRef per [academic-sources.md](references/academic-sources.md).
 - `paper_handoff`: only when the task becomes manuscript-level; then hand off to `$paper-workbench` with **`language_register`** + link to [`../paper-workbench/references/prose-chain-contract.md`](../paper-workbench/references/prose-chain-contract.md) when prose is in scope.
 
 Prefer the smallest lane set that can answer the user's real question. Do not
@@ -179,9 +152,9 @@ the execution lanes with the discovery outputs as context.
 ## Cross-references
 
 - **Academic sources (verified-open retrieval scaffolding)**: [`references/academic-sources.md`](references/academic-sources.md) — arXiv, OpenAlex, CrossRef, PubMed E-utilities, DOAJ API templates and fan-out patterns for `external_research` lane.
-- Quality Gate research harness: `docs/adr/010-ideal-architecture-v10.md` §Quality Gate
-- External research harness: `docs/adr/010-ideal-architecture-v10.md` §External Research
-- Math background inquiry (deep): `docs/adr/010-ideal-architecture-v10.md` §Math Background
+- Quality Gate research harness: `docs/architecture.md` §Quality Gate
+- External research harness: `docs/architecture.md` §External Research
+- Math background inquiry (deep): `docs/architecture.md` §Math Background
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - **Verification skills** (load when lane requires):
   - `literature_survey` lane → [`../literature-verification/SKILL.md`](../literature-verification/SKILL.md)

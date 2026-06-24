@@ -17,7 +17,7 @@ use crate::closeout::{
 use crate::report;
 use std::fs;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 /// Check whether a loop entry's profile is schedulable.
 /// Returns an error for interactive profiles which cannot be scheduled for unattended execution.
@@ -370,16 +370,24 @@ fn barrier_escalation(
     // otherwise fall back to cargo run slow-path.
     let autoresearch_bin = resolve_autoresearch_binary()?;
     let output = if autoresearch_bin.is_empty() {
-        // Slow-path: compile and run via cargo
-        std::process::Command::new("cargo")
-            .args([
-                "run", "-p", "research-harness", "--bin", "autoresearch", "--", "barrier",
-                "--problem", &problem,
-                "--loop-id", loop_id,
-                "--run-id", run_id,
-            ])
-            .current_dir(repo_root)
-            .output()
+        // Slow-path: compile and run via cargo with a timeout
+        let mut cmd = std::process::Command::new("cargo");
+        cmd.args([
+            "run", "-p", "research-harness", "--bin", "autoresearch", "--", "barrier",
+            "--problem", &problem,
+            "--loop-id", loop_id,
+            "--run-id", run_id,
+        ])
+        .current_dir(repo_root);
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(cmd.output());
+        });
+        rx.recv_timeout(Duration::from_secs(300))
+            .map_err(|_| LoopError::ActionFailed(
+                "barrier escalation: cargo run timed out after 300s".into(),
+            ))?
             .map_err(|e| LoopError::ActionFailed(format!("barrier escalation failed: {e}")))?
     } else {
         std::process::Command::new(&autoresearch_bin)

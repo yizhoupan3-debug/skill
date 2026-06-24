@@ -105,7 +105,7 @@ impl BrowserRuntime {
                 .get(&session_id)
                 .map(|session| session.tabs.len())
                 .unwrap_or_default();
-            self.dispose_session(&session_id)?;
+            self.dispose_session(&session_id);
             return Ok(json!({"ok": true, "closed": "session", "remainingTabs": remaining_tabs}));
         }
         if target != "tab" {
@@ -151,7 +151,7 @@ impl BrowserRuntime {
             session.current_tab_id = session.tabs.keys().next().cloned();
             let remaining = session.tabs.len();
             if remaining == 0 {
-                let _ = self.dispose_session(&session_id);
+                self.dispose_session(&session_id);
             }
             return Ok(json!({"ok": true, "closed": "tab", "remainingTabs": remaining}));
         }
@@ -746,7 +746,7 @@ impl BrowserRuntime {
             return base;
         }
         match self.resolve_attached_runtime_descriptor_context() {
-            Ok(resolved) => match inspect_trace_stream(TraceStreamInspectRequestPayload {
+            Ok(resolved) => match (browser_mcp_dispatch::hooks().inspect_trace_stream)(TraceStreamInspectRequestPayload {
                 path: Some(resolved.trace_stream_path),
                 event_stream_text: None,
                 compaction_manifest_path: None,
@@ -972,7 +972,7 @@ impl BrowserRuntime {
         Ok(tab_id)
     }
 
-    fn dispose_session(&mut self, session_id: &str) -> Result<(), Value> {
+    fn dispose_session(&mut self, session_id: &str) {
         if let Some(mut child) = self.browser_processes.remove(session_id) {
             if let Err(e) = child.kill() {
                 tracing::warn!("failed to kill browser process for session {session_id}: {e}");
@@ -985,13 +985,12 @@ impl BrowserRuntime {
             && let Err(e) = fs::remove_dir_all(session.user_data_dir) {
                 tracing::warn!("failed to remove user data dir for session {session_id}: {e}");
             }
-        Ok(())
     }
 
     fn shutdown(&mut self) -> Result<(), Value> {
         let ids = self.sessions.keys().cloned().collect::<Vec<_>>();
         for session_id in ids {
-            self.dispose_session(&session_id)?;
+            self.dispose_session(&session_id);
         }
         Ok(())
     }

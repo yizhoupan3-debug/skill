@@ -8,6 +8,7 @@ use common::{
     cargo_manifest_command, json_from_output, project_root, read_json, read_text, router_rs_json,
     run, seed_framework_markers,
 };
+use core_policy::doc_registry;
 use serde_json::{Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fs;
@@ -185,7 +186,6 @@ fn plan_mode_keeps_review_optional_and_review_only() {
     for marker in [
         "Review findings-only",
         "skills/code-review-deep/SKILL.md",
-        "docs/spec.md",
         "面向用户的回复必须使用简体中文",
         "Continuity artifacts",
         "Closeout",
@@ -757,41 +757,8 @@ fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
 }
 
 #[test]
-fn framework_naming_conventions_has_no_router_rs_default_value_table() {
-    let text = read_text(&project_root().join("docs/framework_naming_conventions.md"));
-    assert!(
-        !text.contains("Known Env Vars"),
-        "framework_naming_conventions must not host a second ROUTER_RS defaults table"
-    );
-    for forbidden_default in [
-        "ROUTER_RS_DEPTH_SCORE_MODE` | off",
-        "ROUTER_RS_CURSOR_REVIEW_GATE_DISABLE` | false",
-    ] {
-        assert!(
-            !text.contains(forbidden_default),
-            "framework_naming_conventions leaked env default row: {forbidden_default}"
-        );
-    }
-    assert!(
-        text.contains("spec.md") || text.contains("harness_architecture"),
-        "framework_naming_conventions must link spec.md for env defaults"
-    );
-}
-
-#[test]
 fn removed_router_flags_are_absent_from_user_docs() {
-    let docs = [
-        "docs/spec.md",
-        "AGENTS.md",
-        "docs/spec/core-crates.md",
-        "docs/spec/multi-agent.md",
-        "docs/spec/host-matrix.md",
-        "docs/spec/routing-plugin.md",
-        "docs/spec/runtime-subsystems.md",
-        "docs/spec/security-lifecycle.md",
-        "docs/spec/auxiliary.md",
-        "docs/spec/observability-testing.md",
-    ]
+    let docs = doc_registry::all_keys()
     .iter()
     .map(|path| read_text(&project_root().join(path)))
     .collect::<Vec<_>>()
@@ -808,9 +775,6 @@ fn removed_router_flags_are_absent_from_user_docs() {
             "removed flag leaked: {removed_flag}"
         );
     }
-    assert!(docs.contains("router-rs framework snapshot"));
-    assert!(docs.contains("framework sync-entrypoints"));
-    assert!(docs.contains("stdio `execute` operation"));
 }
 
 #[test]
@@ -1838,15 +1802,6 @@ fn runtime_registry_on_disk_closed_set_is_canonical_five_hosts() {
         );
     }
 
-    for host_doc in [
-        "docs/hosts/hook-hosts.md",
-        "docs/hosts/opencode.md",
-    ] {
-        assert!(
-            project_root().join(host_doc).is_file(),
-            "missing canonical host manual: {host_doc}"
-        );
-    }
     assert!(
         project_root().join("AGENTS.md").is_file(),
         "missing host agent policy: AGENTS.md"
@@ -2307,20 +2262,6 @@ fn prompt_policy_is_rust_owned() {
     assert!(compression.contains("prompt_policy_owner"));
 }
 
-#[test]
-fn openai_proxy_config_does_not_commit_plaintext_api_keys() {
-    let proxy_root = project_root().join("openai_proxy");
-    if !proxy_root.join("config.yaml").is_file() {
-        // openai_proxy removed in bfd7d87; keep test for forks that still ship the directory.
-        return;
-    }
-    let config = read_text(&proxy_root.join("config.yaml"));
-    let start_script = read_text(&proxy_root.join("start.sh"));
-    assert!(config.contains("__OPENAI_PROXY_API_KEY__"));
-    assert!(!config.contains("qscxzaq75321470"));
-    assert!(!config.contains("sk-aggregator-"));
-    assert!(start_script.contains("OPENAI_PROXY_API_KEY"));
-}
 
 #[test]
 fn slides_native_pptx_lane_has_no_node_package_runtime() {

@@ -1,34 +1,37 @@
 ---
-name: citation-management
 description: Verify and format academic citations and bibliographies.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - citation
+  - bibliography
+  - bibtex
+  - reference
+  - doi
+  - academic
+  version: '2.4.0'
+name: citation-management
+risk: low
+routing_gate: none
 routing_layer: L2
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: true
-disable-model-invocation: true
+source: project
 trigger_hints:
-  - 文献引用管理
-  - BibTeX 格式核查
-  - BibTeX
-  - DOI 格式验证
-  - PMID
-  - Zotero-style cleanup
-  - 文中引用与参考文献表一致性检查
-  - APA
-  - IEEE
-  - ACM
-  - GB/T 7714
-metadata:
-  version: "2.4.0"
-  platforms: [supported]
-  tags: [citation, bibliography, bibtex, reference, doi, academic]
-risk: low
-source: local
-
+- ACM
+- APA
+- BibTeX
+- BibTeX 格式核查
+- DOI 格式验证
+- GB/T 7714
+- IEEE
+- PMID
+- Zotero-style cleanup
+- 文中引用与参考文献表一致性检查
+- 文献引用管理
 ---
-
 # citation-management
 
 This skill owns reference correctness and style consistency. It makes

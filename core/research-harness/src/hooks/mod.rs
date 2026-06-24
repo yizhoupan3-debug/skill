@@ -124,43 +124,30 @@ pub fn dispatch_activity_log(
     Ok(true)
 }
 
-/// Dispatch adversarial review hook with env switch and caching.
+/// Dispatch adversarial review hook with repo_root for BlockCache disk support.
 /// Returns the context to inject, or None if not applicable.
-pub fn dispatch_adversarial(context: &str) -> Option<String> {
-    if !is_adversarial_enabled() {
+pub fn dispatch_adversarial(context: &str, repo_root: Option<&std::path::Path>) -> Option<String> {
+    if !is_adversarial_enabled() || !paper_adversarial::prompt_signals_manuscript_work(context) {
         return None;
     }
-    let cache_key = crate::util::cache_key("adv", context);
-    if let Some(cached) = read_cache(&cache_key) {
-        return if cached.is_empty() {
-            None
-        } else {
-            Some(cached)
-        };
+    if let Some(root) = repo_root {
+        Some(paper_adversarial::resolve_paper_adversarial_block(root))
+    } else {
+        Some(paper_adversarial::builtin_block())
     }
-    let result = paper_adversarial::maybe_append_adversarial_context(context);
-    // Cache the result
-    let _ = write_cache(&cache_key, result.as_deref().unwrap_or(""));
-    result
 }
 
-/// Dispatch prose quality hook with env switch and caching.
+/// Dispatch prose quality hook with repo_root for BlockCache disk support.
 /// Returns the context to inject, or None if not applicable.
-pub fn dispatch_prose(context: &str) -> Option<String> {
-    if !is_prose_enabled() {
+pub fn dispatch_prose(context: &str, repo_root: Option<&std::path::Path>) -> Option<String> {
+    if !is_prose_enabled() || !paper_prose::prompt_signals_prose_work(context) {
         return None;
     }
-    let cache_key = crate::util::cache_key("prose", context);
-    if let Some(cached) = read_cache(&cache_key) {
-        return if cached.is_empty() {
-            None
-        } else {
-            Some(cached)
-        };
+    if let Some(root) = repo_root {
+        Some(paper_prose::resolve_paper_prose_block(root))
+    } else {
+        Some(paper_prose::builtin_block())
     }
-    let result = paper_prose::maybe_append_prose_context(context);
-    let _ = write_cache(&cache_key, result.as_deref().unwrap_or(""));
-    result
 }
 
 // ── Cursor JSON merge support ──
@@ -261,33 +248,29 @@ mod tests {
 
     #[test]
     fn dispatch_adversarial_returns_context() {
-        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_CACHE_DIR", &tempfile::tempdir().unwrap().path()); }
-        let result = dispatch_adversarial("请根据审稿意见修改论文");
+        let result = dispatch_adversarial("请根据审稿意见修改论文", None);
         assert!(result.is_some());
         assert!(result.unwrap().contains("PAPER_ADVERSARIAL_HOOK"));
-        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_CACHE_DIR") };
     }
 
     #[test]
     fn dispatch_adversarial_disabled() {
         unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_ADVERSARIAL", "0") };
-        let result = dispatch_adversarial("请根据审稿意见修改论文");
+        let result = dispatch_adversarial("请根据审稿意见修改论文", None);
         assert!(result.is_none());
         unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_ADVERSARIAL") };
     }
 
     #[test]
     fn dispatch_prose_returns_context() {
-        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_CACHE_DIR", &tempfile::tempdir().unwrap().path()); }
-        let result = dispatch_prose("帮我把这段引言润色一下");
+        let result = dispatch_prose("帮我把这段引言润色一下", None);
         assert!(result.is_some());
         assert!(result.unwrap().contains("PAPER_PROSE_QUALITY_HOOK"));
-        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_CACHE_DIR") };
     }
 
     #[test]
     fn dispatch_prose_no_signal() {
-        let result = dispatch_prose("fix the CI pipeline");
+        let result = dispatch_prose("fix the CI pipeline", None);
         assert!(result.is_none());
     }
 
@@ -311,16 +294,5 @@ mod tests {
         let merged = merge_hook_context_json("plain text", "test", "hook data");
         assert!(merged.contains("plain text"));
         assert!(merged.contains("hook data"));
-    }
-
-    #[test]
-    fn dispatch_adversarial_cached() {
-        let dir = tempfile::tempdir().unwrap();
-        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_CACHE_DIR", &dir.path()); }
-        let ctx = "请根据审稿意见修改这篇论文的手稿";
-        let r1 = dispatch_adversarial(ctx);
-        let r2 = dispatch_adversarial(ctx);
-        assert_eq!(r1, r2); // second call should hit cache
-        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_CACHE_DIR") };
     }
 }

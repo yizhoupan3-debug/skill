@@ -6,21 +6,29 @@ use crate::types::{Claim, ClaimCeiling};
 
 /// Compute the appropriate ceiling for a claim given its evidence strength.
 pub fn compute_claim_ceiling(claim: &Claim) -> ClaimCeiling {
-    let has_strong = claim.evidence.iter().any(|e| {
-        matches!(e.strength, crate::types::EvidenceStrength::Strong)
-    });
-    let has_moderate = claim.evidence.iter().any(|e| {
-        matches!(e.strength, crate::types::EvidenceStrength::Moderate)
-    });
-    let has_missing = claim.evidence.iter().any(|e| {
-        matches!(e.strength, crate::types::EvidenceStrength::Missing)
-    });
+    // Evidence with Missing strength is a placeholder (not yet filled);
+    // it neither proves nor disproves the claim — skip it from ceiling logic.
+    let real_evidence: Vec<_> = claim
+        .evidence
+        .iter()
+        .filter(|e| !matches!(e.strength, crate::types::EvidenceStrength::Missing))
+        .collect();
 
-    if has_missing || (!has_strong && !has_moderate) {
-        ClaimCeiling::NoClaim
-    } else if has_strong && claim.evidence.len() >= 3 {
+    if real_evidence.is_empty() {
+        return ClaimCeiling::NoClaim;
+    }
+
+    let count_strong = real_evidence
+        .iter()
+        .filter(|e| matches!(e.strength, crate::types::EvidenceStrength::Strong))
+        .count();
+    let has_moderate = real_evidence
+        .iter()
+        .any(|e| matches!(e.strength, crate::types::EvidenceStrength::Moderate));
+
+    if count_strong >= 3 {
         ClaimCeiling::TopVenue
-    } else if has_strong || has_moderate {
+    } else if count_strong >= 1 || has_moderate {
         ClaimCeiling::ConferenceReady
     } else {
         ClaimCeiling::LocalOnly
@@ -59,14 +67,16 @@ mod tests {
     }
 
     #[test]
-    fn ceiling_missing_evidence_blocks() {
+    fn ceiling_missing_evidence_ignored_when_strong_present() {
+        // Missing evidence is a placeholder (not yet filled).
+        // When Strong evidence exists, Missing should not lower the ceiling.
         let claim = make_claim(vec![
             anchor(EvidenceStrength::Strong),
             anchor(EvidenceStrength::Missing),
         ]);
         assert!(matches!(
             compute_claim_ceiling(&claim),
-            ClaimCeiling::NoClaim
+            ClaimCeiling::ConferenceReady
         ));
     }
 

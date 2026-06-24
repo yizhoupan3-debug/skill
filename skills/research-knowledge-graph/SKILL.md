@@ -1,42 +1,48 @@
 ---
+description: Research Knowledge Graph — navigate, visualize, trace connections between entries, manage entities, cross-workspace search.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - research
+  - knowledge-graph
+  - graph
+  - entities
+  - hub
+  version: '1.0.0'
 name: research-knowledge-graph
-description: |
-  Research Knowledge Graph — navigate connections between research entries,
-  find paths, visualize graphs, manage entities, and search across workspaces.
-  Use for requests like "show my research connections", "find path between",
-  "visualize knowledge graph", "跨工作区搜索研究", "研究实体管理".
+risk: low
+routing_gate: none
 routing_layer: L2
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: true
-disabled-model-invocation: false
 short_description: Research Knowledge Graph — navigate, visualize, trace connections
-trigger_hints:
-  - 知识图谱
-  - research graph
-  - 研究方向连接
-  - 实体管理
-  - 研究路径追溯
-  - 知识关联
-  - 研究方向关系
-  - knowledge graph
-  - 跨工作区搜索
-  - 研究关系图
-  - 连接查询
-  - 研究历史追溯
-  - barrier route
-  - 障碍路径
-trigger_hints_long: references/trigger-hints-long.md
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [research, knowledge-graph, graph, entities, hub]
-risk: low
 source: local
+trigger_hints:
+- 知识图谱
+- research graph
+- 研究方向连接
+- 实体管理
+- research-knowledge-graph
+- 研究路径追溯
+- 知识关联
+- 研究方向关系
+- knowledge graph
+- 跨工作区搜索
+- 研究关系图
+- kg viz
+- 研究历史追溯
+- barrier route
+- 障碍路径
+- log:neighbors
+- log:viz
+- log:route
+- entity search
+- hub search
+- 连接查询
+- 研究知识图谱可视化
 ---
-
 # Research Knowledge Graph
 
 This skill provides CLI commands for navigating the **Research Knowledge Graph**
@@ -113,7 +119,7 @@ cargo run -p research-harness --bin research-log -- hub-search "transformer"
 
 - Research log database: `core/research-harness/src/log/`
 - Research workspace CLI: `core/research-harness/src/bin/autoresearch.rs`
-- Harness specification: `docs/research-harness.md` §19
+- Harness specification: `docs/research/harness.md` §19
 - Entity extraction patterns: `core/research-harness/src/log/extract.rs`
 - Graph traversal: `core/research-harness/src/log/graph.rs`
 - Hub indexer: `core/research-harness/src/log/hub.rs`

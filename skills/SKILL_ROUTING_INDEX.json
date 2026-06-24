@@ -11,7 +11,11 @@
     "kind",
     "layer",
     "owner",
-    "skill_flags"
+    "skill_flags",
+    "short_description",
+    "tags",
+    "when_to_use",
+    "do_not_use"
   ],
   "skills": [
     [
@@ -39,7 +43,11 @@
         "scoring:agent_swarm",
         "behavior:agent_swarm_owner",
         "behavior:hot_retry_eligible"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "algo-trading",
@@ -75,7 +83,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "citation-management",
@@ -98,7 +110,11 @@
       "skill",
       "L2",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "code-review-deep",
@@ -129,7 +145,11 @@
       [
         "scoring:code_review_deep",
         "behavior:code_review_deep_overlay"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "deep-research",
@@ -154,7 +174,11 @@
       "skill",
       "L2",
       "user",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "deepinterview",
@@ -172,7 +196,11 @@
       "owner",
       [
         "behavior:low_score_override:20.0"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "design-md",
@@ -201,7 +229,11 @@
         "scoring:design_md",
         "behavior:hot_retry_eligible",
         "artifact_exception:design_md_suppress"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "diagramming",
@@ -227,7 +259,11 @@
       "skill",
       "L3",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "doc",
@@ -250,7 +286,11 @@
       "gate",
       [
         "behavior:hot_retry_eligible"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "email-template",
@@ -273,7 +313,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "experiment-reproducibility",
@@ -299,7 +343,11 @@
       "skill",
       "L3",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "formal-verification",
@@ -317,7 +365,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "gh-address-comments",
@@ -345,7 +397,11 @@
       "gate",
       [
         "behavior:ci_gate_fuzzy_rescue_excluded"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "gh-fix-ci",
@@ -379,7 +435,11 @@
       "gate",
       [
         "behavior:nl_exempt_framework_alias"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "gitx",
@@ -393,7 +453,11 @@
       "framework_command",
       "L2",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "infographic",
@@ -413,7 +477,11 @@
       "skill",
       "L3",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "literature-verification",
@@ -431,7 +499,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "math-derivation",
@@ -453,7 +525,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "mcp-server-management",
@@ -473,7 +549,11 @@
       "skill",
       "L3",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "paper-workbench",
@@ -516,7 +596,11 @@
       "owner",
       [
         "scoring:paper_workbench"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "paper-writing",
@@ -536,7 +620,11 @@
       "skill",
       "L2",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "pdf",
@@ -558,7 +646,11 @@
       "gate",
       [
         "behavior:hot_retry_eligible"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "plan-mode",
@@ -580,7 +672,11 @@
       "skill",
       "L1",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "prose-verification",
@@ -598,7 +694,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "python-env-management",
@@ -622,7 +722,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "reproducibility-verification",
@@ -639,7 +743,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "research-discovery",
@@ -673,7 +781,11 @@
       "skill",
       "L2",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "research-execution",
@@ -704,7 +816,11 @@
       "skill",
       "L2",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "scientific-figure-plotting",
@@ -726,7 +842,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "sentry",
@@ -746,7 +866,11 @@
       "gate",
       [
         "behavior:hot_retry_eligible"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "simplify",
@@ -769,7 +893,11 @@
       "skill",
       "L2",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "skill-framework-developer",
@@ -799,7 +927,11 @@
       [
         "behavior:framework_review_overlay",
         "behavior:gate_exception_framework_dev"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "slides",
@@ -821,7 +953,11 @@
       "gate",
       [
         "artifact_exception:slides_design_contract"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "spreadsheets",
@@ -840,7 +976,11 @@
       "skill",
       "L3",
       "gate",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "statistical-analysis",
@@ -867,7 +1007,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "statistical-verification",
@@ -885,7 +1029,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "structure-verification",
@@ -903,7 +1051,11 @@
       "skill",
       "L4",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "tikz-paper-figure",
@@ -933,7 +1085,11 @@
       "skill",
       "L3",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "update",
@@ -959,7 +1115,11 @@
       "framework_command",
       "L0",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "visual-review",
@@ -986,7 +1146,11 @@
         "scoring:visual_review",
         "behavior:gate_exception_visual_screenshot",
         "behavior:gate_exception_visual_debugging"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "autoresearch",
@@ -1016,7 +1180,11 @@
       "skill",
       "L2",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "research-knowledge-graph",
@@ -1050,7 +1218,11 @@
       "skill",
       "L2",
       "owner",
-      []
+      [],
+      null,
+      null,
+      null,
+      null
     ],
     [
       "systematic-debugging",
@@ -1078,7 +1250,11 @@
       "gate",
       [
         "behavior:systematic_debugging_high_threshold"
-      ]
+      ],
+      null,
+      null,
+      null,
+      null
     ]
   ]
 }

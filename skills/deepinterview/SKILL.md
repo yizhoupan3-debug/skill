@@ -1,50 +1,32 @@
 ---
+allowed_tools:
+- shell
+- git
+- python
+description: Native repo deep-interview workflow for evidence-first clarification and convergence review.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - deepinterview
+  - review
+  - alias
+  - convergence
+  version: '1.0.0'
 name: deepinterview
-description: |
-  Repo-native deepinterview workflow for evidence-first clarification and convergence review.
-  It owns the ambiguity-gated interview loop through local continuity artifacts and Rust-backed resume.
+risk: low
+routing_gate: none
 routing_layer: L1
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: n/a
-user-invocable: true
-disable-model-invocation: true
+source: runtime
 trigger_hints:
-  - /deepinterview
-  - deepinterview
-  - deep-interview
-  - deep interview
-  - ouroboros
-  - interview me
-  - don't assume
-  - 深度采访
-  - 深度核查
-framework_roles:
-  - detector
-  - alias
-  - verifier
-framework_contracts:
-  emits_findings: true
-  emits_verification_results: true
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags:
-    - deepinterview
-    - review
-    - alias
-    - convergence
-risk: low
-source: project
-allowed_tools:
-  - shell
-  - git
-  - python
-approval_required_tools: []
-
+- /deepinterview
+- 先问清楚
+- 深度采访
+- 澄清需求
 ---
-
 # deepinterview
 
 `deepinterview` 是本仓自有的深度澄清流程：单轮单问、持续量化模糊度、达标后再交给执行；状态和 handoff 都走证据、continuity 与 Rust supervisor。
@@ -53,7 +35,7 @@ approval_required_tools: []
 
 ## Native Workflow
 
-- 本仓来源：`skills/deepinterview/SKILL.md` + `configs/framework/RUNTIME_REGISTRY.json`
+- 本仓来源：`skills/deepinterview/SKILL.md`
 - 主流程：one-question-at-a-time -> target weakest dimension -> score ambiguity each round -> handoff only below threshold
 - 外部依赖：无外部插件、无旧插件状态目录、无插件运行态
 
@@ -75,7 +57,7 @@ approval_required_tools: []
 ## Canonical owner
 
 - 主 owner：`deepinterview` 只负责澄清、收敛和 findings-first handoff。
-- 达到清晰阈值后，交给当前任务的最窄 skill owner（`framework_goal_drive`）。
+- 达到清晰阈值后，交给当前任务的最窄 skill owner（通过当前会话上下文切换）。
 - 若需要多 review 面并行取证，先走 [`agent-swarm-orchestration`](../agent-swarm-orchestration/SKILL.md) 判断 bounded sidecar 边界。
 
 ## Workflow
@@ -96,8 +78,8 @@ approval_required_tools: []
 ## Local runtime
 
 - 不再写旧插件状态或旧插件 spec。
-- 访谈进度和澄清结果写到 `artifacts/current/<task_id>/bootstrap/` 以及 task-scoped `SESSION_SUMMARY.md`、`NEXT_ACTIONS.json`、`EVIDENCE_INDEX.json`、`TRACE_METADATA.json`；root 只保留 `.supervisor_state.json`。
-- 达标后的 handoff 交给当前任务的最窄 skill owner（`framework_goal_drive`）。
+- 访谈进度和澄清结果写到 `skills/deepinterview/artifacts/bootstrap/` 及 `session_state.json`。
+- 达标后的 handoff 交给当前任务的最窄 skill owner（通过当前会话的上下文切换）。
 
 ## Instructions
 

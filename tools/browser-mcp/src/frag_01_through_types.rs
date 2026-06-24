@@ -1,9 +1,7 @@
 // MCP 常量、transport、JSON-RPC、`BrowserRuntime`/会话类型与 `struct CdpClient`（须整体移动，不得在函数中途截断）。
 use framework_kernel::repo_roots::resolve_repo_root_arg;
 use framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload;
-use host_projection::hooks::{
-    attach_runtime_event_transport, inspect_trace_stream,
-};
+// attach_runtime_event_transport / inspect_trace_stream: resolved via browser_mcp_dispatch::hooks()
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, VecDeque};
@@ -238,7 +236,7 @@ fn handle_tools_call(params: &Value, runtime: &mut BrowserRuntime) -> Result<Val
         .unwrap_or_else(|| json!({}));
 
     let pre_guard =
-        host_projection::hooks::evaluate_mcp_pre_guard_safe(&tool_name, &arguments, &runtime.repo_root);
+        (browser_mcp_dispatch::hooks().evaluate_mcp_pre_guard)(&tool_name, &arguments, &runtime.repo_root);
     if pre_guard.blocked {
         let reason = pre_guard
             .reason
@@ -435,6 +433,18 @@ pub struct BrowserRuntime {
     ref_counter: usize,
     request_counter: usize,
     screenshot_counter: usize,
+}
+
+impl Drop for BrowserRuntime {
+    fn drop(&mut self) {
+        for (_session_id, mut child) in self.browser_processes.drain() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        for (_, session) in self.sessions.drain() {
+            let _ = fs::remove_dir_all(&session.user_data_dir);
+        }
+    }
 }
 
 /// Configuration for browser MCP runtime event attach, specifying descriptor and artifact paths plus headless mode.

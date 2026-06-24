@@ -247,6 +247,12 @@ fn git(repo_root: &Path, args: &[&str]) -> Option<String> {
         .output()
         .ok()?;
     if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        tracing::warn!(
+            exit_code = ?output.status.code(),
+            stderr = %stderr,
+            "git command failed"
+        );
         return None;
     }
     String::from_utf8(output.stdout).ok()

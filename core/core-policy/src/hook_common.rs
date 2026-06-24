@@ -466,7 +466,7 @@ pub fn is_framework_non_goal_entrypoint_prompt(text: &str) -> bool {
 /// 1. Thread-local `TEST_INTERACTIVE_OVERRIDE` (testing only)
 /// 2. (Future) GOAL_STATE.lifecycle_profile == "interactive" via repo_root
 ///
-/// Cf. docs/spec/loop-architecture.md §2.1
+/// Cf. docs/architecture.md §1.2 (hook model)
 pub fn is_interactive_profile(repo_root: Option<&std::path::Path>, _text: &str) -> bool {
     if let Some(v) = TEST_INTERACTIVE_OVERRIDE.with(|c| c.get()) {
         return v;
@@ -571,7 +571,7 @@ pub fn review_gate_stop_would_nudge(
 /// Reads from LOOP_REGISTRY.json (not GOAL_STATE). Loop Runner in PREFLIGHT
 /// phase calls this to confirm the entry profile is schedulable.
 ///
-/// Cf. docs/spec/loop-architecture.md §2.1, §4.2
+/// Cf. docs/architecture.md §1.2 (hook model)
 pub fn lifecycle_profile_is_loop_capable(profile: &str) -> bool {
     profile == "loop-auto"
 }

@@ -16,6 +16,8 @@ pub mod review_routing_signals;
 pub mod session_key;
 pub mod subagent;
 
+pub mod doc_registry;
+
 #[cfg(any(test, feature = "test-sync"))]
 pub mod test_env_sync;
 

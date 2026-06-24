@@ -2,7 +2,6 @@
 
 use serde_json::{Map, Value, json};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
 
 use rt_storage::runtime_envelope_ids::ATTACHED_RUNTIME_EVENT_ATTACH_AUTHORITY;
 use rt_storage::runtime_storage::{
@@ -288,16 +287,11 @@ fn normalize_optional_runtime_path(value: Option<String>) -> Result<Option<PathB
         .transpose()
 }
 
-fn cached_current_dir() -> &'static PathBuf {
-    static CACHED_CWD: OnceLock<PathBuf> = OnceLock::new();
-    CACHED_CWD.get_or_init(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
-}
-
 fn normalize_path_for_compare(path: &Path) -> PathBuf {
     if path.is_absolute() {
         return path.to_path_buf();
     }
-    cached_current_dir().join(path)
+    std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")).join(path)
 }
 
 fn infer_resume_manifest_path(binding_artifact_path: &Path) -> PathBuf {

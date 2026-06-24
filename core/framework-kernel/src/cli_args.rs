@@ -249,6 +249,16 @@ pub enum SkillsSubcommand {
         /// Emit minimal PLUGIN/HEALTH companion stubs (not policy-complete; prefer checked-in catalogs).
         #[arg(long, default_value = "false")]
         write_companions: bool,
+        /// Backfill null registry columns from SKILL.md frontmatter.
+        #[arg(long, default_value = "false")]
+        backfill: bool,
+        /// Preview backfill/generate changes without modifying files.
+        #[arg(long, default_value = "false")]
+        dry_run: bool,
+        /// Generate SKILL.md frontmatter from registry.
+        /// Value: "all" for all skills, or a specific slug.
+        #[arg(long)]
+        generate: Option<String>,
     },
 }
 

@@ -136,6 +136,10 @@ fn load_records_from_index(path: &Path) -> Result<Vec<SkillRecord>, String> {
             .copied(),
         record_kind: index.get("kind").copied(),
         skill_flags: index.get("skill_flags").copied(),
+        short_description: index.get("short_description").copied(),
+        tags: index.get("tags").copied(),
+        when_to_use: index.get("when_to_use").copied(),
+        do_not_use: index.get("do_not_use").copied(),
         ..indexes
     };
 
@@ -243,10 +247,27 @@ fn build_skill_record_from_indexed_row(row: &[Value], indexes: &RecordRowIndexes
             .map(value_to_string)
             .unwrap_or_else(|| "n/a".to_string()),
         summary: value_to_string(&row[indexes.summary]),
-        short_description: String::new(),
-        when_to_use: String::new(),
-        do_not_use: String::new(),
-        tags: Vec::new(),
+        short_description: indexes
+            .short_description
+            .and_then(|idx| row.get(idx))
+            .map(value_to_string)
+            .unwrap_or_default(),
+        when_to_use: indexes
+            .when_to_use
+            .and_then(|idx| row.get(idx))
+            .map(value_to_string)
+            .unwrap_or_default(),
+        do_not_use: indexes
+            .do_not_use
+            .and_then(|idx| row.get(idx))
+            .map(value_to_string)
+            .unwrap_or_default(),
+        tags: indexes
+            .tags
+            .and_then(|idx| row.get(idx))
+            .filter(|value| value.is_array())
+            .map(value_to_string_list)
+            .unwrap_or_default(),
         trigger_hints: value_to_string_list(&row[indexes.trigger_hints]),
         host_platforms: indexes
             .host_platforms
@@ -829,6 +850,10 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String
             .copied(),
         record_kind: index.get("kind").copied(),
         skill_flags: index.get("skill_flags").copied(),
+        short_description: index.get("short_description").copied(),
+        tags: index.get("tags").copied(),
+        when_to_use: index.get("when_to_use").copied(),
+        do_not_use: index.get("do_not_use").copied(),
         ..indexes
     };
 
@@ -891,6 +916,10 @@ pub fn load_records_from_manifest(path: &Path) -> Result<Vec<SkillRecord>, Strin
         host_platforms: key_index.get("host_platforms").copied(),
         record_kind: key_index.get("kind").copied(),
         skill_flags: key_index.get("skill_flags").copied(),
+        short_description: key_index.get("short_description").copied(),
+        tags: key_index.get("tags").copied(),
+        when_to_use: key_index.get("when_to_use").copied(),
+        do_not_use: key_index.get("do_not_use").copied(),
         ..indexes
     };
 

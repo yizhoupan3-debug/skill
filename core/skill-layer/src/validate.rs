@@ -6,8 +6,10 @@
 use crate::columnar;
 use crate::discovery;
 use crate::frontmatter_parser;
+use crate::generate::FRONTMATTER_KEYS;
 use crate::paths;
-use std::collections::HashSet;
+use serde_json::Value;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 
@@ -26,6 +28,23 @@ pub struct ValidationReport {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/// Validate a skill name/slug: must be non-empty, no path traversal, no path separators.
+pub fn validate_skill_name(name: &str) -> Result<(), String> {
+    if name.is_empty() {
+        return Err("skill name must not be empty".into());
+    }
+    if name.contains("..") {
+        return Err(format!("skill name `{name}` must not contain '..' (path traversal)"));
+    }
+    if name.contains('/') || name.contains('\\') {
+        return Err(format!("skill name `{name}` must not contain path separators"));
+    }
+    if name.starts_with('~') || name.starts_with('/') {
+        return Err(format!("skill name `{name}` must not start with absolute path prefix"));
+    }
+    Ok(())
+}
 
 /// Run all validations against a repo root.
 ///
@@ -129,6 +148,11 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, String> {
         }
     }
 
+    // 8. Frontmatter ←→ registry consistency check
+    if let Err(e) = check_frontmatter_vs_registry(repo_root, &mut errors, &mut warnings) {
+        warnings.push(format!("registry consistency check: {e}"));
+    }
+
     Ok(ValidationReport {
         errors,
         warnings,
@@ -169,4 +193,128 @@ fn collect_missing_skill_paths(
             }
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Registry consistency check (Phase 4)
+// ---------------------------------------------------------------------------
+
+/// Check that every SKILL.md frontmatter field matches the registry.
+///
+/// After Phase 3 (generate), the registry is the source of truth for all
+/// routing metadata.  This function detects:
+///
+/// 1. **Value mismatch** — a field exists in both but differs → error.
+/// 2. **Missing field** — registry has a value but frontmatter omits it → error.
+/// 3. **Orphan field** — a frontmatter key with no registry column → warning.
+/// 4. **Null registry** — frontmatter has a value but registry is null → warning.
+fn check_frontmatter_vs_registry(
+    repo_root: &Path,
+    errors: &mut Vec<String>,
+    warnings: &mut Vec<String>,
+) -> Result<(), String> {
+    let runtime_path = paths::runtime_json(repo_root);
+    let doc: Value =
+        serde_json::from_str(&fs::read_to_string(&runtime_path).map_err(|e| e.to_string())?)
+            .map_err(|e| e.to_string())?;
+
+    let keys: Vec<String> = doc["keys"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+
+    let col_idx: HashMap<&str, usize> = keys
+        .iter()
+        .enumerate()
+        .map(|(i, k)| (k.as_str(), i))
+        .collect();
+
+    let slug_idx = match col_idx.get("slug") {
+        Some(&i) => i,
+        None => return Err("runtime JSON missing slug column".to_string()),
+    };
+
+    let known_yaml_keys: HashSet<&str> =
+        FRONTMATTER_KEYS.iter().map(|(_, y)| *y).collect();
+
+    let Some(rows) = doc["skills"].as_array() else {
+        return Ok(());
+    };
+
+    for row in rows {
+        let Some(row_arr) = row.as_array() else { continue; };
+        if slug_idx >= row_arr.len() { continue; }
+        let Some(slug) = row_arr[slug_idx].as_str() else { continue; };
+
+        let skill_md_path = paths::skill_md(repo_root, slug);
+        let text = match fs::read_to_string(&skill_md_path) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+
+        let fm_block = match frontmatter_parser::extract_frontmatter_block(&text) {
+            Some(b) => b,
+            None => continue,
+        };
+
+        let fm_value: Value = match serde_yml::from_str(fm_block) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let Some(fm_map) = fm_value.as_object() else { continue; };
+
+        // 1. Orphan detection — frontmatter field has no registry column
+        for yaml_key in fm_map.keys() {
+            if !known_yaml_keys.contains(yaml_key.as_str()) {
+                warnings.push(format!(
+                    "{slug}: orphan frontmatter field `{yaml_key}` not in registry schema"
+                ));
+            }
+        }
+
+        // 2. Field-by-field comparison
+        for &(registry_col, yaml_key) in FRONTMATTER_KEYS {
+            if registry_col == "slug" {
+                continue; // slug→name mapping is validated by frontmatter schema
+            }
+
+            let reg_val = col_idx.get(registry_col).and_then(|&idx| row_arr.get(idx));
+            let fm_val = fm_map.get(yaml_key);
+
+            match (reg_val, fm_val) {
+                // Both non-null and different → value mismatch
+                (Some(reg), Some(fm)) if !reg.is_null() && reg != fm => {
+                    errors.push(format!(
+                        "{slug}: registry `{registry_col}` ≠ frontmatter `{yaml_key}` — registry={reg}, frontmatter={fm}",
+                    ));
+                }
+                // Registry has non-null, non-empty value, frontmatter missing
+                (Some(reg), None)
+                    if !reg.is_null() && !is_empty_value(reg) =>
+                {
+                    errors.push(format!(
+                        "{slug}: frontmatter missing `{yaml_key}` (registry has `{registry_col}`={reg})",
+                    ));
+                }
+                // Registry is null/None, frontmatter has value → run backfill
+                (Some(reg), Some(fm)) if reg.is_null() && !is_empty_value(fm) => {
+                    warnings.push(format!(
+                        "{slug}: frontmatter `{yaml_key}` populated but registry `{registry_col}` is null — run `backfill`",
+                    ));
+                }
+                _ => {} // both absent, or null↔null ↔ fine
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Return true if a JSON value is null/empty/zero-length.
+fn is_empty_value(v: &Value) -> bool {
+    v.is_null()
+        || (v.is_string() && v.as_str().unwrap_or("").is_empty())
+        || (v.is_array() && v.as_array().map_or(true, |a| a.is_empty()))
+        || (v.is_object() && v.as_object().map_or(true, |o| o.is_empty()))
 }

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 // ── Review ──
 
-/// Severity level for review findings (aligned with severity-spec.md).
+/// Severity level for review findings: P0=一票否决, A=核心硬伤, B=需补充, C=打磨, Warning=隐晦警告.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum Severity {

@@ -1,51 +1,56 @@
 ---
-name: gh-fix-ci
+allowed_tools:
+- shell
+- git
+- rust
+approval_required_tools:
+- git push
 description: Triage and fix failing GitHub Actions PR checks with gh-source-gate.
 metadata:
-  version: "2.0.0"
-  platforms: [supported]
+  platforms:
+  - supported
   tags:
-    - github
-    - ci
-    - github-actions
-    - gh-cli
-    - pull-request
-
-runtime_requirements:
-  commands:
-    - cargo
-    - gh
-    - git
-routing_layer: L0
-routing_owner: gate
-routing_gate: source
-routing_priority: P2
-session_start: required
-user-invocable: false
-disable-model-invocation: true
-trigger_hints:
   - github
   - ci
-  - github actions
-  - gh cli
-  - pull request
-allowed_tools:
-  - shell
-  - git
-  - rust
-approval_required_tools:
-  - git push
-filesystem_scope:
-  - repo
-  - artifacts
+  - github-actions
+  - gh-cli
+  - pull-request
+  version: '2.0.0'
+name: gh-fix-ci
 network_access: conditional
-artifact_outputs:
-  - ci_failure_digest.md
-  - EVIDENCE_INDEX.json
-  - TRACE_METADATA.json
-
+routing_gate: source
+routing_layer: L0
+routing_owner: gate
+routing_priority: P2
+runtime_requirements:
+  commands:
+  - cargo
+  - gh
+  - git
+session_start: required
+source: project
+trigger_hints:
+- /gh-fix-ci
+- CI 修复
+- CI 失败
+- CI 失败排查
+- CI 里
+- PR summary CI
+- ci broken
+- ci failed
+- ci failure
+- failing checks
+- fix build
+- fix ci
+- github actions
+- github actions pull request summary failing checks
+- green ci
+- pull request summary CI failure
+- workflow 失败
+- 修复 CI
+- 模板编译失败
+- 编译失败
 ---
-
 # gh-fix-ci
 
 At conversation start or first turn, check this source gate before ordinary domain owners when the request is driven by external evidence such as Sentry data, PR comments, or failing checks.

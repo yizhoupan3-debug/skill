@@ -1,29 +1,31 @@
 ---
+description: 'Structure verification capability: LaTeX compilation, cross-reference consistency, claim-evidence alignment, format compliance, notation consistency, equation numbering.'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - structure
+  - verification
+  - LaTeX
+  - format
+  - research
+  version: '1.0.0'
 name: structure-verification
-description: |
-  无状态内部 skill：验证论文的 LaTeX 编译、图表引用、claim-evidence 对齐、
-  格式合规、符号一致性和方程编号。由 paper-workbench 内联调用。
+risk: low
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
-risk: low
 source: local
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [structure, verification, LaTeX, format, research]
 trigger_hints:
-  - LaTeX 编译检查
-  - 图表引用一致性
-  - 格式合规检查
-  - 符号一致性
-  - 方程编号连续性
+- LaTeX编译
+- cross-reference
+- format check
+- structure verification
+- 图表引用检查
+- 结构验证
 ---
-
 # Structure Verification
 
 无状态能力 skill：对论文结构与格式做完整性审计。不独立编排会话。

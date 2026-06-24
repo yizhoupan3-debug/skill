@@ -166,6 +166,10 @@ pub fn has_parallel_execution_context(query_text: &str, query_token_list: &[Stri
         "测试",
         "api",
         "数据库",
+        // "ui" must use token-level matching only in the filter below:
+        // substring match causes false positives (e.g. "guide", "quick", "build").
+        // We keep it in the list but the filter logic handles it separately
+        // (see the `if marker == "ui"` guard below).
         "ui",
         "安全",
         "性能",
@@ -186,6 +190,11 @@ pub fn has_parallel_execution_context(query_text: &str, query_token_list: &[Stri
     ]
     .iter()
     .filter(|marker| {
+        // "ui" is token-level only to avoid false positives from
+        // substring match (e.g. "guide", "quick", "build").
+        if **marker == "ui" {
+            return text_matches_phrase(query_token_list, marker);
+        }
         query_text.contains(*marker)
             || text_matches_phrase(query_token_list, marker)
     })

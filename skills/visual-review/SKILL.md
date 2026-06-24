@@ -1,53 +1,43 @@
 ---
-name: visual-review
+allowed_tools:
+- shell
+- browser
+approval_required_tools:
+- gui automation
 description: Review screenshots and rendered visual artifacts.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - visual
+  - review
+  - screenshot
+  - screenshot-ui
+  - chart
+  - accessibility
+  - evidence
+  version: '2.2.1'
+name: visual-review
+network_access: conditional
+routing_gate: evidence
 routing_layer: L3
 routing_owner: gate
-routing_gate: evidence
 routing_priority: P1
 session_start: required
-user-invocable: false
-disable-model-invocation: true
+source: project
 trigger_hints:
-  - 看图
-  - visual
-  - visual review
-  - UI review
-  - screenshot
-  - screenshot UI
-  - chart screenshot
-  - chart export
-  - exported chart
-  - 图表截图
-  - 图表导出
-metadata:
-  version: "2.2.1"
-  platforms: [supported]
-  tags: [visual, review, screenshot, screenshot-ui, chart, accessibility, evidence]
-framework_roles:
-  - gate
-  - detector
-framework_contracts:
-  emits_findings: true
-  consumes_findings: false
-  emits_execution_items: false
-  consumes_execution_items: false
-  emits_verification_results: false
-allowed_tools:
-  - shell
-  - browser
-approval_required_tools:
-  - gui automation
-filesystem_scope:
-  - repo
-  - artifacts
-network_access: conditional
-artifact_outputs:
-  - visual_review.md
-  - EVIDENCE_INDEX.json
-
+- UI review
+- chart export
+- chart screenshot
+- exported chart
+- screenshot
+- screenshot UI
+- visual
+- visual review
+- 图表导出
+- 图表截图
+- 看图
 ---
-
 # Visual Review
 
 ## Persona

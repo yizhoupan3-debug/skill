@@ -1,51 +1,47 @@
 ---
+allowed_tools:
+- shell
+- browser
+description: Convert AI diagrams, screenshots, sketches into publication-ready TikZ/LaTeX standalone figures.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - tikz
+  - latex
+  - standalone
+  - paper-figure
+  - figure-conversion
+  version: '1.0.0'
 name: tikz-paper-figure
-description: |
-  Convert AI-generated diagrams, screenshots, sketches, raster figures, paper text,
-  architecture descriptions, method pipelines, protocol flows, or research figure drafts
-  into publication-ready TikZ/LaTeX standalone figures for papers.
-  Use when the user asks for TikZ, LaTeX standalone, paper figure conversion,
-  AI image to TikZ, screenshot to TikZ, recreate this figure in TikZ, thesis figure,
-  method figure, system architecture figure, protocol diagram, or wants a compiled
-  `.tex` + cropped `.pdf`/`.png` preview that can be included with `\includegraphics`.
+risk: low
+routing_gate: none
 routing_layer: L3
 routing_owner: owner
-routing_gate: none
-routing_priority: P1
+routing_priority: P2
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
 short_description: Convert AI/raster drafts into paper-ready TikZ standalone figures
-trigger_hints:
-  - TikZ
-  - LaTeX standalone
-  - AI image to TikZ
-  - screenshot to TikZ
-  - recreate this figure in TikZ
-  - paper figure
-  - thesis figure
-  - method figure
-  - system architecture figure
-  - protocol diagram
-  - 论文配图
-  - 论文 TikZ
-  - AI 图转论文图
-  - 复刻图片
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [tikz, latex, standalone, paper-figure, figure-conversion]
-risk: low
 source: project
-allowed_tools:
-  - shell
-  - browser
-artifact_outputs:
-  - figure.tex
-  - figure.pdf
-  - figure.png
+trigger_hints:
+- AI image to TikZ
+- AI 图转 TikZ
+- AI 图转论文图
+- LaTeX standalone
+- LaTeX 配图
+- TikZ
+- method figure
+- paper figure
+- protocol diagram
+- recreate this figure in TikZ
+- standalone figure
+- system architecture figure
+- thesis figure
+- tikz-paper-figure
+- 复刻图片
+- 截图转 TikZ
+- 论文 TikZ
+- 论文配图
 ---
-
 # tikz-paper-figure
 
 Owns one narrow job: turn an AI/raster/rough diagram or paper-figure request

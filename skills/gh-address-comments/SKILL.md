@@ -1,58 +1,52 @@
 ---
-name: gh-address-comments
+allowed_tools:
+- shell
+- git
+- rust
+approval_required_tools:
+- git push
 description: Address GitHub PR review comments and lightweight PR triage summaries with gh-source-gate.
 metadata:
-  version: "2.0.0"
-  platforms: [supported]
-  tags:
-    - github
-    - pull-request
-    - review-comments
-    - gh-cli
-    - code-review
+  platforms:
+  - supported
   short-description: Address comments in a GitHub PR review
+  tags:
+  - github
+  - pull-request
+  - review-comments
+  - gh-cli
+  - code-review
+  version: '2.0.0'
+name: gh-address-comments
+network_access: conditional
 risk: medium
-source: local
-runtime_requirements:
-  commands:
-    - cargo
-    - gh
-    - git
+routing_gate: source
 routing_layer: L0
 routing_owner: gate
-routing_gate: source
 routing_priority: P2
-session_start: required
-user-invocable: false
-disable-model-invocation: true
-trigger_hints:
-  - github
-  - pull request
-  - pull request summary
-  - PR review summary
-  - PR triage
-  - reviewer feedback digest
-  - changed-file digest
-  - changed files summary
-  - review comments
-  - gh cli
-allowed_tools:
-  - shell
+runtime_requirements:
+  commands:
+  - cargo
+  - gh
   - git
-  - rust
-approval_required_tools:
-  - git push
-filesystem_scope:
-  - repo
-  - artifacts
-network_access: conditional
-artifact_outputs:
-  - comment_digest.md
-  - EVIDENCE_INDEX.json
-  - TRACE_METADATA.json
-
+session_start: required
+source: project
+trigger_hints:
+- /gh-address-comments
+- PR comments
+- PR review summary
+- PR triage
+- PR 评论回复
+- address PR feedback
+- address comments
+- changed files summary
+- changed-file digest
+- pull request summary
+- review comments
+- review feedback
+- reviewer feedback digest
+- reviewer 意见处理
 ---
-
 # gh-address-comments
 
 At conversation start or first turn, check this source gate before ordinary domain owners when the request is driven by external evidence such as Sentry data, PR comments, or failing checks.

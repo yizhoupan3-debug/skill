@@ -1,59 +1,43 @@
 ---
-name: pdf
+allowed_tools:
+- shell
+- rust
+- python
+approval_required_tools:
+- file overwrite
 description: Handle layout-aware PDF reading, editing, repair, and review.
-routing_layer: L3
-routing_owner: gate
-routing_gate: artifact
-routing_priority: P1
-session_start: required
-user-invocable: false
-disable-model-invocation: true
-trigger_hints:
+metadata:
+  platforms:
+  - supported
+  tags:
   - pdf
   - rendering
   - layout
   - typography
   - reportlab
-metadata:
-  version: "2.1.0"
-  platforms: [supported]
-  tags:
-    - pdf
-    - rendering
-    - layout
-    - typography
-    - reportlab
-framework_roles:
-  - gate
-  - detector
-  - verifier
-framework_contracts:
-  emits_findings: true
-  consumes_findings: false
-  emits_execution_items: false
-  consumes_execution_items: false
-  emits_verification_results: true
+  version: '2.1.0'
+name: pdf
+network_access: conditional
 risk: low
-source: local
-allowed_tools:
-  - shell
-  - rust
-  - python
+routing_gate: artifact
+routing_layer: L3
+routing_owner: gate
+routing_priority: P1
 runtime_requirements:
   commands:
-    - pdf
-approval_required_tools:
-  - file overwrite
-filesystem_scope:
-  - repo
-  - artifacts
-network_access: conditional
-artifact_outputs:
-  - pdf_review.md
-  - EVIDENCE_INDEX.json
-
+  - pdf
+session_start: required
+source: project
+trigger_hints:
+- PDF 转文字
+- pdf layout
+- pdf
+- rendering
+- reportlab
+- typography
+- 合并 PDF
+- 编辑 PDF
 ---
-
 # pdf
 
 This skill owns PDF work where final rendered appearance matters more than raw text alone.

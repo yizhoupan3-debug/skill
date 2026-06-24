@@ -1,41 +1,35 @@
 ---
-name: email-template
-description: |
-  Produce cross-client HTML emails that render correctly in Outlook, Gmail, and Apple
-  Mail. Delivers table-based layouts with inline CSS, Outlook conditional comments,
-  responsive fluid-hybrid patterns, and dark-mode support. Use when the user asks about
-  email templates, HTML email compatibility, newsletter markup, or phrases like '邮件模板',
-  'HTML 邮件', 'Outlook 兼容', 'MJML', 'React Email', 'email 排版'.
+description: Produce cross-client HTML emails compatible with Outlook, Gmail, Apple Mail. Supports MJML/React Email.
 metadata:
-  version: "1.0.0"
-  platforms: [supported]
+  platforms:
+  - supported
   tags:
-    - email
-    - html-email
-    - mjml
-    - react-email
-    - newsletter
+  - email
+  - html-email
+  - mjml
+  - react-email
+  - newsletter
+  version: '1.0.0'
+name: email-template
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P3
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
+source: local
 trigger_hints:
-  - 邮件模板
-  - HTML 邮件
-  - Outlook 兼容
-  - MJML
-  - React Email
-  - email 排版
-  - HTML email compatibility
-  - newsletter markup
-  - email
-  - html email
-
+- HTML email compatibility
+- HTML 邮件
+- MJML
+- Outlook 兼容
+- React Email
+- email template
+- email 排版
+- html email
+- newsletter
+- newsletter markup
+- 邮件模板
 ---
-
 # email-template
 
 This skill owns HTML email development: an environment with unique rendering

@@ -162,10 +162,10 @@ name = "browser-mcp"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "browser-mcp-dispatch",
  "chrono",
  "ctor",
  "framework-kernel",
- "host-projection",
  "http-util",
  "reqwest",
  "runtime-core-contracts",
@@ -175,6 +175,15 @@ dependencies = [
  "serial_test",
  "tracing",
  "tungstenite",
+]
+
+[[package]]
+name = "browser-mcp-dispatch"
+version = "0.1.0"
+dependencies = [
+ "framework-kernel",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -973,7 +982,6 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "clap",
- "codegraph-rs",
  "core-policy",
  "core-state",
  "core-state-utils",
@@ -2077,6 +2085,7 @@ name = "router-rs"
 version = "0.1.0"
 dependencies = [
  "browser-mcp",
+ "browser-mcp-dispatch",
  "chrono",
  "clap",
  "codegraph-rs",
@@ -2532,6 +2541,7 @@ dependencies = [
 name = "skill-rust-test-harness"
 version = "0.1.0"
 dependencies = [
+ "core-policy",
  "regex",
  "routing-engine",
  "runtime-core-contracts",

@@ -228,7 +228,14 @@ pub(crate) fn signal_matches(
 ) -> bool {
     markers
         .iter()
-        .any(|m| query_text.contains(*m) || text_matches_phrase(query_token_list, m))
+        .any(|m| {
+            // Short ASCII-only markers (≤2 chars) must only match at token level
+            // to avoid false positives from substring matches (e.g. "ux" in
+            // "luxury"/"flux"/"auxiliary").  Longer or mixed-script markers are
+            // specific enough for substring containment to be safe.
+            let use_contains = m.len() > 2 || !m.is_ascii();
+            (use_contains && query_text.contains(*m)) || text_matches_phrase(query_token_list, m)
+        })
 }
 
 /// Look up a signal definition by name and evaluate it.
@@ -415,7 +422,6 @@ pub fn has_plan_mode_owner_context(query_text: &str, query_token_list: &[String]
     // query_text is already lowercased at routing entry — all markers are lowercase.
     query_text.contains("cursor plan")
         || query_text.contains("createplan")
-        || query_text.contains("plan_profile")
         || query_text.contains("plan-mode")
         || query_text.contains("skill/plan-mode")
         || query_text.contains("plan 模式")
@@ -589,13 +595,16 @@ pub fn build_route_context(query_text: &str, query_token_list: &[String]) -> Rou
         "有什么问题",
         "哪里错了",
         "audit",
-        "review",
         "diagnose",
     ]
     .iter()
     .any(|marker| {
         query_text.contains(*marker) || text_matches_phrase(query_token_list, marker)
-    });
+    })
+    // "review" must use token-level matching only to avoid false positives
+    // from substring matches (e.g. "preview".contains("review")).
+    // This follows the same pattern documented at paper.rs:328.
+    || text_matches_phrase(query_token_list, "review");
     let implementation_requested = [
         "实现",
         "修复",

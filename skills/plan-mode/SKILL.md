@@ -1,42 +1,37 @@
 ---
+description: 'Cross-host Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认轻量五行证据；高风险时 audit plan。 `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: 跨宿主 Plan 闸门，产出可验收 todo，非 lifecycle 专用。'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - plan
+  - workflow
+  - gate
+  - closeout
+  version: '2.0.0'
 name: plan-mode
-description: |
-  跨宿主 Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认小中型任务用轻量五行证据 + 可验收 todo，跨模块/高风险/用户要求时升级为 audit plan。
-  `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: research` 为纯调研计划（只读 todos，末条不含 /gitx plan）。
-  跨宿主 Plan 闸门，产出可验收 todo，非 lifecycle 专用。
-  `overview` 须按 profile 显式声明实现面边界：`research` 含调研期零实现面改动硬声明（可选窄例外：`overview` **单句**声明允许回写的结论文档 / plan 路径集合；`<host-plans-dir>/<本文件>.plan.md` 仅为常见示例而非唯一形式），`execution` 标明允许按 todos 修改并由末条完成计划/Git 证据收口。
-  Use at 每轮对话开始 / first-turn / conversation start when the user wants Plan 模式、策划文档闸门、可验收 todo、
-  或明确要走「计划→实现→验证→对照 git 收口」而不是直接堆代码。**Plan mode 仅产出可验收 todo 与证据收口；只找问题，不改代码**——若需要落盘修改请走实现流程。
-  Aligns execution-item / verification shapes with `skills/SKILL_FRAMEWORK_PROTOCOLS.md`；continuity 分层以 [`docs/adr/010-ideal-architecture-v10.md`](../../docs/adr/010-ideal-architecture-v10.md) 为准。
+risk: low
+routing_gate: none
 routing_layer: L1
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: true
-disable-model-invocation: false
-risk: low
-source: local
+source: project
 trigger_hints:
-  - Plan 模式
-  - 策划文档闸门
-  - 可验收 todo
-  - gitx plan 收口
-  - 计划对照实际
-  - 调研计划
-  - 纯调研
-  - research-only plan
-  - Cursor Plan
-  - CreatePlan
-metadata:
-  version: "2.0.0"
-  platforms: [supported]
-  tags: [plan, workflow, gate, closeout]
+- CreatePlan
+- Cursor Plan
+- Plan 模式
+- gitx plan 收口
+- research-only plan
+- 可验收 todo
+- 策划文档闸门
+- 纯调研
+- 计划对照实际
+- 调研计划
 ---
-
 # plan-mode
 
-把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在宿主工作区（如 `.cursor/plans/`）；Task 状态机驱动下计划真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。`docs/plans/` 已清理，勿恢复。
+把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在宿主工作区（如 `.cursor/plans/`）；Task 状态机驱动下计划真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。终稿统一归档到 `docs/plans/`。
 
 ## When to use
 
@@ -136,7 +131,7 @@ Non-goals: <可选>
 
 ## Continuity 与工件
 
-分层与 hook 以 [`docs/adr/010-ideal-architecture-v10.md`](../../docs/adr/010-ideal-architecture-v10.md) 为准；计划落盘于宿主工作区 plans 目录；宿主 Plan Build **不**自动武装 lifecycle goal 门控，连续执行由用户显式启动。
+分层与 hook 以 [`docs/architecture.md`](../../docs/architecture.md) 为准；计划落盘于宿主工作区 plans 目录；宿主 Plan Build **不**自动武装 lifecycle goal 门控，连续执行由用户显式启动。
 
 ## 宿主差异
 
@@ -149,7 +144,7 @@ Non-goals: <可选>
 ## Related
 
 - `skills/SKILL_FRAMEWORK_PROTOCOLS.md` — 讨论 → 规划 → 执行 → 验证形状。`skills/gitx/SKILL.md` — `/gitx plan` 收口。
-- `skills/code-review-deep/SKILL.md` — 深度代码审。`docs/plans/` 已清理（见 [`MIGRATION.md`](../../MIGRATION.md)）。
+- `skills/code-review-deep/SKILL.md` — 深度代码审。终稿统一归档到 `docs/plans/`。
 - [references/research-profile-guide.md](references/research-profile-guide.md) — 对照表、overview 模板、todo 收口。
 - [references/research-scope-and-examples.md](references/research-scope-and-examples.md) — 调研范围、能力联动与弱/强示例。
 - [references/cursor-createplan-contract.md](references/cursor-createplan-contract.md) — Cursor 宿主专属全量契约。

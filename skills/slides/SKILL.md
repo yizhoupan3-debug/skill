@@ -1,49 +1,41 @@
 ---
-name: slides
+allowed_tools:
+- shell
+- cargo
+approval_required_tools:
+- file overwrite
 description: Route presentation, PPT, PPTX, and slide deck tasks.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - powerpoint
+  - ppt
+  - pptx
+  - slides
+  - presentation
+  - rust-ppt
+  - proxy
+  version: '2.7.0'
+name: slides
+network_access: conditional
+risk: medium
+routing_gate: artifact
 routing_layer: L3
 routing_owner: gate
-routing_gate: artifact
 routing_priority: P1
 session_start: required
-user-invocable: false
-disable-model-invocation: true
+source: project
 trigger_hints:
-  - PPT
-  - pptx
-  - 做个PPT
-  - 生成演示文稿
-  - slides
-  - PowerPoint
-  - presentation deck
-  - presentation
-  - artifact tool
-metadata:
-  version: "2.7.0"
-  platforms: [supported]
-  tags: [powerpoint, ppt, pptx, slides, presentation, rust-ppt, proxy]
-risk: medium
-source: local
-allowed_tools:
-  - shell
-  - cargo
-approval_required_tools:
-  - file overwrite
-filesystem_scope:
-  - repo
-  - workspace
-  - temp
-  - artifacts
-network_access: conditional
-artifact_outputs:
-  - final_deck.pptx
-  - deck.plan.json
-  - rendered/*.png
-  - montage.png
-  - EVIDENCE_INDEX.json
-
+- PPT
+- PowerPoint
+- pptx
+- presentation
+- presentation deck
+- slides
+- 做个PPT
+- 生成演示文稿
 ---
-
 ## Quick Ref
 - **Purpose**: PPT/PPTX 演示文稿的 artifact-first 生成门控，Rust CLI 驱动，从 deck.plan.json 确定性构建
 - **Key Rules**: 视觉优先内容 ≤45 词/slide；body ≥18pt；anti-ugly 黑名单硬拦；CLI-first 单命令门控；已存在 .pptx 先 intake 再改
@@ -290,7 +282,7 @@ Default path runs only the single-command gate; additional machine gates below a
 - Layout gate (diagnostics/audit): `ppt slides-test --fail-on-overflow` reports no out-of-bounds content.
 - QA gate (diagnostics/audit): `ppt qa ... --json` runs successfully and reports no blocking issues.
 - Font gate (diagnostics/audit): `ppt detect-fonts --json` shows no unaccepted missing/substituted important fonts.
-- Evidence gate: `EVIDENCE_INDEX.json` is updated with artifacts and checks.
+- Evidence gate: `slides_evidence.json` is updated with artifacts and checks.
 
 ### Human review gates
 
@@ -337,7 +329,7 @@ Required artifacts:
 - `deck.plan.json` (source of truth)
 - `rendered/*.png` (per-slide previews)
 - `montage.png` (required when slide count is greater than 8)
-- `EVIDENCE_INDEX.json` (artifact/check index)
+- `slides_evidence.json` (artifact/check index)
 
 Optional orchestrator artifacts (not guaranteed by `ppt` itself):
 
@@ -353,7 +345,7 @@ Hard gates:
   - Overlap gate (rendered review and/or `ppt qa` confirms no overlap regressions)
   - Font gate (`ppt detect-fonts ... --json` with acceptable result)
   - QA gate (`ppt qa ... --fail-on-issues --json`)
-- Evidence gate: `EVIDENCE_INDEX.json` updated with artifacts and checks.
+- Evidence gate: `slides_evidence.json` updated with artifacts and checks.
 
 Pass criteria:
 
@@ -375,7 +367,7 @@ Common repair hints:
 ## Evidence Index
 
 When this skill creates or materially changes a deck, write or update
-`EVIDENCE_INDEX.json` in the deck workspace or artifact directory. Keep it
+`slides_evidence.json` in the deck workspace or artifact directory. Keep it
 compact:
 
 ```json
@@ -399,7 +391,7 @@ compact:
 - Charts, tables, and key layout blocks render correctly in preview.
 - Quality gates pass, including style gate thresholds.
 - Advanced style gate passes, including composition and token consistency.
-- `EVIDENCE_INDEX.json` records final artifacts and checks when a deck was created or materially changed.
+- `slides_evidence.json` records final artifacts and checks when a deck was created or materially changed.
 - Final response stays concise but includes the `.pptx` link and the verification evidence used, or an explicit blocker when verification could not run.
 - In CLI-first mode, include `deck.plan.json` path and exact Rust commands used so the result is reproducible.
 

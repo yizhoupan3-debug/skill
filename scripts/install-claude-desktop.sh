@@ -11,7 +11,7 @@ RETIRED (2026-06): host id claude-desktop is no longer in host_targets.supported
 Use instead:
   ./scripts/install-claude.sh
 
-See MIGRATION.md and docs/hosts/hook-hosts.md
+See docs/migration.md and docs/hosts/handbook.md
 EOF
 }
 

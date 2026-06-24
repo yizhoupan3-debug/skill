@@ -1,48 +1,38 @@
 ---
-name: sentry
+allowed_tools:
+- shell
+- python
+- web
+approval_required_tools:
+- authenticated web access
 description: Inspect Sentry production errors and issue evidence read-only.
 metadata:
-  version: "2.1.0"
-  platforms: [supported]
+  platforms:
+  - supported
   tags:
-    - sentry
-    - production-errors
-    - triage
-    - error-monitoring
-    - incident-debugging
+  - sentry
+  - production-errors
+  - triage
+  - error-monitoring
+  - incident-debugging
+  version: '2.1.0'
+name: sentry
+network_access: required
 risk: medium
-source: local
+routing_gate: source
 routing_layer: L0
 routing_owner: gate
-routing_gate: source
 routing_priority: P2
 session_start: required
-user-invocable: false
-disable-model-invocation: true
+source: project
 trigger_hints:
-  - Sentry evidence
-  - sentry
-  - production errors
-  - triage
-  - error monitoring
-  - incident debugging
-allowed_tools:
-  - shell
-  - python
-  - web
-approval_required_tools:
-  - authenticated web access
-filesystem_scope:
-  - repo
-  - artifacts
-network_access: required
-artifact_outputs:
-  - sentry_triage.md
-  - EVIDENCE_INDEX.json
-  - TRACE_METADATA.json
-
+- Sentry evidence
+- error monitoring
+- incident debugging
+- production errors
+- sentry
+- triage
 ---
-
 # sentry
 
 This skill is the **source gate for Sentry-grounded production triage**.

@@ -70,21 +70,6 @@ pub enum RecordKind {
 }
 
 // ---------------------------------------------------------------------------
-// SkillDependencies (Phase 6 extensible field)
-// ---------------------------------------------------------------------------
-
-/// Optional dependency declaration in SKILL.md frontmatter.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SkillDependencies {
-    #[serde(default, rename = "requires")]
-    pub requires: Vec<String>,
-    #[serde(default, rename = "conflicts-with")]
-    pub conflicts_with: Vec<String>,
-    #[serde(default, rename = "provides-overlay-for")]
-    pub provides_overlay_for: Vec<String>,
-}
-
-// ---------------------------------------------------------------------------
 // SkillFrontmatterSpec (field catalogue)
 // ---------------------------------------------------------------------------
 
@@ -107,22 +92,13 @@ impl SkillFrontmatterSpec {
     /// Fields that MAY be present; validated if present.
     pub const OPTIONAL_FIELDS: &'static [&'static str] = &[
         "short_description",
-        "user-invocable",
-        "disable-model-invocation",
         "metadata",
         "risk",
         "source",
-        "trigger_hints_long",
         "allowed_tools",
-        "framework_roles",
-        "framework_contracts",
         "runtime_requirements",
-        "filesystem_scope",
         "network_access",
-        "artifact_outputs",
         "approval_required_tools",
-        "plan_profile",
-        "dependencies",
     ];
 }
 
@@ -158,10 +134,6 @@ pub struct SkillFrontmatter {
     #[serde(default)]
     pub short_description: Option<String>,
     #[serde(default)]
-    pub user_invocable: Option<bool>,
-    #[serde(default)]
-    pub disable_model_invocation: Option<bool>,
-    #[serde(default)]
     pub risk: Option<String>,
     #[serde(default)]
     pub source: Option<String>,
@@ -170,23 +142,11 @@ pub struct SkillFrontmatter {
     #[serde(default)]
     pub allowed_tools: Option<Vec<String>>,
     #[serde(default)]
-    pub framework_roles: Option<Vec<String>>,
-    #[serde(default)]
-    pub framework_contracts: Option<Value>,
-    #[serde(default)]
     pub runtime_requirements: Option<Value>,
-    #[serde(default)]
-    pub filesystem_scope: Option<Vec<String>>,
     #[serde(default)]
     pub network_access: Option<String>,
     #[serde(default)]
-    pub artifact_outputs: Option<Vec<String>>,
-    #[serde(default)]
     pub approval_required_tools: Option<Vec<String>>,
-    #[serde(default)]
-    pub plan_profile: Option<String>,
-    #[serde(default)]
-    pub dependencies: Option<SkillDependencies>,
 }
 
 impl SkillFrontmatter {

@@ -98,7 +98,7 @@ impl RoutingRuntimeWatch {
                 if tx.is_closed() {
                     return;
                 }
-                thread::sleep(Duration::from_secs(300));
+                thread::sleep(Duration::from_secs(60));
                 if let Ok(snapshot) = load_snapshot(&watch_path) {
                     let _ = tx.send(snapshot);
                 }

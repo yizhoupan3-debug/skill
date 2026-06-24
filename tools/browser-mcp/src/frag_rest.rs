@@ -1,6 +1,15 @@
 // CDP/Chrome 助手、Attach 候选、skill 路由与 MCP 收尾工具函数。
 use std::net::TcpListener;
+use std::sync::LazyLock;
 use framework_kernel::json_value::optional_bool;
+
+/// Shared HTTP client for CDP requests with a 30-second timeout.
+static CDP_HTTP_CLIENT: LazyLock<reqwest::blocking::Client> = LazyLock::new(|| {
+    reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .expect("CDP HTTP client")
+});
 
 /// RAII guard: kills a Chrome child process and removes its temp dir on drop (unless consumed).
 struct CleanupGuard<'a> {
@@ -56,7 +65,10 @@ fn cdp_version_json(port: u16) -> Result<Value, Value> {
 }
 
 fn cdp_http_json(port: u16, path: &str) -> Result<Value, Value> {
-    reqwest::blocking::get(format!("http://127.0.0.1:{port}{path}"))
+    let url = format!("http://127.0.0.1:{port}{path}");
+    CDP_HTTP_CLIENT
+        .get(&url)
+        .send()
         .and_then(|response| response.error_for_status())
         .and_then(|response| response.json::<Value>())
         .map_err(|err| {

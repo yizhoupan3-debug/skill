@@ -16,7 +16,7 @@ pub fn write_if_missing(path: &Path, content: String) -> Result<()> {
 }
 
 /// Append a JSONL ledger event to `run-ledger.jsonl`.
-/// Uses framework-runtime's process-locked append for crash-safe multi-process writes.
+/// Uses fr-utils' process-locked append for crash-safe multi-process writes.
 pub fn append_ledger_event(workspace: &Path, kind: &str, payload: Value) -> Result<()> {
     let event = json!({
         "schema_version": "autoresearch-ledger-v1",
@@ -35,7 +35,7 @@ pub fn append_ledger_event(workspace: &Path, kind: &str, payload: Value) -> Resu
 }
 
 /// Append a section to `research-log.md`.
-/// Uses framework-runtime's process-locked append for crash-safe multi-process writes.
+/// Uses fr-utils' process-locked append for crash-safe multi-process writes.
 pub fn append_research_log(
     workspace: &Path,
     heading: &str,

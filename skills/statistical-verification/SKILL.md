@@ -1,29 +1,30 @@
 ---
+description: 'Statistical verification capability: p-value recomputation, GRIM test, effect size reporting, multiple comparison correction, assumption checking.'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - statistics
+  - verification
+  - audit
+  - research
+  version: '1.0.0'
 name: statistical-verification
-description: |
-  无状态内部 skill：审计统计结果的正确性——重跑 p 值、GRIM 检验、效应量报告、
-  多重比较校正和假设检验前提。由 research-execution、paper-workbench 内联调用。
+risk: low
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
-risk: low
 source: local
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [statistics, verification, audit, research]
 trigger_hints:
-  - 统计结果审计
-  - p 值重跑
-  - GRIM test
-  - 效应量检查
-  - 前提假设检验
+- GRIM test
+- p值验证
+- statistical verification
+- stats audit
+- 假设检验审查
+- 统计审查
 ---
-
 # Statistical Verification
 
 无状态能力 skill：对论文或实验报告中的统计结果做独立审计。不独立编排会话。

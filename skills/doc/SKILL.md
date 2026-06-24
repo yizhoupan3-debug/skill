@@ -1,63 +1,44 @@
 ---
-name: doc
+allowed_tools:
+- shell
+- rust
+approval_required_tools:
+- file overwrite
 description: Handle layout-aware Word .docx creation, edits, and review.
-routing_layer: L3
-routing_owner: gate
-routing_gate: artifact
-routing_priority: P1
-session_start: required
-user-invocable: false
-disable-model-invocation: true
-trigger_hints:
-  - structured Word edits
-  - 模板化文档生成
-  - 表格或版式修复
-  - render-aware
+metadata:
+  platforms:
+  - supported
+  tags:
   - docx
   - word
+  - rust
   - pagination
-  - document layout
+  - document-layout
+  version: '2.0.0'
+name: doc
+network_access: conditional
+risk: low
+routing_gate: artifact
+routing_layer: L3
+routing_owner: gate
+routing_priority: P1
 runtime_requirements:
   commands:
-    - cargo
-    - soffice
-    - pdftoppm
-metadata:
-  version: "2.0.0"
-  platforms: [supported]
-  tags:
-    - docx
-    - word
-    - rust
-    - pagination
-    - document-layout
-framework_roles:
-  - gate
-  - detector
-  - verifier
-framework_contracts:
-  emits_findings: true
-  consumes_findings: false
-  emits_execution_items: false
-  consumes_execution_items: false
-  emits_verification_results: true
-risk: low
-source: local
-allowed_tools:
-  - shell
-  - rust
-approval_required_tools:
-  - file overwrite
-filesystem_scope:
-  - repo
-  - artifacts
-network_access: conditional
-artifact_outputs:
-  - docx_review.md
-  - EVIDENCE_INDEX.json
-
+  - cargo
+  - soffice
+  - pdftoppm
+session_start: required
+source: project
+trigger_hints:
+- document layout
+- docx
+- pagination
+- render-aware
+- structured Word edits
+- word document
+- 模板化文档生成
+- 表格或版式修复
 ---
-
 # doc
 
 At conversation start or first turn, check this artifact gate early whenever the main object is a `.docx` file or the workflow should stay Word-native.

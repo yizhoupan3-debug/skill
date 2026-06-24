@@ -93,6 +93,9 @@ pub fn delete_skill(
     skills_root: &Path,
     opts: &DeleteOptions,
 ) -> Result<DeleteResult, DeleteError> {
+    crate::validate::validate_skill_name(&opts.slug).map_err(|e| {
+        DeleteError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+    })?;
     let skill_dir = skills_root.join(&opts.slug);
     if !skill_dir.exists() {
         return Err(DeleteError::SkillNotFound(opts.slug.clone()));

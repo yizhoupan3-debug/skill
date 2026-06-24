@@ -1,75 +1,50 @@
 ---
+allowed_tools:
+- shell
+- git
+- python
+approval_required_tools:
+- git push
+description: Design and tune cross-host skill routing and framework behavior
+metadata:
+  platforms:
+  - supported
+  tags:
+  - multi-host
+  - host-agnostic
+  - skill-authoring
+  - routing
+  - trigger-debugging
+  - skill-splitting
+  - first-turn-routing
+  version: '3.3.1'
 name: skill-framework-developer
-description: |
-  Skill 框架治理：路由、边界、owner/gate/overlay、维护规范、sync health、
-  registry drift cleanup 与减少 token 消耗。
-  Use when the request is about framework policy, routing-system review, skill-boundary audit,
-  overlap repair strategy, skill-library maintenance/self-optimization, validation,
-  sync checks, registry drift cleanup, or feedback that a domain skill is "不好用".
+network_access: conditional
+risk: low
+routing_gate: none
 routing_layer: L0
 routing_owner: owner
-routing_gate: none
 routing_priority: P1
 session_start: preferred
-user-invocable: false
-disable-model-invocation: true
 short_description: Design and tune cross-host skill routing and framework behavior
+source: project
 trigger_hints:
-  - skill 框架治理
-  - 路由系统
-  - skill 路由
-  - owner / gate / overlay
-  - 边界重叠
-  - 同步状态
-  - 路由表
-  - skill 库维护
-  - 注册表
-  - 框架策略
-  - 路由诊断
-  - skill 边界
-  - 维护规范
-  - 同步健康
-  - 框架自优化
-framework_roles:
-  - planner
-  - gate
-framework_contracts:
-  emits_findings: true
-  consumes_findings: false
-  emits_execution_items: true
-  consumes_execution_items: false
-  emits_verification_results: false
-metadata:
-  version: "3.3.1"
-  platforms: [supported]
-  tags:
-    - multi-host
-    - host-agnostic
-    - skill-authoring
-    - routing
-    - trigger-debugging
-    - skill-splitting
-    - first-turn-routing
-risk: low
-source: local
-allowed_tools:
-  - shell
-  - git
-  - python
-approval_required_tools:
-  - git push
-filesystem_scope:
-  - repo
-  - artifacts
-network_access: conditional
-artifact_outputs:
-  - SESSION_SUMMARY.md
-  - TRACE_METADATA.json
-  - EVIDENCE_INDEX.json
-bridge_behavior: mobile_complete_once
-
+- owner / gate / overlay
+- skill 库维护
+- skill 框架治理
+- skill 路由
+- skill 边界
+- 同步健康
+- 同步状态
+- 框架策略
+- 框架自优化
+- 注册表
+- 维护规范
+- 路由系统
+- 路由表
+- 路由诊断
+- 边界重叠
 ---
-
 **Dual-Dimension Audit (Pre: Framework-Policy/Logic, Post: Sync-Health/Registry Results) → runtime verification gate**
 
 # skill-framework-developer

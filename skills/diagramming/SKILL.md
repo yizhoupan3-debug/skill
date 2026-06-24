@@ -1,45 +1,40 @@
 ---
-name: diagramming
-description: |
-  Create Mermaid or Graphviz/DOT diagrams for flowcharts, process diagrams, sequence diagrams, ERDs, dependency graphs, state machines, and publication-quality technical diagrams.
-  Use when the user asks for Mermaid or Graphviz/DOT, `.mmd` diagrams, 流程图, 研究流程图, 技术路线图, 方法图, 实验流程, pipeline 图, 时序图, 架构图, Gantt charts, user journeys, or wants readable markdown-ready text diagrams. Also use for Mermaid or Graphviz/DOT 美化, 导出 PNG/SVG, 自定义主题, diagramming-cli, or mmdc.
+description: Create Mermaid or Graphviz/DOT diagrams for flowcharts, process diagrams, sequence diagrams, ERDs, dependency graphs, state machines, and publication-quality technical diagrams. Use when the user asks
 metadata:
-  version: "2.0.0"
-  platforms: [supported]
+  platforms:
+  - supported
   tags:
-    - diagramming
-    - flowchart
-    - research-diagram
-    - technical-roadmap
-    - sequence-diagram
-    - erd
+  - diagramming
+  - flowchart
+  - research-diagram
+  - technical-roadmap
+  - sequence-diagram
+  - erd
+  version: '2.0.0'
+name: diagramming
 risk: low
-source: community
+routing_gate: none
 routing_layer: L3
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
+source: project
 trigger_hints:
-  - Mermaid or Graphviz/DOT
-  - readable markdown-ready text diagrams
-  - flowchart
-  - 流程图
-  - research diagram
-  - 研究流程图
-  - technical roadmap
-  - 技术路线图
-  - 方法图
-  - 实验流程
-  - pipeline 图
-  - sequence diagram
-  - 时序图
-  - erd
-
+- Mermaid or Graphviz/DOT
+- erd
+- flowchart
+- pipeline 图
+- readable markdown-ready text diagrams
+- research diagram
+- sequence diagram
+- technical roadmap
+- 实验流程
+- 技术路线图
+- 方法图
+- 时序图
+- 流程图
+- 研究流程图
 ---
-
 # diagramming
 
 Use this skill when the user needs a **text-based Mermaid or Graphviz/DOT diagram** that is easy

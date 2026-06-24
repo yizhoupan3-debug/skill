@@ -1,29 +1,29 @@
 ---
+description: experiment-reproducibility 的无状态审计子能力：验证实验的可复现性——种子、确定性、环境锁定、数据版本和 checkpoint 恢复。
+metadata:
+  platforms:
+  - supported
+  tags:
+  - reproducibility
+  - verification
+  - environment
+  - research
+  version: '1.0.0'
 name: reproducibility-verification
-description: |
-  experiment-reproducibility 的无状态审计子能力：验证实验的可复现性——种子、确定性、环境锁定、数据版本和
-  checkpoint 恢复。由 research-execution、paper-workbench 内联调用，不独立编排会话。
+risk: low
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
-risk: low
 source: local
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [reproducibility, verification, environment, research]
 trigger_hints:
-  - 可复现性验证
-  - 种子检查
-  - 确定性重跑
-  - 环境锁定验证
-  - checkpoint 恢复
+- deterministic rerun
+- reproducibility check
+- 可复现性验证
+- 环境复现
+- 种子检查
 ---
-
 # Reproducibility Verification
 
 无状态能力 skill：对实验代码和配置做可复现性审计。不独立编排会话。

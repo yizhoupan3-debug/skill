@@ -25,27 +25,12 @@ fn novelty_arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
 }
 
 fn ensure_state_defaults(state: &Value) -> Value {
-    let mut s = state.clone();
-    let now = framework_kernel::time::now_iso();
-    let obj = s.as_object_mut().expect("state must be object");
-    for (key, default) in [
-        ("hypotheses", json!([])),
-        ("hypothesis_backlog", json!([])),
-        ("run_history", json!([])),
-        ("decisions", json!([])),
-        ("evidence_index", json!([])),
-        ("external_research", json!([])),
-        ("blockers", json!([])),
-        ("next_actions", json!([])),
-    ] {
-        obj.entry(key).or_insert(default);
-    }
-    obj.entry("novelty_gate").or_insert(json!({
-        "status": "pending", "claims": [], "claim_records": [], "draft_claims": []
-    }));
-    obj.entry("updated_at").or_insert(json!(now));
-    obj.entry("created_at").or_insert(json!(now));
-    s
+    // Delegate to state::hydrate_state — the comprehensive version with
+    // per-field defaults for hypotheses, run records, and external research.
+    crate::state::hydrate_state(state).unwrap_or_else(|e| {
+        tracing::warn!("[research-harness] ensure_state_defaults: hydrate_state failed: {e}");
+        state.clone()
+    })
 }
 
 fn arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
@@ -251,7 +236,7 @@ pub fn research_all_claims(
         let source = source.clone();
         handles.push(std::thread::spawn(move || {
             loop {
-                let idx = next_idx.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let idx = next_idx.fetch_add(1, std::sync::atomic::Ordering::AcqRel);
                 if idx >= tasks.len() {
                     break;
                 }

@@ -1,10 +1,9 @@
 #![recursion_limit = "256"]
 
 // ── Re-exports from runtime-core (B3 migration: single source of truth) ──
-// `browser_mcp` and `route` are consumed externally (by router-rs-cli).
+// `route` is consumed externally (by router-rs-cli).
 // `cli` is now defined locally in router-rs (moved from runtime-core per ADR §10.3).
 // All test-only re-exports live in `tests/common/prelude.rs` included via #[path].
-pub use browser_mcp;
 pub mod cli;
 pub use runtime_core::route;
 
@@ -163,10 +162,3 @@ mod smoke_p0_router_self_tests;
 #[cfg(test)]
 #[path = "../tests/smoke_workspace_dag_compliance_tests.rs"]
 mod smoke_workspace_dag_compliance_tests;
-
-// ── browser dispatch registration ──
-/// Register browser-mcp's dispatch function with runtime-core's hook.
-/// Must be called once before any `router-rs browser` CLI command.
-pub fn init_browser_mcp_dispatch() {
-    browser_mcp::register_browser_dispatch();
-}

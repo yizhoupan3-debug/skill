@@ -10,10 +10,10 @@ name = "browser_mcp"
 path = "src/lib.rs"
 
 [dependencies]
-framework-kernel = { path = "../framework-kernel" }
-http-util = { path = "../http-util" }
-host-projection = { path = "../host-projection" }
-runtime-core-contracts = { path = "../runtime-core-contracts" }
+browser-mcp-dispatch = { path = "../../core/browser-mcp-dispatch" }
+framework-kernel = { path = "../../core/framework-kernel" }
+http-util = { path = "../../core/http-util" }
+runtime-core-contracts = { path = "../../core/runtime-core-contracts" }
 base64.workspace = true
 chrono.workspace = true
 reqwest.workspace = true

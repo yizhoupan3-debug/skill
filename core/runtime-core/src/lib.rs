@@ -324,7 +324,7 @@ pub fn register_host_projection_hooks() {
             session_supervisor::handle_session_supervisor_operation,
         );
 
-        // ── framework-runtime internal hooks (pre_tool_use_guard, closeout, etc.) ──
+        // ── framework-runtime-hooks internal hooks (pre_tool_use_guard, closeout, etc.) ──
         framework_runtime_hooks::register(framework_runtime_hooks::RuntimeCoreHooks {
             telemetry: framework_runtime_hooks::TelemetryHooks {
                 hook_fired: telemetry_emit::emit_hook_fired,

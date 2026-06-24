@@ -1,56 +1,44 @@
 ---
+allowed_tools:
+- Read
+- Write
+- Edit
+- Bash
+- Glob
+- Grep
+- Agent
+description: 行为守恒的三维度并行代码简化审查（复用/质量/效率）。默认 findings-only，可选自动修复模式。与 code-review-deep 互补。不用于找 bug 或安全漏洞——那属于 code-review-deep。集成框架生命周期。
+metadata:
+  platforms:
+  - supported
+  tags:
+  - code-quality
+  - simplification
+  - refactoring
+  - quality-gate
+  - parallel-agents
+  version: '1.0.0'
 name: simplify
-description: |
-  行为守恒的三维度并行代码简化审查（复用/质量/效率）。
-  默认 findings-only，可选自动修复模式。
-  与 code-review-deep 互补：review = 审查专家，simplify = 质量门。
-  不用于找 bug 或安全漏洞——那属于 code-review-deep。
-  集成框架生命周期：实现 → simplify → 验证。
+risk: low
+routing_gate: none
 routing_layer: L2
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: true
-disable-model-invocation: false
+source: project
 trigger_hints:
-  - /simplify
-  - simplify
-  - 代码简化
-  - 简化代码
-  - 代码清理
-  - code simplify
-  - clean up code
-  - 重构简化
-  - 去重
-  - 过度工程
-  - 质量门
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [code-quality, simplification, refactoring, quality-gate, parallel-agents]
-framework_roles:
-  - detector
-  - planner
-  - verifier
-framework_contracts:
-  emits_findings: true
-  consumes_findings: true
-  emits_execution_items: false
-  consumes_execution_items: false
-  emits_verification_results: true
-risk: low
-source: local
-allowed_tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
-  - Agent
+- /simplify
+- clean up code
+- code simplify
+- simplify
+- 代码简化清理
+- 代码简化
+- 去重
+- 简化代码
+- 质量门
+- 过度工程
+- 重构简化
 ---
-
 ## Quick Ref
 
 - **Purpose**: 行为守恒的三维度并行代码简化审查 — 发现可简化的代码并生成 findings 报告，可选自动修复
@@ -254,7 +242,7 @@ git diff --name-only HEAD~1
 
 ### Phase 5: 持久化报告
 
-生成 `simplification-pass.md` 并写入 `artifacts/current/<task_id>/`。
+生成 `simplification-pass.md` 并写入 skill 本地产物目录（`simplify/artifacts/`）。
 
 ## 允许清单（Allowlist）
 
@@ -350,7 +338,7 @@ make test
 - Deferred risks: <anything intentionally not simplified>
 ```
 
-产出路径: `artifacts/current/<task_id>/simplification-pass.md`
+产出路径: `skills/simplify/artifacts/simplification-pass.md`
 
 ## 与 code-review-deep 的互补说明
 
@@ -417,7 +405,7 @@ commit
 
 ## 跨宿主兼容
 
-所有宿主共享同一份 `SKILL.md`，通过子代理并行执行三维度简化（具体子代理接入方式因宿主而异，见 `RUNTIME_REGISTRY.json`），行为契约和测试门控逻辑不变。
+所有宿主共享同一份 `SKILL.md`，通过子代理并行执行三维度简化（具体子代理接入方式因宿主而异），行为契约和测试门控逻辑不变。
 
 ## References
 

@@ -1,58 +1,44 @@
 ---
-name: design-md
+allowed_tools:
+- shell
+- browser
+approval_required_tools:
+- network install
 description: Manage DESIGN.md design-system contracts and visual tokens.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - design-system
+  - design-md
+  - design-tokens
+  - ui-design
+  - acceptance
+  version: '1.0.0'
+name: design-md
+network_access: conditional
+risk: low
+routing_gate: artifact
 routing_layer: L3
 routing_owner: gate
-routing_gate: artifact
 routing_priority: P1
 session_start: required
-user-invocable: false
-disable-model-invocation: true
+source: project
 trigger_hints:
-  - DESIGN.md
-  - design.md
-  - 设计规范
-  - 设计系统
-  - 设计 token
-  - 视觉身份
-  - 风格漂移
-  - 设计验收
-  - 根据 DESIGN.md
-  - 生成 DESIGN.md
-  - extract design tokens
-  - design contract
-  - DESIGN.md 设计规范
-  - UI 设计规范
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags:
-    - design-system
-    - design-md
-    - design-tokens
-    - ui-design
-    - acceptance
-risk: low
-source: local
-framework_roles:
-  - gate
-  - detector
-allowed_tools:
-  - shell
-  - browser
-approval_required_tools:
-  - network install
-filesystem_scope:
-  - repo
-  - artifacts
-network_access: conditional
-artifact_outputs:
-  - DESIGN.md
-  - design_acceptance.md
-  - EVIDENCE_INDEX.json
-
+- DESIGN.md
+- DESIGN.md 设计规范
+- UI 设计规范
+- design contract
+- extract design tokens
+- 根据 DESIGN.md
+- 生成 DESIGN.md
+- 视觉身份
+- 设计 token
+- 设计系统
+- 设计规范
+- 设计验收
+- 风格漂移
 ---
-
 # design-md
 
 This skill is the **design-system source-of-truth gate**. It keeps visual

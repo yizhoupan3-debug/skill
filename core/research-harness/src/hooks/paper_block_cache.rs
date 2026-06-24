@@ -9,6 +9,9 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
+/// Maximum allowed file size for cached blocks (100 KiB).
+const MAX_BLOCK_BYTES: usize = 1024 * 100;
+
 struct CachedBlock {
     content: String,
     mtime: Option<SystemTime>,
@@ -54,19 +57,29 @@ impl BlockCache {
         }
         let content = match fs::read_to_string(&path) {
             Ok(t) => {
-                let trimmed = t.trim();
-                if trimmed.is_empty() {
+                let trimmed = if t.len() > MAX_BLOCK_BYTES {
+                    tracing::warn!(
+                        "{} block file exceeds {MAX_BLOCK_BYTES} bytes ({} B), using builtin",
+                        self.log_label,
+                        t.len()
+                    );
                     builtin()
-                } else if let Some(after) = trimmed.strip_prefix(self.prefix_line) {
-                    let after = after.trim();
-                    if after.is_empty() {
-                        builtin()
-                    } else {
-                        trimmed.to_string()
-                    }
                 } else {
-                    format!("{}\n\n{}", self.prefix_line, trimmed)
-                }
+                    let trimmed = t.trim();
+                    if trimmed.is_empty() {
+                        builtin()
+                    } else if let Some(after) = trimmed.strip_prefix(self.prefix_line) {
+                        let after = after.trim();
+                        if after.is_empty() {
+                            builtin()
+                        } else {
+                            trimmed.to_string()
+                        }
+                    } else {
+                        format!("{}\n\n{}", self.prefix_line, trimmed)
+                    }
+                };
+                trimmed
             }
             Err(_) => builtin(),
         };

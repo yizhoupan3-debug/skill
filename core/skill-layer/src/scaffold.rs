@@ -22,7 +22,6 @@ pub struct ScaffoldOptions {
     pub routing_priority: RoutingPriority,
     pub session_start: SessionStart,
     pub trigger_hints: Vec<String>,
-    pub user_invocable: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -142,8 +141,6 @@ routing_owner: {owner}
 routing_gate: {gate}
 routing_priority: {priority}
 session_start: {session_start}
-user-invocable: {user_invocable}
-disable-model-invocation: false
 short_description: "{short_desc}"
 trigger_hints:
 {hints}
@@ -178,7 +175,6 @@ source: local
         gate = routing_gate_str(opts.routing_gate),
         priority = routing_priority_str(opts.routing_priority),
         session_start = session_start_str(opts.session_start),
-        user_invocable = opts.user_invocable,
         short_desc = short_desc,
         hints = hints_yaml,
     )
@@ -190,11 +186,18 @@ source: local
 
 /// Generate a new skill directory with SKILL.md.
 ///
+/// Creates the directory and writes an initial SKILL.md with template content.
+/// Call [`register_and_generate`] afterward to add a registry entry and
+/// regenerate SKILL.md frontmatter from the registry (source-of-truth).
+///
 /// Fails if the directory already exists.
 pub fn scaffold_skill(
     skills_root: &Path,
     opts: &ScaffoldOptions,
 ) -> Result<ScaffoldResult, ScaffoldError> {
+    crate::validate::validate_skill_name(&opts.name).map_err(|e| {
+        ScaffoldError::Io(std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+    })?;
     let skill_dir = skills_root.join(&opts.name);
     if skill_dir.exists() {
         return Err(ScaffoldError::AlreadyExists(skill_dir));
@@ -212,6 +215,131 @@ pub fn scaffold_skill(
         files_created: vec![skill_md_path],
         warnings: vec![],
     })
+}
+
+/// Register a scaffolded skill in the runtime registry, then regenerate
+/// its SKILL.md frontmatter from the registry (source of truth).
+///
+/// Call this after `scaffold_skill` to ensure the registry owns all routing
+/// metadata and the SKILL.md is a generated artifact.
+pub fn register_and_generate(
+    repo_root: &Path,
+    slug: &str,
+    opts: &ScaffoldOptions,
+) -> Result<(), String> {
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    // ---- 1. Add row to SKILL_ROUTING_RUNTIME.json ----
+    let runtime_path = crate::paths::runtime_json(repo_root);
+    let mut doc: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&runtime_path).map_err(|e| e.to_string())?
+    )
+    .map_err(|e| e.to_string())?;
+
+    let keys = doc["keys"]
+        .as_array()
+        .ok_or_else(|| "runtime JSON missing keys array".to_string())?;
+    let col_idx: HashMap<&str, usize> = keys
+        .iter()
+        .enumerate()
+        .filter_map(|(i, k)| k.as_str().map(|s| (s, i)))
+        .collect();
+
+    let mut row: Vec<serde_json::Value> = vec![serde_json::Value::Null; keys.len()];
+    let skill_path = format!("skills/{slug}/SKILL.md");
+
+    if let Some(&i) = col_idx.get("slug") {
+        row[i] = json!(slug);
+    }
+    if let Some(&i) = col_idx.get("skill_path") {
+        row[i] = json!(skill_path);
+    }
+    if let Some(&i) = col_idx.get("kind") {
+        row[i] = json!("skill");
+    }
+    if let Some(&i) = col_idx.get("description") {
+        row[i] = json!(opts.description);
+    }
+    if let Some(&i) = col_idx.get("layer") {
+        row[i] = json!(crate::frontmatter::RoutingLayer::L3);
+    }
+    if let Some(&i) = col_idx.get("owner") {
+        row[i] = json!("owner");
+    }
+    if let Some(&i) = col_idx.get("gate") {
+        row[i] = json!("none");
+    }
+    if let Some(&i) = col_idx.get("priority") {
+        row[i] = json!("P2");
+    }
+    if let Some(&i) = col_idx.get("session_start") {
+        row[i] = json!("n/a");
+    }
+    if let Some(&i) = col_idx.get("trigger_hints") {
+        row[i] = json!(opts.trigger_hints);
+    }
+    if let Some(&i) = col_idx.get("source") {
+        row[i] = json!("local");
+    }
+    if let Some(&i) = col_idx.get("risk") {
+        row[i] = json!("low");
+    }
+        if let Some(&i) = col_idx.get("metadata") {
+        row[i] = json!({
+            "version": "0.1.0",
+            "platforms": ["supported"],
+            "tags": []
+        });
+    }
+
+    doc["skills"]
+        .as_array_mut()
+        .ok_or_else(|| "runtime JSON missing skills array".to_string())?
+        .push(serde_json::Value::Array(row));
+
+    core_state::utils::atomic_write::write_atomic_json(&runtime_path, &doc)
+        .map_err(|e| e.to_string())?;
+
+    // ---- 2. Also add row to SKILL_MANIFEST.json ----
+    let manifest_path = crate::paths::manifest_json(repo_root);
+    let mut manifest: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?
+    )
+    .map_err(|e| e.to_string())?;
+
+    let m_keys = manifest["keys"]
+        .as_array()
+        .ok_or_else(|| "manifest JSON missing keys array".to_string())?;
+    let m_col_idx: HashMap<&str, usize> = m_keys
+        .iter()
+        .enumerate()
+        .filter_map(|(i, k)| k.as_str().map(|s| (s, i)))
+        .collect();
+
+    let mut m_row: Vec<serde_json::Value> = vec![serde_json::Value::Null; m_keys.len()];
+    if let Some(&i) = m_col_idx.get("slug") {
+        m_row[i] = json!(slug);
+    }
+    if let Some(&i) = m_col_idx.get("skill_path") {
+        m_row[i] = json!(skill_path);
+    }
+    if let Some(&i) = m_col_idx.get("description") {
+        m_row[i] = json!(opts.description);
+    }
+
+    manifest["skills"]
+        .as_array_mut()
+        .ok_or_else(|| "manifest JSON missing skills array".to_string())?
+        .push(serde_json::Value::Array(m_row));
+
+    core_state::utils::atomic_write::write_atomic_json(&manifest_path, &manifest)
+        .map_err(|e| e.to_string())?;
+
+    // ---- 3. Regenerate SKILL.md from registry ----
+    crate::generate::generate_frontmatter(repo_root, Some(slug), false)?;
+
+    Ok(())
 }
 
 /// Dry-run: return what would be created without touching disk.
@@ -250,7 +378,6 @@ mod tests {
             routing_priority: RoutingPriority::P2,
             session_start: SessionStart::NA,
             trigger_hints: vec!["new skill".into(), "新 skill".into()],
-            user_invocable: true,
         }
     }
 

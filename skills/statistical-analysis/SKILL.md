@@ -1,46 +1,41 @@
 ---
+description: Guide research statistics for test choice, effect sizes, uncertainty reporting, and interpretation. Use when the user asks 用什么检验、显著性怎么算、p 值、效应量、贝叶斯、多重比较、统计功效、回归诊断, or needs help choosing, executing, o
+metadata:
+  platforms:
+  - supported
+  tags:
+  - statistics
+  - hypothesis-testing
+  - effect-size
+  - bayesian
+  - regression
+  - research
+  version: '1.0.2'
 name: statistical-analysis
-description: |
-  Guide research statistics for test choice, effect sizes, uncertainty reporting, and interpretation.
-  Use when the user asks 用什么检验、显著性怎么算、p 值、效应量、贝叶斯、多重比较、统计功效、回归诊断, or needs help choosing, executing, or interpreting hypothesis tests, Bayesian inference, confidence intervals, power analysis, regression diagnostics, or statistical figures for research data.
+risk: low
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: false
-disable-model-invocation: true
+source: project
 trigger_hints:
-  - 用什么检验
-  - 显著性怎么算
-  - p 值
-  - 效应量
-  - 贝叶斯
-  - 多重比较
-  - 统计功效
-  - 回归诊断
-  - interpreting hypothesis tests
-  - 假设检验怎么选
-  - 置信区间怎么报
-  - A/B 测试怎么做显著性
-  - 多组比较怎么校正
-  - 需要多少样本量
-  - power analysis
-metadata:
-  version: "1.0.2"
-  platforms: [supported]
-  tags:
-    - statistics
-    - hypothesis-testing
-    - effect-size
-    - bayesian
-    - regression
-    - research
-risk: low
-source: local
-
+- A/B 测试怎么做显著性
+- interpreting hypothesis tests
+- p 值
+- power analysis
+- 假设检验怎么选
+- 回归诊断
+- 多组比较怎么校正
+- 多重比较
+- 效应量
+- 显著性怎么算
+- 用什么检验
+- 统计功效
+- 置信区间怎么报
+- 贝叶斯
+- 需要多少样本量
 ---
-
 # Statistical Analysis
 
 - **Two-stage rigor check (test selection -> result interpretation)** for high-stakes analyses

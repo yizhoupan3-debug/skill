@@ -13,11 +13,17 @@
     "skill_path",
     "host_platforms",
     "kind",
-    "allowedTools",
-    "model"
+    "short_description",
+    "tags",
+    "when_to_use",
+    "do_not_use",
+    "metadata",
+    "risk",
+    "allowed_tools",
+    "runtime_requirements",
+    "network_access",
+    "approval_required_tools"
   ],
-  "plugin_abi_version": "skill-plugin-abi-v1",
-  "schema_version": "skill-manifest-v2",
   "skills": [
     [
       "agent-swarm-orchestration",
@@ -50,6 +56,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -97,12 +111,15 @@
         "opencode"
       ],
       "skill",
-      [
-        "Bash",
-        "Read",
-        "Write",
-        "Edit"
-      ],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -136,6 +153,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -175,19 +200,15 @@
         "opencode"
       ],
       "skill",
-      [
-        "Read",
-        "Bash",
-        "Agent",
-        "mcp__mcp-codegraph__codegraph_search",
-        "mcp__mcp-codegraph__codegraph_callers",
-        "mcp__mcp-codegraph__codegraph_callees",
-        "mcp__mcp-codegraph__codegraph_impact",
-        "mcp__mcp-codegraph__codegraph_node",
-        "mcp__mcp-codegraph__codegraph_status",
-        "mcp__mcp-codegraph__codegraph_dead_code",
-        "mcp__mcp-codegraph__codegraph_goto_definition"
-      ],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -224,6 +245,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -250,6 +279,14 @@
         "opencode"
       ],
       "framework_command",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -286,6 +323,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -324,6 +369,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -354,6 +407,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -388,6 +449,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -426,6 +495,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -454,6 +531,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -491,6 +576,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -535,6 +628,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -559,6 +660,14 @@
         "opencode"
       ],
       "framework_command",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -591,6 +700,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -619,6 +736,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -653,6 +778,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -683,6 +816,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -735,14 +876,15 @@
         "opencode"
       ],
       "skill",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "WebSearch",
-        "WebFetch"
-      ],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -772,14 +914,15 @@
         "opencode"
       ],
       "skill",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "WebSearch",
-        "WebFetch"
-      ],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -810,6 +953,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -844,6 +995,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -872,6 +1031,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -908,6 +1075,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -935,6 +1110,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -981,6 +1164,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1023,6 +1214,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1055,6 +1254,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -1101,6 +1308,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1129,6 +1344,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -1163,15 +1386,15 @@
         "opencode"
       ],
       "skill",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Glob",
-        "Grep",
-        "Agent"
-      ],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1210,6 +1433,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1240,12 +1471,15 @@
         "opencode"
       ],
       "skill",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash"
-      ],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1275,6 +1509,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -1314,6 +1556,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1343,6 +1593,14 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1371,6 +1629,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -1408,6 +1674,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -1449,12 +1723,15 @@
         "opencode"
       ],
       "skill",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash"
-      ],
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1492,6 +1769,14 @@
       ],
       "framework_command",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ],
     [
@@ -1525,6 +1810,14 @@
         "opencode"
       ],
       "skill",
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null
     ],
@@ -1572,17 +1865,15 @@
       ],
       "skill",
       null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
       null
     ]
-  ],
-  "full_skill_count": 43,
-  "hot_skill_count": 43,
-  "manifest_skill_count": 43,
-  "version": 2,
-  "default_host_platforms": [
-    "claude",
-    "codex",
-    "cursor",
-    "opencode"
   ]
 }

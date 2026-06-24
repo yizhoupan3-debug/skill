@@ -242,12 +242,18 @@ pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String
             repo_root,
             write,
             write_companions,
+            backfill,
+            dry_run,
+            generate,
         } => {
             let repo_root = resolve_repo_root_arg(repo_root.as_deref())?;
             refresh_skills(&SkillsCommand {
                 repo_root,
                 write,
                 write_companions,
+                backfill,
+                dry_run,
+                generate,
             })
         }
     }

@@ -1,49 +1,46 @@
 ---
+description: 'Research execution lanes: experiment design, math verification, math modeling, code verification, and reproducibility. Carries a research task through evidence, math, code, and reproducibility checks.'
+metadata:
+  platforms:
+  - supported
+  tags:
+  - research
+  - experiment-design
+  - math
+  - modeling
+  - reproducibility
+  - execution
+  version: '1.0.0'
 name: research-execution
-description: |
-  Research execution lanes: experiment design, math verification, math modeling,
-  code verification, and reproducibility. Carries a research task through evidence,
-  math, code, and reproducibility checks without discovery or literature work.
-  Use for requests like "帮我设计实验", "推导方法正确性", "数学建模", "代码和数学联合核查",
-  "控制方程", "量纲分析", or "benchmark 方案".
+risk: low
+routing_gate: none
 routing_layer: L2
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: false
-disable-model-invocation: false
 short_description: Research execution lanes — experiment design, math, code, reproducibility
-trigger_hints:
-  - 实验设计
-  - 实验方案设计
-  - 方法正确性核查
-  - 代码和数学联合核查
-  - 推导方法正确性
-  - 研究路线设计
-  - ablation 方案
-  - benchmark 方案
-  - 控制方程
-  - 本构方程
-  - 量纲分析
-  - 无量纲化
-  - 数学建模
-  - 模型搭建
-  - modeling
-  - governing equation
-  - baseline 设计
-  - 不确定性管理
-  - 失败复盘
-trigger_hints_long: references/trigger-hints-long.md
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [research, experiment-design, math, modeling, reproducibility, execution]
-risk: low
 source: local
-
+trigger_hints:
+- ablation 方案
+- baseline 设计
+- benchmark 方案
+- governing equation
+- modeling
+- 不确定性管理
+- 代码和数学联合核查
+- 失败复盘
+- 实验方案设计
+- 实验设计
+- 控制方程
+- 推导方法正确性
+- 数学建模
+- 方法正确性核查
+- 无量纲化
+- 本构方程
+- 模型搭建
+- 研究路线设计
+- 量纲分析
 ---
-
 # Research Execution
 
 This skill handles the **execution lanes** of non-manuscript research work. It
@@ -77,7 +74,7 @@ Start by classifying the task into one or more lanes:
 
 - `experiment_design`: variables, controls, ablations, baselines, metrics, sample size, and failure criteria.
 - `math_verification`: assumptions, derivation witnesses, theorem/lemma dependencies, and checker options.
-- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_quality_gate` with `external_mode=modeling` + [math-reasoning-harness.md](../../docs/adr/010-ideal-architecture-v10.md) section F.
+- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_quality_gate` with `external_mode=modeling` + [math-reasoning-harness.md](../../docs/architecture.md) section F.
 - `code_verification`: implementation audit, tests, deterministic repro, and benchmark commands.
 - `reproducibility`: environment, data/versioning, seeds, configs, and artifact trace.
 
@@ -177,8 +174,8 @@ When a task spans both skills, the recommended flow is:
 
 ## Cross-references
 
-- Quality Gate research harness: `docs/adr/010-ideal-architecture-v10.md` §Quality Gate
-- Math reasoning harness: `docs/adr/010-ideal-architecture-v10.md` §Math Reasoning
+- Quality Gate research harness: `docs/architecture.md` §Quality Gate
+- Math reasoning harness: `docs/architecture.md` §Math Reasoning
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - Reproducibility minimum record: [`../experiment-reproducibility/references/research-record-minimum.md`](../experiment-reproducibility/references/research-record-minimum.md)
 - Discovery counterpart: [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md)

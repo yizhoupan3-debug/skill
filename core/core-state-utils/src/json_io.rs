@@ -13,8 +13,14 @@ pub fn read_json_if_exists(path: &Path) -> Value {
         return Value::Object(Map::new());
     }
     match fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| Value::Object(Map::new())),
-        Err(_) => Value::Object(Map::new()),
+        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|e| {
+            tracing::warn!("failed to parse JSON from {}: {e}", path.display());
+            Value::Object(Map::new())
+        }),
+        Err(e) => {
+            tracing::warn!("failed to read {}: {e}", path.display());
+            Value::Object(Map::new())
+        }
     }
 }
 

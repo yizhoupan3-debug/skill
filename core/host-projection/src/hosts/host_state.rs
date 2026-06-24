@@ -95,7 +95,9 @@ pub fn auto_record_verification_evidence(repo_root: &Path, payload: &Value) {
     if let Some(ref text) = output_summary {
         entry.insert("output".to_string(), serde_json::json!(text));
     }
-    let _ = crate::hooks::append_evidence_index(repo_root, None, entry);
+    if let Err(e) = crate::hooks::append_evidence_index(repo_root, None, entry) {
+        tracing::warn!(error = %e, "failed to append evidence index");
+    }
 }
 
 /// Auto-record research activity from tool calls.

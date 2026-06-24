@@ -37,7 +37,7 @@ pub const DEFAULT_MANAGED_MCP_SERVER_IDS: &[&str] = &[
 ];
 
 /// Path to the host adapter contract spec (relative to framework root).
-pub const HOST_ADAPTER_CONTRACT_PATH: &str = "docs/spec.md";
+pub const HOST_ADAPTER_CONTRACT_PATH: &str = "docs/architecture.md";
 
 // ---------------------------------------------------------------------------
 // Typed registry subset (host integration)

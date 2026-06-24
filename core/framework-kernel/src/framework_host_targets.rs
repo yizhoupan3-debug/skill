@@ -309,7 +309,7 @@ mod tests {
                 "cursor".to_string(),
                 "opencode".to_string(),
             ],
-            "AGENTS.md / MIGRATION.md closed-set must match RUNTIME_REGISTRY.host_targets.supported"
+            "AGENTS.md closed-set must match RUNTIME_REGISTRY.host_targets.supported"
         );
     }
 

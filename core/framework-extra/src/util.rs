@@ -1,11 +1,11 @@
 //! Shared utility functions — re-exports from `fr_utils::util`.
 //!
 //! This is the single source of truth for these utility functions.
-//! All implementations live in `framework_runtime/src/util.rs`.
+//! All implementations live in `fr_utils/src/util.rs`.
 //! This module re-exports them so that `framework_extra::util::*` callers
 //! continue to work unchanged.
 
-// ── Re-exports (canonical implementations in framework-runtime) ──
+// ── Re-exports (canonical implementations in fr-utils) ──
 
 pub use fr_utils::util::{
     count_evidence_rows,

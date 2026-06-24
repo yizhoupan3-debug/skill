@@ -151,7 +151,7 @@
       },
       "action": {
         "type": "boost",
-        "delta": 70.0,
+        "delta": 50.0,
         "reason": "Skill-framework boost applied: skill-library maintenance or skill-quality repair wording detected."
       },
       "record": {
@@ -177,7 +177,7 @@
       },
       "action": {
         "type": "boost",
-        "delta": 50.0,
+        "delta": 30.0,
         "reason": "Skill-installer boost applied: install/curate/github-import skill wording detected."
       },
       "record": {
@@ -203,7 +203,7 @@
       },
       "action": {
         "type": "boost",
-        "delta": 50.0,
+        "delta": 20.0,
         "reason": "Skill-creator boost applied: create/scaffold/revise skill wording detected."
       },
       "record": {
@@ -736,7 +736,7 @@
       },
       "action": {
         "type": "boost",
-        "delta": 74.0,
+        "delta": 50.0,
         "reason": "Skill-framework boost applied: runtime lightweighting, compatibility-layer, glue-layer, or entrypoint-reduction wording detected."
       },
       "record": {

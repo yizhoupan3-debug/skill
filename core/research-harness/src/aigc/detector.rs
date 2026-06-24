@@ -285,14 +285,14 @@ fn detect_vocabulary_repetition(text: &str) -> f64 {
 // ── Helpers ──
 
 /// Split text into paragraphs (double-newline separated).
-fn split_paragraphs(text: &str) -> Vec<&str> {
-    text.split("\n\n")
-        .chain(text.split("\n\r\n\r"))
+fn split_paragraphs(text: &str) -> Vec<String> {
+    // Normalize line endings: \r\n → \n so both Unix and Windows-style
+    // double-newlines become \n\n for consistent splitting.
+    let normalized = text.replace("\r\n", "\n");
+    normalized
+        .split("\n\n")
         .filter(|p| !p.trim().is_empty())
-        .collect::<Vec<_>>()
-        .into_iter()
-        .collect::<std::collections::HashSet<_>>()
-        .into_iter()
+        .map(|p| p.to_string())
         .collect()
 }
 

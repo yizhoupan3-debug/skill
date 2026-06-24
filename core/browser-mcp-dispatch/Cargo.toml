@@ -1,0 +1,15 @@
+[package]
+name = "browser-mcp-dispatch"
+version = "0.1.0"
+edition = "2024"
+[lints]
+workspace = true
+
+[lib]
+name = "browser_mcp_dispatch"
+path = "src/lib.rs"
+
+[dependencies]
+framework-kernel = { path = "../framework-kernel" }
+serde_json.workspace = true
+tracing.workspace = true

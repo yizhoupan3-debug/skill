@@ -7,14 +7,14 @@ workspace = true
 
 [dependencies]
 # B0
-core-state = { path = "../../core/core-state" }
-framework-kernel = { path = "../../core/framework-kernel" }
+core-state = { path = "../core-state" }
+framework-kernel = { path = "../framework-kernel" }
 
 # L0
-host-projection = { path = "../../core/host-projection" }
+host-projection = { path = "../host-projection" }
 
 # L4
-framework-extra = { path = "../../core/framework-extra" }
+framework-extra = { path = "../framework-extra" }
 
 # workspace
 serde_json.workspace = true

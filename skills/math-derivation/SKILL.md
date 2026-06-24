@@ -1,50 +1,41 @@
 ---
+description: Execute rigorous mathematical derivations and proofs
+metadata:
+  platforms:
+  - supported
+  tags:
+  - mathematics
+  - proof
+  - derivation
+  - theorem
+  - LaTeX
+  - formal-reasoning
+  - inequality
+  - ODE
+  - PDE
+  - convergence
+  version: '2.0.0'
 name: math-derivation
-description: |
-  Execute rigorous mathematical derivations and proofs with full justification.
-  Use when the user asks for 数学推导, 定理证明, 公式推导, 不等式证明, ODE/PDE 推导,
-  收敛性证明, 存在唯一性证明, 变分推导, 线性代数证明, 概率论推导, 优化问题推导,
-  mathematical proof, formal derivation, prove convergence, derive equation.
-  Best for strict mathematical rigor with every logical step explicitly justified.
+risk: low
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: preferred
-user-invocable: true
-disable-model-invocation: false
 short_description: Execute rigorous mathematical derivations and proofs
+source: project
 trigger_hints:
-  - $math-derivation
-  - 数学推导
-  - 定理证明
-  - 公式推导
-  - 不等式证明
-  - ODE
-  - PDE 推导
-  - 收敛性证明
-  - 存在唯一性证明
-  - 变分推导
-  - 线性代数证明
-metadata:
-  version: "2.0.0"
-  platforms: [supported]
-  tags:
-    - mathematics
-    - proof
-    - derivation
-    - theorem
-    - LaTeX
-    - formal-reasoning
-    - inequality
-    - ODE
-    - PDE
-    - convergence
-risk: low
-source: local
-
+- ODE
+- PDE 推导
+- 不等式证明
+- 公式推导
+- 变分推导
+- 存在唯一性证明
+- 定理证明
+- 收敛性证明
+- 数学推导
+- 线性代数证明
 ---
-
 # Math Derivation
 
 This skill owns **rigorous mathematical derivation and proof execution**:
@@ -87,7 +78,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 - The task is ML model math with coding focus (loss function implementation, gradient code) -> answer in the current implementation context; do not route to a retired AI/research skill
 - The task is reviewing paper-level scientific logic -> use `@lane:reviewer` logic mode
 - The task is LaTeX compilation or rendering → answer in the current context（（latex-compile-acceleration 已归档，内联处理） 已归档）
-- The user wants **multi-round** exploration of new structures, conjectures, or lemmas with parallel falsification lanes → use **`framework_quality_gate`** and [math-reasoning-harness.md](../../docs/adr/010-ideal-architecture-v10.md) §D（**not** this skill as the orchestrator); single-round derive/prove stays here.
+- The user wants **multi-round** exploration of new structures, conjectures, or lemmas with parallel falsification lanes → use **`framework_quality_gate`** and [math-reasoning-harness.md](../../docs/architecture.md) §D（**not** this skill as the orchestrator); single-round derive/prove stays here.
 - The user wants **mathematical modeling** (formulate ODE/PDE/closure, scaling, regimes) or **deep math background** for unknown properties → use [`$research-discovery`](../../skills/research-discovery/SKILL.md) (`math_modeling` / `math_background_inquiry`) → RFV §F–G; use this skill only for deriving a specific equation or proof step once the model is fixed.
 
 ## Derivation workflow
@@ -121,7 +112,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 12. **Theorem hypothesis verification**: Before applying any named theorem, explicitly verify that all its hypotheses are satisfied in the current context.
 13. **Verified means checker-backed**: Do not call a derivation "verified", "严审通过", or "深度验证" based only on prose. Provide checker output / a runnable command, or mark the verification gap.
 14. **Counterexample probe**: For research-grade critique, attempt at least one counterexample or boundary probe before accepting the claim.
-15. **GOAL/RFV completion gates (harness integration)**: When operating under a `GOAL_STATE` or `QUALITY_GATE_STATE`（原 `RFV_LOOP_STATE`）, set `completion_gates: { require_successful_evidence_row: true, min_depth_score: 1 }` to programmatically enforce the checker-backed standard. Without these gates, the harness cannot distinguish verified output from prose. See `docs/adr/010-ideal-architecture-v10.md` and `docs/adr/010-ideal-architecture-v10.md`.
+15. **Completion gates (harness integration)**: When operating under automated review, set gate requirements `require_successful_evidence_row: true, min_depth_score: 1` to enforce the checker-backed standard. Without these, the harness cannot distinguish verified output from prose. See `docs/architecture.md`.
 
 ## Output template
 
@@ -145,8 +136,8 @@ Minimal structure:
 ```
 
 For research-grade or multi-round math work, align with
-[docs/adr/010-ideal-architecture-v10.md](../../docs/adr/010-ideal-architecture-v10.md):
-witnesses, checker-backed PASS/FAIL, dependency graph, counterexample probes, and (when exploring new structures) §D discovery → promotion → STEM falsify via [lane-templates.md](../../docs/adr/010-ideal-architecture-v10.md).
+[docs/architecture.md](../../docs/architecture.md):
+witnesses, checker-backed PASS/FAIL, dependency graph, counterexample probes, and (when exploring new structures) §D discovery → promotion → STEM falsify via [lane-templates.md](../../docs/architecture.md).
 
 ## Common pitfalls
 

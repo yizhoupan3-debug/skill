@@ -20,6 +20,9 @@ pub struct SkillsCommand {
     pub repo_root: std::path::PathBuf,
     pub write: bool,
     pub write_companions: bool,
+    pub backfill: bool,
+    pub dry_run: bool,
+    pub generate: Option<String>,
 }
 
 /// Validation report from `validate_skills`.
@@ -60,8 +63,66 @@ pub fn validate_skills(repo_root: &Path) -> Result<(), String> {
 
 /// Full refresh: write tiers, companion stubs, health manifest, approval policy.
 pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
-    if !cmd.write {
+    if !cmd.write && !cmd.backfill && cmd.generate.is_none() {
         return validate_skills(&cmd.repo_root);
+    }
+    if cmd.backfill {
+        let report = crate::backfill::backfill_registry(&cmd.repo_root, cmd.dry_run)?;
+        if cmd.dry_run {
+            eprintln!(
+                "framework skills backfill --dry-run: {}/{} skills w/ frontmatter, {} cells would be filled across {} columns",
+                report.skills_with_frontmatter,
+                report.total_skills,
+                report.cells_filled,
+                report.columns.len(),
+            );
+            for (col, count) in &report.columns {
+                eprintln!("  {col}: {count}");
+            }
+        } else {
+            eprintln!(
+                "framework skills backfill: {}/{} skills w/ frontmatter, {} cells filled across {} columns",
+                report.skills_with_frontmatter,
+                report.total_skills,
+                report.cells_filled,
+                report.columns.len(),
+            );
+            for (col, count) in &report.columns {
+                eprintln!("  {col}: {count}");
+            }
+            if !report.errors.is_empty() {
+                eprintln!("  {} errors (SKILL.md read/parse)", report.errors.len());
+            }
+        }
+    }
+    if let Some(ref generate_target) = cmd.generate {
+        let slug = if generate_target == "all" { None } else { Some(generate_target.as_str()) };
+        let report = crate::generate::generate_frontmatter(&cmd.repo_root, slug, cmd.dry_run)?;
+        if cmd.dry_run {
+            eprintln!(
+                "framework skills generate{slug_msg}: {}/{} generated, {}/{} skipped (--dry-run)",
+                report.skills_generated,
+                report.total_skills,
+                report.skills_skipped,
+                report.total_skills,
+                slug_msg = slug.map(|s| format!(" --slug {s}")).unwrap_or_default(),
+            );
+        } else {
+            eprintln!(
+                "framework skills generate{slug_msg}: {}/{} generated, {}/{} skipped",
+                report.skills_generated,
+                report.total_skills,
+                report.skills_skipped,
+                report.total_skills,
+                slug_msg = slug.map(|s| format!(" --slug {s}")).unwrap_or_default(),
+            );
+            for err in &report.errors {
+                eprintln!("  error: {err}");
+            }
+        }
+    }
+    if !cmd.write {
+        return Ok(());
     }
     write_skill_tiers_from_surface_policy(&cmd.repo_root)?;
     if cmd.write_companions {
@@ -128,21 +189,9 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
     let keys: Vec<String> = manifest["keys"]
         .as_array()
         .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-        .unwrap_or_default();
+        .ok_or_else(|| "manifest missing keys array".to_string())?;
     let path_idx = crate::columnar::key_index(&keys, "skill_path")
         .ok_or("manifest missing skill_path column")?;
-    let host_idx = crate::columnar::key_index(&keys, "host_platforms");
-
-    // Load all registered hosts from RUNTIME_REGISTRY
-    let mut all_hosts: Vec<Value> = {
-        let reg_path = paths::runtime_registry_json(repo_root);
-        let reg_content = fs::read_to_string(&reg_path).unwrap_or_default();
-        serde_json::from_str::<Value>(&reg_content)
-            .ok()
-            .and_then(|r| r.get("host_targets")?.get("supported")?.as_array().cloned())
-            .unwrap_or_default()
-    };
-    all_hosts.sort_by(|a, b| a.as_str().unwrap_or("").cmp(b.as_str().unwrap_or("")));
 
     let mut plugin_skills = serde_json::Map::new();
     let mut metadata_skills = serde_json::Map::new();
@@ -150,24 +199,11 @@ fn write_routing_companion_stubs(repo_root: &Path) -> Result<(), String> {
         for row in rows {
             let slug = row.get(0).and_then(Value::as_str).unwrap_or("");
             let skill_path = row.get(path_idx).and_then(Value::as_str).unwrap_or("");
-            let raw_platforms = host_idx
-                .and_then(|i| row.get(i))
-                .cloned()
-                .unwrap_or_else(|| json!(["supported"]));
-            let platforms = if raw_platforms
-                .as_array()
-                .is_some_and(|a| a.len() == 1 && a[0].as_str() == Some("supported"))
-            {
-                json!(all_hosts)
-            } else {
-                raw_platforms
-            };
             plugin_skills.insert(
                 slug.to_string(),
                 json!({
                     "kind": "skill",
                     "skill_path": skill_path,
-                    "host_support": { "platforms": platforms }
                 }),
             );
             metadata_skills.insert(

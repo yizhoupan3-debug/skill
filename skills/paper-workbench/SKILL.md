@@ -1,51 +1,66 @@
 ---
+description: 论文全流程前门：自动路由 reviewer/writer lane，一站式审稿、返修、投稿。按顶刊/顶会标准把关，支持 rebuttal、R&R、cover letter 全流程。
+framework_contracts:
+  consumes_execution_items: false
+  consumes_findings: true
+  emits_execution_items: true
+  emits_findings: true
+  emits_verification_results: true
+framework_roles:
+- orchestrator
+- planner
+- verifier
+metadata:
+  platforms:
+  - supported
+  tags:
+  - paper
+  - manuscript
+  - review
+  - revise
+  - submission
+  - orchestrator
+  - top-tier
+  version: '1.16.0'
 name: paper-workbench
-description: |
-  论文全流程前门：自动路由 reviewer/writer lane，一站式审稿、返修、投稿。
-  用户无需在 review、revision、logic、figures、prose 之间手动选择。
-  按顶刊/顶会标准把关，支持 rebuttal、R&R、cover letter 全流程。
+risk: medium
+routing_gate: none
 routing_layer: L2
 routing_owner: owner
-routing_gate: none
 routing_priority: P1
 session_start: preferred
-user-invocable: true
-disable-model-invocation: false
+source: project
 trigger_hints:
-  - 帮我审这篇 paper
-  - 帮我审这篇论文
-  - 投稿前把关
-  - 整篇严审 / 全文审核
-  - 穷举审 / 逐句审
-  - R&R / rebuttal
-  - cover letter
-  - abstract 改写
-  - introduction 重写
-  - 顶刊 / 顶会 / CCF-A
-  - Nature
-  - Science
-  - Cell
-  - NeurIPS
-  - ICML
-  - ICLR
-  - top-tier 论文
-  - revision modes
-  - claim 漂移
-  - 改稿周期
-  - revision loop
-  - 自动改到能投
-  - 对抗审稿循环
-metadata:
-  version: "1.16.0"
-  platforms: [supported]
-  tags: [paper, manuscript, review, revise, submission, orchestrator, top-tier]
-framework_roles: [orchestrator, planner, verifier]
-framework_contracts: {emits_findings: true, consumes_findings: true, emits_execution_items: true, consumes_execution_items: false, emits_verification_results: true}
-risk: medium
-source: local
-
+- 改稿
+- CCF-A 论文
+- SCI润色
+- paper review
+- top-tier paper
+- 严审
+- 先审再改
+- 全文审核
+- 写 rebuttal
+- 写论文
+- 只改摘要
+- 大面积重构
+- 学术润色
+- 帮我审这篇 paper
+- 帮我审这篇论文
+- 投稿前把关
+- 按审稿意见改论文
+- 整体推进这篇论文
+- 根据 reviewer comments 改论文
+- 精准修改
+- 缩口径
+- 能不能投
+- 英文论文润色
+- 论文写作
+- 论文润色
+- 顶会标准
+- 顶会标准改稿
+- 顶刊标准
+- 顶刊标准改稿
 ---
-
 ## Quick Ref
 - **Purpose**: 论文全流程前门——自动路由 reviewer/writer lane，一站式审稿、返修、投稿。支持 loop mode（自动多轮对抗审稿直到收敛）
 - **Key Rules**: 默认 hostile-but-fair 审稿立场；edit_scope 门控（surgical/refactor）；审稿意见逐条关停；prose chain 自动触发；禁降 claim 逃避；**loop mode 收敛硬约束**（min_rounds=5, consecutive_stable=2）
@@ -62,7 +77,7 @@ This skill is the one front door for paper work.
 
 与本立场冲突的捷径（降口径逃难、rebuttal-only、代码空诺、数学直觉化、`surgical` 全局乱改等）一律以 [`references/claim-evidence-ladder.md`](references/claim-evidence-ladder.md)、[`references/edit-scope-gate.md`](references/edit-scope-gate.md) 为硬闸。
 
-启用外研时，审稿/校准产出须满足 [`docs/adr/010-ideal-architecture-v10.md`](../../docs/adr/010-ideal-architecture-v10.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`@lane:reviewer`** 的 External lane shape 约定。
+启用外研时，审稿/校准产出须满足 [`docs/architecture.md`](../../docs/architecture.md) §A–B 的 **`Claims`**、**Contradiction sweep**、**Unknowns** 与可追溯 **retrieval_trace**（不能仅靠「读起来专业」的综述）；门面仍由本会话收口，细节上复用 **`@lane:reviewer`** 的 External lane shape 约定。
 
 **宿主 hook（L4 短码）**：`router-rs` 在宿主提交命中写作/润色语境时合并 **`PAPER_PROSE_QUALITY_HOOK`**（真源 `configs/framework/PAPER_PROSE_QUALITY_HOOK.txt`，**默认开**）；手稿审稿/改稿语境可另合并 **`PAPER_ADVERSARIAL_HOOK`**（opt-in）。受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。Prose 子开关：`ROUTER_RS_<HOST>_PAPER_PROSE_HOOK`（unset=开，`0`=关）。Adversarial：`ROUTER_RS_<HOST>_PAPER_ADVERSARIAL_HOOK=1` 启用。见 [`references/prose-chain-contract.md`](references/prose-chain-contract.md) §L4。
 

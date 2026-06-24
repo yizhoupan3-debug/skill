@@ -1,43 +1,52 @@
 ---
-name: algo-trading
-description: |
-  Design, analyze, and implement algorithmic trading strategies, backtests, execution logic, and risk management.
-  Use proactively when the user asks for quant strategy design, 回测, 交易策略, trading bot logic, Sharpe/drawdown analysis, factor research, or execution/risk rules. For pure market-data acquisition, API verification, or backtest-data export, route to `financial-data-fetching` first.
+description: 'Design and implement algorithmic trading strategies, backtests, execution logic, and risk management. Sub-skill: financial data fetching.'
 metadata:
-  version: "3.0.0"
-  platforms: [supported]
   category: finance
+  platforms:
+  - supported
   tags:
-    - algo-trading
-    - quant
-    - backtesting
-    - strategy-design
-    - execution
-    - risk-management
-    - factor-research
+  - algo-trading
+  - quant
+  - backtesting
+  - strategy-design
+  - execution
+  - risk-management
+  - factor-research
+  version: '3.0.0'
+name: algo-trading
 risk: high
-source: local
+routing_gate: none
 routing_layer: L4
 routing_owner: owner
-routing_gate: none
 routing_priority: P3
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
+source: local
 trigger_hints:
-  - quant strategy design
-  - 回测
-  - 交易策略
-  - trading bot logic
-  - Sharpe
-  - drawdown analysis
-  - factor research
-  - execution
-  - risk rules
-  - algo trading
-
+- A股数据
+- OHLCV
+- Sharpe
+- algo-trading
+- alpha
+- backtest
+- crypto data
+- drawdown
+- factor research
+- financial-data
+- fundamentals
+- market data
+- pairs trading
+- risk rules
+- roe
+- trading
+- trading bot
+- 交易策略
+- 回测
+- 因子研究
+- 统计套利
+- 量化
+- 量化策略
+- 金融数据
 ---
-
 # Algo Trading
 
 This skill owns **strategy logic, backtesting judgment, execution design, and risk management**.

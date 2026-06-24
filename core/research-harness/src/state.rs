@@ -224,11 +224,18 @@ pub fn hydrate_state(state: &Value) -> Result<Value> {
 // ── Load / Save ──
 
 /// Load research state from a YAML or JSON file, applying migration and defaults.
+/// Parser is selected based on file extension (.json → JSON, else YAML).
 pub fn load_state(path: &Path) -> Result<Value> {
     let raw = fs::read_to_string(path)?;
-    let data: Value = serde_yml::from_str(&raw)
-        .or_else(|_| serde_json::from_str(&raw))
-        .with_context(|| format!("State file must be YAML/JSON: {}", path.display()))?;
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let data: Value = if ext.eq_ignore_ascii_case("json") {
+        serde_json::from_str(&raw)
+            .with_context(|| format!("State file must be valid JSON: {}", path.display()))?
+    } else {
+        serde_yml::from_str(&raw)
+            .or_else(|_| serde_json::from_str(&raw))
+            .with_context(|| format!("State file must be YAML/JSON: {}", path.display()))?
+    };
     if !data.is_object() {
         anyhow::bail!("State file must be a mapping: {}", path.display());
     }

@@ -1,72 +1,50 @@
 ---
+description: Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation, smoke tests. Backed by core/research-harness.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - research
+  - workspace
+  - claims
+  - hypotheses
+  - logs
+  - barrier
+  version: '1.0.0'
 name: autoresearch
-description: |
-  Research workspace CLI frontend — init, draft claims, external research,
-  hypothesis management, run records, novelty gating, reflection, barrier
-  escalation (loop bridge), layered logging, smoke tests, and sync.
-  Backed by core/research-harness unified library.
-  Use for requests like "帮我初始化一个研究方向", "做 claim 管理",
-  "自动研究这个瓶颈", or "记录实验反思".
+risk: low
+routing_gate: none
 routing_layer: L2
 routing_owner: owner
-routing_gate: none
 routing_priority: P2
 session_start: optional
-user-invocable: true
-disable-model-invocation: false
 short_description: Research workspace CLI — claims, hypotheses, runs, logs, barrier escalation
-trigger_hints:
-  # workspace
-  - 研究工作区
-  - 科研工作区
-  - research workspace
-  - 研究方向（初始化）
-  - 初始化研究
-  - 研究初始化
-  - 开启研究
-  # claim / novelty
-  - claim 管理
-  - 新颖性声明
-  - novelty gate
-  - draft claims
-  - 声明管理
-  # hypotheses
-  - 假设管理
-  - 实验假设
-  - hypothesis
-  # experiments / runs
-  - 实验记录
-  - 实验反思
-  - 科研回顾
-  - 实验回顾
-  - record run
-  # logging
-  - 研究日志
-  - research log
-  - 科研日志
-  - 记录探索
-  - 研究方向记录
-  # barrier escalation (loop bridge)
-  - 自动研究
-  - loop 研究
-  - barrier research
-  - 瓶颈研究
-  - 突破方向
-  - 自动突破
-  - 突破不了
-  # misc
-  - 实验记录
-  - 科研回顾
-trigger_hints_long: references/trigger-hints-long.md
-metadata:
-  version: "1.0.0"
-  platforms: [supported]
-  tags: [research, workspace, claims, hypotheses, logs, barrier]
-risk: low
 source: local
-
+trigger_hints:
+- 研究工作区
+- 科研工作区
+- research workspace
+- 研究方向（初始化）
+- 初始化研究
+- 研究初始化
+- 开启研究
+- claim 管理
+- 新颖性声明
+- novelty gate
+- 假设管理
+- 实验假设
+- 实验记录
+- 实验反思
+- 科研回顾
+- 研究日志
+- research log
+- 自动研究
+- loop 研究
+- barrier research
+- 瓶颈研究
+- 突破方向
+- 自动突破
 ---
-
 # Autoresearch
 
 This skill wraps the `autoresearch` CLI binary — a Rust CLI for research workspace
@@ -148,18 +126,18 @@ When a loop-auto cycle hits `consecutive_failures ≥ threshold`:
 7. Output BARRIER_REPORT.json → `artifacts/research-barrier/<barrier-id>/`
 8. Loop runner consumes report → selects candidate → resumes
 
-See `docs/research-harness.md` §19.4.3 for the detailed barrier escalation
+See `docs/research/harness.md` §19.4.3 for the detailed barrier escalation
 contract and BARRIER_REPORT.json schema.
 
 ### Logging layer
 
-See `docs/research-harness.md` §19.5 for the layered logging specification:
+See `docs/research/harness.md` §19.5 for the layered logging specification:
 - Text layer: `artifacts/research-log/YYYY-MM/YYYY-MM-DD_direction-name.md`
 - Compressed DB: SQLite FTS5 (`exploration_logs`, `exploration_decisions`, `exploration_insights`, `barrier_reports`)
 
 ### Smoke test
 
-See `docs/research-harness.md` §19.6 for smoke test specification:
+See `docs/research/harness.md` §19.6 for smoke test specification:
 - Registry: `artifacts/research-log/smoke-tests.json`
 - Execution: `cargo run -p research-harness --bin autoresearch -- smoke-test [--source <src>] [--barrier <id>]`
 - Freshness metadata on every external_research result
@@ -181,8 +159,8 @@ See `docs/research-harness.md` §19.6 for smoke test specification:
 
 ## Cross-references
 
-- **Research harness specification**: `docs/research-harness.md` (full §19)
-- **Loop architecture**: ADR-010 §六层模型 (loop-auto profile, barrier escalation)
+- **Research harness specification**: `docs/research/harness.md` (full §19)
+- **Loop architecture**: [`docs/research/harness.md §8`](../../docs/research/harness.md#8-research-aware-loop-模式) (loop-auto profile, barrier escalation)
 - **Discovery front door**: `skills/research-discovery/SKILL.md`
 - **Execution back door**: `skills/research-execution/SKILL.md`
 - **Paper manuscript**: `skills/paper-workbench/SKILL.md`

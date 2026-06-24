@@ -267,6 +267,8 @@ fn append_jsonl_entry(
         + "\n";
     file.write_all(line.as_bytes())
         .map_err(|err| format!("append step ledger {} failed: {err}", path.display()))?;
+    file.sync_all()
+        .map_err(|err| format!("sync step ledger {} failed: {err}", path.display()))?;
 
     // Auto-compact when the file grows past 100 lines.
     // Truncate corrupt tail first so compact accurate line counts.

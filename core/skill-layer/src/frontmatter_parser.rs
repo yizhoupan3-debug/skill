@@ -30,6 +30,23 @@ pub fn extract_frontmatter_block(text: &str) -> Option<&str> {
     Some(content)
 }
 
+/// Extract the body text after the frontmatter block.
+///
+/// Returns everything after the closing `---` delimiter, or the entire text
+/// if no frontmatter block is found.
+pub fn extract_body(text: &str) -> Option<&str> {
+    let trimmed = text.trim_start_matches('\u{FEFF}').trim_start();
+    if !trimmed.starts_with("---") {
+        return Some(trimmed);
+    }
+    let rest = &trimmed[3..];
+    let end = rest.find("\n---").or_else(|| rest.find("\r\n---"))?;
+    // Skip past the closing --- and the newline(s) after it
+    let after_close = &rest[end + 4..]; // 4 = \n + ---
+    let after_close = after_close.trim_start_matches('\n').trim_start_matches('\r');
+    if after_close.is_empty() { None } else { Some(after_close) }
+}
+
 /// Error type for frontmatter parsing failures.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FrontmatterError {
@@ -77,8 +94,6 @@ pub enum FrontmatterWarning {
     EmptyTriggerHints,
     /// `short_description` is missing (recommended for search display).
     MissingShortDescription,
-    /// `user-invocable` is not set (defaults to true in some hosts).
-    MissingUserInvocable,
 }
 
 impl fmt::Display for FrontmatterWarning {
@@ -87,9 +102,6 @@ impl fmt::Display for FrontmatterWarning {
             Self::EmptyTriggerHints => write!(f, "trigger_hints is empty"),
             Self::MissingShortDescription => {
                 write!(f, "short_description is missing (recommended)")
-            }
-            Self::MissingUserInvocable => {
-                write!(f, "user-invocable is not set (defaults vary by host)")
             }
         }
     }
@@ -113,21 +125,13 @@ struct RawFrontmatter {
     session_start: Option<String>,
     trigger_hints: Option<serde_json::Value>,
     short_description: Option<String>,
-    user_invocable: Option<bool>,
-    disable_model_invocation: Option<bool>,
     risk: Option<String>,
     source: Option<String>,
     metadata: Option<serde_json::Value>,
     allowed_tools: Option<Vec<String>>,
-    framework_roles: Option<Vec<String>>,
-    framework_contracts: Option<serde_json::Value>,
     runtime_requirements: Option<serde_json::Value>,
-    filesystem_scope: Option<Vec<String>>,
     network_access: Option<String>,
-    artifact_outputs: Option<Vec<String>>,
     approval_required_tools: Option<Vec<String>>,
-    plan_profile: Option<String>,
-    dependencies: Option<crate::frontmatter::SkillDependencies>,
 }
 
 fn parse_enum<T: std::str::FromStr + fmt::Debug>(
@@ -209,21 +213,13 @@ pub fn parse_frontmatter(
         session_start,
         trigger_hints,
         short_description: raw.short_description,
-        user_invocable: raw.user_invocable,
-        disable_model_invocation: raw.disable_model_invocation,
         risk: raw.risk,
         source: raw.source,
         metadata: raw.metadata,
         allowed_tools: raw.allowed_tools,
-        framework_roles: raw.framework_roles,
-        framework_contracts: raw.framework_contracts,
         runtime_requirements: raw.runtime_requirements,
-        filesystem_scope: raw.filesystem_scope,
         network_access: raw.network_access,
-        artifact_outputs: raw.artifact_outputs,
         approval_required_tools: raw.approval_required_tools,
-        plan_profile: raw.plan_profile,
-        dependencies: raw.dependencies,
     })
 }
 
@@ -241,9 +237,6 @@ pub fn validate_frontmatter(
     }
     if fm.short_description.is_none() {
         warnings.push(FrontmatterWarning::MissingShortDescription);
-    }
-    if fm.user_invocable.is_none() {
-        warnings.push(FrontmatterWarning::MissingUserInvocable);
     }
     warnings
 }

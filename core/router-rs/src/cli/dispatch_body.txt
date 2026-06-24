@@ -38,7 +38,7 @@ pub(crate) fn dispatch_router_command(command: RouterCommand) -> Result<(), Stri
         RouterCommand::AntigravityApp { command } => dispatch_antigravity_command(command),
         RouterCommand::Trace { command } => dispatch_trace_command(command),
         RouterCommand::Storage { command } => dispatch_storage_command(command),
-        RouterCommand::Browser { command } => dispatch_browser_command(command),
+        RouterCommand::Browser { command } => host_projection::hooks::dispatch_browser_command(command),
         RouterCommand::Diagnose { command } => dispatch_diagnose_command(command),
         RouterCommand::Migrate { command } => dispatch_migrate_command(command),
         RouterCommand::HookPolicy { command } => dispatch_hook_policy_command(command),
@@ -173,12 +173,18 @@ fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String> {
             repo_root,
             write,
             write_companions,
+            backfill,
+            dry_run,
+            generate,
         } => {
             let repo_root = resolve_repo_root_arg(repo_root.as_deref())?;
             refresh_skills(&SkillsCommand {
                 repo_root,
                 write,
                 write_companions,
+                backfill,
+                dry_run,
+                generate,
             })
         }
     }
@@ -200,7 +206,7 @@ fn dispatch_host_command(command: HostCommand) -> Result<(), String> {
 fn dispatch_diagnose_command(command: DiagnoseCommand) -> Result<(), String> {
     match command {
         DiagnoseCommand::Profile { command } => dispatch_profile_command(command),
-        DiagnoseCommand::Browser { command } => dispatch_browser_command(command),
+        DiagnoseCommand::Browser { command } => host_projection::hooks::dispatch_browser_command(command),
     }
 }
 

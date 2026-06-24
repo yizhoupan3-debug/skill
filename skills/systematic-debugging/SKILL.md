@@ -1,62 +1,47 @@
 ---
-name: systematic-debugging
-description: |
-  Explicit diagnostic lane for root-cause investigations that need reusable reproduction,
-  evidence capture, flake isolation, incident triage, or failure-mode playbooks. Runtime owns
-  the generic "unknown cause -> gather evidence before fixing" rule; load this skill only for
-  explicit diagnostic work or precise failure-mode requests.
-short_description: Investigate unknown failures before fixing
-trigger_hints:
-  - systematic-debugging
-  - root-cause analysis
-  - flake isolation
-  - incident triage
-  - diagnostic playbook
+allowed_tools:
+- shell
+- browser
+- python
+approval_required_tools:
+- gui automation
+description: 'Root-cause investigation lane: hypothesis-driven debugging, reproduction capture, flake isolation, incident triage.'
 metadata:
-  version: "2.5.0"
-  platforms: [supported]
+  platforms:
+  - supported
   tags:
-    - debugging
-    - root-cause-analysis
-    - reproduction
-    - hypothesis-testing
-    - incident-triage
-framework_roles:
-  - gate
-  - detector
-framework_phase: 2
-framework_contracts:
-  emits_findings: true
-  consumes_findings: false
-  emits_execution_items: false
-  consumes_execution_items: false
-  emits_verification_results: false
+  - debugging
+  - root-cause-analysis
+  - reproduction
+  - hypothesis-testing
+  - incident-triage
+  version: '2.5.0'
+name: systematic-debugging
+network_access: conditional
 risk: low
-source: local
+routing_gate: evidence
 routing_layer: L0
 routing_owner: gate
-routing_gate: evidence
-routing_priority: P1
+routing_priority: P2
 session_start: n/a
-user-invocable: false
-disable-model-invocation: true
-allowed_tools:
-  - shell
-  - browser
-  - python
-approval_required_tools:
-  - gui automation
-filesystem_scope:
-  - repo
-  - artifacts
-network_access: conditional
-artifact_outputs:
-  - runtime_evidence.md
-  - EVIDENCE_INDEX.json
-bridge_behavior: mobile_complete_once
-
+short_description: Investigate unknown failures before fixing
+source: local
+trigger_hints:
+- blind fix
+- debug
+- flake
+- incident triage
+- root cause
+- systematic-debugging
+- 为什么失败
+- 为什么报错
+- 偶发失败
+- 失败了
+- 崩了
+- 无法复现
+- 根因分析
+- 调试
 ---
-
 # Systematic Debugging
 
 This skill owns **investigation before repair**. When root cause is still

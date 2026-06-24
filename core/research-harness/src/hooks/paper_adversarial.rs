@@ -25,6 +25,11 @@ const BUILTIN_TXT: &str =
 static BUILTIN_BLOCK: std::sync::LazyLock<String> =
     std::sync::LazyLock::new(|| BUILTIN_TXT.trim().to_string());
 
+/// Access the compiled-in builtin block directly (no disk lookup).
+pub fn builtin_block() -> String {
+    BUILTIN_BLOCK.clone()
+}
+
 static BLOCK_CACHE: BlockCache = BlockCache::new(REL_PATH, PREFIX_LINE, "paper adversarial");
 
 // ── Per-host environment variable mapping ──
@@ -182,7 +187,7 @@ mod tests {
     use serde_json::json;
     use std::sync::{Mutex, OnceLock};
 
-    fn paper_adversarial_env_var(host: &str) -> &'static str {
+    fn get_paper_adversarial_env_var(host: &str) -> &'static str {
         host_projection::hooks::paper_adversarial_env_var(host)
     }
 

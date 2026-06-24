@@ -7,6 +7,7 @@ edition = "2024"
 
 [dev-dependencies]
 routing-engine = { path = "core/routing-engine" }
+core-policy = { path = "core/core-policy" }
 rt-core-contracts = { path = "core/runtime-core-contracts", package = "runtime-core-contracts" }
 serde_json.workspace = true
 serde_yml.workspace = true
@@ -33,7 +34,8 @@ members = [
     "core/runtime-core-contracts",
     "core/session-supervisor",
     "core/trace-runtime",
-    "core/browser-mcp",
+    "core/browser-mcp-dispatch",
+    "tools/browser-mcp",
     "core/host-projection",
     "core/framework-runtime-hooks",
     "core/framework-extra",
@@ -42,10 +44,11 @@ members = [
     "core/loop-engine",
     "core/research-harness",
     "tools/evolution-rs",
-    "tools/framework-maint",
+    "core/framework-maint",
     "tools/codegraph-rs",
     "core/mcp-tool-registry",
-    "core/skill-layer"]
+    "core/skill-layer",
+    "core/http-util"]
 exclude = [
     "codex-aggregator"
 ]

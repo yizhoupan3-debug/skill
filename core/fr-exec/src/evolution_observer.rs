@@ -280,7 +280,9 @@ impl FanoutTelemetryWriter {
 impl TelemetryWriter for FanoutTelemetryWriter {
     fn write_event(&self, event: &TelemetryEvent) -> Result<(), String> {
         if let Ok(mut guard) = self.observer.lock() {
-            let _ = guard.observe(event);
+            if let Err(e) = guard.observe(event) {
+                tracing::warn!(error = %e, "evolution observer failed to observe event");
+            }
         }
         self.inner.write_event(event)
     }

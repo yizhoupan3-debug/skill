@@ -15,7 +15,7 @@ pub struct CloseoutVerificationResponse {
     pub violations: Vec<String>,
 }
 
-/// Verify a closeout JSON record by delegating to the framework-runtime
+/// Verify a closeout JSON record by delegating to fr-contracts
 /// `evaluate_closeout_record_value` implementation (single source of truth).
 ///
 /// This replaces the former independent 6-rule implementation, ensuring
@@ -24,7 +24,7 @@ pub fn verify_closeout_value(record: &serde_json::Value) -> CloseoutVerification
     delegate_to_framework_runtime(record)
 }
 
-/// Internal helper: call framework-runtime's `evaluate_closeout_record_value`
+/// Internal helper: call fr-contracts' `evaluate_closeout_record_value`
 /// and translate the result into a `CloseoutVerificationResponse`.
 fn delegate_to_framework_runtime(record: &serde_json::Value) -> CloseoutVerificationResponse {
     match evaluate_closeout_record_value(record.clone()) {
@@ -361,7 +361,7 @@ mod tests {
         });
         let resp = verify_closeout_value(&record);
         assert!(!resp.closeout_allowed);
-        // framework-runtime emits "not_run_without_blockers_or_risks" or
+        // fr-contracts emits "not_run_without_blockers_or_risks" or
         // "claimed_done_without_evidence" for not_run records.
         assert!(resp.violations.iter().any(|v| v.contains("not_run")));
     }
@@ -380,7 +380,7 @@ mod tests {
         });
         let resp = verify_closeout_value(&record);
         assert!(!resp.closeout_allowed);
-        // framework-runtime emits "verification_passed_with_failed_command" for this case.
+        // fr-contracts emits "verification_passed_with_failed_command" for this case.
         assert!(resp.violations.iter().any(|v| v.contains("failed_command") || v.contains("command_failed")));
     }
 
@@ -435,7 +435,7 @@ mod tests {
 
     /// B9 cross-path equivalence: the same closeout JSON must produce the same
     /// `closeout_allowed` when evaluated by both loop-engine's `verify_closeout_value`
-    /// (which now delegates to framework-runtime) and the raw
+    /// (which now delegates to fr-contracts) and the raw
     /// `evaluate_closeout_record_value` function directly.
     #[test]
     fn test_cross_path_equivalence_pass() {
@@ -449,12 +449,12 @@ mod tests {
             "blockers": [],
             "risks": []
         });
-        // Loop-engine path (delegates to framework-runtime)
+        // Loop-engine path (delegates to fr-contracts)
         let le_resp = verify_closeout_value(&record);
-        // Direct framework-runtime path
+        // Direct fr-contracts path
         let fr_resp = fr_contracts::closeout_enforcement::evaluate_closeout_record_value(
             record.clone(),
-        ).expect("framework-runtime should return Ok");
+        ).expect("fr-contracts should return Ok");
         let fr_allowed = fr_resp
             .get("closeout_allowed")
             .and_then(|v| v.as_bool())
@@ -478,7 +478,7 @@ mod tests {
         let le_resp = verify_closeout_value(&record);
         let fr_resp = fr_contracts::closeout_enforcement::evaluate_closeout_record_value(
             record.clone(),
-        ).expect("framework-runtime should return Ok");
+        ).expect("fr-contracts should return Ok");
         let fr_allowed = fr_resp
             .get("closeout_allowed")
             .and_then(|v| v.as_bool())

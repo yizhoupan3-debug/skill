@@ -938,7 +938,7 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
 
 # Claude Code（本项目）
 
-跨宿主 **`AGENTS.md`**；手册 **`docs/hosts/_common.md`** / **`docs/hosts/hook-hosts.md`**。
+跨宿主 **`AGENTS.md`**（宿主差异见该文件内「宿主行为差异」节）。
 
 ## 语言（硬约束）
 
@@ -952,7 +952,7 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
 
 - 四事件：`PreToolUse`、`UserPromptSubmit`、`PostToolUse`、`Stop`（`.claude/settings.json` + `router-rs claude hook`）。
 - Goal/Quality Gate：`framework_goal_drive` / `framework_quality_gate` stdio + `artifacts/current/<task_id>/`。
-- 默认 **`lifecycle_profile: interactive`**：closeout/complete 为 advisory，suppress review Stop nudge；非 interactive 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/spec.md` §6）。
+- 默认 **`lifecycle_profile: interactive`**：closeout/complete 为 advisory，suppress review Stop nudge；非 interactive 时 closeout 可 fail-closed（与 REVIEW_GATE advisory 分层，见 `docs/architecture.md` §6）。
 - 检查点：`session_checkpoint`（非自动）。
 - Goal 自动触发：`UserPromptSubmit` 检测复杂任务（自然语言+启发式）→ 注入 goal 建议上下文；`has_structured_goal_contract` 已扩展为在 regex 失败时回退到复杂度分析。
 - Goal amend：`goal_state_manage(operation="amend")` 更新 goal 字段，保留 checkpoints；scope change 检测自动触发 `[Goal Amendment]` 上下文注入。

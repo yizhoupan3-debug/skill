@@ -1,62 +1,53 @@
 ---
+allowed_tools:
+- Read
+- Bash
+- Agent
+- mcp__mcp-codegraph__codegraph_search
+- mcp__mcp-codegraph__codegraph_callers
+- mcp__mcp-codegraph__codegraph_callees
+- mcp__mcp-codegraph__codegraph_impact
+- mcp__mcp-codegraph__codegraph_node
+- mcp__mcp-codegraph__codegraph_status
+- mcp__mcp-codegraph__codegraph_dead_code
+- mcp__mcp-codegraph__codegraph_goto_definition
+description: Deep adversarial-style code review (review-only). Default visible output is a compact, severity-sorted findings list; narrative sections only when explicitly requested. Model selects lenses from an ex
+metadata:
+  platforms:
+  - supported
+  tags:
+  - code-review
+  - security
+  - correctness
+  - delegation
+  - adversarial-review
+  version: '2.1.0'
 name: code-review-deep
-description: |
-  Deep adversarial-style code review (review-only). Default visible output is a compact, severity-sorted findings list; narrative sections only when explicitly requested.
-  Model selects lenses from an extensible catalog (core + optional: first principles/subtraction, dead-code signals, stale docs); exhaustive within chosen lenses.
-  Broad/deep/PR-level work authorizes read-only independent reviewer subagents (fork_context=false) before main-thread synthesis. Does not silently rewrite implementation
-  unless the user explicitly exits review-only posture.
+risk: medium
+routing_gate: none
 routing_layer: L2
 routing_owner: owner
-routing_gate: none
 routing_priority: P1
 session_start: preferred
-user-invocable: true
-disable-model-invocation: false
+source: project
 trigger_hints:
-  - $code-review-deep
-  - code-review-deep
-  - review
-  - code review
-  - 代码审查
-  - 帮我 review
-  - deep code review
-  - 深度代码审查
-  - 严苛代码评审
-  - security code review
-  - adversarial code review
-  - 只允许审不改
-  - CVE 审查
-  - 供应链安全
-metadata:
-  version: "2.1.0"
-  platforms: [supported]
-  tags: [code-review, security, correctness, delegation, adversarial-review]
-framework_roles:
-  - detector
-  - planner
-  - verifier
-framework_contracts:
-  emits_findings: true
-  consumes_findings: false
-  emits_execution_items: false
-  consumes_execution_items: false
-  emits_verification_results: true
-risk: medium
-source: local
-allowed_tools:
-  - Read
-  - Bash
-  - Agent
-  - mcp__mcp-codegraph__codegraph_search
-  - mcp__mcp-codegraph__codegraph_callers
-  - mcp__mcp-codegraph__codegraph_callees
-  - mcp__mcp-codegraph__codegraph_impact
-  - mcp__mcp-codegraph__codegraph_node
-  - mcp__mcp-codegraph__codegraph_status
-  - mcp__mcp-codegraph__codegraph_dead_code
-  - mcp__mcp-codegraph__codegraph_goto_definition
+- $code-review-deep
+- adversarial code review
+- code review
+- code-review-deep
+- deep code review
+- review
+- review-only 代码审查
+- security code review
+- security-focused code review
+- threat model review
+- 严苛代码评审
+- 代码审查
+- 只允许审不改
+- 帮我 review
+- 深度 code review
+- 深度代码审查
 ---
-
 ## Quick Ref
 - **Purpose**: 深度对抗式代码审查（review-only），默认输出 severity-sorted findings 紧凑列表
 - **Key Rules**: 默认只审不改；hostile-but-fair 立场；P0/P1 须有 evidence；lens 可扩展目录选型；broad review a single serial spawned reviewer lane
@@ -101,17 +92,13 @@ For broad/deep/PR-level review, spawn **a single serial** read-only reviewer (`f
 
 **Narrow scope** (single-file, `small_task`, or explicit「不用子代理」): no multi-lane requirement; hosts skip arming `review_required`.
 
-**I7 heterogeneous requirement** (when `ROUTER_RS_HETEROGENEOUS_ADVERSARIAL_REVIEW=1`): at least one spawned reviewer must use a different model family than the primary session. The framework injects a `heterogeneous_review_hint_for_lane()` nudge naming the primary family; the spawn orchestration should select a cross-family model. Same-family self-review findings do **not** satisfy the I7 adversarial contract.
+**I7 heterogeneous requirement**: at least one spawned reviewer must use a different model family than the primary session. The orchestrator injects a `heterogeneous_review_hint_for_lane()` nudge naming the primary family; the spawn orchestration should select a cross-family model. Same-family self-review findings do **not** satisfy the I7 adversarial contract.
 
 - **Task / subagents**: **omit** `model` (inherit parent session). Fail with `Model not available` → retry without model or fall back to main-thread.
 
 ### REVIEW_GATE clearance
 
-各宿主的 countable reviewer evidence 判定逻辑统一由 `RUNTIME_REGISTRY.json` 的 `review_gate` 配置定义。`lifecycle_profile: interactive` 在所有宿主上均不硬阻塞 Stop。
-
-**Host countable evidence**: the subagent lane (after normalization) must be in `RUNTIME_REGISTRY.json` -> `review_gate.reviewer_lanes`. `explore`, `ci-investigator`, and custom lane names **do not count** — even with `fork_context=false`.
-
-Lane outputs must cite **locations** (paths + anchors / symbols).
+Countable reviewer evidence判定：subagent lane 的 review 产出须包含具体**位置引用**（路径 + 锚点/符号）。`explore`、`ci-investigator` 及自定义 lane 不计入 evidence，即使 `fork_context=false`。
 
 ## Factcheck gate（source-level ground truth）
 
@@ -122,7 +109,10 @@ Deep review 在 Merge 和 Verify 之间插入独立 **Factcheck 阶段**，专�
 - **拦截规则**：`code_exists=false` 或 `evidence_accurate=false` 的 finding 标记为 hallucinated，**不进入 Verify 阶段**。`behavior_misrepresented` 附带修正描述后可选进入 Verify。
 - **独立性**：Factcheck agent 与 Scan agent 必须是不同的 agent 实例（pipeline 自动保证）。Factcheck 不复用 Scan 的上下文，避免循环确认。
 - **Schema**：`FACTCHECK_VERDICT_SCHEMA`（`{ is_accurate: bool, errors: [{ quote, correction, severity }], reasoning: string }`）。
-- **Skill 层 spawn**：主会话直接 spawn review subagent 时可使用 `factcheck-verifier` agent 定义（agent 路径见 `RUNTIME_REGISTRY.json` → `agents.factcheck_verifier`），工具限制为 Read + Bash（只读）。
+- **Skill 层 spawn**：主会话直接 spawn review subagent 时可使用 `factcheck-verifier` agent，工具限制为 Read + Bash（只读）。Agent 定义在 skill 内：
+  ```json
+  { "name": "factcheck-verifier", "tools": ["Read", "Bash"], "prompt": "仅核查事实——代码是否存在、evidence 是否原文引用、行号是否准确、行为描述是否与代码一致。不做判断（是否是 bug、severity 如何）。" }
+  ```
 
 ## CodeGraph 增强分析
 
@@ -137,14 +127,14 @@ Deep review 在 Merge 和 Verify 之间插入独立 **Factcheck 阶段**，专�
 
 ## I7: heterogeneous adversarial review (model-family diversity)
 
-When the environment flag `ROUTER_RS_HETEROGENEOUS_ADVERSARIAL_REVIEW=1` is set **and** the prompt qualifies as broad/deep review (not narrow/single-file), the framework enforces model-family diversity:
+When the prompt qualifies as broad/deep review (not narrow/single-file), the orchestrator enforces model-family diversity:
 
-- **Primary model family** is detected from `ROUTER_RS_MODEL_FAMILY` (or host-injected `CLAUDE_MODEL` / `OPENAI_MODEL`). At least **one** reviewer subagent must use a **different** model family (e.g., primary=`claude` requires a `gpt`/`gemini`/`llama` reviewer).
-- The `heterogeneous_review_hint_for_lane()` nudge is injected into the reviewer prompt automatically by the host hooks (Claude/Cursor/Codex). This hint names the primary model family so the spawn orchestration can select a cross-family reviewer.
-- **`reviewer_lanes`** countable evidence: a reviewer lane that satisfies the heterogeneous requirement **and** has `fork_context=false` (or inferred false) counts toward REVIEW_GATE clearance. Same-family self-review does **not** satisfy the I7 requirement.
-- In the RFV loop, the `metadata.heterogeneous_adversarial_review` block records `primary_model_family` alongside the config so round-to-round auditing is possible.
+- **Primary model family** is detected from host-injected `CLAUDE_MODEL` / `OPENAI_MODEL`. At least **one** reviewer subagent must use a **different** model family (e.g., primary=`claude` requires a `gpt`/`gemini`/`llama` reviewer).
+- The `heterogeneous_review_hint_for_lane()` nudge is injected into the reviewer prompt. This hint names the primary model family so the spawn orchestration can select a cross-family reviewer.
+- A reviewer lane that satisfies the heterogeneous requirement counts toward REVIEW_GATE clearance. Same-family self-review does **not** satisfy the I7 requirement.
+- In multi-round review sessions, the `metadata.heterogeneous_adversarial_review` block records `primary_model_family` alongside the config so round-to-round auditing is possible.
 
-**Operator**: set `ROUTER_RS_MODEL_FAMILY=gpt-4o` (or equivalent) to declare the primary session's model family when the host does not inject it automatically.
+**Operator**: set `primary_model_family=gpt-4o` (or equivalent) to declare the primary session's model family when the host does not inject it automatically.
 
 ## External / network research lane
 
@@ -152,7 +142,7 @@ Use when the user allows network/tools or scope touches third-party crates/servi
 
 **In compact mode**: external material appears only as indented bullets under the specific `[P*]` / `Caveat:` line they support, or as plain continuation after the last finding and before the one-line verdict — no standalone section headers, no Markdown tables.
 
-**Full report profile** (or explicit preamble): produce **Claims** with citations (CVE, changelog URL, Advisory ID), **Contradiction sweep**, **Unknowns**, **Retrieval_trace**. Aligns with [docs/adr/010-ideal-architecture-v10.md](../../docs/adr/010-ideal-architecture-v10.md) section A-B.
+**Full report profile** (or explicit preamble): produce **Claims** with citations (CVE, changelog URL, Advisory ID), **Contradiction sweep**, **Unknowns**, **Retrieval_trace**. Aligns with [docs/architecture.md](../../docs/architecture.md) section A-B.
 
 ## Severity evidence gate
 

@@ -12,7 +12,7 @@
 
 - **Python 环境（macOS）**：uv-only、默认 3.12、每仓库 `uv.lock`；禁止 `pip`。重度 Python/ML 任务须高频 `gc.collect()` / `torch.mps.empty_cache()`。
 - **Skill Routing**：热入口 `skills/SKILL_ROUTING_RUNTIME.json`；只读命中项 `skill_path`。
-- **Tool Routing**：PreToolUse/PostToolUse hook 覆盖所有工具（含 MCP）。`ToolOrigin` 分类：NativeHost / McpServer / Unknown。MCP 工具安全审查：`dangerous_mcp_tool_reason()`。四宿主 matcher 策略见 `docs/research/routing-contracts.md`。
+- **Tool Routing**：PreToolUse/PostToolUse hook 覆盖所有工具（含 MCP）。`ToolOrigin` 分类：NativeHost / McpServer / Unknown。MCP 工具安全审查：`dangerous_mcp_tool_reason()`。
 
 ## Lifecycle
 
@@ -29,13 +29,7 @@ Task 是框架的**底层执行引擎**，不是可选组件。用户层表现�
 
 | 组件 | 路径 | 职责 |
 |------|------|------|
-| Active/Focus 指针 | `artifacts/current/active_task.json` / `focus_task.json` | 决定当前执行哪个 task |
-| Task 状态机 | `TaskControlMode`（Idle → GoalDrive → QualityGate → Conflict） | 驱动每个 task 的执行流转 |
-| Goal 状态 | `GOAL_STATE.json` | task 的执行策略（goal、non-goals、done_when、validation_commands） |
-| 事务日志 | `TASK_LEDGER.jsonl` | 幂等写入、回放、跨会话连续性 |
-| 聚合投影 | `TASK_STATE.json` | goal + rfv + evidence 单一视图（人类/工具快速读取） |
-| Evidence | `EVIDENCE_INDEX.json` | 验证证据记录 |
-| Step Ledger | `STEP_LEDGER.jsonl` | 步骤级追踪 |
+| 完整 Task 组件描述 | — | 见 [`docs/architecture.md §3`](docs/architecture.md#3-dag-验证矩阵)（此处不重复） |
 
 ### TaskControlMode 状态机
 
@@ -72,7 +66,7 @@ Loop engine（L6 Orchestration）运行在 Task 之上，仅对 `loop-auto` prof
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
 - Goal 磁盘：`GOAL_STATE.json` / `QUALITY_GATE_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_quality_gate`。
-- 历史 env 名见 [`MIGRATION.md`](MIGRATION.md) 迁移记录。
+- 闭集宿主（codex/claude/cursor/opencode）由 `RUNTIME_REGISTRY.json` 驱动。
 
 ## Task Intake
 
@@ -106,84 +100,42 @@ Loop engine（L6 Orchestration）运行在 Task 之上，仅对 `loop-auto` prof
 
 **核心原则**：在该使用 codegraph 的时候，必须自动调用，即使用户没有明确提及 codegraph。
 
-### 必触发场景（无条件强制执行）
-
-#### 1. 重构/优化操作
-**触发词**：重构、改写、优化、改进、重写、refactor、rewrite、optimize
-**动作**：调用 `codegraph_impact["目标符号", depth=2]`
-
-#### 2. 删除/重命名操作
-**触发词**：删除、移除、重命名、去掉、删掉、delete、remove、rename
-**动作**：调用 `codegraph_callers["目标符号", depth=1]`
-
-#### 3. 跨模块修改
-**触发词**：跨模块、公共API、公共函数、公共接口、cross-module、public API
-**动作**：调用 `codegraph_callees["目标符号", depth=2]`
-
-#### 4. 影响分析
-**触发词**：影响范围、影响分析、有什么影响、会影响什么、impact analysis、what affects
-**动作**：调用 `codegraph_impact["相关符号", depth=3]`
-
-### 建触发场景（条件触发）
-
-#### 5. 符号定位（当符号不在当前文件时）
-**触发条件**：用户提到不在当前文件的符号
-**动作**：调用 `codegraph_goto_definition["符号名"]`
-
-#### 6. 死代码检查
-**触发词**：死代码、无用代码、unused code、dead code
-**动作**：调用 `codegraph_dead_code[language=对应语言]`
-
-### 触发执行规则
-
-1. **自动识别**：从用户输入中识别上述关键词，自动匹配对应工具
-2. **无需询问**：直接调用工具，不需要询问用户是否要使用 codegraph
-3. **结果整合**：将工具结果整合到响应中，说明影响范围和风险
-4. **强制执行**：所有宿主必须一致执行
-
-### 工具映射表
+### 场景与工具映射
 
 | 操作类型 | 触发词 | 必须调用的工具 | 深度 |
 |---------|--------|--------------|------|
-| 重构/优化 | 重构、改写、优化 | `codegraph_impact` | depth=2 |
-| 删除/重命名 | 删除、移除、重命名 | `codegraph_callers` | depth=1 |
-| 跨模块修改 | 跨模块、公共API | `codegraph_callees` | depth=2 |
-| 影响分析 | 影响范围、有什么影响 | `codegraph_impact` | depth=3 |
+| 重构/优化 | 重构、改写、优化、refactor、rewrite | `codegraph_impact` | depth=2 |
+| 删除/重命名 | 删除、移除、重命名、delete、remove、rename | `codegraph_callers` | depth=1 |
+| 跨模块修改 | 跨模块、公共API、cross-module、public API | `codegraph_callees` | depth=2 |
+| 影响分析 | 影响范围、有什么影响、impact analysis、what affects | `codegraph_impact` | depth=3 |
 | 符号定位 | 符号不在当前文件 | `codegraph_goto_definition` | - |
-| 死代码检查 | 死代码、无用代码 | `codegraph_dead_code` | - |
+| 死代码检查 | 死代码、无用代码、unused code、dead code | `codegraph_dead_code` | - |
 
-### 重要说明
+### 执行规则
 
-- **跨宿主一致性**：所有宿主必须一致执行此规则，不能有宿主差异
-- **技能无关性**：无论是否触发了特定技能，都必须执行此规则
-- **强制性**：这是硬约束，不是建议，所有宿主必须遵守
-- **自动触发**：不需要用户显式提及 codegraph，系统应自动识别并调用
+1. **自动识别**：从用户输入中识别关键词，自动匹配对应工具，**无需询问**用户
+2. **跨宿主一致**：所有宿主必须一致执行，此为硬约束
+3. **结果整合**：将结果整合到响应中，说明影响范围和风险
 
 ## Review 通用协议
 
 所有 review 类 skill/workflow 的输出约束与幻觉分类标准。
 
-### 约束：Confirmed-only 输出
+**Confirmed-only 输出**：最终输出**只包含 confirmed findings**（事实核查通过 + 判断通过）。rejected 和 hallucinated 不出现在用户输出中。可选统计摘要：`N confirmed / M rejected / K hallucinated`。
 
-最终用户可见输出**只包含 confirmed findings**。confirmed = 事实核查通过（evidence 真实存在且准确）+ 判断通过（是真实问题）。rejected（判断驳回）和 hallucinated（事实核查拦截）不出现在用户输出中。可选统计摘要行：`N confirmed / M rejected / K hallucinated`。
-
-### 幻觉分类标准（hallucination_type）
-
-| 值 | 含义 |
-|----|------|
+| 幻觉分类 | 含义 |
+|---------|------|
 | `none` | 事实全部准确 |
 | `code_not_exist` | 引用的源不存在 |
-| `evidence_fabricated` | 源存在但证据捏造/复述 |
+| `evidence_fabricated` | 源存在但证据捏造 |
 | `wrong_line` | 源存在但位置错误 |
-| `behavior_misrepresented` | 证据正确但行为/现象描述有误 |
+| `behavior_misrepresented` | 证据正确但描述有误 |
 | `evidence_out_of_context` | 证据真实但与 finding 无关 |
 | `source_moved` | 源已重命名/移动 |
 | `partial_hallucination` | 部分准确部分幻觉 |
 | `indeterminate` | 无法确认 |
 
-### 降级策略
-
-Factcheck 工具不可用时：单 finding 标记 `indeterminate` 不进 Verify；全阶段失败则所有 finding 标记 indeterminate，最终输出为空（0 confirmed）。关键：factcheck 整体失败时**不降级为"跳过 factcheck 直接进 Verify"**。
+**降级策略**：Factcheck 不可用时单 finding 标记 `indeterminate` 不进 Verify；全阶段失败则所有 finding indeterminate，最终输出为空。不降级为"跳过 factcheck 直接进 Verify"。
 
 ## 宿主行为差异
 

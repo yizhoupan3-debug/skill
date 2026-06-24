@@ -41,11 +41,12 @@ const MIGRATIONS: &[(i32, MigrationFn)] = &[
 fn run_migrations(conn: &Connection, existing_version: i32) -> Result<()> {
     // 运行时防御：验证 MIGRATIONS 已排序
     for i in 1..MIGRATIONS.len() {
-        assert!(
-            MIGRATIONS[i].0 > MIGRATIONS[i - 1].0,
-            "MIGRATIONS ordering violation at index {}: v{} <= v{}",
-            i, MIGRATIONS[i].0, MIGRATIONS[i - 1].0
-        );
+        if MIGRATIONS[i].0 <= MIGRATIONS[i - 1].0 {
+            anyhow::bail!(
+                "MIGRATIONS ordering violation at index {}: v{} <= v{}",
+                i, MIGRATIONS[i].0, MIGRATIONS[i - 1].0
+            );
+        }
     }
 
     let mut version = existing_version;

@@ -1,48 +1,48 @@
 ---
+allowed_tools:
+- shell
+- git
+approval_required_tools:
+- git push
+description: Refresh key docs, git tracking, and stale/dead repo surfaces; includes framework generated-artifact checks when applicable.
+metadata:
+  platforms:
+  - supported
+  tags:
+  - maintenance
+  - docs
+  - research-docs
+  - git-tracking
+  - cleanup
+  - contracts
+  - router-rs
+  version: '3.0.0'
 name: update
-description: |
-  仓库知识状态与卫生维护入口：`/update` 用于更新关键文档、科研文档、git 跟踪面，并定位/清除有证据支持的旧代码、旧文件、旧文档和历史残留。
-  现有 framework 生成物刷新与契约测试仍保留为本 skill 框架仓库的专用验证子阶段，而不是 `/update` 的全部语义。
-  Use only when the user explicitly invokes `/update`；不要与普通依赖升级、Git 收口或单点功能修复混用。
+network_access: local
+risk: medium
+routing_gate: none
 routing_layer: L0
 routing_owner: owner
-routing_gate: none
 routing_priority: P1
-session_start: never
-user-invocable: false
-disable-model-invocation: true
+session_start: n/a
 short_description: Refresh key docs, git tracking, and stale/dead repo surfaces; framework checks when applicable.
+source: runtime
 trigger_hints:
-  - /update
-  - 一口气更新
-  - 更新关键文档
-  - 科研文档更新
-  - 刷新文档
-  - 扫描文档
-  - git 跟踪文件
-  - git tracking
-  - 死代码清理
-  - 旧文档清理
-  - stale files
-  - dead code
-  - registry 更新
-  - 同步投影
-allowed_tools:
-  - shell
-  - git
-approval_required_tools:
-  - git push
-metadata:
-  version: "3.0.0"
-  platforms: [supported]
-  tags: [maintenance, docs, research-docs, git-tracking, cleanup, contracts, router-rs]
-risk: medium
-source: project
-filesystem_scope:
-  - repo
-network_access: local
+- /update
+- dead code
+- git tracking
+- git 跟踪文件
+- registry 更新
+- stale files
+- 一口气更新
+- 刷新文档
+- 同步投影
+- 扫描文档
+- 旧文档清理
+- 更新关键文档
+- 死代码清理
+- 科研文档更新
 ---
-
 # update
 
 `update` 是仓库维护用的**显式强制入口**。**推荐显式写法：`/update`**（对齐 `/gitx`）。
@@ -51,7 +51,7 @@ network_access: local
 
 ## 执行模型
 
-1. **document refresh**：读取 README、AGENTS、docs 索引、计划/研究目录、实验记录和 artifact 指针；更新关键说明、状态索引、研究计划、文献综述、方法说明、结果表、论文草稿或实验记录中已经过期的部分。
+1. **document refresh**：读取 README、AGENTS、docs 索引、计划/研究目录、实验记录和 artifact 指针；更新关键说明、状态索引、研究计划、文献综述、方法说明、结果表、论文草稿或实验记录中已经过期的部分。验证 docs governance（report/plan 位于正确目录、命名合规）。
 2. **git tracking audit**：检查已跟踪、未跟踪、被 ignore 但可能应纳管、已跟踪但像生成物/缓存/临时物的文件；给出 add/ignore/remove/migrate 建议。
 3. **stale/dead inventory**：定位疑似死代码、死文件、过期文档、重复入口和历史残留；优先用引用搜索、编译/测试、文档索引、修改历史和命名线索交叉确认。
 4. **cleanup + verification**：只清除有证据支持的对象；不确定项写入待确认清单。收口必须给出测试、检查、diff、生成物状态或明确 blocker。

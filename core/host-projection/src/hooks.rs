@@ -827,7 +827,7 @@ pub fn maybe_record_research_activity(repo_root: &Path, tool_name: &str, summary
 // Research mode inference function pointer (ADR-010 §7.4)
 // ────────────────────────────────────────────────────────────────
 //
-// L4 (framework-runtime) calls `research_mode_for_request` to classify
+// L4 (runtime-core) calls `research_mode_for_request` to classify
 // a request as "quick" or "deep" research. L5 (research-harness)
 // registers the actual inference logic. This keeps research domain
 // knowledge out of L4.
