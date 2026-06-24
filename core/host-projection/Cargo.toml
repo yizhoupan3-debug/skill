@@ -16,6 +16,7 @@ codegraph = ["dep:codegraph-rs"]
 
 [dependencies]
 codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
+core-state-utils = { path = "../core-state-utils" }
 http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }
 core-policy = { path = "../core-policy" }
@@ -31,6 +32,7 @@ serde_json.workspace = true
 tracing.workspace = true
 sha2.workspace = true
 which.workspace = true
+mcp-tool-registry = { path = "../mcp-tool-registry" }
 
 [build-dependencies]
 serde_json.workspace = true

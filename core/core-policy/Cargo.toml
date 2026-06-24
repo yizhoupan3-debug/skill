@@ -11,6 +11,7 @@ dev-exempt = []
 test-sync = []
 
 [dependencies]
+core-state-utils = { path = "../core-state-utils" }
 framework-kernel = { path = "../framework-kernel" }
 regex.workspace = true
 serde.workspace = true

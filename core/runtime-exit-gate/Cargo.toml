@@ -8,6 +8,7 @@ workspace = true
 [dependencies]
 # B0
 core-state = { path = "../core-state" }
+core-state-utils = { path = "../core-state-utils" }
 core-policy = { path = "../core-policy" }
 framework-kernel = { path = "../framework-kernel" }
 

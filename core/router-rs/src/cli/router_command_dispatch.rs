@@ -2,8 +2,7 @@
 
 use serde_json::{Value, json};
 use std::fs;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use runtime_core::framework_runtime::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
@@ -33,7 +32,6 @@ use runtime_core::harness_contract::{harness_contract, lint_skill_contracts};
 use core_policy::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
 use runtime_core::host_entrypoint_sync::sync_host_entrypoints;
 use runtime_core::host_integration::run_host_integration_from_args;
-use runtime_core::review_gate_cli::run_review_gate;
 use runtime_core::runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, runtime_backend_family_catalog_payload,
     runtime_backend_family_parity_payload, runtime_storage_operation,
@@ -45,10 +43,10 @@ use runtime_core::trace_runtime::{
     TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
     record_trace_event,
 };
-use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher, HookOutput};
+use host_projection::hosts::hook_dispatch::{HookEvent, HookOutput};
 use host_projection::hooks::{
     attach_router_rs_observation, emit_hook_fired,
-    hook_action_from_optional_output, read_stdin_json_limited, read_stdin_limited,
+    hook_action_from_optional_output, read_stdin_limited,
 };
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
@@ -234,7 +232,7 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
 }
 
 pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String> {
-    use runtime_core::framework_skills::{SkillsCommand, refresh_skills, validate_skills};
+    use skill_layer::refresh::{SkillsCommand, refresh_skills, validate_skills};
     match command {
         SkillsSubcommand::Validate(args) => {
             let repo_root = resolve_repo_root_arg(args.framework_root.as_deref())?;

@@ -100,10 +100,6 @@ fn is_timestamp_in_window(row_at: Option<&str>, window_start: Option<&str>) -> b
     }
 }
 
-fn now_iso() -> String {
-    framework_kernel::time::now_iso()
-}
-
 /// Check whether any finding in the list has severity P0, A, or B.
 /// Used by the convergence floor logic to decide if this round is "stable".
 fn has_ab_level_findings(findings: &[Value]) -> bool {

@@ -14,10 +14,16 @@ const DEFAULTS_JSON: &str = include_str!(concat!(
     "/../../configs/scoring_weights.json"
 ));
 
-const RUNTIME_CONFIG_PATH: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../configs/scoring_weights.json"
-);
+/// Resolve the runtime path for scoring weights.
+/// Priority: FRAMEWORK_ROOT env var > use embedded defaults.
+fn resolve_runtime_weights_path() -> Option<String> {
+    // Try FRAMEWORK_ROOT environment variable (canonical way to find project root)
+    if let Ok(root) = std::env::var("FRAMEWORK_ROOT") {
+        let path = format!("{root}/configs/scoring_weights.json");
+        return Some(path);
+    }
+    None
+}
 
 const EXPECTED_SCHEMA: &str = "scoring-weights-v1";
 
@@ -101,15 +107,16 @@ impl ScoringWeights {
 }
 
 static WEIGHTS: LazyLock<&'static ScoringWeights> = LazyLock::new(|| {
-    // 1. Try reading from disk at runtime (allows edits without recompile).
-    if let Ok(json) = std::fs::read_to_string(RUNTIME_CONFIG_PATH) {
-        if let Ok(w) = serde_json::from_str::<ScoringWeights>(&json) {
-            return Box::leak(Box::new(w));
+    // 1. Try runtime path first (FRAMEWORK_ROOT env var allows edits without recompile).
+    if let Some(path) = resolve_runtime_weights_path() {
+        if let Ok(json) = std::fs::read_to_string(&path) {
+            if let Ok(w) = serde_json::from_str::<ScoringWeights>(&json) {
+                return Box::leak(Box::new(w));
+            }
+            tracing::warn!(
+                "[scoring_config] {path} exists but failed to parse; using embedded defaults."
+            );
         }
-        tracing::warn!(
-            "[scoring_config] {} exists but failed to parse; using embedded defaults.",
-            RUNTIME_CONFIG_PATH,
-        );
     }
     // 2. Fallback: compile-time embedded JSON.
     let w: ScoringWeights = serde_json::from_str(DEFAULTS_JSON)

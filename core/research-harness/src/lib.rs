@@ -36,6 +36,7 @@ pub mod render;
 pub mod research_mode;
 pub mod review;
 pub mod search;
+#[cfg(feature = "smoke")]
 pub mod smoke;
 pub mod state;
 pub mod text;

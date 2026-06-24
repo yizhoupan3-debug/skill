@@ -1,8 +1,4 @@
 //! Workspace management: initialization, file sync, ledger events.
-//!
-//! Migrated from `tools/autoresearch-rs/src/workspace.rs`.
-//!
-//! TODO: Full implementation pending. This is a stub for compilation.
 
 use anyhow::Result;
 use serde_json::{Value, json};

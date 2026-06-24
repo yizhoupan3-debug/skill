@@ -82,7 +82,7 @@ mod tests {
     fn sync_writes_after_goal_start() {
         let _env = ();
         let prev = std::env::var_os("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO");
-        unsafe { std::env::set_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", "1") };
+        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", "1") };
         let tmp = std::env::temp_dir().join(format!(
             "router-rs-task-agg-{}",
             std::time::SystemTime::now()
@@ -119,8 +119,8 @@ mod tests {
         assert_eq!(v.get("task_id").and_then(Value::as_str), Some("t-agg"));
         assert!(v.get("goal_state").is_some());
         match prev {
-            Some(v) => unsafe { std::env::set_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", v) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO") },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", &v) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }

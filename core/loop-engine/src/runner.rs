@@ -467,7 +467,7 @@ fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> R
     );
 
     let binary = dispatcher::resolve_subagent_binary()?;
-    let mut child = std::process::Command::new(&binary)
+    let child = std::process::Command::new(&binary)
         .args(["-p", &handoff])
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())

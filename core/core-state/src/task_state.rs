@@ -845,7 +845,7 @@ mod tests {
             .expect("depth score mode env mutex poisoned");
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
         // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
+        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("goal");
         let tid = "t1";
         write_active(&tmp, tid);
@@ -891,8 +891,8 @@ mod tests {
             v.resolution_notes
         );
         match prior_hint {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
+            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1117,7 +1117,7 @@ mod tests {
             .expect("depth score mode env mutex poisoned");
         let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict") };
+        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", "strict") };
         let tmp = unique_repo("strict-fals");
         let tid = "t-strict-fals";
         write_active(&tmp, tid);
@@ -1150,8 +1150,8 @@ mod tests {
         let dc = v.depth_compliance.expect("dc");
         assert_eq!(dc.depth_score, 3, "strict third point via falsification");
         match prior {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") },
+            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1164,9 +1164,9 @@ mod tests {
         let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
         // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") };
+        unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") };
         // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
+        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("ext-deep");
         let tid = "t-ext";
         write_active(&tmp, tid);
@@ -1198,12 +1198,12 @@ mod tests {
         assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
         match prior_depth {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") },
+            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") },
         }
         match prior_hint {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
+            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1216,9 +1216,9 @@ mod tests {
         let prior = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
         // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", "strict") };
+        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", "strict") };
         // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
+        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("ext-deep-strict-note");
         let tid = "t-ext-note";
         write_active(&tmp, tid);
@@ -1246,12 +1246,12 @@ mod tests {
         assert!(!hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
         match prior {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") },
+            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") },
         }
         match prior_hint {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
+            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1264,9 +1264,9 @@ mod tests {
         let prior_depth = std::env::var("ROUTER_RS_DEPTH_SCORE_MODE").ok();
         let prior_hint = std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT").ok();
         // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") };
+        unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") };
         // SAFETY: test-only, env mutex held by caller or thread-local test serialization
-        unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
+        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", "1") };
         let tmp = unique_repo("ext-strict");
         let tid = "t-ext-st";
         write_active(&tmp, tid);
@@ -1315,12 +1315,12 @@ mod tests {
         assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
         match prior_depth {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_SCORE_MODE", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_SCORE_MODE") },
+            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") },
         }
         match prior_hint {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
+            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }

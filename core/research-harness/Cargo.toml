@@ -8,14 +8,15 @@ description = "Unified research harness: paper revision loop, literature search,
 [features]
 default = ["cli"]
 cli = ["dep:clap"]
+smoke = []
 
 [dependencies]
 # framework (leaf crates, no cycle risk)
+core-state-utils = { path = "../core-state-utils" }
 core-policy = { path = "../core-policy" }
 core-state = { path = "../core-state" }
 framework-kernel = { path = "../framework-kernel" }
 host-projection = { path = "../host-projection" }
-loop-engine = { path = "../loop-engine" }
 fr-utils = { path = "../fr-utils" }
 
 # LaTeX (RaTeX)
@@ -35,16 +36,15 @@ rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yml.workspace = true
-tempfile.workspace = true
 tracing.workspace = true
 regex.workspace = true
 sha2.workspace = true
-uuid.workspace = true
 
 # CLI (optional)
 clap = { workspace = true, optional = true }
 
 [dev-dependencies]
+tempfile.workspace = true
 
 [[bin]]
 name = "autoresearch"

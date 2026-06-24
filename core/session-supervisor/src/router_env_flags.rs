@@ -16,15 +16,15 @@ mod tests {
     #[test]
     fn unset_means_disabled_for_default_false() {
         let key = "ROUTER_RS_UNITTEST_DEFAULT_FALSE_UNSET";
-        unsafe { std::env::remove_var(key) };
+        unsafe { core_state_utils::env_sync::remove_env(key) };
         assert!(!core_policy::env_flags::env_enabled_default_false(key));
     }
 
     #[test]
     fn one_true_enable_default_false() {
         let key = "ROUTER_RS_UNITTEST_DEFAULT_FALSE_ONE";
-        unsafe { std::env::set_var(key, "1") };
+        unsafe { core_state_utils::env_sync::set_env(key, "1") };
         assert!(core_policy::env_flags::env_enabled_default_false(key));
-        unsafe { std::env::remove_var(key) };
+        unsafe { core_state_utils::env_sync::remove_env(key) };
     }
 }

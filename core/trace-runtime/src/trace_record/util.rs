@@ -47,7 +47,7 @@ pub fn trace_event_object(payload: Value) -> Result<Map<String, Value>, String> 
     }
 }
 
-/// Hydrate a trace event with default values for seq, generation, event_id, cursor, status, and schema_version.
+/// Hydrate a trace event with default values for seq, generation, event_id, page_token, status, and schema_version.
 pub fn hydrate_trace_event(
     mut payload: Map<String, Value>,
     line_number: usize,
@@ -56,7 +56,7 @@ pub fn hydrate_trace_event(
     let generation = trace_event_usize_field(&payload, "generation").unwrap_or(0);
     let event_id = trace_event_string_field(&payload, "event_id")
         .unwrap_or_else(|| format!("evt_replay_{line_number:06}"));
-    let cursor = trace_event_string_field(&payload, "cursor")
+    let page_token = trace_event_string_field(&payload, "page_token")
         .unwrap_or_else(|| build_trace_cursor(generation, seq, &event_id));
     payload
         .entry("seq".to_string())
@@ -68,8 +68,8 @@ pub fn hydrate_trace_event(
         .entry("event_id".to_string())
         .or_insert_with(|| Value::String(event_id));
     payload
-        .entry("cursor".to_string())
-        .or_insert_with(|| Value::String(cursor));
+        .entry("page_token".to_string())
+        .or_insert_with(|| Value::String(page_token));
     payload
         .entry("status".to_string())
         .or_insert_with(|| Value::String("ok".to_string()));

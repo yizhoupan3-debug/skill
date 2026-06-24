@@ -3,6 +3,8 @@
 //! Extracted from projection.rs to keep file size ≤2000 lines.
 
 use super::*;
+use framework_kernel::json_value::{build_task_id, safe_slug};
+
 pub fn default_home_dir() -> PathBuf {
     std::env::var_os("HOME")
         .map(PathBuf::from)
@@ -23,60 +25,6 @@ pub fn workspace_name_from_root(repo_root: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or("workspace")
         .to_string()
-}
-
-pub fn current_local_timestamp() -> String {
-    framework_kernel::time::current_local_timestamp()
-}
-
-pub fn safe_slug(label: &str) -> String {
-    let mut slug = String::new();
-    let mut previous_dash = false;
-    for ch in label.chars().flat_map(|ch| ch.to_lowercase()) {
-        let normalized = if ch.is_ascii_alphanumeric() {
-            Some(ch)
-        } else if ch.is_whitespace() || matches!(ch, '-' | '_' | '/' | '\\' | '.') {
-            Some('-')
-        } else {
-            None
-        };
-        if let Some(value) = normalized {
-            if value == '-' {
-                if slug.is_empty() || previous_dash {
-                    continue;
-                }
-                previous_dash = true;
-                slug.push(value);
-            } else {
-                previous_dash = false;
-                slug.push(value);
-            }
-        }
-    }
-    let trimmed = slug.trim_matches('-').to_string();
-    if trimmed.is_empty() {
-        "workspace".to_string()
-    } else {
-        trimmed
-    }
-}
-
-pub fn build_framework_task_id(label: &str) -> String {
-    let stamp = current_local_timestamp()
-        .chars()
-        .filter(|value| value.is_ascii_alphanumeric())
-        .collect::<String>();
-    let slug = safe_slug(label);
-    if stamp.is_empty() {
-        slug
-    } else {
-        let suffix = if stamp.len() > 14 {
-            &stamp[stamp.len() - 14..]
-        } else {
-            &stamp
-        };
-        format!("{slug}-{suffix}")
-    }
 }
 
 pub fn compact_evolution_proposals(payload: &Value) -> Value {
@@ -108,12 +56,12 @@ pub fn build_default_bootstrap_payload(
     let workspace = workspace_override
         .map(str::to_owned)
         .unwrap_or_else(|| workspace_name_from_root(&repo_root));
-    let created_at = current_local_timestamp();
-    let task_id = build_framework_task_id(if query.trim().is_empty() {
+    let created_at = framework_kernel::time::current_local_timestamp();
+    let task_id = build_task_id(if query.trim().is_empty() {
         &workspace
     } else {
         query
-    });
+    }, None);
     let continuity_bootstrap =
         build_default_continuity_bootstrap(&repo_root, artifact_source_dir, Some(&task_id))?;
     let runtime = json!({
@@ -220,7 +168,7 @@ pub fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf 
 pub fn move_path(source: &Path, destination: &Path) -> Result<String, String> {
     let mut resolved_destination = destination.to_path_buf();
     if resolved_destination.exists() {
-        let suffix = current_local_timestamp().replace(':', "").replace('+', "_");
+        let suffix = framework_kernel::time::current_local_timestamp().replace(':', "").replace('+', "_");
         let stem = resolved_destination
             .file_stem()
             .and_then(|value| value.to_str())

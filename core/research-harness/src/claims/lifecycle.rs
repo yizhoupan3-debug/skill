@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use crate::util::{
-    arr, arr_mut, now_iso, novelty_gate, novelty_gate_mut, set_key, str_field,
+    arr, arr_mut, novelty_gate, novelty_gate_mut, set_key, str_field,
     str_field_default, value_as_string_list,
 };
 
@@ -69,7 +69,7 @@ fn slugify(text: &str) -> String {
 fn ensure_state_defaults(state: &Value) -> Value {
     let mut s = state.clone();
     let obj = s.as_object_mut().expect("state must be object");
-    let now = now_iso();
+    let now = framework_kernel::time::now_iso();
     for (key, default) in [
         ("hypotheses", json!([])),
         ("hypothesis_backlog", json!([])),
@@ -163,7 +163,7 @@ pub fn reuse_audit(state: &Value) -> Value {
         "reusable_runs": reusable.len(),
         "missing_annotations": missing.len(),
         "missing_runs": missing,
-        "generated_at": now_iso(),
+        "generated_at": framework_kernel::time::now_iso(),
     })
 }
 
@@ -214,7 +214,7 @@ pub fn transition_hypothesis(state: &mut Value, index: usize, new_status: &str, 
     let obj = h.as_object_mut().ok_or_else(|| anyhow!("hypothesis must be object"))?;
     obj.insert("status".into(), json!(new_status));
     obj.insert("status_reason".into(), reason.map(Value::from).unwrap_or(Value::Null));
-    obj.insert("status_updated_at".into(), json!(now_iso()));
+    obj.insert("status_updated_at".into(), json!(framework_kernel::time::now_iso()));
     let backlog = arr_mut(state, "hypothesis_backlog");
     if new_status == "queued" {
         if !backlog.iter().any(|v| v.as_str() == Some(&hid)) { backlog.push(json!(hid)); }
@@ -264,7 +264,7 @@ pub fn add_hypothesis(state: &Value, input: HypothesisInput<'_>) -> Result<Value
         "negative_signals": string_vec(input.negative_signals),
         "minimal_test": optional_string(input.minimal_test),
         "priority": input.priority, "status": "queued", "status_reason": Value::Null,
-        "status_updated_at": now_iso(), "created_at": now_iso(),
+        "status_updated_at": framework_kernel::time::now_iso(), "created_at": framework_kernel::time::now_iso(),
     });
     arr_mut(&mut next, "hypotheses").push(entry);
     let backlog = arr_mut(&mut next, "hypothesis_backlog");
@@ -335,7 +335,7 @@ pub fn record_run(state: &Value, input: &RecordRunInput<'_>, _workspace: &Path) 
         "applies_to": string_vec(input.applies_to), "does_not_apply_to": string_vec(input.does_not_apply_to),
         "novelty_gate_status_at_run": gate_status, "novelty_gate_override": input.override_novelty_gate,
         "override_reason": input.override_reason,
-        "recorded_at": now_iso(),
+        "recorded_at": framework_kernel::time::now_iso(),
     });
     arr_mut(&mut next, "run_history").push(record);
     transition_hypothesis(&mut next, index, "needs_reflection", Some(&format!("{run_id} recorded")))?;
@@ -371,7 +371,7 @@ pub fn annotate_run(state: &Value, run_id: &str, input: RunAnnotationInput<'_>) 
     if let Some(v) = input.reuse_note { let v = optional_string(Some(v)); if !v.is_null() { obj.insert("reuse_note".into(), v); } }
     obj.insert("applies_to".into(), merge_string_array(obj.get("applies_to").unwrap_or(&Value::Null), input.applies_to));
     obj.insert("does_not_apply_to".into(), merge_string_array(obj.get("does_not_apply_to").unwrap_or(&Value::Null), input.does_not_apply_to));
-    obj.insert("reuse_annotated_at".into(), json!(now_iso()));
+    obj.insert("reuse_annotated_at".into(), json!(framework_kernel::time::now_iso()));
     Ok(next)
 }
 
@@ -399,7 +399,7 @@ pub fn reflect(
     let decision = json!({
         "hypothesis_id": hypothesis_id, "run_id": run_id, "direction": direction,
         "reason": reason, "next_step": next_step,
-        "recorded_at": now_iso(),
+        "recorded_at": framework_kernel::time::now_iso(),
     });
     arr_mut(&mut next, "decisions").push(decision);
     set_key(&mut next, "current_direction", json!(direction));
@@ -449,7 +449,7 @@ pub fn add_claim_comparison(
     let record = json!({
         "claim_id": id, "claim": claim, "axis": axis, "closest_prior_work": closest_prior_work,
         "overlap": overlap, "difference": difference, "confidence": confidence,
-        "verdict": verdict, "recorded_at": now_iso(),
+        "verdict": verdict, "recorded_at": framework_kernel::time::now_iso(),
     });
     let gate = novelty_gate_mut(&mut next);
     let claims_list;
@@ -476,7 +476,7 @@ pub fn default_state(project: &str, question: &str, mode: &str) -> Value {
         "novelty_gate": { "status": "pending", "claims": [], "claim_records": [], "draft_claims": [] },
         "hypotheses": [], "hypothesis_backlog": [], "run_history": [], "external_research": [],
         "evidence_index": [], "blockers": [], "decisions": [], "next_actions": [],
-        "created_at": now_iso(), "updated_at": now_iso(),
+        "created_at": framework_kernel::time::now_iso(), "updated_at": framework_kernel::time::now_iso(),
     });
     state
 }
@@ -670,7 +670,7 @@ mod tests {
     #[test]
     fn transition_hypothesis_valid() {
         let mut s = gate_passed_state();
-        arr_mut(&mut s, "hypotheses").push(json!({"id": "h1", "claim": "c", "status": "queued", "status_updated_at": now_iso(), "created_at": now_iso()}));
+        arr_mut(&mut s, "hypotheses").push(json!({"id": "h1", "claim": "c", "status": "queued", "status_updated_at": framework_kernel::time::now_iso(), "created_at": framework_kernel::time::now_iso()}));
         let idx = find_hypothesis_index(&s, "h1").unwrap();
         transition_hypothesis(&mut s, idx, "active", Some("activated")).unwrap();
         assert_eq!(find_hypothesis(&s, "h1").unwrap().get("status").and_then(Value::as_str), Some("active"));
@@ -679,7 +679,7 @@ mod tests {
     #[test]
     fn transition_hypothesis_invalid() {
         let mut s = gate_passed_state();
-        arr_mut(&mut s, "hypotheses").push(json!({"id": "h1", "claim": "c", "status": "concluded", "status_updated_at": now_iso(), "created_at": now_iso()}));
+        arr_mut(&mut s, "hypotheses").push(json!({"id": "h1", "claim": "c", "status": "concluded", "status_updated_at": framework_kernel::time::now_iso(), "created_at": framework_kernel::time::now_iso()}));
         let idx = find_hypothesis_index(&s, "h1").unwrap();
         assert!(transition_hypothesis(&mut s, idx, "active", None).is_err());
     }

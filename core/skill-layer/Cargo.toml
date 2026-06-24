@@ -1,0 +1,18 @@
+[package]
+name = "skill-layer"
+version = "0.1.0"
+edition = "2024"
+description = "Skill layer infrastructure: schema, validation, lifecycle, and dependency management."
+[lints]
+workspace = true
+
+[dependencies]
+core-state = { path = "../core-state" }
+serde.workspace = true
+serde_json.workspace = true
+serde_yml.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+tempfile.workspace = true

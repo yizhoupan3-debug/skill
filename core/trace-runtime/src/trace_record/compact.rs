@@ -110,12 +110,12 @@ pub fn compact_trace_stream(
             .unwrap_or(Value::Null),
     );
     state_payload.insert(
-        "delta_cursor".to_string(),
-        trace_event_string_field(tail, "cursor")
+        "delta_page_token".to_string(),
+        trace_event_string_field(tail, "page_token")
             .map(Value::String)
             .unwrap_or(Value::Null),
     );
-    state_payload.insert("latest_cursor".to_string(), latest_cursor.clone());
+    state_payload.insert("latest_page_token".to_string(), latest_cursor.clone());
     state_payload.insert("event_count".to_string(), json!(active_events.len()));
     state_payload.insert("latest_event".to_string(), Value::Object(tail.clone()));
     state_payload.insert(
@@ -225,8 +225,8 @@ pub fn compact_trace_stream(
     snapshot.insert("artifact_index_ref".to_string(), artifact_index_ref);
     snapshot.insert("state_ref".to_string(), state_ref);
     snapshot.insert(
-        "delta_cursor".to_string(),
-        trace_event_string_field(tail, "cursor")
+        "delta_page_token".to_string(),
+        trace_event_string_field(tail, "page_token")
             .map(Value::String)
             .unwrap_or(Value::Null),
     );
@@ -362,7 +362,7 @@ fn latest_cursor_from_event(payload: &Map<String, Value>) -> Option<Value> {
     let seq = trace_event_usize_field(payload, "seq")?;
     let generation = trace_event_usize_field(payload, "generation").unwrap_or(0);
     let event_id = trace_event_string_field(payload, "event_id")?;
-    let cursor = trace_event_string_field(payload, "cursor")
+    let page_token = trace_event_string_field(payload, "page_token")
         .unwrap_or_else(|| build_trace_cursor(generation, seq, &event_id));
     Some(json!({
         "schema_version": TRACE_REPLAY_CURSOR_SCHEMA_VERSION,
@@ -371,7 +371,7 @@ fn latest_cursor_from_event(payload: &Map<String, Value>) -> Option<Value> {
         "generation": generation,
         "seq": seq,
         "event_id": event_id,
-        "cursor": cursor,
+        "page_token": page_token,
     }))
 }
 

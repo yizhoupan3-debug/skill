@@ -175,15 +175,17 @@ macro_rules! poison_safe_lock {
 
 mod tools;
 use tools::*;
-mod tool_registry;
-use tool_registry::*;
+mod task_tools;
+use task_tools::*;
+mod mcp_tool_handlers;
+use mcp_tool_handlers::*;
 #[cfg(any(test, feature = "test-support"))]
 pub use tools::{build_evidence_entry, tool_closeout_gate};
 
 /// Dispatch a tool call through the global CompositeRegistry,
 /// falling through to the external research-tool handler when
 /// the built-in registry does not recognise the tool name.
-/// Defined in mod.rs so both tools and tool_registry can reference it.
+/// Defined in mod.rs so both tools and mcp_tool_handlers can reference it.
 pub(super) fn dispatch_tool(
     tool_name: &str,
     args: &Value,
@@ -200,6 +202,8 @@ pub(super) fn dispatch_tool(
         r.register(RoutingTools);
         r.register(LifecycleTools);
         r.register(InfraTools);
+        r.register(ToolDomainTools);
+        r.register(TaskCrudTools);
         r
     });
     let ctx = ToolCallContext {
@@ -768,7 +772,7 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                 },
                 {
                     "name": "research_aigc_humanize",
-                    "description": "AIGC 降重：句法改写/词汇替换/句式多样化。",
+                    "description": "AIGC humanize：句法改写/词汇替换/句式多样化。",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -799,11 +803,51 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                         "properties": {
                             "original_claims": {
                                 "type": "array",
-                                "items": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]},
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "text": {"type": "string"},
+                                        "ceiling": {"type": "string", "enum": ["no-claim", "local-only", "conference-ready", "top-venue"]},
+                                        "evidence": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "source": {"type": "string"},
+                                                    "location": {"type": "string"},
+                                                    "strength": {"type": "string", "enum": ["strong", "moderate", "weak", "missing"]}
+                                                },
+                                                "required": ["source"]
+                                            }
+                                        }
+                                    },
+                                    "required": ["id", "text"]
+                                },
                             },
                             "current_claims": {
                                 "type": "array",
-                                "items": {"type": "object", "properties": {"id": {"type": "string"}, "text": {"type": "string"}}, "required": ["id", "text"]},
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "text": {"type": "string"},
+                                        "ceiling": {"type": "string", "enum": ["no-claim", "local-only", "conference-ready", "top-venue"]},
+                                        "evidence": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "source": {"type": "string"},
+                                                    "location": {"type": "string"},
+                                                    "strength": {"type": "string", "enum": ["strong", "moderate", "weak", "missing"]}
+                                                },
+                                                "required": ["source"]
+                                            }
+                                        }
+                                    },
+                                    "required": ["id", "text"]
+                                },
                             },
                         },
                         "required": ["original_claims", "current_claims"],
@@ -820,6 +864,47 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
                             "consecutive_stable_required": {"type": "integer"},
                         },
                         "required": [],
+                    },
+                },
+                {
+                    "name": "task_create",
+                    "description": "创建新 task（定义 todo）。幂等：已存在则跳过。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "task_id": {"type": "string", "description": "Task 标识符（必填）"},
+                            "title": {"type": "string", "description": "Task 标题（可选，默认=task_id）"},
+                        },
+                        "required": ["task_id"],
+                    },
+                },
+                {
+                    "name": "task_list",
+                    "description": "列出所有已知 task 及其状态。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {},
+                    },
+                },
+                {
+                    "name": "task_complete",
+                    "description": "完成一个 task。有 GOAL_STATE 时委托 goal_state_manage(complete)。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "task_id": {"type": "string", "description": "Task 标识符（可选，默认=active task）"},
+                        },
+                    },
+                },
+                {
+                    "name": "task_focus",
+                    "description": "切换 focus 到指定 task。",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "task_id": {"type": "string", "description": "Task 标识符（必填）"},
+                        },
+                        "required": ["task_id"],
                     },
                 },
             ],
@@ -1170,7 +1255,7 @@ mod tests {
         let response = handle_tools_list(Some(json!(1)));
         let tools = response["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        assert_eq!(names.len(), 20, "expected 20 tools, got: {:?}", names);
+        assert_eq!(names.len(), 24, "expected 24 tools, got: {:?}", names);
         for tool in &[
             "framework_snapshot",
             "skill_route",
@@ -1192,6 +1277,10 @@ mod tests {
             "research_review_dimensions",
             "research_claim_drift",
             "research_review_loop",
+            "task_create",
+            "task_list",
+            "task_complete",
+            "task_focus",
         ] {
             assert!(names.contains(tool), "missing tool: {tool}");
         }

@@ -10,6 +10,7 @@ name = "loop_engine"
 path = "src/lib.rs"
 
 [dependencies]
+core-state-utils = { path = "../core-state-utils" }
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true

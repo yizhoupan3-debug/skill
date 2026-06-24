@@ -5,7 +5,6 @@
 //! resume logic). All other overrides have been moved to registry-driven code
 //! generation (observation surfaces, dispatcher config, etc.).
 
-use serde_json::Value;
 
 // ── build_driver_args ──────────────────────────────────────────────────────
 

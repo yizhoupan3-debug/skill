@@ -17,6 +17,7 @@ pub mod activity_log;
 pub mod init;
 pub mod paper_adversarial;
 pub mod paper_block_cache;
+pub mod paper_common;
 pub mod paper_prose;
 
 use std::path::{Path, PathBuf};
@@ -129,13 +130,7 @@ pub fn dispatch_adversarial(context: &str) -> Option<String> {
     if !is_adversarial_enabled() {
         return None;
     }
-    // Check cache (keyed by first 64 chars of context hash)
-    let cache_key = format!("adv_{:016x}", {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        context.hash(&mut hasher);
-        hasher.finish()
-    });
+    let cache_key = crate::util::cache_key("adv", context);
     if let Some(cached) = read_cache(&cache_key) {
         return if cached.is_empty() {
             None
@@ -155,12 +150,7 @@ pub fn dispatch_prose(context: &str) -> Option<String> {
     if !is_prose_enabled() {
         return None;
     }
-    let cache_key = format!("prose_{:016x}", {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        context.hash(&mut hasher);
-        hasher.finish()
-    });
+    let cache_key = crate::util::cache_key("prose", context);
     if let Some(cached) = read_cache(&cache_key) {
         return if cached.is_empty() {
             None
@@ -213,23 +203,23 @@ mod tests {
 
     #[test]
     fn is_hook_enabled_disabled() {
-        unsafe { std::env::set_var("RESEARCH_HOOK_TEST_DISABLE", "0") };
+        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_TEST_DISABLE", "0") };
         assert!(!is_hook_enabled("RESEARCH_HOOK_TEST_DISABLE"));
-        unsafe { std::env::remove_var("RESEARCH_HOOK_TEST_DISABLE") };
+        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_TEST_DISABLE") };
     }
 
     #[test]
     fn is_hook_enabled_false_string() {
-        unsafe { std::env::set_var("RESEARCH_HOOK_TEST_FALSE", "false") };
+        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_TEST_FALSE", "false") };
         assert!(!is_hook_enabled("RESEARCH_HOOK_TEST_FALSE"));
-        unsafe { std::env::remove_var("RESEARCH_HOOK_TEST_FALSE") };
+        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_TEST_FALSE") };
     }
 
     #[test]
     fn is_hook_enabled_true_string() {
-        unsafe { std::env::set_var("RESEARCH_HOOK_TEST_TRUE", "1") };
+        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_TEST_TRUE", "1") };
         assert!(is_hook_enabled("RESEARCH_HOOK_TEST_TRUE"));
-        unsafe { std::env::remove_var("RESEARCH_HOOK_TEST_TRUE") };
+        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_TEST_TRUE") };
     }
 
     #[test]
@@ -271,28 +261,28 @@ mod tests {
 
     #[test]
     fn dispatch_adversarial_returns_context() {
-        unsafe { std::env::set_var("RESEARCH_HOOK_CACHE_DIR", tempfile::tempdir().unwrap().path()); }
+        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_CACHE_DIR", &tempfile::tempdir().unwrap().path()); }
         let result = dispatch_adversarial("请根据审稿意见修改论文");
         assert!(result.is_some());
         assert!(result.unwrap().contains("PAPER_ADVERSARIAL_HOOK"));
-        unsafe { std::env::remove_var("RESEARCH_HOOK_CACHE_DIR") };
+        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_CACHE_DIR") };
     }
 
     #[test]
     fn dispatch_adversarial_disabled() {
-        unsafe { std::env::set_var("RESEARCH_HOOK_ADVERSARIAL", "0") };
+        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_ADVERSARIAL", "0") };
         let result = dispatch_adversarial("请根据审稿意见修改论文");
         assert!(result.is_none());
-        unsafe { std::env::remove_var("RESEARCH_HOOK_ADVERSARIAL") };
+        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_ADVERSARIAL") };
     }
 
     #[test]
     fn dispatch_prose_returns_context() {
-        unsafe { std::env::set_var("RESEARCH_HOOK_CACHE_DIR", tempfile::tempdir().unwrap().path()); }
+        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_CACHE_DIR", &tempfile::tempdir().unwrap().path()); }
         let result = dispatch_prose("帮我把这段引言润色一下");
         assert!(result.is_some());
         assert!(result.unwrap().contains("PAPER_PROSE_QUALITY_HOOK"));
-        unsafe { std::env::remove_var("RESEARCH_HOOK_CACHE_DIR") };
+        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_CACHE_DIR") };
     }
 
     #[test]
@@ -326,11 +316,11 @@ mod tests {
     #[test]
     fn dispatch_adversarial_cached() {
         let dir = tempfile::tempdir().unwrap();
-        unsafe { std::env::set_var("RESEARCH_HOOK_CACHE_DIR", dir.path()); }
+        unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_CACHE_DIR", &dir.path()); }
         let ctx = "请根据审稿意见修改这篇论文的手稿";
         let r1 = dispatch_adversarial(ctx);
         let r2 = dispatch_adversarial(ctx);
         assert_eq!(r1, r2); // second call should hit cache
-        unsafe { std::env::remove_var("RESEARCH_HOOK_CACHE_DIR") };
+        unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_CACHE_DIR") };
     }
 }

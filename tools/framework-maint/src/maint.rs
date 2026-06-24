@@ -8,13 +8,12 @@ use framework_kernel::cli_args::{
     MaintRepoArgs, MaintRootsArgs, MaintSubcommand, UpdateAuditArgs,
 };
 use host_projection::host_integration::{
-    cargo_router_rs_executable, resolve_maint_roots, run_host_integration_from_args,
+    resolve_maint_roots, run_host_integration_from_args,
 };
 use serde_json::{Value, json};
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 #[path = "clean.rs"] mod clean;
 
@@ -295,7 +294,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
             host_home_args.push(format!("--{host_id}-home"));
             host_home_args.push(home.to_string_lossy().into_owned());
         }
-        let host_home_arg_refs: Vec<&str> = host_home_args.iter().map(String::as_str).collect();
+        let _host_home_arg_refs: Vec<&str> = host_home_args.iter().map(String::as_str).collect();
         let mut skill_args = vec![
             "framework".to_string(),
             "host-integration".to_string(),
@@ -743,34 +742,6 @@ fn run_router(repo_root: &Path, args: &[&str]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ── claude_rule_has_stale_gsd_narrative ──
-
-    #[test]
-    fn stale_gsd_detects_slash_gsd_dash() {
-        assert!(claude_rule_has_stale_gsd_narrative("use /gsd- command"));
-    }
-
-    #[test]
-    fn stale_gsd_detects_unqualified_goal_continue() {
-        assert!(claude_rule_has_stale_gsd_narrative(
-            "system injects GOAL_CONTINUE automatically"
-        ));
-    }
-
-    #[test]
-    fn stale_gsd_allows_qualified_goal_continue() {
-        assert!(!claude_rule_has_stale_gsd_narrative(
-            "router-rs claude hook does not inject GOAL_CONTINUE"
-        ));
-    }
-
-    #[test]
-    fn stale_gsd_clean_text() {
-        assert!(!claude_rule_has_stale_gsd_narrative(
-            "normal framework documentation text"
-        ));
-    }
 
     // ── is_key_document_path ──
 

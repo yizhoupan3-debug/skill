@@ -13,6 +13,7 @@ pub enum StdioOpDomain {
     Runtime,
     Trace,
     Framework,
+    Tool,
 }
 
 const ROUTING_STDIO_OPS: &[&str] = &[
@@ -80,6 +81,13 @@ const FRAMEWORK_STDIO_OPS: &[&str] = &[
     "task_ledger_dispatch",
 ];
 
+const TOOL_STDIO_OPS: &[&str] = &[
+    "route_tool",
+    "search_tools",
+    "tool_registry_status",
+    // tool_decision_report and tool_eval removed: stubs never implemented
+];
+
 fn op_in_domain(op: &str, domain_ops: &[&str]) -> bool {
     domain_ops.contains(&op)
 }
@@ -97,6 +105,8 @@ pub fn classify_stdio_op(op: &str) -> Option<StdioOpDomain> {
         Some(StdioOpDomain::Trace)
     } else if op_in_domain(op, FRAMEWORK_STDIO_OPS) {
         Some(StdioOpDomain::Framework)
+    } else if op_in_domain(op, TOOL_STDIO_OPS) {
+        Some(StdioOpDomain::Tool)
     } else {
         None
     }
@@ -125,6 +135,11 @@ pub fn is_trace_stdio_op(op: &str) -> bool {
 pub fn is_framework_stdio_op(op: &str) -> bool {
     op_in_domain(op, FRAMEWORK_STDIO_OPS)
 }
+
+pub fn is_tool_stdio_op(op: &str) -> bool {
+    TOOL_STDIO_OPS.contains(&op)
+}
+
 /// ── Runtime output mode dispatch (stub) ──
 ///
 /// These functions are intentionally stubbed here. The real implementation

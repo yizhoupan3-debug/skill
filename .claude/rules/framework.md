@@ -11,7 +11,7 @@ description: Route framework tasks through the Rust-owned shared core.
 
 Use this repository's shared framework runtime.
 
-**Lifecycle：无固定阶段**。Goal/RFV via stdio + manual boards; `router-rs claude hook` does not inject GOAL_CONTINUE/RFV/digest. REVIEW_GATE Stop advisory-only (Claude canonical clearance); `interactive` suppresses review nudge and spawn-first.
+**Lifecycle：无固定阶段**。Task 是底层执行引擎（见 `AGENTS.md` §Task Engine）；Goal/RFV via stdio + manual boards; `router-rs claude hook` does not inject GOAL_CONTINUE/RFV/digest. REVIEW_GATE Stop advisory-only (Claude canonical clearance); `interactive` suppresses review nudge and spawn-first.
 
 **Code review default (all hosts): findings-only.** Explicit `$code-review-deep` or review requests still apply at skill layer; REVIEW_GATE never hard-blocks Stop on any host (advisory nudge only). `interactive` suppresses review Stop nudge and spawn-first. See `skills/code-review-deep/SKILL.md`.
 

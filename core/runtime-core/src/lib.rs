@@ -22,7 +22,7 @@ pub use runtime_exit_gate as exit_gate;
 pub use exit_gate::{quality_gate, schema_drift, harness_ops as harness_operator_nudges};
 pub use framework_extra::session_call as session_call_tracker;
 pub use infrastructure::{
-    kernel_bootstrap, framework_skills, stdio_transport, telemetry_emit,
+    kernel_bootstrap, stdio_transport, telemetry_emit,
 };
 pub use fr_exec::router_env_flags::*;
 
@@ -97,6 +97,29 @@ pub fn register_routing_hooks() {
                     breadth_markers: m.breadth_markers,
                     scope_markers: m.scope_markers,
                 }
+            },
+        )
+        .ok(); // ignore Err if already registered
+    });
+}
+
+// ── mcp-tool-registry hooks registration ──
+static TOOL_REGISTRY_HOOKS_INIT: OnceLock<()> = OnceLock::new();
+
+/// Register mcp-tool-registry hooks with runtime-core implementations.
+/// Safe to call multiple times; only the first call takes effect.
+pub(crate) fn register_tool_registry_hooks() {
+    TOOL_REGISTRY_HOOKS_INIT.get_or_init(|| {
+        mcp_tool_registry::hooks::register_hooks(
+            // discover_tool_registry_path: default path
+            || {
+                let path = std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH);
+                Some(path)
+            },
+            // discover_scoring_weights_path: resolve from FRAMEWORK_ROOT
+            || {
+                let root = std::env::var("FRAMEWORK_ROOT").ok()?;
+                Some(format!("{root}/{}", framework_kernel::constants::TOOL_SCORING_WEIGHTS_RELATIVE_PATH))
             },
         )
         .ok(); // ignore Err if already registered
@@ -357,6 +380,23 @@ pub fn register_host_projection_hooks() {
             fr_exec::trace_stream_io::inspect_trace_stream,
         );
 
+        // ── Tool dispatch hooks: business logic extracted from host-projection ──
+        host_projection::hooks::register_tool_goal_state_manage_dispatch(
+            framework_runtime::tool_handlers::goal_state_manage_dispatch,
+        );
+        host_projection::hooks::register_tool_quality_gate_manage_dispatch(
+            framework_runtime::tool_handlers::quality_gate_manage_dispatch,
+        );
+        host_projection::hooks::register_tool_closeout_record_write_dispatch(
+            framework_runtime::tool_handlers::closeout_record_write_dispatch,
+        );
+        host_projection::hooks::register_tool_closeout_gate_evaluate(
+            framework_runtime::tool_handlers::closeout_gate_evaluate,
+        );
+        host_projection::hooks::register_tool_routing_evolution_dispatch(
+            framework_runtime::tool_handlers::routing_evolution_dispatch,
+        );
+
         // ── stdio transport dispatch (decouples runtime-infra from cli/) ──
         runtime_infra::stdio_transport::register_stdio_dispatch(
             crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload,
@@ -380,6 +420,7 @@ pub fn register_host_projection_hooks() {
 /// calls no-ops.
 pub fn init_hooks() {
     register_routing_hooks();
+    register_tool_registry_hooks();
     register_host_projection_hooks();
 }
 

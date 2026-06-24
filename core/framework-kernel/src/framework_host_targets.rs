@@ -2,7 +2,7 @@
 //! `configs/framework/RUNTIME_REGISTRY.json` → `host_targets.supported`.
 
 use crate::runtime_registry::{
-    ALL_HOST_IDS, HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH, load_runtime_registry_json,
+    HOST_ADAPTER_CONTRACT_PATH, RUNTIME_REGISTRY_PATH, load_runtime_registry_json,
 };
 use serde_json::{Map, Value, json};
 use std::path::Path;
@@ -266,7 +266,7 @@ pub fn host_entrypoints_value_for_id(registry: &Value, host_id: &str) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runtime_registry::RUNTIME_REGISTRY_SCHEMA_VERSION;
+    use crate::runtime_registry::{RUNTIME_REGISTRY_SCHEMA_VERSION, ALL_HOST_IDS};
     use std::path::PathBuf;
 
     fn repo_root() -> PathBuf {

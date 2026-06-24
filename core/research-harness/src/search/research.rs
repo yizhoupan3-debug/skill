@@ -66,10 +66,6 @@ fn arr_mut<'a>(state: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
         .expect("expected array")
 }
 
-fn now_iso() -> String {
-    framework_kernel::time::now_iso()
-}
-
 // ── Query building ──
 
 /// Find the claim record for research by ID, or fall back to top-priority claim.
@@ -194,7 +190,7 @@ pub fn research_claim_with_client(
         "source": source.as_str(),
         "results": dedupe_research_results(results),
         "errors": errors,
-        "created_at": now_iso(),
+        "created_at": framework_kernel::time::now_iso(),
     }))
 }
 
@@ -463,7 +459,7 @@ pub fn novelty_gate_recommendation_from_research(
         "missing_claims": missing,
         "uncompared_claims": uncompared,
         "claim_comparisons": existing_records,
-        "generated_at": now_iso(),
+        "generated_at": framework_kernel::time::now_iso(),
     })
 }
 

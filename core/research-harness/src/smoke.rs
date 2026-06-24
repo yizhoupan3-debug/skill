@@ -14,20 +14,12 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use std::time::Duration;
 
 use crate::search::arxiv;
 use crate::search::semantic_scholar;
 use crate::util::{str_field, str_field_default};
 
 // ── Local helpers ──
-
-fn http_client(timeout_secs: u64) -> Result<reqwest::blocking::Client> {
-    reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(timeout_secs.clamp(3, 120)))
-        .build()
-        .context("failed to build HTTP client")
-}
 
 const DEFAULT_EXTERNAL_TIMEOUT_SECS: u64 = 20;
 
@@ -323,7 +315,7 @@ pub fn run_smoke_tests(
         return Ok(String::new());
     }
 
-    let client = http_client(DEFAULT_EXTERNAL_TIMEOUT_SECS)?;
+    let client = crate::util::blocking_client(DEFAULT_EXTERNAL_TIMEOUT_SECS)?;
 
     // Load previous results for regression
     let prev_path = repo_root.join(SMOKE_RESULTS_REL_PATH);

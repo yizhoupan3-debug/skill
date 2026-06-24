@@ -1359,6 +1359,87 @@ pub fn inspect_trace_stream(
         .unwrap_or_else(|| Err("inspect_trace_stream not registered".into()))
 }
 
+// ── Tool dispatch hooks: business logic extraction from L0 → L4 ──
+//
+// These hooks move heavy business logic (payload construction, enum validation,
+// multi-source evaluation) out of host-projection's tool handlers into runtime-core.
+// host-projection retains MCP parameter type-checking; runtime-core owns domain logic.
+
+/// Goal state manage dispatch: (args, repo_root, session_id) -> Result<String, String>
+type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> Result<String, String>;
+static GOAL_STATE_MANAGE_DISPATCH: OnceLock<GoalStateManageDispatchFn> = OnceLock::new();
+
+pub fn register_tool_goal_state_manage_dispatch(f: GoalStateManageDispatchFn) {
+    once_lock_set(&GOAL_STATE_MANAGE_DISPATCH, f, "tool_goal_state_manage_dispatch");
+}
+
+pub fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String, String> {
+    GOAL_STATE_MANAGE_DISPATCH
+        .get()
+        .map(|f| f(args, repo_root, session_id))
+        .unwrap_or_else(|| Err("tool_goal_state_manage_dispatch not registered — runtime-core boot required".into()))
+}
+
+/// Quality gate manage dispatch: (args, repo_root, session_id) -> Result<String, String>
+type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> Result<String, String>;
+static QUALITY_GATE_MANAGE_DISPATCH: OnceLock<QualityGateManageDispatchFn> = OnceLock::new();
+
+pub fn register_tool_quality_gate_manage_dispatch(f: QualityGateManageDispatchFn) {
+    once_lock_set(&QUALITY_GATE_MANAGE_DISPATCH, f, "tool_quality_gate_manage_dispatch");
+}
+
+pub fn tool_quality_gate_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String, String> {
+    QUALITY_GATE_MANAGE_DISPATCH
+        .get()
+        .map(|f| f(args, repo_root, session_id))
+        .unwrap_or_else(|| Err("tool_quality_gate_manage_dispatch not registered — runtime-core boot required".into()))
+}
+
+/// Closeout record write dispatch: (args, repo_root) -> Result<String, String>
+type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> Result<String, String>;
+static CLOSEOUT_RECORD_WRITE_DISPATCH: OnceLock<CloseoutRecordWriteDispatchFn> = OnceLock::new();
+
+pub fn register_tool_closeout_record_write_dispatch(f: CloseoutRecordWriteDispatchFn) {
+    once_lock_set(&CLOSEOUT_RECORD_WRITE_DISPATCH, f, "tool_closeout_record_write_dispatch");
+}
+
+pub fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Result<String, String> {
+    CLOSEOUT_RECORD_WRITE_DISPATCH
+        .get()
+        .map(|f| f(args, repo_root))
+        .unwrap_or_else(|| Err("tool_closeout_record_write_dispatch not registered — runtime-core boot required".into()))
+}
+
+/// Closeout gate evaluate: (args, repo_root, host_id) -> Result<String, String>
+type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> Result<String, String>;
+static CLOSEOUT_GATE_EVALUATE: OnceLock<CloseoutGateEvaluateFn> = OnceLock::new();
+
+pub fn register_tool_closeout_gate_evaluate(f: CloseoutGateEvaluateFn) {
+    once_lock_set(&CLOSEOUT_GATE_EVALUATE, f, "tool_closeout_gate_evaluate");
+}
+
+pub fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
+    CLOSEOUT_GATE_EVALUATE
+        .get()
+        .map(|f| f(args, repo_root, host_id))
+        .unwrap_or_else(|| Err("tool_closeout_gate_evaluate not registered — runtime-core boot required".into()))
+}
+
+/// Routing evolution dispatch: (args, repo_root) -> Result<String, String>
+type RoutingEvolutionDispatchFn = fn(&Value, &Path) -> Result<String, String>;
+static ROUTING_EVOLUTION_DISPATCH: OnceLock<RoutingEvolutionDispatchFn> = OnceLock::new();
+
+pub fn register_tool_routing_evolution_dispatch(f: RoutingEvolutionDispatchFn) {
+    once_lock_set(&ROUTING_EVOLUTION_DISPATCH, f, "tool_routing_evolution_dispatch");
+}
+
+pub fn tool_routing_evolution_dispatch(args: &Value, repo_root: &Path) -> Result<String, String> {
+    ROUTING_EVOLUTION_DISPATCH
+        .get()
+        .map(|f| f(args, repo_root))
+        .unwrap_or_else(|| Err("tool_routing_evolution_dispatch not registered — runtime-core boot required".into()))
+}
+
 // ── Mirror type structural canary tests ──
 
 #[cfg(test)]

@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
-use crate::util::{obj_mut, arr_mut, set_key, now_iso, novelty_gate_mut, str_field};
+use crate::util::{obj_mut, arr_mut, set_key, novelty_gate_mut, str_field};
 
 // ── Local helpers ──
 
@@ -178,7 +178,7 @@ pub fn hydrate_state(state: &Value) -> Result<Value> {
         root.entry("next_actions").or_insert(json!([]));
         let created_at = root
             .entry("created_at")
-            .or_insert_with(|| json!(now_iso()))
+            .or_insert_with(|| json!(framework_kernel::time::now_iso()))
             .clone();
         root.entry("updated_at").or_insert(created_at);
     }
@@ -242,7 +242,7 @@ pub fn load_state(path: &Path) -> Result<Value> {
 pub fn dump_state(path: &Path, state: &Value) -> Result<()> {
     let mut state_to_write = hydrate_state(state)?;
     set_key(&mut state_to_write, "schema_version", json!(SCHEMA_VERSION));
-    set_key(&mut state_to_write, "updated_at", json!(now_iso()));
+    set_key(&mut state_to_write, "updated_at", json!(framework_kernel::time::now_iso()));
     let actions = crate::claims::lifecycle::recommend_next_actions(&state_to_write);
     set_key(&mut state_to_write, "next_actions", json!(actions));
     let rendered = serde_yml::to_string(&state_to_write)?;

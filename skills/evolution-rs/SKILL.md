@@ -4,6 +4,18 @@ description: |
   Framework-operational tool: audit usage journal, compute per-skill health scores,
   auto-prune zero-usage skills, sync feedback tables, inspect integrity,
   analyze telemetry, snapshot registry state.
+routing_layer: L0
+routing_owner: gate
+routing_gate: none
+routing_priority: P3
+trigger_hints:
+  - evolution
+  - health score
+  - skill audit
+  - 健康检查
+  - 用量审计
+  - 自动清理
+  - registry snapshot
 metadata:
   version: "1.0.0"
   platforms: [supported]

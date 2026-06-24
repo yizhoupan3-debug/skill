@@ -326,6 +326,7 @@ mod tests {
             record_kind: "skill".to_string(),
             primary_allowed: true,
             fallback_policy_mode: "eligible-in-runtime".to_string(),
+            skill_flags: vec![],
         }
     }
 

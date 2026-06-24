@@ -261,7 +261,7 @@ auto_multi_phase 的语义判断完全靠 LLM，Rust 层只做显式关键词匹
 
 - [ ] `cargo test -p router-rs` 与仓库 policy 测试通过
 - [ ] `framework doctor` 无 P0 项
-- [ ] `artifacts/current/<task_id>/` 任务结束后 `/verifyx` purge
+- [ ] `artifacts/current/<task_id>/` 任务结束后清理（手动 purge，无自动入口）
 - [ ] Dependabot PR：合并前跑 CI，Cargo.lock 与宿主 hook 路径无漂移
 
 ---

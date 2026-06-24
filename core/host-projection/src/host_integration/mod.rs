@@ -201,13 +201,16 @@ pub struct ProjectionCommand {
 }
 
 impl ProjectionCommand {
-    /// Check if the host-specific home CLI argument is set for a given host_id.
-    /// Registry-driven: uses host_private_config_dir to determine which field to check.
+    /// Known host IDs that have a home CLI argument.
+    /// **Keep in sync** with the `*_home` fields above and `RUNTIME_REGISTRY.json`.
+    const HOME_CAPABLE_HOST_IDS: &[&str] = &["claude", "codex", "cursor", "opencode"];
+
+    /// Check if the host-specific home CLI argument is set for a given `host_id`.
     pub fn host_home_is_set(&self, host_id: &str) -> bool {
         match host_id {
+            "claude" => self.claude_home.is_some(),
             "codex" => self.codex_home.is_some(),
             "cursor" => self.cursor_home.is_some(),
-            "claude" => self.claude_home.is_some(),
             "opencode" => self.opencode_home.is_some(),
             _ => false,
         }
@@ -269,7 +272,19 @@ mod roots;
 
 pub use artifacts::*;
 pub use projection::*;
-pub use roots::*;
+pub use roots::{
+    McpRouterRsCommand, McpCodegraphCommand, cargo_router_rs_executable,
+    codegraph_mcp_cargo_bootstrap_args, ensure_router_rs_installed_for_mcp_with_roots,
+    is_ephemeral_executable_path, is_repo_build_executable_path,
+    mcp_codegraph_command_value, mcp_router_rs_command_value, nearest_marker_root,
+    normalize_path, resolve_artifact_root, resolve_framework_root, resolve_host_home,
+    resolve_maint_roots, resolve_mcp_codegraph_command, resolve_mcp_router_rs_command,
+    resolve_projection_framework_root, resolve_projection_roots, resolve_project_root,
+    resolve_stable_router_rs_executable, router_rs_cargo_bootstrap_args,
+    run_host_integration_payload, try_framework_root_from_current_exe,
+    try_framework_root_from_workspace_env, validate_mcp_command_binary,
+    workspace_mcp_codegraph_release_binary,
+};
 
 #[cfg(test)]
 mod tests {
@@ -480,7 +495,7 @@ mod tests {
     fn generated_artifact_generator_timeout_kills_process() {
         let root = unique_test_root("generator-timeout");
         fs::create_dir_all(&root).unwrap();
-        unsafe { std::env::set_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS", "1") };
+        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS", "1") };
 
         let timeout = run_generated_artifact_generator("sleep 5", &root, &root);
         assert!(timeout.is_err(), "expected timeout failure");
@@ -490,7 +505,7 @@ mod tests {
             "timeout message should include configured timeout: {timeout_msg}"
         );
 
-        unsafe { std::env::remove_var("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS") };
+        unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS") };
         let _ = fs::remove_dir_all(root);
     }
 
@@ -568,7 +583,7 @@ mod tests {
             .into_iter()
             .collect(),
         };
-        unsafe { std::env::set_var("HOME", &home) };
+        unsafe { core_state_utils::env_sync::set_env("HOME", &home) };
         let outcome =
             install_cursor_mcp_server(&roots, &cursor_home.join("mcp.json")).expect("install");
         assert!(
@@ -588,7 +603,7 @@ mod tests {
             "expected stable PATH or install-path command, got {command}"
         );
 
-        unsafe { std::env::remove_var("HOME") };
+        unsafe { core_state_utils::env_sync::remove_env("HOME") };
         let _ = fs::remove_dir_all(root);
     }
 
@@ -604,8 +619,8 @@ mod tests {
             &framework_root.join("core/router-rs/target/release/router-rs"),
             "#!/bin/sh\n",
         );
-        unsafe { std::env::set_var("HOME", &home) };
-        unsafe { std::env::remove_var("ROUTER_RS_BIN") };
+        unsafe { core_state_utils::env_sync::set_env("HOME", &home) };
+        unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_BIN") };
 
         let command = resolve_mcp_router_rs_command(&framework_root);
         assert_ne!(command, McpRouterRsCommand::CargoBootstrap);
@@ -614,7 +629,7 @@ mod tests {
             McpRouterRsCommand::CargoBootstrap => unreachable!(),
         }
 
-        unsafe { std::env::remove_var("HOME") };
+        unsafe { core_state_utils::env_sync::remove_env("HOME") };
         let _ = fs::remove_dir_all(root);
     }
 
@@ -627,8 +642,8 @@ mod tests {
         fs::create_dir_all(&custom_claude).unwrap();
         let prior_home = std::env::var_os("HOME");
         let prior_claude = std::env::var_os("CLAUDE_HOME");
-        unsafe { std::env::set_var("HOME", &os_home) };
-        unsafe { std::env::set_var("CLAUDE_HOME", &custom_claude) };
+        unsafe { core_state_utils::env_sync::set_env("HOME", &os_home) };
+        unsafe { core_state_utils::env_sync::set_env("CLAUDE_HOME", &custom_claude) };
 
         let roots = resolve_projection_roots(
             None,
@@ -652,14 +667,14 @@ mod tests {
         );
 
         if let Some(h) = prior_home {
-            unsafe { std::env::set_var("HOME", h) };
+            unsafe { core_state_utils::env_sync::set_env("HOME", &h) };
         } else {
-            unsafe { std::env::remove_var("HOME") };
+            unsafe { core_state_utils::env_sync::remove_env("HOME") };
         }
         if let Some(c) = prior_claude {
-            unsafe { std::env::set_var("CLAUDE_HOME", c) };
+            unsafe { core_state_utils::env_sync::set_env("CLAUDE_HOME", &c) };
         } else {
-            unsafe { std::env::remove_var("CLAUDE_HOME") };
+            unsafe { core_state_utils::env_sync::remove_env("CLAUDE_HOME") };
         }
         let _ = fs::remove_dir_all(root);
     }

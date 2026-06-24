@@ -26,6 +26,7 @@ pub use framework_kernel::repo_roots;
 pub use fr_exec::runtime_view;
 pub use fr_exec::sandbox_control;
 pub mod stdio_dispatch;
+pub mod tool_handlers;
 pub use fr_utils::stdio_op_registry;
 pub use fr_exec::trace_attach;
 pub use fr_exec::trace_stream_io;

@@ -925,7 +925,7 @@ mod tests {
         let _lock = crate::test_env_sync::process_env_lock();
         let key = "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
         let prev = std::env::var_os(key);
-        unsafe { std::env::set_var(key, "1") };
+        unsafe { core_state_utils::env_sync::set_env(key, "1") };
         // Delegation arm triggers inject
         assert!(should_inject_subagent_model_inherit_nudge(
             "implement the feature",
@@ -949,8 +949,8 @@ mod tests {
             true
         ));
         match prev {
-            Some(v) => unsafe { std::env::set_var(key, v) },
-            None => unsafe { std::env::remove_var(key) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env(key, &v) },
+            None => unsafe { core_state_utils::env_sync::remove_env(key) },
         }
     }
 
@@ -985,14 +985,13 @@ mod tests {
 
     #[test]
     fn is_interactive_profile_returns_false_without_root() {
-        assert!(!is_interactive_profile(None, "/implementx 继续"));
-        assert!(!is_interactive_profile(None, "/discussx 讨论架构"));
-        assert!(!is_interactive_profile(None, "/planx"));
-        assert!(!is_interactive_profile(None, "/verifyx"));
+        assert!(!is_interactive_profile(None, "run the task"));
+        assert!(!is_interactive_profile(None, "fix the bug"));
+        assert!(!is_interactive_profile(None, "analyze architecture"));
     }
 
     #[test]
-    fn is_interactive_profile_returns_false_for_non_lifecycle_prompt_without_root() {
+    fn is_interactive_profile_returns_false_for_arbitrary_prompt_without_root() {
         assert!(!is_interactive_profile(None, "深度review整个路由系统"));
         assert!(!is_interactive_profile(None, "fix the bug"));
         assert!(!is_interactive_profile(None, ""));
@@ -1003,13 +1002,13 @@ mod tests {
         let _lock = crate::test_env_sync::process_env_lock();
         // Override to false
         set_test_interactive_override(Some(false));
-        assert!(!is_interactive_profile(None, "/implementx"));
-        // Override to true even for non-lifecycle prompt
+        assert!(!is_interactive_profile(None, "run the task"));
+        // Override to true even for non-interactive prompt
         set_test_interactive_override(Some(true));
         assert!(is_interactive_profile(None, "random text"));
         // Clear override, returns false
         set_test_interactive_override(None);
-        assert!(!is_interactive_profile(None, "/implementx"));
+        assert!(!is_interactive_profile(None, "run the task"));
     }
 
     #[test]
@@ -1017,7 +1016,7 @@ mod tests {
         let _lock = crate::test_env_sync::process_env_lock();
         set_test_interactive_override(Some(false));
         assert!(!review_gate_hard_block_disabled(None, "fix the bug"));
-        assert!(!review_gate_hard_block_disabled(None, "/implementx"));
+        assert!(!review_gate_hard_block_disabled(None, "run the task"));
         set_test_interactive_override(None);
     }
 
@@ -1031,7 +1030,7 @@ mod tests {
         let _lock = crate::test_env_sync::process_env_lock();
         set_test_interactive_override(Some(true));
         // Advisory-only: interactive active → hard block disabled
-        assert!(review_gate_hard_block_disabled(None, "/implementx"));
+        assert!(review_gate_hard_block_disabled(None, "run the task"));
         assert!(review_gate_hard_block_disabled(None, "random text"));
         set_test_interactive_override(None);
     }

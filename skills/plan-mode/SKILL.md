@@ -36,7 +36,7 @@ metadata:
 
 # plan-mode
 
-把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在宿主工作区（如 `.cursor/plans/`）；My `/planx` 执行真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。`docs/plans/` 已清理，勿恢复。
+把「写计划」当成**证据先行、可验收、可对照收口**的产物，而不是一次性 prose。默认不要把小任务拖进审计级流程；只有跨模块、高风险、用户明确要求或宿主 gate 需要时，才升级到完整 audit plan。计划草稿落在宿主工作区（如 `.cursor/plans/`）；Task 状态机驱动下计划真源在 **`artifacts/current/<task_id>/ROADMAP.md`**。`docs/plans/` 已清理，勿恢复。
 
 ## When to use
 

@@ -16,17 +16,62 @@
 
 ## Lifecycle
 
-- **Lifecycle**：无固定阶段 lifecycle。详见 `docs/adr/010-ideal-architecture-v10.md`（L0–L7 八层分层模型与生命周期定位）。
+- **无固定阶段 lifecycle**。Task 是运行时底层执行引擎（§Task Engine），Goal/Loop 是 Task 上的策略与可选自动化层。
+- **Lifecycle Profile**：每个 task 通过 `lifecycle_profile` 控制行为（`interactive` 默认 / `loop-auto`），详见 §Task Engine。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
 - **Closeout**：`closeout_gate` / `complete` 为 advisory（`interactive`）。
 
-## Continuity artifacts（手动画板 only）
+## Task Engine（底层执行引擎）
+
+Task 是框架的**底层执行引擎**，不是可选组件。用户层表现为：定义 todo → 执行 todo → 完成 todo，以及与各种状态的关联。
+
+### 核心机制
+
+| 组件 | 路径 | 职责 |
+|------|------|------|
+| Active/Focus 指针 | `artifacts/current/active_task.json` / `focus_task.json` | 决定当前执行哪个 task |
+| Task 状态机 | `TaskControlMode`（Idle → GoalDrive → QualityGate → Conflict） | 驱动每个 task 的执行流转 |
+| Goal 状态 | `GOAL_STATE.json` | task 的执行策略（goal、non-goals、done_when、validation_commands） |
+| 事务日志 | `TASK_LEDGER.jsonl` | 幂等写入、回放、跨会话连续性 |
+| 聚合投影 | `TASK_STATE.json` | goal + rfv + evidence 单一视图（人类/工具快速读取） |
+| Evidence | `EVIDENCE_INDEX.json` | 验证证据记录 |
+| Step Ledger | `STEP_LEDGER.jsonl` | 步骤级追踪 |
+
+### TaskControlMode 状态机
+
+```
+Idle（无活跃 goal/rfv）
+  ↓ goal_state_manage start
+GoalDrive（goal drive_until_done=true）
+  ↓ quality_gate_manage start
+QualityGate（rfv loop_status=active）
+  ↓ 两者同时激活
+Conflict（不一致，需人工介入）
+```
+
+### Lifecycle Profile
+
+每个 task 的 `GOAL_STATE.json` 中的 `lifecycle_profile` 字段控制行为模式：
+- **`interactive`**（默认）：用户主导执行，loop engine 不可调度，closeout 为 advisory
+- **`loop-auto`**：允许 loop engine 自动调度（discovery → dispatch → verify 闭环）
+
+### Loop Engine — 可选自动化增强层
+
+Loop engine（L6 Orchestration）运行在 Task 之上，仅对 `loop-auto` profile 的 task 生效：
+- `interactive` task：loop engine 拒绝调度（`preflight_profile_check` 直接报错）
+- `loop-auto` task：自动 discovery → preflight → dispatch → verify → closeout 闭环
+- Loop engine 不改变 task 作为基础执行单元的地位；task 独立于 loop 运行
+
+### 会话级作用域
+
+- Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。
+- **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `quality_gate_manage`的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。
+- **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`closeout_gate` / `goal_state_read` / `quality_gate_status`的 `task_id` 仍为可选（默认 active task）。
+
+### 真源路径
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
 - Goal 磁盘：`GOAL_STATE.json` / `QUALITY_GATE_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_quality_gate`。
-- **会话级作用域**：Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。
-  - **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `quality_gate_manage`的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。
-  - **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`closeout_gate` / `goal_state_read` / `quality_gate_status`的 `task_id` 仍为可选（默认 active task）。
 - 历史 env 名见 [`MIGRATION.md`](MIGRATION.md) 迁移记录。
 
 ## Task Intake

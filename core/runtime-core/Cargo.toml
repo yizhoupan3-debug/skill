@@ -13,6 +13,7 @@ path = "src/lib.rs"
 
 [dependencies]
 core-state = { path = "../core-state" }
+core-state-utils = { path = "../core-state-utils" }
 core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 framework-extra = { path = "../framework-extra" }
 framework-kernel = { path = "../framework-kernel" }
@@ -47,6 +48,7 @@ which.workspace = true
 ctor = "0.2"
 codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
 loop-engine = { path = "../loop-engine" }
+mcp-tool-registry = { path = "../mcp-tool-registry" }
 
 [build-dependencies]
 serde_json.workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "mcp-tool-registry"
+version = "0.1.0"
+edition = "2024"
+description = "Unified MCP tool registry: discovery, routing, and search for all framework tools."
+[lints]
+workspace = true
+
+[dependencies]
+core-state-utils = { path = "../core-state-utils" }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+tempfile.workspace = true

@@ -355,6 +355,7 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 name = "core-policy"
 version = "0.1.0"
 dependencies = [
+ "core-state-utils",
  "framework-kernel",
  "insta",
  "mockall",
@@ -975,11 +976,13 @@ dependencies = [
  "codegraph-rs",
  "core-policy",
  "core-state",
+ "core-state-utils",
  "framework-kernel",
  "fs2",
  "http-util",
  "insta",
  "libc",
+ "mcp-tool-registry",
  "regex",
  "reqwest",
  "serde",
@@ -1035,6 +1038,9 @@ dependencies = [
 [[package]]
 name = "http-util"
 version = "0.1.0"
+dependencies = [
+ "core-state-utils",
+]
 
 [[package]]
 name = "httparse"
@@ -1433,6 +1439,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "core-state",
+ "core-state-utils",
  "fr-contracts",
  "framework-kernel",
  "serde",
@@ -1456,6 +1463,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d1525a2a28c7f4fa0fc98bb91ae755d1e2d1505079e05539e35bc876b5d65ae9"
 dependencies = [
  "regex-automata",
+]
+
+[[package]]
+name = "mcp-tool-registry"
+version = "0.1.0"
+dependencies = [
+ "core-state-utils",
+ "insta",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -2017,12 +2036,12 @@ dependencies = [
  "clap",
  "core-policy",
  "core-state",
+ "core-state-utils",
  "fancy-regex",
  "fr-utils",
  "framework-kernel",
  "host-projection",
  "html-escape",
- "loop-engine",
  "ratex-font",
  "ratex-lexer",
  "regex",
@@ -2037,7 +2056,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "unicode-normalization",
- "uuid",
 ]
 
 [[package]]
@@ -2064,6 +2082,7 @@ dependencies = [
  "codegraph-rs",
  "core-policy",
  "core-state",
+ "core-state-utils",
  "criterion",
  "ctor",
  "framework-extra",
@@ -2085,6 +2104,7 @@ dependencies = [
  "serde_json",
  "serial_test",
  "sha2",
+ "skill-layer",
  "tempfile",
  "tracing",
  "tracing-subscriber",
@@ -2117,6 +2137,7 @@ dependencies = [
  "codegraph-rs",
  "core-policy",
  "core-state",
+ "core-state-utils",
  "ctor",
  "fr-contracts",
  "fr-exec",
@@ -2131,6 +2152,7 @@ dependencies = [
  "insta",
  "libc",
  "loop-engine",
+ "mcp-tool-registry",
  "rayon",
  "regex",
  "reqwest",
@@ -2174,6 +2196,7 @@ dependencies = [
  "chrono",
  "core-policy",
  "core-state",
+ "core-state-utils",
  "fr-contracts",
  "fr-exec",
  "framework-kernel",
@@ -2192,6 +2215,7 @@ version = "0.1.0"
 dependencies = [
  "core-policy",
  "core-state",
+ "core-state-utils",
  "fr-exec",
  "fr-utils",
  "framework-kernel",
@@ -2431,6 +2455,7 @@ dependencies = [
  "chrono",
  "core-policy",
  "core-state",
+ "core-state-utils",
  "framework-kernel",
  "libc",
  "regex",
@@ -2489,6 +2514,19 @@ name = "siphasher"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ee5873ec9cce0195efcb7a4e9507a04cd49aec9c83d0389df45b1ef7ba2e649"
+
+[[package]]
+name = "skill-layer"
+version = "0.1.0"
+dependencies = [
+ "core-state",
+ "insta",
+ "serde",
+ "serde_json",
+ "serde_yml",
+ "tempfile",
+ "tracing",
+]
 
 [[package]]
 name = "skill-rust-test-harness"
@@ -3032,16 +3070,6 @@ name = "utf8parse"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
-
-[[package]]
-name = "uuid"
-version = "1.23.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "144d6b123cef80b301b8f72a9e2ca4370ddec21950d0a103dd22c437006d2db7"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
-]
 
 [[package]]
 name = "valuable"

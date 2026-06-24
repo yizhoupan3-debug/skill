@@ -13,7 +13,7 @@
 - 仅当用户**当轮明确要求英文**时可切换。
 - **子代理 / Task**：spawn 时在 prompt **首行**写「面向用户的可见输出使用简体中文」。
 
-**Lifecycle：无固定阶段**。Goal/RFV via stdio + manual boards; `router-rs claude hook` does not inject GOAL_CONTINUE/RFV/digest. REVIEW_GATE Stop advisory-only (Claude canonical clearance); `interactive` suppresses review nudge and spawn-first.
+**Lifecycle：无固定阶段**。Task 是底层执行引擎（见 `AGENTS.md` §Task Engine）；Goal/RFV via stdio + manual boards; `router-rs claude hook` does not inject GOAL_CONTINUE/RFV/digest. REVIEW_GATE Stop advisory-only (Claude canonical clearance); `interactive` suppresses review nudge and spawn-first.
 
 ## Hook 集成（非 MCP）
 

@@ -4,7 +4,6 @@ use framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload;
 use host_projection::hooks::{
     attach_runtime_event_transport, inspect_trace_stream,
 };
-use chrono::{Local, SecondsFormat};
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, VecDeque};

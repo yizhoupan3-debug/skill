@@ -1,14 +1,12 @@
 use crate::utils::path_guard::validate_task_id_component;
-use crate::utils::task_write_lock::TASK_LEDGER_LOCK_BASENAME;
-use crate::utils::task_write_lock::router_rs_task_ledger_flock_enabled;
-use fs2::FileExt;
+use crate::utils::task_write_lock::acquire_task_ledger_repo_lock;
+use crate::utils::task_write_lock::TaskLedgerRepoLockGuard;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub const TASK_LEDGER_FILENAME: &str = "TASK_LEDGER.jsonl";
 
@@ -25,10 +23,6 @@ pub struct LedgerTransaction {
     pub schema_version: Option<i64>,
 }
 
-pub struct TaskLedgerLockGuard {
-    _file: Option<File>,
-}
-
 pub fn task_ledger_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
     let tid = validate_task_id_component(task_id)?;
     Ok(repo_root
@@ -36,57 +30,6 @@ pub fn task_ledger_path(repo_root: &Path, task_id: &str) -> Result<PathBuf, Stri
         .join("current")
         .join(tid)
         .join(TASK_LEDGER_FILENAME))
-}
-
-pub fn acquire_task_ledger_lock_with_timeout(
-    repo_root: &Path,
-    timeout: Duration,
-) -> Result<TaskLedgerLockGuard, String> {
-    if !router_rs_task_ledger_flock_enabled() {
-        return Ok(TaskLedgerLockGuard { _file: None });
-    }
-    let current = repo_root.join("artifacts").join("current");
-    let lock_path = current.join(TASK_LEDGER_LOCK_BASENAME);
-    let file = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(&lock_path)
-        .map_err(|err| {
-            format!(
-                "task ledger lock: open {} failed: {err}",
-                lock_path.display()
-            )
-        })?;
-
-    let mut delay = Duration::from_millis(10);
-    let max_delay = Duration::from_millis(200);
-    let start = Instant::now();
-
-    loop {
-        match file.try_lock_exclusive() {
-            Ok(_) => break,
-            Err(err) => {
-                if err.kind() != std::io::ErrorKind::WouldBlock {
-                    return Err(format!(
-                        "task ledger lock: flock {} failed: {err}",
-                        lock_path.display()
-                    ));
-                }
-                if start.elapsed() > timeout {
-                    return Err(format!(
-                        "task ledger lock: flock {} timeout after {:?}",
-                        lock_path.display(),
-                        timeout
-                    ));
-                }
-                thread::sleep(delay);
-                delay = std::cmp::min(delay * 2, max_delay);
-            }
-        }
-    }
-    Ok(TaskLedgerLockGuard { _file: Some(file) })
 }
 
 /// Append one ledger row while the caller already holds L1 (`apply_task_ledger_mutation`).
@@ -107,71 +50,82 @@ pub fn append_transaction_assuming_l1_held(
             .map_err(|err| format!("failed to create dir {}: {err}", parent.display()))?;
     }
 
-    if path.is_file() {
-        // Repair any trailing corrupt lines before reading.
-        if let Err(e) = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path) {
-            tracing::warn!(error = %e, "truncate_corrupt_tail failed for TASK_LEDGER");
-        }
+    // Read-first pattern: avoids TOCTOU between is_file() and open().
+    // When the file exists, content is already in hand; when NotFound, create fresh.
+    match fs::read_to_string(&path) {
+        Ok(mut content) => {
+            // Repair any trailing corrupt lines before using content for idempotency
+            // and before counting lines for seq.
+            let truncated = crate::utils::jsonl_maintenance::truncate_corrupt_tail(&path)
+                .unwrap_or(false);
 
-        let content = fs::read_to_string(&path)
-            .map_err(|err| format!("failed to read task ledger: {err}"))?;
-
-        // --- idempotency: reverse-scan lines, skip full parse when possible ---
-        if let Some(ref new_key) = tx.idempotency_key {
-            for line in content.lines().rev() {
-                let line = line.trim();
-                if line.is_empty() {
-                    continue;
-                }
-                // Cheap substring pre-filter: only pay for full deserialisation
-                // when the raw JSON line actually contains the key string.
-                if !line.contains(new_key.as_str()) {
-                    continue;
-                }
-                if let Ok(existing_tx) = serde_json::from_str::<LedgerTransaction>(line)
-                    && existing_tx.idempotency_key.as_deref() == Some(new_key.as_str()) {
-                        return Ok(());
-                    }
+            // When truncation occurred, re-read to get accurate content for both
+            // idempotency check and line counting. This avoids a seq gap where
+            // seq would be computed from pre-truncation line count.
+            if truncated {
+                content = fs::read_to_string(&path)
+                    .map_err(|err| format!("re-read task ledger after truncate: {err}"))?;
             }
+
+            // --- idempotency: reverse-scan lines, skip full parse when possible ---
+            if let Some(ref new_key) = tx.idempotency_key {
+                for line in content.lines().rev() {
+                    let line = line.trim();
+                    if line.is_empty() {
+                        continue;
+                    }
+                    // Cheap substring pre-filter: only pay for full deserialisation
+                    // when the raw JSON line actually contains the key string.
+                    if !line.contains(new_key.as_str()) {
+                        continue;
+                    }
+                    if let Ok(existing_tx) = serde_json::from_str::<LedgerTransaction>(line)
+                        && existing_tx.idempotency_key.as_deref() == Some(new_key.as_str()) {
+                            return Ok(());
+                        }
+                }
+            }
+
+            // --- seq: count non-empty lines (no deserialisation needed) ---
+            let line_count = content.lines().filter(|l| !l.trim().is_empty()).count() as u64;
+
+            let mut final_tx = tx;
+            final_tx.seq = Some(line_count);
+
+            let serialized = serde_json::to_string(&final_tx)
+                .map_err(|err| format!("failed to serialize transaction: {err}"))?;
+
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .map_err(|err| format!("failed to open task ledger: {err}"))?;
+
+            writeln!(file, "{}", serialized)
+                .map_err(|err| format!("failed to write transaction: {err}"))?;
+            file.sync_all()
+                .map_err(|e| format!("fsync task_ledger failed: {e}"))?;
         }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // File does not exist yet — first entry, seq = 0.
+            let mut final_tx = tx;
+            final_tx.seq = Some(0);
 
-        // --- seq: count non-empty lines (no deserialisation needed) ---
-        let line_count = content.lines().filter(|l| !l.trim().is_empty()).count() as u64;
+            let serialized = serde_json::to_string(&final_tx)
+                .map_err(|err| format!("failed to serialize transaction: {err}"))?;
 
-        let mut final_tx = tx;
-        final_tx.seq = Some(line_count);
+            let mut file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .map_err(|err| format!("failed to open task ledger: {err}"))?;
 
-        let serialized = serde_json::to_string(&final_tx)
-            .map_err(|err| format!("failed to serialize transaction: {err}"))?;
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .map_err(|err| format!("failed to open task ledger: {err}"))?;
-
-        writeln!(file, "{}", serialized)
-            .map_err(|err| format!("failed to write transaction: {err}"))?;
-        file.sync_all()
-            .map_err(|e| format!("fsync task_ledger failed: {e}"))?;
-    } else {
-        // File does not exist yet — first entry, seq = 0.
-        let mut final_tx = tx;
-        final_tx.seq = Some(0);
-
-        let serialized = serde_json::to_string(&final_tx)
-            .map_err(|err| format!("failed to serialize transaction: {err}"))?;
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .map_err(|err| format!("failed to open task ledger: {err}"))?;
-
-        writeln!(file, "{}", serialized)
-            .map_err(|err| format!("failed to write transaction: {err}"))?;
-        file.sync_all()
-            .map_err(|e| format!("fsync task_ledger failed: {e}"))?;
+            writeln!(file, "{}", serialized)
+                .map_err(|err| format!("failed to write transaction: {err}"))?;
+            file.sync_all()
+                .map_err(|e| format!("fsync task_ledger failed: {e}"))?;
+        }
+        Err(e) => return Err(format!("failed to read task ledger: {e}")),
     }
 
     // Auto-compact when the file grows past 100 lines.
@@ -187,7 +141,7 @@ pub fn append_transaction(
     task_id: &str,
     tx: LedgerTransaction,
 ) -> Result<(), String> {
-    let _guard = acquire_task_ledger_lock_with_timeout(repo_root, Duration::from_millis(500))?;
+    let _guard: TaskLedgerRepoLockGuard = acquire_task_ledger_repo_lock(repo_root, Duration::from_millis(500))?;
     append_transaction_assuming_l1_held(repo_root, task_id, tx)
 }
 
@@ -208,7 +162,7 @@ mod tests {
     #[test]
     fn append_transaction_rejects_unsafe_task_id() {
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
-        unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") };
+        unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") };
         let tmp = unique_tmp("unsafe-id");
         fs::create_dir_all(tmp.join("artifacts/current")).expect("mkdir");
         let tx = LedgerTransaction {
@@ -227,8 +181,8 @@ mod tests {
             );
         }
         match prev {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") },
+            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p) },
+            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }

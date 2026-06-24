@@ -331,8 +331,9 @@ fn tokenize(text: &str, language: Language) -> Vec<String> {
 }
 
 /// Check if a character is in the CJK Unified Ideographs range.
+/// Uses the shared implementation from core-state-utils (covers Extension A-G + Hangul + Kana).
 fn is_cjk(ch: char) -> bool {
-    matches!(ch, '\u{4E00}'..='\u{9FFF}' | '\u{3400}'..='\u{4DBF}' | '\u{F900}'..='\u{FAFF}')
+    core_state_utils::text_utils::is_cjk(ch)
 }
 
 /// Split text into sentences.

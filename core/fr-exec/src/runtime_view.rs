@@ -222,7 +222,7 @@ pub fn load_framework_runtime_view(
         known_task_ids,
         recoverable_task_ids,
         registered_tasks,
-        collected_at: current_local_timestamp(),
+        collected_at: framework_kernel::time::current_local_timestamp(),
     }
 }
 
@@ -640,10 +640,6 @@ fn stale_continuity_reasons(
     ])
 }
 
-fn current_local_timestamp() -> String {
-    fr_utils::util::current_local_timestamp()
-}
-
 fn parse_session_summary(text: &str) -> Map<String, Value> {
     fr_utils::util::parse_session_summary(text)
 }
@@ -960,9 +956,16 @@ fn looks_same_identity(left: &str, right: &str) -> bool {
     let left_token = safe_slug(&left.to_ascii_lowercase());
     let right_token = safe_slug(&right.to_ascii_lowercase());
     if left_token.is_empty() || right_token.is_empty() {
+        return false;
+    }
+    if left_token == right_token {
         return true;
     }
-    left_token == right_token
-        || left_token.contains(&right_token)
-        || right_token.contains(&left_token)
+    // Jaccard similarity on '-'-delimited tokens: avoids false positives from
+    // substring containment (e.g. "fix-bug" matching "fix-bug-in-auth").
+    let left_tokens: std::collections::HashSet<&str> = left_token.split('-').collect();
+    let right_tokens: std::collections::HashSet<&str> = right_token.split('-').collect();
+    let intersection = left_tokens.intersection(&right_tokens).count();
+    let union = left_tokens.len() + right_tokens.len() - intersection;
+    union > 0 && intersection * 2 > union
 }

@@ -6,14 +6,14 @@ use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 
 use fr_utils::constants::{
-    FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY, TERMINAL_VERIFICATION_STATUSES,
+    FRAMEWORK_ALIAS_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
 };
 use fr_utils::types::FrameworkAliasBuildOptions;
 use fr_exec::runtime_view::{
     classify_runtime_continuity, load_framework_runtime_view, workspace_name_from_root,
 };
 use fr_utils::json_value::{stable_line_items, value_string_list, value_text};
-use crate::util::{is_terminal, supervisor_contract};
+use crate::util::supervisor_contract;
 
 fn string_or_null(value: String) -> Value {
     if value.trim().is_empty() {
@@ -333,11 +333,6 @@ fn build_framework_alias_entry_contract(
             .unwrap_or(Value::Null)
     };
     let verification_status = value_text(continuity.get("verification_status"));
-    let evidence_missing = continuity
-        .get("evidence_missing")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    let missing_recovery_anchors = value_string_list(continuity.get("missing_recovery_anchors"));
     let execution_readiness = "use-alias-default";
     let mut route_rules = Vec::new();
     let summary = match alias_name {
@@ -407,7 +402,7 @@ fn build_framework_alias_state_machine(
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let verification_status = value_text(continuity.get("verification_status"));
-    let missing_recovery_anchors = value_string_list(continuity.get("missing_recovery_anchors"));
+    let _missing_recovery_anchors = value_string_list(continuity.get("missing_recovery_anchors"));
     let next_steps = compact_alias_next_actions(continuity, max_lines);
     let recovery_hints = value_string_list(continuity.get("recovery_hints"))
         .into_iter()

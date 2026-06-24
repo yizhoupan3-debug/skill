@@ -644,7 +644,7 @@ impl BrowserRuntime {
             &session_path,
             serde_json::to_string_pretty(&json!({
                 "schemaVersion": "browser-mcp-rust-session-v1",
-                "savedAt": current_local_timestamp(),
+                "savedAt": framework_kernel::time::current_local_timestamp(),
                 "cookies": cookies.get("cookies").cloned().unwrap_or_else(|| json!([])),
             }))
             .unwrap_or_else(|_| "{}".to_string()),
@@ -658,7 +658,7 @@ impl BrowserRuntime {
             )
         })?;
         Ok(
-            json!({"ok": true, "path": session_path.to_string_lossy(), "savedAt": current_local_timestamp()}),
+            json!({"ok": true, "path": session_path.to_string_lossy(), "savedAt": framework_kernel::time::current_local_timestamp()}),
         )
     }
 
@@ -884,7 +884,7 @@ impl BrowserRuntime {
             session_id.clone(),
             SessionRecord {
                 id: session_id.clone(),
-                created_at: current_local_timestamp(),
+                created_at: framework_kernel::time::current_local_timestamp(),
                 viewport: ViewportSize {
                     width: 1440,
                     height: 900,

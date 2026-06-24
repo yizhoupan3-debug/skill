@@ -97,18 +97,10 @@ just doctor
 
 ## 默认工作流（全宿主）
 
-- **个人默认生命周期（2026-05-21）**：`/discussx` → `/planx` → `/implementx` → `/verifyx`（verify 含 ship）。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；全宿主 Stop 上 `REVIEW_GATE` 为 advisory-only（见 [架构规约](docs/adr/010-ideal-architecture-v10.md) §6.2）；`lifecycle_profile: interactive` 另 suppress review nudge 与 spawn-first。
+- **四生命周期已彻底退场（2026-06-24）**：`/discussx` → `/planx` → `/implementx` → `/verifyx` 已从行为层完全移除（路由表、测试断言、Skill 文件均不存在）。当前无固定阶段 lifecycle，Task 状态机（core-state）为行为层默认执行引擎。热路由见 `skills/SKILL_ROUTING_RUNTIME.json`；全宿主 Stop 上 `REVIEW_GATE` 为 advisory-only（见 [架构规约](docs/adr/010-ideal-architecture-v10.md) §6.2）；`lifecycle_profile: interactive` 另 suppress review nudge 与 spawn-first。
 - **改 routing 后必做**（否则新对话仍见旧斜杠）：`just publish`（已刷新 Cursor user `framework.mdc` 与 Claude user/project `.claude/*`）；**重启 Cursor**。GSD 整树与 `/gsd-*` runtime 识别已于 **2026-05 彻底移除**。
-- **legacy-gsd / `/gsd-*`**：**已删除**（非冷表、非 CI stub）；hook 与 registry **不再识别**。个人入口仅 My 四命令（下表）。
-- `/autopilot` 已退役；连续执行请用 `/implementx`（一口气跑完 `WAVE_STATE` 全部 wave；goal drive 经 `GOAL_STATE.json`）。
-
-| 退役（个人） | 替代 |
-|--------------|------|
-| `/gsd-new-project` + `/gsd-discuss-phase` | `/discussx` |
-| `/gsd-plan-phase` | `/planx` |
-| `/gsd-execute-phase` | `/implementx` |
-| `/gsd-verify-work` + `/gsd-ship` | `/verifyx` |
-| `/discuss-phase`、`/plan-phase`、`/execute-phase`、`/verify-work`、`/ship`、`/new-project`（无前缀 GSD 残留） | 已归档，**无**个人斜杠；用上表四命令 |
+- **legacy-gsd / `/gsd-*`**：**已删除**（非冷表、非 CI stub）；hook 与 registry **不再识别**。
+- `/autopilot`、`/discussx`、`/planx`、`/implementx`、`/verifyx` 均已退役（2026-06）。连续执行经 `GOAL_STATE.json` + Task 状态机驱动。
 
 ## Cursor：framework 规则仅用户级
 
@@ -122,9 +114,11 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- \
   --artifact-root "$PWD/artifacts" --scope user --to cursor
 ```
 
-## Claude：与 Cursor 对齐 My 生命周期（2026-05-29）
+## Claude：与 Cursor 对齐（2026-06-24 已过时）
 
-- **症状**：`~/.claude/rules/framework.md` 仍写 `/gsd-*` 或 `GOAL_CONTINUE` → 与 Cursor `framework.mdc` 的 `/discussx`→`/verifyx` 不一致；路由仍走仓库 `skills/SKILL_ROUTING_RUNTIME.json`，但**入口叙事过时**。
+> **注意**：以下旧条目保留供历史参考。四生命周期已于 2026-06-24 彻底退场。
+
+- **历史**：`~/.claude/rules/framework.md` 曾写 `/gsd-*` 或 `GOAL_CONTINUE` → 与 Cursor `framework.mdc` 的 `/discussx`→`/verifyx` 不一致；路由仍走仓库 `skills/SKILL_ROUTING_RUNTIME.json`，但**入口叙事过时**。
 - **真源**：`configs/framework/host_projection_narrative.json` + `install --to claude`。
 - **推荐一键**（framework 仓或业务仓）：
 
@@ -254,6 +248,6 @@ Claude 宿主**本就**仅 4 个 hook 事件（`PreToolUse` / `UserPromptSubmit`
 | `docs/plans/` | GSD：`artifacts/current/<task_id>/ROADMAP.md`；Cursor Plan：活跃任务 `.cursor/plans/*.plan.md` |
 | `docs/history/**` | git 历史；[`MIGRATION.md`](MIGRATION.md) |
 | `configs/codex/docs/**` | [`docs/README.md`](docs/README.md)、宿主手册 [`docs/hosts/`](docs/hosts/) |
-| `skills/autopilot/`、`skills/_archived/autopilot/`、`skills/legacy-gsd-ci-stub/`（**仅迁移对照**；磁盘路径已删） | `/implementx` + My 四命令 |
+| `skills/autopilot/`、`skills/_archived/autopilot/`、`skills/legacy-gsd-ci-stub/`（**仅迁移对照**；磁盘路径已删） | Task 状态机驱动（四生命周期均已退役） |
 
 勿在 issue/评论中链接已删路径；契约以 [`docs/README.md`](docs/README.md) 索引为准。

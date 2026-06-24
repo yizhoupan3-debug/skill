@@ -309,7 +309,7 @@ fn runtime_view_active_task_id_matches_resolve_task_view() {
 fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
     let _env = crate::test_env_sync::process_env_lock();
     let prev = std::env::var_os("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE");
-    unsafe { std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1") };
+    unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1") };
 
     let repo_root = temp_dir_path("post-tool-evidence-append");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -356,8 +356,8 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         .contains("cargo test"));
 
     match prev {
-        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", v) },
-        None => unsafe { std::env::remove_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE") },
+        Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", &v) },
+        None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE") },
     }
     let _ = fs::remove_dir_all(&repo_root);
 }
@@ -367,7 +367,7 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
 fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
     let _env = crate::test_env_sync::process_env_lock();
     let prev = std::env::var_os("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE");
-    unsafe { std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1") };
+    unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", "1") };
 
     let repo_root = temp_dir_path("cursor-post-tool-evidence-append");
     let output_dir = repo_root.join("artifacts").join("current");
@@ -414,8 +414,8 @@ fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         .contains("cargo test"));
 
     match prev {
-        Some(v) => unsafe { std::env::set_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", v) },
-        None => unsafe { std::env::remove_var("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE") },
+        Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE", &v) },
+        None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE") },
     }
     let _ = fs::remove_dir_all(&repo_root);
 }

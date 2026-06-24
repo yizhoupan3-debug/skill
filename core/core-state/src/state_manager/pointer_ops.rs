@@ -167,6 +167,45 @@ fn load_task_pointers_json(repo_root: &Path) -> Result<Value, String> {
     })
 }
 
+/// Upsert a single entry in the TASK_POINTERS.json `tasks` array.
+/// Updates existing entry by `task_id` match, or pushes a new entry.
+fn upsert_tasks_array_entry(
+    obj: &mut serde_json::Map<String, Value>,
+    task_id: &str,
+    task_label: &str,
+    updated_at: &str,
+) {
+    if let Some(tasks) = obj.get_mut("tasks").and_then(|v| v.as_array_mut()) {
+        let mut found = false;
+        for entry in tasks.iter_mut() {
+            if entry.get("task_id").and_then(Value::as_str) == Some(task_id) {
+                if let Some(e) = entry.as_object_mut() {
+                    e.insert("task".to_string(), json!(task_label));
+                    e.insert("updated_at".to_string(), json!(updated_at));
+                }
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            tasks.push(json!({
+                "task_id": task_id,
+                "task": task_label,
+                "updated_at": updated_at,
+            }));
+        }
+    } else {
+        obj.insert(
+            "tasks".to_string(),
+            json!([{
+                "task_id": task_id,
+                "task": task_label,
+                "updated_at": updated_at,
+            }]),
+        );
+    }
+}
+
 /// Write `artifacts/current/active_task.json` (`{"task_id":…}` only).
 pub fn write_active_task_pointer(repo_root: &Path, task_id: &str) -> Result<(), String> {
     crate::utils::path_guard::validate_task_id_component(task_id)?;
@@ -192,35 +231,30 @@ fn write_focus_task_pointer_minimal(
     if let Some(obj) = pointers.as_object_mut() {
         obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
         obj.insert("focus_task_id".to_string(), json!(task_id));
-        if let Some(tasks) = obj.get_mut("tasks").and_then(|v| v.as_array_mut()) {
-            let mut found = false;
-            for entry in tasks.iter_mut() {
-                if entry.get("task_id").and_then(Value::as_str) == Some(task_id) {
-                    if let Some(e) = entry.as_object_mut() {
-                        e.insert("task".to_string(), json!(task_label));
-                        e.insert("updated_at".to_string(), json!(updated_at));
-                    }
-                    found = true;
-                    break;
-                }
-            }
-            if !found {
-                tasks.push(json!({
-                    "task_id": task_id,
-                    "task": task_label,
-                    "updated_at": updated_at,
-                }));
-            }
-        } else {
-            obj.insert(
-                "tasks".to_string(),
-                json!([{
-                    "task_id": task_id,
-                    "task": task_label,
-                    "updated_at": updated_at,
-                }]),
-            );
-        }
+        upsert_tasks_array_entry(obj, task_id, task_label, &updated_at);
+    }
+    write_atomic_json(
+        &repo_root.join("artifacts/current/TASK_POINTERS.json"),
+        &pointers,
+    )
+}
+
+/// Atomically write both `active_task_id` and `focus_task_id` in one operation,
+/// including the `tasks` array label update. Prefer this over two independent
+/// `write_active_task_pointer` + `write_focus_task_pointer_minimal` calls.
+pub fn set_task_focus(
+    repo_root: &Path,
+    task_id: &str,
+    task_label: &str,
+) -> Result<(), String> {
+    crate::utils::path_guard::validate_task_id_component(task_id)?;
+    let mut pointers = load_task_pointers_json(repo_root)?;
+    let updated_at = framework_kernel::time::now_iso();
+    if let Some(obj) = pointers.as_object_mut() {
+        obj.insert("schema_version".to_string(), json!("task-pointers-v1"));
+        obj.insert("active_task_id".to_string(), json!(task_id));
+        obj.insert("focus_task_id".to_string(), json!(task_id));
+        upsert_tasks_array_entry(obj, task_id, task_label, &updated_at);
     }
     write_atomic_json(
         &repo_root.join("artifacts/current/TASK_POINTERS.json"),
@@ -267,6 +301,17 @@ pub fn neutralize_task_pointers_for_task(repo_root: &Path, task_id: &str) -> Res
             if obj.get("focus_task_id").and_then(Value::as_str) == Some(task_id) {
                 obj.remove("focus_task_id");
                 changed = true;
+            }
+            // Also remove from `tasks` array to prevent fallback reads
+            // (read_task_pointer_pair falls back to tasks[0].task_id)
+            if let Some(tasks) = obj.get_mut("tasks").and_then(|v| v.as_array_mut()) {
+                let len_before = tasks.len();
+                tasks.retain(|entry| {
+                    entry.get("task_id").and_then(Value::as_str) != Some(task_id)
+                });
+                if tasks.len() != len_before {
+                    changed = true;
+                }
             }
         }
         if changed {

@@ -4,7 +4,6 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::OnceLock;
 
-/// Read and parse JSON from a file path. Can be used as `crate::text::read_json`.
 pub use core_state_utils::json_io::read_json_strict as read_json;
 
 pub fn normalize_optional_text(value: Option<String>) -> Option<String> {
@@ -69,7 +68,7 @@ pub fn normalize_text(text: &str) -> String {
     let mut spaced = String::with_capacity(result.len() + 4);
     let mut prev_cjk_flag: Option<bool> = None;
     for ch in result.chars() {
-        let is_cjk = ('\u{4e00}'..='\u{9fff}').contains(&ch);
+        let is_cjk = core_state_utils::text_utils::is_cjk(ch);
         if let Some(prev) = prev_cjk_flag {
             if prev != is_cjk && ch != ' ' {
                 spaced.push(' ');

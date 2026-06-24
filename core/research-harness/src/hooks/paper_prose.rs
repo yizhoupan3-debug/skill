@@ -5,7 +5,6 @@
 //! - 受 `ROUTER_RS_OPERATOR_INJECT` 总闸约束。
 
 use crate::hooks::paper_block_cache::BlockCache;
-use core_state::state_manager::merge_hook_nudge_paragraph;
 use serde_json::Value;
 use std::path::Path;
 
@@ -24,26 +23,17 @@ static BUILTIN_BLOCK: std::sync::LazyLock<String> =
 
 static BLOCK_CACHE: BlockCache = BlockCache::new(REL_PATH, PREFIX_LINE, "paper prose");
 
-fn builtin_block() -> String {
-    BUILTIN_BLOCK.clone()
-}
-
 // ── Per-host environment variable mapping ──
 
 /// Import per-host env var name resolution from host-projection (L0).
 use host_projection::hooks::paper_prose_env_var;
 
-// ── Env flag helpers (canonical via core-policy) ──
-
-fn operator_inject_globally_enabled() -> bool {
-    core_policy::env_flags::env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
-}
-
 // ── Public API ──
 
 /// Check whether the prose hook is requested for a given host.
 pub fn paper_prose_hook_requested(host: &str) -> bool {
-    operator_inject_globally_enabled() && core_policy::env_flags::env_enabled_default_true(paper_prose_env_var(host))
+    super::paper_common::operator_inject_globally_enabled()
+        && core_policy::env_flags::env_enabled_default_true(paper_prose_env_var(host))
 }
 
 /// 信号检测：用户提示是否涉及论文写作/润色。
@@ -91,7 +81,7 @@ pub fn prompt_signals_paper_prose_work(text: &str) -> bool {
 
 /// Resolve the prose hook block from disk or builtin.
 pub fn resolve_paper_prose_block(repo_root: &Path) -> String {
-    BLOCK_CACHE.resolve(repo_root, builtin_block)
+    BLOCK_CACHE.resolve(repo_root, || BUILTIN_BLOCK.clone())
 }
 
 /// Append prose hook context if the hook is enabled and the prompt signals prose work.
@@ -101,14 +91,14 @@ pub fn maybe_append_paper_prose_context(
     contexts: &mut Vec<String>,
     host: &str,
 ) {
-    if !paper_prose_hook_requested(host) || !prompt_signals_prose_work(prompt_text) {
-        return;
-    }
-    let msg = resolve_paper_prose_block(repo_root);
-    if msg.trim().is_empty() {
-        return;
-    }
-    contexts.push(msg);
+    super::paper_common::maybe_append_context(
+        paper_prose_hook_requested(host),
+        prompt_signals_prose_work(prompt_text),
+        repo_root,
+        &BLOCK_CACHE,
+        &BUILTIN_BLOCK,
+        contexts,
+    );
 }
 
 /// Merge prose hook context into Cursor-compatible JSON output.
@@ -119,14 +109,16 @@ pub fn maybe_merge_paper_prose_before_submit(
     use_followup_message: bool,
     host: &str,
 ) {
-    if !paper_prose_hook_requested(host) || !prompt_signals_prose_work(prompt_text) {
-        return;
-    }
-    let msg = resolve_paper_prose_block(repo_root);
-    if msg.trim().is_empty() {
-        return;
-    }
-    merge_hook_nudge_paragraph(output, &msg, PREFIX_LINE, use_followup_message);
+    super::paper_common::maybe_merge_context(
+        paper_prose_hook_requested(host),
+        prompt_signals_prose_work(prompt_text),
+        repo_root,
+        &BLOCK_CACHE,
+        &BUILTIN_BLOCK,
+        output,
+        PREFIX_LINE,
+        use_followup_message,
+    );
 }
 
 /// 简单版：在检测到论文编辑相关操作时，追加 prose 质量检查上下文片段。
@@ -135,7 +127,7 @@ pub fn maybe_append_prose_context(context: &str) -> Option<String> {
     if !prompt_signals_prose_work(context) {
         return None;
     }
-    Some(builtin_block())
+    Some(BUILTIN_BLOCK.clone())
 }
 
 #[cfg(test)]
@@ -151,8 +143,8 @@ mod tests {
 
     fn restore_env(key: &str, prior: Option<String>) {
         match prior {
-            Some(v) => unsafe { std::env::set_var(key, v) },
-            None => unsafe { std::env::remove_var(key) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env(key, &v) },
+            None => unsafe { core_state_utils::env_sync::remove_env(key) },
         }
     }
 
@@ -210,8 +202,8 @@ mod tests {
             .to_path_buf();
         let on_disk =
             std::fs::read_to_string(repo_root.join(REL_PATH)).expect("readable");
-        assert_eq!(builtin_block(), on_disk.trim());
-        assert!(builtin_block().contains("language_register"));
+        assert_eq!(BUILTIN_BLOCK.clone(), on_disk.trim());
+        assert!(BUILTIN_BLOCK.contains("language_register"));
     }
 
     #[test]
@@ -219,7 +211,7 @@ mod tests {
         let _guard = env_test_lock().lock().unwrap();
         let env = paper_prose_env_var("cursor");
         let prior_hook = std::env::var(env).ok();
-        unsafe { std::env::remove_var(env) };
+        unsafe { core_state_utils::env_sync::remove_env(env) };
 
         let tmp = std::env::temp_dir().join("paper-prose-merge-default-research");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -247,7 +239,7 @@ mod tests {
         let _guard = env_test_lock().lock().unwrap();
         let env = paper_prose_env_var("cursor");
         let prior_hook = std::env::var(env).ok();
-        unsafe { std::env::set_var(env, "0") };
+        unsafe { core_state_utils::env_sync::set_env(env, "0") };
 
         let tmp = std::env::temp_dir().join("paper-prose-merge-off-research");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -267,7 +259,7 @@ mod tests {
         let _guard = env_test_lock().lock().unwrap();
         let env = paper_prose_env_var("codex");
         let prior_hook = std::env::var(env).ok();
-        unsafe { std::env::remove_var(env) };
+        unsafe { core_state_utils::env_sync::remove_env(env) };
 
         let tmp = std::env::temp_dir().join("paper-prose-append-codex-research");
         let _ = std::fs::remove_dir_all(&tmp);

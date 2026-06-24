@@ -7,7 +7,7 @@ use fr_utils::constants::{
 };
 use fr_utils::json_io::read_json_strict;
 use fr_utils::json_value::{
-    nonempty_string, safe_slug, value_bool_or_none, value_string_list, value_text,
+    build_task_id, nonempty_string, safe_slug, value_bool_or_none, value_string_list, value_text,
 };
 use fr_utils::util::{defaulted_payload_text, required_payload_text};
 use fr_utils::types::{
@@ -213,7 +213,7 @@ fn write_repo_session_focus(plan: &mut SessionArtifactWritePlan) -> Result<(), S
         return Ok(());
     };
     let mirror_root = repo_root.join("artifacts").join(CURRENT_ARTIFACT_DIR);
-    let updated_at = current_local_timestamp();
+    let updated_at = framework_kernel::time::current_local_timestamp();
     let registry_known = task_id_known_in_task_pointers(&mirror_root, &plan.task_id);
     let should_touch_registry = !plan.update_registry_only_if_known || registry_known;
     if should_touch_registry
@@ -438,11 +438,13 @@ fn write_session_artifact_set(
     payloads: ArtifactPayloads<'_>,
     changed_paths: &mut Vec<String>,
 ) -> Result<(), String> {
+    // Lock both summary and evidence under a single runtime-path lock to prevent
+    // partial-overwrite from concurrent writers.
+    let _lock = rt_storage::acquire_runtime_path_lock(paths.summary)?;
     if write_text_if_changed(paths.summary, payloads.summary_text)? {
         changed_paths.push(paths.summary.display().to_string());
     }
     if let Some(evidence) = payloads.evidence {
-        let _lock = rt_storage::acquire_runtime_path_lock(paths.evidence)?;
         if write_json_if_changed(paths.evidence, evidence)? {
             changed_paths.push(paths.evidence.display().to_string());
         }
@@ -543,7 +545,7 @@ fn build_session_supervisor_state_payload(input: SupervisorStateInput<'_>) -> Va
     );
     payload.insert(
         "updated_at".to_string(),
-        Value::String(current_local_timestamp()),
+        Value::String(framework_kernel::time::current_local_timestamp()),
     );
     if !input.summary.is_empty() {
         payload.insert(
@@ -629,7 +631,7 @@ fn normalized_verification(existing: Option<&Value>, status: &str) -> Value {
     );
     payload.insert(
         "updated_at".to_string(),
-        Value::String(current_local_timestamp()),
+        Value::String(framework_kernel::time::current_local_timestamp()),
     );
     Value::Object(payload)
 }
@@ -648,7 +650,7 @@ fn normalized_continuity(existing: Option<&Value>, status: &str) -> Value {
     payload.insert("resume_allowed".to_string(), Value::Bool(!terminal));
     payload.insert(
         "last_updated_at".to_string(),
-        Value::String(current_local_timestamp()),
+        Value::String(framework_kernel::time::current_local_timestamp()),
     );
     Value::Object(payload)
 }
@@ -673,10 +675,6 @@ fn normalized_string_array(value: Option<&Value>) -> Option<Vec<Value>> {
     } else {
         Some(values.into_iter().map(Value::String).collect())
     }
-}
-
-fn current_local_timestamp() -> String {
-    framework_kernel::time::current_local_timestamp()
 }
 
 pub(super) use core_state::utils::json_io::{write_json_if_changed, write_text_if_changed};
@@ -709,23 +707,4 @@ pub(super) fn assert_expected_file_hash(
         path.display(),
         current.unwrap_or_else(|| "<missing>".to_string())
     ))
-}
-
-fn build_task_id(task: &str, created_at: Option<&str>) -> String {
-    let stamp = created_at
-        .unwrap_or(&current_local_timestamp())
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .collect::<String>();
-    let slug = safe_slug(task);
-    if stamp.is_empty() {
-        slug
-    } else {
-        let suffix = if stamp.len() > 14 {
-            &stamp[stamp.len() - 14..]
-        } else {
-            &stamp
-        };
-        format!("{slug}-{suffix}")
-    }
 }

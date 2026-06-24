@@ -1,22 +1,29 @@
-# ADR-010: 框架架构规范
+# ADR-010: 理想框架架构真源
 
-**状态**: 终版 · **日期**: 2026-06-23 · **最后修订**: 2026-06-23 (§2 八层模型重写, 余节适应修订)
+**状态**: 真源 · **日期**: 2026-06-24 · **性质**: 框架架构的唯一权威参考（非执行计划）
 
 ---
 
 ## 目录
 
 1. [架构总则](#1-架构总则)
-2. [八层运行时模型](#2-八层运行时模型)
-3. [依赖方向 DAG](#3-依赖方向-dag)
+2. [八层运行时模型总览](#2-八层运行时模型总览)
+3. [DAG 验证矩阵](#3-dag-验证矩阵)
 4. [宿主隔离契约](#4-宿主隔离契约)
-5. [运行时层映射](#5-运行时层映射)
-6. [运行时层—由来](#6-运行时层由来)
-7. [Feature 层](#7-feature-层)
-8. [产物目录](#8-产物目录)
-9. [基础设施层](#9-基础设施层)
-10. [Runtime-Core 内部结构](#10-runtime-core-内部结构)
-11. [验收标准](#11-验收标准)
+5. [L0 Kernel — 纯抽象与共享类型](#5-l0-kernel--纯抽象与共享类型)
+6. [L1 IO & Persistence — 存储后端与追踪](#6-l1-io--persistence--存储后端与追踪)
+7. [L2 Contracts — 验证规则与守卫合约](#7-l2-contracts--验证规则与守卫合约)
+8. [L3 Execution — LLM 执行与沙箱](#8-l3-execution--llm-执行与沙箱)
+9. [L4 State Management — Task Engine 与路由](#9-l4-state-management--task-engine-与路由)
+10. [L5 Hook Infrastructure — 事件路由与观测](#10-l5-hook-infrastructure--事件路由与观测)
+11. [L6 Orchestration — 编排与自动化闭环](#11-l6-orchestration--编排与自动化闭环)
+12. [L7 Bridge / Dispatch — 平台聚合与分发](#12-l7-bridge--dispatch--平台聚合与分发)
+13. [Feature Layer — 可插拔研究能力](#13-feature-layer--可插拔研究能力)
+14. [基础设施层 API 参考](#14-基础设施层-api-参考)
+15. [产物目录](#15-产物目录)
+16. [运行时层由来](#16-运行时层由来)
+17. [已知架构债务](#17-已知架构债务)
+18. [设计决策日志](#18-设计决策日志)
 
 ---
 
@@ -24,137 +31,128 @@
 
 ### 1.1 核心原则
 
-```
-P1. 每层职责唯一，不越界
-P2. 宿主差异仅存于 L0 适配壳
-P3. 依赖方向单向向下（Lⱼ → Lᵢ 当 i <= j，L0 为最底层）
-P4. 禁止循环依赖
-P5. 跨层通信通过共享类型（L0）或函数指针（L5 注册表），不在高层硬编码低层细节
-P6. L0–L7 运行时层承载实质运行域（Kernel/IO/Contracts/Execution/State/Hook/Orchestration/Bridge）
-P7. Feature 层可插拔（feature-gate），不硬编码宿主名或环境变量
-P8. L0 完全无上层依赖
-P9. 基础设施碎片必须收敛到唯一实现（§10）
-P10. 函数指针注册表的后备语义为空操作（no-op），而非 panic 或硬阻断
-```
+| 编号 | 原则 | 说明 |
+|------|------|------|
+| **P1** | 每层职责唯一，不越界 | L4 不含 Research 领域逻辑，L0 不含业务状态 |
+| **P2** | 宿主差异仅存于 L0 适配壳 | 宿主名/路径/env_var 映射全部从 `RUNTIME_REGISTRY.json` 编译期生成 |
+| **P3** | 依赖方向单向向下 | Lⱼ 可依赖 Lᵢ 当 i ≤ j，禁止下层依赖上层 |
+| **P4** | 禁止循环依赖 | DAG 矩阵（§3）编译期强制 |
+| **P5** | 跨层通信通过 L0 或函数指针 | 不在高层硬编码低层细节 |
+| **P6** | L0–L7 承载实质运行域 | 每层有明确的物理 crate 归属 |
+| **P7** | Feature 层可插拔 | feature-gate 编译期可选，不硬编码宿主名 |
+| **P8** | L0 完全无上层依赖 | 所有 L0 crate（6 个）零 L1-L7 依赖 |
+| **P9** | 基础设施碎片收敛到唯一实现 | 每项功能只应有一个定义（§14） |
+| **P10** | 函数指针注册表后备语义为 no-op | 不 panic，不硬阻断 |
 
 ### 1.2 Hook 通信模型
 
-函数指针注册表（`host-projection/src/hooks.rs`）是 L0 的一部分，作为跨层通信机制被 L4 消费。
+函数指针注册表（`framework-runtime-hooks/src/lib.rs`）是 L0 的一部分，作为跨层通信机制被 L4–L7 消费。
 
 ```
-L4 ──register_*()──→ L0 hooks.rs [OnceLock 注册表]
-                         │
-L0 hook 事件到来 ──→ hook_dispatch.rs → 代理函数 → L4 注册的回调
-                         │
-                     infra/ env/  解析环境标志
-                     infra/ json_io/  序列化
-                     infra/ stdin_reader/  读取 stdin
+L4–L7 ──register(hooks)──→ L0 RUNTIME_CORE_HOOKS [OnceLock]
+                                  │
+L0 hook 事件到来 ──────────────→ RuntimeCoreHooks 方法调用
+                                  │
+                              L4–L7 注册的回调函数
 ```
 
-两个关键性质：
-- 注册方向（L4→L0）与调用方向（L0→L4）相反，这是依赖方向合规的关键
-- OnceLock 未注册的 slot 静默返回 no-op，不 panic 不硬阻断
+**两个关键性质**：
+- 注册方向（高层→L0）与调用方向（L0→高层）**相反**，这是依赖方向合规的关键设计
+- OnceLock 未注册的 slot 通过 `try_hooks()` 静默返回 `None`，走 fallback/no-op 路径
+
+**RuntimeCoreHooks 结构**（`framework-runtime-hooks/src/lib.rs:106-132`）：
+
+```rust
+pub struct RuntimeCoreHooks {
+    pub telemetry: TelemetryHooks,       // 5 个遥测钩子
+    pub host_provider: HostProviderHooks, // 4 个宿主提供者钩子
+    pub framework_goal_drive: fn(Value) -> Result<Value, String>,
+    pub framework_quality_gate: fn(Value) -> Result<Value, String>,
+    pub handle_session_supervisor_operation: fn(Value) -> Result<Value, String>,
+    pub handle_background_state_operation: fn(Value) -> Result<Value, String>,
+    pub runtime_concurrency_defaults_payload: fn() -> Value,
+    pub eval_route_contract: fn() -> Value,
+    pub run_eval_route: fn(...) -> Result<Value, String>,
+    pub generated_artifacts_status_for_repo: fn(&Path) -> Result<String, String>,
+    pub ensure_kernel_bootstrap: fn(),
+}
+```
+
+钩子分为两组子结构体 + 8 个独立字段（原 17 个扁平字段，2026-06 重构降低认知负荷）。
+
+### 1.3 无固定阶段 Lifecycle
+
+框架**没有**固定的 discuss→plan→implement→verify 阶段（四生命周期已在 2026-06 彻底退场）。
+
+**Task 是底层执行引擎**。用户层表现为：定义 todo → 执行 todo → 完成 todo，以及与 Goal/RFV/Evidence 等状态的关联。
+
+Lifecycle Profile 控制每个 task 的行为模式：
+- **`interactive`**（默认）：用户主导，loop engine 不可调度，closeout 为 advisory
+- **`loop-auto`**：允许 loop engine 自动调度（discovery → dispatch → verify 闭环）
 
 ---
 
-## 2. 八层运行时模型
+## 2. 八层运行时模型总览
 
 运行时 crate 按依赖方向严格分为 8 层（L0→L7），上层可依赖下层，禁止下层依赖上层。
 
 ```
 L7      Bridge / Dispatch         runtime-core                stdio 分发、聚合 facade
+                                     router-rs,               CLI 入口
 
-L6      Orchestration              session-supervisor,        多 Agent + RFV 闭环
-                                    loop-engine,
-                                    framework-extra
+L6      Orchestration              loop-engine,               RFV 闭环、可选自动化
+                                     session-supervisor,
+                                     framework-extra
 
-L5      Hook Infrastructure        host-projection/hooks,     事件路由、观测埋点、
-                                    runtime-exit-gate,          fn-pointer 消费端
-                                    runtime-core-contracts/
-                                      hook_* + router_rs_obs
+L5      Hook Infrastructure        host-projection,           事件路由、观测埋点、
+                                     runtime-exit-gate,        fn-pointer 消费端
+                                     runtime-infra,
+                                     runtime-core-contracts,
+                                     mcp-tool-registry
 
-L4      State Management           core-state,                Goal/QG/Task 状态机、
-                                    routing-engine              step ledger、路由决策
+L4      State Management           core-state,                Task Engine、Goal/QG 状态机、
+                                     routing-engine,           路由评估、评分、决策
+                                     skill-layer
 
-L3      Execution                  fr-exec,                   LLM 执行、沙箱控制、
-                                    framework-runtime           运行时视图、环境标志
-                                      (facade → fr-exec)
+L3      Execution                  fr-exec,                   LLM 实时执行、沙箱控制、
+                                     framework-runtime,        运行时视图、环境标志
+                                     browser-mcp
 
 L2      Contracts                  fr-contracts,              验证规则、守卫合约
-                                    core-state-types,           纯类型定义（L2 共享）
-                                    runtime-core-contracts
+                                     core-state-types,         纯类型定义（零依赖）
+                                     runtime-core-contracts
 
 L1      IO & Persistence           fr-utils,                  JSON/文件/存储后端、
-                                    runtime-storage,            trace 录制、IO 工具
-                                    trace-runtime
+                                     runtime-storage,          trace 录制、IO 工具
+                                     trace-runtime
 
 L0      Kernel (B0)                framework-kernel,          纯抽象、共享类型、
-                                    core-policy,                策略规则、时间工具
-                                    core-state-utils,           IO/path/JSONL 原语
-                                    framework-runtime-hooks,    fn-pointer 注册表 (OnceLock)
-                                    telemetry-types,            遥测事件类型
-                                    http-util                   HTTP 客户端工厂
+                                     core-policy,              策略规则、env_flags
+                                     core-state-utils,         IO/path/JSONL 原语
+                                     framework-runtime-hooks,  fn-pointer 注册表 (OnceLock)
+                                     telemetry-types,          遥测事件类型
+                                     http-util                 HTTP 客户端工厂
 ```
 
-> **2026-06-23 修订说明**: framework-runtime 已物理拆分为 fr-utils(L1) + fr-contracts(L2) + fr-exec(L3)，
-> framework-runtime 保留为向后兼容 facade。core-state-utils(L0) 和 core-state-types(L2) 从 core-state 提取。
-> routing-engine 归入 L4。framework-runtime-hooks (L5) 的 OnceLock fn-pointer 注册表是 ADR §1.2 许可的跨层例外。
+### 与用户视角层的对应关系
 
-### 2.1 与用户视角层的对应关系
+| 用户视角 | 运行时层 | 核心 crate |
+|----------|---------|-----------|
+| Feature (L5) | 依赖 L6→L7 | research-harness |
+| Runtime (L4) | L3+L4+L5+L6+L7 | runtime-core, loop-engine, framework-extra |
+| Tool (L3) | 独立层 | browser-mcp, codegraph-rs |
+| Skill (L2) | 纯契约层 | skills/\*/SKILL.md |
+| Routing (L7) | L7 (dispatch) | routing-engine, host-projection |
+| Host (L0) | L5 (hook) | host-projection/hosts |
+| Base (L0) | L0+L1+L2+L4 | framework-kernel, core-policy, core-state |
 
-原文档的「六层模型」是从功能视角出发的垂直分层（Feature→Runtime→Tool→Skill→Routing→Host）。
-八层模型是从 crate 依赖视角出发的水平分层（L0→L7），两者正交共存：
+**Task Engine**（L4）：`core-state` 承载 Task 全生命周期。用户层表现为：定义 todo → 执行 todo → 完成 todo。
 
-```
-用户视角     运行时层            核心 crate
-─────────────────────────────────────────
-L5 Feature → 依赖 L6→L7        research-harness
-L4 Runtime → L3+L4+L5+L6+L7   runtime-core, loop-engine, framework-extra
-L3 Tool    → 独立层             browser-mcp, codegraph-rs
-L2 Skill   → 纯契约层           skills/<name>/SKILL.md
-L1 Routing → L7 (dispatch)     routing-engine, host-projection
-L0 Host    → L5 (hook)         host-projection/hosts
-L0 (Base) → L0+L1+L2+L4       framework-kernel, core-policy, core-state
-```
-
-### 2.2 统一 Hook 分派
-
-不采用 4 个独立宿主钩子文件。统一实现方案：
-
-```
-hosts/mod.rs               统一事件分派入口
-├── hosts/stop_dispatch.rs     统一 Stop 决策管道（所有宿主共用一个）
-├── hosts/event_handlers.rs    统一 UserPromptSubmit/PostToolUse
-├── hosts/host_extensions.rs   宿主差异点（TouchState/review_gate/会话密钥）
-├── hosts/mcp_pre_guard.rs     PreToolUse 路径保护（统一所有宿主）
-├── hosts/hook_state_common.rs 状态 CRUD
-├── hosts/file_state_lock.rs   文件锁
-└── hosts/hook_dispatch.rs     工具路由
-```
-
-宿主差异通过 `HostProvider` trait 注入，不在 hook handler 中做 `match host_id`。
-
-### 2.2 Loop Engine — RFV 闭环
-
-`loop-engine` 不包含 discuss/plan/implement 阶段。它的状态机：
-
-```
-PENDING → PREFLIGHT → DISPATCH → RUNNING → VERIFYING → COMPLETED
-                                              ↘ ESCALATED
-```
-
-核心能力：
-- **RFV 收敛检测**: 读取 `RFV_LOOP_STATE.json`，检查 review→fix→verify 是否收敛
-- **Goal 驱动**: PENDING→COMPLETED 状态转换
-- **中断处理**: 自循环活性锁 + 超时
-- **Checkpoint**: session 恢复快照
-
-loop-engine 不关心宿主差异、不操作 closeout 记录、不读取宿主环境变量。
-它通过 L0 函数指针获取外部状态，通过 `core-state` 管理内部状态。
+**Loop Engine**（L6）：可选自动化增强层，仅对 `loop-auto` profile task 生效。不包含 discuss/plan/implement 阶段。
 
 ---
 
-## 3. DAG 验证
+## 3. DAG 验证矩阵
 
 ```
          L0  L1  L2  L3  L4  L5  L6  L7
@@ -169,36 +167,44 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 ```
 
 - Lⱼ 可依赖 Lᵢ 当 i ≤ j
+- **L5 函数指针注册表**是唯一许可的跨层例外（注册方向 L4→L0 与调用方向 L0→L4 相反）
 - 禁止 L4→L7 编译期依赖 override（通过 L5 函数指针间接调用）
 
 ---
 
 ## 4. 宿主隔离契约
 
-宿主逻辑 = 硬编码宿主名 / `ROUTER_RS_{HOST}_*` 环境变量 / 宿主特有分支。
-
-### 4.1 注册表驱动架构（Round8+ 完整实施）
+### 4.1 注册表驱动架构
 
 所有宿主元数据从 `configs/framework/RUNTIME_REGISTRY.json` **编译期生成**：
 
 | 生成目标 | 源字段 | 产物 |
 |---------|--------|------|
-| `framework-kernel/build.rs` | `host_targets.metadata.*` (全部) | `generated_host_tables.rs`: `ALL_HOST_IDS`, `host_private_config_dir()`, `review_gate_disable_env()`, `paper_prose_env()`, `paper_adversarial_env()`, `settings_guarded_paths()`, `generated_entrypoint_paths()`, `hook_state_unreadable_tag()`, `session_namespace_env()`, `is_ephemeral_task_id()`, `host_home_dirs()`, `ALL_KNOWN_HOST_DIRS`, `EPHEMERAL_PATH_PATTERNS`, `EPHEMERAL_TASK_PREFIXES` |
-| `host-projection/build.rs` | `host_targets.supported`, `host_targets.host_providers`, `host_targets.metadata.*` | `generated_host_providers.rs`: provider struct 定义 + `HostLifecycle`/`HostTelemetry`/`HostProvider` trait impl（全部从注册表生成） |
-| CLI hook/agent dispatch | `host_provider_registry()` | `register_hook_dispatchers()` / `register_agent_dispatchers()` 注册表模式 |
+| `framework-kernel/build.rs` | `host_targets.metadata.*` | `generated_host_tables.rs` |
+| `host-projection/build.rs` | `host_targets.supported`, `host_providers` | `generated_host_providers.rs` |
+
+`generated_host_tables.rs` 生成：`ALL_HOST_IDS`、`host_private_config_dir()`、`review_gate_disable_env()`、`paper_prose_env()`、`paper_adversarial_env()`、`settings_guarded_paths()`、`generated_entrypoint_paths()`、`hook_state_unreadable_tag()`、`session_namespace_env()`、`is_ephemeral_task_id()`、`host_home_dirs()`、`ALL_KNOWN_HOST_DIRS`、`EPHEMERAL_PATH_PATTERNS`、`EPHEMERAL_TASK_PREFIXES`。
+
+`generated_host_providers.rs` 生成：provider struct 定义 + `HostLifecycle`/`HostTelemetry`/`HostProvider` trait impl（全部从注册表数据生成，无手写 provider 文件）。
 
 ### 4.2 允许宿主知识的位置
 
-| 位置 | 说明 | 状态 |
-|------|------|------|
-| `RUNTIME_REGISTRY.json` | 唯一真相源 | ✅ 所有宿主元数据 |
-| `host-projection/` (L0) | 宿主适配层 | ✅ `capability_overrides.rs` (CLI args, observation surfaces), `config.rs`, `dispatch.rs` |
-| `host-projection/host_integration/` | 投影操作 | ✅ 已注册表驱动 |
-| `framework-kernel/build.rs` | 编译期生成 | ✅ 生成表格 + 函数 |
-| `host-projection/build.rs` | 编译期生成 | ✅ 生成 provider struct + trait impl |
-| L0/L1/L2/L4 其他 | ❌ 不应出现宿主名 | ✅ 已验证干净 |
+| 位置 | 说明 |
+|------|------|
+| `RUNTIME_REGISTRY.json` | **唯一真相源**：所有宿主元数据 |
+| `host-projection/` (L5) | 宿主适配层：`capability_overrides.rs`, `config.rs`, `dispatch.rs` |
+| `host-projection/host_integration/` | 投影操作（注册表驱动） |
+| `framework-kernel/build.rs` | 编译期生成表格和函数 |
+| `host-projection/build.rs` | 编译期生成 provider struct 和 trait impl |
+| **L0/L1/L2/L4 其他** | **不应出现宿主名** |
 
-### 4.3 宿主身份传递路径
+### 4.3 闭集宿主（4 个）
+
+权威闭集：`claude`、`cursor`、`codex`、`opencode`。
+
+退役 id（codex-cli, codex-app, claude-desktop, antigravity 系列）不再使用。添加新宿主只需编辑 `RUNTIME_REGISTRY.json`，重编译，所有代码自动生成。
+
+### 4.4 宿主身份传递路径
 
 ```
 用户输入 → AGENTS.md → L1 skill routing → L4 session (通过 HostProvider trait)
@@ -208,190 +214,320 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
                               provider.dispatcher() → HostHookDispatcher::dispatch()
 ```
 
-### 4.4 添加新宿主清单
+### 4.5 统一分派架构
 
-编辑 `RUNTIME_REGISTRY.json` 的唯一字段：
-1. `host_targets.supported` 添加 host_id
-2. `host_targets.metadata.<host_id>` 添加所有 20+ 个字段
-3. `host_targets.host_providers.<host_id>` 添加 Rust 模块路径
-4. `all_known_host_dirs` 添加目录
-5. 重编译 → 所有代码自动生成
-
----
-
-## 5. 运行时层映射
-
-当前 crate 在八层模型中的归属：
-
-| 八层 | crate | 职责 |
-|------|-------|------|
-| **L0** Kernel | `core-policy` | Hook 策略、Review 守卫、env_flags |
-| | `framework-kernel` | 时间工具、telemetry trait、tokenizer trait、repo_roots、json_value |
-| | `core-state-utils` | IO/path/JSONL 原语（atomic_write, path_guard, json_io, task_write_lock） |
-| | `framework-runtime-hooks` | fn-pointer 注册表 (OnceLock)，跨层通信中枢 |
-| | `telemetry-types` | 遥测事件类型 |
-| | `http-util` | HTTP 客户端工厂 |
-| **L1** IO & Persistence | `fr-utils` | JSON Value 提取、IO 工具、常量、类型、env_flags |
-| | `runtime-storage` | 文件系统/SQLite/内存后端、路径解析 |
-| | `trace-runtime` | Trace 录制、压紧 |
-| **L2** Contracts | `fr-contracts` | Closeout 验证、执行合约、工具守卫 |
-| | `core-state-types` | 纯类型定义（task_state_types, exit_gate_types, goal_prediction） |
-| | `runtime-core-contracts` | hook 事件路由、观测规则、出站保护、URL 守卫 |
-| **L3** Execution | `fr-exec` | LLM 实时执行、沙箱状态机、运行时视图、环境标志、trace I/O |
-| | `framework-runtime` | L3 facade（向后兼容 re-export） |
-| **L4** State | `core-state` | Goal/QG/Task 状态机、step_ledger、exit gates |
-| | `routing-engine` | 路由评估、信号检测、评分、路由决策 |
-| **L5** Hook | `host-projection` | Hook 分派、宿主扩展、MCP stdio 桥（依赖 core-state L4） |
-| | `runtime-exit-gate` | Quality gate RFV 循环 |
-| | `runtime-core-contracts/hook_*` | 事件路由规则、观测埋点 |
-| **L6** Orchestration | `loop-engine` | RFV 闭环 |
-| | `session-supervisor` | Session 监督器 |
-| | `framework-extra` | 编排控制面 |
-| **L7** Bridge | `runtime-core` | 平台聚合 + stdio 分发 + 上下文工程 |
-| | `runtime-infra` | 运行时初始化、stdio 传输 |
-
-> **说明**：framework-runtime 已物理拆分为 fr-utils(L1) + fr-contracts(L2) + fr-exec(L3)，
-> 保留为向后兼容 facade。core-state-utils(L0) 和 core-state-types(L2) 从 core-state 提取。
-> routing-engine 归入 L4。framework-runtime-hooks (L5) 的 OnceLock fn-pointer 注册表是 §1.2 许可的跨层例外。
-
----
-
-## 6. 运行时层—由来
-
-原「L4 运行时平台」中的 crate 经过 2026-06 重构已分解到 L0–L7 八层：
-
-| 原模块 | 旧行数 | 现归属 |
-|--------|--------|--------|
-| `host_integration/` | 5,707 | L5 host-projection |
-| `framework_runtime/` 本地模块 | 6,800 | → 新 crate `framework-extra`（L6 编排层） |
-| `infrastructure/` (5 文件) | 2,041 | L5 `runtime-infra` |
-| `infrastructure/stdio_transport` | 898 | 并入 runtime-infra |
-| `exit_gate/` | 2,906 | L5 `runtime-exit-gate` |
-| `framework_maint/` | 1,789 | → `tools/framework-maint`（运维工具） |
-| `cli/` | 1,954 | → router-rs（入口 CLI） |
-| `closeout_enforcement.rs` | 1,227 | → `closeout/` 子目录（L2 Contracts） |
-| `execution_contract.rs` | 1,056 | → `contracts/` 子目录（L2 Contracts） |
-| `runtime_view.rs` | 969 | L3 Execution |
-| `hooks.rs` | 133 | → L5 `framework-runtime-hooks` 独立 crate |
-
-**重构受益**:
-- 消除 L2→L5 逆向依赖 (`router_rs_obs` 移出 contracts)
-- `json_value` 16 函数统一至 L0 framework-kernel
-- `quality_gate` 超 1800 行子目录拆分 + `framework_quality_gate` 三→一统一
-- `runtime-infra/router_env_flags` 不必要门面删除
-- `runtime-core/router_env_flags` 直连 framework-runtime
-
----
-
-## 7. Feature 层
-
-`research-harness` 通过 feature-gate 编译期可选，无运行时 crate 依赖。
-
-### 7.2 宿主隔离
-
-- env var 名称映射委托给 L0 的 `paper_prose_env_var()` / `paper_adversarial_env_var()`（从 RUNTIME_REGISTRY.json 生成）
-- 宿主 id 通过函数指针参数接收，不做分支逻辑
-- L5 不包含宿主特定路径（`.claude/`, `.cursor/` 等）——数据库路径已迁移为 `~/.router-rs/`（Round8）
-
-### 7.3 不重复实现 L0/L4 已有功能
-
-L5 不得自行实现以下基础设施——直接调用 L0/L4 的统一版本：
-
-| L5 不应重复实现 | 应改为调用 |
-|----------------|-----------|
-| `env_enabled_default_true/false` | `core_policy::env_flags::env_enabled_default_true/false` |
-| `now_iso()` 时间戳 | `loop_engine::state::now_iso` |
-| JSON 泛型 I/O | `framework_runtime::json_io::*` |
-| `ROUTER_RS_OPERATOR_INJECT` 检查 | `host_projection::hooks::router_rs_operator_inject_globally_enabled()` |
-
-### 7.4 L4 不得包含 Research 领域逻辑
-
-以下内容属于 L5，**不得出现在 L4 的任何子 crate** 中：
-
-| 被禁内容 | 当前违规位置 |
-|---------|-------------|
-| `ResearchMode` 枚举 (Quick/Deep) | `framework-runtime/src/live_execute.rs` |
-| `infer_research_mode()` 分类器 | 同上，含 14 个 research 关键词 |
-| `external_research_phrase_signals_deep()` | 同上 |
-| `payload_text_signals_deep_research()` | 同上 |
-| `normalize_research_mode_token()` | 同上 |
-
-**架构规则**: L4 不感知 `ResearchMode` 的具体含义。如果 L4 需要 research 分类决策，
-应通过 L0 函数指针注册一个 `fn(text: &str) -> Option<ResearchMode>` 回调，
-由 L5 在启用时注册。L4 只接收 `Some(mode)` 或 `None`，不包含 research 关键词或分类枚举。
-
----
-
-## 8. 产物目录
+不采用 4 个独立宿主钩子文件。统一实现：
 
 ```
-core/
-├── core-state/               L4  State Management
-├── core-state-utils/         L0  IO/path/JSONL 原语（从 core-state 提取）
-├── core-state-types/         L2  纯类型定义（从 core-state 提取）
-├── core-policy/              L0  Kernel (策略)
-├── framework-kernel/         L0  Kernel (time/tokenizer/telemetry/json_value)
-├── framework-runtime-hooks/  L0  fn-pointer 注册表 (OnceLock)
-├── telemetry-types/          L0  Kernel (类型)
-├── http-util/                L0  Kernel (HTTP 工具)
-│
-├── host-projection/          L5  Hook 分派 + 宿主扩展
-├── runtime-exit-gate/        L5  Quality Gate RFV
-│
-├── fr-utils/                 L1  IO 工具、常量、类型（从 framework-runtime 提取）
-├── fr-contracts/             L2  合约/守卫（从 framework-runtime 提取）
-├── fr-exec/                  L3  执行引擎（从 framework-runtime 提取）
-├── framework-runtime/        L3  facade（向后兼容 re-export）
-├── runtime-core-contracts/   L2  Contracts (合约/守卫)
-├── runtime-storage/          L1  IO & Persistence
-├── trace-runtime/            L1  IO & Persistence (Trace)
-│
-├── routing-engine/           L4  路由评估/评分/决策
-├── runtime-infra/            L5  Hook 层初始化
-├── runtime-core/             L7  Bridge (调度/聚合)
-│
-├── framework-extra/          L6  Orchestration
-├── loop-engine/              L6  Orchestration (RFV)
-├── session-supervisor/       L6  Orchestration
-│
-├── research-harness/         L5  Feature (feature-gated, router-rs research 特性)
-│
-├── browser-mcp/              L3  浏览器 MCP
-├── router-rs/                L7  CLI 入口
-│
-tools/
-├── codegraph-rs/             L3  代码图 MCP
-├── framework-maint/            运维工具 (从 runtime-core 提取)
-└── evolution-rs/               路由演化
+host-projection/src/hosts/
+├── mod.rs                  统一事件分派入口
+├── stop_dispatch.rs        统一 Stop 决策管道（所有宿主共用）
+├── event_handlers.rs       统一 UserPromptSubmit/PostToolUse
+├── host_extensions.rs      宿主差异点（TouchState/review_gate/会话密钥）
+├── mcp_pre_guard.rs        PreToolUse 路径保护
+├── hook_state_common.rs    状态 CRUD
+├── file_state_lock.rs      文件锁
+└── hook_dispatch.rs        工具路由
 ```
+
+宿主差异通过 `HostProvider` trait 注入，不在 hook handler 中做 `match host_id`。
 
 ---
 
-## 9. 基础设施层
+## 5. L0 Kernel — 纯抽象与共享类型
 
-基础设施层是跨所有 crate 共享的**唯一实现**集合。任何功能只应有一个定义：
+L0 是整个框架的地基。**6 个 crate**，全部零 L1-L7 依赖（仅依赖外部 crate 如 serde、serde_json、fs2 等）。
 
-| 功能 | 唯一位置 | 说明 |
-|------|---------|------|
-| `env_enabled_default_true/false` | `core_policy::env_flags` | 环境标志布尔解析 |
-| `repo_roots` (`is_framework_root`, `resolve_repo_root`) | `framework_kernel::repo_roots` | 框架根目录发现 |
-| 文件锁 (`flock`) | `host-projection/src/hosts/file_state_lock.rs` | 跨进程文件锁 |
-| stdin 受限读取 (4 MiB) | `host-projection/src/hooks.rs` | 带 UTF-8 校验的 stdin |
-| JSON 泛型 I/O | `framework-runtime/src/json_io.rs` | read/write/if-exists |
-| 原子写入 (temp+rename+fsync) | `core-state/src/utils/atomic_write.rs` | 崩溃安全的文件写入 |
-| `now_iso()` | `framework-kernel`（统一源） | UTC ISO 8601 时间戳 |
-| HTTP 代理 URL 缓存 | `http-util`（统一源） | 缓存 `HTTPS_PROXY`/`HTTP_PROXY` 环境变量解析结果（`cached_proxy_url()`） |
-| 追加锁 `OnceLock<Mutex<()>>` | 合并到 `runtime-infra::sync::file_append_lock` | 进程内追加写入串行化 |
-| 退避公式 | `runtime-infra::compute::exponential_backoff` | 几何退避计算 |
+### 5.1 `framework-kernel`
 
-### 9.1 基础设施的归属规则
+**职责**: 时间工具、repo 根发现、JSON Value 操作、tokenizer trait、telemetry trait、运行时注册表、CLI args 结构体、stdio payload 类型。
 
-判断一项功能是否属于基础设施的标准（三项全满足）：
-1. **不依赖 L3+ 业务类型**（不引用 quality_gate、session、task 等）
-2. **可被 2 个以上 crate 独立使用**（否则应内联到调用者）
-3. **语义不因宿主而异**（不包含宿主名、不分支宿主行为）
+**模块清单**:
 
-### 9.2 runtime-infra crate 的公共 API
+| 模块 | 职责 |
+|------|------|
+| `time` | `now_iso()` UTC ISO 8601 时间戳、`current_local_timestamp()` |
+| `repo_roots` | `is_framework_root()`、`resolve_repo_root()` — 框架/项目根目录发现 |
+| `json_value` | 16 个 JSON Value 提取/转换函数（`json_str_opt`、`json_u64_opt`、`json_bool_opt`、`safe_slug` 等） |
+| `tokenizer` | `TokenizerProvider` trait、`tokenize_query()` — tokenizer 注入点 |
+| `telemetry` | `TelemetryEvent`、`TelemetryWriter` trait、`LogAggregator` — 遥测管道 |
+| `runtime_registry` | 编译期生成的宿主注册表函数（从 `RUNTIME_REGISTRY.json` 生成） |
+| `framework_host_targets` | 宿主目标配置结构体 |
+| `cli_args` | 所有 CLI 命令的 clap Args 结构体定义（~600 行定义 + ~1000 行测试） |
+| `stdio_payload_types` | stdio 协议 payload 类型：`SandboxControlRequestPayload`（21 字段）、`BackgroundControlRequestPayload`（19 字段）、`TraceMetadataWriteRequestPayload`（30 字段）等 |
+| `framework_profile` | 框架 profile 打包逻辑 |
+| `skill_lint` | Skill schema 校验 |
+| `skill_repo` | Skill 仓库操作 |
+| `router_self` | router-rs 自身信息查询 |
+
+**关键设计**: `json_value::safe_slug()` 保留 `_`.`-`，不做大小写折叠。`json_value` 通过 `pub use json_value::*` 在 crate 根重导出。
+
+### 5.2 `core-policy`
+
+**职责**: Hook 策略规则、env_flags、review gate 引擎、hook_common、goal_auto_detect。
+
+**关键模块**:
+
+| 模块 | 职责 |
+|------|------|
+| `env_flags` | 所有 `ROUTER_RS_*` 环境变量的**权威解析源**：`env_enabled_default_true/false`、`router_rs_review_gate_disabled_for_host`、`router_rs_task_ledger_flock_enabled` 等 |
+| `hook_common` | hook 事件的通用逻辑：goal gate、review gate、subagent 识别 |
+| `review_gate_engine` | Review lane 判定逻辑 |
+| `goal_auto_detect` | 复杂度检测引擎（主动检测复杂任务） |
+| `hook_policy` | MCP 工具安全审查（`dangerous_mcp_tool_reason`） |
+
+**依赖**: `core-state-utils`(L0) + `framework-kernel`(L0)。L0 内部依赖合规。
+
+### 5.3 `core-state-utils`
+
+**职责**: IO/path/JSONL 原语。零内部依赖。
+
+**模块清单**:
+
+| 模块 | 职责 |
+|------|------|
+| `atomic_write` | 崩溃安全文件写入（temp+rename+fsync） |
+| `path_guard` | 路径安全校验（防 path traversal） |
+| `json_io` | JSON 泛型读写 |
+| `jsonl_maintenance` | JSONL 文件维护（压缩、truncate corrupt tail） |
+| `read_bounded` | 带上限的文件读取 |
+| `task_write_lock` | flock 获取（`acquire_task_ledger_lock_with_timeout`，超时由调用方传入） |
+| `text_utils` | 文本工具函数 |
+| `env_sync` | `unsafe fn set_env/remove_env` — 测试用环境变量操作（Rust 1.66+ unsafe） |
+
+### 5.4 `framework-runtime-hooks`
+
+**职责**: fn-pointer 注册表（OnceLock），跨层通信中枢。零业务逻辑。
+
+**公开 API**:
+- `register(h: RuntimeCoreHooks)` — 注册钩子（仅首次生效）
+- `hooks() -> &'static RuntimeCoreHooks` — 获取已注册钩子（未注册时 panic）
+- `try_hooks() -> Option<&'static RuntimeCoreHooks>` — 获取钩子引用（未注册返回 None）
+- `register_hook_duplicate_check(f)` / `check_hook_duplicates(repo_root)` — hook 重复检查
+
+### 5.5 `telemetry-types`
+
+**职责**: 纯遥测事件类型定义（`TelemetryEvent`、`PredictionOutcomeCheck`）。零内部依赖，仅 serde。
+
+### 5.6 `http-util`
+
+**职责**: HTTP 客户端工厂。仅一个函数 `cached_proxy_url()` — 缓存 `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY` 环境变量解析结果。零生产依赖。
+
+---
+
+## 6. L1 IO & Persistence — 存储后端与追踪
+
+L1 提供持久化基础设施。3 个 crate。
+
+### 6.1 `fr-utils`
+
+**职责**: JSON Value 提取辅助、IO 工具、常量、类型、env_flags。
+
+**依赖**: `core-state-utils`(L0) + `framework-kernel`(L0) + `runtime-storage`(L1)。
+
+**关键模块**: `json_value`（扩展提取函数）、`json_io`（read/write/if-exists）、`util`（`normalized_task_registry` 等）、`stdio_op_registry`（stdio 操作域注册）、`env_flags`（运行时 env 读取）、`io_utils`、`types`、`constants`。
+
+### 6.2 `runtime-storage`
+
+**职责**: 文件系统/SQLite/内存后端、路径解析。
+
+**依赖**: `core-state-utils`(L0) + `framework-kernel`(L0)。
+
+提供统一的存储抽象层，支持 `acquire_runtime_path_lock()` 文件锁操作。
+
+### 6.3 `trace-runtime`
+
+**职责**: Trace 录制、压紧。
+
+**依赖**: `framework-kernel`(L0) + `runtime-storage`(L1)。
+
+---
+
+## 7. L2 Contracts — 验证规则与守卫合约
+
+L2 定义验证规则和守卫合约，无状态管理逻辑。3 个 crate。
+
+### 7.1 `core-state-types`
+
+**职责**: 纯类型定义。零内部依赖（仅 serde + serde_json）。
+
+**包含类型**: `task_state_types`（`ResolvedTaskView`、`TaskPointers`、`DepthCompliance`、`TaskControlMode`、`EvidenceRollup`、`GoalCompletionGates`）、`exit_gate_types`、`goal_prediction`。
+
+**设计**: core-state 通过 `pub use core_state_types::task_state_types::*` 保持向后兼容，消费方通过 `core_state::task_state::*` 访问这些类型。
+
+### 7.2 `fr-contracts`
+
+**职责**: Closeout 验证、执行合约、pre-tool-use 守卫。
+
+**依赖**: `fr-utils`(L1) + `core-policy`(L0) + `core-state-types`(L2) + `framework-kernel`(L0) + `framework-runtime-hooks`(L0)。
+
+**关键模块**: `closeout_enforcement`、`execution_contract`、`pre_tool_use_guard`。
+
+### 7.3 `runtime-core-contracts`
+
+**职责**: Hook 事件路由规则、观测埋点、出站保护、URL 守卫。
+
+**依赖**: `core-policy`(L0) + `framework-kernel`(L0)。
+
+**关键模块**: `hook_event_routing`（hook 事件路由表）、`observation_rules`（观测规则）、`outbound_protection`（出站保护）、`url_guard`（URL 守卫）、`web_fetch_guard`（web fetch 守卫，所有 pub 函数均有真实调用者）。
+
+---
+
+## 8. L3 Execution — LLM 执行与沙箱
+
+L3 是执行层，处理 LLM 实时交互。2-3 个 crate。
+
+### 8.1 `fr-exec`
+
+**职责**: LLM 实时执行、沙箱状态机、运行时视图、环境标志、trace I/O。
+
+**依赖**: `fr-utils`(L1) + `fr-contracts`(L2) + `core-state-utils`(L0) + `core-state-types`(L2) + `core-policy`(L0) + `framework-kernel`(L0) + `host-projection`(L5) + `http-util`(L0) + `runtime-storage`(L1) + `trace-runtime`(L1)。
+
+**关键模块**:
+
+| 模块 | 行数 | 职责 |
+|------|------|------|
+| `runtime_view.rs` | ~700 | `classify_runtime_continuity` — 运行时连续性分类（285 行主函数，产出 22+ 字段的 JSON blob） |
+| `router_env_flags.rs` | ~390 | `ROUTER_RS_*` 连续性/续跑类环境变量解析，委托 core-policy 真源 |
+| `live_execute` | — | LLM 实时执行逻辑 |
+| `sandbox_control` | — | 沙箱状态机控制 |
+| `trace_stream_io` | — | Trace 流式 I/O |
+| `trace_attach` / `trace_transport` | — | Trace 附加和传输 |
+| `evolution_observer` | — | 路由演化观测 |
+
+**设计注意**: `router_env_flags.rs` 中的 `router_rs_task_ledger_flock_enabled()` 是对 `core-policy::env_flags` 的委托包装（增加 tracing warning），而非独立实现。
+
+### 8.2 `browser-mcp`
+
+**职责**: 浏览器自动化 MCP 服务（Playwright 集成）。
+
+**依赖**: `framework-kernel`(L0) + `http-util`(L0) + `host-projection`(L5) + `runtime-core-contracts`(L2)。
+
+### 8.3 `framework-runtime`
+
+**职责**: L3 facade（向后兼容 re-export）。已物理拆分为 `fr-utils`(L1) + `fr-contracts`(L2) + `fr-exec`(L3)，保留为 facade 层。下游 crate 直迁到子 crate，不再依赖 facade。
+
+---
+
+## 9. L4 State Management — Task Engine 与路由
+
+L4 是状态管理层，包含框架的执行引擎核心。3 个 crate。
+
+### 9.1 `core-state` — Task Engine（底层执行引擎）
+
+**职责**: Task 状态机、Goal/RFV/Evidence 状态聚合、step_ledger、exit gates、TASK_LEDGER 幂等事务日志。
+
+**依赖**: `core-state-types`(L2) + `core-state-utils`(L0) + `framework-kernel`(L0)。
+
+#### Task 状态机
+
+TaskControlMode 状态转换：
+
+```
+Idle（无活跃 goal/rfv）
+  ↓ goal_state_manage start
+GoalDrive（goal drive_until_done=true）
+  ↓ quality_gate_manage start
+QualityGate（rfv loop_status=active）
+  ↓ 两者同时激活
+Conflict（不一致，需人工介入）
+```
+
+#### 核心组件
+
+| 组件 | 路径/类型 | 职责 |
+|------|----------|------|
+| Active/Focus 指针 | `active_task.json` / `focus_task.json` | 决定当前执行哪个 task |
+| Goal 状态 | `GOAL_STATE.json` | task 的执行策略（goal、non-goals、done_when、validation_commands） |
+| 事务日志 | `TASK_LEDGER.jsonl` | 幂等写入、回放、跨会话连续性 |
+| 聚合投影 | `TASK_STATE.json` | goal + rfv + evidence 单一视图 |
+| Step Ledger | `STEP_LEDGER.jsonl` | 步骤级追踪 |
+| Evidence | `EVIDENCE_INDEX.json` | 验证证据记录 |
+
+#### 混合加载策略（hydrate_task_state_hybrid）
+
+Task 状态读取采用三阶段容错：
+
+1. 优先读取 `TASK_STATE.json` 聚合投影（快速单文件读取）
+2. 回退到物理文件（`GOAL_STATE.json` + `RFV_LOOP_STATE.json` + `EVIDENCE_INDEX.json`）
+3. 回放 `TASK_LEDGER.jsonl` 中 seq > last_seq 的增量事务
+
+#### 自动指针提升（ADR-001）
+
+当 `active_task.json` 指向的 task 无 `GOAL_STATE.json`，而 `focus_task.json` 指向的 task 有 goal 时，`maybe_promote_focus_to_active_pointer` 自动将 focus 提升为 active。
+
+#### Goal 操作
+
+`goal_state_manage` 支持 8 种操作：`start`、`checkpoint`、`pause`、`resume`、`complete`（不物理删除，标记 `archived: true`）、`clear`、`block`、`amend`（支持自然语言 scope change）。
+
+#### 关键模块
+
+| 模块 | 职责 |
+|------|------|
+| `state_manager/mod.rs` | `read_goal_state`（含 `annotate_goal_staleness` 注入）、`current_env_session_id` |
+| `state_manager/pointer_ops.rs` | 指针读写：`read_pointer_task_id`（多层 fallback）、`read_task_pointer_pair`、`set_task_focus`、`write_focus_task_pointer_minimal` |
+| `state_manager/goal_ops.rs` | Goal 状态 CRUD 操作 |
+| `task_state.rs` | `ResolvedTaskView` 构建、`read_task_ledger_transactions`、env flag 缓存（`#[cfg(not(test))]` OnceLock 模式） |
+| `task_state_aggregate.rs` | `sync_task_state_aggregate` — 合并 goal+rfv+evidence 写入 TASK_STATE.json |
+| `task_ledger.rs` | `append_transaction` — 幂等 JSONL 事务写入（flock 保护） |
+| `utils/task_write_lock.rs` | `acquire_task_ledger_repo_lock` — repo 级 flock（30s 超时） |
+
+### 9.2 `routing-engine`
+
+**职责**: 路由评估、信号检测、评分、路由决策。
+
+**依赖**: `core-state-utils`(L0) — 仅 L0 依赖。
+
+读取 `skills/SKILL_ROUTING_RUNTIME.json`，通过 trigger_hints 匹配 → 评分 → 选择 skill_path。
+
+### 9.3 `skill-layer`
+
+**职责**: Skill 层基础设施：schema、validation、lifecycle、dependency management。
+
+**依赖**: `core-state`(L4)。
+
+---
+
+## 10. L5 Hook Infrastructure — 事件路由与观测
+
+L5 是 Hook 基础设施层，包含事件路由、宿主扩展、MCP 桥。5 个 crate。
+
+### 10.1 `host-projection`
+
+**职责**: Hook 分派、宿主扩展、MCP stdio 桥、投影安装。
+
+**依赖**: `core-state-utils`(L0) + `http-util`(L0) + `core-state`(L4) + `core-policy`(L0) + `framework-kernel`(L0) + `mcp-tool-registry`(L5)。
+
+**关键模块**:
+
+| 模块 | 职责 |
+|------|------|
+| `hosts/mod.rs` | 统一事件分派入口 |
+| `hosts/stop_dispatch.rs` | 统一 Stop 决策管道 |
+| `hosts/event_handlers.rs` | UserPromptSubmit/PostToolUse 处理 |
+| `hosts/host_extensions.rs` | 宿主差异点 |
+| `hosts/mcp_pre_guard.rs` | PreToolUse 路径保护 |
+| `hosts/mcp_stdio_harness/mod.rs` | MCP stdio 桥、全局缓存（SNAPSHOT_CACHE/TASK_VIEW_CACHE OnceLock） |
+| `hosts/mcp_stdio_harness/tools.rs` | MCP 工具实现（~1700 行，含 routing_evolution 480 行分析代码） |
+| `hosts/file_state_lock.rs` | 跨平台文件锁 |
+| `hosts/hook_dispatch.rs` | 工具路由 |
+| `hosts/capability_overrides.rs` | CLI args、observation surfaces |
+| `host_integration/mod.rs` | 投影操作入口 |
+| `host_integration/projection/projection_bootstrap.rs` | 投影引导、task_id 生成（`build_framework_task_id`） |
+
+### 10.2 `runtime-exit-gate`
+
+**职责**: Quality gate RFV 循环。
+
+**依赖**: `core-state`(L4) + `core-state-utils`(L0) + `core-policy`(L0) + `framework-kernel`(L0) + `fr-contracts`(L2) + `fr-exec`(L3) + `host-projection`(L5) + `runtime-core-contracts`(L2)。
+
+### 10.3 `runtime-infra`
+
+**职责**: 运行时初始化、基础 API 门面。
+
+**依赖**: 跨多个 L0-L5 crate（作为基础设施聚合点）。
+
+**公共 API**:
 
 ```rust
 pub mod env {
@@ -406,13 +542,8 @@ pub mod path {
     pub fn resolve_repo_root(arg: Option<&Path>) -> Result<PathBuf, String>;
 }
 
-pub mod time {
-    pub fn now_iso() -> String;
-}
-
-pub mod sync {
-    pub fn file_append_lock() -> &'static Mutex<()>;
-}
+pub mod time { pub fn now_iso() -> String; }
+pub mod sync { pub fn file_append_lock() -> &'static Mutex<()>; }
 
 pub mod io {
     pub fn read_json(path: &Path) -> Result<Option<Value>>;
@@ -425,162 +556,351 @@ pub mod compute {
     pub fn exponential_backoff(attempt: u32, base_secs: f64, multiplier: f64) -> f64;
     pub fn file_sha256_hex(path: &Path) -> Result<String, String>;
 }
-
-pub mod http {
-    /// 缓存代理 URL。检查 HTTPS_PROXY → HTTP_PROXY → ALL_PROXY。
-    /// 实际实现在独立的 `http-util` crate 中。
-}
 ```
+
+### 10.4 `mcp-tool-registry`
+
+**职责**: 统一 MCP 工具注册表：discovery、routing、search。
+
+**依赖**: `core-state-utils`(L0) — 仅 L0 依赖。
+
+### 10.5 `runtime-core-contracts`
+
+**职责**: Hook 事件路由规则、观测埋点、出站保护、URL 守卫。
+
+**注意**: 此 crate 位于 L2（定义合约类型）但部分模块被 L5 消费。
 
 ---
 
-## 10. Runtime-Core 内部结构
+## 11. L6 Orchestration — 编排与自动化闭环
 
-`runtime-core` 是 L7 Bridge 层的平台聚合入口。它的**最终结构**如下：
+L6 是编排层。3 个 crate。
 
-### 10.1 核心保留 (~6,000 行)
+### 11.1 `loop-engine`
 
-属于 L4 核心编排职责、不可移动的部分：
+**职责**: 可选自动化增强层（仅 `loop-auto` profile task 生效）。RFV 闭环：discovery → dispatch → verify。
 
-| 文件 | 行数 | 职责 |
+**依赖**: `core-state-utils`(L0) + `framework-kernel`(L0) + `fr-contracts`(L2) + `core-state`(L4)。
+
+**状态机**:
+
+```
+PENDING → PREFLIGHT → DISPATCH → RUNNING → VERIFYING → COMPLETED
+                                              ↘ ESCALATED
+                                                  ↓ (research escalation auto-resume)
+                                              递归重入 run_loop（depth_remaining--）
+```
+
+**核心能力**:
+- **RFV 收敛检测**: 读取 `RFV_LOOP_STATE.json`，检查 review→fix→verify 是否收敛
+- **Goal 驱动**: PENDING→COMPLETED 状态转换
+- **中断处理**: 自循环活性锁 + 超时
+- **Checkpoint**: session 恢复快照
+
+**设计约束**: loop engine 不关心宿主差异、不操作 closeout 记录、不读取宿主环境变量。它通过 L0 函数指针获取外部状态，通过 `core-state` 管理内部状态。
+
+### 11.2 `session-supervisor`
+
+**职责**: Session 监督器：多 Agent + RFV 闭环。
+
+**依赖**: `core-state-utils`(L0) + `core-policy`(L0) + `core-state`(L4) + `framework-kernel`(L0) + `runtime-storage`(L1)。
+
+### 11.3 `framework-extra`
+
+**职责**: 编排控制面：route_manifest、跨层聚合、session artifacts。
+
+**依赖**: 广泛（core-state, core-policy, framework-kernel, fr-utils, fr-contracts, fr-exec, framework-runtime-hooks, trace-runtime, runtime-core-contracts, runtime-storage, routing-engine, host-projection, runtime-infra）。
+
+**关键模块**: `session_artifacts.rs`（session 产物管理、`build_task_id`）、`alias.rs`（别名构建）。
+
+---
+
+## 12. L7 Bridge / Dispatch — 平台聚合与分发
+
+L7 是最顶层，负责平台聚合和 stdio 分发。2 个 crate。
+
+### 12.1 `runtime-core`
+
+**职责**: 平台聚合 + stdio 分发 + 上下文工程。~6,000 行核心代码。
+
+**依赖**: 广泛（几乎所有 L0-L6 crate）。
+
+**核心模块**:
+
+| 模块 | 行数 | 职责 |
 |------|------|------|
 | `lib.rs` | ~400 | 引导、注册、re-export |
 | `eval_route.rs` | ~450 | 路由评估与分发 |
+| `stdio_dispatch.rs` | ~587 | 编排中枢（深度依赖 37+ 个 `crate::` 引用，不宜机械迁移） |
 | `hook_timing.rs` | ~130 | Hook 计时 |
 | `task_command.rs` | ~130 | 任务命令入站 |
-| `browser_dispatch_hook.rs` | ~30 | 浏览器 dispatch |
-| `review_gate_cli.rs` | ~10 | Review gate CLI |
 
-### 10.2 应迁出到 L0 的部分：`host_integration/`
+**设计**: runtime-core 不包含业务逻辑，仅聚合其他子 crate 并注册到 L0。stdio_dispatch 因深耦合内部模块，留作架构债务长期分解。
 
-`host_integration/`（~5,700 行）包含宿主特有的投影操作。它的内在耦合为零——不引用 `runtime-core` 内部的任何 `crate::` 路径，只通过 `framework_kernel` 和 `host_projection` 的外部 API。应整体迁移到 L0 `host-projection`。
+### 12.2 `router-rs`
 
-### 10.3 应迁出到独立 crate 的部分
+**职责**: CLI 入口二进制（router-rs-cli），宿主 hook/agent/subagent dispatch 总入口。
 
-| 目标 | 内容 | 行数 | 目标 crate |
-|------|------|------|-----------|
-| **运行时基础设施** | `infrastructure/` 中 5 个零依赖文件 | 2,041 | `runtime-infra` (L5) |
-| **stdio_transport** | 对 cli 有 1 处引用，需通过函数指针解耦 | 898 | `runtime-infra` (L5) |
-| **退出质量门控** | `exit_gate/` | 2,906 | `runtime-exit-gate` (L4) |
-| **编排控制面** | `framework_runtime/` 本地模块 | 6,800 | `framework-extra` (L4) |
-| **CLI 分发** | `cli/` | 1,954 | `router-rs` (L7) |
-| **运维工具** | `framework_maint/` | 1,789 | `tools/framework-maint` |
+**依赖**: core-state, core-state-utils, framework-kernel, core-policy, routing-engine, skill-layer, runtime-core, host-projection, framework-extra, loop-engine, browser-mcp, research-harness(optional)。
 
-### 10.4 提取后的最终 L7 Bridge 层
-
-```
-runtime-core (~6,000 行)        ← 编排核心
-framework-runtime (9,620 行)    ← 退出门控 + json_io
-loop-engine (2,943 行)          ← RFV 闭环
-runtime-storage (5,620 行)      ← SQLite 持久化
-trace-runtime (1,103 行)        ← 运行时追踪
-runtime-core-contracts (1,531)  ← 契约与类型
-framework-extra (6,800 行)      ← 编排控制面（新）
-runtime-exit-gate (2,906 行)    ← 质量门控（新）
-runtime-infra (4,000 行)        ← 基础设施（L4 级）
-```
-
-所有沟通路径：
-- `loop-engine` 不直接操作 closeout，通过 L0 函数指针委托给 `framework-runtime`
-- `framework-extra` 不访问宿主特有状态，通过 `HostProvider` trait 交互
-- `runtime-core` 不包含业务逻辑，仅聚合其他子 crate 并注册到 L0
+**dispatch 模式**: `register_hook_dispatchers()` / `find_hook_dispatch()` 注册表模式（非硬编码 dispatch table）。
 
 ---
 
-## 11. 验收标准
+## 13. Feature Layer — 可插拔研究能力
 
-### 11.1 L0 Kernel
+### 13.1 `research-harness`
 
-- [x] 所有 L0 crate（core-policy, framework-kernel, core-state-utils, telemetry-types, http-util）存在且 Cargo.toml 合规
-- [x] L0 crate 不依赖 L1–L7 crate（runtime-storage, runtime-core, framework-runtime, host-projection 等）
-- [x] `runtime-infra` 标记为 L5 启动层
+**职责**: 科研 Harness：paper revision loop、literature search、claims management、AIGC detection。
 
-### 11.1a framework-runtime 拆分（2026-06-23）
+**编译**: 通过 feature-gate 编译期可选，无运行时 crate 依赖。
 
-- [x] fr-utils (L1) 存在：json_value, json_io, types, constants, stdio_op_registry, io_utils, util, env_flags, hooks
-- [x] fr-contracts (L2) 存在：closeout_enforcement, execution_contract, pre_tool_use_guard
-- [x] fr-exec (L3) 存在：live_execute, sandbox_control, runtime_view, router_env_flags, trace_stream_io, trace_attach, trace_transport, evolution_observer
-- [x] framework-runtime 保留为 L3 facade，所有 pub mod re-export 到子 crate
-- [x] 下游 crate（runtime-exit-gate, loop-engine, runtime-infra, framework-extra, research-harness）已直迁到子 crate，不再依赖 facade
-- [x] runtime-core (L7) 保留 framework-runtime facade 依赖（L7→L3 合法），作为二级 re-export 聚合入口
+**宿主隔离**:
+- env var 名称映射委托给 L0 的 `paper_prose_env_var()` / `paper_adversarial_env_var()`
+- 宿主 id 通过函数指针参数接收，不做分支逻辑
+- 数据库路径迁移到 `~/.router-rs/`
 
-### 11.1b core-state 拆分（2026-06-23）
+**L4 不含 Research 领域逻辑**:
 
-- [x] core-state-utils (L0) 存在：atomic_write, path_guard, json_io, read_bounded, task_write_lock, jsonl_maintenance
-- [x] core-state-utils 不依赖任何内部 crate（零内部依赖）
-- [x] core-state-types (L2) 存在：task_state_types, exit_gate_types, goal_prediction
-- [x] core-state-types 仅依赖 serde + serde_json（零内部依赖）
-- [x] core-state 通过 re-export 保持向后兼容（core_state::utils::*, core_state::goal_prediction::*, core_state::task_state::*）
+以下内容属于 L5，**不得出现在 L4 的任何子 crate** 中：
+- `ResearchMode` 枚举 (Quick/Deep)
+- `infer_research_mode()` 分类器
+- `external_research_phrase_signals_deep()`
+- `payload_text_signals_deep_research()`
+- `normalize_research_mode_token()`
 
-### 11.1c routing-engine 分级（2026-06-23）
+架构规则：L4 不感知 `ResearchMode` 的具体含义。如需 research 分类决策，应通过 L0 函数指针注册 `fn(text: &str) -> Option<ResearchMode>` 回调，由 L5 在启用时注册。
 
-- [x] routing-engine 归入 L4 State Management
-- [x] routing-engine 仅依赖 core-state-utils (L0)（原依赖 core-state → 改为 core-state-utils）
+---
 
-### 11.2 DAG 依赖方向
+## 14. 基础设施层 API 参考
 
-- [x] L0 crate 无上层依赖：core-state-utils, framework-kernel, core-policy, framework-runtime-hooks, telemetry-types, http-util 均仅依赖同层或外部 crate
-- [x] L1/L2 crate 不依赖 L3+：fr-utils(L1), runtime-storage(L1), trace-runtime(L1), fr-contracts(L2), core-state-types(L2), runtime-core-contracts(L2) 合规
-- [x] L5 host-projection 依赖 core-state(L4)：**合规**（L5→L4 按 DAG 矩阵允许），已从旧版 L0 错误标注修正
-- [x] framework-runtime-hooks 降级为 L0：纯 fn-pointer 注册表 (OnceLock)，零业务逻辑，L0→L0 无违规
-- [x] ~~browser-mcp→runtime-core~~ **已修复**（Phase 1.1, 2026-06-23，改为 `runtime-core-contracts`）
-- [x] ~~runtime-core→research-harness~~ **已修复**（Phase 1.1, 2026-06-23，改为 feature-gated）
-- [x] **host-projection→routing-engine DAG 违规已修复**（Phase 7, 2026-06-23）：5 个路由函数通过 L4 `runtime-core` 的 fn ptr 注册解耦
+基础设施层是跨所有 crate 共享的**唯一实现**集合。每项功能只应有一个定义。
 
-### 11.3 宿主隔离
+### 14.1 唯一性清单
 
-- [x] 宿主名映射已完全迁移至 `configs/framework/RUNTIME_REGISTRY.json` 生成：`framework-kernel/build.rs` 在编译时读取注册表，生成 `generated_host_tables.rs`，包含 `host_private_config_dir()`、`review_gate_disable_env()`、`settings_guarded_paths()`、`generated_entrypoint_paths()`、`is_ephemeral_task_id()` 以及 `ALL_KNOWN_HOST_DIRS`、`EPHEMERAL_PATH_PATTERNS` 等常量（Round8, 2026-06-23）。添加新宿主只需编辑注册表 <code>→</code> 重新编译，自动保持同步。
-- [x] **per-host provider 文件彻底消除**（Round8, 2026-06-23）：删除 `cursor_provider.rs`、`claude_provider.rs`、`opencode_provider.rs`、`codex_provider.rs`。所有 `HostLifecycle`/`HostTelemetry`/`HostProvider`/`HostCapabilities` 数据（共 ~180 行纯数据）推进 `RUNTIME_REGISTRY.json` 的 `host_targets.metadata`，由 `host-projection/build.rs` 编译期生成完整 provider struct 定义和 trait impl。剩余的逻辑函数（`build_driver_args`、`extract_observation_surfaces`）按能力独立到 `capability_overrides.rs`，内部以 host_id match 分派，消除 per-host 文件命名。
-- [x] `schema_drift.rs` 的 cursor 特有逻辑提取到 L0（Phase 5, 2026-06-23：`host-projection/src/hosts/host_extensions/schema_drift.rs`）
-- [x] `runtime-core/lib.rs` cursor/codex 宿主扩展注册封装（Round7 #3+#4：通过 `register_host_hooks()` 封装，codex duplicate check 作为标准 L4→L4 fn ptr 注册留在 init 序列中）
-- [x] `framework_doctor.rs` `cursor-stop-` 前缀抽象：`is_ephemeral_task_id()` 已迁移至注册表生成（Round7 #8 + Round8, 2026-06-23：前缀从 `RUNTIME_REGISTRY.json` `ephemeral_task_prefixes` 生成）
-- [x] **宿主分派 CLI dispatch table 消除**（Round8, 2026-06-23）：`router_command_dispatch.rs` 中的 `dispatch_hook_command` 和 `dispatch_agent_command` 不再使用 `const DISPATCH_TABLE` 硬编码，改为 `register_hook_dispatchers()` / `find_hook_dispatch()` 注册表模式。`codex/` 子模块（`install.rs`, `mod.rs`）和 `host_extensions/install.rs` 已删除，Codex CLI hooks 安装已被通用投影机制取代。
-- [x] **命名残差清理**（Round8, 2026-06-23）：`evidence.rs` 中 3 个 codex 私有函数重命名为泛型名；`framework-runtime/hooks.rs` 中 `CodexHookDuplicateCheckFn` → `HookDuplicateCheckFn`；`framework-profile/mod.rs` 中 `build_codex_artifact_bundle` → `build_profile_artifact_bundle`；`stdio_op_registry.rs` 中 `"compile_codex_profile_artifacts"` 别名已移除。
-- [x] **上层硬编码宿主路径迁移**（Round8, 2026-06-23）：`hook_policy.rs` 中 `PROTECTED_GENERATED_PATHS` 从硬编码 codex 列表改为 `protected_generated_paths()` 动态遍历 `ALL_HOST_IDS`；`tool_safety_rules.rs` 中 `CROSS_HOST_SURFACES` 从硬编码 `.codex/hooks.json` 改为 `host_home_dirs()` 动态遍历；`worktree_auto_save.rs` 中 `host_config_dir()` match 改为 `host_private_config_dir()` 注册表函数；`dev_exempt.rs` 中豁免列表补全全部宿主目录；`driver.rs` 工作树默认路径从 `.claude/worktrees` 迁移为 `.router-rs/worktrees`；`research-harness/hub.rs` 数据库路径从 `.claude/` 迁移为 `.router-rs/`。
-- [x] **`impl_host_config!` 宏内部硬编码消除**（Round8, 2026-06-23）：`hook_state_unreadable_tag` 和 `session_namespace_env` 的 4-宿主 match 替换为 `framework_kernel::runtime_registry::hook_state_unreadable_tag()` 和 `session_namespace_env()` 生成函数。对应字段已加入 `RUNTIME_REGISTRY.json` 的 `host_targets.metadata.*`。
-- [x] **桥接函数去重 + 跨层宿主硬编码清除**（Round8, 2026-06-24）：`projection_adapter()` 与 `projection_adapter_for_raw()` 合并；`mcp_host_display_label()` 委托 `host_log_label()`；`canonical_tool_name` 错误消息 fallback 改为 `ALL_HOST_IDS`；`runtime-exit-gate/schema_drift.rs` 中 `snapshot_cursor_hooks_json()` 泛化为 `snapshot_host_hooks_json_for(host_id)`；`router_command_dispatch.rs` 中 hook/agent dispatcher 注册改为 `ALL_HOST_IDS` 动态遍历；`framework_profile/mod.rs` 中 `codex_profile` 兼容遗留从 `"codex"` 硬编码改为 `ALL_HOST_IDS[0]`；`runtime-core/lib.rs` 删除 `register_host_hooks()` 空壳调用；`runtime-core/stdio_dispatch.rs` 中 `build_codex_artifact_bundle` 改为已重命名的 `build_profile_artifact_bundle`。
-- [x] **工具层宿主硬编码清除**（Round8, 2026-06-24）：`tools/framework-maint/src/maint.rs` 中 `codex_home_path()`/`cursor_home_path()`/`claude_home_path()` 三个函数合并为泛型 `host_home_path(host_id)`；`verify_cursor_hooks()`/`verify_claude_projection()`/`verify_codex_hooks()`/`verify_opencode_projection_scope()` 中所有 `.cursor/`/`.claude/`/`.codex/`/`.opencode/` 路径改为 `host_private_config_dir(host_id)` 从注册表获取；`print_local_homes()` 改为遍历 `host_home_dirs()` 动态生成；`INSTALL_SCOPES_BY_TOOL` + `projection_install_scopes_for_tool()` 改为 `install_scopes(host_id)` 注册表生成函数；`update_one_shot()` 中 `for tool in ["claude"]` 改为 `ALL_HOST_IDS` 动态遍历。
-- [x] **schema_drift 数据模型泛化**（Round8, 2026-06-24）：`SchemaDriftBaseline.cursor_hooks` 字段重命名为 `host_hooks`；`fallback_cursor_hooks_json()` 重命名为 `fallback_host_hooks_json()`；所有 `cursor_hooks` 引用清除。`install_scopes` 字段已加入 `RUNTIME_REGISTRY.json` 和 `RUNTIME_REGISTRY_SCHEMA.json`，build.rs 生成 `install_scopes(host_id)` 函数。
-- [x] **跨层生产代码宿主硬编码彻底清除**（Round8, 2026-06-24）：`VerifyCursorHooks`/`VerifyCodexHooks` CLI 子命令合并为 `VerifyHostHooks { host_id }`；`CursorHookCommand` 死代码删除；`maint.rs` 中 `.filter(|t| t != "codex")`、`codex_home_path()`/`cursor_home_path()`/`claude_home_path()` 包装器、`host_homes` HashMap、`verify_host_projection(&fw, "claude")` 硬编码全部替换为 `ALL_HOST_IDS` 动态遍历或注册表函数。当前跨层（非 host-projection）生产代码中**零宿主硬编码**。
+| 功能 | 唯一位置 | 说明 |
+|------|---------|------|
+| `env_enabled_default_true/false` | `core_policy::env_flags` | 环境标志布尔解析 |
+| `repo_roots` | `framework_kernel::repo_roots` | 框架根目录发现 |
+| 文件锁 (`flock`) | `host-projection/src/hosts/file_state_lock.rs` | 跨进程文件锁 |
+| stdin 受限读取 (4 MiB) | `host-projection::hooks` | 带 UTF-8 校验的 stdin |
+| JSON 泛型 I/O | `fr_utils::json_io` | read/write/if-exists |
+| 原子写入 | `core_state::utils::atomic_write` | temp+rename+fsync |
+| `now_iso()` | `framework_kernel::time` | UTC ISO 8601 时间戳 |
+| HTTP 代理 URL 缓存 | `http_util::cached_proxy_url` | 缓存代理环境变量解析 |
+| 追加锁 | `OnceLock<Mutex<()>>` | 进程内追加写入串行化 |
+| 退避公式 | `exponential_backoff` | 几何退避计算 |
 
-### 11.4 Runtime-Core 拆分
+### 14.2 归属规则
 
-- [x] `host_integration/` → L0 host-projection
-- [x] `infrastructure/` → runtime-infra
-- [x] `exit_gate/` → runtime-exit-gate
-- [x] `framework_runtime/` 部分 → framework-extra（`route_manifest_fallback` 已迁移（Phase 4, 2026-06-23）并删除 runtime-core 孤儿 re-export；`stdio_dispatch` 因深耦合 runtime-core 内部 37+ 个 `crate::` 引用，不宜机械迁移——留作架构债务，见下文）
-- [x] `cli/` → router-rs
-- [x] `framework_maint/` → tools/framework-maint
+判断一项功能是否属于基础设施的标准（三项全满足）：
+1. **不依赖 L3+ 业务类型**（不引用 quality_gate、session、task 等）
+2. **可被 2 个以上 crate 独立使用**（否则应内联到调用者）
+3. **语义不因宿主而异**（不包含宿主名、不分支宿主行为）
 
-> **关于 stdio_dispatch：** 该模块（587 行）是 runtime-core 的编排中枢，深度依赖 `goal_drive`、`closeout_enforcement`、`execution_contract`、`route`、`runtime_storage`、`session_supervisor`、`trace_runtime`、`kernel_bootstrap` 等 runtime-core 内部模块。不做机械迁移。长期方案应是逐步分解为更薄的注册式分派器。
+### 14.3 L5 不得重复实现 L0/L4 已有功能
 
-### 11.5 基础设施唯一性
+| L5 不应重复实现 | 应改为调用 |
+|----------------|-----------|
+| `env_enabled_default_true/false` | `core_policy::env_flags::env_enabled_default_true/false` |
+| `now_iso()` 时间戳 | `framework_kernel::time::now_iso` |
+| JSON 泛型 I/O | `fr_utils::json_io::*` |
 
-- [x] `env_enabled_default_*` — 唯一源 `core-policy::env_flags`
-- [x] `repo_roots` — 唯一源 `framework-kernel::repo_roots`
-- [x] `now_iso()` — 唯一源 `framework-kernel::time`（7 处 local fn 全部委托到该源）
-- [x] `atomic_write` — 唯一源 `core-state::utils::atomic_write`
-- [x] `read_stdin_limited` — 唯一源 `host-projection::hooks`
+---
 
-### 11.6 L5 研究隔离
+## 15. 产物目录
 
-- [x] `ResearchMode`、`infer_research_mode` 等研究关键词已全清除出 L4
-- [x] L5 通过 L0 函数指针注册表回注 hook → runtime-core 无 research-harness 编译期依赖
+```
+core/
+├── core-state/               L4  State Management
+├── core-state-utils/         L0  IO/path/JSONL 原语（从 core-state 提取）
+├── core-state-types/         L2  纯类型定义（从 core-state 提取）
+├── core-policy/              L0  Kernel (策略)
+├── framework-kernel/         L0  Kernel (time/tokenizer/telemetry/json_value)
+├── framework-runtime-hooks/  L0  fn-pointer 注册表 (OnceLock)
+├── telemetry-types/          L0  Kernel (类型)
+├── http-util/                L0  Kernel (HTTP 工具)
+│
+├── host-projection/          L5  Hook 分派 + 宿主扩展
+├── runtime-exit-gate/        L5  Quality Gate RFV
+├── runtime-infra/            L5  运行时初始化
+├── mcp-tool-registry/        L5  MCP 工具注册表
+│
+├── fr-utils/                 L1  IO 工具、常量、类型
+├── fr-contracts/             L2  合约/守卫
+├── fr-exec/                  L3  执行引擎
+├── framework-runtime/        L3  facade（向后兼容 re-export）
+├── runtime-core-contracts/   L2  Contracts (合约/守卫)
+├── runtime-storage/          L1  IO & Persistence
+├── trace-runtime/            L1  IO & Persistence (Trace)
+│
+├── routing-engine/           L4  路由评估/评分/决策
+├── skill-layer/              L4  Skill 层基础设施
+│
+├── framework-extra/          L6  Orchestration
+├── loop-engine/              L6  Orchestration (RFV)
+├── session-supervisor/       L6  Orchestration
+│
+├── runtime-core/             L7  Bridge (调度/聚合)
+├── router-rs/                L7  CLI 入口
+│
+├── browser-mcp/              L3  浏览器 MCP
+├── research-harness/         Feature  (feature-gated, 研究能力)
+│
+tools/
+├── codegraph-rs/             L3  代码图 MCP
+├── framework-maint/                运维工具
+└── evolution-rs/                   路由演化
+```
 
-### 11.7 ADR 文档完整性
+---
 
-- [x] 产物目录（§8）与实际一致，含 session-supervisor
-- [x] 八层运行时图（§2）与实际 crate 列表一致
+## 16. 运行时层由来
 
-### 追加：Goal 全周期治理（2026-06-23）
+原「L4 运行时平台」中的 crate 经过 2026-06 重构已分解到 L0–L7 八层：
 
-**背景**：基于全面审计（P1×4、P2×6），重构 Goal 生命周期管理系统。
+| 原模块 | 旧行数 | 现归属 |
+|--------|--------|--------|
+| `host_integration/` | 5,707 | L5 host-projection |
+| `framework_runtime/` 本地模块 | 6,800 | L6 framework-extra |
+| `infrastructure/` (5 文件) | 2,041 | L5 runtime-infra |
+| `infrastructure/stdio_transport` | 898 | 并入 runtime-infra |
+| `exit_gate/` | 2,906 | L5 runtime-exit-gate |
+| `framework_maint/` | 1,789 | tools/framework-maint |
+| `cli/` | 1,954 | router-rs (L7) |
+| `closeout_enforcement.rs` | 1,227 | L2 fr-contracts |
+| `execution_contract.rs` | 1,056 | L2 fr-contracts |
+| `runtime_view.rs` | 969 | L3 fr-exec |
+| `hooks.rs` | 133 | L0 framework-runtime-hooks |
 
-**关键决策**：
-1. `complete` 不再物理删除 GOAL_STATE.json，改为标记 `archived: true`
-2. `TASK_POINTERS.json` 读取增加 `tasks[0]` 回退和 `task_registry.json` 回退
-3. `completion_gates` 兼容数组格式（旧数据）
-4. 新增 `amend` 操作，支持自然语言 scope change
-5. 复杂度检测引擎 `goal_auto_detect` 主动检测复杂任务
-6. Stop 管线增加磁盘驱动的 `done_when` 比对
-7. 模型侧 `has_structured_goal_contract` 扩展为 regex + 复杂度分析双模式
+**框架-runtime 拆分**: `framework-runtime` → `fr-utils`(L1) + `fr-contracts`(L2) + `fr-exec`(L3)，保留为向后兼容 facade。
+
+**core-state 拆分**: `core-state-utils`(L0) 和 `core-state-types`(L2) 从 core-state 提取。core-state 通过 re-export 保持向后兼容。
+
+---
+
+## 17. 已知架构债务
+
+### 17.1 并发安全（P1）
+
+| 编号 | 问题 | 位置 |
+|------|------|------|
+| D1 | `router_rs_task_ledger_flock_enabled()` 三份拷贝 | core-state-utils、core-state、core-policy |
+| D2 | 两套独立 flock 实现（超时策略不同） | core-state/utils vs core-state-utils |
+| D3 | 指针读取多层 fallback TOCTOU | pointer_ops.rs:33-148 |
+| D4 | `truncate_corrupt_tail` 无锁修改 | jsonl_maintenance.rs:19-92 |
+| D5 | `task_ledger.rs` is_file() TOCTOU 窗口 | task_ledger.rs:110-175 |
+
+### 17.2 代码重复（P1）
+
+| 编号 | 问题 | 位置 |
+|------|------|------|
+| D6 | `safe_slug` 两处实现语义不一致 | json_value.rs vs projection_bootstrap.rs |
+| D7 | `build_task_id` / `build_framework_task_id` 完全重复 | projection_bootstrap.rs vs session_artifacts.rs |
+| D8 | pointer_ops tasks 数组 upsert 逻辑重复 | write_focus_task_pointer_minimal vs set_task_focus |
+
+### 17.3 函数膨胀（P2）
+
+| 编号 | 问题 | 位置 |
+|------|------|------|
+| D9 | `classify_runtime_continuity` 单函数 285 行 | fr-exec/runtime_view.rs:229-514 |
+| D10 | `routing_evolution` 480 行内联在 tools.rs | host-projection/tools.rs:1214-1695 |
+| D11 | `cli_args.rs` 1632 行（测试与代码混杂） | framework-kernel/cli_args.rs |
+| D12 | Payload 类型过度 Option 化（21 字段全 Option） | stdio_payload_types.rs:64-135 |
+
+### 17.4 API 一致性（P2）
+
+| 编号 | 问题 | 位置 |
+|------|------|------|
+| D13 | Guard 同名异义（LockGuard vs RepoLockGuard） | task_ledger.rs vs task_write_lock.rs |
+| D14 | Tool domain 缺 `is_tool_stdio_op` 谓词 | stdio_op_registry.rs |
+| D15 | `host_home_is_set` 硬编码 match 4 host_id | host_integration/mod.rs:206-215 |
+| D16 | `pub use roots::*` 命名空间污染 | host_integration/mod.rs:270 |
+
+### 17.5 其他（P2-P3）
+
+| 编号 | 问题 | 位置 |
+|------|------|------|
+| D17 | env var 缓存 `#[cfg(not(test))]` 模式重复 4 次 | task_state.rs:25-59 |
+| D18 | `current_env_session_id` 全量扫描 env vars | state_manager/mod.rs:88-98 |
+| D19 | OnceLock 全局缓存不可在测试间重置 | mcp_stdio_harness/mod.rs:133-136 |
+| D20 | `looks_same_identity` substring 匹配误判 | task_state.rs:955-964 |
+| D21 | 测试弱断言 `assert!(x.is_empty() \|\| !x.is_empty())` | framework-runtime-hooks/src/lib.rs:217 |
+| D22 | `http-util` crate 仅一个函数，可考虑合并 | http-util/src/lib.rs |
+
+---
+
+## 18. 设计决策日志
+
+### D-001: 八层运行时模型
+
+**决策**: crate 按依赖方向严格分为 8 层（L0→L7）。
+**理由**: 消除循环依赖，确保每层职责唯一不越界。L5 函数指针注册表是唯一许可的跨层例外。
+**来源**: ADR-010 §2, P1-P10 原则。
+
+### D-002: Task Engine 为底层执行引擎
+
+**决策**: Task 是框架的底层执行引擎，不是可选组件。四生命周期（discussx/planx/implementx/verifyx）已彻底退场。
+**理由**: 用户层表现为 定义 todo → 执行 todo → 完成 todo。Loop engine 是运行在 Task 之上的可选增强。
+**来源**: AGENTS.md §Task Engine, MIGRATION.md。
+
+### D-003: 注册表驱动宿主隔离
+
+**决策**: 所有宿主元数据从 `RUNTIME_REGISTRY.json` 编译期生成。添加新宿主只需编辑注册表。
+**理由**: 消除 per-host provider 文件的硬编码，跨层生产代码中零宿主硬编码。
+**来源**: ADR-010 §4, Round8 重构。
+
+### D-004: REVIEW_GATE 全 advisory 化
+
+**决策**: REVIEW_GATE Stop 在所有宿主上为 advisory-only（仅 followup_message nudge），不 hard-block。
+**理由**: 深度 review 是 skill 层行为，不是 hook 层硬约束。interactive profile 下 suppress review nudge 和 spawn-first。
+**来源**: AGENTS.md, MIGRATION.md。
+
+### D-005: framework-runtime 物理拆分
+
+**决策**: framework-runtime → fr-utils(L1) + fr-contracts(L2) + fr-exec(L3)，保留 facade。
+**理由**: 消除 L2→L5 逆向依赖，下游 crate 直迁到子 crate。
+**来源**: ADR-010 §11.1a。
+
+### D-006: core-state 拆分
+
+**决策**: core-state-utils(L0) 和 core-state-types(L2) 从 core-state 提取。
+**理由**: core-state-utils 是零内部依赖的 IO 原语，core-state-types 是零内部依赖的纯类型，两者独立以减少耦合。
+**来源**: ADR-010 §11.1b。
+
+### D-007: 基础设施唯一性
+
+**决策**: 每项基础设施功能只应有一个定义。
+**理由**: 防止重复实现导致行为不一致和维护负担。
+**来源**: ADR-010 §14, 三项全满足归属规则。
+
+### D-008: L4 不含 Research 领域逻辑
+
+**决策**: ResearchMode、infer_research_mode 等研究关键词全清除出 L4。
+**理由**: 保持 L4 作为通用状态管理层的纯净性。需要时通过 L0 函数指针注入回调。
+**来源**: ADR-010 §13。
+
+### D-009: Session 作用域管理
+
+**决策**: Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage start` 创建新 state。
+**理由**: 避免残留状态污染新会话。
+**来源**: AGENTS.md §会话级作用域。
+
+### D-010: Confirmed-only 输出
+
+**决策**: Review 类 skill 最终用户可见输出只包含 confirmed findings。rejected 和 hallucinated 不出现。
+**理由**: 防止幻觉 findings 误导用户。
+**来源**: AGENTS.md §Review 通用协议。
+
+### D-011: Goal complete 不物理删除
+
+**决策**: `complete` 不再物理删除 GOAL_STATE.json，改为标记 `archived: true`。
+**理由**: 保留历史状态供审计和恢复，避免不可逆操作。
+**来源**: Goal 全周期治理（2026-06-23）。
+
+### D-012: 闭集宿主收敛
+
+**决策**: 权威闭集为 `codex`、`claude`、`cursor`、`opencode`。
+**理由**: 简化维护面，统一为 4 个注册表驱动的宿主。
+**来源**: MIGRATION.md。

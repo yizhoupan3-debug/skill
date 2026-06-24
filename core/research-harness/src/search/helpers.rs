@@ -6,12 +6,11 @@
 //! across multiple search submodules: HTTP client building, XML parsing,
 //! text compaction, and JSON field access.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use reqwest::blocking::Client;
 use serde_json::Value;
 use std::collections::HashSet;
 use std::sync::OnceLock;
-use std::time::Duration;
 
 // ── Constants ──
 
@@ -22,11 +21,9 @@ pub(super) const ARXIV_BASE_URL: &str = "https://export.arxiv.org/api/query";
 // ── HTTP Client ──
 
 /// Build a blocking HTTP client with a bounded timeout.
+/// Delegates to the shared factory in `crate::util`.
 pub(super) fn http_client(timeout_secs: u64) -> Result<Client> {
-    Client::builder()
-        .timeout(Duration::from_secs(timeout_secs.clamp(3, 120)))
-        .build()
-        .context("failed to build HTTP client")
+    crate::util::blocking_client(timeout_secs)
 }
 
 /// Clamp a search result limit to [1, 20].
@@ -107,6 +104,10 @@ fn stopwords() -> HashSet<&'static str> {
 }
 
 // ── JSON field helpers (migrated from autoresearch-rs/src/helpers.rs) ──
+// NOTE: These return `String` (not `&str`) and use `"-"` as default, unlike
+// `crate::util::{str_field, str_field_default}` which return `&str` with `""`.
+// The owned return type and non-empty default are intentional for search result
+// construction where fields are immediately consumed as owned strings.
 
 pub(super) fn str_field(value: &Value, key: &str) -> String {
     str_field_default(value, key, "-")
@@ -118,14 +119,6 @@ pub(super) fn str_field_default(value: &Value, key: &str, default: &str) -> Stri
         .and_then(Value::as_str)
         .unwrap_or(default)
         .to_string()
-}
-
-pub(super) fn value_to_string(value: &Value) -> String {
-    match value {
-        Value::String(text) => text.clone(),
-        Value::Null => "-".into(),
-        other => other.to_string(),
-    }
 }
 
 // ── External source argument (migrated from cli.rs + arg_impls.rs) ──

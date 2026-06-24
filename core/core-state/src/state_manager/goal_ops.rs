@@ -58,17 +58,6 @@ pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
     }
 }
 
-/// Cache-invalidation hook called after every goal-state mutation.
-///
-/// Currently a no-op because the routing record cache lives in
-/// `routing_engine` (across crate boundary) and is invalidated via
-/// file-system mtime checks rather than in-process signals.
-/// Retained as a seam so a future in-process cache can plug in without
-/// touching every call-site.
-fn invalidate_route_records_cache_on_write() {
-    // No in-process route records cache; no-op for goal drive writes.
-}
-
 fn resolve_session_id(payload: &Value) -> String {
     // 1. Explicit from payload
     if let Some(sid) = payload
@@ -447,7 +436,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-            invalidate_route_records_cache_on_write();
             let quality_gate_superseded =
                 deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
@@ -506,7 +494,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-            invalidate_route_records_cache_on_write();
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
@@ -718,7 +705,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             };
             crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
                 .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-            invalidate_route_records_cache_on_write();
             crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
                 &repo_root, &task_id,
             );
@@ -744,7 +730,6 @@ fn clear_goal_state(repo_root: &Path, task_id_resolved: Option<String>) -> Resul
     if existed {
         fs::remove_file(&path).map_err(|err| format!("remove GOAL_STATE: {err}"))?;
     }
-    invalidate_route_records_cache_on_write();
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     neutralize_task_pointers_for_task(repo_root, &task_id)?;
     Ok(json!({
@@ -785,7 +770,6 @@ fn resume_goal_running(
     };
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-    invalidate_route_records_cache_on_write();
     let quality_gate_superseded = deactivate_quality_gate_for_conflict_with_goal_drive(repo_root, &task_id)?;
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     let goal_label = state
@@ -840,7 +824,6 @@ fn set_terminal_flags(
     };
     crate::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
         .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
-    invalidate_route_records_cache_on_write();
     crate::task_state_aggregate::sync_task_state_aggregate_best_effort(repo_root, &task_id);
     Ok(json!({
         "ok": true,

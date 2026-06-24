@@ -126,7 +126,7 @@ pub struct EvidenceAnchor {
     pub strength: EvidenceStrength,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum EvidenceStrength {
     Strong,
@@ -136,7 +136,7 @@ pub enum EvidenceStrength {
 }
 
 /// How far a claim can go (no-claim, local-only, top-venue).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ClaimCeiling {
     NoClaim,

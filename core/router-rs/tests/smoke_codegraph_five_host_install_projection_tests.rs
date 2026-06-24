@@ -149,7 +149,7 @@ mod five_host_install_projection {
 
         let (cleanup_root, roots) = test_roots(&framework_root);
         let prior_home = std::env::var_os("HOME");
-        unsafe { std::env::set_var("HOME", &roots.account_home_root) };
+        unsafe { core_state_utils::env_sync::set_env("HOME", &roots.account_home_root) };
 
         for host_id in &host_ids {
             let tool = skills_install_tool_for_host_id(&registry, host_id).expect("install tool");
@@ -165,9 +165,9 @@ mod five_host_install_projection {
         }
 
         if let Some(h) = prior_home {
-            unsafe { std::env::set_var("HOME", h) };
+            unsafe { core_state_utils::env_sync::set_env("HOME", &h) };
         } else {
-            unsafe { std::env::remove_var("HOME") };
+            unsafe { core_state_utils::env_sync::remove_env("HOME") };
         }
         let _ = fs::remove_dir_all(cleanup_root);
     }

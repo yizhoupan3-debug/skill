@@ -6,16 +6,15 @@
 
 ## 1. Runtime Protocol
 
-所有 runtime / route 默认按以下四步闭环执行：
+所有 runtime / route 默认按以下 task-driven 闭环执行：
 
-`讨论 -> 规划 -> 执行 -> 验证`
+`Task Intake → 执行 → 验证`
 
 规则：
 
-1. `讨论`: 先收敛对象、动作、约束、交付物和成功标准。
-2. `规划`: 选择最窄 owner、必要 gate / overlay、最小路径和验证路径。
-3. `执行`: 按最小 delta 执行，不扩大抽象或替代 domain owner。
-4. `验证`: 用测试、命令、截图、产物或明确 blocker 关闭任务。
+1. `Task Intake`: 抽取目标、约束、交付物和成功标准；选最窄 owner。
+2. `执行`: 按最小 delta 执行，不扩大抽象或替代 domain owner。
+3. `验证`: 用测试、命令、截图、产物或明确 blocker 关闭任务。
 
 补充约束：
 

@@ -17,8 +17,8 @@
 /// Canonical env flag for task-ledger flock. Parses `ROUTER_RS_TASK_LEDGER_FLOCK`
 /// (default ON; `0`/`false`/`off`/`no` disables).
 /// NOTE: A matching function lives in core-policy/env_flags.rs for crates that
-/// depend on core-policy. core-state cannot depend on core-policy (reverse dep),
-/// so this leaf-crate copy is intentionally kept in sync.
+/// depend on core-policy but cannot depend on core-state-utils (circular dep).
+/// The two copies are intentionally kept in sync.
 pub fn router_rs_task_ledger_flock_enabled() -> bool {
     match std::env::var("ROUTER_RS_TASK_LEDGER_FLOCK") {
         Ok(v) => {
@@ -37,7 +37,7 @@ use std::time::{Duration, Instant};
 pub const TASK_LEDGER_LOCK_BASENAME: &str = ".router-rs.task-ledger.lock";
 
 /// Holds `artifacts/current/.router-rs.task-ledger.lock` open + exclusively locked until dropped.
-pub(crate) struct TaskLedgerRepoLockGuard {
+pub struct TaskLedgerRepoLockGuard {
     _file: Option<std::fs::File>,
 }
 
@@ -49,8 +49,9 @@ fn ledger_lock_abs_path(repo_root: &Path) -> std::path::PathBuf {
 }
 
 /// Acquire an exclusive cross-process lock for all task-ledger writers sharing this `repo_root`.
-pub(crate) fn acquire_task_ledger_repo_lock(
+pub fn acquire_task_ledger_repo_lock(
     repo_root: &Path,
+    timeout: Duration,
 ) -> Result<TaskLedgerRepoLockGuard, String> {
     if !router_rs_task_ledger_flock_enabled() {
         return Ok(TaskLedgerRepoLockGuard { _file: None });
@@ -77,7 +78,6 @@ pub(crate) fn acquire_task_ledger_repo_lock(
         })?;
     let mut delay = Duration::from_millis(10);
     let max_delay = Duration::from_millis(200);
-    let timeout = Duration::from_secs(30);
     let start = Instant::now();
 
     loop {
@@ -110,7 +110,7 @@ pub fn apply_task_ledger_mutation<T>(
     repo_root: &Path,
     f: impl FnOnce() -> Result<T, String>,
 ) -> Result<T, String> {
-    let _guard = acquire_task_ledger_repo_lock(repo_root)?;
+    let _guard = acquire_task_ledger_repo_lock(repo_root, Duration::from_secs(30))?;
     f()
 }
 
@@ -141,7 +141,7 @@ mod tests {
             .lock()
             .expect("task ledger flock env mutex poisoned");
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
-        unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") };
+        unsafe { crate::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") };
         let tmp = unique_tmp();
         fs::create_dir_all(tmp.join("artifacts/current")).expect("mkdir");
         let v = apply_task_ledger_mutation(&tmp, || Ok(7_u8)).expect("apply");
@@ -151,8 +151,8 @@ mod tests {
             "expected lock sentinel file"
         );
         match prev {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") },
+            Some(p) => unsafe { crate::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p) },
+            None => unsafe { crate::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -163,14 +163,14 @@ mod tests {
             .lock()
             .expect("task ledger flock env mutex poisoned");
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
-        unsafe { std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", "0") };
+        unsafe { crate::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", "0") };
         let tmp = unique_tmp();
         fs::create_dir_all(tmp.join("artifacts/current")).expect("mkdir");
         let v = apply_task_ledger_mutation(&tmp, || Ok(9_u8)).expect("apply");
         assert_eq!(v, 9);
         match prev {
-            Some(p) => unsafe { std::env::set_var("ROUTER_RS_TASK_LEDGER_FLOCK", p) },
-            None => unsafe { std::env::remove_var("ROUTER_RS_TASK_LEDGER_FLOCK") },
+            Some(p) => unsafe { crate::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p) },
+            None => unsafe { crate::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") },
         }
         let _ = fs::remove_dir_all(&tmp);
     }

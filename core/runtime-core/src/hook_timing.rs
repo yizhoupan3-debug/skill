@@ -66,6 +66,7 @@ pub fn emit_hook_timing_line(event: &str) {
 
 #[cfg(test)]
 mod tests {
+    use crate::router_rs_hook_timing_enabled;
     use crate::router_self::resolve_router_rs_test_bin;
     use crate::test_env_sync::process_env_lock;
     use std::path::PathBuf;
@@ -74,7 +75,7 @@ mod tests {
     #[test]
     fn hook_timing_env_enabled_and_emits_on_stderr() {
         let _g = process_env_lock();
-        unsafe { std::env::set_var("ROUTER_RS_HOOK_TIMING", "1") };
+        unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_HOOK_TIMING", "1") };
         assert!(router_rs_hook_timing_enabled());
 
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");

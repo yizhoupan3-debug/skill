@@ -159,7 +159,7 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
     obj.insert("loop_status".to_string(), json!("active"));
     obj.insert("current_round".to_string(), json!(0));
     obj.insert("rounds".to_string(), json!([]));
-    obj.insert("updated_at".to_string(), json!(now_iso()));
+    obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
     if let Some(extra) = payload.get("metadata").cloned() {
         obj.insert("metadata".to_string(), extra);
     }
@@ -330,7 +330,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         json!(supervisor_decision),
     );
     entry_map.insert("reason".to_string(), json!(reason));
-    entry_map.insert("at".to_string(), json!(now_iso()));
+    entry_map.insert("at".to_string(), json!(framework_kernel::time::now_iso()));
     entry_map.insert("evidence_refs".to_string(), Value::Array(evidence_refs));
     if !adversarial_findings.is_empty() {
         entry_map.insert(
@@ -406,7 +406,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         }
 
     obj.insert("current_round".to_string(), json!(round_n));
-    obj.insert("updated_at".to_string(), json!(now_iso()));
+    obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
 
     // Convergence-aware loop status: supervisor close is gated by min_rounds
     // AND consecutive_stable_required. max_rounds is an unconditional hard ceiling.

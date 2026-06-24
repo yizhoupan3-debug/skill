@@ -253,12 +253,12 @@ fn parse_usize_clamped(
 /// Set an environment variable. Wraps `std::env::set_var` (unsafe due to
 /// thread-safety concern) into a single call site, reducing repeated unsafe blocks.
 pub fn set_env(key: &str, val: &str) {
-    unsafe { std::env::set_var(key, val) }
+    unsafe { core_state_utils::env_sync::set_env(key, val) }
 }
 
 /// Remove an environment variable.
 pub fn unset_env(key: &str) {
-    unsafe { std::env::remove_var(key) }
+    unsafe { core_state_utils::env_sync::remove_env(key) }
 }
 
 #[cfg(test)]

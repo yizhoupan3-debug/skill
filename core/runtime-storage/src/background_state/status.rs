@@ -1,10 +1,6 @@
 use super::types::*;
 use chrono::{DateTime, Utc};
 
-pub(super) fn now_iso() -> String {
-    framework_kernel::time::now_iso()
-}
-
 /// Best-effort RFC3339 parse used by the reaper. Non-RFC3339 timestamps
 /// (legacy or hand-edited state) are treated as "unknown age" and skipped.
 pub(super) fn parse_rfc3339_to_utc(value: &str) -> Option<DateTime<Utc>> {
@@ -102,7 +98,7 @@ pub(super) fn validate_transition(
 }
 impl BackgroundRunStatus {
     pub(super) fn claimed_placeholder(job_id: &str, session_id: &str) -> Self {
-        let now = now_iso();
+        let now = framework_kernel::time::now_iso();
         BackgroundRunStatus {
             job_id: job_id.to_string(),
             session_id: Some(session_id.to_string()),
@@ -157,8 +153,8 @@ impl BackgroundJobStatusMutation {
                     .unwrap_or_else(default_multitask_strategy),
                 result: self.result.clone(),
                 error: self.error.clone(),
-                created_at: now_iso(),
-                updated_at: now_iso(),
+                created_at: framework_kernel::time::now_iso(),
+                updated_at: framework_kernel::time::now_iso(),
                 attempt: self.attempt.unwrap_or(DEFAULT_BACKGROUND_JOB_ATTEMPT),
                 retry_count: self
                     .retry_count
@@ -204,7 +200,7 @@ impl BackgroundJobStatusMutation {
                 error: self.error.clone()
                     .or_else(|| existing.error.clone()),
                 created_at: existing.created_at.clone(),
-                updated_at: now_iso(),
+                updated_at: framework_kernel::time::now_iso(),
                 attempt: self.attempt.unwrap_or(existing.attempt),
                 retry_count: self.retry_count.unwrap_or(existing.retry_count),
                 max_attempts: self.max_attempts.unwrap_or(existing.max_attempts),

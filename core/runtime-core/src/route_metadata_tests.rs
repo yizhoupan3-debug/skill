@@ -374,6 +374,7 @@ use crate::route::has_paper_review_judgment_context;
                 trigger_hints: vec!["codex only".to_string()],
                 host_platforms: vec!["codex".to_string()],
                 record_kind: "skill".to_string(),
+                skill_flags: vec![],
             }),
             skill_record_from_raw(RawSkillRecord {
                 slug: "all-command".to_string(),

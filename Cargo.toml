@@ -43,7 +43,9 @@ members = [
     "core/research-harness",
     "tools/evolution-rs",
     "tools/framework-maint",
-    "tools/codegraph-rs"]
+    "tools/codegraph-rs",
+    "core/mcp-tool-registry",
+    "core/skill-layer"]
 exclude = [
     "codex-aggregator"
 ]

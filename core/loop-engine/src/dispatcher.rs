@@ -158,7 +158,7 @@ pub fn run_action_sync(
     // Acquire a global concurrency permit before spawning the OS process.
     let _permit = SubagentPermit::acquire(subagent_semaphore());
 
-    let mut child = Command::new(&binary)
+    let child = Command::new(&binary)
         .args(["-p", &handoff])
         .current_dir(repo_root)
         .stdout(Stdio::piped())
@@ -270,13 +270,13 @@ mod tests {
     #[test]
     fn test_resolve_subagent_binary_env() {
         unsafe {
-            std::env::set_var("ROUTER_RS_SUBAGENT_BIN", "/usr/bin/fake-opencode");
+            core_state_utils::env_sync::set_env("ROUTER_RS_SUBAGENT_BIN", "/usr/bin/fake-opencode");
         }
         let result = resolve_subagent_binary();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "/usr/bin/fake-opencode");
         unsafe {
-            std::env::remove_var("ROUTER_RS_SUBAGENT_BIN");
+            core_state_utils::env_sync::remove_env("ROUTER_RS_SUBAGENT_BIN");
         }
     }
 }

@@ -1,6 +1,7 @@
 //! B0 root: shared traits for dependency inversion and telemetry pipeline.
 
 // ── B0 core modules ──
+pub mod constants;
 pub mod framework_host_targets;
 pub mod repo_roots;
 pub mod router_self;

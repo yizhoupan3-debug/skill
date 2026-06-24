@@ -10,6 +10,7 @@ name = "session_supervisor"
 path = "src/lib.rs"
 
 [dependencies]
+core-state-utils = { path = "../core-state-utils" }
 core-policy = { path = "../core-policy" }
 core-state = { path = "../core-state" }
 framework-kernel = { path = "../framework-kernel" }

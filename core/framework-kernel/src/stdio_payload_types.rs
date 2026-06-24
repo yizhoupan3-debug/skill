@@ -386,3 +386,231 @@ pub fn runtime_concurrency_defaults_payload() -> RuntimeConcurrencyDefaultsPaylo
         subagent_timeout_seconds: DEFAULT_SUBAGENT_TIMEOUT_SECONDS_LOCAL,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Concurrency constant sanity checks ──
+
+    #[test]
+    fn pool_size_constants_are_sane() {
+        assert!(DEFAULT_ROUTER_STDIO_POOL_SIZE > 0);
+        assert!(MAX_ROUTER_STDIO_POOL_SIZE >= DEFAULT_ROUTER_STDIO_POOL_SIZE);
+    }
+
+    #[test]
+    fn compute_constants_are_sane() {
+        assert!(DEFAULT_COMPUTE_THREADS_LOCAL > 0);
+        assert!(MAX_COMPUTE_THREADS_LOCAL >= DEFAULT_COMPUTE_THREADS_LOCAL);
+    }
+
+    #[test]
+    fn background_job_constants_are_sane() {
+        assert!(DEFAULT_MAX_BACKGROUND_JOBS_LOCAL > 0);
+        assert!(MAX_BACKGROUND_JOBS_LIMIT_LOCAL >= DEFAULT_MAX_BACKGROUND_JOBS_LOCAL);
+        assert!(DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS_LOCAL > 0);
+    }
+
+    #[test]
+    fn subagent_constants_are_sane() {
+        assert!(DEFAULT_MAX_CONCURRENT_SUBAGENTS_LOCAL > 0);
+        assert!(MAX_CONCURRENT_SUBAGENTS_LIMIT_LOCAL >= DEFAULT_MAX_CONCURRENT_SUBAGENTS_LOCAL);
+        assert!(DEFAULT_SUBAGENT_TIMEOUT_SECONDS_LOCAL > 0);
+    }
+
+    // ── runtime_concurrency_defaults_payload ──
+
+    #[test]
+    fn runtime_concurrency_defaults_payload_populates_fields() {
+        let payload = runtime_concurrency_defaults_payload();
+        assert_eq!(payload.router_stdio.default_pool_size, DEFAULT_ROUTER_STDIO_POOL_SIZE);
+        assert_eq!(payload.router_stdio.max_pool_size, MAX_ROUTER_STDIO_POOL_SIZE);
+        assert!(!payload.router_stdio.env_keys.is_empty());
+        assert!(!payload.router_stdio.stdio_max_concurrency_arg.is_empty());
+        assert!(!payload.router_stdio.request_concurrency_field.is_empty());
+        assert!(!payload.router_stdio.scheduling.is_empty());
+        assert!(!payload.router_stdio.backpressure.is_empty());
+    }
+
+    #[test]
+    fn runtime_concurrency_defaults_compute_section() {
+        let payload = runtime_concurrency_defaults_payload();
+        assert_eq!(payload.compute.default_threads, DEFAULT_COMPUTE_THREADS_LOCAL);
+        assert_eq!(payload.compute.max_threads, MAX_COMPUTE_THREADS_LOCAL);
+        assert!(!payload.compute.env_keys.is_empty());
+        assert!(!payload.compute.cli_arg.is_empty());
+        assert!(!payload.compute.scheduling.is_empty());
+    }
+
+    #[test]
+    fn runtime_concurrency_defaults_background_and_subagent() {
+        let payload = runtime_concurrency_defaults_payload();
+        assert_eq!(payload.max_background_jobs, DEFAULT_MAX_BACKGROUND_JOBS_LOCAL);
+        assert_eq!(payload.max_background_jobs_limit, MAX_BACKGROUND_JOBS_LIMIT_LOCAL);
+        assert_eq!(payload.background_job_timeout_seconds, DEFAULT_BACKGROUND_JOB_TIMEOUT_SECONDS_LOCAL);
+        assert_eq!(payload.max_concurrent_subagents, DEFAULT_MAX_CONCURRENT_SUBAGENTS_LOCAL);
+        assert_eq!(payload.max_concurrent_subagents_limit, MAX_CONCURRENT_SUBAGENTS_LIMIT_LOCAL);
+        assert_eq!(payload.subagent_timeout_seconds, DEFAULT_SUBAGENT_TIMEOUT_SECONDS_LOCAL);
+    }
+
+    #[test]
+    fn runtime_concurrency_defaults_serializes() {
+        let payload = runtime_concurrency_defaults_payload();
+        let json = serde_json::to_value(&payload).unwrap();
+        assert!(json.is_object());
+        assert!(json.get("router_stdio").is_some());
+        assert!(json.get("compute").is_some());
+        assert!(json.get("max_background_jobs").is_some());
+        assert!(json.get("subagent_timeout_seconds").is_some());
+    }
+
+    #[test]
+    fn router_stdio_pool_has_three_env_keys() {
+        let payload = runtime_concurrency_defaults_payload();
+        assert_eq!(payload.router_stdio.env_keys.len(), 3);
+    }
+
+    #[test]
+    fn compute_has_two_env_keys() {
+        let payload = runtime_concurrency_defaults_payload();
+        assert_eq!(payload.compute.env_keys.len(), 2);
+    }
+
+    // ── ExecuteRequestPayload round-trip ──
+
+    #[test]
+    fn execute_request_payload_round_trip() {
+        let payload = ExecuteRequestPayload {
+            schema_version: "v1".into(),
+            task: "do stuff".into(),
+            session_id: "s1".into(),
+            user_id: "u1".into(),
+            selected_skill: "test".into(),
+            overlay_skill: None,
+            layer: "main".into(),
+            route_engine: None,
+            diagnostic_route_mode: None,
+            reasons: vec![],
+            prompt_preview: None,
+            dry_run: false,
+            trace_event_count: 0,
+            trace_output_path: None,
+            default_output_tokens: 4096,
+            research_mode: None,
+            execution_protocol: None,
+            verification_required: None,
+            evidence_required: None,
+            model_id: "claude-sonnet".into(),
+            aggregator_base_url: "http://localhost".into(),
+            aggregator_api_key: "key".into(),
+        };
+        let json_str = serde_json::to_string(&payload).unwrap();
+        let deserialized: ExecuteRequestPayload =
+            serde_json::from_str(&json_str).unwrap();
+        assert_eq!(deserialized.schema_version, "v1");
+        assert_eq!(deserialized.task, "do stuff");
+        assert_eq!(deserialized.default_output_tokens, 4096);
+        assert!(!deserialized.dry_run);
+        assert!(deserialized.overlay_skill.is_none());
+    }
+
+    // ── ExecuteUsagePayload round-trip ──
+
+    #[test]
+    fn execute_usage_payload_round_trip() {
+        let usage = ExecuteUsagePayload {
+            input_tokens: 100,
+            output_tokens: 200,
+            total_tokens: 300,
+            mode: "normal".into(),
+        };
+        let json = serde_json::to_value(&usage).unwrap();
+        assert_eq!(json["input_tokens"], 100);
+        assert_eq!(json["total_tokens"], 300);
+        let back: ExecuteUsagePayload = serde_json::from_value(json).unwrap();
+        assert_eq!(back.mode, "normal");
+    }
+
+    // ── BackgroundControlRequestPayload round-trip ──
+
+    #[test]
+    fn background_control_request_payload_round_trip() {
+        let payload = BackgroundControlRequestPayload {
+            schema_version: "v1".into(),
+            operation: "checkpoint".into(),
+            multitask_strategy: Some("parallel".into()),
+            current_status: None,
+            task_active: None,
+            task_done: None,
+            active_job_count: None,
+            capacity_limit: None,
+            attempt: None,
+            retry_count: None,
+            max_attempts: None,
+            backoff_base_seconds: None,
+            backoff_multiplier: None,
+            max_backoff_seconds: None,
+            requested_parallel_group_id: None,
+            request_parallel_group_ids: None,
+            request_lane_ids: None,
+            lane_id_prefix: None,
+            batch_size: None,
+        };
+        let json_str = serde_json::to_string(&payload).unwrap();
+        let back: BackgroundControlRequestPayload =
+            serde_json::from_str(&json_str).unwrap();
+        assert_eq!(back.operation, "checkpoint");
+        assert_eq!(back.multitask_strategy.as_deref(), Some("parallel"));
+    }
+
+    // ── SandboxControlResponsePayload round-trip ──
+
+    #[test]
+    fn sandbox_control_response_payload_round_trip() {
+        let payload = SandboxControlResponsePayload {
+            schema_version: "v1".into(),
+            authority: "supervisor".into(),
+            operation: "start".into(),
+            current_state: Some("created".into()),
+            next_state: Some("running".into()),
+            allowed: true,
+            resolved_state: None,
+            reason: "ok".into(),
+            error: None,
+            failure_reason: None,
+            budget_violation: None,
+            cleanup_required: None,
+            quarantined: None,
+            effective_capabilities: None,
+            sandbox_id: None,
+            profile_id: None,
+            event_schema_version: None,
+            event_log_path: None,
+            event_written: false,
+            event_kind: None,
+        };
+        let json = serde_json::to_value(&payload).unwrap();
+        assert_eq!(json["allowed"], true);
+        assert_eq!(json["reason"], "ok");
+        let back: SandboxControlResponsePayload =
+            serde_json::from_value(json).unwrap();
+        assert_eq!(back.operation, "start");
+        assert!(back.allowed);
+    }
+
+    // ── TraceMetadataWriteRequestPayload with defaults ──
+
+    #[test]
+    fn trace_metadata_write_request_defaults() {
+        let payload: TraceMetadataWriteRequestPayload =
+            serde_json::from_str(r#"{"output_path":"/tmp/out","task":"t","owner":"o","gate":"g","verification_status":"PASS"}"#).unwrap();
+        assert_eq!(payload.output_path, "/tmp/out");
+        assert_eq!(payload.task, "t");
+        // Default values from serde
+        assert!(payload.write_outputs); // default_true()
+        assert!(payload.mirror_paths.is_empty());
+        assert!(payload.matched_skills.is_empty());
+        assert!(payload.artifact_paths.is_empty());
+    }
+}

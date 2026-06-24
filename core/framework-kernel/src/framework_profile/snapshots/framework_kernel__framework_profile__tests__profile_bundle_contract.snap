@@ -24,12 +24,7 @@ expression: json
         "artifact_contract",
         "mcp_servers",
         "workspace_bootstrap",
-        "batch_execution",
-        "cron_execution",
-        "ci_runner",
-        "non_interactive_entrypoint",
-        "external_session_supervisor",
-        "rate_limit_auto_resume",
+        "interactive_agent_chat",
         "host_resume_entrypoint",
         "hard_gate_hooks",
         "framework_alias_entrypoints"
@@ -201,12 +196,7 @@ expression: json
         "artifact_contract",
         "mcp_servers",
         "workspace_bootstrap",
-        "batch_execution",
-        "cron_execution",
-        "ci_runner",
-        "non_interactive_entrypoint",
-        "external_session_supervisor",
-        "rate_limit_auto_resume",
+        "interactive_agent_chat",
         "host_resume_entrypoint",
         "hard_gate_hooks",
         "framework_alias_entrypoints"
@@ -223,8 +213,8 @@ expression: json
         "closeout_evidence_hooks",
         "review_gate_router_observation"
       ],
-      "host_cli": "codex",
-      "host_id": "codex",
+      "host_cli": "cursor",
+      "host_id": "cursor",
       "managed_mcp_paths": [],
       "managed_mcp_server_ids": [
         "router-rs-framework",
@@ -235,24 +225,29 @@ expression: json
       "managed_settings_paths": [],
       "mcp_config_paths": [
         {
-          "relative": ".codex/config.toml",
-          "scope": "project"
+          "host_root": "cursor",
+          "relative": "mcp.json",
+          "scope": "user"
         }
       ],
-      "profile_id": "codex_profile",
+      "profile_id": "cursor_profile",
       "resume_command_examples": [
-        "codex resume --last",
-        "codex resume <session_id>"
+        "在 Cursor 中继续当前会话",
+        "在同一工作区重新打开 Agent 对话"
       ],
-      "session_supervisor_driver": "codex_driver",
+      "session_supervisor_driver": "unsupported",
+      "session_supervisor_status": {
+        "rationale": "Cursor host does not expose external process supervision or auto-resume. session_supervisor currently supports codex and claude drivers only. Long-running goals on Cursor must rely on in-session continuity artifacts (.supervisor_state.json, SESSION_SUMMARY.md, NEXT_ACTIONS.json, EVIDENCE_INDEX.json) instead of an external supervisor process.",
+        "supported": false
+      },
       "settings_paths": [
         {
-          "host_root": "codex",
-          "relative": "config.toml",
+          "host_root": "cursor",
+          "relative": "settings.json",
           "scope": "user"
         },
         {
-          "relative": ".codex/config.toml",
+          "relative": ".cursor/settings.json",
           "scope": "project"
         }
       ],
@@ -260,7 +255,7 @@ expression: json
       "settings_scopes": [],
       "structured_output_modes": [],
       "subagent_paths": [],
-      "transport": "native-codex"
+      "transport": "cursor-agent"
     },
     "profile_id": "test-profile",
     "runtime": {
@@ -300,12 +295,7 @@ expression: json
         "artifact_contract",
         "mcp_servers",
         "workspace_bootstrap",
-        "batch_execution",
-        "cron_execution",
-        "ci_runner",
-        "non_interactive_entrypoint",
-        "external_session_supervisor",
-        "rate_limit_auto_resume",
+        "interactive_agent_chat",
         "host_resume_entrypoint",
         "hard_gate_hooks",
         "framework_alias_entrypoints"

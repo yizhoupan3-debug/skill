@@ -538,7 +538,7 @@ mod tests {
     impl EnvVarGuard {
         fn unset(key: &'static str) -> Self {
             let previous = std::env::var(key).ok();
-            unsafe { std::env::remove_var(key) };
+            unsafe { core_state_utils::env_sync::remove_env(key) };
             Self { key, previous }
         }
     }
@@ -546,8 +546,8 @@ mod tests {
     impl Drop for EnvVarGuard {
         fn drop(&mut self) {
             match self.previous.take() {
-                Some(value) => unsafe { std::env::set_var(self.key, value) },
-                None => unsafe { std::env::remove_var(self.key) },
+                Some(value) => unsafe { core_state_utils::env_sync::set_env(self.key, &value) },
+                None => unsafe { core_state_utils::env_sync::remove_env(self.key) },
             }
         }
     }

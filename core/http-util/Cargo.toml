@@ -5,3 +5,6 @@ edition.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+core-state-utils = { path = "../core-state-utils" }

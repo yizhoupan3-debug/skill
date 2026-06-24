@@ -25,12 +25,12 @@ pub fn record_trace_event(
         payload.job_id.as_deref(),
         &payload.kind,
     );
-    let cursor = build_trace_cursor(payload.generation, payload.seq, &event_id);
+    let page_token = build_trace_cursor(payload.generation, payload.seq, &event_id);
     let mut event = Map::new();
     event.insert("event_id".to_string(), Value::String(event_id));
     event.insert("seq".to_string(), json!(payload.seq));
     event.insert("generation".to_string(), json!(payload.generation));
-    event.insert("cursor".to_string(), Value::String(cursor));
+    event.insert("page_token".to_string(), Value::String(page_token));
     event.insert(
         "ts".to_string(),
         Value::String(framework_kernel::time::now_iso()),
@@ -137,7 +137,7 @@ fn maybe_append_compaction_delta(
         "kind": trace_event_string_field(event_object, "kind").unwrap_or_default(),
         "payload": {
             "event_id": event_id,
-            "cursor": trace_event_string_field(event_object, "cursor").unwrap_or_default(),
+            "page_token": trace_event_string_field(event_object, "page_token").unwrap_or_default(),
             "stage": trace_event_string_field(event_object, "stage").unwrap_or_else(|| "background".to_string()),
             "status": trace_event_string_field(event_object, "status").unwrap_or_else(|| "ok".to_string()),
             "payload": event_object.get("payload").cloned().unwrap_or_else(|| json!({})),

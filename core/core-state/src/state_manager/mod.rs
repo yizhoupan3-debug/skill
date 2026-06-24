@@ -33,7 +33,7 @@ pub use validation::{
 // Re-export from pointer_ops
 pub use pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, read_active_task_id,
-    read_focus_task_id, read_primary_task_id, read_task_pointer_pair,
+    read_focus_task_id, read_primary_task_id, read_task_pointer_pair, set_task_focus,
     sync_task_pointers_after_goal_drive, write_active_task_pointer,
 };
 
@@ -86,8 +86,15 @@ fn goal_state_path_for_nested_under_current(
 
 // ── Session ID / staleness ──
 fn current_env_session_id() -> Option<String> {
-    for (key, val) in std::env::vars() {
-        if key.ends_with("_SESSION_ID") {
+    let known_keys = [
+        "CLAUDE_SESSION_ID",
+        "CURSOR_SESSION_ID",
+        "CODEX_SESSION_ID",
+        "OPENCODE_SESSION_ID",
+        "ROUTER_RS_SESSION_ID",
+    ];
+    for key in known_keys {
+        if let Ok(val) = std::env::var(key) {
             let trimmed = val.trim().to_string();
             if !trimmed.is_empty() {
                 return Some(trimmed);
@@ -1144,7 +1151,7 @@ mod tests {
         crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
 
         // Set a different current session via env var
-        unsafe { std::env::set_var("CLAUDE_SESSION_ID", "new-session-456") };
+        unsafe { core_state_utils::env_sync::set_env("CLAUDE_SESSION_ID", "new-session-456") };
 
         let st = read_goal_state(&repo, Some("stale-task"))
             .expect("read")
@@ -1158,7 +1165,7 @@ mod tests {
         );
 
         // Clean up env var
-        unsafe { std::env::remove_var("CLAUDE_SESSION_ID") };
+        unsafe { core_state_utils::env_sync::remove_env("CLAUDE_SESSION_ID") };
         let _ = fs::remove_dir_all(&repo);
     }
 
@@ -1172,7 +1179,7 @@ mod tests {
             .map(|(k, _)| k)
             .collect();
         for k in &session_vars {
-            unsafe { std::env::remove_var(k) };
+            unsafe { core_state_utils::env_sync::remove_env(k) };
         }
         let suffix = SystemTime::now()
             .duration_since(UNIX_EPOCH)

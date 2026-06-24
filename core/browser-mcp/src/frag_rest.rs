@@ -1023,10 +1023,6 @@ fn to_text_lines(text: &str) -> Vec<String> {
         .collect()
 }
 
-fn current_local_timestamp() -> String {
-    framework_kernel::time::current_local_timestamp()
-}
-
 fn now_millis() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

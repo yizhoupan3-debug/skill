@@ -80,12 +80,6 @@ pub(crate) fn value_as_string_list(value: &Value, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// Current UTC time in RFC 3339 format (seconds precision).
-/// Delegates to the canonical `framework_kernel::time::now_iso`.
-pub(crate) fn now_iso() -> String {
-    framework_kernel::time::now_iso()
-}
-
 /// Render a Value as a string (string values pass through, numbers become text).
 pub(crate) fn value_to_string(v: &Value) -> String {
     match v {
@@ -95,4 +89,25 @@ pub(crate) fn value_to_string(v: &Value) -> String {
         Value::Null => "-".into(),
         other => other.to_string(),
     }
+}
+
+// ── HTTP Client Factories ──
+
+/// Build a blocking HTTP client with a bounded timeout.
+pub(crate) fn blocking_client(timeout_secs: u64) -> anyhow::Result<reqwest::blocking::Client> {
+    use anyhow::Context;
+    reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs.clamp(3, 120)))
+        .build()
+        .context("failed to build blocking HTTP client")
+}
+
+// ── Hash Helpers ──
+
+/// Compute a deterministic hex-encoded hash key for disk caching.
+pub(crate) fn cache_key(prefix: &str, content: &str) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    content.hash(&mut hasher);
+    format!("{prefix}_{:016x}", hasher.finish())
 }

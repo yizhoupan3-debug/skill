@@ -162,7 +162,7 @@ fn hydrate_trace_event_fills_defaults() {
         trace_event_string_field(&hydrated, "status"),
         Some("ok".to_string())
     );
-    assert!(trace_event_string_field(&hydrated, "cursor").is_some());
+    assert!(trace_event_string_field(&hydrated, "page_token").is_some());
 }
 
 #[test]
