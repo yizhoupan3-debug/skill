@@ -22,13 +22,7 @@ struct RouteLogEntry {
     skill: Option<String>,
     confidence: Option<f32>,
     reroute: Option<bool>,
-    #[allow(dead_code)]
-    latency_ms: Option<u64>,
     parity_gate: Option<String>,
-    #[serde(default)]
-    reasons: Vec<String>,
-    #[allow(dead_code)]
-    matched_tokens: Option<usize>,
 }
 
 // ── Tool handler functions ──
@@ -327,9 +321,8 @@ pub fn closeout_record_write_dispatch(
             .map_err(|e| format!("create closeout directory failed: {e}"))?;
     }
 
-    let content = serde_json::to_string_pretty(&record)
-        .map_err(|e| format!("serialize closeout record failed: {e}"))?;
-    std::fs::write(&record_path, &content)
+    let record_value = serde_json::Value::Object(record);
+    core_state::utils::atomic_write::write_atomic_json(&record_path, &record_value)
         .map_err(|e| format!("write closeout record failed: {e}"))?;
 
     // Evaluate the record
