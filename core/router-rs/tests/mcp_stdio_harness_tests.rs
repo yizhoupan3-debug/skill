@@ -963,9 +963,9 @@ mod claude_desktop_hard_blocking_tests {
     }
 
     #[test]
-    fn desktop_allows_unsatisfied_under_interactive_profile() {
+    fn desktop_allows_unsatisfied_under_task_profile() {
         let repo = test_repo_dir();
-        let task_id = "desktop-interactive";
+        let task_id = "desktop-task";
         std::fs::write(
             repo.join("artifacts/current/active_task.json"),
             format!(r#"{{"task_id":"{task_id}"}}"#),
@@ -975,7 +975,7 @@ mod claude_desktop_hard_blocking_tests {
         std::fs::create_dir_all(&task_dir).unwrap();
         std::fs::write(
             task_dir.join("GOAL_STATE.json"),
-            r#"{"schema_version":"router-rs-goal-v1","status":"running","lifecycle_profile":"interactive","goal":"x"}"#,
+            r#"{"schema_version":"router-rs-goal-v1","status":"running","lifecycle_profile":"task","goal":"x"}"#,
         )
         .unwrap();
         let req = json!({

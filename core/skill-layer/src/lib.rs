@@ -3,7 +3,6 @@
 //! This crate is **self-contained** — all skill-specific logic lives here.
 //! Higher layers (runtime-infra, router-rs) delegate via thin wrappers.
 
-pub mod approval;
 pub mod backfill;
 pub mod columnar;
 pub mod constants;

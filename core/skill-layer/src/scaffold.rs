@@ -301,42 +301,7 @@ pub fn register_and_generate(
     core_state::utils::atomic_write::write_atomic_json(&runtime_path, &doc)
         .map_err(|e| e.to_string())?;
 
-    // ---- 2. Also add row to SKILL_MANIFEST.json ----
-    let manifest_path = crate::paths::manifest_json(repo_root);
-    let mut manifest: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(&manifest_path).map_err(|e| e.to_string())?
-    )
-    .map_err(|e| e.to_string())?;
-
-    let m_keys = manifest["keys"]
-        .as_array()
-        .ok_or_else(|| "manifest JSON missing keys array".to_string())?;
-    let m_col_idx: HashMap<&str, usize> = m_keys
-        .iter()
-        .enumerate()
-        .filter_map(|(i, k)| k.as_str().map(|s| (s, i)))
-        .collect();
-
-    let mut m_row: Vec<serde_json::Value> = vec![serde_json::Value::Null; m_keys.len()];
-    if let Some(&i) = m_col_idx.get("slug") {
-        m_row[i] = json!(slug);
-    }
-    if let Some(&i) = m_col_idx.get("skill_path") {
-        m_row[i] = json!(skill_path);
-    }
-    if let Some(&i) = m_col_idx.get("description") {
-        m_row[i] = json!(opts.description);
-    }
-
-    manifest["skills"]
-        .as_array_mut()
-        .ok_or_else(|| "manifest JSON missing skills array".to_string())?
-        .push(serde_json::Value::Array(m_row));
-
-    core_state::utils::atomic_write::write_atomic_json(&manifest_path, &manifest)
-        .map_err(|e| e.to_string())?;
-
-    // ---- 3. Regenerate SKILL.md from registry ----
+    // ---- 2. Regenerate SKILL.md from registry ----
     crate::generate::generate_frontmatter(repo_root, Some(slug), false)?;
 
     Ok(())

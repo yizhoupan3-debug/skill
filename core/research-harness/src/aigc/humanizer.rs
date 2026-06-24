@@ -211,19 +211,20 @@ fn english_replacement_table() -> Vec<(String, String)> {
     ]
 }
 
-/// Chinese AI-word replacement table.
+/// Chinese AI-word replacement table (ordered by length descending to prevent
+/// substring overlap — e.g. "此外" must not match inside "与此同时").
 fn chinese_replacement_table() -> Vec<(String, String)> {
     vec![
-        ("此外".into(), "同时".into()),
+        ("发挥着重要作用".into(), "起关键作用".into()),
+        ("具有重要意义".into(), "至关重要".into()),
+        ("综上所述".into(), "综合来看".into()),
+        ("总而言之".into(), "概括而言".into()),
         ("与此同时".into(), "另外".into()),
         ("不可否认".into(), "可以看到".into()),
         ("毋庸置疑".into(), "显而易见".into()),
-        ("发挥着重要作用".into(), "起关键作用".into()),
-        ("具有重要意义".into(), "至关重要".into()),
         ("不可或缺".into(), "必要".into()),
         ("日益凸显".into(), "逐渐突出".into()),
-        ("综上所述".into(), "综合来看".into()),
-        ("总而言之".into(), "概括而言".into()),
+        ("此外".into(), "同时".into()),
     ]
 }
 
@@ -305,10 +306,11 @@ fn syntactic_rewrite_zh(text: &str) -> (String, usize) {
     let mut result = text.to_string();
     let mut count = 0;
 
-    // "被...所" → remove 所
+    // "被...所" → keep 被 (preserves passive voice), remove 所 (archaic)
+    // e.g. "被他所救" → "被他救" (still passive, correct)
     if result.contains("被") {
         let before = result.clone();
-        result = RE_BEI_SOU_ZH.replace_all(&result, "$1$2").to_string();
+        result = RE_BEI_SOU_ZH.replace_all(&result, "被$1$2").to_string();
         if result != before {
             count += 1;
         }

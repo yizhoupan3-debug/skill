@@ -201,10 +201,10 @@ pub fn should_inject_spawn_first_review_nudge(
     repo_root: Option<&std::path::Path>,
     prompt_text: &str,
 ) -> bool {
-    if crate::hook_common::is_interactive_profile(repo_root, prompt_text)
+    if crate::hook_common::is_task_profile(repo_root, prompt_text)
     {
-        // Interactive profiles suppress spawn-first nudge.
-        // The "interactive" profile entry in RUNTIME_REGISTRY.json always
+        // Task profiles suppress spawn-first nudge.
+        // The "task" profile entry in RUNTIME_REGISTRY.json always
         // has disable_spawn_first_nudge: true.
         return false;
     }
@@ -223,7 +223,7 @@ pub fn review_gate_advisory_only() -> bool {
 /// `*_review_gate_suppressed`): skips arming **and** Stop nudges, not merely hard block.
 /// When [`review_gate_advisory_only`] is true, non-suppressed hosts still inject advisory text.
 pub fn review_gate_hard_block_disabled(repo_root: Option<&std::path::Path>, text: &str) -> bool {
-    crate::hook_common::is_interactive_profile(repo_root, text)
+    crate::hook_common::is_task_profile(repo_root, text)
 }
 
 /// True when an armed review gate would inject a Stop nudge (metrics / advisory detection).
@@ -556,22 +556,22 @@ mod tests {
     }
 
     #[test]
-    fn review_gate_hard_block_disabled_false_when_not_interactive() {
+    fn review_gate_hard_block_disabled_false_when_not_task_profile() {
         let _lock = crate::test_env_sync::process_env_lock();
-        crate::hook_common::set_test_interactive_override(Some(false));
+        crate::hook_common::set_test_task_override(Some(false));
         assert!(!review_gate_hard_block_disabled(None, "fix the bug"));
         assert!(!review_gate_hard_block_disabled(None, "run the task"));
-        crate::hook_common::set_test_interactive_override(None);
+        crate::hook_common::set_test_task_override(None);
     }
 
     #[test]
-    fn review_gate_hard_block_disabled_true_when_interactive_active() {
+    fn review_gate_hard_block_disabled_true_when_task_active() {
         let _lock = crate::test_env_sync::process_env_lock();
-        crate::hook_common::set_test_interactive_override(Some(true));
-        // Advisory-only: interactive active → hard block disabled
+        crate::hook_common::set_test_task_override(Some(true));
+        // Advisory-only: task profile active → hard block disabled
         assert!(review_gate_hard_block_disabled(None, "run the task"));
         assert!(review_gate_hard_block_disabled(None, "random text"));
-        crate::hook_common::set_test_interactive_override(None);
+        crate::hook_common::set_test_task_override(None);
     }
 
     #[tokio::test]

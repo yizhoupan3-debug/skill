@@ -12,12 +12,10 @@ use std::sync::OnceLock;
 
 // ── Function pointer type aliases (reduce type_complexity warnings) ──
 
-/// Route task with manifest fallback: (records_json, runtime_path, manifest_path, host_id, query, session_id, allow_overlay, first_turn) -> Result<RouteDecision, String>
+/// Route task with manifest fallback: (records_json, host_id, query, session_id, allow_overlay, first_turn) -> Result<RouteDecision, String>
 /// `records_json` is a JSON-serialized slice of SkillRecord values (avoids L5→L1 dep on routing_engine).
 type RouteTaskFn = fn(
     &[serde_json::Value],
-    Option<&Path>,
-    Option<&Path>,
     Option<&str>,
     &str,
     &str,
@@ -1042,8 +1040,6 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
 
 pub fn route_task_with_manifest_fallback(
     runtime_records: &[serde_json::Value],
-    runtime_path: Option<&Path>,
-    manifest_path: Option<&Path>,
     host_id: Option<&str>,
     query: &str,
     session_id: &str,
@@ -1055,8 +1051,6 @@ pub fn route_task_with_manifest_fallback(
         .map(|f| {
             f(
                 runtime_records,
-                runtime_path,
-                manifest_path,
                 host_id,
                 query,
                 session_id,

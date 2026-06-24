@@ -4,12 +4,12 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::Path;
 
-use runtime_core::framework_runtime::trace_stream_io::{
+use fr_exec::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
 use host_projection::hooks;
 use super::args::*;
-use runtime_core::framework_runtime::json_io::{parse_json_input, print_json_value};
+use fr_utils::json_io::{parse_json_input, print_json_value};
 use runtime_core::closeout_enforcement::{
     CloseoutEvidenceContext, closeout_enforcement_contract, evaluate_closeout_record_value,
     evaluate_closeout_record_value_with_context,
@@ -21,13 +21,16 @@ use runtime_core::framework_profile::{
     build_profile_artifact_bundle, build_control_plane_contract_descriptors, build_profile_bundle,
     load_framework_profile,
 };
-use runtime_core::framework_runtime::{
-    FrameworkAliasBuildOptions, build_framework_alias_envelope,
-    build_framework_contract_summary_envelope, build_framework_prompt_compression_envelope,
-    build_framework_runtime_snapshot_envelope_with_level, build_framework_statusline,
-    framework_hook_evidence_append, resolve_repo_root_arg, run_framework_doctor,
-    write_framework_session_artifacts,
-};
+use fr_utils::types::FrameworkAliasBuildOptions;
+use framework_extra::alias::build_framework_alias_envelope;
+use framework_extra::contract_summary::build_framework_contract_summary_envelope;
+use framework_extra::prompt_compression::build_framework_prompt_compression_envelope;
+use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
+use framework_extra::statusline::build_framework_statusline;
+use framework_extra::evidence::framework_hook_evidence_append;
+use framework_kernel::repo_roots::resolve_repo_root_arg;
+use framework_extra::framework_doctor::run_framework_doctor;
+use framework_extra::session_artifacts::write_framework_session_artifacts;
 use runtime_core::harness_contract::{harness_contract, lint_skill_contracts};
 use core_policy::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
 use runtime_core::host_entrypoint_sync::sync_host_entrypoints;
@@ -253,16 +256,15 @@ pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String
         SkillsSubcommand::Refresh {
             repo_root,
             write,
-            write_companions,
             backfill,
             dry_run,
             generate,
+            ..
         } => {
             let repo_root = resolve_repo_root_arg(repo_root.as_deref())?;
             refresh_skills(&SkillsCommand {
                 repo_root,
                 write,
-                write_companions,
                 backfill,
                 dry_run,
                 generate,
@@ -738,7 +740,7 @@ pub fn dispatch_closeout_command(command: CloseoutCommand) -> Result<(), String>
                 args.record_path.as_deref(),
             ) {
                 (Some(repo_root), Some(task_id), Some(record_path)) => {
-                    runtime_core::framework_runtime::evaluate_closeout_record_file_for_task(
+                    framework_extra::closeout::evaluate_closeout_record_file_for_task(
                         repo_root,
                         task_id,
                         record_path,
@@ -778,7 +780,6 @@ pub fn dispatch_eval_command(command: EvalCommand) -> Result<(), String> {
             let report = run_eval_route(
                 &args.cases,
                 args.runtime.as_deref(),
-                args.manifest.as_deref(),
             )?;
             print_json_value(&report)
         }

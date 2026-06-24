@@ -164,10 +164,8 @@ impl SkillRegistry {
     pub fn validate_consistency(&self) -> Result<Vec<ConsistencyIssue>, RegistryError> {
         let mut issues = Vec::new();
 
-        // 1. Load all sources
+        // Load RUNTIME
         let runtime_path = paths::runtime_json(&self.repo_root);
-        let manifest_path = paths::manifest_json(&self.repo_root);
-        let index_path = paths::index_json(&self.repo_root);
 
         if !runtime_path.exists() {
             issues.push(ConsistencyIssue {
@@ -179,44 +177,10 @@ impl SkillRegistry {
         }
 
         let runtime_rows = load_rows(&runtime_path)?;
-        let manifest_rows = if manifest_path.exists() {
-            load_rows(&manifest_path)?
-        } else {
-            HashMap::new()
-        };
-        let index_rows = if index_path.exists() {
-            load_rows(&index_path)?
-        } else {
-            HashMap::new()
-        };
 
         let runtime_slugs: HashSet<&String> = runtime_rows.keys().collect();
-        let manifest_slugs: HashSet<&String> = manifest_rows.keys().collect();
-        let index_slugs: HashSet<&String> = index_rows.keys().collect();
 
-        // 2. RUNTIME ⊆ MANIFEST
-        for slug in &runtime_slugs {
-            if !manifest_slugs.contains(*slug) {
-                issues.push(ConsistencyIssue {
-                    severity: IssueSeverity::Error,
-                    slug: Some((**slug).clone()),
-                    message: "in RUNTIME but not in MANIFEST".into(),
-                });
-            }
-        }
-
-        // 3. INDEX ⊆ RUNTIME
-        for slug in &index_slugs {
-            if !runtime_slugs.contains(*slug) {
-                issues.push(ConsistencyIssue {
-                    severity: IssueSeverity::Warning,
-                    slug: Some((**slug).clone()),
-                    message: "in INDEX but not in RUNTIME".into(),
-                });
-            }
-        }
-
-        // 4. Each slug has on-disk SKILL.md
+        // Each slug has on-disk SKILL.md
         for slug in &runtime_slugs {
             let path = paths::skill_md(&self.repo_root, slug);
             if !path.exists() {
@@ -228,7 +192,7 @@ impl SkillRegistry {
             }
         }
 
-        // 5. Frontmatter name matches slug
+        // Frontmatter name matches slug
         for slug in &runtime_slugs {
             let path = paths::skill_md(&self.repo_root, slug);
             if path.exists() {
@@ -301,7 +265,7 @@ mod tests {
         create_minimal_runtime(&skills_root, &["orphan"]);
 
         let manifest = serde_json::json!({
-            "schema_version": constants::SCHEMA_MANIFEST,
+            
             "keys": ["slug"],
             "skills": [["orphan"]]
         });

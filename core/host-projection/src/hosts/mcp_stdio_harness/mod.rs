@@ -782,8 +782,8 @@ fn handle_prompts_get(
             let host_name = mcp_host_display_label(host_id);
             let task_view = get_cached_task_view(repo_root);
             let lifecycle_profile = task_lifecycle_profile(&task_view);
-            let gate_mode = if lifecycle_profile == "interactive" {
-                "interactive: MCP hard block disabled — closeout_gate reports findings only (advisory).".to_string()
+            let gate_mode = if lifecycle_profile == "task" {
+                "task: MCP hard block disabled — closeout_gate reports findings only (advisory).".to_string()
             } else {
                 framework_kernel::runtime_registry::harness_capability_exception_rationale(
                     repo_root, host_id, "closeout_evidence_hooks",

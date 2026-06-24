@@ -1,7 +1,7 @@
 //! Skill metadata ingestion and FTS lookup.
 //!
-//! Stores each skill from `SKILL_MANIFEST.json` as a node with `kind="skill"`,
-//! `language="json"`, `file_path="manifest://SKILL_MANIFEST.json"`.
+//! Stores each skill from `SKILL_ROUTING_RUNTIME.json` as a node with `kind="skill"`,
+//! `language="json"`, `file_path="runtime://SKILL_ROUTING_RUNTIME.json"`.
 //! The symbol column holds the skill slug; keywords are stored as the
 //! `file_path` suffix so FTS can match on trigger_hints.
 //!
@@ -10,11 +10,11 @@
 use rusqlite::{Connection, params};
 use serde_json::Value;
 
-pub const SKILL_MANIFEST_PATH: &str = "manifest://SKILL_MANIFEST.json";
+pub const SKILL_RUNTIME_PATH: &str = "runtime://SKILL_ROUTING_RUNTIME.json";
 pub const SKILL_KIND: &str = "skill";
 pub const SKILL_LANGUAGE: &str = "json";
 
-/// Ingest all skills from a parsed `SKILL_MANIFEST.json` value.
+/// Ingest all skills from a parsed `SKILL_ROUTING_RUNTIME.json` value.
 ///
 /// The manifest uses an array-of-arrays format where `keys` defines column names
 /// and each skill is an array of values. Deletes existing `skill` nodes first

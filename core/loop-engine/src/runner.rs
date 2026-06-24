@@ -20,11 +20,11 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 /// Check whether a loop entry's profile is schedulable.
-/// Returns an error for interactive profiles which cannot be scheduled for unattended execution.
+/// Returns an error for task profiles which cannot be scheduled for unattended execution.
 pub fn preflight_profile_check(entry: &LoopRegistryEntry) -> Result<(), LoopError> {
     match entry.profile.as_str() {
-        "interactive" => Err(LoopError::ProfileMismatch(
-            "interactive profile is not schedulable. \
+        "task" => Err(LoopError::ProfileMismatch(
+            "task profile is not schedulable. \
              Use loop-auto for unattended execution."
                 .to_string(),
         )),
@@ -732,8 +732,8 @@ mod tests {
     }
 
     #[test]
-    fn test_rejects_interactive() {
-        let entry = make_entry("interactive");
+    fn test_rejects_task() {
+        let entry = make_entry("task");
         let result = preflight_profile_check(&entry);
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), LoopError::ProfileMismatch(_)));

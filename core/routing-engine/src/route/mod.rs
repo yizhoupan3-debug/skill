@@ -44,11 +44,11 @@ pub use routing::{
 };
 // Crate-internal re-exports
 pub use records::{
-    invalidate_records_cache, load_inline_records, load_records, load_records_from_manifest,
+    invalidate_records_cache, load_inline_records, load_records,
 };
 pub use routing::{
     build_route_snapshot, filter_records_for_host, literal_framework_alias_decision, route_task,
-    search_skills, should_accept_manifest_fallback, should_retry_with_manifest,
+    search_skills,
 };
 pub use signals::{
     has_github_pr_context, has_paper_context, has_paper_prose_edit_context,

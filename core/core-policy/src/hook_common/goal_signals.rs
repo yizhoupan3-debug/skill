@@ -252,30 +252,30 @@ pub fn lifecycle_profile_is_loop_capable(profile: &str) -> bool {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn is_interactive_profile_returns_false_without_root() {
-        assert!(!crate::hook_common::is_interactive_profile(None, "run the task"));
-        assert!(!crate::hook_common::is_interactive_profile(None, "fix the bug"));
-        assert!(!crate::hook_common::is_interactive_profile(None, "analyze architecture"));
+    fn is_task_profile_returns_false_without_root() {
+        assert!(!crate::hook_common::is_task_profile(None, "run the task"));
+        assert!(!crate::hook_common::is_task_profile(None, "fix the bug"));
+        assert!(!crate::hook_common::is_task_profile(None, "analyze architecture"));
     }
 
     #[test]
-    fn is_interactive_profile_returns_false_for_arbitrary_prompt_without_root() {
-        assert!(!crate::hook_common::is_interactive_profile(None, "深度review整个路由系统"));
-        assert!(!crate::hook_common::is_interactive_profile(None, "fix the bug"));
-        assert!(!crate::hook_common::is_interactive_profile(None, ""));
+    fn is_task_profile_returns_false_for_arbitrary_prompt_without_root() {
+        assert!(!crate::hook_common::is_task_profile(None, "深度review整个路由系统"));
+        assert!(!crate::hook_common::is_task_profile(None, "fix the bug"));
+        assert!(!crate::hook_common::is_task_profile(None, ""));
     }
 
     #[test]
-    fn is_interactive_profile_test_override_takes_priority() {
+    fn is_task_profile_test_override_takes_priority() {
         let _lock = crate::test_env_sync::process_env_lock();
         // Override to false
-        crate::hook_common::set_test_interactive_override(Some(false));
-        assert!(!crate::hook_common::is_interactive_profile(None, "run the task"));
+        crate::hook_common::set_test_task_override(Some(false));
+        assert!(!crate::hook_common::is_task_profile(None, "run the task"));
         // Override to true even for non-interactive prompt
-        crate::hook_common::set_test_interactive_override(Some(true));
-        assert!(crate::hook_common::is_interactive_profile(None, "random text"));
+        crate::hook_common::set_test_task_override(Some(true));
+        assert!(crate::hook_common::is_task_profile(None, "random text"));
         // Clear override, returns false
-        crate::hook_common::set_test_interactive_override(None);
-        assert!(!crate::hook_common::is_interactive_profile(None, "run the task"));
+        crate::hook_common::set_test_task_override(None);
+        assert!(!crate::hook_common::is_task_profile(None, "run the task"));
     }
 }

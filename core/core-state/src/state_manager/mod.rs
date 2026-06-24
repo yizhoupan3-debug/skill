@@ -505,7 +505,7 @@ mod tests {
             "done_when": ["d1", "d2"],
             "validation_commands": ["cargo test -q"],
             "drive_until_done": false,
-            "lifecycle_profile": "interactive",
+            "lifecycle_profile": "task",
         }))
         .expect("start");
         assert_eq!(out["ok"], json!(true));
@@ -516,7 +516,7 @@ mod tests {
             "task_id": "t-lite",
         }))
         .expect("status");
-        assert_eq!(st["goal_state"]["lifecycle_profile"], json!("interactive"));
+        assert_eq!(st["goal_state"]["lifecycle_profile"], json!("task"));
         let _ = fs::remove_dir_all(&repo);
     }
 

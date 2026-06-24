@@ -10,7 +10,7 @@ mod route_metadata_tests {
     };
     use crate::route::{
         load_records, load_records_cached_for_stdio, load_records_cached_for_stdio_resolved,
-        load_records_from_manifest, load_records_from_runtime,
+        load_records_from_runtime,
     };
     use serde_json::json;
     use std::fs;
@@ -148,7 +148,7 @@ mod route_metadata_tests {
         .expect("write metadata");
 
         let records =
-            load_records(Some(&runtime_path), Some(&manifest_path)).expect("load route records");
+            load_records(Some(&runtime_path)).expect("load route records");
         let record = records
             .iter()
             .find(|record| record.slug == "sample-skill")
@@ -483,7 +483,7 @@ mod route_metadata_tests {
         .expect("write metadata");
 
         let first =
-            load_records_cached_for_stdio_resolved(Some(&runtime_path), Some(&manifest_path))
+            load_records_cached_for_stdio_resolved(Some(&runtime_path))
                 .expect("first cached load");
         assert!(first[0].do_not_use_tokens.contains("first"));
         assert!(!first[0].do_not_use_tokens.contains("second"));
@@ -499,7 +499,7 @@ mod route_metadata_tests {
         )
         .expect("update metadata");
         let second =
-            load_records_cached_for_stdio_resolved(Some(&runtime_path), Some(&manifest_path))
+            load_records_cached_for_stdio_resolved(Some(&runtime_path))
                 .expect("second cached load");
         assert!(!second[0].do_not_use_tokens.contains("first"));
         assert!(second[0].do_not_use_tokens.contains("second"));
@@ -535,7 +535,7 @@ mod route_metadata_tests {
         )
         .expect("write manifest");
 
-        let loaded = load_records(None, Some(&manifest_path)).expect("load records");
+        let loaded = load_records(None).expect("load records");
         assert!(
             loaded.iter().any(|record| record.slug == "gitx"),
             "default runtime hot index should be preferred when available"
@@ -583,13 +583,13 @@ mod route_metadata_tests {
             pairs.push((runtime_path, manifest_path));
         }
 
-        let first = load_records_cached_for_stdio(Some(&pairs[0].0), Some(&pairs[0].1))
+        let first = load_records_cached_for_stdio(Some(&pairs[0].0))
             .expect("load pair 0");
         for (runtime_path, manifest_path) in pairs.iter().skip(1) {
-            load_records_cached_for_stdio(Some(runtime_path), Some(manifest_path))
+            load_records_cached_for_stdio(Some(runtime_path))
                 .expect("load subsequent pair");
         }
-        let replay = load_records_cached_for_stdio(Some(&pairs[0].0), Some(&pairs[0].1))
+        let replay = load_records_cached_for_stdio(Some(&pairs[0].0))
             .expect("reload pair 0 after fifo eviction");
         assert!(
             !Arc::ptr_eq(&first, &replay),
@@ -651,9 +651,9 @@ mod route_metadata_tests {
 
     #[test]
     fn manifest_paper_writing_row_accepts_plain_slug_literal() {
-        let manifest_path =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-        let records = load_records_from_manifest(&manifest_path).expect("manifest load");
+        let runtime_path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
+        let records = load_records_from_runtime(&runtime_path).expect("runtime load");
         let rec = records
             .iter()
             .find(|r| r.slug == "paper-writing")

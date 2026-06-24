@@ -61,30 +61,30 @@ fn parse_execute_aggregator_host_allowlist() -> Result<Option<HashSet<String>>, 
     Ok(Some(hosts))
 }
 
-pub fn execute_request(payload: ExecuteRequestPayload) -> Result<ExecuteResponsePayload, String> {
+pub fn execute_request(
+    payload: ExecuteRequestPayload,
+    research_mode: &str,
+) -> Result<ExecuteResponsePayload, String> {
     if payload.dry_run {
         return Ok(build_dry_run_execute_response(&payload));
     }
-    let prompt_preview = build_live_execute_prompt(&payload);
+    let prompt_preview = build_live_execute_prompt(&payload, research_mode);
     if payload.aggregator_base_url.trim().is_empty() {
         return Err("router-rs execute requires a non-empty aggregator_base_url".to_string());
     }
     if payload.aggregator_api_key.trim().is_empty() {
         return Err("router-rs execute requires a non-empty aggregator_api_key".to_string());
     }
-    let live_result = perform_live_execute(&payload, &prompt_preview)?;
+    let live_result = perform_live_execute(&payload, &prompt_preview, research_mode)?;
     Ok(build_live_execute_response(
         &payload,
         Some(prompt_preview),
         live_result,
+        research_mode,
     ))
 }
 
-pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
-    // Ensure kernel bootstrap (idempotent) so research mode inference is registered.
-    host_projection::hooks::ensure_kernel_bootstrap();
-    let payload_json = serde_json::to_value(payload).unwrap_or_default();
-    let research_mode = host_projection::hooks::research_mode_for_request(&payload_json);
+pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload, research_mode: &str) -> String {
     let native_runtime = payload.selected_skill == "none";
     let mut lines = vec![
         "Help with the user's request directly. The route is already chosen, so stay on it."
@@ -282,6 +282,7 @@ fn build_assistant_tail_window(raw: &str, max_chars: usize) -> String {
 pub fn perform_live_execute_with_sender<F>(
     payload: &ExecuteRequestPayload,
     prompt_preview: &str,
+    research_mode: &str,
     mut send_request: F,
 ) -> Result<LiveExecuteResult, String>
 where
@@ -298,8 +299,6 @@ where
         "role": "user",
         "content": payload.task,
     }));
-    let payload_json = serde_json::to_value(payload).unwrap_or_default();
-    let research_mode = host_projection::hooks::research_mode_for_request(&payload_json);
     let mut max_tokens = payload.default_output_tokens;
     if research_mode == "deep" {
         max_tokens = max_tokens.max(1200);
@@ -491,11 +490,12 @@ where
 pub fn perform_live_execute(
     payload: &ExecuteRequestPayload,
     prompt_preview: &str,
+    research_mode: &str,
 ) -> Result<LiveExecuteResult, String> {
     validate_live_execute_aggregator_base_url(&payload.aggregator_base_url)?;
     let endpoint = normalize_chat_completions_endpoint(&payload.aggregator_base_url);
     let client = live_execute_http_client()?;
-    perform_live_execute_with_sender(payload, prompt_preview, |request_body| {
+    perform_live_execute_with_sender(payload, prompt_preview, research_mode, |request_body| {
         let response = client
             .post(endpoint.clone())
             .bearer_auth(payload.aggregator_api_key.as_str())
@@ -542,6 +542,7 @@ pub fn build_live_execute_response(
     payload: &ExecuteRequestPayload,
     prompt_preview: Option<String>,
     live_result: LiveExecuteResult,
+    research_mode: &str,
 ) -> ExecuteResponsePayload {
     let mut metadata =
         build_steady_state_execution_kernel_metadata(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY);
@@ -549,9 +550,7 @@ pub fn build_live_execute_response(
     metadata.insert("status".to_string(), json!(live_result.status));
     metadata.insert(
         "research_mode".to_string(),
-        Value::String(host_projection::hooks::research_mode_for_request(
-            &serde_json::to_value(payload).unwrap_or_default(),
-        )),
+        Value::String(research_mode.to_string()),
     );
     metadata.insert(
         "finish_reason".to_string(),

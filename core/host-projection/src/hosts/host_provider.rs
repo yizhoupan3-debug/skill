@@ -370,6 +370,8 @@ mod tests {
     use super::*;
     use serial_test::serial;
 
+    const REGISTRY_SUPPORTED_HOST_IDS: &[&str] = &["cursor", "claude", "opencode", "codex"];
+
     #[test]
     #[serial]
     fn registry_exposes_closed_set_host_skeletons() {

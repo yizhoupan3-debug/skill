@@ -205,7 +205,7 @@ impl CodeGraphIndex {
         Ok(db::mcp_tool_ops::list_mcp_tools(&self.conn)?)
     }
 
-    /// Ingest skill metadata from SKILL_MANIFEST.json into the index.
+    /// Ingest skill metadata from SKILL_ROUTING_RUNTIME.json into the index.
     ///
     /// Idempotent: deletes existing `skill` nodes before inserting.
     /// Returns the number of skills ingested.

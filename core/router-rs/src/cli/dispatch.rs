@@ -1,10 +1,8 @@
 //! 子命令薄分发壳：解析后的 `RouterCommand` → `cli::router_command_dispatch`。
 
 use super::args::*;
-use runtime_core::framework_runtime::print_json_value;
-use framework_extra::route_manifest_fallback::{
-    manifest_fallback_path, route_task_with_manifest_fallback,
-};
+use fr_utils::json_io::print_json_value;
+use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 #[cfg(feature = "codegraph")]
 use super::router_command_dispatch::dispatch_codegraph_command;
 use super::router_command_dispatch::{
@@ -16,7 +14,7 @@ use super::router_command_dispatch::{
 use runtime_core::route::{
     MatchRow, SearchResultsPayload, build_search_results_payload, filter_record_indices_for_host,
     filter_records_for_host, load_records, load_records_cached_for_stdio,
-    load_records_from_manifest, search_skills_subset,
+    search_skills_subset,
 };
 use runtime_core::router_self;
 
@@ -24,12 +22,10 @@ use runtime_core::router_self;
 pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
     match command {
         RouterCommand::Route(command) => {
-            let records = load_records(command.runtime.as_deref(), command.manifest.as_deref())?;
+            let records = load_records(command.runtime.as_deref())?;
             let records = filter_records_for_host(records, command.host_id.as_deref())?;
             let decision = route_task_with_manifest_fallback(
                 &records,
-                command.runtime.as_deref(),
-                command.manifest.as_deref(),
                 command.host_id.as_deref(),
                 &command.query,
                 &command.session_id,
@@ -39,18 +35,11 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
             print_json_value(&decision)
         }
         RouterCommand::Search(command) => {
-            let manifest_path =
-                manifest_fallback_path(command.runtime.as_deref(), command.manifest.as_deref())?;
-            let records = if let Some(path) = manifest_path.as_deref() {
-                load_records_from_manifest(path)?
-            } else {
-                load_records_cached_for_stdio(
-                    command.runtime.as_deref(),
-                    command.manifest.as_deref(),
-                )?
-                .as_ref()
-                .clone()
-            };
+            let records = load_records_cached_for_stdio(
+                command.runtime.as_deref(),
+            )?
+            .as_ref()
+            .clone();
             let host_indices =
                 filter_record_indices_for_host(&records, command.host_id.as_deref())?;
             let rows =

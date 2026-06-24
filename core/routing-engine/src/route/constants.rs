@@ -11,7 +11,7 @@ pub(super) const NO_SKILL_SELECTED: &str = "none";
 
 pub(super) const PARALLEL_RECORD_SCAN_MIN: usize = 48;
 
-/// Max distinct `(runtime_path, manifest_path)` entries kept for `load_records_cached_for_stdio`.
+/// Max distinct `runtime_path` entries kept for `load_records_cached_for_stdio`.
 /// Long-lived stdio routers otherwise grow without bound when callers rotate paths.
 /// Test builds use a tiny cap so eviction is covered without allocating dozens of fixtures.
 pub(super) const RECORDS_CACHE_MAX_KEYS: usize = if cfg!(test) { 4 } else { 64 };

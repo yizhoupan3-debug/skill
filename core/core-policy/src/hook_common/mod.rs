@@ -94,14 +94,14 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
 // ── Interactive profile (shared by review_signals and hook_dispatch) ──
 
 thread_local! {
-    static TEST_INTERACTIVE_OVERRIDE: Cell<Option<bool>> = const { Cell::new(None) };
+    static TEST_TASK_OVERRIDE: Cell<Option<bool>> = const { Cell::new(None) };
 }
 
-/// Test-only override for [`is_interactive_profile`] (also used by `router-rs` host hook tests).
+/// Test-only override for [`is_task_profile`] (also used by `router-rs` host hook tests).
 /// Thread-local so parallel `#[test]` threads do not race.
 #[doc(hidden)]
-pub fn set_test_interactive_override(v: Option<bool>) {
-    TEST_INTERACTIVE_OVERRIDE.with(|c| c.set(v));
+pub fn set_test_task_override(v: Option<bool>) {
+    TEST_TASK_OVERRIDE.with(|c| c.set(v));
 }
 
 /// Default UTF-8 **char** budget for assistant text on hook signal / lint paths (all hosts).
@@ -124,24 +124,24 @@ pub fn hook_assistant_tail_window(raw: &str, max_chars: usize) -> String {
     format!("[...omitted {omitted} chars...]\n{tail}")
 }
 
-/// True when the current session is in an interactive profile.
+/// True when the current session is in the task lifecycle profile.
 ///
-/// Interactive profiles suppress review-gate hard block,
+/// Task profiles suppress review-gate hard block,
 /// disable spawn-first nudge, and reject being scheduled by the Loop Engine.
 ///
 /// Detection (in priority order):
-/// 1. Thread-local `TEST_INTERACTIVE_OVERRIDE` (testing only)
-/// 2. (Future) GOAL_STATE.lifecycle_profile == "interactive" via repo_root
+/// 1. Thread-local `TEST_TASK_OVERRIDE` (testing only)
+/// 2. (Future) GOAL_STATE.lifecycle_profile == "task" via repo_root
 ///
 /// Cf. docs/architecture.md §1.2 (hook model)
-pub fn is_interactive_profile(repo_root: Option<&std::path::Path>, _text: &str) -> bool {
-    if let Some(v) = TEST_INTERACTIVE_OVERRIDE.with(|c| c.get()) {
+pub fn is_task_profile(repo_root: Option<&std::path::Path>, _text: &str) -> bool {
+    if let Some(v) = TEST_TASK_OVERRIDE.with(|c| c.get()) {
         return v;
     }
     let Some(_root) = repo_root else {
         return false;
     };
     // Single-conversation mode: no pointer fallback for goal state lookup.
-    // (Future: check GOAL_STATE.lifecycle_profile for "interactive")
+    // (Future: check GOAL_STATE.lifecycle_profile for "task")
     false
 }

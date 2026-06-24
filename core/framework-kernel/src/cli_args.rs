@@ -81,8 +81,6 @@ pub struct RouteCommand {
     pub first_turn: bool,
     #[arg(long)]
     pub runtime: Option<PathBuf>,
-    #[arg(long)]
-    pub manifest: Option<PathBuf>,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -94,8 +92,6 @@ pub struct SearchCommand {
     pub limit: usize,
     #[arg(long)]
     pub runtime: Option<PathBuf>,
-    #[arg(long)]
-    pub manifest: Option<PathBuf>,
     #[arg(long)]
     pub json: bool,
 }
@@ -438,9 +434,6 @@ pub struct EvalRouteCommand {
     /// Optional path to SKILL_ROUTING_RUNTIME.json (default: skills/SKILL_ROUTING_RUNTIME.json).
     #[arg(long)]
     pub runtime: Option<PathBuf>,
-    /// Optional path to SKILL_MANIFEST.json fallback.
-    #[arg(long)]
-    pub manifest: Option<PathBuf>,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -603,8 +596,6 @@ pub struct Cli {
     pub limit: usize,
     #[arg(long)]
     pub runtime: Option<PathBuf>,
-    #[arg(long)]
-    pub manifest: Option<PathBuf>,
     #[arg(long)]
     pub framework_profile: Option<PathBuf>,
     #[arg(long)]
@@ -1294,7 +1285,6 @@ mod tests {
             }) => {
                 assert_eq!(cmd.cases, PathBuf::from("/tmp/cases.json"));
                 assert!(cmd.runtime.is_none());
-                assert!(cmd.manifest.is_none());
             }
             other => panic!("expected Eval::Route, got {:?}", other),
         }

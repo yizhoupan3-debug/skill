@@ -72,8 +72,7 @@ pub mod test_env_sync;
 // ── re-exports from core-policy (crate-internal only) ──
 pub(crate) use core_policy::hook_policy;
 
-// ── crate-level re-exports for `crate::X` path compat ──
-pub use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
+// (removed: route_task_with_manifest_fallback re-export removed — callers use framework_extra::route_manifest_fallback directly)
 
 // ── routing-engine hook registration ──
 use std::sync::OnceLock;
@@ -152,16 +151,16 @@ pub fn register_host_projection_hooks() {
     HOST_PROJECTION_HOOKS_INIT.get_or_init(|| {
         // ── per-module registration ──
         host_projection::hooks::register_framework_runtime(
-            framework_runtime::build_framework_contract_summary_envelope,
-            framework_runtime::try_append_post_tool_shell_evidence,
-            framework_runtime::closeout_programmatic_enforcement_enabled,
-            framework_runtime::closeout_record_path_for_task,
-            framework_runtime::evaluate_closeout_record_file_for_task,
-            framework_runtime::first_task_id_from_registry,
-            framework_runtime::framework_hook_evidence_append,
-            framework_runtime::extract_post_tool_duration_ms,
-            framework_runtime::post_tool_call_succeeded,
-            framework_runtime::closeout_stop_followup_for_completion_text,
+            framework_extra::contract_summary::build_framework_contract_summary_envelope,
+            framework_extra::evidence::try_append_post_tool_shell_evidence,
+            framework_extra::closeout::closeout_programmatic_enforcement_enabled,
+            framework_extra::closeout::closeout_record_path_for_task,
+            framework_extra::closeout::evaluate_closeout_record_file_for_task,
+            framework_extra::closeout::first_task_id_from_registry,
+            framework_extra::evidence::framework_hook_evidence_append,
+            framework_extra::evidence::extract_post_tool_duration_ms,
+            framework_extra::evidence::post_tool_call_succeeded,
+            framework_extra::closeout::closeout_stop_followup_for_completion_text,
         );
 
         host_projection::hooks::register_hook_timing(
@@ -199,12 +198,10 @@ pub fn register_host_projection_hooks() {
 
         // ── extra hooks (runtime, web fetch, mcp guard, env flags) ──
         host_projection::hooks::register_framework_runtime_extra(
-            framework_runtime::resolve_repo_root_arg,
-            framework_runtime::current_local_timestamp,
-            framework_runtime::write_framework_session_artifacts,
+            framework_kernel::repo_roots::resolve_repo_root_arg,
+            framework_extra::util::current_local_timestamp,
+            framework_extra::session_artifacts::write_framework_session_artifacts,
             |records_json,
-             runtime_path,
-             manifest_path,
              host_id,
              query,
              session_id,
@@ -214,10 +211,8 @@ pub fn register_host_projection_hooks() {
                 let records: Vec<routing_engine::route::SkillRecord> = records_json.iter()
                     .filter_map(|v| serde_json::from_value(v.clone()).ok())
                     .collect();
-                framework_runtime::route_task_with_manifest_fallback(
+                framework_extra::route_manifest_fallback::route_task_with_manifest_fallback(
                     &records,
-                    runtime_path,
-                    manifest_path,
                     host_id,
                     query,
                     session_id,
@@ -231,15 +226,15 @@ pub fn register_host_projection_hooks() {
                     score: d.score,
                 })
             },
-            framework_runtime::build_framework_runtime_snapshot_envelope,
+            framework_extra::snapshot::build_framework_runtime_snapshot_envelope,
             framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
-            framework_runtime::append_evidence_index_merged_row,
+            framework_extra::evidence::append_evidence_index_merged_row,
             telemetry_emit::hook_action_from_output,
             || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
             session_call_tracker::check_anomalies,
         );
         host_projection::hooks::register_build_framework_runtime_snapshot_envelope_with_level(
-            framework_runtime::build_framework_runtime_snapshot_envelope_with_level,
+            framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level,
         );
 
         // web_fetch_guard: convert (Url, Vec<SocketAddr>) → (String, Vec<String>)
@@ -278,7 +273,7 @@ pub fn register_host_projection_hooks() {
                 let repo_root = std::path::Path::new(repo_root);
                 let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
                 let records = routing_engine::route::load_records_cached_for_stdio(
-                    Some(&runtime_path), None,
+                    Some(&runtime_path),
                 )?;
                 let records = routing_engine::route::filter_records_for_host(
                     records.as_ref(), Some(host_id),
@@ -288,8 +283,6 @@ pub fn register_host_projection_hooks() {
                     .collect();
                 let decision = host_projection::hooks::route_task_with_manifest_fallback(
                     &records_json,
-                    Some(&runtime_path),
-                    None,
                     Some(host_id),
                     query,
                     "session",
@@ -316,7 +309,7 @@ pub fn register_host_projection_hooks() {
                 let repo_root = std::path::Path::new(repo_root);
                 let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
                 let records = routing_engine::route::load_records_cached_for_stdio(
-                    Some(&runtime_path), None,
+                    Some(&runtime_path),
                 )?;
                 let host_indices = routing_engine::route::filter_record_indices_for_host(
                     records.as_ref(), Some(effective_host),
@@ -373,8 +366,8 @@ pub fn register_host_projection_hooks() {
                     .unwrap_or(serde_json::json!({}))
             },
             eval_route_contract: eval_route::eval_route_contract,
-            run_eval_route: |cases_path, runtime, manifest| {
-                eval_route::run_eval_route(cases_path, runtime, manifest)
+            run_eval_route: |cases_path, runtime| {
+                eval_route::run_eval_route(cases_path, runtime)
                     .map(|report| serde_json::to_value(report).unwrap_or(serde_json::json!({})))
                     .map_err(|e| e.to_string())
             },

@@ -128,8 +128,8 @@ pub fn incremental_sync(
         .filter_map(|item| parse_work_item(item).ok().flatten())
         .collect();
 
-    // Phase 3: skill manifest sync — index skill metadata into FTS
-    sync_skill_manifest(index, &repo_root, force_all, &mut report)?;
+    // Phase 3: skill registry sync — index skill metadata into FTS
+    sync_skill_registry(index, &repo_root, force_all, &mut report)?;
 
     // Phase 4: sequential DB ingest (source files)
     let conn = index.connection();
@@ -159,18 +159,18 @@ pub fn incremental_sync(
     Ok(report)
 }
 
-/// Sync skill manifest metadata into the codegraph index.
+/// Sync skill registry metadata into the codegraph index.
 ///
-/// Reads `skills/SKILL_MANIFEST.json`, checks mtime/content-hash for incremental
+/// Reads `skills/SKILL_ROUTING_RUNTIME.json`, checks mtime/content-hash for incremental
 /// updates, and ingests skill + keyword nodes into the DB with FTS indexing.
-fn sync_skill_manifest(
+fn sync_skill_registry(
     index: &CodeGraphIndex,
     repo_root: &Path,
     force_all: bool,
     report: &mut SyncReport,
 ) -> anyhow::Result<()> {
-    let manifest_path = repo_root.join(parser::skill::MANIFEST_REL_PATH);
-    if !manifest_path.is_file() {
+    let registry_path = repo_root.join(parser::skill::RUNTIME_REL_PATH);
+    if !registry_path.is_file() {
         return Ok(());
     }
 
@@ -178,10 +178,10 @@ fn sync_skill_manifest(
 
     // Fast path: mtime check without reading the file
     if !force_all {
-        let mtime_ns = file_mtime_ns(&manifest_path)?;
+        let mtime_ns = file_mtime_ns(&registry_path)?;
         let indexed = list_indexed_files(conn)?
             .into_iter()
-            .find(|m| m.path == parser::skill::MANIFEST_REL_PATH);
+            .find(|m| m.path == parser::skill::RUNTIME_REL_PATH);
         if let Some(ref stored) = indexed
             && stored.mtime_ns == mtime_ns {
                 return Ok(()); // mtime unchanged, skip entirely
@@ -189,9 +189,9 @@ fn sync_skill_manifest(
     }
 
     // mtime changed or new file: read once, share between hash and parser
-    let content = std::fs::read_to_string(&manifest_path)
-        .context("read skill manifest")?;
-    let mtime_ns = file_mtime_ns(&manifest_path)?;
+    let content = std::fs::read_to_string(&registry_path)
+        .context("read skill registry")?;
+    let mtime_ns = file_mtime_ns(&registry_path)?;
     let content_hash = hex_encode(
         Sha256::digest(content.as_bytes()).as_slice(),
     );
@@ -200,14 +200,14 @@ fn sync_skill_manifest(
     if !force_all {
         let indexed = list_indexed_files(conn)?
             .into_iter()
-            .find(|m| m.path == parser::skill::MANIFEST_REL_PATH);
+            .find(|m| m.path == parser::skill::RUNTIME_REL_PATH);
         if let Some(ref stored) = indexed
             && stored.content_hash == content_hash {
                 return Ok(());
             }
     }
 
-    let Some(parsed) = parser::skill::parse_skill_manifest_with_content(
+    let Some(parsed) = parser::skill::parse_skill_registry_with_content(
         &content, mtime_ns, content_hash,
     ) else {
         return Ok(());

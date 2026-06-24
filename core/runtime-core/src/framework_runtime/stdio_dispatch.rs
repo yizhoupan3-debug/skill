@@ -5,18 +5,20 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 use std::path::{Path, PathBuf};
 
-use super::{
-    attach_runtime_event_transport, cleanup_attached_runtime_event_transport, inspect_trace_stream,
-    replay_trace_stream, subscribe_attached_runtime_events, write_trace_compaction_delta,
-    write_trace_metadata,
+use fr_exec::trace_attach::{
+    attach_runtime_event_transport, cleanup_attached_runtime_event_transport,
+    subscribe_attached_runtime_events,
+};
+use fr_exec::trace_stream_io::{
+    inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
 use crate::goal_drive;
 use crate::background_state::handle_background_state_operation;
-use framework_extra::route_manifest_fallback::{manifest_fallback_path, route_task_with_manifest_fallback};
-use super::stdio_op_registry::{
+use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
+use fr_utils::stdio_op_registry::{
     dispatch_runtime_output_mode_stdio, handles_runtime_output_stdio_op,
 };
-use super::trace_transport::{
+use fr_exec::trace_transport::{
     write_checkpoint_resume_manifest_payload, write_transport_binding_payload,
 };
 use crate::closeout_enforcement::{
@@ -40,7 +42,7 @@ use crate::route::{
     RouteSnapshotEnvelopePayload, RouteSnapshotRequestPayload, SkillRecord,
     build_route_diff_report, build_route_policy, build_route_resolution, build_route_snapshot,
     build_search_results_payload, filter_record_indices_for_host, filter_records_for_host,
-    load_inline_records, load_records_cached_for_stdio, load_records_from_manifest, route_task,
+    load_inline_records, load_records_cached_for_stdio, route_task,
     search_skills_subset,
 };
 use crate::runtime_storage::{
@@ -62,23 +64,25 @@ use crate::trace_runtime::{
     record_trace_event,
 };
 
-use super::json_value::{optional_bool, optional_non_empty_string, required_non_empty_string};
-use super::live_execute::execute_request;
-use super::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
-use super::trace_transport::{
+use framework_kernel::json_value::{optional_bool, optional_non_empty_string, required_non_empty_string};
+use fr_exec::live_execute::execute_request;
+use fr_utils::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
+use fr_exec::trace_transport::{
     build_checkpoint_resume_manifest, build_trace_handoff_descriptor,
     build_trace_transport_descriptor,
 };
-use super::{
-    FrameworkAliasBuildOptions, build_framework_alias_envelope,
-    build_framework_prompt_compression_envelope,
-    build_runtime_observability_health_snapshot, build_sandbox_control_response,
-    evaluate_pre_tool_use_guard_value, resolve_repo_root_arg, write_framework_session_artifacts,
-};
-use super::contract_summary::build_framework_contract_summary_envelope;
-use super::snapshot::build_framework_runtime_snapshot_envelope_with_level;
-use super::closeout::evaluate_closeout_record_file_for_task;
-use super::evidence::framework_hook_evidence_append;
+use fr_utils::types::FrameworkAliasBuildOptions;
+use framework_extra::alias::build_framework_alias_envelope;
+use framework_extra::prompt_compression::build_framework_prompt_compression_envelope;
+use framework_extra::orchestration_controller::build_runtime_observability_health_snapshot;
+use fr_exec::sandbox_control::build_sandbox_control_response;
+use fr_contracts::pre_tool_use_guard::evaluate_pre_tool_use_guard_value;
+use framework_kernel::repo_roots::resolve_repo_root_arg;
+use framework_extra::session_artifacts::write_framework_session_artifacts;
+use framework_extra::contract_summary::build_framework_contract_summary_envelope;
+use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
+use framework_extra::closeout::evaluate_closeout_record_file_for_task;
+use framework_extra::evidence::framework_hook_evidence_append;
 
 pub fn dispatch_stdio_json_request_payload(
     request: StdioJsonRequestPayload,
@@ -214,7 +218,13 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
 fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, String> {
     match op {
         "execute" => {
-            parse_and_dispatch::<ExecuteRequestPayload, _, _>(payload, "execute", execute_request)
+            let research_mode = payload
+                .get("research_mode")
+                .and_then(Value::as_str)
+                .unwrap_or("quick")
+                .to_string();
+            let request = parse_payload::<ExecuteRequestPayload>(payload, "execute")?;
+            serialize_payload(execute_request(request, &research_mode)?, "execute")
         }
         "execution_contract_bundle" => Ok(Value::Object(build_execution_contract_bundle())),
         "normalize_execution_kernel_metadata_contract" => {
@@ -262,7 +272,7 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "background_control" => parse_and_dispatch::<BackgroundControlRequestPayload, _, _>(
             payload,
             "background control",
-            super::build_background_control_response,
+            framework_extra::orchestration_controller::build_background_control_response,
         ),
         "background_state" => handle_background_state_operation(payload),
         "session_supervisor" => handle_session_supervisor_operation(payload),
@@ -420,7 +430,6 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
         None
     };
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
-    let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
     let host_id = optional_non_empty_string(&payload, "host_id");
     let cached_records;
     let using_inline_records = owned_inline_records.is_some();
@@ -428,7 +437,7 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
         items.as_slice()
     } else {
         cached_records =
-            load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?;
+            load_records_cached_for_stdio(runtime_path.as_deref())?;
         cached_records.as_ref()
     };
     let owned_host_records = if host_id.is_some() {
@@ -452,8 +461,6 @@ fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {
     } else {
         route_task_with_manifest_fallback(
             route_records,
-            runtime_path.as_deref(),
-            manifest_path.as_deref(),
             host_id.as_deref(),
             &query,
             &session_id,
@@ -472,17 +479,8 @@ fn dispatch_stdio_search_skills(payload: Value) -> Result<Value, String> {
         .map(|value| value as usize)
         .unwrap_or(5);
     let runtime_path = optional_non_empty_string(&payload, "runtime_path").map(PathBuf::from);
-    let manifest_path = optional_non_empty_string(&payload, "manifest_path").map(PathBuf::from);
     let host_id = optional_non_empty_string(&payload, "host_id");
-    let manifest_fallback =
-        manifest_fallback_path(runtime_path.as_deref(), manifest_path.as_deref())?;
-    let records = if let Some(path) = manifest_fallback.as_deref() {
-        load_records_from_manifest(path)?
-    } else {
-        load_records_cached_for_stdio(runtime_path.as_deref(), manifest_path.as_deref())?
-            .as_ref()
-            .clone()
-    };
+    let records = load_records_cached_for_stdio(runtime_path.as_deref())?;
     let host_indices = filter_record_indices_for_host(&records, host_id.as_deref())?;
     let matches = search_skills_subset(&records, Some(&host_indices), &query, limit);
     let resolved = build_search_results_payload(&query, matches);
@@ -628,11 +626,9 @@ fn dispatch_stdio_compile_profile_artifacts(payload: Value) -> Result<Value, Str
 fn dispatch_stdio_eval_route(payload: Value) -> Result<Value, String> {
     let cases_path = required_non_empty_string(&payload, "cases", "stdio eval route")?;
     let runtime = optional_non_empty_string(&payload, "runtime");
-    let manifest = optional_non_empty_string(&payload, "manifest");
     let report = run_eval_route(
         Path::new(&cases_path),
         runtime.as_deref().map(Path::new),
-        manifest.as_deref().map(Path::new),
     )?;
     serialize_payload(report, "eval route report")
 }

@@ -513,7 +513,7 @@ pub(super) fn task_lifecycle_profile(task_view: &core_state::task_state::Resolve
         .as_ref()
         .and_then(|g| g.get("lifecycle_profile"))
         .and_then(Value::as_str)
-        .unwrap_or("interactive")
+        .unwrap_or("task")
 }
 
 pub fn tool_closeout_gate(

@@ -1,6 +1,6 @@
 ---
 source: core/routing-engine/src/route/scoring.rs
-assertion_line: 1013
+assertion_line: 1033
 expression: results
 ---
 [
@@ -11,9 +11,10 @@ expression: results
         "reasons": [
           "Paper-workbench boost: prose edit / pasted manuscript / colloquial rewrite — auto prose-quality-gate (no user tokens required).",
           "Trigger hint matched: SCI润色.",
-          "Description keywords matched: sci, 润色."
+          "Description keywords matched: sci, 润色.",
+          "Session-start preferred boost applied (+3)."
         ],
-        "score": 86.0,
+        "score": 89.0,
         "slug": "paper-workbench"
       }
     ]
@@ -30,17 +31,19 @@ expression: results
       },
       {
         "reasons": [
-          "Description keywords matched: review."
+          "Description keywords matched: review.",
+          "Session-start required boost applied (+8)."
         ],
-        "score": 8.0,
+        "score": 16.0,
         "slug": "spreadsheets"
       },
       {
         "reasons": [
-          "Description keywords matched: review."
+          "Description keywords matched: code.",
+          "Session-start preferred boost applied (+3)."
         ],
-        "score": 3.0,
-        "slug": "scientific-figure-plotting"
+        "score": 6.0,
+        "slug": "research-execution"
       }
     ]
   },
@@ -49,9 +52,10 @@ expression: results
     "top3": [
       {
         "reasons": [
-          "Description keywords matched: tests."
+          "Description keywords matched: help, tests.",
+          "Session-start preferred boost applied (+3)."
         ],
-        "score": 3.0,
+        "score": 9.0,
         "slug": "statistical-analysis"
       }
     ]
@@ -63,6 +67,14 @@ expression: results
   {
     "query": "security audit",
     "top3": [
+      {
+        "reasons": [
+          "Description keywords matched: audit.",
+          "Session-start preferred boost applied (+3)."
+        ],
+        "score": 6.0,
+        "slug": "plan-mode"
+      },
       {
         "reasons": [
           "Description keywords matched: audit."

@@ -25,7 +25,7 @@ pub struct DetectionConfig {
 impl Default for DetectionConfig {
     fn default() -> Self {
         Self {
-            threshold_ngram: 0.7,
+            threshold_ngram: 0.4,
             threshold_burstiness: 0.3,
             threshold_pattern: 0.5,
             language: Language::English,
@@ -84,7 +84,7 @@ pub fn detect(text: &str, config: &DetectionConfig) -> Result<Vec<AigcDetectionR
         });
 
         // Vocabulary repetition (bonus signal)
-        let vocab_rep = detect_vocabulary_repetition(para_trimmed);
+        let vocab_rep = detect_vocabulary_repetition(para_trimmed, config.language);
         signals.push(AigcSignal {
             signal_type: AigcSignalType::VocabularyRepetition,
             value: vocab_rep,
@@ -262,12 +262,40 @@ fn detect_syntactic_patterns(text: &str, config: &DetectionConfig) -> (f64, Vec<
 // ── Bonus signal: vocabulary repetition ──
 
 /// Score how repetitive the vocabulary is (0.0 = varied, 1.0 = repetitive).
-fn detect_vocabulary_repetition(text: &str) -> f64 {
-    let words: Vec<String> = text
-        .split_whitespace()
-        .map(|w| w.to_lowercase())
-        .filter(|w| w.len() > 2)
-        .collect();
+fn detect_vocabulary_repetition(text: &str, language: Language) -> f64 {
+    let words: Vec<String> = match language {
+        Language::English => text
+            .split_whitespace()
+            .map(|w| w.to_lowercase())
+            .filter(|w| w.len() > 2)
+            .collect(),
+        Language::Chinese => {
+            // Chinese: split into individual CJK characters (each character ≈ a word concept).
+            // ASCII words kept intact for mixed-language text.
+            let mut tokens = Vec::new();
+            let mut ascii_word = String::new();
+            for ch in text.chars() {
+                if is_cjk(ch) {
+                    if !ascii_word.is_empty() {
+                        tokens.push(ascii_word.to_lowercase());
+                        ascii_word.clear();
+                    }
+                    tokens.push(ch.to_string());
+                } else if ch.is_ascii_alphanumeric() || ch == '\'' {
+                    ascii_word.push(ch);
+                } else {
+                    if !ascii_word.is_empty() {
+                        tokens.push(ascii_word.to_lowercase());
+                        ascii_word.clear();
+                    }
+                }
+            }
+            if !ascii_word.is_empty() {
+                tokens.push(ascii_word.to_lowercase());
+            }
+            tokens
+        }
+    };
 
     if words.is_empty() {
         return 0.0;

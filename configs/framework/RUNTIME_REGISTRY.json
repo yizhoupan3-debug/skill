@@ -431,7 +431,7 @@
     ]
   },
   "lifecycle_profiles": {
-    "interactive": {
+    "task": {
       "disable_spawn_first_nudge": true,
       "closeout_enforcement": "advisory",
       "review_gate": "suppressed",

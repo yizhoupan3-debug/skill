@@ -1,15 +1,15 @@
 //! Search correctness regression fixtures (stable ordering vs baseline slugs).
 
 use super::{
-    filter_record_indices_for_host, load_records_from_manifest, search_skills, search_skills_subset,
+    filter_record_indices_for_host, load_records_from_runtime, search_skills, search_skills_subset,
 };
 use std::collections::HashSet;
 use std::path::PathBuf;
 
 fn manifest_records() -> Vec<super::SkillRecord> {
-    let manifest_path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-    load_records_from_manifest(&manifest_path).expect("load manifest records")
+    let runtime_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
+    load_records_from_runtime(&runtime_path).expect("load runtime records")
 }
 
 #[test]

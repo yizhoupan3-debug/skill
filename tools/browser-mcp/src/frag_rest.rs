@@ -1082,7 +1082,6 @@ mod frag_rest_tests {
             enabled: true,
             tag: "button".to_string(),
             test_id: Some("submit-btn".to_string()),
-            _ordinal: 0,
             selector: "button".to_string(),
         };
         assert_eq!(create_fingerprint(&desc, &mut counts), "tid::submit-btn");
@@ -1099,20 +1098,17 @@ mod frag_rest_tests {
             enabled: true,
             tag: "a".to_string(),
             test_id: None,
-            _ordinal: 0,
             selector: "a".to_string(),
         };
         assert_eq!(create_fingerprint(&desc, &mut counts), "link::Home::a");
         let desc2 = ElementDescriptor {
-            _ordinal: 1,
             ..desc.clone()
         };
-        assert_eq!(create_fingerprint(&desc2, &mut counts), "link::Home::a#2");
+        assert_eq!(create_fingerprint(&desc2, &mut counts), "link::Home::a");
         let desc3 = ElementDescriptor {
-            _ordinal: 2,
             ..desc.clone()
         };
-        assert_eq!(create_fingerprint(&desc3, &mut counts), "link::Home::a#3");
+        assert_eq!(create_fingerprint(&desc3, &mut counts), "link::Home::a");
     }
 
     // --- has_meaningful_change ---
@@ -1131,7 +1127,6 @@ mod frag_rest_tests {
             interactive_elements: elements,
             text_content: text.to_string(),
             text_lines: text.lines().map(|s| s.to_string()).collect(),
-            _created_at: 0,
         }
     }
 
@@ -1231,13 +1226,6 @@ mod frag_rest_tests {
         assert_eq!(err["message"], "msg");
         assert_eq!(err["recoverable"], true);
         assert_eq!(err["suggested_next_actions"][0], "action1");
-    }
-
-    #[test]
-    fn skill_error_wraps_browser_error() {
-        let err = skill_error("SKILL_ERR", "missing");
-        assert_eq!(err["code"], "SKILL_ERR");
-        assert!(err["suggested_next_actions"].as_array().unwrap().len() > 1);
     }
 
     #[test]
@@ -1504,17 +1492,6 @@ mod frag_rest_tests {
         assert_eq!(descriptor_bool(&val, &["c"]), None);
     }
 
-    // --- skill_body_path ---
-
-    #[test]
-    fn skill_body_path_rejects_traversal() {
-        let root = PathBuf::from("/tmp/test-repo");
-        assert!(skill_body_path(&root, "../etc/passwd").is_err());
-        assert!(skill_body_path(&root, "foo/bar").is_err());
-        assert!(skill_body_path(&root, "").is_err());
-        assert!(skill_body_path(&root, ".hidden").is_err());
-    }
-
     // --- normalize_text (via to_text_lines usage) ---
 
     #[test]
@@ -1582,10 +1559,4 @@ mod frag_rest_tests {
         assert!(parse_rfc3339_millis("not-a-date").is_none());
     }
 
-    // --- skill_runtime_available ---
-
-    #[test]
-    fn skill_runtime_available_false_for_nonexistent_root() {
-        assert!(!skill_runtime_available(Path::new("/nonexistent/repo")));
-    }
 }

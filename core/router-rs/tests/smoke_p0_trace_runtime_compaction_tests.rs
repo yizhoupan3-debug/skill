@@ -1,6 +1,6 @@
 //! independent `trace_runtime` compaction smoke (module-local).
 
-use crate::trace_runtime::{
+use runtime_core::trace_runtime::{
     TraceCompactRequestPayload, TraceRecordEventRequestPayload, compact_trace_stream,
     record_trace_event,
 };

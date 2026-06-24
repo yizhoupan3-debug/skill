@@ -332,7 +332,7 @@ fn post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         "session_id": "sess-post-tool-1",
         "tool_output": { "exit_code": 0 },
     });
-    crate::framework_runtime::try_append_post_tool_shell_evidence(
+    framework_extra::evidence::try_append_post_tool_shell_evidence(
         &repo_root,
         &event,
         "codex_post_tool_verification",
@@ -390,7 +390,7 @@ fn cursor_post_tool_evidence_appends_cargo_test_after_continuity_seed() {
         "session_id": "sess-cursor-post-tool-1",
         "tool_output": { "exit_code": 0 },
     });
-    crate::framework_runtime::try_append_post_tool_shell_evidence(
+    framework_extra::evidence::try_append_post_tool_shell_evidence(
         &repo_root,
         &event,
         "cursor_post_tool_verification",
@@ -590,7 +590,7 @@ fn hook_evidence_append_feeds_closeout_context() {
         .expect("record json"),
     )
     .expect("write record");
-    let eval = crate::framework_runtime::evaluate_closeout_record_file_for_task(
+    let eval = framework_extra::closeout::evaluate_closeout_record_file_for_task(
         &repo_root,
         "closeout-hook",
         &record_path,
@@ -608,7 +608,7 @@ fn post_tool_evidence_no_ops_without_continuity_seed() {
         "tool_name": "Bash",
         "tool_input": { "command": "cargo test" },
     });
-    crate::framework_runtime::try_append_post_tool_shell_evidence(
+    framework_extra::evidence::try_append_post_tool_shell_evidence(
         &repo_root,
         &event,
         "codex_post_tool_verification",
@@ -643,7 +643,7 @@ fn framework_session_artifact_write_rejects_stale_focus_update() {
     assert_eq!(first["task_id"], json!("cas-task"));
 
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
-    let stale_hash = crate::framework_runtime::hash_file_for_test(&focus_path).expect("focus hash");
+    let stale_hash = fr_utils::util::hash_file_for_test(&focus_path).expect("focus hash");
     write_text_fixture(
         &focus_path,
         r#"{"task_id":"other-task","task":"Other task","updated_at":"2026-04-25T00:00:00+08:00"}"#,
@@ -694,10 +694,10 @@ fn framework_session_artifact_write_preserves_existing_roundtrip() {
     let focus_path = repo_root.join("artifacts/current/focus_task.json");
     let supervisor_path = repo_root.join(".supervisor_state.json");
     let active_hash =
-        crate::framework_runtime::hash_file_for_test(&active_path).expect("active hash");
-    let focus_hash = crate::framework_runtime::hash_file_for_test(&focus_path).expect("focus hash");
+        fr_utils::util::hash_file_for_test(&active_path).expect("active hash");
+    let focus_hash = fr_utils::util::hash_file_for_test(&focus_path).expect("focus hash");
     let supervisor_hash =
-        crate::framework_runtime::hash_file_for_test(&supervisor_path).expect("supervisor hash");
+        fr_utils::util::hash_file_for_test(&supervisor_path).expect("supervisor hash");
 
     let second = write_framework_session_artifacts(json!({
         "repo_root": repo_root,
@@ -849,7 +849,7 @@ fn task_registry_normalization_dedupes_and_limits_old_tasks() {
         .to_string(),
     );
 
-    let changed = crate::framework_runtime::write_framework_session_artifacts(json!({
+    let changed = framework_extra::session_artifacts::write_framework_session_artifacts(json!({
         "repo_root": repo_root,
         "output_dir": current_root,
         "task_id": "focus-task",
@@ -1721,7 +1721,7 @@ fn write_text_payload_uses_unique_temp_paths_under_concurrency() {
 
 #[test]
 fn framework_snapshot_summary_mode_is_smaller_than_full() {
-    use crate::framework_runtime::build_framework_runtime_snapshot_envelope_with_level;
+use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
 
     let repo_root = temp_dir_path("framework-snapshot-detail-level");
     let task_id = "detail-level-task";

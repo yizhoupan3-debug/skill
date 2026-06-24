@@ -22,6 +22,8 @@ skill-layer = { path = "../skill-layer" }
 runtime-core = { path = "../runtime-core", features = ["test-support"] }
 host-projection = { path = "../host-projection" }
 framework-extra = { path = "../framework-extra" }
+fr-utils = { path = "../fr-utils" }
+fr-exec = { path = "../fr-exec" }
 loop-engine = { path = "../loop-engine" }
 browser-mcp = { path = "../../tools/browser-mcp", optional = true }
 browser-mcp-dispatch = { path = "../browser-mcp-dispatch", optional = true }

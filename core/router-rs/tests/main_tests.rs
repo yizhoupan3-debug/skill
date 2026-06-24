@@ -5,7 +5,7 @@ use clap::Parser;
 use crate::route::RouteDecision;
 use crate::route::{
     ROUTE_POLICY_SCHEMA_VERSION, evaluate_routing_cases,
-    load_records_cached_for_stdio_with_default_runtime_path, load_records_from_manifest,
+    load_records_cached_for_stdio_with_default_runtime_path,
     load_routing_eval_cases, read_json, value_to_string,
 };
 

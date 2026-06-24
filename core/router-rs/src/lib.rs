@@ -45,7 +45,9 @@ pub(crate) mod hook_status {
 
 // ── cli re-exports (from framework_runtime public API, not cli cfg(test) items) ──
 #[cfg(test)]
-pub(crate) use framework_runtime::{StdioOpDomain, classify_stdio_op, dispatch_stdio_json_request};
+pub(crate) use fr_utils::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
+#[cfg(test)]
+pub(crate) use runtime_core::framework_runtime::stdio_dispatch::dispatch_stdio_json_request;
 // is_*_stdio_op helpers: local wrappers since the originals are cfg(test) in runtime-core
 #[cfg(test)]
 pub(crate) fn is_framework_stdio_op(op: &str) -> bool {
@@ -71,7 +73,7 @@ use execution_contract::{
     EXECUTION_PROMPT_PREVIEW_OWNER,
 };
 #[cfg(test)]
-use framework_runtime::FRAMEWORK_ALIAS_SCHEMA_VERSION;
+use fr_utils::constants::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 
 #[cfg(test)]
 #[ctor::ctor]
@@ -90,6 +92,10 @@ static TEST_KERNEL_BOOTSTRAP: std::sync::LazyLock<()> =
 pub(crate) fn touch_test_kernel_bootstrap() {
     let _ = &*TEST_KERNEL_BOOTSTRAP;
 }
+
+#[cfg(test)]
+#[path = "integration_test_prelude.rs"]
+mod integration_test_prelude;
 
 #[cfg(test)]
 #[path = "../tests/main_tests.rs"]

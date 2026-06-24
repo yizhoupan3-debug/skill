@@ -1,7 +1,7 @@
 use crate::route::{
     ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, filter_records_for_host, load_records,
 };
-use crate::route_task_with_manifest_fallback;
+use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::path::Path;
@@ -80,8 +80,6 @@ pub fn load_eval_cases(path: &Path) -> Result<EvalCasesPayload, String> {
 pub fn evaluate_route_cases(
     records: &[crate::route::SkillRecord],
     cases: &[EvalCasePayload],
-    runtime_path: Option<&Path>,
-    manifest_path: Option<&Path>,
 ) -> EvalRouteReport {
     let mut passed = 0_usize;
     let mut failed = 0_usize;
@@ -117,8 +115,6 @@ pub fn evaluate_route_cases(
         };
         let decision = match route_task_with_manifest_fallback(
             &scoped_records,
-            runtime_path,
-            manifest_path,
             host_id,
             &case.task,
             &session_id,
@@ -265,15 +261,12 @@ pub fn evaluate_route_cases(
 pub fn run_eval_route(
     cases_path: &Path,
     runtime_path: Option<&Path>,
-    manifest_path: Option<&Path>,
 ) -> Result<EvalRouteReport, String> {
     let cases = load_eval_cases(cases_path)?;
-    let records = load_records(runtime_path, manifest_path)?;
+    let records = load_records(runtime_path)?;
     Ok(evaluate_route_cases(
         &records,
         &cases.cases,
-        runtime_path,
-        manifest_path,
     ))
 }
 
@@ -366,7 +359,7 @@ mod tests {
                 ..Default::default()
             },
         ];
-        let report = evaluate_route_cases(&records, &cases, None, None);
+        let report = evaluate_route_cases(&records, &cases);
         assert_eq!(report.total_cases, 2);
         assert_eq!(report.passed, 2);
         assert_eq!(report.failed, 0);
@@ -390,7 +383,7 @@ mod tests {
             expected_owner: Some("slides".to_string()),
             ..Default::default()
         }];
-        let report = evaluate_route_cases(&records, &cases, None, None);
+        let report = evaluate_route_cases(&records, &cases);
         assert_eq!(report.total_cases, 1);
         assert_eq!(report.failed, 1);
         assert_eq!(report.failures.len(), 1);
@@ -418,7 +411,7 @@ mod tests {
             forbidden_owners: vec!["gitx".to_string()],
             ..Default::default()
         }];
-        let report = evaluate_route_cases(&records, &cases, None, None);
+        let report = evaluate_route_cases(&records, &cases);
         assert_eq!(report.failed, 1);
         assert!(report.failures.iter().any(|f| f.field == "forbidden_owner"));
     }
@@ -439,7 +432,7 @@ mod tests {
             expected_owner: Some("slides".to_string()),
             ..Default::default()
         }];
-        let report = evaluate_route_cases(&records, &cases, None, None);
+        let report = evaluate_route_cases(&records, &cases);
         assert_eq!(report.total_cases, 0);
     }
 

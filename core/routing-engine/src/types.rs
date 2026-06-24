@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 //! Route payload and record types.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -5,6 +7,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::SystemTime;
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SkillRecord {
@@ -81,18 +84,16 @@ pub struct RouteCandidate<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+
 pub struct RecordsCacheKey {
     pub runtime_path: Option<PathBuf>,
-    pub manifest_path: Option<PathBuf>,
     pub metadata_sidecar_path: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone)]
 pub struct RecordsCacheEntry {
     pub runtime_mtime: Option<SystemTime>,
-    pub manifest_mtime: Option<SystemTime>,
     pub metadata_mtime: Option<SystemTime>,
-    pub index_mtime: Option<SystemTime>,
     /// Wall-clock time when this entry was inserted/last-refreshed.
     /// Used as the eviction tiebreaker when the FIFO queue is drained:
     /// the entry with the oldest `inserted_at` is evicted first,

@@ -220,14 +220,19 @@ pub fn run_unified_stop(
         return add_context("Stop", &message);
     }
 
-    // Advisory: even if signals are satisfied, check done_when coverage ≥50%
+    // Advisory: even if signals are satisfied, check done_when coverage >= 50%.
+    // Only fires once to avoid nagging on every Stop.
     if goal_is_satisfied
+        && review_state.tracks_goal()
+        && !review_state.done_when_advisory_sent
         && let Some((covered, total, _)) = &done_when_coverage
             && *total > 0 && (*covered as f64 / *total as f64) < 0.5 {
                 let message = format!(
                     "Goal signals satisfied but done_when coverage is low ({covered}/{total}). \
                      Verify all completion conditions before completing. Still missing items may remain.",
                 );
+                review_state.done_when_advisory_sent = true;
+                let _ = write_review_state(&review_path, &review_state);
                 return add_context("Stop", &message);
             }
 

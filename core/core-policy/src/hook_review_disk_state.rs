@@ -63,6 +63,9 @@ pub struct HookReviewDiskCore {
     /// Goal-specific Stop followup nudges.
     #[serde(default)]
     pub goal_followup_count: u32,
+    /// done_when coverage advisory already sent (prevents repeat on every Stop).
+    #[serde(default)]
+    pub done_when_advisory_sent: bool,
 }
 
 /// Common trait for hook-state structs that carry a schema `version` field.

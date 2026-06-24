@@ -11,7 +11,7 @@
 use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group};
 use router_rs::route::{
     SkillRecord, filter_record_indices_for_host, invalidate_records_cache, load_records,
-    load_records_cached_for_stdio, load_records_from_manifest, search_skills, search_skills_subset,
+    load_records_cached_for_stdio, load_records_from_runtime, search_skills, search_skills_subset,
 };
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -81,15 +81,15 @@ fn bench_record_load(c: &mut Criterion) {
     group.bench_function("cold_load_records", |b| {
         b.iter(|| {
             let _ = invalidate_records_cache();
-            black_box(load_records(Some(&runtime), Some(&manifest)).expect("load records"));
+            black_box(load_records(Some(&runtime)).expect("load records"));
         });
     });
     group.bench_function("warm_load_records_cached", |b| {
         let _ =
-            load_records_cached_for_stdio(Some(&runtime), Some(&manifest)).expect("prime cache");
+            load_records_cached_for_stdio(Some(&runtime)).expect("prime cache");
         b.iter(|| {
             black_box(
-                load_records_cached_for_stdio(Some(&runtime), Some(&manifest))
+                load_records_cached_for_stdio(Some(&runtime))
                     .expect("cached load")
                     .len(),
             );
@@ -102,10 +102,10 @@ fn bench_record_load(c: &mut Criterion) {
     for _ in 0..200 {
         let _ = invalidate_records_cache();
         let start = Instant::now();
-        let _ = load_records(Some(&runtime), Some(&manifest)).expect("cold");
+        let _ = load_records(Some(&runtime)).expect("cold");
         cold.push(start.elapsed());
         let start = Instant::now();
-        let _ = load_records_cached_for_stdio(Some(&runtime), Some(&manifest)).expect("warm");
+        let _ = load_records_cached_for_stdio(Some(&runtime)).expect("warm");
         warm.push(start.elapsed());
     }
     report_latency("record_load/cold_load_records", &mut cold);
@@ -114,8 +114,8 @@ fn bench_record_load(c: &mut Criterion) {
 
 fn bench_search_core(c: &mut Criterion) {
     let root = repo_root();
-    let manifest = manifest_path(&root);
-    let records = load_records_from_manifest(&manifest).expect("manifest records");
+    let runtime = runtime_path(&root);
+    let records = load_records_from_runtime(&runtime).expect("runtime records");
     let queries = [
         ("short", "pdf"),
         ("medium", "DESIGN.md 设计规范 token"),
@@ -168,7 +168,7 @@ fn bench_host_filter_path(c: &mut Criterion) {
     let runtime = runtime_path(&root);
     let manifest = manifest_path(&root);
     let records =
-        load_records_cached_for_stdio(Some(&runtime), Some(&manifest)).expect("cached records");
+        load_records_cached_for_stdio(Some(&runtime)).expect("cached records");
     let query = "plugin creator";
 
     let mut group = c.benchmark_group("mcp_search_path");

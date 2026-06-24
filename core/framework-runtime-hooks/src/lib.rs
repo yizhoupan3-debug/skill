@@ -95,7 +95,7 @@ impl RuntimeCoreHooks {
     pub fn handle_background_state_operation(&self, payload: Value) -> Result<Value, String> { (self.handle_background_state_operation)(payload) }
     pub fn runtime_concurrency_defaults_payload(&self) -> Value { (self.runtime_concurrency_defaults_payload)() }
     pub fn eval_route_contract(&self) -> Value { (self.eval_route_contract)() }
-    pub fn run_eval_route(&self, cases_path: &Path, runtime: Option<&Path>, manifest: Option<&Path>) -> Result<Value, String> { (self.run_eval_route)(cases_path, runtime, manifest) }
+    pub fn run_eval_route(&self, cases_path: &Path, runtime: Option<&Path>) -> Result<Value, String> { (self.run_eval_route)(cases_path, runtime) }
     pub fn generated_artifacts_status_for_repo(&self, repo_root: &Path) -> Result<String, String> { (self.generated_artifacts_status_for_repo)(repo_root) }
     pub fn ensure_kernel_bootstrap(&self) { (self.ensure_kernel_bootstrap)() }
 }
@@ -122,7 +122,7 @@ pub struct RuntimeCoreHooks {
     // ── 路由评估 ──
     pub eval_route_contract: fn() -> Value,
     #[allow(clippy::type_complexity)]
-    pub run_eval_route: fn(cases_path: &Path, runtime: Option<&Path>, manifest: Option<&Path>) -> Result<Value, String>,
+    pub run_eval_route: fn(cases_path: &Path, runtime: Option<&Path>) -> Result<Value, String>,
 
     // ── 诊断 ──
     pub generated_artifacts_status_for_repo: fn(repo_root: &Path) -> Result<String, String>,
@@ -167,7 +167,7 @@ mod tests {
             handle_background_state_operation: |_| Ok(serde_json::Value::Null),
             runtime_concurrency_defaults_payload: || serde_json::Value::Null,
             eval_route_contract: || serde_json::Value::Null,
-            run_eval_route: |_, _, _| Ok(serde_json::Value::Null),
+            run_eval_route: |_, _| Ok(serde_json::Value::Null),
             generated_artifacts_status_for_repo: |_| Ok("ok".into()),
             ensure_kernel_bootstrap: || {},
         }
@@ -361,7 +361,6 @@ mod tests {
         let h = hooks();
         let result = h.run_eval_route(
             Path::new("/tmp/cases.json"),
-            None,
             None,
         );
         assert!(result.is_ok());

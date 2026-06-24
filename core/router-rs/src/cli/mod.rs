@@ -9,17 +9,14 @@ pub mod runtime_ops;
 pub use common::{
     configure_compute_parallelism, env_usize,
 };
-pub use framework_extra::route_manifest_fallback::{
-    manifest_fallback_path, resolve_runtime_declared_manifest_fallback,
-    route_task_with_manifest_fallback,
-};
+pub use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 pub use runtime_ops::dispatch_stdio_json_request_payload;
 
 #[cfg(not(test))]
-pub use runtime_core::framework_runtime::stdio_op_registry::StdioOpDomain;
-pub use runtime_core::framework_runtime::stdio_op_registry::classify_stdio_op;
+pub use fr_utils::stdio_op_registry::StdioOpDomain;
+pub use fr_utils::stdio_op_registry::classify_stdio_op;
 #[cfg(test)]
-pub use runtime_core::framework_runtime::stdio_op_registry::{
+pub use fr_utils::stdio_op_registry::{
     StdioOpDomain, is_framework_stdio_op, is_routing_stdio_op, is_runtime_stdio_op,
     is_trace_stdio_op,
 };

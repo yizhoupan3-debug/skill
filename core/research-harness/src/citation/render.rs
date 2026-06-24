@@ -85,9 +85,9 @@ pub fn parse_bibtex_to_json(text: &str) -> Vec<serde_json::Value> {
             pos = abs_at + 1;
             continue;
         }
-        let open_char = after_type.as_bytes()[0];
-        let close_char = if open_char == b'{' { b'}' } else { b')' };
-        let body_start = abs_at + 1 + type_end + (after_at.len() - after_type.len()) + 1;
+        let open_char = if after_type.starts_with('{') { '{' } else { '(' };
+        let close_char = if open_char == '{' { '}' } else { ')' };
+        let body_start = abs_at + 1 + (after_at.len() - after_type.len()) + 1;
 
         // Find key (first comma)
         let body_rest = &text[body_start..];
@@ -98,9 +98,9 @@ pub fn parse_bibtex_to_json(text: &str) -> Vec<serde_json::Value> {
         let mut depth = 1;
         let mut body_end = body_start + comma_pos;
         for (i, ch) in text[body_start..].char_indices() {
-            if ch as u8 == open_char {
+            if ch == open_char {
                 depth += 1;
-            } else if ch as u8 == close_char {
+            } else if ch == close_char {
                 depth -= 1;
                 if depth == 0 {
                     body_end = body_start + i;
@@ -119,13 +119,12 @@ pub fn parse_bibtex_to_json(text: &str) -> Vec<serde_json::Value> {
         for fcap in BIBTEX_FIELD_NAME_RE.captures_iter(body) {
             let field_name = fcap[1].trim().to_lowercase();
             let value_start = fcap.get(0).unwrap().end();
-            // Find the matching closing brace by counting depth
-            if value_start >= body.len() || &body[value_start..value_start + 1] != "=" {
+            // value_start already points past "=" in the regex match;
+            // find the matching closing brace after optional whitespace
+            if value_start >= body.len() {
                 continue;
             }
-            let eq_pos = value_start;
-            // Skip whitespace and opening brace
-            let after_eq = body[eq_pos + 1..].trim_start();
+            let after_eq = body[value_start..].trim_start();
             if !after_eq.starts_with('{') {
                 continue;
             }
@@ -196,5 +195,78 @@ mod tests {
         });
         let bibtex = render_entry(&entry).unwrap();
         assert!(bibtex.contains("@misc{note1,"));
+    }
+
+    #[test]
+    fn parse_bibtex_basic() {
+        let bibtex = r#"@article{smith2024,
+  author = {Smith, Jane},
+  title = {A Great Paper},
+  year = {2024}
+}"#;
+        let entries = parse_bibtex_to_json(bibtex);
+        assert_eq!(entries.len(), 1);
+        let entry = &entries[0];
+        assert_eq!(entry["entry_type"], "article");
+        assert_eq!(entry["key"], "smith2024");
+        let fields = entry["fields"].as_object().unwrap();
+        assert_eq!(fields.get("author").and_then(|v| v.as_str()), Some("Smith, Jane"));
+        assert_eq!(fields.get("title").and_then(|v| v.as_str()), Some("A Great Paper"));
+        assert_eq!(fields.get("year").and_then(|v| v.as_str()), Some("2024"));
+    }
+
+    #[test]
+    fn parse_bibtex_non_ascii_author() {
+        let bibtex = r#"@article{author2024,
+  author = {Żołnierz, Jan and Nguyễn, ĩ}
+}"#;
+        let entries = parse_bibtex_to_json(bibtex);
+        assert_eq!(entries.len(), 1);
+        let entry = &entries[0];
+        let fields = entry["fields"].as_object().unwrap();
+        let author = fields.get("author").and_then(|v| v.as_str()).unwrap();
+        assert!(author.contains("Żołnierz"), "Polish chars should survive ascii truncation bug: {author}");
+        assert!(author.contains("Nguyễn"), "Vietnamese chars should survive: {author}");
+    }
+
+    #[test]
+    fn parse_bibtex_nested_braces() {
+        let bibtex = r#"@article{deep2024,
+  title = {A {Deep} Learning Approach}
+}"#;
+        let entries = parse_bibtex_to_json(bibtex);
+        assert_eq!(entries.len(), 1);
+        let title = entries[0]["fields"]["title"].as_str().unwrap();
+        assert_eq!(title, "A {Deep} Learning Approach");
+    }
+
+    #[test]
+    fn parse_bibtex_multiple_entries() {
+        let bibtex = r#"@article{a2024,
+  author = {Alice}
+}
+@inproceedings{b2024,
+  title = {Bob's Work}
+}"#;
+        let entries = parse_bibtex_to_json(bibtex);
+        assert_eq!(entries.len(), 2);
+    }
+
+    #[test]
+    fn parse_bibtex_empty_fields() {
+        let bibtex = r#"@misc{empty2024,}"#;
+        let entries = parse_bibtex_to_json(bibtex);
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn parse_bibtex_doi_with_url_prefix() {
+        let bibtex = r#"@article{doi2024,
+  doi = {10.1234/example}
+}"#;
+        let entries = parse_bibtex_to_json(bibtex);
+        assert_eq!(entries.len(), 1);
+        let doi = entries[0]["fields"]["doi"].as_str().unwrap();
+        assert_eq!(doi, "10.1234/example");
     }
 }

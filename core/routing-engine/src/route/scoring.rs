@@ -965,7 +965,7 @@ mod paper_prose_routing_score_tests {
     fn sci_polish_scores_paper_workbench_above_doc_eng() {
         let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
-        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let records = load_records(Some(&runtime_path)).expect("load runtime");
         let workbench = records
             .iter()
             .find(|r| r.slug == "paper-workbench")
@@ -999,7 +999,7 @@ mod paper_prose_routing_score_tests {
     fn snapshot_scoring_output_for_common_queries() {
         let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
-        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let records = load_records(Some(&runtime_path)).expect("load runtime");
         let w = scoring_weights();
 
         let queries = vec![
@@ -1075,7 +1075,7 @@ mod snapshot_scoring_edge_cases {
     fn snapshot_scoring_empty_query() {
         let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
-        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let records = load_records(Some(&runtime_path)).expect("load runtime");
         let w = scoring_weights();
         let tokens = tokenize_route_text("");
         let set: HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();
@@ -1094,7 +1094,7 @@ mod snapshot_scoring_edge_cases {
     fn snapshot_scoring_chinese_query() {
         let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
-        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let records = load_records(Some(&runtime_path)).expect("load runtime");
         let w = scoring_weights();
         let q = "帮我写一个单元测试覆盖边界情况";
         let tokens = tokenize_route_text(q);
@@ -1115,7 +1115,7 @@ mod snapshot_scoring_edge_cases {
     fn codegraph_index_keywords_add_boost() {
         let runtime_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../../skills/SKILL_ROUTING_RUNTIME.json");
-        let records = load_records(Some(&runtime_path), None).expect("load runtime");
+        let records = load_records(Some(&runtime_path)).expect("load runtime");
         let q = "分析这个函数的调用链和影响半径";
         let tokens = tokenize_route_text(q);
         let set: HashSet<&str> = tokens.iter().map(|s| s.as_str()).collect();

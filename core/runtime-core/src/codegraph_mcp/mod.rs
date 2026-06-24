@@ -2,7 +2,7 @@
 //!
 //! Runs as an independent stdio MCP surface — never inside `browser_mcp`.
 
-use crate::framework_runtime::resolve_repo_root_arg;
+use framework_kernel::repo_roots::resolve_repo_root_arg;
 use std::path::Path;
 
 pub use codegraph_rs::mcp::{dispatch_tool_call, tool_definitions};

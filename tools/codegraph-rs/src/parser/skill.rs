@@ -1,4 +1,4 @@
-//! Skill manifest parser — extracts skill metadata from `skills/SKILL_MANIFEST.json`.
+//! Skill manifest parser — extracts skill metadata from `skills/SKILL_ROUTING_RUNTIME.json`.
 //!
 //! Each skill entry becomes a `kind="skill"` node in the codegraph index.
 //! Keywords are stored as separate keyword nodes linked via edges so they
@@ -10,20 +10,20 @@ use std::path::Path;
 
 use crate::parser::{ParsedEdge, ParsedFile, ParsedSymbol};
 
-/// Index positions within the `SKILL_MANIFEST.json` "keys" array.
+/// Index positions within the `SKILL_ROUTING_RUNTIME.json` "keys" array.
 const KEY_SLUG: usize = 0;
 const KEY_TRIGGER_HINTS: usize = 7;
 const KEY_SKILL_PATH: usize = 10;
 
 /// Relative path used in the codegraph index for the manifest.
-pub const MANIFEST_REL_PATH: &str = "skills/SKILL_MANIFEST.json";
+pub const RUNTIME_REL_PATH: &str = "skills/SKILL_ROUTING_RUNTIME.json";
 
-/// Parse `skills/SKILL_MANIFEST.json` and return a synthetic `ParsedFile` whose
+/// Parse `skills/SKILL_ROUTING_RUNTIME.json` and return a synthetic `ParsedFile` whose
 /// symbols are skill entries and edges link each skill to its keywords.
 ///
 /// Returns `None` if the manifest is missing or malformed.
-pub fn parse_skill_manifest(repo_root: &Path) -> Option<ParsedFile> {
-    let manifest_path = repo_root.join(MANIFEST_REL_PATH);
+pub fn parse_skill_registry(repo_root: &Path) -> Option<ParsedFile> {
+    let manifest_path = repo_root.join(RUNTIME_REL_PATH);
     let content = std::fs::read_to_string(&manifest_path).ok()?;
     let mtime_ns = std::fs::metadata(&manifest_path)
         .ok()
@@ -37,7 +37,7 @@ pub fn parse_skill_manifest(repo_root: &Path) -> Option<ParsedFile> {
 }
 
 /// Alternative entry for callers that already have the content (avoids double-read).
-pub fn parse_skill_manifest_with_content(
+pub fn parse_skill_registry_with_content(
     content: &str,
     mtime_ns: i64,
     content_hash: String,
@@ -103,7 +103,7 @@ fn parse_manifest_content(content: &str, mtime_ns: i64, content_hash: String) ->
     }
 
     Some(ParsedFile {
-        path: MANIFEST_REL_PATH.to_string(),
+        path: RUNTIME_REL_PATH.to_string(),
         language: "skill".to_string(),
         mtime_ns,
         content_hash,
@@ -128,7 +128,7 @@ mod tests {
 
         assert_eq!(parsed.language, "skill");
         assert!(!parsed.path.starts_with('/'), "path must be relative");
-        assert_eq!(parsed.path, "skills/SKILL_MANIFEST.json");
+        assert_eq!(parsed.path, "skills/SKILL_ROUTING_RUNTIME.json");
 
         let skill_symbols: Vec<_> = parsed
             .symbols
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn returns_none_for_missing_manifest() {
-        let result = parse_skill_manifest(Path::new("/nonexistent/repo"));
+        let result = parse_skill_registry(Path::new("/nonexistent/repo"));
         assert!(result.is_none());
     }
 

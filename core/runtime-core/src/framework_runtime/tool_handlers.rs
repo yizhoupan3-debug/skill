@@ -107,8 +107,8 @@ pub fn goal_state_manage_dispatch(
             }
             if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {
                 match lp {
-                    "interactive" | "loop-auto" => payload["lifecycle_profile"] = json!(lp),
-                    _ => return Err(format!("Invalid lifecycle_profile: {lp}. Must be one of: interactive, loop-auto")),
+                    "task" | "loop-auto" => payload["lifecycle_profile"] = json!(lp),
+                    _ => return Err(format!("Invalid lifecycle_profile: {lp}. Must be one of: task, loop-auto")),
                 }
             }
             if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {

@@ -189,9 +189,9 @@ fn stdio_route_cache_reuses_records_until_runtime_changes() {
     write_runtime_fixture(&runtime_path, "alpha");
     write_manifest_fixture(&manifest_path, "alpha", "P1");
 
-    let first = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
+    let first = load_records_cached_for_stdio(Some(&runtime_path))
         .expect("first cache load");
-    let second = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
+    let second = load_records_cached_for_stdio(Some(&runtime_path))
         .expect("second cache load");
     assert!(Arc::ptr_eq(&first, &second));
     assert_eq!(first[0].slug, "alpha");
@@ -199,7 +199,7 @@ fn stdio_route_cache_reuses_records_until_runtime_changes() {
     sleep(Duration::from_millis(20));
     write_runtime_fixture(&runtime_path, "beta");
 
-    let third = load_records_cached_for_stdio(Some(&runtime_path), Some(&manifest_path))
+    let third = load_records_cached_for_stdio(Some(&runtime_path))
         .expect("reload after runtime change");
     assert!(!Arc::ptr_eq(&second, &third));
     assert_eq!(third[0].slug, "beta");
@@ -217,9 +217,9 @@ fn route_records_cache_refreshes_default_runtime_path() {
     let runtime_path = skills_dir.join("SKILL_ROUTING_RUNTIME.json");
     write_runtime_fixture(&runtime_path, "default-alpha");
 
-    let first = load_records_cached_for_stdio_with_default_runtime_path(&runtime_path, None)
+    let first = load_records_cached_for_stdio_with_default_runtime_path(&runtime_path)
         .expect("first default load");
-    let second = load_records_cached_for_stdio_with_default_runtime_path(&runtime_path, None)
+    let second = load_records_cached_for_stdio_with_default_runtime_path(&runtime_path)
         .expect("second default load");
     assert!(Arc::ptr_eq(&first, &second));
     assert_eq!(first[0].slug, "default-alpha");
@@ -227,7 +227,7 @@ fn route_records_cache_refreshes_default_runtime_path() {
     sleep(Duration::from_millis(20));
     write_runtime_fixture(&runtime_path, "default-beta");
 
-    let third = load_records_cached_for_stdio_with_default_runtime_path(&runtime_path, None)
+    let third = load_records_cached_for_stdio_with_default_runtime_path(&runtime_path)
         .expect("refreshed default load");
     assert!(!Arc::ptr_eq(&second, &third));
     assert_eq!(third[0].slug, "default-beta");
@@ -239,7 +239,7 @@ fn route_records_cache_refreshes_default_runtime_path() {
 #[test]
 fn route_decision_fixture_expectations_hold() {
     let fixture = fixture_path();
-    let records = load_records_from_manifest(&fixture).expect("load fixture records");
+    let records = load_records(Some(&fixture)).expect("load fixture records");
     let payload = read_json(&fixture).expect("read fixture");
     let cases = payload
         .get("cases")
@@ -326,20 +326,8 @@ fn route_decision_fixture_expectations_hold() {
 fn routing_eval_report_matches_expected_baseline() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let manifest_path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-    let mut records =
-        load_records(Some(&runtime_path), Some(&manifest_path)).expect("load routing records");
-    // Merge manifest-only skills (e.g. cold skills) so evaluate_routing_cases can find them.
-    if let Ok(manifest_records) = load_records_from_manifest(&manifest_path) {
-        let existing_slugs: std::collections::HashSet<String> =
-            records.iter().map(|r| r.slug.clone()).collect();
-        for rec in manifest_records {
-            if !existing_slugs.contains(&rec.slug) {
-                records.push(rec);
-            }
-        }
-    }
+    let records =
+        load_records(Some(&runtime_path)).expect("load routing records");
     let cases =
         load_routing_eval_cases(&routing_eval_case_path()).expect("load routing eval cases");
     let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
@@ -365,34 +353,30 @@ fn routing_eval_report_matches_expected_baseline() {
         report.metrics.owner_correct,
         report.metrics.case_count,
     );
-    assert_routing_eval_cases_match("runtime+manifest", |task, session_id, first_turn, host_id| {
+    assert_routing_eval_cases_match("runtime", |task, session_id, first_turn, host_id| {
         route_task_with_manifest_fallback(
-            &records,
-            Some(&runtime_path),
-            Some(&manifest_path),
-            host_id,
-            task,
-            session_id,
-            true,
-            first_turn,
-        )
+    &records,
+    host_id,
+    task,
+    session_id,
+    true,
+    first_turn,
+)
     });
 }
 
 
 #[test]
-fn manifest_fallback_plain_paper_reviewer_token_targets_specialist_slug() {
+fn plain_paper_reviewer_token_targets_specialist_slug() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
     let manifest_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
     let records =
-        load_records(Some(&runtime_path), None).expect("hot runtime without manifest patch");
+        load_records(Some(&runtime_path)).expect("hot runtime without manifest patch");
 
     let decision = route_task_with_manifest_fallback(
         &records,
-        Some(&runtime_path),
-        Some(&manifest_path),
         None,
         "用 paper-reviewer 逻辑模式审一下 claim evidence",
         "paper-reviewer-token-case",
@@ -410,8 +394,6 @@ fn manifest_fallback_plain_paper_reviewer_token_targets_specialist_slug() {
 
     let critique_only = route_task_with_manifest_fallback(
         &records,
-        Some(&runtime_path),
-        Some(&manifest_path),
         None,
         "只想要科学性批评不要改稿 manuscript",
         "paper-critique-only-case",
@@ -430,22 +412,10 @@ fn manifest_fallback_plain_paper_reviewer_token_targets_specialist_slug() {
 
 
 #[test]
-fn routing_eval_runtime_fallback_matches_expected_baseline() {
+fn routing_eval_runtime_matches_expected_baseline() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let manifest_path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-    let mut records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
-    // Merge manifest-only skills (e.g. cold skills) so evaluate_routing_cases can find them.
-    if let Ok(manifest_records) = load_records_from_manifest(&manifest_path) {
-        let existing_slugs: std::collections::HashSet<String> =
-            records.iter().map(|r| r.slug.clone()).collect();
-        for rec in manifest_records {
-            if !existing_slugs.contains(&rec.slug) {
-                records.push(rec);
-            }
-        }
-    }
+    let records = load_records(Some(&runtime_path)).expect("load hot runtime records");
     let cases =
         load_routing_eval_cases(&routing_eval_case_path()).expect("load routing eval cases");
     let report = evaluate_routing_cases(&records, cases).expect("evaluate routing cases");
@@ -462,31 +432,27 @@ fn routing_eval_runtime_fallback_matches_expected_baseline() {
         report.metrics.owner_correct,
         report.metrics.case_count,
     );
-    assert_routing_eval_cases_match("runtime-fallback", |task, session_id, first_turn, host_id| {
+    assert_routing_eval_cases_match("runtime", |task, session_id, first_turn, host_id| {
         route_task_with_manifest_fallback(
-            &records,
-            Some(&runtime_path),
-            None,
-            host_id,
-            task,
-            session_id,
-            true,
-            first_turn,
-        )
+    &records,
+    host_id,
+    task,
+    session_id,
+    true,
+    first_turn,
+)
     });
 }
 
 
 #[test]
-fn runtime_fallback_prefers_framework_manifest_owner_over_low_score_hot_gate() {
+fn framework_manifest_owner_over_low_score_hot_gate() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+    let records = load_records(Some(&runtime_path)).expect("load hot runtime records");
 
     let decision = route_task_with_manifest_fallback(
         &records,
-        Some(&runtime_path),
-        None,
         None,
         "review framework snapshot route continuity integration risk",
         "framework-low-hot-gate",
@@ -514,12 +480,10 @@ fn confident_hot_route_does_not_parse_implicit_malformed_manifest() {
         &skills_root.join("SKILL_MANIFEST.json"),
         "{ not valid json\n",
     );
-    let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+    let records = load_records(Some(&runtime_path)).expect("load hot runtime records");
 
     let decision = route_task_with_manifest_fallback(
         &records,
-        Some(&runtime_path),
-        None,
         None,
         "inspect sentry production errors",
         "confident-hot-route",
@@ -579,7 +543,7 @@ fn runtime_declared_manifest_fallback_resolves_repo_relative_skills_path() {
 fn pr_triage_summary_routes_to_github_source_gate() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+    let records = load_records(Some(&runtime_path)).expect("load hot runtime records");
 
     for query in [
         "pull request summary",
@@ -588,15 +552,13 @@ fn pr_triage_summary_routes_to_github_source_gate() {
         "PR triage changed file digest",
     ] {
         let decision = route_task_with_manifest_fallback(
-            &records,
-            Some(&runtime_path),
-            None,
-            None,
-            query,
-            &format!("pr-triage::{query}"),
-            true,
-            true,
-        )
+    &records,
+    None,
+    query,
+    &format!("pr-triage::{query}"),
+    true,
+    true,
+)
         .unwrap_or_else(|err| panic!("route PR triage query {query}: {err}"));
 
         assert_eq!(
@@ -612,22 +574,20 @@ fn pr_triage_summary_routes_to_github_source_gate() {
 fn pr_summary_ci_context_routes_to_ci_gate() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+    let records = load_records(Some(&runtime_path)).expect("load hot runtime records");
 
     for query in [
         "pull request summary CI failure",
         "github actions pull request summary failing checks",
     ] {
         let decision = route_task_with_manifest_fallback(
-            &records,
-            Some(&runtime_path),
-            None,
-            None,
-            query,
-            &format!("pr-summary-ci::{query}"),
-            true,
-            true,
-        )
+    &records,
+    None,
+    query,
+    &format!("pr-summary-ci::{query}"),
+    true,
+    true,
+)
         .unwrap_or_else(|err| panic!("route PR summary CI query {query}: {err}"));
 
         assert_eq!(
@@ -643,7 +603,7 @@ fn pr_summary_ci_context_routes_to_ci_gate() {
 fn framework_command_aliases_require_literal_entrypoints() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+    let records = load_records(Some(&runtime_path)).expect("load hot runtime records");
     assert!(!records.iter().any(|record| record.slug == "autopilot"));
     assert!(records.iter().any(|record| record.slug == "deepinterview"));
     assert!(records.iter().any(|record| record.slug == "gitx"));
@@ -651,35 +611,31 @@ fn framework_command_aliases_require_literal_entrypoints() {
     assert!(!records.iter().any(|record| record.slug == "team"));
 
     let deep_research = route_task_with_manifest_fallback(
-        &records,
-        Some(&runtime_path),
-        None,
-        None,
-        "请做深度调研这个系统",
-        "deep-research-neutral-phrases",
-        false,
-        true,
-    )
+    &records,
+    None,
+    "请做深度调研这个系统",
+    "deep-research-neutral-phrases",
+    false,
+    true,
+)
     .expect("deep research route");
     assert_ne!(deep_research.selected_skill, "deepresearch");
 
     let my_exec = route_task_with_manifest_fallback(
-        &records,
-        Some(&runtime_path),
-        None,
-        None,
-        "/gitx",
-        "alias-my-gitx",
-        true,
-        true,
-    )
+    &records,
+    None,
+    "/gitx",
+    "alias-my-gitx",
+    true,
+    true,
+)
     .expect("route explicit gitx alias");
     assert_eq!(my_exec.selected_skill, "gitx");
 
-    let team_alias_err = crate::framework_runtime::build_framework_alias_envelope(
+    let team_alias_err = framework_extra::alias::build_framework_alias_envelope(
         &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."),
         "team",
-        crate::framework_runtime::FrameworkAliasBuildOptions {
+        fr_utils::types::FrameworkAliasBuildOptions {
             max_lines: 6,
             compact: true,
             host_id: Some("codex"),
@@ -692,48 +648,40 @@ fn framework_command_aliases_require_literal_entrypoints() {
     );
 
     let deepinterview = route_task_with_manifest_fallback(
-        &records,
-        Some(&runtime_path),
-        None,
-        None,
-        "/deepinterview",
-        "alias-deepinterview",
-        true,
-        true,
-    )
+    &records,
+    None,
+    "/deepinterview",
+    "alias-deepinterview",
+    true,
+    true,
+)
     .expect("route explicit deepinterview alias");
     assert_eq!(deepinterview.selected_skill, "deepinterview");
 
     let gitx = route_task_with_manifest_fallback(
-        &records,
-        Some(&runtime_path),
-        None,
-        None,
-        "gitx",
-        "alias-gitx",
-        true,
-        true,
-    )
+    &records,
+    None,
+    "gitx",
+    "alias-gitx",
+    true,
+    true,
+)
     .expect("route explicit gitx alias");
     assert_eq!(gitx.selected_skill, "gitx");
 
     let update = route_task_with_manifest_fallback(
-        &records,
-        Some(&runtime_path),
-        None,
-        None,
-        "/update",
-        "alias-update",
-        true,
-        true,
-    )
+    &records,
+    None,
+    "/update",
+    "alias-update",
+    true,
+    true,
+)
     .expect("route explicit update alias");
     assert_eq!(update.selected_skill, "update");
 
     let natural_language_workflow = route_task_with_manifest_fallback(
         &records,
-        Some(&runtime_path),
-        None,
         None,
         "需要 workflow orchestration 多 agent 执行",
         "natural-language-workflow",
@@ -749,15 +697,13 @@ fn framework_command_aliases_require_literal_entrypoints() {
     {
         let (query, forbidden) = ("team", "team");
         let decision = route_task_with_manifest_fallback(
-            &records,
-            Some(&runtime_path),
-            None,
-            None,
-            query,
-            &format!("negative-{forbidden}"),
-            true,
-            true,
-        )
+    &records,
+    None,
+    query,
+    &format!("negative-{forbidden}"),
+    true,
+    true,
+)
         .unwrap_or_else(|err| panic!("route negative case {query}: {err}"));
         assert_ne!(
             decision.selected_skill, forbidden,
@@ -767,8 +713,6 @@ fn framework_command_aliases_require_literal_entrypoints() {
 
     let helper_fn = route_task_with_manifest_fallback(
         &records,
-        Some(&runtime_path),
-        None,
         None,
         "write a small helper function",
         "native-runtime-helper-fn",
@@ -781,8 +725,6 @@ fn framework_command_aliases_require_literal_entrypoints() {
 
     let plan_query = route_task_with_manifest_fallback(
         &records,
-        Some(&runtime_path),
-        None,
         None,
         "make a plan",
         "native-runtime-make-a-plan",
@@ -796,33 +738,29 @@ fn framework_command_aliases_require_literal_entrypoints() {
 
 
 #[test]
-fn manifest_fallback_preserves_runtime_visual_review_gate() {
+fn runtime_visual_review_gate() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let records = load_records(Some(&runtime_path), None).expect("load hot runtime records");
+    let records = load_records(Some(&runtime_path)).expect("load hot runtime records");
 
     for query in [
         "review this screenshot UI",
         "audit this rendered chart screenshot",
     ] {
         let decision = route_task_with_manifest_fallback(
-            &records,
-            Some(&runtime_path),
-            None,
-            None,
-            query,
-            &format!("visual-review-{query}"),
-            true,
-            true,
-        )
+    &records,
+    None,
+    query,
+    &format!("visual-review-{query}"),
+    true,
+    true,
+)
         .unwrap_or_else(|err| panic!("route visual review case {query}: {err}"));
         assert_eq!(decision.selected_skill, "visual-review");
     }
 
     let capture = route_task_with_manifest_fallback(
         &records,
-        Some(&runtime_path),
-        None,
         None,
         "take a screenshot",
         "screenshot-capture",
@@ -835,18 +773,16 @@ fn manifest_fallback_preserves_runtime_visual_review_gate() {
 
 
 #[test]
-fn explicit_manifest_preserves_native_runtime_for_low_confidence_hits() {
+fn native_runtime_for_low_confidence_hits() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
     let manifest_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-    let records = load_records(Some(&runtime_path), Some(&manifest_path))
+    let records = load_records(Some(&runtime_path))
         .expect("load hot runtime records with manifest metadata");
 
     let decision = route_task_with_manifest_fallback(
         &records,
-        Some(&runtime_path),
-        Some(&manifest_path),
         None,
         "write a small helper function",
         "explicit-manifest-native-runtime",
@@ -863,9 +799,9 @@ fn explicit_manifest_preserves_native_runtime_for_low_confidence_hits() {
 
 #[test]
 fn search_uses_route_scorer_for_framework_review() {
-    let manifest_path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-    let records = load_records_from_manifest(&manifest_path).expect("load routing records");
+    let runtime_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
+    let records = load_records(Some(&runtime_path)).expect("load routing records");
 
     let rows = search_skills(&records, "DESIGN.md 设计规范 token", 5);
 
@@ -876,9 +812,9 @@ fn search_uses_route_scorer_for_framework_review() {
 
 #[test]
 fn generic_xlsx_intake_hits_spreadsheet_gate_first() {
-    let manifest_path =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
-    let records = load_records_from_manifest(&manifest_path).expect("load routing records");
+    let runtime_path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
+    let records = load_records(Some(&runtime_path)).expect("load routing records");
 
     let decision = route_task(
         &records,
