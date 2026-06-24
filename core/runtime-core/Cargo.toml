@@ -18,7 +18,7 @@ core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] 
 framework-extra = { path = "../framework-extra" }
 framework-kernel = { path = "../framework-kernel" }
 framework-runtime-hooks = { path = "../framework-runtime-hooks" }
-framework-maint = { path = "../../tools/framework-maint" }
+framework-maint = { path = "../framework-maint" }
 host-projection = { path = "../host-projection" }
 fr-utils = { path = "../fr-utils" }
 fr-contracts = { path = "../fr-contracts" }
@@ -67,7 +67,7 @@ host-codex = []
 # Expose test helpers for downstream crate integration tests
 test-support = ["host-projection/test-support", "runtime-core-contracts/test-support"]
 # Codegraph MCP integration (module lives in runtime-core; router-rs re-exports)
-codegraph = ["dep:codegraph-rs", "host-projection/codegraph"]
+codegraph = ["dep:codegraph-rs"]
 
 [dev-dependencies]
 insta.workspace = true

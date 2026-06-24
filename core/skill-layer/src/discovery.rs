@@ -3,7 +3,6 @@
 //! Extracted from `runtime-infra::framework_skills`, `host-projection::tools`,
 //! and `framework-kernel::skill_repo`.
 
-use crate::frontmatter_parser;
 use crate::paths;
 use std::collections::BTreeSet;
 use std::fs;

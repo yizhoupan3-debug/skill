@@ -41,9 +41,12 @@ pub(crate) fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value>
         .expect("expected array")
 }
 
-/// Get the underlying mutable object map.
+/// Get the underlying mutable object map, coercing non-objects to `{}`.
 pub(crate) fn obj_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
-    value.as_object_mut().expect("state must be an object")
+    if !value.is_object() {
+        *value = serde_json::json!({});
+    }
+    value.as_object_mut().expect("obj_mut: value must be object after coercion")
 }
 
 /// Insert a key-value pair into a mutable object.
@@ -103,11 +106,3 @@ pub(crate) fn blocking_client(timeout_secs: u64) -> anyhow::Result<reqwest::bloc
 }
 
 // ── Hash Helpers ──
-
-/// Compute a deterministic hex-encoded hash key for disk caching.
-pub(crate) fn cache_key(prefix: &str, content: &str) -> String {
-    use std::hash::{Hash, Hasher};
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    content.hash(&mut hasher);
-    format!("{prefix}_{:016x}", hasher.finish())
-}

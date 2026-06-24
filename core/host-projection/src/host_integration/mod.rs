@@ -203,6 +203,7 @@ pub struct ProjectionCommand {
 impl ProjectionCommand {
     /// Known host IDs that have a home CLI argument.
     /// **Keep in sync** with the `*_home` fields above and `RUNTIME_REGISTRY.json`.
+    #[allow(dead_code)]
     const HOME_CAPABLE_HOST_IDS: &[&str] = &["claude", "codex", "cursor", "opencode"];
 
     /// Check if the host-specific home CLI argument is set for a given `host_id`.

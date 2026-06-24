@@ -12,10 +12,8 @@ path = "src/lib.rs"
 [features]
 default = []
 test-support = []
-codegraph = ["dep:codegraph-rs"]
 
 [dependencies]
-codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
 core-state-utils = { path = "../core-state-utils" }
 http-util = { path = "../http-util" }
 core-state = { path = "../core-state" }

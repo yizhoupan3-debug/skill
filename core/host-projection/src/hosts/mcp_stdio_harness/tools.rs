@@ -507,20 +507,6 @@ pub(super) fn tool_session_checkpoint(
     )}).to_string())
 }
 
-pub(super) fn goal_suggests_review_work(goal_state: &Value) -> bool {
-    if goal_state
-        .get("goal")
-        .and_then(Value::as_str)
-        .is_some_and(is_review_prompt)
-    {
-        return true;
-    }
-    goal_state
-        .get("done_when")
-        .and_then(Value::as_array)
-        .is_some_and(|items| items.iter().filter_map(Value::as_str).any(is_review_prompt))
-}
-
 pub(super) fn task_lifecycle_profile(task_view: &core_state::task_state::ResolvedTaskView) -> &str {
     task_view
         .goal_state
@@ -528,93 +514,6 @@ pub(super) fn task_lifecycle_profile(task_view: &core_state::task_state::Resolve
         .and_then(|g| g.get("lifecycle_profile"))
         .and_then(Value::as_str)
         .unwrap_or("interactive")
-}
-
-/// Returns true when the lifecycle_profile string represents an interactive profile.
-pub(super) fn is_interactive_lifecycle_profile(profile: &str) -> bool {
-    profile == "interactive"
-}
-
-pub(super) fn mcp_closeout_gate_mode_narrative(
-    repo_root: &Path,
-    host_id: &str,
-    host_name: &str,
-    lifecycle_profile: &str,
-) -> String {
-    if is_interactive_lifecycle_profile(lifecycle_profile) {
-        return "interactive: MCP hard block disabled — closeout_gate reports findings only (advisory).".to_string();
-    }
-    framework_kernel::runtime_registry::harness_capability_exception_rationale(
-        repo_root,
-        host_id,
-        "closeout_evidence_hooks",
-    )
-    .unwrap_or_else(|| {
-        format!(
-            "{host_name}: no shell closeout_evidence_hooks — MCP tool layer evaluates closeout (see RUNTIME_REGISTRY harness_capability_exceptions)."
-        )
-    })
-}
-
-pub(super) fn mcp_closeout_hard_block_metadata(
-    repo_root: &Path,
-    host_id: &str,
-    lifecycle_profile: &str,
-    all_clear: bool,
-) -> bool {
-    if all_clear || is_interactive_lifecycle_profile(lifecycle_profile) {
-        return false;
-    }
-    framework_kernel::runtime_registry::closeout_evidence_hooks_unsupported_on_host(
-        repo_root, host_id,
-    )
-}
-
-pub(super) fn desktop_review_evidence_attested(
-    arguments: &Value,
-    repo_root: &Path,
-    task_id: &str,
-) -> bool {
-    // 自动扫描 artifacts/current/<task_id>/review-lanes 目录下的 Markdown 证据工件
-    let review_lanes_dir = task_artifact_dir(
-        repo_root,
-        if task_id.is_empty() {
-            None
-        } else {
-            Some(task_id)
-        },
-    )
-    .join("review-lanes");
-
-    if review_lanes_dir.is_dir()
-        && let Ok(entries) = std::fs::read_dir(&review_lanes_dir) {
-            let mut valid_findings_found = false;
-            for entry in entries.filter_map(Result::ok) {
-                let path = entry.path();
-                if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("md")
-                    && let Ok(content) = std::fs::read_to_string(&path)
-                        && !content.trim().is_empty() {
-                            valid_findings_found = true;
-                            break;
-                        }
-            }
-            if valid_findings_found {
-                return true;
-            }
-        }
-
-    let lane = arguments
-        .get("reviewer_lane")
-        .or_else(|| arguments.get("subagent_type"))
-        .or_else(|| arguments.get("agent_type"))
-        .and_then(Value::as_str);
-    let Some(lane) = lane else {
-        return false;
-    };
-    let review_lane =
-        core_policy::registry_review_gate::is_reviewer_lane_from_registry(lane, Some(repo_root));
-    let fork = fork_context_from_values(arguments, None);
-    review_independent_reviewer_evidence(fork, review_lane)
 }
 
 pub fn tool_closeout_gate(

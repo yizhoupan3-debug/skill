@@ -29,10 +29,6 @@ macro_rules! env_cache_typed {
 // route_task_with_manifest_fallback — not needed in host-projection; skill routing via framework_kernel
 // framework_runtime functions accessed via crate::hooks
 use crate::hooks::{check_anomalies, init_tracker, read_tracker_state, record_tool_call};
-use core_policy::hook_common::is_review_prompt;
-use core_policy::review_gate_engine::{
-    fork_context_from_values, review_independent_reviewer_evidence,
-};
 use core_state::task_state::resolve_task_view;
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -785,8 +781,16 @@ fn handle_prompts_get(
             let host_name = mcp_host_display_label(host_id);
             let task_view = get_cached_task_view(repo_root);
             let lifecycle_profile = task_lifecycle_profile(&task_view);
-            let gate_mode =
-                mcp_closeout_gate_mode_narrative(repo_root, host_id, &host_name, lifecycle_profile);
+            let gate_mode = if lifecycle_profile == "interactive" {
+                "interactive: MCP hard block disabled — closeout_gate reports findings only (advisory).".to_string()
+            } else {
+                framework_kernel::runtime_registry::harness_capability_exception_rationale(
+                    repo_root, host_id, "closeout_evidence_hooks",
+                )
+                .unwrap_or_else(|| {
+                    format!("{host_name}: no shell closeout_evidence_hooks — MCP tool layer evaluates closeout (see RUNTIME_REGISTRY harness_capability_exceptions).")
+                })
+            };
             {
                 let lane_lines =
                     core_policy::registry_review_gate::reviewer_lanes_prompt_lines(Some(repo_root));

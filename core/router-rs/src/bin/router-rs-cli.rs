@@ -5,6 +5,31 @@ static GLOBAL: MiMalloc = MiMalloc;
 
 use clap::Parser;
 
+#[cfg(feature = "browser")]
+/// Wire browser-mcp dispatch hooks between core/browser-mcp-dispatch and tools/browser-mcp.
+/// Called once at startup before any `router-rs browser` CLI command.
+fn init_browser_mcp_dispatch() {
+    browser_mcp_dispatch::set_hooks(browser_mcp_dispatch::BrowserMcpHooks {
+        evaluate_mcp_pre_guard: |tool, args, repo| {
+            let v = host_projection::hooks::evaluate_mcp_pre_guard_safe(tool, args, repo);
+            browser_mcp_dispatch::McpPreGuardVerdict {
+                blocked: v.blocked,
+                reason: v.reason,
+            }
+        },
+        attach_runtime_event_transport: host_projection::hooks::attach_runtime_event_transport,
+        inspect_trace_stream: host_projection::hooks::inspect_trace_stream,
+    });
+    host_projection::hooks::set_browser_dispatch(browser_mcp::dispatch_browser_command);
+}
+
+#[cfg(not(feature = "browser"))]
+fn init_browser_mcp_dispatch() {
+    // No-op: browser-mcp is not available (feature disabled).
+    // `router-rs browser` CLI commands will return an error via
+    // host_projection::hooks::dispatch_browser_command's fallback.
+}
+
 fn main() -> Result<(), String> {
     // Explicit hook initialization (deterministic ordering, testable).
     // The #[ctor::ctor] in runtime-core handles this for non-test builds,
@@ -51,6 +76,6 @@ fn main() -> Result<(), String> {
             }
         }
     let args = router_rs::cli::Cli::parse_from(args);
-    router_rs::init_browser_mcp_dispatch();
+    init_browser_mcp_dispatch();
     router_rs::cli::run(&args)
 }

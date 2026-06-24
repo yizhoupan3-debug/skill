@@ -5,7 +5,7 @@ use framework_kernel::{
 };
 use routing_engine::routing_runtime_watch;
 use std::path::PathBuf;
-use std::sync::{Arc, Once, OnceLock};
+use std::sync::{Arc, Mutex, Once};
 use std::thread;
 use std::time::Duration;
 
@@ -22,7 +22,7 @@ impl TokenizerProvider for RouteTokenizerProvider {
 }
 
 static BOOTSTRAP_ONCE: Once = Once::new();
-static TELEMETRY_HANDLE: OnceLock<LogAggregatorHandle> = OnceLock::new();
+static TELEMETRY_HANDLE: Mutex<Option<LogAggregatorHandle>> = Mutex::new(None);
 
 /// Idempotent B0 wiring (tokenizer DI + telemetry + review context probes).
 pub fn ensure_kernel_bootstrap() {
@@ -70,8 +70,16 @@ fn bootstrap_telemetry() {
         observer,
     );
     install_global_telemetry_writer(Arc::new(fanout));
-    let _ = TELEMETRY_HANDLE.set(handle);
+    let _ = TELEMETRY_HANDLE.lock().unwrap().replace(handle);
     spawn_routing_runtime_cache_invalidator();
+}
+
+/// Gracefully shut down telemetry: flush pending events and join the aggregator thread.
+/// Safe to call multiple times (second call is a no-op).
+pub fn shutdown_telemetry() {
+    if let Some(handle) = TELEMETRY_HANDLE.lock().unwrap().take() {
+        handle.shutdown();
+    }
 }
 
 /// Invalidate route record cache when `SKILL_ROUTING_RUNTIME.json` changes on disk (P1-1).

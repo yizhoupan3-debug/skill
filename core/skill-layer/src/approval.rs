@@ -81,7 +81,7 @@ fn approval_type_for_gate(gate: &str) -> (bool, String) {
 ///
 /// `repo_root` is the project root (parent of `skills/`).
 pub fn generate_approval_policy(repo_root: &Path) -> Result<(), ApprovalError> {
-    let skills_root = crate::paths::skills_root(repo_root);
+    let _skills_root = crate::paths::skills_root(repo_root);
     let manifest_path = crate::paths::manifest_json(repo_root);
     let manifest_text = fs::read_to_string(&manifest_path)?;
     let manifest: serde_json::Value = serde_json::from_str(&manifest_text)?;

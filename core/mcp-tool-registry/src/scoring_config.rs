@@ -13,13 +13,6 @@ const DEFAULTS_JSON: &str = include_str!(concat!(
     "/../../configs/tool_scoring_weights.json"
 ));
 
-const EXPECTED_SCHEMA: &str = "tool-scoring-weights-v2";
-
-/// Returns the schema version constant embedded at compile time.
-pub fn embedded_schema_version() -> &'static str {
-    EXPECTED_SCHEMA
-}
-
 /// All tuneable numeric weights for the tool routing scoring pipeline.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ToolScoringWeights {
@@ -41,6 +34,7 @@ pub struct ToolScoringWeights {
     pub layer_penalties: HashMap<String, f64>,
     /// Minimum Jaccard similarity for fuzzy rescue (0.0–1.0).
     #[serde(default = "default_fuzzy_min")]
+    #[allow(dead_code)]
     pub fuzzy_min_similarity: f64,
 }
 

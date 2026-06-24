@@ -23,7 +23,8 @@ runtime-core = { path = "../runtime-core", features = ["test-support"] }
 host-projection = { path = "../host-projection" }
 framework-extra = { path = "../framework-extra" }
 loop-engine = { path = "../loop-engine" }
-browser-mcp = { path = "../browser-mcp" }
+browser-mcp = { path = "../../tools/browser-mcp", optional = true }
+browser-mcp-dispatch = { path = "../browser-mcp-dispatch", optional = true }
 research-harness = { path = "../research-harness", optional = true }
 libc.workspace = true
 chrono.workspace = true
@@ -49,6 +50,7 @@ path = "src/bin/router-rs-cli.rs"
 
 [features]
 default = [
+    "browser",
     "host-cursor",
     "host-claude",
     "host-opencode",
@@ -59,6 +61,7 @@ host-cursor = []
 host-claude = []
 host-opencode = []
 host-codex = []
+browser = ["dep:browser-mcp", "dep:browser-mcp-dispatch"]
 codegraph = ["runtime-core/codegraph"]
 research = ["dep:research-harness"]
 
@@ -70,9 +73,6 @@ codegraph-rs = { path = "../../tools/codegraph-rs" }
 tempfile = "3"
 serde_json = "1"
 
-[[test]]
-name = "smoke_codex_hook_install_tests"
-path = "tests/smoke_codex_hook_install_tests.rs"
 
 [[bench]]
 name = "search_bench"
