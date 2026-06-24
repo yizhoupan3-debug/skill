@@ -86,15 +86,11 @@ fn goal_state_path_for_nested_under_current(
 
 // ── Session ID / staleness ──
 fn current_env_session_id() -> Option<String> {
-    let known_keys = [
-        "CLAUDE_SESSION_ID",
-        "CURSOR_SESSION_ID",
-        "CODEX_SESSION_ID",
-        "OPENCODE_SESSION_ID",
-        "ROUTER_RS_SESSION_ID",
-    ];
-    for key in known_keys {
-        if let Ok(val) = std::env::var(key) {
+    // Use wildcard matching (same algorithm as `resolve_session_id` in goal_ops.rs)
+    // instead of a hardcoded key list. This ensures custom * _SESSION_ID env vars
+    // are discovered consistently for both goal creation and staleness detection.
+    for (key, val) in std::env::vars() {
+        if key.ends_with("_SESSION_ID") {
             let trimmed = val.trim().to_string();
             if !trimmed.is_empty() {
                 return Some(trimmed);
@@ -132,8 +128,28 @@ fn annotate_goal_staleness(goal: &mut Value) {
                 );
             }
         }
+        None => {
+            // Cannot determine the current session.
+            // Only mark stale if the goal session_id is an auto-generated token
+            // from an earlier version of resolve_session_id (starting with "auto-").
+            // Such tokens were unique per creation and can never match in a later
+            // read when env is also absent, so they will never resolve correctly.
+            // Explicit session_ids (from payload) are NOT marked stale here —
+            // the caller may be reading in the same context that created them.
+            if goal_session_id.starts_with("auto-") {
+                if let Some(obj) = goal.as_object_mut() {
+                    obj.insert("stale".to_string(), serde_json::json!(true));
+                    obj.insert(
+                        "stale_reason".to_string(),
+                        serde_json::json!(
+                            "auto-generated session_id from older version; cannot verify current session"
+                        ),
+                    );
+                }
+            }
+        }
         _ => {
-            // Same session or can't determine current session — not stale
+            // Same session — not stale
         }
     }
 }
@@ -384,6 +400,38 @@ mod tests {
 
     /// Lock for tests that mutate env vars (*_SESSION_ID etc.) to avoid race conditions.
     static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn goal_start_without_drive_defaults_to_false() {
+        // New goals should start without requiring drive_until_done contract fields.
+        // drive_until_done now defaults to false so users can create lightweight goals.
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-goal-default-false-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
+        let rr = repo.display().to_string();
+
+        // Start without drive_until_done → must succeed (defaults to false).
+        let out = framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "lite-task",
+            "goal": "do something simple",
+        }))
+        .expect("start should succeed without explicit drive_until_done");
+        assert_eq!(out["ok"], json!(true));
+
+        // Verify the goal was created with drive_until_done=false
+        let st = read_goal_state(&repo, Some("lite-task"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["drive_until_done"], json!(false));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
 
     #[test]
     fn goal_start_writes_and_status_reads() {
@@ -1169,6 +1217,61 @@ mod tests {
         let _ = fs::remove_dir_all(&repo);
     }
 
+    /// auto-generated session_id from older versions (auto-{nanos}) must be stale
+    /// when no env var is set — they were unique per creation and can never match.
+    #[test]
+    fn auto_generated_session_id_from_older_version_marks_stale() {
+        let _env = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // Clear all *_SESSION_ID env vars so the stale check hits the None branch
+        let session_vars: Vec<String> = std::env::vars()
+            .filter(|(k, _)| k.ends_with("_SESSION_ID"))
+            .map(|(k, _)| k)
+            .collect();
+        for k in &session_vars {
+            unsafe { core_state_utils::env_sync::remove_env(k) };
+        }
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-auto-stale-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/auto-stale")).expect("mkdir");
+
+        // Simulate an older-style goal with auto-generated session_id
+        let goal_path = goal_state_path_for_task(&repo, "auto-stale").expect("path");
+        let goal_json = json!({
+            "schema_version": GOAL_STATE_SCHEMA_VERSION,
+            "status": "running",
+            "goal": "old auto goal",
+            "session_id": "auto-123456789",
+            "drive_until_done": true,
+            "non_goals": [],
+            "done_when": [],
+            "validation_commands": [],
+            "checkpoints": [],
+            "blocker": null,
+            "updated_at": framework_kernel::time::now_iso(),
+        });
+        crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
+
+        // No env var set — annotate_goal_staleness should detect auto- prefix and mark stale
+        let st = read_goal_state(&repo, Some("auto-stale"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["stale"], json!(true), "auto-{{nanos}} goal must be stale");
+        assert!(
+            st["stale_reason"]
+                .as_str()
+                .unwrap()
+                .contains("auto-generated"),
+            "reason must mention auto-generated: {:?}",
+            st["stale_reason"]
+        );
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
     /// session-scoped: same session_id is NOT stale
     #[test]
     fn goal_read_not_stale_when_session_id_matches() {
@@ -1372,6 +1475,95 @@ mod tests {
         }))
         .expect_err("amend should fail on completed");
         assert!(err.contains("cannot amend a completed"), "err: {err}");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn amend_rejected_for_incomplete_drive_contract() {
+        // A drive_until_done=true goal cannot have its contract fields emptied by amend.
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-amend-drive-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/am-drive")).expect("mkdir");
+        let rr = repo.display().to_string();
+
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "am-drive",
+            "goal": "drive goal",
+            "non_goals": ["n"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["echo ok"],
+            "drive_until_done": true,
+        }))
+        .expect("start");
+
+        // Clear done_when via amend → must be rejected
+        let err = framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "amend",
+            "task_id": "am-drive",
+            "done_when": [],
+        }))
+        .expect_err("amend should reject empty done_when for drive goal");
+        assert!(err.contains("done_when"), "err: {err}");
+
+        // Clear non_goals via amend → must be rejected
+        let err = framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "amend",
+            "task_id": "am-drive",
+            "non_goals": [],
+        }))
+        .expect_err("amend should reject empty non_goals for drive goal");
+        assert!(err.contains("non_goals"), "err: {err}");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn resume_rejected_for_incomplete_drive_contract() {
+        // A goal without sufficient contract fields cannot resume with drive_until_done=true.
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("router-rs-resume-drive-{suffix}"));
+        let _ = fs::remove_dir_all(&repo);
+        fs::create_dir_all(repo.join("artifacts/current/rs-drive")).expect("mkdir");
+        let rr = repo.display().to_string();
+
+        // Start a lightweight goal (drive_until_done=false, no contract fields)
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "rs-drive",
+            "goal": "lightweight goal",
+        }))
+        .expect("start");
+
+        // Pause
+        framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "pause",
+            "task_id": "rs-drive",
+        }))
+        .expect("pause");
+
+        // Resume with drive_until_done=true → must be rejected (no contract fields)
+        let err = framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "resume",
+            "task_id": "rs-drive",
+            "drive_until_done": true,
+        }))
+        .expect_err("resume should reject drive_until_done=true for incomplete goal");
+        assert!(err.contains("non_goals"), "resume err: {err}");
 
         let _ = fs::remove_dir_all(&repo);
     }

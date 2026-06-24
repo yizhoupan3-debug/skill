@@ -185,7 +185,11 @@ fn maybe_note_dual_goal_pointer_conflict(
     }
 }
 
-/// When active has no readable GOAL but focus does, rewrite `active_task.json` to focus (ADR-001).
+/// When active has no readable GOAL but focus does, rewrite active to focus (ADR-001).
+///
+/// Writes to `TASK_POINTERS.json` via `write_active_task_pointer`, not the legacy
+/// `active_task.json` — otherwise the promotion is invisible to readers that prefer
+/// the consolidated `TASK_POINTERS.json` file.
 pub fn maybe_promote_focus_to_active_pointer(repo_root: &Path) -> bool {
     let pointers = read_task_pointers(repo_root);
     let Some(active_id) = pointers.active_task_id.as_deref().filter(|s| !s.is_empty()) else {
@@ -211,13 +215,15 @@ pub fn maybe_promote_focus_to_active_pointer(repo_root: &Path) -> bool {
     {
         return false;
     }
-    let path = repo_root.join("artifacts/current/active_task.json");
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let body = serde_json::json!({"task_id": focus_id});
-    if crate::utils::atomic_write::write_atomic_json(&path, &body).is_err() {
+    // Write to TASK_POINTERS.json (consolidated file) so that read_task_pointer_pair
+    // and read_active_task_id both see the promoted value.
+    if crate::state_manager::write_active_task_pointer(repo_root, focus_id).is_err() {
         return false;
+    }
+    // Best-effort legacy file cleanup so the old file doesn't confuse tools.
+    let legacy_path = repo_root.join("artifacts/current/active_task.json");
+    if legacy_path.is_file() {
+        let _ = std::fs::remove_file(&legacy_path);
     }
     tracing::warn!(focus_id = %focus_id, active_id = %active_id, "promoted focus_task to active_task (active had no GOAL)");
     true
@@ -283,10 +289,15 @@ fn goal_diagnostics_scan_hydrate_enabled() -> bool {
 }
 
 /// `active_task.json` / `focus_task.json` 一次成对读取（比两次独立 open 的半态窗口更小）。
+///
+/// Uses the consolidated `read_task_pointer_pair` under the hood, which reads
+/// `TASK_POINTERS.json` in a single I/O and falls back to legacy files only when
+/// the consolidated file is absent.
 pub fn read_task_pointers(repo_root: &Path) -> TaskPointers {
+    let (active, focus) = crate::state_manager::read_task_pointer_pair(repo_root);
     TaskPointers {
-        active_task_id: crate::state_manager::read_active_task_id(repo_root),
-        focus_task_id: crate::state_manager::read_focus_task_id(repo_root),
+        active_task_id: active,
+        focus_task_id: focus,
     }
 }
 
@@ -808,7 +819,6 @@ mod tests {
     use serde_json::json;
     use std::fs;
     use std::sync::Mutex;
-    use std::time::{SystemTime, UNIX_EPOCH};
 
     static DEPTH_SCORE_MODE_ENV_TEST_MUTEX: Mutex<()> = Mutex::new(());
 

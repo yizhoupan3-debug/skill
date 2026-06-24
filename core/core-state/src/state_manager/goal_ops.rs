@@ -77,12 +77,11 @@ fn resolve_session_id(payload: &Value) -> String {
             }
         }
     }
-    // 3. Auto-generate from SystemTime nanos
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-    format!("auto-{nanos}")
+    // 3. No session identity available — return empty (legacy / no-isolation mode).
+    //    Earlier versions auto-generated an "auto-{nanos}" token here, but that
+    //    broke stale detection across sessions (auto-tokens are unique per creation,
+    //    so they could never match in a later read where env is also absent).
+    String::new()
 }
 
 fn base_goal_object(
@@ -158,6 +157,42 @@ fn value_has_nonempty_string_item(value: Option<&Value>) -> bool {
         Some(Value::String(s)) => !s.trim().is_empty(),
         _ => false,
     }
+}
+
+/// Validate the institutional drive-until-done contract.
+///
+/// When `drive_until_done` is true, a goal must carry a minimally deep contract:
+/// at least one non-goal, at least two done-when items, and at least one
+/// validation command.  This prevents goals that are "one-step done" from
+/// entering driving mode.
+///
+/// `context` is a label like "start", "amend", or "resume" used in error messages.
+fn validate_drive_contract(
+    drive_until_done: bool,
+    non_goals: &[Value],
+    done_when: &[Value],
+    validation_commands: &[Value],
+    context: &str,
+) -> Result<(), String> {
+    if !drive_until_done {
+        return Ok(());
+    }
+    if count_nonempty_string_items(non_goals) == 0 {
+        return Err(format!(
+            "framework_goal_drive {context}: drive_until_done goal requires non-empty non_goals"
+        ));
+    }
+    if count_nonempty_string_items(done_when) < 2 {
+        return Err(format!(
+            "framework_goal_drive {context}: drive_until_done goal requires >=2 done_when items"
+        ));
+    }
+    if count_nonempty_string_items(validation_commands) == 0 {
+        return Err(format!(
+            "framework_goal_drive {context}: drive_until_done goal requires non-empty validation_commands"
+        ));
+    }
+    Ok(())
 }
 
 fn goal_requires_completion_evidence(state: &Value) -> bool {
@@ -363,7 +398,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             let drive_until_done = payload
                 .get("drive_until_done")
                 .and_then(Value::as_bool)
-                .unwrap_or(true);
+                .unwrap_or(false);
             let requires_completion_evidence = if drive_until_done {
                 true
             } else {
@@ -378,26 +413,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
 
             // Institutional contract: when `drive_until_done` is true, a goal must not be "one-step done".
             // Enforce a minimally deep goal contract at creation time.
-            if drive_until_done {
-                if count_nonempty_string_items(&non_goals) == 0 {
-                    return Err(
-                        "framework_goal_drive start requires non-empty non_goals (drive_until_done=true)"
-                            .to_string(),
-                    );
-                }
-                if count_nonempty_string_items(&done_when) < 2 {
-                    return Err(
-                        "framework_goal_drive start requires >=2 done_when items (drive_until_done=true)"
-                            .to_string(),
-                    );
-                }
-                if count_nonempty_string_items(&validation_commands) == 0 {
-                    return Err(
-                        "framework_goal_drive start requires non-empty validation_commands (drive_until_done=true)"
-                            .to_string(),
-                    );
-                }
-            }
+            validate_drive_contract(drive_until_done, &non_goals, &done_when, &validation_commands, "start")?;
 
             let session_id = resolve_session_id(&payload);
             let mut obj = base_goal_object(
@@ -685,6 +701,25 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 );
             }
 
+            // Amend drive-contract revalidation:
+            // If the goal has drive_until_done=true, the resulting contract fields
+            // must still satisfy the same completeness constraints as start.
+            // This prevents amend from silently subcontracting a drive goal.
+            let goal_drive = obj.get("drive_until_done").and_then(Value::as_bool).unwrap_or(false);
+            let amend_non_goals = obj.get("non_goals")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let amend_done_when = obj.get("done_when")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            let amend_validation = obj.get("validation_commands")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            validate_drive_contract(goal_drive, &amend_non_goals, &amend_done_when, &amend_validation, "amend")?;
+
             obj.insert(
                 "amended_at".to_string(),
                 json!(framework_kernel::time::now_iso()),
@@ -759,6 +794,26 @@ fn resume_goal_running(
     obj.insert("status".to_string(), json!("running"));
     obj.insert("drive_until_done".to_string(), json!(drive_until_done));
     obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
+
+    // Resume drive-contract revalidation:
+    // When drive_until_done is being set to true, the existing contract fields
+    // must already satisfy the completeness constraints — otherwise resume
+    // could silently elevate a lightweight goal into driving mode without
+    // the required depth.
+    let resume_non_goals = obj.get("non_goals")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let resume_done_when = obj.get("done_when")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let resume_validation = obj.get("validation_commands")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    validate_drive_contract(drive_until_done, &resume_non_goals, &resume_done_when, &resume_validation, "resume")?;
+
     write_atomic_json(&path, &state)?;
     let tx = crate::task_ledger::LedgerTransaction {
         ts: framework_kernel::time::now_iso(),

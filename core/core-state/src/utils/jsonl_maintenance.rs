@@ -10,6 +10,12 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 
 use serde_json::Value;
+use std::collections::HashMap;
+
+/// tx_type values in TASK_LEDGER that carry a **full state snapshot** — only the
+/// *last* occurrence of each type matters for replay.  Older rows of the same type
+/// can be discarded during compaction.
+const STATE_SNAPSHOT_TX_TYPES: &[&str] = &["goal_state", "rfv_loop_state", "evidence"];
 
 /// Scan a JSONL file from the **end** and, if trailing corrupt lines are found,
 /// truncate the file to the last valid JSONL line boundary.
@@ -104,7 +110,14 @@ fn count_jsonl_lines(path: &Path) -> usize {
 }
 
 /// If the JSONL file at `path` has more than `max_lines` non-empty lines, compact
-/// it by writing valid lines to a temp file and atomically renaming.
+/// it by discarding redundant state-snapshot entries (keeping only the last entry per
+/// `tx_type`) and rewriting via atomic rename.
+///
+/// State-snapshot types (`goal_state`, `rfv_loop_state`, `evidence`) each represent a
+/// **complete replacement**: hydration replay only cares about the most recent copy of
+/// each.  Older rows of the same type are safe to remove.
+///
+/// Non-snapshot rows (steps, events) are always preserved.
 ///
 /// Returns `Ok(true)` if compaction occurred, `Ok(false)` if the file was under the
 /// threshold or missing.
@@ -113,41 +126,93 @@ pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, St
         return Ok(false);
     }
 
+    // Fast early exit: if the raw line count is at or below threshold, skip I/O.
     let line_count = count_jsonl_lines(path);
     if line_count <= max_lines {
         return Ok(false);
     }
 
-    // Read all lines, keep only valid non-empty ones (preserve order).
+    // Read and compact: remove redundant state-snapshot rows.
     let content = fs::read_to_string(path)
         .map_err(|err| format!("compact_jsonl: read {}: {err}", path.display()))?;
 
-    let mut valid_lines: Vec<&str> = Vec::new();
-    for line in content.lines() {
+    // Pass 1: find the *last* occurrence index of each state-snapshot tx_type.
+    let mut last_snapshot: HashMap<&str, usize> = HashMap::new();
+    for (i, line) in content.lines().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             continue;
         }
-        if serde_json::from_str::<Value>(trimmed).is_ok() {
-            valid_lines.push(line);
+        if let Ok(val) = serde_json::from_str::<Value>(trimmed) {
+            if let Some(tt) = extract_state_snapshot_type(&val) {
+                last_snapshot.insert(tt, i);
+            }
         }
-        // Silently skip corrupt lines during compaction.
     }
 
-    if valid_lines.is_empty() {
-        // Nothing valid — truncate to zero.
+    if last_snapshot.is_empty() {
+        // No state-snapshot rows to deduplicate — compaction won't help.
+        // Return early to avoid a pointless write.
+        return Ok(false);
+    }
+
+    // Pass 2: build the compacted content.
+    // - State-snapshot rows: keep only the *last* occurrence per type.
+    // - Non-snapshot rows: keep all (valid lines).
+    // - Corrupt / empty lines: discarded.
+    let mut compacted_lines: Vec<&str> = Vec::new();
+    for (i, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !serde_json::from_str::<Value>(trimmed).is_ok() {
+            continue; // Corrupt line — silently skip.
+        }
+
+        // If this is a state-snapshot type and it's NOT the last occurrence, drop it.
+        if let Ok(val) = serde_json::from_str::<Value>(trimmed) {
+            if let Some(tt) = extract_state_snapshot_type(&val) {
+                if last_snapshot.get(tt) != Some(&i) {
+                    continue; // Redundant — a newer snapshot of this type exists.
+                }
+            }
+        }
+
+        compacted_lines.push(line);
+    }
+
+    // If compaction didn't actually remove any rows, skip the write.
+    let valid_original: Vec<&str> = content
+        .lines()
+        .filter(|l| {
+            let t = l.trim();
+            !t.is_empty() && serde_json::from_str::<Value>(t).is_ok()
+        })
+        .collect();
+    if compacted_lines.len() >= valid_original.len() {
+        return Ok(false);
+    }
+
+    if compacted_lines.is_empty() {
+        // Truncate to zero.
         fs::OpenOptions::new()
             .write(true)
             .open(path)
             .and_then(|f| f.set_len(0))
-            .map_err(|err| format!("compact_jsonl: truncate-all {}: {err}", path.display()))?;
+            .map_err(|err| {
+                format!(
+                    "compact_jsonl: truncate-all {}: {err}",
+                    path.display()
+                )
+            })?;
         return Ok(true);
     }
 
     // Atomic write: tmp file in the same directory, then rename.
     let compacted = {
         let mut buf = String::new();
-        for line in &valid_lines {
+        for line in &compacted_lines {
             buf.push_str(line);
             if !line.ends_with('\n') {
                 buf.push('\n');
@@ -163,20 +228,23 @@ pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, St
     fs::create_dir_all(parent)
         .map_err(|err| format!("compact_jsonl: mkdir {}: {err}", parent.display()))?;
 
-    // Write tmp, fsync, rename, fsync parent (reuse atomic_write patterns).
     {
         let mut tmp_file = fs::OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
             .open(&tmp_path)
-            .map_err(|err| format!("compact_jsonl: open tmp {}: {err}", tmp_path.display()))?;
+            .map_err(|err| {
+                format!("compact_jsonl: open tmp {}: {err}", tmp_path.display())
+            })?;
         tmp_file
             .write_all(compacted.as_bytes())
-            .map_err(|err| format!("compact_jsonl: write tmp {}: {err}", tmp_path.display()))?;
-        tmp_file
-            .sync_all()
-            .map_err(|err| format!("compact_jsonl: fsync tmp {}: {err}", tmp_path.display()))?;
+            .map_err(|err| {
+                format!("compact_jsonl: write tmp {}: {err}", tmp_path.display())
+            })?;
+        tmp_file.sync_all().map_err(|err| {
+            format!("compact_jsonl: fsync tmp {}: {err}", tmp_path.display())
+        })?;
     }
     fs::rename(&tmp_path, path).map_err(|err| {
         let _ = fs::remove_file(&tmp_path);
@@ -196,12 +264,24 @@ pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, St
                 .read(true)
                 .custom_flags(libc::O_RDONLY)
                 .open(parent_dir)
-            && let Err(e) = dir.sync_all() {
-                tracing::warn!(error = %e, "failed to sync parent directory after truncation");
-            }
+            && let Err(e) = dir.sync_all()
+        {
+            tracing::warn!(error = %e, "failed to sync parent directory after compaction");
+        }
     }
 
     Ok(true)
+}
+
+/// If `val` represents a state-snapshot row, return its tx_type label.
+/// Returns `None` for non-snapshot rows (steps, events, etc.).
+fn extract_state_snapshot_type<'a>(val: &'a Value) -> Option<&'a str> {
+    let tt = val.get("tx_type")?.as_str()?;
+    if STATE_SNAPSHOT_TX_TYPES.contains(&tt) {
+        Some(tt)
+    } else {
+        None
+    }
 }
 
 /// Derive a deterministic-ish temp path next to `path` for the compaction atomic write.
@@ -363,11 +443,12 @@ mod tests {
     }
 
     #[test]
-    fn compact_jsonl_compacts_when_over_threshold() {
-        let tmp = unique_tmp("compact-over");
+    fn compact_jsonl_noop_when_no_state_snapshot_rows() {
+        // Lines without a state-snapshot tx_type (e.g. steps, plain JSON)
+        // cannot be reduced by compaction — return false.
+        let tmp = unique_tmp("compact-no-snapshot");
         fs::create_dir_all(&tmp).unwrap();
         let path = tmp.join("test.jsonl");
-        // Write 105 valid lines.
         let mut content = String::new();
         for i in 0..105 {
             content.push_str(&format!("{}\n", json!({"i": i})));
@@ -375,50 +456,84 @@ mod tests {
         fs::write(&path, &content).unwrap();
 
         let compacted = compact_jsonl_if_needed(&path, 100).unwrap();
-        assert!(compacted, "should compact when over threshold");
+        assert!(!compacted, "no state-snapshot rows to deduplicate");
         let readback = fs::read_to_string(&path).unwrap();
-        // All 105 valid lines should survive (compaction preserves valid lines).
         let line_count = readback.lines().filter(|l| !l.trim().is_empty()).count();
         assert_eq!(line_count, 105);
-        // Verify every line is valid JSON.
-        for line in readback.lines() {
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                serde_json::from_str::<serde_json::Value>(trimmed)
-                    .expect("compacted line must be valid JSON");
-            }
-        }
         let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]
-    fn compact_jsonl_strips_corrupt_during_compaction() {
-        let tmp = unique_tmp("compact-corrupt");
+    fn compact_jsonl_deduplicates_state_snapshot_rows() {
+        let tmp = unique_tmp("compact-dedup");
         fs::create_dir_all(&tmp).unwrap();
         let path = tmp.join("test.jsonl");
-        // 99 valid + 2 corrupt = 101 non-empty lines (over threshold).
+
+        // Write 95 non-snapshot lines + 10 goal_state lines = 105 total (over threshold of 100).
         let mut content = String::new();
-        for i in 0..99 {
-            content.push_str(&format!("{}\n", json!({"i": i})));
+        for i in 0..95 {
+            content.push_str(&format!("{}\n", json!({"seq": i, "tx_type": "step", "payload": {"i": i}})));
         }
-        content.push_str("corrupt-line-1\ncorrupt-line-2\n");
+        // 10 goal_state snapshots — only the LAST one should survive.
+        for i in 0..10 {
+            content.push_str(&format!("{}\n", json!({"seq": 100 + i, "tx_type": "goal_state", "payload": {"version": i}})));
+        }
+        fs::write(&path, &content).unwrap();
+
+        let compacted = compact_jsonl_if_needed(&path, 100).unwrap();
+        assert!(compacted, "should compact state-snapshot rows");
+
+        let readback = fs::read_to_string(&path).unwrap();
+        let lines: Vec<&str> = readback.lines().filter(|l| !l.trim().is_empty()).collect();
+        // 95 steps + 1 goal_state = 96 lines
+        assert_eq!(lines.len(), 96, "only 1 goal_state should survive");
+        // Verify only the LAST goal_state remains
+        let goal_lines: Vec<&str> = lines.iter()
+            .filter(|l| l.contains("goal_state"))
+            .copied()
+            .collect();
+        assert_eq!(goal_lines.len(), 1, "only one goal_state row");
+        assert!(goal_lines[0].contains(r#""version":9"#), "the last goal_state (version 9) must survive");
+        let _ = fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn compact_jsonl_deduplicates_multiple_snapshot_types() {
+        let tmp = unique_tmp("compact-multi-snap");
+        fs::create_dir_all(&tmp).unwrap();
+        let path = tmp.join("test.jsonl");
+
+        let mut content = String::new();
+        // 3 goal_state + 3 rfv_loop_state + 2 evidence + 93 steps = 101 total (over 100)
+        for i in 0..3 {
+            content.push_str(&format!("{}\n", json!({"seq": i, "tx_type": "goal_state", "i": i})));
+        }
+        for i in 0..3 {
+            content.push_str(&format!("{}\n", json!({"seq": 10 + i, "tx_type": "rfv_loop_state", "i": i})));
+        }
+        for i in 0..2 {
+            content.push_str(&format!("{}\n", json!({"seq": 20 + i, "tx_type": "evidence", "i": i})));
+        }
+        for i in 0..93 {
+            content.push_str(&format!("{}\n", json!({"seq": 100 + i, "tx_type": "step", "i": i})));
+        }
         fs::write(&path, &content).unwrap();
 
         let compacted = compact_jsonl_if_needed(&path, 100).unwrap();
         assert!(compacted);
+
         let readback = fs::read_to_string(&path).unwrap();
-        let line_count = readback.lines().filter(|l| !l.trim().is_empty()).count();
-        assert_eq!(
-            line_count, 99,
-            "corrupt lines should be stripped during compaction"
-        );
-        // All remaining lines are valid JSON.
-        for line in readback.lines() {
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                serde_json::from_str::<serde_json::Value>(trimmed).expect("valid");
-            }
-        }
+        let lines: Vec<&str> = readback.lines().filter(|l| !l.trim().is_empty()).collect();
+        // 93 steps + 1 goal_state + 1 rfv_loop_state + 1 evidence = 96
+        assert_eq!(lines.len(), 96);
+
+        // Count by type
+        let goal = lines.iter().filter(|l| l.contains("goal_state")).count();
+        let rfv = lines.iter().filter(|l| l.contains("rfv_loop_state")).count();
+        let ev = lines.iter().filter(|l| l.contains("evidence")).count();
+        assert_eq!(goal, 1, "only the last goal_state");
+        assert_eq!(rfv, 1, "only the last rfv_loop_state");
+        assert_eq!(ev, 1, "only the last evidence");
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -429,41 +544,6 @@ mod tests {
         let path = tmp.join("nonexistent.jsonl");
         let compacted = compact_jsonl_if_needed(&path, 100).unwrap();
         assert!(!compacted);
-        let _ = fs::remove_dir_all(&tmp);
-    }
-
-    /// Integration: truncate + compact in sequence.
-    #[test]
-    fn truncate_then_compact_integration() {
-        let tmp = unique_tmp("truncate-compact-integration");
-        fs::create_dir_all(&tmp).unwrap();
-        let path = tmp.join("test.jsonl");
-
-        // 102 valid lines + trailing corrupt.
-        let mut content = String::new();
-        for i in 0..102 {
-            content.push_str(&format!("{}\n", json!({"i": i})));
-        }
-        content.push_str("broken-tail\n");
-        fs::write(&path, &content).unwrap();
-
-        // Step 1: truncate corrupt tail.
-        let was_truncated = truncate_corrupt_tail(&path).unwrap();
-        assert!(was_truncated);
-
-        // Step 2: compact (102 lines > 100 threshold).
-        let was_compacted = compact_jsonl_if_needed(&path, 100).unwrap();
-        assert!(was_compacted);
-
-        let readback = fs::read_to_string(&path).unwrap();
-        let line_count = readback.lines().filter(|l| !l.trim().is_empty()).count();
-        assert_eq!(line_count, 102, "all valid lines preserved");
-        for line in readback.lines() {
-            let trimmed = line.trim();
-            if !trimmed.is_empty() {
-                serde_json::from_str::<serde_json::Value>(trimmed).expect("valid");
-            }
-        }
         let _ = fs::remove_dir_all(&tmp);
     }
 }
