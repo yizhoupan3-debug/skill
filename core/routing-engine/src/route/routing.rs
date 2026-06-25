@@ -363,7 +363,7 @@ pub fn route_task(
     let overlay_normalized_query = normalize_text(query);
     let overlay_query_tokens = tokenize_route_text(query);
 
-    if let Some(decision) = literal_framework_alias_decision(records, query, session_id) {
+    if let Some(decision) = literal_framework_alias_decision(records, query, &normalized_query, &query_token_list, session_id) {
         return Ok(decision);
     }
 
@@ -694,14 +694,14 @@ fn build_fuzzy_rescue_decision(
 pub fn literal_framework_alias_decision(
     records: &[SkillRecord],
     query: &str,
+    normalized_query: &str,
+    query_token_list: &[String],
     session_id: &str,
 ) -> Option<RouteDecision> {
-    let normalized_query = normalize_text(query);
-    let query_token_list = tokenize_route_text(query);
-    let route_context = build_route_context(&normalized_query, &query_token_list);
+    let route_context = build_route_context(normalized_query, query_token_list);
     let record = records
         .iter()
-        .find(|record| has_literal_framework_alias_call(&normalized_query, record))?;
+        .find(|record| has_literal_framework_alias_call(normalized_query, record))?;
     let reasons =
         compact_route_reasons(&["Framework alias entrypoint matched explicitly."]);
     Some(RouteDecision {

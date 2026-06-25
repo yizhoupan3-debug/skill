@@ -77,9 +77,11 @@ fn bootstrap_telemetry() {
     spawn_routing_runtime_cache_invalidator();
 }
 
-/// Gracefully shut down telemetry: flush pending events and join the aggregator thread.
-/// Safe to call multiple times (second call is a no-op).
+/// Gracefully shut down telemetry: flush pending events, join the aggregator thread,
+/// and stop the route record cache invalidator.
+/// Safe to call multiple times (subsequent calls are no-ops).
 pub fn shutdown_telemetry() {
+    ROUTE_CACHE_RUNNING.store(false, std::sync::atomic::Ordering::Relaxed);
     if let Some(handle) = TELEMETRY_HANDLE
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -90,13 +92,14 @@ pub fn shutdown_telemetry() {
 
 /// Invalidate route record cache when `SKILL_ROUTING_RUNTIME.json` changes on disk (P1-1).
 /// Polls every 1s (config file changes don't need sub-second detection).
+static ROUTE_CACHE_RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 fn spawn_routing_runtime_cache_invalidator() {
-    static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
     thread::spawn(move || {
         let watch = routing_runtime_watch();
         let mut rx = watch.receiver();
         let _ = rx.borrow_and_update();
-        while RUNNING.load(std::sync::atomic::Ordering::Relaxed) {
+        while ROUTE_CACHE_RUNNING.load(std::sync::atomic::Ordering::Relaxed) {
             thread::sleep(Duration::from_secs(1));
             if !matches!(rx.has_changed(), Ok(true)) {
                 continue;

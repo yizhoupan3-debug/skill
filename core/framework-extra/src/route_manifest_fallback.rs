@@ -7,7 +7,7 @@
 
 use routing_engine::route::{
     RouteDecision, SkillRecord, filter_records_for_host, literal_framework_alias_decision,
-    route_task,
+    normalize_text, route_task, tokenize_route_text,
 };
 use runtime_infra::telemetry_emit;
 
@@ -20,7 +20,9 @@ pub fn route_task_with_manifest_fallback(
     first_turn: bool,
 ) -> Result<RouteDecision, String> {
     let scoped_runtime = filter_records_for_host(runtime_records, host_id)?;
-    if let Some(decision) = literal_framework_alias_decision(&scoped_runtime, query, session_id) {
+    let normalized = normalize_text(query);
+    let tokens = tokenize_route_text(query);
+    if let Some(decision) = literal_framework_alias_decision(&scoped_runtime, query, &normalized, &tokens, session_id) {
         telemetry_emit::emit_route_decision(query, &decision, false, 0, "");
         return Ok(decision);
     }

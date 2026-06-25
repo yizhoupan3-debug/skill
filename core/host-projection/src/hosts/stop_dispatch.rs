@@ -35,9 +35,10 @@ pub trait StopHostOps {
     fn log_label(&self) -> &'static str;
 
     /// Hook-state base directory relative to repo_root.
-    /// Default: `.claude/hook-state` (shared across all hosts for cross-host state continuity).
+    /// Isolated per-host via host_id() subdirectory to prevent collision when
+    /// multiple hosts share the same repo.
     fn hook_state_base(&self, repo_root: &Path) -> PathBuf {
-        repo_root.join(".claude").join("hook-state")
+        repo_root.join(".claude").join("hook-state").join(self.host_id())
     }
 
     /// Session key for state file naming.
@@ -167,8 +168,8 @@ pub fn run_unified_stop(
     };
 
     if let Some(reason) = &review_advisory_needed {
-        review_state.followup_count += 1;
-        review_state.review_followup_count += 1;
+        review_state.goal.followup_count += 1;
+        review_state.goal.review_followup_count += 1;
         let _ = write_review_state(&review_path, &review_state);
         return add_context("Stop", reason);
     }
@@ -191,14 +192,14 @@ pub fn run_unified_stop(
     }).flatten();
 
     if review_state.tracks_goal() && !goal_is_satisfied {
-        review_state.followup_count += 1;
-        review_state.goal_followup_count += 1;
+        review_state.goal.followup_count += 1;
+        review_state.goal.goal_followup_count += 1;
         let _ = write_review_state(&review_path, &review_state);
         let message = if let Some((covered, total, items)) = &done_when_coverage {
             let mut msg = format!("Goal not yet satisfied (contract={}, progress={}, verify={}). done_when: {covered}/{total} covered, continue working.",
-                review_state.goal_contract_seen,
-                review_state.goal_progress_seen,
-                review_state.goal_verify_or_block_seen,
+                review_state.goal.goal_contract_seen,
+                review_state.goal.goal_progress_seen,
+                review_state.goal.goal_verify_or_block_seen,
             );
             // List uncovered done_when items (up to 3)
             let uncovered: Vec<&str> = items.iter()
@@ -212,9 +213,9 @@ pub fn run_unified_stop(
             msg
         } else {
             format!("Goal not yet satisfied (contract={}, progress={}, verify={}). Continue working.",
-                review_state.goal_contract_seen,
-                review_state.goal_progress_seen,
-                review_state.goal_verify_or_block_seen,
+                review_state.goal.goal_contract_seen,
+                review_state.goal.goal_progress_seen,
+                review_state.goal.goal_verify_or_block_seen,
             )
         };
         return add_context("Stop", &message);
@@ -224,14 +225,14 @@ pub fn run_unified_stop(
     // Only fires once to avoid nagging on every Stop.
     if goal_is_satisfied
         && review_state.tracks_goal()
-        && !review_state.done_when_advisory_sent
+        && !review_state.goal.done_when_advisory_sent
         && let Some((covered, total, _)) = &done_when_coverage
             && *total > 0 && (*covered as f64 / *total as f64) < 0.5 {
                 let message = format!(
                     "Goal signals satisfied but done_when coverage is low ({covered}/{total}). \
                      Verify all completion conditions before completing. Still missing items may remain.",
                 );
-                review_state.done_when_advisory_sent = true;
+                review_state.goal.done_when_advisory_sent = true;
                 let _ = write_review_state(&review_path, &review_state);
                 return add_context("Stop", &message);
             }

@@ -75,7 +75,6 @@ pub struct TelemetryHooks {
 // ── 宿主提供者钩子组 ──
 pub struct HostProviderHooks {
     pub for_routing_spelling: fn(host_id: Option<&str>) -> Option<&'static str>,
-    pub default_id: fn() -> &'static str,
     pub strict_pre_tool_fallback_hint: fn(host_id: &str) -> Option<bool>,
     /// Returns (host_id, capabilities_config_path) for each registered host provider.
     pub registry: fn() -> Vec<(&'static str, Option<&'static str>)>,
@@ -90,7 +89,6 @@ impl RuntimeCoreHooks {
     pub fn emit_rfv_round(&self, round: u32, verdict: &str) { (self.telemetry.rfv_round)(round, verdict); }
     pub fn host_provider_strict_pre_tool_fallback_hint(&self, host_id: &str) -> Option<bool> { (self.host_provider.strict_pre_tool_fallback_hint)(host_id) }
     pub fn host_provider_for_routing_spelling(&self, host_id: Option<&str>) -> Option<&'static str> { (self.host_provider.for_routing_spelling)(host_id) }
-    pub fn default_host_id(&self) -> &'static str { (self.host_provider.default_id)() }
     pub fn host_provider_registry(&self) -> Vec<(&'static str, Option<&'static str>)> { (self.host_provider.registry)() }
     pub fn framework_goal_drive(&self, payload: Value) -> Result<Value, String> { (self.framework_goal_drive)(payload) }
     pub fn framework_quality_gate(&self, payload: Value) -> Result<Value, String> { (self.framework_quality_gate)(payload) }
@@ -155,7 +153,6 @@ mod tests {
     fn noop_host_provider() -> HostProviderHooks {
         HostProviderHooks {
             for_routing_spelling: |_| None,
-            default_id: || "test-host",
             strict_pre_tool_fallback_hint: |_| None,
             registry: || vec![],
         }
@@ -195,7 +192,7 @@ mod tests {
             register(noop_hooks());
         });
         let h = hooks();
-        assert_eq!(h.default_host_id(), "test-host");
+        assert!(h.host_provider_registry().is_empty());
     }
 
     #[test]
@@ -206,7 +203,7 @@ mod tests {
         });
         // This should not panic or change the registered hooks
         let h = hooks();
-        assert_eq!(h.default_host_id(), "test-host");
+        assert!(h.host_provider_registry().is_empty());
     }
 
     #[test]
@@ -251,7 +248,6 @@ mod tests {
         h.emit_rfv_round(1, "PASS");
         assert_eq!(h.host_provider_strict_pre_tool_fallback_hint("h"), None);
         assert_eq!(h.host_provider_for_routing_spelling(None), None);
-        assert_eq!(h.default_host_id(), "test-host");
         assert!(h.host_provider_registry().is_empty());
         assert!(h.framework_goal_drive(serde_json::Value::Null).is_ok());
         assert!(h.framework_quality_gate(serde_json::Value::Null).is_ok());
@@ -291,7 +287,6 @@ mod tests {
         let via_try = try_hooks().expect("try_hooks should return Some after register");
         let via_hooks = hooks();
         // Both pointers should reference the same static data.
-        assert_eq!(via_try.default_host_id(), via_hooks.default_host_id());
         assert_eq!(
             via_try.host_provider_registry(),
             via_hooks.host_provider_registry()

@@ -17,11 +17,7 @@ fn default_subagent_review_types() -> &'static [&'static str] {
             }
         }
         if types.is_empty() {
-            // Registry unavailable — use built-in defaults.
-            types.extend_from_slice(&[
-                "explore", "explorer", "general-purpose", "deep-review-agent",
-                "review", "plan",
-            ]);
+            // Registry unavailable — no review types defined.
         }
         types
     })
@@ -277,10 +273,10 @@ pub fn update_goal_gate_with_disk(
 ) {
     // Arm goal drive on entry
     if goal_drive_entrypoint {
-        core.goal_drive_entry_active = true;
+        core.goal.goal_drive_entry_active = true;
     }
     // Only scan for signals if goal tracking is active
-    if !core.goal_drive_entry_active {
+    if !core.goal.goal_drive_entry_active {
         return;
     }
     // Scan combined signal text for goal signals (regex-based, all hosts)
@@ -292,26 +288,26 @@ pub fn update_goal_gate_with_disk(
         format!("{prompt}\n{response_text}")
     };
     if core_policy::hook_common::has_structured_goal_contract(&signal) {
-        core.goal_contract_seen = true;
+        core.goal.goal_contract_seen = true;
     }
     if core_policy::hook_common::has_goal_progress_signal(&signal) {
-        core.goal_progress_seen = true;
+        core.goal.goal_progress_seen = true;
     }
     if core_policy::hook_common::has_goal_verify_or_block_signal(&signal) {
-        core.goal_verify_or_block_seen = true;
+        core.goal.goal_verify_or_block_seen = true;
     }
     // Disk-based readiness (more precise: reads GOAL_STATE.json + EVIDENCE_INDEX.json)
     if let (Some(root), Some(tid)) = (repo_root, task_id) {
         let goal_val = serde_json::Value::Null; // placeholder; real evaluator reads disk
         let readiness = crate::hooks::evaluate_goal_readiness_from_disk(root, &goal_val, tid);
         if readiness.contract {
-            core.goal_contract_seen = true;
+            core.goal.goal_contract_seen = true;
         }
         if readiness.progress {
-            core.goal_progress_seen = true;
+            core.goal.goal_progress_seen = true;
         }
         if readiness.verification {
-            core.goal_verify_or_block_seen = true;
+            core.goal.goal_verify_or_block_seen = true;
         }
     }
 }
@@ -320,12 +316,12 @@ pub fn update_goal_gate_with_disk(
 pub fn goal_gate_satisfied(core: &core_policy::HookReviewDiskCore) -> bool {
     shared_goal_is_satisfied(
         false, // goal_required is Cursor-specific; shared uses goal_drive_entry_active
-        core.goal_drive_entry_active,
-        core.goal_contract_seen,
-        core.goal_progress_seen,
-        core.goal_verify_or_block_seen,
+        core.goal.goal_drive_entry_active,
+        core.goal.goal_contract_seen,
+        core.goal.goal_progress_seen,
+        core.goal.goal_verify_or_block_seen,
         core.gate.review_override,
-        core.delegation_override,
+        core.goal.delegation_override,
     )
 }
 
@@ -454,14 +450,14 @@ pub fn apply_override_and_reject(
 ) {
     if core_policy::hook_common::has_override(prompt) {
         core.gate.review_override = true;
-        core.delegation_override = true;
+        core.goal.delegation_override = true;
     }
     if core_policy::hook_common::saw_reject_reason(stop_signal, prompt)
         || core_policy::hook_common::saw_reject_reason(prompt, stop_signal)
     {
         core.gate.reject_reason_seen = true;
-        core.followup_count = 0;
-        core.review_followup_count = 0;
+        core.goal.followup_count = 0;
+        core.goal.review_followup_count = 0;
     }
 }
 
@@ -520,10 +516,10 @@ pub fn evaluate_stop_decision(
     // 5. Goal followup
     if !goal_gate_satisfied(core) {
         let followup = shared_goal_stop_followup_line(
-            core.goal_contract_seen,
-            core.goal_progress_seen,
-            core.goal_verify_or_block_seen,
-            core.goal_followup_count,
+            core.goal.goal_contract_seen,
+            core.goal.goal_progress_seen,
+            core.goal.goal_verify_or_block_seen,
+            core.goal.goal_followup_count,
         );
         return StopDecision::GoalFollowup { message: followup };
     }

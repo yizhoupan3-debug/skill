@@ -279,6 +279,186 @@ fn build_assistant_tail_window(raw: &str, max_chars: usize) -> String {
     format!("[...omitted {omitted} chars...]\n{tail}")
 }
 
+/// Result of a deep continuation attempt.
+struct DeepContinuationResult {
+    content: String,
+    finish_reason: Option<String>,
+    usage_merged: Option<serde_json::Map<String, Value>>,
+    continuation_attempted: bool,
+    continuation_status: Option<String>,
+    continuation_error: Option<String>,
+}
+
+/// Send a request to the aggregator with a single retry for transient errors (429, 5xx).
+fn send_request_with_retry<F>(
+    request_body: &Value,
+    send_request: &mut F,
+) -> Result<Value, String>
+where
+    F: FnMut(&Value) -> Result<(u16, String), String>,
+{
+    use std::time::Duration;
+    let mut last_error = "router-rs live execute request failed".to_string();
+    for attempt in 0..=1usize {
+        match send_request(request_body) {
+            Ok((status_code, response_body)) => {
+                if !(200..300).contains(&status_code) {
+                    last_error = format!(
+                        "router-rs live execute returned HTTP {}: {}",
+                        status_code,
+                        truncate_for_error(&response_body)
+                    );
+                    if attempt == 0 && matches!(status_code, 429 | 500..=599) {
+                        // Transient server error or rate limit: backoff then retry once
+                        std::thread::sleep(Duration::from_millis(500));
+                        continue;
+                    }
+                    // 4xx client errors (401/403/404 etc.): return immediately, no retry
+                    return Err(last_error);
+                }
+                return serde_json::from_str::<Value>(&response_body).map_err(|err| {
+                    format!("parse router-rs live execute response failed: {err}")
+                });
+            }
+            Err(err) => {
+                last_error = format!("router-rs live execute request failed: {err}");
+                if attempt == 0 {
+                    std::thread::sleep(Duration::from_millis(500));
+                    continue;
+                }
+                return Err(last_error);
+            }
+        }
+    }
+    Err(last_error)
+}
+
+/// Attempt deep continuation when the initial response was truncated by `length` finish_reason.
+/// Appends continued content and merges usage totals.
+fn attempt_deep_continuation<F>(
+    send_request: &mut F,
+    prompt_preview: &str,
+    task: &str,
+    model_id: &str,
+    original_content: &str,
+    original_finish_reason: &Option<String>,
+    first_usage_ref: Option<&serde_json::Map<String, Value>>,
+    max_tokens: usize,
+) -> DeepContinuationResult
+where
+    F: FnMut(&Value) -> Result<(u16, String), String>,
+{
+    let mut content = original_content.to_string();
+    let mut finish_reason = original_finish_reason.clone();
+    let mut usage_merged: Option<serde_json::Map<String, Value>> = None;
+
+    if original_finish_reason.as_deref() != Some("length") {
+        return DeepContinuationResult {
+            content,
+            finish_reason,
+            usage_merged,
+            continuation_attempted: false,
+            continuation_status: None,
+            continuation_error: None,
+        };
+    }
+
+    let system_anchor = build_compact_anchor(prompt_preview, DEEP_CONTINUATION_ANCHOR_CHARS);
+    let task_anchor = build_compact_anchor(task, DEEP_CONTINUATION_ANCHOR_CHARS);
+    let assistant_tail = build_assistant_tail_window(&content, DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS);
+    let continuation_messages = vec![
+        serde_json::json!({
+            "role": "system",
+            "content": format!(
+                "Deep continuation. Keep the same objective and style. System anchor: {system_anchor}. Task anchor: {task_anchor}."
+            )
+        }),
+        serde_json::json!({"role": "assistant", "content": assistant_tail}),
+        serde_json::json!({"role": "user", "content": "Continue exactly from the cutoff. Do not repeat prior text. Prioritize unresolved evidence gaps and open risks."}),
+    ];
+    let continuation_body = serde_json::json!({
+        "model": model_id,
+        "messages": continuation_messages,
+        "max_tokens": max_tokens,
+    });
+
+    let (continuation_status, continuation_error) = match send_request(&continuation_body) {
+        Ok((status_code, continuation_text)) => {
+            if !(200..300).contains(&status_code) {
+                (
+                    Some(format!("http_{status_code}")),
+                    Some(format!(
+                        "router-rs continuation returned HTTP {}: {}",
+                        status_code,
+                        truncate_for_error(&continuation_text)
+                    )),
+                )
+            } else {
+                match serde_json::from_str::<Value>(&continuation_text) {
+                    Ok(continuation_payload) => {
+                        match extract_chat_completion_content(&continuation_payload) {
+                            Ok(continuation_content) => {
+                                if !continuation_content.trim().is_empty() {
+                                    content = format!(
+                                        "{}\n\n{}",
+                                        content.trim_end(),
+                                        continuation_content.trim_start()
+                                    );
+                                }
+                                usage_merged = Some(
+                                    merge_usage_totals(
+                                        first_usage_ref,
+                                        continuation_payload
+                                            .get("usage")
+                                            .and_then(Value::as_object),
+                                    )
+                                    .unwrap_or_default(),
+                                );
+                                finish_reason = continuation_payload
+                                    .get("choices")
+                                    .and_then(Value::as_array)
+                                    .and_then(|choices| choices.first())
+                                    .and_then(|choice| choice.get("finish_reason"))
+                                    .and_then(Value::as_str)
+                                    .map(|value| value.to_string())
+                                    .or(finish_reason);
+                                (Some("success".to_string()), None)
+                            }
+                            Err(err) => (
+                                Some("content_error".to_string()),
+                                Some(format!(
+                                    "router-rs continuation content extraction failed: {err}"
+                                )),
+                            ),
+                        }
+                    }
+                    Err(err) => (
+                        Some("parse_error".to_string()),
+                        Some(format!(
+                            "parse router-rs continuation response failed: {err}"
+                        )),
+                    ),
+                }
+            }
+        }
+        Err(err) => (
+            Some("request_error".to_string()),
+            Some(format!(
+                "router-rs live execute continuation request failed: {err}"
+            )),
+        ),
+    };
+
+    DeepContinuationResult {
+        content,
+        finish_reason,
+        usage_merged,
+        continuation_attempted: true,
+        continuation_status,
+        continuation_error,
+    }
+}
+
 pub fn perform_live_execute_with_sender<F>(
     payload: &ExecuteRequestPayload,
     prompt_preview: &str,
@@ -308,166 +488,70 @@ where
         "messages": messages,
         "max_tokens": max_tokens,
     });
-    use std::time::Duration;
-    let mut response_payload = Value::Null;
-    let mut last_error = "router-rs live execute request failed".to_string();
-    for attempt in 0..=1usize {
-        match send_request(&request_body) {
-            Ok((status_code, response_body)) => {
-                if !(200..300).contains(&status_code) {
-                    last_error = format!(
-                        "router-rs live execute returned HTTP {}: {}",
-                        status_code,
-                        truncate_for_error(&response_body)
-                    );
-                    if attempt == 0
-                        && matches!(status_code, 429 | 500..=599)
-                    {
-                        // 瞬态服务端错误或限速：退避后重试一次
-                        std::thread::sleep(Duration::from_millis(500));
-                        continue;
-                    }
-                    // 4xx 客户端错误（401/403/404 等）：直接返回，不重试
-                    return Err(last_error);
-                }
-                response_payload =
-                    serde_json::from_str::<Value>(&response_body).map_err(|err| {
-                        format!("parse router-rs live execute response failed: {err}")
-                    })?;
-                break;
-            }
-            Err(err) => {
-                last_error = format!("router-rs live execute request failed: {err}");
-                if attempt == 0 {
-                    std::thread::sleep(Duration::from_millis(500));
-                    continue;
-                }
-                return Err(last_error);
-            }
-        }
-    }
-    if response_payload.is_null() {
-        return Err(last_error);
-    }
-    let mut content = extract_chat_completion_content(&response_payload)?;
+
+    let response_payload = send_request_with_retry(&request_body, &mut send_request)?;
+    let content = extract_chat_completion_content(&response_payload)?;
     let first_usage_ref = response_payload
         .get("usage")
         .and_then(Value::as_object);
-    let mut finish_reason = response_payload
+    let finish_reason = response_payload
         .get("choices")
         .and_then(Value::as_array)
         .and_then(|choices| choices.first())
         .and_then(|choice| choice.get("finish_reason"))
         .and_then(Value::as_str)
         .map(|value| value.to_string());
-    let mut continuation_attempted = false;
-    let mut continuation_status = None;
-    let mut continuation_error = None;
-    let mut usage_merged: Option<serde_json::Map<String, Value>> = None;
-    if research_mode == "deep" && finish_reason.as_deref() == Some("length") {
-        continuation_attempted = true;
-        let system_anchor = build_compact_anchor(prompt_preview, DEEP_CONTINUATION_ANCHOR_CHARS);
-        let task_anchor = build_compact_anchor(&payload.task, DEEP_CONTINUATION_ANCHOR_CHARS);
-        let assistant_tail =
-            build_assistant_tail_window(&content, DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS);
-        let continuation_messages = vec![
-            serde_json::json!({
-                "role": "system",
-                "content": format!(
-                    "Deep continuation. Keep the same objective and style. System anchor: {system_anchor}. Task anchor: {task_anchor}."
-                )
-            }),
-            serde_json::json!({"role": "assistant", "content": assistant_tail}),
-            serde_json::json!({"role": "user", "content": "Continue exactly from the cutoff. Do not repeat prior text. Prioritize unresolved evidence gaps and open risks."}),
-        ];
-        let continuation_body = serde_json::json!({
-            "model": payload.model_id,
-            "messages": continuation_messages,
-            "max_tokens": max_tokens,
-        });
-        match send_request(&continuation_body) {
-            Ok((status_code, continuation_text)) => {
-                if !(200..300).contains(&status_code) {
-                    continuation_status = Some(format!("http_{status_code}"));
-                    continuation_error = Some(format!(
-                        "router-rs continuation returned HTTP {}: {}",
-                        status_code,
-                        truncate_for_error(&continuation_text)
-                    ));
-                } else {
-                    match serde_json::from_str::<Value>(&continuation_text) {
-                        Ok(continuation_payload) => {
-                            match extract_chat_completion_content(&continuation_payload) {
-                                Ok(continuation_content) => {
-                                    if !continuation_content.trim().is_empty() {
-                                        content = format!(
-                                            "{}\n\n{}",
-                                            content.trim_end(),
-                                            continuation_content.trim_start()
-                                        );
-                                    }
-                                    usage_merged = Some(merge_usage_totals(
-                                        first_usage_ref,
-                                        continuation_payload
-                                            .get("usage")
-                                            .and_then(Value::as_object),
-                                    ).unwrap_or_default());
-                                    finish_reason = continuation_payload
-                                        .get("choices")
-                                        .and_then(Value::as_array)
-                                        .and_then(|choices| choices.first())
-                                        .and_then(|choice| choice.get("finish_reason"))
-                                        .and_then(Value::as_str)
-                                        .map(|value| value.to_string())
-                                        .or(finish_reason);
-                                    continuation_status = Some("success".to_string());
-                                }
-                                Err(err) => {
-                                    continuation_status = Some("content_error".to_string());
-                                    continuation_error = Some(format!(
-                                        "router-rs continuation content extraction failed: {err}"
-                                    ));
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            continuation_status = Some("parse_error".to_string());
-                            continuation_error = Some(format!(
-                                "parse router-rs continuation response failed: {err}"
-                            ));
-                        }
-                    }
-                }
-            }
-            Err(err) => {
-                continuation_status = Some("request_error".to_string());
-                continuation_error = Some(format!(
-                    "router-rs live execute continuation request failed: {err}"
-                ));
-            }
+
+    let DeepContinuationResult {
+        content: continued_content,
+        finish_reason: maybe_continued_finish_reason,
+        usage_merged,
+        continuation_attempted,
+        continuation_status,
+        continuation_error,
+    } = if research_mode == "deep" {
+        attempt_deep_continuation(
+            &mut send_request,
+            prompt_preview,
+            &payload.task,
+            &payload.model_id,
+            &content,
+            &finish_reason,
+            first_usage_ref,
+            max_tokens,
+        )
+    } else {
+        DeepContinuationResult {
+            content,
+            finish_reason,
+            usage_merged: None,
+            continuation_attempted: false,
+            continuation_status: None,
+            continuation_error: None,
         }
-    }
+    };
+
     let active_usage = usage_merged.as_ref().or(first_usage_ref);
     let input_tokens = active_usage
         .and_then(|usage| usage.get("prompt_tokens"))
         .and_then(Value::as_u64)
-        .unwrap_or_else(|| estimate_tokens(&content) as u64)
+        .unwrap_or_else(|| estimate_tokens(&continued_content) as u64)
         .try_into()
-        .unwrap_or(usize::MAX);
+        .unwrap_or(0);
     let output_tokens = active_usage
         .and_then(|usage| usage.get("completion_tokens"))
         .and_then(Value::as_u64)
-        .unwrap_or_else(|| estimate_tokens(&content) as u64)
+        .unwrap_or_else(|| estimate_tokens(&continued_content) as u64)
         .try_into()
-        .unwrap_or(usize::MAX);
+        .unwrap_or(0);
     let total_tokens = active_usage
         .and_then(|usage| usage.get("total_tokens"))
         .and_then(Value::as_u64)
         .unwrap_or((input_tokens as u64).saturating_add(output_tokens as u64))
         .try_into()
-        .unwrap_or(usize::MAX);
+        .unwrap_or(0);
     Ok(LiveExecuteResult {
-        content,
+        content: continued_content,
         model_id: response_payload
             .get("model")
             .and_then(Value::as_str)
@@ -476,11 +560,11 @@ where
             .get("id")
             .and_then(Value::as_str)
             .map(|value| value.to_string()),
-        status: finish_reason.clone(),
+        status: maybe_continued_finish_reason.clone(),
         input_tokens,
         output_tokens,
         total_tokens,
-        finish_reason,
+        finish_reason: maybe_continued_finish_reason,
         continuation_attempted,
         continuation_status,
         continuation_error,

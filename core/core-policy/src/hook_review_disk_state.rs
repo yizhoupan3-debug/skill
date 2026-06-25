@@ -21,20 +21,12 @@ pub struct HookReviewGateFields {
     pub reject_reason_seen: bool,
 }
 
-/// Claude `review_gate_*.json` on-disk shape (version + gate fields via flatten).
+/// Goal-tracking fields separated from review gate core (v2+).
 ///
-/// `#[serde(flatten)]` on `gate` keeps JSON backward compatibility —
-/// `gate.review_required` serializes as top-level `"review_required"`.
-/// Extended with goal-tracking fields (v2+): `goal_*` and `followup_count` are
-/// serde(default) so v1 files load cleanly without migration.
+/// `#[serde(flatten)]` when embedded in `HookReviewDiskCore` keeps JSON
+/// backward compatibility — goal fields serialize as top-level keys.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HookReviewDiskCore {
-    #[serde(default)]
-    pub version: u32,
-    /// Nested gate fields flattened into the same JSON object for backward compat.
-    #[serde(flatten)]
-    pub gate: HookReviewGateFields,
-    // ── Goal tracking fields (serde default = backward compat with v1) ──
+pub struct HookGoalDiskCore {
     /// Goal drive entry has been invoked in this session.
     #[serde(default)]
     pub goal_drive_entry_active: bool,
@@ -62,6 +54,24 @@ pub struct HookReviewDiskCore {
     /// done_when coverage advisory already sent (prevents repeat on every Stop).
     #[serde(default)]
     pub done_when_advisory_sent: bool,
+}
+
+/// Claude `review_gate_*.json` on-disk shape (version + gate fields + goal tracking via flatten).
+///
+/// `#[serde(flatten)]` on `gate` and `goal` keeps JSON backward compatibility —
+/// gate fields and goal fields serialize as top-level keys.
+/// Extended with goal-tracking fields (v2+): `goal.*` fields are
+/// serde(default) so v1 files load cleanly without migration.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HookReviewDiskCore {
+    #[serde(default)]
+    pub version: u32,
+    /// Nested gate fields flattened into the same JSON object for backward compat.
+    #[serde(flatten)]
+    pub gate: HookReviewGateFields,
+    /// Nested goal-tracking fields flattened for JSON backward compat.
+    #[serde(flatten)]
+    pub goal: HookGoalDiskCore,
 }
 
 /// Common trait for hook-state structs that carry a schema `version` field.
@@ -115,7 +125,7 @@ impl HookReviewDiskCore {
 
     /// Whether this session has active goal tracking (for Stop followup).
     pub fn tracks_goal(&self) -> bool {
-        self.goal_drive_entry_active
+        self.goal.goal_drive_entry_active
     }
 
     /// Whether the goal gate is satisfied.
@@ -123,10 +133,12 @@ impl HookReviewDiskCore {
         if !self.tracks_goal() {
             return true;
         }
-        if self.gate.review_override || self.delegation_override {
+        if self.gate.review_override || self.goal.delegation_override {
             return true;
         }
-        self.goal_contract_seen && self.goal_progress_seen && self.goal_verify_or_block_seen
+        self.goal.goal_contract_seen
+            && self.goal.goal_progress_seen
+            && self.goal.goal_verify_or_block_seen
     }
 }
 
@@ -232,7 +244,44 @@ pub fn hook_review_disk_core_from_value(value: &Value) -> HookReviewDiskCore {
     HookReviewDiskCore {
         version: value.get("version").and_then(Value::as_u64).unwrap_or(0) as u32,
         gate,
-        ..Default::default()
+        goal: HookGoalDiskCore {
+            goal_drive_entry_active: value
+                .get("goal_drive_entry_active")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            goal_contract_seen: value
+                .get("goal_contract_seen")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            goal_progress_seen: value
+                .get("goal_progress_seen")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            goal_verify_or_block_seen: value
+                .get("goal_verify_or_block_seen")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            delegation_override: value
+                .get("delegation_override")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+            followup_count: value
+                .get("followup_count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as u32,
+            review_followup_count: value
+                .get("review_followup_count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as u32,
+            goal_followup_count: value
+                .get("goal_followup_count")
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as u32,
+            done_when_advisory_sent: value
+                .get("done_when_advisory_sent")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
+        },
     }
 }
 

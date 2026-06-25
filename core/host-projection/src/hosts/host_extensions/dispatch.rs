@@ -46,7 +46,7 @@ impl StopHostOps for RegistryDispatcher {
         state: &mut core_policy::hook_review_disk_state::HookReviewDiskCore,
         _goal_drive_entrypoint: bool,
     ) {
-        if !state.goal_drive_entry_active {
+        if !state.goal.goal_drive_entry_active {
             return; // nothing to clear
         }
         let goal = match core_state::state_manager::read_goal_state(repo_root, None) {
@@ -58,10 +58,10 @@ impl StopHostOps for RegistryDispatcher {
         let running = status == "running";
         // Clear the stale flag when the goal is no longer driving the session.
         if !driving || !running {
-            state.goal_drive_entry_active = false;
-            state.goal_contract_seen = false;
-            state.goal_progress_seen = false;
-            state.goal_verify_or_block_seen = false;
+            state.goal.goal_drive_entry_active = false;
+            state.goal.goal_contract_seen = false;
+            state.goal.goal_progress_seen = false;
+            state.goal.goal_verify_or_block_seen = false;
         }
     }
 }

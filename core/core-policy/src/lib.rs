@@ -16,6 +16,7 @@ pub mod review_output_lint;
 pub mod review_routing_signals;
 pub mod session_key;
 pub mod subagent;
+pub mod tool_safety_rules;
 
 pub mod doc_registry;
 
@@ -44,16 +45,13 @@ pub use hook_common::{
     GOAL_CHAT_VERIFY_ZH_PHRASES,
     ToolOrigin, classify_tool_origin,
     completion_claim_keywords_export, contains_completion_claim_token,
-    has_delegation_override, has_override, has_review_override, hook_assistant_tail_window,
-    is_deep_review_gate_lane_normalized,
-    is_framework_non_goal_entrypoint_prompt,
-    is_mcp_tool_name,
-    is_narrow_review_prompt, is_parallel_delegation_prompt, is_review_prompt,
+    has_override, has_review_override, hook_assistant_tail_window,
+    is_narrow_review_prompt,
+    is_review_prompt,
     is_reviewer_lane_normalized,
-    normalize_subagent_type, normalize_tool_name, parse_mcp_tool_fqn,
-    review_gate_advisory_only,
-    review_gate_hard_block_disabled, review_gate_stop_would_nudge, saw_reject_reason,
-    should_inject_spawn_first_review_nudge, should_inject_subagent_model_inherit_nudge,
+    normalize_subagent_type, normalize_tool_name,
+    review_gate_hard_block_disabled, saw_reject_reason,
+    should_inject_spawn_first_review_nudge,
     strip_quoted_or_codeblock_or_url, tool_input_value_from_map,
 };
 pub use hook_policy::{
