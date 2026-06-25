@@ -132,24 +132,26 @@ fn vocabulary_swap(text: &str, language: Language) -> (String, usize) {
     let mut result = text.to_string();
     let mut count = 0;
 
-    for (from, to) in &replacements {
-        let before = result.clone();
+    for (from, to) in replacements {
         match language {
             Language::English => {
                 // Case-insensitive word-boundary replacement.
-                let re = match Regex::new(&format!(r"(?i)\b{}\b", regex::escape(from))) {
-                    Ok(r) => r,
-                    Err(_) => continue,
+                let Ok(re) = Regex::new(&format!(r"(?i)\b{}\b", regex::escape(from))) else {
+                    continue;
                 };
-                result = re.replace_all(&result, to.as_str()).to_string();
+                let new_result = re.replace_all(&result, *to).to_string();
+                if new_result != result {
+                    result = new_result;
+                    count += 1;
+                }
             }
             Language::Chinese => {
                 // Simple substring replacement — no word boundary in Chinese.
-                result = result.replace(from.as_str(), to.as_str());
+                if result.contains(from) {
+                    result = result.replace(from, *to);
+                    count += 1;
+                }
             }
-        }
-        if result != before {
-            count += 1;
         }
     }
 
@@ -163,9 +165,9 @@ fn vocabulary_swap(text: &str, language: Language) -> (String, usize) {
         ];
         for (pat, repl) in &patterns {
             if let Ok(re) = Regex::new(pat) {
-                let before = result.clone();
-                result = re.replace_all(&result, *repl).to_string();
-                if result != before {
+                let new_result = re.replace_all(&result, *repl).to_string();
+                if new_result != result {
+                    result = new_result;
                     count += 1;
                 }
             }
@@ -191,45 +193,53 @@ fn vocabulary_swap(text: &str, language: Language) -> (String, usize) {
 
 /// English AI-word replacement table (sorted by key length descending to prevent
 /// substring overlap — e.g. "delve" must not match inside "delve into").
-fn english_replacement_table() -> Vec<(String, String)> {
-    let mut table = vec![
-        ("moreover".to_string(), "additionally".to_string()),
-        ("furthermore".to_string(), "what's more".to_string()),
-        ("delve into".to_string(), "explore".to_string()),
-        ("delve".to_string(), "investigate".to_string()),
-        ("tapestry".to_string(), "framework".to_string()),
-        ("rich tapestry".to_string(), "framework".to_string()),
-        ("landscape".to_string(), "field".to_string()),
-        ("multifaceted".to_string(), "complex".to_string()),
-        ("underscore".to_string(), "highlight".to_string()),
-        ("underscores".into(), "highlights".into()),
-        ("pivotal".into(), "key".into()),
-        ("pivotal role".into(), "key role".into()),
-        ("nuanced understanding".into(), "detailed understanding".into()),
-        ("comprehensive overview".into(), "broad review".into()),
-        ("in conclusion".into(), "to summarize".into()),
-        ("in summary".into(), "taken together".into()),
-    ];
-    // Safety: run-once sort ensures longer strings match before their substrings.
-    table.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
-    table
+fn english_replacement_table() -> &'static [( &'static str,  &'static str)] {
+    use std::sync::LazyLock;
+    static TABLE: LazyLock<Vec<(&str, &str)>> = LazyLock::new(|| {
+        let mut table = vec![
+            ("moreover", "additionally"),
+            ("furthermore", "what's more"),
+            ("rich tapestry", "framework"),
+            ("delve into", "explore"),
+            ("delve", "investigate"),
+            ("tapestry", "framework"),
+            ("landscape", "field"),
+            ("multifaceted", "complex"),
+            ("pivotal role", "key role"),
+            ("nuanced understanding", "detailed understanding"),
+            ("comprehensive overview", "broad review"),
+            ("underscores", "highlights"),
+            ("underscore", "highlight"),
+            ("pivotal", "key"),
+            ("in conclusion", "to summarize"),
+            ("in summary", "taken together"),
+        ];
+        // Sort once: longer strings first prevents substring overlap
+        table.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+        table
+    });
+    TABLE.as_slice()
 }
 
 /// Chinese AI-word replacement table (ordered by length descending to prevent
 /// substring overlap — e.g. "此外" must not match inside "与此同时").
-fn chinese_replacement_table() -> Vec<(String, String)> {
-    vec![
-        ("发挥着重要作用".into(), "起关键作用".into()),
-        ("具有重要意义".into(), "至关重要".into()),
-        ("综上所述".into(), "综合来看".into()),
-        ("总而言之".into(), "概括而言".into()),
-        ("与此同时".into(), "另外".into()),
-        ("不可否认".into(), "可以看到".into()),
-        ("毋庸置疑".into(), "显而易见".into()),
-        ("不可或缺".into(), "必要".into()),
-        ("日益凸显".into(), "逐渐突出".into()),
-        ("此外".into(), "同时".into()),
-    ]
+fn chinese_replacement_table() -> &'static [( &'static str,  &'static str)] {
+    use std::sync::LazyLock;
+    static TABLE: LazyLock<Vec<(&str, &str)>> = LazyLock::new(|| {
+        vec![
+            ("发挥着重要作用", "起关键作用"),
+            ("具有重要意义", "至关重要"),
+            ("综上所述", "综合来看"),
+            ("总而言之", "概括而言"),
+            ("与此同时", "另外"),
+            ("不可否认", "可以看到"),
+            ("毋庸置疑", "显而易见"),
+            ("不可或缺", "必要"),
+            ("日益凸显", "逐渐突出"),
+            ("此外", "同时"),
+        ]
+    });
+    TABLE.as_slice()
 }
 
 // ── Strategy 2: Syntactic Rewrite ──
@@ -239,6 +249,11 @@ fn chinese_replacement_table() -> Vec<(String, String)> {
 static RE_IT_IS_ADJ_THAT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)It is (\w+) that ([^.]+)\.").expect("invalid IT_IS_ADJ_THAT regex")
 });
+// NOTE: Passive→active rewrite is HEURISTIC only. The regex only matches
+// "The X was [verb]ed by the Y" — missing plural subjects ("The X were"),
+// perfect tenses ("has been"), irregular past participles ("built", "shown"),
+// and multi-word subjects. Verb conjugation appends "s" after stripping "ed",
+// which works for regular -ed verbs but fails on already-bare verbs.
 #[allow(clippy::expect_used)]
 static RE_PASSIVE_BY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)The (\w+) was (\w+) by the (\w+)\.").expect("invalid PASSIVE_BY regex")
@@ -297,8 +312,7 @@ fn syntactic_rewrite(text: &str, language: Language) -> (String, usize) {
                 let noun = &caps[1];
                 let verb = &caps[2];
                 let agent = &caps[3];
-                // Simple conjugation: add "s" for third person.
-                let v = format!("{verb}s");
+                let v = conjugate_passive_participle(verb);
                 let mut a_chars = agent.chars();
                 let a_first = a_chars.next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
                 let a_rest: String = a_chars.collect();
@@ -309,6 +323,25 @@ fn syntactic_rewrite(text: &str, language: Language) -> (String, usize) {
     }
 
     (result, count)
+}
+
+/// Convert a passive-voice past participle to active third-person singular.
+///
+/// Strips "-ed" suffix and appends "s" (regular verb). Handles "-ied" → "-ies"
+/// (e.g. "applied" → "applies") and "-ed" preceded by sibilant → "-es"
+/// (e.g. "reached" → "reaches"). Returns original + "s" for non-ed endings
+/// (which means the verb wasn't a regular past participle and the output is
+/// also likely wrong — the caller should check).
+fn conjugate_passive_participle(verb: &str) -> String {
+    if verb.ends_with("ied") && verb.len() > 3 {
+        format!("{}ies", &verb[..verb.len() - 3])
+    } else if verb.ends_with("ched") || verb.ends_with("shed") || verb.ends_with("zed") {
+        format!("{}es", &verb[..verb.len() - 2])
+    } else if verb.ends_with("ed") && verb.len() > 2 {
+        format!("{}s", &verb[..verb.len() - 1])
+    } else {
+        format!("{verb}s")
+    }
 }
 
 fn syntactic_rewrite_zh(text: &str) -> (String, usize) {
@@ -499,18 +532,7 @@ fn estimate_improvement(original: &str, rewritten: &str, language: Language) -> 
 }
 
 fn split_sentences(text: &str, language: Language) -> Vec<String> {
-    match language {
-        Language::English => text
-            .split(['.', '!', '?'])
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
-        Language::Chinese => text
-            .split(['。', '！', '？', '.', '!', '?'])
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect(),
-    }
+    super::detector::split_sentences(text, language)
 }
 
 fn lowercase_first(s: &str) -> String {

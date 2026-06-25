@@ -4,7 +4,7 @@
 
 use core_policy::error::FrameworkError;
 use serde_json::{Value, json};
-
+use std::collections::HashMap;
 
 /// Handle a research MCP tool call.
 /// Delegates to the appropriate research-harness module.
@@ -109,59 +109,102 @@ fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, FrameworkErro
 }
 
 // ── Proof DAG tool functions ──
+//
+// DAGs are stored in a name-keyed HashMap for basic session isolation.
+// Each tool accepts an optional `name` argument (defaults to "default").
+// Callers that may run concurrent proof sessions MUST pass distinct names.
 
-fn get_or_create_dag() -> &'static std::sync::Mutex<Option<crate::proof_dag::Blueprint>> {
+fn get_or_create_dag_store(
+) -> &'static std::sync::Mutex<HashMap<String, crate::proof_dag::Blueprint>> {
     use std::sync::OnceLock;
-    static DAG: OnceLock<std::sync::Mutex<Option<crate::proof_dag::Blueprint>>> = OnceLock::new();
-    DAG.get_or_init(|| std::sync::Mutex::new(None))
+    static STORE: OnceLock<
+        std::sync::Mutex<HashMap<String, crate::proof_dag::Blueprint>>,
+    > = OnceLock::new();
+    STORE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
+}
+
+/// Extract the DAG name from tool arguments (defaults to "default").
+fn dag_name(arguments: &Value) -> String {
+    arguments
+        .get("name")
+        .and_then(Value::as_str)
+        .unwrap_or("default")
+        .to_string()
 }
 
 fn tool_math_proof_dag_init(arguments: &Value) -> Result<String, FrameworkError> {
-    let goal = arguments.get("goal").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("math_proof_dag_init requires 'goal' (string)"))?;
+    let goal = arguments
+        .get("goal")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_proof_dag_init requires 'goal' (string)",
+        ))?;
     let name = arguments.get("name").and_then(Value::as_str).unwrap_or("proof");
+    let dag_id = dag_name(arguments);
     let bp = crate::proof_dag::Blueprint::new(goal, name);
     let serialized = crate::proof_dag_serialize::serialize_blueprint(&bp)?;
-    if let Ok(mut guard) = get_or_create_dag().lock() {
-        *guard = Some(bp);
+    if let Ok(mut guard) = get_or_create_dag_store().lock() {
+        guard.insert(dag_id, bp);
     }
     Ok(serialized)
 }
 
 fn tool_math_proof_dag_decompose(arguments: &Value) -> Result<String, FrameworkError> {
-    let parent_id = arguments.get("parent_id").and_then(Value::as_str)
-        .ok_or(FrameworkError::validation("math_proof_dag_decompose requires 'parent_id'"))?;
+    let parent_id = arguments
+        .get("parent_id")
+        .and_then(Value::as_str)
+        .ok_or(FrameworkError::validation(
+            "math_proof_dag_decompose requires 'parent_id'",
+        ))?;
     let and = arguments.get("and").and_then(Value::as_bool).unwrap_or(false);
-    let children_val = arguments.get("children").and_then(Value::as_array)
-        .ok_or(FrameworkError::validation("math_proof_dag_decompose requires 'children' array"))?;
+    let children_val = arguments
+        .get("children")
+        .and_then(Value::as_array)
+        .ok_or(FrameworkError::validation(
+            "math_proof_dag_decompose requires 'children' array",
+        ))?;
     let children: Vec<crate::proof_dag::DagNode> =
         serde_json::from_value(Value::Array(children_val.clone()))
             .map_err(|e| FrameworkError::Json(e))?;
-    let mut guard = get_or_create_dag().lock().map_err(|e| FrameworkError::session(format!("lock: {e}")))?;
-    let bp = guard.as_mut().ok_or(FrameworkError::validation("no active proof DAG — call math_proof_dag_init first"))?;
+    let dag_id = dag_name(arguments);
+    let mut guard = get_or_create_dag_store()
+        .lock()
+        .map_err(|e| FrameworkError::session(format!("lock: {e}")))?;
+    let bp = guard.get_mut(&dag_id).ok_or(FrameworkError::validation(
+        "no proof DAG for this name — call math_proof_dag_init first",
+    ))?;
     bp.decompose(parent_id, children, and)?;
     Ok(crate::proof_dag_serialize::serialize_blueprint(bp)?)
 }
 
 fn tool_math_proof_dag_verify(arguments: &Value) -> Result<String, FrameworkError> {
-    let _ = arguments;
-    let mut guard = get_or_create_dag().lock().map_err(|e| FrameworkError::session(format!("lock: {e}")))?;
-    let bp = guard.as_mut().ok_or(FrameworkError::validation("no active proof DAG — call math_proof_dag_init first"))?;
+    let dag_id = dag_name(arguments);
+    let mut guard = get_or_create_dag_store()
+        .lock()
+        .map_err(|e| FrameworkError::session(format!("lock: {e}")))?;
+    let bp = guard.get_mut(&dag_id).ok_or(FrameworkError::validation(
+        "no proof DAG for this name — call math_proof_dag_init first",
+    ))?;
     bp.verify()?;
     if let Err(warning) = bp.validate_manual_prose_ratio(0.30) {
         let summary = bp.status_summary();
         return serde_json::to_string_pretty(&json!({
             "result": summary,
             "manual_prose_warning": warning,
-        })).map_err(FrameworkError::Json);
+        }))
+        .map_err(FrameworkError::Json);
     }
     Ok(crate::proof_dag_serialize::serialize_blueprint(bp)?)
 }
 
 fn tool_math_proof_dag_status(arguments: &Value) -> Result<String, FrameworkError> {
-    let _ = arguments;
-    let guard = get_or_create_dag().lock().map_err(|e| FrameworkError::session(format!("lock: {e}")))?;
-    let bp = guard.as_ref().ok_or(FrameworkError::validation("no active proof DAG — call math_proof_dag_init first"))?;
+    let dag_id = dag_name(arguments);
+    let guard = get_or_create_dag_store()
+        .lock()
+        .map_err(|e| FrameworkError::session(format!("lock: {e}")))?;
+    let bp = guard.get(&dag_id).ok_or(FrameworkError::validation(
+        "no proof DAG for this name — call math_proof_dag_init first",
+    ))?;
     let summary = bp.status_summary();
     serde_json::to_string_pretty(&summary).map_err(FrameworkError::Json)
 }
@@ -948,14 +991,14 @@ mod tests {
     fn test_math_proof_dag_verify_without_init() {
         let result = handle_research_tool("math_proof_dag_verify", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no active proof DAG"));
+        assert!(result.unwrap_err().to_string().contains("no proof DAG for this name"));
     }
 
     #[test]
     fn test_math_proof_dag_status_without_init() {
         let result = handle_research_tool("math_proof_dag_status", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("no active proof DAG"));
+        assert!(result.unwrap_err().to_string().contains("no proof DAG for this name"));
     }
 
     #[test]

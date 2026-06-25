@@ -74,7 +74,8 @@ pub const REUSE_INDEX_BLOCK_END: &str = "<!-- autoresearch:reuse-index:end -->";
 // ── 基础格式化 ──
 
 pub fn escape_table_cell(value: &str) -> String {
-    value.replace('|', "/")
+    // Replace pipe and newlines — both break markdown table rendering.
+    value.replace('|', "/").replace('\n', " ").replace('\r', " ")
 }
 
 pub fn format_overlap_risk(overlap: &str) -> String {
@@ -1263,6 +1264,11 @@ mod tests {
     #[test]
     fn escape_table_cell_replaces_pipe() {
         assert_eq!(escape_table_cell("foo|bar"), "foo/bar");
+    }
+
+    #[test]
+    fn escape_table_cell_replaces_newlines() {
+        assert_eq!(escape_table_cell("line1\nline2\rline3"), "line1 line2 line3");
     }
 
     #[test]

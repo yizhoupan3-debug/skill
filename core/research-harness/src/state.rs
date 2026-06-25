@@ -81,6 +81,7 @@ fn ensure_run_record_defaults(item: &mut serde_json::Map<String, Value>) {
 // ── Schema migration ──
 
 /// Migrate state from older schema versions to the current version.
+/// Silently drops unrecognized old-schema fields (warns via tracing).
 pub fn migrate_state(state: &Value) -> Result<Value> {
     let mut migrated = state.clone();
     let version = migrated
@@ -89,6 +90,23 @@ pub fn migrate_state(state: &Value) -> Result<Value> {
         .unwrap_or(2);
     if version >= SCHEMA_VERSION {
         return Ok(migrated);
+    }
+    // Warn about unrecognized top-level fields that will be dropped.
+    let known_fields: &[&str] = &[
+        "schema_version", "project", "question", "mode", "status", "stage",
+        "created_at", "updated_at", "hypotheses", "hypothesis_backlog",
+        "run_history", "decisions", "external_research", "evidence_index",
+        "blockers", "next_actions", "environment", "git",
+        "active_hypothesis", "current_direction", "novelty_gate",
+    ];
+    if let Some(obj) = migrated.as_object() {
+        for key in obj.keys() {
+            if !known_fields.contains(&key.as_str()) {
+                tracing::warn!(
+                    "[state migrate] unrecognized field \"{key}\" will be dropped on next save"
+                );
+            }
+        }
     }
     let run_history = migrated
         .get("run_history")

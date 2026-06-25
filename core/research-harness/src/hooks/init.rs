@@ -15,8 +15,9 @@ use host_projection::hooks;
 /// Register all research hooks into the L0 function-pointer registry.
 pub fn init_hooks() {
     // ── Paper prose / adversarial hooks ──
-    // Closures are required because L0 expects `&'static str` for the host
-    // parameter while the study functions use `&str`.
+    // Closure wrappers adapt the study functions' signatures to match the
+    // L0 function-pointer type expected by `register_paper_hooks`.
+    // The closures are not needed for lifetime adaptation — L0 accepts `&str`.
     hooks::register_paper_hooks(
         |root, prompt, lines, host| {
             super::paper_prose::maybe_append_paper_prose_context(root, prompt, lines, host)

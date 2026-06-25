@@ -237,8 +237,8 @@ fn detect_syntactic_patterns(text: &str, config: &DetectionConfig) -> (f64, Vec<
         }
     }
 
-    // Paragraph uniformity
-    let paragraphs: Vec<&str> = text.split("\n\n").filter(|p| !p.trim().is_empty()).collect();
+    // Paragraph uniformity (use normalized split_paragraphs to handle \r\n → \n)
+    let paragraphs = split_paragraphs(text);
     if paragraphs.len() >= 3 {
         let lens: Vec<f64> = paragraphs
             .iter()
@@ -312,8 +312,8 @@ fn detect_vocabulary_repetition(text: &str, language: Language) -> f64 {
 
 // ── Helpers ──
 
-/// Split text into paragraphs (double-newline separated).
-fn split_paragraphs(text: &str) -> Vec<String> {
+/// Split text into paragraphs (double-newline separated), normalizing \r\n first.
+pub(super) fn split_paragraphs(text: &str) -> Vec<String> {
     // Normalize line endings: \r\n → \n so both Unix and Windows-style
     // double-newlines become \n\n for consistent splitting.
     let normalized = text.replace("\r\n", "\n");
@@ -395,7 +395,7 @@ fn is_decimal_dot(text: &str, dot_pos: usize) -> bool {
 }
 
 /// Split text into sentences.
-fn split_sentences(text: &str, language: Language) -> Vec<String> {
+pub(super) fn split_sentences(text: &str, language: Language) -> Vec<String> {
     match language {
         Language::English => {
             // Split on sentence-ending punctuation, respecting abbreviations
