@@ -543,6 +543,20 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
         attach_router_rs_observation(&mut json_output, provider.host_id());
     }
 
+    // Merge paper hooks into output (userpromptsubmit only — modify output before submit)
+    // PostToolUse is intentionally excluded: it fires per-tool-call, not per-user-turn,
+    // so merging into its output would repeat the nudge paragraph N times per prompt.
+    if host_projection::hosts::hook_dispatch::normalize_event_name(event).as_ref() == "userpromptsubmit" {
+        let prompt_text = host_projection::hosts::hook_dispatch::extract_prompt_text(&payload);
+        let use_followup_message = provider.host_id() == "cursor";
+        host_projection::hooks::maybe_merge_paper_prose_before_submit(
+            &repo_root, &mut json_output, &prompt_text, use_followup_message, provider.host_id(),
+        );
+        host_projection::hooks::maybe_merge_paper_adversarial_before_submit(
+            &repo_root, &mut json_output, &prompt_text, use_followup_message, provider.host_id(),
+        );
+    }
+
     // Emit hook timing telemetry + tracing::debug! to stderr
     runtime_core::hook_timing::emit_hook_timing_line(event);
 
