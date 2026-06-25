@@ -126,20 +126,19 @@ pub fn run_stdio_json_loop(max_concurrency_override: Option<usize>) -> Result<()
     let stdout = io::stdout();
     let mut response_writer = StdioResponseWriter::new(stdout.lock());
     for line_result in stdin.lock().lines() {
-        let line = line_result.map_err(|err| format!("read stdio request failed: {err}"))?;
+        let line = line_result?;
         if line.trim().is_empty() {
             continue;
         }
         let response = handle_stdio_json_line(&line);
-        let encoded = serde_json::to_string(&response)
-            .map_err(|err| format!("serialize stdio response failed: {err}"))?;
+        let encoded = serde_json::to_string(&response)?;
         response_writer.write_encoded_response(&encoded)?;
     }
     response_writer.flush()?;
     Ok(())
 }
 
-fn run_concurrent_stdio_json_loop(max_concurrency: usize) -> Result<(), String> {
+fn run_concurrent_stdio_json_loop(max_concurrency: usize) -> Result<()> {
     let in_flight_timeout = resolve_stdio_in_flight_timeout();
     let (task_tx, task_rx) = mpsc::channel::<StdioJsonRequestEnvelope>();
     let (result_tx, result_rx) = mpsc::channel::<StdioWorkerMessage>();
@@ -154,7 +153,7 @@ fn run_concurrent_stdio_json_loop(max_concurrency: usize) -> Result<(), String> 
     let mut in_flight_requests = BTreeMap::<u64, InFlightRequest>::new();
     let mut next_line_index = 0_u64;
     for line_result in stdin.lock().lines() {
-        let line = line_result.map_err(|err| format!("read stdio request failed: {err}"))?;
+        let line = line_result?;
         if line.trim().is_empty() {
             continue;
         }
@@ -212,7 +211,7 @@ fn run_concurrent_stdio_json_loop(max_concurrency: usize) -> Result<(), String> 
                     id: Value::Null,
                     ok: false,
                     payload: None,
-                    error: Some(err),
+                    error: Some(err.to_string()),
                 },
             },
         };
@@ -243,7 +242,7 @@ fn recv_stdio_response_or_timeout(
     result_rx: &mpsc::Receiver<StdioWorkerMessage>,
     in_flight_requests: &mut BTreeMap<u64, InFlightRequest>,
     in_flight_timeout: Duration,
-) -> Result<Option<StdioJsonResponseEnvelope>, String> {
+) -> Result<Option<StdioJsonResponseEnvelope>> {
     loop {
         let wait_duration = next_in_flight_wait_duration(in_flight_requests, in_flight_timeout);
         match result_rx.recv_timeout(wait_duration) {
@@ -276,7 +275,9 @@ fn recv_stdio_response_or_timeout(
                 ));
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                return Err("receive stdio response failed: channel disconnected".to_string());
+                return Err(FrameworkError::validation(
+                    "receive stdio response failed: channel disconnected",
+                ));
             }
         }
     }
@@ -424,9 +425,8 @@ impl<W: Write> StdioResponseWriter<W> {
         }
     }
 
-    fn write_encoded_response(&mut self, encoded: &str) -> Result<(), String> {
-        writeln!(self.output, "{encoded}")
-            .map_err(|err| format!("write stdio response failed: {err}"))?;
+    fn write_encoded_response(&mut self, encoded: &str) -> Result<()> {
+        writeln!(self.output, "{encoded}")?;
         self.pending_responses = self.pending_responses.saturating_add(1);
         if self.pending_responses >= STDIO_RESPONSE_FLUSH_BATCH_SIZE {
             self.flush()?;
@@ -434,10 +434,8 @@ impl<W: Write> StdioResponseWriter<W> {
         Ok(())
     }
 
-    fn flush(&mut self) -> Result<(), String> {
-        self.output
-            .flush()
-            .map_err(|err| format!("flush stdio response failed: {err}"))?;
+    fn flush(&mut self) -> Result<()> {
+        self.output.flush()?;
         self.pending_responses = 0;
         Ok(())
     }
@@ -446,9 +444,8 @@ impl<W: Write> StdioResponseWriter<W> {
 fn write_stdio_response<W: Write>(
     response: &StdioJsonResponsePayload,
     output: &mut StdioResponseWriter<W>,
-) -> Result<(), String> {
-    let encoded = serde_json::to_string(response)
-        .map_err(|err| format!("serialize stdio response failed: {err}"))?;
+) -> Result<()> {
+    let encoded = serde_json::to_string(response)?;
     output.write_encoded_response(&encoded)
 }
 
@@ -459,7 +456,7 @@ pub fn handle_stdio_json_line(line: &str) -> StdioJsonResponsePayload {
             id: Value::Null,
             ok: false,
             payload: None,
-            error: Some(err),
+            error: Some(err.to_string()),
         },
     }
 }
@@ -471,9 +468,8 @@ fn dispatch_stdio_json_envelope(envelope: StdioJsonRequestEnvelope) -> StdioJson
     }
 }
 
-fn parse_stdio_json_line(line: &str) -> Result<StdioJsonRequestPayload, String> {
+fn parse_stdio_json_line(line: &str) -> Result<StdioJsonRequestPayload> {
     serde_json::from_str::<StdioJsonRequestPayload>(line)
-        .map_err(|err| format!("parse stdio request failed: {err}"))
 }
 
 pub fn runtime_concurrency_defaults_payload() -> RuntimeConcurrencyDefaultsPayload {

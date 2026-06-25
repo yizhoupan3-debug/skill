@@ -5,17 +5,25 @@ use std::borrow::Cow;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
 use std::str::FromStr;
 
+use core_policy::error::FrameworkError;
+
+type Result<T> = std::result::Result<T, FrameworkError>;
+
 const BLOCKED_HOST_SUFFIXES: &[&str] = &[".localhost", ".local", ".internal"];
 
 #[deprecated(note = "use validate_and_resolve_web_fetch_url for DNS pinning (TOCTOU safety)")]
-pub fn validate_web_fetch_url(url: &str) -> Result<(), String> {
-    let parsed =
-        reqwest::Url::parse(url.trim()).map_err(|_| format!("web_fetch invalid URL: {url}"))?;
+pub fn validate_web_fetch_url(url: &str) -> Result<()> {
+    let parsed = reqwest::Url::parse(url.trim())
+        .map_err(|e| FrameworkError::validation(format!("web_fetch invalid URL: {url}: {e}")))?;
     if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(format!("web_fetch only supports http(s) URLs: {url}"));
+        return Err(FrameworkError::validation(format!(
+            "web_fetch only supports http(s) URLs: {url}"
+        )));
     }
     let Some(host) = parsed.host_str() else {
-        return Err(format!("web_fetch URL missing host: {url}"));
+        return Err(FrameworkError::validation(format!(
+            "web_fetch URL missing host: {url}"
+        )));
     };
     validate_web_fetch_host(host)?;
     if let Some(port) = parsed.port() {
@@ -28,16 +36,20 @@ pub fn validate_web_fetch_url(url: &str) -> Result<(), String> {
 /// Returns the parsed URL and resolved addresses for DNS pinning to prevent rebinding TOCTOU.
 pub fn validate_and_resolve_web_fetch_url(
     url: &str,
-) -> Result<(reqwest::Url, Vec<std::net::SocketAddr>), String> {
+) -> Result<(reqwest::Url, Vec<std::net::SocketAddr>)> {
     let trimmed = url.trim();
     let parsed = reqwest::Url::parse(trimmed)
-        .map_err(|_| format!("web_fetch invalid URL for DNS pin: {url}"))?;
+        .map_err(|e| FrameworkError::validation(format!("web_fetch invalid URL for DNS pin: {url}: {e}")))?;
     if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(format!("web_fetch only supports http(s) URLs: {url}"));
+        return Err(FrameworkError::validation(format!(
+            "web_fetch only supports http(s) URLs: {url}"
+        )));
     }
     let host = parsed
         .host_str()
-        .ok_or_else(|| format!("web_fetch URL missing host: {url}"))?;
+        .ok_or_else(|| {
+            FrameworkError::validation(format!("web_fetch URL missing host: {url}"))
+        })?;
     validate_web_fetch_host_basic(host)?;
     if let Some(port) = parsed.port() {
         validate_web_fetch_port(port)?;
@@ -50,10 +62,10 @@ pub fn validate_and_resolve_web_fetch_url(
     Ok((parsed, addrs))
 }
 
-pub fn resolve_web_fetch_redirect(base: &reqwest::Url, location: &str) -> Result<String, String> {
+pub fn resolve_web_fetch_redirect(base: &reqwest::Url, location: &str) -> Result<String> {
     let next = base
         .join(location.trim())
-        .map_err(|err| format!("web_fetch invalid redirect location: {err}"))?;
+        .map_err(|e| FrameworkError::validation(format!("web_fetch invalid redirect location: {e}")))?;
     let next_str = next.to_string();
     // Use validate_and_resolve to close DNS-rebind TOCTOU — single pass DNS resolve + IP check.
     // This prevents the redirect target from re-resolving to a private IP between validation
@@ -62,18 +74,22 @@ pub fn resolve_web_fetch_redirect(base: &reqwest::Url, location: &str) -> Result
     Ok(next_str)
 }
 
-fn validate_web_fetch_port(port: u16) -> Result<(), String> {
+fn validate_web_fetch_port(port: u16) -> Result<()> {
     if port == 0 {
-        return Err("web_fetch port 0 is not allowed".to_string());
+        return Err(FrameworkError::validation(
+            "web_fetch port 0 is not allowed",
+        ));
     }
     Ok(())
 }
 
 /// Host checks that do NOT require DNS resolution (string-level only).
-pub(crate) fn validate_web_fetch_host_basic(host: &str) -> Result<(), String> {
+pub(crate) fn validate_web_fetch_host_basic(host: &str) -> Result<()> {
     let host = host.trim().trim_end_matches('.');
     if host.is_empty() {
-        return Err("web_fetch URL missing host".to_string());
+        return Err(FrameworkError::validation(
+            "web_fetch URL missing host",
+        ));
     }
     let lower: Cow<'_, str> = if host.bytes().all(|b| !b.is_ascii_uppercase()) {
         Cow::Borrowed(host)
@@ -81,21 +97,28 @@ pub(crate) fn validate_web_fetch_host_basic(host: &str) -> Result<(), String> {
         Cow::Owned(host.to_ascii_lowercase())
     };
     if lower == "localhost" || lower.ends_with(".localhost") {
-        return Err(format!("web_fetch blocked host: {host}"));
+        return Err(FrameworkError::validation(format!(
+            "web_fetch blocked host: {host}"
+        )));
     }
     for suffix in BLOCKED_HOST_SUFFIXES {
         if lower.ends_with(suffix) {
-            return Err(format!("web_fetch blocked host suffix: {host}"));
+            return Err(FrameworkError::validation(format!(
+                "web_fetch blocked host suffix: {host}"
+            )));
         }
     }
     if let Ok(ip) = IpAddr::from_str(host)
-        && is_forbidden_web_fetch_ip(&ip) {
-            return Err(format!("web_fetch blocked IP: {host}"));
-        }
+        && is_forbidden_web_fetch_ip(&ip)
+    {
+        return Err(FrameworkError::validation(format!(
+            "web_fetch blocked IP: {host}"
+        )));
+    }
     Ok(())
 }
 
-fn validate_web_fetch_host(host: &str) -> Result<(), String> {
+fn validate_web_fetch_host(host: &str) -> Result<()> {
     validate_web_fetch_host_basic(host)?;
     // Hostname-only: resolve DNS to catch hostnames pointing to private IPs.
     // Port is irrelevant for SSRF IP checks; use 443 for the lookup.
@@ -109,21 +132,21 @@ fn validate_web_fetch_host(host: &str) -> Result<(), String> {
         .unwrap_or(host);
     let addrs = (lookup_host, 443u16)
         .to_socket_addrs()
-        .map_err(|err| format!("web_fetch DNS lookup failed for {host}: {err}"))?;
+        .map_err(|err| FrameworkError::validation(format!("web_fetch DNS lookup failed for {host}: {err}")))?;
     let mut any = false;
     for addr in addrs {
         any = true;
         if is_forbidden_web_fetch_ip(&addr.ip()) {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "web_fetch blocked resolved address for {host}: {}",
                 addr.ip()
-            ));
+            )));
         }
     }
     if !any {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "web_fetch DNS lookup returned no addresses for {host}"
-        ));
+        )));
     }
     Ok(())
 }
@@ -168,26 +191,26 @@ fn is_forbidden_web_fetch_ipv6(ip: Ipv6Addr) -> bool {
 pub fn resolve_web_fetch_addresses(
     host: &str,
     port: u16,
-) -> Result<Vec<std::net::SocketAddr>, String> {
+) -> Result<Vec<std::net::SocketAddr>> {
     let lookup_host = host
         .strip_prefix('[')
         .and_then(|h| h.strip_suffix(']'))
         .unwrap_or(host);
     let addrs: Vec<std::net::SocketAddr> = (lookup_host, port)
         .to_socket_addrs()
-        .map_err(|err| format!("web_fetch DNS lookup failed for {host}: {err}"))?
+        .map_err(|err| FrameworkError::validation(format!("web_fetch DNS lookup failed for {host}: {err}")))?
         .collect();
     if addrs.is_empty() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "web_fetch DNS lookup returned no addresses for {host}"
-        ));
+        )));
     }
     for addr in &addrs {
         if is_forbidden_web_fetch_ip(&addr.ip()) {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "web_fetch blocked resolved address for {host}: {}",
                 addr.ip()
-            ));
+            )));
         }
     }
     Ok(addrs)
@@ -196,20 +219,20 @@ pub fn resolve_web_fetch_addresses(
 /// Validates URLs for `browser_open` - blocks non-http(s) schemes (`file://`,
 /// `data:`, `javascript:`, etc.) and reuses the web_fetch SSRF guards
 /// (private IPs, metadata endpoints, blocked host suffixes).
-pub fn validate_browser_open_url(url: &str) -> Result<(), String> {
+pub fn validate_browser_open_url(url: &str) -> Result<()> {
     let trimmed = url.trim();
-    let parsed =
-        reqwest::Url::parse(trimmed).map_err(|_| format!("browser_open invalid URL: {url}"))?;
+    let parsed = reqwest::Url::parse(trimmed)
+        .map_err(|e| FrameworkError::validation(format!("browser_open invalid URL: {url}: {e}")))?;
     if !matches!(parsed.scheme(), "http" | "https") {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "browser_open blocked scheme '{}' - only http(s) allowed: {}",
             parsed.scheme(),
             url
-        ));
+        )));
     }
     let host = parsed
         .host_str()
-        .ok_or_else(|| format!("browser_open URL missing host: {url}"))?;
+        .ok_or_else(|| FrameworkError::validation(format!("browser_open URL missing host: {url}")))?;
     validate_web_fetch_host(host)?;
     if let Some(port) = parsed.port() {
         validate_web_fetch_port(port)?;
