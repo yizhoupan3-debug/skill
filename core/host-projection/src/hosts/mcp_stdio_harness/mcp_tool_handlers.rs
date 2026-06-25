@@ -153,8 +153,8 @@ impl ToolHandler for ToolDomainTools {
     }
     fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
         match tool_name {
-            "route_tool" => tool_route_tool(args, &ctx.repo_root),
-            "search_tools" => tool_search_tools(args, &ctx.repo_root),
+            "route_tool" => tool_route_tool(args, &ctx.repo_root, &ctx.host_id),
+            "search_tools" => tool_search_tools(args, &ctx.repo_root, &ctx.host_id),
             "tool_registry_status" => tool_registry_status(),
             _ => Err(format!("ToolDomainTools: unknown tool: {tool_name}")),
         }
@@ -188,28 +188,48 @@ fn resolve_tool_registry_path(repo_root: &std::path::Path) -> std::path::PathBuf
 }
 
 /// route_tool: route a natural language query to the best-matching MCP tool.
-fn tool_route_tool(args: &Value, ctx_repo_root: &std::path::Path) -> Result<String, String> {
+/// Uses the connection-level host_id by default; args can override with `host_id`.
+fn tool_route_tool(
+    args: &Value,
+    ctx_repo_root: &std::path::Path,
+    host_id: &str,
+) -> Result<String, String> {
     let query = args.get("query")
         .and_then(|v| v.as_str())
         .ok_or("route_tool: missing 'query' parameter")?;
+    let effective_host = args
+        .get("host_id")
+        .and_then(Value::as_str)
+        .filter(|h| !h.is_empty())
+        .unwrap_or(host_id);
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
-    let decision = tool_routing_engine::routing::route_tool(query, &registry_path, None)?
+    let decision = tool_routing_engine::routing::route_tool(query, &registry_path, Some(effective_host))?
         .ok_or_else(|| format!("route_tool: no matching tool found for query '{query}'"))?;
     serde_json::to_string(&decision).map_err(|e| e.to_string())
 }
 
 /// search_tools: search the tool registry and return top-k results.
-fn tool_search_tools(args: &Value, ctx_repo_root: &std::path::Path) -> Result<String, String> {
+/// Uses the connection-level host_id by default; args can override with `host_id`.
+fn tool_search_tools(
+    args: &Value,
+    ctx_repo_root: &std::path::Path,
+    host_id: &str,
+) -> Result<String, String> {
     let query = args.get("query")
         .and_then(|v| v.as_str())
         .ok_or("search_tools: missing 'query' parameter")?;
     let top_k = args.get("top_k")
         .and_then(|v| v.as_u64())
         .unwrap_or(5) as usize;
+    let effective_host = args
+        .get("host_id")
+        .and_then(Value::as_str)
+        .filter(|h| !h.is_empty())
+        .unwrap_or(host_id);
     let registry_path = resolve_tool_registry_path(ctx_repo_root);
     let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
         .map_err(|e| format!("search_tools: failed to load registry: {e}"))?;
-    let results = tool_routing_engine::search::search_tools(query, &records, top_k);
+    let results = tool_routing_engine::search::search_tools(query, &records, top_k, Some(effective_host));
     serde_json::to_string(&results).map_err(|e| e.to_string())
 }
 

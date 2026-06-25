@@ -533,6 +533,12 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
         .iter()
         .filter_map(|s| s.parse().ok())
         .collect();
+    if initial_addrs.is_empty() && !initial_addr_strs.is_empty() {
+        return Err(format!(
+            "web_fetch: DNS resolution returned unparseable addresses for '{}': {initial_addr_strs:?}",
+            parsed_url.host_str().unwrap_or("?")
+        ));
+    }
     let max_bytes = arguments
         .get("max_bytes")
         .and_then(Value::as_u64)
@@ -579,6 +585,12 @@ pub(super) fn tool_web_fetch(arguments: &Value) -> Result<String, String> {
                     .iter()
                     .filter_map(|s| s.parse().ok())
                     .collect();
+            if rp_addrs.is_empty() {
+                return Err(format!(
+                    "web_fetch: redirect DNS resolution returned unparseable addresses for '{rp_host}': \
+                     redirect addresses could not be parsed"
+                ));
+            }
             // Rebuild client with pinned DNS for redirect target — proxy is inherited via build_web_fetch_client.
             client = build_web_fetch_client(rp_host, &rp_addrs)?;
             continue;

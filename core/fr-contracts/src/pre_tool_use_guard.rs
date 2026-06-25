@@ -222,7 +222,7 @@ pub fn evaluate_pre_tool_use_guard(
         .unwrap_or("evaluate")
         .trim()
         .to_ascii_lowercase();
-    let digest = approval_digest(&host_id, &tool_name, &request.tool_input);
+    let digest = approval_digest(&host_id, &tool_name, &request.tool_input)?;
 
     if phase == "approve" {
         let approved = request.approved.unwrap_or(false);
@@ -354,16 +354,18 @@ fn build_response(
     }
 }
 
-fn approval_digest(host_id: &str, tool_name: &str, tool_input: &Value) -> String {
+fn approval_digest(host_id: &str, tool_name: &str, tool_input: &Value) -> Result<String, String> {
     let canonical = json!({
         "host_id": host_id,
         "tool_name": tool_name,
         "tool_input": tool_input,
     });
-    let bytes = serde_json::to_vec(&canonical).expect("serialize canonical Value for approval_digest");
+    let bytes = serde_json::to_vec(&canonical).map_err(|err| {
+        format!("serialize canonical Value for approval_digest failed: {err}")
+    })?;
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    format!("sha256:{}", hex::encode(hasher.finalize()))
+    Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
 }
 
 fn classify_high_risk(
@@ -490,7 +492,7 @@ fn extract_shell_command(tool_input: &Value) -> Option<String> {
 }
 
 fn extract_file_path(tool_input: &Value) -> Option<String> {
-    for key in ["path", "file_path", "target_file", "filePath"] {
+    for key in ["path", "file_path", "target_file", "filePath", "notebook_path"] {
         if let Some(text) = tool_input.get(key).and_then(Value::as_str) {
             let trimmed = text.trim();
             if !trimmed.is_empty() {
@@ -503,7 +505,7 @@ fn extract_file_path(tool_input: &Value) -> Option<String> {
 
 /// Check if tool_input contains a path with `..` traversal components.
 fn has_path_traversal(tool_input: &Value) -> bool {
-    for key in ["path", "file_path", "target_file", "filePath"] {
+    for key in ["path", "file_path", "target_file", "filePath", "notebook_path"] {
         if let Some(text) = tool_input.get(key).and_then(Value::as_str) {
             let p = Path::new(text.trim());
             if p.components().any(|c| c == Component::ParentDir) {

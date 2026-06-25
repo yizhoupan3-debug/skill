@@ -16,7 +16,6 @@
     "builtin": 0.0,
     "research": 0.0,
     "external": -2.0,
-    "external-binary": -2.0,
     "independent": -1.0
   },
   "fuzzy_min_similarity": 0.35

@@ -24,6 +24,7 @@ pub fn search_tools(
     query: &str,
     records: &[McpToolRecord],
     top_k: usize,
+    host_id: Option<&str>,
 ) -> Vec<McpToolDecision> {
     if records.is_empty() || query.trim().is_empty() || top_k == 0 {
         return Vec::new();
@@ -37,10 +38,22 @@ pub fn search_tools(
     let query_lower = query.to_lowercase();
     let query_tokens = tokenize_text(&query_lower);
 
+    // Pre-compute host filter for efficiency
+    let hid_lower = host_id.map(|h| h.to_lowercase());
+
     // Primary: token-based scoring
     let mut results: Vec<McpToolDecision> = records
         .iter()
         .filter_map(|record| {
+            // Apply host filtering: penalize host-mismatched records
+            if let Some(ref hid) = hid_lower {
+                if !record.host_platforms.is_empty()
+                    && !record.host_platforms.iter().any(|p| p.to_lowercase() == *hid)
+                {
+                    return None; // Exclude host-mismatched records from results
+                }
+            }
+
             let (score, reasons, matched_token_count) =
                 score_tool(record, &query_lower, &query_tokens, &weights);
 
@@ -61,9 +74,17 @@ pub fn search_tools(
         })
         .collect();
 
-    // Fallback: fuzzy rescue (trigram Jaccard on trigger hints)
+    // Fallback: fuzzy rescue (trigram Jaccard on trigger hints), respecting host filter
     if results.is_empty() {
         for record in records {
+            // Apply host filtering in fuzzy rescue too
+            if let Some(ref hid) = hid_lower {
+                if !record.host_platforms.is_empty()
+                    && !record.host_platforms.iter().any(|p| p.to_lowercase() == *hid)
+                {
+                    continue;
+                }
+            }
             if let Some(fuzzy_score) = best_fuzzy_score(&query_lower, &record.trigger_hints) {
                 results.push(McpToolDecision {
                     decision_schema_version: DECISION_SCHEMA_VERSION.to_string(),
@@ -117,7 +138,7 @@ mod tests {
             test_tool_record("browser_screenshot", &["截图", "浏览器"]),
             test_tool_record("browser_click", &["点击", "浏览器"]),
         ];
-        let results = search_tools("pdf", &records, 2);
+        let results = search_tools("pdf", &records, 2, None);
         assert_eq!(results.len(), 2);
         assert!(results[0].selected_tool.contains("pdf"));
     }
@@ -125,13 +146,13 @@ mod tests {
     #[test]
     fn search_empty_query() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
-        assert!(search_tools("", &records, 10).is_empty());
+        assert!(search_tools("", &records, 10, None).is_empty());
     }
 
     #[test]
     fn search_zero_top_k() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
-        assert!(search_tools("pdf", &records, 0).is_empty());
+        assert!(search_tools("pdf", &records, 0, None).is_empty());
     }
 
     #[test]
@@ -142,9 +163,32 @@ mod tests {
         )];
         // "screeenshot" is a typo that scores 0 in token-based scoring but
         // fuzzy-matches "screenshot" via trigram Jaccard
-        let results = search_tools("screeenshot", &records, 5);
+        let results = search_tools("screeenshot", &records, 5, None);
         assert!(!results.is_empty(), "typo should fuzzy-match in search");
         assert!(results[0].fuzzy_match, "should be flagged as fuzzy match");
         assert_eq!(results[0].selected_tool, "browser_screenshot");
+    }
+
+    #[test]
+    fn search_host_filter_excludes_mismatch() {
+        let records = vec![
+            test_tool_record("pdf_read", &["pdf", "文档"]),
+            test_tool_record("browser_screenshot", &["截图", "screenshot"]),
+        ];
+        // Query matches "screenshot" but host is "cursor" — pdf_read has host_platforms=["claude"]
+        // Both records should be excluded by host filter
+        let results = search_tools("screenshot", &records, 5, Some("cursor"));
+        assert!(results.is_empty(), "host filter should exclude all records");
+    }
+
+    #[test]
+    fn search_host_filter_fuzzy_rescue() {
+        let records = vec![test_tool_record(
+            "browser_screenshot",
+            &["screenshot"],
+        )];
+        // Fuzzy match but host mismatch — must not appear in results
+        let results = search_tools("screeenshot", &records, 5, Some("cursor"));
+        assert!(results.is_empty(), "fuzzy rescue must not bypass host filter");
     }
 }
