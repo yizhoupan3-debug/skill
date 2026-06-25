@@ -27,7 +27,7 @@ test-all:
     cargo test --manifest-path core/routing-engine/Cargo.toml --lib
     cargo test --manifest-path core/loop-engine/Cargo.toml --lib
     cargo test --manifest-path core/core-policy/Cargo.toml --lib
-    cargo test --manifest-path core/framework-runtime/Cargo.toml --lib
+    cargo test --manifest-path core/fr-exec/Cargo.toml --lib
     cargo test --manifest-path core/runtime-core-contracts/Cargo.toml --lib
     cargo test --manifest-path core/research-harness/Cargo.toml --lib
 

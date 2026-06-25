@@ -9,7 +9,6 @@
     "session_start",
     "trigger_hints",
     "source",
-    "source_position",
     "skill_path",
     "host_platforms",
     "kind",
@@ -48,7 +47,6 @@
         "多 agent 执行"
       ],
       "project",
-      0,
       "skills/agent-swarm-orchestration/SKILL.md",
       [
         "claude",
@@ -118,7 +116,6 @@
         "金融数据"
       ],
       "local",
-      10,
       "skills/algo-trading/SKILL.md",
       [
         "claude",
@@ -188,7 +185,6 @@
         "自动突破"
       ],
       "local",
-      0,
       "skills/autoresearch/SKILL.md",
       [
         "claude",
@@ -244,7 +240,6 @@
         "文献引用管理"
       ],
       "project",
-      0,
       "skills/citation-management/SKILL.md",
       [
         "claude",
@@ -305,7 +300,6 @@
         "深度代码审查"
       ],
       "project",
-      0,
       "skills/code-review-deep/SKILL.md",
       [
         "claude",
@@ -377,7 +371,6 @@
         "verify claims"
       ],
       "local",
-      0,
       "skills/deep-research/SKILL.md",
       [
         "claude",
@@ -425,7 +418,6 @@
         "澄清需求"
       ],
       "runtime",
-      0,
       "skills/deepinterview/SKILL.md",
       [
         "claude",
@@ -487,7 +479,6 @@
         "风格漂移"
       ],
       "project",
-      0,
       "skills/design-md/SKILL.md",
       [
         "claude",
@@ -554,7 +545,6 @@
         "研究流程图"
       ],
       "project",
-      0,
       "skills/diagramming/SKILL.md",
       [
         "claude",
@@ -607,7 +597,6 @@
         "表格或版式修复"
       ],
       "project",
-      0,
       "skills/doc/SKILL.md",
       [
         "claude",
@@ -675,7 +664,6 @@
         "邮件模板"
       ],
       "local",
-      10,
       "skills/email-template/SKILL.md",
       [
         "claude",
@@ -733,7 +721,6 @@
         "预注册"
       ],
       "project",
-      0,
       "skills/experiment-reproducibility/SKILL.md",
       [
         "claude",
@@ -784,7 +771,6 @@
         "量纲检查"
       ],
       "local",
-      0,
       "skills/formal-verification/SKILL.md",
       [
         "claude",
@@ -843,7 +829,6 @@
         "reviewer 意见处理"
       ],
       "project",
-      0,
       "skills/gh-address-comments/SKILL.md",
       [
         "claude",
@@ -922,7 +907,6 @@
         "编译失败"
       ],
       "project",
-      0,
       "skills/gh-fix-ci/SKILL.md",
       [
         "claude",
@@ -982,7 +966,6 @@
         "gitx"
       ],
       "runtime",
-      0,
       "skills/gitx/SKILL.md",
       [
         "claude",
@@ -1041,7 +1024,6 @@
         "知识卡片"
       ],
       "local",
-      10,
       "skills/infographic/SKILL.md",
       [
         "claude",
@@ -1091,7 +1073,6 @@
         "文献验证"
       ],
       "local",
-      0,
       "skills/literature-verification/SKILL.md",
       [
         "claude",
@@ -1144,7 +1125,6 @@
         "线性代数证明"
       ],
       "project",
-      0,
       "skills/math-derivation/SKILL.md",
       [
         "claude",
@@ -1201,7 +1181,6 @@
         "创建 MCP"
       ],
       "project",
-      0,
       "skills/mcp-server-management/SKILL.md",
       [
         "claude",
@@ -1274,7 +1253,6 @@
         "顶刊标准改稿"
       ],
       "project",
-      0,
       "skills/paper-workbench/SKILL.md",
       [
         "claude",
@@ -1329,7 +1307,6 @@
         "论文改稿"
       ],
       "project",
-      3,
       "skills/paper-workbench/SKILL.md",
       [
         "claude",
@@ -1369,7 +1346,6 @@
         "编辑 PDF"
       ],
       "project",
-      0,
       "skills/pdf/SKILL.md",
       [
         "claude",
@@ -1435,7 +1411,6 @@
         "调研计划"
       ],
       "project",
-      0,
       "skills/plan-mode/SKILL.md",
       [
         "claude",
@@ -1484,7 +1459,6 @@
         "风格检查"
       ],
       "local",
-      0,
       "skills/prose-verification/SKILL.md",
       [
         "claude",
@@ -1540,7 +1514,6 @@
         "全局 python 包"
       ],
       "project",
-      3,
       "skills/python-env-management/SKILL.md",
       [
         "claude",
@@ -1591,7 +1564,6 @@
         "种子检查"
       ],
       "local",
-      0,
       "skills/reproducibility-verification/SKILL.md",
       [
         "claude",
@@ -1656,7 +1628,6 @@
         "非手稿科研"
       ],
       "local",
-      0,
       "skills/research-discovery/SKILL.md",
       [
         "claude",
@@ -1719,7 +1690,6 @@
         "量纲分析"
       ],
       "local",
-      0,
       "skills/research-execution/SKILL.md",
       [
         "claude",
@@ -1786,7 +1756,6 @@
         "研究知识图谱可视化"
       ],
       "local",
-      0,
       "skills/research-knowledge-graph/SKILL.md",
       [
         "claude",
@@ -1840,7 +1809,6 @@
         "科研出图"
       ],
       "project",
-      0,
       "skills/scientific-figure-plotting/SKILL.md",
       [
         "claude",
@@ -1897,7 +1865,6 @@
         "triage"
       ],
       "project",
-      0,
       "skills/sentry/SKILL.md",
       [
         "claude",
@@ -1960,7 +1927,6 @@
         "重构简化"
       ],
       "project",
-      0,
       "skills/simplify/SKILL.md",
       [
         "claude",
@@ -2027,7 +1993,6 @@
         "边界重叠"
       ],
       "project",
-      0,
       "skills/skill-framework-developer/SKILL.md",
       [
         "claude",
@@ -2096,7 +2061,6 @@
         "调试"
       ],
       "local",
-      10,
       "skills/systematic-debugging/SKILL.md",
       [
         "claude",
@@ -2156,7 +2120,6 @@
         "生成演示文稿"
       ],
       "project",
-      0,
       "skills/slides/SKILL.md",
       [
         "claude",
@@ -2216,7 +2179,6 @@
         "xlsx"
       ],
       "project",
-      0,
       "skills/primary-runtime/spreadsheets/SKILL.md",
       [
         "claude",
@@ -2263,7 +2225,6 @@
         "需要多少样本量"
       ],
       "project",
-      0,
       "skills/statistical-analysis/SKILL.md",
       [
         "claude",
@@ -2314,7 +2275,6 @@
         "统计审查"
       ],
       "local",
-      0,
       "skills/statistical-verification/SKILL.md",
       [
         "claude",
@@ -2363,7 +2323,6 @@
         "结构验证"
       ],
       "local",
-      0,
       "skills/structure-verification/SKILL.md",
       [
         "claude",
@@ -2425,7 +2384,6 @@
         "论文配图"
       ],
       "project",
-      10,
       "skills/tikz-paper-figure/SKILL.md",
       [
         "claude",
@@ -2486,7 +2444,6 @@
         "科研文档更新"
       ],
       "runtime",
-      0,
       "skills/update/SKILL.md",
       [
         "claude",
@@ -2548,7 +2505,6 @@
         "看图"
       ],
       "project",
-      0,
       "skills/visual-review/SKILL.md",
       [
         "claude",
@@ -2591,6 +2547,61 @@
       [
         "gui automation"
       ]
+    ],
+    [
+      "goalx",
+      "L1",
+      "owner",
+      "none",
+      "P1",
+      "Guaranteed entry point for Goal management — create, checkpoint, amend, resume goals.",
+      "n/a",
+      [
+        "/goalx",
+        "goalx",
+        "goal:",
+        "Goal:",
+        "目标：",
+        "目标:",
+        "goal management",
+        "goal 管理",
+        "goal 模式",
+        "进入 goal"
+      ],
+      "runtime",
+      "skills/goalx/SKILL.md",
+      [
+        "claude",
+        "codex",
+        "cursor",
+        "opencode"
+      ],
+      "framework_command",
+      [],
+      null,
+      null,
+      null,
+      null,
+      {
+        "platforms": [
+          "supported"
+        ],
+        "tags": [
+          "goal",
+          "goalx",
+          "goal-management",
+          "framework-command"
+        ],
+        "version": "1.0.0"
+      },
+      "low",
+      [
+        "shell",
+        "git"
+      ],
+      null,
+      null,
+      []
     ]
   ]
 }

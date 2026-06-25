@@ -268,7 +268,10 @@ fn resolver_cli_prints_resolved_attach_path_on_success() {
     assert_eq!(stdout_trim(&completed), binding_path.display().to_string());
     let stderr = String::from_utf8_lossy(&completed.stderr);
     assert!(
-        stderr.is_empty() || stderr.contains("Compiling") || stderr.contains("Finished"),
+        stderr.is_empty()
+            || stderr.contains("Compiling")
+            || stderr.contains("Finished")
+            || stderr.contains("[router-rs "),
         "unexpected stderr: {stderr}"
     );
 }

@@ -15,13 +15,10 @@ pub use session_supervisor;
 pub use framework_kernel::framework_profile;
 
 // ── subdomain module groups ──
-pub use runtime_infra as infrastructure;
-pub use runtime_exit_gate as exit_gate;
 
 // │  backward-compatible re-exports from subdomain groups ─────────────────────
-pub use exit_gate::{quality_gate, schema_drift, harness_ops as harness_operator_nudges};
-pub use framework_extra::session_call as session_call_tracker;
-pub use infrastructure::{
+pub use runtime_exit_gate::{quality_gate, schema_drift};
+pub use runtime_infra::{
     kernel_bootstrap, stdio_transport, telemetry_emit,
 };
 pub use fr_exec::router_env_flags::*;
@@ -35,7 +32,7 @@ pub use rt_core_contracts::{
 // ── re-exports from core-state (flattened) ──
 pub use core_state::{
     step_ledger, task_state, task_state_aggregate,
-    state_manager as goal_drive, utils::{atomic_write, path_guard},
+    state_manager as goal_drive,
 };
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
 pub mod hook_timing;
@@ -177,14 +174,14 @@ pub fn register_host_projection_hooks() {
         );
 
         host_projection::hooks::register_session_call_tracker(
-            session_call_tracker::init_tracker,
+            framework_extra::session_call::init_tracker,
             |root, name, stats_json| {
                 let stats = stats_json.and_then(|v| {
-                    serde_json::from_value::<session_call_tracker::CacheStats>(v.clone()).ok()
+                    serde_json::from_value::<framework_extra::session_call::CacheStats>(v.clone()).ok()
                 });
-                session_call_tracker::record_tool_call(root, name, stats)
+                framework_extra::session_call::record_tool_call(root, name, stats)
             },
-            session_call_tracker::read_tracker_state,
+            framework_extra::session_call::read_tracker_state,
         );
 
         host_projection::hooks::register_router_rs_observation(
@@ -231,7 +228,7 @@ pub fn register_host_projection_hooks() {
             framework_extra::evidence::append_evidence_index_merged_row,
             telemetry_emit::hook_action_from_output,
             || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
-            session_call_tracker::check_anomalies,
+            framework_extra::session_call::check_anomalies,
         );
         host_projection::hooks::register_build_framework_runtime_snapshot_envelope_with_level(
             framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level,

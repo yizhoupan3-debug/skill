@@ -29,10 +29,6 @@ pub const SKILL_TIERS_JSON: &str = "SKILL_TIERS.json";
 pub const SKILL_HEALTH_MANIFEST_JSON: &str = "SKILL_HEALTH_MANIFEST.json";
 /// `skills/SKILL_LOADOUTS.json` — skill loadout profiles.
 pub const SKILL_LOADOUTS_JSON: &str = "SKILL_LOADOUTS.json";
-/// `skills/SKILL_MANIFEST.json`.
-pub const SKILL_MANIFEST_JSON: &str = "SKILL_MANIFEST.json";
-/// `skills/SKILL_ROUTING_INDEX.json`.
-pub const SKILL_ROUTING_INDEX_JSON: &str = "SKILL_ROUTING_INDEX.json";
 
 // ---------------------------------------------------------------------------
 // Configs (framework-level paths)
@@ -62,16 +58,10 @@ pub fn health_json(repo_root: &Path) -> PathBuf {
     skills_root(repo_root).join(SKILL_HEALTH_MANIFEST_JSON)
 }
 
-/// `repo_root/skills/SKILL_MANIFEST.json`
-pub fn manifest_json(repo_root: &Path) -> PathBuf {
-    skills_root(repo_root).join(SKILL_MANIFEST_JSON)
+/// `repo_root/skills/SKILL_LOADOUTS.json`
+pub fn loadouts_json(repo_root: &Path) -> PathBuf {
+    skills_root(repo_root).join(SKILL_LOADOUTS_JSON)
 }
-
-/// `repo_root/skills/SKILL_ROUTING_INDEX.json`
-pub fn index_json(repo_root: &Path) -> PathBuf {
-    skills_root(repo_root).join(SKILL_ROUTING_INDEX_JSON)
-}
-
 
 // ---------------------------------------------------------------------------
 // SKILL.md paths
@@ -80,11 +70,6 @@ pub fn index_json(repo_root: &Path) -> PathBuf {
 /// `repo_root/skills/{slug}/SKILL.md`
 pub fn skill_md(repo_root: &Path, slug: &str) -> PathBuf {
     skills_root(repo_root).join(slug).join("SKILL.md")
-}
-
-/// `repo_root/skills/SKILL_LOADOUTS.json`
-pub fn loadouts_json(repo_root: &Path) -> PathBuf {
-    skills_root(repo_root).join(SKILL_LOADOUTS_JSON)
 }
 
 // ---------------------------------------------------------------------------

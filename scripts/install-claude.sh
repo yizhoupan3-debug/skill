@@ -99,6 +99,7 @@ install_host() {
     --artifact-root "$PROJECT_ROOT/artifacts" \
     --scope "$scope" \
     --to "$tool"
+}
 
 FRAMEWORK_ROOT_ARG=""
 PROJECT_ROOT=""

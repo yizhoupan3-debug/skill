@@ -202,22 +202,6 @@ fn parse_review_gate_stop_max_nudges_cap(raw: Option<&str>) -> Option<u32> {
     Some(8)
 }
 
-/// Read an env var with legacy fallback. Tries new_name first, then old_name.
-/// Logs a deprecation warning on stderr when legacy name is used.
-pub fn env_with_legacy_fallback(new_name: &str, old_name: &str) -> Option<String> {
-    match std::env::var(new_name) {
-        Ok(val) => Some(val),
-        Err(_) => {
-            if let Ok(val) = std::env::var(old_name) {
-                eprintln!("[router-rs] DEPRECATED: use {new_name} instead of {old_name}");
-                Some(val)
-            } else {
-                None
-            }
-        }
-    }
-}
-
 fn parse_usize_clamped(
     canonical_key: &'static str,
     legacy_key: &'static str,
@@ -246,6 +230,113 @@ fn parse_usize_clamped(
             }
         }
     }
+}
+
+// ── L0/L4 shared env readers (consolidated from fr-exec / host-projection hooks.rs) ──
+
+/// Thin alias for fr-exec / hooks.rs re-export chains.
+pub fn router_rs_env_enabled_default_true(var_name: &str) -> bool {
+    env_enabled_default_true(var_name)
+}
+
+/// Thin alias for fr-exec / hooks.rs re-export chains.
+pub fn router_rs_env_enabled_default_false(var_name: &str) -> bool {
+    env_enabled_default_false(var_name)
+}
+
+pub fn router_rs_operator_inject_globally_enabled() -> bool {
+    env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
+}
+
+/// `ROUTER_RS_PRE_GOAL_ENABLED` — default false (opt-in).
+pub fn router_rs_pre_goal_enabled() -> bool {
+    env_enabled_default_false("ROUTER_RS_PRE_GOAL_ENABLED")
+}
+
+/// Canonical `ROUTER_RS_HOOK_SILENT`; legacy `ROUTER_RS_CURSOR_HOOK_SILENT` — default false.
+pub fn router_rs_hook_silent_enabled() -> bool {
+    env_enabled_default_false("ROUTER_RS_HOOK_SILENT")
+        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_SILENT")
+}
+
+/// Hook outbound context max chars (clamped [1024, 65536], default 8192).
+/// Canonical `ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`; legacy `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`.
+pub fn router_rs_hook_outbound_context_max_bytes() -> usize {
+    parse_usize_clamped(
+        "ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
+        "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS",
+        8192, 1024, 65536,
+    )
+}
+
+/// Canonical `ROUTER_RS_PRE_GOAL_STRICT_DISK`; legacy `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK`.
+///
+/// Canonical explicitly set → evaluate only canonical (default_true: set to "0"/"false" = disabled);
+/// canonical unset → fall through to legacy (default_true: unset = enabled).
+/// This preserves backward compatibility: `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` alone works.
+pub fn router_rs_pre_goal_strict_disk_enabled() -> bool {
+    if std::env::var("ROUTER_RS_PRE_GOAL_STRICT_DISK").is_ok() {
+        return env_enabled_default_true("ROUTER_RS_PRE_GOAL_STRICT_DISK");
+    }
+    env_enabled_default_true("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK")
+}
+
+/// Canonical `ROUTER_RS_HOOK_STATE_FAIL_OPEN`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN`.
+pub fn router_rs_hook_state_fail_open_enabled() -> bool {
+    env_enabled_default_false("ROUTER_RS_HOOK_STATE_FAIL_OPEN")
+        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN")
+}
+
+fn parse_env_u32(key: &str) -> Option<u32> {
+    std::env::var(key).ok().and_then(|v| v.trim().parse().ok())
+}
+
+/// Canonical `ROUTER_RS_HOOK_STATE_LOCK_RETRIES`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES` (default 100).
+pub fn router_rs_hook_state_lock_retries() -> u32 {
+    parse_env_u32("ROUTER_RS_HOOK_STATE_LOCK_RETRIES")
+        .or_else(|| parse_env_u32("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES"))
+        .unwrap_or(100)
+}
+
+/// Canonical `ROUTER_RS_HOOK_STATE_FILE_SYNC`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC`.
+pub fn router_rs_hook_state_file_sync_enabled() -> bool {
+    env_enabled_default_false("ROUTER_RS_HOOK_STATE_FILE_SYNC")
+        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC")
+}
+
+/// Canonical `ROUTER_RS_HOOK_STATE_DIR_SYNC`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC`.
+pub fn router_rs_hook_state_dir_sync_enabled() -> bool {
+    env_enabled_default_false("ROUTER_RS_HOOK_STATE_DIR_SYNC")
+        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC")
+}
+
+/// Canonical `ROUTER_RS_CARGO_CHECK_SYNC`; legacy `ROUTER_RS_CURSOR_CARGO_CHECK_SYNC`.
+pub fn router_rs_cargo_check_sync_enabled() -> bool {
+    env_enabled_default_false("ROUTER_RS_CARGO_CHECK_SYNC")
+        || env_enabled_default_false("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC")
+}
+
+/// Canonical `ROUTER_RS_HOOK_STATE_LEGACY_FULL_SWEEP`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP`.
+pub fn router_rs_hook_state_legacy_full_sweep_enabled() -> bool {
+    env_enabled_default_false("ROUTER_RS_HOOK_STATE_LEGACY_FULL_SWEEP")
+        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP")
+}
+
+fn parse_env_u64(key: &str) -> Option<u64> {
+    std::env::var(key).ok().and_then(|v| v.trim().parse().ok())
+}
+
+/// Canonical `ROUTER_RS_HOOK_STATE_STALE_SWEEP_DAYS`; legacy `ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS` (default 7).
+pub fn router_rs_hook_state_stale_sweep_days() -> u64 {
+    parse_env_u64("ROUTER_RS_HOOK_STATE_STALE_SWEEP_DAYS")
+        .or_else(|| parse_env_u64("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS"))
+        .unwrap_or(7)
+}
+
+/// Canonical `ROUTER_RS_HOOK_LEGACY_SUBTRACTED_EVENTS`; legacy `ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS`.
+pub fn router_rs_hook_legacy_subtracted_events_enabled() -> bool {
+    env_enabled_default_false("ROUTER_RS_HOOK_LEGACY_SUBTRACTED_EVENTS")
+        || env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS")
 }
 
 // ── Safe env var wrappers (eliminates ~100 unsafe blocks across crates) ──

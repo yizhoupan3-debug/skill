@@ -113,7 +113,7 @@ pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
     "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
 
 // ────────────────────────────────────────────────────────────────
-// router_env_flags: thin wrappers over core_policy::env_flags
+// router_env_flags: delegates to core_policy::env_flags (single source of truth)
 // ────────────────────────────────────────────────────────────────
 
 pub fn router_rs_env_enabled_default_true(var_name: &str) -> bool {
@@ -125,25 +125,19 @@ pub fn router_rs_env_enabled_default_false(var_name: &str) -> bool {
 }
 
 pub fn router_rs_operator_inject_globally_enabled() -> bool {
-    router_rs_env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
+    core_policy::env_flags::router_rs_operator_inject_globally_enabled()
 }
 
 pub fn router_rs_hook_legacy_subtracted_events_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_HOOK_LEGACY_SUBTRACTED_EVENTS")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS")
+    core_policy::env_flags::router_rs_hook_legacy_subtracted_events_enabled()
 }
 
 pub fn router_rs_hook_silent_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_HOOK_SILENT")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_SILENT")
+    core_policy::env_flags::router_rs_hook_silent_enabled()
 }
 
 pub fn router_rs_hook_outbound_context_max_bytes() -> usize {
-    let key_canonical = "ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS";
-    let key_legacy = "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS";
-    parse_env_usize(key_canonical)
-        .or_else(|| parse_env_usize(key_legacy))
-        .unwrap_or(8192)
+    core_policy::env_flags::router_rs_hook_outbound_context_max_bytes()
 }
 
 /// Delegates to core-policy's canonical implementation (single source of truth).
@@ -152,29 +146,23 @@ pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
 }
 
 pub fn router_rs_pre_goal_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_PRE_GOAL_ENABLED")
+    core_policy::env_flags::router_rs_pre_goal_enabled()
 }
 
 pub fn router_rs_hook_state_lock_retries() -> u32 {
-    parse_env_u32("ROUTER_RS_HOOK_STATE_LOCK_RETRIES")
-        .or_else(|| parse_env_u32("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES"))
-        .unwrap_or(8)
+    core_policy::env_flags::router_rs_hook_state_lock_retries()
 }
 
 pub fn router_rs_hook_state_file_sync_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_HOOK_STATE_FILE_SYNC")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC")
+    core_policy::env_flags::router_rs_hook_state_file_sync_enabled()
 }
 
 pub fn router_rs_hook_state_dir_sync_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_HOOK_STATE_DIR_SYNC")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC")
+    core_policy::env_flags::router_rs_hook_state_dir_sync_enabled()
 }
 
 pub fn router_rs_review_pending_cycle_max() -> usize {
-    parse_env_usize("ROUTER_RS_REVIEW_PENDING_CYCLE_MAX")
-        .or_else(|| parse_env_usize("ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX"))
-        .unwrap_or(3)
+    core_policy::env_flags::router_rs_review_pending_cycle_max()
 }
 
 pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
@@ -185,34 +173,27 @@ pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
             .or_else(|| std::env::var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES").ok());
         raw.as_ref()?;
     }
-    parse_env_u32("ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES")
-        .or_else(|| parse_env_u32("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES"))
+    core_policy::env_flags::router_rs_review_gate_stop_max_nudges_cap()
 }
 
 pub fn router_rs_pre_goal_strict_disk_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_PRE_GOAL_STRICT_DISK")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK")
+    core_policy::env_flags::router_rs_pre_goal_strict_disk_enabled()
 }
 
 pub fn router_rs_hook_state_fail_open_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_HOOK_STATE_FAIL_OPEN")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN")
+    core_policy::env_flags::router_rs_hook_state_fail_open_enabled()
 }
 
 pub fn router_rs_cargo_check_sync_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CARGO_CHECK_SYNC")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC")
+    core_policy::env_flags::router_rs_cargo_check_sync_enabled()
 }
 
 pub fn router_rs_hook_state_legacy_full_sweep_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_HOOK_STATE_LEGACY_FULL_SWEEP")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP")
+    core_policy::env_flags::router_rs_hook_state_legacy_full_sweep_enabled()
 }
 
 pub fn router_rs_hook_state_stale_sweep_days() -> u64 {
-    parse_env_u64("ROUTER_RS_HOOK_STATE_STALE_SWEEP_DAYS")
-        .or_else(|| parse_env_u64("ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS"))
-        .unwrap_or(7)
+    core_policy::env_flags::router_rs_hook_state_stale_sweep_days()
 }
 
 pub fn router_rs_sessionstart_context_max_bytes() -> usize {
@@ -335,14 +316,6 @@ pub fn sweep_orphan_lock_files(hook_state_dir: &Path) -> usize {
 }
 
 fn parse_env_usize(var: &str) -> Option<usize> {
-    std::env::var(var).ok().and_then(|v| v.trim().parse().ok())
-}
-
-fn parse_env_u32(var: &str) -> Option<u32> {
-    std::env::var(var).ok().and_then(|v| v.trim().parse().ok())
-}
-
-fn parse_env_u64(var: &str) -> Option<u64> {
     std::env::var(var).ok().and_then(|v| v.trim().parse().ok())
 }
 

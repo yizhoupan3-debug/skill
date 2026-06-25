@@ -62,12 +62,34 @@ fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
             .contains("never resolves or fills project_root")
     );
 
+    // Run generated-artifacts-status against a clean temp framework to avoid
+    // validation issues with real project projection files (.claude/rules/framework.md).
+    let tmp = tempdir().unwrap();
+    let tmp_framework = tmp.path().join("framework");
+    seed_framework_markers(&tmp_framework);
+    // Write a GENERATED_ARTIFACTS.json manifest declaring configs/framework/FRAMEWORK_SURFACE_POLICY.json
+    write_json(
+        &tmp_framework.join("configs/framework/GENERATED_ARTIFACTS.json"),
+        &json!({
+            "schema_version": "framework-generated-artifacts-manifest-v1",
+            "generated_artifacts": [{
+                "path": "configs/framework/FRAMEWORK_SURFACE_POLICY.json",
+                "generator": "true",
+                "compare": "byte-for-byte"
+            }]
+        }),
+    );
+    write_text(
+        &tmp_framework.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json"),
+        r#"{"status":"fresh"}"#,
+    );
+
     let status = router_rs_json(&[
         "framework",
         "host-integration",
         "generated-artifacts-status",
         "--framework-root",
-        framework_root.to_str().unwrap(),
+        tmp_framework.to_str().unwrap(),
         "--skip-generator-run",
     ]);
     assert_eq!(

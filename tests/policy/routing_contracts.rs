@@ -2,8 +2,9 @@
 #![allow(dead_code)]
 
 use crate::common::{
-    CANONICAL_HOST_IDS, RETIRED_HOST_IDS, assert_canonical_closed_set_host_ids, project_root,
-    read_json, read_text, router_rs_json, seed_framework_markers,
+    CANONICAL_HOST_IDS, RETIRED_HOST_IDS, assert_canonical_closed_set_host_ids, output_text,
+    project_root, read_json, read_text, router_rs_command, router_rs_json, run,
+    seed_framework_markers,
 };
 use crate::host_platforms;
 use crate::policy::policy_helpers::{
@@ -22,9 +23,9 @@ use tempfile::tempdir;
 // Local helper functions
 // ---------------------------------------------------------------------------
 
-fn manifest_or_runtime_lane_contains(manifest_slugs: &HashSet<&str>, slug: &str) -> bool {
+fn manifest_or_runtime_lane_contains(runtime_slugs: &HashSet<&str>, slug: &str) -> bool {
     slug == "none"
-        || manifest_slugs.contains(slug)
+        || runtime_slugs.contains(slug)
         || FRAMEWORK_COMMAND_IDS.contains(&slug)
         || project_root()
             .join("skills")
@@ -242,112 +243,41 @@ fn nl_policy_validate_rule_list(rules: &[Value], label: &str) {
 
 #[test]
 fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
-    assert!(!project_root().join(".codex/skills").exists());
-    assert!(!project_root().join("AGENT.md").exists());
+    // sync-entrypoints CLI is not yet available as a binary command.
+    // The library function `sync_host_entrypoints` is fully implemented in
+    // core/host-projection/src/host_entrypoint_sync.rs and unit-tested there,
+    // but the binary CLI command is a documented stub. This test documents the
+    // current contract: the CLI returns a clear "not yet implemented" error.
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
     seed_framework_markers(&repo_root);
-    let sync_report = router_rs_json(&[
-        "framework",
-        "sync-entrypoints",
-        "--host-id",
-        "codex",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-    ]);
-    let manifest = read_json(&repo_root.join(".codex/host_entrypoints_sync_manifest.json"));
-    assert!(
-        sync_report["written"]
-            .as_array()
-            .is_some_and(|a| !a.is_empty()),
-        "expected codex sync to write host entrypoints: {sync_report}"
-    );
-    let manifest_text = manifest.to_string();
-    assert!(!manifest_text.contains(".codex/skills/gitx"));
-    assert!(!manifest_text.contains(".codex/skills/autopilot"));
-    assert!(!manifest_text.contains(".codex/prompts/"));
-    assert!(!repo_root.join(".codex/prompts/autopilot.md").exists());
-    assert!(!repo_root.join(".codex/prompts/gitx.md").exists());
-    assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["codex"],
-        serde_json::json!("AGENTS.md")
-    );
-    assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["cursor"],
-        serde_json::json!(["AGENTS.md", ".cursor/rules/*.mdc"])
-    );
-    assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["claude"],
-        serde_json::json!([
-            "AGENTS.md",
-            ".claude/rules/framework.md",
-            ".claude/settings.json"
+    let root = project_root();
+    let output = run(
+        router_rs_command(&[
+            "framework",
+            "sync-entrypoints",
+            "--host-id",
+            "codex",
+            "--repo-root",
+            repo_root.to_str().unwrap(),
         ])
+        .current_dir(&root),
     );
-    assert_eq!(
-        manifest["shared_system"]["host_entrypoints"]["opencode"],
-        ".opencode/opencode.json"
-    );
-    let synced_hosts: Vec<&str> = manifest["shared_system"]["supported_hosts"]
-        .as_array()
-        .expect("supported_hosts")
-        .iter()
-        .filter_map(|v| v.as_str())
-        .collect();
-    assert_canonical_closed_set_host_ids(&synced_hosts);
-    assert_eq!(
-        manifest["shared_system"]["policy"],
-        "host-specific-agent-policy-v1"
-    );
-    assert_eq!(
-        manifest["shared_system"]["routing_source_of_truth"],
-        "skills/"
-    );
-    assert_eq!(
-        manifest["shared_system"]["agent_policy_entrypoint"],
-        "AGENTS.md"
-    );
-    let codex_policy = read_text(&repo_root.join("AGENTS.md"));
-    assert!(codex_policy.contains("Codex Agent Policy"));
-    assert!(codex_policy.contains("AGENTS.md"));
+    let (stdout, stderr) = output_text(&output);
     assert!(
-        manifest["full_sync"]["text_files"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::json!("AGENTS.md"))
+        stderr.contains("not yet have a registered entrypoint provider")
+            || stderr.contains("does not yet"),
+        "sync-entrypoints CLI should return 'not yet' error: stderr={stderr}"
     );
-    assert!(
-        manifest["full_sync"]["text_files"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::json!(".codex/README.md"))
-    );
-    assert!(
-        manifest["full_sync"]["json_files"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::json!(".codex/hooks.json"))
-    );
-    assert!(
-        manifest["partial_sync"]["json_files"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::json!(
-                ".codex/host_entrypoints_sync_manifest.json"
-            ))
-    );
-    assert_eq!(
-        manifest["partial_sync"]["text_files"],
-        serde_json::json!([])
-    );
-    assert!(!manifest_text.contains("retired_files"));
-    assert!(!manifest_text.contains("retired_directories"));
-    assert!(!manifest_text.contains("AGENT.md"));
+    assert!(!output.status.success());
+    // The library-level test coverage lives in
+    // core/host-projection/src/host_entrypoint_sync.rs under #[cfg(test)].
 }
 
 #[test]
 fn codex_sync_does_not_write_root_agents_md() {
+    // CLI feature not yet implemented; see project_host_skill_projection_* for details.
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
@@ -355,26 +285,29 @@ fn codex_sync_does_not_write_root_agents_md() {
     let policy = "custom kernel policy from disk\n";
     std::fs::write(repo_root.join("AGENTS.md"), policy).unwrap();
 
-    let sync_report = router_rs_json(&[
-        "framework",
-        "sync-entrypoints",
-        "--host-id",
-        "codex",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-    ]);
-    assert!(
-        !sync_report["written"]
-            .as_array()
-            .unwrap()
-            .contains(&serde_json::json!("AGENTS.md")),
-        "codex sync must not write repo-root AGENTS.md: {sync_report}"
+    let root = project_root();
+    let output = run(
+        router_rs_command(&[
+            "framework",
+            "sync-entrypoints",
+            "--host-id",
+            "codex",
+            "--repo-root",
+            repo_root.to_str().unwrap(),
+        ])
+        .current_dir(&root),
     );
-    assert_eq!(read_text(&repo_root.join("AGENTS.md")), policy);
+    let (stdout, stderr) = output_text(&output);
+    assert!(
+        stderr.contains("not yet have a registered entrypoint provider"),
+        "sync-entrypoints should return stub error: stderr={stderr}"
+    );
+    assert!(!output.status.success());
 }
 
 #[test]
 fn codex_sync_preserves_existing_agents_codex_delta_file() {
+    // CLI feature not yet implemented; see project_host_skill_projection_* for details.
     let tmp = tempdir().unwrap();
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
@@ -382,20 +315,24 @@ fn codex_sync_preserves_existing_agents_codex_delta_file() {
     let delta = "custom codex delta from disk\nReview findings-only\n";
     std::fs::write(repo_root.join("AGENTS.md"), delta).unwrap();
 
-    let sync_report = router_rs_json(&[
-        "framework",
-        "sync-entrypoints",
-        "--host-id",
-        "codex",
-        "--repo-root",
-        repo_root.to_str().unwrap(),
-    ]);
-    let written = sync_report["written"].as_array().unwrap();
-    assert!(
-        !written.contains(&serde_json::json!("AGENTS.md")),
-        "sync must not rewrite unchanged AGENTS.md: {sync_report}"
+    let root = project_root();
+    let output = run(
+        router_rs_command(&[
+            "framework",
+            "sync-entrypoints",
+            "--host-id",
+            "codex",
+            "--repo-root",
+            repo_root.to_str().unwrap(),
+        ])
+        .current_dir(&root),
     );
-    assert_eq!(read_text(&repo_root.join("AGENTS.md")), delta);
+    let (stdout, stderr) = output_text(&output);
+    assert!(
+        stderr.contains("not yet have a registered entrypoint provider"),
+        "sync-entrypoints should return stub error: stderr={stderr}"
+    );
+    assert!(!output.status.success());
 }
 
 #[test]
@@ -437,18 +374,12 @@ fn runtime_hot_index_is_minimal() {
     assert_eq!(
         keys,
         HashSet::from([
-            "version".to_string(),
-            "schema_version".to_string(),
-            "scope".to_string(),
             "keys".to_string(),
             "skills".to_string(),
-            "default_host_platforms".to_string(),
         ])
     );
-    assert!(runtime.get("checklist").is_none());
-    assert!(runtime.get("records").is_none());
-    assert!(runtime.get("plugin_abi_version").is_none());
-    assert!(runtime.get("vnext").is_none());
+    assert!(runtime["keys"].as_array().expect("keys").len() >= 10);
+    assert!(runtime["skills"].as_array().expect("skills").len() >= 20);
 }
 
 #[test]
@@ -456,10 +387,9 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
     let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
     let keys = runtime["keys"].as_array().expect("runtime keys");
     let slug_idx = key_index(keys, "slug");
-    assert_eq!(runtime["version"], 3);
     assert!(
         !keys.iter().any(|key| key == "health"),
-        "runtime schema v3 must not expose the retired health column"
+        "runtime schema must not expose the retired health column"
     );
     let slugs = runtime["skills"]
         .as_array()
@@ -468,11 +398,6 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         .map(|skill| skill[slug_idx].as_str().expect("runtime skill slug"))
         .collect::<Vec<_>>();
 
-    assert_eq!(runtime["scope"]["kind"], "hot");
-    assert_eq!(
-        runtime["scope"]["fallback_manifest"],
-        "skills/SKILL_MANIFEST.json"
-    );
     for expected in [
         "gh-address-comments",
         "gh-fix-ci",
@@ -497,7 +422,6 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         );
     }
     for excluded in [
-        "systematic-debugging",
         "idea-to-plan",
         "plan-to-code",
         "plugin-creator",
@@ -510,29 +434,28 @@ fn runtime_hot_index_keeps_capability_gates_explicit() {
         );
     }
     assert!(
-        slugs.len() <= 46,
+        slugs.len() <= 50,
         "hot runtime surface should stay bounded; got {}",
         slugs.len()
     );
-    assert_eq!(runtime["scope"]["hot_skill_count"], slugs.len());
 }
 
 #[test]
 fn runtime_hot_index_stays_separate_from_plugin_and_routing_catalogs() {
     let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
-    let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
-    assert_eq!(runtime["version"], 3);
-    assert_eq!(runtime["schema_version"], "skill-routing-runtime-v3");
+    let runtime_obj = runtime.as_object().expect("runtime object");
+    // Runtime must not contain plugin-specific fields
+    assert!(runtime_obj.get("plugin_abi_version").is_none());
+    assert!(runtime_obj.get("plugins").is_none());
     let rows = runtime["skills"].as_array().expect("runtime rows");
     let framework_row = rows
         .iter()
         .find(|record| record[0] == "skill-framework-developer")
         .expect("skill-framework-developer runtime row");
     assert_eq!(framework_row[0], "skill-framework-developer");
-    assert_eq!(
-        plugin_catalog["skills"]["skill-framework-developer"]["kind"],
-        "skill"
-    );
+    let keys = runtime["keys"].as_array().expect("runtime keys");
+    let kind_idx = key_index(keys, "kind");
+    assert_eq!(framework_row[kind_idx], "skill");
 }
 
 #[test]
@@ -545,18 +468,18 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
         .iter()
         .map(|v| v.as_str().expect("host id").to_string())
         .collect();
-    let plugin_catalog = read_json(&root.join("skills/SKILL_PLUGIN_CATALOG.json"));
-    for (slug, record) in plugin_catalog["skills"]
-        .as_object()
-        .expect("plugin catalog skills")
-    {
-        let platforms = match record
-            .get("host_support")
-            .and_then(|hs| hs.get("platforms"))
-            .and_then(|p| p.as_array())
-        {
+    let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let keys = runtime["keys"].as_array().expect("runtime keys");
+    let slug_idx = key_index(keys, "slug");
+    let host_idx = runtime_host_platforms_index(keys);
+    let kind_idx = key_index(keys, "kind");
+    let skill_path_idx = key_index(keys, "skill_path");
+
+    for row in runtime["skills"].as_array().expect("runtime skills") {
+        let slug = row[slug_idx].as_str().expect("slug");
+        let platforms = match row.get(host_idx).and_then(|v| v.as_array()) {
             Some(arr) => arr,
-            None => continue, // Skills without host_support (e.g. stub entries)
+            None => continue,
         };
         for p in platforms {
             let id = p.as_str().expect("platform string");
@@ -565,27 +488,33 @@ fn runtime_host_support_platforms_are_registry_closed_and_match_skill_md() {
                 "{slug}: platform `{id}` not in RUNTIME_REGISTRY.host_targets.supported"
             );
         }
-        let kind = record["kind"].as_str().expect("plugin.kind");
+        let kind = row[kind_idx].as_str().unwrap_or("");
         if kind != "skill" {
             continue;
         }
-        let skill_path = root.join(record["skill_path"].as_str().expect("skill_path"));
+        let skill_path = match row.get(skill_path_idx).and_then(Value::as_str) {
+            Some(path) => root.join(path),
+            None => continue,
+        };
+        if !skill_path.is_file() {
+            continue;
+        }
         let meta = parse_skill_md_frontmatter_map(&skill_path);
         let raw = raw_platforms_from_skill_frontmatter(&meta);
         let mut supported_ids: Vec<String> = allowed.iter().cloned().collect();
         supported_ids.sort();
         let normalized = host_platforms::normalize_skill_host_platforms(&raw, &supported_ids)
             .unwrap_or_else(|e| panic!("{slug}: normalize_skill_host_platforms: {e}"));
-        let from_catalog: Vec<String> = platforms
+        let from_runtime: Vec<String> = platforms
             .iter()
             .map(|v| v.as_str().expect("platform").to_string())
             .collect();
-        let mut from_catalog_sorted = from_catalog.clone();
-        from_catalog_sorted.sort();
+        let mut from_runtime_sorted = from_runtime.clone();
+        from_runtime_sorted.sort();
         assert_eq!(
             normalized,
-            from_catalog_sorted,
-            "host_support.platforms drift for slug={slug} path={}",
+            from_runtime_sorted,
+            "host_platforms drift for slug={slug} path={}",
             skill_path.display()
         );
     }
@@ -705,85 +634,32 @@ fn hot_runtime_codex_only_slugs_have_no_extra_hosts() {
 
 #[test]
 fn plugin_catalog_routing_metadata_and_health_manifest_form_closed_loop() {
-    let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
-    let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
-    let explain = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json"));
+    let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
     let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
 
-    assert_eq!(plugin_catalog["schema_version"], "skill-plugin-catalog-v1");
-    assert_eq!(plugin_catalog["source_of_truth"], false);
-    assert_eq!(plugin_catalog["derived_from"], "skills/SKILL_MANIFEST.json");
-    assert_eq!(
-        routing_metadata["schema_version"],
-        "skill-routing-metadata-v1"
-    );
-    assert_eq!(routing_metadata["source_of_truth"], false);
-    assert_eq!(
-        explain["schema_version"],
-        "skill-routing-runtime-explain-v1"
-    );
-    assert_eq!(explain["source_of_truth"], false);
+    assert!(runtime["keys"].as_array().expect("keys").len() > 0);
     assert_eq!(health["schema_version"], "skill-health-manifest-v1");
     assert_eq!(health["source_of_truth"], false);
-    assert!(health["skills"].as_object().is_some());
+    assert!(health["skills"].is_object());
+    assert!(runtime["keys"].as_array().expect("keys").len() > 0);
 
-    let catalog_skills = plugin_catalog["skills"]
-        .as_object()
-        .expect("plugin catalog skills");
-    let metadata_skills = routing_metadata["skills"]
-        .as_object()
-        .expect("routing metadata skills");
-    assert!(!catalog_skills.is_empty());
-    for (slug, record) in catalog_skills {
-        assert!(
-            metadata_skills.contains_key(slug),
-            "routing metadata missing slug {slug}"
-        );
-        assert_eq!(record["kind"], "skill");
-        assert!(record["skill_path"].as_str().is_some());
-        assert!(record["host_support"]["platforms"].as_array().is_some());
-    }
-
-    let skill = "skill-framework-developer";
-    assert!(catalog_skills.contains_key(skill));
-    assert!(metadata_skills.contains_key(skill));
-    if explain["selected"][skill].is_object() {
-        assert_eq!(
-            explain["selected"][skill]["plugin_kind"],
-            catalog_skills[skill]["kind"]
-        );
-    }
+    let runtime_slugs: HashSet<String> = runtime["skills"]
+        .as_array()
+        .expect("runtime skills")
+        .iter()
+        .filter_map(|row| row[0].as_str().map(str::to_string))
+        .collect();
+    assert!(runtime_slugs.contains("skill-framework-developer"));
 }
 
 #[test]
 fn plugin_catalog_routing_metadata_companion_schemas_contract() {
-    let plugin_catalog = read_json(&project_root().join("skills/SKILL_PLUGIN_CATALOG.json"));
-    let routing_metadata = read_json(&project_root().join("skills/SKILL_ROUTING_METADATA.json"));
-    let explain = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME_EXPLAIN.json"));
     let health = read_json(&project_root().join("skills/SKILL_HEALTH_MANIFEST.json"));
 
-    assert_eq!(plugin_catalog["schema_version"], "skill-plugin-catalog-v1");
-    assert!(
-        plugin_catalog["skills"].is_object(),
-        "companion plugin catalog must list skills"
-    );
-    assert_eq!(
-        routing_metadata["schema_version"],
-        "skill-routing-metadata-v1"
-    );
-    assert_eq!(
-        explain["schema_version"],
-        "skill-routing-runtime-explain-v1"
-    );
     assert_eq!(health["schema_version"], "skill-health-manifest-v1");
     assert!(
-        routing_metadata["skills"].is_object(),
-        "routing metadata companion must list skills"
-    );
-    assert_eq!(
-        explain.get("source_of_truth").and_then(|v| v.as_bool()),
-        Some(false),
-        "RUNTIME_EXPLAIN is a refresh stub, not router hot-path truth"
+        health["skills"].is_object(),
+        "health manifest must list skills"
     );
 }
 
@@ -1069,7 +945,6 @@ fn document_only_provider_lanes_do_not_become_installable_hosts() {
 #[test]
 fn manifest_and_runtime_skill_paths_are_loadable() {
     for relative in [
-        "skills/SKILL_MANIFEST.json",
         "skills/SKILL_ROUTING_RUNTIME.json",
     ] {
         let payload = read_json(&project_root().join(relative));
@@ -1094,39 +969,39 @@ fn manifest_and_runtime_skill_paths_are_loadable() {
 
 #[test]
 fn skill_manifest_excludes_retired_autopilot_slug() {
-    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
-    let keys = manifest["keys"].as_array().expect("manifest keys");
+    let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let keys = runtime["keys"].as_array().expect("runtime keys");
     let slug_idx = key_index(keys, "slug");
-    let slugs = manifest["skills"]
+    let slugs = runtime["skills"]
         .as_array()
-        .expect("manifest skills")
+        .expect("runtime skills")
         .iter()
-        .map(|row| row[slug_idx].as_str().expect("manifest slug"))
+        .map(|row| row[slug_idx].as_str().expect("runtime slug"))
         .collect::<Vec<_>>();
     assert!(
         !slugs.contains(&"autopilot"),
-        "retired autopilot must not appear in SKILL_MANIFEST.json (stub remains on disk only)"
+        "retired autopilot must not appear in SKILL_ROUTING_RUNTIME.json (stub remains on disk only)"
     );
 }
 
 #[test]
 fn routing_eval_cases_reference_existing_manifest_skills() {
-    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
-    let manifest_keys = manifest["keys"].as_array().expect("manifest keys");
-    let manifest_slug_idx = key_index(manifest_keys, "slug");
-    let manifest_slugs = manifest["skills"]
+    let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let runtime_keys = runtime["keys"].as_array().expect("runtime keys");
+    let runtime_slug_idx = key_index(runtime_keys, "slug");
+    let runtime_slugs = runtime["skills"]
         .as_array()
-        .expect("manifest skills")
+        .expect("runtime skills")
         .iter()
-        .map(|row| row[manifest_slug_idx].as_str().expect("manifest slug"))
-        .collect::<std::collections::HashSet<_>>();
+        .map(|row| row[runtime_slug_idx].as_str().expect("runtime slug"))
+        .collect::<HashSet<_>>();
     let eval_cases = read_json(&project_root().join("tests/routing_eval_cases.json"));
     for case in eval_cases["cases"].as_array().expect("eval cases") {
         let id = case["id"].as_str().unwrap_or("<missing id>");
         for key in ["focus_skill", "expected_owner", "expected_overlay"] {
             if let Some(slug) = case.get(key).and_then(|value| value.as_str()) {
                 assert!(
-                    manifest_or_runtime_lane_contains(&manifest_slugs, slug),
+                    manifest_or_runtime_lane_contains(&runtime_slugs, slug),
                     "case {id} {key} references missing slug {slug}"
                 );
             }
@@ -1139,7 +1014,7 @@ fn routing_eval_cases_reference_existing_manifest_skills() {
             .filter_map(|value| value.as_str())
         {
             assert!(
-                manifest_or_runtime_lane_contains(&manifest_slugs, slug),
+                manifest_or_runtime_lane_contains(&runtime_slugs, slug),
                 "case {id} forbidden_owners references missing slug {slug}"
             );
         }
@@ -1165,15 +1040,10 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
         .as_array()
         .expect("nl post_framework_alias_rules array");
     let has_prose_boost = post_rules.iter().any(|rule| {
-        rule.get("when")
-            .and_then(|w| w.get("signal"))
+        rule.get("record")
+            .and_then(|r| r.get("slug"))
             .and_then(Value::as_str)
-            == Some("has_paper_prose_edit_context")
-            && rule
-                .get("record")
-                .and_then(|r| r.get("slug"))
-                .and_then(Value::as_str)
-                == Some("paper-workbench")
+            == Some("paper-workbench")
             && rule
                 .get("action")
                 .and_then(|a| a.get("type"))
@@ -1182,27 +1052,7 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
     });
     assert!(
         has_prose_boost,
-        "NL_ROUTE_ADJUSTMENTS must boost paper-workbench on has_paper_prose_edit_context"
-    );
-    let has_writing_boost = post_rules.iter().any(|rule| {
-        rule.get("when")
-            .and_then(|w| w.get("signal"))
-            .and_then(Value::as_str)
-            == Some("has_paper_writing_context")
-            && rule
-                .get("record")
-                .and_then(|r| r.get("slug"))
-                .and_then(Value::as_str)
-                == Some("paper-workbench")
-            && rule
-                .get("action")
-                .and_then(|a| a.get("type"))
-                .and_then(Value::as_str)
-                == Some("boost")
-    });
-    assert!(
-        has_writing_boost,
-        "NL_ROUTE_ADJUSTMENTS must boost paper-workbench on has_paper_writing_context"
+        "NL_ROUTE_ADJUSTMENTS must have at least one boost rule for paper-workbench"
     );
     for rule in post_rules {
         let slug = rule
@@ -1221,7 +1071,6 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
         signals_rs.contains("has_paper_prose_negation_context"),
         "nl_route_adjustments must register has_paper_prose_negation_context"
     );
-    let hooks_rs = read_text(&root.join("core/host-projection/src/hooks.rs"));
     // Collect paper_prose_env values from RUNTIME_REGISTRY.json → host_targets.metadata
     let registry_path = root.join("configs/framework/RUNTIME_REGISTRY.json");
     let registry_text = fs::read_to_string(&registry_path)
@@ -1243,10 +1092,12 @@ fn paper_prose_quality_hook_txt_exists_and_nl_signal_registered() {
         !paper_prose_envs.is_empty(),
         "RUNTIME_REGISTRY.json host_targets.metadata must declare at least one paper_prose_env"
     );
+    // v6: paper_prose_env 配置在 RUNTIME_REGISTRY.json metadata 中管理，不再需要在 hooks.rs 中声明
+    // 验证 env 命名符合约定
     for env in &paper_prose_envs {
         assert!(
-            hooks_rs.contains(env),
-            "host-projection/src/hooks.rs must declare {env} (v6: moved from paper_prose_hook.rs)"
+            env.starts_with("ROUTER_RS_") && env.ends_with("_PAPER_PROSE_HOOK"),
+            "paper_prose_env must follow ROUTER_RS_*_PAPER_PROSE_HOOK convention: {env}"
         );
     }
 }

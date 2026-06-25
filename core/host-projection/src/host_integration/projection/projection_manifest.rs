@@ -776,7 +776,6 @@ pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, S
         return Ok(adapter.tool.to_string());
     }
     let known = projection_supported_tools_for_message(framework_root);
-    let _aliases = projection_alias_summary();
     Err(format!(
         "Unknown tool: {}. Supported tools: {}",
         raw.trim().to_lowercase(),

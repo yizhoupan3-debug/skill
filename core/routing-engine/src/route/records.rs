@@ -416,10 +416,7 @@ pub fn load_records_from_runtime(path: &Path) -> Result<Vec<SkillRecord>, String
     );
     let indexes = RecordRowIndexes {
         skill_path: index.get("skill_path").copied(),
-        host_platforms: index
-            .get("host_platforms")
-            .or_else(|| index.get("source_position"))
-            .copied(),
+        host_platforms: index.get("host_platforms").copied(),
         record_kind: index.get("kind").copied(),
         skill_flags: index.get("skill_flags").copied(),
         short_description: index.get("short_description").copied(),

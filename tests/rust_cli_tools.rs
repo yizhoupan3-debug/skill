@@ -8,8 +8,8 @@ use tempfile::tempdir;
 
 #[test]
 fn update_audit_cli_contract_is_registered() {
-    let args = read_text(&project_root().join("core/runtime-core/src/cli/args.rs"));
-    let maint = read_text(&project_root().join("core/runtime-core/src/framework_maint.rs"));
+    let args = read_text(&project_root().join("core/framework-kernel/src/cli_args.rs"));
+    let maint = read_text(&project_root().join("core/framework-maint/src/maint.rs"));
     assert!(args.contains("UpdateAudit(UpdateAuditArgs)"));
     assert!(args.contains("repo_root: Option<PathBuf>"));
     assert!(args.contains("Dry-run `/update` repository knowledge/hygiene audit"));
@@ -33,12 +33,12 @@ fn update_audit_cli_contract_is_registered() {
 
 #[test]
 fn refresh_host_projections_keeps_claude_code_projection_explicit() {
-    let args = read_text(&project_root().join("core/runtime-core/src/cli/args.rs"));
-    let maint = read_text(&project_root().join("core/runtime-core/src/framework_maint.rs"));
+    let args = read_text(&project_root().join("core/framework-kernel/src/cli_args.rs"));
+    let maint = read_text(&project_root().join("core/framework-maint/src/maint.rs"));
     assert!(args.contains("non-Codex framework installs"));
     assert!(maint.contains("let installable_tools = installable_projection_tools(&fw)?"));
     assert!(maint.contains("verify_installable_projections(&fw, &installable_tools)?"));
-    assert!(maint.contains("for tool in &projection_tools"));
+    assert!(maint.contains("for tool in &installable_tools"));
     assert!(maint.contains("verify_claude_code_projection"));
     assert!(maint.contains(".claude/rules/framework.md"));
     assert!(maint.contains(".claude/.framework-projection.json"));

@@ -102,9 +102,7 @@ fn github_source_gate_python_helpers_stay_removed() {
 #[test]
 fn generated_routing_surfaces_do_not_reference_removed_python_helpers() {
     let generated = [
-        "skills/SKILL_MANIFEST.json",
         "skills/SKILL_ROUTING_RUNTIME.json",
-        "skills/SKILL_PLUGIN_CATALOG.json",
     ]
     .iter()
     .map(|path| read_text(&project_root().join(path)))
@@ -152,7 +150,7 @@ fn gsd_slash_commands_removed_from_runtime_and_hooks() {
         !registry_text.contains("/gsd-"),
         "RUNTIME_REGISTRY must not reference /gsd- commands"
     );
-    let hook_common = read_text(&root.join("core/core-policy/src/hook_common.rs"));
+    let hook_common = read_text(&root.join("core/core-policy/src/hook_common/mod.rs"));
     assert!(
         !hook_common.contains("/gsd-"),
         "hook_common must not recognize /gsd- entrypoints"
@@ -192,11 +190,8 @@ fn framework_runtime_python_package_stays_removed() {
 
 #[test]
 fn repo_local_codex_omits_framework_mcp_entrypoint() {
-    let source = read_text(&project_root().join(".codex/config.toml"));
-    assert!(!source.contains("python3"));
-    assert!(!source.contains("scripts.framework_mcp"));
-    assert!(!source.contains("[mcp_servers.framework-mcp]"));
-    assert!(!source.contains("--framework-mcp-stdio"));
+    // .codex/ 目录在未运行 install-skills codex 时不存在
+    assert!(!project_root().join(".codex").exists(), ".codex/ directory must not exist in repo (only generated on install)");
 }
 
 #[test]

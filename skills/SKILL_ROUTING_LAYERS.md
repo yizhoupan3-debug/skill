@@ -1,7 +1,7 @@
 # Skill 分层路由详解
 
 > 这是扩展参考，不是默认入口。
-> 默认只看 `SKILL_ROUTING_RUNTIME.json`；不够再看 [SKILL_MANIFEST.json](SKILL_MANIFEST.json)。
+> 默认只看 `SKILL_ROUTING_RUNTIME.json`；不够再看 [SKILL_LOADOUTS.json](SKILL_LOADOUTS.json)。
 > 只有 owner / overlay / reroute 仍有歧义时，才打开本页。
 > 协议细节见 [SKILL_FRAMEWORK_PROTOCOLS.md](SKILL_FRAMEWORK_PROTOCOLS.md)
 

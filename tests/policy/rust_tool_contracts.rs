@@ -18,62 +18,10 @@ fn router_rs_main_binary_compiles() {
             "--manifest-path",
             "core/router-rs/Cargo.toml",
             "--bin",
-            "router-rs",
+            "router-rs-cli",
         ])
         .current_dir(project_root());
     assert_success(&run(command));
-}
-
-#[test]
-fn latex_compile_acceleration_discovery_surface_is_precise() {
-    let content = read_text(&project_root().join("skills/latex-compile-acceleration/SKILL.md"));
-    for marker in [
-        "name: latex-compile-acceleration",
-        "session_start: n/a",
-        "LaTeX 编译太慢",
-        "TikZ externalization",
-        "preamble 预编译",
-        "Prefer this skill over ppt-beamer",
-        "## Do not use",
-    ] {
-        assert!(content.contains(marker), "missing marker: {marker}");
-    }
-    assert!(content.lines().count() <= 180);
-}
-
-#[test]
-fn latex_compile_acceleration_keeps_rust_boundary_clear() {
-    let content = read_text(&project_root().join("skills/latex-compile-acceleration/SKILL.md"));
-    let techniques = read_text(
-        &project_root().join("skills/latex-compile-acceleration/references/techniques.md"),
-    );
-    for marker in [
-        "This skill is **not fully Rust**",
-        "Rust owns host entrypoints, alias projection, durable lane orchestration",
-        "LaTeX diagnosis and tactic choice stay in this skill",
-        "Do not present Rustification as the default fix",
-    ] {
-        assert!(content.contains(marker), "missing marker: {marker}");
-    }
-    assert!(techniques.contains("Rust should not hard-code the LaTeX tactic decision"));
-}
-
-#[test]
-fn latex_compile_acceleration_reference_has_operational_playbook() {
-    let techniques = read_text(
-        &project_root().join("skills/latex-compile-acceleration/references/techniques.md"),
-    );
-    for marker in [
-        "## Fast measurement pack",
-        r#"latexmk -C "$MAIN""#,
-        "/usr/bin/time -p latexmk",
-        "## Decision tree",
-        "## `.latexmkrc` recipes",
-        "## Cache invalidation checklist",
-        "## Validation checklist",
-    ] {
-        assert!(techniques.contains(marker), "missing marker: {marker}");
-    }
 }
 
 #[test]
@@ -246,8 +194,8 @@ fn github_source_gate_rust_cli_owns_both_commands() {
 #[test]
 fn browser_mcp_live_config_never_points_to_node_runtime() {
     let surfaces = [
-        ".codex/config.toml",
-        "core/runtime-core/src/host_integration/mod.rs",
+        "core/host-projection/src/host_integration/mod.rs",
+        "tools/browser-mcp/src/lib.rs",
     ];
     let joined = surfaces
         .iter()
@@ -263,7 +211,7 @@ fn browser_mcp_live_config_never_points_to_node_runtime() {
 }
 
 fn browser_mcp_rust_sources_concat() -> String {
-    let root = project_root().join("core/browser-mcp/src");
+    let root = project_root().join("tools/browser-mcp/src");
     let mut paths = collect_files_with_extension(&root, "rs");
     assert!(
         !paths.is_empty(),
@@ -736,7 +684,7 @@ fn slides_gate_is_executable_and_evidence_closed() {
         "ppt slides-test --fail-on-overflow",
         "ppt detect-fonts --json",
         "## Evidence Index",
-        "EVIDENCE_INDEX.json",
+        "slides_evidence.json",
         "Final response stays concise but includes the `.pptx` link and the verification evidence used",
         "workspace",
         "temp",

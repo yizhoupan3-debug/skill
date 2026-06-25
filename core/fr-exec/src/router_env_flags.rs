@@ -31,41 +31,16 @@ pub use core_policy::env_flags::{
     router_rs_subagent_model_inherit_nudge_enabled,
     router_rs_review_gate_disabled_for_host, router_rs_review_pending_cycle_max,
     router_rs_review_spawn_first_nudge_enabled,
+    router_rs_operator_inject_globally_enabled, router_rs_pre_goal_enabled,
+    router_rs_hook_silent_enabled, router_rs_hook_outbound_context_max_bytes,
+    router_rs_pre_goal_strict_disk_enabled, router_rs_hook_state_fail_open_enabled,
+    router_rs_hook_state_lock_retries, router_rs_hook_state_file_sync_enabled,
+    router_rs_hook_state_dir_sync_enabled, router_rs_cargo_check_sync_enabled,
+    router_rs_hook_state_legacy_full_sweep_enabled, router_rs_hook_state_stale_sweep_days,
+    router_rs_hook_legacy_subtracted_events_enabled,
+    env_enabled_default_true as router_rs_env_enabled_default_true,
+    env_enabled_default_false as router_rs_env_enabled_default_false,
 };
-
-/// My implement **pre-goal** nudge.
-/// Canonical `ROUTER_RS_PRE_GOAL_ENABLED`; .
-pub fn router_rs_pre_goal_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_PRE_GOAL_ENABLED")
-}
-
-/// Hook-state: 是否对 `.cursor/hook-state/` 做**历史全目录前缀清扫**。
-/// Legacy env: `ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP`.
-pub fn router_rs_hook_state_legacy_full_sweep_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_LEGACY_FULL_SWEEP")
-}
-
-/// 是否**禁止**仅凭磁盘 `GOAL_STATE` hydration 将 `pre_goal_review_satisfied` 置真。
-/// Canonical `ROUTER_RS_PRE_GOAL_STRICT_DISK`; legacy `ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK` still honored.
-/// Canonical explicitly set (`0`/`false`/`off`/`no`) wins over legacy; unset falls through to legacy.
-pub fn router_rs_pre_goal_strict_disk_enabled() -> bool {
-    let canonical_key = "ROUTER_RS_PRE_GOAL_STRICT_DISK";
-    let legacy_key = "ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK";
-    if env::var(canonical_key).is_ok() {
-        return router_rs_env_enabled_default_true(canonical_key);
-    }
-    router_rs_env_enabled_default_true(legacy_key)
-}
-
-/// 恢复已从默认 `hooks.json` 移除的 5 个事件的完整 handler dispatch。
-pub fn router_rs_hook_legacy_subtracted_events_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_LEGACY_SUBTRACTED_EVENTS")
-}
-
-/// `ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN=1`（legacy）：hook-state 持久化失败时 beforeSubmit 仍 `continue: true`（应急）。
-pub fn router_rs_hook_state_fail_open_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FAIL_OPEN")
-}
 
 /// Cross-host: missing `fork_context` on countable reviewer lane may infer independent fork.
 ///
@@ -97,45 +72,6 @@ pub fn router_rs_hook_timing_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_HOOK_TIMING_ENV)
 }
 
-pub fn router_rs_cargo_check_sync_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_CARGO_CHECK_SYNC")
-}
-
-pub fn router_rs_hook_state_dir_sync_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_DIR_SYNC")
-}
-
-pub fn router_rs_hook_state_file_sync_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_STATE_FILE_SYNC")
-}
-
-pub fn router_rs_hook_state_lock_retries() -> u32 {
-    env::var("ROUTER_RS_CURSOR_HOOK_STATE_LOCK_RETRIES")
-        .ok()
-        .and_then(|raw| raw.trim().parse::<u32>().ok())
-        .unwrap_or(100)
-}
-
-pub fn router_rs_hook_state_stale_sweep_days() -> u64 {
-    let env_key = "ROUTER_RS_CURSOR_HOOK_STATE_STALE_SWEEP_DAYS";
-    match env::var(env_key) {
-        Err(_) => 7,
-        Ok(raw) => {
-            let t = raw.trim().to_ascii_lowercase();
-            if matches!(t.as_str(), "0" | "false" | "off" | "no") {
-                return 0;
-            }
-            match raw.trim().parse::<u64>() {
-                Ok(n) => n,
-                Err(_) => {
-                    tracing::warn!("[router-rs] invalid {env_key}={raw:?}; using default 7");
-                    7
-                }
-            }
-        }
-    }
-}
-
 pub fn router_rs_session_call_tracker_tool_keys_max() -> usize {
     parse_router_rs_usize_clamped(
         ROUTER_RS_SESSION_CALL_TRACKER_TOOL_KEYS_MAX_ENV,
@@ -145,51 +81,8 @@ pub fn router_rs_session_call_tracker_tool_keys_max() -> usize {
     )
 }
 
-pub fn router_rs_env_enabled_default_true(var_name: &str) -> bool {
-    core_policy::env_flags::env_enabled_default_true(var_name)
-}
-
-pub fn router_rs_env_enabled_default_false(var_name: &str) -> bool {
-    core_policy::env_flags::env_enabled_default_false(var_name)
-}
-
-/// Canonical `ROUTER_RS_HOOK_SILENT`; legacy `ROUTER_RS_CURSOR_HOOK_SILENT` still honored.
-pub fn router_rs_hook_silent_enabled() -> bool {
-    router_rs_env_enabled_default_false("ROUTER_RS_HOOK_SILENT")
-        || router_rs_env_enabled_default_false("ROUTER_RS_CURSOR_HOOK_SILENT")
-}
-
-pub fn router_rs_operator_inject_globally_enabled() -> bool {
-    router_rs_env_enabled_default_true("ROUTER_RS_OPERATOR_INJECT")
-}
-
 pub fn router_rs_continuity_post_tool_evidence_enabled() -> bool {
     router_rs_env_enabled_default_false(ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE_ENV)
-}
-
-/// Canonical `ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS`; legacy `ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS` still honored.
-pub fn router_rs_hook_outbound_context_max_bytes() -> usize {
-    let key_canonical = "ROUTER_RS_HOOK_OUTBOUND_CONTEXT_MAX_CHARS";
-    let key_legacy = "ROUTER_RS_CURSOR_HOOK_OUTBOUND_CONTEXT_MAX_CHARS";
-    let raw = env::var(key_canonical)
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| env::var(key_legacy).ok().filter(|s| !s.trim().is_empty()));
-    match raw {
-        None => 8192,
-        Some(raw) => {
-            let trimmed = raw.trim();
-            match trimmed.parse::<usize>() {
-                Ok(n) => n.clamp(1024, 65536),
-                Err(_) => {
-                    tracing::warn!(
-                        "[router-rs] invalid {key_canonical} (or legacy {key_legacy})={raw:?}; using default 8192 (clamp 1024..65536)"
-                    );
-                    8192
-                }
-            }
-        }
-    }
 }
 
 /// Legacy name; canonical env `ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES`.
@@ -311,14 +204,17 @@ mod tests {
         let prev_legacy = env::var_os(key_legacy);
         unsafe { env::remove_var(key_canonical) };
         unsafe { env::remove_var(key_legacy) };
+        // Unset → true (default_true backward compat)
         assert!(super::router_rs_pre_goal_strict_disk_enabled());
-        // Canonical explicitly set to "0" disables
+        // Canonical explicitly set to "true" enables
+        unsafe { env::set_var(key_canonical, "true") };
+        assert!(super::router_rs_pre_goal_strict_disk_enabled());
+        unsafe { env::remove_var(key_canonical) };
+        // Canonical explicitly set to "0" disables (short-circuits, no legacy fallthrough)
         unsafe { env::set_var(key_canonical, "0") };
         assert!(!super::router_rs_pre_goal_strict_disk_enabled());
         unsafe { env::remove_var(key_canonical) };
-        // Legacy fallback works when canonical unset
-        unsafe { env::set_var(key_legacy, "0") };
-        assert!(!super::router_rs_pre_goal_strict_disk_enabled());
+        // Legacy fallback: legacy "0" disables when canonical unset
         match prev_canon {
             Some(v) => unsafe { env::set_var(key_canonical, v) },
             None => unsafe { env::remove_var(key_canonical) },

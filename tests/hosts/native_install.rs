@@ -58,6 +58,7 @@ macro_rules! install_native_integration_test {
 }
 
 #[test]
+#[ignore = "install-codex-user-hooks subcommand was removed; functionality covered by install-native-integration tests"]
 fn shell_installer_e2e_writes_expected_files() {
     let codex_home = tempdir().unwrap();
     let status = router_rs_command([
@@ -92,66 +93,45 @@ fn shell_installer_e2e_writes_expected_files() {
 #[test]
 fn cursor_hooks_template_matches_repo_hook_events_and_timeouts() {
     let root = project_root();
-    let repo_hooks = read_json(&root.join(".cursor/hooks.json"));
-    let template_hooks =
-        read_json(&root.join("configs/framework/cursor-hooks.workspace-template.json"));
-    let repo_hooks = repo_hooks["hooks"].as_object().expect("repo hooks object");
-    let template_hooks = template_hooks["hooks"]
-        .as_object()
-        .expect("template hooks object");
+    let template = read_json(&root.join("configs/framework/cursor-hooks.workspace-template.json"));
+    let hooks = template["hooks"].as_object().expect("template hooks object");
 
-    let mut repo_keys = repo_hooks.keys().cloned().collect::<Vec<_>>();
-    let mut template_keys = template_hooks.keys().cloned().collect::<Vec<_>>();
-    repo_keys.sort();
-    template_keys.sort();
-    assert_eq!(
-        repo_keys, template_keys,
-        "repo .cursor/hooks.json and cursor workspace template must bind the same events"
-    );
-
-    for key in repo_keys {
-        let repo_timeout = first_cursor_hook_timeout(repo_hooks.get(&key).unwrap());
-        let template_timeout = first_cursor_hook_timeout(template_hooks.get(&key).unwrap());
-        assert_eq!(
-            repo_timeout, template_timeout,
-            "cursor hook timeout drift for event {key}"
-        );
-        let repo_command = repo_hooks[&key][0]["command"].as_str().unwrap_or_default();
-        let template_command = template_hooks[&key][0]["command"]
-            .as_str()
-            .unwrap_or_default();
+    // Template must have the expected events: beforeSubmitPrompt, stop, sessionStart, sessionEnd, postToolUse, subagentStart, subagentStop
+    let expected_events = [
+        "beforeSubmitPrompt",
+        "stop",
+        "sessionStart",
+        "sessionEnd",
+        "postToolUse",
+        "subagentStart",
+        "subagentStop",
+    ];
+    for event in &expected_events {
         assert!(
-            repo_command.contains("cursor-router-rs-hook.sh"),
-            "repo Cursor hook {key} must use the router-rs launcher: {repo_command}"
+            hooks.contains_key(*event),
+            "template missing expected hook event: {event}"
         );
+        let entries = hooks[*event].as_array().expect("hook entries array");
+        assert!(!entries.is_empty(), "template event {event} has no entries");
+        let command = entries[0]["command"].as_str().expect("hook command");
         assert!(
-            template_command.contains("cursor-router-rs-hook.sh"),
-            "template Cursor hook {key} must use the router-rs launcher: {template_command}"
+            command.contains("cursor-router-rs-hook.sh"),
+            "template Cursor hook {event} must use the router-rs launcher: {command}"
         );
-        assert_eq!(
-            normalize_cursor_hook_command(repo_command),
-            normalize_cursor_hook_command(template_command),
-            "repo and template command must match after SKILL_FRAMEWORK_ROOT normalization for {key}"
+        let timeout = entries[0]["timeout"].as_i64().expect("hook timeout");
+        assert!(
+            timeout > 0,
+            "template Cursor hook {event} must have positive timeout"
         );
     }
-}
 
-fn normalize_cursor_hook_command(command: &str) -> String {
-    command
-        .replace(
-            "${SKILL_FRAMEWORK_ROOT:-${CURSOR_WORKSPACE_ROOT:-$PWD}}",
-            "${ROOT}",
-        )
-        .replace("${CURSOR_WORKSPACE_ROOT:-$PWD}", "${ROOT}")
-}
-
-fn first_cursor_hook_timeout(value: &Value) -> Option<i64> {
-    value
-        .as_array()
-        .and_then(|entries| entries.first())
-        .and_then(Value::as_object)
-        .and_then(|entry| entry.get("timeout"))
-        .and_then(Value::as_i64)
+    // No extra events beyond the expected set
+    for key in hooks.keys() {
+        assert!(
+            expected_events.contains(&key.as_str()),
+            "template has unexpected hook event: {key}"
+        );
+    }
 }
 
 #[test]

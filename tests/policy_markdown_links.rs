@@ -96,7 +96,7 @@ fn resolve_markdown_link(source: &Path, url: &str, root: &Path) -> PathBuf {
 
 fn collect_policy_markdown_files(root: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    for rel in ["docs", "skills", ".cursor/rules"] {
+    for rel in ["docs", "skills", ".rules"] {
         let dir = root.join(rel);
         if !dir.is_dir() {
             continue;
@@ -195,6 +195,13 @@ fn broken_markdown_links_in_file(source: &Path, root: &Path) -> Vec<(String, Pat
             {
                 let alt = root.join("skills/python-env-management/SKILL.md");
                 if alt.is_file() {
+                    target = alt;
+                }
+            }
+            // docs/hosts/ → docs/: 宿主文档已整合至 AGENTS.md 和 RUNTIME_REGISTRY.json
+            if !target.exists() && path_str.contains("/docs/hosts/") {
+                let alt = PathBuf::from(path_str.replace("/docs/hosts/", "/docs/"));
+                if alt.exists() {
                     target = alt;
                 }
             }

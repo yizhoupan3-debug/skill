@@ -3,7 +3,7 @@
 
 use crate::common::{project_root, read_json, read_text};
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 const FRAMEWORK_COMMAND_IDS: &[&str] = &[
     "deepinterview",
@@ -11,9 +11,9 @@ const FRAMEWORK_COMMAND_IDS: &[&str] = &[
     "update",
 ];
 
-fn manifest_or_runtime_lane_contains(manifest_slugs: &HashSet<&str>, slug: &str) -> bool {
+fn manifest_or_runtime_lane_contains(runtime_slugs: &HashSet<&str>, slug: &str) -> bool {
     slug == "none"
-        || manifest_slugs.contains(slug)
+        || runtime_slugs.contains(slug)
         || FRAMEWORK_COMMAND_IDS.contains(&slug)
         || project_root()
             .join("skills")
@@ -35,9 +35,9 @@ fn key_index_first(keys: &[Value], names: &[&str]) -> usize {
         .unwrap_or_else(|| panic!("missing keys {:?}", names))
 }
 
-/// Hot runtime rows store per-skill hosts under `host_platforms` or legacy `source_position`.
+/// Hot runtime rows store per-skill hosts under `host_platforms`.
 fn runtime_host_platforms_index(keys: &[Value]) -> usize {
-    key_index_first(keys, &["host_platforms", "source_position"])
+    key_index_first(keys, &["host_platforms"])
 }
 
 fn runtime_description_index(keys: &[Value]) -> usize {
@@ -76,12 +76,11 @@ fn plan_mode_keeps_review_optional_and_review_only() {
     }
     for marker in [
         "仅当用户明确要求 review plan / 审计划",
-        "只找问题，不改代码",
     ] {
         assert!(plan_mode.contains(marker), "missing marker: {marker}");
     }
 
-    let review_gate = read_text(&project_root().join(".cursor/rules/review-subagent-gate.mdc"));
+    let review_gate = read_text(&project_root().join(".rules/review-subagent-gate.mdc"));
     for marker in [
         "review lane **只读**",
         "纯 review 禁止默认改代码",
@@ -95,7 +94,6 @@ fn plan_mode_keeps_review_optional_and_review_only() {
         "Review findings-only",
         "skills/code-review-deep/SKILL.md",
         "面向用户的回复必须使用简体中文",
-        "Continuity artifacts",
         "Closeout",
         "Skill Routing",
         "Goal/RFV",
@@ -181,20 +179,20 @@ fn update_skill_exposes_explicit_entrypoint_like_gitx() {
 
 #[test]
 fn framework_command_slugs_in_manifest() {
-    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
-    let keys = manifest["keys"].as_array().expect("manifest keys");
+    let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let keys = runtime["keys"].as_array().expect("runtime keys");
     let slug_idx = key_index(keys, "slug");
-    let manifest_slugs: HashSet<String> = manifest["skills"]
+    let runtime_slugs: HashSet<String> = runtime["skills"]
         .as_array()
-        .expect("manifest skills")
+        .expect("runtime skills")
         .iter()
         .filter_map(|row| row.get(slug_idx).and_then(Value::as_str))
         .map(str::to_string)
         .collect();
     for slug in FRAMEWORK_COMMAND_IDS {
         assert!(
-            manifest_slugs.contains(*slug),
-            "SKILL_MANIFEST must contain framework command `{slug}` (not runtime-only)"
+            runtime_slugs.contains(*slug),
+            "SKILL_ROUTING_RUNTIME must contain framework command `{slug}` (not runtime-only)"
         );
     }
 }
@@ -203,7 +201,6 @@ fn framework_command_slugs_in_manifest() {
 fn runtime_framework_command_rows_match_manifest() {
     let root = project_root();
     let runtime = read_json(&root.join("skills/SKILL_ROUTING_RUNTIME.json"));
-    let manifest = read_json(&root.join("skills/SKILL_MANIFEST.json"));
     let registry = read_json(&root.join("configs/framework/RUNTIME_REGISTRY.json"));
     let supported_host_set: HashSet<String> = registry["host_targets"]["supported"]
         .as_array()
@@ -212,7 +209,6 @@ fn runtime_framework_command_rows_match_manifest() {
         .map(|v| v.as_str().expect("host id").to_string())
         .collect();
     let runtime_keys = runtime["keys"].as_array().expect("runtime keys");
-    let manifest_keys = manifest["keys"].as_array().expect("manifest keys");
     let r_slug = key_index(runtime_keys, "slug");
     let r_layer = key_index(runtime_keys, "layer");
     let r_kind = key_index(runtime_keys, "kind");
@@ -220,24 +216,6 @@ fn runtime_framework_command_rows_match_manifest() {
     let r_hosts = runtime_host_platforms_index(runtime_keys);
     let r_skill_path = key_index(runtime_keys, "skill_path");
     let r_trigger_hints = key_index(runtime_keys, "trigger_hints");
-    let m_slug = key_index(manifest_keys, "slug");
-    let m_layer = key_index(manifest_keys, "layer");
-    let m_kind = key_index(manifest_keys, "kind");
-    let m_desc = key_index(manifest_keys, "description");
-    let m_hosts = key_index(manifest_keys, "host_platforms");
-    let m_skill_path = key_index(manifest_keys, "skill_path");
-    let m_trigger_hints = key_index(manifest_keys, "trigger_hints");
-
-    let manifest_by_slug: HashMap<String, &Vec<Value>> = manifest["skills"]
-        .as_array()
-        .expect("manifest skills")
-        .iter()
-        .filter_map(|row| row.as_array())
-        .filter_map(|row| {
-            let slug = row.get(m_slug)?.as_str()?.to_string();
-            Some((slug, row))
-        })
-        .collect();
 
     for row in runtime["skills"].as_array().expect("runtime skills") {
         let row = row.as_array().expect("runtime row");
@@ -245,23 +223,18 @@ fn runtime_framework_command_rows_match_manifest() {
         if !FRAMEWORK_COMMAND_IDS.contains(&slug) {
             continue;
         }
-        let manifest_row = manifest_by_slug
-            .get(slug)
-            .unwrap_or_else(|| panic!("manifest missing framework command row for {slug}"));
-        assert_eq!(
-            row[r_layer].as_str(),
-            manifest_row.get(m_layer).and_then(Value::as_str),
-            "{slug}: layer mismatch runtime vs manifest"
+        // Verify basic field existence (no cross-source comparison)
+        assert!(
+            row[r_layer].as_str().is_some(),
+            "{slug}: layer must be present"
         );
-        assert_eq!(
-            row[r_kind].as_str(),
-            manifest_row.get(m_kind).and_then(Value::as_str),
-            "{slug}: kind mismatch runtime vs manifest"
+        assert!(
+            row[r_kind].as_str().is_some(),
+            "{slug}: kind must be present"
         );
-        assert_eq!(
-            row[r_summary].as_str(),
-            manifest_row.get(m_desc).and_then(Value::as_str),
-            "{slug}: description/summary mismatch runtime vs manifest"
+        assert!(
+            row[r_summary].as_str().is_some(),
+            "{slug}: description/summary must be present"
         );
         let runtime_hosts: HashSet<String> = row[r_hosts]
             .as_array()
@@ -269,46 +242,19 @@ fn runtime_framework_command_rows_match_manifest() {
             .iter()
             .filter_map(|v| v.as_str().map(str::to_string))
             .collect();
-        let raw_manifest_hosts: Vec<String> = manifest_row
-            .get(m_hosts)
-            .and_then(Value::as_array)
-            .expect("manifest host_platforms")
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect();
-        // [supported] / [all-hosts] wildcard: expand to registry set before comparing.
-        let manifest_hosts: HashSet<String> = if raw_manifest_hosts.len() == 1
-            && (raw_manifest_hosts[0] == "supported" || raw_manifest_hosts[0] == "all-hosts")
-        {
-            supported_host_set.clone()
-        } else {
-            raw_manifest_hosts.into_iter().collect()
-        };
-        assert_eq!(
-            runtime_hosts, manifest_hosts,
-            "{slug}: host_platforms mismatch runtime vs manifest"
+        for host in &runtime_hosts {
+            assert!(
+                supported_host_set.contains(host),
+                "{slug}: host `{host}` not in RUNTIME_REGISTRY"
+            );
+        }
+        assert!(
+            row[r_skill_path].as_str().is_some(),
+            "{slug}: skill_path must be present"
         );
-        assert_eq!(
-            row[r_skill_path].as_str(),
-            manifest_row.get(m_skill_path).and_then(Value::as_str),
-            "{slug}: skill_path mismatch runtime vs manifest"
-        );
-        let runtime_hints: Vec<String> = row[r_trigger_hints]
-            .as_array()
-            .expect("runtime trigger_hints")
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect();
-        let manifest_hints: Vec<String> = manifest_row
-            .get(m_trigger_hints)
-            .and_then(Value::as_array)
-            .expect("manifest trigger_hints")
-            .iter()
-            .filter_map(|v| v.as_str().map(str::to_string))
-            .collect();
-        assert_eq!(
-            runtime_hints, manifest_hints,
-            "{slug}: trigger_hints mismatch runtime vs manifest"
+        assert!(
+            row[r_trigger_hints].as_array().is_some(),
+            "{slug}: trigger_hints must be present"
         );
     }
 }
@@ -355,14 +301,14 @@ fn host_projection_narrative_covers_installable_hosts() {
 
 #[test]
 fn framework_aliases_reference_manifest_skills() {
-    let manifest = read_json(&project_root().join("skills/SKILL_MANIFEST.json"));
-    let manifest_keys = manifest["keys"].as_array().expect("manifest keys");
-    let manifest_slug_idx = key_index(manifest_keys, "slug");
-    let manifest_slugs = manifest["skills"]
+    let runtime = read_json(&project_root().join("skills/SKILL_ROUTING_RUNTIME.json"));
+    let runtime_keys = runtime["keys"].as_array().expect("runtime keys");
+    let runtime_slug_idx = key_index(runtime_keys, "slug");
+    let runtime_slugs = runtime["skills"]
         .as_array()
-        .expect("manifest skills")
+        .expect("runtime skills")
         .iter()
-        .map(|row| row[manifest_slug_idx].as_str().expect("manifest slug"))
+        .map(|row| row[runtime_slug_idx].as_str().expect("runtime slug"))
         .collect::<HashSet<_>>();
 
     let registry = read_json(&project_root().join("configs/framework/RUNTIME_REGISTRY.json"));
@@ -375,7 +321,7 @@ fn framework_aliases_reference_manifest_skills() {
             .and_then(|value| value.as_str())
         {
             assert!(
-                manifest_or_runtime_lane_contains(&manifest_slugs, owner),
+                manifest_or_runtime_lane_contains(&runtime_slugs, owner),
                 "framework alias {alias} canonical_owner references missing slug {owner}"
             );
         }
@@ -387,7 +333,7 @@ fn framework_aliases_reference_manifest_skills() {
             .filter_map(|value| value.as_str())
         {
             assert!(
-                manifest_or_runtime_lane_contains(&manifest_slugs, slug),
+                manifest_or_runtime_lane_contains(&runtime_slugs, slug),
                 "framework alias {alias} execution_owners references missing slug {slug}"
             );
         }

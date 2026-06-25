@@ -144,11 +144,6 @@ pub fn hook_review_subagent_state_basename(session_key: &str) -> String {
     format!("review-subagent-{session_key}.json")
 }
 
-/// Legacy Claude hook-state basename (`review_gate_<session_key>.json`) — read/migrate only.
-pub fn hook_review_gate_legacy_state_basename(session_key: &str) -> String {
-    format!("review_gate_{session_key}.json")
-}
-
 /// Build shared gate fields from the four persisted booleans.
 pub fn hook_review_gate_fields_from_parts(
     review_required: bool,
@@ -429,8 +424,8 @@ mod tests {
     #[test]
     fn hook_review_gate_legacy_state_basename_matches_claude_hook_state() {
         assert_eq!(
-            hook_review_gate_legacy_state_basename("abc123"),
-            "review_gate_abc123.json"
+            hook_review_subagent_state_basename("abc123"),
+            "review-subagent-abc123.json"
         );
     }
 

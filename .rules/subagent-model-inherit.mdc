@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Subagent Model Inherit（仅 Cursor）
 
-跨宿主基线见 [AGENTS.md](../../AGENTS.md) · [docs/architecture.md](../../docs/architecture.md)；lane/并行度见 [execution-subagent-gate.mdc](execution-subagent-gate.mdc)。本节只约束 **子代理模型选择**。
+跨宿主基线见 [AGENTS.md](../AGENTS.md) · [docs/architecture.md](../docs/architecture.md)；lane/并行度见 [execution-subagent-gate.mdc](execution-subagent-gate.mdc)。本节只约束 **子代理模型选择**。
 
 ## 硬约束
 
@@ -18,4 +18,4 @@ alwaysApply: true
 
 ## 排障
 
-见 [docs/hosts/hook-hosts.md](../../docs/hosts/hook-hosts.md)「Subagent 启动失败」；机读 nudge 来自 registry `subagent_model_inherit_nudge`（`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` 默认开）。
+见 [AGENTS.md](../AGENTS.md)「Subagent 启动失败」；机读 nudge 来自 registry `subagent_model_inherit_nudge`（`ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE` 默认开）。

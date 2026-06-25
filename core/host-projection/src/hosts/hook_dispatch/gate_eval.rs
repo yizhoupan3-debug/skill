@@ -550,6 +550,19 @@ fn is_plan_keyword_in_prompt(text: &str) -> bool {
         || lower.contains("先计划")
         || lower.contains("let's plan")
         || lower.contains("lets plan")
+        // Additional English plan invocations
+        || lower.contains("create a plan")
+        || lower.contains("make a plan")
+        || lower.contains("write a plan")
+        || lower.contains("draft a plan")
+        || lower.contains("draw up a plan")
+        || lower.contains("design a plan")
+        // Additional Chinese plan invocations
+        || lower.contains("做个计划")
+        || lower.contains("写个计划")
+        || lower.contains("草拟计划")
+        || lower.contains("规划方案")
+        || lower.contains("我需要一个计划")
 }
 
 /// Extract the new constraint phrase from a scope-change message.
@@ -631,8 +644,20 @@ pub fn build_user_prompt_context_injection(
     // append the new constraint to done_when so the model incorporates it.
     // SKIP if user is invoking plan mode (plan and goal are mutually exclusive).
     let is_plan_invocation = is_plan_keyword_in_prompt(prompt);
-    if !is_plan_invocation
-        && let Ok(Some(goal)) = core_state::state_manager::read_goal_state(repo_root, None) {
+
+    // Read goal state once, share between auto-amend and auto-detect blocks.
+    // Err on I/O is non-fatal — treat as "no state" to avoid a transient error
+    // suppressing auto-detect for all prompts (worst case: harmless extra context).
+    let goal_state: Option<Value> = if !is_plan_invocation {
+        match core_state::state_manager::read_goal_state(repo_root, None) {
+            Ok(state) => state,
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    if let Some(ref goal) = goal_state {
         let goal_running = goal.get("status").and_then(Value::as_str) == Some("running");
         let goal_driving = goal.get("drive_until_done").and_then(Value::as_bool) == Some(true);
         let not_stale = goal.get("stale").and_then(Value::as_bool) != Some(true);
@@ -671,7 +696,37 @@ pub fn build_user_prompt_context_injection(
                 }
             }
         }
+    }
+
+    // Goal auto-detect: complex task, no active goal → inject set_goal context.
+    if !is_plan_invocation {
+        let has_active_goal = goal_state.as_ref().is_some_and(|g| {
+            g.get("status").and_then(Value::as_str) == Some("running")
+                && g.get("drive_until_done").and_then(Value::as_bool) == Some(true)
+                && g.get("stale").and_then(Value::as_bool) != Some(true)
+        });
+        if !has_active_goal {
+            let result = core_policy::goal_auto_detect::analyze_complexity(prompt);
+            if result.is_complex {
+                let indicators = result.matched_indicators.join(", ");
+                contexts.push(format!(
+                    "[Goal Auto-Detect] 检测到复杂任务（匹配特征: {indicators}），当前无活跃 Goal 契约。\n\
+                     请执行 set_goal 流程：\n\
+                     ① 调研分析任务范围与约束（允许搜索相关代码、文档或外部信息）\n\
+                     ② 提炼结构化 Goal 契约：\n\
+                     - Goal：不是复述原话，而是分析后提取的核心目标\n\
+                     - Non-goals：明确不做什么\n\
+                     - Done when：可验证的完成条件列表\n\
+                     - Validation commands：验证命令\n\
+                     ③ 调用 goal_state_manage(operation=start, task_id=<task_id>, \
+                     goal=<goal>, done_when=[...], non_goals=[...], \
+                     validation_commands=[...])\n\
+                     （请将 <task_id> 等替换为实际值）\n\
+                     创建后回复用户当前 Goal 状态。"
+                ));
+            }
         }
+    }
 
     contexts
 }

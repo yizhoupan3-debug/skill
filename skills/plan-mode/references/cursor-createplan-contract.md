@@ -86,7 +86,7 @@ Cursor Plan Build **不**自动武装 lifecycle goal 门控。连续执行仅由
 
 ## 6. `.cursor/rules/session-close-summary.mdc` 引用
 
-计划执行完成后的用户可见聊天收尾，语气与「几句带过」见 [`.cursor/rules/session-close-summary.mdc`](../../../.cursor/rules/session-close-summary.mdc)；与仓库根 **`AGENTS.md`** 的 Closeout 「证据优先落工件、聊天不默认堆证据」一致。
+计划执行完成后的用户可见聊天收尾，语气与「几句带过」见 [`.rules/session-close-summary.mdc`](../../../.rules/session-close-summary.mdc)；与仓库根 **`AGENTS.md`** 的 Closeout 「证据优先落工件、聊天不默认堆证据」一致。
 
 ---
 

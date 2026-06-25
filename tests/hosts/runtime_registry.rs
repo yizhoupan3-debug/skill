@@ -46,7 +46,6 @@ fn runtime_registry_closed_set_is_canonical_five_hosts() {
 fn route_search_host_id_filters_skill_body_platforms_but_keeps_framework_commands() {
     let tmp = tempdir().unwrap();
     let runtime_path = tmp.path().join("SKILL_ROUTING_RUNTIME.json");
-    let manifest_path = tmp.path().join("SKILL_MANIFEST.json");
     write_json(
         &runtime_path,
         &json!({
@@ -59,24 +58,12 @@ fn route_search_host_id_filters_skill_body_platforms_but_keeps_framework_command
             ]
         }),
     );
-    write_json(
-        &manifest_path,
-        &json!({
-            "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "source_position", "skill_path", "host_platforms", "kind"],
-            "skills": [
-                ["opencode-only", "L1", "owner", "none", "P1", "Opencode-only skill", "n/a", ["opencode only"], "project", 3, "skills/opencode-only/SKILL.md", ["opencode"], "skill"],
-                ["cursor-skill", "L1", "owner", "none", "P1", "Cursor skill", "n/a", ["cursor task"], "project", 3, "skills/cursor-skill/SKILL.md", ["cursor"], "skill"],
-                ["gitx", "L1", "owner", "none", "P1", "Git command", "n/a", ["gitx", "/gitx"], "project", 3, "skills/gitx/SKILL.md", ["cursor"], "framework_command"]
-            ]
-        }),
-    );
+
     let filtered = router_rs_json(&[
         "search",
         "opencode only",
         "--runtime",
         runtime_path.to_str().unwrap(),
-        "--manifest",
-        manifest_path.to_str().unwrap(),
         "--host-id",
         "cursor",
         "--json",
@@ -93,8 +80,6 @@ fn route_search_host_id_filters_skill_body_platforms_but_keeps_framework_command
         "/gitx",
         "--runtime",
         runtime_path.to_str().unwrap(),
-        "--manifest",
-        manifest_path.to_str().unwrap(),
         "--host-id",
         "cursor",
         "--json",
@@ -120,8 +105,7 @@ fn runtime_registry_missing_file_fails_closed_with_actionable_error() {
     let repo_root = tmp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
     let output = run(router_rs_command([
-        "host",
-        "codex",
+        "framework",
         "host-integration",
         "export-runtime-registry",
         "--repo-root",
@@ -129,7 +113,7 @@ fn runtime_registry_missing_file_fails_closed_with_actionable_error() {
     ]));
     assert!(!output.status.success());
     let (_stdout, stderr) = output_text(&output);
-    assert!(stderr.contains("Runtime registry not found"));
+    assert!(stderr.contains("runtime registry not found"));
     assert!(stderr.contains("--framework-root"));
 }
 
@@ -179,10 +163,6 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         aliases["gitx"]["host_entrypoints"]["cursor"],
         "/gitx"
     );
-    let gitx_eps = aliases["gitx"]["goal_persistence"]["execution_entrypoints"]
-        .as_array()
-        .expect("gitx execution_entrypoints should be an array");
-    assert!(gitx_eps.contains(&json!("/gitx")));
     assert_eq!(
         aliases["deepinterview"]["host_entrypoints"]["codex"],
         "/deepinterview"
@@ -239,19 +219,7 @@ fn runtime_registry_exposes_framework_commands_and_native_runtime_contract() {
         ])
     );
     assert!(payload.get("mcp_clients").is_none());
-    let gitx_cmd = &aliases["gitx"];
-    assert_eq!(gitx_cmd["canonical_owner"], "gitx");
-    let gp = gitx_cmd["goal_persistence"]
-        .as_object()
-        .expect("goal_persistence");
-    let leader = gp
-        .get("continuation_hook_leader")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    assert!(
-        leader.contains("framework_goal_drive") && !leader.contains("GOAL_CONTINUE"),
-        "continuation_hook_leader: {leader}"
-    );
+    assert_eq!(aliases["gitx"]["canonical_owner"], "gitx");
 }
 
 #[test]

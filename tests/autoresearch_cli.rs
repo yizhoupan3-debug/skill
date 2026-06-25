@@ -128,6 +128,7 @@ fn rust_autoresearch_full_loop() {
 }
 
 #[test]
+#[ignore = "requires external API (arxiv)"]
 fn autoresearch_records_external_research_from_arxiv() {
     let tmp = tempdir().unwrap();
     run_ctl_ok(&[
@@ -170,6 +171,7 @@ fn autoresearch_records_external_research_from_arxiv() {
 }
 
 #[test]
+#[ignore = "requires external API (arxiv)"]
 fn autoresearch_batch_research_and_gate_recommendation() {
     let tmp = tempdir().unwrap();
     run_ctl_ok(&[

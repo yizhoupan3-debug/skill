@@ -2,7 +2,7 @@
 
 ## 一页纸定位
 
-这是一整套给 Claude、Codex、Cursor 和 OpenCode 共用的 skill 系统：`skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。**使用者快查**（宿主差异、`REVIEW_GATE`、真源阅读顺序、自检命令）：[`docs/hosts/`](docs/hosts/) + [`AGENTS.md`](AGENTS.md)。
+这是一整套给 Claude、Codex、Cursor 和 OpenCode 共用的 skill 系统：`skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。**使用者快查**（宿主差异、`REVIEW_GATE`、真源阅读顺序、自检命令）：[`docs/README.md`](docs/README.md) + [`AGENTS.md`](AGENTS.md)。
 
 **近期变更（2026-06）**：闭集宿主收敛为**四宿主**（`codex`、`claude`、`cursor`、`opencode`），由 `RUNTIME_REGISTRY.json` 驱动。文档地图：[`docs/README.md`](docs/README.md)。
 
@@ -55,7 +55,7 @@ cargo test --test policy_contracts
 ## 修改或新增 skill
 
 1. 创建 `skills/<skill-name>/SKILL.md`（frontmatter + `## When to use` / `## Do not use`）
-2. 手改热路由真源：`skills/SKILL_ROUTING_RUNTIME.json`、`skills/SKILL_MANIFEST.json`
+2. 手改热路由真源：`skills/SKILL_ROUTING_RUNTIME.json`
 3. 再生 companion：`cargo run --manifest-path core/router-rs/Cargo.toml -- framework skills refresh --write --write-companions`
 4. 验证：`framework skills validate`；`cargo test --test policy_contracts`
 

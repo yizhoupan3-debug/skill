@@ -771,10 +771,6 @@ pub fn validate_projection_adapters_against_registry(framework_root: &Path) -> R
     Ok(())
 }
 
-pub fn projection_alias_summary() -> String {
-    String::new()
-}
-
 pub fn canonical_scope(scope: &str) -> Result<&'static str, String> {
     match scope.trim().to_lowercase().as_str() {
         "" | "project" | "project-local" => Ok("project"),

@@ -4,7 +4,6 @@ pub use core_state_utils::atomic_write;
 pub use core_state_utils::json_io;
 pub use core_state_utils::jsonl_maintenance;
 pub use core_state_utils::path_guard;
-pub use core_state_utils::read_bounded;
 pub use core_state_utils::task_write_lock;
 
 #[cfg(test)]

@@ -812,19 +812,6 @@ fn validate_execution_kernel_steady_state_metadata_impl(
             }
         }
     }
-    for field in [
-        "execution_kernel_fallback_reason",
-        "execution_kernel_compatibility_agent_contract",
-        "execution_kernel_compatibility_agent_kind",
-        "execution_kernel_compatibility_agent_authority",
-    ] {
-        if metadata.contains_key(field) {
-            return Err(FrameworkError::validation(format!(
-                "execution-kernel steady-state metadata returned an unsupported compatibility field: {field}"
-            )));
-        }
-    }
-
     let mut normalized = Map::new();
     for (key, value) in metadata {
         normalized.insert(key.clone(), value.clone());

@@ -107,7 +107,7 @@ use crate::route::has_paper_review_judgment_context;
             ]]
         });
         let manifest_payload = json!({
-            "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "source_position", "skill_path"],
+            "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
             "skills": [[
                 "sample-skill",
                 "L1",
@@ -118,7 +118,6 @@ use crate::route::has_paper_review_judgment_context;
                 "n/a",
                 ["sample"],
                 "project",
-                3,
                 "skills/sample-skill/SKILL.md"
             ]]
         });
@@ -453,7 +452,7 @@ use crate::route::has_paper_review_judgment_context;
         fs::write(
             &manifest_path,
             serde_json::to_string(&json!({
-                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "source_position", "skill_path"],
+                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
                 "skills": [[
                     "sample-skill",
                     "L1",
@@ -464,7 +463,6 @@ use crate::route::has_paper_review_judgment_context;
                     "n/a",
                     ["sample"],
                     "project",
-                    3,
                     "skills/sample-skill/SKILL.md"
                 ]]
             }))
@@ -515,7 +513,7 @@ use crate::route::has_paper_review_judgment_context;
         fs::write(
             &manifest_path,
             serde_json::to_string(&json!({
-                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "source_position", "skill_path"],
+                "keys": ["slug", "layer", "owner", "gate", "priority", "description", "session_start", "trigger_hints", "source", "skill_path"],
                 "skills": [[
                     "manifest-owner",
                     "L1",

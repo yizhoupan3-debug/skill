@@ -243,7 +243,7 @@ fn first_frontmatter_accepts_closing_delim_with_trailing_spaces() {
 #[test]
 fn cursor_always_apply_rules_link_agents_and_harness_architecture() {
     let root = project_root();
-    let rules_dir = root.join(".cursor/rules");
+    let rules_dir = root.join(".rules");
     assert!(
         rules_dir.is_dir(),
         "expected {} to exist",

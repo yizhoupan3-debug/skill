@@ -106,9 +106,9 @@ pub fn key_index_first(keys: &[Value], names: &[&str]) -> usize {
         .unwrap_or_else(|| panic!("missing keys {:?}", names))
 }
 
-/// Hot runtime rows store per-skill hosts under `host_platforms` or legacy `source_position`.
+/// Hot runtime rows store per-skill hosts under `host_platforms`.
 pub fn runtime_host_platforms_index(keys: &[Value]) -> usize {
-    key_index_first(keys, &["host_platforms", "source_position"])
+    key_index_first(keys, &["host_platforms"])
 }
 
 /// Runtime rows store the description under `description` or legacy `summary`.
@@ -180,4 +180,5 @@ pub fn allowed_python_control_plane_path(path: &Path) -> bool {
     let text = path.to_string_lossy();
     text == ".cursor/hook-tests/test_install_codex_cli_hooks.py"
         || text.starts_with(".cursor/hook-tests/tmp_")
+        || text == "scripts/check-mcp-configs.py"
 }
