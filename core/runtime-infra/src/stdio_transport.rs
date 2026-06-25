@@ -1,3 +1,4 @@
+use core_policy::error::FrameworkError;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -17,6 +18,8 @@ use rt_storage::runtime_envelope_ids::{
 pub use fr_utils::types::{StdioJsonRequestPayload, StdioJsonResponsePayload};
 
 // ── Function pointer injection (decouples from cli/ per ADR §10.3) ──
+
+type Result<T> = std::result::Result<T, FrameworkError>;
 
 type DispatchFn = fn(StdioJsonRequestPayload) -> StdioJsonResponsePayload;
 type EnvUsizeFn = fn(&str) -> Option<usize>;
@@ -113,7 +116,7 @@ pub struct RuntimeConcurrencyDefaultsPayload {
     pub subagent_timeout_seconds: u64,
 }
 
-pub fn run_stdio_json_loop(max_concurrency_override: Option<usize>) -> Result<(), String> {
+pub fn run_stdio_json_loop(max_concurrency_override: Option<usize>) -> Result<()> {
     let max_concurrency = resolve_stdio_max_concurrency(max_concurrency_override);
     if max_concurrency > 1 {
         return run_concurrent_stdio_json_loop(max_concurrency);
