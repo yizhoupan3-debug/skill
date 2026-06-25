@@ -207,7 +207,52 @@ Then for all x with |x - a| < δ, we have:
 
 ---
 
-## Strategy Selection Flowchart
+## Tier 5: Asymptotic Analysis
+
+### Order-of-Magnitude (≲ / ≪ / ≍)
+
+**Pattern:** Compare growth rates via limits: f ≲ g ⟺ limsup|f/g| < ∞; f ≪ g ⟺ lim|f/g| = 0; f ≍ g ⟺ 0 < lim|f/g| < ∞.
+
+**When:** Estimating error terms, comparing algorithm complexity, dominating terms in ODE/PDE regimes, analytic number theory, harmonic analysis.
+
+**Key properties:**
+- **Transitivity**: f ≲ g ∧ g ≲ h ⇒ f ≲ h (same for ≪ and ≍)
+- **Mixed chains** (e.g., f ≲ g ≪ h) are valid for top-level ordering but require per-step justification — never collapse a mixed relation without checking the strictness degradation
+- **Algebra**: If f₁ ≲ g₁ and f₂ ≲ g₂ then f₁+f₂ ≲ g₁+g₂, f₁·f₂ ≲ g₁·g₂ (same for ≪ under positivity)
+
+**Template:**
+```
+Claim: f(x) ≲ g(x) as x → ∞
+Compute L = limsup_{x→∞} |f(x)/g(x)|
+If L < ∞: claim holds.
+If L = 0: claim strengthens to f ≪ g.
+If L = ∞: claim fails (reverse inequality may hold).
+```
+
+**Tooling:**
+- `math_asymptotic_estimate(expression, variable, regime)` — SymPy leading-term estimate
+- `math_asymptotic_chain(steps, variable, regime)` — verify chain transitivity
+- Mixed-chain detection: use `math_asymptotic_chain` with `sympy_check=true`
+
+**Checklist:**
+- [ ] Regime (limit point) is explicitly stated
+- [ ] Ratio limit (f/g) is finite for ≲, zero for ≪
+- [ ] Chain transitivity is verified
+- [ ] Mixed relations are NOT silently collapsed
+
+### Dominant Balance / Matched Asymptotics
+
+**Pattern:** For ODEs with a small parameter ε → 0, identify dominant terms by balancing two at a time.
+
+**When:** Boundary layer problems, singular perturbations, WKB approximation.
+
+**Approach:**
+1. Assume an asymptotic expansion: y ~ y₀ + εy₁ + ε²y₂ + ...
+2. Substitute into the equation and collect powers of ε
+3. Solve at each order
+4. Check consistency (no secular terms, matching across layers)
+
+---
 
 ```
 Is the statement parameterized by ℕ?

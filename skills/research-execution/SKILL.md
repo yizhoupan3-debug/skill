@@ -175,7 +175,7 @@ When a task spans both skills, the recommended flow is:
 ## Cross-references
 
 - Quality Gate research harness: `docs/architecture.md` §Quality Gate
-- Math reasoning harness: `docs/architecture.md` §Math Reasoning
+- Math reasoning harness: `docs/math-reasoning-harness.md`
 - Manuscript stack boundary: [`../paper-workbench/references/RESEARCH_PAPER_STACK.md`](../paper-workbench/references/RESEARCH_PAPER_STACK.md)
 - Reproducibility minimum record: [`../experiment-reproducibility/references/research-record-minimum.md`](../experiment-reproducibility/references/research-record-minimum.md)
 - Discovery counterpart: [`../research-discovery/SKILL.md`](../research-discovery/SKILL.md)

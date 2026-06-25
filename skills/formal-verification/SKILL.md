@@ -65,20 +65,25 @@ trigger_hints:
 
 ## Verification Checklist
 
-Rust 实现：`research_harness::verification::formal`（通过 MCP tool 或直接调用）
+通过 MCP tool 调用数学验证后端：
 
 ```
-# 量纲一致性检查：
-research_harness::verification::formal::check_dimensional_consistency(equation)
+math_prove_inequality(expression="x + y <= 10")          # 不等式可行性
+math_asymptotic_estimate(expression="x^2 + x", regime="oo")  # 渐近阶估计
+math_asymptotic_chain(steps=[...])                           # 渐近链传递性
+math_backend_available()                                     # 后端可用状态
 ```
 
-| # | 检查名 | PASS 条件 |
-|---|--------|-----------|
-| 1 | CAS identity 化简 | SymPy simplify(expr) == 0 |
-| 2 | SMT 预期一致性 | Z3 check() == sat |
-| 3 | Witness 一致性 | 代入特例值后左右两边一致 |
-| 4 | 量纲检查 | 每步方程左右两侧量纲相同 |
-| 5 | 步骤依赖图完整性 | 无悬空引用（每步的前置步骤已定义） |
+| # | 检查名 | PASS 条件 | 调用方式 |
+|---|--------|-----------|----------|
+| 1 | 不等式一致性 | Z3 check() == sat | `math_prove_inequality` |
+| 2 | 渐近关系链传递性 | 纯链自动 PASS，混合链 WARN | `math_asymptotic_chain` |
+| 3 | Proof DAG 验证 | 递归遍历，每轮标记 stale | `math_proof_dag_verify` |
+| 4 | 后端可用性 | 后端返回 available=true | `math_backend_available` |
+| 5 | CAS identity 化简 | SymPy simplify(expr) == 0 | `math_prove_inequality`（parse via SymPy） |
+| 6 | Witness 一致性 | 代入特例值后左右两边一致 | 内链数值代入 |
+| 7 | 量纲检查 | 每步方程左右两侧量纲相同 | 内链量纲分析 |
+| 8 | 步骤依赖图完整性 | 无悬空引用（每步的前置步骤已定义） | 内联图检查 |
 
 ## References
 

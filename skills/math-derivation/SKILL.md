@@ -14,6 +14,11 @@ metadata:
   - ODE
   - PDE
   - convergence
+  - asymptotic
+  - order of magnitude
+  - ≲
+  - ≪
+  - ≍
   version: '2.0.0'
 name: math-derivation
 risk: low
@@ -98,7 +103,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 > [!CAUTION]
 > These are **non-negotiable rules** for every derivation produced by this skill.
 
-1. **No logic jumps**: Every step's premise must be traceable to given conditions or prior steps. No implicit "middle steps" allowed.
+1. **No logic jumps**: Every step's premise must be traceable to given conditions or prior steps. No implicit "middle steps" allowed. For multi-step proofs with ≥5 steps or ≥2 sub-claims, decompose using `math_proof_dag_init` / `math_proof_dag_decompose` into AND-OR sub-goals.
 2. **No unjustified "obvious"**: If writing "显然" / "clearly" / "trivially", you MUST append a one-line justification or cite a standard result by name.
 3. **All math in LaTeX**: Every formula, equation, and expression uses LaTeX notation. No plain-text math like `x^2 + y^2`.
 4. **Division safety**: When dividing or inverting, explicitly verify the denominator/element is non-zero. State the reason (e.g., "since $x > 0$ by $H_2$").
@@ -110,9 +115,11 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 10. **No circular reasoning**: The conclusion must never appear (even in disguised form) in its own proof chain.
 11. **Limit interchange justification**: Swapping $\lim$, $\int$, $\sum$, or $\frac{d}{dx}$ requires explicit invocation of the justifying theorem (DCT, MCT, Fubini, Leibniz, etc.) with verification of its hypotheses.
 12. **Theorem hypothesis verification**: Before applying any named theorem, explicitly verify that all its hypotheses are satisfied in the current context.
-13. **Verified means checker-backed**: Do not call a derivation "verified", "严审通过", or "深度验证" based only on prose. Provide checker output / a runnable command, or mark the verification gap.
+13. **Verified means checker-backed**: Do not call a derivation "verified", "严审通过", or "深度验证" based only on prose. Call `math_prove_inequality` for a **single inequality** feasibility check; use `math_asymptotic_chain` for **inequality/asymptotic chain** verification; use `math_sympy_verify` for algebraic identity checking. When no backend is available, mark as `[CHECKER_UNAVAILABLE: Z3]`.
 14. **Counterexample probe**: For research-grade critique, attempt at least one counterexample or boundary probe before accepting the claim.
 15. **Completion gates (harness integration)**: When operating under automated review, set gate requirements `require_successful_evidence_row: true, min_depth_score: 1` to enforce the checker-backed standard. Without these, the harness cannot distinguish verified output from prose. See `docs/architecture.md`.
+16. **Asymptotic chain discipline**: All asymptotic relation chains (≲/≪/≍) must be verified for transitivity — use `math_asymptotic_chain` for verification. Mixed chains (containing more than one relation type) automatically WARN and require human review. Pure chains (single relation type) auto-PASS on transitive closure.
+17. **Proof DAG monotonicity**: Blueprint-DAG decomposition is monotonic (structure only grows by refinement). Verification results are per-round valid — a new round marks all previous results as stale. DAG monotonicity constrains topological invariance only, not verification result persistence.
 
 ## Output template
 
@@ -136,7 +143,7 @@ Minimal structure:
 ```
 
 For research-grade or multi-round math work, align with
-[docs/architecture.md](../../docs/architecture.md):
+[math-reasoning-harness.md](../../docs/math-reasoning-harness.md):
 witnesses, checker-backed PASS/FAIL, dependency graph, counterexample probes, and (when exploring new structures) §D discovery → promotion → STEM falsify via [lane-templates.md](../../docs/architecture.md).
 
 ## Common pitfalls

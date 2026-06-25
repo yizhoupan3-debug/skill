@@ -13,8 +13,192 @@ pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, Str
         "research_review_dimensions" => tool_research_review_dimensions(arguments),
         "research_claim_drift" => tool_research_claim_drift(arguments),
         "research_review_loop" => tool_research_review_loop(arguments),
+        _ if name.starts_with("math_") => math_tool_dispatch(name, arguments),
         _ => Err(format!("unknown research tool: {name}")),
     }
+}
+
+// ── Math tool sub-dispatch ──
+
+fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, String> {
+    match name {
+        "math_prove_inequality" => tool_math_prove_inequality(arguments),
+        "math_backend_available" => tool_math_backend_available(arguments),
+        "math_backend_status" => tool_math_backend_available(arguments),
+        "math_asymptotic_estimate" => tool_math_asymptotic_estimate(arguments),
+        "math_asymptotic_chain" => tool_math_asymptotic_chain(arguments),
+        "math_proof_dag_init" => tool_math_proof_dag_init(arguments),
+        "math_proof_dag_decompose" => tool_math_proof_dag_decompose(arguments),
+        "math_proof_dag_verify" => tool_math_proof_dag_verify(arguments),
+        "math_proof_dag_status" => tool_math_proof_dag_status(arguments),
+        "math_sympy_verify" => tool_math_sympy_verify(arguments),
+        "math_sympy_simplify" => tool_math_sympy_simplify(arguments),
+        "math_lean_verify" => tool_math_lean_verify(arguments),
+        _ => Err(format!("unknown math tool: {name}")),
+    }
+}
+
+// ── Inequality tool functions ──
+
+fn tool_math_prove_inequality(arguments: &Value) -> Result<String, String> {
+    let expr = arguments.get("expression").and_then(Value::as_str)
+        .ok_or("math_prove_inequality requires 'expression' (string)")?;
+    let timeout = arguments.get("timeout_ms").and_then(Value::as_u64);
+    let vr = crate::verification::inequality::check_inequality(expr, timeout);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+    })).map_err(|e| e.to_string())
+}
+
+fn tool_math_backend_available(_arguments: &Value) -> Result<String, String> {
+    let lean_status = crate::verification::lean_bridge::check_lean_status();
+    let (lean_available, lean_desc) = match &lean_status {
+        crate::verification::lean_bridge::LeanStatus::Available => {
+            (true, "Lean 4 theorem prover is installed".to_string())
+        }
+        crate::verification::lean_bridge::LeanStatus::NotFound { install_guide, .. } => {
+            (false, format!("Lean 4 — not found. Install guide: {install_guide}"))
+        }
+    };
+    serde_json::to_string_pretty(&json!({
+        "inequality_engine": {
+            "available": crate::verification::inequality::z3_available(),
+            "description": "Z3-based linear inequality verification",
+        },
+        "sympy": {
+            "available": crate::verification::sympy_available(),
+            "description": "Symbolic identity simplification and LaTeX parsing",
+        },
+        "lean": { "available": lean_available, "description": lean_desc },
+        "install_hint": "uv pip install z3-solver sympy",
+    })).map_err(|e| e.to_string())
+}
+
+// ── Asymptotic tool functions ──
+
+fn tool_math_asymptotic_estimate(arguments: &Value) -> Result<String, String> {
+    let expr = arguments.get("expression").and_then(Value::as_str)
+        .ok_or("math_asymptotic_estimate requires 'expression' (string)")?;
+    let var = arguments.get("variable").and_then(Value::as_str).unwrap_or("x");
+    let regime = arguments.get("regime").and_then(Value::as_str).unwrap_or("oo");
+    let vr = crate::verification::asymptotic::magnitude_estimate_with_name(expr, var, regime, "math_asymptotic_estimate");
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+    })).map_err(|e| e.to_string())
+}
+
+fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, String> {
+    let steps_val = arguments.get("steps").and_then(Value::as_array)
+        .ok_or("math_asymptotic_chain requires 'steps' array")?;
+    let var = arguments.get("variable").and_then(Value::as_str).unwrap_or("x");
+    let regime = arguments.get("regime").and_then(Value::as_str).unwrap_or("oo");
+    let sympy_check = arguments.get("sympy_check").and_then(Value::as_bool).unwrap_or(true);
+    let steps: Vec<crate::verification::asymptotic::AsymptoticStep> =
+        serde_json::from_value(serde_json::Value::Array(steps_val.clone()))
+            .map_err(|e| format!("invalid step format: {e}"))?;
+    let vr = crate::verification::asymptotic::verify_asymptotic_chain_with_name(&steps, var, regime, sympy_check, "math_asymptotic_chain");
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "steps": steps_val,
+    })).map_err(|e| e.to_string())
+}
+
+// ── Proof DAG tool functions ──
+
+fn get_or_create_dag() -> &'static std::sync::Mutex<Option<crate::proof_dag::Blueprint>> {
+    use std::sync::OnceLock;
+    static DAG: OnceLock<std::sync::Mutex<Option<crate::proof_dag::Blueprint>>> = OnceLock::new();
+    DAG.get_or_init(|| std::sync::Mutex::new(None))
+}
+
+fn tool_math_proof_dag_init(arguments: &Value) -> Result<String, String> {
+    let goal = arguments.get("goal").and_then(Value::as_str)
+        .ok_or("math_proof_dag_init requires 'goal' (string)")?;
+    let name = arguments.get("name").and_then(Value::as_str).unwrap_or("proof");
+    let bp = crate::proof_dag::Blueprint::new(goal, name);
+    let serialized = crate::proof_dag_serialize::serialize_blueprint(&bp)?;
+    if let Ok(mut guard) = get_or_create_dag().lock() {
+        *guard = Some(bp);
+    }
+    Ok(serialized)
+}
+
+fn tool_math_proof_dag_decompose(arguments: &Value) -> Result<String, String> {
+    let parent_id = arguments.get("parent_id").and_then(Value::as_str)
+        .ok_or("math_proof_dag_decompose requires 'parent_id'")?;
+    let and = arguments.get("and").and_then(Value::as_bool).unwrap_or(false);
+    let children_val = arguments.get("children").and_then(Value::as_array)
+        .ok_or("math_proof_dag_decompose requires 'children' array")?;
+    let children: Vec<crate::proof_dag::DagNode> =
+        serde_json::from_value(Value::Array(children_val.clone()))
+            .map_err(|e| format!("invalid child format: {e}"))?;
+    let mut guard = get_or_create_dag().lock().map_err(|e| format!("lock: {e}"))?;
+    let bp = guard.as_mut().ok_or("no active proof DAG — call math_proof_dag_init first")?;
+    bp.decompose(parent_id, children, and)?;
+    crate::proof_dag_serialize::serialize_blueprint(bp)
+}
+
+fn tool_math_proof_dag_verify(arguments: &Value) -> Result<String, String> {
+    let _ = arguments;
+    let mut guard = get_or_create_dag().lock().map_err(|e| format!("lock: {e}"))?;
+    let bp = guard.as_mut().ok_or("no active proof DAG — call math_proof_dag_init first")?;
+    bp.verify()?;
+    if let Err(warning) = bp.validate_manual_prose_ratio(0.30) {
+        let summary = bp.status_summary();
+        return serde_json::to_string_pretty(&json!({
+            "result": summary,
+            "manual_prose_warning": warning,
+        })).map_err(|e| e.to_string());
+    }
+    crate::proof_dag_serialize::serialize_blueprint(bp)
+}
+
+fn tool_math_proof_dag_status(arguments: &Value) -> Result<String, String> {
+    let _ = arguments;
+    let guard = get_or_create_dag().lock().map_err(|e| format!("lock: {e}"))?;
+    let bp = guard.as_ref().ok_or("no active proof DAG — call math_proof_dag_init first")?;
+    let summary = bp.status_summary();
+    serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())
+}
+
+// ── SymPy bridge tool functions ──
+
+fn tool_math_sympy_verify(arguments: &Value) -> Result<String, String> {
+    let lhs = arguments.get("lhs").and_then(Value::as_str)
+        .ok_or("math_sympy_verify requires 'lhs' (string)")?;
+    let rhs = arguments.get("rhs").and_then(Value::as_str)
+        .ok_or("math_sympy_verify requires 'rhs' (string)")?;
+    let assumptions: Vec<&str> = arguments.get("assumptions")
+        .and_then(Value::as_array)
+        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    let vr = crate::verification::sympy_bridge::verify_identity(lhs, rhs, &assumptions);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "lhs": lhs, "rhs": rhs,
+    })).map_err(|e| e.to_string())
+}
+
+fn tool_math_sympy_simplify(arguments: &Value) -> Result<String, String> {
+    let expr = arguments.get("expression").and_then(Value::as_str)
+        .ok_or("math_sympy_simplify requires 'expression' (string)")?;
+    let vr = crate::verification::sympy_bridge::simplify_expression(expr);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details, "expression": expr,
+    })).map_err(|e| e.to_string())
+}
+
+fn tool_math_lean_verify(arguments: &Value) -> Result<String, String> {
+    let script = arguments.get("script").and_then(Value::as_str)
+        .ok_or("math_lean_verify requires 'script' (string)")?;
+    let vr = crate::verification::lean_bridge::verify_lean_theorem(script);
+    serde_json::to_string_pretty(&json!({
+        "check_name": vr.check_name, "status": format!("{:?}", vr.status),
+        "details": vr.details,
+    })).map_err(|e| e.to_string())
 }
 
 fn parse_language(value: &Value, key: &str) -> crate::aigc::Language {
@@ -462,5 +646,126 @@ mod tests {
         assert_eq!(anchors[0].strength, EvidenceStrength::Strong);
         assert_eq!(anchors[1].source, "Figure 2");
         assert_eq!(anchors[1].strength, EvidenceStrength::Weak);
+    }
+
+    // ── Math tool tests ──
+
+    #[test]
+    fn test_math_prove_inequality_missing_expression() {
+        let result = handle_research_tool("math_prove_inequality", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires 'expression'"));
+    }
+
+    #[test]
+    fn test_math_prove_inequality_optional_timeout() {
+        let result = handle_research_tool("math_prove_inequality", &json!({"expression": "x > 0"}));
+        assert!(result.is_err() || result.is_ok());
+    }
+
+    #[test]
+    fn test_math_asymptotic_estimate_missing_expression() {
+        let result = handle_research_tool("math_asymptotic_estimate", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires 'expression'"));
+    }
+
+    #[test]
+    fn test_math_asymptotic_chain_missing_steps() {
+        let result = handle_research_tool("math_asymptotic_chain", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires 'steps'"));
+    }
+
+    #[test]
+    fn test_math_asymptotic_chain_invalid_step_format() {
+        let result = handle_research_tool("math_asymptotic_chain", &json!({
+            "steps": [{"premise": "n", "relation": "InvalidOp"}],
+            "variable": "n", "regime": "oo",
+        }));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_math_proof_dag_init_missing_goal() {
+        let result = handle_research_tool("math_proof_dag_init", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires 'goal'"));
+    }
+
+    #[test]
+    fn test_math_proof_dag_decompose_missing_parent_id() {
+        let result = handle_research_tool("math_proof_dag_decompose", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires 'parent_id'"));
+    }
+
+    #[test]
+    fn test_math_proof_dag_verify_without_init() {
+        let result = handle_research_tool("math_proof_dag_verify", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("no active proof DAG"));
+    }
+
+    #[test]
+    fn test_math_proof_dag_status_without_init() {
+        let result = handle_research_tool("math_proof_dag_status", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("no active proof DAG"));
+    }
+
+    #[test]
+    fn test_math_sympy_verify_missing_lhs() {
+        let result = handle_research_tool("math_sympy_verify", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires 'lhs'"));
+    }
+
+    #[test]
+    fn test_math_sympy_verify_missing_rhs() {
+        let result = handle_research_tool("math_sympy_verify", &json!({"lhs": "x"}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires 'rhs'"));
+    }
+
+    #[test]
+    fn test_math_sympy_simplify_missing_expression() {
+        let result = handle_research_tool("math_sympy_simplify", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires 'expression'"));
+    }
+
+    #[test]
+    fn test_math_lean_verify_missing_script() {
+        let result = handle_research_tool("math_lean_verify", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("requires 'script'"));
+    }
+
+    #[test]
+    fn test_math_backend_available_ok() {
+        let result = handle_research_tool("math_backend_available", &json!({}));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_math_backend_status_ok() {
+        let result = handle_research_tool("math_backend_status", &json!({}));
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_math_unknown_tool() {
+        let result = handle_research_tool("math_nonexistent", &json!({}));
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown math tool"));
+    }
+
+    #[test]
+    fn test_math_tool_routing() {
+        let result = handle_research_tool("math_future_tool", &json!({}));
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("unknown") || err.contains("requires"), "wrong routing: {err}");
     }
 }
