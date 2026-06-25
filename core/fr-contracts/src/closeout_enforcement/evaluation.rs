@@ -271,20 +271,19 @@ fn validate_r3b_invalid_command_evidence(
     violations: &mut Vec<CloseoutViolation>,
     missing: &mut Vec<String>,
 ) {
-    if let Some(invalid) = record
-        .commands_run
-        .iter()
-        .find(|c| c.command.trim().is_empty())
-    {
-        violations.push(CloseoutViolation::new(
-            "invalid_command_evidence",
-            "block",
-            format!(
-                "commands_run contains a row without a non-empty command; exit_code={}",
-                invalid.exit_code
-            ),
-        ));
-        missing.push("command".to_string());
+    for cmd in &record.commands_run {
+        let cmd_trimmed = cmd.command.trim();
+        if cmd_trimmed.is_empty() {
+            violations.push(CloseoutViolation::new(
+                "invalid_command_evidence",
+                "block",
+                format!(
+                    "commands_run contains a row without a non-empty command; exit_code={}",
+                    cmd.exit_code
+                ),
+            ));
+            missing.push("command".to_string());
+        }
     }
 }
 

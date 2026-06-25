@@ -116,6 +116,11 @@ pub fn has_explicit_entrypoint_term(query_text: &str, entrypoint: &str) -> bool 
 }
 
 /// Retired framework slash commands must fail-closed to native runtime (no skill owner).
+///
+/// This is the single maintenance location for retired framework command names.
+/// When a framework command is deprecated, add its name here so that it
+/// reliably fails closed to the native runtime instead of matching a skill.
+/// New framework command constants should be registered in `super::constants`.
 const RETIRED_FRAMEWORK_SLASH_COMMANDS: &[&str] =
     &["/team"];
 

@@ -4,7 +4,7 @@
 
 这是一整套给 Claude、Codex、Cursor 和 OpenCode 共用的 skill 系统：`skills/` 技能库、路由运行表、维护脚本、CI 校验和项目级 `AGENTS.md` 规则。**使用者快查**（宿主差异、`REVIEW_GATE`、真源阅读顺序、自检命令）：[`docs/README.md`](docs/README.md) + [`AGENTS.md`](AGENTS.md)。
 
-**近期变更（2026-06）**：闭集宿主收敛为**四宿主**（`codex`、`claude`、`cursor`、`opencode`），由 `RUNTIME_REGISTRY.json` 驱动。文档地图：[`docs/README.md`](docs/README.md)。
+**宿主闭集**：`codex`、`claude`、`cursor`、`opencode`，由 `RUNTIME_REGISTRY.json` 驱动。文档地图：[`docs/README.md`](docs/README.md)。
 
 ## 两条使用路径
 

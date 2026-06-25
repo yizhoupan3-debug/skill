@@ -1,4 +1,4 @@
-//! Unified hook dispatcher for all 4 closed-set hosts.
+//! Unified hook dispatcher for all supported hosts (registry-driven).
 //!
 //! All hosts use a single `RegistryDispatcher` struct configured from
 //! RUNTIME_REGISTRY.json fields. No per-host hardcoded structs remain.

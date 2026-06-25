@@ -19,12 +19,7 @@ pub const DOC_ARCHITECTURE: &str = "docs/architecture.md";
 /// 一站式文档地图
 pub const DOC_README: &str = "docs/README.md";
 
-// ── 研究文档 ──
-
-/// 科研 Harness 总览 + 路由契约
-pub const DOC_HARNESS: &str = "docs/research/harness.md";
-
-// ── 运维 ──
+// ── 研发文档 ──
 
 /// 运维中枢
 pub const DOC_OPS_INDEX: &str = "docs/operations/index.md";
@@ -63,6 +58,8 @@ pub const DEPRECATED: &[&str] = &[
     "docs/hosts/opencode.md",
     "docs/research-harness.md",
     "docs/research/routing-contracts.md",
+    "docs/research/harness.md",
+    "docs/reports/2026-06-24-runtime-audit.md",
 ];
 
 // ── 查询函数 ──
@@ -82,7 +79,6 @@ pub fn all_keys() -> &'static [&'static str] {
     &[
         DOC_ARCHITECTURE,
         DOC_README,
-        DOC_HARNESS,
         DOC_OPS_INDEX,
         AGENTS_MD,
         ROOT_README,

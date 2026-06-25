@@ -1,3 +1,7 @@
+---
+last_verified: "2026-06-25"
+---
+
 # 架构规约
 
 ## 1. 架构总则
@@ -79,11 +83,14 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | L6 | `loop-engine` | 可选自动化增强（仅 `loop-auto` profile）；RFV 闭环 |
 | L6 | `session-supervisor` | 多 Agent + RFV 闭环监督 |
 | L6 | `framework-extra` | 编排控制面：doctor、session_artifacts、snapshot |
+| L6 | `framework-maint` | L6 framework 维护：inline snapshot、maintenance commands |
 | L5 | `host-projection` | Hook 分派、MCP stdio 桥、投影安装 |
 | L5 | `runtime-exit-gate` | Quality gate RFV 循环 |
 | L5 | `runtime-infra` | 运行时初始化、基础 API 门面 |
 | L5 | `mcp-tool-registry` | 统一 MCP 工具注册表 |
 | L5 | `runtime-core-contracts` | L2 定义被 L5 消费 |
+| L5 | `eval-route` | 路由评估框架：validate routing decisions against expected outcomes |
+| L5 | `research-harness` | 科研 Harness：paper revision loop、literature search、claims mgmt（§5.1） |
 | L4 | `core-state` | Task 状态机与 Goal/RFV（组件表见下） |
 | L4 | `routing-engine` | Skill 路由匹配与评分 |
 | L4 | `tool-routing-engine` | Tool 路由评分与搜索 |

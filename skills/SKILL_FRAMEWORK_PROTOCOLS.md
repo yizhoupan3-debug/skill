@@ -24,7 +24,7 @@
 4. 若出现 regression，作为下一轮 finding。
 5. `runtime verification gate` iteration loop 只编排验收轮次，不替代 domain owner。
 
-## 5. Stop Rules
+## 2. Stop Rules
 
 满足任一即停止：
 
@@ -34,7 +34,7 @@
 4. 用户要求停止
 5. 剩余问题均为 `info`
 
-## 6. Self-Audit 最小维度
+## 3. Self-Audit 最小维度
 
 完成一轮后只需复核：
 

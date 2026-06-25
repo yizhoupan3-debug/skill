@@ -2,8 +2,8 @@
 use tracing;
 use super::aliases::has_literal_framework_alias_call;
 use super::constants::{
-    NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN, PROFILE_COMPILE_AUTHORITY, ROUTE_AUTHORITY,
-    ROUTE_DECISION_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
+    FRAMEWORK_COMMAND_KIND, NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN, PROFILE_COMPILE_AUTHORITY,
+    ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
 };
 use super::fuzzy::{FUZZY_MIN_SIMILARITY, fuzzy_fallback_score};
 use super::scoring::{
@@ -281,7 +281,7 @@ pub fn filter_record_indices_for_host(
     let mut saw_host = false;
     let mut indices = Vec::with_capacity(records.len());
     for (idx, record) in records.iter().enumerate() {
-        if record.record_kind == "framework_command" {
+        if record.record_kind == FRAMEWORK_COMMAND_KIND {
             saw_host = true;
             indices.push(idx);
             continue;
@@ -305,9 +305,11 @@ pub fn filter_record_indices_for_host(
     }
 
     if !saw_host {
-        return Err(format!(
-            "host-aware routing has no skill records for host_id `{host_id}`; host_platforms metadata is missing or the host id is unsupported"
-        ));
+        tracing::warn!(
+            host_id, original_len,
+            "host-aware routing has no skill records for host_id; returning empty"
+        );
+        return Ok(vec![]);
     }
     Ok(indices)
 }

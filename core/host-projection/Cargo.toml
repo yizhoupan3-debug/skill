@@ -2,6 +2,7 @@
 name = "host-projection"
 version = "0.1.0"
 edition = "2024"
+description = "L5 host projection: hook dispatch, MCP stdio bridge, provider trait"
 [lints]
 workspace = true
 

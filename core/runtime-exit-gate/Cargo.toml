@@ -2,6 +2,7 @@
 name = "runtime-exit-gate"
 version = "0.1.0"
 edition = "2024"
+description = "L5 quality gate: RFV validation and schema drift detection"
 [lints]
 workspace = true
 
@@ -20,6 +21,7 @@ runtime-core-contracts = { path = "../runtime-core-contracts" }
 
 # workspace
 chrono.workspace = true
+fs2.workspace = true
 hex.workspace = true
 serde.workspace = true
 serde_json.workspace = true

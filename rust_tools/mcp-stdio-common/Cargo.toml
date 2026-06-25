@@ -2,6 +2,7 @@
 name = "mcp-stdio-common"
 version = "0.1.0"
 edition = "2024"
+description = "Shared stdio MCP protocol helpers"
 
 [dependencies]
 anyhow = "1.0"

@@ -2,6 +2,7 @@
 name = "telemetry-types"
 version = "1.0.0"
 edition = "2024"
+description = "L0 pure telemetry event types"
 [lints]
 workspace = true
 

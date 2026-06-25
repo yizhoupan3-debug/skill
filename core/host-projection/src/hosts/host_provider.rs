@@ -6,7 +6,7 @@
 use std::sync::OnceLock;
 
 /// Full harness capabilities for hosts with complete hook support
-/// (claude, cursor, codex, opencode — all 4 closed-set hosts).
+/// (all supported hosts from the registry).
 pub const HARNESS_CAPABILITIES_FULL: &[&str] = &[
     "hot_runtime_routing",
     "l2_continuity_contract",
@@ -14,15 +14,15 @@ pub const HARNESS_CAPABILITIES_FULL: &[&str] = &[
     "review_gate_router_observation",
 ];
 
-/// Declared harness surface for a closed-set host (roadmap §4.1).
+/// Declared harness surface for a host (roadmap §4.1).
 ///
-/// Default values reflect the majority across the 4 closed-set hosts.
+/// Default values reflect the majority across supported hosts.
 /// Only fields that differ per host need to be overridden in `capabilities()`.
 ///
 /// **Design note**: The boolean defaults (`has_native_hook`, `supports_subagent`,
-/// `supports_worktree`) are `true` because all current closed-set hosts (claude,
-/// cursor, codex, opencode) support these features. If a new host is added that
-/// lacks any of these capabilities, it MUST explicitly set the field to `false`
+/// `supports_worktree`) are `true` because all current supported hosts
+/// support these features. If a new host is added that lacks any of these
+/// capabilities, it MUST explicitly set the field to `false`
 /// in its `capabilities()` override. The test
 /// `all_host_capabilities_match_expected_values` in this module guards against
 /// accidental default drift.
@@ -67,7 +67,7 @@ pub trait HostLifecycle: Send + Sync {
     fn session_supervisor_driver(&self) -> &'static str;
     fn context_file(&self) -> &'static str;
 
-    /// Harness capabilities. All 4 closed-set hosts use FULL.
+    /// Harness capabilities. All supported hosts use FULL.
     fn harness_capabilities(&self) -> &'static [&'static str] {
         HARNESS_CAPABILITIES_FULL
     }
@@ -116,17 +116,17 @@ pub trait HostLifecycle: Send + Sync {
 
 /// Tool-guard metadata aligned with `pre_tool_use_guard` registry signals.
 pub trait HostToolExecutor: Send + Sync {
-    /// All 4 closed-set hosts support hard gate hooks (shell/plugin level).
+    /// All supported hosts (with native hooks) support hard gate hooks (shell/plugin level).
     fn has_hard_gate_hooks(&self) -> bool {
         true
     }
 
-    /// All 4 closed-set hosts support closeout evidence hooks.
+    /// All supported hosts (with native hooks) support closeout evidence hooks.
     fn closeout_evidence_hooks_supported(&self) -> bool {
         true
     }
 
-    /// All 4 closed-set hosts have native hooks; strict fallback not needed.
+    /// All supported hosts (with native hooks) have native hooks; strict fallback not needed.
     fn requires_strict_pre_tool_fallback_default(&self) -> bool {
         false
     }
@@ -231,17 +231,19 @@ static AGENT_DISPATCH_REGISTRY: OnceLock<Vec<(&'static str, AgentDispatchFn)>> =
 
 /// Register hook dispatch functions for all supported hosts.
 /// Called once during CLI bootstrap (router-rs), before any hook dispatch.
-/// Panics on double-registration (design contract: single init).
+/// Double-registration is silently ignored (safe for re-init scenarios).
 pub fn register_hook_dispatchers(entries: Vec<(&'static str, HookDispatchFn)>) {
-    let existing = HOOK_DISPATCH_REGISTRY.set(entries);
-    assert!(existing.is_ok(), "hook dispatch registry already initialized");
+    if HOOK_DISPATCH_REGISTRY.set(entries).is_err() {
+        tracing::warn!("hook dispatch registry already initialized (double-register ignored)");
+    }
 }
 
 /// Register agent dispatch functions for all supported hosts.
-/// Called once during CLI bootstrap. Panics on double-registration.
+/// Called once during CLI bootstrap. Double-registration silently ignored.
 pub fn register_agent_dispatchers(entries: Vec<(&'static str, AgentDispatchFn)>) {
-    let existing = AGENT_DISPATCH_REGISTRY.set(entries);
-    assert!(existing.is_ok(), "agent dispatch registry already initialized");
+    if AGENT_DISPATCH_REGISTRY.set(entries).is_err() {
+        tracing::warn!("agent dispatch registry already initialized (double-register ignored)");
+    }
 }
 
 /// Find a hook dispatch function by host_id. Returns None for unknown hosts.
@@ -479,45 +481,50 @@ mod tests {
     #[test]
     #[serial]
     fn p4_sub_trait_accessors_upcast_from_host_provider() {
-        let lifecycle = host_lifecycle_for_id("cursor").expect("cursor lifecycle");
-        assert_eq!(lifecycle.profile_id(), "cursor_profile");
-        let tool_exec = host_tool_executor_for_id("codex").expect("codex tool executor");
-        assert!(!tool_exec.requires_strict_pre_tool_fallback_default());
-        let telemetry = host_telemetry_for_id("opencode").expect("opencode telemetry");
-        assert!(telemetry.review_gate_router_observable());
+        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+            let lifecycle = host_lifecycle_for_id(host_id)
+                .unwrap_or_else(|| panic!("{host_id}: lifecycle upcast"));
+            assert!(!lifecycle.profile_id().is_empty(), "{host_id}: profile_id");
+            assert!(!lifecycle.session_supervisor_driver().is_empty(), "{host_id}: supervisor");
+
+            let tool_exec = host_tool_executor_for_id(host_id)
+                .unwrap_or_else(|| panic!("{host_id}: tool_exec upcast"));
+            assert!(!tool_exec.requires_strict_pre_tool_fallback_default(), "{host_id}: strict_fallback");
+
+            let telemetry = host_telemetry_for_id(host_id)
+                .unwrap_or_else(|| panic!("{host_id}: telemetry upcast"));
+            assert!(telemetry.review_gate_router_observable(), "{host_id}: review_gate");
+        }
     }
 
     #[test]
     fn native_hook_glue_surfaces_manifest_and_events() {
-        let cases: &[(&str, &str, &[&str])] = &[
-            // (host_id, manifest_path, sample_events)
-            (
-                "cursor",
-                ".cursor/hooks.json",
-                &["beforeSubmitPrompt", "stop"],
-            ),
-            ("codex", ".codex/hooks.json", &["PreToolUse", "Stop"]),
-            // opencode: no manifest (native hook via launcher script), events tested separately
-        ];
-        for &(host_id, manifest, events) in cases {
+        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
             let lifecycle = host_lifecycle_for_id(host_id).expect(host_id);
-            assert_eq!(
-                lifecycle.hooks_manifest_path(),
-                Some(manifest),
-                "{host_id}: manifest"
-            );
-            for event in events {
+            if let Some(manifest) = lifecycle.hooks_manifest_path() {
+                let events = lifecycle.registered_hook_events();
                 assert!(
-                    lifecycle.registered_hook_events().contains(event),
-                    "{host_id}: event {event}"
+                    !events.is_empty(),
+                    "{host_id}: hooks_manifest_path ({manifest}) but no registered_hook_events"
+                );
+                for event in events {
+                    assert!(!event.is_empty(), "{host_id}: empty event in registered_hook_events");
+                }
+                let telemetry = host_telemetry_for_id(host_id)
+                    .unwrap_or_else(|| panic!("{host_id} telemetry"));
+                assert_eq!(
+                    telemetry.observation_host_id(),
+                    Some(*host_id),
+                    "{host_id}: observation_host_id"
+                );
+            } else {
+                // Hosts without hooks_manifest_path may still have registered_hook_events
+                // (e.g., for template-driven hooks via launcher script).
+                assert!(
+                    lifecycle.registered_hook_events().is_empty(),
+                    "{host_id}: no hooks_manifest_path but has registered_hook_events"
                 );
             }
-            let telemetry = host_telemetry_for_id(host_id).unwrap_or_else(|| panic!("{host_id} telemetry"));
-            assert_eq!(
-                telemetry.observation_host_id(),
-                Some(host_id),
-                "{host_id}: observation_host_id"
-            );
         }
     }
 

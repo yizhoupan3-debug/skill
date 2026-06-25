@@ -28,17 +28,22 @@ struct ParsedRules {
 fn parsed_rules() -> &'static ParsedRules {
     static CELL: OnceLock<ParsedRules> = OnceLock::new();
     CELL.get_or_init(|| {
-        #[allow(clippy::expect_used)]
-        let root: Value =
-            serde_json::from_str(RULES_EMBED).expect("ROUTER_RS_HOOK_OBSERVATION_RULES.json");
+        let root: Value = serde_json::from_str(RULES_EMBED).unwrap_or_else(|e| {
+            panic!(
+                "ROUTER_RS_HOOK_OBSERVATION_RULES.json: failed to parse embedded JSON: {}",
+                e
+            );
+        });
         let sv = root
             .get("schema_version")
             .and_then(Value::as_str)
             .unwrap_or("");
-        assert_eq!(
-            sv, EXPECTED_SCHEMA,
-            "ROUTER_RS_HOOK_OBSERVATION_RULES schema_version mismatch"
-        );
+        if sv != EXPECTED_SCHEMA {
+            panic!(
+                "ROUTER_RS_HOOK_OBSERVATION_RULES: schema_version mismatch: expected='{}', actual='{}'",
+                EXPECTED_SCHEMA, sv
+            );
+        }
         let mut tokens = HashMap::new();
         if let Some(obj) = root.get("router_rs_tokens").and_then(Value::as_object) {
             for (k, v) in obj {

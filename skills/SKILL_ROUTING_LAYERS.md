@@ -58,8 +58,8 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
                verification/review, memory and prompt policy, research workflow
 ```
 
-> 冷表分层对齐 `skills/SKILL_MANIFEST.json`；热表 owner 以 `skills/SKILL_ROUTING_RUNTIME.json` 为准。
-> System skills（`.system/`）[archived]: `plugin-creator`, `skill-creator`, `skill-installer`
+> 热表 owner 以 `skills/SKILL_ROUTING_RUNTIME.json` 为准。
+> System skills [archived]: `plugin-creator`, `skill-creator`, `skill-installer`
 
 ## 各层何时做主 owner
 

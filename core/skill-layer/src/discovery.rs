@@ -75,10 +75,12 @@ pub fn parse_skill_name_from_path(path: &Path) -> Result<Option<String>, Discove
         return Ok(None);
     };
     for line in block.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("name:") {
-            return Ok(Some(rest.trim().to_string()));
+        // Must be at column 0 (before trimming) to avoid matching nested keys
+        // such as `metadata:  name:` — lightweight parsing without serde_yaml.
+        if !line.starts_with("name:") {
+            continue;
         }
+        return Ok(Some(line["name:".len()..].trim().to_string()));
     }
     Ok(None)
 }
@@ -105,15 +107,23 @@ pub fn safe_skill_md_path(
 
     let path = skills_root.join(slug).join("SKILL.md");
 
-    // Verify the resolved path is still under skills_root
-    let canonical_skills = fs::canonicalize(skills_root)
-        .unwrap_or_else(|_| skills_root.to_path_buf());
-    if let Ok(canonical_path) = fs::canonicalize(&path)
-        && !canonical_path.starts_with(&canonical_skills) {
-            return Err(DiscoveryError::InvalidSlug(format!(
-                "path traversal detected: {slug}"
-            )));
-        }
+    // Verify the resolved path is still under skills_root.
+    // Both paths must canonicalize successfully — fail-closed against traversal.
+    let canonical_skills = fs::canonicalize(skills_root).map_err(|e| {
+        DiscoveryError::InvalidSlug(format!(
+            "skills_root canonicalize failed for slug `{slug}`: {e}"
+        ))
+    })?;
+    let canonical_path = fs::canonicalize(&path).map_err(|e| {
+        DiscoveryError::InvalidSlug(format!(
+            "skill path canonicalize failed for slug `{slug}`: {e}"
+        ))
+    })?;
+    if !canonical_path.starts_with(&canonical_skills) {
+        return Err(DiscoveryError::InvalidSlug(format!(
+            "path traversal detected: {slug}"
+        )));
+    }
 
     Ok(path)
 }

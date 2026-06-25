@@ -2,6 +2,7 @@
 name = "loop-engine"
 version = "0.1.0"
 edition = "2024"
+description = "L6 optional automation engine: RFV loop for loop-auto profile"
 [lints]
 workspace = true
 

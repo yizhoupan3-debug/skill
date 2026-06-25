@@ -2,6 +2,7 @@
 name = "ooxml_parser_rs"
 version = "0.1.0"
 edition = "2024"
+description = "MCP OOXML (docx/xlsx/pptx) parser tool"
 default-run = "ooxml"
 
 [lib]

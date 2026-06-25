@@ -2,6 +2,7 @@
 name = "browser-mcp-dispatch"
 version = "0.1.0"
 edition = "2024"
+description = "L0 browser MCP dispatch helper — stdin/stdout MCP relay with host isolation"
 [lints]
 workspace = true
 

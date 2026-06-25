@@ -130,9 +130,17 @@ pub fn storage_artifact_exists(
     }
     match storage_backend {
         Some(ResolvedStorageBackend::Filesystem) => false,
-        Some(ResolvedStorageBackend::Memory) => memory_artifact_path(path)
-            .map(|artifact_path| artifact_path.exists())
-            .unwrap_or(false),
+        Some(ResolvedStorageBackend::Memory) => match memory_artifact_path(path) {
+            Ok(artifact_path) => artifact_path.exists(),
+            Err(e) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "storage_artifact_exists: memory_artifact_path failed"
+                );
+                false
+            }
+        },
         Some(ResolvedStorageBackend::Sqlite {
             db_path,
             storage_root,
@@ -146,12 +154,16 @@ pub fn storage_read_text(
     path: &Path,
     storage_backend: Option<&ResolvedStorageBackend>,
 ) -> Result<String, String> {
-    if path.exists() {
-        return fs::read_to_string(path)
-            .map_err(|err| format!("read artifact failed for {}: {err}", path.display()));
-    }
+    // Route to the correct backend based on the storage_backend parameter.
+    // The path.exists() filesystem check must NOT run for Sqlite or Memory
+    // backends, as that would return stale filesystem data for paths that
+    // happen to exist on disk but belong to a different backend.
     match storage_backend {
         Some(ResolvedStorageBackend::Filesystem) | None => {
+            if path.exists() {
+                return fs::read_to_string(path)
+                    .map_err(|err| format!("read artifact failed for {}: {err}", path.display()));
+            }
             Err(format!("artifact does not exist: {}", path.display()))
         }
         Some(ResolvedStorageBackend::Memory) => fs::read_to_string(memory_artifact_path(path)?)

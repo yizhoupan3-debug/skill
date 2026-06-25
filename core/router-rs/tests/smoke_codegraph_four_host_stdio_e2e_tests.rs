@@ -1,9 +1,9 @@
-//! CG deferred: five-host install projection + real `mcp-codegraph` stdio subprocess.
+//! CG deferred: four-host install projection + real `mcp-codegraph` stdio subprocess.
 //!
 //! Opt-in: `ROUTER_RS_CODEGRAPH_STDIO_E2E=1` (spawns real binary; may build `mcp-codegraph` first).
 
 #[cfg(feature = "codegraph")]
-mod five_host_stdio_e2e {
+mod four_host_stdio_e2e {
     use std::fs;
     use std::io::Write;
     use std::path::{Path, PathBuf};
@@ -263,10 +263,10 @@ mod five_host_stdio_e2e {
 
     #[serial]
     #[test]
-    fn codegraph_five_host_stdio_e2e_smoke() {
+    fn codegraph_four_host_stdio_e2e_smoke() {
         if !stdio_e2e_enabled() {
             eprintln!(
-                "skip codegraph_five_host_stdio_e2e_smoke: set ROUTER_RS_CODEGRAPH_STDIO_E2E=1"
+                "skip codegraph_four_host_stdio_e2e_smoke: set ROUTER_RS_CODEGRAPH_STDIO_E2E=1"
             );
             return;
         }
@@ -276,7 +276,7 @@ mod five_host_stdio_e2e {
 
         let registry = load_runtime_registry_json(&framework_root).expect("load RUNTIME_REGISTRY");
         let host_ids = host_targets_supported_host_ids(&registry).expect("supported host ids");
-        assert_eq!(host_ids.len(), 5, "closed-set must remain five hosts");
+        assert_eq!(host_ids.len(), 4, "closed-set must remain four hosts (codex, claude, cursor, opencode)");
 
         let (cleanup_root, roots) = test_roots(&framework_root);
         let prior_home = std::env::var_os("HOME");

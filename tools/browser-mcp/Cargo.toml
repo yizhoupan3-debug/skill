@@ -2,6 +2,7 @@
 name = "browser-mcp"
 version = "0.1.0"
 edition = "2024"
+description = "L3 browser automation MCP service (tools/)"
 [lints]
 workspace = true
 

@@ -2,6 +2,7 @@
 name = "framework-maint"
 version = "0.1.0"
 edition = "2024"
+description = "L6 framework maintenance: inline snapshot, maintenance commands"
 [lints]
 workspace = true
 

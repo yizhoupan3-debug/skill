@@ -2,6 +2,7 @@
 name = "pdf_tool_rs"
 version = "0.1.0"
 edition = "2024"
+description = "MCP PDF processing tool"
 default-run = "pdf"
 
 [lib]

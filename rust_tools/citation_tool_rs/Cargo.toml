@@ -2,6 +2,7 @@
 name = "citation_tool_rs"
 version = "0.1.0"
 edition = "2024"
+description = "MCP citation collection and formatting tool"
 default-run = "citation"
 
 [lib]

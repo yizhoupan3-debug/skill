@@ -2,6 +2,7 @@
 name = "financial_data_rs"
 version = "0.1.0"
 edition = "2024"
+description = "MCP financial data retrieval tool"
 default-run = "financial-data"
 
 [lib]

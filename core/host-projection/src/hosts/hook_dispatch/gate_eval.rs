@@ -324,7 +324,7 @@ pub fn goal_gate_satisfied(core: &core_policy::HookReviewDiskCore) -> bool {
         core.goal_contract_seen,
         core.goal_progress_seen,
         core.goal_verify_or_block_seen,
-        core.review_override,
+        core.gate.review_override,
         core.delegation_override,
     )
 }
@@ -424,15 +424,15 @@ pub fn merge_review_gate_on_user_prompt(
     let mut core = prev.clone();
 
     if task_profile || goal_drive || narrow {
-        core.review_required = false;
-        core.independent_reviewer_seen = false;
+        core.gate.review_required = false;
+        core.gate.independent_reviewer_seen = false;
     } else {
         if review_arms && !override_now {
-            core.independent_reviewer_seen = false;
+            core.gate.independent_reviewer_seen = false;
         }
-        core.review_required = core.review_required || review_arms;
+        core.gate.review_required = core.gate.review_required || review_arms;
     }
-    core.review_override = core.review_override || override_now;
+    core.gate.review_override = core.gate.review_override || override_now;
 
     let fresh_cycle = review_arms && !override_now && !task_profile && !goal_drive && !narrow;
 
@@ -453,13 +453,13 @@ pub fn apply_override_and_reject(
     stop_signal: &str,
 ) {
     if core_policy::hook_common::has_override(prompt) {
-        core.review_override = true;
+        core.gate.review_override = true;
         core.delegation_override = true;
     }
     if core_policy::hook_common::saw_reject_reason(stop_signal, prompt)
         || core_policy::hook_common::saw_reject_reason(prompt, stop_signal)
     {
-        core.reject_reason_seen = true;
+        core.gate.reject_reason_seen = true;
         core.followup_count = 0;
         core.review_followup_count = 0;
     }
@@ -510,14 +510,8 @@ pub fn evaluate_stop_decision(
     update_goal_gate(core, prompt, response_text, goal_entry);
 
     // 4. Review gate
-    let gate_fields = core_policy::hook_review_gate_fields_from_parts(
-        core.review_required,
-        core.review_override,
-        core.independent_reviewer_seen,
-        core.reject_reason_seen,
-    );
     if let Some(nudge) = core_policy::hook_review_stop_advisory_needed(
-        &gate_fields,
+        &core.gate,
         &format!("{}_REVIEW_GATE", host_id.to_ascii_uppercase()),
     ) {
         return StopDecision::ReviewGateNudge { message: nudge };

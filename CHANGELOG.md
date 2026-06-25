@@ -56,6 +56,57 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `framework_runtime/json_payload.rs` (merged into json_value.rs)
 - `cursor_hooks/tests_review_gate.rs` 5254-line monolith (split into 3 sub-modules)
 
-## [v6.5] — 2026-06-12
+## [v7.1] — 2026-06-25
+
+### Architecture
+- 六层→八层运行时模型重构 (L0-L7)
+- `framework-runtime` 拆分为 `fr-utils`/`fr-contracts`/`fr-exec` 子 crate
+- 新增 `http-util` crate (HTTP 客户端工厂)
+- 新增 `tool-routing` crate (tool 路由评分与搜索)
+- 彻底移除 JS workflow 脚本与废弃 skill references
+- JS workflow (`/workflow`) 废弃清理
+- 生命周期四阶段 skill 退场 (`discussx`/`planx`/`implementx`/`verifyx`)
+- `my-light` goal profile 删除，区分 linear/loop 模式
+- Goal 全周期治理：自动检测、amend、严格退出验证、anti-drift 核查
+- 注册表驱动全面推行：所有宿主硬编码从工具层清除
+
+### Host Management
+- 移除 MiMo 第 5 宿主，闭集收敛为 4 宿主 (`cursor`/`claude`/`opencode`/`codex`)
+- `router-rs-cli`→`router-rs` 二进制回退兼容层清除
+- 删除废弃 `per-host` agent 模块与 `host_extensions`
+- 宿主统一 verify + 工具层运行时逻辑清除 + `schema_drift` 泛化
+
+### Security
+- 运行时安全加固：6 项 Critical 级审计修复
+- MCP `dispatch_tool` 区分"未注册"与"执行失败"
+- SSRF 防护回归
+
+### Governance & Code Quality
+- 多轮 clippy 治理：200→0 清理，unwrap/expect 严格化
+- `cargo test --workspace` 编译修复（7 处编译器错误）
+- 清除 11 处死函数/废弃导入/未使用变量（12 编译警告清零）
+- `core-policy`: `hook_common` 拆分子模块，`tool_safety_rules` 死代码清除
+- 4 阶段字段兼容层 + 死/重复字段清理 + env flag 合并
+- 对抗审核修复：`goal_state` 共享读取、`SKILL.md` network_access 等
+- `research-harness`: 合并 `extract_content_words` + 加固 claim 覆盖度算法
+- `browser-mcp` 独立特征门控
+- `closeout record` 原子写入 + compaction 修复
+
+### Testing
+- 新增 `cargo-fuzz` 目标 (MCP/stdio/hook)
+- `insta` snapshot 从 5 扩展到 33 个
+- 测试覆盖完成（W4 阶段）
+- CodeGraph 深度集成：skill prompt 指引 + routing signal + hook 软告警
+
+### Documentation
+- 注册表驱动重构全面文档适配
+- ADR 更新 + AGENTS.md 六层→八层运行时模型同步
+- 文档体系科学化重构 + `last_verified` 日期治理
+- codegraph 支持 `.md` 索引
+- 文档体系维护 + `research-harness` KG 专章
+
+### Config
+- 注册表驱动配置全面更新 + 路由索引 `skill_flags` 对齐
+- `RUNTIME_REGISTRY.json` 缓存优化 + 路由引擎拆分
 
 Baseline for v7. See `artifacts/current/system-evolution-roadmap-v6.md` for v6.x history.

@@ -143,12 +143,12 @@ mod smoke_codegraph_semantic_dispatch_tests;
 mod smoke_codegraph_e2e_minimal_tests;
 
 #[cfg(all(test, feature = "codegraph"))]
-#[path = "../tests/smoke_codegraph_five_host_install_projection_tests.rs"]
-mod smoke_codegraph_five_host_install_projection_tests;
+#[path = "../tests/smoke_codegraph_four_host_install_projection_tests.rs"]
+mod smoke_codegraph_four_host_install_projection_tests;
 
 #[cfg(all(test, feature = "codegraph"))]
-#[path = "../tests/smoke_codegraph_five_host_stdio_e2e_tests.rs"]
-mod smoke_codegraph_five_host_stdio_e2e_tests;
+#[path = "../tests/smoke_codegraph_four_host_stdio_e2e_tests.rs"]
+mod smoke_codegraph_four_host_stdio_e2e_tests;
 
 #[cfg(test)]
 #[path = "../tests/smoke_p0_trace_runtime_compaction_tests.rs"]

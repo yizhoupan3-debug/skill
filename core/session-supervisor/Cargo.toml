@@ -2,6 +2,7 @@
 name = "session-supervisor"
 version = "0.1.0"
 edition = "2024"
+description = "L6 multi-agent supervisor with RFV closeout loop"
 [lints]
 workspace = true
 

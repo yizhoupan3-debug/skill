@@ -282,9 +282,9 @@ pub fn run_unified_stop(
     }
 
     // ── 12. Conditional state cleanup ──
-    let should_clear = !review_state.review_required
+    let should_clear = !review_state.gate.review_required
         && !review_state.tracks_goal()
-        && !review_state.reject_reason_seen;
+        && !review_state.gate.reject_reason_seen;
     if should_clear {
         clear_file(&review_path);
     } else {

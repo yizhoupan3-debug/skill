@@ -2,6 +2,7 @@
 name = "framework-extra"
 version = "0.1.0"
 edition = "2024"
+description = "L6 orchestration control plane: doctor, session_artifacts, snapshot"
 [lints]
 workspace = true
 

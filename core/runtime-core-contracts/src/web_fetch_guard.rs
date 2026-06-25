@@ -54,7 +54,10 @@ pub fn resolve_web_fetch_redirect(base: &reqwest::Url, location: &str) -> Result
         .join(location.trim())
         .map_err(|err| format!("web_fetch invalid redirect location: {err}"))?;
     let next_str = next.to_string();
-    validate_web_fetch_url(&next_str)?;
+    // Use validate_and_resolve to close DNS-rebind TOCTOU — single pass DNS resolve + IP check.
+    // This prevents the redirect target from re-resolving to a private IP between validation
+    // and the HTTP request. Callers that need DNS pinning should request a pinned variant.
+    validate_and_resolve_web_fetch_url(&next_str)?;
     Ok(next_str)
 }
 

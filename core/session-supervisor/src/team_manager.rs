@@ -367,24 +367,8 @@ pub fn send_message(
         .transpose()?
         .unwrap_or_else(|| "broadcast".to_string());
 
-    // Step 1: validate team exists (under lock), update counters
-    with_team_registry(repo_root, |registry| {
-        let team = find_team_mut(registry, team_id)
-            .ok_or_else(|| format!("team not found: {team_id}"))?;
-
-        if let Some(sender) = team.members.iter_mut().find(|m| m.agent_id == from_agent) {
-            sender.messages_sent += 1;
-        }
-        if let Some(recipient) = to_agent
-            .and_then(|id| team.members.iter_mut().find(|m| m.agent_id == id))
-        {
-            recipient.messages_received += 1;
-        }
-        team.updated_at = now.to_string();
-        Ok(())
-    })?;
-
-    // Step 2: write message file (outside lock — no registry dependency)
+    // Validate team, update counters, AND write message file under the same
+    // lock so the entire validation-and-write sequence is atomic.
     let msg_id = format!("{now}-{safe_from}");
     let safe_msg_id: String = msg_id
         .chars()
@@ -406,17 +390,33 @@ pub fn send_message(
         .join(&safe_target)
         .join(format!("{safe_msg_id}.json"));
 
-    if let Some(parent) = msg_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("create message dir failed: {e}"))?;
-    }
+    with_team_registry(repo_root, |registry| {
+        let team = find_team_mut(registry, team_id)
+            .ok_or_else(|| format!("team not found: {team_id}"))?;
 
-    let raw = serde_json::to_string_pretty(&msg)
-        .map_err(|e| format!("serialize message failed: {e}"))?;
-    fs::write(&msg_path, &raw)
-        .map_err(|e| format!("write message failed: {e}"))?;
+        if let Some(sender) = team.members.iter_mut().find(|m| m.agent_id == from_agent) {
+            sender.messages_sent += 1;
+        }
+        if let Some(recipient) = to_agent
+            .and_then(|id| team.members.iter_mut().find(|m| m.agent_id == id))
+        {
+            recipient.messages_received += 1;
+        }
+        team.updated_at = now.to_string();
 
-    Ok(msg)
+        // Write message file inside the lock
+        if let Some(parent) = msg_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("create message dir failed: {e}"))?;
+        }
+
+        let raw = serde_json::to_string_pretty(&msg)
+            .map_err(|e| format!("serialize message failed: {e}"))?;
+        fs::write(&msg_path, &raw)
+            .map_err(|e| format!("write message failed: {e}"))?;
+
+        Ok(msg)
+    })
 }
 
 /// Read all messages for a given agent in a team.

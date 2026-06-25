@@ -1,7 +1,7 @@
-//! Unified hook dispatch trait for all 4 closed-set hosts.
+//! Unified hook dispatch trait for all supported hosts (registry-driven).
 //!
-//! All hosts (cursor, claude, codex, opencode) implement `HostHookDispatcher`,
-//! sharing common logic through trait defaults. Host-specific overrides are minimal.
+//! All hosts implement `HostHookDispatcher`, sharing common logic through trait
+//! defaults. Host-specific overrides are minimal.
 //!
 //! Architecture:
 //! ```text
@@ -78,7 +78,7 @@ pub enum HookOutput {
 pub struct StopOrchestrationInput<'a> {
     /// Repository root path.
     pub repo_root: &'a Path,
-    /// Host identifier (claude / cursor / codex / opencode).
+    /// Host identifier (from RUNTIME_REGISTRY.json).
     pub host_id: &'a str,
     /// Raw event payload from the host.
     pub payload: &'a Value,
@@ -115,7 +115,7 @@ pub trait HostHookConfig: Send + Sync {
     /// Host identifier for env flag resolution.
     fn host_id(&self) -> &'static str;
 
-    /// State directory leaf name (e.g. ".cursor", ".claude", ".codex", ".opencode").
+    /// State directory leaf name (from RUNTIME_REGISTRY.json host_private_config_dir).
     fn state_dir_leaf(&self) -> &'static str;
 
     /// Hook state unreadable error tag.

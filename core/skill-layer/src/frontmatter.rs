@@ -69,6 +69,16 @@ pub enum RecordKind {
     FrameworkCommand,
 }
 
+impl RecordKind {
+    /// Canonical string representation matching `#[serde(rename_all = "snake_case")]`.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RecordKind::Skill => "skill",
+            RecordKind::FrameworkCommand => "framework_command",
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SkillFrontmatterSpec (field catalogue)
 // ---------------------------------------------------------------------------

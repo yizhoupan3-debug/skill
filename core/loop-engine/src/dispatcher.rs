@@ -29,7 +29,9 @@ impl<'a> SubagentPermit<'a> {
     fn acquire(sem: &'a Mutex<u32>) -> Self {
         let mut backoff_ms = 50;
         loop {
-            let mut count = sem.lock().unwrap();
+            let Ok(mut count) = sem.lock().map_err(|e| e.into_inner()) else {
+                continue;
+            };
             if *count > 0 {
                 *count -= 1;
                 return Self { sem };
@@ -43,7 +45,9 @@ impl<'a> SubagentPermit<'a> {
 
 impl Drop for SubagentPermit<'_> {
     fn drop(&mut self) {
-        *self.sem.lock().unwrap() += 1;
+        if let Ok(mut count) = self.sem.lock().map_err(|e| e.into_inner()) {
+            *count += 1;
+        }
     }
 }
 

@@ -17,7 +17,7 @@ use std::fs;
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Check whether a loop entry's profile is schedulable.
 /// Returns an error for task profiles which cannot be scheduled for unattended execution.
@@ -437,15 +437,18 @@ fn barrier_escalation(
             cmd.pre_exec(|| dispatcher::apply_subprocess_rlimits());
         }
 
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let _ = tx.send(cmd.output());
-        });
-        rx.recv_timeout(Duration::from_secs(300))
-            .map_err(|_| {
-                LoopError::ActionFailed("barrier escalation: cargo run timed out after 300s".into())
-            })?
-            .map_err(|e| LoopError::ActionFailed(format!("barrier escalation failed: {e}")))?
+        let child = cmd
+            .spawn()
+            .map_err(|e| LoopError::SpawnFailed(format!("barrier escalation: {e}")))?;
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+        crate::dispatcher::poll_subprocess(
+            child,
+            repo_root,
+            loop_id,
+            "barrier-escalation",
+            deadline,
+            std::time::Duration::from_secs(300),
+        )?
     } else {
         let mut cmd = std::process::Command::new(&autoresearch_bin);
         cmd.args([

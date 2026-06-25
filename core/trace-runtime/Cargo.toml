@@ -2,6 +2,7 @@
 name = "trace-runtime"
 version = "0.1.0"
 edition = "2024"
+description = "L1 trace recording and compaction"
 [lints]
 workspace = true
 

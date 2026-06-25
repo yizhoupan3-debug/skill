@@ -2,6 +2,7 @@
 name = "core-policy"
 version = "0.1.0"
 edition = "2024"
+description = "L0 core policies: hook policy, env_flags, review gate, goal detection"
 [lints]
 workspace = true
 

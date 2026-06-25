@@ -208,15 +208,16 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
 
     #[cfg(not(unix))]
     {
-        // NOTE: On non-Unix platforms (Windows, etc.) we cannot use O_EXCL for atomic
-        // file creation. The `fs::write` call below is susceptible to a TOCTOU race:
-        // another process could create the lock file between the existence check above
-        // and this write. For production Windows deployments, consider using a Named Mutex
-        // (via the `windows` crate or `winapi`) to achieve true cross-process mutual
-        // exclusion. The current approach is acceptable for single-user CI/development
-        // environments where concurrent loop runners on Windows are unlikely.
-        fs::write(&path, text)
-            .map_err(|e| LoopError::Io(format!("write lock {}: {e}", path.display())))?;
+        // Use write-to-temp-then-rename for atomic lock file creation on
+        // platforms without O_EXCL (Windows, etc.). The temp + rename pattern
+        // makes the write itself atomic, though the existence check above and
+        // this write remain non-atomic. For production Windows deployments,
+        // consider using a Named Mutex (via the `windows` crate or `winapi`)
+        // to achieve true cross-process mutual exclusion.
+        core_state_utils::atomic_write::write_atomic_text(&path, &text).map_err(|e| {
+            tracing::warn!("non-unix lock write failed: {e}");
+            LoopError::Io(format!("write lock {}: {e}", path.display()))
+        })?;
     }
 
     Ok(())

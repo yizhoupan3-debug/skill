@@ -21,23 +21,19 @@ pub struct HookReviewGateFields {
     pub reject_reason_seen: bool,
 }
 
-/// Claude `review_gate_*.json` on-disk shape (version + shared gate fields).
+/// Claude `review_gate_*.json` on-disk shape (version + gate fields via flatten).
 ///
+/// `#[serde(flatten)]` on `gate` keeps JSON backward compatibility —
+/// `gate.review_required` serializes as top-level `"review_required"`.
 /// Extended with goal-tracking fields (v2+): `goal_*` and `followup_count` are
 /// serde(default) so v1 files load cleanly without migration.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HookReviewDiskCore {
     #[serde(default)]
     pub version: u32,
-    #[serde(default)]
-    pub review_required: bool,
-    #[serde(default)]
-    pub review_override: bool,
-    /// Must have #[serde(default)] for backward compat with v1 disk state without this field.
-    #[serde(default)]
-    pub independent_reviewer_seen: bool,
-    #[serde(default)]
-    pub reject_reason_seen: bool,
+    /// Nested gate fields flattened into the same JSON object for backward compat.
+    #[serde(flatten)]
+    pub gate: HookReviewGateFields,
     // ── Goal tracking fields (serde default = backward compat with v1) ──
     /// Goal drive entry has been invoked in this session.
     #[serde(default)]
@@ -83,7 +79,7 @@ impl HookReviewDiskVersion for HookReviewDiskCore {
 
 impl From<&HookReviewDiskCore> for HookReviewGateFields {
     fn from(core: &HookReviewDiskCore) -> Self {
-        core.gate_fields()
+        core.gate.clone()
     }
 }
 
@@ -114,12 +110,7 @@ impl HookReviewDiskCore {
     }
 
     pub fn gate_fields(&self) -> HookReviewGateFields {
-        hook_review_gate_fields_from_parts(
-            self.review_required,
-            self.review_override,
-            self.independent_reviewer_seen,
-            self.reject_reason_seen,
-        )
+        self.gate.clone()
     }
 
     /// Whether this session has active goal tracking (for Stop followup).
@@ -132,7 +123,7 @@ impl HookReviewDiskCore {
         if !self.tracks_goal() {
             return true;
         }
-        if self.review_override || self.delegation_override {
+        if self.gate.review_override || self.delegation_override {
             return true;
         }
         self.goal_contract_seen && self.goal_progress_seen && self.goal_verify_or_block_seen
@@ -240,10 +231,7 @@ pub fn hook_review_disk_core_from_value(value: &Value) -> HookReviewDiskCore {
     let gate = hook_review_gate_fields_from_value(value);
     HookReviewDiskCore {
         version: value.get("version").and_then(Value::as_u64).unwrap_or(0) as u32,
-        review_required: gate.review_required,
-        review_override: gate.review_override,
-        independent_reviewer_seen: gate.independent_reviewer_seen,
-        reject_reason_seen: gate.reject_reason_seen,
+        gate,
         ..Default::default()
     }
 }
@@ -341,7 +329,7 @@ mod tests {
         });
         let core = migrate_hook_review_disk_core(&raw);
         assert_eq!(core.version, 1);
-        assert!(core.review_required);
+        assert!(core.gate.review_required);
         assert!(core.gate_fields().review_gate_stop_blocks());
         assert!(core.gate_fields().review_stop_blocks());
     }
@@ -434,10 +422,12 @@ mod tests {
     fn hook_review_disk_core_populated_snapshot() {
         let core = HookReviewDiskCore {
             version: 1,
-            review_required: true,
-            review_override: false,
-            independent_reviewer_seen: true,
-            reject_reason_seen: false,
+            gate: HookReviewGateFields {
+                review_required: true,
+                review_override: false,
+                independent_reviewer_seen: true,
+                reject_reason_seen: false,
+            },
             ..Default::default()
         };
         insta::assert_debug_snapshot!(core);

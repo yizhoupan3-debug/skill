@@ -2,6 +2,7 @@
 name = "runtime-core"
 version = "0.1.0"
 edition = "2024"
+description = "L7 platform aggregate: stdio dispatch, context engineering, kernel bootstrap"
 build = "build.rs"
 
 [lints]

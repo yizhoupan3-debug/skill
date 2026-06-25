@@ -2,6 +2,7 @@
 name = "gh_source_gate_rs"
 version = "0.1.0"
 edition = "2024"
+description = "MCP GitHub source gate tool"
 default-run = "gh-source-gate"
 
 [lib]

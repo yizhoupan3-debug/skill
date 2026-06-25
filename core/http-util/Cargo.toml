@@ -2,6 +2,7 @@
 name = "http-util"
 version = "0.1.0"
 edition.workspace = true
+description = "L0 HTTP client factory with proxy URL caching"
 
 [lints]
 workspace = true

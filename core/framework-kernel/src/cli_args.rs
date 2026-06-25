@@ -29,6 +29,12 @@ pub enum RouterCommand {
         #[command(subcommand)]
         command: BrowserSubcommand,
     },
+    /// Codegraph MCP server (feature-gated).
+    #[cfg(feature = "codegraph")]
+    Codegraph {
+        #[command(subcommand)]
+        command: CodegraphSubcommand,
+    },
     /// Diagnostic commands: profile, browser
     Diagnose {
         #[command(subcommand)]
@@ -317,6 +323,19 @@ pub enum ProfileSubcommand {
 pub enum BrowserSubcommand {
     McpStdio(BrowserMcpStdioCommand),
     ResolveAttachArtifact(BrowserResolveAttachCommand),
+}
+
+/// Codegraph MCP subcommand (feature-gated in dispatch).
+#[derive(Subcommand, Debug, Clone)]
+pub enum CodegraphSubcommand {
+    McpStdio(CodegraphMcpStdioCommand),
+}
+
+/// Arguments for `codegraph mcp-stdio`.
+#[derive(Args, Debug, Clone)]
+pub struct CodegraphMcpStdioCommand {
+    #[arg(long)]
+    pub repo_root: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug, Clone)]

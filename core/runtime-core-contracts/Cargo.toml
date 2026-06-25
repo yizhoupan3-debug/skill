@@ -2,6 +2,7 @@
 name = "runtime-core-contracts"
 version = "0.1.0"
 edition = "2024"
+description = "L2/L5 hook event routing, observation, and outbound protection contracts"
 [lints]
 workspace = true
 

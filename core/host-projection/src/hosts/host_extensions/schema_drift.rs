@@ -9,10 +9,11 @@
 //! ```ignore
 //! let snap = snapshot_host_hooks(
 //!     repo_root,
-//!     ".cursor/hooks.json",
-//!     "configs/framework/cursor-hooks.workspace-template.json",
-//!     &host_extensions::config::host_registered_hook_events("cursor"),
-//!     &host_extensions::config::CURSOR_HOOKS_SUBTRACTED_EVENTS,
+//!     hooks_path,                                    // from HostProvider::hooks_manifest_path()
+//!     template_path,                                 // e.g. "configs/framework/{host_id}-hooks.workspace-template.json"
+//!     &host_registered_hook_events(host_id),
+//!     &[],                                           // from HostLifecycle::subtracted_hook_events()
+//!     "{host_id}-router-rs-hook.sh",
 //! )?;
 //! ```
 
@@ -55,6 +56,7 @@ pub fn host_hooks_snapshot_ok(s: &HostHooksSnapshot) -> bool {
 // ---------------------------------------------------------------------------
 
 const GATE_TIMEOUT_SECS: &[(&str, u64)] = &[
+    // camelCase events
     ("beforeSubmitPrompt", 20),
     ("stop", 20),
     ("postToolUse", 20),
@@ -62,6 +64,27 @@ const GATE_TIMEOUT_SECS: &[(&str, u64)] = &[
     ("subagentStop", 20),
     ("sessionStart", 5),
     ("sessionEnd", 15),
+    // kebab-case events
+    ("pre-tool-use", 20),
+    ("user-prompt-submit", 20),
+    // PascalCase events
+    ("SessionStart", 5),
+    ("PreToolUse", 20),
+    ("UserPromptSubmit", 20),
+    ("PostToolUse", 20),
+    ("Stop", 20),
+    ("SubagentStart", 20),
+    ("SubagentStop", 20),
+    // dot-separated events
+    ("tool.execute.before", 20),
+    ("tool.execute.after", 20),
+    ("session.idle", 5),
+    ("session.created", 5),
+    ("session.deleted", 5),
+    ("permission.asked", 20),
+    ("permission.replied", 20),
+    ("file.edited", 20),
+    ("shell.env", 20),
 ];
 
 // ---------------------------------------------------------------------------
@@ -171,10 +194,10 @@ fn compare_hooks_template_parity(hooks_doc: &Value, template_doc: &Value) -> Vec
 ///
 /// # Parameters
 ///
-/// - `hooks_path` — repo-root-relative path to the host's hooks.json (e.g. `.cursor/hooks.json`)
-/// - `template_path` — repo-root-relative path to the workspace template (e.g. `configs/framework/cursor-hooks.workspace-template.json`)
+/// - `hooks_path` — repo-root-relative path to the host's hooks manifest (from HostProvider::hooks_manifest_path())
+/// - `template_path` — repo-root-relative path to the workspace template (e.g. `configs/framework/{host_id}-hooks.workspace-template.json`)
 /// - `expected_events` — events that the host must register (from host_registered_hook_events())
-/// - `forbidden_events` — events that must NOT be registered (e.g. `CURSOR_HOOKS_SUBTRACTED_EVENTS`)
+/// - `forbidden_events` — events that must NOT be registered (e.g. subtracted events)
 pub fn snapshot_host_hooks(
     repo_root: &Path,
     hooks_path: &Path,

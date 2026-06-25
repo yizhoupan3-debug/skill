@@ -505,7 +505,13 @@
       "lineage": {
         "source": "repo-native",
         "description": "Native repo deep-interview workflow for evidence-first clarification and convergence review."
-      }
+      },
+      "trigger_hints": [
+        "/deepinterview",
+        "先问清楚",
+        "深度采访",
+        "澄清需求"
+      ]
     },
     "gitx": {
       "canonical_owner": "gitx",
@@ -527,7 +533,11 @@
       "lineage": {
         "source": "repo-native",
         "description": "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end."
-      }
+      },
+      "trigger_hints": [
+        "/gitx",
+        "gitx"
+      ]
     },
     "update": {
       "canonical_owner": "update",
@@ -580,7 +590,19 @@
       "lineage": {
         "source": "repo-native",
         "description": "Guaranteed entry point for Goal management with goal_state_manage."
-      }
+      },
+      "trigger_hints": [
+        "/goalx",
+        "goalx",
+        "goal:",
+        "Goal:",
+        "目标：",
+        "目标:",
+        "goal management",
+        "goal 管理",
+        "goal 模式",
+        "进入 goal"
+      ]
     }
   },
   "managed_mcp_servers": {

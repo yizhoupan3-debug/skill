@@ -17,3 +17,25 @@ pub(super) const PARALLEL_RECORD_SCAN_MIN: usize = 48;
 pub(super) const RECORDS_CACHE_MAX_KEYS: usize = if cfg!(test) { 4 } else { 64 };
 
 pub(super) const PARALLEL_EVAL_CASE_MIN: usize = 8;
+
+/// Const string matching `skill_layer::frontmatter::RecordKind::FrameworkCommand.as_str()`.
+///
+/// Used in routing decisions (e.g. `filter_records_by_host`) instead of a
+/// hardcoded string literal. A `#[cfg(test)]` test below verifies compile-time
+/// consistency with the enum definition.
+pub(super) const FRAMEWORK_COMMAND_KIND: &str = "framework_command";
+
+#[cfg(test)]
+mod tests {
+    use super::FRAMEWORK_COMMAND_KIND;
+
+    #[test]
+    fn framework_command_kind_matches_record_kind_enum() {
+        let expected = skill_layer::frontmatter::RecordKind::FrameworkCommand.as_str();
+        assert_eq!(
+            FRAMEWORK_COMMAND_KIND, expected,
+            "FRAMEWORK_COMMAND_KIND must stay in sync with \
+             skill_layer::frontmatter::RecordKind::FrameworkCommand.as_str()"
+        );
+    }
+}

@@ -96,9 +96,6 @@ Loop engine（L6 Orchestration）运行在 Task 之上，仅对 `loop-auto` prof
 
 ## CodeGraph 自动触发规则（跨宿主硬约束）
 
-
-## Review 通用协议
-
 **核心原则**：在该使用 codegraph 的时候，必须自动调用，即使用户没有明确提及 codegraph。
 
 ### 场景与工具映射

@@ -29,13 +29,6 @@ pub fn host_registered_hook_events(host_id: &str) -> &'static [&'static str] {
         .unwrap_or(&[])
 }
 
-/// Events removed from default .cursor/hooks.json (dispatch defaults to no-op).
-/// Handler implementations remain in L0 for recovery paths.
-pub const CURSOR_HOOKS_SUBTRACTED_EVENTS: &[&str] = &[
-    "afterAgentResponse", "beforeShellExecution", "afterShellExecution",
-    "afterFileEdit", "preCompact",
-];
-
 // Backward-compatible re-exports
 pub use dispatch::*;
 

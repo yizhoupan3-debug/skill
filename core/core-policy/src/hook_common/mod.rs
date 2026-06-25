@@ -65,6 +65,10 @@ pub(crate) fn compile_patterns(patterns: &[&str]) -> Vec<Regex> {
 /// Used by review_signals and goal_signals for signal detection on sanitized input.
 #[allow(clippy::expect_used)]
 pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
+    // Short text fast path: avoid 5 regex replace_all passes.
+    if text.len() < 200 {
+        return text.to_string();
+    }
     static RE_FENCED: OnceLock<Regex> = OnceLock::new();
     static RE_INLINE: OnceLock<Regex> = OnceLock::new();
     static RE_URL: OnceLock<Regex> = OnceLock::new();
@@ -110,19 +114,25 @@ pub fn set_test_task_override(v: Option<bool>) {
 pub const HOOK_SIGNAL_ASSISTANT_TAIL_CHARS: usize = 4096;
 
 /// Truncate assistant text for hook signal paths (char-based; matches deep-continuation tail style).
+/// Single pass via char_indices() — avoids separate .chars().count() traversal.
 pub fn hook_assistant_tail_window(raw: &str, max_chars: usize) -> String {
-    // Single-pass char_indices() instead of two full chars() traversals (O(n) → O(n) but faster).
-    let total = raw.chars().count();
+    if raw.is_empty() {
+        return String::new();
+    }
+    // Single pass: count chars and record the byte offset where truncation begins.
+    let mut truncate_at: Option<usize> = None;
+    let mut total: usize = 0;
+    for (byte_idx, _) in raw.char_indices() {
+        if total == max_chars {
+            truncate_at = Some(byte_idx);
+        }
+        total += 1;
+    }
     if total <= max_chars {
         return raw.to_string();
     }
     let omitted = total.saturating_sub(max_chars);
-    let byte_start = raw
-        .char_indices()
-        .nth(omitted)
-        .map(|(i, _)| i)
-        .unwrap_or(raw.len());
-    let tail = &raw[byte_start..];
+    let tail = &raw[truncate_at.unwrap_or(raw.len())..];
     format!("[...omitted {omitted} chars...]\n{tail}")
 }
 

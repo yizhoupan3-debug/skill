@@ -543,7 +543,10 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
         attach_router_rs_observation(&mut json_output, provider.host_id());
     }
 
-    // Emit telemetry
+    // Emit hook timing telemetry + tracing::debug! to stderr
+    runtime_core::hook_timing::emit_hook_timing_line(event);
+
+    // Emit tool telemetry
     let telemetry_event = event.to_ascii_lowercase();
     if telemetry_event.contains("tool") {
         emit_hook_fired(&telemetry_event, hook_action_from_optional_output(Some(&json_output)));

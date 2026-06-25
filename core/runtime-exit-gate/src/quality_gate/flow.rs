@@ -183,6 +183,9 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
         core_state::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
     {
         tracing::error!(task_id = %task_id, error = %e, "failed to append quality_gate transaction to TASK_LEDGER");
+        return Err(format!(
+            "quality_gate failed to append transaction to TASK_LEDGER for {task_id}: {e}"
+        ));
     }
     let goal_state_cleared =
         core_state::state_manager::deactivate_goal_for_conflict_with_quality_gate(repo_root, &task_id)?;
@@ -454,6 +457,9 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         core_state::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
     {
         tracing::error!(task_id = %task_id, error = %e, "failed to append quality_gate transaction to TASK_LEDGER");
+        return Err(format!(
+            "quality_gate failed to append transaction to TASK_LEDGER for {task_id}: {e}"
+        ));
     }
     core_state::task_state_aggregate::sync_task_state_aggregate_best_effort(
         repo_root, &task_id,

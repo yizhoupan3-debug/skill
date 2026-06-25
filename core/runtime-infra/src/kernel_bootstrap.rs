@@ -72,7 +72,7 @@ fn bootstrap_telemetry() {
     install_global_telemetry_writer(Arc::new(fanout));
     let _ = TELEMETRY_HANDLE
         .lock()
-        .expect("TELEMETRY_HANDLE mutex poisoned")
+        .unwrap_or_else(|e| e.into_inner())
         .replace(handle);
     spawn_routing_runtime_cache_invalidator();
 }
@@ -82,7 +82,7 @@ fn bootstrap_telemetry() {
 pub fn shutdown_telemetry() {
     if let Some(handle) = TELEMETRY_HANDLE
         .lock()
-        .expect("TELEMETRY_HANDLE mutex poisoned")
+        .unwrap_or_else(|e| e.into_inner())
         .take() {
         handle.shutdown();
     }
@@ -91,11 +91,12 @@ pub fn shutdown_telemetry() {
 /// Invalidate route record cache when `SKILL_ROUTING_RUNTIME.json` changes on disk (P1-1).
 /// Polls every 1s (config file changes don't need sub-second detection).
 fn spawn_routing_runtime_cache_invalidator() {
-    thread::spawn(|| {
+    static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+    thread::spawn(move || {
         let watch = routing_runtime_watch();
         let mut rx = watch.receiver();
         let _ = rx.borrow_and_update();
-        loop {
+        while RUNNING.load(std::sync::atomic::Ordering::Relaxed) {
             thread::sleep(Duration::from_secs(1));
             if !matches!(rx.has_changed(), Ok(true)) {
                 continue;

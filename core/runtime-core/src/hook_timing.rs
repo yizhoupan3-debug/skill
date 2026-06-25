@@ -2,7 +2,6 @@
 
 use std::cell::Cell;
 use std::time::Instant;
-use tracing::debug;
 
 use crate::router_rs_hook_timing_enabled;
 
@@ -35,6 +34,11 @@ pub fn add_cargo_check_ms(ms: u64) {
 
 pub fn emit_hook_timing_line(event: &str) {
     if !router_rs_hook_timing_enabled() {
+        // Reset thread-local accumulators in case a prior call accumulated state
+        // before the env flag was turned off at runtime.
+        HOOK_STARTED.with(|c| c.set(None));
+        LOCK_WAIT_MS.with(|c| c.set(0));
+        CARGO_CHECK_MS.with(|c| c.set(0));
         return;
     }
     let duration_ms = HOOK_STARTED
@@ -42,13 +46,6 @@ pub fn emit_hook_timing_line(event: &str) {
         .unwrap_or(0);
     let lock_wait_ms = LOCK_WAIT_MS.with(|c| c.get());
     let cargo_check_ms = CARGO_CHECK_MS.with(|c| c.get());
-    debug!(
-        %event,
-        duration_ms,
-        lock_wait_ms,
-        cargo_check_ms,
-        "hook timing"
-    );
     tracing::debug!(
         event, duration_ms, lock_wait_ms, cargo_check_ms,
         "hook timing"
@@ -94,6 +91,7 @@ mod tests {
             ])
             .env("ROUTER_RS_HOOK_TIMING", "1")
             .env("ROUTER_RS_REVIEW_GATE_DISABLE", "1")
+            .env("RUST_LOG", "runtime_core=debug")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

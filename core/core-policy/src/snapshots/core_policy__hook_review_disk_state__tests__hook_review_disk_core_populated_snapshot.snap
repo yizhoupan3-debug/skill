@@ -4,10 +4,12 @@ expression: core
 ---
 HookReviewDiskCore {
     version: 1,
-    review_required: true,
-    review_override: false,
-    independent_reviewer_seen: true,
-    reject_reason_seen: false,
+    gate: HookReviewGateFields {
+        review_required: true,
+        review_override: false,
+        independent_reviewer_seen: true,
+        reject_reason_seen: false,
+    },
     goal_drive_entry_active: false,
     goal_contract_seen: false,
     goal_progress_seen: false,

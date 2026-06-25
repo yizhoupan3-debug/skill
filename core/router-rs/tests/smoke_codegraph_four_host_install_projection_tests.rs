@@ -1,8 +1,8 @@
-//! CG deferred: five-host install projection smoke — each closed-set host must
+//! CG deferred: four-host install projection smoke — each closed-set host must
 //! materialize `mcp-codegraph` in its projected MCP config after `install_projection_tool`.
 
 #[cfg(feature = "codegraph")]
-mod five_host_install_projection {
+mod four_host_install_projection {
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -137,7 +137,7 @@ mod five_host_install_projection {
 
     #[serial]
     #[test]
-    fn codegraph_five_host_install_projection_smoke() {
+    fn codegraph_four_host_install_projection_smoke() {
         let framework_root = framework_repo_root();
         let registry = load_runtime_registry_json(&framework_root).expect("load RUNTIME_REGISTRY");
         let host_ids = host_targets_supported_host_ids(&registry).expect("supported host ids");

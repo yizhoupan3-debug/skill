@@ -17,7 +17,12 @@ pub fn resolve_worktree_cwd(
     if let Some(path) = worktree_path {
         let p = std::path::Path::new(path);
         if p.is_absolute() {
-            if p.components()
+            // Resolve symlinks via canonicalize before checking for path
+            // traversal. If canonicalize fails, fall back to the original
+            // path for the ParentDir check.
+            let check = std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf());
+            if check
+                .components()
                 .any(|c| matches!(c, std::path::Component::ParentDir))
             {
                 return cwd.to_string();
@@ -25,7 +30,9 @@ pub fn resolve_worktree_cwd(
             return path.to_string();
         }
         let resolved = std::path::Path::new(cwd).join(p);
-        if resolved
+        let check =
+            std::fs::canonicalize(&resolved).unwrap_or_else(|_| resolved.clone());
+        if check
             .components()
             .any(|c| matches!(c, std::path::Component::ParentDir))
         {

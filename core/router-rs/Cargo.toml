@@ -2,6 +2,7 @@
 name = "router-rs"
 version = "0.1.0"
 edition = "2024"
+description = "L7 CLI binary: host hook dispatch and agent dispatch entry point"
 autotests = false
 default-run = "router-rs-cli"
 

@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod route_metadata_tests {
+    use crate::route::constants::FRAMEWORK_COMMAND_KIND;
     use crate::route::has_paper_review_judgment_context;
     use crate::route::normalize_text;
     use crate::route::RawSkillRecord;
@@ -390,7 +391,7 @@ mod route_metadata_tests {
                 tags: Vec::new(),
                 trigger_hints: vec!["/all-command".to_string()],
                 host_platforms: Vec::new(),
-                record_kind: "framework_command".to_string(),
+                record_kind: FRAMEWORK_COMMAND_KIND.to_string(),
                 skill_flags: Vec::new(),
             }),
         ];

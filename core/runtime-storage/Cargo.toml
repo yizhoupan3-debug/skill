@@ -2,6 +2,7 @@
 name = "runtime-storage"
 version = "0.1.0"
 edition = "2024"
+description = "L1 storage backends: filesystem, SQLite, in-memory, path resolution"
 [lints]
 workspace = true
 

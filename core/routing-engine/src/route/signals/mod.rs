@@ -252,6 +252,9 @@ const ROUTING_SIGNAL_MARKERS_EMBED: &str = include_str!(concat!(
     "/../../configs/framework/ROUTING_SIGNAL_MARKERS.json"
 ));
 
+/// Schema version for ROUTING_SIGNAL_MARKERS.json — bump this when the embedded JSON structure changes.
+const ROUTING_SIGNAL_MARKERS_SCHEMA_VERSION: &str = "routing-signal-markers-v1";
+
 pub(crate) fn routing_signal_markers_json() -> &'static Value {
     static CELL: OnceLock<Value> = OnceLock::new();
     CELL.get_or_init(|| {
@@ -260,8 +263,8 @@ pub(crate) fn routing_signal_markers_json() -> &'static Value {
         let version = v.get("schema_version").and_then(Value::as_str);
         assert_eq!(
             version,
-            Some("routing-signal-markers-v1"),
-            "ROUTING_SIGNAL_MARKERS schema_version={version:?}, expected \"routing-signal-markers-v1\" — \
+            Some(ROUTING_SIGNAL_MARKERS_SCHEMA_VERSION),
+            "ROUTING_SIGNAL_MARKERS schema_version={version:?}, expected \"{ROUTING_SIGNAL_MARKERS_SCHEMA_VERSION}\" — \
              configs/framework/ROUTING_SIGNAL_MARKERS.json was modified without updating this assertion"
         );
         v
@@ -394,6 +397,15 @@ pub(crate) fn has_existing_image_file_context(query_text: &str, query_token_list
 
 
 
+/// Returns `true` when the record`s `owner_lower` is `"overlay"`.
+///
+/// This is a broad string match: any record whose owner is literally
+/// `"overlay"` (lowercased) is considered an overlay record. This includes
+/// records whose `owner` field happens to contain the string "overlay" when
+/// lowercased. The match is intentionally liberal because the owner space
+/// is closed — new owners must be explicitly registered in frontmatter
+/// validation — and false positives from a substring match are already
+/// precluded by closed-set validation upstream.
 pub fn is_overlay_record(record: &SkillRecord) -> bool {
     record.owner_lower == "overlay"
 }

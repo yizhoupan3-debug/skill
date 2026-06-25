@@ -2,6 +2,7 @@
 name = "batch-common"
 version = "0.1.0"
 edition = "2024"
+description = "Shared utilities for batch processing tools"
 
 [dependencies]
 anyhow = "1.0"

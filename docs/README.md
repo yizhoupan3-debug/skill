@@ -12,16 +12,9 @@ scope: documentation-map
 | 文档 | 一句话说明 |
 |------|----------|
 | [architecture.md](architecture.md) | L0–L7 层模型、DAG 验证矩阵、宿主隔离契约、架构原则 P1–P10 |
-| [research/harness.md](research/harness.md) | 科研 Harness 系统总览、路由契约、研究工作区 |
 | [operations/index.md](operations/index.md) | 运维中枢：安装/升级、模块操作、状态管理、排障 |
 | [../AGENTS.md](../AGENTS.md) | 跨宿主代理策略（生命周期、语言、CodeGraph、行为差异） |
 | [../README.md](../README.md) | 仓库快速入门：能力概览 |
-
-## 审计报告
-
-| 报告 | 日期 | 范围 |
-|------|------|------|
-| [2026-06-24-runtime-audit.md](reports/2026-06-24-runtime-audit.md) | 2026-06-24 | 全面运行时审计 |
 
 ## 已删除文档记录
 
@@ -37,3 +30,5 @@ scope: documentation-map
 | `docs/hosts/README.md` | 5 行无实质内容 |
 | `docs/plans/doc-restructure-2026-06-24.md` | 已完成计划 |
 | `docs/reports/2026-06-23-runtime-audit.md` | 被 2026-06-24 报告取代 |
+| `docs/reports/2026-06-24-runtime-audit.md` | 一次性审计快照，非参考文档 |
+| `docs/research/harness.md` | 大篇幅过期规约，§19 引用与实际 13 节不匹配 |
