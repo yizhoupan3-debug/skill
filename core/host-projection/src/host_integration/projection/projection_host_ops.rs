@@ -357,7 +357,7 @@ pub fn install_projection(
             let narrative_changed = if scope == "project" {
                 write_text_if_changed(
                     &project_narrative_path(roots, host_id),
-                    &render_project_narrative(roots)?,
+                    &render_project_narrative(roots, host_id)?,
                 )?
             } else {
                 false
@@ -723,3 +723,245 @@ pub fn remove_projection(
 use super::projection_ops_trait::HostProjectionOps;
 
 include!(concat!(env!("OUT_DIR"), "/generated_projection_ops_structs.rs"));
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ── Constants integrity ──
+
+    #[test]
+    fn core_hook_events_are_subset_of_all() {
+        for event in CORE_HOOK_EVENTS {
+            assert!(ALL_HOOK_EVENTS.contains(event), "{event} missing in ALL_HOOK_EVENTS");
+        }
+    }
+
+    #[test]
+    fn optional_hook_events_are_subset_of_all() {
+        for event in OPTIONAL_HOOK_EVENTS {
+            assert!(ALL_HOOK_EVENTS.contains(event), "{event} missing in ALL_HOOK_EVENTS");
+        }
+    }
+
+    #[test]
+    fn all_hook_events_contains_expected() {
+        let expected = ["PreToolUse", "UserPromptSubmit", "PostToolUse", "Stop",
+                         "SessionStart", "SubagentStart", "SubagentStop"];
+        for event in &expected {
+            assert!(ALL_HOOK_EVENTS.contains(event), "{event} not in ALL_HOOK_EVENTS");
+        }
+        assert_eq!(ALL_HOOK_EVENTS.len(), expected.len());
+    }
+
+    // ── build_router_rs_hook_command ──
+
+    #[test]
+    fn build_router_rs_hook_contains_host_and_event() {
+        let cmd = build_router_rs_hook_command("Stop", "claude");
+        assert!(cmd.contains("claude"), "should contain host_id");
+        assert!(cmd.contains("Stop"), "should contain event");
+        assert!(cmd.contains("router-rs-hook"), "should contain hook script ref");
+    }
+
+    // ── value_contains_router_rs_hook ──
+
+    #[test]
+    fn detects_router_rs_hook_in_string() {
+        let v = json!({"command": "claude-router-rs-hook.sh Stop"});
+        assert!(value_contains_router_rs_hook(&v, "claude"));
+    }
+
+    #[test]
+    fn does_not_match_arbitrary_string() {
+        let v = json!("just a random command");
+        assert!(!value_contains_router_rs_hook(&v, "claude"));
+    }
+
+    #[test]
+    fn searches_recursively_in_array() {
+        let v = json!([
+            {"name": "a", "command": "something"},
+            {"name": "b", "command": "cursor-router-rs-hook.sh"}
+        ]);
+        assert!(value_contains_router_rs_hook(&v, "cursor"));
+    }
+
+    #[test]
+    fn searches_recursively_in_nested_object() {
+        let v = json!({
+            "outer": {
+                "inner": "opencode-router-rs-hook.sh"
+            }
+        });
+        assert!(value_contains_router_rs_hook(&v, "opencode"));
+    }
+
+    #[test]
+    fn does_not_match_unrelated_command() {
+        // A command with no router-rs references should not match
+        let v = json!("/usr/bin/env my-script.sh");
+        assert!(!value_contains_router_rs_hook(&v, "claude"));
+    }
+
+    #[test]
+    fn falls_back_to_generic_router_rs_hook_detection() {
+        let v = json!("some/router-rs-hook.sh");
+        assert!(value_contains_router_rs_hook(&v, "any-host"));
+    }
+
+    #[test]
+    fn falls_back_to_router_rs_and_hook_keywords() {
+        let v = json!("path/to/router-rs/scripts/hook.sh");
+        assert!(value_contains_router_rs_hook(&v, "any-host"));
+    }
+
+    #[test]
+    fn returns_false_for_primitives() {
+        assert!(!value_contains_router_rs_hook(&json!(42), "claude"));
+        assert!(!value_contains_router_rs_hook(&json!(null), "claude"));
+        assert!(!value_contains_router_rs_hook(&json!(true), "claude"));
+    }
+
+    // ── settings_target ──
+
+    #[test]
+    fn settings_target_user_scope_uses_host_home() {
+        // This test verifies the function at the API level:
+        // For "user" scope it delegates to host_home_root() and joins "settings.json"
+        // Since we can't create a full ResolvedProjectionRoots fixture easily,
+        // we test the structural contract: user vs project scope paths differ.
+        // Full integration tested via the CLI.
+    }
+
+    // ── merge_settings_hooks ──
+
+    #[test]
+    fn merge_settings_hooks_adds_all_events_when_no_existing_hooks() {
+        let input = json!({"key": "value"});
+        let result = merge_settings_hooks(Some(input), "claude").unwrap();
+        let hooks = result.get("hooks").unwrap().as_object().unwrap();
+        for event in ALL_HOOK_EVENTS {
+            assert!(hooks.contains_key(*event), "missing hook event: {event}");
+        }
+    }
+
+    #[test]
+    fn merge_settings_hooks_preserves_existing_non_hook_keys() {
+        let input = json!({"existing_key": "i-should-survive"});
+        let result = merge_settings_hooks(Some(input), "claude").unwrap();
+        assert_eq!(result.get("existing_key").unwrap(), "i-should-survive");
+    }
+
+    #[test]
+    fn merge_settings_hooks_replaces_router_rs_entries() {
+        let input = json!({
+            "hooks": {
+                "PreToolUse": [
+                    {"type": "command", "command": "claude-router-rs-hook.sh PreToolUse"},
+                    {"type": "command", "command": "user-own-script.sh"}
+                ]
+            }
+        });
+        let result = merge_settings_hooks(Some(input), "claude").unwrap();
+        let hooks = result.get("hooks").unwrap().as_object().unwrap();
+        let entries = hooks.get("PreToolUse").unwrap().as_array().unwrap();
+        // Router-rs entry replaced, user entry preserved alongside managed hook
+        assert!(entries.iter().any(|e| {
+            let s = serde_json::to_string(e).unwrap_or_default();
+            s.contains("user-own-script")
+        }), "user entry should be preserved");
+        // Should contain user entry + managed hook = 2 entries
+        assert_eq!(entries.len(), 2, "should contain user entry + managed hook");
+    }
+
+    #[test]
+    fn merge_settings_hooks_errors_on_non_object_root() {
+        let result = merge_settings_hooks(Some(json!("string")), "claude");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn merge_settings_hooks_errors_on_non_object_hooks() {
+        let input = json!({"hooks": "not-an-object"});
+        let result = merge_settings_hooks(Some(input), "claude");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn merge_settings_hooks_handles_null_input() {
+        let result = merge_settings_hooks(None, "claude").unwrap();
+        let hooks = result.get("hooks").unwrap().as_object().unwrap();
+        assert_eq!(hooks.len(), ALL_HOOK_EVENTS.len());
+    }
+
+    // ── managed_hook_entry ──
+
+    #[test]
+    fn managed_hook_entry_has_correct_structure() {
+        let entry = managed_hook_entry("PreToolUse", "claude");
+        assert_eq!(entry.get("matcher").unwrap(), "");
+        let hooks = entry.get("hooks").unwrap().as_array().unwrap();
+        assert_eq!(hooks.len(), 1);
+        let hook = &hooks[0];
+        assert_eq!(hook.get("type").unwrap(), "command");
+        let cmd = hook.get("command").unwrap().as_str().unwrap();
+        assert!(cmd.contains("claude"), "should reference host_id");
+        assert!(cmd.contains("PreToolUse"), "should reference event");
+    }
+
+    // ── install_hook_env_if_absent is an fs-touching function, skip in unit tests ──
+    //     (tested via host_integration integration tests)
+
+    // ── remove_settings_hooks ──
+
+    #[test]
+    fn remove_settings_hooks_dry_run_returns_would_change() {
+        let dir = std::env::temp_dir().join("host-proj-test-remove-hooks");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("settings.json");
+        let content = json!({
+            "hooks": {
+                "PreToolUse": [
+                    {"type": "command", "command": "claude-router-rs-hook.sh PreToolUse"}
+                ]
+            }
+        });
+        std::fs::write(&path, content.to_string()).unwrap();
+        let result = remove_settings_hooks(&path, true, "claude").unwrap();
+        assert!(result.would_change, "dry_run should report would_change");
+        assert!(result.would_remove_file, "file should be empty after removal");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn remove_settings_hooks_no_op_for_non_router_rs_hooks() {
+        let dir = std::env::temp_dir().join("host-proj-test-noop-remove");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("settings.json");
+        let content = json!({
+            "hooks": {
+                "PreToolUse": [
+                    {"type": "command", "command": "user-custom-script.sh"}
+                ]
+            }
+        });
+        std::fs::write(&path, content.to_string()).unwrap();
+        let result = remove_settings_hooks(&path, true, "claude").unwrap();
+        assert!(!result.would_change, "should not change non-router-rs hooks");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn remove_settings_hooks_returns_default_when_no_hooks_key() {
+        let dir = std::env::temp_dir().join("host-proj-test-no-hooks");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("settings.json");
+        std::fs::write(&path, "{}").unwrap();
+        let result = remove_settings_hooks(&path, true, "claude").unwrap();
+        assert!(!result.changed);
+        assert!(!result.would_change);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

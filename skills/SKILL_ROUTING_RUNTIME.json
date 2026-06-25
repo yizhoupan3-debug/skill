@@ -77,9 +77,14 @@
         "version": "4.0.0"
       },
       "medium",
+      [
+        "Agent",
+        "Read",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "conditional",
       null
     ],
     [
@@ -147,9 +152,16 @@
         "version": "3.0.0"
       },
       "high",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep",
+        "Glob"
+      ],
       null,
-      null,
-      null,
+      "conditional",
       null
     ],
     [
@@ -215,9 +227,15 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "conditional",
       null
     ],
     [
@@ -271,9 +289,15 @@
         "version": "2.4.0"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "conditional",
       null
     ],
     [
@@ -346,7 +370,7 @@
         "mcp__mcp-codegraph__codegraph_goto_definition"
       ],
       null,
-      null,
+      "local",
       null
     ],
     [
@@ -400,9 +424,14 @@
         "version": "1.1.0"
       },
       "low",
+      [
+        "WebSearch",
+        "WebFetch",
+        "Read",
+        "Bash"
+      ],
       null,
-      null,
-      null,
+      "required",
       null
     ],
     [
@@ -454,7 +483,7 @@
         "python"
       ],
       null,
-      null,
+      "local",
       []
     ],
     [
@@ -579,9 +608,14 @@
         "version": "2.0.0"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -699,9 +733,14 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -758,9 +797,16 @@
         "version": "1.0.3"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep",
+        "Glob"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -809,9 +855,13 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -1060,9 +1110,14 @@
         "version": "1.0.1"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -1109,9 +1164,15 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "WebFetch",
+        "WebSearch",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "required",
       null
     ],
     [
@@ -1168,9 +1229,13 @@
         "version": "2.0.0"
       },
       "low",
+      [
+        "Read",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -1220,9 +1285,16 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep",
+        "Glob"
+      ],
       null,
-      null,
-      null,
+      "conditional",
       null
     ],
     [
@@ -1346,9 +1418,15 @@
       null,
       null,
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "conditional",
       null
     ],
     [
@@ -1462,9 +1540,15 @@
         "version": "2.0.0"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -1512,9 +1596,13 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -1570,9 +1658,13 @@
         "version": "1.1.1"
       },
       "medium",
+      [
+        "Read",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "conditional",
       null
     ],
     [
@@ -1618,9 +1710,13 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -1684,9 +1780,14 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "WebSearch",
+        "WebFetch",
+        "Read",
+        "Bash"
+      ],
       null,
-      null,
-      null,
+      "required",
       null
     ],
     [
@@ -1748,9 +1849,16 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep",
+        "Glob"
+      ],
       null,
-      null,
-      null,
+      "conditional",
       null
     ],
     [
@@ -1813,9 +1921,13 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -1868,7 +1980,14 @@
         "version": "1.2.0"
       },
       "medium",
-      null,
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep",
+        "Glob"
+      ],
       {
         "python": [
           "matplotlib",
@@ -1876,7 +1995,7 @@
           "scienceplots"
         ]
       },
-      null,
+      "conditional",
       null
     ],
     [
@@ -1995,7 +2114,7 @@
         "Agent"
       ],
       null,
-      null,
+      "local",
       null
     ],
     [
@@ -2228,9 +2347,15 @@
       null,
       null,
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -2288,9 +2413,15 @@
         "version": "1.0.2"
       },
       "low",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "conditional",
       null
     ],
     [
@@ -2337,9 +2468,13 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -2387,9 +2522,13 @@
         "version": "1.0.0"
       },
       "low",
+      [
+        "Read",
+        "Bash",
+        "Grep"
+      ],
       null,
-      null,
-      null,
+      "local",
       null
     ],
     [
@@ -2453,7 +2592,7 @@
         "browser"
       ],
       null,
-      null,
+      "local",
       null
     ],
     [
@@ -2639,7 +2778,7 @@
         "git"
       ],
       null,
-      null,
+      "local",
       []
     ]
   ]

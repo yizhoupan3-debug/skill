@@ -374,3 +374,108 @@ fn add_context(event: &str, msg: &str) -> Option<Value> {
         "context_append": format!("[{event}] {msg}")
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::Path;
+
+    struct TestHost;
+    impl StopHostOps for TestHost {
+        fn host_id(&self) -> &'static str { "test-host" }
+        fn log_label(&self) -> &'static str { "TestHost" }
+        fn session_key(&self, _repo_root: &Path, _payload: &Value) -> String {
+            "test-session".to_string()
+        }
+        fn stop_signal_text(&self, _payload: &Value) -> String {
+            "/stop".to_string()
+        }
+    }
+
+    // ── StopHostOps trait default methods ──
+
+    #[test]
+    fn hook_state_base_includes_host_id() {
+        let host = TestHost;
+        let base = host.hook_state_base(Path::new("/repo"));
+        let expected = Path::new("/repo/.claude/hook-state/test-host");
+        assert_eq!(base, expected);
+    }
+
+    #[test]
+    fn pre_stop_cleanup_default_is_noop() {
+        let host = TestHost;
+        assert!(host.pre_stop_cleanup(Path::new("/tmp")).is_none());
+    }
+
+    // ── add_context ──
+
+    #[test]
+    fn add_context_returns_formatted_message() {
+        let result = add_context("Stop", "test message").unwrap();
+        assert_eq!(result["context_append"], "[Stop] test message");
+    }
+
+    #[test]
+    fn add_context_never_returns_none() {
+        assert!(add_context("Stop", "anything").is_some());
+        assert!(add_context("", "").is_some());
+    }
+
+    // ── DiskState ──
+
+    #[test]
+    fn disk_state_absent_from_nonexistent_file() {
+        let path = Path::new("/nonexistent/path/to/file.json");
+        match load_review_gate_disk(path) {
+            DiskState::Absent => {} // expected
+            _ => panic!("should be Absent for nonexistent file"),
+        }
+    }
+
+    #[test]
+    fn disk_state_unreadable_from_invalid_json_file() {
+        let dir = std::env::temp_dir().join("stop-dispatch-test-invalid-json");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("state.json");
+        std::fs::write(&path, "not valid json {").unwrap();
+        match load_touch_state_disk(&path) {
+            DiskState::Unreadable => {} // expected
+            _ => panic!("should be Unreadable for invalid JSON"),
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── clear_file ──
+
+    #[test]
+    fn clear_file_removes_existing_file() {
+        let dir = std::env::temp_dir().join("stop-dispatch-test-clear");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("to_clear.json");
+        std::fs::write(&path, "{}").unwrap();
+        assert!(path.exists());
+        clear_file(&path);
+        assert!(!path.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clear_file_does_not_panic_on_nonexistent() {
+        let path = Path::new("/tmp/nonexistent-clear-file-test.json");
+        clear_file(&path); // should not panic
+    }
+
+    // ── write_review_state ──
+
+    #[test]
+    fn write_review_state_creates_file() {
+        let dir = std::env::temp_dir().join("stop-dispatch-test-write");
+        let path = dir.join("review.json");
+        let state = core_policy::hook_review_disk_state::HookReviewDiskCore::default();
+        let result = write_review_state(&path, &state);
+        assert!(result.is_ok(), "write should succeed: {:?}", result.err());
+        assert!(path.exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
