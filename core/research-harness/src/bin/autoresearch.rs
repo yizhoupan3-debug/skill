@@ -37,10 +37,13 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         workspace: PathBuf,
     },
-    /// Resume workspace (compact status)
+    /// Resume workspace (compact status or from handoff artifact)
     Resume {
         #[arg(short, long, default_value = ".")]
         workspace: PathBuf,
+        /// Path to a handoff JSON artifact (claim-ledger.json or BARRIER_REPORT.json)
+        #[arg(long)]
+        from_handoff: Option<PathBuf>,
     },
     /// Sync workspace files
     Sync {
@@ -348,7 +351,53 @@ fn cmd_next(workspace: &PathBuf) -> Result<()> {
     Ok(())
 }
 
-fn cmd_resume(workspace: &PathBuf) -> Result<()> {
+fn cmd_resume(workspace: &PathBuf, from_handoff: Option<&Path>) -> Result<()> {
+    // If a handoff path is given, load and render NL resumption context
+    if let Some(h_path) = from_handoff {
+        match research_harness::claims::handoff::load_handoff(h_path) {
+            Ok(Some(handoff)) => {
+                println!(
+                    "{}",
+                    research_harness::claims::handoff::format_resume_context(&handoff)
+                );
+                return Ok(());
+            }
+            Ok(None) => {
+                // Check if it's a BARRIER_REPORT.json with a sibling claim-ledger.json
+                if let Some(parent) = h_path.parent() {
+                    let sibling = parent.join("claim-ledger.json");
+                    if sibling.exists() {
+                        match research_harness::claims::handoff::load_handoff(&sibling) {
+                            Ok(Some(handoff)) => {
+                                println!(
+                                    "{}",
+                                    research_harness::claims::handoff::format_resume_context(
+                                        &handoff
+                                    )
+                                );
+                                return Ok(());
+                            }
+                            Ok(None) => {} // fall through
+                            Err(e) => {
+                                eprintln!("Warning: failed to load sibling handoff: {e}");
+                            }
+                        }
+                    }
+                }
+                // Fallback: display compact status
+                eprintln!(
+                    "Warning: handoff file not found at '{}', falling back to compact status.",
+                    h_path.display()
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: failed to load handoff '{}': {e}, falling back to compact status.",
+                    h_path.display()
+                );
+            }
+        }
+    }
     let ws = resolve_workspace(workspace)?;
     let state = load_state(&ws)?;
     println!("{}", research_harness::render::format_resume(&state));
@@ -847,6 +896,15 @@ fn cmd_barrier(
     }
     std::fs::write(&report_path, serde_json::to_string_pretty(&report)?)?;
     println!("Barrier report written to: {}", report_path.display());
+    // Save companion handoff artifact for cross-session resumption
+    match research_harness::claims::handoff::save_handoff(&report, &ws) {
+        Ok(handoff_path) => {
+            println!("Handoff artifact saved to: {}", handoff_path.display());
+        }
+        Err(e) => {
+            eprintln!("Warning: failed to save handoff artifact: {e}");
+        }
+    }
     Ok(())
 }
 
@@ -865,7 +923,10 @@ fn main() -> Result<()> {
         } => cmd_init(&project, &question, &dir, &mode)?,
         Commands::Status { workspace } => cmd_status(&workspace)?,
         Commands::Next { workspace } => cmd_next(&workspace)?,
-        Commands::Resume { workspace } => cmd_resume(&workspace)?,
+        Commands::Resume {
+            workspace,
+            from_handoff,
+        } => cmd_resume(&workspace, from_handoff.as_deref())?,
         Commands::Sync { workspace } => cmd_sync(&workspace)?,
         Commands::DraftClaims {
             workspace,
