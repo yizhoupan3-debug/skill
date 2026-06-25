@@ -165,6 +165,7 @@ impl Blueprint {
         if parent.is_leaf() {
             return Err(format!("cannot decompose leaf node {parent_id}"));
         }
+        let parent_label = parent.label().to_string();
 
         // AND constraint: at least one child must be non-ManualProse
         if and && children.iter().all(|c| matches!(c.backend(), Some(VerificationBackend::ManualProse))) {
@@ -181,9 +182,9 @@ impl Blueprint {
 
         // Replace parent with the appropriate internal node
         let new_parent = if and {
-            DagNode::AndNode { id: parent_id.to_string(), label: parent.label().to_string(), children: child_ids }
+            DagNode::AndNode { id: parent_id.to_string(), label: parent_label.clone(), children: child_ids }
         } else {
-            DagNode::OrNode { id: parent_id.to_string(), label: parent.label().to_string(), children: child_ids }
+            DagNode::OrNode { id: parent_id.to_string(), label: parent_label.clone(), children: child_ids }
         };
         self.nodes.insert(parent_id.to_string(), new_parent);
 
@@ -217,7 +218,7 @@ impl Blueprint {
             .ok_or_else(|| format!("node {node_id} not found"))?;
 
         match node {
-            DagNode::Leaf { claim, backend } => {
+            DagNode::Leaf { claim, backend, .. } => {
                 // Leaf: mark as pending — actual verification requires external call
                 let status = if backend.is_automated() {
                     VerificationStatus::Pass

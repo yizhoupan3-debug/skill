@@ -332,7 +332,7 @@ pub fn verify_asymptotic_chain_with_name(steps: &[AsymptoticStep], var: &str, re
             check_name: check_name.to_string(),
             status: VerificationStatus::Pass,
             details: format!("Pure chain ({} steps): all {} relations are consistent",
-                steps.len(), chain.unique_relations.join(", ")),
+                steps.len(), chain.unique_relations().join(", ")),
             evidence_path: None,
         }
     }

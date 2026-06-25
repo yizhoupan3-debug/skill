@@ -46,7 +46,7 @@ pub fn enforce_rfv_close_gates(
     preview_rfv: &Map<String, Value>,
     closing_round: &Map<String, Value>,
     gates: &RfvCloseGates,
-) -> Result<(), String> {
+) -> Result<()> {
     if !gates.enabled {
         return Ok(());
     }
@@ -56,9 +56,9 @@ pub fn enforce_rfv_close_gates(
             .and_then(Value::as_str)
             .unwrap_or("");
         if vr != "PASS" {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "RFV close_gates: require_last_round_verify_pass but verify_result={vr:?}"
-            ));
+            )));
         }
     }
     let allow_external = preview_rfv
@@ -71,10 +71,10 @@ pub fn enforce_rfv_close_gates(
             .get("external_research")
             .is_some_and(|v| !v.is_null() && v.is_object());
         if !has_obj {
-            return Err(
+            return Err(FrameworkError::validation(
                 "RFV close_gates: require_external_research_object_when_strict_on_close but closing round has no structured external_research object"
                     .to_string(),
-            );
+            ));
         }
     }
     let (_, evidence_ok) =
@@ -90,16 +90,16 @@ pub fn enforce_rfv_close_gates(
     );
     if let Some(min) = gates.min_depth_score
         && dc.depth_score < min {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "RFV close_gates: depth_score={} < min_depth_score={}",
                 dc.depth_score, min
-            ));
+            )));
         }
     if gates.block_on_rfv_pass_without_evidence && dc.qg_pass_without_evidence_count > 0 {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "RFV close_gates: block_on_rfv_pass_without_evidence but qg_pass_without_evidence_count={}",
             dc.qg_pass_without_evidence_count
-        ));
+        )));
     }
     Ok(())
 }

@@ -60,7 +60,7 @@ pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, Str
             framework_extra::session_artifacts::write_framework_session_artifacts(p)
         }
         TaskLedgerCommand::HookEvidenceAppend(p) => {
-            framework_extra::evidence::framework_hook_evidence_append(p)
+            Ok(framework_extra::evidence::framework_hook_evidence_append(p)?)
         }
     }
 }

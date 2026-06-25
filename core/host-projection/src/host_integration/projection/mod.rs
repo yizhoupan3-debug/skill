@@ -271,7 +271,11 @@ pub fn install_native_integration(
     let home_codex_dir = home_config_path
         .parent()
         .map(Path::to_path_buf)
-        .unwrap_or_else(|| default_home_dir().join(".codex"));
+        .unwrap_or_else(|| {
+            default_home_dir().join(
+                framework_kernel::runtime_registry::host_private_config_dir("codex"),
+            )
+        });
     let prompt_entrypoints = codex_prompt_entrypoints_disabled(&home_codex_dir);
     let default_bootstrap = if install_default_bootstrap {
         ensure_default_bootstrap(&repo_root, bootstrap_output_dir.as_deref())?
@@ -525,9 +529,21 @@ pub fn opencode_config_path(
     host_id: &str,
 ) -> PathBuf {
     if scope == "user" {
-        roots
-            .account_home_root
-            .join(".config/opencode/opencode.json")
+        let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(
+            host_id,
+            "user",
+        );
+        if framework_kernel::runtime_registry::host_projection_mcp_base_is_account(
+            host_id,
+            "user",
+        ) {
+            roots.account_home_root.join(rel)
+        } else {
+            roots
+                .host_home_root(host_id)
+                .map(|h| h.join(rel))
+                .unwrap_or_else(|| roots.account_home_root.join(rel))
+        }
     } else {
         let dotdir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
         roots.project_root.join(format!("{dotdir}/opencode.json"))

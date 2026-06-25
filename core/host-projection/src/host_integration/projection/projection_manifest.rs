@@ -582,11 +582,20 @@ pub fn cursor_mcp_server_exists(path: &Path) -> std::result::Result<bool, String
 
 pub fn claude_mcp_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
+        let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(
+            "claude",
+            "user",
+        );
         roots
-            .account_home_root
-            .join(".claude/mcp.json")
+            .host_home_root("claude")
+            .map(|h| h.join(rel))
+            .unwrap_or_else(|| roots.account_home_root.join(rel))
     } else {
-        roots.project_root.join(".mcp.json")
+        let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(
+            "claude",
+            "project",
+        );
+        roots.project_root.join(rel)
     }
 }
 

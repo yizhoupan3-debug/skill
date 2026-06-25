@@ -4,8 +4,7 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value> {
     let payload = match cli.command {
         Commands::ExportRuntimeRegistry { repo_root } => {
             let framework_root = resolve_framework_root(repo_root.as_deref())?;
-            serde_json::to_value(load_runtime_registry_payload(&framework_root)?)
-                .map_err(|err| err.to_string())?
+            serde_json::to_value(load_runtime_registry_payload(&framework_root)?)?
         }
         Commands::ResolveSkillsSource { repo_root } => json!({
             "path": normalize_path(&repo_root)?
@@ -135,8 +134,7 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf> {
     let combined = if path.is_absolute() {
         path.to_path_buf()
     } else {
-        std::env::current_dir()
-            .map_err(|err| err.to_string())?
+        std::env::current_dir()?
             .join(path)
     };
     // Resolve . and .. components without requiring path to exist on disk
@@ -201,10 +199,10 @@ pub fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf> {
 pub fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<PathBuf> {
     let root = resolve_framework_root(explicit)?;
     if !is_framework_root(&root) {
-        return Err(format!(
+        return Err(FrameworkError::config(format!(
             "stale or missing framework_root: {}. Repair by passing --framework-root pointing at the framework checkout containing configs/framework/RUNTIME_REGISTRY.json and core/router-rs/Cargo.toml",
             root.display()
-        ).into());
+        )));
     }
     Ok(root)
 }
@@ -231,7 +229,9 @@ pub fn resolve_project_root(
     if is_framework_root(framework_root) && cwd.starts_with(framework_root) {
         return normalize_path(framework_root);
     }
-    Err("missing project_root; pass --project-root or set SKILL_PROJECT_ROOT".to_string().into())
+    Err(FrameworkError::config(
+        "missing project_root; pass --project-root or set SKILL_PROJECT_ROOT",
+    ))
 }
 
 pub fn normalize_discovered_project_root(
@@ -241,11 +241,11 @@ pub fn normalize_discovered_project_root(
     let candidate = normalize_path(candidate)?;
     let framework_root = normalize_path(framework_root)?;
     if is_framework_root(&candidate) && candidate != framework_root {
-        return Err(format!(
+        return Err(FrameworkError::config(format!(
             "ambiguous project_root discovery: {} looks like a framework checkout but does not match framework_root {}. Pass both --framework-root and --project-root explicitly",
             candidate.display(),
             framework_root.display()
-        ).into());
+        )));
     }
     Ok(candidate)
 }
@@ -484,7 +484,9 @@ pub fn codegraph_mcp_cargo_bootstrap_args(framework_root: &Path, repo_root: &str
 pub fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> Result<()> {
     if cmd == "cargo" {
         if which::which("cargo").is_err() {
-            return Err("Cargo is not found on system PATH".to_string().into());
+            return Err(FrameworkError::config(
+                "Cargo is not found on system PATH",
+            ));
         }
         return Ok(());
     }
@@ -498,17 +500,19 @@ pub fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> 
     }
     let path = Path::new(cmd);
     if !path.is_file() {
-        return Err(format!("MCP executable binary '{cmd}' is missing on disk").into());
+        return Err(FrameworkError::config(format!(
+            "MCP executable binary '{cmd}' is missing on disk"
+        )));
     }
     if is_ephemeral_executable_path(cmd) {
-        return Err(format!(
+        return Err(FrameworkError::config(format!(
             "MCP executable '{cmd}' points at an ephemeral build path; run `router-rs self install` then `framework host-integration install --to <host>`"
-        ).into());
+        )));
     }
     if framework_root.is_some_and(|root| is_repo_build_executable_path(cmd, root)) {
-        return Err(format!(
+        return Err(FrameworkError::config(format!(
             "MCP executable '{cmd}' points at a repo build artifact; run `router-rs self install` then `framework host-integration install --to <host>`"
-        ).into());
+        )));
     }
     Ok(())
 }

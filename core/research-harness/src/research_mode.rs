@@ -1,7 +1,8 @@
 //! Research mode inference — moved from framework-runtime to L5 (ADR-010 §7.4).
 //!
-//! L4 uses this module via the `host_projection::hooks::research_mode_for_request`
-//! function pointer. L5 registers the inference callback at bootstrap.
+//! L7 (runtime-core) consumes this inference result via the
+//! `host_projection::hooks::research_mode_for_request` function pointer.
+//! L5 registers the inference callback at bootstrap.
 
 use framework_kernel::stdio_payload_types::ExecuteRequestPayload;
 

@@ -303,7 +303,8 @@ pub fn remove_cursor_projection(
 }
 
 pub fn claude_project_narrative_path(roots: &ResolvedProjectionRoots) -> PathBuf {
-    roots.project_root.join(".claude").join("CLAUDE.md")
+    let config_dir = framework_kernel::runtime_registry::host_private_config_dir("claude");
+    roots.project_root.join(config_dir).join("CLAUDE.md")
 }
 
 pub fn claude_settings_target(
@@ -403,7 +404,8 @@ pub fn install_claude_settings_hooks(settings_path: &Path) -> Result<bool> {
 }
 
 pub fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<bool> {
-    let dest = roots.project_root.join(".claude/router-rs-hook.env");
+    let config_dir = framework_kernel::runtime_registry::host_private_config_dir("claude");
+    let dest = roots.project_root.join(config_dir).join("router-rs-hook.env");
     if dest.is_file() {
         return Ok(false);
     }

@@ -1,9 +1,9 @@
 {
   "schema_version": "mcp-tool-registry-v2",
   "scope": {
-    "total_count": 54,
+    "total_count": 66,
     "builtin_count": 15,
-    "research_count": 5,
+    "research_count": 17,
     "independent_count": 23,
     "external_count": 11
   },
@@ -599,7 +599,15 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": []
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {"type": "string", "description": "待检测文本"},
+          "language": {"type": "string", "enum": ["en", "zh"], "description": "语言：en=英语, zh=中文"}
+        }
+      }
     },
     {
       "slug": "research_aigc_humanize",
@@ -618,7 +626,16 @@
       "mcp_server": "research-harness",
       "tool_flags": [
         "deprecated"
-      ]
+      ],
+      "input_schema": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {"type": "string", "description": "待改写文本"},
+          "language": {"type": "string", "enum": ["en", "zh"], "description": "语言：en=英语, zh=中文"},
+          "preserve_academic_tone": {"type": "boolean", "description": "保留学术语气（默认 true）"}
+        }
+      }
     },
     {
       "slug": "research_review_dimensions",
@@ -636,7 +653,15 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": []
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["round"],
+        "properties": {
+          "round": {"type": "integer", "description": "审稿轮次"},
+          "manuscript_summary": {"type": "string", "description": "论文摘要（可选）"}
+        }
+      }
     },
     {
       "slug": "research_claim_drift",
@@ -654,7 +679,15 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": []
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["original_claims", "current_claims"],
+        "properties": {
+          "original_claims": {"type": "array", "items": {"type": "object"}, "description": "原始声明列表（含 id/text/ceiling/evidence）"},
+          "current_claims": {"type": "array", "items": {"type": "object"}, "description": "当前声明列表"}
+        }
+      }
     },
     {
       "slug": "research_review_loop",
@@ -673,7 +706,323 @@
       ],
       "host_platforms": [],
       "mcp_server": "research-harness",
-      "tool_flags": []
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "max_rounds": {"type": "integer", "description": "最大轮次（默认 10）"},
+          "min_rounds": {"type": "integer", "description": "最小轮次（默认 5）"},
+          "consecutive_stable_required": {"type": "integer", "description": "连续稳定轮次要求（默认 2）"}
+        }
+      }
+    },
+    {
+      "slug": "math_prove_inequality",
+      "display_name": "不等式证明",
+      "description": "使用 Z3/SMT 求解器验证线性不等式",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "不等式",
+        "证明",
+        "inequality",
+        "Z3",
+        "数学证明",
+        "线性不等式"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["expression"],
+        "properties": {
+          "expression": {"type": "string", "description": "不等式表达式"},
+          "timeout_ms": {"type": "integer", "description": "超时毫秒（可选）"}
+        }
+      }
+    },
+    {
+      "slug": "math_backend_available",
+      "display_name": "数学后端可用性检查",
+      "description": "检查数学验证后端（Z3/SymPy/Lean）是否可用",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "后端",
+        "available",
+        "数学检查",
+        "工具可用性",
+        "Z3",
+        "SymPy",
+        "Lean"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "math_backend_status",
+      "display_name": "数学后端状态",
+      "description": "检查所有数学验证后端的详细状态与版本信息（同 math_backend_available 别名）",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "后端状态",
+        "backend status",
+        "数学版本",
+        "Z3 版本",
+        "SymPy 版本",
+        "Lean 版本",
+        "安装检查"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "math_asymptotic_estimate",
+      "display_name": "渐近估计",
+      "description": "估计数学表达式的渐近量级",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "渐近",
+        "asymptotic",
+        "量级",
+        "O",
+        "估计",
+        "数学分析"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["expression"],
+        "properties": {
+          "expression": {"type": "string", "description": "数学表达式"},
+          "variable": {"type": "string", "description": "变量名（默认 x）"},
+          "regime": {"type": "string", "description": "极限 regime: oo=无穷大, 0=趋于零（默认 oo）"}
+        }
+      }
+    },
+    {
+      "slug": "math_asymptotic_chain",
+      "display_name": "渐近链验证",
+      "description": "验证渐近推理链（多步逐步推导）",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "渐近链",
+        "asymptotic chain",
+        "推导验证",
+        "O 链",
+        "数学推理"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["steps"],
+        "properties": {
+          "steps": {"type": "array", "items": {"type": "object"}, "description": "渐近推理步骤列表"},
+          "variable": {"type": "string", "description": "变量名（默认 x）"},
+          "regime": {"type": "string", "description": "极限 regime（默认 oo）"},
+          "sympy_check": {"type": "boolean", "description": "是否用 SymPy 验证（默认 true）"}
+        }
+      }
+    },
+    {
+      "slug": "math_proof_dag_init",
+      "display_name": "证明 DAG 初始化",
+      "description": "初始化一个证明有向无环图（Proof DAG）",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "证明 DAG",
+        "proof DAG",
+        "证明分解",
+        "数学证明",
+        "proof decomposition",
+        "蓝图"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["goal"],
+        "properties": {
+          "goal": {"type": "string", "description": "证明目标陈述"},
+          "name": {"type": "string", "description": "证明名称（可选，默认 proof）"}
+        }
+      }
+    },
+    {
+      "slug": "math_proof_dag_decompose",
+      "display_name": "证明 DAG 分解",
+      "description": "将证明节点分解为子目标",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "分解",
+        "证明分解",
+        "子目标",
+        "proof decompose",
+        "DAG 分解"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["parent_id", "children"],
+        "properties": {
+          "parent_id": {"type": "string", "description": "父节点 ID"},
+          "children": {"type": "array", "items": {"type": "object"}, "description": "子目标节点列表"},
+          "and": {"type": "boolean", "description": "AND 分解（全部成立）或 OR 分解（任一成立）（默认 false=OR）"}
+        }
+      }
+    },
+    {
+      "slug": "math_proof_dag_verify",
+      "display_name": "证明 DAG 验证",
+      "description": "验证当前证明 DAG 的结构完备性",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "DAG 验证",
+        "证明验证",
+        "proof verify",
+        "完整性检查",
+        "论证审查"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "math_proof_dag_status",
+      "display_name": "证明 DAG 状态",
+      "description": "查看当前证明 DAG 的进度摘要",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "DAG 状态",
+        "证明进度",
+        "proof status",
+        "摘要",
+        "当前进度"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "slug": "math_sympy_verify",
+      "display_name": "SymPy 等式验证",
+      "description": "使用 SymPy 验证代数等式恒成立",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "SymPy",
+        "等式验证",
+        "恒等式",
+        "sympy verify",
+        "代数化简",
+        "数学验证"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["lhs", "rhs"],
+        "properties": {
+          "lhs": {"type": "string", "description": "等式左侧表达式"},
+          "rhs": {"type": "string", "description": "等式右侧表达式"},
+          "assumptions": {"type": "array", "items": {"type": "string"}, "description": "前提条件列表（可选）"}
+        }
+      }
+    },
+    {
+      "slug": "math_sympy_simplify",
+      "display_name": "SymPy 表达式化简",
+      "description": "使用 SymPy 化简数学表达式",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "化简",
+        "simplify",
+        "SymPy",
+        "表达式化简",
+        "代数化简"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["expression"],
+        "properties": {
+          "expression": {"type": "string", "description": "待化简的数学表达式"}
+        }
+      }
+    },
+    {
+      "slug": "math_lean_verify",
+      "display_name": "Lean 定理证明",
+      "description": "使用 Lean 4 定理证明器验证数学命题",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "Lean",
+        "定理证明",
+        "命题验证",
+        "formal proof",
+        "lean verify",
+        "形式化证明"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "required": ["script"],
+        "properties": {
+          "script": {"type": "string", "description": "Lean 4 脚本内容"}
+        }
+      }
     },
     {
       "slug": "browser_tabs",

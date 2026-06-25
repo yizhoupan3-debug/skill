@@ -70,7 +70,7 @@ pub fn closeout_record_write_dispatch(
         host_projection::hooks::evaluate_closeout_record_file_for_task(repo_root, task_id, &record_path);
     let eval = match eval_result {
         Ok(v) => v,
-        Err(e) => json!({"error": e}),
+        Err(e) => json!({"error": e.to_string()}),
     };
 
     let closeout_allowed = eval.get("closeout_allowed").and_then(Value::as_bool).unwrap_or(false);

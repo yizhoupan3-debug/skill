@@ -839,8 +839,9 @@
         {
           "scope": "user",
           "host_root": "opencode",
-          "relative": "opencode.json",
-          "notes": "Default: ~/.config/opencode/opencode.json"
+          "relative": ".config/opencode/opencode.json",
+          "notes": "Default: ~/.config/opencode/opencode.json",
+          "base": "account_home"
         }
       ],
       "session_supervisor_driver": "unsupported",
@@ -938,6 +939,17 @@
         {
           "scope": "project",
           "relative": ".claude/settings.json"
+        }
+      ],
+      "mcp_config_paths": [
+        {
+          "scope": "user",
+          "host_root": "claude",
+          "relative": "mcp.json"
+        },
+        {
+          "scope": "project",
+          "relative": ".mcp.json"
         }
       ],
       "session_supervisor_driver": "mcp_bridge",

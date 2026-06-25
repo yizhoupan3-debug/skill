@@ -56,8 +56,8 @@ The `latex` module **does not replace** existing `citation/audit.rs`, `citation/
 - `ratex-font` (font metrics and symbol tables from RaTeX)
 - Common workspace deps (anyhow, chrono, reqwest, rusqlite, serde, regex, ...)
 
-**不依赖** `runtime-core` 或 `host-projection`，避免循环依赖。
-`runtime-core` 可通过 trait object 或函数指针调用 `research-harness` 的 hook 接口。
+**不依赖** `runtime-core`，避免循环依赖。
+`runtime-core` 可通过函数指针调用 `research-harness` 的 hook 接口。
 
 ## MCP Tools
 

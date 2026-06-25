@@ -400,7 +400,7 @@ fn dispatch_stdio_work_items(
 fn report_stdio_worker_pool_unavailable(
     envelope: StdioJsonRequestEnvelope,
     result_tx: &mpsc::Sender<StdioWorkerMessage>,
-) -> Result<(), mpsc::SendError<StdioWorkerMessage>> {
+) -> std::result::Result<(), mpsc::SendError<StdioWorkerMessage>> {
     result_tx.send(StdioWorkerMessage::Finished(StdioJsonResponseEnvelope {
         line_index: envelope.line_index,
         response: StdioJsonResponsePayload {
@@ -469,7 +469,7 @@ fn dispatch_stdio_json_envelope(envelope: StdioJsonRequestEnvelope) -> StdioJson
 }
 
 fn parse_stdio_json_line(line: &str) -> Result<StdioJsonRequestPayload> {
-    serde_json::from_str::<StdioJsonRequestPayload>(line)
+    Ok(serde_json::from_str::<StdioJsonRequestPayload>(line)?)
 }
 
 pub fn runtime_concurrency_defaults_payload() -> RuntimeConcurrencyDefaultsPayload {

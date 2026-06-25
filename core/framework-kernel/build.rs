@@ -371,6 +371,84 @@ fn main() {
     out.push_str("        _ => &[\"project\"],\n");
     out.push_str("    }\n}\n\n");
 
+    // --- host_projection_mcp_relative (from host_projections.*.mcp_config_paths) ---
+    {
+        let projections = reg
+            .get("host_projections")
+            .and_then(|v| v.as_object())
+            .expect("RUNTIME_REGISTRY missing host_projections");
+
+        out.push_str("/// Return the relative MCP config path for a (host_id, scope) pair.\n");
+        out.push_str("/// Returns `\"\"` if no matching entry is found.\n");
+        out.push_str("/// Source: host_projections.*.mcp_config_paths[].relative\n");
+        out.push_str(
+            "pub fn host_projection_mcp_relative(host_id: &str, scope: &str) -> &'static str {\n",
+        );
+        out.push_str("    match (host_id, scope) {\n");
+        for host_id in &supported {
+            if let Some(entries) = projections
+                .get(host_id.as_str())
+                .and_then(|p| p.get("mcp_config_paths"))
+                .and_then(|v| v.as_array())
+            {
+                for entry in entries {
+                    if let (Some(s), Some(rel)) = (
+                        entry.get("scope").and_then(|v| v.as_str()),
+                        entry.get("relative").and_then(|v| v.as_str()),
+                    ) {
+                        let escaped = rust_str_escape(rel);
+                        out.push_str(&format!(
+                            "        (\"{host_id}\", \"{s}\") => \"{escaped}\",\n"
+                        ));
+                    }
+                }
+            }
+        }
+        out.push_str("        _ => \"\",\n");
+        out.push_str("    }\n}\n\n");
+    }
+
+    // --- host_projection_mcp_base_is_account (from host_projections.*.mcp_config_paths) ---
+    {
+        let projections = reg
+            .get("host_projections")
+            .and_then(|v| v.as_object())
+            .expect("RUNTIME_REGISTRY missing host_projections");
+
+        out.push_str(
+            "/// Returns `true` when the matching mcp_config_paths entry uses `account_home` base.\n",
+        );
+        out.push_str(
+            "/// This signals the caller to resolve the path relative to `account_home_root`\n",
+        );
+        out.push_str("/// instead of `host_home_root`.\n");
+        out.push_str(
+            "pub fn host_projection_mcp_base_is_account(host_id: &str, scope: &str) -> bool {\n",
+        );
+        out.push_str("    match (host_id, scope) {\n");
+        for host_id in &supported {
+            if let Some(entries) = projections
+                .get(host_id.as_str())
+                .and_then(|p| p.get("mcp_config_paths"))
+                .and_then(|v| v.as_array())
+            {
+                for entry in entries {
+                    if let Some(s) = entry.get("scope").and_then(|v| v.as_str()) {
+                        let is_account = entry
+                            .get("base")
+                            .and_then(|v| v.as_str())
+                            == Some("account_home");
+                        if is_account {
+                            out.push_str(&format!("        (\"{host_id}\", \"{s}\") => true,\n"));
+                        }
+                    }
+                }
+            }
+        }
+        out.push_str("        _ => false,\n");
+        out.push_str("    }\n}\n\n");
+    }
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
 
     // --- stdio_op_domains ---

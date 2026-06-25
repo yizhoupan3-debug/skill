@@ -273,7 +273,7 @@ impl FanoutTelemetryWriter {
 }
 
 impl TelemetryWriter for FanoutTelemetryWriter {
-    fn write_event(&self, event: &TelemetryEvent) -> Result<(), String> {
+    fn write_event(&self, event: &TelemetryEvent) -> std::result::Result<(), String> {
         match self.observer.lock() {
             Ok(mut guard) => {
                 if let Err(e) = guard.observe(event) {

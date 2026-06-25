@@ -167,11 +167,11 @@ pub fn register_host_projection_hooks() {
 
 fn register_runtime_contract_hooks_impl() {
     host_projection::hooks::register_framework_runtime(
-        framework_extra::contract_summary::build_framework_contract_summary_envelope,
+        |repo_root| framework_extra::contract_summary::build_framework_contract_summary_envelope(repo_root).map_err(Into::into),
         framework_extra::evidence::try_append_post_tool_shell_evidence,
         framework_extra::closeout::closeout_programmatic_enforcement_enabled,
-        framework_extra::closeout::closeout_record_path_for_task,
-        framework_extra::closeout::evaluate_closeout_record_file_for_task,
+        |repo_root, task_id| framework_extra::closeout::closeout_record_path_for_task(repo_root, task_id).map_err(Into::into),
+        |repo_root, task_id, record_path| framework_extra::closeout::evaluate_closeout_record_file_for_task(repo_root, task_id, record_path).map_err(Into::into),
         framework_extra::closeout::first_task_id_from_registry,
         framework_extra::evidence::framework_hook_evidence_append,
         framework_extra::evidence::extract_post_tool_duration_ms,
@@ -180,9 +180,9 @@ fn register_runtime_contract_hooks_impl() {
     );
 
     host_projection::hooks::register_framework_runtime_extra(
-        framework_kernel::repo_roots::resolve_repo_root_arg,
+        |repo_root| framework_kernel::repo_roots::resolve_repo_root_arg(repo_root).map_err(Into::into),
         framework_extra::util::current_local_timestamp,
-        framework_extra::session_artifacts::write_framework_session_artifacts,
+        |payload| framework_extra::session_artifacts::write_framework_session_artifacts(payload).map_err(Into::into),
         |records_json,
          host_id,
          query,
@@ -192,7 +192,7 @@ fn register_runtime_contract_hooks_impl() {
             let records: Vec<routing_engine::route::SkillRecord> = records_json.iter()
                 .filter_map(|v| serde_json::from_value(v.clone()).ok())
                 .collect();
-            framework_extra::route_manifest_fallback::route_task_with_manifest_fallback(
+            Ok(framework_extra::route_manifest_fallback::route_task_with_manifest_fallback(
                 &records, host_id, query, session_id, allow_overlay, first_turn,
             )
             .map(|d| host_projection::hooks::RouteDecision {
@@ -200,17 +200,17 @@ fn register_runtime_contract_hooks_impl() {
                 selected_skill_path: d.selected_skill_path,
                 reasons: d.reasons,
                 score: d.score,
-            })
+            })?)
         },
-        framework_extra::snapshot::build_framework_runtime_snapshot_envelope,
+        |repo_root, artifact_root, task_id| framework_extra::snapshot::build_framework_runtime_snapshot_envelope(repo_root, artifact_root, task_id).map_err(Into::into),
         framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
         framework_extra::evidence::append_evidence_index_merged_row,
         telemetry_emit::hook_action_from_output,
         || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
-        framework_extra::session_call::check_anomalies,
+        |repo_root| framework_extra::session_call::check_anomalies(repo_root).map_err(Into::into),
     );
     host_projection::hooks::register_build_framework_runtime_snapshot_envelope_with_level(
-        framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level,
+        |repo_root, artifact_root, task_id, detail_level| framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level(repo_root, artifact_root, task_id, detail_level).map_err(Into::into),
     );
 
     // ── RFV loop full implementation (supports append_round) ──
@@ -218,7 +218,7 @@ fn register_runtime_contract_hooks_impl() {
 
     // ── session-supervisor op dispatch (for MCP tools) ──
     host_projection::hooks::register_session_supervisor_op(
-        session_supervisor::handle_session_supervisor_operation,
+        |payload| session_supervisor::handle_session_supervisor_operation(payload).map_err(Into::into),
     );
 
     // ── framework-runtime-hooks internal hooks (pre_tool_use_guard, closeout, etc.) ──
@@ -248,7 +248,7 @@ fn register_runtime_contract_hooks_impl() {
             },
         },
         framework_goal_drive: core_state::state_manager::framework_goal_drive,
-        framework_quality_gate: quality_gate::framework_quality_gate,
+        framework_quality_gate: |payload| quality_gate::framework_quality_gate(payload).map_err(|e| e.to_string()),
         handle_session_supervisor_operation: session_supervisor::handle_session_supervisor_operation,
         #[cfg(feature = "l5-state")]
         handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
@@ -290,14 +290,14 @@ fn register_telemetry_hooks_impl() {
     );
 
     host_projection::hooks::register_session_call_tracker(
-        framework_extra::session_call::init_tracker,
+        |repo_root| framework_extra::session_call::init_tracker(repo_root).map_err(Into::into),
         |root, name, stats_json| {
             let stats = stats_json.and_then(|v| {
                 serde_json::from_value::<framework_extra::session_call::CacheStats>(v.clone()).ok()
             });
-            framework_extra::session_call::record_tool_call(root, name, stats)
+            Ok(framework_extra::session_call::record_tool_call(root, name, stats)?)
         },
-        framework_extra::session_call::read_tracker_state,
+        |repo_root| framework_extra::session_call::read_tracker_state(repo_root).map_err(Into::into),
     );
 
     host_projection::hooks::register_router_rs_observation(
@@ -307,10 +307,10 @@ fn register_telemetry_hooks_impl() {
 
     // ── Runtime trace transport proxies (for L3 browser-mcp) ──
     host_projection::hooks::register_attach_runtime_event_transport(
-        fr_exec::trace_attach::attach_runtime_event_transport,
+        |payload| fr_exec::trace_attach::attach_runtime_event_transport(payload).map_err(Into::into),
     );
     host_projection::hooks::register_inspect_trace_stream(
-        fr_exec::trace_stream_io::inspect_trace_stream,
+        |payload| fr_exec::trace_stream_io::inspect_trace_stream(payload).map_err(Into::into),
     );
 }
 
@@ -366,17 +366,17 @@ fn register_mcp_hooks_impl() {
                 first_turn,
             )?;
             if decision.selected_skill.is_empty() || decision.selected_skill == "none" {
-                serde_json::to_string(&serde_json::json!({
+                Ok(serde_json::to_string(&serde_json::json!({
                     "routed": false, "skill_slug": null,
                     "skill_path": null, "match_reason": "no match",
-                })).map_err(|e| e.to_string())
+                })).map_err(|e| e.to_string())?)
             } else {
-                serde_json::to_string(&serde_json::json!({
+                Ok(serde_json::to_string(&serde_json::json!({
                     "routed": true,
                     "skill_slug": decision.selected_skill,
                     "skill_path": decision.selected_skill_path,
                     "match_reason": decision.reasons.first().cloned().unwrap_or_default(),
-                })).map_err(|e| e.to_string())
+                })).map_err(|e| e.to_string())?)
             }
         },
     );
@@ -394,7 +394,7 @@ fn register_mcp_hooks_impl() {
                 records.as_ref(), Some(&host_indices), query, limit,
             );
             let results = routing_engine::route::build_search_results_payload(query, rows);
-            serde_json::to_string(&results).map_err(|e| e.to_string())
+            Ok(serde_json::to_string(&results).map_err(|e| e.to_string())?)
         },
     );
 }

@@ -542,17 +542,13 @@ fn handle_initialize(id: Option<Value>) -> Value {
 }
 
 pub fn handle_tools_list(id: Option<Value>) -> Value {
-    // Build framework dispatch-domain tool entries dynamically from the registry
+    // Build framework dispatch-domain and research tool entries dynamically from the registry
     let composite_tools = build_composite_tools_from_registry();
-
-    // Research tools (from research-harness, schemas hardcoded here)
-    let research_tools = research_tool_schemas();
 
     // Task CRUD tools (built-in)
     let task_tools = task_crud_tool_schemas();
 
     let mut all_tools = composite_tools;
-    all_tools.extend(research_tools);
     all_tools.extend(task_tools);
 
     json!({
@@ -564,9 +560,9 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
     })
 }
 
-/// Build tool schema entries for framework dispatch-domain tools
-/// (`domain:goal`, `domain:quality-gate`, `domain:closeout`,
-/// `domain:routing-evolution`, `domain:framework`) from MCP_TOOL_REGISTRY.json.
+/// Build tool schema entries for framework dispatch-domain and research tools
+/// from MCP_TOOL_REGISTRY.json. Includes tools with dispatch_domain starting
+/// with `domain:` or equal to `research`, excluding deprecated tools.
 fn build_composite_tools_from_registry() -> Vec<Value> {
     let registry_path = mcp_tool_registry::resolve_tool_registry_path()
         .unwrap_or_else(|| {
@@ -584,7 +580,9 @@ fn build_composite_tools_from_registry() -> Vec<Value> {
 
     records
         .iter()
-        .filter(|r| r.dispatch_domain.starts_with("domain:"))
+        .filter(|r| {
+            r.dispatch_domain.starts_with("domain:") || r.dispatch_domain == "research"
+        })
         .filter(|r| !r.tool_flags.iter().any(|f| f == "deprecated"))
         .map(|r| {
             let mut tool = json!({
@@ -607,73 +605,6 @@ fn build_composite_tools_from_registry() -> Vec<Value> {
 }
 
 /// Research tool schemas (hardcoded — managed by research-harness).
-fn research_tool_schemas() -> Vec<Value> {
-    vec![
-        json!({
-            "name": "research_aigc_check",
-            "description": "检测文本是否由 AI 生成，返回概率评分和逐段分析。",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "text": {"type": "string"},
-                    "language": {"type": "string", "enum": ["en", "zh"]},
-                },
-                "required": ["text"],
-            },
-        }),
-        json!({
-            "name": "research_aigc_humanize",
-            "description": "对 AI 生成文本进行句法改写和词汇替换降重。",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "text": {"type": "string"},
-                    "language": {"type": "string", "enum": ["en", "zh"]},
-                    "preserve_academic_tone": {"type": "boolean"},
-                },
-                "required": ["text"],
-            },
-        }),
-        json!({
-            "name": "research_review_dimensions",
-            "description": "获取多轮对抗审稿的维度 prompt。",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "round": {"type": "integer"},
-                    "manuscript_summary": {"type": "string"},
-                },
-                "required": ["round"],
-            },
-        }),
-        json!({
-            "name": "research_claim_drift",
-            "description": "检测 claim 漂移:原始 vs 当前声明的相似度和证据变化。",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "original_claims": {"type": "array", "items": {"type": "object"}},
-                    "current_claims": {"type": "array", "items": {"type": "object"}},
-                },
-                "required": ["original_claims", "current_claims"],
-            },
-        }),
-        json!({
-            "name": "research_review_loop",
-            "description": "启动多轮对抗审稿循环。",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "max_rounds": {"type": "integer"},
-                    "min_rounds": {"type": "integer"},
-                    "consecutive_stable_required": {"type": "integer"},
-                },
-                "required": [],
-            },
-        }),
-    ]
-}
-
 /// Task CRUD tool schemas (built-in).
 fn task_crud_tool_schemas() -> Vec<Value> {
     vec![
@@ -1037,7 +968,7 @@ pub fn read_mcp_message_test_helper<R: std::io::BufRead>(
 
 #[cfg(any(test, feature = "test-support"))]
 pub fn init_tracker_for_test(path: &std::path::Path) -> Result<(), String> {
-    crate::hooks::init_tracker(path)
+    Ok(crate::hooks::init_tracker(path)?)
 }
 
 #[cfg(any(test, feature = "test-support"))]

@@ -148,11 +148,11 @@ fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, String> {
         task_id.as_deref(),
         optional_non_empty_string(&payload, "record_path").as_deref(),
     ) {
-        evaluate_closeout_record_file_for_task(
+        Ok(evaluate_closeout_record_file_for_task(
             Path::new(repo_root),
             task_id,
             Path::new(record_path),
-        )
+        )?)
     } else {
         let record_value = payload
             .get("record")
@@ -176,9 +176,9 @@ fn dispatch_stdio_closeout_evaluate(payload: Value) -> Result<Value, String> {
                 has_successful_verification: has_success,
                 goal_prediction,
             };
-            evaluate_closeout_record_value_with_context(record_value, &ctx)
+            Ok(evaluate_closeout_record_value_with_context(record_value, &ctx)?)
         } else {
-            evaluate_closeout_record_value(record_value)
+            Ok(evaluate_closeout_record_value(record_value)?)
         }
     };
     if let Ok(ref response) = result {
@@ -197,7 +197,7 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
         "route" => dispatch_stdio_route(payload),
         "search_skills" => dispatch_stdio_search_skills(payload),
         "hook_policy" => evaluate_hook_policy_value(payload),
-        "pre_tool_use_guard" => evaluate_pre_tool_use_guard_value(payload),
+        "pre_tool_use_guard" => Ok(evaluate_pre_tool_use_guard_value(payload)?),
         "concurrency_defaults" => serialize_payload(runtime_concurrency_defaults_payload(), "concurrency defaults"),
         "route_report" => dispatch_stdio_route_report(payload),
         "route_resolution" => dispatch_stdio_route_resolution(payload),
@@ -219,11 +219,7 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
 fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, String> {
     match op {
         "execute" => {
-            let research_mode = payload
-                .get("research_mode")
-                .and_then(Value::as_str)
-                .unwrap_or("quick")
-                .to_string();
+            let research_mode = host_projection::hooks::research_mode_for_request(&payload);
             let request = parse_payload::<ExecuteRequestPayload>(payload, "execute")?;
             serialize_payload(execute_request(request, &research_mode)?, "execute")
         }
@@ -355,7 +351,7 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
             build_framework_prompt_compression_envelope(payload, ctx_size)
         }
         "framework_session_artifact_write" => write_framework_session_artifacts(payload),
-        "framework_hook_evidence_append" => framework_hook_evidence_append(payload),
+        "framework_hook_evidence_append" => Ok(framework_hook_evidence_append(payload)?),
         "framework_goal_drive" => {
             crate::telemetry_emit::framework_goal_drive(payload)
         }

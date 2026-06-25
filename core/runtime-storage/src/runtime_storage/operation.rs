@@ -176,7 +176,7 @@ pub fn storage_read_text(
         Some(ResolvedStorageBackend::Sqlite {
             db_path,
             storage_root,
-        }) => sqlite_read_text(path, db_path, storage_root),
+        }) => Ok(sqlite_read_text(path, db_path, storage_root)?),
     }
 }
 

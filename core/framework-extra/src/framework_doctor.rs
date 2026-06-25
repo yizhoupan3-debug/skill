@@ -68,7 +68,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
         core_policy::review_gate_engine::ReviewGateMode::Strict => "strict",
     };
     println!(
-        "ROUTER_RS_REVIEW_GATE_MODE: {review_mode} (env ROUTER_RS_REVIEW_GATE_MODE, legacy ROUTER_RS_CURSOR_REVIEW_GATE_MODE)"
+        "ROUTER_RS_REVIEW_GATE_MODE: {review_mode} (env ROUTER_RS_REVIEW_GATE_MODE; legacy per-host env variants for backward compat)"
     );
     for (label, path) in &checks {
         let status = if path.is_file() {
@@ -228,8 +228,11 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
     );
 
     println!("\n--- ephemeral Stop checkpoint rows (operator) ---");
+    const EPHEMERAL_PREFIXES: &[&str] =
+        framework_kernel::runtime_registry::EPHEMERAL_TASK_PREFIXES;
     println!(
-        "If task_registry.json lists many cursor-stop-* / session-checkpoint-* rows or focus drifted:"
+        "If task_registry.json lists many \"{}\" rows or focus drifted:",
+        EPHEMERAL_PREFIXES.join("\" / \""),
     );
     println!(
         "  1) Pick the real task_id (active/focus or GOAL_STATE under artifacts/current/<id>/)."

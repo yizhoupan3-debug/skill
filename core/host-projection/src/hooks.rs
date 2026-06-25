@@ -729,10 +729,10 @@ pub fn maybe_record_research_activity(repo_root: &Path, tool_name: &str, summary
 // Research mode inference function pointer (ADR-010 §7.4)
 // ────────────────────────────────────────────────────────────────
 //
-// L4 (runtime-core) calls `research_mode_for_request` to classify
+// L7 (runtime-core) calls `research_mode_for_request` to classify
 // a request as "quick" or "deep" research. L5 (research-harness)
 // registers the actual inference logic. This keeps research domain
-// knowledge out of L4.
+// knowledge out of L4 (routing-engine, core-state) and below.
 
 type InferResearchModeFn = fn(&Value) -> String;
 
@@ -1117,7 +1117,7 @@ pub fn quality_gate_drive_registered() -> Option<fn(Value) -> Result<Value>> {
 
 /// Research tool dispatch: injected at startup by runtime-core
 /// to break the L3→L6 dependency direction.
-type ResearchToolDispatchFn = fn(&str, &Value) -> Result<String>;
+type ResearchToolDispatchFn = fn(&str, &Value) -> std::result::Result<String, String>;
 
 // ── Session supervisor operation hook ──
 // Registered by runtime-core at startup. Allows MCP tools to call session_supervisor ops
@@ -1261,7 +1261,7 @@ pub fn inspect_trace_stream(
 // host-projection retains MCP parameter type-checking; runtime-core owns domain logic.
 
 /// Goal state manage dispatch: (args, repo_root, session_id) -> Result<String>
-type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> Result<String>;
+type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, String>;
 static GOAL_STATE_MANAGE_DISPATCH: OnceLock<GoalStateManageDispatchFn> = OnceLock::new();
 
 pub fn register_tool_goal_state_manage_dispatch(f: GoalStateManageDispatchFn) {
@@ -1269,14 +1269,16 @@ pub fn register_tool_goal_state_manage_dispatch(f: GoalStateManageDispatchFn) {
 }
 
 pub fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> {
-    GOAL_STATE_MANAGE_DISPATCH
-        .get()
-        .map(|f| f(args, repo_root, session_id))
-        .unwrap_or_else(|| Err(FrameworkError::validation("tool_goal_state_manage_dispatch not registered — runtime-core boot required")))
+    match GOAL_STATE_MANAGE_DISPATCH.get() {
+        Some(f) => Ok(f(args, repo_root, session_id)?),
+        None => Err(FrameworkError::validation(
+            "tool_goal_state_manage_dispatch not registered — runtime-core boot required",
+        )),
+    }
 }
 
 /// Quality gate manage dispatch: (args, repo_root, session_id) -> Result<String>
-type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> Result<String>;
+type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, String>;
 static QUALITY_GATE_MANAGE_DISPATCH: OnceLock<QualityGateManageDispatchFn> = OnceLock::new();
 
 pub fn register_tool_quality_gate_manage_dispatch(f: QualityGateManageDispatchFn) {
@@ -1284,14 +1286,16 @@ pub fn register_tool_quality_gate_manage_dispatch(f: QualityGateManageDispatchFn
 }
 
 pub fn tool_quality_gate_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> {
-    QUALITY_GATE_MANAGE_DISPATCH
-        .get()
-        .map(|f| f(args, repo_root, session_id))
-        .unwrap_or_else(|| Err(FrameworkError::validation("tool_quality_gate_manage_dispatch not registered — runtime-core boot required")))
+    match QUALITY_GATE_MANAGE_DISPATCH.get() {
+        Some(f) => Ok(f(args, repo_root, session_id)?),
+        None => Err(FrameworkError::validation(
+            "tool_quality_gate_manage_dispatch not registered — runtime-core boot required",
+        )),
+    }
 }
 
 /// Closeout record write dispatch: (args, repo_root) -> Result<String>
-type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> Result<String>;
+type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> std::result::Result<String, String>;
 static CLOSEOUT_RECORD_WRITE_DISPATCH: OnceLock<CloseoutRecordWriteDispatchFn> = OnceLock::new();
 
 pub fn register_tool_closeout_record_write_dispatch(f: CloseoutRecordWriteDispatchFn) {
@@ -1299,14 +1303,16 @@ pub fn register_tool_closeout_record_write_dispatch(f: CloseoutRecordWriteDispat
 }
 
 pub fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Result<String> {
-    CLOSEOUT_RECORD_WRITE_DISPATCH
-        .get()
-        .map(|f| f(args, repo_root))
-        .unwrap_or_else(|| Err(FrameworkError::validation("tool_closeout_record_write_dispatch not registered — runtime-core boot required")))
+    match CLOSEOUT_RECORD_WRITE_DISPATCH.get() {
+        Some(f) => Ok(f(args, repo_root)?),
+        None => Err(FrameworkError::validation(
+            "tool_closeout_record_write_dispatch not registered — runtime-core boot required",
+        )),
+    }
 }
 
 /// Closeout gate evaluate: (args, repo_root, host_id) -> Result<String>
-type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> Result<String>;
+type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> std::result::Result<String, String>;
 static CLOSEOUT_GATE_EVALUATE: OnceLock<CloseoutGateEvaluateFn> = OnceLock::new();
 
 pub fn register_tool_closeout_gate_evaluate(f: CloseoutGateEvaluateFn) {
@@ -1314,14 +1320,16 @@ pub fn register_tool_closeout_gate_evaluate(f: CloseoutGateEvaluateFn) {
 }
 
 pub fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str) -> Result<String> {
-    CLOSEOUT_GATE_EVALUATE
-        .get()
-        .map(|f| f(args, repo_root, host_id))
-        .unwrap_or_else(|| Err(FrameworkError::validation("tool_closeout_gate_evaluate not registered — runtime-core boot required")))
+    match CLOSEOUT_GATE_EVALUATE.get() {
+        Some(f) => Ok(f(args, repo_root, host_id)?),
+        None => Err(FrameworkError::validation(
+            "tool_closeout_gate_evaluate not registered — runtime-core boot required",
+        )),
+    }
 }
 
 /// Routing evolution dispatch: (args, repo_root) -> Result<String>
-type RoutingEvolutionDispatchFn = fn(&Value, &Path) -> Result<String>;
+type RoutingEvolutionDispatchFn = fn(&Value, &Path) -> std::result::Result<String, String>;
 static ROUTING_EVOLUTION_DISPATCH: OnceLock<RoutingEvolutionDispatchFn> = OnceLock::new();
 
 pub fn register_tool_routing_evolution_dispatch(f: RoutingEvolutionDispatchFn) {
@@ -1329,10 +1337,12 @@ pub fn register_tool_routing_evolution_dispatch(f: RoutingEvolutionDispatchFn) {
 }
 
 pub fn tool_routing_evolution_dispatch(args: &Value, repo_root: &Path) -> Result<String> {
-    ROUTING_EVOLUTION_DISPATCH
-        .get()
-        .map(|f| f(args, repo_root))
-        .unwrap_or_else(|| Err(FrameworkError::validation("tool_routing_evolution_dispatch not registered — runtime-core boot required")))
+    match ROUTING_EVOLUTION_DISPATCH.get() {
+        Some(f) => Ok(f(args, repo_root)?),
+        None => Err(FrameworkError::validation(
+            "tool_routing_evolution_dispatch not registered — runtime-core boot required",
+        )),
+    }
 }
 
 // ── Mirror type structural canary tests ──
