@@ -334,6 +334,7 @@ pub fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
     Ok(bytes)
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

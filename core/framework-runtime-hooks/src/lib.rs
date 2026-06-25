@@ -17,6 +17,8 @@
 //! - `HostProviderHooks`: 宿主提供者查询 (4 fields)
 //! - 其余为独立功能钩子 (8 fields)
 
+#![deny(clippy::unwrap_used, clippy::expect_used)]
+
 use serde_json::Value;
 use std::path::Path;
 use std::sync::OnceLock;
@@ -132,6 +134,7 @@ pub struct RuntimeCoreHooks {
     pub ensure_kernel_bootstrap: fn(),
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

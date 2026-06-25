@@ -45,6 +45,7 @@ fn compile_review_gate_regexes(patterns: &[String]) -> Vec<Regex> {
 /// 解析编译期嵌入的 `configs/framework/REVIEW_ROUTING_SIGNALS.json` 为运行时 `Loaded`。
 /// JSON 由 `include_str!` 静态嵌入；解析失败或可编译 regex 为空 = 仓库自身契约破损，
 /// 走 panic 让 CI / 启动期立即失败，避免历史上的「fallback 静默退化」第二真源。
+#[allow(clippy::expect_used)]
 fn load_from_embedded_json() -> Loaded {
     let parsed: ReviewRoutingSignalsFile = serde_json::from_str(EMBEDDED_JSON).expect(
         "embedded configs/framework/REVIEW_ROUTING_SIGNALS.json must parse; check JSON syntax",
@@ -85,6 +86,7 @@ pub fn parallel_review_candidate_markers() -> ParallelReviewCandidateMarkers {
     }
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

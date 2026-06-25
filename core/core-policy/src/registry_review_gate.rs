@@ -379,6 +379,7 @@ pub fn assert_reviewer_lane_matrix(repo_root: Option<&Path>) {
     ));
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

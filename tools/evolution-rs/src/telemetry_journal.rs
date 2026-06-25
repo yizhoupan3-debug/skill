@@ -240,6 +240,7 @@ pub fn default_evolution_output_dir() -> &'static str {
     "artifacts/evolution"
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -123,6 +123,7 @@ fn normalize_qg_verdict_bucket(verdict: &str) -> String {
     }
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -953,6 +953,7 @@ pub fn write_trace_metadata(
     })
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

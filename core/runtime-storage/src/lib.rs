@@ -2,6 +2,8 @@
 //!
 //! Provides runtime envelope IDs and the runtime storage backend (filesystem + SQLite).
 
+#![deny(clippy::unwrap_used, clippy::expect_used)]
+
 pub mod runtime_envelope_ids;
 pub mod runtime_storage;
 

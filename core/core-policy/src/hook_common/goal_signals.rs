@@ -56,6 +56,7 @@ pub fn completion_claim_keywords_export() -> Vec<&'static str> {
 // ────────────────────────────────────────────────────────────────
 
 /// Regex for goal contract keywords (EN + ZH).
+#[allow(clippy::expect_used)]
 pub fn goal_contract_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -67,6 +68,7 @@ pub fn goal_contract_re() -> &'static Regex {
 }
 
 /// Regex for goal progress keywords (EN + ZH).
+#[allow(clippy::expect_used)]
 pub fn goal_progress_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -76,6 +78,7 @@ pub fn goal_progress_re() -> &'static Regex {
 }
 
 /// Regex for goal verify/block keywords (EN + ZH).
+#[allow(clippy::expect_used)]
 pub fn goal_verify_or_block_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -116,6 +119,7 @@ pub fn has_structured_goal_contract(text: &str) -> bool {
 }
 
 /// Check if a heading has non-empty inline content after `:`.
+#[allow(clippy::expect_used)]
 pub fn nonempty_inline_heading_any(text: &str, heading: &str) -> bool {
     static GOAL_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(r"(?im)^\s*Goal\s*[:：]\s*(\S.+)$").expect("invalid heading regex")
@@ -153,6 +157,7 @@ pub fn nonempty_inline_heading_any(text: &str, heading: &str) -> bool {
 }
 
 /// Count "Done when" items: prefer bullet/numbered items, fallback to inline separators.
+#[allow(clippy::expect_used)]
 fn count_done_when_items(text: &str) -> usize {
     const HEADINGS: [&str; 2] = ["Done when", "完成条件"];
     static NUMBERED_LINE_RE: OnceLock<Regex> = OnceLock::new();
@@ -249,6 +254,7 @@ pub fn lifecycle_profile_is_loop_capable(profile: &str) -> bool {
     profile == "loop-auto"
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     #[test]

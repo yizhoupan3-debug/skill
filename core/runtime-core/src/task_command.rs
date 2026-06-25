@@ -70,6 +70,7 @@ pub fn dispatch_task_ledger_command_envelope(envelope: Value) -> Result<Value, S
     dispatch_task_ledger_command(cmd)
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

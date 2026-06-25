@@ -179,6 +179,7 @@ pub fn default_config_path() -> &'static str {
     "configs/evolution/evolution.toml"
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

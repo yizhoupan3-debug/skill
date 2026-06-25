@@ -5,12 +5,14 @@ use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 /// Cached compiled regex for whitespace compaction.
+#[allow(clippy::expect_used)]
 fn compact_space_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"\s+").expect("valid regex"))
 }
 
 /// Cached compiled regex for shell segment splitting.
+#[allow(clippy::expect_used)]
 fn shell_segment_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"\s*(?:&&|\|\||;|\|)\s*").expect("valid regex"))
@@ -422,6 +424,7 @@ fn shell_words(command: &str) -> Vec<String> {
 /// Cached regex match: compiles the pattern once (with `(?i)` case-insensitive prefix, matching
 /// the original runtime behavior) via `OnceLock` and reuses it across calls.
 /// All callers pass static string literals — dynamic patterns must use `Regex::new` directly.
+#[allow(clippy::expect_used)]
 fn regex_is_match(pattern: &str, text: &str) -> bool {
     // Each unique pattern string maps to a dedicated static OnceLock.
     // We use match-dispatch on known patterns to avoid runtime recompilation.
@@ -545,6 +548,7 @@ fn regex_is_match(pattern: &str, text: &str) -> bool {
 }
 
 /// Pre-compiled (case-insensitive) regexes for the dangerous-bash patterns.
+#[allow(clippy::expect_used)]
 fn dangerous_bash_compiled_patterns() -> &'static [(Regex, &'static str)] {
     static PATTERNS: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     PATTERNS.get_or_init(|| {
@@ -824,9 +828,11 @@ pub fn hook_policy_contract() -> Value {
     })
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn dangerous_bash_matches_python_guard_cases() {

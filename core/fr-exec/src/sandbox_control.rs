@@ -442,6 +442,7 @@ pub fn build_sandbox_control_response(
     Ok(response)
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

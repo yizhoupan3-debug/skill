@@ -65,6 +65,7 @@ pub fn emit_hook_timing_line(event: &str) {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use crate::router_rs_hook_timing_enabled;
     use crate::router_self::resolve_router_rs_test_bin;

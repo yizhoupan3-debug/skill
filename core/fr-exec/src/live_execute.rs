@@ -754,9 +754,9 @@ fn estimate_tokens(text: &str) -> usize {
     trimmed.chars().count().div_ceil(4)
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
-    use super::*;
     use serde_json::json;
 
     // ── build_live_execute_prompt ──

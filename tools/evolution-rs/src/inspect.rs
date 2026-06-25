@@ -159,6 +159,7 @@ fn hash_dir_recursive(path: &Path, hasher: &mut Sha256) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

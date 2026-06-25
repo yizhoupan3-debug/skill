@@ -970,6 +970,7 @@ fn looks_same_identity(left: &str, right: &str) -> bool {
     union > 0 && intersection * 2 > union
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

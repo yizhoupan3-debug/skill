@@ -1,4 +1,5 @@
 #![recursion_limit = "256"]
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 
 //! runtime-core: extracted runtime modules from router-rs.
 //!
@@ -246,12 +247,18 @@ fn register_runtime_contract_hooks_impl() {
         handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
         runtime_concurrency_defaults_payload: || {
             serde_json::to_value(stdio_transport::runtime_concurrency_defaults_payload())
-                .unwrap_or(serde_json::json!({}))
+                .unwrap_or_else(|e| {
+                    tracing::warn!(error = %e, "runtime_concurrency_defaults_payload serialization failed");
+                    serde_json::json!({})
+                })
         },
         eval_route_contract: eval_route::eval_route_contract,
         run_eval_route: |cases_path, runtime| {
             eval_route::run_eval_route(cases_path, runtime)
-                .map(|report| serde_json::to_value(report).unwrap_or(serde_json::json!({})))
+                .map(|report| serde_json::to_value(report).unwrap_or_else(|e| {
+                    tracing::warn!(error = %e, "eval_route report serialization failed");
+                    serde_json::json!({})
+                }))
                 .map_err(|e| e.to_string())
         },
         generated_artifacts_status_for_repo: |repo_root| {

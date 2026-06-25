@@ -51,6 +51,7 @@ pub fn sync_feedback(journal: PathBuf, feedback: PathBuf, dry_run: bool) -> anyh
     Ok(())
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

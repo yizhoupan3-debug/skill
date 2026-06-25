@@ -26,15 +26,19 @@ pub struct LintFinding {
     pub message: String,
 }
 
+#[allow(clippy::expect_used)]
 static TABLE_ROW: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*\|.*\|.*\|").expect("table row regex"));
 
+#[allow(clippy::expect_used)]
 static SEVERITY_PREFIX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*\[P[012]\]").expect("severity prefix regex"));
 
+#[allow(clippy::expect_used)]
 static CAVEAT_PREFIX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*Caveat:").expect("caveat prefix regex"));
 
+#[allow(clippy::expect_used)]
 static SCOPE_PREFIX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\s*(Scope:|Out of scope:)").expect("scope prefix regex"));
 

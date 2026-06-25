@@ -25,6 +25,7 @@ fn parallel_delegation_patterns() -> &'static Vec<Regex> {
     })
 }
 
+#[allow(clippy::expect_used)]
 fn parallel_marker_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -33,6 +34,7 @@ fn parallel_marker_re() -> &'static Regex {
     })
 }
 
+#[allow(clippy::expect_used)]
 fn task_context_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -41,6 +43,7 @@ fn task_context_re() -> &'static Regex {
     })
 }
 
+#[allow(clippy::expect_used)]
 fn capability_domain_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -76,6 +79,7 @@ fn delegation_override_patterns() -> &'static Vec<Regex> {
     })
 }
 
+#[allow(clippy::expect_used)]
 fn reject_reason_patterns() -> &'static Vec<Regex> {
     static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
     PATTERNS.get_or_init(|| {
@@ -112,16 +116,19 @@ const REJECT_REASON_LINE_TOKENS: &[&str] = &[
 /// 显式操作符：仅当单独成行（trim 后全串匹配）时生效，避免在正常句子里误触发。
 pub const REVIEW_GATE_LINE_CLEAR_MARKERS: &[&str] = &["rg_clear", "/rg_clear"];
 
+#[allow(clippy::expect_used)]
 fn review_keyword_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"(?i)\breview\b").expect("invalid regex"))
 }
 
+#[allow(clippy::expect_used)]
 fn pr_keyword_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"(?i)\b(pr|pull request)\b").expect("invalid regex"))
 }
 
+#[allow(clippy::expect_used)]
 fn deep_keyword_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -130,6 +137,7 @@ fn deep_keyword_re() -> &'static Regex {
     })
 }
 
+#[allow(clippy::expect_used)]
 fn narrow_review_prefix_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
@@ -138,6 +146,7 @@ fn narrow_review_prefix_re() -> &'static Regex {
     })
 }
 
+#[allow(clippy::expect_used)]
 fn framework_non_goal_entry_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"(?i)(^|\s)/(gitx|update)\b").expect("invalid regex"))
@@ -240,6 +249,7 @@ pub fn review_gate_stop_would_nudge(
     })
 }
 
+#[allow(clippy::expect_used)]
 fn strong_code_review_anchor(sanitized: &str, tokens: &[String]) -> bool {
     if crate::review_context_signals::has_github_pr_context(sanitized, tokens) {
         return true;
@@ -389,6 +399,7 @@ pub(crate) fn install_review_prompt_test_deps() {
     crate::review_context_signals::install_test_review_context_probes();
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

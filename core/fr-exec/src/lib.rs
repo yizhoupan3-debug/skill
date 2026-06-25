@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 pub mod evolution_observer;
 pub mod live_execute;
 pub mod router_env_flags;

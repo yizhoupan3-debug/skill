@@ -105,6 +105,7 @@ pub fn run_health_score(
     Ok(out_path)
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

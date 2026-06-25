@@ -1,4 +1,5 @@
 #![cfg(test)]
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use crate::route::has_paper_review_judgment_context;
     use crate::route::normalize_text;
     use crate::route::RawSkillRecord;

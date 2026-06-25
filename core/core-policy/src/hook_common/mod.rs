@@ -5,9 +5,9 @@
 //! - `review_signals` — review prompt detection, gate status, nudge injection, delegation.
 //! - `goal_signals` — goal contract recognition, progress/completion detection, structured goals.
 //!
-//! **不含**宿主 hook 的 stdin 生命周期分发、写盘或出站 JSON 投影；这类逻辑在
-//! `cursor_hooks` / `codex_hooks` / `claude_hooks` 等模块。
-//! Dependency direction: `cursor_hooks` / `codex_hooks` / `claude_hooks` → `hook_common`；
+//! **不含**宿主 hook 的 stdin 生命周期分发、写盘或出站 JSON 投影；这类逻辑在各宿主的
+//! hook 模块中。
+//! Dependency direction: 宿主 hook 模块 → `hook_common`；
 //! `hook_posttool_normalize` 不在此链上（其依赖 `cursor_hooks` 的字段 helper）。
 
 pub mod tool_origin;
@@ -53,6 +53,7 @@ pub use goal_signals::{
 // Shared utilities (used by sub-modules and external callers)
 // ────────────────────────────────────────────────────────────────
 
+#[allow(clippy::expect_used)]
 pub(crate) fn compile_patterns(patterns: &[&str]) -> Vec<Regex> {
     patterns
         .iter()
@@ -62,6 +63,7 @@ pub(crate) fn compile_patterns(patterns: &[&str]) -> Vec<Regex> {
 
 /// Strip fenced code blocks, inline code, URLs, blockquotes, and double-quoted strings from text.
 /// Used by review_signals and goal_signals for signal detection on sanitized input.
+#[allow(clippy::expect_used)]
 pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
     static RE_FENCED: OnceLock<Regex> = OnceLock::new();
     static RE_INLINE: OnceLock<Regex> = OnceLock::new();

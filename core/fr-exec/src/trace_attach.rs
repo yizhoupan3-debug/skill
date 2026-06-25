@@ -168,12 +168,15 @@ fn normalize_attach_request(payload: &Value) -> Result<NormalizedAttachRequest, 
         tracing::warn!("attach_descriptor missing 'requested_artifacts' field");
     }
     let resolution_mapping = descriptor_mapping(attach_descriptor, "resolution")?;
-    let resolved_mapping = descriptor_mapping(attach_descriptor, "resolved_artifacts")?
-        .unwrap_or_else(|| {
-            attach_descriptor
-                .as_object()
-                .expect("attach descriptor object")
-        });
+    let resolved_mapping = match descriptor_mapping(attach_descriptor, "resolved_artifacts")? {
+        Some(m) => m,
+        None => attach_descriptor
+            .as_object()
+            .ok_or_else(|| {
+                "attach descriptor: expected object when resolved_artifacts is absent"
+                    .to_string()
+            })?,
+    };
     let descriptor_binding = mapping_string(resolved_mapping, "binding_artifact_path")?;
     let descriptor_handoff = mapping_string(resolved_mapping, "handoff_path")?;
     let descriptor_resume = mapping_string(resolved_mapping, "resume_manifest_path")?;

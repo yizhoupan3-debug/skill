@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 use super::persist::{handle_background_state_operation, is_mutating_background_operation};
 use super::status::validate_transition;
 use super::types::{

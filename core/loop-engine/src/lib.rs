@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 pub mod closeout;
 pub mod dispatcher;
 pub mod drift;

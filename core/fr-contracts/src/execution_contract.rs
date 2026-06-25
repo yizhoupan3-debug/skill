@@ -129,11 +129,19 @@ fn required_string_field(
     match payload.get(field) {
         Some(Value::String(value)) => Ok(value.clone()),
         Some(Value::Null) | None => Err(FrameworkError::validation(format!("{context} is missing {field}."))),
-        Some(other) => Ok(match other {
-            Value::Bool(flag) => flag.to_string(),
-            Value::Number(number) => number.to_string(),
-            _ => other.to_string(),
-        }),
+        Some(other) => {
+            let type_name = match other {
+                Value::String(_) => "string",
+                Value::Number(_) => "number",
+                Value::Bool(_) => "bool",
+                Value::Array(_) => "array",
+                Value::Object(_) => "object",
+                Value::Null => "null",
+            };
+            Err(FrameworkError::validation(format!(
+                "expected string for {context}.{field}, got {type_name}"
+            )))
+        }
     }
 }
 
@@ -569,7 +577,11 @@ fn normalize_execution_kernel_metadata_contract_impl(
         return Ok(expected_object.clone());
     }
     let payload = required_object(
-        kernel_metadata_contract.expect("checked above"),
+        kernel_metadata_contract.ok_or_else(|| {
+            FrameworkError::validation(
+                "internal: kernel_metadata_contract was None".to_string(),
+            )
+        })?,
         "runtime control plane execution descriptor returned an invalid kernel_metadata_contract",
     )?;
 

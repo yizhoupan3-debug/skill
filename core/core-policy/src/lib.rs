@@ -1,4 +1,5 @@
 //! Hook policy, guards, review signals, and permission exemptions (B0 core-policy).
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 pub mod crypto_util;
 pub mod dev_exempt;
 pub mod env_flags;

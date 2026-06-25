@@ -292,6 +292,7 @@ pub fn hook_review_stop_advisory_line(review_gate_tag: &str) -> String {
     }
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;
