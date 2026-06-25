@@ -59,6 +59,7 @@ default = [
     "host-opencode",
     "host-codex",
     "research",
+    "codegraph",
 ]
 host-cursor = []
 host-claude = []

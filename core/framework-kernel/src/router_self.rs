@@ -1,4 +1,4 @@
-//! `router-rs self install|clean` — global binary install and build artifact cleanup.
+//! `router-rs-cli self install|clean` — global binary install and build artifact cleanup.
 
 use clap::{Args, Subcommand};
 use sha2::{Digest, Sha256};
@@ -15,7 +15,7 @@ fn file_sha256(path: &Path) -> Result<[u8; 32], String> {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum RouterSelfCommands {
-    /// Copy this `router-rs` binary into a directory on your PATH (default: ~/.local/bin).
+    /// Copy this `router-rs-cli` binary into a directory on your PATH (default: ~/.local/bin).
     Install(RouterSelfInstallArgs),
     /// Run `cargo clean` for this crate; optionally delete shared/repo target caches.
     Clean(RouterSelfCleanArgs),
@@ -23,7 +23,7 @@ pub enum RouterSelfCommands {
 
 #[derive(Args, Debug, Clone)]
 pub struct RouterSelfInstallArgs {
-    /// Destination directory for the `router-rs` binary (created if missing).
+    /// Destination directory for the `router-rs-cli` binary (created if missing).
     #[arg(long)]
     pub bin_dir: Option<PathBuf>,
 }
@@ -43,7 +43,7 @@ pub fn dispatch(command: RouterSelfCommands) -> Result<(), String> {
         RouterSelfCommands::Install(args) => {
             let dest = install_router_rs_to_bin_dir(args.bin_dir)?;
             tracing::info!(
-                "Installed router-rs -> {}\nAdd to PATH if needed: export PATH=\"{}:$PATH\"",
+                "Installed router-rs-cli -> {}\nAdd to PATH if needed: export PATH=\"{}:$PATH\"",
                 dest.display(),
                 dest.parent()
                     .map(|p| p.display().to_string())
@@ -61,7 +61,7 @@ pub fn default_router_rs_install_dir() -> PathBuf {
 }
 
 pub fn default_router_rs_install_path() -> PathBuf {
-    default_router_rs_install_dir().join("router-rs")
+    default_router_rs_install_dir().join("router-rs-cli")
 }
 
 pub fn router_rs_desktop_mcp_dir_for_home(home: &Path) -> PathBuf {
@@ -69,14 +69,14 @@ pub fn router_rs_desktop_mcp_dir_for_home(home: &Path) -> PathBuf {
 }
 
 pub fn router_rs_desktop_mcp_path_for_home(home: &Path) -> PathBuf {
-    router_rs_desktop_mcp_dir_for_home(home).join("router-rs")
+    router_rs_desktop_mcp_dir_for_home(home).join("router-rs-cli")
 }
 
 pub fn install_router_rs_to_bin_dir(bin_dir: Option<PathBuf>) -> Result<PathBuf, String> {
     #[cfg(not(unix))]
     {
         let _ = bin_dir;
-        return Err("router-rs self install is only supported on unix hosts".to_string());
+        return Err("router-rs-cli self install is only supported on unix hosts".to_string());
     }
     #[cfg(unix)]
     {
@@ -85,7 +85,7 @@ pub fn install_router_rs_to_bin_dir(bin_dir: Option<PathBuf>) -> Result<PathBuf,
         let dest_dir = bin_dir.unwrap_or_else(default_router_rs_install_dir);
         fs::create_dir_all(&dest_dir).map_err(|err| err.to_string())?;
         let src = std::env::current_exe().map_err(|err| err.to_string())?;
-        let dest = dest_dir.join("router-rs");
+        let dest = dest_dir.join("router-rs-cli");
         fs::copy(&src, &dest).map_err(|err| err.to_string())?;
         let mut perms = fs::metadata(&dest)
             .map_err(|err| err.to_string())?
@@ -97,7 +97,7 @@ pub fn install_router_rs_to_bin_dir(bin_dir: Option<PathBuf>) -> Result<PathBuf,
 }
 
 pub fn ensure_router_rs_installed_for_runtime() -> Result<PathBuf, String> {
-    if let Ok(path) = which::which("router-rs")
+    if let Ok(path) = which::which("router-rs-cli")
         && path.is_file() && !is_ephemeral_router_rs_path(&path.to_string_lossy()) {
             return Ok(path);
         }
@@ -147,7 +147,7 @@ fn pick_router_rs_copy_source() -> Result<PathBuf, String> {
         && current.is_file() && !is_ephemeral_router_rs_path(&current.to_string_lossy()) {
             return Ok(current);
         }
-    if let Ok(path) = which::which("router-rs") {
+    if let Ok(path) = which::which("router-rs-cli") {
         let text = path.to_string_lossy();
         if path.is_file() && !is_ephemeral_router_rs_path(&text) {
             return Ok(path);
@@ -158,17 +158,17 @@ fn pick_router_rs_copy_source() -> Result<PathBuf, String> {
         return Ok(local);
     }
     Err(
-        "no stable router-rs binary found; build with `cargo build --release --manifest-path core/router-rs/Cargo.toml` or set ROUTER_RS_BIN"
+        "no stable router-rs-cli binary found; build with `cargo build --release --manifest-path core/router-rs/Cargo.toml` or set ROUTER_RS_BIN"
             .to_string(),
     )
 }
 
-/// Install Desktop MCP binary under `{home}/.local/share/skill-framework/bin/router-rs`.
+/// Install Desktop MCP binary under `{home}/.local/share/skill-framework/bin/router-rs-cli`.
 pub fn install_router_rs_for_desktop_mcp_at(home_account: &Path) -> Result<PathBuf, String> {
     #[cfg(not(unix))]
     {
         let _ = home_account;
-        return Err("router-rs desktop MCP install is only supported on unix hosts".to_string());
+        return Err("router-rs-cli desktop MCP install is only supported on unix hosts".to_string());
     }
     #[cfg(unix)]
     {
@@ -215,7 +215,7 @@ pub fn install_router_rs_for_desktop_mcp_at(home_account: &Path) -> Result<PathB
 
 pub fn validate_router_rs_binary_runnable(path: &Path) -> Result<(), String> {
     if !path.is_file() {
-        return Err(format!("router-rs binary missing at {}", path.display()));
+        return Err(format!("router-rs-cli binary missing at {}", path.display()));
     }
     let status = Command::new(path)
         .arg("framework")
@@ -229,7 +229,7 @@ pub fn validate_router_rs_binary_runnable(path: &Path) -> Result<(), String> {
         return Ok(());
     }
     Err(format!(
-        "router-rs binary at {} failed smoke test (exit {status})",
+        "router-rs-cli binary at {} failed smoke test (exit {status})",
         path.display()
     ))
 }
@@ -277,7 +277,7 @@ pub fn is_ephemeral_router_rs_path(path: &str) -> bool {
 }
 
 pub fn is_repo_build_router_rs_path(path: &str, framework_root: &Path) -> bool {
-    if !(path.contains("/target/release/router-rs") || path.contains("/target/debug/router-rs")) {
+    if !(path.contains("/target/release/router-rs-cli") || path.contains("/target/debug/router-rs-cli")) {
         return false;
     }
     if let Ok(root) = framework_root.canonicalize()
@@ -290,7 +290,7 @@ pub fn is_repo_build_router_rs_path(path: &str, framework_root: &Path) -> bool {
         }
     let root_text = framework_root.to_string_lossy();
     path.starts_with(root_text.as_ref())
-        && (path.contains("/target/release/router-rs") || path.contains("/target/debug/router-rs"))
+        && (path.contains("/target/release/router-rs-cli") || path.contains("/target/debug/router-rs-cli"))
 }
 
 fn run_clean(args: RouterSelfCleanArgs) -> Result<(), String> {
@@ -348,13 +348,13 @@ mod tests {
     fn default_install_paths_use_home_local_bin() {
         let dir = default_router_rs_install_dir();
         assert!(dir.ends_with(".local/bin"));
-        assert_eq!(default_router_rs_install_path(), dir.join("router-rs"));
+        assert_eq!(default_router_rs_install_path(), dir.join("router-rs-cli"));
     }
 
     #[test]
     fn ephemeral_paths_detect_sandbox_and_tmp_targets() {
         assert!(is_ephemeral_router_rs_path(
-            "/tmp/skill-cargo-target/debug/router-rs"
+            "/tmp/skill-cargo-target/debug/router-rs-cli"
         ));
         assert!(is_ephemeral_router_rs_path(
             "/var/folders/xx/cursor-sandbox-cache/yy/router-rs"
@@ -371,13 +371,13 @@ mod tests {
             .parent()
             .and_then(|p| p.parent())
             .expect("framework root");
-        let debug = framework_root.join("target/debug/router-rs");
+        let debug = framework_root.join("target/debug/router-rs-cli");
         assert!(is_repo_build_router_rs_path(
             &debug.to_string_lossy(),
             framework_root
         ));
         assert!(!is_repo_build_router_rs_path(
-            "/other/repo/target/debug/router-rs",
+            "/other/repo/target/debug/router-rs-cli",
             framework_root
         ));
     }
@@ -393,7 +393,7 @@ mod tests {
         ));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("probe.bin");
-        fs::write(&path, b"router-rs-self").unwrap();
+        fs::write(&path, b"router-rs-cli-self").unwrap();
         let digest = file_sha256(&path).expect("sha256");
         assert_eq!(digest.len(), 32);
         assert_eq!(digest, file_sha256(&path).expect("repeat"));
@@ -407,7 +407,7 @@ mod tests {
         assert!(dir.ends_with(".local/share/skill-framework/bin"));
         assert_eq!(
             router_rs_desktop_mcp_path_for_home(home),
-            dir.join("router-rs")
+            dir.join("router-rs-cli")
         );
     }
 
@@ -418,7 +418,7 @@ mod tests {
             .parent()
             .and_then(|p| p.parent())
             .expect("framework root");
-        let release = framework_root.join("target/release/router-rs");
+        let release = framework_root.join("target/release/router-rs-cli");
         assert!(is_repo_build_router_rs_path(
             &release.to_string_lossy(),
             framework_root
@@ -457,7 +457,7 @@ mod tests {
     #[test]
     fn validate_router_rs_binary_runnable_smoke() {
         let Some(bin) = try_resolve_router_rs_test_bin() else {
-            tracing::warn!("skip: router-rs binary not built (per-crate test run)");
+            tracing::warn!("skip: router-rs-cli binary not built (per-crate test run)");
             return;
         };
         validate_router_rs_binary_runnable(&bin).expect("router-rs --help smoke");
@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn validate_router_rs_binary_runnable_rejects_missing_file() {
-        let missing = std::env::temp_dir().join("router-rs-missing-binary-smoke");
+        let missing = std::env::temp_dir().join("router-rs-cli-missing-binary-smoke");
         let err = validate_router_rs_binary_runnable(&missing).unwrap_err();
         assert!(
             err.contains("missing"),
@@ -492,7 +492,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         let dest = install_router_rs_to_bin_dir(Some(dir.clone())).expect("install");
         assert!(dest.is_file());
-        assert_eq!(dest, dir.join("router-rs"));
+        assert_eq!(dest, dir.join("router-rs-cli"));
         let src = std::env::current_exe().expect("current_exe");
         assert_eq!(
             fs::metadata(&dest).expect("dest meta").len(),
@@ -508,7 +508,7 @@ mod tests {
             .parent()
             .and_then(|p| p.parent())
             .expect("framework root");
-        let crate_target = manifest_dir.join("target/debug/router-rs");
+        let crate_target = manifest_dir.join("target/debug/router-rs-cli");
         assert!(is_repo_build_router_rs_path(
             &crate_target.to_string_lossy(),
             framework_root

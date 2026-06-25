@@ -77,7 +77,7 @@
     },
     "consumers": {
       "router_rs_eval_route": {
-        "binary": "router-rs",
+        "binary": "router-rs-cli",
         "subcommand": "eval route",
         "rust_type": "core/router-rs/src/eval_route.rs::EvalCasePayload",
         "behavior": "route_task_with_manifest_fallback；先 filter_records_for_host（当 host_id 非空）；first_turn 固定为 true；校验 expected_owner、expected_overlay、expected_layer、forbidden_owners。"

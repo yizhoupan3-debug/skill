@@ -1,4 +1,4 @@
-//! CLI top-level subcommand backward compatibility (parse-only smoke).
+//! CLI top-level subcommand smoke tests (parse-only).
 
 use clap::Parser;
 
@@ -8,45 +8,45 @@ use crate::cli::args::{
 };
 use crate::router_self::RouterSelfCommands;
 
-/// Canonical top-level `router-rs` subcommands must keep parsing (binary name + shape stable).
+/// Canonical top-level `router-rs-cli` subcommands must keep parsing (binary name + shape stable).
 #[test]
-fn cli_backward_compat_top_level_commands_smoke() {
+fn cli_top_level_commands_smoke() {
     let argv_sets: &[&[&str]] = &[
-        &["router-rs", "route", "plan mode"],
-        &["router-rs", "search", "workflow", "--limit", "3"],
-        &["router-rs", "framework", "doctor", "--repo-root", "."],
-        &["router-rs", "host", "hook", "cursor", "--event", "stop"],
+        &["router-rs-cli", "route", "plan mode"],
+        &["router-rs-cli", "search", "workflow", "--limit", "3"],
+        &["router-rs-cli", "framework", "doctor", "--repo-root", "."],
+        &["router-rs-cli", "host", "hook", "cursor", "--event", "stop"],
         &[
-            "router-rs",
+            "router-rs-cli",
             "host",
             "hook",
             "claude",
             "--event",
             "PreToolUse",
         ],
-        &["router-rs", "host", "agent", "opencode"],
-        &["router-rs", "storage", "backend-catalog"],
+        &["router-rs-cli", "host", "agent", "opencode"],
+        &["router-rs-cli", "storage", "backend-catalog"],
         &[
-            "router-rs",
+            "router-rs-cli",
             "diagnose",
             "profile",
             "artifacts",
             "--framework-profile",
             "/tmp/smoke.json",
         ],
-        &["router-rs", "hook-policy", "contract"],
-        &["router-rs", "closeout", "contract"],
-        &["router-rs", "eval", "route-contract"],
-        &["router-rs", "schema-drift", "contract"],
-        &["router-rs", "self", "clean"],
+        &["router-rs-cli", "hook-policy", "contract"],
+        &["router-rs-cli", "closeout", "contract"],
+        &["router-rs-cli", "eval", "route-contract"],
+        &["router-rs-cli", "schema-drift", "contract"],
+        &["router-rs-cli", "self", "clean"],
         &[
-            "router-rs",
+            "router-rs-cli",
             "self",
             "install",
             "--bin-dir",
             "/tmp/smoke-router-bin",
         ],
-        &["router-rs", "--stdio-json"],
+        &["router-rs-cli", "--stdio-json"],
     ];
 
     for argv in argv_sets {

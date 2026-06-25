@@ -17,7 +17,7 @@
       }
     },
     {
-      "starts_with": "router-rs ",
+      "starts_with": "router-rs-cli ",
       "code_from_router_rs_leader": true,
       "human_prefix": {
         "kind": "router_rs_leader"
@@ -48,7 +48,7 @@
     },
     {
       "priority": 1,
-      "starts_with": "router-rs ",
+      "starts_with": "router-rs-cli ",
       "code_from_router_rs_leader": true,
       "human_prefix": {
         "kind": "router_rs_leader"

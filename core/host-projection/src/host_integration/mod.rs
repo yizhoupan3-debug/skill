@@ -585,7 +585,7 @@ mod tests {
             .as_str()
             .expect("command");
         assert!(
-            command == "router-rs" || command.ends_with("/.local/bin/router-rs"),
+            command == "router-rs-cli" || command.ends_with("/.local/bin/router-rs-cli"),
             "expected stable PATH or install-path command, got {command}"
         );
 

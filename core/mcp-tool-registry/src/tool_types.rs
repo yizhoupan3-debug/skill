@@ -47,7 +47,7 @@ pub struct McpToolRecord {
     pub trigger_hints: Vec<String>,
     /// Supported host platforms. Empty = all platforms supported.
     pub host_platforms: Vec<String>,
-    /// Target MCP server process name (e.g. "router-rs", "browser-mcp", "mcp-pdf").
+    /// Target MCP server process name (e.g. "router-rs-cli", "browser-mcp", "mcp-pdf").
     pub mcp_server: String,
     /// Extension flags for specialized routing behavior.
     /// e.g. "deprecated" (auto-blacklist), "experimental", "host_filtered".

@@ -126,8 +126,8 @@ mod smoke_p0_qg_state_tests;
 mod smoke_p0_task_pointers_tests;
 
 #[cfg(test)]
-#[path = "../tests/smoke_cli_backward_compat_tests.rs"]
-mod smoke_cli_backward_compat_tests;
+#[path = "../tests/smoke_cli_tests.rs"]
+mod smoke_cli_tests;
 
 #[cfg(test)]
 #[path = "../tests/smoke_codegraph_semantic_dispatch_tests.rs"]

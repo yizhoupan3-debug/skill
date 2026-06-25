@@ -625,7 +625,7 @@
     "router-rs-framework": {
       "server_id": "router-rs-framework",
       "process": "framework-binary",
-      "binary": "router-rs",
+      "binary": "router-rs-cli",
       "crate": "router-rs",
       "tools": [
         "skill_route",
@@ -660,7 +660,7 @@
     "browser-mcp": {
       "server_id": "browser-mcp",
       "process": "framework-binary",
-      "binary": "router-rs",
+      "binary": "router-rs-cli",
       "crate": "router-rs",
       "subcommand": [
         "browser",

@@ -417,7 +417,7 @@ pub fn mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Pat
     let Some(cmd) = existing.get("command").and_then(Value::as_str) else {
         return false;
     };
-    if matches!(cmd, "cargo" | "router-rs") {
+    if matches!(cmd, "cargo" | "router-rs-cli") {
         return true;
     }
     if is_ephemeral_executable_path(cmd) {
@@ -489,22 +489,22 @@ pub fn browser_mcp_command_is_router_rs(server: &Value, framework_root: &Path) -
     let Some(cmd) = server.get("command").and_then(Value::as_str) else {
         return false;
     };
-    if matches!(cmd, "cargo" | "router-rs") {
+    if matches!(cmd, "cargo" | "router-rs-cli") {
         return true;
     }
     if !Path::new(cmd).is_file() {
         return false;
     }
     if is_ephemeral_executable_path(cmd) {
-        return cmd.ends_with("/router-rs") || cmd.ends_with("\\router-rs");
+        return cmd.ends_with("/router-rs-cli") || cmd.ends_with("\\router-rs-cli");
     }
     if is_repo_build_executable_path(cmd, framework_root) {
         return true;
     }
     resolve_stable_router_rs_executable(framework_root)
         .is_some_and(|stable| stable.to_string_lossy() == cmd)
-        || cmd.ends_with("/router-rs")
-        || cmd.ends_with("\\router-rs")
+        || cmd.ends_with("/router-rs-cli")
+        || cmd.ends_with("\\router-rs-cli")
 }
 
 pub fn mcp_server_semantically_matches_framework(

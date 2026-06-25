@@ -740,7 +740,7 @@ pub fn resolve_router_rs_executable(repo_root: &Path) -> std::result::Result<Pat
         }
     }
     Err(format!(
-        "could not resolve router-rs executable for subprocess (try `cargo build --release --manifest-path core/router-rs/Cargo.toml`, `router-rs self install`, or set ROUTER_RS_BIN); repo_root={}",
+        "could not resolve router-rs executable for subprocess (try `cargo build --release --manifest-path core/router-rs/Cargo.toml`, `router-rs-cli self install`, or set ROUTER_RS_BIN); repo_root={}",
         repo_root.display()
     ))
 }

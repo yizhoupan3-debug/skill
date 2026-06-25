@@ -597,11 +597,11 @@ pub struct FrameworkContractsCommand {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "router-rs")]
+#[command(name = "router-rs-cli")]
 #[command(about = "Fast Rust routing core for skill lookup")]
-#[command(override_usage = "router-rs <COMMAND>")]
+#[command(override_usage = "router-rs-cli <COMMAND>")]
 #[command(
-    help_template = "{about-section}\nUsage: {usage}\n\nCommands:\n{subcommands}\n\nUse `router-rs <command> --help` for command-specific options.\n"
+    help_template = "{about-section}\nUsage: {usage}\n\nCommands:\n{subcommands}\n\nUse `router-rs-cli <command> --help` for command-specific options.\n"
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -637,7 +637,7 @@ mod tests {
 
     #[test]
     fn cli_parses_with_no_args() {
-        let cli = Cli::try_parse_from(["router-rs"]);
+        let cli = Cli::try_parse_from(["router-rs-cli"]);
         assert!(cli.is_ok());
         let cli = cli.unwrap();
         assert!(cli.command.is_none());
@@ -647,14 +647,14 @@ mod tests {
 
     #[test]
     fn cli_default_limit() {
-        let cli = Cli::try_parse_from(["router-rs"]).unwrap();
+        let cli = Cli::try_parse_from(["router-rs-cli"]).unwrap();
         assert_eq!(cli.limit, 5);
     }
 
     #[test]
     fn cli_with_global_flags() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "--repo-root",
             "/tmp/repo",
             "--query",
@@ -680,7 +680,7 @@ mod tests {
 
     #[test]
     fn route_command_parses_query() {
-        let cli = Cli::try_parse_from(["router-rs", "route", "my query"]);
+        let cli = Cli::try_parse_from(["router-rs-cli", "route", "my query"]);
         assert!(cli.is_ok());
         match cli.unwrap().command {
             Some(RouterCommand::Route(cmd)) => {
@@ -693,7 +693,7 @@ mod tests {
     #[test]
     fn route_command_default_session_id() {
         let cli =
-            Cli::try_parse_from(["router-rs", "route", "q"]).unwrap();
+            Cli::try_parse_from(["router-rs-cli", "route", "q"]).unwrap();
         match cli.command {
             Some(RouterCommand::Route(cmd)) => {
                 assert_eq!(cmd.session_id, "route-cli");
@@ -708,7 +708,7 @@ mod tests {
     #[test]
     fn route_command_with_host_id() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "route",
             "q",
             "--host-id",
@@ -737,7 +737,7 @@ mod tests {
     #[test]
     fn search_command_defaults() {
         let cli =
-            Cli::try_parse_from(["router-rs", "search", "find me"]).unwrap();
+            Cli::try_parse_from(["router-rs-cli", "search", "find me"]).unwrap();
         match cli.command {
             Some(RouterCommand::Search(cmd)) => {
                 assert_eq!(cmd.query, "find me");
@@ -751,7 +751,7 @@ mod tests {
     #[test]
     fn search_command_with_options() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "search",
             "q",
             "--limit",
@@ -776,7 +776,7 @@ mod tests {
     #[test]
     fn framework_doctor_parses() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "doctor",
             "--repo-root",
@@ -796,7 +796,7 @@ mod tests {
     #[test]
     fn framework_sync_entrypoints_default() {
         let cli =
-            Cli::try_parse_from(["router-rs", "framework", "sync-entrypoints"])
+            Cli::try_parse_from(["router-rs-cli", "framework", "sync-entrypoints"])
                 .unwrap();
         match cli.command {
             Some(RouterCommand::Framework {
@@ -812,7 +812,7 @@ mod tests {
     #[test]
     fn framework_scaffold_parses() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "scaffold",
             "--host-id",
@@ -836,7 +836,7 @@ mod tests {
     #[test]
     fn host_hook_parses() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "host",
             "hook",
             "claude",
@@ -858,7 +858,7 @@ mod tests {
     #[test]
     fn host_agent_parses() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "host",
             "agent",
             "opencode",
@@ -885,7 +885,7 @@ mod tests {
     #[test]
     fn trace_compact_parses() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "trace",
             "compact",
             "--input-json",
@@ -907,7 +907,7 @@ mod tests {
     #[test]
     fn storage_backend_catalog_parses() {
         let cli =
-            Cli::try_parse_from(["router-rs", "storage", "backend-catalog"])
+            Cli::try_parse_from(["router-rs-cli", "storage", "backend-catalog"])
                 .unwrap();
         match cli.command {
             Some(RouterCommand::Storage {
@@ -922,7 +922,7 @@ mod tests {
     #[test]
     fn loop_run_defaults() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "loop",
             "run",
             "--loop-id",
@@ -944,7 +944,7 @@ mod tests {
     #[test]
     fn loop_kill_with_all_flag() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "loop",
             "kill",
             "--loop-id",
@@ -968,7 +968,7 @@ mod tests {
     #[test]
     fn eval_route_contract_parses() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "eval",
             "route-contract",
         ])
@@ -986,7 +986,7 @@ mod tests {
     #[test]
     fn schema_drift_contract_parses() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "schema-drift",
             "contract",
         ])
@@ -1004,7 +1004,7 @@ mod tests {
     #[test]
     fn closeout_contract_parses() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "closeout",
             "contract",
         ])
@@ -1022,7 +1022,7 @@ mod tests {
     #[test]
     fn framework_maint_refresh_host_projections() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "maint",
             "refresh-host-projections",
@@ -1050,7 +1050,7 @@ mod tests {
     #[test]
     fn framework_maint_clean_hook_state_dry_run() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "maint",
             "clean-hook-state",
@@ -1079,7 +1079,7 @@ mod tests {
     #[test]
     fn diagnose_profile_emit() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "diagnose",
             "profile",
             "emit",
@@ -1109,7 +1109,7 @@ mod tests {
     #[test]
     fn skills_validate_parses() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "skills",
             "validate",
@@ -1130,7 +1130,7 @@ mod tests {
     #[test]
     fn hook_policy_contract() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "hook-policy",
             "contract",
         ])
@@ -1150,7 +1150,7 @@ mod tests {
         // ForwardedArgsCommand is tested through the Cli parser since it derives
         // Args (not Parser). The host integration command uses it with trailing var args.
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "host-integration",
             "--",
@@ -1177,7 +1177,7 @@ mod tests {
     #[test]
     fn json_input_command_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "trace",
             "compact",
             "--input-json",
@@ -1199,7 +1199,7 @@ mod tests {
     #[test]
     fn maint_roots_args_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "maint",
             "refresh-host-projections",
@@ -1232,7 +1232,7 @@ mod tests {
     #[test]
     fn maint_repo_args_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "maint",
             "verify-host-hooks",
@@ -1267,7 +1267,7 @@ mod tests {
     #[test]
     fn closeout_evaluate_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "closeout",
             "evaluate",
             "--input-json",
@@ -1290,7 +1290,7 @@ mod tests {
     #[test]
     fn eval_route_command_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "eval",
             "route",
             "--cases",
@@ -1313,7 +1313,7 @@ mod tests {
     #[test]
     fn loop_status_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "loop",
             "status",
             "--loop-id",
@@ -1335,7 +1335,7 @@ mod tests {
     #[test]
     fn schema_drift_baseline_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "schema-drift",
             "baseline",
             "--repo-root",
@@ -1360,7 +1360,7 @@ mod tests {
     #[test]
     fn profile_path_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "diagnose",
             "profile",
             "emit",
@@ -1388,7 +1388,7 @@ mod tests {
     #[test]
     fn framework_contracts_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "contracts",
             "--repo-root",
@@ -1412,7 +1412,7 @@ mod tests {
     #[test]
     fn storage_backend_parity_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "storage",
             "backend-parity",
             "--store",
@@ -1439,7 +1439,7 @@ mod tests {
     #[test]
     fn browser_mcp_stdio_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "browser",
             "mcp-stdio",
             "--repo-root",
@@ -1464,7 +1464,7 @@ mod tests {
     #[test]
     fn browser_resolve_attach_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "browser",
             "resolve-attach-artifact",
             "--repo-root",
@@ -1489,7 +1489,7 @@ mod tests {
     #[test]
     fn framework_snapshot_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "snapshot",
             "--repo-root",
@@ -1517,7 +1517,7 @@ mod tests {
     #[test]
     fn framework_alias_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "alias",
             "my-alias",
@@ -1543,7 +1543,7 @@ mod tests {
     #[test]
     fn task_state_resolve_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "task-state-resolve",
             "--repo-root",
@@ -1568,7 +1568,7 @@ mod tests {
     #[test]
     fn task_state_aggregate_sync_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "framework",
             "task-state-aggregate-sync",
             "--repo-root",
@@ -1593,7 +1593,7 @@ mod tests {
     #[test]
     fn diagnose_profile_artifacts_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "diagnose",
             "profile",
             "artifacts",
@@ -1620,7 +1620,7 @@ mod tests {
     #[test]
     fn migrate_current_artifact_clutter_via_cli() {
         let cli = Cli::try_parse_from([
-            "router-rs",
+            "router-rs-cli",
             "migrate",
             "current-artifact-clutter",
             "task-123",

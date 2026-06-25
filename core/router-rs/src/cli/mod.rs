@@ -31,7 +31,7 @@ pub fn run(args: &args::Cli) -> Result<(), String> {
     if args.stdio_json {
         return Ok(runtime_core::stdio_transport::run_stdio_json_loop(args.stdio_max_concurrency)?);
     }
-    Err("missing router-rs command; use `router-rs --help` for canonical subcommands".to_string())
+    Err("missing router-rs command; use `router-rs-cli --help` for canonical subcommands".to_string())
 }
 
 pub use args::Cli;

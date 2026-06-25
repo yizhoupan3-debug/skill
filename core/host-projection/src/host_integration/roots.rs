@@ -489,12 +489,12 @@ pub fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> 
     }
     if is_ephemeral_executable_path(cmd) {
         return Err(FrameworkError::config(format!(
-            "MCP executable '{cmd}' points at an ephemeral build path; run `router-rs self install` then `framework host-integration install --to <host>`"
+            "MCP executable '{cmd}' points at an ephemeral build path; run `router-rs-cli self install` then `framework host-integration install --to <host>`"
         )));
     }
     if framework_root.is_some_and(|root| is_repo_build_executable_path(cmd, root)) {
         return Err(FrameworkError::config(format!(
-            "MCP executable '{cmd}' points at a repo build artifact; run `router-rs self install` then `framework host-integration install --to <host>`"
+            "MCP executable '{cmd}' points at a repo build artifact; run `router-rs-cli self install` then `framework host-integration install --to <host>`"
         )));
     }
     Ok(())

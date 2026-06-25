@@ -73,8 +73,8 @@ pub fn validate_mcp_servers_from_json(
                 Ok(()) => {
                     // Deep validation for router-rs-based servers
                     if server_id.as_str() == "router-rs-framework" && cmd != "cargo" {
-                        let resolved = if cmd == "router-rs" {
-                            resolve_stable_router_rs_executable(&roots.framework_root)
+                        let resolved = if !cmd.contains('/') && !cmd.contains('\\') {
+                            which::which(cmd).ok()
                         } else {
                             Some(PathBuf::from(cmd))
                         };
@@ -88,7 +88,7 @@ pub fn validate_mcp_servers_from_json(
                             }
                             None => {
                                 all_valid = false;
-                                let msg = "router-rs not found or not runnable; run `router-rs self install`".to_string();
+                                let msg = "router-rs not found or not runnable; run `router-rs-cli self install`".to_string();
                                 if first_error.is_none() {
                                     first_error = Some(msg.clone());
                                 }
@@ -914,7 +914,7 @@ pub fn ensure_research_mcp_toml(
         let cmd = payload
             .get("command")
             .and_then(Value::as_str)
-            .unwrap_or("router-rs");
+            .unwrap_or("router-rs-cli");
         let args: Vec<String> = payload
             .get("args")
             .and_then(Value::as_array)

@@ -89,12 +89,12 @@ pub fn shorten_line(s: &str, max: usize) -> String {
 }
 
 fn human_prefix_router_rs_leader(line: &str) -> String {
-    let rest = line.strip_prefix("router-rs ").unwrap_or("").trim();
+    let rest = line.strip_prefix("router-rs-cli ").unwrap_or("").trim();
     let token = rest.split_whitespace().next().unwrap_or("");
     if token.is_empty() {
-        "router-rs".to_string()
+        "router-rs-cli".to_string()
     } else {
-        format!("router-rs {token}")
+        format!("router-rs-cli {token}")
     }
 }
 
@@ -119,7 +119,7 @@ fn human_prefix_from_spec(line: &str, spec: &Value) -> String {
 }
 
 fn classify_router_rs_after_leader_line(line: &str, rules: &ParsedRules) -> Option<GateClassified> {
-    let rest = line.strip_prefix("router-rs ").unwrap_or("").trim();
+    let rest = line.strip_prefix("router-rs-cli ").unwrap_or("").trim();
     let token = rest.split_whitespace().next().unwrap_or("");
     let code = if token.is_empty() {
         return None;
@@ -273,7 +273,7 @@ mod tests {
 
     #[test]
     fn golden_followup_review_gate() {
-        let line = "router-rs REVIEW_GATE incomplete";
+        let line = "router-rs-cli REVIEW_GATE incomplete";
         let g = classify_followup_first_line(line).expect("gate");
         assert_eq!(g.code, "review_gate");
         assert!(g.human_prefix.contains("REVIEW_GATE"));
