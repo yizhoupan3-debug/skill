@@ -279,10 +279,19 @@ impl FanoutTelemetryWriter {
 
 impl TelemetryWriter for FanoutTelemetryWriter {
     fn write_event(&self, event: &TelemetryEvent) -> Result<(), String> {
-        if let Ok(mut guard) = self.observer.lock()
-            && let Err(e) = guard.observe(event) {
-                tracing::warn!(error = %e, "evolution observer failed to observe event");
+        match self.observer.lock() {
+            Ok(mut guard) => {
+                if let Err(e) = guard.observe(event) {
+                    tracing::warn!(error = %e, "evolution observer failed to observe event");
+                }
             }
+            Err(poisoned) => {
+                let mut guard = poisoned.into_inner();
+                if let Err(e) = guard.observe(event) {
+                    tracing::warn!(error = %e, "evolution observer failed to observe event after mutex poison recovery");
+                }
+            }
+        }
         self.inner.write_event(event)
     }
 }

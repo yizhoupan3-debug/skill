@@ -257,6 +257,7 @@ fn parse_iso_epoch(s: &str) -> Option<u64> {
         .map(|dt| dt.timestamp() as u64)
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

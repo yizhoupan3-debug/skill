@@ -157,6 +157,7 @@ pub fn update_heartbeat(state: &mut LoopRunState) {
     state.last_refreshed_at = now_iso();
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

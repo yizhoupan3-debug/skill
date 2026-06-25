@@ -132,7 +132,20 @@ pub fn router_rs_qg_max_rounds_cap() -> u64 {
     const DEFAULT: u64 = 1000;
     env::var("ROUTER_RS_QG_MAX_ROUNDS_CAP")
         .ok()
-        .and_then(|raw| raw.trim().parse::<u64>().ok())
+        .and_then(|raw| {
+            let trimmed = raw.trim();
+            match trimmed.parse::<u64>() {
+                Ok(n) => Some(n),
+                Err(_) => {
+                    tracing::warn!(
+                        "ROUTER_RS_QG_MAX_ROUNDS_CAP: failed to parse '{}' as u64, using default {}",
+                        trimmed,
+                        DEFAULT
+                    );
+                    None
+                }
+            }
+        })
         .map(|n| n.min(MAX_CAP))
         .unwrap_or(DEFAULT)
 }

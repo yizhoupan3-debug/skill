@@ -805,6 +805,7 @@ fn read_goal_snapshot(repo_root: &Path, entry: &LoopRegistryEntry) -> Option<Str
     val.get("goal").and_then(|g| g.as_str()).map(String::from)
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

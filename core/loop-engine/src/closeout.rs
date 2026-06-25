@@ -323,6 +323,7 @@ pub fn aggregate_has_partial(aggregate: &LoopCloseoutAggregate) -> bool {
     aggregate.partial
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

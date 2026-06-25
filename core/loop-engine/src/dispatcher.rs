@@ -80,7 +80,13 @@ pub(crate) fn poll_subprocess(
                     .map_err(|e| LoopError::Io(format!("{label} collect: {e}")));
             }
             None => {
-                if crate::kill_switch::take_kill_signal(repo_root, loop_id).unwrap_or(false) {
+                if match crate::kill_switch::take_kill_signal(repo_root, loop_id) {
+                    Ok(signaled) => signaled,
+                    Err(e) => {
+                        tracing::warn!(%loop_id, error = %e, "kill_switch IO error — treating as no signal");
+                        false
+                    }
+                } {
                     child
                         .kill()
                         .map_err(|e| LoopError::Io(format!("{label} kill: {e}")))?;
@@ -295,6 +301,7 @@ pub fn check_scope_compliance(repo_root: &Path, scope_paths: &[String]) -> Vec<S
     }
 }
 
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

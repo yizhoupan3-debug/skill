@@ -359,7 +359,7 @@ fn approval_digest(host_id: &str, tool_name: &str, tool_input: &Value) -> String
         "tool_name": tool_name,
         "tool_input": tool_input,
     });
-    let bytes = serde_json::to_vec(&canonical).unwrap_or_default();
+    let bytes = serde_json::to_vec(&canonical).expect("serialize canonical Value for approval_digest");
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     format!("sha256:{}", hex::encode(hasher.finalize()))
@@ -382,6 +382,14 @@ fn classify_high_risk(
             }
     if is_file_write_tool(&lowered)
         && let Some(path) = extract_file_path(tool_input) {
+            // Block path traversal attempts before protected-path check
+            if has_path_traversal(tool_input) {
+                return Ok((
+                    PreToolUseGuardVerdict::Block,
+                    Some(format!("path traversal detected in file path: {path}")),
+                    vec!["file_write".to_string(), "path_traversal".to_string()],
+                ));
+            }
             let repo_root_str = repo_root.display().to_string();
             let response = evaluate_hook_policy(HookPolicyEvaluateRequest {
                 operation: "protected-path".to_string(),
@@ -459,16 +467,24 @@ fn extract_file_path(tool_input: &Value) -> Option<String> {
         if let Some(text) = tool_input.get(key).and_then(Value::as_str) {
             let trimmed = text.trim();
             if !trimmed.is_empty() {
-                // Reject path traversal attempts (../ etc.)
-                let p = Path::new(trimmed);
-                if p.components().any(|c| c == Component::ParentDir) {
-                    return None;
-                }
                 return Some(trimmed.to_string());
             }
         }
     }
     None
+}
+
+/// Check if tool_input contains a path with `..` traversal components.
+fn has_path_traversal(tool_input: &Value) -> bool {
+    for key in ["path", "file_path", "target_file", "filePath"] {
+        if let Some(text) = tool_input.get(key).and_then(Value::as_str) {
+            let p = Path::new(text.trim());
+            if p.components().any(|c| c == Component::ParentDir) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // Test-only no-op hook registration for tests that need RuntimeCoreHooks.
