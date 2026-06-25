@@ -112,16 +112,6 @@ pub(crate) fn install_test_deps() {
                 .and_then(Value::as_str)
                 .map(str::to_string)
         }
-        fn test_build_contract(_repo_root: &std::path::Path) -> Result<Value, FrameworkError> {
-            Ok(serde_json::json!({}))
-        }
-        fn test_append_shell(
-            _repo_root: &std::path::Path,
-            _event: &Value,
-            _kind: &str,
-        ) -> Result<(), FrameworkError> {
-            Ok(())
-        }
         fn test_evidence_append(payload: Value) -> Result<Value, FrameworkError> {
             Ok(payload)
         }
@@ -165,13 +155,8 @@ pub(crate) fn install_test_deps() {
             ))
         }
         hooks::register_framework_runtime(
-            test_build_contract,
-            test_append_shell,
-            test_closeout_enforcement_enabled,
             test_closeout_record_path,
             test_evaluate_closeout_record,
-            test_first_task_id_from_registry,
-            test_evidence_append,
             test_extract_duration,
             test_post_tool_ok,
             test_closeout_followup,

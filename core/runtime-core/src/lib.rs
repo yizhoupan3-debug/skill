@@ -131,9 +131,9 @@ fn register_tool_routing_config_hooks() {
                 let path = std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH);
                 Some(path)
             },
-            // discover_scoring_weights_path: resolve from FRAMEWORK_ROOT
+            // discover_scoring_weights_path: resolve from SKILL_FRAMEWORK_ROOT
             || {
-                let root = std::env::var("FRAMEWORK_ROOT").ok()?;
+                let root = std::env::var("SKILL_FRAMEWORK_ROOT").ok()?;
                 Some(format!("{root}/{}", framework_kernel::constants::TOOL_SCORING_WEIGHTS_RELATIVE_PATH))
             },
         )
@@ -165,20 +165,14 @@ pub fn register_host_projection_hooks() {
 
 fn register_runtime_contract_hooks_impl() {
     host_projection::hooks::register_framework_runtime(
-        |repo_root| framework_extra::contract_summary::build_framework_contract_summary_envelope(repo_root).map_err(Into::into),
-        framework_extra::evidence::try_append_post_tool_shell_evidence,
-        framework_extra::closeout::closeout_programmatic_enforcement_enabled,
         |repo_root, task_id| framework_extra::closeout::closeout_record_path_for_task(repo_root, task_id).map_err(Into::into),
         |repo_root, task_id, record_path| framework_extra::closeout::evaluate_closeout_record_file_for_task(repo_root, task_id, record_path).map_err(Into::into),
-        framework_extra::closeout::first_task_id_from_registry,
-        framework_extra::evidence::framework_hook_evidence_append,
         framework_extra::evidence::extract_post_tool_duration_ms,
         framework_extra::evidence::post_tool_call_succeeded,
         framework_extra::closeout::closeout_stop_followup_for_completion_text,
     );
 
     host_projection::hooks::register_framework_runtime_extra(
-        |repo_root| framework_kernel::repo_roots::resolve_repo_root_arg(repo_root).map_err(Into::into),
         framework_extra::util::current_local_timestamp,
         |payload| framework_extra::session_artifacts::write_framework_session_artifacts(payload).map_err(Into::into),
         |records_json,
@@ -200,15 +194,10 @@ fn register_runtime_contract_hooks_impl() {
                 score: d.score,
             })?)
         },
-        |repo_root, artifact_root, task_id| framework_extra::snapshot::build_framework_runtime_snapshot_envelope(repo_root, artifact_root, task_id).map_err(Into::into),
         framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
         framework_extra::evidence::append_evidence_index_merged_row,
-        telemetry_emit::hook_action_from_output,
         || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
         |repo_root| framework_extra::session_call::check_anomalies(repo_root).map_err(Into::into),
-    );
-    host_projection::hooks::register_build_framework_runtime_snapshot_envelope_with_level(
-        |repo_root, artifact_root, task_id, detail_level| framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level(repo_root, artifact_root, task_id, detail_level).map_err(Into::into),
     );
 
     // ── RFV loop full implementation (supports append_round) ──

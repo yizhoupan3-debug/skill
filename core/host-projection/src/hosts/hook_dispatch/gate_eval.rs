@@ -561,7 +561,7 @@ pub fn build_user_prompt_context_injection(
     repo_root: &Path,
     prompt: &str,
     host_id: &str,
-    paper_host: crate::hooks::PaperProseHookHostType,
+    paper_host: crate::hooks::PaperProseHookHost,
     review_required: bool,
     review_override: bool,
 ) -> Vec<String> {
