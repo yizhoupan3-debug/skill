@@ -15,7 +15,6 @@
 //! | Tool scoring, routing, search | `tool-routing-engine` (routing layer) |
 //! | Skill scoring, routing, search | `routing-engine` (routing layer) |
 
-pub mod error;
 pub mod hooks;
 pub mod tool_registry;
 pub mod tool_types;

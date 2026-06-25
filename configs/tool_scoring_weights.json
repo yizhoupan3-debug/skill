@@ -1,7 +1,6 @@
 {
   "schema_version": "tool-scoring-weights-v2",
   "exact_name_boost": 100.0,
-  "display_name_per_match": 8.0,
   "name_tokens_base": 14.0,
   "name_tokens_per_token": 4.0,
   "trigger_hint_per_match": 20.0,
@@ -11,8 +10,8 @@
   "alias_hits_per_hit": 4.0,
   "description_per_match": 1.0,
   "description_max": 15.0,
-  "do_not_use_penalty_max_ratio": 0.3,
-  "do_not_use_penalty_per_hit": 5.0,
+  "do_not_use_penalty_max_ratio": 0.8,
+  "do_not_use_penalty_per_hit": 25.0,
   "layer_penalties": {
     "builtin": 0.0,
     "research": 0.0,

@@ -76,7 +76,7 @@ mod routing_integration_tests {
         let records = make_records();
         let results = tool_routing_engine::search::search_tools("PDF 文档", &records, 3);
         assert!(!results.is_empty());
-        assert_eq!(results[0].slug, "pdf-read");
+        assert_eq!(results[0].selected_tool, "pdf-read");
     }
 
     #[test]
@@ -100,5 +100,44 @@ mod routing_integration_tests {
         let d = decision.unwrap();
         assert!(d.fuzzy_match, "should be flagged as fuzzy match");
         assert_eq!(d.selected_tool, "browser-screenshot");
+    }
+
+    #[test]
+    fn load_real_tool_registry() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let registry_path = manifest_dir.join("../../configs/framework/MCP_TOOL_REGISTRY.json");
+        let records = mcp_tool_registry::load_tool_records(&registry_path)
+            .expect("should load real MCP_TOOL_REGISTRY.json");
+        assert!(!records.is_empty(), "registry should contain tools");
+        assert!(records.len() >= 54, "should have at least 54 tools");
+
+        for record in &records {
+            assert!(!record.slug.is_empty(), "every tool must have a slug");
+            assert!(!record.display_name.is_empty(), "every tool must have a display_name");
+        }
+    }
+
+    #[test]
+    fn real_registry_routes_by_exact_slug() {
+        let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let registry_path = manifest_dir.join("../../configs/framework/MCP_TOOL_REGISTRY.json");
+        let records = mcp_tool_registry::load_tool_records(&registry_path)
+            .expect("should load real registry");
+
+        for record in &records {
+            let decision = tool_routing_engine::routing::route_tool_from_records(
+                &record.slug,
+                &records,
+                None,
+            );
+            assert!(
+                decision.is_some(),
+                "tool '{}' should be reachable by exact slug match",
+                record.slug,
+            );
+            if let Some(d) = decision {
+                assert_eq!(d.selected_tool, record.slug);
+            }
+        }
     }
 }

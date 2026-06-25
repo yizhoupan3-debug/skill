@@ -1,5 +1,5 @@
 {
-  "schema_version": "mcp-tool-registry-v1",
+  "schema_version": "mcp-tool-registry-v2",
   "scope": {
     "total_count": 54,
     "builtin_count": 15,
@@ -7,47 +7,32 @@
     "independent_count": 23,
     "external_count": 11
   },
-  "keys": [
-    "slug",
-    "display_name",
-    "description",
-    "layer",
-    "dispatch_domain",
-    "owner",
-    "gate",
-    "trigger_hints",
-    "host_platforms",
-    "mcp_server",
-    "tool_flags",
-    "input_schema"
-  ],
   "tools": [
-    [
-      "goal_state_manage",
-      "目标状态管理",
-      "管理 Goal 状态（start/checkpoint/pause/resume/complete/clear/block/amend）",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    {
+      "slug": "goal_state_manage",
+      "display_name": "目标状态管理",
+      "description": "管理 Goal 状态（start/checkpoint/pause/resume/complete/clear/block/amend）",
+      "layer": "builtin",
+      "dispatch_domain": "domain:goal",
+      "owner": "framework",
+      "trigger_hints": [
         "目标",
         "goal",
         "状态",
         "管理",
         "暂停",
         "完成",
-        "恢复"
+        "恢复",
+        "进度追踪",
+        "任务状态管理",
+        "overview"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "operation"
@@ -67,31 +52,27 @@
           }
         }
       }
-    ],
-    [
-      "goal_state_read",
-      "目标状态读取",
-      "读取当前 task 的 GOAL_STATE.json 内容",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "goal_state_read",
+      "display_name": "目标状态读取",
+      "description": "读取当前 task 的 GOAL_STATE.json 内容",
+      "layer": "builtin",
+      "dispatch_domain": "domain:goal",
+      "owner": "framework",
+      "trigger_hints": [
         "目标",
         "goal",
         "读取",
         "状态",
         "查看"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "properties": {
           "task_id": {
@@ -100,31 +81,27 @@
           }
         }
       }
-    ],
-    [
-      "quality_gate_manage",
-      "质量门管理",
-      "管理 Quality Gate 循环（start/append_round）",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "quality_gate_manage",
+      "display_name": "质量门管理",
+      "description": "管理 Quality Gate 循环（start/append_round）",
+      "layer": "builtin",
+      "dispatch_domain": "domain:quality-gate",
+      "owner": "framework",
+      "trigger_hints": [
         "质量",
         "quality",
         "gate",
         "审查",
         "循环"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "operation"
@@ -144,31 +121,27 @@
           }
         }
       }
-    ],
-    [
-      "quality_gate_status",
-      "质量门状态",
-      "查看 Quality Gate 循环状态",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "quality_gate_status",
+      "display_name": "质量门状态",
+      "description": "查看 Quality Gate 循环状态",
+      "layer": "builtin",
+      "dispatch_domain": "domain:quality-gate",
+      "owner": "framework",
+      "trigger_hints": [
         "质量",
         "quality",
         "gate",
         "状态",
         "查看"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "properties": {
           "task_id": {
@@ -177,30 +150,26 @@
           }
         }
       }
-    ],
-    [
-      "record_evidence",
-      "记录证据",
-      "追加 evidence 到 EVIDENCE_INDEX",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "record_evidence",
+      "display_name": "记录证据",
+      "description": "追加 evidence 到 EVIDENCE_INDEX",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
         "证据",
         "evidence",
         "记录",
         "追加"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "tool_name",
@@ -225,31 +194,30 @@
           }
         }
       }
-    ],
-    [
-      "session_checkpoint",
-      "会话检查点",
-      "写入 SESSION_SUMMARY + NEXT_ACTIONS checkpoint",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "session_checkpoint",
+      "display_name": "会话检查点",
+      "description": "写入 SESSION_SUMMARY + NEXT_ACTIONS checkpoint",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
         "检查点",
         "checkpoint",
         "会话",
         "保存",
-        "摘要"
+        "摘要",
+        "保存进度",
+        "中间存档",
+        "snapshot"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "summary"
@@ -272,31 +240,27 @@
           }
         }
       }
-    ],
-    [
-      "closeout_gate",
-      "收尾门禁",
-      "closeout 就绪状态与缺失项清单",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "closeout_gate",
+      "display_name": "收尾门禁",
+      "description": "检查 closeout 就绪状态并返回缺失项清单，含 goal/evidence/checkpoint 评估",
+      "layer": "builtin",
+      "dispatch_domain": "domain:closeout",
+      "owner": "framework",
+      "trigger_hints": [
         "收尾",
         "closeout",
         "完成",
         "就绪",
         "缺失"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "properties": {
           "task_id": {
@@ -309,30 +273,29 @@
           }
         }
       }
-    ],
-    [
-      "closeout_record_write",
-      "收尾记录写入",
-      "写入并验证 closeout record",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "closeout_record_write",
+      "display_name": "收尾记录写入",
+      "description": "写入并验证 closeout record",
+      "layer": "builtin",
+      "dispatch_domain": "domain:closeout",
+      "owner": "framework",
+      "trigger_hints": [
         "收尾",
         "closeout",
         "记录",
-        "写入"
+        "写入",
+        "归档记录",
+        "完成汇报",
+        "end task"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "task_id",
@@ -375,31 +338,27 @@
           }
         }
       }
-    ],
-    [
-      "framework_snapshot",
-      "框架快照",
-      "框架运行时快照（summary/full）",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "framework_snapshot",
+      "display_name": "框架快照",
+      "description": "框架运行时快照（summary/full）",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
         "框架",
         "framework",
         "快照",
         "snapshot",
         "运行时"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "properties": {
           "detail_level": {
@@ -408,31 +367,27 @@
           }
         }
       }
-    ],
-    [
-      "skill_read",
-      "技能读取",
-      "读取 skill 的 SKILL.md 内容",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "skill_read",
+      "display_name": "技能读取",
+      "description": "读取 skill 的 SKILL.md 内容",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
         "技能",
         "skill",
         "读取",
         "查看",
         "文档"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "skill"
@@ -448,31 +403,27 @@
           }
         }
       }
-    ],
-    [
-      "skill_route",
-      "技能路由",
-      "自然语言查询匹配 skill 路由结果",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "skill_route",
+      "display_name": "技能路由",
+      "description": "自然语言查询匹配 skill 路由结果",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
         "路由",
         "route",
         "skill",
         "匹配",
         "查询"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "query"
@@ -484,31 +435,27 @@
           }
         }
       }
-    ],
-    [
-      "skill_search",
-      "技能搜索",
-      "搜索 skill 目录，返回最佳匹配",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "skill_search",
+      "display_name": "技能搜索",
+      "description": "搜索 skill 目录，返回最佳匹配",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
         "搜索",
         "search",
         "skill",
         "技能",
         "查找"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "query"
@@ -528,43 +475,41 @@
           }
         }
       }
-    ],
-    [
-      "skill_route_status",
-      "技能路由状态",
-      "检查路由产物是否存在",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "skill_route_status",
+      "display_name": "技能路由状态",
+      "description": "检查路由索引文件和缓存是否已生成，验证路由系统就绪状态",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
         "路由",
         "route",
         "状态",
-        "检查"
+        "检查",
+        "路由就绪",
+        "索引状态",
+        "routing health"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "properties": {}
       }
-    ],
-    [
-      "web_fetch",
-      "网页抓取",
-      "只读 HTTP GET 抓取外部 URL",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "web_fetch",
+      "display_name": "网页抓取",
+      "description": "只读 HTTP GET 抓取外部 URL",
+      "layer": "builtin",
+      "dispatch_domain": "domain:framework",
+      "owner": "framework",
+      "trigger_hints": [
         "网页",
         "fetch",
         "url",
@@ -572,15 +517,12 @@
         "HTTP",
         "链接"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "url"
@@ -596,32 +538,31 @@
           }
         }
       }
-    ],
-    [
-      "routing_evolution",
-      "路由演化分析",
-      "路由日志分析（stats/analyze/extract/calibrate）",
-      "builtin",
-      "composite",
-      "framework",
-      "none",
-      [
+    },
+    {
+      "slug": "routing_evolution",
+      "display_name": "路由演化分析",
+      "description": "路由日志分析（stats/analyze/extract/calibrate）",
+      "layer": "builtin",
+      "dispatch_domain": "domain:routing-evolution",
+      "owner": "framework",
+      "trigger_hints": [
         "路由",
         "routing",
         "演化",
         "evolution",
         "分析",
-        "日志"
+        "日志",
+        "路由诊断",
+        "路由统计",
+        "日志分析"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
+      "host_platforms": [],
+      "mcp_server": "router-rs",
+      "tool_flags": [
+        "behavior:core_routing_tool"
       ],
-      "router-rs",
-      [],
-      {
+      "input_schema": {
         "type": "object",
         "required": [
           "operation"
@@ -641,111 +582,88 @@
           }
         }
       }
-    ],
-    [
-      "research_aigc_check",
-      "AIGC 检测",
-      "检测文本是否由 AI 生成，返回概率评分和逐段分析",
-      "research",
-      "research",
-      "research",
-      "none",
-      [
+    },
+    {
+      "slug": "research_aigc_check",
+      "display_name": "AIGC 检测",
+      "description": "检测文本是否由 AI 生成，返回概率评分和逐段分析",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
         "AIGC",
         "检测",
         "AI",
         "生成",
         "论文"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "research-harness",
-      []
-    ],
-    [
-      "research_aigc_humanize",
-      "AIGC 降重",
-      "对 AI 生成文本进行句法改写和词汇替换降重",
-      "research",
-      "research",
-      "research",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": []
+    },
+    {
+      "slug": "research_aigc_humanize",
+      "display_name": "AIGC 降重",
+      "description": "对 AI 生成文本进行句法改写和词汇替换降重",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
         "AIGC",
         "降重",
         "改写",
         "论文"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "research-harness",
-      []
-    ],
-    [
-      "research_review_dimensions",
-      "审稿维度",
-      "获取多轮对抗审稿的维度 prompt",
-      "research",
-      "research",
-      "research",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [
+        "deprecated"
+      ]
+    },
+    {
+      "slug": "research_review_dimensions",
+      "display_name": "审稿维度",
+      "description": "获取多轮对抗审稿的维度 prompt",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
         "审稿",
         "维度",
         "review",
         "对抗",
         "论文"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "research-harness",
-      []
-    ],
-    [
-      "research_claim_drift",
-      "Claim 漂移检测",
-      "检测原始 vs 当前声明的相似度和证据变化",
-      "research",
-      "research",
-      "research",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": []
+    },
+    {
+      "slug": "research_claim_drift",
+      "display_name": "Claim 漂移检测",
+      "description": "检测原始 vs 当前声明的相似度和证据变化",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
         "claim",
         "漂移",
         "drift",
         "检测",
         "声明"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "research-harness",
-      []
-    ],
-    [
-      "research_review_loop",
-      "对抗审稿循环",
-      "启动多轮对抗审稿循环",
-      "research",
-      "research",
-      "research",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": []
+    },
+    {
+      "slug": "research_review_loop",
+      "display_name": "对抗审稿循环",
+      "description": "启动多轮对抗审稿循环",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
         "审稿",
         "循环",
         "review",
@@ -753,554 +671,434 @@
         "对抗",
         "论文"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "research-harness",
-      []
-    ],
-    [
-      "browser_tabs",
-      "浏览器标签页",
-      "管理浏览器标签页（列出/切换）",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_tabs",
+      "display_name": "浏览器标签页",
+      "description": "管理浏览器标签页（列出/切换）",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "标签页",
         "tabs",
         "浏览器",
         "切换",
-        "列表"
+        "列表",
+        "标签列表",
+        "窗口管理"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_open",
-      "浏览器打开",
-      "在当前浏览器会话中打开页面",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_open",
+      "display_name": "浏览器打开",
+      "description": "在当前浏览器会话中打开页面",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "打开",
         "open",
         "页面",
         "浏览器",
         "URL"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_close",
-      "浏览器关闭",
-      "关闭单个标签页或整个会话",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_close",
+      "display_name": "浏览器关闭",
+      "description": "关闭单个标签页或整个会话",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "关闭",
         "close",
         "标签页",
         "浏览器",
         "会话"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_click",
-      "浏览器点击",
-      "点击索引元素并返回增量页面 delta",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_click",
+      "display_name": "浏览器点击",
+      "description": "点击索引元素并返回增量页面 delta",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "点击",
         "click",
         "浏览器",
         "按钮",
-        "元素"
+        "元素",
+        "选取元素",
+        "模拟点击",
+        "鼠标操作"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_fill",
-      "浏览器填充",
-      "填充输入框，可选提交，返回增量页面 delta",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_fill",
+      "display_name": "浏览器填充",
+      "description": "填充输入框，可选提交，返回增量页面 delta",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "填充",
         "fill",
         "输入",
         "表单",
-        "浏览器"
+        "浏览器",
+        "表单填写",
+        "输入文字"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_press",
-      "浏览器按键",
-      "在当前页面按下键盘键",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_press",
+      "display_name": "浏览器按键",
+      "description": "在当前页面按下键盘键",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "按键",
         "press",
         "键盘",
         "浏览器",
         "快捷键"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_screenshot",
-      "浏览器截图",
-      "截取页面截图并作为内联图像返回",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_screenshot",
+      "display_name": "浏览器截图",
+      "description": "截取页面截图并作为内联图像返回",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "截图",
         "screenshot",
         "浏览器",
         "页面",
-        "图像"
+        "图像",
+        "页面截图",
+        "视觉验证"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_get_text",
-      "浏览器获取文本",
-      "获取页面或特定元素范围的可见文本",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_get_text",
+      "display_name": "浏览器获取文本",
+      "description": "获取页面或特定元素范围的可见文本",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "文本",
         "text",
         "浏览器",
         "获取",
         "内容"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_get_state",
-      "浏览器获取状态",
-      "返回压缩页面摘要、交互元素和可选 diff",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_get_state",
+      "display_name": "浏览器获取状态",
+      "description": "返回压缩页面摘要、交互元素和可选 diff",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "状态",
         "state",
         "浏览器",
         "摘要",
         "页面"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_get_elements",
-      "浏览器获取元素",
-      "返回按角色和文本查询过滤的交互元素",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_get_elements",
+      "display_name": "浏览器获取元素",
+      "description": "返回按角色和文本查询过滤的交互元素",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "元素",
         "elements",
         "浏览器",
         "交互",
         "查询"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_wait_for",
-      "浏览器等待",
-      "等待一个显式页面条件而不重新读取整个页面",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_wait_for",
+      "display_name": "浏览器等待",
+      "description": "等待一个显式页面条件而不重新读取整个页面",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "等待",
         "wait",
         "浏览器",
         "条件",
         "加载"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_get_network",
-      "浏览器网络",
-      "返回最近的网络请求，包括状态、时序和可选 body",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_get_network",
+      "display_name": "浏览器网络",
+      "description": "返回最近的网络请求，包括状态、时序和可选 body",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "网络",
         "network",
         "浏览器",
         "请求",
         "API"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_diagnostics",
-      "浏览器诊断",
-      "返回运行时健康信息，包括仓库技能路由工具是否暴露",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_diagnostics",
+      "display_name": "浏览器诊断",
+      "description": "返回运行时健康信息，包括仓库技能路由工具是否暴露",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "诊断",
         "diagnostics",
         "浏览器",
         "健康",
         "运行时"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_save_session",
-      "浏览器保存会话",
-      "将当前浏览器上下文存储状态保存到磁盘",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_save_session",
+      "display_name": "浏览器保存会话",
+      "description": "将当前浏览器上下文存储状态保存到磁盘",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "保存",
         "save",
         "会话",
         "浏览器",
         "状态"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "browser_restore_session",
-      "浏览器恢复会话",
-      "从磁盘恢复之前保存的浏览器会话",
-      "independent",
-      "browser",
-      "browser",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "browser_restore_session",
+      "display_name": "浏览器恢复会话",
+      "description": "从磁盘恢复之前保存的浏览器会话",
+      "layer": "independent",
+      "dispatch_domain": "browser",
+      "owner": "browser",
+      "trigger_hints": [
         "恢复",
         "restore",
         "会话",
         "浏览器",
         "加载"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "browser-mcp",
-      []
-    ],
-    [
-      "codegraph_search",
-      "代码图搜索",
-      "在代码图中搜索符号、函数、类等",
-      "independent",
-      "codegraph",
-      "codegraph",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "browser-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "codegraph_search",
+      "display_name": "代码图搜索",
+      "description": "在代码图中搜索符号、函数、类等",
+      "layer": "independent",
+      "dispatch_domain": "codegraph",
+      "owner": "codegraph",
+      "trigger_hints": [
         "代码",
         "搜索",
         "search",
         "codegraph",
         "符号"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "codegraph-rs",
-      []
-    ],
-    [
-      "codegraph_callers",
-      "调用者查询",
-      "查找哪些函数/方法调用了指定的符号",
-      "independent",
-      "codegraph",
-      "codegraph",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "codegraph-rs",
+      "tool_flags": []
+    },
+    {
+      "slug": "codegraph_callers",
+      "display_name": "调用者查询",
+      "description": "查找哪些函数/方法调用了指定的符号",
+      "layer": "independent",
+      "dispatch_domain": "codegraph",
+      "owner": "codegraph",
+      "trigger_hints": [
         "调用者",
         "callers",
         "谁调用",
         "引用",
-        "代码"
+        "代码",
+        "哪些地方用了",
+        "谁引用"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "codegraph-rs",
-      []
-    ],
-    [
-      "codegraph_callees",
-      "被调用者查询",
-      "查找指定函数/方法调用了哪些其他符号",
-      "independent",
-      "codegraph",
-      "codegraph",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "codegraph-rs",
+      "tool_flags": []
+    },
+    {
+      "slug": "codegraph_callees",
+      "display_name": "被调用者查询",
+      "description": "查找指定函数/方法调用了哪些其他符号",
+      "layer": "independent",
+      "dispatch_domain": "codegraph",
+      "owner": "codegraph",
+      "trigger_hints": [
         "被调用者",
         "callees",
         "调用了",
         "依赖",
-        "代码"
+        "代码",
+        "调用了什么",
+        "内部依赖"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "codegraph-rs",
-      []
-    ],
-    [
-      "codegraph_impact",
-      "影响分析",
-      "分析修改指定符号的影响范围",
-      "independent",
-      "codegraph",
-      "codegraph",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "codegraph-rs",
+      "tool_flags": []
+    },
+    {
+      "slug": "codegraph_impact",
+      "display_name": "影响分析",
+      "description": "分析修改指定符号的影响范围",
+      "layer": "independent",
+      "dispatch_domain": "codegraph",
+      "owner": "codegraph",
+      "trigger_hints": [
         "影响",
         "impact",
         "分析",
         "修改",
         "波及",
-        "代码"
+        "代码",
+        "修改变更影响",
+        "波及范围"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "codegraph-rs",
-      []
-    ],
-    [
-      "codegraph_node",
-      "节点详情",
-      "获取代码图中指定节点的详细信息",
-      "independent",
-      "codegraph",
-      "codegraph",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "codegraph-rs",
+      "tool_flags": []
+    },
+    {
+      "slug": "codegraph_node",
+      "display_name": "节点详情",
+      "description": "获取代码图中指定节点的详细信息",
+      "layer": "independent",
+      "dispatch_domain": "codegraph",
+      "owner": "codegraph",
+      "trigger_hints": [
         "节点",
         "node",
         "详情",
         "信息",
         "代码图"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "codegraph-rs",
-      []
-    ],
-    [
-      "codegraph_status",
-      "代码图状态",
-      "查看代码图索引的构建状态和统计信息",
-      "independent",
-      "codegraph",
-      "codegraph",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "codegraph-rs",
+      "tool_flags": []
+    },
+    {
+      "slug": "codegraph_status",
+      "display_name": "代码图状态",
+      "description": "查看代码图索引的构建状态和统计信息",
+      "layer": "independent",
+      "dispatch_domain": "codegraph",
+      "owner": "codegraph",
+      "trigger_hints": [
         "状态",
         "status",
         "代码图",
         "索引",
         "统计"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "codegraph-rs",
-      []
-    ],
-    [
-      "codegraph_dead_code",
-      "死代码检测",
-      "检测项目中未被使用的代码",
-      "independent",
-      "codegraph",
-      "codegraph",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "codegraph-rs",
+      "tool_flags": []
+    },
+    {
+      "slug": "codegraph_dead_code",
+      "display_name": "死代码检测",
+      "description": "检测项目中未被使用的代码",
+      "layer": "independent",
+      "dispatch_domain": "codegraph",
+      "owner": "codegraph",
+      "trigger_hints": [
         "死代码",
         "dead",
         "unused",
         "未使用",
         "检测",
-        "代码"
+        "代码",
+        "未调用",
+        "僵尸代码",
+        "剔除"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "codegraph-rs",
-      []
-    ],
-    [
-      "codegraph_goto_definition",
-      "跳转定义",
-      "查找指定符号的定义位置",
-      "independent",
-      "codegraph",
-      "codegraph",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "codegraph-rs",
+      "tool_flags": []
+    },
+    {
+      "slug": "codegraph_goto_definition",
+      "display_name": "跳转定义",
+      "description": "查找指定符号的定义位置",
+      "layer": "independent",
+      "dispatch_domain": "codegraph",
+      "owner": "codegraph",
+      "trigger_hints": [
         "定义",
         "definition",
         "跳转",
@@ -1308,24 +1106,18 @@
         "查找",
         "代码"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "codegraph-rs",
-      []
-    ],
-    [
-      "pdf_read",
-      "PDF 文本提取",
-      "从 PDF 文件中提取文本内容，支持分页和全量提取",
-      "external",
-      "stdio-binary",
-      "rust-tools",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "codegraph-rs",
+      "tool_flags": []
+    },
+    {
+      "slug": "pdf_read",
+      "display_name": "PDF 文本提取",
+      "description": "从 PDF 文件中提取文本内容，支持分页和全量提取",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "rust-tools",
+      "trigger_hints": [
         "PDF",
         "pdf",
         "文本",
@@ -1333,48 +1125,36 @@
         "文档",
         "论文"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "mcp-pdf",
-      []
-    ],
-    [
-      "pdf_info",
-      "PDF 元数据",
-      "获取 PDF 文件的元数据信息（页数、标题、作者等）",
-      "external",
-      "stdio-binary",
-      "rust-tools",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "mcp-pdf",
+      "tool_flags": []
+    },
+    {
+      "slug": "pdf_info",
+      "display_name": "PDF 元数据",
+      "description": "获取 PDF 文件的元数据信息（页数、标题、作者等）",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "rust-tools",
+      "trigger_hints": [
         "PDF",
         "pdf",
         "元数据",
         "信息",
         "页数"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "mcp-pdf",
-      []
-    ],
-    [
-      "ooxml_parse",
-      "OOXML 解析",
-      "解析 Office Open XML 格式文件（docx/xlsx/pptx）",
-      "external",
-      "stdio-binary",
-      "rust-tools",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "mcp-pdf",
+      "tool_flags": []
+    },
+    {
+      "slug": "ooxml_parse",
+      "display_name": "OOXML 解析",
+      "description": "解析 Office Open XML 格式文件（docx/xlsx/pptx）",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "rust-tools",
+      "trigger_hints": [
         "OOXML",
         "Office",
         "docx",
@@ -1382,48 +1162,36 @@
         "解析",
         "文档"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "mcp-ooxml",
-      []
-    ],
-    [
-      "pptx_parse",
-      "PPTX 解析",
-      "解析 PowerPoint 文件，提取幻灯片文本和结构",
-      "external",
-      "stdio-binary",
-      "rust-tools",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "mcp-ooxml",
+      "tool_flags": []
+    },
+    {
+      "slug": "pptx_parse",
+      "display_name": "PPTX 解析",
+      "description": "解析 PowerPoint 文件，提取幻灯片文本和结构",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "rust-tools",
+      "trigger_hints": [
         "PPTX",
         "pptx",
         "PowerPoint",
         "幻灯片",
         "解析"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "mcp-pptx",
-      []
-    ],
-    [
-      "financial_data",
-      "金融数据",
-      "获取和分析金融数据（股票、基金、指数等）",
-      "external",
-      "stdio-binary",
-      "rust-tools",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "mcp-pptx",
+      "tool_flags": []
+    },
+    {
+      "slug": "financial_data",
+      "display_name": "金融数据",
+      "description": "获取和分析金融数据（股票、基金、指数等）",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "rust-tools",
+      "trigger_hints": [
         "金融",
         "股票",
         "基金",
@@ -1431,72 +1199,54 @@
         "分析",
         "financial"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "mcp-financial-data",
-      []
-    ],
-    [
-      "citation_audit",
-      "引用审计",
-      "审计学术论文引用的准确性和完整性",
-      "external",
-      "stdio-binary",
-      "rust-tools",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "mcp-financial-data",
+      "tool_flags": []
+    },
+    {
+      "slug": "citation_audit",
+      "display_name": "引用审计",
+      "description": "审计学术论文引用的准确性和完整性",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "rust-tools",
+      "trigger_hints": [
         "引用",
         "citation",
         "审计",
         "论文",
         "学术"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "mcp-citation",
-      []
-    ],
-    [
-      "citation_lint",
-      "引用检查",
-      "检查引用格式是否符合规范",
-      "external",
-      "stdio-binary",
-      "rust-tools",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "mcp-citation",
+      "tool_flags": []
+    },
+    {
+      "slug": "citation_lint",
+      "display_name": "引用检查",
+      "description": "检查引用格式是否符合规范",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "rust-tools",
+      "trigger_hints": [
         "引用",
         "citation",
         "检查",
         "lint",
         "格式"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "mcp-citation",
-      []
-    ],
-    [
-      "gh_source_gate",
-      "GitHub 源码门禁",
-      "对 GitHub 仓库源码进行安全和质量门禁检查",
-      "external",
-      "stdio-binary",
-      "rust-tools",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "mcp-citation",
+      "tool_flags": []
+    },
+    {
+      "slug": "gh_source_gate",
+      "display_name": "GitHub 源码门禁",
+      "description": "对 GitHub 仓库源码进行安全和质量门禁检查",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "rust-tools",
+      "trigger_hints": [
         "GitHub",
         "源码",
         "门禁",
@@ -1504,24 +1254,18 @@
         "质量",
         "检查"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "mcp-gh-source-gate",
-      []
-    ],
-    [
-      "search_research",
-      "研究论文搜索",
-      "搜索学术论文，支持多源并行查询",
-      "external",
-      "stdio-binary",
-      "paperplain",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "mcp-gh-source-gate",
+      "tool_flags": []
+    },
+    {
+      "slug": "search_research",
+      "display_name": "研究论文搜索",
+      "description": "搜索学术论文，支持多源并行查询",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "paperplain",
+      "trigger_hints": [
         "搜索",
         "search",
         "论文",
@@ -1530,62 +1274,45 @@
         "PubMed",
         "ArXiv"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "paperplain-mcp",
-      []
-    ],
-    [
-      "fetch_paper",
-      "论文获取",
-      "获取论文的完整摘要和元数据",
-      "external",
-      "stdio-binary",
-      "paperplain",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "paperplain-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "fetch_paper",
+      "display_name": "论文获取",
+      "description": "获取论文的完整摘要和元数据",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "paperplain",
+      "trigger_hints": [
         "获取",
         "fetch",
         "论文",
         "摘要",
         "元数据"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "paperplain-mcp",
-      []
-    ],
-    [
-      "find_paper_by_title",
-      "论文标题查找",
-      "通过标题或部分标题查找论文",
-      "external",
-      "stdio-binary",
-      "paperplain",
-      "none",
-      [
+      "host_platforms": [],
+      "mcp_server": "paperplain-mcp",
+      "tool_flags": []
+    },
+    {
+      "slug": "find_paper_by_title",
+      "display_name": "论文标题查找",
+      "description": "通过标题或部分标题查找论文",
+      "layer": "external",
+      "dispatch_domain": "stdio-binary",
+      "owner": "paperplain",
+      "trigger_hints": [
         "查找",
         "find",
         "标题",
         "论文",
         "论文标题"
       ],
-      [
-        "claude",
-        "cursor",
-        "opencode",
-        "codex"
-      ],
-      "paperplain-mcp",
-      []
-    ]
+      "host_platforms": [],
+      "mcp_server": "paperplain-mcp",
+      "tool_flags": []
+    }
   ]
 }

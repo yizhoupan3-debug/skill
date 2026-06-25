@@ -7,9 +7,9 @@ description = "Unified MCP tool registry: discovery and record loading for all f
 workspace = true
 
 [dependencies]
+routing-core = { path = "../routing-core" }
 serde.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

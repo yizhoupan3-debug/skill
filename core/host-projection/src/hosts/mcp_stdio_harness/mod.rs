@@ -564,8 +564,9 @@ pub fn handle_tools_list(id: Option<Value>) -> Value {
     })
 }
 
-/// Build tool schema entries for `dispatch_domain == "composite"` tools
-/// from the MCP_TOOL_REGISTRY.json.
+/// Build tool schema entries for framework dispatch-domain tools
+/// (`domain:goal`, `domain:quality-gate`, `domain:closeout`,
+/// `domain:routing-evolution`, `domain:framework`) from MCP_TOOL_REGISTRY.json.
 fn build_composite_tools_from_registry() -> Vec<Value> {
     let registry_path = mcp_tool_registry::resolve_tool_registry_path()
         .unwrap_or_else(|| {
@@ -583,7 +584,7 @@ fn build_composite_tools_from_registry() -> Vec<Value> {
 
     records
         .iter()
-        .filter(|r| r.dispatch_domain == "composite")
+        .filter(|r| r.dispatch_domain.starts_with("domain:"))
         .map(|r| {
             let mut tool = json!({
                 "name": r.slug,

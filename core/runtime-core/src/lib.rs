@@ -100,32 +100,19 @@ pub fn register_routing_hooks() {
     });
 }
 
-// ── mcp-tool-registry hooks registration ──
-static TOOL_REGISTRY_HOOKS_INIT: OnceLock<()> = OnceLock::new();
+// ── merged routing config hooks (mcp-tool-registry + tool-routing-engine) ──
+static TOOL_ROUTING_CONFIG_HOOKS_INIT: OnceLock<()> = OnceLock::new();
 
-/// Register mcp-tool-registry hooks with runtime-core implementations.
-/// Safe to call multiple times; only the first call takes effect.
-pub(crate) fn register_tool_registry_hooks() {
-    TOOL_REGISTRY_HOOKS_INIT.get_or_init(|| {
-        mcp_tool_registry::hooks::register_hooks(
+/// Register routing config hooks with merged implementations for
+/// mcp-tool-registry and tool-routing-engine. Safe to call multiple times.
+fn register_tool_routing_config_hooks() {
+    TOOL_ROUTING_CONFIG_HOOKS_INIT.get_or_init(|| {
+        routing_core::config_hooks::register_routing_config_hooks(
             // discover_tool_registry_path: default path
             || {
                 let path = std::path::PathBuf::from(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH);
                 Some(path)
             },
-        )
-        .ok(); // ignore Err if already registered
-    });
-}
-
-// ── tool-routing-engine hooks registration ──
-static TOOL_ROUTING_HOOKS_INIT: OnceLock<()> = OnceLock::new();
-
-/// Register tool-routing-engine hooks with runtime-core implementations.
-/// Safe to call multiple times; only the first call takes effect.
-fn register_tool_routing_engine_hooks() {
-    TOOL_ROUTING_HOOKS_INIT.get_or_init(|| {
-        tool_routing_engine::hooks::register_hooks(
             // discover_scoring_weights_path: resolve from FRAMEWORK_ROOT
             || {
                 let root = std::env::var("FRAMEWORK_ROOT").ok()?;
@@ -232,7 +219,6 @@ fn register_runtime_contract_hooks_impl() {
                         .map(|p| p.host_id())
                 })
             },
-            default_id: hosts::host_provider::default_host_id,
             strict_pre_tool_fallback_hint: hosts::host_provider::host_provider_strict_pre_tool_fallback_hint,
             registry: || {
                 hosts::host_provider::host_provider_registry()
@@ -432,8 +418,7 @@ fn register_tool_dispatch_hooks_impl() {
 /// calls no-ops.
 pub fn init_hooks() {
     register_routing_hooks();
-    register_tool_registry_hooks();
-    register_tool_routing_engine_hooks();
+    register_tool_routing_config_hooks();
     register_host_projection_hooks();
 }
 

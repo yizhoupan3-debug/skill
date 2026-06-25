@@ -1,40 +1,35 @@
 //! Tool search API: top-k matching results from the unified registry.
+//!
+//! Returns `McpToolDecision` results (same type as `route_tool`) for consistency.
+//! Includes a fuzzy rescue fallback (trigram Jaccard on trigger hints) when
+//! the primary scoring pipeline produces no matches — matching `route_tool` behavior.
 
+use crate::fuzzy::best_fuzzy_score;
 use crate::routing::score_tool;
 use crate::scoring_config::tool_scoring_weights;
+use crate::types::McpToolDecision;
 use core_state_utils::text_utils::tokenize_cjk_aware as tokenize_text;
 use mcp_tool_registry::McpToolRecord;
 
-/// A single search result with score and matched tokens.
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct ToolSearchResult {
-    pub slug: String,
-    pub display_name: String,
-    pub score: f64,
-    pub reasons: Vec<String>,
-    pub matched_token_count: usize,
-    pub dispatch_domain: String,
-    pub mcp_server: String,
-}
-
-/// Maximum query length in bytes.
-const MAX_QUERY_LEN: usize = 4096;
+const DECISION_SCHEMA_VERSION: &str = "1.0.0";
 
 /// Maximum top_k value to prevent abuse.
 const MAX_TOP_K: usize = 100;
 
 /// Search tools by query, returning top-k results sorted by score.
 /// Uses the same scoring pipeline as route_tool for consistency.
+/// Falls back to fuzzy trigram matching on trigger hints when scoring
+/// produces no results.
 pub fn search_tools(
     query: &str,
     records: &[McpToolRecord],
     top_k: usize,
-) -> Vec<ToolSearchResult> {
+) -> Vec<McpToolDecision> {
     if records.is_empty() || query.trim().is_empty() || top_k == 0 {
         return Vec::new();
     }
     let top_k = top_k.min(MAX_TOP_K);
-    if query.len() > MAX_QUERY_LEN {
+    if query.len() > crate::MAX_QUERY_LEN {
         return Vec::new();
     }
 
@@ -42,7 +37,8 @@ pub fn search_tools(
     let query_lower = query.to_lowercase();
     let query_tokens = tokenize_text(&query_lower);
 
-    let mut results: Vec<ToolSearchResult> = records
+    // Primary: token-based scoring
+    let mut results: Vec<McpToolDecision> = records
         .iter()
         .filter_map(|record| {
             let (score, reasons, matched_token_count) =
@@ -52,17 +48,36 @@ pub fn search_tools(
                 return None;
             }
 
-            Some(ToolSearchResult {
-                slug: record.slug.clone(),
-                display_name: record.display_name.clone(),
+            Some(McpToolDecision {
+                decision_schema_version: DECISION_SCHEMA_VERSION.to_string(),
+                selected_tool: record.slug.clone(),
                 score,
                 reasons,
                 matched_token_count,
                 dispatch_domain: record.dispatch_domain.clone(),
                 mcp_server: record.mcp_server.clone(),
+                fuzzy_match: false,
             })
         })
         .collect();
+
+    // Fallback: fuzzy rescue (trigram Jaccard on trigger hints)
+    if results.is_empty() {
+        for record in records {
+            if let Some(fuzzy_score) = best_fuzzy_score(&query_lower, &record.trigger_hints) {
+                results.push(McpToolDecision {
+                    decision_schema_version: DECISION_SCHEMA_VERSION.to_string(),
+                    selected_tool: record.slug.clone(),
+                    score: fuzzy_score,
+                    reasons: vec![format!("fuzzy_rescue: trigram similarity {fuzzy_score:.1}")],
+                    matched_token_count: 0,
+                    dispatch_domain: record.dispatch_domain.clone(),
+                    mcp_server: record.mcp_server.clone(),
+                    fuzzy_match: true,
+                });
+            }
+        }
+    }
 
     results.sort_by(|a, b| {
         b.score
@@ -104,7 +119,7 @@ mod tests {
         ];
         let results = search_tools("pdf", &records, 2);
         assert_eq!(results.len(), 2);
-        assert!(results[0].slug.contains("pdf"));
+        assert!(results[0].selected_tool.contains("pdf"));
     }
 
     #[test]
@@ -117,5 +132,19 @@ mod tests {
     fn search_zero_top_k() {
         let records = vec![test_tool_record("pdf_read", &["pdf"])];
         assert!(search_tools("pdf", &records, 0).is_empty());
+    }
+
+    #[test]
+    fn search_fuzzy_rescue_handles_typo() {
+        let records = vec![test_tool_record(
+            "browser_screenshot",
+            &["截图", "screenshot"],
+        )];
+        // "screeenshot" is a typo that scores 0 in token-based scoring but
+        // fuzzy-matches "screenshot" via trigram Jaccard
+        let results = search_tools("screeenshot", &records, 5);
+        assert!(!results.is_empty(), "typo should fuzzy-match in search");
+        assert!(results[0].fuzzy_match, "should be flagged as fuzzy match");
+        assert_eq!(results[0].selected_tool, "browser_screenshot");
     }
 }

@@ -14,6 +14,11 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Default gate value for serde(default) when field is absent from JSON.
+fn default_gate() -> String {
+    "none".to_string()
+}
+
 // ── Core types ──────────────────────────────────────────────────────────────
 
 /// A single MCP tool record in the unified registry.
@@ -27,15 +32,20 @@ pub struct McpToolRecord {
     pub description: String,
     /// Tool classification: "builtin" | "research" | "external" | "independent".
     pub layer: String,
-    /// Which dispatch domain handles this tool: "composite" | "research" | "browser" | "codegraph" | "stdio-binary".
+    /// Which dispatch domain handles this tool: "domain:goal" | "domain:quality-gate"
+    /// | "domain:closeout" | "domain:routing-evolution" | "domain:framework"
+    /// | "research" | "browser" | "codegraph" | "stdio-binary".
     pub dispatch_domain: String,
     /// Owning team/component: "framework" | "research" | "browser" | "codegraph" | "rust-tools".
     pub owner: String,
     /// Gate requirement: "none" | "guard" | "sandbox".
+    /// Retained for future safety policy integration.
+    #[doc(hidden)]
+    #[serde(default = "default_gate")]
     pub gate: String,
     /// Natural language trigger phrases for routing.
     pub trigger_hints: Vec<String>,
-    /// Supported host platforms.
+    /// Supported host platforms. Empty = all platforms supported.
     pub host_platforms: Vec<String>,
     /// Target MCP server process name (e.g. "router-rs", "browser-mcp", "mcp-pdf").
     pub mcp_server: String,
@@ -43,9 +53,9 @@ pub struct McpToolRecord {
     /// e.g. "deprecated" (auto-blacklist), "experimental", "host_filtered".
     #[serde(default)]
     pub tool_flags: Vec<String>,
-    /// JSON Schema for composite-domain tools (used to generate MCP tools/list response).
-    /// Only populated for `dispatch_domain == "composite"` tools.
-    #[serde(default)]
+    /// JSON Schema for framework-domain tools (used to generate MCP tools/list response).
+    /// Only populated for `dispatch_domain.starts_with("domain:")` tools.
+    #[serde(default, rename = "input_schema")]
     pub input_schema_json: Option<McpToolInputSchema>,
 }
 

@@ -17,7 +17,6 @@ const DEFAULTS_JSON: &str = include_str!(concat!(
 #[derive(Debug, Clone, Deserialize)]
 pub struct ToolScoringWeights {
     pub exact_name_boost: f64,
-    pub display_name_per_match: f64,
     pub name_tokens_base: f64,
     pub name_tokens_per_token: f64,
     pub trigger_hint_per_match: f64,
@@ -108,7 +107,6 @@ mod tests {
         // Test that v1 config missing v2 fields still works via serde default
         let v1_json = r#"{
             "exact_name_boost": 100.0,
-            "display_name_per_match": 8.0,
             "name_tokens_base": 14.0,
             "name_tokens_per_token": 4.0,
             "trigger_hint_per_match": 20.0,

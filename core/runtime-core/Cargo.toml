@@ -24,6 +24,7 @@ host-projection = { path = "../host-projection" }
 fr-utils = { path = "../fr-utils" }
 fr-contracts = { path = "../fr-contracts" }
 fr-exec = { path = "../fr-exec" }
+routing-core = { path = "../routing-core" }
 routing-engine = { path = "../routing-engine" }
 runtime-core-contracts = { path = "../runtime-core-contracts" }
 runtime-exit-gate = { path = "../runtime-exit-gate" }

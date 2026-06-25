@@ -11,6 +11,7 @@
 //! - `fuzzy::extract_trigrams`, `fuzzy::jaccard_similarity`,
 //!   `fuzzy::trigram_similarity`, `fuzzy::best_fuzzy_jaccard`
 
+pub mod config_hooks;
 pub mod fuzzy;
 
 pub use fuzzy::{best_fuzzy_jaccard, extract_trigrams, jaccard_similarity};

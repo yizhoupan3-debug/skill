@@ -1,0 +1,199 @@
+//! Closeout tool handlers (`domain:closeout`).
+//! closeout_record_write (file I/O + evaluation) and closeout_gate_evaluate.
+
+use serde_json::{json, Map, Value};
+use std::path::Path;
+
+/// closeout_record_write: payload construction + file I/O + evaluation.
+pub fn closeout_record_write_dispatch(
+    arguments: &Value,
+    repo_root: &Path,
+) -> Result<String, String> {
+    let task_id = arguments
+        .get("task_id")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: task_id")?;
+    let summary = arguments
+        .get("summary")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: summary")?;
+    let verification_status = arguments
+        .get("verification_status")
+        .and_then(Value::as_str)
+        .ok_or("Missing required argument: verification_status")?;
+    match verification_status {
+        "passed" | "failed" | "partial" | "not_run" => {}
+        _ => return Err(format!(
+            "Invalid verification_status: {verification_status}. Must be one of: passed, failed, partial, not_run"
+        )),
+    }
+
+    let mut record = Map::new();
+    record.insert("schema_version".to_string(), json!(host_projection::hooks::closeout_record_schema_version()));
+    record.insert("task_id".to_string(), json!(task_id));
+    record.insert("ended_at".to_string(), json!(host_projection::hooks::current_local_timestamp()));
+    record.insert("summary".to_string(), json!(summary));
+    record.insert("verification_status".to_string(), json!(verification_status));
+
+    if let Some(files) = arguments.get("changed_files").and_then(Value::as_array) {
+        record.insert("changed_files".to_string(), json!(files));
+    }
+    if let Some(cmds) = arguments.get("commands_run").and_then(Value::as_array) {
+        record.insert("commands_run".to_string(), json!(cmds));
+    }
+    if let Some(blockers) = arguments.get("blockers").and_then(Value::as_array)
+        && !blockers.is_empty() {
+            record.insert("blockers".to_string(), json!(blockers));
+        }
+    if let Some(risks) = arguments.get("risks").and_then(Value::as_array)
+        && !risks.is_empty() {
+            record.insert("risks".to_string(), json!(risks));
+        }
+    if let Some(notes) = arguments.get("notes").and_then(Value::as_str)
+        && !notes.is_empty() {
+            record.insert("notes".to_string(), json!(notes));
+        }
+
+    let record_path = host_projection::hooks::closeout_record_path_for_task(repo_root, task_id)
+        .map_err(|e| format!("invalid task_id: {e}"))?;
+    if let Some(parent) = record_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create closeout directory failed: {e}"))?;
+    }
+
+    let record_value = serde_json::Value::Object(record);
+    core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)
+        .map_err(|e| format!("write closeout record failed: {e}"))?;
+
+    // Evaluate the record
+    let eval_result =
+        host_projection::hooks::evaluate_closeout_record_file_for_task(repo_root, task_id, &record_path);
+    let eval = match eval_result {
+        Ok(v) => v,
+        Err(e) => json!({"error": e}),
+    };
+
+    let closeout_allowed = eval.get("closeout_allowed").and_then(Value::as_bool).unwrap_or(false);
+    let violations: Vec<String> = eval.get("violations").and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .map(|v| {
+                    let rule = v.get("rule").and_then(Value::as_str).unwrap_or("unknown");
+                    let detail = v.get("detail").and_then(Value::as_str).unwrap_or("no detail");
+                    format!("[{rule}] {detail}")
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let result = json!({
+        "closeout_allowed": closeout_allowed,
+        "violations": violations,
+    });
+
+    serde_json::to_string_pretty(&result).map_err(|e| format!("serialize closeout result failed: {e}"))
+}
+
+/// closeout_gate_evaluate: multi-source closeout readiness evaluation.
+pub fn closeout_gate_evaluate(
+    arguments: &Value,
+    repo_root: &Path,
+    host_id: &str,
+) -> Result<String, String> {
+    let task_id_override = arguments
+        .get("task_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let task_view = core_state::task_state::resolve_task_view(repo_root, task_id_override);
+    let mut findings: Vec<String> = Vec::new();
+
+    if let Some(rationale) =
+        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+            repo_root, host_id, "closeout_evidence_hooks",
+        ) {
+        findings.push(format!("harness: closeout_evidence_hooks — {rationale}"));
+    }
+    if let Some(rationale) =
+        framework_kernel::runtime_registry::harness_capability_exception_rationale(
+            repo_root, host_id, "review_gate_router_observation",
+        ) {
+        findings.push(format!("harness: review_gate_router_observation — {rationale}"));
+    }
+
+    findings.push(format!(
+        "review_gate: {host_id} has no hook REVIEW_GATE — reviewer evidence is honor-system / self-attested"
+    ));
+
+    let goal_present = task_view.goal_state.is_some();
+    if !goal_present {
+        findings.push("goal_state: no GOAL_STATE.json".to_string());
+    } else {
+        findings.push("goal_state: present".to_string());
+    }
+
+    let evidence_success = task_view.evidence
+        .as_ref()
+        .map(|e| e.has_successful_verification)
+        .unwrap_or(false);
+    let task_id = task_view.task_id.as_deref().unwrap_or("");
+
+    if !evidence_success {
+        findings.push("evidence: no successful EVIDENCE_INDEX records".to_string());
+    } else {
+        findings.push("evidence: successful records present".to_string());
+        if !task_id.is_empty()
+            && core_state::state_manager::task_evidence_success_only_self_attested(repo_root, task_id)
+        {
+            findings.push("WARN: evidence: only self-attested MCP record_evidence rows — verify independently".to_string());
+        }
+    }
+
+    let summary_path = repo_root.join("artifacts").join("current")
+        .join(if task_id.is_empty() { "" } else { task_id })
+        .join("SESSION_SUMMARY.md");
+    let has_summary = summary_path.is_file();
+    if !has_summary {
+        findings.push(format!("checkpoint: missing SESSION_SUMMARY at {}", summary_path.display()));
+    } else {
+        findings.push("checkpoint: SESSION_SUMMARY.md on disk".to_string());
+    }
+
+    let review_goal = task_view.goal_state
+        .as_ref()
+        .is_some_and(check_goal_suggests_review);
+
+    // desktop_review_evidence_attested uses args.reviewer_lane + fork_context
+    let has_review_evidence = arguments.get("reviewer_lane").and_then(Value::as_str).is_some()
+        || arguments.get("fork_context").is_some();
+
+    if review_goal && !has_review_evidence {
+        findings.push("WARN: review_gate: GOAL suggests review work but no reviewer evidence — \
+             pass reviewer_lane + fork_context in closeout_gate args".to_string());
+    } else if review_goal {
+        findings.push("review_gate: GOAL suggests review; reviewer evidence attested".to_string());
+    }
+
+    let all_clear = goal_present && evidence_success && has_summary
+        && (!review_goal || has_review_evidence);
+    let checkpoint_only = !all_clear && goal_present && evidence_success
+        && (!review_goal || has_review_evidence);
+
+    let verdict_label = if all_clear {
+        "PASS: all closeout gates satisfied"
+    } else if checkpoint_only {
+        "ADVISORY: checkpoint missing — call session_checkpoint before complete"
+    } else {
+        "ADVISORY: closeout gates not satisfied"
+    };
+
+    let formatted = format!("[Closeout Gate] {verdict_label}\n\n{}", findings.join("\n"));
+    serde_json::to_string(&json!({"result": formatted})).map_err(|e| e.to_string())
+}
+
+/// Minimal check: does the goal mention review-related work?
+fn check_goal_suggests_review(goal_state: &Value) -> bool {
+    let goal_text = goal_state.get("goal").and_then(Value::as_str).unwrap_or("");
+    let review_markers = ["review", "审计", "审稿", "check", "verify", "验证"];
+    review_markers.iter().any(|m| goal_text.contains(m))
+}

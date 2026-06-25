@@ -7,6 +7,7 @@ use std::str::FromStr;
 
 const BLOCKED_HOST_SUFFIXES: &[&str] = &[".localhost", ".local", ".internal"];
 
+#[deprecated(note = "use validate_and_resolve_web_fetch_url for DNS pinning (TOCTOU safety)")]
 pub fn validate_web_fetch_url(url: &str) -> Result<(), String> {
     let parsed =
         reqwest::Url::parse(url.trim()).map_err(|_| format!("web_fetch invalid URL: {url}"))?;

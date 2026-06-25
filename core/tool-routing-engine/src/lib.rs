@@ -21,6 +21,9 @@ pub mod scoring_config;
 pub mod search;
 pub mod types;
 
+/// Maximum query length in bytes to prevent abuse.
+pub(crate) const MAX_QUERY_LEN: usize = 4096;
+
 pub use routing::{route_tool, route_tool_from_records};
-pub use search::{search_tools, ToolSearchResult};
+pub use search::search_tools;
 pub use types::{McpToolDecision, ToolCandidate};

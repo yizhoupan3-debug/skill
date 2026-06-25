@@ -18,9 +18,6 @@ use std::collections::HashSet;
 
 const DECISION_SCHEMA_VERSION: &str = "1.0.0";
 
-/// Maximum query length in bytes to prevent abuse.
-const MAX_QUERY_LEN: usize = 4096;
-
 /// Route a natural language query to the best-matching tool.
 ///
 /// `host_id` is optional — when provided, records with non-empty `host_platforms`
@@ -30,10 +27,11 @@ pub fn route_tool(
     registry_path: &std::path::Path,
     host_id: Option<&str>,
 ) -> Result<Option<McpToolDecision>, String> {
-    if query.len() > MAX_QUERY_LEN {
+    if query.len() > crate::MAX_QUERY_LEN {
         return Err(format!(
-            "query too long: {} bytes (max {MAX_QUERY_LEN})",
-            query.len()
+            "query too long: {} bytes (max {})",
+            query.len(),
+            crate::MAX_QUERY_LEN,
         ));
     }
     let records = mcp_tool_registry::load_tool_records(registry_path)?;
@@ -46,7 +44,7 @@ pub fn route_tool_from_records(
     records: &[McpToolRecord],
     host_id: Option<&str>,
 ) -> Option<McpToolDecision> {
-    if records.is_empty() || query.trim().is_empty() || query.len() > MAX_QUERY_LEN {
+    if records.is_empty() || query.trim().is_empty() || query.len() > crate::MAX_QUERY_LEN {
         return None;
     }
 
@@ -113,8 +111,18 @@ pub fn route_tool_from_records(
     }
 
     // Step 8: fuzzy rescue — try trigram matching against trigger hints
+    // Respect host filtering (same logic as Step 7) to prevent bypass
     let mut fuzzy_candidates: Vec<(f64, &McpToolRecord)> = Vec::new();
     for record in records {
+        // Skip records excluded by host filter
+        if let Some(hid) = host_id {
+            let hid_lower = hid.to_lowercase();
+            if !record.host_platforms.is_empty()
+                && !record.host_platforms.iter().any(|p| p.to_lowercase() == hid_lower)
+            {
+                continue;
+            }
+        }
         if let Some(fuzzy_score) = best_fuzzy_score(&query_lower, &record.trigger_hints) {
             fuzzy_candidates.push((fuzzy_score, record));
         }
@@ -135,8 +143,10 @@ pub fn route_tool_from_records(
     })
 }
 
-/// 8-step scoring pipeline. Steps 1-6 produce the primary score;
-/// step 7 (do-not-use) and step 8 (layer penalty) are applied as adjustments.
+/// 7-step scoring pipeline. Steps 1-5 produce the primary score;
+/// step 6 (do-not-use) and step 7 (layer penalty) are applied as adjustments.
+/// Step 3 (display_name) was merged into Step 4's alias mechanism to avoid
+/// double-counting — the same alias_tokens were being scored twice.
 pub(crate) fn score_tool(
     record: &McpToolRecord,
     query_lower: &str,
@@ -198,18 +208,8 @@ pub(crate) fn score_tool(
         matched_token_count += name_match_count;
     }
 
-    // Step 3: Display name matching (tool-specific: Chinese display names like "PDF 文本提取")
-    let display_match_count = query_tokens
-        .iter()
-        .filter(|qt| alias_tokens.contains(qt.as_str()))
-        .count();
-    if display_match_count > 0 {
-        score += weights.display_name_per_match * (display_match_count as f64);
-        reasons.push(format!("display_name:{display_match_count}"));
-        matched_token_count += display_match_count;
-    }
+    // Step 3: Trigger hint matching
 
-    // Step 4: Trigger hint matching
     let trigger_match_count = record
         .trigger_hints
         .iter()
@@ -228,7 +228,7 @@ pub(crate) fn score_tool(
         matched_token_count += trigger_match_count;
     }
 
-    // Step 5: Keyword + Alias token matching
+    // Step 4: Keyword + Alias token matching
     let keyword_match_count = query_tokens
         .iter()
         .filter(|qt| keyword_tokens.contains(qt.as_str()))
@@ -246,14 +246,14 @@ pub(crate) fn score_tool(
         .filter(|qt| alias_tokens.contains(qt.as_str()))
         .count();
     if alias_match_count > 0 && keyword_match_count == 0 {
-        // Only add alias score when keywords didn't fire (avoid double-count)
+        // Only add alias score when keywords didn't fire (avoid double-count with trigger hints too)
         let alias_score = weights.alias_hits_base + weights.alias_hits_per_hit * (alias_match_count as f64);
         score += alias_score;
         reasons.push(format!("alias_tokens:{alias_match_count}"));
         matched_token_count += alias_match_count;
     }
 
-    // Step 6: Description token matching
+    // Step 5: Description token matching
     let desc_match_count = query_tokens
         .iter()
         .filter(|qt| desc_tokens.contains(qt.as_str()))
@@ -265,7 +265,7 @@ pub(crate) fn score_tool(
         reasons.push(format!("description:{desc_match_count}"));
     }
 
-    // Step 7: do-not-use penalty (for deprecated tools)
+    // Step 6: do-not-use penalty (for deprecated tools)
     if !do_not_use_tokens.is_empty() && score > 0.0 {
         let negative_hits: Vec<&str> = query_tokens
             .iter()
@@ -282,7 +282,7 @@ pub(crate) fn score_tool(
         }
     }
 
-    // Step 8: Layer penalty (from externalized JSON config)
+    // Step 7: Layer penalty (from externalized JSON config)
     let layer_penalty = weights
         .layer_penalties
         .get(&record.layer)
@@ -368,6 +368,18 @@ mod tests {
     }
 
     #[test]
+    fn fuzzy_rescue_respects_host_filter() {
+        // "screenshto" would fuzzy-match trigger_hint "screenshot" via trigram,
+        // but host="cursor" doesn't match claude-only record — must not select it
+        let records = vec![test_tool_record("browser_screenshot", &["screenshot"])];
+        let decision = route_tool_from_records("screenshto", &records, Some("cursor"));
+        assert!(
+            decision.is_none(),
+            "fuzzy rescue must not bypass host filter"
+        );
+    }
+
+    #[test]
     fn fuzzy_rescue_handles_typo() {
         let records = vec![test_tool_record(
             "browser_screenshot",
@@ -390,7 +402,90 @@ mod tests {
         let decision = route_tool_from_records("文本提取", &records, None);
         assert!(decision.is_some(), "display name should match");
         if let Some(d) = decision {
-            assert!(d.reasons.iter().any(|r| r.contains("display_name")));
+            assert!(d.reasons.iter().any(|r| r.contains("alias")),
+                "display name matching now produces alias_tokens reasons");
         }
+    }
+
+    #[test]
+    fn score_tool_do_not_use_penalty() {
+        let weights = tool_scoring_weights();
+        let mut record = test_tool_record("old_tool", &["legacy"]);
+        record.tool_flags = vec!["deprecated".to_string()];
+        record.description = "An old deprecated tool".to_string();
+        let query_tokens = tokenize_text("old_tool");
+        let (score, reasons, _) = score_tool(&record, "old_tool", &query_tokens, &weights);
+        assert!(score > 0.0, "exact name should still score positively");
+        assert!(
+            reasons.iter().any(|r| r.contains("do_not_use_penalty")),
+            "do-not-use penalty reason should be present"
+        );
+        assert!(score < weights.exact_name_boost, "penalty reduces score below exact match boost");
+    }
+
+    #[test]
+    fn score_tool_layer_penalty_external() {
+        let weights = tool_scoring_weights();
+        let make_record = |layer: &str| McpToolRecord {
+            slug: "ext_tool".to_string(),
+            display_name: "Ext Tool".to_string(),
+            description: "An external tool".to_string(),
+            layer: layer.to_string(),
+            dispatch_domain: "composite".to_string(),
+            owner: "external".to_string(),
+            gate: "none".to_string(),
+            trigger_hints: vec![],
+            host_platforms: vec![],
+            mcp_server: "ext-server".to_string(),
+            tool_flags: vec![],
+            input_schema_json: None,
+        };
+        let query_tokens = tokenize_text("ext_tool");
+        let (score_builtin, _, _) = score_tool(&make_record("builtin"), "ext_tool", &query_tokens, &weights);
+        let (score_external, reasons, _) = score_tool(&make_record("external"), "ext_tool", &query_tokens, &weights);
+        assert!(
+            reasons.iter().any(|r| r.contains("layer")),
+            "layer penalty reason should be present"
+        );
+        // external layer penalty is -2.0 relative to builtin
+        let diff = score_builtin - score_external;
+        assert!((diff - 2.0).abs() < 0.001, "external layer penalty should reduce score by 2.0");
+    }
+
+    #[test]
+    fn score_tool_alias_only() {
+        let weights = tool_scoring_weights();
+        let mut record = test_tool_record("pdf_read", &[]);
+        record.display_name = "PDF 文本提取".to_string();
+        let query_tokens = tokenize_text("文本提取");
+        let (score, reasons, _) = score_tool(&record, "文本提取", &query_tokens, &weights);
+        assert!(
+            reasons.iter().any(|r| r.contains("alias")),
+            "alias matching should fire when keywords=0"
+        );
+        assert!(score > 0.0, "alias-only should score > 0");
+    }
+
+    #[test]
+    fn score_tool_description_match() {
+        let weights = tool_scoring_weights();
+        let mut record = test_tool_record("pdf_read", &[]);
+        record.display_name = "".to_string();
+        record.description = "extract text and images from PDF files".to_string();
+        let query_tokens = tokenize_text("extract images");
+        let (score, reasons, _) = score_tool(&record, "extract images", &query_tokens, &weights);
+        assert!(
+            reasons.iter().any(|r| r.contains("description")),
+            "description matching should fire"
+        );
+        assert!(score > 0.0, "description match should score > 0");
+    }
+
+    #[test]
+    fn route_long_query() {
+        let records = vec![test_tool_record("pdf_read", &["pdf"])];
+        let long_query = "a".repeat(5000);
+        let decision = route_tool_from_records(&long_query, &records, None);
+        assert!(decision.is_none(), "query over MAX_QUERY_LEN should return None");
     }
 }

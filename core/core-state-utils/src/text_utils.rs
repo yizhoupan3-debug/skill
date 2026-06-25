@@ -35,11 +35,13 @@ pub fn is_ascii_word(s: &str) -> bool {
 /// Examples:
 /// - `"hello world"` → `["hello", "world"]`
 /// - `"帮我截图"` → `["帮", "我", "截", "图"]`
-/// - `"browser-screenshot"` → `["browser-screenshot"]`
+/// - `"browser-screenshot"` → `["browser", "screenshot"]`
 /// - `"PDF 文档提取"` → `["PDF", "文", "档", "提", "取"]`
 pub fn tokenize_cjk_aware(text: &str) -> Vec<String> {
     text.split(|c: char| {
         c.is_ascii_whitespace()
+            || c == '-'
+            || c == '_'
             || c == ','
             || c == '，'
             || c == '。'
@@ -59,6 +61,17 @@ pub fn tokenize_cjk_aware(text: &str) -> Vec<String> {
             || c == ']'
             || c == '【'
             || c == '】'
+            || c == '、'
+            || c == '\u{3000}' // 全角空格
+            || c == '《'
+            || c == '》'
+            || c == '「'
+            || c == '」'
+            || c == '『'
+            || c == '』'
+            || c == '\u{2014}'
+            || c == '\u{2015}'
+            || c == '·'
     })
     .filter(|t| !t.is_empty())
     .flat_map(|token| {

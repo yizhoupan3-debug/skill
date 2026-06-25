@@ -14,11 +14,14 @@ use serde_json::Value;
 use crate::tool_types::McpToolRecord;
 
 pub const EXPECTED_SCHEMA: &str = "mcp-tool-registry-v1";
+const EXPECTED_SCHEMA_V2: &str = "mcp-tool-registry-v2";
 
 /// Default TTL for the cached registry (60 seconds).
 const CACHE_TTL_SECS: u64 = 60;
 
 /// Load tool records from MCP_TOOL_REGISTRY.json.
+/// Supports both v1 (columnar array) and v2 (object) formats — auto-detected
+/// by checking whether the first tool entry is an array or object.
 pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, String> {
     let content = fs::read_to_string(registry_path)
         .map_err(|e| format!("failed to read {}: {e}", registry_path.display()))?;
@@ -29,22 +32,10 @@ pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, Str
         .get("schema_version")
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    if schema != EXPECTED_SCHEMA {
+    if schema != EXPECTED_SCHEMA && schema != EXPECTED_SCHEMA_V2 {
         return Err(format!(
-            "MCP_TOOL_REGISTRY.json schema mismatch: expected {EXPECTED_SCHEMA}, got {schema}"
+            "MCP_TOOL_REGISTRY.json schema mismatch: expected {EXPECTED_SCHEMA} or {EXPECTED_SCHEMA_V2}, got {schema}"
         ));
-    }
-
-    let keys: Vec<String> = root
-        .get("keys")
-        .and_then(|v| v.as_array())
-        .ok_or("MCP_TOOL_REGISTRY.json missing 'keys' array")?
-        .iter()
-        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-        .collect();
-
-    if keys.is_empty() {
-        return Err("MCP_TOOL_REGISTRY.json has empty 'keys' array".to_string());
     }
 
     let tools = root
@@ -52,11 +43,41 @@ pub fn load_tool_records(registry_path: &Path) -> Result<Vec<McpToolRecord>, Str
         .and_then(|v| v.as_array())
         .ok_or("MCP_TOOL_REGISTRY.json missing 'tools' array")?;
 
-    tools
-        .iter()
-        .enumerate()
-        .map(|(idx, tool)| parse_tool_record(tool, &keys, idx))
-        .collect::<Result<Vec<_>, _>>()
+    if tools.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Auto-detect format: object → v2 (direct serde), array → v1 (columnar)
+    match &tools[0] {
+        Value::Object(_) => tools
+            .iter()
+            .enumerate()
+            .map(|(idx, tool)| {
+                serde_json::from_value::<McpToolRecord>(tool.clone())
+                    .map_err(|e| format!("tool record at index {idx} is invalid: {e}"))
+            })
+            .collect(),
+        Value::Array(_) => {
+            let keys: Vec<String> = root
+                .get("keys")
+                .and_then(|v| v.as_array())
+                .ok_or("MCP_TOOL_REGISTRY.json missing 'keys' array")?
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect();
+            if keys.is_empty() {
+                return Err("MCP_TOOL_REGISTRY.json has empty 'keys' array".to_string());
+            }
+            tools
+                .iter()
+                .enumerate()
+                .map(|(idx, tool)| parse_tool_record(tool, &keys, idx))
+                .collect::<Result<Vec<_>, _>>()
+        }
+        _ => Err(
+            "MCP_TOOL_REGISTRY.json 'tools' entries must be arrays or objects".to_string(),
+        ),
+    }
 }
 
 /// Cache entry: the loaded records plus when they were loaded.
@@ -136,15 +157,42 @@ fn parse_tool_record(row: &Value, keys: &[String], index: usize) -> Result<McpTo
     };
 
     for (i, key) in keys.iter().enumerate() {
+        // Handle input_schema (JSON object) before string-based val extraction,
+        // because the object value would trigger a `continue` in the val match
+        // below (non-string branch), skipping the handler entirely.
+        if key == "input_schema" {
+            if let Some(obj) = arr.get(i).and_then(|v| v.as_object()) {
+                record.input_schema_json = Some(crate::tool_types::McpToolInputSchema {
+                    schema_type: obj
+                        .get("type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("object")
+                        .to_string(),
+                    properties: obj
+                        .get("properties")
+                        .and_then(|v| v.as_object())
+                        .cloned()
+                        .unwrap_or_default(),
+                    required: obj
+                        .get("required")
+                        .and_then(|v| v.as_array())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                });
+            }
+            continue;
+        }
+
         let val = match arr.get(i) {
             Some(v) if v.is_string() => v.as_str().unwrap_or(""),
             Some(v) => {
-                // For non-string values: check if this is input_schema (which is an object)
-                if key == "input_schema" {
-                    // Handle below as a special case
-                    continue;
-                }
-                tracing::warn!("[mcp-tool-registry warning] tool record at index {index}, key '{key}': expected string, got {v}");
+                tracing::warn!(
+                    "[mcp-tool-registry warning] tool record at index {index}, key '{key}': expected string, got {v}"
+                );
                 ""
             }
             None => "",
@@ -167,35 +215,8 @@ fn parse_tool_record(row: &Value, keys: &[String], index: usize) -> Result<McpTo
             "tool_flags" => {
                 record.tool_flags = parse_string_array(arr.get(i));
             }
-            "input_schema" => {
-                if let Some(obj) = arr.get(i).and_then(|v| v.as_object()) {
-                    let schema_type = obj
-                        .get("type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("object")
-                        .to_string();
-                    let properties = obj
-                        .get("properties")
-                        .and_then(|v| v.as_object())
-                        .cloned()
-                        .unwrap_or_default();
-                    let required = obj
-                        .get("required")
-                        .and_then(|v| v.as_array())
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    record.input_schema_json =
-                        Some(crate::tool_types::McpToolInputSchema {
-                            schema_type,
-                            properties,
-                            required,
-                        });
-                }
-            }
+            // input_schema is handled above before the val match
+            "input_schema" => unreachable!(),
             _ => {}
         }
     }
