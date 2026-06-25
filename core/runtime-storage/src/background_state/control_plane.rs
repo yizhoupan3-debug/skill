@@ -3,20 +3,16 @@ use crate::{
     DEFAULT_STATE_SERVICE_AUTHORITY, DEFAULT_STATE_SERVICE_PROJECTION, DEFAULT_STATE_SERVICE_ROLE,
     runtime_backend_capabilities,
 };
+use crate::runtime_storage::backend::RuntimeBackendCapabilities;
 use serde_json::{Value, json};
 use std::path::Path;
 
 pub(super) fn backend_capabilities(
     backend_family: &str,
-) -> Result<(bool, bool, bool, bool), String> {
-    let capabilities = runtime_backend_capabilities(backend_family)
-        .map_err(|err| format!("Unsupported durable background-state backend family: {err}"))?;
-    Ok((
-        capabilities.supports_atomic_replace,
-        capabilities.supports_compaction,
-        capabilities.supports_snapshot_delta,
-        capabilities.supports_remote_event_transport,
-    ))
+) -> Result<RuntimeBackendCapabilities, String> {
+    runtime_backend_capabilities(backend_family).map_err(|err| {
+        format!("Unsupported durable background-state backend family: {err}")
+    })
 }
 
 pub(super) fn normalized_backend_family(value: &str) -> String {

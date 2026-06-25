@@ -29,8 +29,7 @@ pub enum RouterCommand {
         #[command(subcommand)]
         command: BrowserSubcommand,
     },
-    /// Codegraph MCP server (feature-gated).
-    #[cfg(feature = "codegraph")]
+    /// Codegraph MCP server (feature-gated in dispatch).
     Codegraph {
         #[command(subcommand)]
         command: CodegraphSubcommand,
