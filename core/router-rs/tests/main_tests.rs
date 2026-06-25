@@ -26,8 +26,6 @@ mod artifact_write_tests;
 mod alias_snapshot_tests;
 #[path = "main_tests/routing_tests.rs"]
 mod routing_tests;
-#[path = "main_tests/sandbox_tests.rs"]
-mod sandbox_tests;
 #[path = "main_tests/storage_tests.rs"]
 mod storage_tests;
 #[path = "main_tests/trace_tests.rs"]

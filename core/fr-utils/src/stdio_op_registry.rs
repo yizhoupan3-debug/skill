@@ -42,7 +42,6 @@ const RUNTIME_STDIO_OPS: &[&str] = &[
     "normalize_execution_kernel_contract",
     "validate_execution_kernel_steady_state_metadata",
     "decode_execution_response",
-    "sandbox_control",
     "runtime_observability_health_snapshot",
     "background_control",
     "background_state",
@@ -181,7 +180,6 @@ mod tests {
     #[test]
     fn classify_runtime_ops() {
         assert_eq!(classify_stdio_op("execute"), Some(StdioOpDomain::Runtime));
-        assert_eq!(classify_stdio_op("sandbox_control"), Some(StdioOpDomain::Runtime));
         assert_eq!(classify_stdio_op("session_supervisor"), Some(StdioOpDomain::Runtime));
     }
 

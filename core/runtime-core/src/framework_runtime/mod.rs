@@ -24,7 +24,6 @@ pub use framework_extra::orchestration_controller;
 pub use fr_contracts::pre_tool_use_guard;
 pub use framework_kernel::repo_roots;
 pub use fr_exec::runtime_view;
-pub use fr_exec::sandbox_control;
 pub mod stdio_dispatch;
 pub mod tool_handlers;
 pub use fr_utils::stdio_op_registry;
@@ -67,7 +66,6 @@ pub use repo_roots::{
     framework_root_from_executable_path, is_framework_root, resolve_repo_root_arg,
 };
 pub use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
-pub use sandbox_control::build_sandbox_control_response;
 pub use session_artifacts::write_framework_session_artifacts;
 pub use snapshot::{
     build_framework_runtime_snapshot_envelope, build_framework_runtime_snapshot_envelope_with_level,

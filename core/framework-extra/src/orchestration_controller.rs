@@ -18,7 +18,7 @@ use routing_engine::route::ROUTE_AUTHORITY;
 use fr_utils::constants::{
     FRAMEWORK_RUNTIME_AUTHORITY, RUNTIME_BACKGROUND_ORCHESTRATION_SCHEMA_VERSION,
     RUNTIME_EVENT_HANDOFF_SCHEMA_VERSION, RUNTIME_EVENT_SINK_SCHEMA_VERSION,
-    RUNTIME_EVENT_STREAM_SCHEMA_VERSION, RUNTIME_SANDBOX_LIFECYCLE_SCHEMA_VERSION,
+    RUNTIME_EVENT_STREAM_SCHEMA_VERSION,
 };
 use rt_storage::runtime_envelope_ids::{
     BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION,
@@ -29,7 +29,6 @@ use rt_storage::runtime_envelope_ids::{
     RUNTIME_OBSERVABILITY_METRIC_CATALOG_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_METRIC_CATALOG_VERSION,
     RUNTIME_OBSERVABILITY_METRIC_RECORD_SCHEMA_VERSION, RUNTIME_OBSERVABILITY_SIGNAL_VOCABULARY,
-    SANDBOX_EVENT_SCHEMA_VERSION,
 };
 use rt_storage::runtime_storage::{
     runtime_backend_family_catalog_payload, runtime_backend_family_parity_payload,
@@ -673,48 +672,6 @@ pub fn build_runtime_control_plane_payload() -> Value {
             "kernel_live_delegate_mode": "rust-primary",
             "kernel_mode_support": ["dry_run", "live"],
             "execution_schema_version": EXECUTION_SCHEMA_VERSION,
-            "sandbox_lifecycle_contract": {
-                "schema_version": RUNTIME_SANDBOX_LIFECYCLE_SCHEMA_VERSION,
-                "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
-                "role": "sandbox-lifecycle-control",
-                "projection": "rust-native-projection",
-                "delegate_kind": "rust-runtime-control-plane",
-                "lifecycle_states": [
-                    "created",
-                    "warm",
-                    "busy",
-                    "draining",
-                    "recycled",
-                    "failed"
-                ],
-                "allowed_transitions": [
-                    ["busy", "draining"],
-                    ["busy", "failed"],
-                    ["created", "warm"],
-                    ["draining", "failed"],
-                    ["draining", "recycled"],
-                    ["recycled", "warm"],
-                    ["warm", "busy"],
-                    ["warm", "failed"]
-                ],
-                "capability_categories": [
-                    "read_only",
-                    "workspace_mutating",
-                    "networked",
-                    "high_risk"
-                ],
-                "cleanup_mode": "async-drain-and-recycle",
-                "event_log_artifact": "runtime_sandbox_events.jsonl",
-                "event_schema_version": SANDBOX_EVENT_SCHEMA_VERSION,
-                "event_tracing": {
-                    "request_flag": "trace_event",
-                    "path_field": "event_log_path",
-                    "response_flag": "event_written",
-                    "effective_capabilities_field": "effective_capabilities"
-                },
-                "control_operations": ["transition", "cleanup", "admit", "execution_result"],
-                "runtime_probe_dimensions": ["cpu", "memory", "wall_clock", "output_size"],
-            },
         },
         "background": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,
@@ -954,16 +911,8 @@ fn runtime_observability_metric_catalog() -> Vec<Value> {
             "metric_name": "runtime.compression_offload_total",
             "metric_type": "counter",
             "unit": "1",
-            "base_dimensions": base_dimensions.clone(),
-            "dashboard_derivation": "rate(compression_offload_total) / rate(compression_candidate_total)",
-        }),
-        json!({
-            "intent": "sandbox timeout rate",
-            "metric_name": "runtime.sandbox_timeout_total",
-            "metric_type": "counter",
-            "unit": "1",
             "base_dimensions": base_dimensions,
-            "dashboard_derivation": "rate(sandbox_timeout_total) / rate(sandbox_execution_total)",
+            "dashboard_derivation": "rate(compression_offload_total) / rate(compression_candidate_total)",
         }),
     ]
 }
@@ -1084,12 +1033,6 @@ pub fn runtime_observability_dashboard_schema() -> Value {
                 "visualization": "timeseries",
                 "group_by": ["service.name", "service.version", "runtime.generation"],
             },
-            {
-                "name": "Sandbox timeout rate",
-                "metric": "runtime.sandbox_timeout_total",
-                "visualization": "timeseries",
-                "group_by": ["service.name", "service.version", "runtime.worker_id"],
-            }
         ],
         "alerts": [
             {
@@ -1102,11 +1045,6 @@ pub fn runtime_observability_dashboard_schema() -> Value {
                 "metric": "runtime.lease_takeover_latency_ms",
                 "severity": "critical",
             },
-            {
-                "name": "sandbox-timeout-spike",
-                "metric": "runtime.sandbox_timeout_total",
-                "severity": "warning",
-            }
         ],
     })
 }

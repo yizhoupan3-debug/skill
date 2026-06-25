@@ -58,8 +58,6 @@ pub const HOOK_EVIDENCE_APPEND_SCHEMA_VERSION: &str = "router-rs-hook-evidence-a
 pub const NEXT_ACTIONS_SCHEMA_VERSION: &str = "next-actions-v2";
 /// Framework alias state machine schema — used by `framework-extra/src/alias.rs`.
 pub const FRAMEWORK_ALIAS_STATE_MACHINE_SCHEMA_VERSION: &str = "framework-alias-state-machine-v1";
-/// Runtime sandbox lifecycle schema — used by `framework-extra/src/orchestration_controller.rs`.
-pub const RUNTIME_SANDBOX_LIFECYCLE_SCHEMA_VERSION: &str = "runtime-sandbox-lifecycle-v1";
 /// Runtime background orchestration schema — used by `framework-extra/src/orchestration_controller.rs`.
 pub const RUNTIME_BACKGROUND_ORCHESTRATION_SCHEMA_VERSION: &str =
     "runtime-background-orchestration-v1";

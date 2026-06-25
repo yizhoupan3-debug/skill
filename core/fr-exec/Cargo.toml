@@ -2,7 +2,7 @@
 name = "fr-exec"
 version = "0.1.0"
 edition = "2024"
-description = "L3 execution: live execute, sandbox, runtime view, trace, env flags"
+description = "L3 execution: live execute, runtime view, trace, env flags"
 [lints]
 workspace = true
 

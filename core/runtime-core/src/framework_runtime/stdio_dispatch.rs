@@ -52,7 +52,7 @@ use crate::runtime_storage::{
 };
 use crate::session_supervisor::handle_session_supervisor_operation;
 use crate::stdio_payload_types::{
-    BackgroundControlRequestPayload, ExecuteRequestPayload, SandboxControlRequestPayload,
+    BackgroundControlRequestPayload, ExecuteRequestPayload,
     TraceCompactionDeltaWriteRequestPayload, TraceMetadataWriteRequestPayload,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
 };
@@ -79,7 +79,6 @@ use framework_extra::prompt_compression::build_framework_prompt_compression_enve
 use framework_extra::content_store::ContentStore;
 use framework_extra::prompt_resolver::PromptResolver;
 use framework_extra::orchestration_controller::build_runtime_observability_health_snapshot;
-use fr_exec::sandbox_control::build_sandbox_control_response;
 use fr_contracts::pre_tool_use_guard::evaluate_pre_tool_use_guard_value;
 use framework_kernel::repo_roots::resolve_repo_root_arg;
 use framework_extra::session_artifacts::write_framework_session_artifacts;
@@ -261,11 +260,6 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
             let dry_run = payload.get("dry_run").and_then(Value::as_bool);
             decode_execution_response_value(execution_payload, kernel_contract, dry_run).map_err(Into::into)
         }
-        "sandbox_control" => parse_and_dispatch::<SandboxControlRequestPayload, _, _>(
-            payload,
-            "sandbox control",
-            build_sandbox_control_response,
-        ),
         "runtime_observability_health_snapshot" => {
             serialize_payload(build_runtime_observability_health_snapshot(), "runtime observability health snapshot")
         }

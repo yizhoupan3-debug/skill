@@ -531,31 +531,6 @@ fn runtime_control_plane_payload_is_rust_owned() {
         Value::String("rust-execution-cli".to_string())
     );
     assert_eq!(
-        payload["services"]["execution"]["sandbox_lifecycle_contract"]["schema_version"],
-        Value::String("runtime-sandbox-lifecycle-v1".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["sandbox_lifecycle_contract"]["cleanup_mode"],
-        Value::String("async-drain-and-recycle".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["sandbox_lifecycle_contract"]["control_operations"][1],
-        Value::String("cleanup".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["sandbox_lifecycle_contract"]["control_operations"][2],
-        Value::String("admit".to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["sandbox_lifecycle_contract"]["event_schema_version"],
-        Value::String(SANDBOX_EVENT_SCHEMA_VERSION.to_string())
-    );
-    assert_eq!(
-        payload["services"]["execution"]["sandbox_lifecycle_contract"]["event_tracing"]
-            ["response_flag"],
-        Value::String("event_written".to_string())
-    );
-    assert_eq!(
         payload["services"]["checkpoint"]["delegate_kind"],
         Value::String("filesystem-checkpointer".to_string())
     );

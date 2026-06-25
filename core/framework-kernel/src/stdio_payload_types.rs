@@ -85,55 +85,6 @@ pub struct BackgroundControlRequestPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SandboxControlRequestPayload {
-    pub schema_version: String,
-    pub operation: String,
-    pub sandbox_id: Option<String>,
-    pub profile_id: Option<String>,
-    pub current_state: Option<String>,
-    pub next_state: Option<String>,
-    pub cleanup_failed: Option<bool>,
-    pub tool_category: Option<String>,
-    pub capability_categories: Option<Vec<String>>,
-    pub dedicated_profile: Option<bool>,
-    pub budget_cpu: Option<f64>,
-    pub budget_memory: Option<i64>,
-    pub budget_wall_clock: Option<f64>,
-    pub budget_output_size: Option<i64>,
-    pub probe_cpu: Option<f64>,
-    pub probe_memory: Option<i64>,
-    pub probe_wall_clock: Option<f64>,
-    pub probe_output_size: Option<i64>,
-    pub error_kind: Option<String>,
-    pub event_log_path: Option<String>,
-    pub trace_event: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SandboxControlResponsePayload {
-    pub schema_version: String,
-    pub authority: String,
-    pub operation: String,
-    pub current_state: Option<String>,
-    pub next_state: Option<String>,
-    pub allowed: bool,
-    pub resolved_state: Option<String>,
-    pub reason: String,
-    pub error: Option<String>,
-    pub failure_reason: Option<String>,
-    pub budget_violation: Option<String>,
-    pub cleanup_required: Option<bool>,
-    pub quarantined: Option<bool>,
-    pub effective_capabilities: Option<Vec<String>>,
-    pub sandbox_id: Option<String>,
-    pub profile_id: Option<String>,
-    pub event_schema_version: Option<String>,
-    pub event_log_path: Option<String>,
-    pub event_written: bool,
-    pub event_kind: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackgroundControlEffectPlanPayload {
     pub next_step: String,
     pub terminal_status: Option<String>,
@@ -563,41 +514,6 @@ mod tests {
             serde_json::from_str(&json_str).unwrap();
         assert_eq!(back.operation, "checkpoint");
         assert_eq!(back.multitask_strategy.as_deref(), Some("parallel"));
-    }
-
-    // ── SandboxControlResponsePayload round-trip ──
-
-    #[test]
-    fn sandbox_control_response_payload_round_trip() {
-        let payload = SandboxControlResponsePayload {
-            schema_version: "v1".into(),
-            authority: "supervisor".into(),
-            operation: "start".into(),
-            current_state: Some("created".into()),
-            next_state: Some("running".into()),
-            allowed: true,
-            resolved_state: None,
-            reason: "ok".into(),
-            error: None,
-            failure_reason: None,
-            budget_violation: None,
-            cleanup_required: None,
-            quarantined: None,
-            effective_capabilities: None,
-            sandbox_id: None,
-            profile_id: None,
-            event_schema_version: None,
-            event_log_path: None,
-            event_written: false,
-            event_kind: None,
-        };
-        let json = serde_json::to_value(&payload).unwrap();
-        assert_eq!(json["allowed"], true);
-        assert_eq!(json["reason"], "ok");
-        let back: SandboxControlResponsePayload =
-            serde_json::from_value(json).unwrap();
-        assert_eq!(back.operation, "start");
-        assert!(back.allowed);
     }
 
     // ── TraceMetadataWriteRequestPayload with defaults ──

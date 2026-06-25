@@ -1049,7 +1049,6 @@
       "normalize_execution_kernel_contract",
       "validate_execution_kernel_steady_state_metadata",
       "decode_execution_response",
-      "sandbox_control",
       "runtime_observability_health_snapshot",
       "background_control",
       "background_state",

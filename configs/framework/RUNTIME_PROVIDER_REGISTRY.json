@@ -152,7 +152,6 @@
         "fallback_accept",
         "skill_load_failure",
         "eval_drift",
-        "sandbox_timeout",
         "replay_resume"
       ],
       "outputs": [

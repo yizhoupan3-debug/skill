@@ -15,7 +15,6 @@ pub(super) use std::time::{Duration, SystemTime, UNIX_EPOCH};
 // when this file lived at the crate-root test module level).
 pub(super) use crate::cli::route_task_with_manifest_fallback;
 pub(super) use crate::cli::args::{
-    BackgroundControlRequestPayload, SandboxControlRequestPayload,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
 };
 pub(super) use crate::route::ROUTE_REPORT_SCHEMA_VERSION;
