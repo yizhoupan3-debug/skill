@@ -5,7 +5,7 @@ allowed_tools:
 - python
 approval_required_tools:
 - git push
-description: Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.
+description: Run the safe Git review-fix-tidy-commit-branch-merge workflow end to end (no default push).
 metadata:
   platforms:
   - supported
@@ -25,7 +25,7 @@ routing_layer: L2
 routing_owner: owner
 routing_priority: P1
 session_start: n/a
-short_description: Run the Git closeout workflow with deep review on the substantive diff before commit/merge/push.
+short_description: Run the Git closeout workflow with deep review on the substantive diff before commit/merge (no default push).
 source: runtime
 trigger_hints:
 - /gitx
@@ -52,12 +52,12 @@ trigger_hints:
 
 ## Default contract
 
-把 **`/gitx`**（与 **`/gitx plan`** 等价）视为用户对当前仓库发出的“安全一条龙收口”授权；**默认在完成诊断与提交面厘清之后、执行面向收口的 commit/merge/push 之前**，必须满足下文 **深度 review checklist**（含实质性 diff、回归向量、验证记录），而非“浅扫一眼就上提交”。默认目标是：
+把 **`/gitx`**（与 **`/gitx plan`** 等价）视为用户对当前仓库发出的“安全一条龙收口”授权；**默认在完成诊断与提交面厘清之后、执行面向收口的 commit/merge 之前**，必须满足下文 **深度 review checklist**（含实质性 diff、回归向量、验证记录），而非“浅扫一眼就上提交”。默认目标是：
 
 1. 先看清真实 Git 状态，而不是直接提交
 2. 提交边界可读之后：先 **深度 review**（checklist），再 fix 与验证
-3. 先整理脏改动和 worktree，再决定怎么提交或合并分支
-4. 最后把应该推送的分支安全推上去（默认直接执行，不再二次询问）
+3. 先整理脏改动和 worktree，再决定怎么提交或合并分支；
+   commit/merge 为止，不默认推送
 
 如果当前目录不是 Git 仓库，不要擅自初始化；直接说明不是仓库并停下。
 
@@ -109,7 +109,7 @@ trigger_hints:
    - 先做手动 checkpoint：保存 `git diff`、`git diff --staged`、必要的 untracked 清单到 `artifacts/ops/`
    - 不要直接在混乱状态下提交
 4. 对待提交改动做 **深度 review**（默认必做，顺序见上文 **Review 深度**）：
-   - 按 **深度 review checklist** 逐项落实后再推进 commit/push（实质性 diff / 回归向量 / 风险与验证记录）
+   - 按 **深度 review checklist** 逐项落实后再推进 commit/merge（实质性 diff / 回归向量 / 风险与验证记录）
    - 发现问题时先修复再继续
 5. 能并行的面尽量放在收口前半段：
    - 只读审计可以并行看：status / worktree / stash / hooks / reflog
@@ -134,6 +134,7 @@ trigger_hints:
    - 用清晰提交信息提交
    - 若工作在 topic/worktree 分支上，优先用 `git merge --ff-only` 路线合并回目标分支
 12. 推送：
+   - 仅在用户明确要求推送时执行（不默认推送）
    - 推送前确认 upstream、ahead/behind、remote 目标
    - 用显式 remote 和 branch；不要盲推
    - 推送前征求用户确认（遵循宿主安全协议：多数宿主要求显式 push 授权）

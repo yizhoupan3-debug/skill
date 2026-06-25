@@ -959,7 +959,7 @@
       "owner",
       "none",
       "P1",
-      "Run the safe Git review-fix-tidy-commit-branch-merge-push workflow end to end.",
+      "Run the safe Git review-fix-tidy-commit-branch-merge workflow end to end (no default push).",
       "n/a",
       [
         "/gitx",
@@ -975,7 +975,7 @@
       ],
       "framework_command",
       [],
-      "Run the Git closeout workflow with deep review on the substantive diff before commit/merge/push.",
+      "Run the Git closeout workflow with deep review on the substantive diff before commit/merge (no default push).",
       null,
       null,
       null,
