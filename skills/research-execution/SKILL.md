@@ -74,7 +74,7 @@ Start by classifying the task into one or more lanes:
 
 - `experiment_design`: variables, controls, ablations, baselines, metrics, sample size, and failure criteria.
 - `math_verification`: assumptions, derivation witnesses, theorem/lemma dependencies, and checker options.
-- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_quality_gate` with `external_mode=modeling` + [math-reasoning-harness.md](../../docs/architecture.md) section F.
+- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_quality_gate` with `external_mode=modeling` + [architecture.md](../../docs/architecture.md) section F.
 - `code_verification`: implementation audit, tests, deterministic repro, and benchmark commands.
 - `reproducibility`: environment, data/versioning, seeds, configs, and artifact trace.
 

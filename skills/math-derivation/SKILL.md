@@ -83,7 +83,7 @@ linear algebra proofs, and probability/measure-theoretic arguments.
 - The task is ML model math with coding focus (loss function implementation, gradient code) -> answer in the current implementation context; do not route to a retired AI/research skill
 - The task is reviewing paper-level scientific logic -> use `@lane:reviewer` logic mode
 - The task is LaTeX compilation or rendering → answer in the current context（（latex-compile-acceleration 已归档，内联处理） 已归档）
-- The user wants **multi-round** exploration of new structures, conjectures, or lemmas with parallel falsification lanes → use **`framework_quality_gate`** and [math-reasoning-harness.md](../../docs/architecture.md) §D（**not** this skill as the orchestrator); single-round derive/prove stays here.
+- The user wants **multi-round** exploration of new structures, conjectures, or lemmas with parallel falsification lanes → use **`framework_quality_gate`** and [architecture.md](../../docs/architecture.md) §D（**not** this skill as the orchestrator); single-round derive/prove stays here.
 - The user wants **mathematical modeling** (formulate ODE/PDE/closure, scaling, regimes) or **deep math background** for unknown properties → use [`$research-discovery`](../../skills/research-discovery/SKILL.md) (`math_modeling` / `math_background_inquiry`) → RFV §F–G; use this skill only for deriving a specific equation or proof step once the model is fixed.
 
 ## Derivation workflow

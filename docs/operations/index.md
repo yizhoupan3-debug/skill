@@ -1,5 +1,5 @@
 ---
-last_verified: "2026-06-22"
+last_verified: "2026-06-26"
 scope: modular-ops
 depends_on:
   - ../README.md
@@ -69,7 +69,7 @@ cargo run --release --manifest-path core/router-rs/Cargo.toml -- browser mcp-std
 
 ### B10 — codegraph
 
-代码图谱索引（`tools/codegraph-rs/`），MCP 八工具：search / callers / callees / impact / node / status / dead_code / goto_definition。
+代码图谱索引（`core/codegraph-rs/`），MCP 八工具：search / callers / callees / impact / node / status / dead_code / goto_definition。
 
 ```bash
 cargo build --release --manifest-path core/router-rs/Cargo.toml --features codegraph

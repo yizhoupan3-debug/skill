@@ -1,3 +1,7 @@
+---
+last_verified: "2026-06-26"
+---
+
 # Math Reasoning Harness
 
 数学验证工具链 — ResearchHarness 的形式化验证后端。

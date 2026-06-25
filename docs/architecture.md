@@ -45,15 +45,12 @@ L0 hook 事件到来 ──────────→ hooks 方法调用 → L4
 |----|------|-----------|
 | L7 | Bridge / Dispatch — stdio 分发、聚合 facade | `runtime-core`, `router-rs` |
 | L6 | Orchestration — RFV 闭环、可选自动化 | `loop-engine`, `session-supervisor`, `framework-extra` |
-| L5 | Hook Infrastructure — 事件路由、MCP 桥、fn-pointer 消费 | `host-projection`, `runtime-exit-gate`, `runtime-infra`, `mcp-tool-registry`, `runtime-core-contracts` |
+| L5 | Hook Infrastructure — 事件路由、MCP 桥、fn-pointer 消费 | `host-projection`, `runtime-exit-gate`, `runtime-infra`, `mcp-tool-registry` |
 | L4 | State Management — Task Engine、路由、skill-layer | `core-state`, `routing-engine`, `skill-layer` |
-| L3 | Execution — LLM 实时执行、沙箱 | `fr-exec`, `browser-mcp`, `framework-runtime`(facade) |
+| L3 | Execution — LLM 实时执行、沙箱 | `fr-exec`, `browser-mcp` |
 | L2 | Contracts — 验证规则、守卫合约、纯类型 | `fr-contracts`, `core-state-types`, `runtime-core-contracts` |
 | L1 | IO & Persistence — 存储后端、trace | `fr-utils`, `runtime-storage`, `trace-runtime` |
 | L0 | Kernel — 纯抽象、策略规则、fn-pointer 注册表 | `framework-kernel`, `core-policy`, `core-state-utils`, `framework-runtime-hooks`, `telemetry-types`, `http-util` |
-
-
-
 
 ---
 
@@ -88,7 +85,6 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | L5 | `runtime-exit-gate` | Quality gate RFV 循环 |
 | L5 | `runtime-infra` | 运行时初始化、基础 API 门面 |
 | L5 | `mcp-tool-registry` | 统一 MCP 工具注册表 |
-| L5 | `runtime-core-contracts` | L2 定义被 L5 消费 |
 | L5 | `eval-route` | 路由评估框架：validate routing decisions against expected outcomes |
 | L5 | `research-harness` | 科研 Harness：paper revision loop、literature search、claims mgmt（§5.1） |
 | L4 | `core-state` | Task 状态机与 Goal/RFV（组件表见下） |
@@ -100,7 +96,7 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | L3 | `browser-mcp` (tools/) | 浏览器自动化 MCP 服务 |
 | L2 | `fr-contracts` | Closeout 验证、执行合约、pre-tool-use 守卫 |
 | L2 | `core-state-types` | 纯类型定义，零内部依赖 |
-| L2 | `runtime-core-contracts` | Hook 事件路由、观测、出站保护 |
+| L2 | `runtime-core-contracts` | Hook 事件路由、观测、出站保护；被 L5+ crates 消费
 | L1 | `fr-utils` | JSON/IO 工具、stdio 操作域注册 |
 | L1 | `runtime-storage` | 文件系统/SQLite/内存后端、路径解析 |
 | L1 | `trace-runtime` | Trace 录制与压紧 |

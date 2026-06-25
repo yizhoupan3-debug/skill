@@ -1,6 +1,6 @@
 # Research Harness
 
-Unified research harness crate for the skill framework. Integrates paper revision loop, literature search, claims management, AIGC detection/reduction, verification pipelines, research logging, and **LaTeX math formula parsing/rendering**.
+Unified research harness crate for the skill framework. Integrates paper revision loop, literature search, claims management, AIGC detection/reduction, verification pipelines, and research logging.
 
 ## Modules
 
@@ -66,8 +66,8 @@ The `latex` module **does not replace** existing `citation/audit.rs`, `citation/
 - `research_review_dimensions` — 获取审稿维度 prompt + checklist
 - `research_aigc_check` — AIGC 检测（0-100 评分 + 信号列表）
 - `research_aigc_humanize` — AIGC 降重（句法改写/词汇替换）
-- `research_latex_parse` — LaTeX 数学公式 AST 解析
-- `research_latex_render_svg` — LaTeX 公式渲染为 SVG（支持内联/独立模式）
+- `research_claim_drift` — Claim 漂移检测（原始 vs 当前声明）
+- `research_review_loop` — 多轮对抗审稿循环
 
 ## 向后兼容
 
