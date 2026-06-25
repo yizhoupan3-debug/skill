@@ -29,7 +29,7 @@ pub fn run(args: &args::Cli) -> Result<(), String> {
         return dispatch::dispatch_router_command(command);
     }
     if args.stdio_json {
-        return runtime_core::stdio_transport::run_stdio_json_loop(args.stdio_max_concurrency);
+        return Ok(runtime_core::stdio_transport::run_stdio_json_loop(args.stdio_max_concurrency)?);
     }
     Err("missing router-rs command; use `router-rs --help` for canonical subcommands".to_string())
 }

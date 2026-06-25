@@ -11,7 +11,6 @@
 
 use crate::types::{VerificationResult, VerificationStatus};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // ===========================================================================
 // Core types
@@ -332,7 +331,7 @@ pub fn verify_asymptotic_chain_with_name(steps: &[AsymptoticStep], var: &str, re
             check_name: check_name.to_string(),
             status: VerificationStatus::Pass,
             details: format!("Pure chain ({} steps): all {} relations are consistent",
-                steps.len(), chain.unique_relations().join(", ")),
+                steps.len(), chain.unique_relations().iter().map(|r| format!("{r:?}")).collect::<Vec<_>>().join(", ")),
             evidence_path: None,
         }
     }

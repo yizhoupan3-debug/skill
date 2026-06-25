@@ -9,6 +9,20 @@ use clap::Parser;
 /// Wire browser-mcp dispatch hooks between core/browser-mcp-dispatch and tools/browser-mcp.
 /// Called once at startup before any `router-rs browser` CLI command.
 fn init_browser_mcp_dispatch() {
+    // Wrapper functions to convert FrameworkError -> String for the BrowserMcpHooks struct.
+    fn attach_runtime_event_transport_wrapper(
+        v: serde_json::Value,
+    ) -> std::result::Result<serde_json::Value, String> {
+        Ok(host_projection::hooks::attach_runtime_event_transport(v)?)
+    }
+    fn inspect_trace_stream_wrapper(
+        req: framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
+    ) -> std::result::Result<
+        framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload,
+        String,
+    > {
+        Ok(host_projection::hooks::inspect_trace_stream(req)?)
+    }
     browser_mcp_dispatch::set_hooks(browser_mcp_dispatch::BrowserMcpHooks {
         evaluate_mcp_pre_guard: |tool, args, repo| {
             let v = host_projection::hooks::evaluate_mcp_pre_guard_safe(tool, args, repo);
@@ -17,12 +31,12 @@ fn init_browser_mcp_dispatch() {
                 reason: v.reason,
             }
         },
-        attach_runtime_event_transport: host_projection::hooks::attach_runtime_event_transport,
-        inspect_trace_stream: host_projection::hooks::inspect_trace_stream,
+        attach_runtime_event_transport: attach_runtime_event_transport_wrapper,
+        inspect_trace_stream: inspect_trace_stream_wrapper,
     });
     // Adapter: browser-mcp returns anyhow::Error; dispatch hook expects String.
     host_projection::hooks::set_browser_dispatch(|cmd| {
-        browser_mcp::dispatch_browser_command(cmd).map_err(|e| e.to_string())
+        Ok(browser_mcp::dispatch_browser_command(cmd).map_err(|e| e.to_string())?)
     });
 }
 

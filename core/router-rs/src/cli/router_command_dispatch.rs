@@ -668,7 +668,7 @@ pub fn dispatch_codegraph_command(command: CodegraphSubcommand) -> Result<(), St
 }
 
 pub fn dispatch_browser_command(command: BrowserSubcommand) -> Result<(), String> {
-    hooks::dispatch_browser_command(command)
+    Ok(hooks::dispatch_browser_command(command)?)
 }
 
 pub fn dispatch_profile_command(command: ProfileSubcommand) -> Result<(), String> {

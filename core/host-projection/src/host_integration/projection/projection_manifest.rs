@@ -248,18 +248,32 @@ pub fn write_projection_manifest(
     )
 }
 
-pub fn cursor_mcp_config_path(roots: &ResolvedProjectionRoots) -> std::result::Result<PathBuf, String> {
-    Ok(roots
-        .host_home_root("cursor")
-        .ok_or_else(|| "cursor host must be registered in projection roots".to_string())?
-        .join("mcp.json"))
+pub fn mcp_config_path(roots: &ResolvedProjectionRoots, host_id: &str, scope: &str) -> std::result::Result<PathBuf, String> {
+    if host_id == "cursor" {
+        Ok(roots
+            .host_home_root("cursor")
+            .ok_or_else(|| "cursor host must be registered in projection roots".to_string())?
+            .join("mcp.json"))
+    } else {
+        let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, scope);
+        if rel.is_empty() {
+            return Err(format!("no mcp config path for {host_id} scope {scope}"));
+        }
+        if scope == "user" {
+            roots.host_home_root(host_id)
+                .map(|h| h.join(rel))
+                .ok_or_else(|| format!("{host_id} host not registered"))
+        } else {
+            Ok(roots.project_root.join(rel))
+        }
+    }
 }
 
-pub fn cursor_mcp_server_key_path() -> &'static str {
+pub fn mcp_server_key_path() -> &'static str {
     "mcp_servers.browser-mcp"
 }
 
-pub fn cursor_codegraph_mcp_server_key_path() -> &'static str {
+pub fn codegraph_mcp_server_key_path() -> &'static str {
     "mcp_servers.mcp-codegraph"
 }
 
@@ -275,7 +289,7 @@ pub fn install_cursor_mcp_server(
     roots: &ResolvedProjectionRoots,
     path: &Path,
 ) -> std::result::Result<CursorMcpInstallOutcome, String> {
-    let browser_server = cursor_mcp_server_payload(roots);
+    let browser_server = mcp_server_payload(roots);
     let framework_server = host_router_rs_framework_payload(
         roots,
         "cursor",
@@ -288,7 +302,7 @@ pub fn install_cursor_mcp_server(
             .and_then(Value::as_object)
             .and_then(|servers| servers.get("browser-mcp"))
         {
-            if cursor_mcp_server_semantically_matches_framework(existing, roots) {
+            if mcp_server_semantically_matches_framework(existing, roots) {
                 let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
                 if !payload.is_object() {
                     payload = json!({});
@@ -328,7 +342,7 @@ pub fn install_cursor_mcp_server(
                     skipped_user_owned: false,
                 });
             }
-            if !cursor_mcp_entry_is_framework_owned_stale(existing, &roots.framework_root) {
+            if !mcp_entry_is_framework_owned_stale(existing, &roots.framework_root) {
                 return Ok(CursorMcpInstallOutcome {
                     managed: false,
                     changed: false,
@@ -379,15 +393,15 @@ pub fn install_cursor_mcp_server(
 }
 
 /// Entries that look framework-managed but stale (ephemeral/repo-target/cargo bootstrap) may be rewritten.
-pub fn cursor_mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Path) -> bool {
-    if !cursor_browser_mcp_is_managed_shape(existing) {
+pub fn mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Path) -> bool {
+    if !browser_mcp_is_managed_shape(existing) {
         return false;
     }
     let expected_root = framework_root.to_string_lossy();
     let Some(existing_root) = existing
         .get("args")
         .and_then(Value::as_array)
-        .and_then(|args| cursor_browser_mcp_repo_root_from_args(args))
+        .and_then(|args| browser_mcp_repo_root_from_args(args))
     else {
         return false;
     };
@@ -410,7 +424,7 @@ pub fn remove_cursor_mcp_server(path: &Path, framework_root: &Path) -> std::resu
     Ok(mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_SNAKE_CASE)?)
 }
 
-pub fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String> {
+pub fn browser_mcp_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String> {
     vec![
         "browser".into(),
         "mcp-stdio".into(),
@@ -419,7 +433,7 @@ pub fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<Str
     ]
 }
 
-pub fn cursor_browser_mcp_repo_root_from_args(args: &[Value]) -> Option<String> {
+pub fn browser_mcp_repo_root_from_args(args: &[Value]) -> Option<String> {
     let str_args: Vec<&str> = args.iter().filter_map(Value::as_str).collect();
     for window in str_args.windows(2) {
         if window[0] == "--repo-root" {
@@ -429,7 +443,7 @@ pub fn cursor_browser_mcp_repo_root_from_args(args: &[Value]) -> Option<String> 
     None
 }
 
-pub fn cursor_browser_mcp_is_cargo_bootstrap_shaped(server: &Value) -> bool {
+pub fn browser_mcp_is_cargo_bootstrap_shaped(server: &Value) -> bool {
     let Some(cmd) = server.get("command").and_then(Value::as_str) else {
         return false;
     };
@@ -441,15 +455,15 @@ pub fn cursor_browser_mcp_is_cargo_bootstrap_shaped(server: &Value) -> bool {
     };
     let str_args: Vec<&str> = args.iter().filter_map(Value::as_str).collect();
     str_args.contains(&"mcp-stdio")
-        && cursor_browser_mcp_repo_root_from_args(args).is_some()
+        && browser_mcp_repo_root_from_args(args).is_some()
 }
 
-pub fn cursor_browser_mcp_is_managed_shape(server: &Value) -> bool {
-    cursor_browser_mcp_is_framework_shaped(server)
-        || cursor_browser_mcp_is_cargo_bootstrap_shaped(server)
+pub fn browser_mcp_is_managed_shape(server: &Value) -> bool {
+    browser_mcp_is_framework_shaped(server)
+        || browser_mcp_is_cargo_bootstrap_shaped(server)
 }
 
-pub fn cursor_browser_mcp_is_framework_shaped(server: &Value) -> bool {
+pub fn browser_mcp_is_framework_shaped(server: &Value) -> bool {
     let Some(args) = server.get("args").and_then(Value::as_array) else {
         return false;
     };
@@ -457,10 +471,10 @@ pub fn cursor_browser_mcp_is_framework_shaped(server: &Value) -> bool {
     str_args.len() >= 3
         && str_args[0] == "browser"
         && str_args[1] == "mcp-stdio"
-        && cursor_browser_mcp_repo_root_from_args(args).is_some()
+        && browser_mcp_repo_root_from_args(args).is_some()
 }
 
-pub fn cursor_browser_mcp_command_is_router_rs(server: &Value, framework_root: &Path) -> bool {
+pub fn browser_mcp_command_is_router_rs(server: &Value, framework_root: &Path) -> bool {
     let Some(cmd) = server.get("command").and_then(Value::as_str) else {
         return false;
     };
@@ -482,20 +496,20 @@ pub fn cursor_browser_mcp_command_is_router_rs(server: &Value, framework_root: &
         || cmd.ends_with("\\router-rs")
 }
 
-pub fn cursor_mcp_server_semantically_matches_framework(
+pub fn mcp_server_semantically_matches_framework(
     existing: &Value,
     roots: &ResolvedProjectionRoots,
 ) -> bool {
-    if existing == &cursor_mcp_server_payload(roots) {
+    if existing == &mcp_server_payload(roots) {
         return true;
     }
-    if !cursor_browser_mcp_is_framework_shaped(existing) {
+    if !browser_mcp_is_framework_shaped(existing) {
         return false;
     }
     let Some(existing_root) = existing
         .get("args")
         .and_then(Value::as_array)
-        .and_then(|args| cursor_browser_mcp_repo_root_from_args(args))
+        .and_then(|args| browser_mcp_repo_root_from_args(args))
     else {
         return false;
     };
@@ -503,11 +517,11 @@ pub fn cursor_mcp_server_semantically_matches_framework(
     if existing_root != expected_root {
         return false;
     }
-    cursor_browser_mcp_command_is_router_rs(existing, &roots.framework_root)
+    browser_mcp_command_is_router_rs(existing, &roots.framework_root)
 }
 
-pub fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
-    let args = cursor_mcp_browser_stdio_args(roots);
+pub fn mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
+    let args = browser_mcp_stdio_args(roots);
     match resolve_mcp_router_rs_command(&roots.framework_root) {
         McpRouterRsCommand::CargoBootstrap => json!({
             "command": "cargo",
@@ -525,11 +539,11 @@ pub fn cursor_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     }
 }
 
-pub fn cursor_router_rs_framework_key_path() -> &'static str {
+pub fn router_rs_framework_key_path() -> &'static str {
     "mcp_servers.router-rs-framework"
 }
 
-pub fn cursor_paperplain_mcp_server_key_path() -> &'static str {
+pub fn paperplain_mcp_server_key_path() -> &'static str {
     "mcp_servers.paperplain"
 }
 
@@ -548,7 +562,7 @@ pub fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> std:
         .unwrap_or(false))
 }
 
-pub fn cursor_mcp_server_matches_framework(
+pub fn mcp_server_matches_framework(
     roots: &ResolvedProjectionRoots,
     path: &Path,
 ) -> std::result::Result<Option<bool>, String> {
@@ -562,12 +576,12 @@ pub fn cursor_mcp_server_matches_framework(
     let Some(server) = actual else {
         return Ok(None);
     };
-    Ok(Some(cursor_mcp_server_semantically_matches_framework(
+    Ok(Some(mcp_server_semantically_matches_framework(
         server, roots,
     )))
 }
 
-pub fn cursor_mcp_server_exists(path: &Path) -> std::result::Result<bool, String> {
+pub fn mcp_server_exists(path: &Path) -> std::result::Result<bool, String> {
     let Some(payload) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -578,26 +592,7 @@ pub fn cursor_mcp_server_exists(path: &Path) -> std::result::Result<bool, String
         .is_some())
 }
 
-// ── Claude Code MCP Server ──────────────────────────────────────────────────
-
-pub fn claude_mcp_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
-    if scope == "user" {
-        let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(
-            "claude",
-            "user",
-        );
-        roots
-            .host_home_root("claude")
-            .map(|h| h.join(rel))
-            .unwrap_or_else(|| roots.account_home_root.join(rel))
-    } else {
-        let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(
-            "claude",
-            "project",
-        );
-        roots.project_root.join(rel)
-    }
-}
+// ── MCP Server (shared across hosts) ──────────────────────────────────────────
 
 pub fn install_claude_mcp_server(
     roots: &ResolvedProjectionRoots,

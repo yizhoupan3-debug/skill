@@ -61,6 +61,8 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         RouterCommand::Browser { command } => dispatch_browser_command(command),
         #[cfg(feature = "codegraph")]
         RouterCommand::Codegraph { command } => dispatch_codegraph_command(command),
+        #[cfg(not(feature = "codegraph"))]
+        RouterCommand::Codegraph { .. } => Err("codegraph feature not enabled; rebuild with --features codegraph".to_string()),
         RouterCommand::Diagnose { command } => dispatch_diagnose_command(command),
         RouterCommand::Migrate { command } => dispatch_migrate_command(command),
         RouterCommand::HookPolicy { command } => dispatch_hook_policy_command(command),

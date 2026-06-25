@@ -155,7 +155,7 @@ pub fn cursor_projection_status(
         validate_mcp_servers_from_json(roots, config_payload.as_ref(), "mcp_servers");
     let all_valid = mcp_valid;
     let first_error = if !mcp_exists {
-        Some("~/.cursor/mcp.json does not exist".to_string())
+        Some(format!("~/.{host_id}/mcp.json does not exist"))
     } else {
         mcp_error
     };
@@ -302,12 +302,12 @@ pub fn remove_cursor_projection(
     }))
 }
 
-pub fn claude_project_narrative_path(roots: &ResolvedProjectionRoots) -> PathBuf {
+pub fn project_narrative_path(roots: &ResolvedProjectionRoots) -> PathBuf {
     let config_dir = framework_kernel::runtime_registry::host_private_config_dir("claude");
     roots.project_root.join(config_dir).join("CLAUDE.md")
 }
 
-pub fn claude_settings_target(
+pub fn settings_target(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     host_id: &str,
@@ -323,14 +323,15 @@ pub fn claude_settings_target(
     }
 }
 
-pub fn build_router_rs_claude_hook_command(event: &str) -> String {
+pub fn build_router_rs_hook_command(event: &str) -> String {
+    let config_dir = framework_kernel::runtime_registry::host_private_config_dir("claude");
     format!(
-        "/usr/bin/env bash -c 'ROOT=\"${{CLAUDE_PROJECT_ROOT:-$PWD}}\"; FW=\"${{SKILL_FRAMEWORK_ROOT:-$ROOT}}\"; if [[ -r \"$ROOT/.claude/router-rs-hook.env\" ]]; then set -a; . \"$ROOT/.claude/router-rs-hook.env\"; set +a; fi; exec \"$FW/configs/framework/claude-router-rs-hook.sh\" {event}'",
+        "/usr/bin/env bash -c 'ROOT=\"${{CLAUDE_PROJECT_ROOT:-$PWD}}\"; FW=\"${{SKILL_FRAMEWORK_ROOT:-$ROOT}}\"; if [[ -r \"$ROOT/{config_dir}/router-rs-hook.env\" ]]; then set -a; . \"$ROOT/{config_dir}/router-rs-hook.env\"; set +a; fi; exec \"$FW/configs/framework/claude-router-rs-hook.sh\" {event}'",
         event = event
     )
 }
 
-pub fn managed_claude_hook_entry(event: &str) -> Value {
+pub fn managed_hook_entry(event: &str) -> Value {
     json!({
         "matcher": "",
         "hooks": [{
@@ -340,7 +341,7 @@ pub fn managed_claude_hook_entry(event: &str) -> Value {
     })
 }
 
-pub fn value_contains_router_rs_claude_hook(value: &Value) -> bool {
+pub fn value_contains_router_rs_hook(value: &Value) -> bool {
     match value {
         Value::String(s) => {
             s.contains("claude-router-rs-hook.sh")
@@ -373,7 +374,7 @@ pub(super) const ALL_HOOK_EVENTS: &[&str] = &[
     "SubagentStop",
 ];
 
-pub fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value> {
+pub fn merge_settings_hooks(existing: Option<Value>) -> Result<Value> {
     let mut root = match existing {
         Some(Value::Object(map)) => map,
         Some(_) => return Err("Claude settings root must be a JSON object".to_string().into()),
@@ -397,13 +398,13 @@ pub fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value> {
     Ok(Value::Object(root))
 }
 
-pub fn install_claude_settings_hooks(settings_path: &Path) -> Result<bool> {
+pub fn install_settings_hooks(settings_path: &Path) -> Result<bool> {
     let existing = read_json_if_exists(settings_path)?;
     let merged = merge_claude_settings_hooks(existing)?;
     Ok(write_json_if_changed(settings_path, &merged)?)
 }
 
-pub fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<bool> {
+pub fn install_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<bool> {
     let config_dir = framework_kernel::runtime_registry::host_private_config_dir("claude");
     let dest = roots.project_root.join(config_dir).join("router-rs-hook.env");
     if dest.is_file() {
@@ -617,7 +618,7 @@ pub struct AgentSettingsRemoval {
     removed_events: Vec<String>,
 }
 
-pub fn remove_claude_settings_hooks(
+pub fn remove_settings_hooks(
     settings_path: &Path,
     dry_run: bool,
 ) -> Result<AgentSettingsRemoval> {

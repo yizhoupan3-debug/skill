@@ -214,55 +214,62 @@ impl Blueprint {
     }
 
     fn verify_node(&mut self, node_id: &str, round: u64) -> Result<VerificationResultExt, String> {
-        let node = self.nodes.get(node_id)
-            .ok_or_else(|| format!("node {node_id} not found"))?;
+        // Extract all data from self.nodes before any mutation to avoid borrow conflicts
+        let (node_children, node_is_leaf, node_backend, is_or) = {
+            let node = self.nodes.get(node_id)
+                .ok_or_else(|| format!("node {node_id} not found"))?;
+            (
+                node.children().to_vec(),
+                node.is_leaf(),
+                node.backend().cloned(),
+                matches!(node, DagNode::OrNode { .. }),
+            )
+        };
 
-        match node {
-            DagNode::Leaf { claim, backend, .. } => {
-                // Leaf: mark as pending — actual verification requires external call
-                let status = if backend.is_automated() {
-                    VerificationStatus::Pass
-                } else {
-                    VerificationStatus::Warn
-                };
-                let result = VerificationResultExt::new(status, round);
-                self.status.insert(node_id.to_string(), result.clone());
-                Ok(result)
+        if node_is_leaf {
+            // Leaf: mark as pending — actual verification requires external call
+            let status = if node_backend.map_or(false, |b| b.is_automated()) {
+                VerificationStatus::Pass
+            } else {
+                VerificationStatus::Warn
+            };
+            let result = VerificationResultExt::new(status, round);
+            self.status.insert(node_id.to_string(), result.clone());
+            return Ok(result);
+        }
+
+        if is_or {
+            // OR: one child must pass
+            let mut best: Option<VerificationResultExt> = None;
+            for child_id in &node_children {
+                let child_result = self.verify_node(child_id, round)?;
+                if child_result.status == VerificationStatus::Pass {
+                    return Ok(VerificationResultExt::new(VerificationStatus::Pass, round));
+                }
+                best = best.or(Some(child_result));
             }
-            DagNode::OrNode { children, .. } => {
-                // OR: one child must pass
-                let mut best: Option<VerificationResultExt> = None;
-                for child_id in children {
-                    let child_result = self.verify_node(child_id, round)?;
-                    if child_result.status == VerificationStatus::Pass {
-                        return Ok(VerificationResultExt::new(VerificationStatus::Pass, round));
-                    }
-                    best = best.or(Some(child_result));
+            Ok(best.unwrap_or_else(|| VerificationResultExt::new(VerificationStatus::Fail, round)))
+        } else {
+            // AND: all must pass
+            let mut all_pass = true;
+            let mut all_skip = true;
+            let mut worst = VerificationStatus::Pass;
+            for child_id in &node_children {
+                let child_result = self.verify_node(child_id, round)?;
+                match child_result.status {
+                    VerificationStatus::Fail => { all_pass = false; worst = VerificationStatus::Fail; all_skip = false; }
+                    VerificationStatus::Warn => { worst = VerificationStatus::Warn; all_skip = false; }
+                    VerificationStatus::Skip => {}
+                    VerificationStatus::Pass => { all_skip = false; }
                 }
-                Ok(best.unwrap_or_else(|| VerificationResultExt::new(VerificationStatus::Fail, round)))
             }
-            DagNode::AndNode { children, .. } => {
-                // AND: all must pass
-                let mut all_pass = true;
-                let mut all_skip = true;
-                let mut worst = VerificationStatus::Pass;
-                for child_id in children {
-                    let child_result = self.verify_node(child_id, round)?;
-                    match child_result.status {
-                        VerificationStatus::Fail => { all_pass = false; worst = VerificationStatus::Fail; all_skip = false; }
-                        VerificationStatus::Warn => { worst = VerificationStatus::Warn; all_skip = false; }
-                        VerificationStatus::Skip => {}
-                        VerificationStatus::Pass => { all_skip = false; }
-                    }
-                }
-                if all_skip {
-                    return Ok(VerificationResultExt::new(VerificationStatus::Skip, round));
-                }
-                if all_pass {
-                    Ok(VerificationResultExt::new(VerificationStatus::Pass, round))
-                } else {
-                    Ok(VerificationResultExt::new(worst, round))
-                }
+            if all_skip {
+                return Ok(VerificationResultExt::new(VerificationStatus::Skip, round));
+            }
+            if all_pass {
+                Ok(VerificationResultExt::new(VerificationStatus::Pass, round))
+            } else {
+                Ok(VerificationResultExt::new(worst, round))
             }
         }
     }

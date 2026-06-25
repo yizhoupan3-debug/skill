@@ -523,7 +523,7 @@ pub fn default_projection_tools_for_scope(
 }
 
 
-pub fn opencode_config_path(
+pub fn resolve_mcp_config_path(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     host_id: &str,
@@ -859,7 +859,7 @@ pub fn load_host_projection_narrative(
     Ok(narrative)
 }
 
-pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Result<String> {
+pub fn render_project_narrative(roots: &ResolvedProjectionRoots) -> Result<String> {
     let narrative = load_host_projection_narrative(&roots.framework_root).map_err(|err| {
         format!(
             "host projection narrative must load before rendering claude project narrative: {err}"
@@ -911,7 +911,7 @@ pub fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path
         .unwrap_or_else(|_| path.to_string_lossy().into_owned())
 }
 
-pub fn claude_settings_hook_status(path: &Path) -> Result<Value> {
+pub fn settings_hook_status(path: &Path) -> Result<Value> {
     let payload = read_json_if_exists(path)?;
     let mut managed_events = Vec::new();
     if let Some(Value::Object(root)) = payload.as_ref()
@@ -1042,11 +1042,11 @@ fn merge_paperplain_into_mcp_servers_map(
     changed
 }
 
-fn codex_mcp_managed_marker(server_id: &str) -> String {
+fn mcp_toml_managed_marker(server_id: &str) -> String {
     format!("# managed_by: skill-framework · mcp_servers.{server_id}")
 }
 
-fn render_codex_mcp_toml_section(server_id: &str, command: &str, args: &[&str]) -> String {
+fn render_mcp_toml_section(server_id: &str, command: &str, args: &[&str]) -> String {
     let escaped_cmd = command.replace('\\', "\\\\").replace('"', "\\\"");
     let args_toml = args
         .iter()
@@ -1058,7 +1058,7 @@ fn render_codex_mcp_toml_section(server_id: &str, command: &str, args: &[&str]) 
     )
 }
 
-fn upsert_codex_mcp_toml_section(
+fn upsert_mcp_toml_section(
     path: &Path,
     server_id: &str,
     command: &str,
@@ -1101,9 +1101,13 @@ fn upsert_codex_mcp_toml_section(
     Ok(write_text_if_changed(path, &normalized)?)
 }
 
-/// Codex reads MCP from project `.codex/config.toml` (`mcp_servers.*` sections).
-pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result<bool> {
-    let path = roots.project_root.join(".codex/config.toml");
+/// Ensure MCP tool research sections exist in the project-scope TOML config.
+pub fn ensure_research_mcp_toml(
+    roots: &ResolvedProjectionRoots,
+    host_id: &str,
+) -> Result<bool> {
+    let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, "project");
+    let path = roots.project_root.join(rel);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -1111,8 +1115,10 @@ pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result
     // -- router-rs-framework --
     let framework = host_router_rs_framework_payload(
         roots,
-        "codex",
-        "Framework snapshot, skill routing, goal/closeout gating (Codex)",
+        host_id,
+        &format!(
+            "Framework snapshot, skill routing, goal/closeout gating ({host_id})"
+        ),
     );
     let fw_cmd = framework
         .get("command")
@@ -1173,9 +1179,13 @@ pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result
     Ok(changed)
 }
 
-/// Remove all managed MCP TOML sections from `.codex/config.toml`.
-pub fn remove_codex_mcp_toml_entries(roots: &ResolvedProjectionRoots) -> Result<bool> {
-    let path = roots.project_root.join(".codex/config.toml");
+/// Remove all managed MCP TOML sections from the project-scope TOML config.
+pub fn remove_research_mcp_toml_entries(
+    roots: &ResolvedProjectionRoots,
+    host_id: &str,
+) -> Result<bool> {
+    let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, "project");
+    let path = roots.project_root.join(rel);
     let managed_server_ids = registry_managed_mcp_server_ids(&roots.framework_root)?;
     let existing = read_text_if_exists(&path)?.unwrap_or_default();
     let mut result = existing.clone();
@@ -1207,7 +1217,7 @@ pub fn remove_codex_mcp_toml_entries(roots: &ResolvedProjectionRoots) -> Result<
 
 /// 始终返回 disabled 状态。Codex prompt entrypoints 功能已禁用，
 /// 保留此函数以维持接口兼容（调用方依赖返回的 JSON 结构）。
-pub fn codex_prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
+pub fn prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
     let prompt_dir = codex_dir.join("prompts");
     json!({
         "changed": false,
