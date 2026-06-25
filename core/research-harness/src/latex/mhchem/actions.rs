@@ -10,13 +10,21 @@ use regex::Regex;
 use serde_json::{json, Value};
 use std::sync::LazyLock;
 
-static RE_DIGITS_ONLY: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[0-9]+$").unwrap());
-static RE_CELSIUS_C: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\u{00B0}C|\^oC|\^\{o\}C").unwrap());
-static RE_CELSIUS_F: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\u{00B0}F|\^oF|\^\{o\}F").unwrap());
+static RE_DIGITS_ONLY: LazyLock<Regex> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
+    Regex::new(r"^[0-9]+$").expect("invalid RE_DIGITS_ONLY regex")
+});
+static RE_CELSIUS_C: LazyLock<Regex> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
+    Regex::new(r"\u{00B0}C|\^oC|\^\{o\}C").expect("invalid RE_CELSIUS_C regex")
+});
+static RE_CELSIUS_F: LazyLock<Regex> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
+    Regex::new(r"\u{00B0}F|\^oF|\^\{o\}F").expect("invalid RE_CELSIUS_F regex")
+});
 static RE_HALF: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^([0-9]+|\$[a-z]\$|[a-z])\/([0-9]+)(\$[a-z]\$|[a-z])?$").unwrap()
+    #[allow(clippy::expect_used)]
+    Regex::new(r"^([0-9]+|\$[a-z]\$|[a-z])\/([0-9]+)(\$[a-z]\$|[a-z])?$").expect("invalid RE_HALF regex")
 });
 
 pub fn apply(
@@ -243,6 +251,7 @@ fn ce_o_after_d(ctx: &ParserCtx, buffer: &mut Buffer, m: &MatchToken) -> MhchemR
         .map(|d| RE_DIGITS_ONLY.is_match(d))
         .unwrap_or(false);
     if digits_only {
+        #[allow(clippy::unwrap_used)]
         let tmp = buffer.d.take().unwrap();
         buffer.d = None;
         ret.extend(ce_output(ctx, buffer, None)?);
@@ -770,7 +779,9 @@ fn half_action(m: &MatchToken) -> MhchemResult<Vec<Value>> {
     let Some(c) = RE_HALF.captures(&s) else {
         return Ok(vec![]);
     };
+    #[allow(clippy::unwrap_used)]
     let n1 = c.get(1).unwrap().as_str().replace('$', "");
+    #[allow(clippy::unwrap_used)]
     let n2 = c.get(2).unwrap().as_str();
     ret.push(json!({"type_": "frac", "p1": n1.clone(), "p2": n2}));
     if let Some(t) = c.get(3) {

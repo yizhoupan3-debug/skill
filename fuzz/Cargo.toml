@@ -1,0 +1,38 @@
+[package]
+name = "skill-fuzz"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+fr-utils = { path = "../core/fr-utils" }
+host-projection = { path = "../core/host-projection", features = ["test-support"] }
+
+[[bin]]
+name = "mcp_stdio_parse"
+path = "fuzz_targets/mcp_stdio_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "stdio_json_line"
+path = "fuzz_targets/stdio_json_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "hook_stdin_parse"
+path = "fuzz_targets/hook_stdin_parse.rs"
+test = false
+doc = false
+bench = false

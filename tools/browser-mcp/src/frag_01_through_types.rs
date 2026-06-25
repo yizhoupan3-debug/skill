@@ -118,7 +118,7 @@ fn read_browser_mcp_message<R: BufRead>(
         .starts_with("content-length:")
     {
         *transport_mode = Some(BrowserMcpTransportMode::ContentLength);
-        let content_length = parse_content_length_header(&first_line)?;
+        let content_length = parse_content_length_header(&first_line).map_err(|e| e.to_string())?;
         if content_length > MAX_BROWSER_MCP_CONTENT_LENGTH {
             return Err(format!(
                 "browser MCP Content-Length {content_length} exceeds max {MAX_BROWSER_MCP_CONTENT_LENGTH}"

@@ -329,14 +329,11 @@ fn cmd_status(workspace: &PathBuf) -> Result<()> {
     let git = research_harness::provenance::capture_git_provenance(&ws);
     let env = research_harness::provenance::capture_environment_fingerprint(&ws);
     let mut state = state;
-    state
+    let state_obj = state
         .as_object_mut()
-        .expect("state must be an object after load")
-        .insert("git".into(), git);
-    state
-        .as_object_mut()
-        .expect("state must be an object after load")
-        .insert("environment".into(), env);
+        .ok_or_else(|| anyhow::anyhow!("state must be an object after load"))?;
+    state_obj.insert("git".into(), git);
+    state_obj.insert("environment".into(), env);
     println!("{}", research_harness::render::format_status(&state));
     Ok(())
 }
@@ -760,33 +757,26 @@ fn cmd_set_novelty_gate(
     let state = load_state(&ws)?;
     let mut next = state;
     {
-        let gate = next
+        let next_obj = next
             .as_object_mut()
-            .expect("state must be an object after load")
+            .ok_or_else(|| anyhow::anyhow!("state must be an object after load"))?;
+        let gate = next_obj
             .entry("novelty_gate")
             .or_insert(json!({}));
-        gate.as_object_mut()
-            .expect("novelty_gate must be an object")
-            .insert("status".into(), json!(status));
+        let gate_obj = gate.as_object_mut()
+            .ok_or_else(|| anyhow::anyhow!("novelty_gate must be an object"))?;
+        gate_obj.insert("status".into(), json!(status));
         if let Some(d) = decision {
-            gate.as_object_mut()
-                .expect("novelty_gate must be an object")
-                .insert("decision".into(), json!(d));
+            gate_obj.insert("decision".into(), json!(d));
         }
         if let Some(os) = overlap_summary {
-            gate.as_object_mut()
-                .expect("novelty_gate must be an object")
-                .insert("overlap_summary".into(), json!(os));
+            gate_obj.insert("overlap_summary".into(), json!(os));
         }
         if let Some(ds) = differentiation_strategy {
-            gate.as_object_mut()
-                .expect("novelty_gate must be an object")
-                .insert("differentiation_strategy".into(), json!(ds));
+            gate_obj.insert("differentiation_strategy".into(), json!(ds));
         }
         if !claims.is_empty() {
-            gate.as_object_mut()
-                .expect("novelty_gate must be an object")
-                .insert("claims".into(), json!(claims));
+            gate_obj.insert("claims".into(), json!(claims));
         }
     }
     dump_state(&ws, &next)?;

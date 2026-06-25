@@ -226,15 +226,18 @@ impl BrowserRuntime {
             None,
         ) {
             Ok(hydrated) => {
-                assert_attach_descriptor_matches_canonical(&descriptor, &hydrated.descriptor)?;
-                assert_attach_descriptor_contract(&hydrated.descriptor)?;
+                assert_attach_descriptor_matches_canonical(&descriptor, &hydrated.descriptor)
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
+                assert_attach_descriptor_contract(&hydrated.descriptor)
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
                 Ok(hydrated)
             }
             Err(err) => {
                 if attach_descriptor_needs_rust_hydration(&descriptor) {
                     return Err(err);
                 }
-                assert_attach_descriptor_contract(&descriptor)?;
+                assert_attach_descriptor_contract(&descriptor)
+                    .map_err(|e| anyhow::anyhow!("{e}"))?;
                 Ok(LoadedRuntimeAttachDescriptor {
                     descriptor,
                     input_artifact_kind: Some("attach_descriptor"),

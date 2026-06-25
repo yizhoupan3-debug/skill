@@ -547,7 +547,7 @@ pub fn run_continuity_audit(repo_root: &Path) -> Result<Value, String> {
                                     let age_days = mtime.map(|secs| {
                                         let now = std::time::SystemTime::now()
                                             .duration_since(std::time::UNIX_EPOCH)
-                                            .unwrap()
+                                            .unwrap_or_default()
                                             .as_secs();
                                         (now - secs) / 86400
                                     });

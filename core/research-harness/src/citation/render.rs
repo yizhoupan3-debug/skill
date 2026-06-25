@@ -8,6 +8,7 @@ use anyhow::{Context, Result};
 use regex::Regex;
 
 static BIBTEX_FIELD_NAME_RE: LazyLock<Regex> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
     Regex::new(r"(?m)^\s*(\w+)\s*=").expect("invalid BIBTEX_FIELD_NAME_RE regex")
 });
 
@@ -118,6 +119,7 @@ pub fn parse_bibtex_to_json(text: &str) -> Vec<serde_json::Value> {
         // Parse fields using brace-depth counting to handle nested braces
         for fcap in BIBTEX_FIELD_NAME_RE.captures_iter(body) {
             let field_name = fcap[1].trim().to_lowercase();
+            #[allow(clippy::unwrap_used)]
             let value_start = fcap.get(0).unwrap().end();
             // value_start already points past "=" in the regex match;
             // find the matching closing brace after optional whitespace

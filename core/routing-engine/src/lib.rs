@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! B1 routing engine: leaf modules, hook registry, and route orchestration.
 //!
 //! This crate provides skill routing (search, score, decide) with zero internal

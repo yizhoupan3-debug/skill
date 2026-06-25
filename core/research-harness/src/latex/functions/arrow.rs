@@ -49,6 +49,7 @@ fn handle_arrow(
     args: Vec<ParseNode>,
     opt_args: Vec<Option<ParseNode>>,
 ) -> ParseResult<ParseNode> {
+    #[allow(clippy::unwrap_used)]
     let body = args.into_iter().next().unwrap();
     let below = opt_args.into_iter().next().flatten();
 

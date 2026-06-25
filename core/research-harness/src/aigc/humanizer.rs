@@ -231,24 +231,31 @@ fn chinese_replacement_table() -> Vec<(String, String)> {
 // ── Strategy 2: Syntactic Rewrite ──
 
 // Pre-compiled regex patterns for syntactic rewriting.
+#[allow(clippy::expect_used)]
 static RE_IT_IS_ADJ_THAT: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)It is (\w+) that ([^.]+)\.").expect("invalid IT_IS_ADJ_THAT regex")
 });
+#[allow(clippy::expect_used)]
 static RE_PASSIVE_BY: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)The (\w+) was (\w+) by the (\w+)\.").expect("invalid PASSIVE_BY regex")
 });
+#[allow(clippy::expect_used)]
 static RE_BEI_SOU_ZH: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"被(\w+)所(\w+)").expect("invalid BEI_SOU regex")
 });
+#[allow(clippy::expect_used)]
 static RE_WHICH_CLAUSE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r",\s+which ([^,]+),\s+").expect("invalid WHICH_CLAUSE regex")
 });
+#[allow(clippy::expect_used)]
 static RE_SEMICOLON_CONNECTORS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r";\s+(moreover|furthermore|however|nevertheless),\s+").expect("invalid SEMICOLON regex")
 });
+#[allow(clippy::expect_used)]
 static RE_AND_CONNECTOR: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^(.{40,}?), and (.+)$").expect("invalid AND_CONNECTOR regex")
 });
+#[allow(clippy::expect_used)]
 static RE_BINGQIE_ZH: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(.{20,}?)，并且(.+?)(。|$)").expect("invalid BINGQIE regex")
 });

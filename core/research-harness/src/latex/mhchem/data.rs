@@ -53,5 +53,8 @@ static MHCHEM_DATA: OnceLock<MhchemData> = OnceLock::new();
 
 pub fn data() -> &'static MhchemData {
     MHCHEM_DATA
-        .get_or_init(|| MhchemData::load().expect("mhchem static data must parse and compile"))
+        .get_or_init(|| {
+            #[allow(clippy::expect_used)]
+            MhchemData::load().expect("mhchem static data must parse and compile")
+        })
 }

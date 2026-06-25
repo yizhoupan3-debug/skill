@@ -244,8 +244,7 @@ fn build_compact_registered_tasks(registered_tasks: &Value) -> Value {
             if !truncated.is_empty() {
                 compact
                     .as_object_mut()
-                    .unwrap()
-                    .insert("task".to_string(), Value::String(truncated));
+                    .map(|obj| obj.insert("task".to_string(), Value::String(truncated)));
             }
             compact
         })
@@ -277,8 +276,7 @@ fn build_compact_registered_tasks(registered_tasks: &Value) -> Value {
     if let Some(fti) = focus_task_id {
         result
             .as_object_mut()
-            .unwrap()
-            .insert("focus_task_id".to_string(), fti);
+            .map(|obj| obj.insert("focus_task_id".to_string(), fti));
     }
     result
 }

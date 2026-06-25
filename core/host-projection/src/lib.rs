@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! host-projection: host provider abstraction and entrypoint sync.
 //!
 //! Physical migration from runtime-core:

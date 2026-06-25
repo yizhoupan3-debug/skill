@@ -567,6 +567,7 @@ impl<'a> MacroExpander<'a> {
             "\\@firstoftwo".to_string(),
             MacroDefinition::Function(|me: &mut MacroExpander| -> ParseResult<Vec<Token>> {
                 let args = me.consume_args(2)?;
+                #[allow(clippy::unwrap_used)]
                 Ok(args.into_iter().next().unwrap())
             }),
         );
@@ -576,6 +577,7 @@ impl<'a> MacroExpander<'a> {
             "\\@secondoftwo".to_string(),
             MacroDefinition::Function(|me: &mut MacroExpander| -> ParseResult<Vec<Token>> {
                 let args = me.consume_args(2)?;
+                #[allow(clippy::unwrap_used)]
                 Ok(args.into_iter().nth(1).unwrap())
             }),
         );
@@ -779,6 +781,7 @@ impl<'a> MacroExpander<'a> {
                 let right = args[3].clone();
 
                 let content = me.consume_args(1)?;
+                #[allow(clippy::unwrap_used)]
                 let content = content.into_iter().next().unwrap();
 
                 // Convert stack-order (reversed) to logical order, replace all | at depth 0,
@@ -843,6 +846,7 @@ impl<'a> MacroExpander<'a> {
                 let right = args[3].clone();
 
                 let content = me.consume_args(1)?;
+                #[allow(clippy::unwrap_used)]
                 let mut content = content.into_iter().next().unwrap();
 
                 // Scan content and replace only the first | at depth 0
@@ -980,12 +984,14 @@ impl<'a> MacroExpander<'a> {
             let tok = self.lexer.lex();
             self.stack.push(tok);
         }
+        #[allow(clippy::unwrap_used)]
         self.stack.last().unwrap()
     }
 
     /// Remove and return the next unexpanded token.
     pub fn pop_token(&mut self) -> Token {
         self.future();
+        #[allow(clippy::unwrap_used)]
         self.stack.pop().unwrap()
     }
 
@@ -1096,6 +1102,7 @@ impl<'a> MacroExpander<'a> {
         let def = self.macros.get(name)?;
 
         if name.len() == 1 {
+            #[allow(clippy::unwrap_used)]
             let ch = name.chars().next().unwrap();
             let catcode = self.lexer_catcode(ch);
             if catcode != 0 && catcode != 13 {
@@ -1162,6 +1169,7 @@ impl<'a> MacroExpander<'a> {
         loop {
             let expanded = self.expand_once(false)?;
             if !expanded {
+                #[allow(clippy::unwrap_used)]
                 let mut token = self.stack.pop().unwrap();
                 if token.treat_as_relax {
                     token.text = "\\relax".to_string();

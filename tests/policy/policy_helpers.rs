@@ -128,6 +128,15 @@ pub fn collect_files(root: &Path, visitor: &mut dyn FnMut(&Path)) {
         let path = entry.path();
         if path.is_dir() {
             let directory_name = path.file_name().and_then(|name| name.to_str());
+            // Skip temporary worktree directories under .claude/
+            if directory_name == Some("worktrees")
+                && path
+                    .parent()
+                    .and_then(|p| p.file_name().and_then(|n| n.to_str()))
+                    == Some(".claude")
+            {
+                continue;
+            }
             if matches!(
                 directory_name,
                 Some(

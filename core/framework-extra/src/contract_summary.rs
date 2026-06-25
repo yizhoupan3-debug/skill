@@ -198,7 +198,9 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String
         .ok()
         .and_then(|m| m.modified().ok());
     {
-        let guard = REGISTRY_CACHE.lock().expect("registry cache");
+        let guard = REGISTRY_CACHE
+            .lock()
+            .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
         if let Some(ref cached) = *guard
             && cached.mtime == mtime {
                 return Ok(cached.content.clone());
@@ -227,7 +229,9 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String
     }
     let result = Value::Object(out);
     {
-        let mut guard = REGISTRY_CACHE.lock().expect("registry cache");
+        let mut guard = REGISTRY_CACHE
+            .lock()
+            .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
         *guard = Some(CachedRegistry { content: result.clone(), mtime });
     }
     Ok(result)

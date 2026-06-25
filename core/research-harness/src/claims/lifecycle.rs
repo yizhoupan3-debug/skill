@@ -251,7 +251,8 @@ pub fn add_hypothesis(state: &Value, input: HypothesisInput<'_>) -> Result<Value
     if !backlog.iter().any(|v| v.as_str() == Some(&id)) { backlog.push(json!(id.clone())); }
     if next.get("active_hypothesis").and_then(Value::as_str).is_none() && novelty_str(&next, "status", "pending") == "passed" {
         set_key(&mut next, "active_hypothesis", json!(id.clone()));
-        let idx = find_hypothesis_index(&next, &id).expect("hypothesis just inserted must exist");
+        let idx = find_hypothesis_index(&next, &id)
+            .ok_or_else(|| anyhow!("hypothesis just inserted must exist"))?;
         transition_hypothesis(&mut next, idx, "active", Some("first active hypothesis after novelty gate passed"))?;
     }
     Ok(next)
@@ -345,7 +346,8 @@ pub fn annotate_run(state: &Value, run_id: &str, input: RunAnnotationInput<'_>) 
     let Some(record) = arr_mut(&mut next, "run_history").iter_mut().find(|r| r.get("run_id").and_then(Value::as_str) == Some(run_id)) else {
         bail!("Unknown run id: {run_id}");
     };
-    let obj = record.as_object_mut().expect("run record must be object");
+    let obj = record.as_object_mut()
+        .ok_or_else(|| anyhow!("run record must be object"))?;
     if let Some(v) = input.finding { let v = optional_string(Some(v)); if !v.is_null() { obj.insert("finding".into(), v); } }
     if let Some(v) = input.decision_delta { let v = optional_string(Some(v)); if !v.is_null() { obj.insert("decision_delta".into(), v); } }
     if let Some(v) = input.reuse_note { let v = optional_string(Some(v)); if !v.is_null() { obj.insert("reuse_note".into(), v); } }
@@ -435,7 +437,8 @@ pub fn add_claim_comparison(
     let gate = novelty_gate_mut(&mut next);
     let claims_list;
     {
-        let records = gate.entry("claim_records".to_string()).or_insert(json!([])).as_array_mut().expect("claim_records must be an array");
+        let records = gate.entry("claim_records".to_string()).or_insert(json!([])).as_array_mut()
+            .ok_or_else(|| anyhow!("claim_records must be an array"))?;
         if let Some(pos) = records.iter().position(|r| r.get("claim_id").and_then(Value::as_str) == Some(&id)) {
             records[pos] = record;
         } else {

@@ -48,9 +48,9 @@ use runtime_core::trace_runtime::{
 };
 use host_projection::hosts::hook_dispatch::{HookEvent, HookOutput};
 use host_projection::hooks::{
-    attach_router_rs_observation, emit_hook_fired,
-    hook_action_from_optional_output, read_stdin_limited,
+    attach_router_rs_observation, read_stdin_limited,
 };
+use runtime_core::telemetry_emit::{emit_hook_fired, hook_action_from_optional_output};
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
 

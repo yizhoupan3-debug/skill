@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 pub mod analyze;
 pub mod config;
 pub mod health_score;

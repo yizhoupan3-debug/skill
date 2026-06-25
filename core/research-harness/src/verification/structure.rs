@@ -39,7 +39,9 @@ pub fn check_figure_references(tex_path: &Path) -> Result<Vec<String>> {
 /// 基本 LaTeX 语法检查：环境配对和大括号平衡。
 fn check_latex_syntax(content: &str) -> bool {
     // 1. 检查 \begin{env} 和 \end{env} 配对
+    #[allow(clippy::expect_used)]
     let begin_re = Regex::new(r"\\begin\{([^}]+)\}").expect("static regex");
+    #[allow(clippy::expect_used)]
     let end_re = Regex::new(r"\\end\{([^}]+)\}").expect("static regex");
 
     let mut env_stack: Vec<String> = Vec::new();
@@ -80,6 +82,7 @@ fn check_latex_syntax(content: &str) -> bool {
 
 /// 提取 LaTeX 文件中所有 \label{...} 的标签名。
 fn extract_labels(content: &str) -> HashSet<String> {
+    #[allow(clippy::expect_used)]
     let re = Regex::new(r"\\label\{([^}]+)\}").expect("static regex");
     re.captures_iter(content)
         .map(|cap| cap[1].to_string())
@@ -88,6 +91,7 @@ fn extract_labels(content: &str) -> HashSet<String> {
 
 /// 提取 LaTeX 文件中所有 \ref{...}, \eqref{...}, \autoref{...} 的引用名。
 fn extract_refs(content: &str) -> Vec<String> {
+    #[allow(clippy::expect_used)]
     let re = Regex::new(r"\\(?:ref|eqref|autoref|nameref|pageref)\{([^}]+)\}").expect("static regex");
     re.captures_iter(content)
         .map(|cap| cap[1].to_string())

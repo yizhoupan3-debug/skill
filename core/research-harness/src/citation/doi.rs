@@ -10,6 +10,7 @@ use regex::Regex;
 use crate::types::{Paper, PaperSource};
 
 static DOI_PATTERN_RE: LazyLock<Regex> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
     Regex::new(r"^10\.\d{4,}/.+").expect("invalid DOI_PATTERN_RE regex")
 });
 

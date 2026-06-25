@@ -42,6 +42,7 @@ fn arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
 }
 
 fn arr_mut<'a>(state: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
+    #[allow(clippy::expect_used)]
     state
         .as_object_mut()
         .expect("state must be object")
@@ -552,6 +553,7 @@ pub fn cleanup_question_text(question: &str) -> String {
     let trimmed = question.trim().trim_end_matches(['?', '.', '!']);
     static CLEANUP_RE: OnceLock<regex::Regex> = OnceLock::new();
     let re = CLEANUP_RE.get_or_init(|| {
+        #[allow(clippy::expect_used)]
         regex::Regex::new(
             r"(?i)^(can|could|does|do|did|is|are|should|would|will|how|why|what|whether)\s+",
         )
@@ -574,6 +576,7 @@ pub fn extract_question_parts(question: &str) -> (String, String, String) {
     let mut effect = "a meaningful measurable improvement".to_string();
     static MAIN_RE: OnceLock<regex::Regex> = OnceLock::new();
     let main_re = MAIN_RE.get_or_init(|| {
+        #[allow(clippy::expect_used)]
         regex::Regex::new(
             r"(.+?)\s+(improve|improves|reduce|reduces|increase|increases|enable|enables)\s+(.+)",
         )
@@ -586,7 +589,10 @@ pub fn extract_question_parts(question: &str) -> (String, String, String) {
     } else {
         static USING_RE: OnceLock<regex::Regex> = OnceLock::new();
         let using_re =
-            USING_RE.get_or_init(|| regex::Regex::new(r"using\s+(.+?)\s+for\s+(.+)").expect("invalid USING_RE regex"));
+            USING_RE.get_or_init(|| {
+                #[allow(clippy::expect_used)]
+                regex::Regex::new(r"using\s+(.+?)\s+for\s+(.+)").expect("invalid USING_RE regex")
+            });
         if let Some(caps) = using_re.captures(&lowered) {
             focus = caps[1].trim().to_string();
             target = caps[2].trim().to_string();
@@ -704,10 +710,12 @@ pub fn draft_claims_from_state(
     let drafts = prioritize_claims(&propose_claims_from_question(&question, count));
     let gate = novelty_gate_mut(&mut next_state);
     gate.insert("draft_claims".into(), json!(drafts));
-    let claims = gate
+    #[allow(clippy::expect_used)]
+    let draft_claims = gate
         .get("draft_claims")
         .and_then(Value::as_array)
-        .expect("draft_claims just inserted must be an array")
+        .expect("draft_claims just inserted must be an array");
+    let claims = draft_claims
         .iter()
         .map(|draft| str_field(draft, "claim"))
         .collect::<Vec<_>>();

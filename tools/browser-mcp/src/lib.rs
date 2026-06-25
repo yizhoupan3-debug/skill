@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! Browser MCP：`include!("frag_*")` 只是把 **同一个 `browser_mcp` 模块** 分到多个磁盘文件以降低单文件体量。
 //!
 //! **维护契约（硬）**：任何 `frag_*.rs` 的增补/删减必须在 **Rust 顶层项边界**完成（例如在完整 `fn`/`impl`/`struct` 首尾），**严禁**按行号在 **函数体半途**断开，否则会生成不可编译的半截括号。

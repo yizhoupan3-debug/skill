@@ -188,6 +188,7 @@ expression: json
     "host_alias_entrypoints": {
       "deepinterview": "/deepinterview",
       "gitx": "/gitx",
+      "goalx": "/goalx",
       "update": "/update"
     },
     "host_family": "shared-rust-core",

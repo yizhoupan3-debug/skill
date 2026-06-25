@@ -16,7 +16,7 @@ fn main() {
                 let json = serde_json::to_string(&ast).unwrap_or_else(|e| {
                     format!(r#"{{"error":true,"message":"{}","input":"{}"}}"#, e, expr)
                 });
-                writeln!(out, "{}", json).expect("write");
+                let _ = writeln!(out, "{}", json);
             }
             Err(e) => {
                 let err = serde_json::json!({
@@ -24,7 +24,7 @@ fn main() {
                     "message": e.to_string(),
                     "input": expr,
                 });
-                writeln!(out, "{}", err).expect("write");
+                let _ = writeln!(out, "{}", err);
             }
         }
     }

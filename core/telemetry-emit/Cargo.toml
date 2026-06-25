@@ -1,0 +1,16 @@
+[package]
+name = "telemetry-emit"
+version = "0.1.0"
+description = "L0 unified telemetry emit primitives: structured emit, MetricCounter, tracing+telemetry macros"
+edition = "2024"
+[lints]
+workspace = true
+
+[dependencies]
+# L0
+telemetry-types = { path = "../telemetry-types" }
+framework-kernel = { path = "../framework-kernel" }
+
+# workspace
+serde_json.workspace = true
+tracing.workspace = true

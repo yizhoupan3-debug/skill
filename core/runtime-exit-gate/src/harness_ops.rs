@@ -105,7 +105,7 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
     let path = repo_root.join(NUDGES_REL_PATH);
     let mtime = fs::metadata(&path).ok().and_then(|m| m.modified().ok());
     {
-        let guard = NUDGES_CACHE.lock().expect("nudges cache");
+        let guard = NUDGES_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(ref cached) = *guard
             && cached.mtime == mtime
         {
@@ -155,7 +155,7 @@ pub fn resolve_harness_operator_nudges(repo_root: &Path) -> ResolvedHarnessNudge
         &file.nudges.qg_loop_external_struct_hint_line,
     );
     {
-        let mut guard = NUDGES_CACHE.lock().expect("nudges cache");
+        let mut guard = NUDGES_CACHE.lock().unwrap_or_else(|e| e.into_inner());
         *guard = Some(CachedNudges {
             content: out.clone(),
             mtime,
@@ -187,6 +187,7 @@ mod tests {
     #[test]
     fn resolve_uses_builtin_when_file_missing() {
         let _g = harness_nudges_env_test_lock();
+        // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(HARNESS_NUDGES_ENV) };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-missing-{}",
@@ -208,6 +209,7 @@ mod tests {
     #[test]
     fn resolve_overrides_from_json() {
         let _g = harness_nudges_env_test_lock();
+        // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(HARNESS_NUDGES_ENV) };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-override-{}",
@@ -235,6 +237,7 @@ mod tests {
     #[test]
     fn resolve_math_line_from_json() {
         let _g = harness_nudges_env_test_lock();
+        // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(HARNESS_NUDGES_ENV) };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-math-{}",
@@ -261,6 +264,7 @@ mod tests {
     #[test]
     fn resolve_retrieval_line_from_json() {
         let _g = harness_nudges_env_test_lock();
+        // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(HARNESS_NUDGES_ENV) };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-retrieval-{}",
@@ -289,7 +293,9 @@ mod tests {
     #[test]
     fn schema_version_mismatch_falls_back_to_builtin_defaults() {
         let _g = harness_nudges_env_test_lock();
+        // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(HARNESS_NUDGES_ENV) };
+        // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_OPERATOR_INJECT") };
         let tmp = std::env::temp_dir().join(format!(
             "harness-nudges-schema-mismatch-{}",
@@ -330,7 +336,9 @@ mod tests {
         let _g = harness_nudges_env_test_lock();
         let prior_nudge = std::env::var(HARNESS_NUDGES_ENV).ok();
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
+        // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(HARNESS_NUDGES_ENV) };
+        // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_OPERATOR_INJECT", "0") };
         let tmp = std::env::temp_dir().join("harness-nudges-aggregate-off");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -345,11 +353,15 @@ mod tests {
         assert!(n.retrieval_trace_harness_line.is_empty());
         assert!(n.qg_loop_external_struct_hint_line.is_empty());
         match prior_nudge {
+            // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
             Some(v) => unsafe { core_state_utils::env_sync::set_env(HARNESS_NUDGES_ENV, &v) },
+            // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
             None => unsafe { core_state_utils::env_sync::remove_env(HARNESS_NUDGES_ENV) },
         }
         match prior_inject {
+            // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
             Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_OPERATOR_INJECT", &v) },
+            // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
             None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_OPERATOR_INJECT") },
         }
     }
@@ -358,6 +370,7 @@ mod tests {
     fn env_off_yields_empty() {
         let _g = harness_nudges_env_test_lock();
         let prior = std::env::var(HARNESS_NUDGES_ENV).ok();
+        // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env(HARNESS_NUDGES_ENV, "0") };
         let tmp = std::env::temp_dir().join("harness-nudges-env-off");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -367,7 +380,9 @@ mod tests {
         assert!(n.retrieval_trace_harness_line.is_empty());
         assert!(n.qg_loop_external_struct_hint_line.is_empty());
         match prior {
+            // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
             Some(v) => unsafe { core_state_utils::env_sync::set_env(HARNESS_NUDGES_ENV, &v) },
+            // SAFETY: test-only; harness_nudges_env_test_lock() prevents concurrent env access from other tests.
             None => unsafe { core_state_utils::env_sync::remove_env(HARNESS_NUDGES_ENV) },
         }
     }

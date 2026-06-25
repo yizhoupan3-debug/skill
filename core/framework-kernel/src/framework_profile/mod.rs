@@ -326,10 +326,10 @@ impl HostProfileSpec {
             "transport".to_string(),
             Value::String(self.transport.clone()),
         );
-        payload.insert(
-            "capabilities".to_string(),
-            serde_json::to_value(&self.capabilities).unwrap(),
-        );
+        // Vec<String> serialization to JSON never fails; safe unwrap.
+        #[allow(clippy::unwrap_used)]
+        let caps = serde_json::to_value(&self.capabilities).unwrap();
+        payload.insert("capabilities".to_string(), caps);
         payload.insert("host_id".to_string(), Value::String(self.host_cli.clone()));
         payload.extend(self.projection.clone());
         payload

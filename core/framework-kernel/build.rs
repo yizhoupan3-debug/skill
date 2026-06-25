@@ -1,4 +1,5 @@
 //! Minimal build.rs: reads RUNTIME_REGISTRY.json and generates
+#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! `generated_host_tables.rs` — a set of constants and lookup functions
 //! driven by the registry rather than hand-maintained match arms.
 //!

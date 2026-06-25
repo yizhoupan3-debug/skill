@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! framework-extra: orchestration control plane (L4).
 //!
 //! Extracted from `runtime-core/src/framework_runtime/` per ADR-010 §10.3.

@@ -85,7 +85,7 @@ fn last_flush() -> &'static Mutex<Option<Instant>> {
 }
 
 fn should_flush() -> bool {
-    let guard = last_flush().lock().expect("last_flush lock");
+    let guard = last_flush().lock().unwrap_or_else(|e| e.into_inner());
     match *guard {
         Some(t) => t.elapsed() >= Duration::from_secs(FLUSH_INTERVAL_SECS),
         None => true,
@@ -104,7 +104,9 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
     // Drain per-tool counts
     let tool_drain = {
         let map = PER_TOOL.get_or_init(|| Mutex::new(HashMap::new()));
-        let mut map = map.lock().expect("per_tool map lock");
+        let mut map = map
+            .lock()
+            .map_err(|e| format!("per_tool map lock poisoned: {e}"))?;
         std::mem::take(&mut *map)
     };
 
@@ -174,7 +176,9 @@ fn flush_to_disk(repo_root: &Path) -> Result<(), String> {
 
         write_tracker(&path, &payload)?;
 
-        let mut guard = last_flush().lock().expect("last_flush lock");
+        let mut guard = last_flush()
+            .lock()
+            .map_err(|e| format!("last_flush lock poisoned: {e}"))?;
         *guard = Some(Instant::now());
 
         Ok(())
@@ -205,7 +209,9 @@ pub fn record_tool_call(
 
     {
         let map = PER_TOOL.get_or_init(|| Mutex::new(HashMap::new()));
-        let mut map = map.lock().expect("per_tool map lock");
+        let mut map = map
+            .lock()
+            .map_err(|e| format!("per_tool map lock poisoned: {e}"))?;
         *map.entry(tool_name.to_string()).or_insert(0) += 1;
     }
 

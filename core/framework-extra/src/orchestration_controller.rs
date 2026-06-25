@@ -1,4 +1,8 @@
 //! Background/worker orchestration policy、runtime control-plane 描述与 observability 契约。
+//!
+//! This file contains static data constructors where `.unwrap()` on provably
+//! infallible calls is intentional (hardcoded parameters).
+#![allow(clippy::unwrap_used)]
 
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -639,7 +643,9 @@ pub fn build_runtime_control_plane_payload() -> Value {
                 Some("filesystem"),
                 Some("filesystem"),
                 Some("filesystem"),
-            ).expect("default backend family parity is valid"),
+            )
+            // SAFETY: hardcoded static parameters are always valid
+            .unwrap(),
         },
         "execution": {
             "authority": RUNTIME_CONTROL_PLANE_AUTHORITY,

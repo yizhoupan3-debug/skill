@@ -12,12 +12,15 @@ use anyhow::{Context, Result};
 use regex::Regex;
 
 static BIB_KEY_RE: LazyLock<Regex> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
     Regex::new(r"(?m)^@\w+\s*\{\s*([^,\s]+)").expect("invalid BIB_KEY_RE regex")
 });
 static LATEX_CITE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
     Regex::new(r"\\cite[a-zA-Z*]*\s*(?:\[[^\]]*\]\s*){0,2}\{([^}]*)\}").expect("invalid LATEX_CITE_RE regex")
 });
 static PANDOC_CITE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
     Regex::new(r"(?m)(?:^|[^\w:-])@([A-Za-z0-9_:.+\-/]+)").expect("invalid PANDOC_CITE_RE regex")
 });
 

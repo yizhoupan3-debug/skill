@@ -71,6 +71,7 @@ fn scan_end(input: &str, start: usize, end: End<'_>) -> MhchemResult<Option<(usi
                 return Ok(Some((i, i + len)));
             }
         }
+        #[allow(clippy::unwrap_used)]
         let c = input[i..].chars().next().unwrap();
         if c == '{' {
             braces += 1;
@@ -168,47 +169,60 @@ fn regex_match_token(re: &Regex, input: &str) -> Option<(MatchToken, usize)> {
     Some((MatchToken::S(m0.as_str().to_string()), end))
 }
 
+// All regexes are compile-time known constants.
+#[allow(clippy::expect_used)]
 static RE_AGG_OPEN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\([a-z]{1,3}(?=[\),])").unwrap());
-static RE_CMD_BRACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\\[a-zA-Z]+\{").unwrap());
-static RE_BEFORE_BRACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(?=\{)").unwrap());
+    LazyLock::new(|| Regex::new(r"^\([a-z]{1,3}(?=[\),])").expect("invalid RE_AGG_OPEN fancy_regex"));
+#[allow(clippy::expect_used)]
+static RE_CMD_BRACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\\[a-zA-Z]+\{").expect("invalid RE_CMD_BRACE fancy_regex"));
+#[allow(clippy::expect_used)]
+static RE_BEFORE_BRACE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(?=\{)").expect("invalid RE_BEFORE_BRACE fancy_regex"));
+#[allow(clippy::expect_used)]
 static RE_NEG_POW: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"^(\+\-|\+\/\-|\+|\-|\\pm\s?)?([0-9]+(?:[,.][0-9]+)?|[0-9]*(?:\.[0-9]+)?)\^([+\-]?[0-9]+|\{[+\-]?[0-9]+\})",
-    ).unwrap()
+    ).expect("invalid RE_NEG_POW fancy_regex")
 });
+#[allow(clippy::expect_used)]
 static RE_SCI: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"^(\+\-|\+\/\-|\+|\-|\\pm\s?)?([0-9]+(?:[,.][0-9]+)?|[0-9]*(?:\.[0-9]+))?(\((?:[0-9]+(?:[,.][0-9]+)?|[0-9]*(?:\.[0-9]+))\))?(?:([eE]|\s*(\*|x|\\times|\u{00D7})\s*10\^)([+\-]?[0-9]+|\{[+\-]?[0-9]+\}))?",
-    ).unwrap()
+    ).expect("invalid RE_SCI fancy_regex")
 });
+#[allow(clippy::expect_used)]
 static RE_SOA_REMAINDER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^($|[\s,;\)\]\}])").unwrap());
+    LazyLock::new(|| Regex::new(r"^($|[\s,;\)\]\}])").expect("invalid RE_SOA_REMAINDER fancy_regex"));
+#[allow(clippy::expect_used)]
 static RE_SOA_ALT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(?:\((?:\\ca\s?)?\$[amothc]\$\))").unwrap());
+    LazyLock::new(|| Regex::new(r"^(?:\((?:\\ca\s?)?\$[amothc]\$\))").expect("invalid RE_SOA_ALT fancy_regex"));
+#[allow(clippy::expect_used)]
 static RE_AMOUNT_MAIN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"^(?:(?:(?:\([+\-]?[0-9]+\/[0-9]+\)|[+\-]?(?:[0-9]+|\$[a-z]\$|[a-z])\/[0-9]+|[+\-]?[0-9]+[.,][0-9]+|[+\-]?\.[0-9]+|[+\-]?[0-9]+)(?:[a-z](?=\s*[A-Z]))?)|[+\-]?[a-z](?=\s*[A-Z])|\+(?!\s))",
-    ).unwrap()
+    ).expect("invalid RE_AMOUNT_MAIN fancy_regex")
 });
+#[allow(clippy::expect_used)]
 static RE_AMOUNT_DOLLAR: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"^\$(?:\(?[+\-]?(?:[0-9]*[a-z]?[+\-])?[0-9]*[a-z](?:[+\-][0-9]*[a-z]?)?\)?|\+|-)\$$",
     )
-    .unwrap()
+    .expect("invalid RE_AMOUNT_DOLLAR fancy_regex")
 });
+#[allow(clippy::expect_used)]
 static RE_FORMULA_PAREN_ONLY: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\([a-z]+\)$").unwrap());
+    LazyLock::new(|| Regex::new(r"^\([a-z]+\)$").expect("invalid RE_FORMULA_PAREN_ONLY fancy_regex"));
+#[allow(clippy::expect_used)]
 static RE_FORMULA_MAIN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r"^(?:[a-z]|(?:[0-9\ \+\-\,\.\(\)]+[a-z])+[0-9\ \+\-\,\.\(\)]*|(?:[a-z][0-9\ \+\-\,\.\(\)]+)+[a-z]?)",
-    ).unwrap()
+    ).expect("invalid RE_FORMULA_MAIN fancy_regex")
 });
 
 fn pattern_neg_pow(input: &str) -> MhchemResult<Option<PatternHit>> {
     let Some(c) = RE_NEG_POW.captures(input).ok().flatten() else {
         return Ok(None);
     };
+    #[allow(clippy::unwrap_used)]
     let full = c.get(0).unwrap();
     let mut v = Vec::new();
     for i in 1..c.len() {
@@ -224,6 +238,7 @@ fn pattern_sci(input: &str) -> MhchemResult<Option<PatternHit>> {
     let Some(c) = RE_SCI.captures(input).ok().flatten() else {
         return Ok(None);
     };
+    #[allow(clippy::unwrap_used)]
     let full = c.get(0).unwrap();
     if full.as_str().is_empty() {
         return Ok(None);

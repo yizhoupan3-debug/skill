@@ -89,6 +89,7 @@ fn handle_font(
     args: Vec<ParseNode>,
     _opt_args: Vec<Option<ParseNode>>,
 ) -> ParseResult<ParseNode> {
+    #[allow(clippy::unwrap_used)]
     let body = ParseNode::normalize_argument(args.into_iter().next().unwrap());
 
     let font_aliases: &[(&str, &str)] = &[

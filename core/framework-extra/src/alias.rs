@@ -211,22 +211,26 @@ fn load_framework_alias_record(repo_root: &Path, alias_name: &str) -> Result<Val
     // entire registry Value tree (can be hundreds of KB).
     let result = {
         let mut cache = REGISTRY_CACHE.lock().unwrap_or_else(|e| e.into_inner());
-        let entry = cache.get_or_insert_with(|| {
-            let parsed = load_and_cache(&registry_path).expect("registry load failed");
-            RegistryCache {
-                payload: parsed.clone(),
-                mtime,
+        let payload = if let Some(ref entry) = *cache {
+            if entry.mtime == mtime {
+                entry.payload.clone()
+            } else {
+                let parsed = load_and_cache(&registry_path)?;
+                *cache = Some(RegistryCache {
+                    payload: parsed.clone(),
+                    mtime,
+                });
+                parsed
             }
-        });
-        if entry.mtime != mtime {
+        } else {
             let parsed = load_and_cache(&registry_path)?;
-            *entry = RegistryCache {
+            *cache = Some(RegistryCache {
                 payload: parsed.clone(),
                 mtime,
-            };
-        }
-        entry
-            .payload
+            });
+            parsed
+        };
+        payload
             .get("framework_commands")
             .and_then(Value::as_object)
             .and_then(|aliases| aliases.get(alias_name))

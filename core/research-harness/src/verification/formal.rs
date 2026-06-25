@@ -75,6 +75,7 @@ fn extract_unit_symbols(text: &str) -> Vec<String> {
 
 /// 提取维度标注文本（如 [L], [M], [T] 等）。
 fn extract_dimension_tokens(text: &str) -> Vec<String> {
+    #[allow(clippy::expect_used)]
     let re = regex::Regex::new(r"\[([A-Z](?:[A-Za-z\^0-9+\-]*)?)\]").expect("static regex");
     re.captures_iter(text)
         .map(|cap| cap[1].to_string())

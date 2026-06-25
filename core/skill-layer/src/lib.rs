@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! Skill layer infrastructure: schema, validation, lifecycle, dependency management.
 //!
 //! This crate is **self-contained** — all skill-specific logic lives here.

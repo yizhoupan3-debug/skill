@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! B0 root: shared traits for dependency inversion and telemetry pipeline.
 
 // ── B0 core modules ──

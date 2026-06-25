@@ -183,10 +183,8 @@ fn merge_operator_nudge_refs(resp: &mut Value, repo_root: &Path, state: Option<&
             json!(nudges.math_reasoning_harness_line),
         );
     }
-    if !refs.is_empty() {
-        resp.as_object_mut()
-            .expect("rfv response must be object")
-            .insert("operator_nudge_refs".to_string(), Value::Object(refs));
+    if !refs.is_empty() && let Some(obj) = resp.as_object_mut() {
+        obj.insert("operator_nudge_refs".to_string(), Value::Object(refs));
     }
 }
 

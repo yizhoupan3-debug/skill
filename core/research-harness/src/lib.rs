@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! # Research Harness
 //!
 //! Unified research harness crate for the skill framework.

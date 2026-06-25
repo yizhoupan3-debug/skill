@@ -318,7 +318,13 @@ fn run_clean(args: RouterSelfCleanArgs) -> Result<(), String> {
             .ok_or_else(|| {
                 "could not resolve framework root for repo target cleanup".to_string()
             })?;
-        remove_dir_if_exists(&manifest.parent().unwrap().join("target"))?;
+        let crate_target = manifest.parent().ok_or_else(|| {
+            format!(
+                "cannot resolve crate target dir from manifest path {}",
+                manifest.display()
+            )
+        })?;
+        remove_dir_if_exists(&crate_target.join("target"))?;
         remove_dir_if_exists(&framework_root.join("target"))?;
     }
 

@@ -116,6 +116,7 @@ pub fn score_claim_priority(record: &Value) -> Value {
         else if cost >= 4 { "verification is expensive" }
         else { "worth checking, but not the best first target" };
     let mut out = record.clone();
+    #[allow(clippy::expect_used)]
     let map = out.as_object_mut().expect("claim record must be object");
     map.insert("priority_score".into(), json!(score));
     map.insert("priority_label".into(), json!(label));

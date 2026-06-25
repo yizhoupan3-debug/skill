@@ -96,7 +96,7 @@ fn plan_mode_keeps_review_optional_and_review_only() {
         "面向用户的回复必须使用简体中文",
         "Closeout",
         "Skill Routing",
-        "Goal/RFV",
+        "Goal state",
     ] {
         assert!(agents.contains(marker), "missing AGENTS marker: {marker}");
     }

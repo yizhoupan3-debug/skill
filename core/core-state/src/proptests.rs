@@ -323,6 +323,7 @@ pub(crate) mod proptests {
             Op::Pause => match state {
                 Some(s) if s.status == GoalStatus::Running => {
                     Some(SimGoal {
+                        status: GoalStatus::Paused,
                         drive_until_done: false,
                         ..s
                     })
@@ -361,6 +362,7 @@ pub(crate) mod proptests {
                 Some(s) if s.status == GoalStatus::Blocked => {
                     Some(SimGoal {
                         status: GoalStatus::Running,
+                        drive_until_done: true,
                         ..s
                     })
                 }
@@ -422,50 +424,46 @@ pub(crate) mod proptests {
                     }
                 }
 
-                // Only check invariants for ops that actually mutate state
-                // (compare state vs its clone before the op)
-
-                // Invariant 2: Pause always sets drive_until_done=false (when it succeeds)
+                // Invariant 2: Pause sets drive_until_done=false when goal was Running.
                 if let Op::Pause = op {
-                    if state != before {
+                    if before.as_ref().is_some_and(|s| s.status == GoalStatus::Running) {
                         if let Some(ref s) = state {
+                            prop_assert!(matches!(s.status, GoalStatus::Paused));
                             prop_assert!(!s.drive_until_done, "pause sets drive_until_done=false");
                         }
                     }
                 }
 
-                // Invariant 3: After Resume on non-completed, drive_until_done=true
+                // Invariant 3: Resume restores running+drive when goal was Paused.
                 if let Op::Resume = op {
-                    if state != before {
+                    if before.as_ref().is_some_and(|s| s.status == GoalStatus::Paused) {
                         if let Some(ref s) = state {
-                            if s.status != GoalStatus::Completed {
-                                prop_assert!(s.drive_until_done, "resume sets drive_until_done=true");
-                            }
+                            prop_assert!(matches!(s.status, GoalStatus::Running));
+                            prop_assert!(s.drive_until_done, "resume sets drive_until_done=true");
                         }
                     }
                 }
 
-                // Invariant 4: Checkpoint count never decreases (rejected ops don't change it)
+                // Invariant 4: Checkpoint increments count when goal was Running.
                 if let Op::Checkpoint = op {
-                    if state != before {
-                        if let Some(ref s) = state {
-                            if let Some(ref b) = before {
-                                prop_assert_eq!(s.checkpoint_count, b.checkpoint_count + 1, "checkpoint increments count");
-                            }
+                    if before.as_ref().is_some_and(|s| s.status == GoalStatus::Running) {
+                        if let (Some(ref s), Some(ref b)) = (state.as_ref(), before.as_ref()) {
+                            prop_assert_eq!(s.checkpoint_count, b.checkpoint_count + 1,
+                                "checkpoint increments count");
                         }
                     }
                 }
 
-                // Invariant 5: Clear removes state entirely
+                // Invariant 5: Clear removes state entirely.
                 if let Op::Clear = op {
                     prop_assert!(state.is_none(), "clear removes state");
                 }
 
-                // Invariant 6: Block→unblock round-trip restores running
+                // Invariant 6: Unblock restores running+drive when goal was Blocked.
                 if let Op::Unblock = op {
-                    if state != before {
+                    if before.as_ref().is_some_and(|s| s.status == GoalStatus::Blocked) {
                         if let Some(ref s) = state {
-                            prop_assert_eq!(&s.status, &GoalStatus::Running, "unblock restores running");
+                            prop_assert!(matches!(s.status, GoalStatus::Running));
                             prop_assert!(s.drive_until_done, "unblocked goal has drive_until_done=true");
                         }
                     }

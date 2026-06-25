@@ -27,10 +27,8 @@ pub fn read_utf8_file_prefix(path: &Path, max_bytes: usize) -> Option<String> {
     if cut == 0 {
         return None;
     }
-    let text = std::str::from_utf8(&raw[..cut])
-        .expect("cut chosen on valid utf8 boundary")
-        .to_string();
-    if text.is_empty() { None } else { Some(text) }
+    let text = std::str::from_utf8(&raw[..cut]).ok()?;
+    if text.is_empty() { None } else { Some(text.to_string()) }
 }
 
 #[cfg(test)]

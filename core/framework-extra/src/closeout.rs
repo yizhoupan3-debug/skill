@@ -79,7 +79,9 @@ pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
         .ok()
         .and_then(|m| m.modified().ok());
     {
-        let guard = TASK_REGISTRY_CACHE.lock().expect("task registry cache");
+        let guard = TASK_REGISTRY_CACHE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(ref cached) = *guard
             && cached.mtime == mtime {
                 return extract_first_task_id_from_value(&cached.content);
@@ -88,7 +90,9 @@ pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
     let raw = fs::read_to_string(&registry_path).ok()?;
     let data: Value = serde_json::from_str(&raw).ok()?;
     {
-        let mut guard = TASK_REGISTRY_CACHE.lock().expect("task registry cache");
+        let mut guard = TASK_REGISTRY_CACHE
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         *guard = Some(CachedTaskRegistry { content: data.clone(), mtime });
     }
     extract_first_task_id_from_value(&data)

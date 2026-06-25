@@ -51,6 +51,7 @@ pub fn mhchem_arg_tokens_to_string(tokens: &[ratex_lexer::token::Token]) -> Stri
     if tokens.is_empty() {
         return String::new();
     }
+    #[allow(clippy::unwrap_used)]
     let mut expected_loc = tokens.last().unwrap().loc.start;
     let mut out = String::new();
     for i in (0..tokens.len()).rev() {

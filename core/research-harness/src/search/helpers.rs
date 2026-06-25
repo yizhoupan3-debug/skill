@@ -54,9 +54,12 @@ pub(super) fn decode_xml_entities(raw: &str) -> String {
 
 // ── arXiv regex patterns (migrated from main.rs constants) ──
 
-pub(super) static ARXIV_ENTRY_RE: std::sync::LazyLock<Regex> =
-    std::sync::LazyLock::new(|| Regex::new(r"(?s)<entry>(.*?)</entry>").expect("arxiv entry regex"));
+pub(super) static ARXIV_ENTRY_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
+    Regex::new(r"(?s)<entry>(.*?)</entry>").expect("arxiv entry regex")
+});
 pub(super) static ARXIV_AUTHOR_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
+    #[allow(clippy::expect_used)]
     Regex::new(r"(?s)<author>.*?<name>(.*?)</name>.*?</author>").expect("arxiv author regex")
 });
 
@@ -66,6 +69,7 @@ pub(super) static ARXIV_AUTHOR_RE: std::sync::LazyLock<Regex> = std::sync::LazyL
 pub(super) fn compact_words(text: &str, limit: usize) -> Vec<String> {
     static WORD_RE: OnceLock<Regex> = OnceLock::new();
     let re = WORD_RE.get_or_init(|| {
+        #[allow(clippy::expect_used)]
         Regex::new(r"[A-Za-z0-9][A-Za-z0-9_-]*|[\p{Han}]{2,}").expect("invalid compact_words regex")
     });
     let stops = stopwords();
