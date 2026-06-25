@@ -1150,4 +1150,107 @@ mod tests {
         let result = parse_content_length("Content-Length  : 42");
         assert!(result.is_err());
     }
+
+    // ── E2E chain tests: JSON-RPC tools/call → dispatch → research handler ──
+
+    use std::sync::Once;
+    use core_policy::error::FrameworkError;
+
+    /// Test research tool dispatch that mimics the real handler at a high level.
+    fn test_research_dispatch(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
+        match name {
+            "research_review_loop" => {
+                let max_rounds = arguments.get("max_rounds").and_then(Value::as_u64).unwrap_or(10);
+                Ok(serde_json::to_string(&json!({
+                    "quality_gate_config": {
+                        "min_rounds": 5,
+                        "max_rounds": max_rounds,
+                        "consecutive_stable_required": 2,
+                    },
+                    "current_round": {
+                        "round": 1,
+                        "dimension": "逻辑与证据",
+                    },
+                    "workflow": "test workflow stub",
+                })).unwrap())
+            }
+            "research_aigc_check" => {
+                let _text = arguments.get("text").and_then(Value::as_str)
+                    .ok_or(FrameworkError::validation("requires 'text'"))?;
+                Ok(serde_json::to_string(&json!({
+                    "score": 42.0,
+                    "ai_probability": 0.42,
+                    "segments_analyzed": 1,
+                    "results": [],
+                })).unwrap())
+            }
+            "research_review_dimensions" => {
+                let _round = arguments.get("round").and_then(Value::as_u64)
+                    .ok_or(FrameworkError::validation("requires 'round'"))?;
+                Ok(serde_json::to_string(&json!({
+                    "round": 1,
+                    "dimension": "逻辑与证据",
+                    "prompt": "test prompt",
+                    "checklist": [],
+                })).unwrap())
+            }
+            _ => Err(FrameworkError::validation(format!("unknown research tool: {name}"))),
+        }
+    }
+
+    static E2E_INIT: Once = Once::new();
+
+    fn ensure_test_research_dispatch() {
+        E2E_INIT.call_once(|| {
+            crate::hooks::register_research_tool_dispatch(test_research_dispatch);
+        });
+    }
+
+    #[test]
+    fn e2e_research_review_loop_via_tools_call() {
+        ensure_test_research_dispatch();
+        let repo = unique_test_repo("e2e-review-loop");
+        let request = r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"research_review_loop","arguments":{}}}"#;
+        let response = handle_mcp_request(request, &repo, "test", "test-session").unwrap();
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert_eq!(response["id"], 1);
+        let content = response["result"]["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(content).unwrap();
+        assert!(parsed.get("quality_gate_config").is_some(), "missing quality_gate_config");
+    }
+
+    #[test]
+    fn e2e_research_aigc_check_via_tools_call() {
+        ensure_test_research_dispatch();
+        let repo = unique_test_repo("e2e-aigc-check");
+        let request = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"research_aigc_check","arguments":{"text":"test text for detection"}}}"#;
+        let response = handle_mcp_request(request, &repo, "test", "test-session").unwrap();
+        assert_eq!(response["jsonrpc"], "2.0");
+        let content_text = response["result"]["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(content_text).unwrap();
+        assert!(parsed.get("score").is_some(), "missing score");
+        assert_eq!(parsed.get("ai_probability").and_then(Value::as_f64), Some(0.42));
+    }
+
+    #[test]
+    fn e2e_research_unknown_tool_returns_error() {
+        ensure_test_research_dispatch();
+        let repo = unique_test_repo("e2e-unknown");
+        let request = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"research_nonexistent","arguments":{}}}"#;
+        let response = handle_mcp_request(request, &repo, "test", "test-session").unwrap();
+        // Should return isError: true
+        let is_err = response["result"]["isError"].as_bool().unwrap_or(false);
+        assert!(is_err, "expected isError for unknown tool");
+    }
+
+    #[test]
+    fn e2e_research_dimensions_with_round_param() {
+        ensure_test_research_dispatch();
+        let repo = unique_test_repo("e2e-dimensions");
+        let request = r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"research_review_dimensions","arguments":{"round":1}}}"#;
+        let response = handle_mcp_request(request, &repo, "test", "test-session").unwrap();
+        let content_text = response["result"]["content"][0]["text"].as_str().unwrap();
+        let parsed: Value = serde_json::from_str(content_text).unwrap();
+        assert_eq!(parsed.get("dimension").and_then(Value::as_str), Some("逻辑与证据"));
+    }
 }

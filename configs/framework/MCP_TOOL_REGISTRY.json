@@ -692,7 +692,7 @@
     {
       "slug": "research_review_loop",
       "display_name": "对抗审稿循环",
-      "description": "启动多轮对抗审稿循环",
+      "description": "对抗审稿循环——适配器工具，提供审稿维度/prompt/checklist。循环状态由 quality_gate_manage 在运行层管理",
       "layer": "research",
       "dispatch_domain": "research",
       "owner": "research",
@@ -710,9 +710,39 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "max_rounds": {"type": "integer", "description": "最大轮次（默认 10）"},
-          "min_rounds": {"type": "integer", "description": "最小轮次（默认 5）"},
-          "consecutive_stable_required": {"type": "integer", "description": "连续稳定轮次要求（默认 2）"}
+          "operation": {"type": "string", "description": "操作：start（默认）/submit_round/status"},
+          "max_rounds": {"type": "integer", "description": "最大轮次（默认 10；start 操作设定上限，submit_round 操作可传以触发 ceiling 检测）"},
+          "min_rounds": {"type": "integer", "description": "最小轮次（默认 5；仅 start 操作）"},
+          "consecutive_stable_required": {"type": "integer", "description": "连续稳定轮次要求（默认 2；仅 start 操作）"},
+          "round": {"type": "integer", "description": "当前轮次号（submit_round/status 操作必填）"},
+          "findings": {"type": "array", "items": {"type": "object"}, "description": "本轮审稿发现数组（submit_round 操作）"}
+        }
+      }
+    },
+    {
+      "slug": "research_smoke",
+      "display_name": "学术数据源新鲜度烟雾测试",
+      "description": "对学术数据源（arXiv/Semantic Scholar）执行新鲜度烟雾测试，检测源端数据是否滞后或不可用",
+      "layer": "research",
+      "dispatch_domain": "research",
+      "owner": "research",
+      "trigger_hints": [
+        "烟雾测试",
+        "数据源",
+        "freshness",
+        "学术搜索",
+        "arXiv",
+        "Semantic Scholar"
+      ],
+      "host_platforms": [],
+      "mcp_server": "research-harness",
+      "tool_flags": [],
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source": {"type": "string", "description": "过滤源：arxiv/semantic-scholar（可选）"},
+          "barrier_id": {"type": "string", "description": "按 barrier_id 过滤（可选）"},
+          "repo_root": {"type": "string", "description": "仓库根路径（可选，默认当前目录）"}
         }
       }
     },

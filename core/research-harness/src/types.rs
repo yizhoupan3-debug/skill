@@ -227,38 +227,3 @@ pub enum VerificationStatus {
     Warn,
     Skip,
 }
-
-// ── Convergence ──
-
-/// Convergence state for the review loop.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ConvergenceState {
-    pub min_rounds: u64,
-    pub consecutive_stable_required: u64,
-    pub consecutive_stable_count: u64,
-    pub max_rounds: u64,
-    pub current_round: u64,
-}
-
-impl ConvergenceState {
-    /// Check if the loop has converged.
-    pub fn is_converged(&self) -> bool {
-        self.current_round >= self.min_rounds
-            && self.consecutive_stable_count >= self.consecutive_stable_required
-    }
-
-    /// Check if the loop has hit the hard ceiling.
-    pub fn is_at_ceiling(&self) -> bool {
-        self.current_round >= self.max_rounds
-    }
-
-    /// Record a round result and update stable count.
-    pub fn record_round(&mut self, has_blocking_findings: bool) {
-        if has_blocking_findings {
-            self.consecutive_stable_count = 0;
-        } else {
-            self.consecutive_stable_count += 1;
-        }
-        self.current_round += 1;
-    }
-}

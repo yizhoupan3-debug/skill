@@ -434,7 +434,7 @@ fn review_loop_start(arguments: &Value) -> Result<String, FrameworkError> {
     .map_err(FrameworkError::Json)
 }
 
-/// Operation `submit_round`: accept round + findings, return next-round dimension.
+/// Operation `submit_round`: accept round + findings, return next-round dimension or completion.
 /// Stateless — convergence is managed by quality_gate_manage at the runtime layer.
 fn review_loop_submit_round(arguments: &Value) -> Result<String, FrameworkError> {
     let round = arguments
@@ -443,6 +443,20 @@ fn review_loop_submit_round(arguments: &Value) -> Result<String, FrameworkError>
         .ok_or(FrameworkError::validation(
             "research_review_loop submit_round requires 'round' (u64)",
         ))?;
+
+    let max_rounds = arguments.get("max_rounds").and_then(Value::as_u64);
+
+    // Ceiling check: if this round has reached max, signal completion.
+    if let Some(ceiling) = max_rounds {
+        if round >= ceiling {
+            return serde_json::to_string_pretty(&json!({
+                "operation": "completed",
+                "reason": "max_rounds reached — ceiling exceeded",
+                "rounds_completed": round,
+            }))
+            .map_err(FrameworkError::Json);
+        }
+    }
 
     let findings_val = arguments.get("findings").and_then(Value::as_array);
     let findings: Vec<crate::types::Finding> = match findings_val {
@@ -793,6 +807,38 @@ mod tests {
         let next = parsed.get("next_round").unwrap();
         assert_eq!(next.get("round").and_then(Value::as_u64), Some(4));
         assert_eq!(next.get("dimension").and_then(Value::as_str), Some("图表与可读性"));
+    }
+
+    #[test]
+    fn research_review_loop_submit_at_ceiling() {
+        // round == max_rounds → ceiling hit, operation="completed"
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({"operation": "submit_round", "round": 10, "max_rounds": 10, "findings": []}),
+        );
+        assert!(result.is_ok());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("completed"));
+        assert!(parsed.get("reason").and_then(Value::as_str)
+            .unwrap_or("").contains("max_rounds"));
+
+        // round > max_rounds → also completed
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({"operation": "submit_round", "round": 999, "max_rounds": 10, "findings": []}),
+        );
+        assert!(result.is_ok());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("completed"));
+
+        // no max_rounds → proceeds normally (backward compat)
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({"operation": "submit_round", "round": 99, "findings": []}),
+        );
+        assert!(result.is_ok());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("continue"));
     }
 
     #[test]

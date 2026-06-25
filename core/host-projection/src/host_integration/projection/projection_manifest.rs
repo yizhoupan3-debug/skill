@@ -249,39 +249,28 @@ pub fn write_projection_manifest(
 }
 
 pub fn mcp_config_path(roots: &ResolvedProjectionRoots, host_id: &str, scope: &str) -> std::result::Result<PathBuf, String> {
-    if host_id == "cursor" {
-        Ok(roots
-            .host_home_root(host_id)
-            .ok_or_else(|| format!("{host_id} host must be registered in projection roots"))?
-            .join("mcp.json"))
-    } else {
-        let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, scope);
-        if rel.is_empty() {
-            return Err(format!("no mcp config path for {host_id} scope {scope}"));
-        }
-        if scope == "user" {
-            if framework_kernel::runtime_registry::host_projection_mcp_base_is_account(
-                host_id,
-                "user",
-            ) {
-                Ok(roots.account_home_root.join(rel))
-            } else {
-                roots.host_home_root(host_id)
-                    .map(|h| h.join(rel))
-                    .ok_or_else(|| format!("{host_id} host not registered"))
-            }
+    let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, scope);
+    if rel.is_empty() {
+        return Err(format!("no mcp config path for {host_id} scope {scope}"));
+    }
+    if scope == "user" {
+        if framework_kernel::runtime_registry::host_projection_mcp_base_is_account(
+            host_id,
+            "user",
+        ) {
+            Ok(roots.account_home_root.join(rel))
         } else {
-            Ok(roots.project_root.join(rel))
+            roots.host_home_root(host_id)
+                .map(|h| h.join(rel))
+                .ok_or_else(|| format!("{host_id} host not registered"))
         }
+    } else {
+        Ok(roots.project_root.join(rel))
     }
 }
 
 pub fn mcp_server_key_path() -> &'static str {
     "mcp_servers.browser-mcp"
-}
-
-pub fn codegraph_mcp_server_key_path() -> &'static str {
-    "mcp_servers.mcp-codegraph"
 }
 
 #[derive(Debug, Clone)]
@@ -298,7 +287,7 @@ pub fn install_mcp_server(
     host_id: &str,
     scope: &str,
 ) -> std::result::Result<McpInstallOutcome, String> {
-    if host_id == "cursor" {
+    if framework_kernel::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
         install_mcp_impl_snake_case(roots, path, host_id)
     } else {
         install_mcp_impl_camel_case(roots, path, scope, host_id).map(|changed| McpInstallOutcome {
@@ -308,6 +297,25 @@ pub fn install_mcp_server(
             skipped_user_owned: false,
         })
     }
+}
+
+/// Ensure JSON payload is an object with a servers map, return mutable ref to it.
+pub(super) fn mcp_servers_mut<'a>(
+    payload: &'a mut Value,
+    servers_key: &str,
+    host_id: &str,
+) -> std::result::Result<&'a mut Map<String, Value>, String> {
+    if !payload.is_object() {
+        *payload = json!({});
+    }
+    let root = payload.as_object_mut().ok_or_else(|| {
+        format!("{host_id} MCP config must be a JSON object")
+    })?;
+    let container = root.entry(servers_key.to_string()).or_insert_with(|| json!({}));
+    if !container.is_object() {
+        *container = json!({});
+    }
+    container.as_object_mut().ok_or_else(|| format!("{host_id} MCP servers must be an object"))
 }
 
 fn install_mcp_impl_snake_case(
@@ -330,21 +338,7 @@ fn install_mcp_impl_snake_case(
         {
             if mcp_server_semantically_matches_framework(existing, roots) {
                 let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
-                if !payload.is_object() {
-                    payload = json!({});
-                }
-                let root = payload
-                    .as_object_mut()
-                    .ok_or_else(|| format!("{host_id} mcp config payload must be an object"))?;
-                let mcp_servers = root
-                    .entry("mcp_servers".to_string())
-                    .or_insert_with(|| json!({}));
-                if !mcp_servers.is_object() {
-                    *mcp_servers = json!({});
-                }
-                let servers = mcp_servers
-                    .as_object_mut()
-                    .ok_or_else(|| format!("{host_id} mcp_servers must be an object"))?;
+                let servers = mcp_servers_mut(&mut payload, "mcp_servers", host_id)?;
                 let framework_changed =
                     servers.get("router-rs-framework") != Some(&framework_server);
                 if framework_changed {
@@ -379,21 +373,7 @@ fn install_mcp_impl_snake_case(
         }
 
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
-    if !payload.is_object() {
-        payload = json!({});
-    }
-    let root = payload
-        .as_object_mut()
-        .ok_or_else(|| format!("{host_id} mcp config payload must be an object"))?;
-    let mcp_servers = root
-        .entry("mcp_servers".to_string())
-        .or_insert_with(|| json!({}));
-    if !mcp_servers.is_object() {
-        *mcp_servers = json!({});
-    }
-    let servers = mcp_servers
-        .as_object_mut()
-        .ok_or_else(|| format!("{host_id} mcp_servers must be an object"))?;
+    let servers = mcp_servers_mut(&mut payload, "mcp_servers", host_id)?;
     let browser_changed = servers.get("browser-mcp") != Some(&browser_server);
     if browser_changed {
         servers.insert("browser-mcp".to_string(), browser_server);
@@ -447,7 +427,7 @@ pub fn mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Pat
 }
 
 pub fn remove_mcp_server(path: &Path, framework_root: &Path, host_id: &str) -> std::result::Result<bool, String> {
-    let format = if host_id == "cursor" {
+    let format = if framework_kernel::runtime_registry::host_mcp_config_format(host_id) == "snake_case" {
         McpConfigFormat::JSON_SNAKE_CASE
     } else {
         McpConfigFormat::JSON_CAMEL_CASE
@@ -570,14 +550,6 @@ pub fn mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
     }
 }
 
-pub fn router_rs_framework_key_path() -> &'static str {
-    "mcp_servers.router-rs-framework"
-}
-
-pub fn paperplain_mcp_server_key_path() -> &'static str {
-    "mcp_servers.paperplain"
-}
-
 pub fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> std::result::Result<bool, String> {
     let Some(manifest) = read_json_if_exists(path)? else {
         return Ok(false);
@@ -632,21 +604,7 @@ fn install_mcp_impl_camel_case(
     host_id: &str,
 ) -> std::result::Result<bool, String> {
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
-    if !payload.is_object() {
-        payload = json!({});
-    }
-    let root = payload
-        .as_object_mut()
-        .ok_or_else(|| format!("{host_id} mcp.json root must be an object"))?;
-    let mcp_servers = root
-        .entry("mcpServers".to_string())
-        .or_insert_with(|| json!({}));
-    if !mcp_servers.is_object() {
-        *mcp_servers = json!({});
-    }
-    let entries = mcp_servers
-        .as_object_mut()
-        .ok_or_else(|| "mcpServers must be an object".to_string())?;
+    let entries = mcp_servers_mut(&mut payload, "mcpServers", host_id)?;
 
     let framework_payload = host_router_rs_framework_payload(
         roots,
