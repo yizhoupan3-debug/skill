@@ -1055,14 +1055,11 @@ fn json_string_literal(value: &str) -> String {
 
 fn decode_base64(input: &str) -> Result<Vec<u8>, String> {
     use base64::Engine as _;
-    let engine = base64::engine::general_purpose::STANDARD;
-    // Fast path: no whitespace (common for screenshots from Chrome CDP)
-    if input.bytes().any(|b| b.is_ascii_whitespace()) {
-        let cleaned: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
-        engine.decode(cleaned.as_bytes()).map_err(|e| format!("decode base64 failed: {e}"))
-    } else {
-        engine.decode(input.as_bytes()).map_err(|e| format!("decode base64 failed: {e}"))
-    }
+    let engine = base64::engine::general_purpose::STANDARD_NO_PAD;
+    // Strip padding so both padded and unpadded base64 decode cleanly.
+    let cleaned: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
+    let trimmed = cleaned.trim_end_matches('=');
+    engine.decode(trimmed.as_bytes()).map_err(|e| format!("decode base64 failed: {e}"))
 }
 
 #[cfg(test)]
@@ -1104,11 +1101,11 @@ mod frag_rest_tests {
         let desc2 = ElementDescriptor {
             ..desc.clone()
         };
-        assert_eq!(create_fingerprint(&desc2, &mut counts), "link::Home::a");
+        assert_eq!(create_fingerprint(&desc2, &mut counts), "link::Home::a#2");
         let desc3 = ElementDescriptor {
             ..desc.clone()
         };
-        assert_eq!(create_fingerprint(&desc3, &mut counts), "link::Home::a");
+        assert_eq!(create_fingerprint(&desc3, &mut counts), "link::Home::a#3");
     }
 
     // --- has_meaningful_change ---

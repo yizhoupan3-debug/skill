@@ -16,4 +16,5 @@ HookReviewDiskCore {
     followup_count: 0,
     review_followup_count: 0,
     goal_followup_count: 0,
+    done_when_advisory_sent: false,
 }

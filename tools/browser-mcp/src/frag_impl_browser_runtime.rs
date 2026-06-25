@@ -3,6 +3,24 @@
 impl BrowserRuntime {
     #[cfg(test)]
     fn new(repo_root: PathBuf) -> Self {
+        // Initialize no-op hooks for test isolation
+        static INIT_HOOKS: std::sync::Once = std::sync::Once::new();
+        INIT_HOOKS.call_once(|| {
+            browser_mcp_dispatch::set_hooks(browser_mcp_dispatch::BrowserMcpHooks {
+                evaluate_mcp_pre_guard: |_, _, _| {
+                    browser_mcp_dispatch::McpPreGuardVerdict {
+                        blocked: false,
+                        reason: None,
+                    }
+                },
+                attach_runtime_event_transport: |_| {
+                    Err("no runtime hooks in test".to_string())
+                },
+                inspect_trace_stream: |_| {
+                    Err("no runtime hooks in test".to_string())
+                },
+            });
+        });
         Self::with_attach_config(repo_root, BrowserAttachConfig::default())
     }
 

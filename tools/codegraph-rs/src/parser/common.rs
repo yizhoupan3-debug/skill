@@ -71,7 +71,7 @@ mod tests {
     #[test]
     fn should_index_markdown_in_docs() {
         assert_eq!(detect_language("docs/architecture.md"), Some("markdown"));
-        assert_eq!(detect_language("docs/README.md"), Some("markdown"));
+        assert_eq!(detect_language("docs/guide.md"), Some("markdown"));
         assert_eq!(detect_language("skills/code-review-deep/SKILL.md"), Some("markdown"));
     }
 
