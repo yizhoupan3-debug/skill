@@ -153,19 +153,19 @@ fn clamp_max_rounds(raw: u64) -> (u64, bool) {
     if raw > cap { (cap, true) } else { (raw, false) }
 }
 
-fn resolve_framework_quality_gate_repo(payload: &Value) -> Result<PathBuf, String> {
+fn resolve_framework_quality_gate_repo(payload: &Value) -> Result<PathBuf> {
     let repo_root = payload
         .get("repo_root")
         .and_then(|v| v.as_str())
         .map(PathBuf::from)
         .ok_or_else(|| "framework_quality_gate requires repo_root".to_string())?;
     if !repo_root.is_dir() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "framework_quality_gate: repo_root is not a directory: {}",
             repo_root.display()
-        ));
+        )));
     }
-    resolve_repo_root_arg(Some(repo_root.as_path()))
+    Ok(resolve_repo_root_arg(Some(repo_root.as_path()))?)
 }
 
 /// Attach JSON-backed operator nudge reference lines for stdio callers (non-hook path).

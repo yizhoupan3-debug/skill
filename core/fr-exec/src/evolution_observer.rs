@@ -241,16 +241,14 @@ impl EvolutionObserver {
     fn append_alert(&self, alert: &EvolutionAlert) -> Result<()> {
         let path = &self.config.alerts_path;
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("create alerts dir {}: {e}", parent.display()))?;
+            fs::create_dir_all(parent)?;
         }
-        let line = serde_json::to_string(alert).map_err(|e| e.to_string())?;
+        let line = serde_json::to_string(alert)?;
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(path)
-            .map_err(|e| format!("open alerts {}: {e}", path.display()))?;
-        writeln!(file, "{line}").map_err(|e| format!("append alerts: {e}"))?;
+            .open(path)?;
+        writeln!(file, "{line}")?;
         Ok(())
     }
 }

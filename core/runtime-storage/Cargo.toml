@@ -17,6 +17,7 @@ path = "src/lib.rs"
 
 [dependencies]
 chrono = { workspace = true }
+core-policy = { path = "../core-policy" }
 core-state-utils = { path = "../core-state-utils" }
 framework-kernel = { path = "../framework-kernel" }
 libc = { workspace = true }
@@ -29,6 +30,5 @@ sha2 = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-core-policy = { path = "../core-policy", features = ["dev-exempt", "test-sync"] }
 insta.workspace = true
 serial_test = "3"
