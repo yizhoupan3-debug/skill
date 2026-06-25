@@ -280,7 +280,6 @@ pub(crate) mod proptests {
     /// Simulated GOAL_STATE machine state for in-memory property testing.
     #[derive(Debug, Clone, PartialEq)]
     enum GoalStatus {
-        Nonexistent,
         Running,
         Paused,
         Blocked,

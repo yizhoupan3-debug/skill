@@ -385,13 +385,6 @@ pub fn cargo_manifest_command(manifest: &Path, args: &[&str]) -> Command {
 }
 
 #[allow(dead_code)]
-pub fn shell_command(cwd: &Path, script: &str) -> Command {
-    let mut command = Command::new("sh");
-    command.args(["-c", script]).current_dir(cwd);
-    command
-}
-
-#[allow(dead_code)]
 pub fn make_executable(path: &Path) {
     #[cfg(unix)]
     {

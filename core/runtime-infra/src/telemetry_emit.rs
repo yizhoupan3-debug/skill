@@ -179,7 +179,6 @@ pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn prediction_mismatch_writes_prediction_outcome_journal_line() {

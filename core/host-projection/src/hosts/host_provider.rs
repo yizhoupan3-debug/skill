@@ -416,8 +416,6 @@ mod tests {
             .and_then(|m| m.as_object())
             .expect("host_targets.metadata");
         for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
-            let provider = host_provider_for_id(host_id)
-                .unwrap_or_else(|| panic!("no host provider for {host_id}"));
             let host_meta = metadata
                 .get(*host_id)
                 .unwrap_or_else(|| panic!("metadata missing host_id `{host_id}`"));

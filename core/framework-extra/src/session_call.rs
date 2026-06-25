@@ -411,15 +411,6 @@ fn unix_timestamp() -> u64 {
         .unwrap_or(0)
 }
 
-#[allow(unexpected_cfgs)]
-#[cfg(any(test, feature = "test-support"))]
-pub fn test_lock_roundtrip() -> bool {
-    let lock = get_tracker_lock();
-    let guard = lock.lock();
-    drop(guard);
-    true
-}
-
 #[cfg(test)]
 mod tests {
     use crate::session_call::*;

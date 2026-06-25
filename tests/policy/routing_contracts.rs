@@ -3,7 +3,7 @@
 
 use crate::common::{
     CANONICAL_HOST_IDS, RETIRED_HOST_IDS, assert_canonical_closed_set_host_ids, output_text,
-    project_root, read_json, read_text, router_rs_command, router_rs_json, run,
+    project_root, read_json, read_text, router_rs_command, run,
     seed_framework_markers,
 };
 use crate::host_platforms;
@@ -263,7 +263,7 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     ]);
     command.current_dir(&root);
     let output = run(command);
-    let (stdout, stderr) = output_text(&output);
+    let (_, stderr) = output_text(&output);
     assert!(
         stderr.contains("not yet have a registered entrypoint provider")
             || stderr.contains("does not yet"),
@@ -295,7 +295,7 @@ fn codex_sync_does_not_write_root_agents_md() {
     ]);
     command.current_dir(&root);
     let output = run(command);
-    let (stdout, stderr) = output_text(&output);
+    let (_, stderr) = output_text(&output);
     assert!(
         stderr.contains("not yet have a registered entrypoint provider"),
         "sync-entrypoints should return stub error: stderr={stderr}"
@@ -324,7 +324,7 @@ fn codex_sync_preserves_existing_agents_codex_delta_file() {
     ]);
     command.current_dir(&root);
     let output = run(command);
-    let (stdout, stderr) = output_text(&output);
+    let (_, stderr) = output_text(&output);
     assert!(
         stderr.contains("not yet have a registered entrypoint provider"),
         "sync-entrypoints should return stub error: stderr={stderr}"

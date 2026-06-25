@@ -2,7 +2,7 @@ use crate::common::{
     host_integration_json, project_root, read_json, read_text, router_rs_command,
     seed_framework_markers, write_json, write_text,
 };
-use serde_json::{Value, json};
+use serde_json::json;
 use tempfile::tempdir;
 
 /// Shared fixture for `install-native-integration` tests.

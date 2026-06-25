@@ -18,7 +18,6 @@ fn router_rs_json_with_home(home: &Path, args: &[&str]) -> Value {
 
 #[test]
 fn compatibility_alias_inventory_and_generated_artifacts_status_are_reported() {
-    let framework_root = project_root();
     let aliases = router_rs_json(&["framework", "host-integration", "compatibility-aliases"]);
     assert_eq!(
         aliases["schema_version"],
