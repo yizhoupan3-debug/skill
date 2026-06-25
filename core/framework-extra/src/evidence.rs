@@ -19,6 +19,9 @@ use crate::util::{
     write_json_if_changed_unlocked,
 };
 
+use core_policy::error::FrameworkError;
+type Result<T> = std::result::Result<T, FrameworkError>;
+
 const MAX_POST_TOOL_EVIDENCE_ARTIFACTS: usize = 120;
 
 fn continuity_post_tool_evidence_env_enabled() -> bool {
@@ -182,13 +185,18 @@ fn extract_tool_exit_hint(event: &Value) -> Option<i64> {
 }
 
 /// Task id resolution for evidence append helpers: explicit override wins, then task_view pointers.
+///
+/// The override is validated via `safe_task_id_component` to reject path traversal
+/// (`..`, `/`, `\0`). Invalid overrides fall back to `resolve_task_view`.
 fn resolve_evidence_append_task_id(
     repo_root: &Path,
     task_id_override: Option<&str>,
 ) -> Option<String> {
-    task_id_override
+    let validated_override = task_id_override
         .map(str::trim)
         .filter(|s| !s.is_empty())
+        .and_then(core_state_utils::path_guard::safe_task_id_component);
+    validated_override
         .map(ToString::to_string)
         .or_else(|| {
             let view = core_state::task_state::resolve_task_view(repo_root, None);
@@ -200,7 +208,7 @@ pub fn append_evidence_index_merged_row(
     repo_root: &Path,
     task_id_override: Option<&str>,
     entry: Map<String, Value>,
-) -> Result<(), String> {
+) -> Result<()> {
     // 解析 entry 中的签名字段用于去重（精确去重：command_preview + recorded_at）
     let entry_signature = entry
         .get("command_preview")
@@ -235,7 +243,7 @@ pub fn append_evidence_index_merged_row(
         None => current_root.join(EVIDENCE_INDEX_FILENAME),
     };
     if let Some(parent) = evidence_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| format!("create evidence dir: {err}"))?;
+        fs::create_dir_all(parent)?;
     }
 
     let tx_payload = {
@@ -306,7 +314,7 @@ pub fn append_evidence_index_merged_row(
 /// `framework hook-evidence-append`：供 Cursor hook 等外部进程写入一条验证记录。
 ///
 /// JSON：`repo_root`（可选）、`task_id`（可选）、`command_preview`（必填）、`exit_code`（可选）、`source`（可选，默认 `external_hook`）。
-pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
+pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
     let explicit = payload.get("repo_root").and_then(|v| {
         let s = value_text(Some(v));
         if s.is_empty() {
@@ -319,7 +327,7 @@ pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
     let preview = required_payload_text(&payload, "command_preview", "hook evidence append")?;
     let preview_trim = preview.trim();
     if preview_trim.is_empty() {
-        return Err("hook evidence append requires non-empty command_preview".to_string());
+        return Err(FrameworkError::validation("hook evidence append requires non-empty command_preview"));
     }
     let source = defaulted_payload_text(&payload, "source", "external_hook");
     let task_id = payload
@@ -597,7 +605,7 @@ pub fn try_append_post_tool_shell_evidence(
     repo_root: &Path,
     event: &Value,
     kind: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     if !continuity_post_tool_evidence_env_enabled() {
         return Ok(());
     }

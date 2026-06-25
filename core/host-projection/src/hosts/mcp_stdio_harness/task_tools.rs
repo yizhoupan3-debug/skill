@@ -11,7 +11,7 @@ use std::path::Path;
 /// Create a new task: ensure directory, set focus, append `task_created` ledger entry.
 ///
 /// Idempotent: if `task_id` directory already has a `TASK_LEDGER.jsonl`, returns early.
-pub(crate) fn tool_task_create(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(crate) fn tool_task_create(arguments: &Value, repo_root: &Path) -> Result<String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -70,7 +70,7 @@ pub(crate) fn tool_task_create(arguments: &Value, repo_root: &Path) -> Result<St
 }
 
 /// List all known tasks with status, goal summary, and active/focus flags.
-pub(crate) fn tool_task_list(repo_root: &Path) -> Result<String, String> {
+pub(crate) fn tool_task_list(repo_root: &Path) -> Result<String> {
     let task_ids = list_known_task_ids(repo_root);
     let (active_task_id, focus_task_id) =
         core_state::state_manager::read_task_pointer_pair(repo_root);
@@ -157,7 +157,7 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> Result<String, String> {
 
 /// Complete a task. If GOAL_STATE exists, delegates to `framework_goal_drive(complete)`.
 /// Otherwise, neutralizes pointers and appends `task_completed` ledger entry.
-pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> Result<String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -231,7 +231,7 @@ pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> Result<
 
 /// Set focus to an existing task. Validates directory exists, then atomically writes both
 /// active + focus pointers.
-pub(crate) fn tool_task_focus(arguments: &Value, repo_root: &Path) -> Result<String, String> {
+pub(crate) fn tool_task_focus(arguments: &Value, repo_root: &Path) -> Result<String> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -240,6 +240,10 @@ pub(crate) fn tool_task_focus(arguments: &Value, repo_root: &Path) -> Result<Str
     if task_id.is_empty() {
         return Err("task_focus: task_id must not be empty".to_string());
     }
+
+    // Validate task_id is a safe path component before using it in filesystem ops
+    let task_id = core_state_utils::path_guard::validate_task_id_component(task_id)
+        .map_err(|_| format!("task_focus: invalid task_id '{task_id}'"))?;
 
     // Validate directory exists
     let task_dir = repo_root.join("artifacts/current").join(task_id);
