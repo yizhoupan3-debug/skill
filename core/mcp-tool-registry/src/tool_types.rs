@@ -59,7 +59,7 @@ pub struct McpToolRecord {
     pub input_schema_json: Option<McpToolInputSchema>,
 }
 
-/// JSON Schema for a composite-domain MCP tool's input parameters.
+/// JSON Schema for a framework-domain MCP tool's input parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpToolInputSchema {
     #[serde(rename = "type")]

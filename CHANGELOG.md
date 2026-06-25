@@ -58,6 +58,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [v7.1] — 2026-06-25
 
+### Tool Routing — 全面对抗审计重构（29 项 findings 闭环）
+
+#### Bug 修复
+- `input_schema_json` continue bug 修复（对象类型列在 v1 解析器中被错误跳过）
+- Host 过滤 + 模糊救援交互缺陷修复（模糊救援阶段绕过 host 过滤）
+- `display_name` 双重加分修复（Step 3 独立得分与 Step 5 alias 机制重叠）
+
+#### 基础设施提取
+- `mcp-tool-registry` + `tool-routing-engine` hooks 合并到 `routing-core::config_hooks`，消除两套 OnceLock 系统（L9 fallback 层级清除）
+- `McpToolRegistryError` 死代码模块删除，统一 `Result<..., String>`
+- `MAX_QUERY_LEN` 重复常量清除 + `signal/tooling.rs` 硬编码正则清理
+- `McpToolDecision` 替代 `ToolSearchResult`，消除冗余类型
+
+#### 数据模型升级
+- `MCP_TOOL_REGISTRY.json` 升级 v2 对象格式（columnar→object），54 工具全量迁移
+- `gate` 字段 `#[doc(hidden)]` 标注；`host_platforms` 语义变更为空数组=通配所有平台
+- 评分引擎权重外部化到 `configs/tool_scoring_weights.json` + 注释文档化
+
+#### 算法对齐
+- `search_tools` 增加 fuzzy rescue fallback（trigram Jaccard 匹配），与 `route_tool` 行为对齐
+- CJK tokenizer 补充 7 类标点分隔符（顿号、全角空格、书名号、角括号、破折号、间隔号）
+- do-not-use 惩罚增强（`per_hit` 5→25，`max_ratio` 0.3→0.8）
+- 权重文件 `tool_scoring_weights.json` 编译期 fallback（hook → FRAMEWORK_ROOT → 内嵌默认值）
+
+#### 数据质量提升
+- 54 工具 `trigger_hints` 密度提升，每工具补充 2-3 条场景化同义词
+- `browser_*`/`codegraph_*` 系列增加去重叠独有 hint
+- `tool_flags` 审计标记（`research_aigc_humanize` → deprecated）
+- 短描述扩展（`skill_route_status`、`closeout_gate` 30+ 字符）
+
+#### 安全加固
+- `web_fetch_guard` 旧 API `validate_web_fetch_url` 标注 `#[deprecated]`，全面迁移至 `validate_and_resolve_web_fetch_url`（TOCTOU 防护）
+- `routing_evolution` telemetry 文件读取加 `lock_shared()` flock 保护
+- `pre_tool_use_guard` 集成 `check_auxiliary_file_reference()` 安全检查
+
+#### 复合域分发拆分（H3）
+- `dispatch_domain` 从 `"composite"` 拆分为 5 子域：`domain:goal` / `domain:quality-gate` / `domain:closeout` / `domain:routing-evolution` / `domain:framework`
+- `tool_handlers.rs`（647 行）拆分为目录模块 `tool_handlers/`，4 个独立 handler 文件：`goal_handler.rs` / `quality_gate_handler.rs` / `closeout_handler.rs` / `routing_evolution_handler.rs`
+- `mod.rs` 统一 re-export 接口，host-projection 按子域注册不同 handler
+
+#### 测试覆盖
+- `tool-routing-engine` 新增 5 项单元测试（do-not-use penalty / layer_penalty / alias / description / 超长查询）
+- `tool-routing-engine` 新增 2 项集成测试（真实注册表 54+ 工具加载验证 / 全量路由可达性）
+
 ### Architecture
 - 六层→八层运行时模型重构 (L0-L7)
 - `framework-runtime` 拆分为 `fr-utils`/`fr-contracts`/`fr-exec` 子 crate

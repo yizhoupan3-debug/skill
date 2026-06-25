@@ -542,7 +542,7 @@ fn handle_initialize(id: Option<Value>) -> Value {
 }
 
 pub fn handle_tools_list(id: Option<Value>) -> Value {
-    // Build composite tool entries dynamically from the registry
+    // Build framework dispatch-domain tool entries dynamically from the registry
     let composite_tools = build_composite_tools_from_registry();
 
     // Research tools (from research-harness, schemas hardcoded here)
