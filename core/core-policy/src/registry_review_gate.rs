@@ -10,7 +10,7 @@ use std::sync::{Mutex, OnceLock};
 pub(crate) const RUNTIME_REGISTRY_PATH: &str = "configs/framework/RUNTIME_REGISTRY.json";
 
 const DEFAULT_SPAWN_FIRST_NUDGE: &str = "配对审稿：首轮工具前先 spawn 只读 reviewer（general-purpose/best-of-n-runner，fork_context=false）；主线程做调研须另开独立 reviewer，explore 不计入证据。细则 skills/code-review-deep/SKILL.md";
-const DEFAULT_SUBAGENT_MODEL_INHERIT_NUDGE: &str = "子代理模型：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见 cursor.com/docs/account/regions";
+const DEFAULT_SUBAGENT_MODEL_INHERIT_NUDGE: &str = "子代理模型：继承主会话；Task 省略 model；禁止默认 claude/sonnet，除非主会话已选 Anthropic。地区不可用见宿主官方文档";
 
 #[derive(Clone)]
 struct ReviewGateSnapshot {

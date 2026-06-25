@@ -48,7 +48,7 @@ pub struct ProjectionManifestOwnership {
     pub owns_projection_file: bool,
 }
 
-pub fn projection_manifest_status(path: &Path) -> Result<Value, String> {
+pub fn projection_manifest_status(path: &Path) -> std::result::Result<Value, String> {
     let manifest = read_json_if_exists(path)?;
     Ok(projection_manifest_status_from_payload(
         path,
@@ -69,7 +69,7 @@ pub fn projection_manifest_ownership(
     host_projection: &str,
     scope: &str,
     projection_path: &Path,
-) -> Result<ProjectionManifestOwnership, String> {
+) -> std::result::Result<ProjectionManifestOwnership, String> {
     let managed = projection_manifest_is_managed(path, Some(host_projection), Some(scope))?;
     let owns_projection_file = managed && projection_manifest_files_include(path, projection_path)?;
     Ok(ProjectionManifestOwnership {
@@ -82,7 +82,7 @@ pub fn projection_manifest_is_managed(
     path: &Path,
     host_projection: Option<&str>,
     scope: Option<&str>,
-) -> Result<bool, String> {
+) -> std::result::Result<bool, String> {
     let Some(manifest) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -121,7 +121,7 @@ pub fn projection_manifest_payload_is_managed(
 pub fn projection_manifest_files_include(
     manifest_path: &Path,
     projection_path: &Path,
-) -> Result<bool, String> {
+) -> std::result::Result<bool, String> {
     let Some(manifest) = read_json_if_exists(manifest_path)? else {
         return Ok(false);
     };
@@ -175,55 +175,24 @@ pub fn append_mcp_path(paths: &mut Value, include: bool, mcp_path: &Path) {
     }
 }
 
-pub fn codex_entrypoint_target(
+/// Generic entrypoint target path for any host.
+/// Uses RUNTIME_REGISTRY.json via compile-time generated lookup functions.
+pub fn entrypoint_target(
     roots: &ResolvedProjectionRoots,
     scope: &str,
-) -> Result<PathBuf, String> {
+    host_id: &str,
+) -> std::result::Result<PathBuf, String> {
+    let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+    let subdir = framework_kernel::runtime_registry::projection_entrypoint_subdir(host_id);
+    let filename = framework_kernel::runtime_registry::projection_entrypoint_filename(host_id);
     if scope == "user" {
-        Ok(roots
-            .host_home_root("codex")
-            .ok_or_else(|| "codex host must be registered in projection roots".to_string())?
-            .join("prompts")
-            .join("framework.md"))
+        roots
+            .host_home_root(host_id)
+            .ok_or_else(|| format!("{host_id} host must be registered in projection roots"))?
+            .join(subdir)
+            .join(filename)
     } else {
-        Ok(roots
-            .project_root
-            .join(".codex")
-            .join("prompts")
-            .join("framework.md"))
-    }
-}
-
-pub fn cursor_entrypoint_target(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<PathBuf, String> {
-    if scope == "user" {
-        Ok(roots
-            .host_home_root("cursor")
-            .ok_or_else(|| "cursor host must be registered in projection roots".to_string())?
-            .join("rules")
-            .join("framework.mdc"))
-    } else {
-        Ok(roots
-            .project_root
-            .join(".cursor")
-            .join("rules")
-            .join("framework.mdc"))
-    }
-}
-
-pub fn codex_prompt_entrypoints_root(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<PathBuf, String> {
-    if scope == "user" {
-        Ok(roots
-            .host_home_root("codex")
-            .ok_or_else(|| "codex host must be registered in projection roots".to_string())?
-            .clone())
-    } else {
-        Ok(roots.project_root.join(".codex"))
+        roots.project_root.join(config_dir).join(subdir).join(filename)
     }
 }
 
@@ -263,7 +232,7 @@ pub fn write_projection_manifest(
     scope: &str,
     files: &[String],
     managed_key_paths: &[String],
-) -> Result<bool, String> {
+) -> std::result::Result<bool, String> {
     write_json_if_changed(
         &projection_manifest_path(roots, host_projection, scope),
         &json!({
@@ -279,23 +248,7 @@ pub fn write_projection_manifest(
     )
 }
 
-pub fn render_codex_framework_entrypoint(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<String, String> {
-    let narrative = load_host_projection_narrative(&roots.framework_root)
-        .map_err(|_| "host projection narrative must load before rendering codex entrypoint".to_string())?;
-    let runtime_rel = skills_source_rel(&roots.framework_root)
-        .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
-        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
-    Ok(format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nargument-hint: \"[framework task...]\"\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: codex -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse `$framework` semantics via the Rust-owned shared core.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n\n$ARGUMENTS\n",
-        gsd = lifecycle_paragraph_for_host(&narrative, "codex"),
-        review = narrative.review_findings_only_paragraph,
-    ))
-}
-
-pub fn cursor_mcp_config_path(roots: &ResolvedProjectionRoots) -> Result<PathBuf, String> {
+pub fn cursor_mcp_config_path(roots: &ResolvedProjectionRoots) -> std::result::Result<PathBuf, String> {
     Ok(roots
         .host_home_root("cursor")
         .ok_or_else(|| "cursor host must be registered in projection roots".to_string())?
@@ -321,7 +274,7 @@ pub struct CursorMcpInstallOutcome {
 pub fn install_cursor_mcp_server(
     roots: &ResolvedProjectionRoots,
     path: &Path,
-) -> Result<CursorMcpInstallOutcome, String> {
+) -> std::result::Result<CursorMcpInstallOutcome, String> {
     let browser_server = cursor_mcp_server_payload(roots);
     let framework_server = host_router_rs_framework_payload(
         roots,
@@ -453,7 +406,7 @@ pub fn cursor_mcp_entry_is_framework_owned_stale(existing: &Value, framework_roo
     is_repo_build_executable_path(cmd, framework_root)
 }
 
-pub fn remove_cursor_mcp_server(path: &Path, framework_root: &Path) -> Result<bool, String> {
+pub fn remove_cursor_mcp_server(path: &Path, framework_root: &Path) -> std::result::Result<bool, String> {
     mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_SNAKE_CASE)
 }
 
@@ -580,7 +533,7 @@ pub fn cursor_paperplain_mcp_server_key_path() -> &'static str {
     "mcp_servers.paperplain"
 }
 
-pub fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> Result<bool, String> {
+pub fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> std::result::Result<bool, String> {
     let Some(manifest) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -598,7 +551,7 @@ pub fn projection_manifest_manages_key_path(path: &Path, key_path: &str) -> Resu
 pub fn cursor_mcp_server_matches_framework(
     roots: &ResolvedProjectionRoots,
     path: &Path,
-) -> Result<Option<bool>, String> {
+) -> std::result::Result<Option<bool>, String> {
     let Some(payload) = read_json_if_exists(path)? else {
         return Ok(None);
     };
@@ -614,7 +567,7 @@ pub fn cursor_mcp_server_matches_framework(
     )))
 }
 
-pub fn cursor_mcp_server_exists(path: &Path) -> Result<bool, String> {
+pub fn cursor_mcp_server_exists(path: &Path) -> std::result::Result<bool, String> {
     let Some(payload) = read_json_if_exists(path)? else {
         return Ok(false);
     };
@@ -641,7 +594,7 @@ pub fn install_claude_mcp_server(
     roots: &ResolvedProjectionRoots,
     path: &Path,
     _scope: &str,
-) -> Result<bool, String> {
+) -> std::result::Result<bool, String> {
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
     if !payload.is_object() {
         payload = json!({});
@@ -682,34 +635,38 @@ pub fn install_claude_mcp_server(
     Ok(framework_changed || browser_changed || paperplain_changed || codegraph_changed || file_changed)
 }
 
-pub fn remove_claude_mcp_server(path: &Path, framework_root: &Path) -> Result<bool, String> {
+pub fn remove_claude_mcp_server(path: &Path, framework_root: &Path) -> std::result::Result<bool, String> {
     mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_CAMEL_CASE)
 }
 
-pub fn render_cursor_framework_entrypoint(
+pub fn render_framework_entrypoint(
     roots: &ResolvedProjectionRoots,
     scope: &str,
-) -> Result<String, String> {
+    host_id: &str,
+) -> std::result::Result<String, String> {
     let narrative = load_host_projection_narrative(&roots.framework_root)
-        .map_err(|_| "host projection narrative must load before rendering cursor entrypoint".to_string())?;
+        .map_err(|_| format!("host projection narrative must load before rendering {host_id} entrypoint"))?;
     let runtime_rel = skills_source_rel(&roots.framework_root)
         .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string());
+    let frontmatter_extra = framework_kernel::runtime_registry::projection_entrypoint_frontmatter_extra(host_id);
+    let description = framework_kernel::runtime_registry::projection_entrypoint_description(host_id);
+    let trailer = framework_kernel::runtime_registry::projection_entrypoint_trailer(host_id);
     Ok(format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\nglobs: [\"**/*\"]\nalwaysApply: true\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: cursor -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n",
-        gsd = lifecycle_paragraph_for_host(&narrative, "cursor"),
+        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n{frontmatter_extra}---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: {host_id} -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\n{description}\n\n{gsd}\n\n{review}\n\n1) Start from `AGENTS.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n{trailer}",
+        gsd = lifecycle_paragraph_for_host(&narrative, host_id),
         review = narrative.review_findings_only_paragraph,
     ))
 }
 
-pub fn managed_projection_file_exists(path: &Path) -> Result<bool, String> {
+pub fn managed_projection_file_exists(path: &Path) -> std::result::Result<bool, String> {
     let Some(content) = read_text_if_exists(path)? else {
         return Ok(false);
     };
     Ok(is_managed_projection_content(&content))
 }
 
-pub(super) fn projection_file_status(path: &Path, host_projection: &str) -> Result<Value, String> {
+pub(super) fn projection_file_status(path: &Path, host_projection: &str) -> std::result::Result<Value, String> {
     let content = read_text_if_exists(path)?;
     let marker_managed = content
         .as_deref()
@@ -763,7 +720,7 @@ pub fn install_skills_projection_tools(
     }
 }
 
-pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
+pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> std::result::Result<String, String> {
     let normalized = raw.trim().to_lowercase();
     if crate::host_integration::projection::projection_ops_trait::projection_ops_for_tool(&normalized).is_some() {
         return Ok(normalized);

@@ -11,9 +11,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
-use std::time::{Duration, Instant};
 
 type Result<T> = std::result::Result<T, FrameworkError>;
+use std::time::{Duration, Instant};
+
 
 const CONFIG_SCHEMA_HEADER: &str =
     "#:schema https://developers.openai.com/codex/config-schema.json\n";
@@ -138,16 +139,9 @@ enum Commands {
         project_root: Option<PathBuf>,
         #[arg(long)]
         artifact_root: Option<PathBuf>,
-        #[arg(long)]
-        home: Option<PathBuf>,
-        #[arg(long)]
-        codex_home: Option<PathBuf>,
-        #[arg(long)]
-        cursor_home: Option<PathBuf>,
-        #[arg(long)]
-        claude_home: Option<PathBuf>,
-        #[arg(long)]
-        opencode_home: Option<PathBuf>,
+        /// Per-host home overrides as `<host_id>=<path>`, e.g. `--host-home cursor=~/.cursor`.
+        #[arg(long = "host-home")]
+        host_homes: Vec<String>,
         #[arg(long)]
         to: Vec<String>,
         #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]

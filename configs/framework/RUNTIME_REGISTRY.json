@@ -22,6 +22,7 @@
         "home_env_var": "CURSOR_HOME",
         "default_home_dir": ".cursor",
         "install_tool": "cursor",
+        "entrypoint_frontmatter_extra": "globs: [\"**/*\"]\nalwaysApply: true\n",
         "projection_status": "implemented",
         "installable": true,
         "host_entrypoints": [
@@ -179,6 +180,9 @@
         "home_env_var": "CODEX_HOME",
         "default_home_dir": ".codex",
         "install_tool": "codex",
+        "entrypoint_frontmatter_extra": "argument-hint: \"[framework task...]\"\n",
+        "entrypoint_description": "Use `$framework` semantics via the Rust-owned shared core.",
+        "entrypoint_trailer": "\n\n$ARGUMENTS",
         "projection_status": "implemented",
         "installable": true,
         "host_entrypoints": "AGENTS.md",

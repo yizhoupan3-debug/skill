@@ -849,7 +849,7 @@ fn skills_runtime_rel_path(framework_root: &Path) -> String {
         .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string())
 }
 
-fn framework_entrypoint_render_context(
+pub(super) fn framework_entrypoint_render_context(
     roots: &ResolvedProjectionRoots,
     host_label: &str,
 ) -> Result<(HostProjectionNarrative, String)> {
@@ -862,7 +862,7 @@ fn framework_entrypoint_render_context(
     Ok((narrative, runtime_rel))
 }
 
-fn framework_entrypoint_common_footer(runtime_rel: &str) -> String {
+pub(super) fn framework_entrypoint_common_footer(runtime_rel: &str) -> String {
     format!(
         "1) Start from `AGENTS.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n"
     )

@@ -124,13 +124,10 @@ fn canonical_framework_host_id(host_id: &str) -> &str {
 }
 
 fn resolve_alias_host_entrypoint(alias_record: &Value, host_id: Option<&str>) -> String {
-    let requested_host = canonical_framework_host_id(
-        host_id
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            // Data-driven default: first registered host, no hardcoded name.
-            .unwrap_or_else(|| host_projection::hosts::default_host_id()),
-    );
+    let requested_host = match host_id {
+        Some(id) if !id.trim().is_empty() => canonical_framework_host_id(id.trim()),
+        _ => return String::new(),
+    };
     let host_entrypoints =
         alias_value_at_path(alias_record, &["host_entrypoints"]).and_then(Value::as_object);
     if let Some(entrypoint) = host_entrypoints

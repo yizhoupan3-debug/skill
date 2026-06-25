@@ -3,7 +3,10 @@
 //! P4: `HostLifecycle` / `HostToolExecutor` / `HostTelemetry` expose static metadata hooks
 //! consumed by `pre_tool_use_guard` and `host_integration` without registry I/O.
 
+use core_policy::error::FrameworkError;
 use std::sync::OnceLock;
+
+type Result<T> = std::result::Result<T, FrameworkError>;
 
 /// Full harness capabilities for hosts with complete hook support
 /// (all supported hosts from the registry).
@@ -219,12 +222,12 @@ include!(concat!(env!("OUT_DIR"), "/generated_host_providers.rs"));
 /// Generic hook dispatch function signature.
 /// Each host's CLI hook handler conforms to `fn(host_id, event, repo_root) -> Result<(), String>`.
 pub type HookDispatchFn =
-    fn(host_id: &str, event: &str, repo_root: Option<&std::path::Path>) -> Result<(), String>;
+    fn(host_id: &str, event: &str, repo_root: Option<&std::path::Path>) -> std::result::Result<(), String>;
 
 /// Generic agent dispatch function signature.
 /// Matches host_id (from registration) + repo_root to run the agent MCP loop.
 pub type AgentDispatchFn =
-    fn(host_id: &str, repo_root: Option<&std::path::Path>) -> Result<(), String>;
+    fn(host_id: &str, repo_root: Option<&std::path::Path>) -> std::result::Result<(), String>;
 
 static HOOK_DISPATCH_REGISTRY: OnceLock<Vec<(&'static str, HookDispatchFn)>> = OnceLock::new();
 static AGENT_DISPATCH_REGISTRY: OnceLock<Vec<(&'static str, AgentDispatchFn)>> = OnceLock::new();
@@ -277,15 +280,6 @@ pub fn host_provider_registry() -> &'static [Box<dyn HostProvider>] {
     HOST_PROVIDER_REGISTRY
         .get_or_init(build_host_provider_registry)
         .as_slice()
-}
-
-/// Returns the host_id of the first registered provider.
-/// Used as a data-driven default instead of hardcoding a specific host name.
-pub fn default_host_id() -> &'static str {
-    host_provider_registry()
-        .first()
-        .map(|p| p.host_id())
-        .unwrap_or("unknown")
 }
 
 pub fn host_provider_for_id(host_id: &str) -> Option<&'static dyn HostProvider> {
@@ -348,7 +342,7 @@ pub fn extract_observation_surfaces_for_host(
 
 pub fn validate_host_providers_against_registry(
     supported_host_ids: &[String],
-) -> Result<(), String> {
+) -> std::result::Result<(), String> {
     for provider in host_provider_registry() {
         let host_id = provider.host_id();
         if !supported_host_ids.iter().any(|id| id == host_id) {

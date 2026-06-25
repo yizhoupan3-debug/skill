@@ -67,12 +67,9 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value> {
             repo_root,
             project_root,
             artifact_root,
-            home,
-            codex_home,
-            cursor_home,
-            claude_home,
-            opencode_home,
+            host_homes,
             to,
+            home,
             scope,
             bootstrap_output_dir,
             skip_default_bootstrap,
@@ -82,15 +79,6 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value> {
         } => {
             let _ = (bootstrap_output_dir, skip_default_bootstrap);
             let selected = install_skills_projection_tools(&command, &tools, &to);
-            // Convert old per-host fields to host_homes for the new ProjectionCommand
-            let host_homes: Vec<String> = [
-                ("codex", codex_home),
-                ("cursor", cursor_home),
-                ("claude", claude_home),
-                ("opencode", opencode_home),
-            ].iter().filter_map(|(id, path_opt)| {
-                path_opt.as_ref().map(|p| format!("{}={}", id, p.display()))
-            }).collect();
             let projection_command = ProjectionCommand {
                 framework_root: repo_root,
                 project_root,

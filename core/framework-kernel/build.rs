@@ -10,6 +10,13 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
+/// Escape a string value for safe use inside a Rust `"…"` string literal.
+fn rust_str_escape(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+}
+
 fn main() {
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
     let registry_path = manifest_dir
@@ -167,6 +174,54 @@ fn main() {
         }
     }
     out.push_str("        _ => \"framework.md\",\n");
+    out.push_str("    }\n}\n\n");
+
+    // projection_entrypoint_frontmatter_extra
+    out.push_str("pub fn projection_entrypoint_frontmatter_extra(host_id: &str) -> &'static str {\n");
+    out.push_str("    match host_id {\n");
+    for id in &supported {
+        if let Some(val) = metadata.get(id.as_str())
+            .and_then(|m| m.get("entrypoint_frontmatter_extra"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            let escaped = rust_str_escape(val);
+            out.push_str(&format!("        \"{id}\" => \"{escaped}\",\n"));
+        }
+    }
+    out.push_str("        _ => \"\",\n");
+    out.push_str("    }\n}\n\n");
+
+    // projection_entrypoint_description
+    out.push_str("pub fn projection_entrypoint_description(host_id: &str) -> &'static str {\n");
+    out.push_str("    match host_id {\n");
+    for id in &supported {
+        if let Some(val) = metadata.get(id.as_str())
+            .and_then(|m| m.get("entrypoint_description"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            let escaped = rust_str_escape(val);
+            out.push_str(&format!("        \"{id}\" => \"{escaped}\",\n"));
+        }
+    }
+    out.push_str("        _ => \"Use this repository's shared framework runtime.\",\n");
+    out.push_str("    }\n}\n\n");
+
+    // projection_entrypoint_trailer
+    out.push_str("pub fn projection_entrypoint_trailer(host_id: &str) -> &'static str {\n");
+    out.push_str("    match host_id {\n");
+    for id in &supported {
+        if let Some(val) = metadata.get(id.as_str())
+            .and_then(|m| m.get("entrypoint_trailer"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            let escaped = rust_str_escape(val);
+            out.push_str(&format!("        \"{id}\" => \"{escaped}\",\n"));
+        }
+    }
+    out.push_str("        _ => \"\",\n");
     out.push_str("    }\n}\n\n");
 
     // review_gate_disable_env

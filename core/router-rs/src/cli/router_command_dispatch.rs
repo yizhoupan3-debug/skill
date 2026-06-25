@@ -101,10 +101,10 @@ fn resolve_host_entrypoint_provider(
     repo_root: &std::path::Path,
     host_id: Option<&str>,
 ) -> Result<runtime_core::host_entrypoint_sync::HostEntrypointPayloadProvider, String> {
-    let resolved = host_id
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| runtime_core::hosts::default_host_id());
+    let resolved = match host_id {
+        Some(id) if !id.trim().is_empty() => id.trim(),
+        _ => return Err("host-id is required for sync-entrypoints; pass --host-id <host_name>".to_string()),
+    };
     match runtime_core::hosts::host_provider_for_routing_spelling(resolved) {
         Some(provider) => {
             let _ = repo_root;
