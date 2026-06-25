@@ -161,7 +161,7 @@ fn write_skill_tiers_from_surface_policy(repo_root: &Path) -> Result<(), String>
         }
     });
     let dest = paths::tiers_json(repo_root);
-    core_state::utils::atomic_write::write_atomic_json(&dest, &out).map_err(|e| e.to_string())
+    core_state_utils::atomic_write::write_atomic_json(&dest, &out).map_err(|e| e.to_string())
 }
 
 

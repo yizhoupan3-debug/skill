@@ -87,7 +87,7 @@ pub fn write_loop_state(
     let path = loop_state_path(repo_root, loop_id);
     let text = serde_json::to_string_pretty(state)
         .map_err(|e| LoopError::Serde(format!("serialize state: {e}")))?;
-    core_state::utils::atomic_write::write_atomic_text(&path, &text).map_err(LoopError::Io)
+    core_state_utils::atomic_write::write_atomic_text(&path, &text).map_err(LoopError::Io)
 }
 
 /// Create a new initial `LoopRunState` with the given loop ID and profile.

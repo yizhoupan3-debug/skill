@@ -4,7 +4,7 @@ pub use core_state::state_manager::read_quality_gate_state;
 // QUALITY_GATE_STATE_FILENAME is imported via core_state::state_manager::quality_gate_state_path.
 // quality_gate_state_path is re-exported below.
 
-use core_state::utils::atomic_write::write_atomic_json;
+use core_state_utils::atomic_write::write_atomic_json;
 #[allow(unused_imports)] // consumed by tests via `use super::*`
 use core_state::state_manager::{
     source_traceable_heuristic, validate_external_research_strict,

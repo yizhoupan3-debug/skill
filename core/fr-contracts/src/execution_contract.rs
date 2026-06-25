@@ -191,6 +191,7 @@ fn runtime_fields_payload() -> Map<String, Value> {
         "live_primary_passthrough": EXECUTION_LIVE_PRIMARY_PASSTHROUGH_RUNTIME_FIELDS,
         "dry_run_required": EXECUTION_DRY_RUN_REQUIRED_RUNTIME_FIELDS,
     }) {
+        #[allow(clippy::panic)]
         Value::Object(map) => map,
         _ => unreachable!(),
     }
@@ -213,6 +214,7 @@ pub fn build_steady_state_execution_kernel_metadata(response_shape: &str) -> Map
         "execution_kernel_response_shape": response_shape,
         "execution_kernel_prompt_preview_owner": EXECUTION_PROMPT_PREVIEW_OWNER,
     }) {
+        #[allow(clippy::panic)]
         Value::Object(map) => map,
         _ => unreachable!(),
     }

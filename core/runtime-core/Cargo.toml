@@ -46,6 +46,7 @@ tungstenite.workspace = true
 tracing.workspace = true
 which.workspace = true
 codegraph-rs = { path = "../../tools/codegraph-rs", optional = true }
+eval-route = { path = "../eval-route" }
 loop-engine = { path = "../loop-engine" }
 mcp-tool-registry = { path = "../mcp-tool-registry" }
 tool-routing-engine = { path = "../tool-routing-engine" }

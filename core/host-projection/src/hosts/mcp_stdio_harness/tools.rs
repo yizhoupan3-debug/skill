@@ -294,7 +294,7 @@ fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
 /// Validate the resolved skill path stays within the repo root.
 /// Returns the path on success.
 fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<PathBuf, String> {
-    use core_state::utils::path_guard::{path_is_within_repo_root, reject_unsafe_path};
+    use core_state_utils::path_guard::{path_is_within_repo_root, reject_unsafe_path};
 
     reject_unsafe_path(path)?;
     if !path.is_file() {

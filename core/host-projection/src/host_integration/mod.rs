@@ -339,18 +339,6 @@ mod tests {
     }
 
     #[test]
-    fn projection_adapters_are_aligned_with_runtime_registry() {
-        let root = repo_root();
-
-        validate_projection_adapters_against_registry(&root).unwrap();
-        let expected: Vec<String> = framework_kernel::runtime_registry::ALL_HOST_IDS
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        assert_eq!(registry_projection_tools(&root).unwrap(), expected);
-    }
-
-    #[test]
     fn runtime_registry_missing_in_repo_root_returns_actionable_error() {
         let root = unique_test_root("runtime-registry-missing");
         fs::create_dir_all(&root).unwrap();

@@ -47,7 +47,7 @@ pub mod task_command;
 // cli: migrated to router-rs (ADR §10.3)
 #[cfg(feature = "codegraph")]
 pub mod codegraph_mcp;
-pub mod eval_route;
+pub use eval_route;
 pub use framework_kernel::framework_host_targets;
 pub use framework_maint;
 pub use host_projection::host_entrypoint_sync;
@@ -141,270 +141,278 @@ static HOST_PROJECTION_HOOKS_INIT: OnceLock<()> = OnceLock::new();
 /// Register host-projection hooks with runtime-core implementations.
 /// Safe to call multiple times; only the first call takes effect.
 ///
-/// NOTE: This function is ~209 lines. Consider splitting into per-domain
-/// registration helpers (e.g. `register_runtime_hooks`, `register_paper_hooks`,
-/// `register_web_fetch_hooks`) to keep each registration scope focused.
+/// Decomposed into per-domain helpers for maintainability. Registration
+/// order is deterministic — helpers execute sequentially within a single
+/// OnceLock guard.
 pub fn register_host_projection_hooks() {
     HOST_PROJECTION_HOOKS_INIT.get_or_init(|| {
-        // ── per-module registration ──
-        host_projection::hooks::register_framework_runtime(
-            framework_extra::contract_summary::build_framework_contract_summary_envelope,
-            framework_extra::evidence::try_append_post_tool_shell_evidence,
-            framework_extra::closeout::closeout_programmatic_enforcement_enabled,
-            framework_extra::closeout::closeout_record_path_for_task,
-            framework_extra::closeout::evaluate_closeout_record_file_for_task,
-            framework_extra::closeout::first_task_id_from_registry,
-            framework_extra::evidence::framework_hook_evidence_append,
-            framework_extra::evidence::extract_post_tool_duration_ms,
-            framework_extra::evidence::post_tool_call_succeeded,
-            framework_extra::closeout::closeout_stop_followup_for_completion_text,
-        );
-
-        host_projection::hooks::register_hook_timing(
-            hook_timing::mark_hook_start,
-            hook_timing::add_lock_wait_ms,
-            hook_timing::add_cargo_check_ms,
-            hook_timing::emit_hook_timing_line,
-        );
-
-        host_projection::hooks::register_session_call_tracker(
-            framework_extra::session_call::init_tracker,
-            |root, name, stats_json| {
-                let stats = stats_json.and_then(|v| {
-                    serde_json::from_value::<framework_extra::session_call::CacheStats>(v.clone()).ok()
-                });
-                framework_extra::session_call::record_tool_call(root, name, stats)
-            },
-            framework_extra::session_call::read_tracker_state,
-        );
-
-        host_projection::hooks::register_router_rs_observation(
-            |_output, _host| {}, // attach: no-op (runtime-core handles directly)
-            |_output| {},        // strip: no-op
-        );
-
-        host_projection::hooks::register_kernel_bootstrap(
-            kernel_bootstrap::ensure_kernel_bootstrap,
-        );
-
-        // ── extra hooks (runtime, web fetch, mcp guard, env flags) ──
-        host_projection::hooks::register_framework_runtime_extra(
-            framework_kernel::repo_roots::resolve_repo_root_arg,
-            framework_extra::util::current_local_timestamp,
-            framework_extra::session_artifacts::write_framework_session_artifacts,
-            |records_json,
-             host_id,
-             query,
-             session_id,
-             allow_overlay,
-             first_turn| {
-                // Deserialize from JSON to avoid L5→L1 dep on routing_engine::SkillRecord
-                let records: Vec<routing_engine::route::SkillRecord> = records_json.iter()
-                    .filter_map(|v| serde_json::from_value(v.clone()).ok())
-                    .collect();
-                framework_extra::route_manifest_fallback::route_task_with_manifest_fallback(
-                    &records,
-                    host_id,
-                    query,
-                    session_id,
-                    allow_overlay,
-                    first_turn,
-                )
-                .map(|d| host_projection::hooks::RouteDecision {
-                    selected_skill: d.selected_skill,
-                    selected_skill_path: d.selected_skill_path,
-                    reasons: d.reasons,
-                    score: d.score,
-                })
-            },
-            framework_extra::snapshot::build_framework_runtime_snapshot_envelope,
-            framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
-            framework_extra::evidence::append_evidence_index_merged_row,
-            telemetry_emit::hook_action_from_output,
-            || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
-            framework_extra::session_call::check_anomalies,
-        );
-        host_projection::hooks::register_build_framework_runtime_snapshot_envelope_with_level(
-            framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level,
-        );
-
-        // web_fetch_guard: convert (Url, Vec<SocketAddr>) → (String, Vec<String>)
-        host_projection::hooks::register_web_fetch_guard_extra(
-            |url| {
-                web_fetch_guard::validate_and_resolve_web_fetch_url(url).map(|(u, addrs)| {
-                    (u.to_string(), addrs.iter().map(|a| a.to_string()).collect())
-                })
-            },
-            |base, location| {
-                let base_url = reqwest::Url::parse(base)
-                    .map_err(|e| format!("web_fetch redirect base URL parse error: {e}"))?;
-                web_fetch_guard::resolve_web_fetch_redirect(&base_url, location)
-                    .map(|u| u.to_string())
-            },
-            |host, port| {
-                web_fetch_guard::resolve_web_fetch_addresses(host, port)
-                    .map(|addrs| addrs.iter().map(|a| a.to_string()).collect())
-            },
-        );
-
-        host_projection::hooks::register_mcp_pre_guard_extra(|tool, args, repo_root| {
-            let v = mcp_pre_guard::evaluate_mcp_pre_guard_safe(tool, args, repo_root);
-            host_projection::hooks::McpPreGuardVerdict {
-                blocked: v.blocked,
-                reason: v.reason,
-            }
-        });
-
-        // ── MCP routing: decouple L0→L1 DAG (ADR-010 §11.2) ──
-        // host-projection (L0) calls these fn ptrs instead of depending on
-        // routing-engine (L1) at compile time. The actual routing-engine
-        // types never cross the fn ptr boundary — only JSON strings do.
-        host_projection::hooks::register_mcp_tool_skill_route(
-            |query: &str, host_id: &str, first_turn: bool, repo_root: &str| {
-                let repo_root = std::path::Path::new(repo_root);
-                let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
-                let records = routing_engine::route::load_records_cached_for_stdio(
-                    Some(&runtime_path),
-                )?;
-                let records = routing_engine::route::filter_records_for_host(
-                    records.as_ref(), Some(host_id),
-                )?;
-                let records_json: Vec<serde_json::Value> = records.iter()
-                    .filter_map(|r| serde_json::to_value(r).ok())
-                    .collect();
-                let decision = host_projection::hooks::route_task_with_manifest_fallback(
-                    &records_json,
-                    Some(host_id),
-                    query,
-                    "session",
-                    true,
-                    first_turn,
-                )?;
-                if decision.selected_skill.is_empty() || decision.selected_skill == "none" {
-                    serde_json::to_string(&serde_json::json!({
-                        "routed": false, "skill_slug": null,
-                        "skill_path": null, "match_reason": "no match",
-                    })).map_err(|e| e.to_string())
-                } else {
-                    serde_json::to_string(&serde_json::json!({
-                        "routed": true,
-                        "skill_slug": decision.selected_skill,
-                        "skill_path": decision.selected_skill_path,
-                        "match_reason": decision.reasons.first().cloned().unwrap_or_default(),
-                    })).map_err(|e| e.to_string())
-                }
-            },
-        );
-        host_projection::hooks::register_mcp_tool_search_skills(
-            |query: &str, limit: usize, effective_host: &str, repo_root: &str| {
-                let repo_root = std::path::Path::new(repo_root);
-                let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
-                let records = routing_engine::route::load_records_cached_for_stdio(
-                    Some(&runtime_path),
-                )?;
-                let host_indices = routing_engine::route::filter_record_indices_for_host(
-                    records.as_ref(), Some(effective_host),
-                )?;
-                let rows = routing_engine::route::search_skills_subset(
-                    records.as_ref(), Some(&host_indices), query, limit,
-                );
-                let results = routing_engine::route::build_search_results_payload(query, rows);
-                serde_json::to_string(&results).map_err(|e| e.to_string())
-            },
-        );
-
-        // ── RFV loop full implementation (supports append_round) ──
-        host_projection::hooks::register_quality_gate_drive(quality_gate::framework_quality_gate);
-
-        // ── session-supervisor op dispatch (for MCP tools) ──
-        host_projection::hooks::register_session_supervisor_op(
-            session_supervisor::handle_session_supervisor_operation,
-        );
-
-        // ── framework-runtime-hooks internal hooks (pre_tool_use_guard, closeout, etc.) ──
-        framework_runtime_hooks::register(framework_runtime_hooks::RuntimeCoreHooks {
-            telemetry: framework_runtime_hooks::TelemetryHooks {
-                hook_fired: telemetry_emit::emit_hook_fired,
-                tool_call: |tool, count, blocked| {
-                    telemetry_emit::emit_tool_call(tool, count as u64, blocked);
-                },
-                route_decision: |_query, _decision, _reroute| {},
-                prediction_outcome: |_task_id, _checks_summary, _verification_status, _checks_count| {},
-                rfv_round: telemetry_emit::emit_rfv_round,
-            },
-            host_provider: framework_runtime_hooks::HostProviderHooks {
-                for_routing_spelling: |host_id| {
-                    host_id.and_then(|id| {
-                        hosts::host_provider::host_provider_for_routing_spelling(id)
-                            .map(|p| p.host_id())
-                    })
-                },
-                default_id: hosts::host_provider::default_host_id,
-                strict_pre_tool_fallback_hint: hosts::host_provider::host_provider_strict_pre_tool_fallback_hint,
-                registry: || {
-                    hosts::host_provider::host_provider_registry()
-                        .iter()
-                        .map(|p| (p.host_id(), None))
-                        .collect()
-                },
-            },
-            framework_goal_drive: core_state::state_manager::framework_goal_drive,
-            framework_quality_gate: quality_gate::framework_quality_gate,
-            handle_session_supervisor_operation: session_supervisor::handle_session_supervisor_operation,
-            handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
-            runtime_concurrency_defaults_payload: || {
-                serde_json::to_value(stdio_transport::runtime_concurrency_defaults_payload())
-                    .unwrap_or(serde_json::json!({}))
-            },
-            eval_route_contract: eval_route::eval_route_contract,
-            run_eval_route: |cases_path, runtime| {
-                eval_route::run_eval_route(cases_path, runtime)
-                    .map(|report| serde_json::to_value(report).unwrap_or(serde_json::json!({})))
-                    .map_err(|e| e.to_string())
-            },
-            generated_artifacts_status_for_repo: |repo_root| {
-                crate::host_integration::generated_artifacts_status_for_repo(repo_root)
-                    .map(|v| v.to_string())
-                    .map_err(|e| e.to_string())
-            },
-            ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
-        });
-
-        // ── Runtime trace transport proxies (for L3 browser-mcp) ──
-        host_projection::hooks::register_attach_runtime_event_transport(
-            fr_exec::trace_attach::attach_runtime_event_transport,
-        );
-        host_projection::hooks::register_inspect_trace_stream(
-            fr_exec::trace_stream_io::inspect_trace_stream,
-        );
-
-        // ── Tool dispatch hooks: business logic extracted from host-projection ──
-        host_projection::hooks::register_tool_goal_state_manage_dispatch(
-            framework_runtime::tool_handlers::goal_state_manage_dispatch,
-        );
-        host_projection::hooks::register_tool_quality_gate_manage_dispatch(
-            framework_runtime::tool_handlers::quality_gate_manage_dispatch,
-        );
-        host_projection::hooks::register_tool_closeout_record_write_dispatch(
-            framework_runtime::tool_handlers::closeout_record_write_dispatch,
-        );
-        host_projection::hooks::register_tool_closeout_gate_evaluate(
-            framework_runtime::tool_handlers::closeout_gate_evaluate,
-        );
-        host_projection::hooks::register_tool_routing_evolution_dispatch(
-            framework_runtime::tool_handlers::routing_evolution_dispatch,
-        );
-
-        // ── stdio transport dispatch (decouples runtime-infra from cli/) ──
-        runtime_infra::stdio_transport::register_stdio_dispatch(
-            crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload,
-            |key| {
-                std::env::var(key)
-                    .ok()
-                    .and_then(|v| v.trim().parse::<usize>().ok())
-            },
-        );
+        register_runtime_contract_hooks_impl();
+        register_telemetry_hooks_impl();
+        register_web_fetch_hooks_impl();
+        register_mcp_hooks_impl();
+        register_framework_bootstrap_hooks_impl();
+        register_tool_dispatch_hooks_impl();
     });
+}
+
+// ── per-domain registration helpers (private) ──
+
+fn register_runtime_contract_hooks_impl() {
+    host_projection::hooks::register_framework_runtime(
+        framework_extra::contract_summary::build_framework_contract_summary_envelope,
+        framework_extra::evidence::try_append_post_tool_shell_evidence,
+        framework_extra::closeout::closeout_programmatic_enforcement_enabled,
+        framework_extra::closeout::closeout_record_path_for_task,
+        framework_extra::closeout::evaluate_closeout_record_file_for_task,
+        framework_extra::closeout::first_task_id_from_registry,
+        framework_extra::evidence::framework_hook_evidence_append,
+        framework_extra::evidence::extract_post_tool_duration_ms,
+        framework_extra::evidence::post_tool_call_succeeded,
+        framework_extra::closeout::closeout_stop_followup_for_completion_text,
+    );
+
+    host_projection::hooks::register_framework_runtime_extra(
+        framework_kernel::repo_roots::resolve_repo_root_arg,
+        framework_extra::util::current_local_timestamp,
+        framework_extra::session_artifacts::write_framework_session_artifacts,
+        |records_json,
+         host_id,
+         query,
+         session_id,
+         allow_overlay,
+         first_turn| {
+            let records: Vec<routing_engine::route::SkillRecord> = records_json.iter()
+                .filter_map(|v| serde_json::from_value(v.clone()).ok())
+                .collect();
+            framework_extra::route_manifest_fallback::route_task_with_manifest_fallback(
+                &records, host_id, query, session_id, allow_overlay, first_turn,
+            )
+            .map(|d| host_projection::hooks::RouteDecision {
+                selected_skill: d.selected_skill,
+                selected_skill_path: d.selected_skill_path,
+                reasons: d.reasons,
+                score: d.score,
+            })
+        },
+        framework_extra::snapshot::build_framework_runtime_snapshot_envelope,
+        framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
+        framework_extra::evidence::append_evidence_index_merged_row,
+        telemetry_emit::hook_action_from_output,
+        || closeout_enforcement::CLOSEOUT_RECORD_SCHEMA_VERSION,
+        framework_extra::session_call::check_anomalies,
+    );
+    host_projection::hooks::register_build_framework_runtime_snapshot_envelope_with_level(
+        framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level,
+    );
+
+    // ── RFV loop full implementation (supports append_round) ──
+    host_projection::hooks::register_quality_gate_drive(quality_gate::framework_quality_gate);
+
+    // ── session-supervisor op dispatch (for MCP tools) ──
+    host_projection::hooks::register_session_supervisor_op(
+        session_supervisor::handle_session_supervisor_operation,
+    );
+
+    // ── framework-runtime-hooks internal hooks (pre_tool_use_guard, closeout, etc.) ──
+    framework_runtime_hooks::register(framework_runtime_hooks::RuntimeCoreHooks {
+        telemetry: framework_runtime_hooks::TelemetryHooks {
+            hook_fired: telemetry_emit::emit_hook_fired,
+            tool_call: |tool, count, blocked| {
+                telemetry_emit::emit_tool_call(tool, count as u64, blocked);
+            },
+            route_decision: |_query, _decision, _reroute| {},
+            prediction_outcome: |_task_id, _checks_summary, _verification_status, _checks_count| {},
+            rfv_round: telemetry_emit::emit_rfv_round,
+        },
+        host_provider: framework_runtime_hooks::HostProviderHooks {
+            for_routing_spelling: |host_id| {
+                host_id.and_then(|id| {
+                    hosts::host_provider::host_provider_for_routing_spelling(id)
+                        .map(|p| p.host_id())
+                })
+            },
+            default_id: hosts::host_provider::default_host_id,
+            strict_pre_tool_fallback_hint: hosts::host_provider::host_provider_strict_pre_tool_fallback_hint,
+            registry: || {
+                hosts::host_provider::host_provider_registry()
+                    .iter()
+                    .map(|p| (p.host_id(), None))
+                    .collect()
+            },
+        },
+        framework_goal_drive: core_state::state_manager::framework_goal_drive,
+        framework_quality_gate: quality_gate::framework_quality_gate,
+        handle_session_supervisor_operation: session_supervisor::handle_session_supervisor_operation,
+        handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
+        runtime_concurrency_defaults_payload: || {
+            serde_json::to_value(stdio_transport::runtime_concurrency_defaults_payload())
+                .unwrap_or(serde_json::json!({}))
+        },
+        eval_route_contract: eval_route::eval_route_contract,
+        run_eval_route: |cases_path, runtime| {
+            eval_route::run_eval_route(cases_path, runtime)
+                .map(|report| serde_json::to_value(report).unwrap_or(serde_json::json!({})))
+                .map_err(|e| e.to_string())
+        },
+        generated_artifacts_status_for_repo: |repo_root| {
+            crate::host_integration::generated_artifacts_status_for_repo(repo_root)
+                .map(|v| v.to_string())
+                .map_err(|e| e.to_string())
+        },
+        ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
+    });
+}
+
+fn register_telemetry_hooks_impl() {
+    host_projection::hooks::register_hook_timing(
+        hook_timing::mark_hook_start,
+        hook_timing::add_lock_wait_ms,
+        hook_timing::add_cargo_check_ms,
+        hook_timing::emit_hook_timing_line,
+    );
+
+    host_projection::hooks::register_session_call_tracker(
+        framework_extra::session_call::init_tracker,
+        |root, name, stats_json| {
+            let stats = stats_json.and_then(|v| {
+                serde_json::from_value::<framework_extra::session_call::CacheStats>(v.clone()).ok()
+            });
+            framework_extra::session_call::record_tool_call(root, name, stats)
+        },
+        framework_extra::session_call::read_tracker_state,
+    );
+
+    host_projection::hooks::register_router_rs_observation(
+        |_output, _host| {},
+        |_output| {},
+    );
+
+    // ── Runtime trace transport proxies (for L3 browser-mcp) ──
+    host_projection::hooks::register_attach_runtime_event_transport(
+        fr_exec::trace_attach::attach_runtime_event_transport,
+    );
+    host_projection::hooks::register_inspect_trace_stream(
+        fr_exec::trace_stream_io::inspect_trace_stream,
+    );
+}
+
+fn register_web_fetch_hooks_impl() {
+    host_projection::hooks::register_web_fetch_guard_extra(
+        |url| {
+            web_fetch_guard::validate_and_resolve_web_fetch_url(url).map(|(u, addrs)| {
+                (u.to_string(), addrs.iter().map(|a| a.to_string()).collect())
+            })
+        },
+        |base, location| {
+            let base_url = reqwest::Url::parse(base)
+                .map_err(|e| format!("web_fetch redirect base URL parse error: {e}"))?;
+            web_fetch_guard::resolve_web_fetch_redirect(&base_url, location)
+                .map(|u| u.to_string())
+        },
+        |host, port| {
+            web_fetch_guard::resolve_web_fetch_addresses(host, port)
+                .map(|addrs| addrs.iter().map(|a| a.to_string()).collect())
+        },
+    );
+}
+
+fn register_mcp_hooks_impl() {
+    host_projection::hooks::register_mcp_pre_guard_extra(|tool, args, repo_root| {
+        let v = mcp_pre_guard::evaluate_mcp_pre_guard_safe(tool, args, repo_root);
+        host_projection::hooks::McpPreGuardVerdict {
+            blocked: v.blocked,
+            reason: v.reason,
+        }
+    });
+
+    // ── MCP routing: decouple L0→L1 DAG (ADR-010 §11.2) ──
+    host_projection::hooks::register_mcp_tool_skill_route(
+        |query: &str, host_id: &str, first_turn: bool, repo_root: &str| {
+            let repo_root = std::path::Path::new(repo_root);
+            let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
+            let records = routing_engine::route::load_records_cached_for_stdio(
+                Some(&runtime_path),
+            )?;
+            let records = routing_engine::route::filter_records_for_host(
+                records.as_ref(), Some(host_id),
+            )?;
+            let records_json: Vec<serde_json::Value> = records.iter()
+                .filter_map(|r| serde_json::to_value(r).ok())
+                .collect();
+            let decision = host_projection::hooks::route_task_with_manifest_fallback(
+                &records_json,
+                Some(host_id),
+                query,
+                "session",
+                true,
+                first_turn,
+            )?;
+            if decision.selected_skill.is_empty() || decision.selected_skill == "none" {
+                serde_json::to_string(&serde_json::json!({
+                    "routed": false, "skill_slug": null,
+                    "skill_path": null, "match_reason": "no match",
+                })).map_err(|e| e.to_string())
+            } else {
+                serde_json::to_string(&serde_json::json!({
+                    "routed": true,
+                    "skill_slug": decision.selected_skill,
+                    "skill_path": decision.selected_skill_path,
+                    "match_reason": decision.reasons.first().cloned().unwrap_or_default(),
+                })).map_err(|e| e.to_string())
+            }
+        },
+    );
+    host_projection::hooks::register_mcp_tool_search_skills(
+        |query: &str, limit: usize, effective_host: &str, repo_root: &str| {
+            let repo_root = std::path::Path::new(repo_root);
+            let runtime_path = framework_kernel::skill_repo::skill_routing_runtime_json(repo_root);
+            let records = routing_engine::route::load_records_cached_for_stdio(
+                Some(&runtime_path),
+            )?;
+            let host_indices = routing_engine::route::filter_record_indices_for_host(
+                records.as_ref(), Some(effective_host),
+            )?;
+            let rows = routing_engine::route::search_skills_subset(
+                records.as_ref(), Some(&host_indices), query, limit,
+            );
+            let results = routing_engine::route::build_search_results_payload(query, rows);
+            serde_json::to_string(&results).map_err(|e| e.to_string())
+        },
+    );
+}
+
+fn register_framework_bootstrap_hooks_impl() {
+    host_projection::hooks::register_kernel_bootstrap(
+        kernel_bootstrap::ensure_kernel_bootstrap,
+    );
+
+    // ── stdio transport dispatch (decouples runtime-infra from cli/) ──
+    runtime_infra::stdio_transport::register_stdio_dispatch(
+        crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload,
+        |key| {
+            std::env::var(key)
+                .ok()
+                .and_then(|v| v.trim().parse::<usize>().ok())
+        },
+    );
+}
+
+fn register_tool_dispatch_hooks_impl() {
+    host_projection::hooks::register_tool_goal_state_manage_dispatch(
+        framework_runtime::tool_handlers::goal_state_manage_dispatch,
+    );
+    host_projection::hooks::register_tool_quality_gate_manage_dispatch(
+        framework_runtime::tool_handlers::quality_gate_manage_dispatch,
+    );
+    host_projection::hooks::register_tool_closeout_record_write_dispatch(
+        framework_runtime::tool_handlers::closeout_record_write_dispatch,
+    );
+    host_projection::hooks::register_tool_closeout_gate_evaluate(
+        framework_runtime::tool_handlers::closeout_gate_evaluate,
+    );
+    host_projection::hooks::register_tool_routing_evolution_dispatch(
+        framework_runtime::tool_handlers::routing_evolution_dispatch,
+    );
 }
 
 /// Explicitly initialize all runtime-core hooks.

@@ -262,7 +262,7 @@ mod fork_context_parse_tests {
     }
 
     #[test]
-    fn codex_countable_evidence_excludes_start_zero_without_independent() {
+    fn countable_evidence_excludes_start_zero_without_independent() {
         assert!(!countable_review_subagent_evidence(0, false));
         assert!(countable_review_subagent_evidence(1, false));
         assert!(countable_review_subagent_evidence(0, true));
@@ -293,7 +293,7 @@ mod fork_context_parse_tests {
     }
 
     #[test]
-    fn codex_wave2_compact_bump_requires_countable_evidence() {
+    fn wave2_compact_bump_requires_countable_evidence() {
         let finding = "[P1] foo.rs:1 — substantive compact finding for gate";
         assert!(
             maybe_bump_review_phase_for_compact_findings(true, false, 0, 0, false, finding,)

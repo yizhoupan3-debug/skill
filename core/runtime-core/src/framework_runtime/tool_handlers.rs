@@ -322,7 +322,7 @@ pub fn closeout_record_write_dispatch(
     }
 
     let record_value = serde_json::Value::Object(record);
-    core_state::utils::atomic_write::write_atomic_json(&record_path, &record_value)
+    core_state_utils::atomic_write::write_atomic_json(&record_path, &record_value)
         .map_err(|e| format!("write closeout record failed: {e}"))?;
 
     // Evaluate the record

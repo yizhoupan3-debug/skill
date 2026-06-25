@@ -9,7 +9,7 @@
 
 use crate::frontmatter_parser;
 use crate::paths;
-use core_state::utils::atomic_write::write_atomic_text;
+use core_state_utils::atomic_write::write_atomic_text;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;

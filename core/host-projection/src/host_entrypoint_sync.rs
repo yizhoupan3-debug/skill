@@ -233,7 +233,7 @@ fn sync_host_entrypoint_file(
     report: &mut SingleSyncReport,
 ) -> Result<(), String> {
     let destination =
-        core_state::utils::path_guard::join_repo_relative_under_root(target_root, relative)?;
+        core_state_utils::path_guard::join_repo_relative_under_root(target_root, relative)?;
     let existing = fs::read(&destination).ok();
 
     // 对 JSON 文件进行语义比较，消除格式差异导致的误判
@@ -247,7 +247,7 @@ fn sync_host_entrypoint_file(
         let text = std::str::from_utf8(desired).map_err(|_| {
             format!("host entrypoint {relative} payload must be UTF-8 text for atomic write")
         })?;
-        core_state::utils::atomic_write::write_atomic_text(&destination, text)?;
+        core_state_utils::atomic_write::write_atomic_text(&destination, text)?;
     }
     let bucket = if changed && apply {
         &mut report.written

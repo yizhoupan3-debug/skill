@@ -24,7 +24,7 @@
 //! 非 Unix 平台（Windows、WASM）使用 `create_new` 作为锁机制，存在固有的
 //! TOCTOU (time-of-check-to-time-of-use) 竞态风险。当前实现使用指数退避重试缓解。
 
-use core_state::utils::atomic_write::write_atomic_text;
+use core_state_utils::atomic_write::write_atomic_text;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::debug;

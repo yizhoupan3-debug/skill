@@ -9,7 +9,7 @@ use std::path::Path;
 /// Delegates to core-state's write_text_if_changed for atomic write safety.
 pub fn write_if_missing(path: &Path, content: String) -> Result<()> {
     if !path.exists() {
-        core_state::utils::json_io::write_text_if_changed(path, &content)
+        core_state_utils::json_io::write_text_if_changed(path, &content)
             .map_err(|e| anyhow::anyhow!("{e}"))?;
     }
     Ok(())

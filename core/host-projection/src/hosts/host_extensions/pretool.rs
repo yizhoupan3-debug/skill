@@ -238,6 +238,7 @@ fn bash_segment_mentions_path(segment: &str, hint: &str) -> bool {
         .any(|token| normalize_repo_relative_path(token) == hint)
 }
 
+#[allow(clippy::unwrap_used)]
 fn bash_segment_redirects_to_hint(segment: &str, hint: &str) -> bool {
     std::thread_local! {
         static HINT_RE_CACHE: std::cell::RefCell<HashMap<String, [Regex; 3]>> =

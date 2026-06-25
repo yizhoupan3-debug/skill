@@ -298,7 +298,7 @@ pub fn register_and_generate(
         .ok_or_else(|| "runtime JSON missing skills array".to_string())?
         .push(serde_json::Value::Array(row));
 
-    core_state::utils::atomic_write::write_atomic_json(&runtime_path, &doc)
+    core_state_utils::atomic_write::write_atomic_json(&runtime_path, &doc)
         .map_err(|e| e.to_string())?;
 
     // ---- 2. Regenerate SKILL.md from registry ----

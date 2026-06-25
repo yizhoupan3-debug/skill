@@ -47,42 +47,36 @@ pub fn build_profile_bundle(profile: FrameworkProfileContract) -> Result<Profile
     let workspace_bootstrap = compile_workspace_bootstrap(&profile);
     let shared_contract =
         build_shared_contract(&profile, &normalized_mcp_servers, &workspace_bootstrap);
-    // Use the first supported host from the registry as the default profile host.
     let host_specs = load_host_profile_specs()?;
-    let default_host = crate::runtime_registry::ALL_HOST_IDS
-        .first()
-        .ok_or_else(|| "RUNTIME_REGISTRY host_targets.supported is empty".to_string())?;
-    let codex_spec = host_specs
-        .iter()
-        .find(|spec| spec.host_key == *default_host)
-        .ok_or_else(|| {
-            format!(
-                "RUNTIME_REGISTRY host_projections must include {default_host} for legacy codex_profile"
-            )
-        })?;
-    let codex_host_payload = codex_spec.build_payload();
+
+    let mut host_profiles = Map::new();
+    let mut full_host_profiles = Map::new();
     let mut host_payloads = Map::new();
     for spec in &host_specs {
-        host_payloads.insert(spec.host_key.clone(), Value::Object(spec.build_payload()));
+        let payload = spec.build_payload();
+        host_payloads.insert(spec.host_key.clone(), Value::Object(payload.clone()));
+
+        let compact = build_host_profile(
+            &profile,
+            &normalized_mcp_servers,
+            &workspace_bootstrap,
+            &shared_contract,
+            &payload,
+            spec,
+            false,
+        );
+        let full = build_host_profile(
+            &profile,
+            &normalized_mcp_servers,
+            &workspace_bootstrap,
+            &shared_contract,
+            &payload,
+            spec,
+            true,
+        );
+        host_profiles.insert(spec.host_key.clone(), Value::Object(compact));
+        full_host_profiles.insert(spec.host_key.clone(), Value::Object(full));
     }
-    let codex_profile = build_host_profile(
-        &profile,
-        &normalized_mcp_servers,
-        &workspace_bootstrap,
-        &shared_contract,
-        &codex_host_payload,
-        codex_spec,
-        false,
-    );
-    let full_codex_profile = build_host_profile(
-        &profile,
-        &normalized_mcp_servers,
-        &workspace_bootstrap,
-        &shared_contract,
-        &codex_host_payload,
-        codex_spec,
-        true,
-    );
 
     let FrameworkProfileContract {
         profile_id,
@@ -130,8 +124,8 @@ pub fn build_profile_bundle(profile: FrameworkProfileContract) -> Result<Profile
         workspace_bootstrap,
         host_capability_requirements,
         metadata,
-        codex_profile: Value::Object(codex_profile),
-        full_codex_profile: Value::Object(full_codex_profile),
+        host_profiles,
+        full_host_profiles,
         host_payloads,
     })
 }
@@ -141,16 +135,11 @@ pub fn build_profile_artifact_bundle(
     full: bool,
 ) -> Result<Map<String, Value>, String> {
     let bundle = build_profile_bundle(profile)?;
-    let mut artifacts = Map::new();
-    artifacts.insert(
-        "codex_profile".to_string(),
-        if full {
-            bundle.full_codex_profile
-        } else {
-            bundle.codex_profile
-        },
-    );
-    Ok(artifacts)
+    if full {
+        Ok(bundle.full_host_profiles)
+    } else {
+        Ok(bundle.host_profiles)
+    }
 }
 
 // ── normalization ──

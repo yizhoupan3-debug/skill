@@ -58,7 +58,7 @@ pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String
         Ok(response)
     };
     match resolve_session_repo_root_for_task_ledger(&payload)? {
-        Some(resolved) => core_state::utils::task_write_lock::apply_task_ledger_mutation(&resolved, run),
+        Some(resolved) => core_state_utils::task_write_lock::apply_task_ledger_mutation(&resolved, run),
         None => run(),
     }
 }
@@ -676,7 +676,7 @@ fn normalized_string_array(value: Option<&Value>) -> Option<Vec<Value>> {
     }
 }
 
-pub(super) use core_state::utils::json_io::{write_json_if_changed, write_text_if_changed};
+pub(super) use core_state_utils::json_io::{write_json_if_changed, write_text_if_changed};
 
 pub(super) fn current_file_hash(path: &Path) -> Result<Option<String>, String> {
     match fs::read(path) {

@@ -8,7 +8,7 @@
 //! counters and only persists to disk periodically (every `FLUSH_INTERVAL_SECS`
 //! seconds), avoiding the previous 5-step sync I/O chain on every tool call.
 
-use core_state::utils::task_write_lock::apply_task_ledger_mutation;
+use core_state_utils::task_write_lock::apply_task_ledger_mutation;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs::File;

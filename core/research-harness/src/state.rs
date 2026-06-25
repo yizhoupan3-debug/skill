@@ -255,7 +255,7 @@ pub fn dump_state(path: &Path, state: &Value) -> Result<()> {
     let rendered = serde_yml::to_string(&state_to_write)?;
 
     // Atomic write via core-standard write_atomic_text (POSIX rename for crash safety).
-    core_state::utils::atomic_write::write_atomic_text(path, &rendered)
+    core_state_utils::atomic_write::write_atomic_text(path, &rendered)
         .map_err(|e| anyhow::anyhow!("atomic write failed for {}: {e}", path.display()))?;
     Ok(())
 }

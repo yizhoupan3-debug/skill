@@ -1,6 +1,6 @@
 # Agent Policy (Cross-Host)
 
-跨宿主叙述性协议真源。各宿主行为差异见 `## 宿主行为差异`。
+跨宿主叙述性协议真源。
 
 ## Language
 
@@ -66,7 +66,7 @@ Loop engine（L6 Orchestration）运行在 Task 之上，仅对 `loop-auto` prof
 
 - 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
 - Goal 磁盘：`GOAL_STATE.json` / `QUALITY_GATE_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_quality_gate`。
-- 闭集宿主（codex/claude/cursor/opencode）由 `RUNTIME_REGISTRY.json` 驱动。
+- 闭集宿主由 `RUNTIME_REGISTRY.json` 驱动。
 
 ## Task Intake
 
@@ -96,7 +96,8 @@ Loop engine（L6 Orchestration）运行在 Task 之上，仅对 `loop-auto` prof
 
 ## CodeGraph 自动触发规则（跨宿主硬约束）
 
-所有宿主（Claude / Cursor / Codex / OpenCode）必须一致执行。
+
+## Review 通用协议
 
 **核心原则**：在该使用 codegraph 的时候，必须自动调用，即使用户没有明确提及 codegraph。
 
@@ -136,35 +137,3 @@ Loop engine（L6 Orchestration）运行在 Task 之上，仅对 `loop-auto` prof
 | `indeterminate` | 无法确认 |
 
 **降级策略**：Factcheck 不可用时单 finding 标记 `indeterminate` 不进 Verify；全阶段失败则所有 finding indeterminate，最终输出为空。不降级为"跳过 factcheck 直接进 Verify"。
-
-## 宿主行为差异
-
-> 以下段落仅对该节标题标注的宿主生效。通用规则（Language → CodeGraph）对所有宿主一致。
-
-### Claude
-
-- **PreToolUse 硬阻断**：未物化 `GOAL_STATE.json` 或未授权执行区 → 硬阻断。遭遇阻断时重新评估任务或请求用户指导，勿盲目重试。
-- **Review gate**：Stop `REVIEW_GATE` advisory-only；**无** `rg_clear` 粘贴面（须完成可数 reviewer lane 或自然语言 override）。
-- **框架命令流**：无 `AG_FOLLOWUP` / `updateCurrentStep`；续跑 `framework_goal_drive` + `artifacts/current/<task_id>/` 手动画板。
-- **interactive**：suppress spawn-first 与 review Stop nudge（skill 层 findings-only 仍适用）。
-
-### Cursor
-
-- **Hook 事件**：`.cursor/hooks.json` + `router-rs cursor hook`（7 事件闭集）；清门 **Claude canonical**；Stop **advisory-only**。
-- **机读短码**：`REVIEW_GATE`、`AG_FOLLOWUP`、`CLOSEOUT_FOLLOWUP`（须 `router-rs ` 前缀）；**interactive** suppress `REVIEW_GATE` / `AG_FOLLOWUP`。清门粘贴 **`rg_clear`** 或拒因 token。
-- **`updateCurrentStep`**：禁止空载荷；须含可机读步骤或状态。
-- **子代理模型**：并行 `Task` 默认继承主会话（省略 `model`）。
-
-### Codex
-
-- **策略嵌入**：编译期 `include_str!` 嵌入本文件（`policy_embed.rs` → `codex_agent_policy`）；hook 运行期不读盘。
-- **Hook**：`.codex/hooks.json` + `router-rs codex hook`；清门 **Claude canonical**；Stop **advisory-only** `CODEX_REVIEW_GATE`。
-- **多代理**：`execution_mode=parallel` 时应 spawn lane；深度 review spawn-first（`fork_context=false`）。
-- **stdio 替代 MCP 工具**：`framework_goal_drive` / `framework_quality_gate`；证据 PostTool 追加。
-
-### OpenCode
-
-- **shell hook + MCP 双通道**：通过 hook.sh → router-rs-cli 提供 hook（`tool.execute.before`、`tool.execute.after`、`session.idle` 等），同时通过 `opencode.json` → MCP 提供框架工具。
-- **Review / closeout**：清门 **Claude canonical**；Stop review **advisory-only**（MCP `ADVISORY`）；非 interactive 时 MCP 可对**未满足 closeout 证据** hard-block。
-- **权限策略**：**fail-closed**（hook 脚本层对 critical events fail-closed）。
-- **安装**：`framework host-integration install --to opencode --repo-root "$PWD"`。

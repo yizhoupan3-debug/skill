@@ -4,7 +4,7 @@
 
 use super::*;
 use core_state::task_ledger::{append_transaction_assuming_l1_held, LedgerTransaction};
-use core_state::utils::task_write_lock::apply_task_ledger_mutation;
+use core_state_utils::task_write_lock::apply_task_ledger_mutation;
 use serde_json::{json, Value};
 use std::path::Path;
 

@@ -369,7 +369,8 @@ fn detect_rate_limit(evidence_text: &str, patterns: &[Regex]) -> Option<BlockCla
 fn duration_pattern() -> &'static Regex {
     static DURATION: OnceLock<Regex> = OnceLock::new();
     DURATION.get_or_init(|| {
-        Regex::new(r"(?i)(\d+)\s*(second|sec|minute|min|hour|hr)s?").expect("valid duration regex")
+        #[allow(clippy::expect_used)]
+        #[allow(clippy::expect_used)] Regex::new(r"(?i)(\d+)\s*(second|sec|minute|min|hour|hr)s?").expect("valid duration regex")
     })
 }
 
@@ -393,13 +394,13 @@ fn rate_limit_patterns() -> &'static [Regex] {
     PATTERNS
         .get_or_init(|| {
             vec![
-                Regex::new("(?i)rate limit").expect("valid regex"),
-                Regex::new("(?i)too many (?:requests|queries)").expect("valid regex"),
-                Regex::new("(?i)\\b429\\b").expect("valid regex"),
-                Regex::new("(?i)overloaded").expect("valid regex"),
-                Regex::new("(?i)try again (?:later|in|now)").expect("valid regex"),
-                Regex::new("(?i)quota exceeded").expect("valid regex"),
-                Regex::new("(?i)usage limit").expect("valid regex"),
+                #[allow(clippy::expect_used)] Regex::new("(?i)rate limit").expect("valid regex"),
+                #[allow(clippy::expect_used)] Regex::new("(?i)too many (?:requests|queries)").expect("valid regex"),
+                #[allow(clippy::expect_used)] Regex::new("(?i)\\b429\\b").expect("valid regex"),
+                #[allow(clippy::expect_used)] Regex::new("(?i)overloaded").expect("valid regex"),
+                #[allow(clippy::expect_used)] Regex::new("(?i)try again (?:later|in|now)").expect("valid regex"),
+                #[allow(clippy::expect_used)] Regex::new("(?i)quota exceeded").expect("valid regex"),
+                #[allow(clippy::expect_used)] Regex::new("(?i)usage limit").expect("valid regex"),
             ]
         })
         .as_slice()

@@ -398,7 +398,7 @@ dependencies = [
 
 [[package]]
 name = "core-state-types"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "core-state-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "fs2",
  "insta",
@@ -2706,7 +2706,7 @@ dependencies = [
 
 [[package]]
 name = "telemetry-types"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "serde",
 ]

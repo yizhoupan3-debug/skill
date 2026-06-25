@@ -1,5 +1,6 @@
 //! Incremental index sync + filesystem watcher.
 
+
 use crate::CodeGraphIndex;
 use crate::db::index_ops::{
     IndexedFileMeta, IngestStmts, ingest_parsed_file_with_stmts, list_indexed_files, set_meta,
@@ -382,8 +383,9 @@ impl Drop for IndexWatcher {
             .unwrap_or_else(|_| {
                 // If we can't create a replacement, the original will be dropped
                 // when this struct is dropped, closing the channel.
+                #[allow(clippy::expect_used)]
                 RecommendedWatcher::new(mpsc::channel().0, Config::default())
-                    .expect("fallback watcher")
+                    .expect("fallback watcher: both primary and fallback notifier channel watchers failed")
             });
         if let Some(handle) = self._handle.take() {
             let _ = handle.join();

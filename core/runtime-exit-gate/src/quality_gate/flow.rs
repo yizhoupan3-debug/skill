@@ -14,7 +14,7 @@ pub fn framework_quality_gate(payload: Value) -> Result<Value, String> {
         framework_quality_gate_impl(payload)
     } else {
         let resolved = resolve_framework_quality_gate_repo(&payload)?;
-        core_state::utils::task_write_lock::apply_task_ledger_mutation(&resolved, || {
+        core_state_utils::task_write_lock::apply_task_ledger_mutation(&resolved, || {
             framework_quality_gate_impl(payload)
         })
     }
@@ -54,7 +54,7 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
         "framework_quality_gate start requires task_id in payload or TASK_POINTERS.json"
             .to_string()
     })?;
-    core_state::utils::path_guard::validate_task_id_component(&task_id)?;
+    core_state_utils::path_guard::validate_task_id_component(&task_id)?;
     let goal = payload
         .get("goal")
         .and_then(Value::as_str)
@@ -217,7 +217,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .ok_or_else(|| "framework_quality_gate append_round requires task_id".to_string())?;
-    core_state::utils::path_guard::validate_task_id_component(&task_id)?;
+    core_state_utils::path_guard::validate_task_id_component(&task_id)?;
     let path = quality_gate_state_path(repo_root, &task_id)?;
     let mut state = read_quality_gate_state(repo_root, Some(&task_id))?
         .ok_or_else(|| format!("QUALITY_GATE_STATE missing at {}", path.display()))?;

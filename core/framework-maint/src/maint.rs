@@ -619,7 +619,7 @@ fn untracked_keyword_markers(
         if !include_path(&lower_path) {
             continue;
         }
-        let Ok(full_path) = core_state::utils::path_guard::join_repo_relative_under_root(repo_root, path)
+        let Ok(full_path) = core_state_utils::path_guard::join_repo_relative_under_root(repo_root, path)
         else {
             continue;
         };

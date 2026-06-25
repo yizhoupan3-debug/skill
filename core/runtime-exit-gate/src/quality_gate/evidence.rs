@@ -29,7 +29,7 @@ fn read_evidence_index_artifacts_impl(
     repo_root: &Path,
     task_id: &str,
 ) -> Result<Vec<Value>, EvidenceReadError> {
-    let tid = core_state::utils::path_guard::validate_task_id_component(task_id)
+    let tid = core_state_utils::path_guard::validate_task_id_component(task_id)
         .map_err(EvidenceReadError::InvalidTaskId)?;
     let path = repo_root
         .join("artifacts/current")

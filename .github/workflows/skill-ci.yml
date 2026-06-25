@@ -13,6 +13,7 @@ on:
       - '.claude/**'
       - '.cursor/**'
       - '.github/workflows/**'
+      - 'fuzz/**'
       - 'AGENTS.md'
       - '.codex/**'
       - 'configs/framework/**'
@@ -30,6 +31,7 @@ on:
       - '.claude/**'
       - '.cursor/**'
       - '.github/workflows/**'
+      - 'fuzz/**'
       - 'AGENTS.md'
       - '.codex/**'
       - 'configs/framework/**'
@@ -314,3 +316,52 @@ jobs:
         with:
           name: coverage-report
           path: lcov.info
+
+  # ── Fuzz smoke test (short runs, nightly-only) ──
+  fuzz-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Fuzz smoke - MCP stdio parse
+        run: cargo +nightly fuzz run --fuzz-dir fuzz mcp_stdio_parse -- -max_len=512 -runs=500
+      - name: Fuzz smoke - Stdio JSON line
+        run: cargo +nightly fuzz run --fuzz-dir fuzz stdio_json_line -- -max_len=512 -runs=500
+      - name: Fuzz smoke - Hook stdin parse
+        run: cargo +nightly fuzz run --fuzz-dir fuzz hook_stdin_parse -- -max_len=512 -runs=500
+      - name: Fuzz smoke - Routing decision
+        run: cargo +nightly fuzz run --fuzz-dir fuzz routing_decision -- -max_len=512 -runs=500
+      - name: Fuzz smoke - JSONL maintenance
+        run: cargo +nightly fuzz run --fuzz-dir fuzz jsonl_maintenance -- -max_len=512 -runs=500
+
+  # ── Build timing profile (non-blocking, produce HTML artifact) ──
+  timings:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: /tmp/skill-cargo-target
+      - name: Enable sccache + mold
+        uses: mozilla/sccache-action@v0.0.8
+        with:
+          version: "latest"
+      - name: Install mold linker
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq mold clang
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
+      - name: Build with timings (ci profile)
+        run: cargo build --workspace --profile ci --timings 2>&1 | tail -10
+      - name: Upload cargo timing report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-timings
+          path: target/cargo-timings/

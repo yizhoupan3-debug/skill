@@ -436,22 +436,17 @@ pub fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-pub fn ensure_codex_hooks_feature_disabled(config_path: &Path) -> Result<(bool, bool), String> {
+pub fn ensure_hooks_feature_disabled(config_path: &Path) -> Result<bool, String> {
     const HOOKS_DISABLED_LINE: &str = "hooks = false";
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
         let block = content[start..end].trim_end_matches('\n');
         let mut has_hooks = false;
         let mut hooks_already_disabled = false;
-        let mut hook_setting_count = 0usize;
-        let mut deprecated_codex_hooks_removed = false;
         let mut updated_lines = Vec::new();
         for line in block.lines() {
-            if is_named_setting(line, "codex_hooks") || is_named_setting(line, "hooks") {
-                hook_setting_count += 1;
-                deprecated_codex_hooks_removed |= is_named_setting(line, "codex_hooks");
-                hooks_already_disabled |=
-                    is_named_setting(line, "hooks") && line.trim() == HOOKS_DISABLED_LINE;
+            if is_named_setting(line, "hooks") {
+                hooks_already_disabled |= line.trim() == HOOKS_DISABLED_LINE;
                 if !has_hooks {
                     updated_lines.push(HOOKS_DISABLED_LINE.to_string());
                     has_hooks = true;
@@ -460,30 +455,25 @@ pub fn ensure_codex_hooks_feature_disabled(config_path: &Path) -> Result<(bool, 
                 updated_lines.push(line.to_string());
             }
         }
-        if has_hooks
-            && hooks_already_disabled
-            && hook_setting_count == 1
-            && !deprecated_codex_hooks_removed
-        {
-            return Ok((false, false));
+        if has_hooks && hooks_already_disabled {
+            return Ok(false);
         }
         if !has_hooks {
             updated_lines.push(HOOKS_DISABLED_LINE.to_string());
         }
         let new_block = format!("{}\n", updated_lines.join("\n"));
         let updated = format!("{}{}{}", &content[..start], new_block, &content[end..]);
-        let changed = write_text_if_changed(config_path, &updated)?;
-        return Ok((changed, deprecated_codex_hooks_removed));
+        write_text_if_changed(config_path, &updated)
+    } else {
+        let mut updated = content.trim_end().to_string();
+        if !updated.is_empty() {
+            updated.push_str("\n\n");
+        }
+        updated.push_str("[features]\n");
+        updated.push_str(HOOKS_DISABLED_LINE);
+        updated.push('\n');
+        write_text_if_changed(config_path, &updated)
     }
-    let mut updated = content.trim_end().to_string();
-    if !updated.is_empty() {
-        updated.push_str("\n\n");
-    }
-    updated.push_str("[features]\n");
-    updated.push_str(HOOKS_DISABLED_LINE);
-    updated.push('\n');
-    let changed = write_text_if_changed(config_path, &updated)?;
-    Ok((changed, false))
 }
 
 pub fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, usize)> {
@@ -580,11 +570,11 @@ pub fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {
     }
 }
 
-pub use core_state::utils::json_io::{write_json_if_changed, write_text_if_changed};
+pub use core_state_utils::json_io::{write_json_if_changed, write_text_if_changed};
 
 /// Read JSON from file if it exists. Returns `Ok(None)` when file is absent.
 pub fn read_json_if_exists(path: &Path) -> Result<Option<Value>, String> {
-    Ok(Some(core_state::utils::json_io::read_json_if_exists(path)))
+    Ok(Some(core_state_utils::json_io::read_json_if_exists(path)))
 }
 
 pub fn remove_path(path: &Path) -> io::Result<()> {

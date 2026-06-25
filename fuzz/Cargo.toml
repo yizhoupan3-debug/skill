@@ -15,6 +15,7 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 fr-utils = { path = "../core/fr-utils" }
 host-projection = { path = "../core/host-projection", features = ["test-support"] }
+core-policy = { path = "../core/core-policy", features = ["test-sync"] }
 
 [[bin]]
 name = "mcp_stdio_parse"

@@ -50,6 +50,7 @@ static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();
 /// # Panics
 /// 仅在 `register()` 尚未调用时 panic。由 `runtime_core::init_hooks()` 保证初始化顺序。
 pub fn hooks() -> &'static RuntimeCoreHooks {
+    #[allow(clippy::expect_used)]
     RUNTIME_CORE_HOOKS
         .get()
         .expect("RuntimeCoreHooks not registered — call register() before use")

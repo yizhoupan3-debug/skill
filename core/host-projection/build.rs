@@ -3,6 +3,7 @@
 //!
 //! Adding a new host? Edit `configs/framework/RUNTIME_REGISTRY.json`
 //! and rebuild; all provider code is generated from the single source of truth.
+#![allow(clippy::panic, clippy::expect_used, clippy::unwrap_used)]
 
 use std::env;
 use std::fs;

@@ -267,8 +267,7 @@ pub fn install_native_integration(
     let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
 
     let created_config = ensure_config_file(&home_config_path)?;
-    let (hooks_disabled_changed, deprecated_codex_hooks_removed) =
-        ensure_codex_hooks_feature_disabled(&home_config_path)?;
+    let hooks_disabled_changed = ensure_hooks_feature_disabled(&home_config_path)?;
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
     let home_codex_dir = home_config_path
         .parent()
@@ -289,7 +288,6 @@ pub fn install_native_integration(
         "created_config": created_config,
         "hooks_enabled": false,
         "hooks_disabled_changed": hooks_disabled_changed,
-        "deprecated_codex_hooks_removed": deprecated_codex_hooks_removed,
         "tui_status_line_changed": tui_changed,
         "default_bootstrap": default_bootstrap,
     }))
@@ -398,9 +396,9 @@ pub fn validate_cleanup_scope(
         return Ok(());
     }
     for tool in tools {
-        let host_id = projection_adapter(tool)
-            .map(|a| a.host_id)
-            .unwrap_or(tool.as_str());
+        let host_id = projection_ops_trait::projection_ops_for_tool(tool)
+            .map(|a| a.host_id())
+            .unwrap_or(tool);
         let env_var = format!("{}_HOME", host_id.to_uppercase().replace('-', "_"));
         // Check: --home flag, host-specific --<host>-home CLI arg, or $HOST_HOME env var.
         let host_cli_home_set = command.host_home_is_set(host_id);
@@ -527,33 +525,6 @@ pub fn default_projection_tools_for_scope(
     Ok(tools)
 }
 
-/// Lightweight adapter metadata derived from RUNTIME_REGISTRY.
-/// Install/status/remove are dispatched by tool name (match), not function pointers.
-pub struct HostProjectionAdapter {
-    pub tool: &'static str,
-    pub host_id: &'static str,
-}
-
-/// Known tool→host_id mappings.
-/// Source of truth: RUNTIME_REGISTRY.json → host_targets.metadata.*.install_tool
-const KNOWN_PROJECTION_TOOLS: &[HostProjectionAdapter] = &[
-    HostProjectionAdapter {
-        tool: "cursor",
-        host_id: "cursor",
-    },
-    HostProjectionAdapter {
-        tool: "claude",
-        host_id: "claude",
-    },
-    HostProjectionAdapter {
-        tool: "opencode",
-        host_id: "opencode",
-    },
-    HostProjectionAdapter {
-        tool: "codex",
-        host_id: "codex",
-    },
-];
 
 pub fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
     if scope == "user" {
@@ -735,47 +706,24 @@ pub fn remove_opencode_projection(
     }))
 }
 
-pub fn projection_adapter(tool: &str) -> Option<&'static HostProjectionAdapter> {
-    let normalized = tool.trim().to_lowercase();
-    KNOWN_PROJECTION_TOOLS
-        .iter()
-        .find(|adapter| adapter.tool == normalized)
-}
-
 pub fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, String> {
     let pairs = framework_kernel::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
         framework_root,
     )?;
     let mut tools = Vec::new();
-    for (host_id, tool) in pairs {
-        let adapter = projection_adapter(&tool).ok_or_else(|| {
+    for (_host_id, tool) in &pairs {
+        let _ = projection_ops_trait::projection_ops_for_tool(tool).ok_or_else(|| {
             format!(
-                "RUNTIME_REGISTRY host {host_id:?} declares unsupported install_tool {tool:?}; extend host projection adapters"
+                "RUNTIME_REGISTRY host {_host_id:?} declares unsupported install_tool {tool:?}; extend host projection ops"
             )
         })?;
-        if !tools.contains(&adapter.tool.to_string()) {
-            tools.push(adapter.tool.to_string());
+        if !tools.contains(tool) {
+            tools.push(tool.clone());
         }
     }
-    validate_projection_adapters_against_registry(framework_root)?;
     let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
     framework_kernel::framework_host_targets::validate_host_providers_against_registry(&registry)?;
     Ok(tools)
-}
-
-pub fn validate_projection_adapters_against_registry(framework_root: &Path) -> Result<(), String> {
-    let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
-    let supported =
-        framework_kernel::framework_host_targets::host_targets_supported_host_ids(&registry)?;
-    for adapter in KNOWN_PROJECTION_TOOLS {
-        if !supported.iter().any(|host_id| host_id == adapter.host_id) {
-            return Err(format!(
-                "host projection adapter `{}` declares host_id `{}` outside RUNTIME_REGISTRY.host_targets.supported",
-                adapter.tool, adapter.host_id
-            ));
-        }
-    }
-    Ok(())
 }
 
 pub fn canonical_scope(scope: &str) -> Result<&'static str, String> {
@@ -813,9 +761,6 @@ pub fn install_projection_tool(
     if tool.contains("..") || tool.contains('/') || tool.contains('\\') {
         return Err(format!("Invalid tool name: {}", tool));
     }
-    if projection_adapter(tool).is_none() {
-        return Err(format!("Unsupported tool: {tool}"));
-    }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
     projection_ops_trait::projection_ops_for_tool(tool)
         .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
@@ -826,9 +771,6 @@ pub fn projection_tool_status(
     roots: &ResolvedProjectionRoots,
     tool: &str,
 ) -> Result<Value, String> {
-    if projection_adapter(tool).is_none() {
-        return Err(format!("Unsupported tool: {tool}"));
-    }
     projection_ops_trait::projection_ops_for_tool(tool)
         .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
         .status(roots)
@@ -840,9 +782,6 @@ pub fn remove_projection_tool(
     scope: &str,
     dry_run: bool,
 ) -> Result<Value, String> {
-    if projection_adapter(tool).is_none() {
-        return Err(format!("Unsupported tool: {tool}"));
-    }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
     projection_ops_trait::projection_ops_for_tool(tool)
         .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?

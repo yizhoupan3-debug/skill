@@ -772,13 +772,13 @@ pub fn install_skills_projection_tools(
 }
 
 pub fn canonical_tool_name(raw: &str, framework_root: &Path) -> Result<String, String> {
-    if let Some(adapter) = projection_adapter(raw) {
-        return Ok(adapter.tool.to_string());
+    let normalized = raw.trim().to_lowercase();
+    if crate::host_integration::projection::projection_ops_trait::projection_ops_for_tool(&normalized).is_some() {
+        return Ok(normalized);
     }
     let known = projection_supported_tools_for_message(framework_root);
     Err(format!(
-        "Unknown tool: {}. Supported tools: {}",
-        raw.trim().to_lowercase(),
+        "Unknown tool: {normalized}. Supported tools: {}",
         known.join(", "),
     ))
 }

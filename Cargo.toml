@@ -21,6 +21,7 @@ members = [
     "core/core-state",
     "core/core-state-utils",
     "core/core-state-types",
+    "core/eval-route",
     "core/fr-utils",
     "core/fr-contracts",
     "core/fr-exec",
@@ -109,3 +110,8 @@ debug = true  # bench 需要 debug symbols 以生成 flamegraph
 
 [profile.test]
 opt-level = 1  # test 构建适度优化，加速大型测试
+
+[profile.ci]
+inherits = "release"
+codegen-units = 16  # 并行代码生成，加速 CI
+lto = "thin"        # ThinLTO 替代全量 LTO

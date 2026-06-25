@@ -88,7 +88,7 @@ pub fn resolve_task_id_for_schema_drift(
     task_id: Option<&str>,
 ) -> Result<String, String> {
     if let Some(id) = task_id.map(str::trim).filter(|s| !s.is_empty()) {
-        core_state::utils::path_guard::safe_task_id_component(id)
+        core_state_utils::path_guard::safe_task_id_component(id)
             .ok_or_else(|| format!("schema-drift: invalid task_id {:?}", id))?;
         return Ok(id.to_string());
     }

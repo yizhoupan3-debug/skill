@@ -181,7 +181,7 @@ pub fn backfill_registry(repo_root: &Path, dry_run: bool) -> Result<BackfillRepo
 
     // Write the updated JSON (if not dry-run and any changes were made)
     if !dry_run && report.cells_filled > 0 {
-        core_state::utils::atomic_write::write_atomic_json(&runtime_path, &doc)
+        core_state_utils::atomic_write::write_atomic_json(&runtime_path, &doc)
             .map_err(|e| format!("failed to write backfilled registry: {e}"))?;
     }
 

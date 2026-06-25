@@ -335,12 +335,10 @@ pub trait HostHookDispatcher: HostHookConfig {
 
     /// SubagentStop: unregister agent in session-supervisor health registry.
     fn handle_subagent_stop(&self, event: &HookEvent) -> Option<HookOutput> {
-        let agent_id = extract_subagent_id_from_payload(event.payload);
-        if agent_id.is_none() {
+        let Some(agent_id) = extract_subagent_id_from_payload(event.payload) else {
             debug!("SubagentStop: no agent_id in payload, skipping unregister");
             return None;
-        }
-        let agent_id = agent_id.unwrap();
+        };
         let now = framework_kernel::time::now_iso();
         let terminal_status = if payload_signal_contains_failure(event.payload) {
             "failed"

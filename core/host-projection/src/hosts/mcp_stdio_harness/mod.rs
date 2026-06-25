@@ -66,7 +66,7 @@ fn list_known_task_ids(repo_root: &Path) -> Vec<String> {
 fn task_artifact_dir(repo_root: &Path, task_id: Option<&str>) -> PathBuf {
     let base = repo_root.join("artifacts/current");
     if let Some(task_id) = task_id.filter(|value| !value.is_empty()) {
-        match core_state::utils::path_guard::validate_task_id_component(task_id.trim()) {
+        match core_state_utils::path_guard::validate_task_id_component(task_id.trim()) {
             Ok(safe) => base.join(safe),
             // Poisoned or hostile task_id must not escape artifacts/current via `..`.
             Err(_) => base,

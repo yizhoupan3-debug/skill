@@ -112,8 +112,8 @@ pub struct ProfileBundle {
     pub workspace_bootstrap: Map<String, Value>,
     pub host_capability_requirements: Map<String, Value>,
     pub metadata: Map<String, Value>,
-    pub codex_profile: Value,
-    pub full_codex_profile: Value,
+    pub host_profiles: Map<String, Value>,
+    pub full_host_profiles: Map<String, Value>,
     pub host_payloads: Map<String, Value>,
 }
 

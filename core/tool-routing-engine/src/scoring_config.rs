@@ -63,6 +63,7 @@ fn resolve_runtime_weights_path() -> Option<String> {
 }
 
 /// Runtime-loaded weights with compile-time fallback.
+#[allow(clippy::expect_used)]
 static WEIGHTS: LazyLock<ToolScoringWeights> = LazyLock::new(|| {
     // Try runtime config first (hook or FRAMEWORK_ROOT)
     if let Some(runtime_path) = resolve_runtime_weights_path()
