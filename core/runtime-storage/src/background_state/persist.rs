@@ -1,7 +1,7 @@
 use super::control_plane::normalized_backend_family;
 use super::types::BackgroundStateStore;
 use super::types::*;
-use crate::{SQLITE_TABLE_NAME, acquire_runtime_path_lock};
+use crate::{SQLITE_TABLE_NAME, acquire_runtime_path_lock, runtime_storage::sqlite_connection};
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 use std::fs;
@@ -161,42 +161,9 @@ pub(super) fn sqlite_storage_key(storage_root: &Path, state_path: &Path) -> Resu
     Ok(relative.to_string_lossy().replace('\\', "/"))
 }
 
-pub(super) fn open_sqlite_connection(db_path: &Path) -> Result<std::rc::Rc<Connection>, String> {
-    use std::cell::RefCell;
-    use std::rc::Rc;
-    thread_local! {
-        static CACHED: RefCell<Option<(PathBuf, Rc<Connection>)>> = const { RefCell::new(None) };
-    }
-    CACHED.with(|cell| {
-        let mut slot = cell.borrow_mut();
-        if let Some((ref cached_path, ref cached_conn)) = *slot
-            && cached_path == db_path {
-                return Ok(Rc::clone(cached_conn));
-            }
-        if let Some(parent) = db_path.parent() {
-            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
-        }
-        let conn = Connection::open(db_path).map_err(|err| err.to_string())?;
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|err| err.to_string())?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
-            .map_err(|err| err.to_string())?;
-        conn.execute(
-            &format!(
-                "CREATE TABLE IF NOT EXISTS {SQLITE_TABLE_NAME} (
-                    payload_key TEXT PRIMARY KEY,
-                    payload_text TEXT NOT NULL
-                )"
-            ),
-            [],
-        )
-        .map_err(|err| err.to_string())?;
-        let shared = Rc::new(conn);
-        let result = Rc::clone(&shared);
-        *slot = Some((db_path.to_path_buf(), shared));
-        Ok(result)
-    })
-}
+/// Re-export shared SQLite connection — delegates to `runtime_storage::sqlite::sqlite_connection`.
+/// Maintains the `pub(super)` API for `background_state` internal callers.
+pub(super) use crate::runtime_storage::sqlite_connection as open_sqlite_connection;
 
 /// Returns true for operations that mutate the persisted store. Used by
 /// `handle_background_state_operation` to decide whether to flush the
