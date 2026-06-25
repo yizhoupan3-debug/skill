@@ -1,12 +1,7 @@
-//! Inequality verification — ResearchHarness formal verification feature.
+//! Inequality verification — pure Rust implementation.
 //!
-//! Pure business logic: types, LaTeX parsing (SymPy + regex fallback),
-//! Z3 calling via Python subprocess (JSON stdin/stdout).
-//!
-//! # Security
-//!
-//! User input NEVER reaches shell. Python subprocess receives only
-//! serialized JSON via stdin — no string concatenation into command args.
+//! Pure business logic: types, LaTeX parsing (regex), minilp solver.
+//! No Python/Z3/SymPy subprocess dependencies.
 //!
 //! # Layer boundary
 //!
@@ -74,25 +69,11 @@ impl FeasibilityResult {
 }
 
 // ===========================================================================
-// LaTeX inequality string parsing (SymPy subprocess, regex fallback)
+// LaTeX inequality string parsing (regex)
 // ===========================================================================
 
-const DEFAULT_TIMEOUT_MS: u64 = 5_000;
-
 pub fn parse_inequality_latex(expr: &str) -> Result<Inequality, String> {
-    parse_via_sympy_subprocess(expr).or_else(|e| {
-        tracing::warn!("SymPy parse_inequality_latex failed, falling back to regex: {e}");
-        parse_via_regex(expr)
-    })
-}
-
-fn parse_via_sympy_subprocess(expr: &str) -> Result<Inequality, String> {
-    let input = serde_json::json!({ "command": "parse", "expr": expr });
-    let resp = crate::subprocess::run_uv_module("inequality_solver", &input)?;
-    if resp.get("error").is_some() {
-        return Err(resp["error"].as_str().unwrap_or("parse error").to_string());
-    }
-    serde_json::from_value(resp).map_err(|e| format!("deser: {e}"))
+    parse_via_regex(expr)
 }
 
 fn parse_via_regex(expr: &str) -> Result<Inequality, String> {
@@ -116,10 +97,28 @@ fn parse_via_regex(expr: &str) -> Result<Inequality, String> {
         ">=" => InequalitySense::Ge, ">" => InequalitySense::Gt,
         _ => return Err(format!("unknown sense: {sense_str}")),
     };
-    let rhs = parse_number(rhs_str)?;
 
-    let (coeffs, vars, const_shift) = extract_terms(lhs_str);
-    Ok(Inequality::new(coeffs, vars, sense, rhs - const_shift))
+    // Extract terms from both sides. Variables go to LHS, constants to RHS.
+    let (l_coeffs, l_vars, l_const) = extract_terms(lhs_str);
+    let (r_coeffs, r_vars, r_const) = extract_terms(rhs_str);
+
+    // Merge variable lists: coefficient = l_coeff - r_coeff (bring RHS vars to LHS)
+    let mut all_vars: Vec<String> = l_vars.clone();
+    let mut net_coeffs: Vec<f64> = l_coeffs.clone();
+    for (rc, rv) in r_coeffs.iter().zip(r_vars.iter()) {
+        match all_vars.iter().position(|v| v == rv) {
+            Some(idx) => net_coeffs[idx] -= rc,
+            None => {
+                all_vars.push(rv.clone());
+                net_coeffs.push(-rc);
+            }
+        }
+    }
+
+    // RHS net = r_const - l_const (bring LHS constants to RHS)
+    let rhs_net = r_const - l_const;
+
+    Ok(Inequality::new(net_coeffs, all_vars, sense, rhs_net))
 }
 
 fn parse_number(s: &str) -> Result<f64, String> {
@@ -140,6 +139,9 @@ fn extract_terms(lhs: &str) -> (Vec<f64>, Vec<String>, f64) {
     let mut i = 0;
 
     while i < src.len() {
+        // Skip '+' separators (not consumed by the term body loop)
+        if src[i] == '+' { i += 1; continue; }
+
         let mut term = String::new();
         if src[i] == '-' { term.push('-'); i += 1; }
         while i < src.len() && src[i] != '+' && src[i] != '-' {
@@ -173,54 +175,119 @@ fn parse_one_term(t: &str) -> Option<(f64, Option<String>)> {
         } else { in_var = true; var.push(ch); }
     }
     if var.is_empty() { return None; }
+    // Strip leading '*' from coefficient-variable separator
+    let var = var.trim_start_matches('*').to_string();
+    if var.is_empty() { return None; }
     let c = if num.is_empty() || num == "+" { 1.0 }
             else if num == "-" { -1.0 } else { parse_number(&num).ok()? };
     Some((c, Some(var)))
 }
 
 // ===========================================================================
-// Z3 subprocess bridge
+// minilp solver (pure Rust LP feasibility)
 // ===========================================================================
 
+/// Solve a system of linear inequalities using minilp.
 pub fn solve_system(system: &InequalitySystem, timeout_ms: Option<u64>) -> FeasibilityResult {
-    let timeout = timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS);
+    let _timeout = timeout_ms.unwrap_or(5000);
     if system.is_empty() {
         return FeasibilityResult::Feasible { model: HashMap::new() };
     }
-    let r = call_z3(system, timeout);
-    // If Z3 failed with an error-like result, return a consistent Warn
-    // with install hint regardless of system size.
-    if matches!(&r, FeasibilityResult::Error { .. } | FeasibilityResult::Timeout { .. }) {
-        return FeasibilityResult::Warn {
-            message: "Z3 check failed or timed out; install z3-solver: uv pip install z3-solver".into(),
+
+    let result = solve_via_minilp(system);
+    match result {
+        Ok(model) => FeasibilityResult::Feasible { model },
+        Err(cert) => FeasibilityResult::Infeasible { proof_certificate: cert },
+    }
+}
+
+fn solve_via_minilp(system: &InequalitySystem) -> Result<HashMap<String, f64>, String> {
+    use minilp::{ComparisonOp, OptimizationDirection, Problem};
+
+    let mut prob = Problem::new(OptimizationDirection::Maximize);
+
+    // Collect unique variable names across all constraints
+    let mut all_vars: Vec<String> = Vec::new();
+    for c in &system.constraints {
+        for v in &c.vars {
+            if !all_vars.contains(v) {
+                all_vars.push(v.clone());
+            }
+        }
+    }
+
+    if all_vars.is_empty() {
+        // No variables → check constant constraints
+        for c in &system.constraints {
+            let ok = match c.sense {
+                InequalitySense::Lt => 0.0 < c.rhs,
+                InequalitySense::Le => 0.0 <= c.rhs,
+                InequalitySense::Eq => (0.0 - c.rhs).abs() < 1e-12,
+                InequalitySense::Ge => 0.0 >= c.rhs,
+                InequalitySense::Gt => 0.0 > c.rhs,
+            };
+            if !ok {
+                return Err(format!("constant constraint violated: {:?} {} {}", c.coefficients, c.rhs, c.rhs));
+            }
+        }
+        return Ok(HashMap::new());
+    }
+
+    // Bounded variables help the simplex converge
+    let large = 1e10;
+
+    // Create minilp variables (dummy objective = 0, wide bounds)
+    let vars: Vec<minilp::Variable> = all_vars
+        .iter()
+        .map(|_| prob.add_var(0.0, (-large, large)))
+        .collect();
+
+    // Map from var name to index
+    let var_indices: HashMap<&str, usize> = all_vars
+        .iter()
+        .enumerate()
+        .map(|(i, v)| (v.as_str(), i))
+        .collect();
+
+    // Add each constraint
+    for c in &system.constraints {
+        let mut expr = minilp::LinearExpr::empty();
+        for (coeff, vname) in c.coefficients.iter().zip(c.vars.iter()) {
+            if let Some(&idx) = var_indices.get(vname.as_str()) {
+                expr.add(vars[idx], *coeff);
+            }
+        }
+
+        let op = match c.sense {
+            InequalitySense::Lt => ComparisonOp::Le, // use ≤ with epsilon margin
+            InequalitySense::Le => ComparisonOp::Le,
+            InequalitySense::Eq => ComparisonOp::Eq,
+            InequalitySense::Ge => ComparisonOp::Ge,
+            InequalitySense::Gt => ComparisonOp::Ge, // use ≥ with epsilon margin
         };
+
+        // For strict inequalities, use epsilon-adjusted bound
+        let adjusted_rhs = match c.sense {
+            InequalitySense::Lt => c.rhs - 1e-7,
+            InequalitySense::Gt => c.rhs + 1e-7,
+            _ => c.rhs,
+        };
+
+        prob.add_constraint(expr, op, adjusted_rhs);
     }
-    r
-}
 
-fn call_z3(system: &InequalitySystem, timeout_ms: u64) -> FeasibilityResult {
-    let input = serde_json::json!({ "command": "solve", "system": system, "timeout_ms": timeout_ms });
-    match crate::subprocess::run_uv_module_with_timeout("inequality_solver", &input, timeout_ms) {
-        Ok(resp) => serde_json::from_value(resp).unwrap_or_else(|e| {
-            FeasibilityResult::Error { message: format!("parse response: {e}") }
-        }),
-        Err(e) => FeasibilityResult::Error { message: e },
+    // Solve — minilp 0.2 returns Result<Solution, Error>
+    match prob.solve() {
+        Ok(solution) => {
+            let model: HashMap<String, f64> = all_vars
+                .iter()
+                .zip(solution.iter())
+                .map(|(name, (_var, val))| (name.clone(), *val))
+                .collect();
+            Ok(model)
+        }
+        Err(e) => Err(format!("minilp: {e}")),
     }
-}
-
-// ===========================================================================
-// Backend probes (no cache — per-invocation)
-// ===========================================================================
-
-pub fn z3_available() -> bool {
-    std::process::Command::new("uv")
-        .args(["run", "python", "-c", "import z3; print('ok')"])
-        .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status()
-        .map(|s| s.success()).unwrap_or(false)
-}
-
-pub fn sympy_available() -> bool {
-    crate::verification::sympy_available()
 }
 
 // ===========================================================================
@@ -280,6 +347,15 @@ pub fn check_inequality_with_name(expr: &str, timeout_ms: Option<u64>, check_nam
     }
 }
 
+// ===========================================================================
+// Backend probe
+// ===========================================================================
+
+/// minilp is always available (pure Rust, no external dependencies).
+pub fn solver_available() -> bool {
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,8 +409,26 @@ mod tests {
     }
 
     #[test]
-    fn test_backend_probe_no_panic() {
-        let _ = z3_available();
-        let _ = sympy_available();
+    fn test_simple_feasible() {
+        // x > 0
+        let ineq = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Gt, 0.0);
+        let system = InequalitySystem::new(vec![ineq]);
+        let result = solve_system(&system, Some(1000));
+        assert!(result.is_feasible(), "x > 0 should be feasible");
+    }
+
+    #[test]
+    fn test_contradiction() {
+        // x > 5 AND x < 0
+        let ineq1 = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Gt, 5.0);
+        let ineq2 = Inequality::new(vec![1.0], vec!["x".into()], InequalitySense::Lt, 0.0);
+        let system = InequalitySystem::new(vec![ineq1, ineq2]);
+        let result = solve_system(&system, Some(1000));
+        assert!(result.is_infeasible(), "x > 5 AND x < 0 should be infeasible");
+    }
+
+    #[test]
+    fn test_probe_always_true() {
+        assert!(solver_available());
     }
 }

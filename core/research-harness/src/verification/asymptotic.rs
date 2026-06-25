@@ -1,8 +1,7 @@
-//! Asymptotic / Order-of-Magnitude analysis — ResearchHarness feature layer.
+//! Asymptotic / Order-of-Magnitude analysis — pure Rust implementation.
 //!
 //! Pure business logic: asymptotic relation types, chain verification,
-//! magnitude estimation via SymPy subprocess. No MCP dispatch or JSON
-//! argument extraction — those belong in `mcp_tools.rs`.
+//! magnitude estimation, growth comparison. No Python/SymPy subprocess.
 //!
 //! # Layer boundary
 //!
@@ -131,15 +130,7 @@ pub fn compose_asymptotic_chain(chain: &AsymptoticChain) -> ChainComposition {
 }
 
 // ===========================================================================
-// Subprocess bridge to SymPy asymptotic solver
-// ===========================================================================
-
-fn call_asymptotic_subprocess(input: &serde_json::Value) -> Result<serde_json::Value, String> {
-    crate::subprocess::run_uv_module("asymptotic_solver", input)
-}
-
-// ===========================================================================
-// Magnitude estimation
+// Magnitude estimation (pure Rust via symbolic module)
 // ===========================================================================
 
 /// Estimate the leading-order term of an expression in a given regime (e.g. n→∞).
@@ -148,118 +139,106 @@ pub fn magnitude_estimate(expr: &str, var: &str, regime: &str) -> VerificationRe
 }
 
 /// Like `magnitude_estimate` with an explicit check name.
-pub fn magnitude_estimate_with_name(expr: &str, var: &str, regime: &str, check_name: &str) -> VerificationResult {
-    let input = serde_json::json!({
-        "command": "estimate",
-        "expr": expr,
-        "var": var,
-        "point": regime,
-        "n_terms": 3,
-    });
-
-    match call_asymptotic_subprocess(&input) {
-        Ok(resp) => {
-            if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
-                return VerificationResult {
-                    check_name: check_name.to_string(),
-                    status: VerificationStatus::Warn,
-                    details: format!("estimate error: {err}"),
-                    evidence_path: None,
-                };
-            }
-            let leading = resp.get("leading_term").and_then(|v| v.as_str()).unwrap_or("?");
-            let order = resp.get("order").and_then(|v| v.as_str()).unwrap_or("?");
+pub fn magnitude_estimate_with_name(expr: &str, var: &str, _regime: &str, check_name: &str) -> VerificationResult {
+    match crate::verification::symbolic::leading_term(expr, var) {
+        Ok((leading, order)) => {
             VerificationResult {
                 check_name: check_name.to_string(),
                 status: VerificationStatus::Pass,
-                details: format!("{expr} ~ {leading} (order: {order}) as {var}→{regime}"),
+                details: format!("{expr} ~ {leading} (order: {order}) as {var}→∞"),
                 evidence_path: None,
             }
         }
         Err(e) => VerificationResult {
             check_name: check_name.to_string(),
             status: VerificationStatus::Warn,
-            details: format!("subprocess: {e}"),
+            details: format!("estimate error: {e}"),
             evidence_path: None,
         },
     }
 }
 
 // ===========================================================================
-// Asymptotic claim verification
+// Asymptotic claim verification (pure Rust)
 // ===========================================================================
 
 /// Verify an asymptotic claim: f relation g in a given regime.
-pub fn check_asymptotic_claim(f: &str, g: &str, relation: &OrderRelation, var: &str, regime: &str) -> VerificationResult {
-    check_asymptotic_claim_with_name(f, g, relation, var, regime, "math_asymptotic_claim")
+pub fn check_asymptotic_claim(f: &str, g: &str, relation: &OrderRelation, var: &str, _regime: &str) -> VerificationResult {
+    check_asymptotic_claim_with_name(f, g, relation, var, _regime, "math_asymptotic_claim")
 }
 
 /// Like `check_asymptotic_claim` with an explicit check name.
 pub fn check_asymptotic_claim_with_name(
-    f: &str, g: &str, relation: &OrderRelation, var: &str, regime: &str, check_name: &str,
+    f: &str, g: &str, relation: &OrderRelation, var: &str, _regime: &str, check_name: &str,
 ) -> VerificationResult {
-    let relation_str = match relation {
-        OrderRelation::LessSim => "LessSim",
-        OrderRelation::MuchLess => "MuchLess",
-        OrderRelation::Asymp => "Asymp",
-    };
-
-    let input = serde_json::json!({
-        "command": "check_claim",
-        "f": f,
-        "g": g,
-        "relation": relation_str,
-        "var": var,
-        "point": regime,
-    });
-
-    match call_asymptotic_subprocess(&input) {
-        Ok(resp) => {
-            if let Some(err) = resp.get("error").and_then(|v| v.as_str()) {
-                return VerificationResult {
-                    check_name: check_name.to_string(),
-                    status: VerificationStatus::Warn,
-                    details: format!("check error: {err}"),
-                    evidence_path: None,
-                };
-            }
-            let feasible = resp.get("feasible").and_then(|v| v.as_bool()).unwrap_or(false);
-            let reason = resp.get("reason").and_then(|v| v.as_str()).unwrap_or("");
-            let symbol = relation.symbol();
-
-            if feasible {
-                VerificationResult {
-                    check_name: check_name.to_string(),
-                    status: VerificationStatus::Pass,
-                    details: format!("{f} {symbol} {g} holds as {var}→{regime}: {reason}"),
-                    evidence_path: None,
-                }
-            } else {
-                VerificationResult {
-                    check_name: check_name.to_string(),
-                    status: VerificationStatus::Fail,
-                    details: format!("{f} {symbol} {g} does NOT hold as {var}→{regime}: {reason}"),
-                    evidence_path: None,
-                }
-            }
-        }
-        Err(e) => VerificationResult {
+    let f_expr = match crate::verification::symbolic::parse(f) {
+        Ok(e) => e,
+        Err(e) => return VerificationResult {
             check_name: check_name.to_string(),
-            status: VerificationStatus::Warn,
-            details: format!("subprocess: {e}"),
+            status: VerificationStatus::Fail,
+            details: format!("parse f failed: {e}"),
             evidence_path: None,
         },
+    };
+    let g_expr = match crate::verification::symbolic::parse(g) {
+        Ok(e) => e,
+        Err(e) => return VerificationResult {
+            check_name: check_name.to_string(),
+            status: VerificationStatus::Fail,
+            details: format!("parse g failed: {e}"),
+            evidence_path: None,
+        },
+    };
+
+    let gf = crate::verification::symbolic::classify_growth(&f_expr, var);
+    let gg = crate::verification::symbolic::classify_growth(&g_expr, var);
+
+    let cmp = crate::verification::symbolic::compare_growth_classes(&gf, &gg);
+    let symbol = relation.symbol();
+
+    let holds = match relation {
+        OrderRelation::MuchLess => {
+            // f ≪ g: f grows strictly slower than g
+            cmp == std::cmp::Ordering::Less
+                || (cmp == std::cmp::Ordering::Equal && gf != gg)
+        }
+        OrderRelation::LessSim => {
+            // f ≲ g: f grows no faster than g
+            cmp != std::cmp::Ordering::Greater
+        }
+        OrderRelation::Asymp => {
+            // f ≍ g: same growth class and same parameters
+            gf == gg
+        }
+    };
+
+    if holds {
+        VerificationResult {
+            check_name: check_name.to_string(),
+            status: VerificationStatus::Pass,
+            details: format!("{f} {symbol} {g} holds as {var}→∞"),
+            evidence_path: None,
+        }
+    } else {
+        VerificationResult {
+            check_name: check_name.to_string(),
+            status: VerificationStatus::Fail,
+            details: format!("{f} {symbol} {g} does NOT hold as {var}→∞"),
+            evidence_path: None,
+        }
     }
 }
 
 /// Verify an entire asymptotic chain.
 /// Pure chains → auto PASS; mixed chains → auto WARN + human review.
-pub fn verify_asymptotic_chain(steps: &[AsymptoticStep], var: &str, regime: &str, sympy_check: bool) -> VerificationResult {
-    verify_asymptotic_chain_with_name(steps, var, regime, sympy_check, "math_asymptotic_chain")
+/// The `sympy_check` parameter is accepted for backward compatibility but
+/// is ignored — all checking is now done in pure Rust.
+pub fn verify_asymptotic_chain(steps: &[AsymptoticStep], var: &str, _regime: &str, _sympy_check: bool) -> VerificationResult {
+    verify_asymptotic_chain_with_name(steps, var, _regime, _sympy_check, "math_asymptotic_chain")
 }
 
 /// Like `verify_asymptotic_chain` with an explicit check name.
-pub fn verify_asymptotic_chain_with_name(steps: &[AsymptoticStep], var: &str, regime: &str, sympy_check: bool, check_name: &str) -> VerificationResult {
+pub fn verify_asymptotic_chain_with_name(steps: &[AsymptoticStep], var: &str, _regime: &str, _sympy_check: bool, check_name: &str) -> VerificationResult {
     if steps.is_empty() {
         return VerificationResult {
             check_name: check_name.to_string(),
@@ -282,67 +261,41 @@ pub fn verify_asymptotic_chain_with_name(steps: &[AsymptoticStep], var: &str, re
         };
     }
 
-    // If SymPy check is requested, verify each step
-    if sympy_check && chain.steps.len() <= 10 {
-        let mut step_details = Vec::new();
-        let mut all_pass = true;
+    // Pure chain: verify each step's growth ordering using the symbolic engine
+    let mut step_details = Vec::new();
+    let mut all_pass = true;
 
-        for (i, step) in steps.iter().enumerate() {
-            let vr = check_asymptotic_claim_with_name(
-                &step.premise, &step.conclusion,
-                &step.relation, var, regime, check_name,
-            );
-            match vr.status {
-                VerificationStatus::Pass => {
-                    step_details.push(format!("Step {}: PASS", i + 1));
-                }
-                _ => {
-                    all_pass = false;
-                    step_details.push(format!("Step {}: {:?} — {}", i + 1, vr.status, vr.details));
-                }
+    for (i, step) in steps.iter().enumerate() {
+        let vr = check_asymptotic_claim_with_name(
+            &step.premise, &step.conclusion,
+            &step.relation, var, _regime, check_name,
+        );
+        match vr.status {
+            VerificationStatus::Pass => {
+                step_details.push(format!("Step {}: PASS", i + 1));
+            }
+            _ => {
+                all_pass = false;
+                step_details.push(format!("Step {}: {:?} — {}", i + 1, vr.status, vr.details));
             }
         }
+    }
 
-        if all_pass {
-            VerificationResult {
-                check_name: check_name.to_string(),
-                status: VerificationStatus::Pass,
-                details: format!("Chain verified ({} steps): {}", steps.len(), step_details.join("; ")),
-                evidence_path: None,
-            }
-        } else {
-            VerificationResult {
-                check_name: check_name.to_string(),
-                status: VerificationStatus::Fail,
-                details: format!("Chain verification FAILED ({} steps): {}", steps.len(), step_details.join("; ")),
-                evidence_path: None,
-            }
-        }
-    } else if chain.steps.len() > 10 {
-        VerificationResult {
-            check_name: check_name.to_string(),
-            status: VerificationStatus::Warn,
-            details: format!("chain too long ({} steps) for SymPy verification, manual review", chain.steps.len()),
-            evidence_path: None,
-        }
-    } else {
-        // Pure chain, no SymPy check — structural PASS
+    if all_pass {
         VerificationResult {
             check_name: check_name.to_string(),
             status: VerificationStatus::Pass,
-            details: format!("Pure chain ({} steps): all {} relations are consistent",
-                steps.len(), chain.unique_relations().iter().map(|r| format!("{r:?}")).collect::<Vec<_>>().join(", ")),
+            details: format!("Chain verified ({} steps): {}", steps.len(), step_details.join("; ")),
+            evidence_path: None,
+        }
+    } else {
+        VerificationResult {
+            check_name: check_name.to_string(),
+            status: VerificationStatus::Fail,
+            details: format!("Chain verification FAILED ({} steps): {}", steps.len(), step_details.join("; ")),
             evidence_path: None,
         }
     }
-}
-
-// ===========================================================================
-// Backend availability
-// ===========================================================================
-
-pub fn sympy_available() -> bool {
-    crate::verification::sympy_available()
 }
 
 #[cfg(test)]
@@ -415,7 +368,40 @@ mod tests {
     }
 
     #[test]
-    fn test_sympy_backend_probe() {
-        let _ = sympy_available();
+    fn test_magnitude_estimate_polynomial() {
+        let vr = magnitude_estimate("n^2 + n", "n", "oo");
+        assert_eq!(vr.status, VerificationStatus::Pass);
+        assert!(vr.details.contains("n^2"));
+    }
+
+    #[test]
+    fn test_check_asymptotic_claim_log_vs_linear() {
+        let vr = check_asymptotic_claim("log(n)", "n", &OrderRelation::MuchLess, "n", "oo");
+        assert_eq!(vr.status, VerificationStatus::Pass,
+            "log(n) ≪ n should hold, got: {}", vr.details);
+    }
+
+    #[test]
+    fn test_check_asymptotic_claim_linear_vs_quadratic() {
+        let vr = check_asymptotic_claim("n", "n^2", &OrderRelation::MuchLess, "n", "oo");
+        assert_eq!(vr.status, VerificationStatus::Pass,
+            "n ≪ n^2 should hold, got: {}", vr.details);
+    }
+
+    #[test]
+    fn test_check_asymptotic_chain_pure() {
+        let steps = vec![
+            AsymptoticStep {
+                premise: "log(n)".into(), relation: OrderRelation::MuchLess,
+                conclusion: "n".into(), justification: "".into(),
+            },
+            AsymptoticStep {
+                premise: "n".into(), relation: OrderRelation::MuchLess,
+                conclusion: "n^2".into(), justification: "".into(),
+            },
+        ];
+        let vr = verify_asymptotic_chain(&steps, "n", "oo", true);
+        assert_eq!(vr.status, VerificationStatus::Pass,
+            "pure chain should pass, got: {:?} ({})", vr.status, vr.details);
     }
 }

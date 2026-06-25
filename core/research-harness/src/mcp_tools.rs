@@ -2,25 +2,28 @@
 //!
 //! Delegated from host-projection's tool dispatcher (Phase 4 T1).
 
+use core_policy::error::FrameworkError;
 use serde_json::{Value, json};
+
 
 /// Handle a research MCP tool call.
 /// Delegates to the appropriate research-harness module.
-pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, String> {
+pub fn handle_research_tool(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
     match name {
-        "research_aigc_check" => tool_research_aigc_check(arguments),
-        "research_aigc_humanize" => tool_research_aigc_humanize(arguments),
-        "research_review_dimensions" => tool_research_review_dimensions(arguments),
-        "research_claim_drift" => tool_research_claim_drift(arguments),
-        "research_review_loop" => tool_research_review_loop(arguments),
-        _ if name.starts_with("math_") => math_tool_dispatch(name, arguments),
-        _ => Err(format!("unknown research tool: {name}")),
+        "research_aigc_check" => Ok(tool_research_aigc_check(arguments)?),
+        "research_aigc_humanize" => Ok(tool_research_aigc_humanize(arguments)?),
+        "research_review_dimensions" => Ok(tool_research_review_dimensions(arguments)?),
+        "research_claim_drift" => Ok(tool_research_claim_drift(arguments)?),
+        "research_review_loop" => Ok(tool_research_review_loop(arguments)?),
+        "research_smoke" => Ok(tool_research_smoke(arguments)?),
+        _ if name.starts_with("math_") => Ok(math_tool_dispatch(name, arguments)?),
+        _ => Err(FrameworkError::validation(format!("unknown research tool: {name}"))),
     }
 }
 
 // ── Math tool sub-dispatch ──
 
-fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, String> {
+fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, FrameworkError> {
     match name {
         "math_prove_inequality" => tool_math_prove_inequality(arguments),
         "math_backend_available" => tool_math_backend_available(arguments),
@@ -34,24 +37,24 @@ fn math_tool_dispatch(name: &str, arguments: &Value) -> Result<String, String> {
         "math_sympy_verify" => tool_math_sympy_verify(arguments),
         "math_sympy_simplify" => tool_math_sympy_simplify(arguments),
         "math_lean_verify" => tool_math_lean_verify(arguments),
-        _ => Err(format!("unknown math tool: {name}")),
+        _ => Err(FrameworkError::validation(format!("unknown math tool: {name}"))),
     }
 }
 
 // ── Inequality tool functions ──
 
-fn tool_math_prove_inequality(arguments: &Value) -> Result<String, String> {
+fn tool_math_prove_inequality(arguments: &Value) -> Result<String, FrameworkError> {
     let expr = arguments.get("expression").and_then(Value::as_str)
-        .ok_or("math_prove_inequality requires 'expression' (string)")?;
+        .ok_or(FrameworkError::validation("math_prove_inequality requires 'expression' (string)"))?;
     let timeout = arguments.get("timeout_ms").and_then(Value::as_u64);
     let vr = crate::verification::inequality::check_inequality(expr, timeout);
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "expression": expr,
-    })).map_err(|e| e.to_string())
+    })).map_err(FrameworkError::Json)
 }
 
-fn tool_math_backend_available(_arguments: &Value) -> Result<String, String> {
+fn tool_math_backend_available(_arguments: &Value) -> Result<String, FrameworkError> {
     let lean_status = crate::verification::lean_bridge::check_lean_status();
     let (lean_available, lean_desc) = match &lean_status {
         crate::verification::lean_bridge::LeanStatus::Available => {
@@ -63,46 +66,46 @@ fn tool_math_backend_available(_arguments: &Value) -> Result<String, String> {
     };
     serde_json::to_string_pretty(&json!({
         "inequality_engine": {
-            "available": crate::verification::inequality::z3_available(),
-            "description": "Z3-based linear inequality verification",
+            "available": crate::verification::inequality::solver_available(),
+            "description": "minilp-based linear inequality verification (pure Rust)",
         },
         "sympy": {
-            "available": crate::verification::sympy_available(),
-            "description": "Symbolic identity simplification and LaTeX parsing",
+            "available": crate::verification::sympy_bridge::sympy_available(),
+            "description": "Symbolic identity verification (pure Rust, no Python dependency)",
         },
         "lean": { "available": lean_available, "description": lean_desc },
-        "install_hint": "uv pip install z3-solver sympy",
-    })).map_err(|e| e.to_string())
+        "install_hint": "All math tools are pure Rust — no Python dependencies required.",
+    })).map_err(FrameworkError::Json)
 }
 
 // ── Asymptotic tool functions ──
 
-fn tool_math_asymptotic_estimate(arguments: &Value) -> Result<String, String> {
+fn tool_math_asymptotic_estimate(arguments: &Value) -> Result<String, FrameworkError> {
     let expr = arguments.get("expression").and_then(Value::as_str)
-        .ok_or("math_asymptotic_estimate requires 'expression' (string)")?;
+        .ok_or(FrameworkError::validation("math_asymptotic_estimate requires 'expression' (string)"))?;
     let var = arguments.get("variable").and_then(Value::as_str).unwrap_or("x");
     let regime = arguments.get("regime").and_then(Value::as_str).unwrap_or("oo");
     let vr = crate::verification::asymptotic::magnitude_estimate_with_name(expr, var, regime, "math_asymptotic_estimate");
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "expression": expr,
-    })).map_err(|e| e.to_string())
+    })).map_err(FrameworkError::Json)
 }
 
-fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, String> {
+fn tool_math_asymptotic_chain(arguments: &Value) -> Result<String, FrameworkError> {
     let steps_val = arguments.get("steps").and_then(Value::as_array)
-        .ok_or("math_asymptotic_chain requires 'steps' array")?;
+        .ok_or(FrameworkError::validation("math_asymptotic_chain requires 'steps' array"))?;
     let var = arguments.get("variable").and_then(Value::as_str).unwrap_or("x");
     let regime = arguments.get("regime").and_then(Value::as_str).unwrap_or("oo");
     let sympy_check = arguments.get("sympy_check").and_then(Value::as_bool).unwrap_or(true);
     let steps: Vec<crate::verification::asymptotic::AsymptoticStep> =
         serde_json::from_value(serde_json::Value::Array(steps_val.clone()))
-            .map_err(|e| format!("invalid step format: {e}"))?;
+            .map_err(|e| FrameworkError::Json(e))?;
     let vr = crate::verification::asymptotic::verify_asymptotic_chain_with_name(&steps, var, regime, sympy_check, "math_asymptotic_chain");
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "steps": steps_val,
-    })).map_err(|e| e.to_string())
+    })).map_err(FrameworkError::Json)
 }
 
 // ── Proof DAG tool functions ──
@@ -113,9 +116,9 @@ fn get_or_create_dag() -> &'static std::sync::Mutex<Option<crate::proof_dag::Blu
     DAG.get_or_init(|| std::sync::Mutex::new(None))
 }
 
-fn tool_math_proof_dag_init(arguments: &Value) -> Result<String, String> {
+fn tool_math_proof_dag_init(arguments: &Value) -> Result<String, FrameworkError> {
     let goal = arguments.get("goal").and_then(Value::as_str)
-        .ok_or("math_proof_dag_init requires 'goal' (string)")?;
+        .ok_or(FrameworkError::validation("math_proof_dag_init requires 'goal' (string)"))?;
     let name = arguments.get("name").and_then(Value::as_str).unwrap_or("proof");
     let bp = crate::proof_dag::Blueprint::new(goal, name);
     let serialized = crate::proof_dag_serialize::serialize_blueprint(&bp)?;
@@ -125,80 +128,81 @@ fn tool_math_proof_dag_init(arguments: &Value) -> Result<String, String> {
     Ok(serialized)
 }
 
-fn tool_math_proof_dag_decompose(arguments: &Value) -> Result<String, String> {
+fn tool_math_proof_dag_decompose(arguments: &Value) -> Result<String, FrameworkError> {
     let parent_id = arguments.get("parent_id").and_then(Value::as_str)
-        .ok_or("math_proof_dag_decompose requires 'parent_id'")?;
+        .ok_or(FrameworkError::validation("math_proof_dag_decompose requires 'parent_id'"))?;
     let and = arguments.get("and").and_then(Value::as_bool).unwrap_or(false);
     let children_val = arguments.get("children").and_then(Value::as_array)
-        .ok_or("math_proof_dag_decompose requires 'children' array")?;
+        .ok_or(FrameworkError::validation("math_proof_dag_decompose requires 'children' array"))?;
     let children: Vec<crate::proof_dag::DagNode> =
         serde_json::from_value(Value::Array(children_val.clone()))
-            .map_err(|e| format!("invalid child format: {e}"))?;
-    let mut guard = get_or_create_dag().lock().map_err(|e| format!("lock: {e}"))?;
-    let bp = guard.as_mut().ok_or("no active proof DAG — call math_proof_dag_init first")?;
+            .map_err(|e| FrameworkError::Json(e))?;
+    let mut guard = get_or_create_dag().lock().map_err(|e| FrameworkError::session(format!("lock: {e}")))?;
+    let bp = guard.as_mut().ok_or(FrameworkError::validation("no active proof DAG — call math_proof_dag_init first"))?;
     bp.decompose(parent_id, children, and)?;
-    crate::proof_dag_serialize::serialize_blueprint(bp)
+    Ok(crate::proof_dag_serialize::serialize_blueprint(bp)?)
 }
 
-fn tool_math_proof_dag_verify(arguments: &Value) -> Result<String, String> {
+fn tool_math_proof_dag_verify(arguments: &Value) -> Result<String, FrameworkError> {
     let _ = arguments;
-    let mut guard = get_or_create_dag().lock().map_err(|e| format!("lock: {e}"))?;
-    let bp = guard.as_mut().ok_or("no active proof DAG — call math_proof_dag_init first")?;
+    let mut guard = get_or_create_dag().lock().map_err(|e| FrameworkError::session(format!("lock: {e}")))?;
+    let bp = guard.as_mut().ok_or(FrameworkError::validation("no active proof DAG — call math_proof_dag_init first"))?;
     bp.verify()?;
     if let Err(warning) = bp.validate_manual_prose_ratio(0.30) {
         let summary = bp.status_summary();
         return serde_json::to_string_pretty(&json!({
             "result": summary,
             "manual_prose_warning": warning,
-        })).map_err(|e| e.to_string());
+        })).map_err(FrameworkError::Json);
     }
-    crate::proof_dag_serialize::serialize_blueprint(bp)
+    Ok(crate::proof_dag_serialize::serialize_blueprint(bp)?)
 }
 
-fn tool_math_proof_dag_status(arguments: &Value) -> Result<String, String> {
+fn tool_math_proof_dag_status(arguments: &Value) -> Result<String, FrameworkError> {
     let _ = arguments;
-    let guard = get_or_create_dag().lock().map_err(|e| format!("lock: {e}"))?;
-    let bp = guard.as_ref().ok_or("no active proof DAG — call math_proof_dag_init first")?;
+    let guard = get_or_create_dag().lock().map_err(|e| FrameworkError::session(format!("lock: {e}")))?;
+    let bp = guard.as_ref().ok_or(FrameworkError::validation("no active proof DAG — call math_proof_dag_init first"))?;
     let summary = bp.status_summary();
-    serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())
+    serde_json::to_string_pretty(&summary).map_err(FrameworkError::Json)
 }
 
 // ── SymPy bridge tool functions ──
 
-fn tool_math_sympy_verify(arguments: &Value) -> Result<String, String> {
+fn tool_math_sympy_verify(arguments: &Value) -> Result<String, FrameworkError> {
     let lhs = arguments.get("lhs").and_then(Value::as_str)
-        .ok_or("math_sympy_verify requires 'lhs' (string)")?;
+        .ok_or(FrameworkError::validation("math_sympy_verify requires 'lhs' (string)"))?;
     let rhs = arguments.get("rhs").and_then(Value::as_str)
-        .ok_or("math_sympy_verify requires 'rhs' (string)")?;
-    let assumptions: Vec<&str> = arguments.get("assumptions")
+        .ok_or(FrameworkError::validation("math_sympy_verify requires 'rhs' (string)"))?;
+    // assumptions are accepted for backward compat but ignored (pure Rust)
+    let _assumptions: Vec<&str> = arguments.get("assumptions")
         .and_then(Value::as_array)
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
         .unwrap_or_default();
-    let vr = crate::verification::sympy_bridge::verify_identity(lhs, rhs, &assumptions);
+    let vr = crate::verification::sympy_bridge::verify_identity(lhs, rhs);
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "lhs": lhs, "rhs": rhs,
-    })).map_err(|e| e.to_string())
+    })).map_err(FrameworkError::Json)
 }
 
-fn tool_math_sympy_simplify(arguments: &Value) -> Result<String, String> {
+fn tool_math_sympy_simplify(arguments: &Value) -> Result<String, FrameworkError> {
     let expr = arguments.get("expression").and_then(Value::as_str)
-        .ok_or("math_sympy_simplify requires 'expression' (string)")?;
+        .ok_or(FrameworkError::validation("math_sympy_simplify requires 'expression' (string)"))?;
     let vr = crate::verification::sympy_bridge::simplify_expression(expr);
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details, "expression": expr,
-    })).map_err(|e| e.to_string())
+    })).map_err(FrameworkError::Json)
 }
 
-fn tool_math_lean_verify(arguments: &Value) -> Result<String, String> {
+fn tool_math_lean_verify(arguments: &Value) -> Result<String, FrameworkError> {
     let script = arguments.get("script").and_then(Value::as_str)
-        .ok_or("math_lean_verify requires 'script' (string)")?;
+        .ok_or(FrameworkError::validation("math_lean_verify requires 'script' (string)"))?;
     let vr = crate::verification::lean_bridge::verify_lean_theorem(script);
     serde_json::to_string_pretty(&json!({
         "check_name": vr.check_name, "status": format!("{:?}", vr.status),
         "details": vr.details,
-    })).map_err(|e| e.to_string())
+    })).map_err(FrameworkError::Json)
 }
 
 fn parse_language(value: &Value, key: &str) -> crate::aigc::Language {
@@ -208,11 +212,11 @@ fn parse_language(value: &Value, key: &str) -> crate::aigc::Language {
     }
 }
 
-fn tool_research_aigc_check(arguments: &Value) -> Result<String, String> {
+fn tool_research_aigc_check(arguments: &Value) -> Result<String, FrameworkError> {
     let text = arguments
         .get("text")
         .and_then(Value::as_str)
-        .ok_or("research_aigc_check requires 'text' parameter")?;
+        .ok_or(FrameworkError::validation("research_aigc_check requires 'text' parameter"))?;
     let language = parse_language(arguments, "language");
 
     let config = crate::aigc::detector::DetectionConfig {
@@ -220,7 +224,7 @@ fn tool_research_aigc_check(arguments: &Value) -> Result<String, String> {
         ..Default::default()
     };
     let results = crate::aigc::detector::detect(text, &config)
-        .map_err(|e| format!("AIGC detection failed: {e}"))?;
+        .map_err(|e| FrameworkError::validation(format!("AIGC detection failed: {e}")))?;
     let score = crate::aigc::scorer::score(&results);
 
     serde_json::to_string_pretty(&json!({
@@ -229,14 +233,14 @@ fn tool_research_aigc_check(arguments: &Value) -> Result<String, String> {
         "segments_analyzed": results.len(),
         "results": results,
     }))
-    .map_err(|e| e.to_string())
+    .map_err(FrameworkError::Json)
 }
 
-fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, String> {
+fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, FrameworkError> {
     let text = arguments
         .get("text")
         .and_then(Value::as_str)
-        .ok_or("research_aigc_humanize requires 'text' parameter")?;
+        .ok_or(FrameworkError::validation("research_aigc_humanize requires 'text' parameter"))?;
     let language = parse_language(arguments, "language");
     let preserve_academic_tone = arguments
         .get("preserve_academic_tone")
@@ -255,7 +259,7 @@ fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, String> {
         ..Default::default()
     };
     let result = crate::aigc::humanizer::humanize_with_config(text, &config)
-        .map_err(|e| format!("AIGC humanization failed: {e}"))?;
+        .map_err(|e| FrameworkError::validation(format!("AIGC humanization failed: {e}")))?;
 
     serde_json::to_string_pretty(&json!({
         "original_length": text.len(),
@@ -264,14 +268,14 @@ fn tool_research_aigc_humanize(arguments: &Value) -> Result<String, String> {
         "estimated_score_improvement": result.estimated_score_improvement,
         "rewritten": result.rewritten,
     }))
-    .map_err(|e| e.to_string())
+    .map_err(FrameworkError::Json)
 }
 
-fn tool_research_review_dimensions(arguments: &Value) -> Result<String, String> {
+fn tool_research_review_dimensions(arguments: &Value) -> Result<String, FrameworkError> {
     let round = arguments
         .get("round")
         .and_then(Value::as_u64)
-        .ok_or("research_review_dimensions requires 'round' parameter")?;
+        .ok_or(FrameworkError::validation("research_review_dimensions requires 'round' parameter"))?;
     let manuscript_summary = arguments
         .get("manuscript_summary")
         .and_then(Value::as_str)
@@ -293,7 +297,7 @@ fn tool_research_review_dimensions(arguments: &Value) -> Result<String, String> 
         "checklist": checklist,
         "full_reviewer_prompt": full_prompt,
     }))
-    .map_err(|e| e.to_string())
+    .map_err(FrameworkError::Json)
 }
 
 /// Parse a `ceiling` string value into `ClaimCeiling`.
@@ -336,15 +340,15 @@ fn parse_evidence_anchors(arr: Option<&[Value]>) -> Vec<crate::types::EvidenceAn
     .unwrap_or_default()
 }
 
-fn tool_research_claim_drift(arguments: &Value) -> Result<String, String> {
+fn tool_research_claim_drift(arguments: &Value) -> Result<String, FrameworkError> {
     let original_claims = arguments
         .get("original_claims")
         .and_then(Value::as_array)
-        .ok_or("research_claim_drift requires 'original_claims' array")?;
+        .ok_or(FrameworkError::validation("research_claim_drift requires 'original_claims' array"))?;
     let current_claims = arguments
         .get("current_claims")
         .and_then(Value::as_array)
-        .ok_or("research_claim_drift requires 'current_claims' array")?;
+        .ok_or(FrameworkError::validation("research_claim_drift requires 'current_claims' array"))?;
 
     let parse_claims = |arr: &[Value]| -> Vec<crate::types::Claim> {
         arr.iter()
@@ -367,16 +371,33 @@ fn tool_research_claim_drift(arguments: &Value) -> Result<String, String> {
     let curr = parse_claims(current_claims);
 
     let results = crate::claims::drift::detect_drift(&orig, &curr)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| FrameworkError::validation(e.to_string()))?;
 
     serde_json::to_string_pretty(&json!({
         "drift_results": results,
         "total_claims_analyzed": results.len(),
     }))
-    .map_err(|e| e.to_string())
+    .map_err(FrameworkError::Json)
 }
 
-fn tool_research_review_loop(arguments: &Value) -> Result<String, String> {
+fn tool_research_review_loop(arguments: &Value) -> Result<String, FrameworkError> {
+    let operation = arguments
+        .get("operation")
+        .and_then(Value::as_str)
+        .unwrap_or("start");
+
+    match operation {
+        "start" => review_loop_start(arguments),
+        "submit_round" => review_loop_submit_round(arguments),
+        "status" => review_loop_status(arguments),
+        _ => Err(FrameworkError::validation(format!(
+            "research_review_loop: unknown operation '{operation}' — expected start|submit_round|status"
+        ))),
+    }
+}
+
+/// Operation `start`: return config + round-1 dimension. Stateless — no persistence.
+fn review_loop_start(arguments: &Value) -> Result<String, FrameworkError> {
     let max_rounds = arguments
         .get("max_rounds")
         .and_then(Value::as_u64)
@@ -385,42 +406,124 @@ fn tool_research_review_loop(arguments: &Value) -> Result<String, String> {
         .get("min_rounds")
         .and_then(Value::as_u64)
         .unwrap_or(5);
-    let consecutive_stable = arguments
+    let stable_req = arguments
         .get("consecutive_stable_required")
         .and_then(Value::as_u64)
         .unwrap_or(2);
 
-    let state = crate::types::ConvergenceState {
-        min_rounds,
-        consecutive_stable_required: consecutive_stable,
-        consecutive_stable_count: 0,
-        max_rounds,
-        current_round: 0,
-    };
-
-    let dimensions: Vec<Value> = (1..=max_rounds)
-        .map(|round| {
-            let dim = crate::types::ReviewDimension::for_round(round);
-            let prompt = crate::review::dimensions::dimension_prompt(&dim);
-            let preview: String = prompt.chars().take(200).collect();
-            json!({
-                "round": round,
-                "dimension": dim.display_name(),
-                "prompt_preview": preview,
-            })
-        })
-        .collect();
+    let dim = crate::types::ReviewDimension::for_round(1);
+    let prompt = crate::review::dimensions::dimension_prompt(&dim);
+    let checklist = crate::review::dimensions::dimension_checklist(&dim);
 
     serde_json::to_string_pretty(&json!({
-        "convergence_config": {
-            "min_rounds": state.min_rounds,
-            "max_rounds": state.max_rounds,
-            "consecutive_stable_required": state.consecutive_stable_required,
+        "operation": "started",
+        "quality_gate_config": {
+            "min_rounds": min_rounds,
+            "max_rounds": max_rounds,
+            "consecutive_stable_required": stable_req,
         },
-        "dimensions": dimensions,
-        "workflow": "spawn reviewer subagent per round → fix findings → check convergence → repeat",
+        "current_round": {
+            "round": 1,
+            "dimension": dim.display_name(),
+            "prompt": prompt,
+            "checklist": checklist,
+        },
+        "total_dimensions": std::cmp::min(max_rounds, 7),
+        "workflow": "1. Call quality_gate_manage(operation=start, ...) to init the runtime loop. 2. Spawn reviewer subagent using current_round. 3. Call research_review_loop(operation=submit_round, round=N, findings=[...]) for next-round. 4. Call quality_gate_manage(operation=append_round, ...) to record in runtime loop.",
     }))
-    .map_err(|e| e.to_string())
+    .map_err(FrameworkError::Json)
+}
+
+/// Operation `submit_round`: accept round + findings, return next-round dimension.
+/// Stateless — convergence is managed by quality_gate_manage at the runtime layer.
+fn review_loop_submit_round(arguments: &Value) -> Result<String, FrameworkError> {
+    let round = arguments
+        .get("round")
+        .and_then(Value::as_u64)
+        .ok_or(FrameworkError::validation(
+            "research_review_loop submit_round requires 'round' (u64)",
+        ))?;
+
+    let findings_val = arguments.get("findings").and_then(Value::as_array);
+    let findings: Vec<crate::types::Finding> = match findings_val {
+        Some(arr) => serde_json::from_value(Value::Array(arr.clone()))
+            .map_err(|e| FrameworkError::validation(format!("invalid findings format: {e}")))?,
+        None => Vec::new(),
+    };
+
+    let has_blocking = findings.iter().any(|f| f.severity.blocks_convergence());
+
+    let next_round = round + 1;
+    let dim = crate::types::ReviewDimension::for_round(next_round);
+    let prompt = crate::review::dimensions::dimension_prompt(&dim);
+    let checklist = crate::review::dimensions::dimension_checklist(&dim);
+
+    serde_json::to_string_pretty(&json!({
+        "operation": "continue",
+        "round_completed": round,
+        "findings_this_round": findings.len(),
+        "has_blocking": has_blocking,
+        "findings": findings.iter().map(|f| json!({
+            "id": f.id,
+            "severity": format!("{:?}", f.severity),
+            "dimension": f.dimension,
+            "location": f.location,
+            "description": f.description,
+            "suggestion": f.suggestion,
+        })).collect::<Vec<_>>(),
+        "next_round": {
+            "round": next_round,
+            "dimension": dim.display_name(),
+            "prompt": prompt,
+            "checklist": checklist,
+        },
+        "next_step": "Call quality_gate_manage(operation=append_round, ...) to record round in runtime loop, then spawn reviewer for next round.",
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+/// Operation `status`: return current round's dimension. Stateless — pure function of round.
+fn review_loop_status(arguments: &Value) -> Result<String, FrameworkError> {
+    let round = arguments.get("round").and_then(Value::as_u64).unwrap_or(1);
+    let dim = crate::types::ReviewDimension::for_round(round);
+
+    serde_json::to_string_pretty(&json!({
+        "round": round,
+        "dimension": dim.display_name(),
+        "note": "Runtime loop state (convergence, rounds history) is managed by quality_gate_manage at the runtime layer.",
+        "next_step": "Call quality_gate_manage(operation=status) for convergence state.",
+    }))
+    .map_err(FrameworkError::Json)
+}
+
+/// Academic data source freshness smoke test.
+/// Requires the `smoke` feature; returns descriptive error otherwise.
+#[cfg_attr(not(feature = "smoke"), allow(unused_variables))]
+fn tool_research_smoke(arguments: &Value) -> Result<String, FrameworkError> {
+    #[cfg(feature = "smoke")]
+    {
+        let repo_root = arguments
+            .get("repo_root")
+            .and_then(Value::as_str)
+            .map(std::path::Path::new)
+            .unwrap_or_else(|| {
+                // Lazy static to avoid repeated current_dir() calls
+                static CWD: std::sync::LazyLock<std::path::PathBuf> =
+                    std::sync::LazyLock::new(|| std::env::current_dir().unwrap_or_default());
+                &*CWD
+            });
+        let source = arguments.get("source").and_then(Value::as_str);
+        let barrier_id = arguments.get("barrier_id").and_then(Value::as_str);
+        let result = crate::smoke::run_smoke_tests(repo_root, source, barrier_id)
+            .map_err(|e| FrameworkError::validation(format!("research_smoke failed: {e}")))?;
+        Ok(result)
+    }
+    #[cfg(not(feature = "smoke"))]
+    {
+        Err(FrameworkError::validation(
+            "research_smoke: not available (crate was built without 'smoke' feature)",
+        ))
+    }
 }
 
 #[cfg(test)]
@@ -432,21 +535,21 @@ mod tests {
     fn handle_research_tool_unknown() {
         let result = handle_research_tool("nonexistent_tool", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("unknown research tool"));
+        assert!(result.unwrap_err().to_string().contains("unknown research tool"));
     }
 
     #[test]
     fn research_aigc_check_missing_text() {
         let result = handle_research_tool("research_aigc_check", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'text'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'text'"));
     }
 
     #[test]
     fn research_aigc_humanize_missing_text() {
         let result = handle_research_tool("research_aigc_humanize", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'text'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'text'"));
     }
 
     #[test]
@@ -509,7 +612,7 @@ mod tests {
     fn research_review_dimensions_missing_round() {
         let result = handle_research_tool("research_review_dimensions", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'round'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'round'"));
     }
 
     #[test]
@@ -528,7 +631,7 @@ mod tests {
     fn research_claim_drift_missing_required() {
         let result = handle_research_tool("research_claim_drift", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'original_claims'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'original_claims'"));
     }
 
     #[test]
@@ -581,10 +684,12 @@ mod tests {
         let result = handle_research_tool("research_review_loop", &json!({}));
         assert!(result.is_ok());
         let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
-        let config = parsed.get("convergence_config").unwrap();
+        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("started"));
+        let config = parsed.get("quality_gate_config").unwrap();
         assert_eq!(config.get("min_rounds").and_then(Value::as_u64), Some(5));
         assert_eq!(config.get("max_rounds").and_then(Value::as_u64), Some(10));
         assert_eq!(config.get("consecutive_stable_required").and_then(Value::as_u64), Some(2));
+        assert!(parsed.get("current_round").is_some());
     }
 
     #[test]
@@ -594,7 +699,100 @@ mod tests {
             &json!({"max_rounds": 3, "min_rounds": 1, "consecutive_stable_required": 1}),
         );
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("\"dimensions\":"));
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("started"));
+        let config = parsed.get("quality_gate_config").unwrap();
+        assert_eq!(config.get("max_rounds").and_then(Value::as_u64), Some(3));
+        assert_eq!(config.get("min_rounds").and_then(Value::as_u64), Some(1));
+        assert!(parsed.get("current_round").is_some());
+    }
+
+    #[test]
+    fn research_review_loop_status_round_1() {
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({"operation": "status"}),
+        );
+        assert!(result.is_ok());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed.get("round").and_then(Value::as_u64), Some(1));
+        assert_eq!(parsed.get("dimension").and_then(Value::as_str), Some("逻辑与证据"));
+    }
+
+    #[test]
+    fn research_review_loop_status_round_3() {
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({"operation": "status", "round": 3}),
+        );
+        assert!(result.is_ok());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed.get("round").and_then(Value::as_u64), Some(3));
+        assert_eq!(parsed.get("dimension").and_then(Value::as_str), Some("数学与符号"));
+    }
+
+    #[test]
+    fn research_review_loop_submit_missing_round() {
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({"operation": "submit_round"}),
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("requires 'round'"));
+    }
+
+    #[test]
+    fn research_review_loop_submit_empty_findings() {
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({"operation": "submit_round", "round": 1, "findings": []}),
+        );
+        assert!(result.is_ok());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed.get("operation").and_then(Value::as_str), Some("continue"));
+        assert_eq!(parsed.get("round_completed").and_then(Value::as_u64), Some(1));
+        assert_eq!(parsed.get("has_blocking").and_then(Value::as_bool), Some(false));
+        let next = parsed.get("next_round").unwrap();
+        assert_eq!(next.get("round").and_then(Value::as_u64), Some(2));
+    }
+
+    #[test]
+    fn research_review_loop_submit_with_blocking() {
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({
+                "operation": "submit_round",
+                "round": 1,
+                "findings": [{"id": "f1", "severity": "P0", "dimension": "逻辑与证据", "location": "§2", "description": "data integrity"}]
+            }),
+        );
+        assert!(result.is_ok());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed.get("has_blocking").and_then(Value::as_bool), Some(true));
+    }
+
+    #[test]
+    fn research_review_loop_unknown_operation() {
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({"operation": "unknown"}),
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("unknown operation"));
+    }
+
+    #[test]
+    fn research_review_loop_submit_advances_round() {
+        let result = handle_research_tool(
+            "research_review_loop",
+            &json!({"operation": "submit_round", "round": 3, "findings": []}),
+        );
+        assert!(result.is_ok());
+        let parsed: Value = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(parsed.get("round_completed").and_then(Value::as_u64), Some(3));
+        let next = parsed.get("next_round").unwrap();
+        assert_eq!(next.get("round").and_then(Value::as_u64), Some(4));
+        assert_eq!(next.get("dimension").and_then(Value::as_str), Some("图表与可读性"));
     }
 
     #[test]
@@ -654,7 +852,7 @@ mod tests {
     fn test_math_prove_inequality_missing_expression() {
         let result = handle_research_tool("math_prove_inequality", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'expression'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'expression'"));
     }
 
     #[test]
@@ -667,14 +865,14 @@ mod tests {
     fn test_math_asymptotic_estimate_missing_expression() {
         let result = handle_research_tool("math_asymptotic_estimate", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'expression'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'expression'"));
     }
 
     #[test]
     fn test_math_asymptotic_chain_missing_steps() {
         let result = handle_research_tool("math_asymptotic_chain", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'steps'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'steps'"));
     }
 
     #[test]
@@ -690,56 +888,56 @@ mod tests {
     fn test_math_proof_dag_init_missing_goal() {
         let result = handle_research_tool("math_proof_dag_init", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'goal'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'goal'"));
     }
 
     #[test]
     fn test_math_proof_dag_decompose_missing_parent_id() {
         let result = handle_research_tool("math_proof_dag_decompose", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'parent_id'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'parent_id'"));
     }
 
     #[test]
     fn test_math_proof_dag_verify_without_init() {
         let result = handle_research_tool("math_proof_dag_verify", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("no active proof DAG"));
+        assert!(result.unwrap_err().to_string().contains("no active proof DAG"));
     }
 
     #[test]
     fn test_math_proof_dag_status_without_init() {
         let result = handle_research_tool("math_proof_dag_status", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("no active proof DAG"));
+        assert!(result.unwrap_err().to_string().contains("no active proof DAG"));
     }
 
     #[test]
     fn test_math_sympy_verify_missing_lhs() {
         let result = handle_research_tool("math_sympy_verify", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'lhs'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'lhs'"));
     }
 
     #[test]
     fn test_math_sympy_verify_missing_rhs() {
         let result = handle_research_tool("math_sympy_verify", &json!({"lhs": "x"}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'rhs'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'rhs'"));
     }
 
     #[test]
     fn test_math_sympy_simplify_missing_expression() {
         let result = handle_research_tool("math_sympy_simplify", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'expression'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'expression'"));
     }
 
     #[test]
     fn test_math_lean_verify_missing_script() {
         let result = handle_research_tool("math_lean_verify", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires 'script'"));
+        assert!(result.unwrap_err().to_string().contains("requires 'script'"));
     }
 
     #[test]
@@ -758,14 +956,14 @@ mod tests {
     fn test_math_unknown_tool() {
         let result = handle_research_tool("math_nonexistent", &json!({}));
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("unknown math tool"));
+        assert!(result.unwrap_err().to_string().contains("unknown math tool"));
     }
 
     #[test]
     fn test_math_tool_routing() {
         let result = handle_research_tool("math_future_tool", &json!({}));
         assert!(result.is_err());
-        let err = result.unwrap_err();
+        let err = result.unwrap_err().to_string();
         assert!(err.contains("unknown") || err.contains("requires"), "wrong routing: {err}");
     }
 }

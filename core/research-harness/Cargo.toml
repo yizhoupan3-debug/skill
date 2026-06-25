@@ -39,6 +39,7 @@ serde_yml.workspace = true
 tracing.workspace = true
 regex.workspace = true
 sha2.workspace = true
+minilp.workspace = true
 
 # CLI (optional)
 clap = { workspace = true, optional = true }

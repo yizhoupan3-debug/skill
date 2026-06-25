@@ -80,6 +80,7 @@ hex = "0.4"
 insta = { version = "1.42", features = ["json"] }
 libc = "0.2"
 mimalloc = "0.1"
+minilp = "0.2"
 notify = "7.0"
 
 rayon = "1.10"
@@ -96,6 +97,9 @@ mockall = "0.13"
 tracing = "0.1"
 tungstenite = "0.24"
 which = "8"
+
+[profile.dev]
+split-debuginfo = "unpacked"  # macOS 链接加速：DWARF 不进链接阶段
 
 [profile.release]
 lto = true
