@@ -231,6 +231,7 @@ pub fn maybe_promote_focus_to_active_pointer(repo_root: &Path) -> bool {
 ///
 /// - `pointer_view`：`resolve_task_view_with_pointers`（override 无 → active → focus），供续跑合并时与 `active_task` 对齐缓存。
 /// - `hydration_goal`：与 `read_goal_state_for_hydration_from_pointer_ids` 一致（active → focus；不扫 orphan），供 `AG_FOLLOWUP` hydrate；与 `pointer_view` 共用同一 [`read_task_pointers`] 快照。
+///
 /// beforeSubmit / Stop 入口：一次构建指针视图 + hydration 目标对。
 /// 会话级作用域：默认仅 active/focus 指针 hydration；不扫 orphan。
 /// 遗留 diagnostics scan 仅当 `ROUTER_RS_GOAL_DIAGNOSTICS_SCAN_HYDRATE=1` 显式 opt-in。

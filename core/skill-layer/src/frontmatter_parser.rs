@@ -412,7 +412,7 @@ pub fn yaml_multiline_value(yaml_text: &str, key: &str) -> Option<String> {
                 // Collect indented lines
                 let mut value_lines = Vec::new();
                 let base_indent = line.len() - line.trim_start().len() + 2;
-                while let Some(next) = lines.next() {
+                for next in lines.by_ref() {
                     if next.trim().is_empty() {
                         break;
                     }
@@ -435,11 +435,11 @@ pub fn yaml_multiline_value(yaml_text: &str, key: &str) -> Option<String> {
 /// Returns 0 if the key is not found.
 pub fn count_yaml_list_items(yaml_text: &str, key: &str) -> usize {
     let prefix = format!("{key}:");
-    let mut lines = yaml_text.lines();
+    let lines = yaml_text.lines();
     let mut in_list = false;
     let mut count = 0;
 
-    while let Some(line) = lines.next() {
+    for line in lines {
         let trimmed = line.trim();
         if trimmed.starts_with(&prefix) {
             in_list = true;

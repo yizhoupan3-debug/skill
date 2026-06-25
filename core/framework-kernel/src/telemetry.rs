@@ -133,7 +133,7 @@ fn flush_buffer(journal_path: &Path, buffer: &mut Vec<TelemetryEvent>) -> Result
     for event in buffer.iter() {
         let line = JournalLine {
             ts: crate::time::now_iso(),
-            event: &event,
+            event,
         };
         let serialized = serde_json::to_string(&line).map_err(|e| e.to_string())?;
         lines.push_str(&serialized);

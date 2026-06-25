@@ -90,15 +90,12 @@ pub struct GoalCompletionGates {
 /// Goal execution type: determines the goal lifecycle strategy.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum GoalType {
     /// Linear goal: plan → execute → review. Default when absent.
+    #[default]
     Linear,
     /// Loop goal: review → implement (with task splitting), uses loop engine.
     Loop,
 }
 
-impl Default for GoalType {
-    fn default() -> Self {
-        GoalType::Linear
-    }
-}

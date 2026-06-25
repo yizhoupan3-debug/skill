@@ -51,17 +51,15 @@ fn walk_skill_md(dir: &Path, slugs: &mut BTreeSet<String>) -> Result<(), Discove
         let path = entry.path();
         if path.is_dir() {
             // Skip hidden directories
-            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                if name.starts_with('.') {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                && name.starts_with('.') {
                     continue;
                 }
-            }
             walk_skill_md(&path, slugs)?;
-        } else if path.file_name().and_then(|s| s.to_str()) == Some("SKILL.md") {
-            if let Some(name) = parse_skill_name_from_path(&path)? {
+        } else if path.file_name().and_then(|s| s.to_str()) == Some("SKILL.md")
+            && let Some(name) = parse_skill_name_from_path(&path)? {
                 slugs.insert(name);
             }
-        }
     }
     Ok(())
 }
@@ -110,13 +108,12 @@ pub fn safe_skill_md_path(
     // Verify the resolved path is still under skills_root
     let canonical_skills = fs::canonicalize(skills_root)
         .unwrap_or_else(|_| skills_root.to_path_buf());
-    if let Ok(canonical_path) = fs::canonicalize(&path) {
-        if !canonical_path.starts_with(&canonical_skills) {
+    if let Ok(canonical_path) = fs::canonicalize(&path)
+        && !canonical_path.starts_with(&canonical_skills) {
             return Err(DiscoveryError::InvalidSlug(format!(
                 "path traversal detected: {slug}"
             )));
         }
-    }
 
     Ok(path)
 }
@@ -136,20 +133,18 @@ pub fn skill_md_from_manifest(
     let slug_idx = keys.iter().position(|k| k == "slug");
     let path_idx = keys.iter().position(|k| k == "skill_path");
 
-    if let (Some(slug_idx), Some(path_idx)) = (slug_idx, path_idx) {
-        if let Some(rows) = manifest["skills"].as_array() {
+    if let (Some(slug_idx), Some(path_idx)) = (slug_idx, path_idx)
+        && let Some(rows) = manifest["skills"].as_array() {
             for row in rows {
-                if row.get(slug_idx).and_then(|v| v.as_str()) == Some(slug) {
-                    if let Some(rel) = row.get(path_idx).and_then(|v| v.as_str()) {
+                if row.get(slug_idx).and_then(|v| v.as_str()) == Some(slug)
+                    && let Some(rel) = row.get(path_idx).and_then(|v| v.as_str()) {
                         let full = repo_root.join(rel);
                         if full.exists() {
                             return Some(full);
                         }
                     }
-                }
             }
         }
-    }
 
     // Fallback to standard path
     let fallback = paths::skill_md(repo_root, slug);

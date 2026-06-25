@@ -227,14 +227,12 @@ fn main() {
         let trans = meta_str(id, "transport_type");
         let cfg = meta_str(id, "config_path");
 
-        let caps = vec![
-            ("batch_execution", meta_bool(id, "batch_execution")),
+        let caps = [("batch_execution", meta_bool(id, "batch_execution")),
             ("cron_execution", meta_bool(id, "cron_execution")),
             ("ci_runner", meta_bool(id, "ci_runner")),
             ("non_interactive_entrypoint", meta_bool(id, "non_interactive_entrypoint")),
             ("external_session_supervisor", meta_bool(id, "external_session_supervisor")),
-            ("rate_limit_auto_resume", meta_bool(id, "rate_limit_auto_resume")),
-        ];
+            ("rate_limit_auto_resume", meta_bool(id, "rate_limit_auto_resume"))];
         let caps_lines: String = caps.iter()
             .map(|(k, v)| format!("{nl}            {k}: {v},"))
             .collect();

@@ -348,14 +348,13 @@ pub fn reap_stale_agents(
             if !a.is_terminal() {
                 return true;
             }
-            if let Some(ref completed) = a.completed_at {
-                if let (Ok(c_dt), Ok(d_dt)) = (
+            if let Some(ref completed) = a.completed_at
+                && let (Ok(c_dt), Ok(d_dt)) = (
                     chrono::DateTime::parse_from_rfc3339(completed),
                     chrono::DateTime::parse_from_rfc3339(&deadline),
                 ) {
                     return d_dt.signed_duration_since(c_dt).num_seconds() < retention_seconds;
                 }
-            }
             false
         });
         let reaped = before - store.agents.len();

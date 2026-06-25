@@ -108,15 +108,15 @@ impl ScoringWeights {
 
 static WEIGHTS: LazyLock<&'static ScoringWeights> = LazyLock::new(|| {
     // 1. Try runtime path first (FRAMEWORK_ROOT env var allows edits without recompile).
-    if let Some(path) = resolve_runtime_weights_path() {
-        if let Ok(json) = std::fs::read_to_string(&path) {
-            if let Ok(w) = serde_json::from_str::<ScoringWeights>(&json) {
-                return Box::leak(Box::new(w));
-            }
-            tracing::warn!(
-                "[scoring_config] {path} exists but failed to parse; using embedded defaults."
-            );
+    if let Some(path) = resolve_runtime_weights_path()
+        && let Ok(json) = std::fs::read_to_string(&path)
+    {
+        if let Ok(w) = serde_json::from_str::<ScoringWeights>(&json) {
+            return Box::leak(Box::new(w));
         }
+        tracing::warn!(
+            "[scoring_config] {path} exists but failed to parse; using embedded defaults."
+        );
     }
     // 2. Fallback: compile-time embedded JSON.
     let w: ScoringWeights = serde_json::from_str(DEFAULTS_JSON)

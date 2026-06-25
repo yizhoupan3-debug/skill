@@ -17,11 +17,8 @@ pub(super) use crate::cli::route_task_with_manifest_fallback;
 pub(super) use crate::cli::args::{
     BackgroundControlRequestPayload, SandboxControlRequestPayload,
     TraceStreamInspectRequestPayload, TraceStreamReplayRequestPayload,
-    RouterCommand, HostCommand,
 };
-pub(super) use crate::cli::Cli;
 pub(super) use crate::route::ROUTE_REPORT_SCHEMA_VERSION;
-pub(super) use crate::hook_status;
 
 pub(super) fn execution_kernel_contract_shape_fields(shape: &Value) -> Vec<String> {
     let object = shape.as_object().expect("contract shape object");
@@ -194,7 +191,7 @@ where
     let previous = std::env::var_os(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV);
 
     match value {
-        Some(raw) => unsafe { core_state_utils::env_sync::set_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, &raw) },
+        Some(raw) => unsafe { core_state_utils::env_sync::set_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV, raw) },
         None => unsafe { core_state_utils::env_sync::remove_env(EXECUTE_AGGREGATOR_HOST_ALLOWLIST_ENV) },
     }
 
@@ -230,7 +227,7 @@ impl Drop for CloseoutStrictEnvGuard {
     fn drop(&mut self) {
         // SAFETY: self._lock is alive until after drop() returns.
         match &self.prior {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }
@@ -268,15 +265,15 @@ impl Drop for CiHardUnsetCloseoutEnvGuard {
     fn drop(&mut self) {
         // SAFETY: self._lock is alive until after drop() returns.
         match &self.prior_ci {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("CI", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("CI", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("CI") },
         }
         match &self.prior_github_actions {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("GITHUB_ACTIONS", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("GITHUB_ACTIONS", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }
@@ -309,15 +306,15 @@ impl GithubActionsHardUnsetCloseoutEnvGuard {
 impl Drop for GithubActionsHardUnsetCloseoutEnvGuard {
     fn drop(&mut self) {
         match &self.prior_ci {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("CI", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("CI", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("CI") },
         }
         match &self.prior_github_actions {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("GITHUB_ACTIONS", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("GITHUB_ACTIONS", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }
@@ -349,15 +346,15 @@ impl CiWithCloseoutDisabledEnvGuard {
 impl Drop for CiWithCloseoutDisabledEnvGuard {
     fn drop(&mut self) {
         match &self.prior_ci {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("CI", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("CI", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("CI") },
         }
         match &self.prior_github_actions {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("GITHUB_ACTIONS", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("GITHUB_ACTIONS", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }
@@ -389,15 +386,15 @@ impl LocalNonCiEmptyCloseoutEnvGuard {
 impl Drop for LocalNonCiEmptyCloseoutEnvGuard {
     fn drop(&mut self) {
         match &self.prior_ci {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("CI", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("CI", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("CI") },
         }
         match &self.prior_github_actions {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("GITHUB_ACTIONS", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("GITHUB_ACTIONS", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("GITHUB_ACTIONS") },
         }
         match &self.prior_closeout {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", &v) },
+            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
             None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
         }
     }

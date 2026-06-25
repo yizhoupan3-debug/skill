@@ -96,8 +96,8 @@ pub fn delete_skill(
     if loadouts_path.exists() {
         let loadouts_text =
             fs::read_to_string(&loadouts_path).map_err(DeleteError::Io)?;
-        if let Ok(loadouts_val) = serde_json::from_str::<serde_json::Value>(&loadouts_text) {
-            if let Some(loadouts_obj) = loadouts_val.get("loadouts").and_then(|v| v.as_object()) {
+        if let Ok(loadouts_val) = serde_json::from_str::<serde_json::Value>(&loadouts_text)
+            && let Some(loadouts_obj) = loadouts_val.get("loadouts").and_then(|v| v.as_object()) {
                 let referencing: Vec<String> = loadouts_obj
                     .iter()
                     .filter(|(_, v)| {
@@ -118,7 +118,6 @@ pub fn delete_skill(
                     });
                 }
             }
-        }
     }
 
     // Backup if requested
@@ -181,7 +180,7 @@ mod tests {
     #[test]
     fn dry_run_does_not_delete() {
         let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path().exists();
+        let _dir = tmp.path().exists();
         // Create skill dir
         let skill_dir = tmp.path().join("test-skill");
         fs::create_dir_all(&skill_dir).unwrap();

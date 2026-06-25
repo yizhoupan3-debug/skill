@@ -952,3 +952,204 @@ pub fn write_trace_metadata(
         payload_text: serialized,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn minimal_trace_events() -> String {
+        r#"{"kind": "run.started", "session_id": "s1", "seq": 1}
+{"kind": "route.selected", "session_id": "s1", "seq": 2}
+{"kind": "run.failed", "session_id": "s1", "seq": 3}
+{"kind": "run.started", "session_id": "s1", "seq": 4}
+"#
+        .to_string()
+    }
+
+    // ── inspect_trace_stream ──
+
+    #[test]
+    fn inspect_from_inline_text() {
+        let payload = TraceStreamInspectRequestPayload {
+            path: None,
+            event_stream_text: Some(minimal_trace_events()),
+            compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
+            session_id: None,
+            job_id: None,
+            stream_scope_fields: None,
+        };
+        let result = inspect_trace_stream(payload).unwrap();
+        assert_eq!(result.event_count, 4);
+        assert_eq!(result.source_kind, "trace_stream");
+        assert!(result.latest_event_id.is_some());
+        // reroute_count = route.selected events - 1 = 0 (only 1)
+        assert_eq!(result.reroute_count, 0);
+        // retry_count = run.failed events = 1
+        assert_eq!(result.retry_count, 1);
+    }
+
+    #[test]
+    fn inspect_filters_by_session_id() {
+        let events = r#"{"kind": "run.started", "session_id": "s1", "seq": 1}
+{"kind": "run.started", "session_id": "s2", "seq": 2}
+"#.to_string();
+        let payload = TraceStreamInspectRequestPayload {
+            event_stream_text: Some(events),
+            session_id: Some("s1".into()),
+            ..base_inspect()
+        };
+        let result = inspect_trace_stream(payload).unwrap();
+        assert_eq!(result.event_count, 1);
+    }
+
+    #[test]
+    fn inspect_reroute_count_multiple() {
+        let events = r#"{"kind": "route.selected", "session_id": "s1", "seq": 1}
+{"kind": "route.selected", "session_id": "s1", "seq": 2}
+{"kind": "route.selected", "session_id": "s1", "seq": 3}
+"#;
+        let payload = TraceStreamInspectRequestPayload {
+            event_stream_text: Some(events.into()),
+            ..base_inspect()
+        };
+        let result = inspect_trace_stream(payload).unwrap();
+        // reroute_count = 3 route.selected - 1 = 2
+        assert_eq!(result.reroute_count, 2);
+    }
+
+    #[test]
+    fn inspect_without_source_returns_err() {
+        let payload = TraceStreamInspectRequestPayload {
+            path: None,
+            event_stream_text: None,
+            ..base_inspect()
+        };
+        assert!(inspect_trace_stream(payload).is_err());
+    }
+
+    // ── replay_trace_stream ──
+
+    #[test]
+    fn replay_all_events() {
+        let payload = TraceStreamReplayRequestPayload {
+            path: None,
+            event_stream_text: Some(minimal_trace_events()),
+            compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
+            session_id: None,
+            job_id: None,
+            stream_scope_fields: None,
+            after_event_id: None,
+            limit: None,
+        };
+        let result = replay_trace_stream(payload).unwrap();
+        assert_eq!(result.event_count, 4);
+        assert_eq!(result.events.len(), 4);
+    }
+
+    #[test]
+    fn replay_after_event_id() {
+        let payload = TraceStreamReplayRequestPayload {
+            event_stream_text: Some(minimal_trace_events()),
+            after_event_id: Some("evt_replay_000002".into()),
+            session_id: Some("s1".into()),
+            ..base_replay()
+        };
+        let result = replay_trace_stream(payload).unwrap();
+        // After evt_replay_000002 (seq 2, line 3), remaining = 2 events
+        assert_eq!(result.events.len(), 2, "events after anchor");
+    }
+
+    #[test]
+    fn replay_with_limit() {
+        let payload = TraceStreamReplayRequestPayload {
+            event_stream_text: Some(minimal_trace_events()),
+            limit: Some(2),
+            ..base_replay()
+        };
+        let result = replay_trace_stream(payload).unwrap();
+        assert_eq!(result.events.len(), 2);
+        assert!(result.has_more, "more events available");
+    }
+
+    #[test]
+    fn replay_unknown_after_event_id_returns_err() {
+        let payload = TraceStreamReplayRequestPayload {
+            event_stream_text: Some(minimal_trace_events()),
+            after_event_id: Some("nonexistent".into()),
+            ..base_replay()
+        };
+        assert!(replay_trace_stream(payload).is_err());
+    }
+
+    // ── write_trace_compaction_delta ──
+
+    #[test]
+    fn compaction_delta_writes_to_temp_file() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("compaction-delta-test.jsonl");
+        let payload = TraceCompactionDeltaWriteRequestPayload {
+            path: path.display().to_string(),
+            delta: json!({"kind": "test_event", "seq": 1}),
+        };
+        let result = write_trace_compaction_delta(payload).unwrap();
+        assert!(result.bytes_written > 0);
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("test_event"));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn compaction_delta_returns_bytes_written() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("compaction-delta-bytes.jsonl");
+        let payload = TraceCompactionDeltaWriteRequestPayload {
+            path: path.display().to_string(),
+            delta: json!({"msg": "hello"}),
+        };
+        let result = write_trace_compaction_delta(payload).unwrap();
+        assert!(result.bytes_written > 0);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // ── Shared helpers ──
+
+    fn base_inspect() -> TraceStreamInspectRequestPayload {
+        TraceStreamInspectRequestPayload {
+            path: None,
+            event_stream_text: None,
+            compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
+            session_id: None,
+            job_id: None,
+            stream_scope_fields: None,
+        }
+    }
+
+    fn base_replay() -> TraceStreamReplayRequestPayload {
+        TraceStreamReplayRequestPayload {
+            path: None,
+            event_stream_text: None,
+            compaction_manifest_path: None,
+            compaction_manifest_text: None,
+            compaction_state_text: None,
+            compaction_artifact_index_text: None,
+            compaction_delta_text: None,
+            session_id: None,
+            job_id: None,
+            stream_scope_fields: None,
+            after_event_id: None,
+            limit: None,
+        }
+    }
+}

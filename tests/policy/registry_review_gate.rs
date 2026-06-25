@@ -1,3 +1,8 @@
+use crate::common;
+use crate::common::{project_root, read_json};
+use serde_json::Value;
+use std::collections::{BTreeSet, HashSet};
+
 #[test]
 fn runtime_registry_review_gate_spawn_first_fields() {
     let root = project_root();

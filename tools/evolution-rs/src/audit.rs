@@ -260,10 +260,11 @@ mod tests {
         let dir = temp_dir("struggle");
         let journal = dir.join("journal.jsonl");
         let ts = chrono::Utc::now().to_rfc3339();
-        let mut lines = Vec::new();
-        lines.push(make_entry(&ts, "task1", "none", "pdf", false, 3));
-        lines.push(make_entry(&ts, "task2", "none", "csv", false, 0));
-        lines.push(make_entry(&ts, "task3", "none", "pdf", true, 1));
+        let lines = [
+            make_entry(&ts, "task1", "none", "pdf", false, 3),
+            make_entry(&ts, "task2", "none", "csv", false, 0),
+            make_entry(&ts, "task3", "none", "pdf", true, 1),
+        ];
         std::fs::write(&journal, lines.join("\n")).unwrap();
         let cfg = EvolutionConfig::default();
         audit_journal(journal, 30, true, None, &cfg).unwrap();

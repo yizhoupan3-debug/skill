@@ -6,6 +6,7 @@ use runtime_core::trace_runtime::{
 };
 use serde_json::{Map, json};
 use std::fs;
+use std::path::Path;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -17,7 +18,7 @@ fn temp_trace_root(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("router-rs-trace-{name}-{nonce}"))
 }
 
-fn base_compact_payload(root: &PathBuf, session_id: &str) -> TraceCompactRequestPayload {
+fn base_compact_payload(root: &Path, session_id: &str) -> TraceCompactRequestPayload {
     TraceCompactRequestPayload {
         root_path: root.display().to_string(),
         event_stream_path: None,

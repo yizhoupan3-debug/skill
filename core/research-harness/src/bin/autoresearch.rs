@@ -107,7 +107,7 @@ enum Commands {
     CompareClaim {
         #[arg(short, long, default_value = ".")]
         workspace: PathBuf,
-        #[arg(short, long)]
+        #[arg(long)]
         claim: String,
         #[arg(short, long)]
         axis: String,
@@ -148,7 +148,7 @@ enum Commands {
         negative_signals: Vec<String>,
         #[arg(long)]
         minimal_test: Option<String>,
-        #[arg(short, long, default_value = "medium")]
+        #[arg(short = 'P', long, default_value = "medium")]
         priority: String,
         #[arg(long)]
         id: Option<String>,

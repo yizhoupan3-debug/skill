@@ -421,17 +421,15 @@ pub fn closeout_gate_evaluate(
 
     let review_goal = task_view.goal_state
         .as_ref()
-        .is_some_and(|gs| check_goal_suggests_review(gs));
+        .is_some_and(check_goal_suggests_review);
 
     // desktop_review_evidence_attested uses args.reviewer_lane + fork_context
     let has_review_evidence = arguments.get("reviewer_lane").and_then(Value::as_str).is_some()
         || arguments.get("fork_context").is_some();
 
     if review_goal && !has_review_evidence {
-        findings.push(format!(
-            "WARN: review_gate: GOAL suggests review work but no reviewer evidence — \
-             pass reviewer_lane + fork_context in closeout_gate args"
-        ));
+        findings.push("WARN: review_gate: GOAL suggests review work but no reviewer evidence — \
+             pass reviewer_lane + fork_context in closeout_gate args".to_string());
     } else if review_goal {
         findings.push("review_gate: GOAL suggests review; reviewer evidence attested".to_string());
     }
@@ -450,7 +448,7 @@ pub fn closeout_gate_evaluate(
     };
 
     let formatted = format!("[Closeout Gate] {verdict_label}\n\n{}", findings.join("\n"));
-    Ok(serde_json::to_string(&json!({"result": formatted})).map_err(|e| e.to_string())?)
+    serde_json::to_string(&json!({"result": formatted})).map_err(|e| e.to_string())
 }
 
 /// Minimal check: does the goal mention review-related work?
@@ -595,7 +593,7 @@ fn routing_analyze(entries: &[RouteLogEntry]) -> String {
     }
 
     low_conf.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-    high_reroute.sort_by(|a, b| b.0.cmp(&a.0));
+    high_reroute.sort_by(|a, b| b.0.cmp(a.0));
 
     let analysis = json!({
         "total_entries": entries.len(),

@@ -35,11 +35,7 @@ mod task_write_lock {
 
 // ── hook_status (inline, test-only) ──
 #[cfg(test)]
-pub(crate) mod hook_status {
-    pub const REVIEW_GATE_CHECKING: &str = "Loading Codex turn context";
-    pub const REVIEW_GATE_UPDATING: &str = "Recording Codex tool evidence";
-    pub const REVIEW_GATE_ENFORCING: &str = "Enforcing Codex review gate";
-}
+pub(crate) mod hook_status {}
 
 // ── crate-level re-exports ──
 

@@ -184,7 +184,7 @@ pub fn truncate_and_compact(path: &Path, max_lines: usize) -> Result<bool, Strin
     }
 
     let trunc_end = find_last_valid_line_end(&content);
-    let was_truncated = trunc_end.map_or(true, |end| end < content.len());
+    let was_truncated = trunc_end.is_none_or(|end| end < content.len());
 
     let clean = match trunc_end {
         Some(end) if end < content.len() => &content[..end],
@@ -291,10 +291,8 @@ fn compact_jsonl_core(content: &str, max_lines: usize) -> Result<Option<String>,
     let entry_count = entries.len(); // captured before the consuming into_iter below
 
     for (i, (mut obj, snap_type)) in entries.into_iter().enumerate() {
-        if let Some(tt) = snap_type {
-            if last_snapshot.get(tt.as_str()) != Some(&i) {
-                continue; // Redundant — a newer snapshot of this type exists.
-            }
+        if let Some(tt) = snap_type && last_snapshot.get(tt.as_str()) != Some(&i) {
+            continue; // Redundant — a newer snapshot of this type exists.
         }
 
         // Renumber seq to its dense position.  Every kept line gets 0,1,2,...
@@ -398,16 +396,14 @@ fn atomic_write_jsonl(path: &Path, payload: &str) -> Result<(), String> {
 fn cleanup_stale_compact_tmp_files(path: &Path) {
     let pid = std::process::id();
     let pattern = format!(".compact.tmp-{pid}-");
-    if let Some(parent) = path.parent() {
-        if let Ok(entries) = fs::read_dir(parent) {
-            for entry in entries.flatten() {
-                let name = match entry.file_name().to_str() {
-                    Some(n) => n.to_string(),
-                    None => continue,
-                };
-                if name.contains(&pattern) {
-                    let _ = fs::remove_file(entry.path());
-                }
+    if let Some(parent) = path.parent() && let Ok(entries) = fs::read_dir(parent) {
+        for entry in entries.flatten() {
+            let name = match entry.file_name().to_str() {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            if name.contains(&pattern) {
+                let _ = fs::remove_file(entry.path());
             }
         }
     }

@@ -571,8 +571,8 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             if goal_path.is_file() {
                 match fs::read_to_string(&goal_path) {
                     Ok(raw) => {
-                        if let Ok(mut goal_val) = serde_json::from_str::<Value>(&raw) {
-                            if let Some(obj) = goal_val.as_object_mut() {
+                        if let Ok(mut goal_val) = serde_json::from_str::<Value>(&raw)
+                            && let Some(obj) = goal_val.as_object_mut() {
                                 obj.insert("archived".to_string(), json!(true));
                                 obj.insert(
                                     "completed_at".to_string(),
@@ -584,7 +584,6 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                                 );
                                 let _ = write_atomic_json(&goal_path, &goal_val);
                             }
-                        }
                     }
                     Err(e) => warn!("failed to read GOAL_STATE.json for archive annotation: {e}"),
                 }

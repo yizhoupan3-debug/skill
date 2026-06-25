@@ -46,7 +46,7 @@ pub fn perform_drift_check(
 pub fn should_check_drift(anti_drift: &AntiDriftState) -> bool {
     anti_drift.check_interval > 0
         && anti_drift.review_cycle_count > 0
-        && anti_drift.review_cycle_count % anti_drift.check_interval == 0
+        && anti_drift.review_cycle_count.is_multiple_of(anti_drift.check_interval)
 }
 
 /// Lightweight Jaccard drift: 1.0 - jaccard_similarity.

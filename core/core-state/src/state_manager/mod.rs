@@ -136,8 +136,8 @@ fn annotate_goal_staleness(goal: &mut Value) {
             // read when env is also absent, so they will never resolve correctly.
             // Explicit session_ids (from payload) are NOT marked stale here —
             // the caller may be reading in the same context that created them.
-            if goal_session_id.starts_with("auto-") {
-                if let Some(obj) = goal.as_object_mut() {
+            if goal_session_id.starts_with("auto-")
+                && let Some(obj) = goal.as_object_mut() {
                     obj.insert("stale".to_string(), serde_json::json!(true));
                     obj.insert(
                         "stale_reason".to_string(),
@@ -146,7 +146,6 @@ fn annotate_goal_staleness(goal: &mut Value) {
                         ),
                     );
                 }
-            }
         }
         _ => {
             // Same session — not stale

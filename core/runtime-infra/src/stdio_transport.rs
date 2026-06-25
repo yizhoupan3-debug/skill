@@ -902,7 +902,7 @@ mod tests {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let result =
-            std::thread::spawn(move || runtime_concurrency_defaults_payload())
+            std::thread::spawn(runtime_concurrency_defaults_payload)
                 .join()
                 .expect("thread panicked");
         assert_eq!(

@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn task_create_and_list_roundtrip() {
         let repo = unique_test_dir("create-list");
-        let rr = repo.display().to_string();
+        let _rr = repo.display().to_string();
 
         // Create
         let result = tool_task_create(&json!({"task_id": "my-task", "title": "My Task"}), &repo)

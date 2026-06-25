@@ -58,7 +58,7 @@ fn should_omit(v: &Value) -> bool {
     v.is_null()
         || (v.is_string() && v.as_str().unwrap_or("").trim().is_empty())
         || (v.is_array() && v.as_array().unwrap_or(&vec![]).is_empty())
-        || (v.is_object() && v.as_object().map_or(false, |o| o.is_empty()))
+        || (v.is_object() && v.as_object().is_some_and(|o| o.is_empty()))
 }
 
 // ---------------------------------------------------------------------------
@@ -82,14 +82,13 @@ fn build_frontmatter_yaml(row: &[Value], col_idx: &HashMap<&str, usize>) -> Resu
     }
 
     // Special handling: always include trigger_hints (even if empty)
-    if let Some(&idx) = col_idx.get("trigger_hints") {
-        if idx < row.len() {
+    if let Some(&idx) = col_idx.get("trigger_hints")
+        && idx < row.len() {
             let hints = &row[idx];
             if should_omit(hints) {
                 map.insert("trigger_hints".to_string(), Value::Array(vec![]));
             }
         }
-    }
 
     let yaml_text = serde_yml::to_string(&Value::Object(map))
         .map_err(|e| format!("YAML serialization failed: {e}"))?;
@@ -159,11 +158,10 @@ pub fn generate_frontmatter(
         };
 
         // Filter by slug if specified
-        if let Some(target) = slug {
-            if current_slug != target {
+        if let Some(target) = slug
+            && current_slug != target {
                 continue;
             }
-        }
 
         let skill_md_path = paths::skill_md(repo_root, &current_slug);
 

@@ -82,8 +82,8 @@ pub fn classify_protected_path(
 
 fn relative_candidate_path(path: &str, repo_root: &Path) -> String {
     let candidate = PathBuf::from(path);
-    if candidate.is_absolute() {
-        if let Ok(rel) = candidate
+    if candidate.is_absolute()
+        && let Ok(rel) = candidate
             .canonicalize()
             .unwrap_or(candidate.clone())
             .strip_prefix(
@@ -94,7 +94,6 @@ fn relative_candidate_path(path: &str, repo_root: &Path) -> String {
         {
             return normalize_repo_relative_path(&rel.to_string_lossy());
         }
-    }
     normalize_repo_relative_path(path)
 }
 

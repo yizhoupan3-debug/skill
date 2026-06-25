@@ -665,11 +665,10 @@ fn cap_values(mut values: Vec<Value>, max: usize) -> Vec<Value> {
 /// falls back to `$HOME/<config_dir>` from RUNTIME_REGISTRY.json.
 fn host_home_path(host_id: &str) -> Result<PathBuf, String> {
     let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
-    if !env_var.is_empty() {
-        if let Some(path) = std::env::var_os(env_var) {
+    if !env_var.is_empty()
+        && let Some(path) = std::env::var_os(env_var) {
             return Ok(PathBuf::from(path));
         }
-    }
     std::env::var_os("HOME")
         .map(|h| PathBuf::from(h).join(framework_kernel::runtime_registry::host_private_config_dir(host_id)))
         .ok_or_else(|| format!("{env_var} or HOME must be set for host skill publish"))
@@ -699,7 +698,7 @@ fn print_local_homes(fw: PathBuf) -> Result<(), String> {
         let local = fw.join(format!(".local/{host_id}-home"));
         fs::create_dir_all(&local).map_err(|e| e.to_string())?;
         let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
-        let home = std::env::var_os(&env_var)
+        let home = std::env::var_os(env_var)
             .map(PathBuf::from)
             .unwrap_or_else(|| local.clone());
         println!("export {env_var}={}", home.display());

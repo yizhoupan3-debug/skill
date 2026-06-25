@@ -1,5 +1,3 @@
-#![recursion_limit = "256"]
-
 //! Route payload and record types.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

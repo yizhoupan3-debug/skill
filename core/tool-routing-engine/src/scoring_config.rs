@@ -65,13 +65,11 @@ fn resolve_runtime_weights_path() -> Option<String> {
 /// Runtime-loaded weights with compile-time fallback.
 static WEIGHTS: LazyLock<ToolScoringWeights> = LazyLock::new(|| {
     // Try runtime config first (hook or FRAMEWORK_ROOT)
-    if let Some(runtime_path) = resolve_runtime_weights_path() {
-        if let Ok(content) = std::fs::read_to_string(&runtime_path) {
-            if let Some(w) = parse_weights(&content) {
+    if let Some(runtime_path) = resolve_runtime_weights_path()
+        && let Ok(content) = std::fs::read_to_string(&runtime_path)
+            && let Some(w) = parse_weights(&content) {
                 return w;
             }
-        }
-    }
     // Fallback to compile-time embedded defaults
     parse_weights(DEFAULTS_JSON).expect("embedded tool_scoring_weights.json is invalid")
 });

@@ -753,3 +753,352 @@ fn estimate_tokens(text: &str) -> usize {
     }
     trimmed.chars().count().div_ceil(4)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ── build_live_execute_prompt ──
+
+    #[test]
+    fn prompt_native_runtime_no_skill_body() {
+        let p = ExecuteRequestPayload {
+            schema_version: "1".into(), task: "hello".into(), session_id: "s1".into(),
+            user_id: "u1".into(), selected_skill: "none".into(), overlay_skill: None,
+            layer: "L3".into(), route_engine: None, diagnostic_route_mode: None,
+            reasons: vec![], prompt_preview: None, dry_run: false,
+            trace_event_count: 0, trace_output_path: None, default_output_tokens: 512,
+            research_mode: None, execution_protocol: None,
+            verification_required: None, evidence_required: None,
+            model_id: "gpt-4".into(), aggregator_base_url: "".into(), aggregator_api_key: "".into(),
+        };
+        let prompt = build_live_execute_prompt(&p, "quick");
+        assert!(prompt.contains("no skill body"), "native runtime hint");
+        assert!(!prompt.contains("Primary focus: none"), "no 'none' label leak");
+    }
+
+    #[test]
+    fn prompt_selected_skill_and_overlay() {
+        let p = ExecuteRequestPayload {
+            selected_skill: "pdf".into(), overlay_skill: Some("ocr".into()),
+            ..base_payload()
+        };
+        let prompt = build_live_execute_prompt(&p, "deep");
+        assert!(prompt.contains("Primary focus: pdf"));
+        assert!(prompt.contains("Extra guidance: ocr"));
+        assert!(prompt.contains("deep-research"), "deep mode structure");
+    }
+
+    #[test]
+    fn prompt_quick_mode_says_short_reply() {
+        let prompt = build_live_execute_prompt(&base_payload(), "quick");
+        assert!(prompt.contains("short"), "quick mode hint");
+        assert!(!prompt.contains("deep-research"), "no deep structure");
+    }
+
+    #[test]
+    fn prompt_includes_reasons_up_to_five() {
+        let p = ExecuteRequestPayload {
+            reasons: vec!["a".into(), "b".into(), "c".into(), "d".into(), "e".into(), "f".into()],
+            ..base_payload()
+        };
+        let prompt = build_live_execute_prompt(&p, "quick");
+        assert!(prompt.contains("Task cues:"));
+        // Only the first 5 reasons should appear, "f" should not
+        assert!(!prompt.contains("- f"), "reason 'f' should be truncated (6th)");
+    }
+
+    #[test]
+    fn prompt_omits_cues_when_no_reasons() {
+        let prompt = build_live_execute_prompt(&base_payload(), "quick");
+        assert!(!prompt.contains("Task cues:"));
+    }
+
+    // ── normalize_chat_completions_endpoint ──
+
+    #[test]
+    fn endpoint_already_has_chat_completions() {
+        assert_eq!(
+            normalize_chat_completions_endpoint("https://api.example.com/chat/completions"),
+            "https://api.example.com/chat/completions"
+        );
+    }
+
+    #[test]
+    fn endpoint_appends_chat_completions() {
+        assert_eq!(
+            normalize_chat_completions_endpoint("https://api.example.com"),
+            "https://api.example.com/chat/completions"
+        );
+    }
+
+    #[test]
+    fn endpoint_strips_trailing_slash() {
+        assert_eq!(
+            normalize_chat_completions_endpoint("https://api.example.com/"),
+            "https://api.example.com/chat/completions"
+        );
+    }
+
+    // ── validate_live_execute_aggregator_base_url ──
+
+    #[test]
+    fn validate_url_accepts_valid_https_domain() {
+        let result = validate_live_execute_aggregator_base_url("https://api.example.com");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validate_url_rejects_http() {
+        let result = validate_live_execute_aggregator_base_url("http://api.example.com");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("https"));
+    }
+
+    #[test]
+    fn validate_url_rejects_localhost() {
+        let result = validate_live_execute_aggregator_base_url("https://localhost:8080");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("localhost"));
+    }
+
+    #[test]
+    fn validate_url_rejects_ip_literal() {
+        let result = validate_live_execute_aggregator_base_url("https://1.2.3.4");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("IP"));
+    }
+
+    #[test]
+    fn validate_url_rejects_private_ip() {
+        let result = validate_live_execute_aggregator_base_url("https://10.0.0.1");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_url_rejects_invalid_url() {
+        let result = validate_live_execute_aggregator_base_url("not-a-url");
+        assert!(result.is_err());
+    }
+
+    // ── extract_chat_completion_content ──
+
+    #[test]
+    fn extract_standard_content_string() {
+        let payload = json!({
+            "choices": [{"message": {"content": "Hello world"}}]
+        });
+        assert_eq!(extract_chat_completion_content(&payload).unwrap(), "Hello world");
+    }
+
+    #[test]
+    fn extract_content_array() {
+        let payload = json!({
+            "choices": [{"message": {"content": [{"text": "Hello "}, {"text": "world"}]}}]
+        });
+        assert_eq!(extract_chat_completion_content(&payload).unwrap(), "Hello world");
+    }
+
+    #[test]
+    fn extract_missing_choice_returns_err() {
+        let payload = json!({});
+        assert!(extract_chat_completion_content(&payload).is_err());
+    }
+
+    #[test]
+    fn extract_empty_choices_returns_err() {
+        let payload = json!({"choices": []});
+        assert!(extract_chat_completion_content(&payload).is_err());
+    }
+
+    #[test]
+    fn extract_unsupported_shape_returns_err() {
+        let payload = json!({"choices": [{"message": {"content": 42}}]});
+        assert!(extract_chat_completion_content(&payload).is_err());
+    }
+
+    // ── execute_request (dry_run path) ──
+
+    #[test]
+    fn execute_request_dry_run_returns_estimated_tokens() {
+        let p = ExecuteRequestPayload {
+            dry_run: true, task: "hello world".into(), default_output_tokens: 64,
+            ..base_payload()
+        };
+        let result = execute_request(p, "quick");
+        assert!(result.is_ok());
+        let resp = result.unwrap();
+        assert!(!resp.live_run);
+        assert!(resp.content.contains("[dry-run]"));
+        assert!(resp.content.contains("pdf"), "default skill rendered");
+        assert_eq!(resp.usage.mode, "estimated");
+        assert!(resp.usage.input_tokens > 0);
+    }
+
+    #[test]
+    fn execute_request_dry_run_empty_task_has_zero_input_tokens() {
+        let p = ExecuteRequestPayload {
+            dry_run: true, task: "".into(), default_output_tokens: 64,
+            ..base_payload()
+        };
+        let resp = execute_request(p, "quick").unwrap();
+        assert_eq!(resp.usage.input_tokens, 0);
+    }
+
+    // ── build_live_execute_response ──
+
+    #[test]
+    fn build_response_without_continuation() {
+        let payload = base_payload();
+        let result = LiveExecuteResult {
+            content: "done".into(), model_id: Some("gpt-4".into()),
+            run_id: Some("r1".into()), status: Some("stop".into()),
+            input_tokens: 10, output_tokens: 20, total_tokens: 30,
+            finish_reason: Some("stop".into()),
+            continuation_attempted: false, continuation_status: None, continuation_error: None,
+        };
+        let resp = build_live_execute_response(&payload, None, result, "quick");
+        assert!(resp.live_run);
+        assert_eq!(resp.content, "done");
+        assert_eq!(resp.model_id.as_deref(), Some("gpt-4"));
+        // Continuation fields should not appear in metadata
+        let md = resp.metadata.as_object().unwrap();
+        assert!(md.get("continuation_attempted").is_none(), "skip when absent");
+    }
+
+    #[test]
+    fn build_response_with_continuation() {
+        let payload = base_payload();
+        let result = LiveExecuteResult {
+            content: "deep result".into(), model_id: None,
+            run_id: Some("r2".into()), status: Some("length".into()),
+            input_tokens: 100, output_tokens: 200, total_tokens: 300,
+            finish_reason: Some("length".into()),
+            continuation_attempted: true, continuation_status: Some("success".into()),
+            continuation_error: None,
+        };
+        let resp = build_live_execute_response(&payload, Some("preview".into()), result, "deep");
+        assert!(resp.live_run);
+        assert_eq!(resp.prompt_preview.as_deref(), Some("preview"));
+        let md = resp.metadata.as_object().unwrap();
+        assert_eq!(md.get("continuation_status").and_then(Value::as_str), Some("success"));
+    }
+
+    // ── perform_live_execute_with_sender (mock sender) ──
+
+    #[test]
+    fn live_execute_with_sender_success() {
+        let p = ExecuteRequestPayload {
+            task: "test task".into(), model_id: "gpt-4".into(),
+            default_output_tokens: 512, ..base_payload()
+        };
+        let result = perform_live_execute_with_sender(
+            &p, "prompt", "quick",
+            |_| Ok((200, r#"{"choices":[{"message":{"content":"OK"}}],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}"#.into())),
+        );
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        assert_eq!(r.content, "OK");
+        assert_eq!(r.input_tokens, 5);
+        assert_eq!(r.output_tokens, 3);
+    }
+
+    #[test]
+    fn live_execute_retries_on_500_then_succeeds() {
+        let p = ExecuteRequestPayload {
+            task: "retry test".into(), model_id: "gpt-4".into(),
+            default_output_tokens: 512, ..base_payload()
+        };
+        let mut call_count = 0usize;
+        let result = perform_live_execute_with_sender(
+            &p, "prompt", "quick",
+            |_| {
+                call_count += 1;
+                if call_count == 1 {
+                    Ok((500, "server error".into()))
+                } else {
+                    Ok((200, r#"{"choices":[{"message":{"content":"recovered"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#.into()))
+                }
+            },
+        );
+        assert!(result.is_ok());
+        assert_eq!(call_count, 2, "should retry once");
+    }
+
+    #[test]
+    fn live_execute_400_does_not_retry() {
+        let mut call_count = 0usize;
+        let p = ExecuteRequestPayload {
+            task: "no retry".into(), model_id: "gpt-4".into(),
+            default_output_tokens: 512, ..base_payload()
+        };
+        let result = perform_live_execute_with_sender(
+            &p, "prompt", "quick",
+            |_| {
+                call_count += 1;
+                Ok((401, "unauthorized".into()))
+            },
+        );
+        assert!(result.is_err());
+        assert_eq!(call_count, 1, "should NOT retry on 4xx");
+    }
+
+    #[test]
+    fn live_execute_deep_continuation_on_length() {
+        let p = ExecuteRequestPayload {
+            task: "deep".into(), model_id: "gpt-4".into(),
+            default_output_tokens: 1024, ..base_payload()
+        };
+        let result = perform_live_execute_with_sender(
+            &p, "prompt", "deep",
+            |body| {
+                let is_continuation = body.get("messages").and_then(Value::as_array)
+                    .map(|m| m.len() > 2).unwrap_or(false);
+                if is_continuation {
+                    Ok((200, r#"{"choices":[{"message":{"content":" continuation"}}],"usage":{"prompt_tokens":2,"completion_tokens":1,"total_tokens":3}}"#.into()))
+                } else {
+                    Ok((200, r#"{"choices":[{"message":{"content":"first half"},"finish_reason":"length"}]}"#.into()))
+                }
+            },
+        );
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        assert!(r.continuation_attempted);
+        assert_eq!(r.continuation_status.as_deref(), Some("success"));
+        // Content should include both halves
+        assert!(r.content.contains("first half"), "original content preserved");
+        assert!(r.content.contains("continuation"), "continuation appended");
+    }
+
+    #[test]
+    fn live_execute_deep_no_continuation_for_stop() {
+        let p = ExecuteRequestPayload {
+            task: "short".into(), model_id: "gpt-4".into(),
+            default_output_tokens: 256, ..base_payload()
+        };
+        let result = perform_live_execute_with_sender(
+            &p, "prompt", "deep",
+            |_| Ok((200, r#"{"choices":[{"message":{"content":"done"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#.into())),
+        );
+        assert!(result.is_ok());
+        let r = result.unwrap();
+        assert!(!r.continuation_attempted, "no continuation when finish_reason != length");
+    }
+
+    // ── Shared helper ──
+
+    fn base_payload() -> ExecuteRequestPayload {
+        ExecuteRequestPayload {
+            schema_version: "1".into(), task: "test".into(), session_id: "s1".into(),
+            user_id: "u1".into(), selected_skill: "pdf".into(), overlay_skill: None,
+            layer: "L3".into(), route_engine: None, diagnostic_route_mode: None,
+            reasons: vec![], prompt_preview: None, dry_run: false,
+            trace_event_count: 0, trace_output_path: None, default_output_tokens: 512,
+            research_mode: None, execution_protocol: None,
+            verification_required: None, evidence_required: None,
+            model_id: "gpt-4".into(), aggregator_base_url: "".into(),
+            aggregator_api_key: "".into(),
+        }
+    }
+}

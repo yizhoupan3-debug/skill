@@ -50,9 +50,15 @@ const BACKFILLABLE_FIELDS: &[(&str, &str)] = &[
 
 /// Returns true if a Value should be treated as non-null for backfill purposes.
 fn is_non_null(v: &Value) -> bool {
-    !v.is_null()
-        && !(v.is_string() && v.as_str().unwrap_or("").trim().is_empty())
-        && !(v.is_array() && v.as_array().unwrap_or(&vec![]).is_empty())
+    matches!(
+        v,
+        Value::Number(_) | Value::Bool(_) | Value::Object(_)
+    ) || (v.is_string()
+        && v.as_str()
+            .is_some_and(|s| !s.trim().is_empty()))
+        || (v.is_array()
+            && v.as_array()
+                .is_some_and(|a| !a.is_empty()))
 }
 
 // ---------------------------------------------------------------------------

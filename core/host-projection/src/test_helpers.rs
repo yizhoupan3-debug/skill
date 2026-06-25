@@ -21,12 +21,6 @@ pub fn synthetic_post_tool_evidence_shape(event: &Value) -> Value {
         .unwrap_or_else(|| serde_json::json!({}))
 }
 
-// ── harness_operator_nudges: test-only env lock ──
-
-pub(crate) fn harness_nudges_env_test_lock() -> std::sync::MutexGuard<'static, ()> {
-    core_policy::test_env_sync::harness_nudges_env_test_lock()
-}
-
 // ── Test bootstrap: install tokenizer + review context probes ──
 
 /// Install a simple whitespace tokenizer and no-op review context probes so that

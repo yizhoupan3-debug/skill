@@ -195,10 +195,10 @@ impl SkillRegistry {
         // Frontmatter name matches slug
         for slug in &runtime_slugs {
             let path = paths::skill_md(&self.repo_root, slug);
-            if path.exists() {
-                if let Ok(text) = fs::read_to_string(&path) {
-                    if let Ok(fm) = frontmatter_parser::parse_frontmatter(&text) {
-                        if fm.name != **slug {
+            if path.exists()
+                && let Ok(text) = fs::read_to_string(&path)
+                    && let Ok(fm) = frontmatter_parser::parse_frontmatter(&text)
+                        && fm.name != **slug {
                             issues.push(ConsistencyIssue {
                                 severity: IssueSeverity::Warning,
                                 slug: Some((**slug).clone()),
@@ -208,9 +208,6 @@ impl SkillRegistry {
                                 ),
                             });
                         }
-                    }
-                }
-            }
         }
 
         Ok(issues)

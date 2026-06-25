@@ -388,6 +388,7 @@ pub fn runtime_concurrency_defaults_payload() -> RuntimeConcurrencyDefaultsPaylo
 }
 
 #[cfg(test)]
+#[allow(clippy::assertions_on_constants)]
 mod tests {
     use super::*;
 

@@ -613,7 +613,7 @@ mod tests {
     }
 
     fn gate_passed_state() -> Value {
-        let mut s = minimal_state();
+        let s = minimal_state();
         let s2 = add_claim_comparison(&s, "c1", "method", "pw", "low", "diff", "high", "novel", Some("C1")).unwrap();
         let mut s3 = add_claim_comparison(&s2, "c2", "task", "pw2", "medium", "diff2", "medium", "defensible", Some("C2")).unwrap();
         novelty_gate_mut(&mut s3).insert("status".into(), json!("passed"));

@@ -280,8 +280,8 @@ fn run_loop_inner(
     // Anti-drift check: after each review cycle, increment counter
     // and fire drift check every N cycles (default 3).
     state.anti_drift.review_cycle_count += 1;
-    if crate::drift::should_check_drift(&state.anti_drift) {
-        if let Some(current_goal) = read_goal_snapshot(ctx.repo_root, entry) {
+    if crate::drift::should_check_drift(&state.anti_drift)
+        && let Some(current_goal) = read_goal_snapshot(ctx.repo_root, entry) {
             let result = crate::drift::perform_drift_check(
                 &mut state.anti_drift,
                 &current_goal,
@@ -301,7 +301,6 @@ fn run_loop_inner(
                 state.anti_drift.drift_check_history.drain(..drain_count);
             }
         }
-    }
 
     if aggregate.overall_status == "pass" {
         state.circuit_breaker.consecutive_failures = 0;

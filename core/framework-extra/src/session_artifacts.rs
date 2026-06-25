@@ -444,11 +444,10 @@ fn write_session_artifact_set(
     if write_text_if_changed(paths.summary, payloads.summary_text)? {
         changed_paths.push(paths.summary.display().to_string());
     }
-    if let Some(evidence) = payloads.evidence {
-        if write_json_if_changed(paths.evidence, evidence)? {
+    if let Some(evidence) = payloads.evidence
+        && write_json_if_changed(paths.evidence, evidence)? {
             changed_paths.push(paths.evidence.display().to_string());
         }
-    }
     Ok(())
 }
 

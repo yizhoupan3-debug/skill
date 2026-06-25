@@ -96,17 +96,12 @@ pub fn generate_health_manifest(
                         .and_then(|n| n.to_str())
                         .unwrap_or_default()
                         .to_string();
-                    if !skills.contains_key(&slug) {
-                        skills.insert(
-                            slug,
-                            HealthEntry {
+                    skills.entry(slug).or_insert_with(|| HealthEntry {
                                 blended_score: 0.0,
                                 status: "Unknown".into(),
                                 route_count: None,
                                 reroute_count: None,
-                            },
-                        );
-                    }
+                            });
                 }
             }
         }
@@ -121,9 +116,9 @@ pub fn generate_health_manifest(
         skills,
     };
 
-    let json_val = serde_json::to_value(&manifest).map_err(|e| HealthError::Json(e))?;
+    let json_val = serde_json::to_value(&manifest).map_err(HealthError::Json)?;
     core_state::utils::atomic_write::write_atomic_json(&manifest_path, &json_val)
-        .map_err(|e| HealthError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| HealthError::Io(std::io::Error::other(e)))?;
     eprintln!(
         "health manifest: wrote {} entries to {}",
         manifest.skills.len(),
@@ -179,7 +174,7 @@ fn utc_now() -> String {
 }
 
 fn is_leap(year: u64) -> bool {
-    (year % 4 == 0 && year % 100 != 0) || year % 400 == 0
+    (year.is_multiple_of(4) && !year.is_multiple_of(100)) || year.is_multiple_of(400)
 }
 
 // ---------------------------------------------------------------------------

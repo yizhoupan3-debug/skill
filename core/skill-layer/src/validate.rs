@@ -297,6 +297,6 @@ fn check_frontmatter_vs_registry(
 fn is_empty_value(v: &Value) -> bool {
     v.is_null()
         || (v.is_string() && v.as_str().unwrap_or("").is_empty())
-        || (v.is_array() && v.as_array().map_or(true, |a| a.is_empty()))
-        || (v.is_object() && v.as_object().map_or(true, |o| o.is_empty()))
+        || (v.is_array() && v.as_array().is_none_or(|a| a.is_empty()))
+        || (v.is_object() && v.as_object().is_none_or(|o| o.is_empty()))
 }

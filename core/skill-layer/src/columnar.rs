@@ -41,15 +41,14 @@ pub fn load_columnar_rows(doc: &Value) -> HashMap<String, Vec<Value>> {
     let mut rows = HashMap::new();
     if let Some(skills) = doc["skills"].as_array() {
         for row in skills {
-            if let Some(idx) = slug_idx {
-                if let Some(slug) = row.get(idx).and_then(|v| v.as_str()) {
+            if let Some(idx) = slug_idx
+                && let Some(slug) = row.get(idx).and_then(|v| v.as_str()) {
                     let values: Vec<Value> = row
                         .as_array()
                         .map(|a| a.to_vec())
                         .unwrap_or_default();
                     rows.insert(slug.to_string(), values);
                 }
-            }
         }
     }
     rows
@@ -128,8 +127,11 @@ pub fn col_bool(row: &[Value], keys: &[String], column: &str) -> Option<bool> {
 // File-level loaders
 // ---------------------------------------------------------------------------
 
+/// Result type for [`load_columnar_file`].
+type LoadColumnarFileResult = Result<(Vec<String>, HashMap<String, Vec<Value>>), std::io::Error>;
+
 /// Load a columnar JSON file from disk.
-pub fn load_columnar_file(path: &Path) -> Result<(Vec<String>, HashMap<String, Vec<Value>>), std::io::Error> {
+pub fn load_columnar_file(path: &Path) -> LoadColumnarFileResult {
     let text = fs::read_to_string(path)?;
     let doc: Value = serde_json::from_str(&text).map_err(|e| {
         std::io::Error::new(std::io::ErrorKind::InvalidData, e)

@@ -7,7 +7,7 @@
 
 /// Set an environment variable. Safe wrapper over `std::env::set_var`.
 ///
-/// # Safety (API contract)
+/// # Safety
 /// Must not be called while other threads are reading/writing env vars.
 pub unsafe fn set_env(key: impl AsRef<std::ffi::OsStr>, value: impl AsRef<std::ffi::OsStr>) {
     #[allow(unsafe_op_in_unsafe_fn)]
@@ -18,7 +18,7 @@ pub unsafe fn set_env(key: impl AsRef<std::ffi::OsStr>, value: impl AsRef<std::f
 
 /// Remove an environment variable. Safe wrapper over `std::env::remove_var`.
 ///
-/// # Safety (API contract)
+/// # Safety
 /// Must not be called while other threads are reading/writing env vars.
 pub unsafe fn remove_env(key: impl AsRef<std::ffi::OsStr>) {
     #[allow(unsafe_op_in_unsafe_fn)]

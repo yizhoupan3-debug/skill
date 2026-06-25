@@ -3,7 +3,6 @@ mod common;
 
 use common::{project_root, read_text};
 use core_policy::doc_registry;
-use regex::Regex;
 
 #[test]
 fn rust_contracts_doc_no_longer_uses_stale_transition_wording() {

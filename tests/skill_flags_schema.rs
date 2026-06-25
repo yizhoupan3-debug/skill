@@ -49,20 +49,18 @@ fn all_referenced_skill_flags_are_defined() {
 
     let mut referenced_flags: HashSet<String> = HashSet::new();
     for row in records {
-        if let Some(arr) = row.as_array() {
-            if let Some(idx) = flags_idx {
-                if let Some(flags_val) = arr.get(idx) {
-                    if let Some(flags) = flags_val.as_array() {
-                        for flag in flags {
-                            if let Some(s) = flag.as_str() {
-                                referenced_flags.insert(s.to_string());
-                            }
-                        }
-                    }
+        if let Some(arr) = row.as_array()
+            && let Some(idx) = flags_idx
+            && let Some(flags_val) = arr.get(idx)
+            && let Some(flags) = flags_val.as_array()
+        {
+            for flag in flags {
+                if let Some(s) = flag.as_str() {
+                    referenced_flags.insert(s.to_string());
                 }
             }
         }
-    }
+        }
 
     // Validate: each referenced flag must be defined
     // (or be a parameterized variant of a defined flag like "behavior:low_score_override:20.0")

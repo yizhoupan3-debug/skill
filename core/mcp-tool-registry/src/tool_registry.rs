@@ -83,24 +83,21 @@ pub fn load_tool_records_cached(registry_path: &Path) -> Result<Vec<McpToolRecor
 
     // Fast path: check cache (read lock)
     {
-        if let Ok(guard) = cache().read() {
-            if let Some(entry) = guard.as_ref() {
-                if now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS) {
+        if let Ok(guard) = cache().read()
+            && let Some(entry) = guard.as_ref()
+                && now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS) {
                     return Ok(entry.records.clone());
                 }
-            }
-        }
     }
 
     // TTL expired or cache empty: reload from disk (write lock)
     {
         let mut guard = cache().write().map_err(|_| "cache poisoned".to_string())?;
         // Double-check after acquiring write lock (another thread may have reloaded)
-        if let Some(entry) = guard.as_ref() {
-            if now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS) {
+        if let Some(entry) = guard.as_ref()
+            && now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS) {
                 return Ok(entry.records.clone());
             }
-        }
         let records = load_tool_records(registry_path)?;
         guard.replace(CacheEntry {
             records: records.clone(),

@@ -57,7 +57,8 @@ impl BlockCache {
         }
         let content = match fs::read_to_string(&path) {
             Ok(t) => {
-                let trimmed = if t.len() > MAX_BLOCK_BYTES {
+                
+                if t.len() > MAX_BLOCK_BYTES {
                     tracing::warn!(
                         "{} block file exceeds {MAX_BLOCK_BYTES} bytes ({} B), using builtin",
                         self.log_label,
@@ -78,8 +79,7 @@ impl BlockCache {
                     } else {
                         format!("{}\n\n{}", self.prefix_line, trimmed)
                     }
-                };
-                trimmed
+                }
             }
             Err(_) => builtin(),
         };

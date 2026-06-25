@@ -75,10 +75,10 @@ pub fn route_tool_from_records(
         candidates
             .into_iter()
             .map(|c| {
-                if c.record.host_platforms.is_empty() {
-                    c // empty host_platforms = all hosts
-                } else if c.record.host_platforms.iter().any(|p| p.to_lowercase() == hid_lower) {
-                    c // host matches
+                if c.record.host_platforms.is_empty()
+                    || c.record.host_platforms.iter().any(|p| p.to_lowercase() == hid_lower)
+                {
+                    c
                 } else {
                     // Penalize rather than exclude — allows fallback
                     let mut c = c;
@@ -149,7 +149,7 @@ pub(crate) fn score_tool(
     let display_name_lower = record.display_name.to_lowercase();
 
     let name_tokens: HashSet<String> = slug_lower
-        .split(|c: char| c == '-' || c == '_')
+        .split(['-', '_'])
         .filter(|t| !t.is_empty())
         .map(|t| t.to_string())
         .collect();

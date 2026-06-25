@@ -1,5 +1,4 @@
 use super::*;
-use clap::Parser;
 
 
 use crate::route::RouteDecision;
@@ -19,6 +18,12 @@ mod closeout_tests;
 mod execution_tests;
 #[path = "main_tests/framework_runtime_tests.rs"]
 mod framework_runtime_tests;
+#[path = "main_tests/evidence_tests.rs"]
+mod evidence_tests;
+#[path = "main_tests/artifact_write_tests.rs"]
+mod artifact_write_tests;
+#[path = "main_tests/alias_snapshot_tests.rs"]
+mod alias_snapshot_tests;
 #[path = "main_tests/routing_tests.rs"]
 mod routing_tests;
 #[path = "main_tests/sandbox_tests.rs"]

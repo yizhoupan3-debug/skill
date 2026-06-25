@@ -40,6 +40,7 @@ fn has_skill_flag(record: &SkillRecord, flag: &str) -> bool {
 
 /// Score agent-swarm related signals. Returns `(delta, reasons)`.
 #[inline]
+#[allow(clippy::too_many_arguments)]
 fn score_agent_swarm_signals(
     record: &SkillRecord,
     query_text: &str,
@@ -408,7 +409,7 @@ fn score_visual_review_signals(
         .any(|marker| {
             // Short ASCII-only markers (≤2 chars) must only match at token level
             // to avoid false positives (e.g. "ui" in "guide"/"quick"/"build").
-            let use_contains = marker.len() > 2 || !marker.chars().all(|c| c.is_ascii());
+            let use_contains = marker.len() > 2 || !marker.is_ascii();
             (use_contains && query_text.contains(marker.as_str()))
                 || text_matches_phrase(query_token_list, marker)
         })

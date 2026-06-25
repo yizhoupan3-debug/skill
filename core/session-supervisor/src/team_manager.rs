@@ -186,7 +186,7 @@ pub fn create_team(
         let member_meta_path = team_dir_safe(repo_root, &safe_team).join("members");
         fs::create_dir_all(&member_meta_path)
             .map_err(|e| format!("create team dir failed: {e}"))?;
-        fs::create_dir_all(&team_messages_dir_safe(repo_root, &safe_team))
+        fs::create_dir_all(team_messages_dir_safe(repo_root, &safe_team))
             .map_err(|e| format!("create messages dir failed: {e}"))?;
 
         let team = TeamDescriptor {
@@ -447,7 +447,7 @@ pub fn read_my_messages(
         let mut entries: Vec<_> = fs::read_dir(&inbox)
             .map_err(|e| format!("read inbox failed: {e}"))?
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .collect();
         entries.sort_by_key(|e| e.path().file_name().map(|n| n.to_os_string()));
 
@@ -472,14 +472,14 @@ pub fn read_my_messages(
         let entries: Vec<_> = fs::read_dir(&broadcast_dir)
             .map_err(|e| format!("read broadcast dir failed: {e}"))?
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "json"))
+            .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
             .collect();
 
         for entry in entries {
             let raw = fs::read_to_string(entry.path())
                 .map_err(|e| format!("read broadcast failed: {e}"))?;
-            if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw) {
-                if !messages.iter().any(|m| m.message_id == msg.message_id) {
+            if let Ok(mut msg) = serde_json::from_str::<InterAgentMessage>(&raw)
+                && !messages.iter().any(|m| m.message_id == msg.message_id) {
                     // Mark broadcast as read too
                     if !msg.read {
                         msg.read = true;
@@ -489,7 +489,6 @@ pub fn read_my_messages(
                     }
                     messages.push(msg);
                 }
-            }
         }
     }
 
@@ -546,11 +545,10 @@ pub fn reap_stale_teams(
             if t.status != "completed" {
                 return true;
             }
-            if let Ok(updated) = chrono::DateTime::parse_from_rfc3339(&t.updated_at) {
-                if let Ok(dead) = chrono::DateTime::parse_from_rfc3339(&deadline) {
+            if let Ok(updated) = chrono::DateTime::parse_from_rfc3339(&t.updated_at)
+                && let Ok(dead) = chrono::DateTime::parse_from_rfc3339(&deadline) {
                     return dead.signed_duration_since(updated).num_seconds() < retention_seconds;
                 }
-            }
             false
         });
 

@@ -380,7 +380,7 @@ pub fn register_host_projection_hooks() {
 
         // ── Runtime trace transport proxies (for L3 browser-mcp) ──
         host_projection::hooks::register_attach_runtime_event_transport(
-            |payload| fr_exec::trace_attach::attach_runtime_event_transport(payload),
+            fr_exec::trace_attach::attach_runtime_event_transport,
         );
         host_projection::hooks::register_inspect_trace_stream(
             fr_exec::trace_stream_io::inspect_trace_stream,

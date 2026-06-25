@@ -176,11 +176,11 @@ pub fn run_action_sync(
         deadline,
         timeout_duration,
     )?;
-    return Ok(SubagentResult {
+    Ok(SubagentResult {
         success: output.status.success(),
         stdout: String::from_utf8_lossy(&output.stdout).to_string(),
         stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-    });
+    })
 }
 
 /// Generate a dry-run description string for an action (no subagent is launched).

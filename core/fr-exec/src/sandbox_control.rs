@@ -441,3 +441,268 @@ pub fn build_sandbox_control_response(
     maybe_record_sandbox_event(&mut response, &payload)?;
     Ok(response)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base_req(operation: &str) -> SandboxControlRequestPayload {
+        SandboxControlRequestPayload {
+            schema_version: "1".into(),
+            operation: operation.into(),
+            sandbox_id: Some("s1".into()),
+            profile_id: Some("p1".into()),
+            current_state: None,
+            next_state: None,
+            cleanup_failed: None,
+            tool_category: None,
+            capability_categories: None,
+            dedicated_profile: None,
+            budget_cpu: None,
+            budget_memory: None,
+            budget_wall_clock: None,
+            budget_output_size: None,
+            probe_cpu: None,
+            probe_memory: None,
+            probe_wall_clock: None,
+            probe_output_size: None,
+            error_kind: None,
+            event_log_path: None,
+            trace_event: None,
+        }
+    }
+
+    // ── transition ──
+
+    #[test]
+    fn transition_allowed_warm_to_busy() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("warm".into()),
+            next_state: Some("busy".into()),
+            ..base_req("transition")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(resp.allowed, "warm→busy should be allowed");
+        assert_eq!(resp.reason, "transition-accepted");
+        assert_eq!(resp.error, None);
+    }
+
+    #[test]
+    fn transition_forbidden_warm_to_recycled() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("warm".into()),
+            next_state: Some("recycled".into()),
+            ..base_req("transition")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(!resp.allowed, "warm→recycled should be denied");
+        assert_eq!(resp.reason, "invalid-transition");
+        assert!(resp.error.is_some());
+    }
+
+    #[test]
+    fn transition_missing_state_returns_err() {
+        let req = base_req("transition");
+        assert!(build_sandbox_control_response(req).is_err());
+    }
+
+    // ── cleanup ──
+
+    #[test]
+    fn cleanup_draining_to_recycled() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("draining".into()),
+            cleanup_failed: Some(false),
+            ..base_req("cleanup")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(resp.allowed);
+        assert_eq!(resp.reason, "cleanup-completed");
+        assert_eq!(resp.next_state.as_deref(), Some("recycled"));
+    }
+
+    #[test]
+    fn cleanup_failed_quarantines() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("draining".into()),
+            cleanup_failed: Some(true),
+            error_kind: Some("script_error".into()),
+            ..base_req("cleanup")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(resp.allowed);
+        assert_eq!(resp.reason, "cleanup-failed");
+        assert_eq!(resp.quarantined, Some(true));
+        assert_eq!(resp.failure_reason.as_deref(), Some("script_error"));
+    }
+
+    #[test]
+    fn cleanup_from_busy_denied() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("busy".into()),
+            ..base_req("cleanup")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(!resp.allowed);
+    }
+
+    // ── admit ──
+
+    #[test]
+    fn admit_accepted_with_valid_params() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("warm".into()),
+            capability_categories: Some(vec!["workspace_mutating".into()]),
+            tool_category: Some("workspace_mutating".into()),
+            budget_cpu: Some(1.0),
+            budget_memory: Some(512),
+            budget_wall_clock: Some(30.0),
+            budget_output_size: Some(10000),
+            ..base_req("admit")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(resp.allowed);
+        assert_eq!(resp.reason, "admission-accepted");
+        assert_eq!(resp.next_state.as_deref(), Some("busy"));
+    }
+
+    #[test]
+    fn admit_rejects_missing_capabilities() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("warm".into()),
+            capability_categories: Some(vec![]),
+            tool_category: Some("workspace_mutating".into()),
+            budget_cpu: Some(1.0),
+            budget_memory: Some(512),
+            budget_wall_clock: Some(30.0),
+            budget_output_size: Some(10000),
+            ..base_req("admit")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(!resp.allowed);
+        assert!(resp.failure_reason.as_deref().unwrap_or("").contains("missing_capability"));
+    }
+
+    #[test]
+    fn admit_rejects_high_risk_without_dedicated_profile() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("warm".into()),
+            capability_categories: Some(vec!["high_risk".into()]),
+            tool_category: Some("high_risk".into()),
+            dedicated_profile: Some(false),
+            budget_cpu: Some(1.0),
+            budget_memory: Some(512),
+            budget_wall_clock: Some(30.0),
+            budget_output_size: Some(10000),
+            ..base_req("admit")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(!resp.allowed);
+        assert!(resp.failure_reason.as_deref().unwrap_or("").contains("high_risk"));
+    }
+
+    #[test]
+    fn admit_rejects_bad_state_transition() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("recycled".into()),
+            capability_categories: Some(vec!["read_only".into()]),
+            tool_category: Some("read_only".into()),
+            budget_cpu: Some(1.0),
+            budget_memory: Some(512),
+            budget_wall_clock: Some(30.0),
+            budget_output_size: Some(10000),
+            ..base_req("admit")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(!resp.allowed);
+    }
+
+    #[test]
+    fn admit_rejects_unknown_capability() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("warm".into()),
+            capability_categories: Some(vec!["unknown_cap".into()]),
+            ..base_req("admit")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(!resp.allowed);
+        assert!(resp.failure_reason.as_deref().unwrap_or("").contains("unknown_capability"));
+    }
+
+    // ── execution_result ──
+
+    #[test]
+    fn execution_result_completed_goes_to_draining() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("busy".into()),
+            capability_categories: Some(vec!["workspace_mutating".into()]),
+            ..base_req("execution_result")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(resp.allowed);
+        assert_eq!(resp.reason, "execution-completed");
+        assert_eq!(resp.next_state.as_deref(), Some("draining"));
+    }
+
+    #[test]
+    fn execution_result_error_fails_when_not_allowed() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("recycled".into()),
+            error_kind: Some("runtime_error".into()),
+            ..base_req("execution_result")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert!(!resp.allowed, "recycled→failed is not allowed");
+    }
+
+    #[test]
+    fn execution_result_budget_violation() {
+        let req = SandboxControlRequestPayload {
+            current_state: Some("busy".into()),
+            probe_cpu: Some(5.0),
+            budget_cpu: Some(1.0),
+            capability_categories: Some(vec!["read_only".into()]),
+            ..base_req("execution_result")
+        };
+        let resp = build_sandbox_control_response(req).unwrap();
+        assert_eq!(resp.reason, "budget-exceeded");
+        assert_eq!(resp.next_state.as_deref(), Some("draining"));
+        assert!(resp.cleanup_required == Some(true));
+    }
+
+    // ── unsupported operation ──
+
+    #[test]
+    fn unknown_operation_returns_err() {
+        let req = base_req("fly_to_moon");
+        let result = build_sandbox_control_response(req);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsupported"));
+    }
+
+    // ── sandbox_transition_allowed (indirect) ──
+
+    #[test]
+    fn all_valid_sandbox_transitions() {
+        let valid: &[(&str, &str)] = &[
+            ("created", "warm"),
+            ("warm", "busy"),
+            ("busy", "draining"),
+            ("draining", "recycled"),
+            ("draining", "failed"),
+            ("warm", "failed"),
+            ("busy", "failed"),
+            ("recycled", "warm"),
+        ];
+        for &(from, to) in valid {
+            assert!(sandbox_transition_allowed(from, to), "{from}→{to}");
+        }
+    }
+
+    #[test]
+    fn invalid_sandbox_transitions() {
+        assert!(!sandbox_transition_allowed("created", "busy"));
+        assert!(!sandbox_transition_allowed("failed", "warm"));
+        assert!(!sandbox_transition_allowed("busy", "warm"));
+    }
+}

@@ -3,7 +3,7 @@
 //! Tests exercise the dispatcher through the public HostHookDispatcher trait
 //! via host_provider_for_id().dispatcher(), not through internal types.
 
-use host_projection::hosts::hook_dispatch::{HookEvent, HostHookDispatcher};
+use host_projection::hosts::hook_dispatch::HookEvent;
 use host_projection::hosts::host_provider_for_id;
 use serde_json::json;
 use std::path::Path;
@@ -150,7 +150,7 @@ fn session_key_extraction_respects_scan_tool_input() {
 
     // Claude: scan_tool_input=false, should NOT pick up from tool_input
     let claude_provider = host_provider_for_id("claude").unwrap();
-    let mut claude_dispatcher = claude_provider.dispatcher();
+    let claude_dispatcher = claude_provider.dispatcher();
     let _ = claude_dispatcher.handle_pre_tool_use(&event_with_tool_input);
 
     // Both should complete without panicking

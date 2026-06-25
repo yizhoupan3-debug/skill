@@ -702,8 +702,11 @@ pub use crate::test_helpers::{
 // ship_readiness: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-static EVAL_GOAL_READINESS: OnceLock<fn(&Path, &Value, &str) -> GoalReadiness> = OnceLock::new();
-static GOAL_STOP_FOLLOWUP: OnceLock<fn(bool, bool, bool, u32) -> String> = OnceLock::new();
+type EvalGoalReadiness = fn(&Path, &Value, &str) -> GoalReadiness;
+type GoalStopFollowup = fn(bool, bool, bool, u32) -> String;
+
+static EVAL_GOAL_READINESS: OnceLock<EvalGoalReadiness> = OnceLock::new();
+static GOAL_STOP_FOLLOWUP: OnceLock<GoalStopFollowup> = OnceLock::new();
 
 pub fn register_ship_readiness(
     evaluate: fn(&Path, &Value, &str) -> GoalReadiness,
@@ -1195,8 +1198,6 @@ pub fn evaluate_mcp_pre_guard_safe(
 
 // ── Test-only re-exports from test_helpers (for host_extensions::cursor test code) ──
 
-#[cfg(test)]
-pub(crate) use crate::test_helpers::harness_nudges_env_test_lock;
 
 // ── Quality Gate full implementation hook (registered by runtime-core) ──
 static QUALITY_GATE_DRIVE: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();

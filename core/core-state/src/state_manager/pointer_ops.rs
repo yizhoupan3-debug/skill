@@ -44,41 +44,35 @@ fn read_pointer_task_id(repo_root: &Path, key: &str, legacy_filename: &str) -> O
         }
         // Fallback: TASK_POINTERS.json has `tasks` array but no top-level key.
         // Try `tasks[0].task_id` as the implied focus task.
-        if key == "focus_task_id" {
-            if let Some(arr) = data.get("tasks").and_then(Value::as_array) {
-                if let Some(first) = arr.first() {
-                    if let Some(tid) = first.get("task_id").and_then(Value::as_str) {
+        if key == "focus_task_id"
+            && let Some(arr) = data.get("tasks").and_then(Value::as_array)
+                && let Some(first) = arr.first()
+                    && let Some(tid) = first.get("task_id").and_then(Value::as_str) {
                         let tid = tid.trim().to_string();
                         if !tid.is_empty() {
                             let _ = crate::utils::path_guard::safe_task_id_component(&tid)?;
                             return Some(tid);
                         }
                     }
-                }
-            }
-        }
     }
     // Fallback: legacy single-file format (active_task.json / focus_task.json)
     let path = repo_root.join("artifacts/current").join(legacy_filename);
-    if let Ok(raw) = fs::read_to_string(&path) {
-        if let Some(tid) = parse_task_id_from_pointer_json(&raw) {
+    if let Ok(raw) = fs::read_to_string(&path)
+        && let Some(tid) = parse_task_id_from_pointer_json(&raw) {
             return Some(tid);
         }
-    }
     // Fallback: task_registry.json's focus_task_id
     if key == "focus_task_id" {
         let registry_path = repo_root.join("artifacts/current/task_registry.json");
-        if let Ok(raw) = fs::read_to_string(&registry_path) {
-            if let Ok(data) = serde_json::from_str::<Value>(&raw) {
-                if let Some(tid) = data.get("focus_task_id").and_then(Value::as_str) {
+        if let Ok(raw) = fs::read_to_string(&registry_path)
+            && let Ok(data) = serde_json::from_str::<Value>(&raw)
+                && let Some(tid) = data.get("focus_task_id").and_then(Value::as_str) {
                     let tid = tid.trim().to_string();
                     if !tid.is_empty() {
                         let _ = crate::utils::path_guard::safe_task_id_component(&tid)?;
                         return Some(tid);
                     }
                 }
-            }
-        }
     }
     None
 }

@@ -324,7 +324,7 @@ mod tests {
         let text = "修改 core/foo/src/lib.rs 和 core/bar/src/lib.rs 以及 core/baz/src/config.rs";
         let r = analyze_complexity(text);
         assert!(r.is_complex, "cross-crate refs should be complex");
-        let has_cross = r.matched_indicators.iter().any(|i| *i == "cross_module_or_crate");
+        let has_cross = r.matched_indicators.contains(&"cross_module_or_crate");
         assert!(has_cross, "cross-module indicator should match: {:?}", r.matched_indicators);
     }
 

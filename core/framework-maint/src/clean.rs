@@ -8,7 +8,6 @@ use std::path::Path;
 
 use framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS;
 
-#[allow(dead_code)]
 pub(super) fn clean_rust_target_dirs(repo_root: &Path, dry_run: bool) -> Result<(), String> {
     clean_targets_walk(repo_root, dry_run)?;
     Ok(())
@@ -42,7 +41,6 @@ fn clean_targets_walk(path: &Path, dry_run: bool) -> Result<(), String> {
 }
 
 /// Clean hook-state files older than TTL days across all host directories.
-#[allow(dead_code)]
 pub(super) fn clean_hook_state_files(
     repo_root: &Path,
     dry_run: bool,
@@ -109,7 +107,8 @@ pub(super) fn clean_hook_state_files(
 
         // Sort by mtime descending to clean newest-first on tty (useful for
         // debugging when ttl is too aggressive).
-        files_to_clean.sort_by(|a, b| b.1.cmp(&a.1));
+        use std::cmp::Reverse;
+        files_to_clean.sort_by_key(|k| Reverse(k.1));
 
         if dry_run {
             for (p, _) in &files_to_clean {
@@ -144,7 +143,6 @@ pub(super) fn clean_hook_state_files(
 
 /// Remove directories that are older than TTL and match known patterns
 /// (e.g. `.claude/projects/`, `.cursor/tmp/`) OR are empty host dirs.
-#[allow(dead_code)]
 pub(super) fn clean_orphan_directories(
     repo_root: &Path,
     dry_run: bool,
@@ -166,15 +164,12 @@ pub(super) fn clean_orphan_directories(
         }
 
         // Check if the host dir itself is older than TTL.
-        if let Ok(meta) = fs::metadata(&dir) {
-            if let Ok(modified) = meta.modified() {
-                if let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH) {
-                    if duration.as_secs() < cutoff {
+        if let Ok(meta) = fs::metadata(&dir)
+            && let Ok(modified) = meta.modified()
+                && let Ok(duration) = modified.duration_since(std::time::UNIX_EPOCH)
+                    && duration.as_secs() < cutoff {
                         continue; // Too new to clean.
                     }
-                }
-            }
-        }
 
         // Walk entries under the host dir, looking for empty dirs or known patterns.
         let entries = match fs::read_dir(&dir) {

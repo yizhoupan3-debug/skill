@@ -111,7 +111,7 @@ pub fn run_framework_doctor(repo_root: &Path) -> Result<DoctorResult, String> {
                     if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
                         continue;
                     }
-                    let stem_end = fname_str.len().checked_sub(3).unwrap_or(0);
+                    let stem_end = fname_str.len().saturating_sub(3);
                     if stem_end < 10 {
                         let msg = format!("{dir_key}/{fname_str}: filename too short for convention {{topic}}-{{YYYY-MM-DD}}.md");
                         println!("WARN: {msg}");

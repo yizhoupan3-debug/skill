@@ -4,19 +4,15 @@
 //! works transparently for all `#[path = "../tests/…"] mod tests;` imports.
 
 pub use runtime_core::{
-    goal_drive, closeout_enforcement, execution_contract, framework_host_targets,
-    harness_context_signals,
-    harness_operator_nudges, hook_event_routing, hosts, kernel_bootstrap, router_self, runtime_envelope_ids, session_call_tracker, session_supervisor, stdio_payload_types, task_state,
+    execution_contract, goal_drive, framework_host_targets,
+    harness_context_signals, kernel_bootstrap, router_self, task_state,
     mcp_stdio_test_support,
 };
 
 pub use framework_kernel::runtime_registry;
 
 // host submodule re-exports (registry-driven: single RegistryDispatcher for all hosts)
-pub use runtime_core::hosts::{
-    mcp_stdio_harness,
-    host_extensions::dispatch::RegistryDispatcher,
-};
+pub use runtime_core::hosts::mcp_stdio_harness;
 
 // specific function / constant re-exports
 pub use runtime_core::{
@@ -30,7 +26,6 @@ pub use runtime_core::{
 };
 
 // framework-runtime 原 re-export items — 现直接用原始 crate
-pub use fr_utils::constants::FRAMEWORK_ALIAS_SCHEMA_VERSION;
 pub use fr_utils::types::FrameworkAliasBuildOptions;
 pub use framework_extra::alias::build_framework_alias_envelope;
 pub use framework_extra::snapshot::build_framework_runtime_snapshot_envelope;
@@ -62,8 +57,7 @@ pub use runtime_core::route::{
 };
 pub use runtime_core::runtime_envelope_ids::{
     BACKGROUND_CONTROL_AUTHORITY, BACKGROUND_CONTROL_SCHEMA_VERSION,
-    DEFAULT_MAX_BACKGROUND_JOBS, DEFAULT_MAX_CONCURRENT_SUBAGENTS,
-    MAX_CONCURRENT_SUBAGENTS_LIMIT, RUNTIME_CONTROL_PLANE_AUTHORITY,
+    DEFAULT_MAX_BACKGROUND_JOBS, DEFAULT_MAX_CONCURRENT_SUBAGENTS, RUNTIME_CONTROL_PLANE_AUTHORITY,
     RUNTIME_CONTROL_PLANE_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_DASHBOARD_SCHEMA_VERSION,
     RUNTIME_OBSERVABILITY_EXPORTER_SCHEMA_VERSION,
@@ -93,7 +87,7 @@ pub use runtime_core::trace_runtime::{TraceRecordEventRequestPayload, record_tra
 
 // observability/control-plane re-exports (from framework-extra)
 pub use framework_extra::orchestration_controller::{
-    build_background_control_response, build_runtime_control_plane_payload, build_runtime_integrator_payload, build_runtime_metric_record,
+    build_background_control_response, build_runtime_control_plane_payload, build_runtime_metric_record,
     build_runtime_observability_exporter_descriptor,
     build_runtime_observability_health_snapshot,
     build_runtime_observability_metric_catalog_payload,
@@ -102,4 +96,3 @@ pub use framework_extra::orchestration_controller::{
 
 pub use fr_exec::sandbox_control::build_sandbox_control_response;
 pub use framework_extra::route_manifest_fallback::resolve_runtime_declared_manifest_fallback;
-pub use core_policy::hook_common;

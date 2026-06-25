@@ -370,7 +370,7 @@ fn routing_eval_report_matches_expected_baseline() {
 fn plain_paper_reviewer_token_targets_specialist_slug() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let manifest_path =
+    let _manifest_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
     let records =
         load_records(Some(&runtime_path)).expect("hot runtime without manifest patch");
@@ -776,7 +776,7 @@ fn runtime_visual_review_gate() {
 fn native_runtime_for_low_confidence_hits() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");
-    let manifest_path =
+    let _manifest_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_MANIFEST.json");
     let records = load_records(Some(&runtime_path))
         .expect("load hot runtime records with manifest metadata");

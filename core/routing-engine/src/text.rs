@@ -69,10 +69,8 @@ pub fn normalize_text(text: &str) -> String {
     let mut prev_cjk_flag: Option<bool> = None;
     for ch in result.chars() {
         let is_cjk = core_state_utils::text_utils::is_cjk(ch);
-        if let Some(prev) = prev_cjk_flag {
-            if prev != is_cjk && ch != ' ' {
-                spaced.push(' ');
-            }
+        if let Some(prev) = prev_cjk_flag && prev != is_cjk && ch != ' ' {
+            spaced.push(' ');
         }
         spaced.push(ch);
         if ch != ' ' {

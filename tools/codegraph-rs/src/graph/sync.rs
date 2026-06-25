@@ -561,7 +561,7 @@ mod tests {
         let (root, index) = temp_repo();
         fs::write(root.join("README.md"), "# Project\n\nDesc.\n")
             .expect("write readme");
-        let report = build_full_index(&index, &root).expect("build full index");
+        let _report = build_full_index(&index, &root).expect("build full index");
         let hits = index
             .search_symbols("Project", None, None, 10)
             .expect("search symbols");

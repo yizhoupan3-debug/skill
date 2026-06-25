@@ -588,7 +588,7 @@ use crate::route::has_paper_review_judgment_context;
 
         let first = load_records_cached_for_stdio(Some(&pairs[0].0))
             .expect("load pair 0");
-        for (runtime_path, manifest_path) in pairs.iter().skip(1) {
+        for (runtime_path, _manifest_path) in pairs.iter().skip(1) {
             load_records_cached_for_stdio(Some(runtime_path))
                 .expect("load subsequent pair");
         }

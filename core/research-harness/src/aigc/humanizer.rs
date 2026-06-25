@@ -604,11 +604,11 @@ mod tests {
         )
         .unwrap();
         assert!(
-            result.rewritten.len() > 0,
+            !result.rewritten.is_empty(),
             "Should produce non-empty output"
         );
         assert!(
-            result.strategies_applied.len() >= 1,
+            !result.strategies_applied.is_empty(),
             "At least one strategy should fire"
         );
     }

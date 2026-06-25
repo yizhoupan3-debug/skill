@@ -1391,8 +1391,8 @@ mod frag_rest_tests {
 
     #[test]
     fn resolve_headless_option_cli_overrides_env() {
-        assert_eq!(resolve_headless_option(Some("false".to_string())), false);
-        assert_eq!(resolve_headless_option(Some("true".to_string())), true);
+        assert!(!resolve_headless_option(Some("false".to_string())));
+        assert!(resolve_headless_option(Some("true".to_string())));
     }
 
     // --- opt_string_value ---

@@ -187,10 +187,6 @@ mod tests {
     use serde_json::json;
     use std::sync::{Mutex, OnceLock};
 
-    fn get_paper_adversarial_env_var(host: &str) -> &'static str {
-        host_projection::hooks::paper_adversarial_env_var(host)
-    }
-
     fn env_test_lock() -> &'static Mutex<()> {
         static TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         TEST_LOCK.get_or_init(|| Mutex::new(()))

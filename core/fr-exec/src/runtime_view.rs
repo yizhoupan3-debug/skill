@@ -969,3 +969,243 @@ fn looks_same_identity(left: &str, right: &str) -> bool {
     let union = left_tokens.len() + right_tokens.len() - intersection;
     union > 0 && intersection * 2 > union
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn base_snapshot() -> FrameworkRuntimeView {
+        let mut supervisor = Map::new();
+        supervisor.insert("active_phase".into(), json!("implement"));
+        supervisor.insert("task_id".into(), json!("fix-bug"));
+        supervisor.insert("verification".into(), json!({"verification_status": ""}));
+        supervisor.insert("continuity".into(), json!({"resume_allowed": true}));
+        FrameworkRuntimeView {
+            session_summary_text: "phase: implement\nstatus: in_progress".into(),
+            next_actions: json!({"next_actions": ["review pr"]}),
+            evidence_index: json!({"schema_version": "v1", "artifacts": [{"path": "test.md"}]}),
+            trace_metadata: json!({"task": "fix-bug", "matched_skills": ["rust"]}),
+            supervisor_state: supervisor,
+            routing_runtime_version: 1,
+            repo_root: PathBuf::from("/tmp/repo"),
+            artifact_base: PathBuf::from("/tmp/repo/artifacts"),
+            current_root: PathBuf::from("/tmp/repo/current"),
+            mirror_root: PathBuf::from("/tmp/repo/current"),
+            task_root: PathBuf::from("/tmp/repo/task"),
+            task_pointers_present: true,
+            active_task_id: Some("fix-bug".into()),
+            focus_task_id: None,
+            control_plane_inconsistency_reasons: vec![],
+            known_task_ids: vec!["fix-bug".into()],
+            recoverable_task_ids: vec![],
+            registered_tasks: json!([]),
+            collected_at: "now".into(),
+        }
+    }
+
+    // ── classify_runtime_continuity ──
+
+    #[test]
+    fn classify_active_state() {
+        let result = classify_runtime_continuity(&base_snapshot());
+        assert_eq!(result["state"], "active", "expected active, got {:?} with reasons {:?}",
+            result["state"], result["inconsistency_reasons"]);
+        assert_eq!(result["can_resume"], true);
+        assert_eq!(result["task"], "fix-bug");
+        assert!(!result["phase"].as_str().unwrap_or("").is_empty());
+        assert!(result["current_execution"].is_object());
+        assert!(result["recent_completed_execution"].is_null());
+    }
+
+    #[test]
+    fn classifies_missing_when_no_signals() {
+        let snap = FrameworkRuntimeView {
+            session_summary_text: String::new(),
+            next_actions: Value::Null,
+            evidence_index: Value::Null,
+            trace_metadata: Value::Null,
+            supervisor_state: Map::new(),
+            task_pointers_present: false,
+            ..base_snapshot()
+        };
+        let result = classify_runtime_continuity(&snap);
+        assert_eq!(result["state"], "missing");
+    }
+
+    #[test]
+    fn classifies_completed_via_terminal_phases() {
+        let mut supervisor = Map::new();
+        supervisor.insert("active_phase".into(), json!("completed"));
+        supervisor.insert("verification".into(), json!({"verification_status": "verified"}));
+        supervisor.insert("continuity".into(), json!({"story_state": "completed"}));
+        let snap = FrameworkRuntimeView {
+            session_summary_text: "phase: completed\nstatus: verified".into(),
+            supervisor_state: supervisor,
+            ..base_snapshot()
+        };
+        let result = classify_runtime_continuity(&snap);
+        assert_eq!(result["state"], "completed", "terminal phase => completed, got {:?}",
+            result["state"]);
+        assert!(result["recent_completed_execution"].is_object());
+    }
+
+    #[test]
+    fn classifies_inconsistent_when_control_plane_mismatch() {
+        let snap = FrameworkRuntimeView {
+            control_plane_inconsistency_reasons: vec!["task_id mismatch".into()],
+            ..base_snapshot()
+        };
+        let result = classify_runtime_continuity(&snap);
+        assert_eq!(result["state"], "inconsistent");
+    }
+
+    #[test]
+    fn supervisor_terminal_overrides_summary() {
+        let mut supervisor = Map::new();
+        supervisor.insert("active_phase".into(), json!("completed"));
+        supervisor.insert("verification".into(), json!({"verification_status": "verified"}));
+        supervisor.insert("continuity".into(), json!({"story_state": "completed", "resume_allowed": false}));
+        let snap = FrameworkRuntimeView {
+            session_summary_text: "phase: implement\nstatus: in_progress".into(),
+            supervisor_state: supervisor,
+            ..base_snapshot()
+        };
+        let result = classify_runtime_continuity(&snap);
+        assert_eq!(result["state"], "completed");
+    }
+
+    #[test]
+    fn supervisor_resume_allowed_false_conflicts_with_terminal() {
+        let mut continuity = Map::new();
+        continuity.insert("resume_allowed".into(), json!(true));
+        let mut supervisor = Map::new();
+        supervisor.insert("active_phase".into(), json!("completed"));
+        supervisor.insert("continuity".into(), Value::Object(continuity));
+        supervisor.insert("verification".into(), json!({"verification_status": "verified"}));
+        let snap = FrameworkRuntimeView {
+            session_summary_text: "phase: completed".into(),
+            supervisor_state: supervisor,
+            ..base_snapshot()
+        };
+        let result = classify_runtime_continuity(&snap);
+        // Should show inconsistency: resume_allowed=true while terminal
+        assert!(result["inconsistency_reasons"].as_array().map(|a| a.iter().any(|r| {
+            r.as_str().map(|s| s.contains("resume_allowed")).unwrap_or(false)
+        })).unwrap_or(false));
+    }
+
+    // ── missing_control_plane_anchors ──
+
+    #[test]
+    fn missing_anchors_empty_when_both_present() {
+        let snap = base_snapshot();
+        let anchors = missing_control_plane_anchors(&snap);
+        assert!(anchors.is_empty());
+    }
+
+    #[test]
+    fn missing_anchors_reports_supervisor_when_empty() {
+        let snap = FrameworkRuntimeView {
+            supervisor_state: Map::new(),
+            ..base_snapshot()
+        };
+        let anchors = missing_control_plane_anchors(&snap);
+        assert!(anchors.iter().any(|a| a.contains("supervisor")));
+    }
+
+    #[test]
+    fn missing_anchors_reports_task_pointers_when_absent() {
+        let snap = FrameworkRuntimeView {
+            task_pointers_present: false,
+            ..base_snapshot()
+        };
+        let anchors = missing_control_plane_anchors(&snap);
+        assert!(anchors.iter().any(|a| a.contains("TASK_POINTERS")));
+    }
+
+    // ── workspace_name_from_root ──
+
+    #[test]
+    fn workspace_name_from_root_uses_dir_name() {
+        assert_eq!(workspace_name_from_root(Path::new("/home/user/project")), "project");
+    }
+
+    #[test]
+    fn workspace_name_fallback_for_root() {
+        let name = workspace_name_from_root(Path::new("/"));
+        assert!(!name.is_empty());
+    }
+
+    // ── read_json_control_plane_field ──
+
+    #[test]
+    fn control_plane_field_returns_empty_for_missing_file() {
+        let mut errors = vec![];
+        let result = read_json_control_plane_field(
+            Path::new("/tmp/nonexistent-xxxx.json"),
+            "test",
+            &mut errors,
+        );
+        assert!(result.is_object());
+        assert!(result.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn control_plane_field_records_parse_error() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("ctrl-plane-bad-json.json");
+        std::fs::write(&path, "not valid json {").ok();
+        let mut errors = vec![];
+        let result = read_json_control_plane_field(&path, "bad-file", &mut errors);
+        assert!(result.is_object());
+        assert!(result.as_object().unwrap().is_empty());
+        assert!(!errors.is_empty());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn control_plane_field_reads_valid_json() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("ctrl-plane-good.json");
+        std::fs::write(&path, r#"{"key": "value"}"#).ok();
+        let mut errors = vec![];
+        let result = read_json_control_plane_field(&path, "good", &mut errors);
+        assert_eq!(result["key"], "value");
+        assert!(errors.is_empty());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // ── normalize_supervisor_state (indirect via classify) ──
+
+    #[test]
+    fn classify_with_empty_supervisor_does_not_panic() {
+        let result = classify_runtime_continuity(&base_snapshot());
+        // Should not crash — empty supervisor is normal
+        assert!(result["continuity"].is_object());
+    }
+
+    // ── terminal_reason / is_terminal (indirect via classify) ──
+
+    #[test]
+    fn classify_in_progress_summary_produces_active_state() {
+        let snap = FrameworkRuntimeView {
+            session_summary_text: "phase: implement".into(),
+            ..base_snapshot()
+        };
+        let result = classify_runtime_continuity(&snap);
+        assert_eq!(result["state"], "active");
+    }
+
+    #[test]
+    fn classify_with_evidence_but_no_task_marks_inconsistent() {
+        let snap = FrameworkRuntimeView {
+            session_summary_text: String::new(),
+            active_task_id: None,
+            task_pointers_present: false,
+            ..base_snapshot()
+        };
+        let result = classify_runtime_continuity(&snap);
+        assert_ne!(result["state"], "active", "missing task should not be active");
+    }
+}

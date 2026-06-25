@@ -155,7 +155,7 @@ fn framework_session_artifact_write_allows_completion_without_closeout_when_env_
     impl Drop for EnvCloseoutGuard {
         fn drop(&mut self) {
             match &self.prior {
-                Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", &v) },
+                Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT", v) },
                 None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_CLOSEOUT_ENFORCEMENT") },
             }
         }

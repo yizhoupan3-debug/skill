@@ -70,14 +70,20 @@ fn bootstrap_telemetry() {
         observer,
     );
     install_global_telemetry_writer(Arc::new(fanout));
-    let _ = TELEMETRY_HANDLE.lock().unwrap().replace(handle);
+    let _ = TELEMETRY_HANDLE
+        .lock()
+        .expect("TELEMETRY_HANDLE mutex poisoned")
+        .replace(handle);
     spawn_routing_runtime_cache_invalidator();
 }
 
 /// Gracefully shut down telemetry: flush pending events and join the aggregator thread.
 /// Safe to call multiple times (second call is a no-op).
 pub fn shutdown_telemetry() {
-    if let Some(handle) = TELEMETRY_HANDLE.lock().unwrap().take() {
+    if let Some(handle) = TELEMETRY_HANDLE
+        .lock()
+        .expect("TELEMETRY_HANDLE mutex poisoned")
+        .take() {
         handle.shutdown();
     }
 }

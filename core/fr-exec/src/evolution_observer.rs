@@ -279,11 +279,10 @@ impl FanoutTelemetryWriter {
 
 impl TelemetryWriter for FanoutTelemetryWriter {
     fn write_event(&self, event: &TelemetryEvent) -> Result<(), String> {
-        if let Ok(mut guard) = self.observer.lock() {
-            if let Err(e) = guard.observe(event) {
+        if let Ok(mut guard) = self.observer.lock()
+            && let Err(e) = guard.observe(event) {
                 tracing::warn!(error = %e, "evolution observer failed to observe event");
             }
-        }
         self.inner.write_event(event)
     }
 }
@@ -344,7 +343,7 @@ mod tests {
     #[test]
     fn high_reroute_rate_writes_alert() {
         let path = temp_alerts_path();
-        let mut cfg = EvolutionObserverConfig {
+        let cfg = EvolutionObserverConfig {
             alerts_path: path.clone(),
             reroute_rate_alert: 0.3,
             window_capacity: 64,

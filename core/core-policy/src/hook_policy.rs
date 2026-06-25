@@ -291,7 +291,7 @@ pub fn classify_protected_path<'a>(
     let source_repo = repo_root
         .zip(runtime_root)
         .is_none_or(|(repo, runtime)| same_path(repo, runtime));
-    if source_repo && protected_generated_paths().iter().any(|p| *p == relative.as_str()) {
+    if source_repo && protected_generated_paths().contains(&relative.as_str()) {
         return Some("generated_host_entrypoint");
     }
     if source_repo

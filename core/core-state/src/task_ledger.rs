@@ -167,11 +167,10 @@ pub fn append_transaction_assuming_l1_held(
     }
 
     // Fallback compaction for the NotFound branch (first entry, 1 line — won't trigger).
-    if !compacted_inline {
-        if let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(&path, 300) {
+    if !compacted_inline
+        && let Err(e) = crate::utils::jsonl_maintenance::compact_jsonl_if_needed(&path, 300) {
             tracing::warn!(error = %e, "compact_jsonl_if_needed failed for TASK_LEDGER");
         }
-    }
 
     Ok(())
 }
