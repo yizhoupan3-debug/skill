@@ -56,8 +56,8 @@ pub fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value,
         "status": "projection-status",
         "prompts": {
             "framework": {
-                "project": codex_projection_file_status(&project_target)?,
-                "user": codex_projection_file_status(&user_target)?,
+                "project": projection_file_status(&project_target, "codex")?,
+                "user": projection_file_status(&user_target, "codex")?,
             }
         },
         "manifest": {
@@ -152,7 +152,7 @@ pub fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value
         "error": first_error,
         "rules": {
             "framework": {
-                "user": cursor_projection_file_status(&user_target)?,
+                "user": projection_file_status(&user_target, "cursor")?,
             }
         },
         "mcp_config": {
@@ -517,8 +517,8 @@ pub fn claude_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value
         "status": "projection-status",
         "prompts": {
             "framework": {
-                "project": claude_projection_file_status(&project_target)?,
-                "user": claude_projection_file_status(&user_target)?,
+                "project": projection_file_status(&project_target, "claude")?,
+                "user": projection_file_status(&user_target, "claude")?,
             }
         },
         "manifest": {

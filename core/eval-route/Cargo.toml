@@ -1,0 +1,15 @@
+[package]
+name = "eval-route"
+version = "0.1.0"
+edition = "2024"
+description = "Routing evaluation framework: validate routing decisions against expected outcomes"
+[lints]
+workspace = true
+
+[dependencies]
+framework-extra = { path = "../framework-extra" }
+routing-engine = { path = "../routing-engine" }
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]

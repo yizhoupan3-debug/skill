@@ -14,4 +14,9 @@ serde_json.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]
+criterion = { workspace = true }
 insta.workspace = true
+
+[[bench]]
+name = "jsonl_bench"
+harness = false

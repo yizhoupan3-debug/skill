@@ -1,4 +1,4 @@
-use crate::route::{
+use routing_engine::route::{
     ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, filter_records_for_host, load_records,
 };
 use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
@@ -78,7 +78,7 @@ pub fn load_eval_cases(path: &Path) -> Result<EvalCasesPayload, String> {
 }
 
 pub fn evaluate_route_cases(
-    records: &[crate::route::SkillRecord],
+    records: &[routing_engine::route::SkillRecord],
     cases: &[EvalCasePayload],
 ) -> EvalRouteReport {
     let mut passed = 0_usize;
@@ -171,7 +171,6 @@ pub fn evaluate_route_cases(
                 }
             }
         } else if decision.overlay_skill.is_some() {
-            // Expected no overlay but got one
             failures.push(EvalCaseFailure {
                 case_id: case.id.clone(),
                 field: "overlay_skill".to_string(),
@@ -284,7 +283,7 @@ pub fn eval_route_contract() -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::route::SkillRecord;
+    use routing_engine::route::SkillRecord;
     use std::collections::HashSet;
 
     fn make_record(

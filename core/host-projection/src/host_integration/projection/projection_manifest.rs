@@ -709,14 +709,6 @@ pub fn managed_projection_file_exists(path: &Path) -> Result<bool, String> {
     Ok(is_managed_projection_content(&content))
 }
 
-pub fn codex_projection_file_status(path: &Path) -> Result<Value, String> {
-    projection_file_status(path, "codex")
-}
-
-pub fn cursor_projection_file_status(path: &Path) -> Result<Value, String> {
-    projection_file_status(path, "cursor")
-}
-
 pub(super) fn projection_file_status(path: &Path, host_projection: &str) -> Result<Value, String> {
     let content = read_text_if_exists(path)?;
     let marker_managed = content

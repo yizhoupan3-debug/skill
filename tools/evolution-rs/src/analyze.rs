@@ -73,6 +73,7 @@ pub fn run_analyze(
                     prediction_outcome_mismatched += 1;
                 }
             }
+            TelemetryEvent::MetricEvent { .. } => {}
         }
     }
 

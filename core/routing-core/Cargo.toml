@@ -10,3 +10,8 @@ workspace = true
 core-state-utils = { path = "../core-state-utils" }
 
 [dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name = "fuzzy_bench"
+harness = false

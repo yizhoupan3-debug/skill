@@ -290,7 +290,23 @@ fn main() {
          }}\n",
     ));
 
+    // ── Projection Ops Registry ──
+    // Generate `m.insert(...)` calls into the projection ops HashMap,
+    // driven by RUNTIME_REGISTRY.json host_targets.supported.
+    // Wrapped in a block expression for Rust 2024 `include!` compatibility.
+    let mut proj_out = String::new();
+    proj_out.push_str("{\n");
+    for id in &supported {
+        proj_out.push_str(&format!(
+            "    m.insert(\"{id}\", Box::new(super::projection_host_ops::{}ProjectionOps));\n",
+            pascal(id)
+        ));
+    }
+    proj_out.push_str("}\n");
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     fs::write(out_dir.join("generated_host_providers.rs"), out)
         .expect("write generated_host_providers.rs");
+    fs::write(out_dir.join("generated_projection_ops_registry.rs"), proj_out)
+        .expect("write generated_projection_ops_registry.rs");
 }

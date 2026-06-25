@@ -16,6 +16,8 @@ serde = { version = "1.0", features = ["derive"] }
 fr-utils = { path = "../core/fr-utils" }
 host-projection = { path = "../core/host-projection", features = ["test-support"] }
 core-policy = { path = "../core/core-policy", features = ["test-sync"] }
+core-state-utils = { path = "../core/core-state-utils" }
+routing-engine = { path = "../core/routing-engine" }
 
 [[bin]]
 name = "mcp_stdio_parse"
@@ -34,6 +36,20 @@ bench = false
 [[bin]]
 name = "hook_stdin_parse"
 path = "fuzz_targets/hook_stdin_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "routing_decision"
+path = "fuzz_targets/routing_decision.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "jsonl_maintenance"
+path = "fuzz_targets/jsonl_maintenance.rs"
 test = false
 doc = false
 bench = false

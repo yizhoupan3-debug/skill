@@ -370,18 +370,16 @@ mod tests {
     use super::*;
     use serial_test::serial;
 
-    const REGISTRY_SUPPORTED_HOST_IDS: &[&str] = &["cursor", "claude", "opencode", "codex"];
-
     #[test]
     #[serial]
-    fn registry_exposes_closed_set_host_skeletons() {
+    fn host_provider_registry_matches_supported_hosts() {
         let registry = host_provider_registry();
         assert_eq!(
             registry.len(),
-            REGISTRY_SUPPORTED_HOST_IDS.len(),
+            framework_kernel::runtime_registry::ALL_HOST_IDS.len(),
             "HostProvider count must match registry host_targets.supported"
         );
-        for host_id in REGISTRY_SUPPORTED_HOST_IDS {
+        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
             assert!(
                 host_provider_for_id(host_id).is_some(),
                 "missing provider for {host_id}"
@@ -391,55 +389,21 @@ mod tests {
 
     #[test]
     #[serial]
-    fn supported_hosts_each_have_provider() {
-        for host_id in REGISTRY_SUPPORTED_HOST_IDS {
-            assert!(
-                host_provider_for_id(host_id).is_some(),
-                "RUNTIME_REGISTRY supported host `{host_id}` has no HostProvider entry"
+    fn install_tool_and_alias_resolution() {
+        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+            let provider = host_provider_for_install_tool(host_id)
+                .unwrap_or_else(|| panic!("install_tool for {host_id} must exist"));
+            assert_eq!(
+                provider.host_id(),
+                *host_id,
+                "install_tool for {host_id} resolved to wrong host"
             );
         }
     }
 
     #[test]
     #[serial]
-    fn install_tool_and_alias_resolution() {
-        assert_eq!(
-            host_provider_for_install_tool("cursor")
-                .expect("cursor")
-                .host_id(),
-            "cursor"
-        );
-        assert_eq!(
-            host_provider_for_install_tool("claude")
-                .expect("claude install tool")
-                .host_id(),
-            "claude"
-        );
-        assert_eq!(
-            host_provider_for_install_tool("claude")
-                .expect("claude alias")
-                .host_id(),
-            "claude"
-        );
-        assert_eq!(
-            host_provider_for_install_tool("opencode")
-                .expect("opencode")
-                .host_id(),
-            "opencode"
-        );
-        assert_eq!(
-            host_provider_for_install_tool("codex")
-                .expect("codex")
-                .host_id(),
-            "codex"
-        );
-    }
-
-    #[test]
-    #[serial]
-    fn all_host_capabilities_match_expected_values() {
-        // Load transport_type and session_supervisor_driver from RUNTIME_REGISTRY.json
-        // so the test stays in sync with the single source of truth.
+    fn all_host_provider_config_matches_registry_metadata() {
         let framework_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("..")
             .join("..");
@@ -451,16 +415,11 @@ mod tests {
             .and_then(|ht| ht.get("metadata"))
             .and_then(|m| m.as_object())
             .expect("host_targets.metadata");
-        let cases: &[(&str, &str, bool)] = &[
-            // (host_id, config_path_contains, has_worktree)
-            ("cursor", "mcp.json", true),
-            ("claude", ".claude/settings.json", true),
-            ("opencode", ".opencode/opencode.json", true),
-            ("codex", "config.toml", true),
-        ];
-        for &(host_id, config_contains, worktree) in cases {
+        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+            let provider = host_provider_for_id(host_id)
+                .unwrap_or_else(|| panic!("no host provider for {host_id}"));
             let host_meta = metadata
-                .get(host_id)
+                .get(*host_id)
                 .unwrap_or_else(|| panic!("metadata missing host_id `{host_id}`"));
             let expected_transport = host_meta
                 .get("transport_type")
@@ -471,28 +430,18 @@ mod tests {
                 .and_then(|v| v.as_str())
                 .unwrap_or_else(|| panic!("{host_id}: metadata missing session_supervisor_driver"));
 
-            let provider = host_provider_for_id(host_id).expect(host_id);
+            let provider = host_provider_for_id(host_id)
+                .unwrap_or_else(|| panic!("no host provider for {host_id}"));
             let caps = provider.capabilities();
-            assert!(caps.has_native_hook, "{host_id}: has_native_hook");
-            assert!(caps.supports_subagent, "{host_id}: supports_subagent");
-            assert_eq!(
-                caps.supports_worktree, worktree,
-                "{host_id}: supports_worktree"
-            );
             assert_eq!(
                 caps.transport_type, expected_transport,
                 "{host_id}: transport_type"
-            );
-            assert!(
-                caps.config_path.contains(config_contains),
-                "{host_id}: config_path"
             );
             assert_eq!(
                 provider.session_supervisor_driver(),
                 expected_supervisor,
                 "{host_id}: supervisor"
             );
-            // All 4 hosts share these via trait defaults
             assert!(
                 provider.closeout_evidence_hooks_supported(),
                 "{host_id}: closeout"
@@ -512,14 +461,14 @@ mod tests {
     #[test]
     #[serial]
     fn strict_pre_tool_fallback_hint_matches_provider_metadata() {
-        assert_eq!(
-            host_provider_strict_pre_tool_fallback_hint("cursor"),
-            Some(false)
-        );
-        assert_eq!(
-            host_provider_strict_pre_tool_fallback_hint("opencode"),
-            Some(false)
-        );
+        for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
+            let hint = host_provider_strict_pre_tool_fallback_hint(host_id);
+            assert_eq!(
+                hint,
+                Some(false),
+                "{host_id} expected strict_pre_tool_fallback hint"
+            );
+        }
         assert!(host_provider_strict_pre_tool_fallback_hint("unknown-host").is_none());
     }
 

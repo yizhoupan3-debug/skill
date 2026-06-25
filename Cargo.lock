@@ -408,6 +408,7 @@ dependencies = [
 name = "core-state-utils"
 version = "0.2.0"
 dependencies = [
+ "criterion",
  "fs2",
  "insta",
  "libc",
@@ -603,6 +604,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "eval-route"
+version = "0.1.0"
+dependencies = [
+ "framework-extra",
+ "routing-engine",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "evolution-rs"
 version = "0.1.0"
 dependencies = [
@@ -724,6 +735,7 @@ name = "fr-utils"
 version = "0.1.0"
 dependencies = [
  "core-state-utils",
+ "criterion",
  "framework-kernel",
  "fs2",
  "hex",
@@ -750,6 +762,7 @@ dependencies = [
  "chrono",
  "core-policy",
  "core-state",
+ "core-state-utils",
  "fr-contracts",
  "fr-exec",
  "fr-utils",
@@ -790,6 +803,7 @@ name = "framework-maint"
 version = "0.1.0"
 dependencies = [
  "core-state",
+ "core-state-utils",
  "framework-extra",
  "framework-kernel",
  "host-projection",
@@ -2171,6 +2185,7 @@ name = "routing-core"
 version = "0.1.0"
 dependencies = [
  "core-state-utils",
+ "criterion",
 ]
 
 [[package]]
@@ -2178,6 +2193,7 @@ name = "routing-engine"
 version = "0.1.0"
 dependencies = [
  "core-state-utils",
+ "criterion",
  "insta",
  "notify",
  "rayon",
@@ -2200,6 +2216,7 @@ dependencies = [
  "core-policy",
  "core-state",
  "core-state-utils",
+ "eval-route",
  "fr-contracts",
  "fr-exec",
  "fr-utils",
@@ -2595,6 +2612,7 @@ name = "skill-layer"
 version = "0.1.0"
 dependencies = [
  "core-state",
+ "core-state-utils",
  "serde",
  "serde_json",
  "serde_yml",
@@ -2896,6 +2914,7 @@ name = "tool-routing-engine"
 version = "0.1.0"
 dependencies = [
  "core-state-utils",
+ "criterion",
  "insta",
  "mcp-tool-registry",
  "routing-core",

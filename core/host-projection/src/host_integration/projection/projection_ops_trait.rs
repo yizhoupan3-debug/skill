@@ -32,23 +32,8 @@ static PROJECTION_OPS_REGISTRY: OnceLock<HashMap<&'static str, Box<dyn HostProje
 fn build_projection_ops_registry() -> HashMap<&'static str, Box<dyn HostProjectionOps>> {
     let mut m: HashMap<&'static str, Box<dyn HostProjectionOps>> = HashMap::new();
 
-    // Register hosts with custom projection ops
-    m.insert(
-        "cursor",
-        Box::new(super::projection_host_ops::CursorProjectionOps),
-    );
-    m.insert(
-        "claude",
-        Box::new(super::projection_host_ops::ClaudeProjectionOps),
-    );
-    m.insert(
-        "opencode",
-        Box::new(super::projection_host_ops::OpencodeProjectionOps),
-    );
-    m.insert(
-        "codex",
-        Box::new(super::projection_host_ops::CodexProjectionOps),
-    );
+    // Registration driven by RUNTIME_REGISTRY.json host_targets.supported.
+    include!(concat!(env!("OUT_DIR"), "/generated_projection_ops_registry.rs"));
 
     m
 }

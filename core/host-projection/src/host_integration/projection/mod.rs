@@ -960,10 +960,6 @@ pub fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
     }))
 }
 
-pub fn claude_projection_file_status(path: &Path) -> Result<Value, String> {
-    projection_file_status(path, "claude")
-}
-
 /// Shared paperplain MCP entry (five-host research harness).
 pub fn paperplain_mcp_server_payload() -> Value {
     json!({
