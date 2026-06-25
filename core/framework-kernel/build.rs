@@ -139,6 +139,36 @@ fn main() {
     out.push_str("        _ => \"\",\n");
     out.push_str("    }\n}\n\n");
 
+    // projection_entrypoint_subdir
+    out.push_str("pub fn projection_entrypoint_subdir(host_id: &str) -> &'static str {\n");
+    out.push_str("    match host_id {\n");
+    for id in &supported {
+        if let Some(dir) = metadata.get(id.as_str())
+            .and_then(|m| m.get("entrypoint_subdir"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            out.push_str(&format!("        \"{id}\" => \"{dir}\",\n"));
+        }
+    }
+    out.push_str("        _ => \"rules\",\n");
+    out.push_str("    }\n}\n\n");
+
+    // projection_entrypoint_filename
+    out.push_str("pub fn projection_entrypoint_filename(host_id: &str) -> &'static str {\n");
+    out.push_str("    match host_id {\n");
+    for id in &supported {
+        if let Some(fname) = metadata.get(id.as_str())
+            .and_then(|m| m.get("entrypoint_filename"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|s| !s.is_empty())
+        {
+            out.push_str(&format!("        \"{id}\" => \"{fname}\",\n"));
+        }
+    }
+    out.push_str("        _ => \"framework.md\",\n");
+    out.push_str("    }\n}\n\n");
+
     // review_gate_disable_env
     out.push_str("pub fn review_gate_disable_env(host_id: &str) -> &'static str {\n");
     out.push_str("    match host_id {\n");

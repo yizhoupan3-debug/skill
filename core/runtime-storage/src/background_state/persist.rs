@@ -1,11 +1,11 @@
 use super::control_plane::normalized_backend_family;
 use super::types::BackgroundStateStore;
 use super::types::*;
-use crate::{SQLITE_TABLE_NAME, acquire_runtime_path_lock, runtime_storage::sqlite_connection};
-use rusqlite::{Connection, OptionalExtension, params};
+use crate::{SQLITE_TABLE_NAME, acquire_runtime_path_lock};
+use rusqlite::{OptionalExtension, params};
 use serde_json::{Value, json};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub(super) fn read_persisted_state(
     state_path: &Path,

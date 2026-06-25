@@ -32,12 +32,8 @@ pub(super) fn build_state_control_plane(
     state_path: &Path,
 ) -> Result<Value, String> {
     let normalized_backend = normalized_backend_family(backend_family);
-    let (
-        supports_atomic_replace,
-        supports_compaction,
-        supports_snapshot_delta,
-        supports_remote_event_transport,
-    ) = backend_capabilities(&normalized_backend)?;
+    let capabilities = backend_capabilities(&normalized_backend)?;
+    let runtime_caps = runtime_backend_capabilities(&normalized_backend)?;
     let mut payload = json!({
         "schema_version": BACKGROUND_STATE_CONTROL_PLANE_SCHEMA_VERSION,
         "runtime_control_plane_schema_version": control_plane_descriptor
@@ -56,12 +52,12 @@ pub(super) fn build_state_control_plane(
         "transport_family": "checkpoint-artifact",
         "health_family": "runtime-health",
         "backend_family": normalized_backend,
-        "supports_atomic_replace": supports_atomic_replace,
-        "supports_compaction": supports_compaction,
-        "supports_snapshot_delta": supports_snapshot_delta,
-        "supports_remote_event_transport": supports_remote_event_transport,
-        "supports_consistent_append": runtime_backend_capabilities(&normalized_backend)?.supports_consistent_append,
-        "supports_sqlite_wal": runtime_backend_capabilities(&normalized_backend)?.supports_sqlite_wal,
+        "supports_atomic_replace": capabilities.supports_atomic_replace,
+        "supports_compaction": capabilities.supports_compaction,
+        "supports_snapshot_delta": capabilities.supports_snapshot_delta,
+        "supports_remote_event_transport": capabilities.supports_remote_event_transport,
+        "supports_consistent_append": runtime_caps.supports_consistent_append,
+        "supports_sqlite_wal": runtime_caps.supports_sqlite_wal,
         "state_path": state_path.to_string_lossy(),
     });
     if let Some(Value::Object(descriptor)) = control_plane_descriptor
