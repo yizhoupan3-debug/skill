@@ -251,8 +251,8 @@ pub fn write_projection_manifest(
 pub fn mcp_config_path(roots: &ResolvedProjectionRoots, host_id: &str, scope: &str) -> std::result::Result<PathBuf, String> {
     if host_id == "cursor" {
         Ok(roots
-            .host_home_root("cursor")
-            .ok_or_else(|| "cursor host must be registered in projection roots".to_string())?
+            .host_home_root(host_id)
+            .ok_or_else(|| format!("{host_id} host must be registered in projection roots"))?
             .join("mcp.json"))
     } else {
         let rel = framework_kernel::runtime_registry::host_projection_mcp_relative(host_id, scope);
@@ -260,9 +260,16 @@ pub fn mcp_config_path(roots: &ResolvedProjectionRoots, host_id: &str, scope: &s
             return Err(format!("no mcp config path for {host_id} scope {scope}"));
         }
         if scope == "user" {
-            roots.host_home_root(host_id)
-                .map(|h| h.join(rel))
-                .ok_or_else(|| format!("{host_id} host not registered"))
+            if framework_kernel::runtime_registry::host_projection_mcp_base_is_account(
+                host_id,
+                "user",
+            ) {
+                Ok(roots.account_home_root.join(rel))
+            } else {
+                roots.host_home_root(host_id)
+                    .map(|h| h.join(rel))
+                    .ok_or_else(|| format!("{host_id} host not registered"))
+            }
         } else {
             Ok(roots.project_root.join(rel))
         }
@@ -278,22 +285,41 @@ pub fn codegraph_mcp_server_key_path() -> &'static str {
 }
 
 #[derive(Debug, Clone)]
-pub struct CursorMcpInstallOutcome {
+pub struct McpInstallOutcome {
     pub managed: bool,
     pub changed: bool,
     pub reason: &'static str,
     pub skipped_user_owned: bool,
 }
 
-pub fn install_cursor_mcp_server(
+pub fn install_mcp_server(
     roots: &ResolvedProjectionRoots,
     path: &Path,
-) -> std::result::Result<CursorMcpInstallOutcome, String> {
+    host_id: &str,
+    scope: &str,
+) -> std::result::Result<McpInstallOutcome, String> {
+    if host_id == "cursor" {
+        install_mcp_impl_snake_case(roots, path, host_id)
+    } else {
+        install_mcp_impl_camel_case(roots, path, scope, host_id).map(|changed| McpInstallOutcome {
+            managed: true,
+            changed,
+            reason: "",
+            skipped_user_owned: false,
+        })
+    }
+}
+
+fn install_mcp_impl_snake_case(
+    roots: &ResolvedProjectionRoots,
+    path: &Path,
+    host_id: &str,
+) -> std::result::Result<McpInstallOutcome, String> {
     let browser_server = mcp_server_payload(roots);
     let framework_server = host_router_rs_framework_payload(
         roots,
-        "cursor",
-        "Framework snapshot, skill routing, goal/closeout gating (Cursor)",
+        host_id,
+        "Framework snapshot, skill routing, goal/closeout gating",
     );
     // codegraph 注入走 merge_codegraph_into_mcp_servers_map，无需提前构造
     if let Some(payload) = read_json_if_exists(path)?
@@ -309,7 +335,7 @@ pub fn install_cursor_mcp_server(
                 }
                 let root = payload
                     .as_object_mut()
-                    .ok_or_else(|| "cursor mcp config payload must be an object".to_string())?;
+                    .ok_or_else(|| format!("{host_id} mcp config payload must be an object"))?;
                 let mcp_servers = root
                     .entry("mcp_servers".to_string())
                     .or_insert_with(|| json!({}));
@@ -318,7 +344,7 @@ pub fn install_cursor_mcp_server(
                 }
                 let servers = mcp_servers
                     .as_object_mut()
-                    .ok_or_else(|| "cursor mcp_servers must be an object".to_string())?;
+                    .ok_or_else(|| format!("{host_id} mcp_servers must be an object"))?;
                 let framework_changed =
                     servers.get("router-rs-framework") != Some(&framework_server);
                 if framework_changed {
@@ -331,7 +357,7 @@ pub fn install_cursor_mcp_server(
                 let file_changed = write_json_if_changed(path, &payload)?;
                 let changed =
                     framework_changed || paperplain_changed || codegraph_changed || file_changed;
-                return Ok(CursorMcpInstallOutcome {
+                return Ok(McpInstallOutcome {
                     managed: true,
                     changed,
                     reason: if changed {
@@ -343,7 +369,7 @@ pub fn install_cursor_mcp_server(
                 });
             }
             if !mcp_entry_is_framework_owned_stale(existing, &roots.framework_root) {
-                return Ok(CursorMcpInstallOutcome {
+                return Ok(McpInstallOutcome {
                     managed: false,
                     changed: false,
                     reason: "skipped_user_owned",
@@ -358,7 +384,7 @@ pub fn install_cursor_mcp_server(
     }
     let root = payload
         .as_object_mut()
-        .ok_or_else(|| "cursor mcp config payload must be an object".to_string())?;
+        .ok_or_else(|| format!("{host_id} mcp config payload must be an object"))?;
     let mcp_servers = root
         .entry("mcp_servers".to_string())
         .or_insert_with(|| json!({}));
@@ -367,7 +393,7 @@ pub fn install_cursor_mcp_server(
     }
     let servers = mcp_servers
         .as_object_mut()
-        .ok_or_else(|| "cursor mcp_servers must be an object".to_string())?;
+        .ok_or_else(|| format!("{host_id} mcp_servers must be an object"))?;
     let browser_changed = servers.get("browser-mcp") != Some(&browser_server);
     if browser_changed {
         servers.insert("browser-mcp".to_string(), browser_server);
@@ -380,7 +406,7 @@ pub fn install_cursor_mcp_server(
     let paperplain_changed = merge_paperplain_into_mcp_servers_map(servers, "paperplain");
     let file_changed = write_json_if_changed(path, &payload)?;
     let changed = browser_changed || framework_changed || codegraph_changed || paperplain_changed;
-    Ok(CursorMcpInstallOutcome {
+    Ok(McpInstallOutcome {
         managed: true,
         changed: changed || file_changed,
         reason: if changed {
@@ -420,8 +446,13 @@ pub fn mcp_entry_is_framework_owned_stale(existing: &Value, framework_root: &Pat
     is_repo_build_executable_path(cmd, framework_root)
 }
 
-pub fn remove_cursor_mcp_server(path: &Path, framework_root: &Path) -> std::result::Result<bool, String> {
-    Ok(mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_SNAKE_CASE)?)
+pub fn remove_mcp_server(path: &Path, framework_root: &Path, host_id: &str) -> std::result::Result<bool, String> {
+    let format = if host_id == "cursor" {
+        McpConfigFormat::JSON_SNAKE_CASE
+    } else {
+        McpConfigFormat::JSON_CAMEL_CASE
+    };
+    Ok(mcp_json_remove_servers(path, framework_root, format)?)
 }
 
 pub fn browser_mcp_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String> {
@@ -594,10 +625,11 @@ pub fn mcp_server_exists(path: &Path) -> std::result::Result<bool, String> {
 
 // ── MCP Server (shared across hosts) ──────────────────────────────────────────
 
-pub fn install_claude_mcp_server(
+fn install_mcp_impl_camel_case(
     roots: &ResolvedProjectionRoots,
     path: &Path,
     _scope: &str,
+    host_id: &str,
 ) -> std::result::Result<bool, String> {
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
     if !payload.is_object() {
@@ -605,7 +637,7 @@ pub fn install_claude_mcp_server(
     }
     let root = payload
         .as_object_mut()
-        .ok_or_else(|| "claude mcp.json root must be an object".to_string())?;
+        .ok_or_else(|| format!("{host_id} mcp.json root must be an object"))?;
     let mcp_servers = root
         .entry("mcpServers".to_string())
         .or_insert_with(|| json!({}));
@@ -618,7 +650,7 @@ pub fn install_claude_mcp_server(
 
     let framework_payload = host_router_rs_framework_payload(
         roots,
-        "claude",
+        host_id,
         "Framework snapshot, skill routing, goal/closeout gating",
     );
     let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
@@ -637,10 +669,6 @@ pub fn install_claude_mcp_server(
 
     let file_changed = write_json_if_changed(path, &payload)?;
     Ok(framework_changed || browser_changed || paperplain_changed || codegraph_changed || file_changed)
-}
-
-pub fn remove_claude_mcp_server(path: &Path, framework_root: &Path) -> std::result::Result<bool, String> {
-    Ok(mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_CAMEL_CASE)?)
 }
 
 pub fn render_framework_entrypoint(

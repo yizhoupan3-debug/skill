@@ -305,7 +305,7 @@ mod tests {
     }
     #[test]
     fn build_router_rs_claude_hook_command_sources_optional_env_file() {
-        let cmd = build_router_rs_claude_hook_command("Stop");
+        let cmd = build_router_rs_hook_command("Stop", "claude");
         assert!(
             cmd.contains("router-rs-hook.env"),
             "expected optional hook env injection path segment: {cmd}"
@@ -516,8 +516,9 @@ mod tests {
 
         let err = validate_mcp_command_binary(&artifact.to_string_lossy(), Some(&framework_root))
             .expect_err("repo target artifact must be rejected");
+        let msg = err.to_string();
         assert!(
-            err.contains("ephemeral build path") || err.contains("repo build artifact"),
+            msg.contains("ephemeral build path") || msg.contains("repo build artifact"),
             "unexpected error: {err}"
         );
 
@@ -570,7 +571,7 @@ mod tests {
         // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("HOME", &home) };
         let outcome =
-            install_cursor_mcp_server(&roots, &cursor_home.join("mcp.json")).expect("install");
+            install_mcp_server(&roots, &cursor_home.join("mcp.json"), "cursor", "user").expect("install");
         assert!(
             outcome.changed,
             "expected stale browser-mcp entry to be rewritten"
@@ -697,7 +698,7 @@ mod tests {
         };
 
         let changed =
-            super::projection::ensure_codex_research_mcp_toml(&roots).expect("codex mcp toml");
+            super::projection::ensure_research_mcp_toml(&roots, "codex").expect("codex mcp toml");
         assert!(changed);
         let text = fs::read_to_string(project_root.join(".codex/config.toml")).unwrap();
         assert!(text.contains("[mcp_servers.paperplain]"));
@@ -709,7 +710,7 @@ mod tests {
         );
 
         let changed_again =
-            super::projection::ensure_codex_research_mcp_toml(&roots).expect("idempotent");
+            super::projection::ensure_research_mcp_toml(&roots, "codex").expect("idempotent");
         assert!(!changed_again);
 
         let _ = fs::remove_dir_all(root);

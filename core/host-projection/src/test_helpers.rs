@@ -3,6 +3,7 @@
 //! Extracted from `hooks.rs` to keep production code focused.
 
 use crate::hooks;
+use core_policy::error::FrameworkError;
 use serde_json::Value;
 use std::sync::OnceLock;
 
@@ -64,18 +65,16 @@ pub(crate) fn install_test_deps() {
         fn test_closeout_record_path(
             repo_root: &std::path::Path,
             task_id: &str,
-        ) -> Result<std::path::PathBuf, String> {
+        ) -> Result<std::path::PathBuf, FrameworkError> {
             Ok(repo_root.join("artifacts/closeout").join(format!("{task_id}.json")))
         }
         fn test_evaluate_closeout_record(
             _repo_root: &std::path::Path,
             _task_id: &str,
             record_path: &std::path::Path,
-        ) -> Result<Value, String> {
-            let data = std::fs::read_to_string(record_path)
-                .map_err(|e| format!("read closeout record: {e}"))?;
-            let val: Value =
-                serde_json::from_str(&data).map_err(|e| format!("parse closeout record: {e}"))?;
+        ) -> Result<Value, FrameworkError> {
+            let data = std::fs::read_to_string(record_path)?;
+            let val: Value = serde_json::from_str(&data)?;
             // Simplified evaluation: allow if record has valid schema_version,
             // verification_status == "passed", and commands_run is non-empty.
             let schema_ok = val
@@ -113,17 +112,17 @@ pub(crate) fn install_test_deps() {
                 .and_then(Value::as_str)
                 .map(str::to_string)
         }
-        fn test_build_contract(_repo_root: &std::path::Path) -> Result<Value, String> {
+        fn test_build_contract(_repo_root: &std::path::Path) -> Result<Value, FrameworkError> {
             Ok(serde_json::json!({}))
         }
         fn test_append_shell(
             _repo_root: &std::path::Path,
             _event: &Value,
             _kind: &str,
-        ) -> Result<(), String> {
+        ) -> Result<(), FrameworkError> {
             Ok(())
         }
-        fn test_evidence_append(payload: Value) -> Result<Value, String> {
+        fn test_evidence_append(payload: Value) -> Result<Value, FrameworkError> {
             Ok(payload)
         }
         fn test_extract_duration(_event: &Value) -> Option<u64> {
@@ -443,42 +442,39 @@ pub(crate) fn install_test_deps() {
         });
 
         // Register session call tracker hooks for tests.
-        fn test_init_tracker(repo_root: &std::path::Path) -> Result<(), String> {
+        fn test_init_tracker(repo_root: &std::path::Path) -> Result<(), FrameworkError> {
             let dir = repo_root.join("artifacts/current");
-            std::fs::create_dir_all(&dir).map_err(|e| format!("mkdir: {e}"))?;
+            std::fs::create_dir_all(&dir)?;
             let path = dir.join("session_call_tracker.json");
             let state = serde_json::json!({
                 "schema_version": "session-call-tracker-v1",
                 "total_calls": 0,
                 "per_tool": {},
             });
-            std::fs::write(&path, serde_json::to_string_pretty(&state).unwrap())
-                .map_err(|e| format!("write tracker: {e}"))?;
+            std::fs::write(&path, serde_json::to_string_pretty(&state).unwrap())?;
             Ok(())
         }
         fn test_record_tool_call(
             repo_root: &std::path::Path,
             tool_name: &str,
             _cache_stats: Option<&Value>,
-        ) -> Result<(), String> {
+        ) -> Result<(), FrameworkError> {
             let path = repo_root.join("artifacts/current/session_call_tracker.json");
-            let data = std::fs::read_to_string(&path).map_err(|e| format!("read tracker: {e}"))?;
-            let mut state: Value =
-                serde_json::from_str(&data).map_err(|e| format!("parse tracker: {e}"))?;
+            let data = std::fs::read_to_string(&path)?;
+            let mut state: Value = serde_json::from_str(&data)?;
             let total = state["total_calls"].as_u64().unwrap_or(0) + 1;
             state["total_calls"] = serde_json::json!(total);
             let tool_key = tool_name.to_string();
             let per_tool = state["per_tool"].as_object_mut().unwrap();
             let count = per_tool.get(&tool_key).and_then(Value::as_u64).unwrap_or(0) + 1;
             per_tool.insert(tool_key, serde_json::json!(count));
-            std::fs::write(&path, serde_json::to_string_pretty(&state).unwrap())
-                .map_err(|e| format!("write tracker: {e}"))?;
+            std::fs::write(&path, serde_json::to_string_pretty(&state).unwrap())?;
             Ok(())
         }
-        fn test_read_tracker_state(repo_root: &std::path::Path) -> Result<Value, String> {
+        fn test_read_tracker_state(repo_root: &std::path::Path) -> Result<Value, FrameworkError> {
             let path = repo_root.join("artifacts/current/session_call_tracker.json");
-            let data = std::fs::read_to_string(&path).map_err(|e| format!("read tracker: {e}"))?;
-            serde_json::from_str(&data).map_err(|e| format!("parse tracker: {e}"))
+            let data = std::fs::read_to_string(&path)?;
+            Ok(serde_json::from_str(&data)?)
         }
         hooks::register_session_call_tracker(test_init_tracker, test_record_tool_call, test_read_tracker_state);
 

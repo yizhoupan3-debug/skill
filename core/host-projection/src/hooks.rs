@@ -1117,7 +1117,7 @@ pub fn quality_gate_drive_registered() -> Option<fn(Value) -> Result<Value>> {
 
 /// Research tool dispatch: injected at startup by runtime-core
 /// to break the L3→L6 dependency direction.
-type ResearchToolDispatchFn = fn(&str, &Value) -> std::result::Result<String, String>;
+type ResearchToolDispatchFn = fn(&str, &Value) -> std::result::Result<String, FrameworkError>;
 
 // ── Session supervisor operation hook ──
 // Registered by runtime-core at startup. Allows MCP tools to call session_supervisor ops
@@ -1261,7 +1261,7 @@ pub fn inspect_trace_stream(
 // host-projection retains MCP parameter type-checking; runtime-core owns domain logic.
 
 /// Goal state manage dispatch: (args, repo_root, session_id) -> Result<String>
-type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, String>;
+type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
 static GOAL_STATE_MANAGE_DISPATCH: OnceLock<GoalStateManageDispatchFn> = OnceLock::new();
 
 pub fn register_tool_goal_state_manage_dispatch(f: GoalStateManageDispatchFn) {
@@ -1278,7 +1278,7 @@ pub fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_i
 }
 
 /// Quality gate manage dispatch: (args, repo_root, session_id) -> Result<String>
-type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, String>;
+type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
 static QUALITY_GATE_MANAGE_DISPATCH: OnceLock<QualityGateManageDispatchFn> = OnceLock::new();
 
 pub fn register_tool_quality_gate_manage_dispatch(f: QualityGateManageDispatchFn) {
@@ -1295,7 +1295,7 @@ pub fn tool_quality_gate_manage_dispatch(args: &Value, repo_root: &Path, session
 }
 
 /// Closeout record write dispatch: (args, repo_root) -> Result<String>
-type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> std::result::Result<String, String>;
+type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> std::result::Result<String, FrameworkError>;
 static CLOSEOUT_RECORD_WRITE_DISPATCH: OnceLock<CloseoutRecordWriteDispatchFn> = OnceLock::new();
 
 pub fn register_tool_closeout_record_write_dispatch(f: CloseoutRecordWriteDispatchFn) {
@@ -1312,7 +1312,7 @@ pub fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Re
 }
 
 /// Closeout gate evaluate: (args, repo_root, host_id) -> Result<String>
-type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> std::result::Result<String, String>;
+type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
 static CLOSEOUT_GATE_EVALUATE: OnceLock<CloseoutGateEvaluateFn> = OnceLock::new();
 
 pub fn register_tool_closeout_gate_evaluate(f: CloseoutGateEvaluateFn) {
@@ -1329,7 +1329,7 @@ pub fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str
 }
 
 /// Routing evolution dispatch: (args, repo_root) -> Result<String>
-type RoutingEvolutionDispatchFn = fn(&Value, &Path) -> std::result::Result<String, String>;
+type RoutingEvolutionDispatchFn = fn(&Value, &Path) -> std::result::Result<String, FrameworkError>;
 static ROUTING_EVOLUTION_DISPATCH: OnceLock<RoutingEvolutionDispatchFn> = OnceLock::new();
 
 pub fn register_tool_routing_evolution_dispatch(f: RoutingEvolutionDispatchFn) {
