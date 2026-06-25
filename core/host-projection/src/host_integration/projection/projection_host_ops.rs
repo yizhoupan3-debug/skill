@@ -7,17 +7,25 @@ use super::*;
 pub fn install_codex_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
-) -> Result<Value, String> {
+    host_id: &str,
+) -> Result<Value> {
     ensure_router_rs_installed_for_mcp_with_roots(roots)?;
-    let target = codex_entrypoint_target(roots, scope)?;
+    let target = entrypoint_target(roots, scope, host_id)?;
     let changed =
-        write_text_if_changed(&target, &render_codex_framework_entrypoint(roots, scope)?)?;
+        write_text_if_changed(&target, &render_framework_entrypoint(roots, scope, host_id)?)?;
     let mcp_changed = ensure_codex_research_mcp_toml(roots)?;
-    let prompt_entrypoints =
-        codex_prompt_entrypoints_disabled(&codex_prompt_entrypoints_root(roots, scope)?);
+    let config_dir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+    let prompt_entrypoints_root = if scope == "user" {
+        roots.host_home_root(host_id)
+            .ok_or_else(|| format!("{host_id} host must be registered in projection roots"))?
+            .clone()
+    } else {
+        roots.project_root.join(config_dir)
+    };
+    let prompt_entrypoints = codex_prompt_entrypoints_disabled(&prompt_entrypoints_root);
     let manifest_changed = write_projection_manifest(
         roots,
-        "codex",
+        host_id,
         scope,
         &[target.to_string_lossy().into_owned()],
         &[],
@@ -32,7 +40,7 @@ pub fn install_codex_projection(
         "scope": scope,
         "mcp": {
             "changed": mcp_changed,
-            "config": ".codex/config.toml",
+            "config": format!("{config_dir}/config.toml"),
         },
         "prompts": {
             "framework": {
@@ -48,21 +56,24 @@ pub fn install_codex_projection(
     }))
 }
 
-pub fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    let project_target = codex_entrypoint_target(roots, "project")?;
-    let user_target = codex_entrypoint_target(roots, "user")?;
+pub fn codex_projection_status(
+    roots: &ResolvedProjectionRoots,
+    host_id: &str,
+) -> Result<Value> {
+    let project_target = entrypoint_target(roots, "project", host_id)?;
+    let user_target = entrypoint_target(roots, "user", host_id)?;
     Ok(json!({
         "ready": managed_projection_file_exists(&project_target)? || managed_projection_file_exists(&user_target)?,
         "status": "projection-status",
         "prompts": {
             "framework": {
-                "project": projection_file_status(&project_target, "codex")?,
-                "user": projection_file_status(&user_target, "codex")?,
+                "project": projection_file_status(&project_target, host_id)?,
+                "user": projection_file_status(&user_target, host_id)?,
             }
         },
         "manifest": {
-            "project": projection_manifest_status(&projection_manifest_path(roots, "codex", "project"))?,
-            "user": projection_manifest_status(&projection_manifest_path(roots, "codex", "user"))?,
+            "project": projection_manifest_status(&projection_manifest_path(roots, host_id, "project"))?,
+            "user": projection_manifest_status(&projection_manifest_path(roots, host_id, "user"))?,
         },
         "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
     }))
@@ -71,12 +82,13 @@ pub fn codex_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value,
 pub fn install_cursor_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
-) -> Result<Value, String> {
-    let target = cursor_entrypoint_target(roots, scope)?;
+    host_id: &str,
+) -> Result<Value> {
+    let target = entrypoint_target(roots, scope, host_id)?;
     let mut managed_files = vec![target.to_string_lossy().to_string()];
     let mut managed_key_paths: Vec<String> = Vec::new();
     let mut changed =
-        write_text_if_changed(&target, &render_cursor_framework_entrypoint(roots, scope)?)?;
+        write_text_if_changed(&target, &render_framework_entrypoint(roots, scope, host_id)?)?;
     let mcp_config_path = cursor_mcp_config_path(roots)?;
     let mut mcp = json!({
         "managed": false,
@@ -107,7 +119,7 @@ pub fn install_cursor_projection(
         });
     }
     let manifest_changed =
-        write_projection_manifest(roots, "cursor", scope, &managed_files, &managed_key_paths)?;
+        write_projection_manifest(roots, host_id, scope, &managed_files, &managed_key_paths)?;
     Ok(json!({
         "status": "installed",
         "changed": changed || manifest_changed,
@@ -126,8 +138,11 @@ pub fn install_cursor_projection(
     }))
 }
 
-pub fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    let user_target = cursor_entrypoint_target(roots, "user")?;
+pub fn cursor_projection_status(
+    roots: &ResolvedProjectionRoots,
+    host_id: &str,
+) -> Result<Value> {
+    let user_target = entrypoint_target(roots, "user", host_id)?;
     let mcp_path = cursor_mcp_config_path(roots)?;
     let rules_ready = managed_projection_file_exists(&user_target)?;
     let mcp_exists = mcp_path.is_file();
@@ -152,7 +167,7 @@ pub fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value
         "error": first_error,
         "rules": {
             "framework": {
-                "user": projection_file_status(&user_target, "cursor")?,
+                "user": projection_file_status(&user_target, host_id)?,
             }
         },
         "mcp_config": {
@@ -163,7 +178,7 @@ pub fn cursor_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value
             "servers": server_status,
         },
         "manifest": {
-            "user": projection_manifest_status(&projection_manifest_path(roots, "cursor", "user"))?,
+            "user": projection_manifest_status(&projection_manifest_path(roots, host_id, "user"))?,
         },
         "hooks": {"managed": false, "reason": "not-enabled-by-framework-policy"},
         "policy": "user-scope-only",
@@ -174,11 +189,12 @@ pub fn remove_codex_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
-) -> Result<Value, String> {
-    let target = codex_entrypoint_target(roots, scope)?;
-    let manifest_path = projection_manifest_path(roots, "codex", scope);
+    host_id: &str,
+) -> Result<Value> {
+    let target = entrypoint_target(roots, scope, host_id)?;
+    let manifest_path = projection_manifest_path(roots, host_id, scope);
     let manifest_ownership =
-        projection_manifest_ownership(&manifest_path, "codex", scope, &target)?;
+        projection_manifest_ownership(&manifest_path, host_id, scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
         fs::remove_file(&target).map_err(|err| err.to_string())?;
@@ -214,11 +230,12 @@ pub fn remove_cursor_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
-) -> Result<Value, String> {
-    let target = cursor_entrypoint_target(roots, scope)?;
-    let manifest_path = projection_manifest_path(roots, "cursor", scope);
+    host_id: &str,
+) -> Result<Value> {
+    let target = entrypoint_target(roots, scope, host_id)?;
+    let manifest_path = projection_manifest_path(roots, host_id, scope);
     let manifest_ownership =
-        projection_manifest_ownership(&manifest_path, "cursor", scope, &target)?;
+        projection_manifest_ownership(&manifest_path, host_id, scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
         fs::remove_file(&target).map_err(|err| err.to_string())?;
@@ -285,25 +302,6 @@ pub fn remove_cursor_projection(
     }))
 }
 
-pub fn claude_entrypoint_target(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<PathBuf, String> {
-    if scope == "user" {
-        Ok(roots
-            .host_home_root("claude")
-            .ok_or_else(|| "claude host must be registered in projection roots".to_string())?
-            .join("rules")
-            .join("framework.md"))
-    } else {
-        Ok(roots
-            .project_root
-            .join(".claude")
-            .join("rules")
-            .join("framework.md"))
-    }
-}
-
 pub fn claude_project_narrative_path(roots: &ResolvedProjectionRoots) -> PathBuf {
     roots.project_root.join(".claude").join("CLAUDE.md")
 }
@@ -311,14 +309,16 @@ pub fn claude_project_narrative_path(roots: &ResolvedProjectionRoots) -> PathBuf
 pub fn claude_settings_target(
     roots: &ResolvedProjectionRoots,
     scope: &str,
-) -> Result<PathBuf, String> {
+    host_id: &str,
+) -> Result<PathBuf> {
     if scope == "user" {
         Ok(roots
-            .host_home_root("claude")
-            .ok_or_else(|| "claude host must be registered in projection roots".to_string())?
+            .host_home_root(host_id)
+            .ok_or_else(|| format!("{host_id} host must be registered in projection roots"))?
             .join("settings.json"))
     } else {
-        Ok(roots.project_root.join(".claude").join("settings.json"))
+        let dotdir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
+        Ok(roots.project_root.join(format!("{dotdir}/settings.json")))
     }
 }
 
@@ -372,15 +372,15 @@ pub(super) const ALL_HOOK_EVENTS: &[&str] = &[
     "SubagentStop",
 ];
 
-pub fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value, String> {
+pub fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value> {
     let mut root = match existing {
         Some(Value::Object(map)) => map,
-        Some(_) => return Err("Claude settings root must be a JSON object".to_string()),
+        Some(_) => return Err("Claude settings root must be a JSON object".to_string().into()),
         None => Map::new(),
     };
     let mut hooks = match root.remove("hooks") {
         Some(Value::Object(map)) => map,
-        Some(_) => return Err("Claude settings `hooks` must be a JSON object".to_string()),
+        Some(_) => return Err("Claude settings `hooks` must be a JSON object".to_string().into()),
         None => Map::new(),
     };
     for &event in ALL_HOOK_EVENTS {
@@ -396,13 +396,13 @@ pub fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value, Str
     Ok(Value::Object(root))
 }
 
-pub fn install_claude_settings_hooks(settings_path: &Path) -> Result<bool, String> {
+pub fn install_claude_settings_hooks(settings_path: &Path) -> Result<bool> {
     let existing = read_json_if_exists(settings_path)?;
     let merged = merge_claude_settings_hooks(existing)?;
     write_json_if_changed(settings_path, &merged)
 }
 
-pub fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+pub fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<bool> {
     let dest = roots.project_root.join(".claude/router-rs-hook.env");
     if dest.is_file() {
         return Ok(false);
@@ -429,11 +429,12 @@ pub fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Res
 pub fn install_claude_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
-) -> Result<Value, String> {
-    let target = claude_entrypoint_target(roots, scope)?;
-    let settings_path = claude_settings_target(roots, scope)?;
+    host_id: &str,
+) -> Result<Value> {
+    let target = entrypoint_target(roots, scope, host_id)?;
+    let settings_path = claude_settings_target(roots, scope, host_id)?;
     let changed =
-        write_text_if_changed(&target, &render_claude_framework_entrypoint(roots, scope)?)?;
+        write_text_if_changed(&target, &render_framework_entrypoint(roots, scope, host_id)?)?;
     let narrative_changed = if scope == "project" {
         write_text_if_changed(
             &claude_project_narrative_path(roots),
@@ -475,7 +476,7 @@ pub fn install_claude_projection(
     )?);
     let manifest_changed = write_projection_manifest(
         roots,
-        "claude",
+        host_id,
         scope,
         &manifest_files,
         &manifest_key_paths,
@@ -507,23 +508,26 @@ pub fn install_claude_projection(
     }))
 }
 
-pub fn claude_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    let project_target = claude_entrypoint_target(roots, "project")?;
-    let user_target = claude_entrypoint_target(roots, "user")?;
-    let project_settings = claude_settings_target(roots, "project")?;
-    let user_settings = claude_settings_target(roots, "user")?;
+pub fn claude_projection_status(
+    roots: &ResolvedProjectionRoots,
+    host_id: &str,
+) -> Result<Value> {
+    let project_target = entrypoint_target(roots, "project", host_id)?;
+    let user_target = entrypoint_target(roots, "user", host_id)?;
+    let project_settings = claude_settings_target(roots, "project", host_id)?;
+    let user_settings = claude_settings_target(roots, "user", host_id)?;
     Ok(json!({
         "ready": managed_projection_file_exists(&project_target)? || managed_projection_file_exists(&user_target)?,
         "status": "projection-status",
         "prompts": {
             "framework": {
-                "project": projection_file_status(&project_target, "claude")?,
-                "user": projection_file_status(&user_target, "claude")?,
+                "project": projection_file_status(&project_target, host_id)?,
+                "user": projection_file_status(&user_target, host_id)?,
             }
         },
         "manifest": {
-            "project": projection_manifest_status(&projection_manifest_path(roots, "claude", "project"))?,
-            "user": projection_manifest_status(&projection_manifest_path(roots, "claude", "user"))?,
+            "project": projection_manifest_status(&projection_manifest_path(roots, host_id, "project"))?,
+            "user": projection_manifest_status(&projection_manifest_path(roots, host_id, "user"))?,
         },
         "hooks": {
             "project": claude_settings_hook_status(&project_settings)?,
@@ -536,12 +540,13 @@ pub fn remove_claude_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
-) -> Result<Value, String> {
-    let target = claude_entrypoint_target(roots, scope)?;
-    let settings_path = claude_settings_target(roots, scope)?;
-    let manifest_path = projection_manifest_path(roots, "claude", scope);
+    host_id: &str,
+) -> Result<Value> {
+    let target = entrypoint_target(roots, scope, host_id)?;
+    let settings_path = claude_settings_target(roots, scope, host_id)?;
+    let manifest_path = projection_manifest_path(roots, host_id, scope);
     let manifest_ownership =
-        projection_manifest_ownership(&manifest_path, "claude", scope, &target)?;
+        projection_manifest_ownership(&manifest_path, host_id, scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
         fs::remove_file(&target).map_err(|err| err.to_string())?;
@@ -613,7 +618,7 @@ pub struct AgentSettingsRemoval {
 pub fn remove_claude_settings_hooks(
     settings_path: &Path,
     dry_run: bool,
-) -> Result<AgentSettingsRemoval, String> {
+) -> Result<AgentSettingsRemoval> {
     let Some(Value::Object(mut root)) = read_json_if_exists(settings_path)? else {
         return Ok(AgentSettingsRemoval::default());
     };
@@ -673,77 +678,8 @@ pub fn remove_claude_settings_hooks(
 }
 
 // ── HostProjectionOps trait implementations ──
+// Generated by build.rs from configs/framework/RUNTIME_REGISTRY.json
 
 use super::projection_ops_trait::HostProjectionOps;
 
-pub struct CursorProjectionOps;
-
-impl HostProjectionOps for CursorProjectionOps {
-    fn host_id(&self) -> &'static str { "cursor" }
-
-    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
-        install_cursor_projection(roots, scope)
-    }
-
-    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-        cursor_projection_status(roots)
-    }
-
-    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {
-        remove_cursor_projection(roots, scope, dry_run)
-    }
-}
-
-pub struct ClaudeProjectionOps;
-
-impl HostProjectionOps for ClaudeProjectionOps {
-    fn host_id(&self) -> &'static str { "claude" }
-
-    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
-        install_claude_projection(roots, scope)
-    }
-
-    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-        claude_projection_status(roots)
-    }
-
-    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {
-        remove_claude_projection(roots, scope, dry_run)
-    }
-}
-
-pub struct OpencodeProjectionOps;
-
-impl HostProjectionOps for OpencodeProjectionOps {
-    fn host_id(&self) -> &'static str { "opencode" }
-
-    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
-        install_opencode_projection(roots, scope)
-    }
-
-    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-        opencode_projection_status(roots)
-    }
-
-    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {
-        remove_opencode_projection(roots, scope, dry_run)
-    }
-}
-
-pub struct CodexProjectionOps;
-
-impl HostProjectionOps for CodexProjectionOps {
-    fn host_id(&self) -> &'static str { "codex" }
-
-    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {
-        install_codex_projection(roots, scope)
-    }
-
-    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-        codex_projection_status(roots)
-    }
-
-    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {
-        remove_codex_projection(roots, scope, dry_run)
-    }
-}
+include!(concat!(env!("OUT_DIR"), "/generated_projection_ops_structs.rs"));

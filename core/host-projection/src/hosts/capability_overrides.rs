@@ -8,31 +8,15 @@
 
 // ── build_driver_args ──────────────────────────────────────────────────────
 
-/// Build driver CLI args for hosts with custom resume/prompt syntax.
-/// Returns `None` for hosts that don't override (cursor, opencode),
-/// matching the trait default.
-pub fn host_build_driver_args(
-    host_id: &str,
-    cwd: &str,
-    prompt: Option<&str>,
-    resume_target: Option<&str>,
-    resume_mode: &str,
-    resume_only: bool,
-) -> Option<(Vec<String>, String)> {
-    match host_id {
-        "claude" => Some(build_claude_args(cwd, prompt, resume_target, resume_mode, resume_only)),
-        "codex" => Some(build_codex_args(cwd, prompt, resume_target, resume_mode, resume_only)),
-        _ => None,
-    }
-}
-
-fn build_claude_args(
+/// Build driver CLI args for claude host.
+/// Called directly from build.rs generated code (no central dispatch).
+pub fn build_claude_driver_args(
     _cwd: &str,
     prompt: Option<&str>,
     resume_target: Option<&str>,
     _resume_mode: &str,
     resume_only: bool,
-) -> (Vec<String>, String) {
+) -> Option<(Vec<String>, String)> {
     let mut args = vec!["--print".to_string()];
     if resume_only {
         if let Some(target) = resume_target {
@@ -44,16 +28,18 @@ fn build_claude_args(
         args.push(p.to_string());
     }
     let shell_cmd = format!("claude {}", args.join(" "));
-    (args, shell_cmd)
+    Some((args, shell_cmd))
 }
 
-fn build_codex_args(
+/// Build driver CLI args for codex host.
+/// Called directly from build.rs generated code (no central dispatch).
+pub fn build_codex_driver_args(
     cwd: &str,
     prompt: Option<&str>,
     resume_target: Option<&str>,
     resume_mode: &str,
     resume_only: bool,
-) -> (Vec<String>, String) {
+) -> Option<(Vec<String>, String)> {
     let mut args = vec!["-C".to_string(), cwd.to_string()];
     if resume_only {
         args.push("resume".to_string());
@@ -70,5 +56,5 @@ fn build_codex_args(
         args.push(p.to_string());
     }
     let shell_cmd = format!("codex {}", args.join(" "));
-    (args, shell_cmd)
+    Some((args, shell_cmd))
 }

@@ -1,5 +1,4 @@
 use super::*;
-use core_policy::error::FrameworkError;
 
 // ── Sub-modules (split for file size ≤2000 lines) ──
 mod projection_bootstrap;
@@ -11,7 +10,7 @@ pub use projection_host_ops::*;
 pub use projection_manifest::*;
 
 /// Load managed MCP server IDs from RUNTIME_REGISTRY.json.
-pub fn registry_managed_mcp_server_ids(framework_root: &Path) -> Result<Vec<String>, String> {
+pub fn registry_managed_mcp_server_ids(framework_root: &Path) -> Result<Vec<String>> {
     let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
     Ok(registry
         .get("managed_mcp_servers")
@@ -41,7 +40,7 @@ pub fn host_router_rs_framework_payload(
 }
 
 /// Resolve host install_tool label from RUNTIME_REGISTRY for MCP payload construction.
-pub fn registry_host_install_tool(framework_root: &Path, host_id: &str) -> Result<String, String> {
+pub fn registry_host_install_tool(framework_root: &Path, host_id: &str) -> Result<String> {
     let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
     registry
         .get("host_targets")
@@ -70,7 +69,7 @@ pub fn validate_mcp_servers_from_json(
     let managed_servers = match registry_managed_mcp_server_ids(&roots.framework_root) {
         Ok(ids) => ids,
         Err(err) => {
-            return (server_status, false, Some(err));
+            return (server_status, false, Some(err.to_string()));
         }
     };
 
@@ -121,11 +120,11 @@ pub fn validate_mcp_servers_from_json(
                 Err(err) => {
                     all_valid = false;
                     if first_error.is_none() {
-                        first_error = Some(err.clone());
+                        first_error = Some(err.to_string());
                     }
                     server_status.insert(
                         server_id.to_string(),
-                        json!({"binary_valid": false, "error": err}),
+                        json!({"binary_valid": false, "error": err.to_string()}),
                     );
                 }
             }
@@ -177,7 +176,7 @@ pub fn mcp_json_upsert_servers(
     path: &Path,
     format: McpConfigFormat,
     entries: &[(&str, Value)],
-) -> Result<bool, FrameworkError> {
+) -> Result<bool> {
     let McpConfigFormat::Json { top_level_key } = format else {
         return Err(FrameworkError::config(
             "mcp_json_upsert_servers called with non-JSON format",
@@ -216,9 +215,9 @@ pub fn mcp_json_remove_servers(
     path: &Path,
     framework_root: &Path,
     format: McpConfigFormat,
-) -> Result<bool, String> {
+) -> Result<bool> {
     let McpConfigFormat::Json { top_level_key } = format else {
-        return Err("mcp_json_remove_servers called with non-JSON format".to_string());
+        return Err("mcp_json_remove_servers called with non-JSON format".to_string().into());
     };
     let Some(mut payload) = read_json_if_exists(path)? else {
         return Ok(false);
@@ -246,7 +245,7 @@ pub fn mcp_json_remove_servers(
 pub fn mcp_json_managed_key_paths(
     framework_root: &Path,
     format: McpConfigFormat,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>> {
     let McpConfigFormat::Json { top_level_key } = format else {
         return Ok(vec![]);
     };
@@ -261,7 +260,7 @@ pub fn install_native_integration(
     home_config_path: &Path,
     bootstrap_output_dir: Option<&Path>,
     install_default_bootstrap: bool,
-) -> Result<Value, String> {
+) -> Result<Value> {
     let repo_root = normalize_path(repo_root)?;
     let home_config_path = normalize_path(home_config_path)?;
     let bootstrap_output_dir = bootstrap_output_dir.map(normalize_path).transpose()?;
@@ -296,15 +295,13 @@ pub fn install_native_integration(
 pub fn projection_install_command(
     command: ProjectionCommand,
     compatibility_alias: bool,
-) -> Result<Value, String> {
+) -> Result<Value> {
+    let host_homes = command.parsed_host_homes();
     let roots = resolve_projection_roots(
         command.framework_root.as_deref(),
         command.project_root.as_deref(),
         command.artifact_root.as_deref(),
-        command.codex_home.as_deref(),
-        command.cursor_home.as_deref(),
-        command.claude_home.as_deref(),
-        command.opencode_home.as_deref(),
+        &host_homes,
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -320,15 +317,13 @@ pub fn projection_install_command(
     projection_envelope("install", compatibility_alias, &roots, Some(scope), results)
 }
 
-pub fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value, String> {
+pub fn projection_status_command(command: ProjectionStatusCommand) -> Result<Value> {
+    let host_homes = command.parsed_host_homes();
     let roots = resolve_projection_roots(
         command.framework_root.as_deref(),
         command.project_root.as_deref(),
         command.artifact_root.as_deref(),
-        command.codex_home.as_deref(),
-        command.cursor_home.as_deref(),
-        command.claude_home.as_deref(),
-        command.opencode_home.as_deref(),
+        &host_homes,
         command.home.as_deref(),
     )?;
     let mut results = Map::new();
@@ -343,11 +338,11 @@ pub fn projection_status_command(command: ProjectionStatusCommand) -> Result<Val
 pub fn projection_remove_command(
     command: ProjectionCommand,
     compatibility_alias: bool,
-) -> Result<Value, String> {
+) -> Result<Value> {
     projection_remove_or_cleanup_command(command, compatibility_alias, false)
 }
 
-pub fn projection_cleanup_command(command: ProjectionCommand) -> Result<Value, String> {
+pub fn projection_cleanup_command(command: ProjectionCommand) -> Result<Value> {
     projection_remove_or_cleanup_command(command, false, true)
 }
 
@@ -355,15 +350,13 @@ pub fn projection_remove_or_cleanup_command(
     command: ProjectionCommand,
     compatibility_alias: bool,
     cleanup_mode: bool,
-) -> Result<Value, String> {
+) -> Result<Value> {
+    let host_homes = command.parsed_host_homes();
     let roots = resolve_projection_roots(
         command.framework_root.as_deref(),
         command.project_root.as_deref(),
         command.artifact_root.as_deref(),
-        command.codex_home.as_deref(),
-        command.cursor_home.as_deref(),
-        command.claude_home.as_deref(),
-        command.opencode_home.as_deref(),
+        &host_homes,
         command.home.as_deref(),
     )?;
     let scope = canonical_scope(&command.scope)?;
@@ -391,7 +384,7 @@ pub fn validate_cleanup_scope(
     scope: &str,
     tools: &[String],
     cleanup_mode: bool,
-) -> Result<(), String> {
+) -> Result<()> {
     if !cleanup_mode || scope != "user" {
         return Ok(());
     }
@@ -400,14 +393,14 @@ pub fn validate_cleanup_scope(
             .map(|a| a.host_id())
             .unwrap_or(tool);
         let env_var = format!("{}_HOME", host_id.to_uppercase().replace('-', "_"));
-        // Check: --home flag, host-specific --<host>-home CLI arg, or $HOST_HOME env var.
+        // Check: --home flag, --host-home override, or $HOST_HOME env var.
         let host_cli_home_set = command.host_home_is_set(host_id);
         let explicit_home =
             command.home.is_some() || host_cli_home_set || std::env::var_os(&env_var).is_some();
         if !explicit_home {
             return Err(format!(
-                "user-scope cleanup for {tool} requires explicit host-home resolution; pass --codex-home/--cursor-home/--claude-home, --home, or the matching host HOME environment variable"
-            ));
+                "user-scope cleanup for {tool} requires explicit host-home resolution; pass --host-home <host_id>=<path>, --home, or the matching host HOME environment variable"
+            ).into());
         }
     }
     Ok(())
@@ -419,7 +412,7 @@ pub fn projection_envelope(
     roots: &ResolvedProjectionRoots,
     scope: Option<&str>,
     results: Map<String, Value>,
-) -> Result<Value, String> {
+) -> Result<Value> {
     let pairs = framework_kernel::framework_host_targets::host_id_and_skills_install_tool_pairs(
         &roots.framework_root,
     )?;
@@ -456,7 +449,7 @@ pub fn projection_envelope(
 pub fn resolved_roots_payload(
     roots: &ResolvedProjectionRoots,
     pairs: &[(String, String)],
-) -> Result<Value, String> {
+) -> Result<Value> {
     let mut host_home_roots = serde_json::Map::new();
     let registry =
         framework_kernel::runtime_registry::load_runtime_registry_json(&roots.framework_root)?;
@@ -484,7 +477,7 @@ pub fn selected_projection_tools(
     raw_tools: &[String],
     default_all: bool,
     scope: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>> {
     if raw_tools.is_empty() && default_all {
         return default_projection_tools_for_scope(framework_root, scope);
     }
@@ -508,7 +501,7 @@ pub fn selected_projection_tools(
         return Err(format!(
             "projection command requires --to <tool> or --to all. Supported tools: {}",
             known.join(", ")
-        ));
+        ).into());
     }
     Ok(selected)
 }
@@ -516,7 +509,7 @@ pub fn selected_projection_tools(
 pub fn default_projection_tools_for_scope(
     framework_root: &Path,
     scope: &str,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>> {
     let mut tools = registry_projection_tools(framework_root)?;
     if canonical_scope(scope)? == "project" {
         // Exclude hosts whose projection is user-scope only (registry: `install_scopes: ["user"]`).
@@ -526,13 +519,17 @@ pub fn default_projection_tools_for_scope(
 }
 
 
-pub fn opencode_config_path(roots: &ResolvedProjectionRoots, scope: &str) -> PathBuf {
+pub fn opencode_config_path(
+    roots: &ResolvedProjectionRoots,
+    scope: &str,
+    host_id: &str,
+) -> PathBuf {
     if scope == "user" {
         roots
             .account_home_root
             .join(".config/opencode/opencode.json")
     } else {
-        let dotdir = framework_kernel::runtime_registry::host_private_config_dir("opencode");
+        let dotdir = framework_kernel::runtime_registry::host_private_config_dir(host_id);
         roots.project_root.join(format!("{dotdir}/opencode.json"))
     }
 }
@@ -567,9 +564,10 @@ pub fn browser_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
 pub fn install_opencode_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
-) -> Result<Value, String> {
+    host_id: &str,
+) -> Result<Value> {
     ensure_router_rs_installed_for_mcp_with_roots(roots)?;
-    let config_path = opencode_config_path(roots, scope);
+    let config_path = opencode_config_path(roots, scope, host_id);
     let config_dir = config_path.parent().ok_or_else(|| {
         format!(
             "cannot determine parent directory of {}",
@@ -597,7 +595,7 @@ pub fn install_opencode_projection(
         .ok_or_else(|| "mcpServers must be an object".to_string())?;
     let framework_payload = host_router_rs_framework_payload(
         roots,
-        "opencode",
+        host_id,
         "Framework snapshot, skill routing, goal/closeout gating (MCP advisory for interactive)",
     );
     let framework_changed = entries.get("router-rs-framework") != Some(&framework_payload);
@@ -610,7 +608,7 @@ pub fn install_opencode_projection(
     write_json_if_changed(&config_path, &payload)?;
     let changed = framework_changed || browser_changed || paperplain_changed || codegraph_changed;
 
-    let manifest_dir = projection_manifest_path(roots, "opencode", scope);
+    let manifest_dir = projection_manifest_path(roots, host_id, scope);
     if let Some(parent) = manifest_dir.parent() {
         std::fs::create_dir_all(parent)
             .map_err(|err| format!("failed to create {}: {err}", parent.display()))?;
@@ -619,7 +617,7 @@ pub fn install_opencode_projection(
         mcp_json_managed_key_paths(&roots.framework_root, McpConfigFormat::JSON_CAMEL_CASE)?;
     let manifest_changed = write_projection_manifest(
         roots,
-        "opencode",
+        host_id,
         scope,
         &[projection_manifest_file_ref(roots, &config_path)],
         &manifest_key_paths,
@@ -635,15 +633,18 @@ pub fn install_opencode_projection(
             "changed": changed,
         },
         "projection_manifest": {
-            "path": projection_manifest_path(roots, "opencode", scope).to_string_lossy(),
+            "path": projection_manifest_path(roots, host_id, scope).to_string_lossy(),
             "changed": manifest_changed,
         },
     }))
 }
 
-pub fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Result<Value, String> {
-    let project_path = opencode_config_path(roots, "project");
-    let user_path = opencode_config_path(roots, "user");
+pub fn opencode_projection_status(
+    roots: &ResolvedProjectionRoots,
+    host_id: &str,
+) -> Result<Value> {
+    let project_path = opencode_config_path(roots, "project", host_id);
+    let user_path = opencode_config_path(roots, "user", host_id);
     let project_exists = project_path.is_file();
     let user_exists = user_path.is_file();
 
@@ -667,8 +668,8 @@ pub fn opencode_projection_status(roots: &ResolvedProjectionRoots) -> Result<Val
             "servers": server_status,
         },
         "projection_manifest": {
-            "project_scope": projection_manifest_path(roots, "opencode", "project").exists(),
-            "user_scope": projection_manifest_path(roots, "opencode", "user").exists(),
+            "project_scope": projection_manifest_path(roots, host_id, "project").exists(),
+            "user_scope": projection_manifest_path(roots, host_id, "user").exists(),
         },
     }))
 }
@@ -677,8 +678,9 @@ pub fn remove_opencode_projection(
     roots: &ResolvedProjectionRoots,
     scope: &str,
     dry_run: bool,
-) -> Result<Value, String> {
-    let config_path = opencode_config_path(roots, scope);
+    host_id: &str,
+) -> Result<Value> {
+    let config_path = opencode_config_path(roots, scope, host_id);
 
     let mut config_removed = false;
     if config_path.is_file() && !dry_run {
@@ -689,7 +691,7 @@ pub fn remove_opencode_projection(
         )?;
     }
 
-    let manifest_path = projection_manifest_path(roots, "opencode", scope);
+    let manifest_path = projection_manifest_path(roots, host_id, scope);
     let manifest_removed = if manifest_path.is_file() && !dry_run {
         std::fs::remove_file(&manifest_path).is_ok()
     } else {
@@ -706,7 +708,7 @@ pub fn remove_opencode_projection(
     }))
 }
 
-pub fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, String> {
+pub fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>> {
     let pairs = framework_kernel::framework_host_targets::installable_host_id_and_skills_install_tool_pairs(
         framework_root,
     )?;
@@ -726,19 +728,19 @@ pub fn registry_projection_tools(framework_root: &Path) -> Result<Vec<String>, S
     Ok(tools)
 }
 
-pub fn canonical_scope(scope: &str) -> Result<&'static str, String> {
+pub fn canonical_scope(scope: &str) -> Result<&'static str> {
     match scope.trim().to_lowercase().as_str() {
         "" | "project" | "project-local" => Ok("project"),
         "user" => Ok("user"),
         other => Err(format!(
             "Unsupported scope: {other}. Supported scopes: project user"
-        )),
+        ).into()),
     }
 }
 
 /// Returns the effective scope for a tool: user-scope-only hosts always return "user",
 /// others defer to the requested scope. Reads `install_scopes` from RUNTIME_REGISTRY.
-pub fn projection_scope_for_tool(tool: &str, scope: &str) -> Result<&'static str, String> {
+pub fn projection_scope_for_tool(tool: &str, scope: &str) -> Result<&'static str> {
     if tool_force_user_scope(tool) {
         let _ = canonical_scope(scope)?;
         return Ok("user");
@@ -757,9 +759,9 @@ pub fn install_projection_tool(
     roots: &ResolvedProjectionRoots,
     tool: &str,
     scope: &str,
-) -> Result<Value, String> {
+) -> Result<Value> {
     if tool.contains("..") || tool.contains('/') || tool.contains('\\') {
-        return Err(format!("Invalid tool name: {}", tool));
+        return Err(format!("Invalid tool name: {}", tool).into());
     }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
     projection_ops_trait::projection_ops_for_tool(tool)
@@ -770,7 +772,7 @@ pub fn install_projection_tool(
 pub fn projection_tool_status(
     roots: &ResolvedProjectionRoots,
     tool: &str,
-) -> Result<Value, String> {
+) -> Result<Value> {
     projection_ops_trait::projection_ops_for_tool(tool)
         .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
         .status(roots)
@@ -781,7 +783,7 @@ pub fn remove_projection_tool(
     tool: &str,
     scope: &str,
     dry_run: bool,
-) -> Result<Value, String> {
+) -> Result<Value> {
     let effective_scope = projection_scope_for_tool(tool, scope)?;
     projection_ops_trait::projection_ops_for_tool(tool)
         .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
@@ -820,7 +822,7 @@ pub fn lifecycle_paragraph_for_host(
 
 pub fn load_host_projection_narrative(
     framework_root: &Path,
-) -> Result<HostProjectionNarrative, String> {
+) -> Result<HostProjectionNarrative> {
     let path = framework_root.join("configs/framework/host_projection_narrative.json");
     let raw = fs::read_to_string(&path)
         .map_err(|err| format!("read host projection narrative {}: {err}", path.display()))?;
@@ -836,7 +838,7 @@ pub fn load_host_projection_narrative(
             narrative.schema_version,
             path.display(),
             HOST_PROJECTION_NARRATIVE_SCHEMA_VERSION
-        ));
+        ).into());
     }
     Ok(narrative)
 }
@@ -850,7 +852,7 @@ fn skills_runtime_rel_path(framework_root: &Path) -> String {
 fn framework_entrypoint_render_context(
     roots: &ResolvedProjectionRoots,
     host_label: &str,
-) -> Result<(HostProjectionNarrative, String), String> {
+) -> Result<(HostProjectionNarrative, String)> {
     let narrative = load_host_projection_narrative(&roots.framework_root).map_err(|err| {
         format!(
             "host projection narrative must load before rendering {host_label} entrypoint: {err}"
@@ -866,7 +868,7 @@ fn framework_entrypoint_common_footer(runtime_rel: &str) -> String {
     )
 }
 
-pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Result<String, String> {
+pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Result<String> {
     let narrative = load_host_projection_narrative(&roots.framework_root).map_err(|err| {
         format!(
             "host projection narrative must load before rendering claude project narrative: {err}"
@@ -911,18 +913,6 @@ pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Resul
     ))
 }
 
-pub fn render_claude_framework_entrypoint(
-    roots: &ResolvedProjectionRoots,
-    scope: &str,
-) -> Result<String, String> {
-    let (narrative, runtime_rel) = framework_entrypoint_render_context(roots, "claude")?;
-    Ok(format!(
-        "---\ndescription: Route framework tasks through the Rust-owned shared core.\n---\n\n<!-- managed_by: skill-framework -->\n<!-- projection_id: framework-root-entrypoint -->\n<!-- host_projection: claude -->\n<!-- logical_entrypoint: framework -->\n<!-- framework_schema_version: {FRAMEWORK_PROJECTION_SCHEMA_VERSION} -->\n<!-- install_scope: {scope} -->\n\nUse this repository's shared framework runtime.\n\n{gsd}\n\n{review}\n\n{footer}",
-        gsd = lifecycle_paragraph_for_host(&narrative, "claude"),
-        review = narrative.review_findings_only_paragraph,
-        footer = framework_entrypoint_common_footer(&runtime_rel),
-    ))
-}
 
 pub fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path) -> String {
     path.strip_prefix(&roots.project_root)
@@ -930,7 +920,7 @@ pub fn projection_manifest_file_ref(roots: &ResolvedProjectionRoots, path: &Path
         .unwrap_or_else(|_| path.to_string_lossy().into_owned())
 }
 
-pub fn claude_settings_hook_status(path: &Path) -> Result<Value, String> {
+pub fn claude_settings_hook_status(path: &Path) -> Result<Value> {
     let payload = read_json_if_exists(path)?;
     let mut managed_events = Vec::new();
     if let Some(Value::Object(root)) = payload.as_ref()
@@ -993,7 +983,7 @@ pub fn codegraph_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
 }
 
 /// Project-root `.mcp.json` with all four shared MCP servers (gitignored; materialized on host install).
-pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Result<bool> {
     let path = roots.project_root.join(".mcp.json");
     let mut payload = read_json_if_exists(&path)?.unwrap_or_else(|| json!({}));
     if !payload.is_object() {
@@ -1035,7 +1025,7 @@ pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Resu
 }
 
 /// Remove all managed MCP entries from project-root `.mcp.json`.
-pub fn remove_project_mcp_json_entries(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+pub fn remove_project_mcp_json_entries(roots: &ResolvedProjectionRoots) -> Result<bool> {
     let path = roots.project_root.join(".mcp.json");
     mcp_json_remove_servers(&path, &roots.framework_root, McpConfigFormat::JSON_CAMEL_CASE)
 }
@@ -1082,7 +1072,7 @@ fn upsert_codex_mcp_toml_section(
     server_id: &str,
     command: &str,
     args: &[&str],
-) -> Result<bool, String> {
+) -> Result<bool> {
     let marker = codex_mcp_managed_marker(server_id);
     let block = format!(
         "{marker}\n{}",
@@ -1121,7 +1111,7 @@ fn upsert_codex_mcp_toml_section(
 }
 
 /// Codex reads MCP from project `.codex/config.toml` (`mcp_servers.*` sections).
-pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result<bool> {
     let path = roots.project_root.join(".codex/config.toml");
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -1193,7 +1183,7 @@ pub fn ensure_codex_research_mcp_toml(roots: &ResolvedProjectionRoots) -> Result
 }
 
 /// Remove all managed MCP TOML sections from `.codex/config.toml`.
-pub fn remove_codex_mcp_toml_entries(roots: &ResolvedProjectionRoots) -> Result<bool, String> {
+pub fn remove_codex_mcp_toml_entries(roots: &ResolvedProjectionRoots) -> Result<bool> {
     let path = roots.project_root.join(".codex/config.toml");
     let managed_server_ids = registry_managed_mcp_server_ids(&roots.framework_root)?;
     let existing = read_text_if_exists(&path)?.unwrap_or_default();

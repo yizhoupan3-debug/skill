@@ -1,6 +1,6 @@
 use super::*;
 
-pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
+pub fn run_host_integration_payload(cli: Cli) -> Result<Value> {
     let payload = match cli.command {
         Commands::ExportRuntimeRegistry { repo_root } => {
             let framework_root = resolve_framework_root(repo_root.as_deref())?;
@@ -82,14 +82,20 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
         } => {
             let _ = (bootstrap_output_dir, skip_default_bootstrap);
             let selected = install_skills_projection_tools(&command, &tools, &to);
+            // Convert old per-host fields to host_homes for the new ProjectionCommand
+            let host_homes: Vec<String> = [
+                ("codex", codex_home),
+                ("cursor", cursor_home),
+                ("claude", claude_home),
+                ("opencode", opencode_home),
+            ].iter().filter_map(|(id, path_opt)| {
+                path_opt.as_ref().map(|p| format!("{}={}", id, p.display()))
+            }).collect();
             let projection_command = ProjectionCommand {
                 framework_root: repo_root,
                 project_root,
                 artifact_root,
-                codex_home,
-                cursor_home,
-                claude_home,
-                opencode_home,
+                host_homes,
                 home,
                 scope,
                 to: selected,
@@ -99,14 +105,12 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
             let has_selected_targets = !projection_command.to.is_empty();
             match normalized_command.as_str() {
                 "status" | "ls" if !has_selected_targets => {
+                    let host_homes = projection_command.host_homes.clone();
                     projection_status_command(ProjectionStatusCommand {
                         framework_root: projection_command.framework_root.clone(),
                         project_root: projection_command.project_root.clone(),
                         artifact_root: projection_command.artifact_root.clone(),
-                        codex_home: projection_command.codex_home.clone(),
-                        cursor_home: projection_command.cursor_home.clone(),
-                        claude_home: projection_command.claude_home.clone(),
-                        opencode_home: projection_command.opencode_home.clone(),
+                        host_homes,
                         home: projection_command.home.clone(),
                     })?
                 }
@@ -140,7 +144,7 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
     Ok(payload)
 }
 
-pub fn normalize_path(path: &Path) -> Result<PathBuf, String> {
+pub fn normalize_path(path: &Path) -> Result<PathBuf> {
     let combined = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -179,7 +183,7 @@ pub fn try_framework_root_from_current_exe() -> Option<PathBuf> {
     framework_root_from_executable_path(&exe)
 }
 
-pub fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf, String> {
+pub fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf> {
     if let Some(path) = explicit {
         return normalize_path(path);
     }
@@ -208,13 +212,13 @@ pub fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf, String
     )
 }
 
-pub fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<PathBuf, String> {
+pub fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<PathBuf> {
     let root = resolve_framework_root(explicit)?;
     if !is_framework_root(&root) {
         return Err(format!(
             "stale or missing framework_root: {}. Repair by passing --framework-root pointing at the framework checkout containing configs/framework/RUNTIME_REGISTRY.json and core/router-rs/Cargo.toml",
             root.display()
-        ));
+        ).into());
     }
     Ok(root)
 }
@@ -222,7 +226,7 @@ pub fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<Path
 pub fn resolve_project_root(
     explicit: Option<&Path>,
     framework_root: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf> {
     if let Some(path) = explicit {
         return normalize_path(path);
     }
@@ -241,13 +245,13 @@ pub fn resolve_project_root(
     if is_framework_root(framework_root) && cwd.starts_with(framework_root) {
         return normalize_path(framework_root);
     }
-    Err("missing project_root; pass --project-root or set SKILL_PROJECT_ROOT".to_string())
+    Err("missing project_root; pass --project-root or set SKILL_PROJECT_ROOT".to_string().into())
 }
 
 pub fn normalize_discovered_project_root(
     candidate: &Path,
     framework_root: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf> {
     let candidate = normalize_path(candidate)?;
     let framework_root = normalize_path(framework_root)?;
     if is_framework_root(&candidate) && candidate != framework_root {
@@ -255,7 +259,7 @@ pub fn normalize_discovered_project_root(
             "ambiguous project_root discovery: {} looks like a framework checkout but does not match framework_root {}. Pass both --framework-root and --project-root explicitly",
             candidate.display(),
             framework_root.display()
-        ));
+        ).into());
     }
     Ok(candidate)
 }
@@ -263,7 +267,7 @@ pub fn normalize_discovered_project_root(
 pub fn resolve_artifact_root(
     explicit: Option<&Path>,
     framework_root: &Path,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf> {
     if let Some(path) = explicit {
         return normalize_path(path);
     }
@@ -276,7 +280,7 @@ pub fn resolve_artifact_root(
 pub fn resolve_maint_roots(
     framework_root: Option<&Path>,
     artifact_root: Option<&Path>,
-) -> Result<(PathBuf, PathBuf), String> {
+) -> Result<(PathBuf, PathBuf)> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
     Ok((framework_root, artifact_root))
@@ -364,7 +368,7 @@ pub fn mcp_router_rs_command_value(command: &McpRouterRsCommand) -> Value {
 
 pub fn ensure_router_rs_installed_for_mcp_with_roots(
     roots: &ResolvedProjectionRoots,
-) -> Result<(), String> {
+) -> Result<()> {
     if matches!(
         resolve_mcp_router_rs_command(&roots.framework_root),
         McpRouterRsCommand::CargoBootstrap
@@ -491,10 +495,10 @@ pub fn codegraph_mcp_cargo_bootstrap_args(framework_root: &Path, repo_root: &str
     ]
 }
 
-pub fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> Result<(), String> {
+pub fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> Result<()> {
     if cmd == "cargo" {
         if which::which("cargo").is_err() {
-            return Err("Cargo is not found on system PATH".to_string());
+            return Err("Cargo is not found on system PATH".to_string().into());
         }
         return Ok(());
     }
@@ -508,17 +512,17 @@ pub fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> 
     }
     let path = Path::new(cmd);
     if !path.is_file() {
-        return Err(format!("MCP executable binary '{cmd}' is missing on disk"));
+        return Err(format!("MCP executable binary '{cmd}' is missing on disk").into());
     }
     if is_ephemeral_executable_path(cmd) {
         return Err(format!(
             "MCP executable '{cmd}' points at an ephemeral build path; run `router-rs self install` then `framework host-integration install --to <host>`"
-        ));
+        ).into());
     }
     if framework_root.is_some_and(|root| is_repo_build_executable_path(cmd, root)) {
         return Err(format!(
             "MCP executable '{cmd}' points at a repo build artifact; run `router-rs self install` then `framework host-integration install --to <host>`"
-        ));
+        ).into());
     }
     Ok(())
 }
@@ -528,7 +532,7 @@ pub fn resolve_host_home(
     shared_home: Option<&Path>,
     env_var: &str,
     default_leaf: &str,
-) -> Result<PathBuf, String> {
+) -> Result<PathBuf> {
     if let Some(path) = explicit {
         return normalize_path(path);
     }
@@ -545,12 +549,9 @@ pub fn resolve_projection_roots(
     framework_root: Option<&Path>,
     project_root: Option<&Path>,
     artifact_root: Option<&Path>,
-    codex_home: Option<&Path>,
-    cursor_home: Option<&Path>,
-    claude_home: Option<&Path>,
-    opencode_home: Option<&Path>,
+    host_homes: &[(String, PathBuf)],
     shared_home: Option<&Path>,
-) -> Result<ResolvedProjectionRoots, String> {
+) -> Result<ResolvedProjectionRoots> {
     let framework_root = resolve_projection_framework_root(framework_root)?;
     let project_root = resolve_project_root(project_root, &framework_root)?;
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
@@ -564,14 +565,9 @@ pub fn resolve_projection_roots(
     let host_home_roots = {
         let mut m = BTreeMap::new();
         // Map explicit CLI overrides by host_id for lookup
-        let explicit_overrides: std::collections::HashMap<&str, Option<&Path>> = [
-            ("codex", codex_home),
-            ("cursor", cursor_home),
-            ("claude", claude_home),
-            ("opencode", opencode_home),
-        ]
-        .into_iter()
-        .collect();
+        // Hosts not in `host_homes` have no entry — same as None in the old per-host scheme.
+        let explicit_overrides: std::collections::HashMap<&str, Option<&Path>> =
+            host_homes.iter().map(|(id, path)| (id.as_str(), Some(path.as_path()))).collect();
         for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
             let env_var = framework_kernel::runtime_registry::home_env_var(host_id);
             let default_leaf = framework_kernel::runtime_registry::host_private_config_dir(host_id);

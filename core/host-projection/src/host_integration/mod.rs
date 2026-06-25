@@ -1,5 +1,6 @@
 use chrono::Local;
 use clap::{Parser, Subcommand};
+use core_policy::error::FrameworkError;
 use framework_kernel::repo_roots::{framework_root_from_executable_path, is_framework_root};
 use framework_kernel::runtime_registry::{load_runtime_registry, load_runtime_registry_payload};
 use serde::Deserialize;
@@ -11,6 +12,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+
+type Result<T> = std::result::Result<T, FrameworkError>;
 
 const CONFIG_SCHEMA_HEADER: &str =
     "#:schema https://developers.openai.com/codex/config-schema.json\n";
@@ -182,14 +185,9 @@ pub struct ProjectionCommand {
     project_root: Option<PathBuf>,
     #[arg(long)]
     artifact_root: Option<PathBuf>,
-    #[arg(long)]
-    codex_home: Option<PathBuf>,
-    #[arg(long)]
-    cursor_home: Option<PathBuf>,
-    #[arg(long)]
-    claude_home: Option<PathBuf>,
-    #[arg(long)]
-    opencode_home: Option<PathBuf>,
+    /// Per-host home overrides as `<host_id>=<path>`, e.g. `--host-home cursor=~/.cursor`.
+    #[arg(long = "host-home")]
+    host_homes: Vec<String>,
     #[arg(long)]
     home: Option<PathBuf>,
     #[arg(long, default_value = DEFAULT_PROJECT_SCOPE)]
@@ -201,15 +199,17 @@ pub struct ProjectionCommand {
 }
 
 impl ProjectionCommand {
-    /// Check if the host-specific home CLI argument is set for a given `host_id`.
+    /// Check if a host-specific home override is present in the --host-home vec.
     pub fn host_home_is_set(&self, host_id: &str) -> bool {
-        match host_id {
-            "claude" => self.claude_home.is_some(),
-            "codex" => self.codex_home.is_some(),
-            "cursor" => self.cursor_home.is_some(),
-            "opencode" => self.opencode_home.is_some(),
-            _ => false,
-        }
+        let prefix = format!("{}=", host_id);
+        self.host_homes.iter().any(|h| h.starts_with(&prefix))
+    }
+
+    /// Parse `--host-home` pairs into `(host_id, path)` tuples.
+    pub fn parsed_host_homes(&self) -> Vec<(String, PathBuf)> {
+        self.host_homes.iter().filter_map(|s| {
+            s.split_once('=').map(|(id, path)| (id.to_string(), PathBuf::from(path)))
+        }).collect()
     }
 }
 
@@ -221,16 +221,20 @@ pub struct ProjectionStatusCommand {
     project_root: Option<PathBuf>,
     #[arg(long)]
     artifact_root: Option<PathBuf>,
-    #[arg(long)]
-    codex_home: Option<PathBuf>,
-    #[arg(long)]
-    cursor_home: Option<PathBuf>,
-    #[arg(long)]
-    claude_home: Option<PathBuf>,
-    #[arg(long)]
-    opencode_home: Option<PathBuf>,
+    /// Per-host home overrides as `<host_id>=<path>`, e.g. `--host-home cursor=~/.cursor`.
+    #[arg(long = "host-home")]
+    host_homes: Vec<String>,
     #[arg(long)]
     home: Option<PathBuf>,
+}
+
+impl ProjectionStatusCommand {
+    /// Parse `--host-home` pairs into `(host_id, path)` tuples.
+    pub fn parsed_host_homes(&self) -> Vec<(String, PathBuf)> {
+        self.host_homes.iter().filter_map(|s| {
+            s.split_once('=').map(|(id, path)| (id.to_string(), PathBuf::from(path)))
+        }).collect()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -240,7 +244,7 @@ pub struct ResolvedProjectionRoots {
     pub artifact_root: PathBuf,
     /// OS account home for Desktop official config paths and stable MCP binary (not `CLAUDE_HOME` parent).
     pub account_home_root: PathBuf,
-    /// Per-host home roots, keyed by host_id (e.g. "codex", "cursor", "claude", "opencode").
+    /// Per-host home roots, keyed by host_id from the runtime registry.
     pub host_home_roots: BTreeMap<String, PathBuf>,
 }
 
@@ -251,7 +255,7 @@ impl ResolvedProjectionRoots {
     }
 }
 
-pub fn run_host_integration_from_args(args: &[String]) -> Result<Value, String> {
+pub fn run_host_integration_from_args(args: &[String]) -> Result<Value> {
     let forwarded_args = if matches!(args.first().map(String::as_str), Some("--")) {
         &args[1..]
     } else {
@@ -561,10 +565,10 @@ mod tests {
             artifact_root: framework_root.join("artifacts"),
             account_home_root: home.clone(),
             host_home_roots: [
-                ("codex".into(), root.join("codex")),
-                ("cursor".into(), cursor_home.clone()),
-                ("claude".into(), root.join("claude")),
-                ("opencode".into(), root.join("opencode")),
+                ("codex".to_string().into(), root.join("codex")),
+                ("cursor".to_string().into(), cursor_home.clone()),
+                ("claude".to_string().into(), root.join("claude")),
+                ("opencode".to_string().into(), root.join("opencode")),
             ]
             .into_iter()
             .collect(),
@@ -638,14 +642,12 @@ mod tests {
         // SAFETY: test-only; the #[serial] attribute prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env("CLAUDE_HOME", &custom_claude) };
 
+        let host_homes = vec![("claude".to_string(), custom_claude.clone())];
         let roots = resolve_projection_roots(
             None,
             Some(&root.join("project")),
             None,
-            None,
-            None,
-            Some(&custom_claude),
-            None,
+            &host_homes,
             None,
         )
         .expect("resolve roots");
@@ -691,10 +693,10 @@ mod tests {
             artifact_root: project_root.join("artifacts"),
             account_home_root: home.clone(),
             host_home_roots: [
-                ("codex".into(), home.join(".codex")),
-                ("cursor".into(), home.join(".cursor")),
-                ("claude".into(), home.join(".claude")),
-                ("opencode".into(), home.join(".opencode")),
+                ("codex".to_string().into(), home.join(".codex")),
+                ("cursor".to_string().into(), home.join(".cursor")),
+                ("claude".to_string().into(), home.join(".claude")),
+                ("opencode".to_string().into(), home.join(".opencode")),
             ]
             .into_iter()
             .collect(),
@@ -738,10 +740,10 @@ mod tests {
             artifact_root: project_root.join("artifacts"),
             account_home_root: home.clone(),
             host_home_roots: [
-                ("codex".into(), home.join(".codex")),
-                ("cursor".into(), home.join(".cursor")),
-                ("claude".into(), home.join(".claude")),
-                ("opencode".into(), home.join(".opencode")),
+                ("codex".to_string().into(), home.join(".codex")),
+                ("cursor".to_string().into(), home.join(".cursor")),
+                ("claude".to_string().into(), home.join(".claude")),
+                ("opencode".to_string().into(), home.join(".opencode")),
             ]
             .into_iter()
             .collect(),
