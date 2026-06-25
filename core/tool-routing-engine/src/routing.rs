@@ -34,7 +34,7 @@ pub fn route_tool(
             crate::MAX_QUERY_LEN,
         ));
     }
-    let records = mcp_tool_registry::load_tool_records(registry_path)?;
+    let records = mcp_tool_registry::load_tool_records_cached(registry_path)?;
     Ok(route_tool_from_records(query, &records, host_id))
 }
 
@@ -283,20 +283,23 @@ pub(crate) fn score_tool(
     }
 
     // Step 6: do-not-use penalty (for deprecated tools)
+    // Always applies a base penalty to deprecated tools, plus additional
+    // penalty when the query explicitly contains "deprecated".
     if !do_not_use_tokens.is_empty() && score > 0.0 {
-        let negative_hits: Vec<&str> = query_tokens
+        let base_penalty = weights.do_not_use_penalty_per_hit;
+        let additional_hits: Vec<&str> = query_tokens
             .iter()
             .filter(|qt| do_not_use_tokens.contains(qt.as_str()))
             .map(|s| s.as_str())
             .collect();
-        if !negative_hits.is_empty() {
-            let penalty = f64::min(
-                score * weights.do_not_use_penalty_max_ratio,
-                (negative_hits.len() as f64) * weights.do_not_use_penalty_per_hit,
-            );
-            score = f64::max(0.0, score - penalty);
-            reasons.push(format!("do_not_use_penalty:{penalty:.1}"));
-        }
+        let total_penalty = base_penalty
+            + (additional_hits.len() as f64) * weights.do_not_use_penalty_per_hit;
+        let penalty = f64::min(
+            score * weights.do_not_use_penalty_max_ratio,
+            total_penalty,
+        );
+        score = f64::max(0.0, score - penalty);
+        reasons.push(format!("do_not_use_penalty:{penalty:.1}"));
     }
 
     // Step 7: Layer penalty (from externalized JSON config)
@@ -422,6 +425,22 @@ mod tests {
             assert!(d.reasons.iter().any(|r| r.contains("alias")),
                 "display name matching now produces alias_tokens reasons");
         }
+    }
+
+    #[test]
+    fn score_tool_deprecated_base_penalty_no_keyword() {
+        let weights = tool_scoring_weights();
+        let mut record = test_tool_record("old_tool", &["legacy"]);
+        record.tool_flags = vec!["deprecated".to_string()];
+        record.description = "An old deprecated tool".to_string();
+        // Query does NOT contain "deprecated" — base penalty should still fire.
+        let query_tokens = tokenize_text("old_tool legacy");
+        let (score, reasons, _) = score_tool(&record, "old_tool legacy", &query_tokens, &weights);
+        assert!(score > 0.0, "exact name should still score positively");
+        assert!(
+            reasons.iter().any(|r| r.starts_with("do_not_use_penalty:")),
+            "base do-not-use penalty should fire even without 'deprecated' keyword"
+        );
     }
 
     #[test]

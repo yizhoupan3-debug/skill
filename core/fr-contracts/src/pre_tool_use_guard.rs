@@ -418,8 +418,7 @@ fn classify_high_risk(
                 ));
             }
         }
-    let args_str = serde_json::to_string(tool_input).unwrap_or_default();
-    if let Some(reason) = dangerous_mcp_tool_reason(tool_name, &args_str) {
+    if let Some(reason) = dangerous_mcp_tool_reason(tool_name, Some(tool_input)) {
         return Ok((
             PreToolUseGuardVerdict::RequiresStdioApproval,
             Some(reason),

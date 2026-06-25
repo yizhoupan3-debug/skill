@@ -185,12 +185,7 @@ pub fn evaluate_hook_policy(
         }
         "mcp-tool-safety" => {
             let tool_name = request.tool_name.as_deref().unwrap_or("");
-            let tool_args_str = request
-                .tool_args
-                .as_ref()
-                .map(|v| serde_json::to_string(v).unwrap_or_default())
-                .unwrap_or_default();
-            response.reason = dangerous_mcp_tool_reason(tool_name, &tool_args_str);
+            response.reason = dangerous_mcp_tool_reason(tool_name, request.tool_args.as_ref());
             response.blocked = response.reason.is_some();
             if response.blocked {
                 response.categories = vec!["mcp-safety".to_string()];
@@ -752,14 +747,6 @@ const SHELL_INJECTION_PATTERNS: &[(&str, &str)] = &[
         r"\b(sh|bash)\s+<\s*\(\s*(curl|wget)\b",
         "Blocked process substitution from remote script into shell (via MCP tool args).",
     ),
-    (
-        r"(^|[;&|]\s*)git(\s+-C\s+\S+)?\s+reset\s+--hard\b",
-        "Blocked git reset --hard in MCP tool args.",
-    ),
-    (
-        r"(^|[;&|]\s*)git(\s+-C\s+\S+)?\s+push\b[^;&|]*(--force|--force-with-lease)",
-        "Blocked force push in MCP tool args.",
-    ),
 ];
 
 /// Evaluate whether an MCP tool invocation is potentially dangerous.
@@ -768,7 +755,12 @@ const SHELL_INJECTION_PATTERNS: &[(&str, &str)] = &[
 /// 1. High-risk tool names (tool-level block regardless of args).
 /// 2. Known MCP arg-value risk patterns (e.g., credential-like values in fill).
 /// 3. Shell injection patterns inside args that contain command strings.
-pub fn dangerous_mcp_tool_reason(tool_name: &str, tool_args_str: &str) -> Option<String> {
+///
+/// `tool_args` is `Option<&Value>` to enable field-scoped matching: instead of
+/// serializing the entire JSON blob and running regex against it (which would
+/// match any field, ignoring the `_field` constraint), we extract the specific
+/// field value declared by each pattern and match only against that.
+pub fn dangerous_mcp_tool_reason(tool_name: &str, tool_args: Option<&Value>) -> Option<String> {
     if tool_name.is_empty() {
         return None;
     }
@@ -783,18 +775,37 @@ pub fn dangerous_mcp_tool_reason(tool_name: &str, tool_args_str: &str) -> Option
             return Some((*reason).to_string());
         }
     }
-    // Layer 2: MCP arg-value risk patterns
-    if !tool_args_str.is_empty() {
-        for (tn_re, _field, val_re, reason) in MCP_ARG_RISK_PATTERNS {
-            if regex_is_match(tn_re, tool_name) && regex_is_match(val_re, tool_args_str) {
+    if let Some(args) = tool_args {
+        // Layer 2: MCP arg-value risk patterns — field-scoped matching
+        for (tn_re, field, val_re, reason) in MCP_ARG_RISK_PATTERNS {
+            if !regex_is_match(tn_re, tool_name) {
+                continue;
+            }
+            // Extract the specific field value; skip if field is missing or not a string.
+            let field_val = if field == &".*" {
+                // Wildcard: serialize the whole object for broad matching
+                serde_json::to_string(args).unwrap_or_default()
+            } else {
+                args.get(field)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string()
+            };
+            if regex_is_match(val_re, &field_val) {
                 return Some((*reason).to_string());
             }
         }
         // Layer 3: shell injection patterns in args
+        let args_str = serde_json::to_string(args).unwrap_or_default();
         for (pattern, reason) in SHELL_INJECTION_PATTERNS {
-            if regex_is_match(pattern, tool_args_str) {
+            if regex_is_match(pattern, &args_str) {
                 return Some((*reason).to_string());
             }
+        }
+        // Layer 3.5: dangerous bash patterns on command-like args
+        let dangerous_bash = dangerous_bash_compiled_patterns();
+        if dangerous_bash.iter().any(|(re, _)| re.is_match(&args_str)) {
+            return Some("Blocked dangerous bash command via MCP tool args.".to_string());
         }
     }
     None
