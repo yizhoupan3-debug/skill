@@ -1,14 +1,17 @@
+use core_policy::error::FrameworkError;
 use serde_json::Value;
 
 use super::types::*;
 use super::ALLOWED_VERIFICATION_STATUSES;
+
+type Result<T> = std::result::Result<T, FrameworkError>;
 
 /// Shared helper: build a blocked closeout response with the given violations.
 /// Used by both `evaluate_closeout_record_value` and its `_with_context` variant.
 fn make_blocked_closeout_response(
     task_id: &str,
     violations: Vec<CloseoutViolation>,
-) -> Result<Value, String> {
+) -> Result<Value> {
     let mut response = CloseoutEnforcementResponse {
         schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
         authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
@@ -22,7 +25,7 @@ fn make_blocked_closeout_response(
         prediction_verification: Vec::new(),
     };
     append_closeout_violations(&mut response, violations);
-    serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
+    Ok(serde_json::to_value(response)?)
 }
 
 /// Shared helper: build a parse-error closeout response.
@@ -30,7 +33,7 @@ fn make_parse_error_closeout_response(
     task_id: &str,
     violations: Vec<CloseoutViolation>,
     parse_error: String,
-) -> Result<Value, String> {
+) -> Result<Value> {
     let mut response = CloseoutEnforcementResponse {
         schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
         authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
@@ -49,11 +52,11 @@ fn make_parse_error_closeout_response(
         "block",
         format!("parse closeout record failed: {parse_error}"),
     ));
-    serde_json::to_value(response).map_err(|err| format!("serialize closeout response: {err}"))
+    Ok(serde_json::to_value(response)?)
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
+pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value> {
     // Check raw shape violations FIRST: critical issues like missing schema_version
     // are more actionable than serde's deny_unknown_fields errors, which can mask
     // the real problem when the record shape is fundamentally broken.
@@ -74,8 +77,7 @@ pub fn evaluate_closeout_record_value(payload: Value) -> Result<Value, String> {
         Ok(record) => {
             let mut response = evaluate_closeout_record(&record);
             append_closeout_violations(&mut response, raw_shape_violations);
-            serde_json::to_value(response)
-                .map_err(|err| format!("serialize closeout response: {err}"))
+            Ok(serde_json::to_value(response)?)
         }
         Err(err) => make_parse_error_closeout_response(&task_id, raw_shape_violations, err.to_string()),
     }
@@ -493,7 +495,7 @@ fn append_prediction_verification(
 pub fn evaluate_closeout_record_value_with_context(
     payload: Value,
     ctx: &CloseoutEvidenceContext,
-) -> Result<Value, String> {
+) -> Result<Value> {
     // Check raw shape violations FIRST (same rationale as evaluate_closeout_record_value).
     let raw_shape_violations =
         raw_closeout_record_shape_violations(&payload, ctx.task_id.as_deref());
@@ -513,8 +515,7 @@ pub fn evaluate_closeout_record_value_with_context(
         Ok(record) => {
             let mut response = evaluate_closeout_record_with_context(&record, ctx);
             append_closeout_violations(&mut response, raw_shape_violations);
-            serde_json::to_value(response)
-                .map_err(|err| format!("serialize closeout response: {err}"))
+            Ok(serde_json::to_value(response)?)
         }
         Err(err) => make_parse_error_closeout_response(&task_id, raw_shape_violations, err.to_string()),
     }

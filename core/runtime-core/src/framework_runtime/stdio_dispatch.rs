@@ -13,6 +13,7 @@ use fr_exec::trace_stream_io::{
     inspect_trace_stream, replay_trace_stream, write_trace_compaction_delta, write_trace_metadata,
 };
 use crate::goal_drive;
+#[cfg(feature = "l5-state")]
 use crate::background_state::handle_background_state_operation;
 use framework_extra::route_manifest_fallback::route_task_with_manifest_fallback;
 use fr_utils::stdio_op_registry::{
@@ -274,7 +275,10 @@ fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, Str
             "background control",
             framework_extra::orchestration_controller::build_background_control_response,
         ),
+        #[cfg(feature = "l5-state")]
         "background_state" => handle_background_state_operation(payload),
+        #[cfg(not(feature = "l5-state"))]
+        "background_state" => Err("background_state requires l5-state feature".to_string()),
         "session_supervisor" => handle_session_supervisor_operation(payload),
         "describe_transport" => build_trace_transport_descriptor(payload),
         "describe_handoff" => build_trace_handoff_descriptor(payload),

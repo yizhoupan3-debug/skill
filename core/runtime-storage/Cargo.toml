@@ -6,6 +6,11 @@ description = "L1 storage backends: filesystem, SQLite, in-memory, path resoluti
 [lints]
 workspace = true
 
+[features]
+default = ["l5-state"]
+# L5 运行时状态持久化（background_state 作业 FSM、会话仲裁、收割）。关闭后仅保留 L4 存储原语。
+l5-state = []
+
 [lib]
 name = "rt_storage"
 path = "src/lib.rs"

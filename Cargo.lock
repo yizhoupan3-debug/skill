@@ -1504,9 +1504,9 @@ dependencies = [
 name = "mcp-tool-registry"
 version = "0.1.0"
 dependencies = [
+ "routing-core",
  "serde",
  "serde_json",
- "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -2237,6 +2237,7 @@ dependencies = [
  "rayon",
  "regex",
  "reqwest",
+ "routing-core",
  "routing-engine",
  "runtime-core-contracts",
  "runtime-exit-gate",

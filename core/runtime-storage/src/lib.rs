@@ -7,6 +7,7 @@
 pub mod runtime_envelope_ids;
 pub mod runtime_storage;
 
+#[cfg(feature = "l5-state")]
 pub mod background_state;
 
 // Re-export runtime_storage items at the crate root for background_state convenience.

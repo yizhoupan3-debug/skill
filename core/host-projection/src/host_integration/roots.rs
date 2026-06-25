@@ -141,13 +141,23 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value, String> {
 }
 
 pub fn normalize_path(path: &Path) -> Result<PathBuf, String> {
-    if path.is_absolute() {
-        Ok(path.to_path_buf())
+    let combined = if path.is_absolute() {
+        path.to_path_buf()
     } else {
-        Ok(std::env::current_dir()
+        std::env::current_dir()
             .map_err(|err| err.to_string())?
-            .join(path))
+            .join(path)
+    };
+    // Resolve . and .. components without requiring path to exist on disk
+    let mut normalized = PathBuf::new();
+    for component in combined.components() {
+        match component {
+            std::path::Component::ParentDir => { normalized.pop(); }
+            std::path::Component::CurDir => {} // skip
+            other => normalized.push(other.as_os_str()),
+        }
     }
+    Ok(normalized)
 }
 
 pub fn try_framework_root_from_workspace_env() -> Option<PathBuf> {

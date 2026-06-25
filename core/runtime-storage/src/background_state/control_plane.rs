@@ -3,7 +3,7 @@ use crate::{
     DEFAULT_STATE_SERVICE_AUTHORITY, DEFAULT_STATE_SERVICE_PROJECTION, DEFAULT_STATE_SERVICE_ROLE,
     runtime_backend_capabilities,
 };
-use crate::runtime_storage::backend::RuntimeBackendCapabilities;
+use crate::runtime_storage::RuntimeBackendCapabilities;
 use serde_json::{Value, json};
 use std::path::Path;
 

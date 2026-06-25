@@ -21,7 +21,7 @@ fn parallel_delegation_patterns() -> &'static Vec<Regex> {
             r"(?i)(多个|多条|多路|多维|多方向|独立).*(假设|模块|方向|维度|lane|lanes)",
             r"(?i)\b(parallel|concurrent|in parallel|split lanes|split work)\b.*\b(frontend|backend|test|testing|database|security|performance|architecture|implementation|verification|worker|workers)\b",
             r"(?i)(并行|分路|分头|独立).*(lane|路线|路)",
-        ])
+        ]).unwrap_or_else(|e| panic!("compile parallel delegation patterns failed: {e}"))
     })
 }
 
@@ -65,7 +65,7 @@ fn review_override_patterns() -> &'static Vec<Regex> {
             r"(?i)不要.*子代理",
             r"(?i)不用.*子代理",
             r"(?i)(你|你自己).*(本地处理|直接处理|自己做)",
-        ])
+        ]).unwrap_or_else(|e| panic!("compile review override patterns failed: {e}"))
     })
 }
 
@@ -75,7 +75,7 @@ fn delegation_override_patterns() -> &'static Vec<Regex> {
         compile_patterns(&[
             r"(?i)no (parallel|delegation|delegating|split)",
             r"(?i)(不要|不用).*(分工|并行|分路|分头)",
-        ])
+        ]).unwrap_or_else(|e| panic!("compile delegation override patterns failed: {e}"))
     })
 }
 

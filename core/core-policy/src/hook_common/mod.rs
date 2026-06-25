@@ -53,17 +53,12 @@ pub use goal_signals::{
 // Shared utilities (used by sub-modules and external callers)
 // ────────────────────────────────────────────────────────────────
 
-#[allow(clippy::expect_used)]
-pub(crate) fn compile_patterns(patterns: &[&str]) -> Vec<Regex> {
-    patterns
-        .iter()
-        .map(|p| Regex::new(p).expect("invalid regex"))
-        .collect()
+pub(crate) fn compile_patterns(patterns: &[&str]) -> Result<Vec<Regex>, regex::Error> {
+    patterns.iter().map(|p| Regex::new(p)).collect()
 }
 
 /// Strip fenced code blocks, inline code, URLs, blockquotes, and double-quoted strings from text.
 /// Used by review_signals and goal_signals for signal detection on sanitized input.
-#[allow(clippy::expect_used)]
 pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
     // Short text fast path: avoid 5 regex replace_all passes.
     if text.len() < 200 {
@@ -76,23 +71,23 @@ pub fn strip_quoted_or_codeblock_or_url(text: &str) -> String {
     static RE_QUOTED: OnceLock<Regex> = OnceLock::new();
     let mut cleaned = text.to_string();
     cleaned = RE_FENCED
-        .get_or_init(|| Regex::new(r"(?s)```.*?```").expect("invalid regex"))
+        .get_or_init(|| Regex::new(r"(?s)```.*?```").unwrap_or_else(|e| panic!("invalid regex: {e}")))
         .replace_all(&cleaned, " ")
         .into_owned();
     cleaned = RE_INLINE
-        .get_or_init(|| Regex::new(r"`[^`\n]*`").expect("invalid regex"))
+        .get_or_init(|| Regex::new(r"`[^`\n]*`").unwrap_or_else(|e| panic!("invalid regex: {e}")))
         .replace_all(&cleaned, " ")
         .into_owned();
     cleaned = RE_URL
-        .get_or_init(|| Regex::new(r"https?://\S+").expect("invalid regex"))
+        .get_or_init(|| Regex::new(r"https?://\S+").unwrap_or_else(|e| panic!("invalid regex: {e}")))
         .replace_all(&cleaned, " ")
         .into_owned();
     cleaned = RE_BLOCKQUOTE
-        .get_or_init(|| Regex::new(r"(?m)^\s*>\s.*$").expect("invalid regex"))
+        .get_or_init(|| Regex::new(r"(?m)^\s*>\s.*$").unwrap_or_else(|e| panic!("invalid regex: {e}")))
         .replace_all(&cleaned, " ")
         .into_owned();
     RE_QUOTED
-        .get_or_init(|| Regex::new("\"[^\"\\n]*\"").expect("invalid regex"))
+        .get_or_init(|| Regex::new("\"[^\"\\n]*\"").unwrap_or_else(|e| panic!("invalid regex: {e}")))
         .replace_all(&cleaned, " ")
         .into_owned()
 }

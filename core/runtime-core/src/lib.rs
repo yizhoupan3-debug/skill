@@ -6,7 +6,9 @@
 //! Single source of truth for framework_runtime, session_supervisor, and supporting modules.
 
 // ── original four (flattened from runtime-storage) ──
-pub use rt_storage::{background_state, runtime_envelope_ids, runtime_storage};
+pub use rt_storage::{runtime_envelope_ids, runtime_storage};
+#[cfg(feature = "l5-state")]
+pub use rt_storage::background_state;
 pub use trace_runtime;
 
 // ── migrated modules (B3) ──
@@ -22,7 +24,25 @@ pub use runtime_exit_gate::{quality_gate, schema_drift};
 pub use runtime_infra::{
     kernel_bootstrap, stdio_transport, telemetry_emit,
 };
-pub use fr_exec::router_env_flags::*;
+pub use fr_exec::router_env_flags::{
+    router_rs_subagent_model_inherit_nudge_enabled,
+    router_rs_review_gate_disabled_for_host, router_rs_review_pending_cycle_max,
+    router_rs_review_spawn_first_nudge_enabled,
+    router_rs_operator_inject_globally_enabled, router_rs_pre_goal_enabled,
+    router_rs_hook_silent_enabled, router_rs_hook_outbound_context_max_bytes,
+    router_rs_pre_goal_strict_disk_enabled, router_rs_hook_state_fail_open_enabled,
+    router_rs_hook_state_lock_retries, router_rs_hook_state_file_sync_enabled,
+    router_rs_hook_state_dir_sync_enabled, router_rs_cargo_check_sync_enabled,
+    router_rs_hook_state_legacy_full_sweep_enabled, router_rs_hook_state_stale_sweep_days,
+    router_rs_hook_legacy_subtracted_events_enabled,
+    router_rs_env_enabled_default_true, router_rs_env_enabled_default_false,
+    router_rs_review_fork_context_missing_infer_false_enabled,
+    router_rs_task_ledger_flock_enabled, router_rs_hook_timing_enabled,
+    router_rs_session_call_tracker_tool_keys_max,
+    router_rs_continuity_post_tool_evidence_enabled,
+    router_rs_review_gate_stop_max_nudges_cap, router_rs_qg_max_rounds_cap,
+    router_rs_session_supervisor_real_process_smoke_enabled,
+};
 
 // ── re-exports from rt_core_contracts (remaining pure contract modules) ──
 pub use rt_core_contracts::{
@@ -230,7 +250,12 @@ fn register_runtime_contract_hooks_impl() {
         framework_goal_drive: core_state::state_manager::framework_goal_drive,
         framework_quality_gate: quality_gate::framework_quality_gate,
         handle_session_supervisor_operation: session_supervisor::handle_session_supervisor_operation,
+        #[cfg(feature = "l5-state")]
         handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
+        #[cfg(not(feature = "l5-state"))]
+        handle_background_state_operation: |_: serde_json::Value| -> Result<serde_json::Value, String> {
+            Err("background_state requires l5-state feature".to_string())
+        },
         runtime_concurrency_defaults_payload: || {
             serde_json::to_value(stdio_transport::runtime_concurrency_defaults_payload())
                 .unwrap_or_else(|e| {

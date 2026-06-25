@@ -518,8 +518,9 @@ mod tests {
                     "{host_id}: observation_host_id"
                 );
             } else {
-                // Hosts without hooks_manifest_path may still have registered_hook_events
-                // (e.g., for template-driven hooks via launcher script).
+                // Hosts without hooks_manifest_path must not have registered_hook_events.
+                // (hook events require a manifest path to be actionable; hosts that lack
+                // one should return empty events to avoid orphan configuration.)
                 assert!(
                     lifecycle.registered_hook_events().is_empty(),
                     "{host_id}: no hooks_manifest_path but has registered_hook_events"

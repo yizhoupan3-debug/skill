@@ -17,8 +17,11 @@ use core_policy::tool_safety_rules;
 use framework_kernel::runtime_registry::load_runtime_registry_json;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use core_policy::error::FrameworkError;
 use sha2::{Digest, Sha256};
 use std::path::{Component, Path};
+
+type Result<T> = std::result::Result<T, FrameworkError>;
 
 /// Schema version string for the pre-tool-use guard protocol.
 /// Use to validate response schema compatibility in callers.
@@ -126,7 +129,7 @@ pub fn host_requires_strict_pre_tool_fallback(
     host_id: &str,
     repo_root: &Path,
     has_native_hook_override: Option<bool>,
-) -> Result<bool, String> {
+) -> Result<bool> {
     let id = host_id.trim();
     // 1. HostProvider hint (highest priority after explicit overrides)
     if let Some(strict) = framework_runtime_hooks::hooks().host_provider_strict_pre_tool_fallback_hint(id) {
@@ -200,7 +203,7 @@ pub fn host_requires_strict_pre_tool_fallback(
 /// shell commands and protected-path file writes produce `RequiresStdioApproval`.
 pub fn evaluate_pre_tool_use_guard(
     request: PreToolUseGuardRequest,
-) -> Result<PreToolUseGuardResponse, String> {
+) -> Result<PreToolUseGuardResponse> {
     framework_runtime_hooks::hooks().ensure_kernel_bootstrap();
     let repo_root = request
         .repo_root
@@ -301,11 +304,10 @@ pub fn evaluate_pre_tool_use_guard(
 ///
 /// Parses the payload into [`PreToolUseGuardRequest`], evaluates, and returns the response as JSON.
 /// Use from stdio dispatch where the input is already a `serde_json::Value`.
-pub fn evaluate_pre_tool_use_guard_value(payload: Value) -> Result<Value, String> {
-    let request = serde_json::from_value::<PreToolUseGuardRequest>(payload)
-        .map_err(|err| format!("parse pre_tool_use_guard input failed: {err}"))?;
-    serde_json::to_value(evaluate_pre_tool_use_guard(request)?)
-        .map_err(|err| format!("serialize pre_tool_use_guard output failed: {err}"))
+pub fn evaluate_pre_tool_use_guard_value(payload: Value) -> Result<Value> {
+    let request: PreToolUseGuardRequest = serde_json::from_value(payload)?;
+    let response = evaluate_pre_tool_use_guard(request)?;
+    Ok(serde_json::to_value(response)?)
 }
 
 fn approve_verdict(
@@ -354,15 +356,13 @@ fn build_response(
     }
 }
 
-fn approval_digest(host_id: &str, tool_name: &str, tool_input: &Value) -> Result<String, String> {
+fn approval_digest(host_id: &str, tool_name: &str, tool_input: &Value) -> Result<String> {
     let canonical = json!({
         "host_id": host_id,
         "tool_name": tool_name,
         "tool_input": tool_input,
     });
-    let bytes = serde_json::to_vec(&canonical).map_err(|err| {
-        format!("serialize canonical Value for approval_digest failed: {err}")
-    })?;
+    let bytes = serde_json::to_vec(&canonical)?;
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     Ok(format!("sha256:{}", hex::encode(hasher.finalize())))
@@ -372,7 +372,7 @@ fn classify_high_risk(
     tool_name: &str,
     tool_input: &Value,
     repo_root: &Path,
-) -> Result<(PreToolUseGuardVerdict, Option<String>, Vec<String>), String> {
+) -> Result<(PreToolUseGuardVerdict, Option<String>, Vec<String>)> {
     let lowered = tool_name.to_ascii_lowercase();
     if is_shell_tool(&lowered)
         && let Some(command) = extract_shell_command(tool_input)

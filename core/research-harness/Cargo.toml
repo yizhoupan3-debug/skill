@@ -3,7 +3,7 @@ name = "research-harness"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
-description = "Unified research harness: paper revision loop, literature search, claims management, AIGC detection, verification, research logging, and CLI tools"
+description = "L5 unified research harness: paper revision loop, literature search, claims management, AIGC detection, verification, research logging, and CLI tools — 实际依赖 L5 host-projection，从 L3 升级"
 
 [features]
 default = ["cli"]

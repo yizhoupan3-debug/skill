@@ -2,7 +2,7 @@
 name = "runtime-infra"
 version = "0.1.0"
 edition = "2024"
-description = "L4 运行时基础设施 (env/path/time/io/sync/compute) — 依赖中含有同层 L4 crate，非纯 B0 层"
+description = "L5 运行时基础设施 (env/path/time/io/sync/compute/bootstrap) — 实际依赖 L5 host-projection/runtime-exit-gate，从 L4 升级"
 [lints]
 workspace = true
 

@@ -62,11 +62,14 @@ default = [
     "host-claude",
     "host-opencode",
     "host-codex",
+    "l5-state",
 ]
 host-cursor = []
 host-claude = []
 host-opencode = []
 host-codex = []
+# L5 运行时状态持久化（转发至 runtime-storage）。关闭后 background_state 模块不可用。
+l5-state = ["runtime-storage/l5-state"]
 # Expose test helpers for downstream crate integration tests
 test-support = ["host-projection/test-support", "runtime-core-contracts/test-support"]
 # Codegraph MCP integration (module lives in runtime-core; router-rs re-exports)
