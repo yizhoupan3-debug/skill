@@ -6,6 +6,7 @@
 //! derived from the `HostProvider` registry.
 
 
+use core_policy::error::FrameworkError;
 use hex;
 use host_projection::hosts::host_extensions::schema_drift as shared_schema_drift;
 use serde::{Deserialize, Serialize};
@@ -13,6 +14,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+type Result<T> = std::result::Result<T, FrameworkError>;
 
 pub const SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION: &str = "schema-drift-baseline-v1";
 pub const SCHEMA_DRIFT_CHECK_RESPONSE_SCHEMA_VERSION: &str = "schema-drift-check-response-v1";
@@ -88,13 +91,15 @@ pub struct SchemaDriftCheckResponse {
 pub fn resolve_task_id_for_schema_drift(
     _repo_root: &Path,
     task_id: Option<&str>,
-) -> Result<String, String> {
+) -> Result<String> {
     if let Some(id) = task_id.map(str::trim).filter(|s| !s.is_empty()) {
         core_state_utils::path_guard::safe_task_id_component(id)
             .ok_or_else(|| format!("schema-drift: invalid task_id {:?}", id))?;
         return Ok(id.to_string());
     }
-    Err("schema-drift: provide --task-id (pointer fallback removed)".to_string())
+    Err(FrameworkError::validation(
+        "schema-drift: provide --task-id (pointer fallback removed)",
+    ))
 }
 
 pub fn baseline_path(repo_root: &Path, task_id: &str) -> PathBuf {
@@ -229,7 +234,7 @@ pub fn snapshot_task_artifacts(repo_root: &Path, task_id: &str) -> TaskArtifacts
 
 // ── Baseline I/O ──
 
-pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBaseline, String> {
+pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBaseline> {
     Ok(SchemaDriftBaseline {
         schema_version: SCHEMA_DRIFT_BASELINE_SCHEMA_VERSION.to_string(),
         recorded_at: framework_kernel::time::now_iso(),
@@ -246,7 +251,7 @@ pub fn build_baseline(repo_root: &Path, task_id: &str) -> Result<SchemaDriftBase
 pub fn write_baseline(
     repo_root: &Path,
     task_id: &str,
-) -> Result<(SchemaDriftBaseline, PathBuf), String> {
+) -> Result<(SchemaDriftBaseline, PathBuf)> {
     let baseline = build_baseline(repo_root, task_id)?;
     let path = baseline_path(repo_root, task_id);
     if let Some(parent) = path.parent() {
@@ -600,6 +605,6 @@ mod tests {
         )
         .unwrap();
         let err = resolve_task_id_for_schema_drift(&repo, None).unwrap_err();
-        assert!(err.contains("provide --task-id"), "unexpected err: {err}");
+        assert!(err.to_string().contains("provide --task-id"), "unexpected err: {err}");
     }
 }

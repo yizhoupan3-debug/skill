@@ -13,6 +13,9 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use core_policy::error::FrameworkError;
+type Result<T> = std::result::Result<T, FrameworkError>;
+
 // Defaults match configs/evolution/evolution.toml [observer] section
 const DEFAULT_WINDOW_CAPACITY: usize = 256;
 const DEFAULT_REROUTE_RATE_ALERT: f32 = 0.35;
@@ -105,13 +108,13 @@ impl EvolutionObserver {
     }
 
     /// Process one JSONL journal line (file-tail / offline catch-up).
-    pub fn observe_jsonl_line(&mut self, line: &str) -> Result<(), String> {
+    pub fn observe_jsonl_line(&mut self, line: &str) -> Result<()> {
         let trimmed = line.trim();
         if trimmed.is_empty() {
             return Ok(());
         }
         let event: TelemetryEvent =
-            serde_json::from_str(trimmed).map_err(|e| format!("parse telemetry line: {e}"))?;
+            serde_json::from_str(trimmed)?;
         self.observe(&event)
     }
 
@@ -120,22 +123,16 @@ impl EvolutionObserver {
         &mut self,
         journal_path: &std::path::Path,
         offset: &mut u64,
-    ) -> Result<u32, String> {
+    ) -> Result<u32> {
         use std::io::{Read, Seek, SeekFrom};
-        let mut file = std::fs::File::open(journal_path)
-            .map_err(|e| format!("open journal {}: {e}", journal_path.display()))?;
-        let len = file
-            .metadata()
-            .map_err(|e| format!("stat journal: {e}"))?
-            .len();
+        let mut file = std::fs::File::open(journal_path)?;
+        let len = file.metadata()?.len();
         if *offset > len {
             *offset = 0;
         }
-        file.seek(SeekFrom::Start(*offset))
-            .map_err(|e| format!("seek journal: {e}"))?;
+        file.seek(SeekFrom::Start(*offset))?;
         let mut buf = String::new();
-        file.read_to_string(&mut buf)
-            .map_err(|e| format!("read journal tail: {e}"))?;
+        file.read_to_string(&mut buf)?;
         *offset = len;
         let mut seen = 0u32;
         for line in buf.lines() {
@@ -148,7 +145,7 @@ impl EvolutionObserver {
         Ok(seen)
     }
 
-    pub fn observe(&mut self, event: &TelemetryEvent) -> Result<(), String> {
+    pub fn observe(&mut self, event: &TelemetryEvent) -> Result<()> {
         self.events_seen += 1;
         match event {
             TelemetryEvent::RouteDecision {
@@ -190,7 +187,7 @@ impl EvolutionObserver {
         }
     }
 
-    fn maybe_emit_alerts(&mut self) -> Result<(), String> {
+    fn maybe_emit_alerts(&mut self) -> Result<()> {
         let mut alerts = Vec::new();
         if self.counters.route_total >= 10 {
             let rate = self.counters.route_reroute as f32 / self.counters.route_total as f32;
@@ -241,7 +238,7 @@ impl EvolutionObserver {
         }
     }
 
-    fn append_alert(&self, alert: &EvolutionAlert) -> Result<(), String> {
+    fn append_alert(&self, alert: &EvolutionAlert) -> Result<()> {
         let path = &self.config.alerts_path;
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)

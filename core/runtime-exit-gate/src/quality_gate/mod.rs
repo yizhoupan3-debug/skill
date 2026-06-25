@@ -16,6 +16,8 @@ use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+type Result<T> = std::result::Result<T, FrameworkError>;
+
 // ---- Constants ----
 pub const QUALITY_GATE_LOOP_SCHEMA_VERSION: &str = "router-rs-quality-gate-v1";
 /// Repo-relative path; keep in sync with `cursor_hooks` merge logic that surfaces this substring.
@@ -38,7 +40,7 @@ fn external_research_strict_from_loaded_state(obj: &Map<String, Value>) -> bool 
     }
 }
 
-fn normalize_verify_result(raw: &str) -> Result<String, String> {
+fn normalize_verify_result(raw: &str) -> Result<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Ok("UNKNOWN".to_string());
@@ -47,9 +49,9 @@ fn normalize_verify_result(raw: &str) -> Result<String, String> {
     if ALLOWED_VERIFY_RESULTS.iter().any(|s| *s == upper) {
         return Ok(upper);
     }
-    Err(format!(
+    Err(FrameworkError::validation(format!(
         "verify_result must be one of {ALLOWED_VERIFY_RESULTS:?} (case-insensitive), got {raw:?}"
-    ))
+    )))
 }
 
 /// EVIDENCE_INDEX 行视为「成功验证」：`success==true` 或 `exit_code==0`。
@@ -133,7 +135,7 @@ fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
         .unwrap_or_default()
 }
 
-fn value_array_or_empty(payload: &Value, key: &str) -> Result<Vec<Value>, String> {
+fn value_array_or_empty(payload: &Value, key: &str) -> Result<Vec<Value>> {
     let Some(v) = payload.get(key) else {
         return Ok(Vec::new());
     };
@@ -141,7 +143,7 @@ fn value_array_or_empty(payload: &Value, key: &str) -> Result<Vec<Value>, String
         return Ok(Vec::new());
     }
     let Some(arr) = v.as_array() else {
-        return Err(format!("{key} must be array (or null), got {v:?}"));
+        return Err(FrameworkError::validation(format!("{key} must be array (or null), got {v:?}")));
     };
     Ok(arr.clone())
 }
