@@ -97,8 +97,8 @@ fn cache() -> &'static std::sync::RwLock<Option<CacheEntry>> {
 ///
 /// First call loads from disk; subsequent calls within `CACHE_TTL_SECS` return
 /// the cached result. After the TTL expires, the next call reloads from disk.
-/// Returns `Err` on reload failure (stale cache data is preserved, so a
-/// subsequent call after the TTL will retry).
+/// On reload failure, returns stale cache data (with a warning) instead of
+/// propagating the error, so transient I/O issues don't disrupt routing.
 pub fn load_tool_records_cached(registry_path: &Path) -> Result<Vec<McpToolRecord>, String> {
     let now = Instant::now();
 
@@ -119,12 +119,26 @@ pub fn load_tool_records_cached(registry_path: &Path) -> Result<Vec<McpToolRecor
             && now.duration_since(entry.loaded_at) < Duration::from_secs(CACHE_TTL_SECS) {
                 return Ok(entry.records.clone());
             }
-        let records = load_tool_records(registry_path)?;
-        guard.replace(CacheEntry {
-            records: records.clone(),
-            loaded_at: Instant::now(),
-        });
-        Ok(records)
+        match load_tool_records(registry_path) {
+            Ok(records) => {
+                guard.replace(CacheEntry {
+                    records: records.clone(),
+                    loaded_at: Instant::now(),
+                });
+                Ok(records)
+            }
+            Err(e) => {
+                // Reload failed: return stale data if available, otherwise propagate error
+                if let Some(entry) = guard.as_ref() {
+                    tracing::warn!(
+                        "tool registry reload failed, using stale cache: {e}"
+                    );
+                    Ok(entry.records.clone())
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 }
 

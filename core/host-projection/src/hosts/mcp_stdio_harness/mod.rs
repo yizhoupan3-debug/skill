@@ -585,6 +585,7 @@ fn build_composite_tools_from_registry() -> Vec<Value> {
     records
         .iter()
         .filter(|r| r.dispatch_domain.starts_with("domain:"))
+        .filter(|r| !r.tool_flags.iter().any(|f| f == "deprecated"))
         .map(|r| {
             let mut tool = json!({
                 "name": r.slug,
