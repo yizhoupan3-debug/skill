@@ -56,11 +56,13 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value> {
             home_config_path,
             bootstrap_output_dir,
             skip_default_bootstrap,
+            host_id,
         } => install_native_integration(
             &repo_root,
             &home_config_path,
             bootstrap_output_dir.as_deref(),
             !skip_default_bootstrap,
+            &host_id,
         )?,
         Commands::InstallSkills {
             repo_root,
@@ -150,7 +152,7 @@ pub fn normalize_path(path: &Path) -> Result<PathBuf> {
 }
 
 pub fn try_framework_root_from_workspace_env() -> Option<PathBuf> {
-    for name in ["ROUTER_RS_CURSOR_WORKSPACE_ROOT", "CURSOR_WORKSPACE_ROOT"] {
+    for name in framework_kernel::runtime_registry::ALL_HOST_WORKSPACE_ROOT_ENV_VARS {
         let Some(raw) = std::env::var_os(name) else {
             continue;
         };
@@ -192,7 +194,8 @@ pub fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf> {
     }
     Err(FrameworkError::validation(
         "missing framework_root; pass --framework-root, set SKILL_FRAMEWORK_ROOT, \
-         or set ROUTER_RS_CURSOR_WORKSPACE_ROOT / CURSOR_WORKSPACE_ROOT to the framework checkout when cwd is outside the repo"
+         or set a registered host workspace root env var \
+         to the framework checkout when cwd is outside the repo"
     ))
 }
 
@@ -272,20 +275,14 @@ pub fn resolve_maint_roots(
     Ok((framework_root, artifact_root))
 }
 
-pub fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
-    let manifest = framework_root.join("core/router-rs/Cargo.toml");
+/// Run `cargo metadata` on a manifest and return its target_directory.
+fn cargo_metadata_target_dir(manifest: &Path) -> Option<PathBuf> {
     if !manifest.is_file() {
         return None;
     }
     let output = std::process::Command::new("cargo")
-        .args([
-            "metadata",
-            "--no-deps",
-            "--format-version",
-            "1",
-            "--manifest-path",
-        ])
-        .arg(&manifest)
+        .args(["metadata", "--no-deps", "--format-version", "1", "--manifest-path"])
+        .arg(manifest)
         .output()
         .ok()?;
     if !output.status.success() {
@@ -293,9 +290,14 @@ pub fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
     }
     let meta: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
     let td = meta.get("target_directory")?.as_str()?;
-    let base = PathBuf::from(td);
+    Some(PathBuf::from(td))
+}
+
+pub fn cargo_router_rs_executable(framework_root: &Path) -> Option<PathBuf> {
+    let manifest = framework_root.join("core/router-rs/Cargo.toml");
+    let td = cargo_metadata_target_dir(&manifest)?;
     for tail in ["release/router-rs-cli", "debug/router-rs-cli"] {
-        let candidate = base.join(tail);
+        let candidate = td.join(tail);
         if candidate.is_file() {
             return Some(candidate);
         }
@@ -403,27 +405,8 @@ pub fn workspace_mcp_codegraph_release_binary(framework_root: &Path) -> Option<P
         }
     }
     let manifest = framework_root.join("Cargo.toml");
-    if !manifest.is_file() {
-        return None;
-    }
-    let output = std::process::Command::new("cargo")
-        .current_dir(framework_root)
-        .args([
-            "metadata",
-            "--no-deps",
-            "--format-version",
-            "1",
-            "--manifest-path",
-        ])
-        .arg(&manifest)
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let meta: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
-    let td = meta.get("target_directory")?.as_str()?;
-    let candidate = PathBuf::from(td).join("release/mcp-codegraph");
+    let td = cargo_metadata_target_dir(&manifest)?;
+    let candidate = td.join("release/mcp-codegraph");
     if candidate.is_file() {
         Some(candidate)
     } else {

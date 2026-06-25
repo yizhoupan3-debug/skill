@@ -58,21 +58,6 @@ impl CompositeRegistry {
 }
 
 // ---------------------------------------------------------------------------
-// FrameworkTools (1 tool)
-// ---------------------------------------------------------------------------
-
-pub struct FrameworkTools;
-impl ToolHandler for FrameworkTools {
-    fn tool_names(&self) -> &[&'static str] {
-        &["framework_snapshot"]
-    }
-    fn dispatch(&self, _tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
-        // Registry already matched tool_name; FrameworkTools only registers one tool.
-        tool_framework_snapshot(args, &ctx.repo_root)
-    }
-}
-
-// ---------------------------------------------------------------------------
 // RoutingTools (5 tools)
 // ---------------------------------------------------------------------------
 
@@ -168,7 +153,7 @@ impl ToolHandler for ToolDomainTools {
 pub struct TaskCrudTools;
 impl ToolHandler for TaskCrudTools {
     fn tool_names(&self) -> &[&'static str] {
-        &["task_create", "task_list", "task_complete", "task_focus"]
+        &["task_create", "task_list", "task_complete", "task_focus", "task_chain_advance"]
     }
     fn dispatch(&self, tool_name: &str, args: &Value, ctx: &ToolCallContext) -> Result<String, String> {
         match tool_name {
@@ -176,6 +161,7 @@ impl ToolHandler for TaskCrudTools {
             "task_list" => tool_task_list(&ctx.repo_root),
             "task_complete" => tool_task_complete(args, &ctx.repo_root),
             "task_focus" => tool_task_focus(args, &ctx.repo_root),
+            "task_chain_advance" => tool_task_chain_advance(args, &ctx.repo_root),
             _ => Err(format!("TaskCrudTools: unknown tool: {tool_name}")),
         }
     }

@@ -1,6 +1,7 @@
 //! Routing evolution telemetry analysis tool handler (`domain:routing-evolution`).
 //! Reads the telemetry journal, aggregates, and reports.
 
+use core_policy::error::FrameworkError;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::io::BufRead;
@@ -25,17 +26,17 @@ struct RouteLogEntry {
 pub fn routing_evolution_dispatch(
     arguments: &Value,
     repo_root: &Path,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let operation = arguments
         .get("operation")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: operation (stats|analyze|extract|calibrate)")?;
+        .ok_or_else(|| FrameworkError::validation("Missing required argument: operation (stats|analyze|extract|calibrate)"))?;
     let skill_filter = arguments.get("skill").and_then(Value::as_str);
     let lookback_days = arguments.get("days").and_then(Value::as_u64).unwrap_or(0);
 
     let journal_path = repo_root.join("artifacts/telemetry/events.jsonl");
     if !journal_path.exists() {
-        return Err(format!("Telemetry journal not found at {}", journal_path.display()));
+        return Err(FrameworkError::validation(format!("Telemetry journal not found at {}", journal_path.display())));
     }
 
     let file = std::fs::File::open(&journal_path)
@@ -87,7 +88,7 @@ pub fn routing_evolution_dispatch(
         "analyze" => Ok(routing_analyze(&entries)),
         "extract" => Ok(routing_extract(&entries)),
         "calibrate" => Ok(routing_calibrate(&entries)),
-        _ => Err(format!("Unknown operation: {operation}. Use stats|analyze|extract|calibrate")),
+        _ => Err(FrameworkError::validation(format!("Unknown operation: {operation}. Use stats|analyze|extract|calibrate"))),
     }
 }
 

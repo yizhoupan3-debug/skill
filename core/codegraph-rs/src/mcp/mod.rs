@@ -4,10 +4,8 @@ use crate::CodeGraphIndex;
 use crate::db::node_ops::{ResolveOutcome, SymbolFilter};
 use anyhow::Context;
 use serde_json::{Value, json};
-use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::time::Instant;
-use tracing;
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "mcp-codegraph";
@@ -29,40 +27,16 @@ pub fn prepare_index(
 
 pub fn run_stdio_mcp(repo_root: &Path) -> anyhow::Result<()> {
     let (index, _watcher) = prepare_index(repo_root)?;
-    let stdin = io::stdin();
-    let mut stdout = io::stdout();
-    for line in stdin.lock().lines() {
-        let line = match line {
-            Ok(line) => line,
-            Err(err) => {
-                tracing::error!("codegraph MCP stdin read error: {err}");
-                break;
-            }
-        };
-        if line.trim().is_empty() {
-            continue;
-        }
-        let request: Value = match serde_json::from_str(&line) {
-            Ok(value) => value,
-            Err(err) => {
-                let response = json!({
-                    "jsonrpc": "2.0",
-                    "id": null,
-                    "error": {"code": -32700, "message": format!("Parse error: {err}")},
-                });
-                writeln!(stdout, "{}", serde_json::to_string(&response)?)?;
-                stdout.flush()?;
-                continue;
-            }
-        };
-        if let Some(response) = handle_request(&request, &index) {
-            writeln!(stdout, "{}", serde_json::to_string(&response)?)?;
-            stdout.flush()?;
-        }
-    }
-    Ok(())
+    mcp_stdio_common::stdio_server::run_stdio_mcp(
+        repo_root,
+        "mcp-codegraph",
+        tool_definitions,
+        |name, args| dispatch_tool_call(&json!({"name": name, "arguments": args}), &index),
+    )
 }
 
+/// JSON-RPC method dispatcher shared by the stdio loop.
+#[allow(dead_code)]
 fn handle_request(request: &Value, index: &CodeGraphIndex) -> Option<Value> {
     let id = request.get("id").cloned();
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");

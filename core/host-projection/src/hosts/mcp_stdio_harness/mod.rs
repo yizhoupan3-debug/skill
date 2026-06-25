@@ -76,19 +76,7 @@ fn task_artifact_dir(repo_root: &Path, task_id: Option<&str>) -> PathBuf {
     }
 }
 
-/// Cache entry for framework_snapshot responses (30 second TTL).
-struct SnapshotCache {
-    content: String,
-    expires_at: Instant,
-}
-
-impl SnapshotCache {
-    fn is_valid(&self) -> bool {
-        Instant::now() < self.expires_at
-    }
-}
-
-/// Rate limiter state for tool call frequency control.
+/// Task view cache: path → (resolved_view, last_access).
 pub struct RateLimiter {
     last_call: HashMap<String, Instant>,
     min_interval: Duration,
@@ -126,7 +114,6 @@ type TaskViewCacheEntry = (core_state::task_state::ResolvedTaskView, Instant);
 /// Task view cache: path → (resolved_view, last_access).
 type TaskViewCache = HashMap<PathBuf, TaskViewCacheEntry>;
 
-static SNAPSHOT_CACHE: OnceLock<Arc<std::sync::RwLock<Option<SnapshotCache>>>> = OnceLock::new();
 static TASK_VIEW_CACHE: OnceLock<Arc<std::sync::RwLock<TaskViewCache>>> = OnceLock::new();
 static RATE_LIMITER: OnceLock<Arc<std::sync::Mutex<RateLimiter>>> = OnceLock::new();
 
@@ -194,7 +181,6 @@ pub(super) fn dispatch_tool(
     static REGISTRY: OnceLock<CompositeRegistry> = OnceLock::new();
     let registry = REGISTRY.get_or_init(|| {
         let mut r = CompositeRegistry::new();
-        r.register(FrameworkTools);
         r.register(RoutingTools);
         r.register(LifecycleTools);
         r.register(InfraTools);
@@ -224,10 +210,6 @@ pub(super) fn dispatch_tool(
     }
 }
 
-fn get_snapshot_cache() -> &'static Arc<std::sync::RwLock<Option<SnapshotCache>>> {
-    SNAPSHOT_CACHE.get_or_init(|| Arc::new(std::sync::RwLock::new(None)))
-}
-
 fn get_task_view_cache() -> &'static Arc<
     std::sync::RwLock<HashMap<PathBuf, (core_state::task_state::ResolvedTaskView, Instant)>>,
 > {
@@ -252,12 +234,6 @@ pub fn reset_rate_limiter_for_test() {
         && let Ok(mut guard) = limiter.lock() {
             guard.last_call.clear();
         }
-}
-
-/// Get snapshot cache TTL from environment variable.
-/// Default: 30 seconds. Env: ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS
-fn snapshot_cache_ttl_secs() -> u64 {
-    env_cache_typed!(u64, "ROUTER_RS_DESKTOP_SNAPSHOT_CACHE_TTL_SECS", 30)
 }
 
 /// Maximum number of entries in the TASK_VIEW_CACHE to prevent unbounded memory growth.
@@ -948,12 +924,6 @@ pub fn tool_quality_gate_manage_test_helper(
     result
 }
 
-#[cfg(any(test, feature = "test-support"))]
-pub fn get_snapshot_ttl_for_test() -> u64 {
-    snapshot_cache_ttl_secs()
-}
-
-#[cfg(any(test, feature = "test-support"))]
 pub fn get_task_view_ttl_for_test() -> u64 {
     task_view_cache_ttl_secs()
 }
@@ -1004,21 +974,15 @@ mod tests {
         let response = handle_tools_list(Some(json!(1)));
         let tools = response["result"]["tools"].as_array().expect("tools array");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
-        // Minimum tools that should always be present: 5 research + 4 task = 9.
-        assert!(names.len() >= 9, "expected at least 9 tools, got {}: {:?}", names.len(), names);
-        // Composite tools load from MCP_TOOL_REGISTRY.json. If hooks aren't
-        // registered (test mode), composite tools may be absent. Only check
-        // research + task tools unconditionally.
+        // Minimum built-in tools (task CRUD). Composite tools from registry
+        // may not load in test mode without hooks.
+        assert!(names.len() >= 5, "expected at least 5 tools, got {}: {:?}", names.len(), names);
         let always_present = &[
-            "research_aigc_check",
-            "research_aigc_humanize",
-            "research_review_dimensions",
-            "research_claim_drift",
-            "research_review_loop",
             "task_create",
             "task_list",
             "task_complete",
             "task_focus",
+            "task_chain_advance",
         ];
         for tool in always_present {
             assert!(names.contains(tool), "missing tool: {tool}");

@@ -339,3 +339,43 @@ pub fn ensure_task_directory(
     }
     Ok(task_dir)
 }
+
+/// Read the STEP_BUDGET.json for a task, returning `(used, max)`.
+pub fn read_task_budget(repo_root: &Path, task_id: &str) -> Option<(u64, u64)> {
+    let path = repo_root
+        .join("artifacts/current")
+        .join(task_id)
+        .join("STEP_BUDGET.json");
+    if !path.is_file() {
+        return None;
+    }
+    let raw = std::fs::read_to_string(&path).ok()?;
+    let v: Value = serde_json::from_str(&raw).ok()?;
+    Some((v["used"].as_u64()?, v["max"].as_u64()?))
+}
+
+/// Increment the step counter in STEP_BUDGET.json.
+/// If the file doesn't exist, creates it with `used=1, max=0` (unlimited).
+/// Returns `Err` when `max > 0 && used > max` (budget exceeded).
+pub fn increment_step_budget(repo_root: &Path, task_id: &str) -> Result<(), String> {
+    let path = repo_root
+        .join("artifacts/current")
+        .join(task_id)
+        .join("STEP_BUDGET.json");
+    let mut budget = if path.is_file() {
+        let raw =
+            std::fs::read_to_string(&path).map_err(|e| format!("read STEP_BUDGET.json: {e}"))?;
+        serde_json::from_str::<Value>(&raw)
+            .map_err(|e| format!("parse STEP_BUDGET.json: {e}"))?
+    } else {
+        json!({"used": 0, "max": 0})
+    };
+    let used = budget["used"].as_u64().unwrap_or(0) + 1;
+    budget["used"] = json!(used);
+    let max = budget["max"].as_u64().unwrap_or(0);
+    write_atomic_json(&path, &budget)?;
+    if max > 0 && used > max {
+        return Err("step budget exceeded".to_string());
+    }
+    Ok(())
+}

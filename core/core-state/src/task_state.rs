@@ -40,24 +40,6 @@ fn depth_score_mode_is_strict() -> bool {
     }
 }
 
-fn depth_compliance_hint_enabled() -> bool {
-    #[cfg(not(test))]
-    {
-        static CACHED: OnceLock<bool> = OnceLock::new();
-        *CACHED.get_or_init(|| {
-            std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT")
-                .map(|v| v.trim() == "1")
-                .unwrap_or(false)
-        })
-    }
-    #[cfg(test)]
-    {
-        std::env::var("ROUTER_RS_DEPTH_COMPLIANCE_HINT")
-            .map(|v| v.trim() == "1")
-            .unwrap_or(false)
-    }
-}
-
 pub const RESOLVED_TASK_VIEW_SCHEMA_VERSION: &str = "router-rs-resolved-task-view-v1";
 
 /// When present in [`ResolvedTaskView::resolution_notes`], `active_task.json` resolves to a task
@@ -75,10 +57,6 @@ pub const RESOLUTION_NOTE_ACTIVE_GOAL_NOT_DRIVING_FOCUS_DRIVES: &str =
 
 pub const RESOLUTION_NOTE_DUAL_GOAL_POINTER_CONFLICT: &str =
     "continuity:dual_goal_pointer_conflict";
-
-/// Suffix for [`depth_compliance_refresh_hint`] when `ROUTER_RS_DEPTH_SCORE_MODE` is not `strict`
-/// yet structured external-research rounds are present advisory counters only for the third depth point.
-pub const DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH: &str = " · legacy第三分不含「仅外研结构化轮次」；d3需GOAL checkpoint或RFV对抗轮，或设ROUTER_RS_DEPTH_SCORE_MODE=strict";
 
 /// Zh line appended to Codex continuity digest and Cursor SessionStart when
 /// [`task_view_has_active_goal_focus_mismatch_note`] is true (same bytes as legacy digest string).
@@ -675,42 +653,6 @@ pub fn resolve_task_view_with_pointers(
     }
 }
 
-/// One-line hint for continuity digest / Codex SessionStart (`Continuity digest` prompt).
-/// Omitted when no resolved `task_id` (idle). Keeps copy short for ~640-char caps.
-pub fn depth_compliance_refresh_hint(view: &ResolvedTaskView) -> Option<String> {
-    if !depth_compliance_hint_enabled()
-    {
-        return None;
-    }
-    let tid = view.task_id.as_deref()?.trim();
-    if tid.is_empty() {
-        return None;
-    }
-    let dc = view.depth_compliance.as_ref()?;
-    let mut out = format!("深度信号: d{}/3", dc.depth_score);
-    if dc.qg_pass_without_evidence_count > 0 {
-        out.push_str(&format!(
-            " · PASS无对照证据={}",
-            dc.qg_pass_without_evidence_count
-        ));
-    }
-    if dc.qg_external_deep_structured_round_count > 0 {
-        out.push_str(&format!(
-            " · 结构化外研轮次={}",
-            dc.qg_external_deep_structured_round_count
-        ));
-    }
-    if dc.qg_external_strict_ok_round_count > 0 {
-        out.push_str(&format!(
-            " · 外研strict通过轮次={}",
-            dc.qg_external_strict_ok_round_count
-        ));
-    }
-    if dc.qg_external_deep_structured_round_count > 0 && !depth_score_mode_is_strict() {
-        out.push_str(DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH);
-    }
-    Some(out)
-}
 
 /// Parse `GOAL_STATE.completion_gates`. Missing / null → **off** (no gate). Object with
 /// `"enabled": false` → parsed but [`validate_goal_completion_gates`] is a no-op.
@@ -844,7 +786,6 @@ mod tests {
         assert_eq!(v.task_id, None);
         assert!(matches!(v.control_mode, TaskControlMode::Idle));
         assert!(!v.resolution_notes.is_empty());
-        assert!(depth_compliance_refresh_hint(&v).is_none());
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -891,10 +832,7 @@ mod tests {
         let ev = v.evidence.as_ref().expect("evidence");
         assert!(!ev.evidence_rows_non_empty);
         assert!(!ev.has_successful_verification);
-        let hint = depth_compliance_refresh_hint(&v).expect("hint");
-        assert!(hint.contains("深度信号") && hint.contains("d0/3"));
-        assert!(
-            !v.resolution_notes.iter().any(|n| {
+        assert!(!v.resolution_notes.iter().any(|n| {
                 n.starts_with(super::RESOLUTION_NOTE_ACTIVE_GOAL_MISSING_FOCUS_HAS_GOAL)
             }),
             "unexpected focus-has-goal note when active has GOAL: {:?}",
@@ -1215,30 +1153,6 @@ mod tests {
         let dc = v.depth_compliance.as_ref().expect("dc");
         assert_eq!(dc.qg_external_deep_structured_round_count, 1);
 
-        let hint = depth_compliance_refresh_hint(&v).expect("hint");
-        assert!(hint.contains("结构化外研轮次=1"));
-        assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
-
-        match prior_depth {
-            Some(p) => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) }
-            }
-            None => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") }
-            }
-        }
-        match prior_hint {
-            Some(p) => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) }
-            }
-            None => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") }
-            }
-        }
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -1276,8 +1190,7 @@ mod tests {
         .unwrap();
 
         let v = resolve_task_view(&tmp, Some(tid));
-        let hint = depth_compliance_refresh_hint(&v).expect("hint");
-        assert!(!hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
+        let _ = fs::remove_dir_all(&tmp);
 
         match prior {
             Some(p) => {
@@ -1356,30 +1269,6 @@ mod tests {
         assert_eq!(dc.qg_external_deep_structured_round_count, 1);
         assert_eq!(dc.qg_external_strict_ok_round_count, 1);
 
-        let hint = depth_compliance_refresh_hint(&v).expect("hint");
-        assert!(hint.contains("外研strict通过轮次=1"));
-        assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
-
-        match prior_depth {
-            Some(p) => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) }
-            }
-            None => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") }
-            }
-        }
-        match prior_hint {
-            Some(p) => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) }
-            }
-            None => {
-                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
-                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") }
-            }
-        }
         let _ = fs::remove_dir_all(&tmp);
     }
 

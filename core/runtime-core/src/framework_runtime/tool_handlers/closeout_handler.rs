@@ -1,6 +1,7 @@
 //! Closeout tool handlers (`domain:closeout`).
 //! closeout_record_write (file I/O + evaluation) and closeout_gate_evaluate.
 
+use core_policy::error::FrameworkError;
 use serde_json::{json, Map, Value};
 use std::path::Path;
 
@@ -8,24 +9,24 @@ use std::path::Path;
 pub fn closeout_record_write_dispatch(
     arguments: &Value,
     repo_root: &Path,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let task_id = arguments
         .get("task_id")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: task_id")?;
+        .ok_or_else(|| FrameworkError::validation("Missing required argument: task_id"))?;
     let summary = arguments
         .get("summary")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: summary")?;
+        .ok_or_else(|| FrameworkError::validation("Missing required argument: summary"))?;
     let verification_status = arguments
         .get("verification_status")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: verification_status")?;
+        .ok_or_else(|| FrameworkError::validation("Missing required argument: verification_status"))?;
     match verification_status {
         "passed" | "failed" | "partial" | "not_run" => {}
-        _ => return Err(format!(
+        _ => return Err(FrameworkError::validation(format!(
             "Invalid verification_status: {verification_status}. Must be one of: passed, failed, partial, not_run"
-        )),
+        ))),
     }
 
     let mut record = Map::new();
@@ -91,7 +92,7 @@ pub fn closeout_record_write_dispatch(
         "violations": violations,
     });
 
-    serde_json::to_string_pretty(&result).map_err(|e| format!("serialize closeout result failed: {e}"))
+    Ok(serde_json::to_string_pretty(&result).map_err(|e| format!("serialize closeout result failed: {e}"))?)
 }
 
 /// closeout_gate_evaluate: multi-source closeout readiness evaluation.
@@ -99,7 +100,7 @@ pub fn closeout_gate_evaluate(
     arguments: &Value,
     repo_root: &Path,
     host_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let task_id_override = arguments
         .get("task_id")
         .and_then(Value::as_str)
@@ -188,7 +189,7 @@ pub fn closeout_gate_evaluate(
     };
 
     let formatted = format!("[Closeout Gate] {verdict_label}\n\n{}", findings.join("\n"));
-    serde_json::to_string(&json!({"result": formatted})).map_err(|e| e.to_string())
+    Ok(serde_json::to_string(&json!({"result": formatted})).map_err(|e| e.to_string())?)
 }
 
 /// Minimal check: does the goal mention review-related work?

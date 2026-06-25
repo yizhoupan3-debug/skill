@@ -31,6 +31,7 @@ tree-sitter-typescript = "0.23"
 tracing.workspace = true
 rayon.workspace = true
 sha2.workspace = true
+mcp-stdio-common = { path = "../../rust_tools/mcp-stdio-common" }
 
 [features]
 default = []

@@ -39,21 +39,6 @@ pub fn host_router_rs_framework_payload(
     )
 }
 
-/// Resolve host install_tool label from RUNTIME_REGISTRY for MCP payload construction.
-pub fn registry_host_install_tool(framework_root: &Path, host_id: &str) -> Result<String> {
-    let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
-    Ok(registry
-        .get("host_targets")
-        .and_then(|t| t.get("metadata"))
-        .and_then(|m| m.get(host_id))
-        .and_then(|h| h.get("install_tool"))
-        .and_then(Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| {
-            format!("host {host_id} not found in RUNTIME_REGISTRY.host_targets.metadata")
-        })?)
-}
-
 /// Shared MCP server binary validation loop.
 /// Reads managed server IDs from registry, validates each server's binary from the given JSON config.
 /// `mcp_servers_key` is the JSON key containing server entries (e.g. "mcp_servers" for Cursor, "mcpServers" for OpenCode).
@@ -156,10 +141,6 @@ pub enum McpConfigFormat {
 }
 
 impl McpConfigFormat {
-    /// Cursor uses `mcp_servers` (underscore).
-    pub const CURSOR: Self = Self::Json {
-        top_level_key: "mcp_servers",
-    };
     /// JSON config with camelCase `mcpServers` key (Claude, OpenCode, `.mcp.json`).
     pub const JSON_CAMEL_CASE: Self = Self::Json {
         top_level_key: "mcpServers",
@@ -260,6 +241,7 @@ pub fn install_native_integration(
     home_config_path: &Path,
     bootstrap_output_dir: Option<&Path>,
     install_default_bootstrap: bool,
+    host_id: &str,
 ) -> Result<Value> {
     let repo_root = normalize_path(repo_root)?;
     let home_config_path = normalize_path(home_config_path)?;
@@ -268,15 +250,15 @@ pub fn install_native_integration(
     let created_config = ensure_config_file(&home_config_path)?;
     let hooks_disabled_changed = ensure_hooks_feature_disabled(&home_config_path)?;
     let tui_changed = ensure_tui_status_line(&home_config_path)?;
-    let home_codex_dir = home_config_path
+    let home_config_dir = home_config_path
         .parent()
         .map(Path::to_path_buf)
         .unwrap_or_else(|| {
             default_home_dir().join(
-                framework_kernel::runtime_registry::host_private_config_dir("codex"),
+                framework_kernel::runtime_registry::host_private_config_dir(host_id),
             )
         });
-    let prompt_entrypoints = prompt_entrypoints_disabled(&home_codex_dir);
+    let prompt_entrypoints = prompt_entrypoints_disabled(&home_config_dir);
     let default_bootstrap = if install_default_bootstrap {
         ensure_default_bootstrap(&repo_root, bootstrap_output_dir.as_deref())?
     } else {
@@ -287,7 +269,7 @@ pub fn install_native_integration(
         "success": true,
         "repo_root": repo_root.to_string_lossy(),
         "home_config_path": home_config_path.to_string_lossy(),
-        "codex_prompt_entrypoints": prompt_entrypoints,
+        "prompt_entrypoints": prompt_entrypoints,
         "created_config": created_config,
         "hooks_enabled": false,
         "hooks_disabled_changed": hooks_disabled_changed,
@@ -691,16 +673,16 @@ pub fn load_host_projection_narrative(
     Ok(narrative)
 }
 
-pub fn render_project_narrative(roots: &ResolvedProjectionRoots) -> Result<String> {
+pub fn render_project_narrative(roots: &ResolvedProjectionRoots, host_id: &str) -> Result<String> {
     let narrative = load_host_projection_narrative(&roots.framework_root).map_err(|err| {
         format!(
-            "host projection narrative must load before rendering claude project narrative: {err}"
+            "host projection narrative must load before rendering project narrative for {host_id}: {err}"
         )
     })?;
     Ok(format!(
-        r#"<!-- managed_by: skill-framework · claude · keep ≤48 lines -->
-<!-- projection_id: claude-project-narrative -->
-<!-- host_projection: claude -->
+        r#"<!-- managed_by: skill-framework · {host_id} · keep ≤48 lines -->
+<!-- projection_id: {host_id}-project-narrative -->
+<!-- host_projection: {host_id} -->
 <!-- install_scope: project -->
 
 # Claude Code（本项目）
@@ -732,7 +714,7 @@ pub fn render_project_narrative(roots: &ResolvedProjectionRoots) -> Result<Strin
 
 路由：`skills/SKILL_ROUTING_RUNTIME.json` · 产物：`artifacts/current/`。
 "#,
-        gsd = lifecycle_paragraph_for_host(&narrative, "claude"),
+        gsd = lifecycle_paragraph_for_host(&narrative, host_id),
     ))
 }
 
@@ -806,45 +788,22 @@ pub fn codegraph_mcp_server_payload(roots: &ResolvedProjectionRoots) -> Value {
 }
 
 /// Project-root `.mcp.json` with all four shared MCP servers (gitignored; materialized on host install).
-pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Result<bool> {
+pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots, host_id: &str) -> Result<bool> {
     let path = roots.project_root.join(".mcp.json");
     let mut payload = read_json_if_exists(&path)?.unwrap_or_else(|| json!({}));
-    if !payload.is_object() {
-        payload = json!({});
+    let entries = projection_manifest::mcp_servers_mut(&mut payload, "mcpServers", host_id)?;
+    let mut changed = false;
+    for (id, val) in [
+        ("router-rs-framework", host_router_rs_framework_payload(roots, host_id, "Framework snapshot, skill routing, goal/closeout gating")),
+        ("browser-mcp", browser_mcp_server_payload(roots)),
+        ("paperplain", paperplain_mcp_server_payload()),
+    ] {
+        if entries.get(id) != Some(&val) { changed = true; }
+        entries.insert(id.to_string(), val);
     }
-    let root = payload
-        .as_object_mut()
-        .ok_or_else(|| "project .mcp.json root must be an object".to_string())?;
-    let servers = root
-        .entry("mcpServers".to_string())
-        .or_insert_with(|| json!({}));
-    if !servers.is_object() {
-        *servers = json!({});
-    }
-    let entries = servers
-        .as_object_mut()
-        .ok_or_else(|| "project .mcp.json mcpServers must be an object".to_string())?;
-    let framework = host_router_rs_framework_payload(
-        roots,
-        "claude",
-        "Framework snapshot, skill routing, goal/closeout gating",
-    );
-    let framework_changed = entries.get("router-rs-framework") != Some(&framework);
-    entries.insert("router-rs-framework".to_string(), framework);
-    let browser = browser_mcp_server_payload(roots);
-    let browser_changed = entries.get("browser-mcp") != Some(&browser);
-    entries.insert("browser-mcp".to_string(), browser);
-    let plain = paperplain_mcp_server_payload();
-    let paperplain_changed = entries.get("paperplain") != Some(&plain);
-    entries.insert("paperplain".to_string(), plain);
     let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
-    Ok(write_json_if_changed(&path, &payload).map(|file_changed| {
-        framework_changed
-            || browser_changed
-            || paperplain_changed
-            || codegraph_changed
-            || file_changed
-    })?)
+    changed |= codegraph_changed;
+    Ok(write_json_if_changed(&path, &payload).map(|file_changed| changed || file_changed)?)
 }
 
 /// Remove all managed MCP entries from project-root `.mcp.json`.
@@ -943,71 +902,28 @@ pub fn ensure_research_mcp_toml(
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let mut changed = false;
-    // -- router-rs-framework --
-    let framework = host_router_rs_framework_payload(
-        roots,
-        host_id,
-        &format!(
-            "Framework snapshot, skill routing, goal/closeout gating ({host_id})"
-        ),
+    let fw_description = format!(
+        "Framework snapshot, skill routing, goal/closeout gating ({host_id})"
     );
-    let fw_cmd = framework
-        .get("command")
-        .and_then(Value::as_str)
-        .unwrap_or("router-rs");
-    let fw_args: Vec<String> = framework
-        .get("args")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(Value::as_str)
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
-    let fw_arg_refs: Vec<&str> = fw_args.iter().map(String::as_str).collect();
-    changed |= upsert_mcp_toml_section(&path, "router-rs-framework", fw_cmd, &fw_arg_refs)?;
-    // -- browser-mcp --
-    let browser = browser_mcp_server_payload(roots);
-    let br_cmd = browser
-        .get("command")
-        .and_then(Value::as_str)
-        .unwrap_or("router-rs");
-    let br_args: Vec<String> = browser
-        .get("args")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(Value::as_str)
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
-    let br_arg_refs: Vec<&str> = br_args.iter().map(String::as_str).collect();
-    changed |= upsert_mcp_toml_section(&path, "browser-mcp", br_cmd, &br_arg_refs)?;
-    // -- paperplain --
-    changed |=
-        upsert_mcp_toml_section(&path, "paperplain", "npx", &["-y", "paperplain-mcp"])?;
-    // -- mcp-codegraph --
-    let codegraph = codegraph_mcp_server_payload(roots);
-    let command = codegraph
-        .get("command")
-        .and_then(Value::as_str)
-        .unwrap_or("mcp-codegraph");
-    let args: Vec<String> = codegraph
-        .get("args")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
-    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    changed |= upsert_mcp_toml_section(&path, "mcp-codegraph", command, &arg_refs)?;
+    let mut changed = false;
+    for (id, payload) in [
+        ("router-rs-framework", host_router_rs_framework_payload(roots, host_id, &fw_description)),
+        ("browser-mcp", browser_mcp_server_payload(roots)),
+        ("mcp-codegraph", codegraph_mcp_server_payload(roots)),
+    ] {
+        let cmd = payload
+            .get("command")
+            .and_then(Value::as_str)
+            .unwrap_or("router-rs");
+        let args: Vec<String> = payload
+            .get("args")
+            .and_then(Value::as_array)
+            .map(|a| a.iter().filter_map(Value::as_str).map(str::to_string).collect())
+            .unwrap_or_default();
+        let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+        changed |= upsert_mcp_toml_section(&path, id, cmd, &arg_refs)?;
+    }
+    changed |= upsert_mcp_toml_section(&path, "paperplain", "npx", &["-y", "paperplain-mcp"])?;
     Ok(changed)
 }
 
@@ -1049,8 +965,8 @@ pub fn remove_research_mcp_toml_entries(
 
 /// 始终返回 disabled 状态。Codex prompt entrypoints 功能已禁用，
 /// 保留此函数以维持接口兼容（调用方依赖返回的 JSON 结构）。
-pub fn prompt_entrypoints_disabled(codex_dir: &Path) -> Value {
-    let prompt_dir = codex_dir.join("prompts");
+pub fn prompt_entrypoints_disabled(config_dir: &Path) -> Value {
+    let prompt_dir = config_dir.join("prompts");
     json!({
         "changed": false,
         "enabled": false,

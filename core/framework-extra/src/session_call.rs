@@ -313,8 +313,7 @@ pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
             }
         }
 
-        // Update anomaly_flags in the tracker (always write, clearing stale flags)
-        payload["anomaly_flags"] = json!(warnings);
+        // Write the tracker immediately (pass through unchanged warnings as Vec<String>)
         write_tracker(&path, &payload)?;
 
         Ok(warnings)

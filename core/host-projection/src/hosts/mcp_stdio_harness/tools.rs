@@ -63,6 +63,13 @@ pub(super) fn handle_tools_call(
         tracing::warn!("record_tool_call failed: {e}");
     }
 
+    // Step budget: increment counter for the active task (if any).
+    if let Some(task_id) = core_state::state_manager::read_primary_task_id(repo_root) {
+        if let Err(e) = core_state::state_manager::increment_step_budget(repo_root, &task_id) {
+            tracing::info!("step budget exceeded for task '{task_id}': {e}");
+        }
+    }
+
     let result = dispatch_tool(tool_name, arguments, repo_root, host_id, connection_session_id);
 
     match result {
@@ -96,61 +103,8 @@ pub(super) fn handle_tools_call(
     }
 }
 
-pub(super) fn tool_framework_snapshot(
-    arguments: &Value,
-    repo_root: &Path,
-) -> Result<String, String> {
-    let detail_level = arguments
-        .get("detail_level")
-        .and_then(Value::as_str)
-        .unwrap_or("summary");
-    if detail_level != "summary" && detail_level != "full" {
-        return Err(format!(
-            "Invalid detail_level: {detail_level}. Must be 'summary' or 'full'."
-        ));
-    }
-    let is_full = detail_level == "full";
-    let ttl_secs = snapshot_cache_ttl_secs();
-    // Try to read from cache (configurable TTL, default 30 seconds)
-    // Only use cache for summary mode; full mode always recomputes
-    if !is_full {
-        let cache = get_snapshot_cache();
-        if let Some(guard) = poison_safe_read_lock!(cache)
-            && let Some(ref cached) = *guard
-                && cached.is_valid() {
-                    return Ok(cached.content.clone());
-                }
-    }
-
-    // Cache miss: recompute
-    let envelope = crate::hooks::build_framework_runtime_snapshot_envelope_with_level(
-        repo_root,
-        None,
-        None,
-        detail_level,
-    )?;
-    let content = serde_json::to_string_pretty(&envelope).map_err(|e| e.to_string())?;
-
-    // Update cache with configurable TTL (summary mode only)
-    if !is_full {
-        let cache = get_snapshot_cache();
-        if let Some(mut guard) = poison_safe_write_lock!(cache) {
-            *guard = Some(SnapshotCache {
-                content: content.clone(),
-                expires_at: Instant::now() + Duration::from_secs(ttl_secs),
-            });
-        }
-    }
-
-    Ok(content)
-}
-
-/// Invalidate evidence-dependent caches (snapshot / task view).
+/// Invalidate evidence-dependent caches (task view).
 pub(super) fn invalidate_evidence_caches() {
-    // Clear snapshot cache
-    if let Some(mut guard) = poison_safe_write_lock!(get_snapshot_cache()) {
-        *guard = None;
-    }
     // Clear task view cache
     if let Some(mut guard) = poison_safe_write_lock!(get_task_view_cache()) {
         guard.clear();

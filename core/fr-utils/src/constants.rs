@@ -96,3 +96,13 @@ pub const TERMINAL_VERIFICATION_STATUSES: &[&str] = &[
     "failed",
 ];
 pub const STALE_STORY_STATES: &[&str] = &["stale", "expired", "invalid"];
+
+// ---------------------------------------------------------------------------
+// Content store constants
+// ---------------------------------------------------------------------------
+
+/// Subdirectory name within the artifact root for the content-addressed store.
+pub const CONTENT_STORE_DIR: &str = "content-store";
+
+/// Field name in RUNTIME_REGISTRY.json that specifies the artifact root.
+pub const ARTIFACT_ROOT_REGISTRY_FIELD: &str = "runtime_artifact_root";

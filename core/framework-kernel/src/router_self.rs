@@ -457,7 +457,7 @@ mod tests {
     #[test]
     fn validate_router_rs_binary_runnable_smoke() {
         let Some(bin) = try_resolve_router_rs_test_bin() else {
-            eprintln!("skip: router-rs binary not built (per-crate test run)");
+            tracing::warn!("skip: router-rs binary not built (per-crate test run)");
             return;
         };
         validate_router_rs_binary_runnable(&bin).expect("router-rs --help smoke");

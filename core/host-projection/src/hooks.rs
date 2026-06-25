@@ -122,9 +122,7 @@ pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
 pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
     #[cfg(test)]
     {
-        let raw = std::env::var("ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES")
-            .ok()
-            .or_else(|| std::env::var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES").ok());
+        let raw = std::env::var("ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES").ok();
         raw.as_ref()?;
     }
     core_policy::env_flags::router_rs_review_gate_stop_max_nudges_cap()
@@ -132,7 +130,6 @@ pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
 
 pub fn router_rs_sessionstart_context_max_bytes() -> usize {
     parse_env_usize("ROUTER_RS_SESSIONSTART_CONTEXT_MAX_BYTES")
-        .or_else(|| parse_env_usize("ROUTER_RS_CURSOR_SESSIONSTART_CONTEXT_MAX_BYTES"))
         .unwrap_or(64 * 1024)
 }
 

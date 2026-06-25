@@ -60,24 +60,6 @@ pub fn default_review_types() -> &'static [&'static str] {
     subagent_review_types()
 }
 
-/// Extended review types (includes worker/shell variants for hosts that use them).
-pub fn extended_review_types() -> &'static [&'static str] {
-    static EXTENDED: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
-    EXTENDED.get_or_init(|| {
-        let mut types: Vec<&'static str> = subagent_review_types().to_vec();
-        for t in &[
-            "generalpurpose", "default", "shell", "worker",
-            "browser-use", "browseruse", "ci-investigator", "ciinvestigator",
-            "best-of-n-runner", "bestofnrunner", "cursor-guide", "cursorguide",
-        ] {
-            if !types.contains(t) {
-                types.push(t);
-            }
-        }
-        types
-    })
-}
-
 /// Compute review lane and parallel lane bits using a provided review type set.
 pub fn subagent_lane_bits_with_types(kind: Option<&str>, review_types: &[&str]) -> (bool, bool) {
     let Some(k) = kind else { return (false, false); };
@@ -149,19 +131,13 @@ pub fn is_verification_command(tool_name: &str, command: &str) -> bool {
         return false;
     }
     let cmd_lower = command.to_ascii_lowercase();
-    cmd_lower.contains("cargo test")
-        || cmd_lower.contains("cargo check")
-        || cmd_lower.contains("cargo build")
-        || cmd_lower.contains("cargo clippy")
-        || cmd_lower.contains("cargo fmt")
-        || cmd_lower.contains("npm test")
-        || cmd_lower.contains("npm run test")
-        || cmd_lower.contains("pytest")
-        || cmd_lower.contains("make test")
-        || cmd_lower.contains("make check")
-        || cmd_lower.contains("go test")
-        || cmd_lower.contains("git diff")
-        || cmd_lower.contains("git log")
+    const VERIFY_CMDS: &[&str] = &[
+        "cargo test", "cargo check", "cargo build", "cargo clippy", "cargo fmt",
+        "npm test", "npm run test",
+        "pytest", "make test", "make check",
+        "go test", "git diff", "git log",
+    ];
+    VERIFY_CMDS.iter().any(|cmd| cmd_lower.contains(cmd))
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -531,28 +507,15 @@ pub fn evaluate_stop_decision(
 /// Covers: "写plan", "给plan", "plan mode", "做计划", "制定计划" etc.
 fn is_plan_keyword_in_prompt(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
-    lower.contains("plan mode")
-        || lower.contains("写plan")
-        || lower.contains("给plan")
-        || lower.contains("做计划")
-        || lower.contains("制定计划")
-        || lower.contains("先规划")
-        || lower.contains("先计划")
-        || lower.contains("let's plan")
-        || lower.contains("lets plan")
-        // Additional English plan invocations
-        || lower.contains("create a plan")
-        || lower.contains("make a plan")
-        || lower.contains("write a plan")
-        || lower.contains("draft a plan")
-        || lower.contains("draw up a plan")
-        || lower.contains("design a plan")
-        // Additional Chinese plan invocations
-        || lower.contains("做个计划")
-        || lower.contains("写个计划")
-        || lower.contains("草拟计划")
-        || lower.contains("规划方案")
-        || lower.contains("我需要一个计划")
+    const PLAN_KWS: &[&str] = &[
+        "plan mode", "写plan", "给plan", "做计划", "制定计划",
+        "先规划", "先计划", "let's plan", "lets plan",
+        "create a plan", "make a plan", "write a plan",
+        "draft a plan", "draw up a plan", "design a plan",
+        "做个计划", "写个计划", "草拟计划", "规划方案",
+        "我需要一个计划",
+    ];
+    PLAN_KWS.iter().any(|kw| lower.contains(kw))
 }
 
 /// Extract the new constraint phrase from a scope-change message.

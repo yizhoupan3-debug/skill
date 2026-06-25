@@ -339,34 +339,6 @@
         }
       }
     },
-    {
-      "slug": "framework_snapshot",
-      "display_name": "框架快照",
-      "description": "框架运行时快照（summary/full）",
-      "layer": "builtin",
-      "dispatch_domain": "domain:framework",
-      "owner": "framework",
-      "trigger_hints": [
-        "框架",
-        "framework",
-        "快照",
-        "snapshot",
-        "运行时"
-      ],
-      "host_platforms": [],
-      "mcp_server": "router-rs",
-      "tool_flags": [
-        "behavior:core_routing_tool"
-      ],
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "detail_level": {
-            "type": "string",
-            "description": "快照详细级别：summary/full"
-          }
-        }
-      }
     },
     {
       "slug": "skill_read",

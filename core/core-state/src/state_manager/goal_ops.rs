@@ -439,6 +439,19 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
             apply_optional_goal_fields_from_payload(&mut obj, &payload);
             // Ensure task directory exists before writing GOAL_STATE
             ensure_task_directory(&repo_root, &task_id)?;
+            // Write default STEP_BUDGET.json for drive_until_done tasks
+            if drive_until_done {
+                let budget_path = repo_root
+                    .join("artifacts/current")
+                    .join(&task_id)
+                    .join("STEP_BUDGET.json");
+                if !budget_path.is_file() {
+                    write_atomic_json(
+                        &budget_path,
+                        &json!({"used": 0, "max": 80, "soft_warned": false}),
+                    )?;
+                }
+            }
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;

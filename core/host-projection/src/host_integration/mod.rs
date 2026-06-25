@@ -16,8 +16,6 @@ type Result<T> = std::result::Result<T, FrameworkError>;
 use std::time::{Duration, Instant};
 
 
-const CONFIG_SCHEMA_HEADER: &str =
-    "#:schema https://developers.openai.com/codex/config-schema.json\n";
 const DEFAULT_TUI_STATUS_ITEMS: [&str; 4] = [
     "model-with-reasoning",
     "fast-mode",
@@ -131,6 +129,8 @@ enum Commands {
         bootstrap_output_dir: Option<PathBuf>,
         #[arg(long)]
         skip_default_bootstrap: bool,
+        #[arg(long)]
+        host_id: String,
     },
     InstallSkills {
         #[arg(long, alias = "framework-root")]
@@ -745,7 +745,7 @@ mod tests {
         };
 
         let changed =
-            super::projection::ensure_project_research_mcp_json(&roots).expect("project mcp json");
+            super::projection::ensure_project_research_mcp_json(&roots, "claude").expect("project mcp json");
         assert!(changed);
 
         let payload: Value =

@@ -202,7 +202,7 @@ pub mod tests;
 // Re-export all pub items from submodules so internal sibling calls work
 // and external paths remain unchanged.
 pub use close_gates::{parse_close_gates, enforce_rfv_close_gates};
-pub use evidence::{cross_link_evidence, EvidenceReadError};
+pub use evidence::cross_link_evidence;
 pub use flow::framework_quality_gate;
 
 

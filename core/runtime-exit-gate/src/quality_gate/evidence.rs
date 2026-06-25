@@ -1,50 +1,29 @@
 //! Evidence 交叉校验：读取 EVIDENCE_INDEX.json 并 cross-link 到 RFV round。
 
 use super::*;
+use core_policy::error::FrameworkError;
 
-/// 读取同任务目录下的 `EVIDENCE_INDEX.json`。
-/// 返回 `Result` 以区分「文件不存在」（正常）和其他错误（可能需要诊断）。
-#[derive(Debug)]
-pub enum EvidenceReadError {
-    InvalidTaskId(String),
-    FileNotFound,
-    ParseError(String),
-    IoError(String),
-}
-
-impl std::fmt::Display for EvidenceReadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            EvidenceReadError::InvalidTaskId(id) => write!(f, "invalid task_id: {}", id),
-            EvidenceReadError::FileNotFound => write!(f, "EVIDENCE_INDEX.json not found"),
-            EvidenceReadError::ParseError(e) => write!(f, "parse error: {}", e),
-            EvidenceReadError::IoError(e) => write!(f, "IO error: {}", e),
-        }
-    }
-}
-
-impl std::error::Error for EvidenceReadError {}
-
+/// 读取同任务目录下的 `EVIDENCE_INDEX.json`；非法 / 缺失视为空。
+/// 注意：此函数保持向后兼容，返回空 Vec 而非 Result。
 fn read_evidence_index_artifacts_impl(
     repo_root: &Path,
     task_id: &str,
-) -> std::result::Result<Vec<Value>, EvidenceReadError> {
+) -> Result<Vec<Value>> {
     let tid = core_state_utils::path_guard::validate_task_id_component(task_id)
-        .map_err(EvidenceReadError::InvalidTaskId)?;
+        .map_err(|e| FrameworkError::validation(format!("invalid task_id: {e}")))?;
     let path = repo_root
         .join("artifacts/current")
         .join(tid)
         .join("EVIDENCE_INDEX.json");
     if !path.is_file() {
-        return Err(EvidenceReadError::FileNotFound);
+        return Ok(Vec::new());
     }
-    let raw = fs::read_to_string(&path).map_err(|e| EvidenceReadError::IoError(e.to_string()))?;
-    let val: Value =
-        serde_json::from_str(&raw).map_err(|e| EvidenceReadError::ParseError(e.to_string()))?;
+    let raw = fs::read_to_string(&path)?;
+    let val: Value = serde_json::from_str(&raw)?;
     val.get("artifacts")
         .and_then(Value::as_array)
         .cloned()
-        .ok_or_else(|| EvidenceReadError::ParseError("missing or non-array artifacts".to_string()))
+        .ok_or_else(|| FrameworkError::validation("missing or non-array artifacts".to_string()))
 }
 
 /// 读取同任务目录下的 `EVIDENCE_INDEX.json`；非法 / 缺失视为空。

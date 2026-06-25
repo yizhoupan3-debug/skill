@@ -213,6 +213,7 @@ pub fn install_projection(
     host_id: &str,
 ) -> Result<Value> {
     let target = entrypoint_target(roots, scope, host_id)?;
+    ensure_router_rs_installed_for_mcp_with_roots(roots)?;
     match host_id {
         "cursor" => {
             let mut managed_files = vec![target.to_string_lossy().to_string()];
@@ -228,7 +229,6 @@ pub fn install_projection(
                 "reason": "user-scope-only",
             });
             if scope == "user" {
-                ensure_router_rs_installed_for_mcp_with_roots(roots)?;
                 let mcp_path = mcp_config_path(roots, host_id, "user")?;
                 let mcp_install = install_mcp_server(roots, &mcp_path, host_id, scope)?;
                 changed |= mcp_install.changed;
@@ -268,7 +268,6 @@ pub fn install_projection(
             }))
         }
         "codex" => {
-            ensure_router_rs_installed_for_mcp_with_roots(roots)?;
             let changed =
                 write_text_if_changed(&target, &render_framework_entrypoint(roots, scope, host_id)?)?;
             let mcp_changed = ensure_research_mcp_toml(roots, host_id)?;
@@ -314,7 +313,6 @@ pub fn install_projection(
             }))
         }
         "opencode" => {
-            ensure_router_rs_installed_for_mcp_with_roots(roots)?;
             let mcp_path = mcp_config_path(roots, host_id, scope)?;
             let mcp_dir = mcp_path.parent().ok_or_else(|| {
                 format!("cannot determine parent directory of {}", mcp_path.display())
@@ -684,20 +682,14 @@ pub fn remove_projection(
                 would_remove_projection || would_remove_manifest || settings_removal.would_change;
             let mut removed_paths =
                 removed_projection_paths(changed, &target, manifest_removed, &manifest_path);
-            if settings_removal.removed_file
-                && let Some(paths) = removed_paths.as_array_mut() {
-                    paths.push(Value::String(settings_path.to_string_lossy().into_owned()));
-                }
+            append_mcp_path(&mut removed_paths, settings_removal.removed_file, &settings_path);
             let mut would_remove_paths = removed_projection_paths(
                 would_remove_projection,
                 &target,
                 would_remove_manifest,
                 &manifest_path,
             );
-            if settings_removal.would_remove_file
-                && let Some(paths) = would_remove_paths.as_array_mut() {
-                    paths.push(Value::String(settings_path.to_string_lossy().into_owned()));
-                }
+            append_mcp_path(&mut would_remove_paths, settings_removal.would_remove_file, &settings_path);
             Ok(json!({
                 "status": if dry_run && would_remove_any { "would-remove" } else if any_changed { "removed" } else { "not-installed-or-user-owned" },
                 "changed": any_changed,

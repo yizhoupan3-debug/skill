@@ -33,7 +33,8 @@ pub use validation::{
 // Re-export from pointer_ops
 pub use pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, read_active_task_id,
-    read_focus_task_id, read_primary_task_id, read_task_pointer_pair, set_task_focus,
+    read_focus_task_id, read_primary_task_id, read_task_budget,
+    read_task_pointer_pair, increment_step_budget, set_task_focus,
     sync_task_pointers_after_goal_drive, write_active_task_pointer,
 };
 

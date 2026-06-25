@@ -50,6 +50,8 @@ macro_rules! install_native_integration_test {
                 "--home-config-path",
                 $f.home_config_path.to_str().unwrap(),
                 "--skip-default-bootstrap",
+                "--host-id",
+                "codex",
             ]);
             $body
         }
@@ -179,6 +181,8 @@ fn install_native_integration_idempotent() {
         home_config_path.display().to_string(),
         "--bootstrap-output-dir".to_string(),
         bootstrap_output_dir.display().to_string(),
+        "--host-id".to_string(),
+        "codex".to_string(),
     ];
     let refs = string_refs(&args);
     let first = host_integration_json(&refs);
@@ -203,8 +207,8 @@ fn install_native_integration_idempotent() {
         ["already-present", "repaired-stale"]
             .contains(&second["default_bootstrap"]["status"].as_str().unwrap())
     );
-    assert_eq!(first["codex_prompt_entrypoints"]["changed"], false);
-    assert_eq!(second["codex_prompt_entrypoints"]["changed"], false);
+    assert_eq!(first["prompt_entrypoints"]["changed"], false);
+    assert_eq!(second["prompt_entrypoints"]["changed"], false);
 }
 
 #[test]
@@ -233,6 +237,8 @@ fn install_native_integration_prompt_entrypoints_clean() {
         "--home-config-path",
         tmp.path().join("home/.codex/config.toml").to_str().unwrap(),
         "--skip-default-bootstrap",
+        "--host-id",
+        "codex",
     ]);
 
     assert!(!tmp.path().join("home/.codex/prompts/gsd.md").exists());

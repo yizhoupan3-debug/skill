@@ -17,6 +17,9 @@ use std::time::Duration;
 /// Default timeout for all Python subprocess calls (15 seconds).
 const DEFAULT_TIMEOUT_MS: u64 = 15_000;
 
+/// Poll interval for `try_wait` loop. 50ms is negligible vs 15s default timeout.
+const POLL_INTERVAL_MS: u64 = 50;
+
 /// Run `uv run -m <module> --stdin-json` with JSON input, default timeout.
 pub fn run_uv_module(module: &str, input: &Value) -> Result<Value, String> {
     run_uv_module_with_timeout(module, input, DEFAULT_TIMEOUT_MS)
@@ -26,6 +29,11 @@ pub fn run_uv_module(module: &str, input: &Value) -> Result<Value, String> {
 ///
 /// Writes `input` as JSON to the subprocess stdin, reads a JSON object from stdout,
 /// and captures stderr for error diagnostics.
+///
+/// # Safety
+///
+/// No `unsafe` code. Uses `std::process::Child::kill()` (safe libstd wrapper)
+/// instead of raw `libc::kill()` to avoid PID-reuse races on timeout.
 pub fn run_uv_module_with_timeout(
     module: &str,
     input: &Value,
@@ -50,66 +58,68 @@ pub fn run_uv_module_with_timeout(
             .map_err(|e| format!("stdin write: {e}"))?;
     }
 
-    // Thread-based timeout guard
-    let (tx, rx) = mpsc::channel();
+    // Background thread: fires a signal once the deadline passes.
+    // Used instead of polling `Instant::now()` to avoid time-warp issues and
+    // keep the hot path simple (just check channel emptiness).
+    let (deadline_tx, deadline_rx) = mpsc::channel::<()>();
     std::thread::spawn(move || {
-        let result = child.wait_with_output();
-        tx.send(result).ok();
+        std::thread::sleep(Duration::from_millis(timeout_ms));
+        let _ = deadline_tx.send(());
     });
 
-    let timeout = Duration::from_millis(timeout_ms);
-    let output = match rx.recv_timeout(timeout) {
-        Ok(Ok(o)) => o,
-        Ok(Err(e)) => return Err(format!("subprocess wait: {e}")),
-        Err(_) => {
-            // Timeout — best-effort process termination.
-            // Avoid shell `kill` command: PID-reuse races and cross-platform issues.
-            // Try brief wait to reap zombie (thread should complete after process exits).
-            #[cfg(unix)]
-            unsafe {
-                // SAFETY: pid is from child.id(); pid may be reused after child exits,
-                // but we immediately attempt recv_timeout to reap, closing the race window.
-                extern "C" { fn kill(pid: i32, sig: i32) -> i32; }
-                kill(pid as i32, 9);
-            }
-            #[cfg(windows)]
-            {
-                let _ = std::process::Command::new("taskkill")
-                    .args(["/F", "/PID", &pid.to_string()])
-                    .output();
-            }
-            // Brief wait to reap zombie; the kill should wake the wait_with_output thread.
-            let _ = rx.recv_timeout(Duration::from_secs(3));
-            return Err(format!("subprocess timed out after {timeout_ms}ms (pid={pid})"));
-        }
-    };
+    // Poll loop using `try_wait` (non-blocking, no unsafe).
+    // On process exit: collect buffered stdout/stderr via `wait_with_output`.
+    // On timeout: `child.kill()` is the safe libstd cross-platform wrapper.
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // Process exited — collect remaining pipe data.
+                let output = child
+                    .wait_with_output()
+                    .map_err(|e| format!("subprocess wait: {e}"))?;
 
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+                let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
-    if !output.status.success() {
-        // The Python script may print an error JSON on stdout even on exit code 0
-        // (error field in the response). On non-zero exit, try parsing stdout first.
-        if let Ok(val) = serde_json::from_slice::<Value>(&output.stdout) {
-            if val.get("error").is_some() {
-                return Ok(val); // Let caller handle the {"error": ...} response
+                if !status.success() {
+                    // Non-zero exit: check if stdout has an {"error": ...} JSON.
+                    if let Ok(val) = serde_json::from_slice::<Value>(&output.stdout) {
+                        if val.get("error").is_some() {
+                            return Ok(val);
+                        }
+                    }
+                    let detail = truncate(&stderr, 500);
+                    return Err(format!(
+                        "uv {} failed (exit={:?}): {}",
+                        module,
+                        output.status.code(),
+                        detail
+                    ));
+                }
+
+                return serde_json::from_slice(&output.stdout).map_err(|e| {
+                    format!(
+                        "parse {} output: {e}, stderr: {}",
+                        module,
+                        truncate(&stderr, 200)
+                    )
+                });
             }
+            Ok(None) => {
+                // Child still running — check deadline.
+                if deadline_rx.try_recv().is_ok() {
+                    // Timeout: kill safely via libstd (cross-platform, no unsafe).
+                    let _ = child.kill();
+                    // Reap zombie.
+                    let _ = child.wait();
+                    return Err(format!(
+                        "subprocess timed out after {timeout_ms}ms (pid={pid})"
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(POLL_INTERVAL_MS));
+            }
+            Err(e) => return Err(format!("subprocess wait: {e}")),
         }
-        let detail = truncate(&stderr, 500);
-        return Err(format!(
-            "uv {} failed (exit={:?}): {}",
-            module,
-            output.status.code(),
-            detail
-        ));
     }
-
-    serde_json::from_slice(&output.stdout).map_err(|e| {
-        format!(
-            "parse {} output: {e}, stderr: {}",
-            module,
-            truncate(&stderr, 200)
-        )
-    })
 }
 
 fn truncate(s: &str, max: usize) -> String {

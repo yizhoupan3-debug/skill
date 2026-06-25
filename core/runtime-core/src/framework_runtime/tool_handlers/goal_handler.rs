@@ -1,6 +1,7 @@
 //! Goal state management tool handler (`domain:goal`).
 //! Payload construction + core_state state_manager call.
 
+use core_policy::error::FrameworkError;
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -9,17 +10,17 @@ pub fn goal_state_manage_dispatch(
     arguments: &Value,
     repo_root: &Path,
     connection_session_id: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let operation = arguments
         .get("operation")
         .and_then(Value::as_str)
-        .ok_or("Missing required argument: operation")?;
+        .ok_or_else(|| FrameworkError::validation("Missing required argument: operation"))?;
 
     // Auto-resolve task_id from TASK_POINTERS.json
     let task_id = match arguments.get("task_id").and_then(Value::as_str).filter(|s| !s.trim().is_empty()) {
         Some(tid) => tid.to_string(),
         None => core_state::state_manager::read_primary_task_id(repo_root)
-            .ok_or("No active task_id in TASK_POINTERS.json (start a task first or provide task_id explicitly)")?,
+            .ok_or_else(|| FrameworkError::validation("No active task_id in TASK_POINTERS.json (start a task first or provide task_id explicitly)"))?,
     };
 
     let repo_root_str = repo_root.to_string_lossy().to_string();
@@ -34,7 +35,7 @@ pub fn goal_state_manage_dispatch(
             let goal = arguments
                 .get("goal")
                 .and_then(Value::as_str)
-                .ok_or("start requires 'goal' argument (string)")?;
+                .ok_or_else(|| FrameworkError::validation("start requires 'goal' argument (string)"))?;
             payload["goal"] = json!(goal);
 
             let drive_until_done = arguments
@@ -79,13 +80,13 @@ pub fn goal_state_manage_dispatch(
             if let Some(gt) = arguments.get("goal_type").and_then(Value::as_str) {
                 match gt {
                     "linear" | "loop" => payload["goal_type"] = json!(gt),
-                    _ => return Err(format!("Invalid goal_type: {gt}. Must be one of: linear, loop")),
+                    _ => return Err(FrameworkError::validation(format!("Invalid goal_type: {gt}. Must be one of: linear, loop"))),
                 }
             }
             if let Some(lp) = arguments.get("lifecycle_profile").and_then(Value::as_str) {
                 match lp {
                     "task" | "loop-auto" => payload["lifecycle_profile"] = json!(lp),
-                    _ => return Err(format!("Invalid lifecycle_profile: {lp}. Must be one of: task, loop-auto")),
+                    _ => return Err(FrameworkError::validation(format!("Invalid lifecycle_profile: {lp}. Must be one of: task, loop-auto"))),
                 }
             }
             if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {
@@ -105,7 +106,7 @@ pub fn goal_state_manage_dispatch(
             let note = arguments
                 .get("note")
                 .and_then(Value::as_str)
-                .ok_or("checkpoint requires 'note' argument (string)")?;
+                .ok_or_else(|| FrameworkError::validation("checkpoint requires 'note' argument (string)"))?;
             payload["note"] = json!(note);
         }
         "block" => {
@@ -113,13 +114,14 @@ pub fn goal_state_manage_dispatch(
                 .get("blocker")
                 .and_then(Value::as_str)
                 .filter(|s| !s.trim().is_empty())
-                .ok_or("block requires 'blocker' argument (string)")?;
+                .ok_or_else(|| FrameworkError::validation("block requires 'blocker' argument (string)"))?;
             payload["blocker"] = json!(blocker);
         }
         "append_round" => {
-            return Err("append_round is not a valid goal_state_manage operation. \
-                 Use quality_gate_manage with operation=append_round instead."
-                .to_string());
+            return Err(FrameworkError::validation(
+                "append_round is not a valid goal_state_manage operation. \
+                 Use quality_gate_manage with operation=append_round instead.",
+            ));
         }
         "pause" | "resume" | "complete" | "clear" => {}
         "amend" => {
@@ -139,11 +141,11 @@ pub fn goal_state_manage_dispatch(
                 payload["keep_progress"] = json!(kp);
             }
         }
-        _ => return Err(format!(
+        _ => return Err(FrameworkError::validation(format!(
             "Unknown goal operation: {operation}. Valid operations: start, checkpoint, pause, resume, complete, clear, block, amend"
-        )),
+        ))),
     }
 
     let result = core_state::state_manager::framework_goal_drive(payload)?;
-    serde_json::to_string_pretty(&result).map_err(|e| e.to_string())
+    Ok(serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?)
 }

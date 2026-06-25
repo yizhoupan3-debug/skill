@@ -212,18 +212,18 @@ pub fn destination_for_current_artifact(
         return None;
     }
     let name = path.file_name()?.to_str()?;
+    let suffix = || if path.parent() == Some(current_root.as_path()) {
+        PathBuf::from(name)
+    } else {
+        PathBuf::from(active_task_id).join(name)
+    };
     if name == "framework_default_bootstrap.json" || name == "hermes_default_bootstrap.json" {
-        let suffix = if path.parent() == Some(current_root.as_path()) {
-            PathBuf::from(name)
-        } else {
-            PathBuf::from(active_task_id).join(name)
-        };
         return Some(
             repo_root
                 .join("artifacts")
                 .join("bootstrap")
                 .join("archived-current")
-                .join(suffix),
+                .join(suffix()),
         );
     }
     if name == "run_summary.json"
@@ -231,17 +231,12 @@ pub fn destination_for_current_artifact(
         || name == "snapshot.json"
         || name == "snapshot.md"
     {
-        let suffix = if path.parent() == Some(current_root.as_path()) {
-            PathBuf::from(name)
-        } else {
-            PathBuf::from(active_task_id).join(name)
-        };
         return Some(
             repo_root
                 .join("artifacts")
                 .join("ops")
                 .join("archived-current")
-                .join(suffix),
+                .join(suffix()),
         );
     }
     if name.starts_with("tmp-") {
@@ -253,12 +248,7 @@ pub fn destination_for_current_artifact(
                 .join(name)
         });
     }
-    let suffix = if path.parent() == Some(current_root.as_path()) {
-        PathBuf::from(name)
-    } else {
-        PathBuf::from(active_task_id).join(name)
-    };
-    Some(evidence_artifact_root(repo_root, Some("archived-current")).join(suffix))
+    Some(evidence_artifact_root(repo_root, Some("archived-current")).join(suffix()))
 }
 
 pub fn plan_current_artifact_clutter_migrations(
@@ -432,7 +422,13 @@ pub fn ensure_config_file(config_path: &Path) -> std::result::Result<bool, Strin
     if config_path.exists() {
         return Ok(false);
     }
-    fs::write(config_path, CONFIG_SCHEMA_HEADER).map_err(|err| err.to_string())?;
+    let header = framework_kernel::runtime_registry::host_config_schema_url("codex");
+    let header = if header.is_empty() {
+        String::new()
+    } else {
+        format!("#:schema {header}\n")
+    };
+    fs::write(config_path, &header).map_err(|err| err.to_string())?;
     Ok(true)
 }
 

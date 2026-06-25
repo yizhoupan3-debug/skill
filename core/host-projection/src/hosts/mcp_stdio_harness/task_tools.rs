@@ -284,6 +284,79 @@ pub(crate) fn tool_task_focus(arguments: &Value, repo_root: &Path) -> std::resul
     .to_string())
 }
 
+/// Advance the task chain to the next task.
+/// Reads TASK_CHAIN.json, marks current as completed, switches focus to next.
+pub(crate) fn tool_task_chain_advance(_arguments: &Value, repo_root: &Path) -> std::result::Result<String, String> {
+    let chain_path = repo_root.join("artifacts/current/TASK_CHAIN.json");
+    if !chain_path.is_file() {
+        return Err("TASK_CHAIN.json not found — create one first to use task_chain_advance".to_string());
+    }
+    let raw = std::fs::read_to_string(&chain_path).map_err(|e| format!("read TASK_CHAIN.json: {e}"))?;
+    let mut chain: Value = serde_json::from_str(&raw).map_err(|e| format!("parse TASK_CHAIN.json: {e}"))?;
+    let current_index = chain["current_index"].as_u64().unwrap_or(0) as usize;
+    let tasks_len = chain["tasks"].as_array().map(|a| a.len()).unwrap_or(0);
+
+    if current_index >= tasks_len {
+        return Err("all tasks in chain are completed — no task to advance to".to_string());
+    }
+
+    // Extract next task info before any writes (avoids borrow conflicts)
+    let next = current_index + 1;
+    let (next_id, next_title, all_complete) = if next >= tasks_len {
+        (None, None, true)
+    } else {
+        let tasks = chain["tasks"].as_array().ok_or("TASK_CHAIN.json: 'tasks' is not an array")?;
+        let next_obj = &tasks[next];
+        let nid = next_obj["task_id"].as_str().ok_or("TASK_CHAIN.json: next task missing 'task_id'")?.to_string();
+        let ntitle = next_obj["title"].as_str().unwrap_or(&nid).to_string();
+        (Some(nid), Some(ntitle), false)
+    };
+
+    // Mark current as completed
+    if let Some(tasks) = chain["tasks"].as_array_mut() {
+        if current_index < tasks.len() {
+            if let Some(obj) = tasks[current_index].as_object_mut() {
+                obj.insert("status".to_string(), json!("completed"));
+            }
+        }
+    }
+
+    if all_complete {
+        chain["current_index"] = json!(tasks_len);
+        std::fs::write(&chain_path, serde_json::to_string_pretty(&chain).map_err(|e| e.to_string())?)
+            .map_err(|e| format!("write TASK_CHAIN.json: {e}"))?;
+        return Ok(json!({
+            "ok": true,
+            "status": "chain_complete",
+            "message": "all tasks in chain completed",
+        }).to_string());
+    }
+
+    let next_id = next_id.unwrap();
+    let next_title = next_title.unwrap();
+
+    // Mark next as running
+    if let Some(tasks) = chain["tasks"].as_array_mut() {
+        if next < tasks.len() {
+            if let Some(obj) = tasks[next].as_object_mut() {
+                obj.insert("status".to_string(), json!("running"));
+            }
+        }
+    }
+    chain["current_index"] = json!(next);
+    std::fs::write(&chain_path, serde_json::to_string_pretty(&chain).map_err(|e| e.to_string())?)
+        .map_err(|e| format!("write TASK_CHAIN.json: {e}"))?;
+
+    // Atomically switch focus to the next task
+    core_state::state_manager::set_task_focus(repo_root, &next_id, &next_title)?;
+
+    Ok(json!({
+        "ok": true,
+        "next_task_id": next_id,
+        "next_title": next_title,
+    }).to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -66,6 +66,7 @@ use crate::trace_runtime::{
 };
 
 use framework_kernel::json_value::{optional_bool, optional_non_empty_string, required_non_empty_string};
+use framework_kernel::runtime_registry::load_runtime_registry_payload;
 use fr_exec::live_execute::execute_request;
 use fr_utils::stdio_op_registry::{StdioOpDomain, classify_stdio_op};
 use fr_exec::trace_transport::{
@@ -75,6 +76,8 @@ use fr_exec::trace_transport::{
 use fr_utils::types::FrameworkAliasBuildOptions;
 use framework_extra::alias::build_framework_alias_envelope;
 use framework_extra::prompt_compression::build_framework_prompt_compression_envelope;
+use framework_extra::content_store::ContentStore;
+use framework_extra::prompt_resolver::PromptResolver;
 use framework_extra::orchestration_controller::build_runtime_observability_health_snapshot;
 use fr_exec::sandbox_control::build_sandbox_control_response;
 use fr_contracts::pre_tool_use_guard::evaluate_pre_tool_use_guard_value;
@@ -350,6 +353,14 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
                 .map(|v| v as usize);
             build_framework_prompt_compression_envelope(payload, ctx_size)
         }
+        "framework_resolve_content" => {
+            let hash = required_non_empty_string(&payload, "hash", "framework_resolve_content")?;
+            let artifact_root = resolve_artifact_root(&payload)?;
+            let store = ContentStore::new(&artifact_root);
+            let resolver = PromptResolver::new(store);
+            let content = resolver.resolve_one(&hash)?;
+            Ok(serde_json::json!({ "content": content }))
+        }
         "framework_session_artifact_write" => write_framework_session_artifacts(payload),
         "framework_hook_evidence_append" => Ok(framework_hook_evidence_append(payload)?),
         "framework_goal_drive" => {
@@ -410,6 +421,39 @@ fn resolve_tool_registry_path_from_payload(payload: &Value) -> Result<std::path:
         .unwrap_or(".");
     Ok(std::path::PathBuf::from(repo_root)
         .join(framework_kernel::constants::MCP_TOOL_REGISTRY_RELATIVE_PATH))
+}
+
+/// Resolve the artifact root directory from the payload or RUNTIME_REGISTRY.
+///
+/// Resolution order:
+/// 1. `artifact_root` field in the payload (caller-provided override)
+/// 2. `runtime_artifact_root` field in `RUNTIME_REGISTRY.json`
+/// 3. Error — no fallback, host-agnostic
+fn resolve_artifact_root(payload: &Value) -> Result<std::path::PathBuf, String> {
+    if let Some(root) = payload.get("artifact_root").and_then(Value::as_str) {
+        if !root.is_empty() {
+            return Ok(std::path::PathBuf::from(root));
+        }
+    }
+    let repo_root = payload
+        .get("repo_root")
+        .and_then(Value::as_str)
+        .unwrap_or(".");
+    if let Ok(registry) = load_runtime_registry_payload(Path::new(repo_root)) {
+        if let Some(root) = registry
+            .get(fr_utils::constants::ARTIFACT_ROOT_REGISTRY_FIELD)
+            .and_then(Value::as_str)
+        {
+            if !root.is_empty() {
+                return Ok(std::path::PathBuf::from(root));
+            }
+        }
+    }
+    Err(
+        "artifact_root is required — provide in payload or set \
+         RUNTIME_REGISTRY.json::runtime_artifact_root"
+            .to_string(),
+    )
 }
 
 fn dispatch_stdio_route(payload: Value) -> Result<Value, String> {

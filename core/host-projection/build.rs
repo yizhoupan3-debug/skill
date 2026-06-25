@@ -157,16 +157,15 @@ fn main() {
             ));
         }
 
-        // build_driver_args override — call per-host function directly
-        // (no central dispatch; each host that needs custom args has its own function)
+        // build_driver_args override — call unified function with host_id
         if meta_bool(id, "override_build_driver_args") {
             methods.push_str(&format!(
                 "{0}    fn build_driver_args(\
                  {0}        &self, cwd: &str, prompt: Option<&str>,\
                  {0}        resume_target: Option<&str>, resume_mode: &str, resume_only: bool,\
                  {0}    ) -> Option<(Vec<String>, String)> {{\
-                 {0}        super::capability_overrides::build_{id}_driver_args(\
-                 cwd, prompt, resume_target, resume_mode, resume_only)\
+                 {0}        super::capability_overrides::build_driver_args(\
+                 self.host_id(), cwd, prompt, resume_target, resume_mode, resume_only)\
                  {0}    }}", nl
             ));
         }

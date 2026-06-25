@@ -449,6 +449,78 @@ fn main() {
         out.push_str("    }\n}\n\n");
     }
 
+    // --- host_mcp_config_format (from host_targets.metadata.*.mcp_config_format) ---
+    {
+        out.push_str("/// Return the MCP config JSON key format for a host: \"snake_case\" or \"camelCase\".\n");
+        out.push_str("/// Returns \"camelCase\" as default if not specified.\n");
+        out.push_str("/// Source: host_targets.metadata.*.mcp_config_format\n");
+        out.push_str("pub fn host_mcp_config_format(host_id: &str) -> &'static str {\n");
+        out.push_str("    match host_id {\n");
+        for id in &supported {
+            if let Some(fmt) = metadata.get(id.as_str())
+                .and_then(|m| m.get("mcp_config_format"))
+                .and_then(serde_json::Value::as_str)
+                .filter(|s| !s.is_empty())
+            {
+                out.push_str(&format!("        \"{id}\" => \"{fmt}\",\n"));
+            }
+        }
+        out.push_str("        _ => \"camelCase\",\n");
+        out.push_str("    }\n}\n\n");
+    }
+
+    // --- host_driver_binary (from host_targets.metadata.*.driver_binary) ---
+    out.push_str("/// Return the driver binary name for a host.\n");
+    out.push_str("/// Returns \"\" if not specified in registry.\n");
+    out.push_str("/// Source: host_targets.metadata.*.driver_binary\n");
+    out.push_str("pub fn host_driver_binary(host_id: &str) -> &'static str {\n");
+    out.push_str("    match host_id {\n");
+    for id in &supported {
+        if let Some(bin) = metadata.get(id.as_str())
+            .and_then(|m| m.get("driver_binary"))
+            .and_then(serde_json::Value::as_str)
+        {
+            out.push_str(&format!("        \"{id}\" => \"{bin}\",\n"));
+        }
+    }
+    out.push_str("        _ => \"\",\n");
+    out.push_str("    }\n}\n\n");
+
+    // --- host_config_schema_url (from host_targets.metadata.*.config_schema_url) ---
+    out.push_str("/// Return the config schema URL for a host (e.g. TOML config schema).\n");
+    out.push_str("/// Returns \"\" if not specified.\n");
+    out.push_str("/// Source: host_targets.metadata.*.config_schema_url\n");
+    out.push_str("pub fn host_config_schema_url(host_id: &str) -> &'static str {\n");
+    out.push_str("    match host_id {\n");
+    for id in &supported {
+        if let Some(url) = metadata.get(id.as_str())
+            .and_then(|m| m.get("config_schema_url"))
+            .and_then(serde_json::Value::as_str)
+        {
+            out.push_str(&format!("        \"{id}\" => \"{url}\",\n"));
+        }
+    }
+    out.push_str("        _ => \"\",\n");
+    out.push_str("    }\n}\n\n");
+
+    // --- ALL_HOST_WORKSPACE_ROOT_ENV_VARS (from hook_launcher.root_env_var) ---
+    {
+        let env_vars: Vec<String> = supported.iter()
+            .filter_map(|id| {
+                metadata.get(id.as_str())
+                    .and_then(|m| m.get("hook_launcher"))
+                    .and_then(|hl| hl.get("root_env_var"))
+                    .and_then(serde_json::Value::as_str)
+                    .map(|ev| format!("\"{ev}\""))
+            })
+            .collect();
+        out.push_str(&format!(
+            "/// All known host workspace/project root env vars from the registry.\n\
+             pub const ALL_HOST_WORKSPACE_ROOT_ENV_VARS: &[&str] = &[{}];\n\n",
+            env_vars.join(", ")
+        ));
+    }
+
     let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
 
     // --- stdio_op_domains ---

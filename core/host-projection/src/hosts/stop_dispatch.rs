@@ -38,7 +38,8 @@ pub trait StopHostOps {
     /// Isolated per-host via host_id() subdirectory to prevent collision when
     /// multiple hosts share the same repo.
     fn hook_state_base(&self, repo_root: &Path) -> PathBuf {
-        repo_root.join(".claude").join("hook-state").join(self.host_id())
+        let config_dir = framework_kernel::runtime_registry::host_private_config_dir(self.host_id());
+        repo_root.join(config_dir).join("hook-state").join(self.host_id())
     }
 
     /// Session key for state file naming.
@@ -382,7 +383,7 @@ mod tests {
 
     struct TestHost;
     impl StopHostOps for TestHost {
-        fn host_id(&self) -> &'static str { "test-host" }
+        fn host_id(&self) -> &'static str { "claude" }
         fn log_label(&self) -> &'static str { "TestHost" }
         fn session_key(&self, _repo_root: &Path, _payload: &Value) -> String {
             "test-session".to_string()
@@ -398,7 +399,7 @@ mod tests {
     fn hook_state_base_includes_host_id() {
         let host = TestHost;
         let base = host.hook_state_base(Path::new("/repo"));
-        let expected = Path::new("/repo/.claude/hook-state/test-host");
+        let expected = Path::new("/repo/.claude/hook-state/claude");
         assert_eq!(base, expected);
     }
 
