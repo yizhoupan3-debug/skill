@@ -230,7 +230,12 @@ pub(crate) fn tool_task_complete(arguments: &Value, repo_root: &Path) -> std::re
 }
 
 /// Set focus to an existing task. Validates directory exists, then atomically writes both
-/// active + focus pointers.
+/// active + focus pointers under the task write lock.
+///
+/// Runs `set_task_focus` under [`apply_task_ledger_mutation`] to prevent RMW races
+/// with concurrent `tool_task_focus` or `neutralize_task_pointers_for_task`
+/// (called from `tool_task_complete` / `framework_goal_drive complete`)
+/// on the shared `TASK_POINTERS.json`.
 pub(crate) fn tool_task_focus(arguments: &Value, repo_root: &Path) -> std::result::Result<String, String> {
     let task_id = arguments
         .get("task_id")
@@ -245,7 +250,7 @@ pub(crate) fn tool_task_focus(arguments: &Value, repo_root: &Path) -> std::resul
     let task_id = core_state_utils::path_guard::validate_task_id_component(task_id)
         .map_err(|_| format!("task_focus: invalid task_id '{task_id}'"))?;
 
-    // Validate directory exists
+    // Validate directory exists (cheap read — outside the lock)
     let task_dir = repo_root.join("artifacts/current").join(task_id);
     if !task_dir.is_dir() {
         return Err(format!(
@@ -253,19 +258,23 @@ pub(crate) fn tool_task_focus(arguments: &Value, repo_root: &Path) -> std::resul
         ));
     }
 
-    // Read label from GOAL_STATE if present, else use task_id
-    let goal_path = task_dir.join("GOAL_STATE.json");
-    let label = if goal_path.is_file() {
-        fs::read_to_string(&goal_path)
-            .ok()
-            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
-            .and_then(|v| v.get("goal").and_then(Value::as_str).map(str::to_string))
-            .unwrap_or_else(|| task_id.to_string())
-    } else {
-        task_id.to_string()
-    };
+    // Acquire task write lock: prevents RMW race on TASK_POINTERS.json with
+    // concurrent set_task_focus / neutralize_task_pointers_for_task.
+    apply_task_ledger_mutation(repo_root, || {
+        let goal_path = task_dir.join("GOAL_STATE.json");
+        let label = if goal_path.is_file() {
+            fs::read_to_string(&goal_path)
+                .ok()
+                .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+                .and_then(|v| v.get("goal").and_then(Value::as_str).map(str::to_string))
+                .unwrap_or_else(|| task_id.to_string())
+        } else {
+            task_id.to_string()
+        };
 
-    core_state::state_manager::set_task_focus(repo_root, task_id, &label)?;
+        core_state::state_manager::set_task_focus(repo_root, task_id, &label)?;
+        Ok(())
+    })?;
 
     Ok(json!({
         "ok": true,

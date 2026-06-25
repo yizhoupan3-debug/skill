@@ -885,3 +885,685 @@ fn set_terminal_flags(
         "task_id": task_id,
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+    use crate::state_manager::EVIDENCE_INDEX_FILENAME;
+    use crate::task_ledger::task_ledger_path;
+    use serde_json::json;
+
+    // ── unique_repo ──────────────────────────────────────────────────────────
+
+    fn unique_repo(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "router-rs-goal-ops-{label}-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ))
+    }
+
+    fn start_drive_goal(repo: &Path, task_id: &str) -> Value {
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "start",
+            "task_id": task_id,
+            "goal": "drive goal test",
+            "non_goals": ["n1", "n2"],
+            "done_when": ["d1", "d2", "d3"],
+            "validation_commands": ["cargo test"],
+            "drive_until_done": true,
+        }))
+        .expect("start drive goal")
+    }
+
+    fn write_evidence_success(repo: &Path, task_id: &str) {
+        let dir = repo.join("artifacts/current").join(task_id);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(EVIDENCE_INDEX_FILENAME),
+            r#"{"schema_version":"evidence-index-v2","artifacts":[{"command_preview":"x","exit_code":0}]}"#,
+        )
+        .expect("write EVIDENCE_INDEX.json");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // validate_drive_contract
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn drive_contract_skips_when_not_driving() {
+        assert!(validate_drive_contract(false, &[], &[], &[], "test").is_ok());
+    }
+
+    #[test]
+    fn drive_contract_rejects_no_non_goals() {
+        let err = validate_drive_contract(true, &[], &[json!("d1"), json!("d2")], &[json!("cargo test")], "test").unwrap_err();
+        assert!(err.contains("non_goals"), "{err}");
+    }
+
+    #[test]
+    fn drive_contract_rejects_less_than_two_done_when() {
+        let err = validate_drive_contract(true, &[json!("n1")], &[json!("d1")], &[json!("cargo test")], "test").unwrap_err();
+        assert!(err.contains("done_when"), "{err}");
+    }
+
+    #[test]
+    fn drive_contract_rejects_no_validation_commands() {
+        let err = validate_drive_contract(true, &[json!("n1")], &[json!("d1"), json!("d2")], &[], "test").unwrap_err();
+        assert!(err.contains("validation_commands"), "{err}");
+    }
+
+    #[test]
+    fn drive_contract_accepts_minimally_valid() {
+        assert!(validate_drive_contract(true, &[json!("n1")], &[json!("d1"), json!("d2")], &[json!("cargo test")], "test").is_ok());
+    }
+
+    #[test]
+    fn drive_contract_ignores_empty_string_items() {
+        // Empty strings should not count toward the contract
+        let err = validate_drive_contract(true, &[json!(""), json!("n1")], &[json!(""), json!("d1"), json!("d2")], &[json!("")], "test").unwrap_err();
+        assert!(err.contains("validation_commands"), "empty validation cmd should not satisfy contract: {err}");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // goal_requires_completion_evidence
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn requires_evidence_when_drive_until_done() {
+        let state = json!({"drive_until_done": true});
+        assert!(goal_requires_completion_evidence(&state));
+    }
+
+    #[test]
+    fn requires_evidence_when_explicit_flag() {
+        let state = json!({"requires_completion_evidence": true});
+        assert!(goal_requires_completion_evidence(&state));
+    }
+
+    #[test]
+    fn requires_evidence_when_validation_commands_nonempty() {
+        let state = json!({"validation_commands": ["cargo test"]});
+        assert!(goal_requires_completion_evidence(&state));
+    }
+
+    #[test]
+    fn requires_evidence_when_done_when_nonempty() {
+        let state = json!({"done_when": ["d1"]});
+        assert!(goal_requires_completion_evidence(&state));
+    }
+
+    #[test]
+    fn not_requires_evidence_when_no_triggers() {
+        let state = json!({"drive_until_done": false});
+        assert!(!goal_requires_completion_evidence(&state));
+        let state2 = json!({});
+        assert!(!goal_requires_completion_evidence(&state2));
+    }
+
+    #[test]
+    fn explicit_flag_is_authoritative() {
+        // requires_completion_evidence explicitly set — checked first, overrides drive_until_done
+        let state = json!({"drive_until_done": false, "requires_completion_evidence": true});
+        assert!(goal_requires_completion_evidence(&state));
+
+        // Explicit false overrides drive_until_done=true (key presence wins)
+        let state2 = json!({"drive_until_done": true, "requires_completion_evidence": false});
+        assert!(!goal_requires_completion_evidence(&state2), "explicit false is authoritative");
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // framework_goal_drive — start
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn goal_start_creates_goal_state_file() {
+        let repo = unique_repo("start-file");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        let out = start_drive_goal(&repo, "t-start");
+        assert_eq!(out["ok"], json!(true));
+        assert_eq!(out["task_id"], json!("t-start"));
+
+        let path = repo.join("artifacts/current/t-start/GOAL_STATE.json");
+        assert!(path.is_file(), "GOAL_STATE.json must exist");
+
+        let raw = fs::read_to_string(&path).unwrap();
+        let goal: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(goal["schema_version"], json!("router-rs-goal-v1"));
+        assert_eq!(goal["status"], json!("running"));
+        assert_eq!(goal["goal"], json!("drive goal test"));
+        assert_eq!(goal["drive_until_done"], json!(true));
+        assert_eq!(goal[REQUIRES_COMPLETION_EVIDENCE_KEY], json!(true));
+        assert_eq!(goal["checkpoints"], json!([]));
+
+        // TASK_LEDGER should have the goal_state transaction
+        let ledger_path = task_ledger_path(&repo, "t-start").unwrap();
+        assert!(ledger_path.is_file(), "TASK_LEDGER.jsonl must exist");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_start_rejects_drive_without_contract() {
+        let repo = unique_repo("start-reject");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        let err = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "start",
+            "task_id": "t-bad",
+            "goal": "incomplete drive",
+            "drive_until_done": true,
+            // missing non_goals, done_when, validation_commands
+        }))
+        .unwrap_err();
+        assert!(err.contains("non_goals"), "must reject: {err}");
+        assert!(!repo.join("artifacts/current/t-bad/GOAL_STATE.json").is_file());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_start_non_drive_succeeds_with_minimal_fields() {
+        let repo = unique_repo("start-nd");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "start",
+            "task_id": "t-simple",
+            "goal": "simple task",
+            "drive_until_done": false,
+        }))
+        .expect("non-drive start must succeed");
+        assert_eq!(out["ok"], json!(true));
+        assert!(repo.join("artifacts/current/t-simple/GOAL_STATE.json").is_file());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // framework_goal_drive — status
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn goal_status_reads_back_goal_state() {
+        let repo = unique_repo("status");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-st");
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "status",
+            "task_id": "t-st",
+        }))
+        .expect("status");
+        assert_eq!(out["ok"], json!(true));
+        assert_eq!(out["task_id"], json!("t-st"));
+        assert!(out["goal_state"].is_object());
+        assert_eq!(out["goal_state"]["status"], json!("running"));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_status_without_override_uses_pointer() {
+        let repo = unique_repo("status-ptr");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-sp");
+        // Pointer was set by start via sync_task_pointers_after_goal_drive
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "status",
+            // no task_id — should resolve from pointer
+        }))
+        .expect("status with pointer");
+        assert_eq!(out["task_id"], json!("t-sp"));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // framework_goal_drive — checkpoint
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn goal_checkpoint_appends_to_goal_state() {
+        let repo = unique_repo("cp");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-cp");
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "checkpoint",
+            "task_id": "t-cp",
+            "note": "milestone one",
+        }))
+        .expect("checkpoint");
+        assert_eq!(out["ok"], json!(true));
+
+        let raw = fs::read_to_string(repo.join("artifacts/current/t-cp/GOAL_STATE.json")).unwrap();
+        let goal: Value = serde_json::from_str(&raw).unwrap();
+        let cps = goal["checkpoints"].as_array().unwrap();
+        assert_eq!(cps.len(), 1);
+        assert_eq!(cps[0]["note"], json!("milestone one"));
+        assert_eq!(cps[0]["type"], json!("milestone"));
+        assert!(cps[0]["at"].is_string());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_checkpoint_rejects_empty_note() {
+        let repo = unique_repo("cp-empty");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-cpe");
+        let err = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "checkpoint",
+            "task_id": "t-cpe",
+            "note": "",
+        }))
+        .unwrap_err();
+        assert!(err.contains("non-empty note"), "{err}");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // framework_goal_drive — pause / resume
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn goal_pause_sets_status_paused_and_drive_false() {
+        let repo = unique_repo("pause");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-pa");
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "pause",
+            "task_id": "t-pa",
+        }))
+        .expect("pause");
+        assert_eq!(out["ok"], json!(true));
+
+        let raw = fs::read_to_string(repo.join("artifacts/current/t-pa/GOAL_STATE.json")).unwrap();
+        let goal: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(goal["status"], json!("paused"));
+        assert_eq!(goal["drive_until_done"], json!(false));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_pause_resume_cycle_toggles_status() {
+        let repo = unique_repo("pause-resume");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-pr");
+
+        // pause
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "pause",
+            "task_id": "t-pr",
+        }))
+        .expect("pause");
+
+        // resume
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "resume",
+            "task_id": "t-pr",
+        }))
+        .expect("resume");
+        assert_eq!(out["ok"], json!(true));
+
+        let raw = fs::read_to_string(repo.join("artifacts/current/t-pr/GOAL_STATE.json")).unwrap();
+        let goal: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(goal["status"], json!("running"));
+        assert_eq!(goal["drive_until_done"], json!(true));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // framework_goal_drive — complete
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn goal_complete_succeeds_with_evidence() {
+        let repo = unique_repo("complete-ev");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-ce");
+        write_evidence_success(&repo, "t-ce");
+
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "t-ce",
+        }))
+        .expect("complete");
+        assert_eq!(out["ok"], json!(true));
+        assert_eq!(out["operation"], json!("completed"));
+
+        // Verify goal state is marked archived
+        let raw = fs::read_to_string(repo.join("artifacts/current/t-ce/GOAL_STATE.json")).unwrap();
+        let goal: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(goal["archived"], json!(true));
+        assert!(goal["completed_at"].is_string());
+        assert_eq!(goal["status"], json!("completed"));
+
+        // Verify pointers neutralized
+        let (active, focus) = super::super::pointer_ops::read_task_pointer_pair(&repo);
+        assert!(active.is_none() || active.as_deref() != Some("t-ce"),
+            "active pointer should be neutralized: {active:?}");
+        assert!(focus.is_none() || focus.as_deref() != Some("t-ce"),
+            "focus pointer should be neutralized: {focus:?}");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_complete_rejects_missing_evidence() {
+        let repo = unique_repo("complete-no-ev");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-cne");
+
+        let err = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "t-cne",
+        }))
+        .unwrap_err();
+        assert!(err.contains("EVIDENCE"), "must reject without evidence: {err}");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_complete_non_drive_does_not_require_evidence() {
+        let repo = unique_repo("complete-nd");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "start",
+            "task_id": "t-nd",
+            "goal": "no drive needed",
+            "drive_until_done": false,
+        }))
+        .expect("start non-drive");
+
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "t-nd",
+        }))
+        .expect("non-drive complete must succeed without evidence");
+        assert_eq!(out["ok"], json!(true));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // framework_goal_drive — block
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn goal_block_sets_blocker_and_status() {
+        let repo = unique_repo("block");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-bl");
+
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "block",
+            "task_id": "t-bl",
+            "blocker": "waiting for dependency X",
+        }))
+        .expect("block");
+        assert_eq!(out["ok"], json!(true));
+
+        let raw = fs::read_to_string(repo.join("artifacts/current/t-bl/GOAL_STATE.json")).unwrap();
+        let goal: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(goal["status"], json!("blocked"));
+        assert_eq!(goal["blocker"], json!("waiting for dependency X"));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_block_rejects_empty_blocker() {
+        let repo = unique_repo("block-empty");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-ble");
+
+        let err = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "block",
+            "task_id": "t-ble",
+            "blocker": "",
+        }))
+        .unwrap_err();
+        assert!(err.contains("non-empty blocker"), "{err}");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // framework_goal_drive — clear
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn goal_clear_removes_goal_state_and_neutralizes_pointers() {
+        let repo = unique_repo("clear");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-cl");
+
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "clear",
+            "task_id": "t-cl",
+        }))
+        .expect("clear");
+        assert_eq!(out["ok"], json!(true));
+        assert_eq!(out["removed"], json!(true));
+
+        assert!(!repo.join("artifacts/current/t-cl/GOAL_STATE.json").is_file(),
+            "GOAL_STATE must be deleted");
+
+        // Pointers neutralized
+        let (active, focus) = super::super::pointer_ops::read_task_pointer_pair(&repo);
+        assert!(active.is_none() || active.as_deref() != Some("t-cl"));
+        assert!(focus.is_none() || focus.as_deref() != Some("t-cl"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_clear_noop_on_missing_goal_state() {
+        let repo = unique_repo("clear-miss");
+        fs::create_dir_all(repo.join("artifacts/current/t-cm")).unwrap();
+
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "clear",
+            "task_id": "t-cm",
+        }))
+        .expect("clear on missing goal");
+        assert_eq!(out["removed"], json!(false));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // framework_goal_drive — amend
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn goal_amend_updates_goal_field() {
+        let repo = unique_repo("amend-ok");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-am");
+
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "amend",
+            "task_id": "t-am",
+            "goal": "revised goal",
+        }))
+        .expect("amend");
+        assert_eq!(out["ok"], json!(true));
+
+        let raw = fs::read_to_string(repo.join("artifacts/current/t-am/GOAL_STATE.json")).unwrap();
+        let goal: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(goal["goal"], json!("revised goal"));
+        assert!(goal["amended_at"].is_string());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_amend_rejects_completed_goal() {
+        let repo = unique_repo("amend-complete");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        // Non-drive goal — no evidence needed
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "start",
+            "task_id": "t-ac",
+            "goal": "to complete",
+            "drive_until_done": false,
+        }))
+        .expect("start");
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "t-ac",
+        }))
+        .expect("complete");
+
+        let err = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "amend",
+            "task_id": "t-ac",
+            "goal": "wont work",
+        }))
+        .unwrap_err();
+        assert!(err.contains("completed"), "{err}");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_amend_revalidates_drive_contract() {
+        let repo = unique_repo("amend-contract");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        // Start with drive_until_done=true (satisfies contract: 2 non_goals, 3 done_when, 1 validation_cmd)
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "start",
+            "task_id": "t-amc",
+            "goal": "amend contract test",
+            "non_goals": ["n1"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["cargo test"],
+            "drive_until_done": true,
+        }))
+        .expect("start");
+
+        // Amend to remove a done_when — should succeed since drive contract still met
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "amend",
+            "task_id": "t-amc",
+            "done_when": ["d1"],  // only 1 now — drive contract violated!
+        }))
+        .unwrap_err();
+        // Note: amend with drive_until_done=true requires >=2 done_when
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn goal_amend_requires_at_least_one_field() {
+        let repo = unique_repo("amend-empty");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_drive_goal(&repo, "t-ae");
+
+        let err = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "amend",
+            "task_id": "t-ae",
+            // no goal/non_goals/done_when/validation_commands
+        }))
+        .unwrap_err();
+        assert!(err.contains("at least one field"), "{err}");
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // resolve_session_id
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn session_id_from_payload_takes_precedence() {
+        let payload = json!({"session_id": "from-payload"});
+        let sid = resolve_session_id(&payload);
+        assert_eq!(sid, "from-payload");
+    }
+
+    #[test]
+    fn session_id_falls_back_to_env_when_no_explicit() {
+        let payload = json!({});
+        // Returns first *_SESSION_ID env var match, or empty if none exist.
+        // Either is acceptable — test validates no panic/crash in the fallback path.
+        let _ = resolve_session_id(&payload);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // value_string_list helper
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn value_string_list_from_array() {
+        let payload = json!({"items": ["a", "b", "c"]});
+        let result = value_string_list(&payload, "items");
+        assert_eq!(result, vec![json!("a"), json!("b"), json!("c")]);
+    }
+
+    #[test]
+    fn value_string_list_from_single_string() {
+        let payload = json!({"name": "hello"});
+        let result = value_string_list(&payload, "name");
+        assert_eq!(result, vec![json!("hello")]);
+    }
+
+    #[test]
+    fn value_string_list_returns_empty_for_missing_key() {
+        let payload = json!({});
+        let result = value_string_list(&payload, "nope");
+        assert_eq!(result, Vec::<Value>::new());
+    }
+
+    #[test]
+    fn value_string_list_filters_non_strings() {
+        let payload = json!({"items": ["a", 42, false, "b"]});
+        let result = value_string_list(&payload, "items");
+        assert_eq!(result, vec![json!("a"), json!("b")]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // count_nonempty_string_items
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn count_nonempty_counts_correctly() {
+        let items = [json!("a"), json!(""), json!("b"), json!("  "), json!("c")];
+        assert_eq!(count_nonempty_string_items(&items), 3);
+    }
+
+    #[test]
+    fn count_nonempty_zero_when_all_empty() {
+        let items = [json!(""), json!("  ")];
+        assert_eq!(count_nonempty_string_items(&items), 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // goal_state_path_for_task — path safety
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn goal_state_path_rejects_unsafe_task_id() {
+        let repo = Path::new("/tmp");
+        for bad in ["", "../x", "a/b", ".."] {
+            let err = goal_state_path_for_task(repo, bad).unwrap_err();
+            assert!(err.contains("safe path component"), "bad id {bad:?}: {err}");
+        }
+    }
+}
