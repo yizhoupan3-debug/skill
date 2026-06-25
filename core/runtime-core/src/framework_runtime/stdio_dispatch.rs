@@ -379,7 +379,7 @@ fn dispatch_tool_stdio_request(op: &str, payload: Value) -> Result<Value, String
             let registry_path = resolve_tool_registry_path_from_payload(&payload)?;
             let records = mcp_tool_registry::load_tool_records_cached(&registry_path)
                 .map_err(|e| format!("search_tools: {e}"))?;
-            let results = tool_routing_engine::search::search_tools(&query, &records, top_k);
+            let results = tool_routing_engine::search::search_tools(&query, &records, top_k, None);
             serde_json::to_value(&results).map_err(|e| e.to_string())
         }
         "tool_registry_status" => {

@@ -1,8 +1,9 @@
 {
-  "note": "Write-only — populated by framework maint health-scan when run. Currently empty because no health scan has been executed.",
+  "note": "Auto-populated after routing audit (2026-06-25). Set active=true when health scan completes.",
   "schema_version": "skill-health-manifest-v1",
+  "active": false,
   "skills": {},
   "source_of_truth": false,
-  "version": 1,
+  "version": 2,
   "lifecycle": "write-only"
 }

@@ -25,7 +25,7 @@ routing_priority: P1
 session_start: required
 source: project
 trigger_hints:
-- DESIGN.md
+- /DESIGN.md
 - DESIGN.md 设计规范
 - UI 设计规范
 - design contract

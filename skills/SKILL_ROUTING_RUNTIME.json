@@ -31,7 +31,7 @@
       "gate",
       "delegation",
       "P1",
-      "Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration. Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundar",
+      "Decide whether work should stay local, use bounded sidecars, or escalate to workflow orchestration. Also design and debug multi-agent systems when the real problem is coordination, handoff, worker boundaries, and inter-agent information sharing.",
       "required",
       [
         "/workflow",
@@ -44,7 +44,8 @@
         "swarm architecture",
         "task routing system",
         "多 agent 协作",
-        "多 agent 执行"
+        "多 agent 执行",
+        "agent-swarm-orchestration"
       ],
       "project",
       "skills/agent-swarm-orchestration/SKILL.md",
@@ -60,7 +61,7 @@
         "behavior:agent_swarm_owner",
         "behavior:hot_retry_eligible"
       ],
-      null,
+      "Decide local vs orchestrated execution for multi-agent workflows",
       null,
       null,
       null,
@@ -125,7 +126,7 @@
       ],
       "skill",
       [],
-      null,
+      "Design algorithmic trading strategies, backtests, and risk management",
       null,
       null,
       null,
@@ -182,7 +183,8 @@
         "barrier research",
         "瓶颈研究",
         "突破方向",
-        "自动突破"
+        "自动突破",
+        "autoresearch"
       ],
       "local",
       "skills/autoresearch/SKILL.md",
@@ -237,7 +239,8 @@
         "PMID",
         "Zotero-style cleanup",
         "文中引用与参考文献表一致性检查",
-        "文献引用管理"
+        "文献引用管理",
+        "citation-management"
       ],
       "project",
       "skills/citation-management/SKILL.md",
@@ -249,7 +252,7 @@
       ],
       "skill",
       [],
-      null,
+      "Verify and format academic citations",
       null,
       null,
       null,
@@ -279,7 +282,7 @@
       "owner",
       "none",
       "P1",
-      "Deep adversarial-style code review (review-only). Default visible output is a compact, severity-sorted findings list; narrative sections only when explicitly requested. Model selects lenses from an ex",
+      "Deep adversarial-style code review (review-only). Default visible output is a compact, severity-sorted findings list; narrative sections only when explicitly requested. Model selects lenses from an extensible adversarial review palette for coverage.",
       "preferred",
       [
         "$code-review-deep",
@@ -287,7 +290,6 @@
         "code review",
         "code-review-deep",
         "deep code review",
-        "review",
         "review-only 代码审查",
         "security code review",
         "security-focused code review",
@@ -312,7 +314,7 @@
         "scoring:code_review_deep",
         "behavior:code_review_deep_overlay"
       ],
-      null,
+      "Adversarial code review with severity-sorted findings",
       null,
       null,
       null,
@@ -429,7 +431,7 @@
       [
         "behavior:low_score_override:20.0"
       ],
-      null,
+      "Evidence-first requirement clarification and convergence review",
       null,
       null,
       null,
@@ -476,7 +478,9 @@
         "设计系统",
         "设计规范",
         "设计验收",
-        "风格漂移"
+        "风格漂移",
+        "/DESIGN.md",
+        "design-md"
       ],
       "project",
       "skills/design-md/SKILL.md",
@@ -490,9 +494,10 @@
       [
         "scoring:design_md",
         "behavior:hot_retry_eligible",
-        "artifact_exception:design_md_suppress"
+        "artifact_exception:design_md_suppress",
+        "behavior:design_md_scored"
       ],
-      null,
+      "Manage design-system contracts and visual tokens",
       null,
       null,
       null,
@@ -526,7 +531,7 @@
       "owner",
       "none",
       "P2",
-      "Create Mermaid or Graphviz/DOT diagrams for flowcharts, process diagrams, sequence diagrams, ERDs, dependency graphs, state machines, and publication-quality technical diagrams. Use when the user asks",
+      "Create Mermaid or Graphviz/DOT diagrams for flowcharts, process diagrams, sequence diagrams, ERDs, dependency graphs, state machines, and publication-quality technical diagrams. Use when the user asks for a visual representation of processes, architecture, or data flow.",
       "n/a",
       [
         "Mermaid or Graphviz/DOT",
@@ -542,7 +547,8 @@
         "方法图",
         "时序图",
         "流程图",
-        "研究流程图"
+        "研究流程图",
+        "diagramming"
       ],
       "project",
       "skills/diagramming/SKILL.md",
@@ -554,7 +560,7 @@
       ],
       "skill",
       [],
-      null,
+      "Create Mermaid/Graphviz diagrams for processes and architecture",
       null,
       null,
       null,
@@ -594,7 +600,8 @@
         "structured Word edits",
         "word document",
         "模板化文档生成",
-        "表格或版式修复"
+        "表格或版式修复",
+        "doc"
       ],
       "project",
       "skills/doc/SKILL.md",
@@ -608,7 +615,7 @@
       [
         "behavior:hot_retry_eligible"
       ],
-      null,
+      "Handle Word .docx creation, edits, and review",
       null,
       null,
       null,
@@ -661,7 +668,8 @@
         "html email",
         "newsletter",
         "newsletter markup",
-        "邮件模板"
+        "邮件模板",
+        "email-template"
       ],
       "local",
       "skills/email-template/SKILL.md",
@@ -673,7 +681,7 @@
       ],
       "skill",
       [],
-      null,
+      "Produce cross-client HTML emails compatible with Outlook/Gmail/Apple Mail",
       null,
       null,
       null,
@@ -690,7 +698,7 @@
         ],
         "version": "1.0.0"
       },
-      null,
+      "low",
       null,
       null,
       null,
@@ -702,7 +710,7 @@
       "owner",
       "none",
       "P2",
-      "Ensure and manage research experiment reproducibility: environment capture, random seed management, data versioning, configuration tracking, result validation, and artifact archival. Use when the user",
+      "Ensure and manage research experiment reproducibility: environment capture, random seed management, data versioning, configuration tracking, result validation, and artifact archival. Use when the user needs to make experiments reproducible or verify reproducibility setup.",
       "preferred",
       [
         "DVC",
@@ -718,7 +726,8 @@
         "方案偏离",
         "实验环境管理",
         "随机种子",
-        "预注册"
+        "预注册",
+        "experiment-reproducibility"
       ],
       "project",
       "skills/experiment-reproducibility/SKILL.md",
@@ -730,7 +739,7 @@
       ],
       "skill",
       [],
-      null,
+      "Manage research experiment reproducibility end-to-end",
       null,
       null,
       null,
@@ -768,7 +777,8 @@
         "formal verification",
         "witness验证",
         "形式验证",
-        "量纲检查"
+        "量纲检查",
+        "formal-verification"
       ],
       "local",
       "skills/formal-verification/SKILL.md",
@@ -780,7 +790,7 @@
       ],
       "skill",
       [],
-      null,
+      "CAS identity, SMT consistency, witness validation, dimensional analysis",
       null,
       null,
       null,
@@ -840,7 +850,7 @@
       [
         "behavior:ci_gate_fuzzy_rescue_excluded"
       ],
-      null,
+      "Address comments in a GitHub PR review",
       null,
       null,
       null,
@@ -848,7 +858,6 @@
         "platforms": [
           "supported"
         ],
-        "short-description": "Address comments in a GitHub PR review",
         "tags": [
           "github",
           "pull-request",
@@ -918,7 +927,7 @@
       [
         "behavior:nl_exempt_framework_alias"
       ],
-      null,
+      "Triage and fix failing GitHub Actions PR checks",
       null,
       null,
       null,
@@ -935,7 +944,7 @@
         ],
         "version": "2.0.0"
       },
-      null,
+      "low",
       [
         "shell",
         "git",
@@ -1033,7 +1042,7 @@
       ],
       "skill",
       [],
-      null,
+      "Generate HTML/CSS/JS infographics and knowledge cards",
       null,
       null,
       null,
@@ -1062,7 +1071,7 @@
       "owner",
       "none",
       "P2",
-      "Literature verification capability: DOI reachability, citation-claim alignment, contradiction sweep, closest work identification, coverage scoring.",
+      "Literature verification capability (research-discovery sub-skill): DOI reachability, citation-claim alignment, contradiction sweep, closest work identification, coverage scoring.",
       "n/a",
       [
         "DOI验证",
@@ -1070,7 +1079,8 @@
         "contradiction sweep",
         "literature check",
         "引用审查",
-        "文献验证"
+        "文献验证",
+        "literature-verification"
       ],
       "local",
       "skills/literature-verification/SKILL.md",
@@ -1082,7 +1092,7 @@
       ],
       "skill",
       [],
-      null,
+      "Verify DOI reachability, citation-claim alignment, contradiction sweep",
       null,
       null,
       null,
@@ -1122,7 +1132,8 @@
         "定理证明",
         "收敛性证明",
         "数学推导",
-        "线性代数证明"
+        "线性代数证明",
+        "math-derivation"
       ],
       "project",
       "skills/math-derivation/SKILL.md",
@@ -1134,7 +1145,7 @@
       ],
       "skill",
       [],
-      "Execute rigorous mathematical derivations and proofs",
+      "Rigorous mathematical derivations and theorem proofs",
       null,
       null,
       null,
@@ -1178,7 +1189,8 @@
         "MCP 配置",
         "model context protocol",
         "tool server",
-        "创建 MCP"
+        "创建 MCP",
+        "mcp-server-management"
       ],
       "project",
       "skills/mcp-server-management/SKILL.md",
@@ -1190,7 +1202,7 @@
       ],
       "skill",
       [],
-      null,
+      "创建、配置、调试和注册 MCP server",
       null,
       null,
       null,
@@ -1250,7 +1262,8 @@
         "顶会标准",
         "顶会标准改稿",
         "顶刊标准",
-        "顶刊标准改稿"
+        "顶刊标准改稿",
+        "paper-workbench"
       ],
       "project",
       "skills/paper-workbench/SKILL.md",
@@ -1262,9 +1275,10 @@
       ],
       "skill",
       [
-        "scoring:paper_workbench"
+        "scoring:paper_workbench",
+        "behavior:paper_workbench_scored"
       ],
-      null,
+      "论文全流程：审稿、返修、rebuttal、写作、投稿",
       null,
       null,
       null,
@@ -1284,10 +1298,20 @@
         "version": "1.16.0"
       },
       "medium",
+      [
+        "Read",
+        "Write",
+        "Edit",
+        "Bash",
+        "Agent",
+        "Glob",
+        "Grep"
+      ],
       null,
-      null,
-      null,
-      null
+      "conditional",
+      [
+        "git push"
+      ]
     ],
     [
       "paper-writing",
@@ -1316,12 +1340,12 @@
       ],
       "skill",
       [],
+      "Prose-chain paper writing: story card, section rewrite, revised prose",
       null,
       null,
       null,
       null,
-      null,
-      null,
+      "low",
       null,
       null,
       null,
@@ -1357,7 +1381,7 @@
       [
         "behavior:hot_retry_eligible"
       ],
-      null,
+      "Handle PDF reading, editing, repair, and review",
       null,
       null,
       null,
@@ -1396,7 +1420,7 @@
       "owner",
       "none",
       "P2",
-      "Cross-host Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认轻量五行证据；高风险时 audit plan。 `plan_profile: execution`（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 `/gitx plan`）；`plan_profile: 跨宿主 Plan 闸门，产出可验收 todo，非 lifecycle 专用。",
+      "跨宿主 Plan / 策划文档闸门：先用本地证据起草可执行计划，再产出可验收 todo；默认轻量五行证据；高风险时 audit plan。plan_profile: execution（缺省）末条须做计划 vs 实际 + Git 状态证据收口（宿主支持时使用 /gitx plan）；plan_profile: 跨宿主 Plan 闸门，产出可验收 todo，非 lifecycle 专用。",
       "preferred",
       [
         "CreatePlan",
@@ -1408,7 +1432,8 @@
         "策划文档闸门",
         "纯调研",
         "计划对照实际",
-        "调研计划"
+        "调研计划",
+        "plan-mode"
       ],
       "project",
       "skills/plan-mode/SKILL.md",
@@ -1420,7 +1445,7 @@
       ],
       "skill",
       [],
-      null,
+      "Cross-host plan gate with actionable todo output",
       null,
       null,
       null,
@@ -1448,7 +1473,7 @@
       "owner",
       "none",
       "P2",
-      "Prose verification capability: terminology consistency, style guide compliance, claim drift detection, language register, hedging appropriateness.",
+      "Prose verification capability (paper-writing/paper-workbench sub-skill): terminology consistency, style guide compliance, claim drift detection, language register, hedging appropriateness.",
       "n/a",
       [
         "claim drift",
@@ -1456,7 +1481,8 @@
         "writing verification",
         "文体验证",
         "术语一致性",
-        "风格检查"
+        "风格检查",
+        "prose-verification"
       ],
       "local",
       "skills/prose-verification/SKILL.md",
@@ -1468,7 +1494,7 @@
       ],
       "skill",
       [],
-      null,
+      "Verify terminology, style guide, claim drift, and language register",
       null,
       null,
       null,
@@ -1511,7 +1537,8 @@
         "uv 包管理",
         "uv.lock",
         "不用 pip",
-        "全局 python 包"
+        "全局 python 包",
+        "python-env-management"
       ],
       "project",
       "skills/python-env-management/SKILL.md",
@@ -1523,7 +1550,7 @@
       ],
       "skill",
       [],
-      null,
+      "macOS Python governance with uv-only packaging",
       null,
       null,
       null,
@@ -1554,14 +1581,15 @@
       "owner",
       "none",
       "P2",
-      "experiment-reproducibility 的无状态审计子能力：验证实验的可复现性——种子、确定性、环境锁定、数据版本和 checkpoint 恢复。",
+      "Reproducibility verification capability (experiment-reproducibility sub-skill): 验证实验的可复现性——种子、确定性、环境锁定、数据版本和 checkpoint 恢复。",
       "n/a",
       [
         "deterministic rerun",
         "reproducibility check",
         "可复现性验证",
         "环境复现",
-        "种子检查"
+        "种子检查",
+        "reproducibility-verification"
       ],
       "local",
       "skills/reproducibility-verification/SKILL.md",
@@ -1573,7 +1601,7 @@
       ],
       "skill",
       [],
-      null,
+      "Verify experiment reproducibility: seed, determinism, environment",
       null,
       null,
       null,
@@ -1625,7 +1653,8 @@
         "类比",
         "该用什么理论",
         "调研方向",
-        "非手稿科研"
+        "非手稿科研",
+        "research-discovery"
       ],
       "local",
       "skills/research-discovery/SKILL.md",
@@ -1687,7 +1716,8 @@
         "本构方程",
         "模型搭建",
         "研究路线设计",
-        "量纲分析"
+        "量纲分析",
+        "research-execution"
       ],
       "local",
       "skills/research-execution/SKILL.md",
@@ -1794,7 +1824,7 @@
       "owner",
       "none",
       "P2",
-      "Create, refactor, and review code-generated scientific figures for papers using matplotlib, seaborn, plotnine, or related Python plotting tools. Use for 科研出图, publication charts, journal style figures",
+      "Create, refactor, and review code-generated scientific figures for papers using matplotlib, seaborn, plotnine, or related Python plotting tools. Use for 科研出图, publication charts, journal style figures.",
       "preferred",
       [
         "CJK font",
@@ -1806,7 +1836,8 @@
         "scientific figures",
         "seaborn",
         "statistical annotations",
-        "科研出图"
+        "科研出图",
+        "scientific-figure-plotting"
       ],
       "project",
       "skills/scientific-figure-plotting/SKILL.md",
@@ -1818,7 +1849,7 @@
       ],
       "skill",
       [],
-      null,
+      "Create publication-quality scientific figures with Python",
       null,
       null,
       null,
@@ -1876,7 +1907,7 @@
       [
         "behavior:hot_retry_eligible"
       ],
-      null,
+      "Inspect Sentry production errors and triage issues",
       null,
       null,
       null,
@@ -1936,7 +1967,7 @@
       ],
       "skill",
       [],
-      null,
+      "Three-dimension parallel code simplification (reuse/quality/efficiency)",
       null,
       null,
       null,
@@ -1953,7 +1984,7 @@
         ],
         "version": "1.0.0"
       },
-      "low",
+      "medium",
       [
         "Read",
         "Write",
@@ -1990,7 +2021,8 @@
         "路由系统",
         "路由表",
         "路由诊断",
-        "边界重叠"
+        "边界重叠",
+        "skill-framework-developer"
       ],
       "project",
       "skills/skill-framework-developer/SKILL.md",
@@ -2005,7 +2037,7 @@
         "behavior:framework_review_overlay",
         "behavior:gate_exception_framework_dev"
       ],
-      "Design and tune cross-host skill routing and framework behavior",
+      "Tune cross-host skill routing and framework behavior",
       null,
       null,
       null,
@@ -2107,7 +2139,7 @@
       "gate",
       "artifact",
       "P1",
-      "Route presentation, PPT, PPTX, and slide deck tasks.",
+      "Create and edit presentation, PPT, PPTX, and slide deck files.",
       "required",
       [
         "PPT",
@@ -2131,7 +2163,7 @@
       [
         "artifact_exception:slides_design_contract"
       ],
-      null,
+      "Create and edit PPT, PPTX, and slide deck presentations",
       null,
       null,
       null,
@@ -2167,7 +2199,7 @@
       "gate",
       "artifact",
       "P1",
-      "Route workbook-native spreadsheet artifact work before choosing a narrower implementation lane. Use this artifact gate at 每轮对话开始 / first-turn / conversation start when the main artifact is an Excel wo",
+      "Route workbook-native spreadsheet artifact work before choosing a narrower implementation lane. Use this artifact gate at every turn / first-turn / conversation start when the main artifact is an Excel workbook or CSV dataset.",
       "required",
       [
         "Excel",
@@ -2176,7 +2208,9 @@
         "spreadsheet",
         "tsv",
         "xls",
-        "xlsx"
+        "xlsx",
+        "spreadsheets",
+        "/spreadsheets"
       ],
       "project",
       "skills/primary-runtime/spreadsheets/SKILL.md",
@@ -2188,12 +2222,12 @@
       ],
       "skill",
       [],
+      "Route workbook-native spreadsheet work to the right implementation lane",
       null,
       null,
       null,
       null,
-      null,
-      null,
+      "low",
       null,
       null,
       null,
@@ -2205,7 +2239,7 @@
       "owner",
       "none",
       "P2",
-      "Guide research statistics for test choice, effect sizes, uncertainty reporting, and interpretation. Use when the user asks 用什么检验、显著性怎么算、p 值、效应量、贝叶斯、多重比较、统计功效、回归诊断, or needs help choosing, executing, o",
+      "Guide research statistics for test choice, effect sizes, uncertainty reporting, and interpretation. Use when the user asks about test selection, significance, p-values, effect sizes, Bayesian methods, multiple comparisons, statistical power, regression diagnostics, or needs help choosing, executing, or interpreting statistical analyses.",
       "preferred",
       [
         "A/B 测试怎么做显著性",
@@ -2222,7 +2256,8 @@
         "统计功效",
         "置信区间怎么报",
         "贝叶斯",
-        "需要多少样本量"
+        "需要多少样本量",
+        "statistical-analysis"
       ],
       "project",
       "skills/statistical-analysis/SKILL.md",
@@ -2234,7 +2269,7 @@
       ],
       "skill",
       [],
-      null,
+      "Guide research statistics: test choice, effect sizes, interpretation",
       null,
       null,
       null,
@@ -2264,7 +2299,7 @@
       "owner",
       "none",
       "P2",
-      "Statistical verification capability: p-value recomputation, GRIM test, effect size reporting, multiple comparison correction, assumption checking.",
+      "Statistical verification capability (statistical-analysis sub-skill): p-value recomputation, GRIM test, effect size reporting, multiple comparison correction, assumption checking.",
       "n/a",
       [
         "GRIM test",
@@ -2272,7 +2307,8 @@
         "statistical verification",
         "stats audit",
         "假设检验审查",
-        "统计审查"
+        "统计审查",
+        "statistical-verification"
       ],
       "local",
       "skills/statistical-verification/SKILL.md",
@@ -2284,7 +2320,7 @@
       ],
       "skill",
       [],
-      null,
+      "Verify statistical results: p-values, GRIM, effect sizes",
       null,
       null,
       null,
@@ -2312,7 +2348,7 @@
       "owner",
       "none",
       "P2",
-      "Structure verification capability: LaTeX compilation, cross-reference consistency, claim-evidence alignment, format compliance, notation consistency, equation numbering.",
+      "Structure verification capability (paper-workbench sub-skill): LaTeX compilation, cross-reference consistency, claim-evidence alignment, format compliance, notation consistency, equation numbering.",
       "n/a",
       [
         "LaTeX编译",
@@ -2320,7 +2356,8 @@
         "format check",
         "structure verification",
         "图表引用检查",
-        "结构验证"
+        "结构验证",
+        "structure-verification"
       ],
       "local",
       "skills/structure-verification/SKILL.md",
@@ -2332,7 +2369,7 @@
       ],
       "skill",
       [],
-      null,
+      "Verify LaTeX compilation, cross-references, and format compliance",
       null,
       null,
       null,
@@ -2502,7 +2539,9 @@
         "visual review",
         "图表导出",
         "图表截图",
-        "看图"
+        "看图",
+        "visual-review",
+        "/visual-review"
       ],
       "project",
       "skills/visual-review/SKILL.md",
@@ -2518,7 +2557,7 @@
         "behavior:gate_exception_visual_screenshot",
         "behavior:gate_exception_visual_debugging"
       ],
-      null,
+      "Review screenshots and rendered visuals",
       null,
       null,
       null,
@@ -2537,7 +2576,7 @@
         ],
         "version": "2.2.1"
       },
-      null,
+      "low",
       [
         "shell",
         "browser"
@@ -2578,7 +2617,7 @@
       ],
       "framework_command",
       [],
-      null,
+      "Guaranteed entry point for Goal management lifecycle",
       null,
       null,
       null,

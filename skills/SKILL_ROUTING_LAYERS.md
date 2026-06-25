@@ -51,7 +51,7 @@ L1  deepinterview, citation-management, plan-mode
 L2  code-review-deep, gitx, paper-workbench, research-discovery, research-execution
     (reroute alias: paper-writing → paper-workbench/SKILL.md)
 L3  design-md, diagramming, doc, experiment-reproducibility, infographic,
-    tikz-paper-figure, tao-ci, visual-review
+    tikz-paper-figure, visual-review
 L4  math-derivation, scientific-figure-plotting, statistical-analysis (hot)
     algo-trading (sub-skill: financial-data-fetching), email-template (hot)
 Runtime lanes  planning, execution/code, language/framework, platform/integration,
@@ -85,8 +85,6 @@ Runtime lanes  planning, execution/code, language/framework, platform/integratio
 - `tikz-paper-figure` vs `diagramming` → TikZ 矢量图（LaTeX 编译）vs Mermaid/Graphviz 文本图
 - `tikz-paper-figure` vs `structure-verification` → 生成 TikZ 图 vs 验证 LaTeX 编译正确性
 - `email-template` vs `doc` → HTML 邮件（邮件客户端渲染）vs Word 文档（.docx）
-- `tao-ci` vs `email-template` → tao-ci 限教授套磁场景；email-template 管 HTML 邮件技术实现
-- `tao-ci` vs `paper-workbench` → 套磁信（个人化、短文）vs 学术论文（结构化、长文）
 - `algo-trading` vs `statistical-analysis` → 交易策略+数据获取+回测 vs 通用统计方法+假设检验
 - `visual-review` vs `pdf` / `doc` / `spreadsheets` → 看证据 vs 改 artifact
 - `spreadsheets` vs XLSX workflow → 通用 spreadsheet artifact gate owns `.xlsx`; workbook-native repair is a reference mode
