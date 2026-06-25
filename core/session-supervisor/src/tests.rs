@@ -209,7 +209,7 @@ fn resolve_worktree_cwd_defaults_to_cwd() {
 fn resolve_worktree_cwd_with_safe_name() {
     assert_eq!(
         resolve_worktree_cwd("/repo", Some("my-feature"), None),
-        "/repo/.claude/worktrees/my-feature"
+        "/repo/.router-rs/worktrees/my-feature"
     );
 }
 

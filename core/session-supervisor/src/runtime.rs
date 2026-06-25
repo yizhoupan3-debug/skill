@@ -83,6 +83,8 @@ pub fn save_store(path: &Path, store: &SessionSupervisorStore) -> Result<(), Str
             path.display()
         )
     })?;
+    core_state_utils::atomic_write::fsync_parent_dir(path)
+        .unwrap_or_else(|e| tracing::warn!("fsync supervisor state parent dir failed: {e}"));
     Ok(())
 }
 

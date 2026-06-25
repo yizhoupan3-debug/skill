@@ -221,6 +221,8 @@ pub fn reconcile_process_state(worker: &mut WorkerSessionRecord) {
         }
     } else if matches!(worker.status.as_str(), "running" | "launching" | "queued") {
         worker.status = "completed".to_string();
+    } else if matches!(worker.status.as_str(), "blocked_rate_limit") {
+        worker.status = "interrupted".to_string();
     }
 }
 

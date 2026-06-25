@@ -137,7 +137,10 @@ fn save_team_registry_raw(path: &Path, registry: &TeamRegistry) -> Result<(), St
     fs::write(&tmp_path, &payload)
         .map_err(|e| format!("write team registry tmp failed: {e}"))?;
     fs::rename(&tmp_path, path)
-        .map_err(|e| format!("rename team registry failed: {e}"))
+        .map_err(|e| format!("rename team registry failed: {e}"))?;
+    core_state_utils::atomic_write::fsync_parent_dir(path)
+        .unwrap_or_else(|e| tracing::warn!("fsync team registry parent dir failed: {e}"));
+    Ok(())
 }
 
 /// Execute `f` with an exclusive lock on the team registry.
@@ -553,9 +556,7 @@ pub fn reap_stale_teams(
         });
 
         let reaped = before - registry.teams.len();
-        if reaped > 0 {
-            // Saves happen automatically in with_team_registry
-        }
+        // with_team_registry saves automatically
         Ok(reaped)
     })
 }

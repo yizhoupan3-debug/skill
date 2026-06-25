@@ -10,6 +10,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const COOLDOWN_SECS: u64 = 300;
 const COOLDOWN_REL_PATH: &str = "artifacts/evolution/.last_idle_trigger";
 
+fn epoch_seconds() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 pub fn workers_are_idle(workers: &[WorkerSessionRecord]) -> bool {
     workers.iter().all(|worker| worker.status != "running")
 }
@@ -70,11 +77,7 @@ fn cooldown_elapsed(repo_cwd: &Path) -> bool {
     let Ok(stamp) = raw.trim().parse::<u64>() else {
         return true;
     };
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    now.saturating_sub(stamp) >= COOLDOWN_SECS
+    epoch_seconds().saturating_sub(stamp) >= COOLDOWN_SECS
 }
 
 fn stamp_cooldown(repo_cwd: &Path) -> Result<(), String> {
@@ -82,10 +85,7 @@ fn stamp_cooldown(repo_cwd: &Path) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("create evolution cooldown dir: {e}"))?;
     }
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
+    let now = epoch_seconds();
     let mut file = OpenOptions::new()
         .create(true)
         .truncate(true)

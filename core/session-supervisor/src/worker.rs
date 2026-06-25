@@ -131,16 +131,17 @@ pub fn launch_worker(
 }
 
 /// Compute exponential backoff based on how many times this worker has been blocked.
-/// Steps: 30s → 60s → 120s → 300s (cap).
+/// Called before the "blocked" event is pushed, so we add 1 to account for the
+/// current block. Steps: 60s → 120s → 240s → 300s (cap).
 fn exponential_backoff_seconds(worker: &WorkerSessionRecord) -> i64 {
     let block_count = worker
         .events
         .iter()
         .filter(|e| e.event == "blocked")
         .count() as u32;
-    let base = 30i64;
-    let backoff = base * 2_i64.pow(block_count.min(3)); // 30, 60, 120, 300
-    backoff.min(DEFAULT_BACKOFF_SECONDS)
+    // +1: the current block event has not been pushed yet when this is called
+    let backoff = 30i64 * 2_i64.pow((block_count + 1).min(4));
+    backoff.min(DEFAULT_BACKOFF_SECONDS) // 300s cap
 }
 
 pub fn mark_worker_blocked(
@@ -370,7 +371,7 @@ fn duration_pattern() -> &'static Regex {
     static DURATION: OnceLock<Regex> = OnceLock::new();
     DURATION.get_or_init(|| {
         #[allow(clippy::expect_used)]
-        #[allow(clippy::expect_used)] Regex::new(r"(?i)(\d+)\s*(second|sec|minute|min|hour|hr)s?").expect("valid duration regex")
+        Regex::new(r"(?i)(\d+)\s*(second|sec|minute|min|hour|hr)s?").expect("valid duration regex")
     })
 }
 
