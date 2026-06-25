@@ -13,6 +13,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use std::time::SystemTime;
+use core_state_types::task_state_types::GoalType;
 
 // ── Constants ──
 pub const GOAL_STATE_FILENAME: &str = "GOAL_STATE.json";
@@ -33,8 +34,8 @@ pub use validation::{
 // Re-export from pointer_ops
 pub use pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, read_active_task_id,
-    read_focus_task_id, read_primary_task_id, read_task_budget,
-    read_task_pointer_pair, increment_step_budget, set_task_focus,
+    read_focus_task_id, read_primary_task_id,
+    read_task_pointer_pair, set_task_focus,
     sync_task_pointers_after_goal_drive, write_active_task_pointer,
 };
 
@@ -221,19 +222,44 @@ pub fn read_goal_state_pair_if_valid(repo_root: &Path, task_id: &str) -> Option<
     Some((value, tid_out))
 }
 
-/// `GOAL_STATE` 是否处于「宏控制应续跑」态（`drive_until_done` + `status=running`）。
+/// `GOAL_STATE` 是否处于「宏控制应续跑」态。
+/// Linear: `drive_until_done` + `status=running`。
+/// Loop: 只依赖 `status=running`（不依赖 drive_until_done）。
 /// Stale goals (session_id mismatch) do NOT request continuation.
 pub fn goal_state_requests_continuation(state: &Value) -> bool {
-    // Stale goals from a different session should not drive continuation
     if state.get("stale").and_then(Value::as_bool) == Some(true) {
         return false;
     }
+    // Loop goal: 只依赖 status=running
+    if read_goal_type_from_state(state) == GoalType::Loop {
+        return state.get("status").and_then(Value::as_str) == Some("running");
+    }
+    // Linear goal: drive_until_done + running
     let drive = state
         .get("drive_until_done")
         .and_then(Value::as_bool)
         .unwrap_or(false);
     let status = state.get("status").and_then(Value::as_str).unwrap_or("");
     drive && status == "running"
+}
+
+/// Read `GoalType` from a parsed GOAL_STATE Value. Defaults to `Linear` when absent.
+pub fn read_goal_type_from_state(state: &Value) -> GoalType {
+    match state.get("goal_type").and_then(Value::as_str) {
+        Some("loop") => GoalType::Loop,
+        _ => GoalType::Linear,
+    }
+}
+
+/// Convenience: read `GoalType` for a task_id from disk. Returns `Linear` when GOAL_STATE
+/// is missing or unreadable (safe fallback).
+pub fn read_goal_type_by_id(repo_root: &Path, task_id: &str) -> GoalType {
+    read_goal_state(repo_root, Some(task_id))
+        .ok()
+        .flatten()
+        .as_ref()
+        .map(|s| read_goal_type_from_state(s))
+        .unwrap_or(GoalType::Linear)
 }
 
 // ── Hydration ──
@@ -1791,5 +1817,96 @@ mod tests {
         assert_eq!(after["goal"], json!("cleared goal"));
 
         let _ = fs::remove_dir_all(&repo);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // read_goal_type_from_state
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn read_goal_type_loop() {
+        let state = json!({"goal_type": "loop"});
+        assert_eq!(read_goal_type_from_state(&state), GoalType::Loop);
+    }
+
+    #[test]
+    fn read_goal_type_missing_defaults_to_linear() {
+        let state = json!({"status": "running"});
+        assert_eq!(read_goal_type_from_state(&state), GoalType::Linear);
+    }
+
+    #[test]
+    fn read_goal_type_unknown_value_defaults_to_linear() {
+        let state = json!({"goal_type": "banana"});
+        assert_eq!(read_goal_type_from_state(&state), GoalType::Linear);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // goal_state_requests_continuation — loop variant
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    #[test]
+    fn loop_goal_requests_continuation_when_running() {
+        let state = json!({
+            "status": "running",
+            "goal_type": "loop",
+            "drive_until_done": false,
+        });
+        assert!(goal_state_requests_continuation(&state),
+            "running loop goal must request continuation even with drive_until_done=false");
+    }
+
+    #[test]
+    fn loop_goal_does_not_request_continuation_when_not_running() {
+        let paused = json!({
+            "status": "paused",
+            "goal_type": "loop",
+        });
+        assert!(!goal_state_requests_continuation(&paused),
+            "paused loop goal must NOT request continuation");
+
+        let blocked = json!({
+            "status": "blocked",
+            "goal_type": "loop",
+        });
+        assert!(!goal_state_requests_continuation(&blocked),
+            "blocked loop goal must NOT request continuation");
+
+        let completed = json!({
+            "status": "completed",
+            "goal_type": "loop",
+            "archived": true,
+        });
+        assert!(!goal_state_requests_continuation(&completed),
+            "completed loop goal must NOT request continuation");
+    }
+
+    #[test]
+    fn loop_goal_stale_does_not_request_continuation() {
+        let state = json!({
+            "status": "running",
+            "goal_type": "loop",
+            "stale": true,
+        });
+        assert!(!goal_state_requests_continuation(&state),
+            "stale loop goal must NOT request continuation");
+    }
+
+    #[test]
+    fn linear_goal_requests_continuation_only_when_drive_and_running() {
+        let state = json!({
+            "status": "running",
+            "goal_type": "linear",
+            "drive_until_done": true,
+        });
+        assert!(goal_state_requests_continuation(&state),
+            "linear drive goal must request continuation");
+
+        let no_drive = json!({
+            "status": "running",
+            "drive_until_done": false,
+        });
+        assert!(!goal_state_requests_continuation(&no_drive),
+            "linear non-drive goal must NOT request continuation");
     }
 }

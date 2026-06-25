@@ -79,7 +79,13 @@ pub fn goal_state_manage_dispatch(
 
             if let Some(gt) = arguments.get("goal_type").and_then(Value::as_str) {
                 match gt {
-                    "linear" | "loop" => payload["goal_type"] = json!(gt),
+                    "linear" | "loop" => {
+                        payload["goal_type"] = json!(gt);
+                        // goal_type=loop without explicit lifecycle_profile → auto-set loop-auto
+                        if gt == "loop" && arguments.get("lifecycle_profile").is_none() {
+                            payload["lifecycle_profile"] = json!("loop-auto");
+                        }
+                    }
                     _ => return Err(FrameworkError::validation(format!("Invalid goal_type: {gt}. Must be one of: linear, loop"))),
                 }
             }
@@ -87,6 +93,14 @@ pub fn goal_state_manage_dispatch(
                 match lp {
                     "task" | "loop-auto" => payload["lifecycle_profile"] = json!(lp),
                     _ => return Err(FrameworkError::validation(format!("Invalid lifecycle_profile: {lp}. Must be one of: task, loop-auto"))),
+                }
+                // Validate consistency: goal_type=loop conflicts with lifecycle_profile=task
+                if let Some(gt) = arguments.get("goal_type").and_then(Value::as_str) {
+                    if gt == "loop" && lp == "task" {
+                        return Err(FrameworkError::validation(
+                            "goal_type=loop 与 lifecycle_profile=task 冲突。循环目标需要 lifecycle_profile=loop-auto。"
+                        ));
+                    }
                 }
             }
             if let Some(ch) = arguments.get("current_horizon").and_then(Value::as_str) {
@@ -148,4 +162,58 @@ pub fn goal_state_manage_dispatch(
 
     let result = core_state::state_manager::framework_goal_drive(payload)?;
     Ok(serde_json::to_string_pretty(&result).map_err(|e| e.to_string())?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// goal_type=loop + lifecycle_profile=task must be rejected before
+    /// framework_goal_drive (early validation at the handler boundary).
+    #[test]
+    fn rejects_loop_with_task_lifecycle() {
+        let repo = Path::new("/tmp"); // never hit the filesystem — validation is early
+        let err = goal_state_manage_dispatch(
+            &json!({
+                "operation": "start",
+                "goal": "loop task",
+                "task_id": "t-loop",
+                "goal_type": "loop",
+                "lifecycle_profile": "task",
+            }),
+            repo,
+            "test-session",
+        )
+        .expect_err("loop+task should be rejected");
+        let msg = err.to_string();
+        assert!(msg.contains("冲突"), "err must mention conflict: {msg}");
+    }
+
+    /// goal_type=loop + lifecycle_profile=loop-auto is valid
+    #[test]
+    fn accepts_loop_with_loop_auto_lifecycle() {
+        let suffix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let repo = std::env::temp_dir().join(format!("goal-handler-loop-auto-{suffix}"));
+        let _ = std::fs::remove_dir_all(&repo);
+        std::fs::create_dir_all(repo.join("artifacts/current")).expect("mkdir");
+
+        let result = goal_state_manage_dispatch(
+            &json!({
+                "operation": "start",
+                "goal": "auto lifecycle",
+                "task_id": "t-auto",
+                "goal_type": "loop",
+                "lifecycle_profile": "loop-auto",
+            }),
+            &repo,
+            "test-session",
+        )
+        .expect("loop+loop-auto should succeed");
+        assert!(result.contains("\"ok\": true"), "result: {result}");
+
+        let _ = std::fs::remove_dir_all(&repo);
+    }
 }

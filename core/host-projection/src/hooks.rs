@@ -54,12 +54,78 @@ pub fn once_lock_set<T>(lock: &OnceLock<T>, value: T, name: &str) {
     });
 }
 
+// ── Hook slot macros ────────────────────────────────────────────
+
+/// Declare a `OnceLock`-backed hook slot (static + register + dispatch).
+///
+/// Arms:
+/// - `fn name(args...);` — unit return, no-op if unregistered
+/// - `fn name(args...) -> Ret = expr;` — returns `expr` as default
+/// - `fn name(args...) -> Ret = err("msg");` — returns `Err(FrameworkError::validation("msg"))`
+macro_rules! once_lock_hook {
+    // Unit return — `if let Some(f) = STATIC.get() { f(args) }`
+    (
+        $(#[$meta:meta])*
+        static $name:ident: $fty:ty;
+        register $rname:ident;
+        fn $dname:ident($($arg:ident: $t:ty),* $(,)?);
+    ) => {
+        $(#[$meta])*
+        static $name: OnceLock<$fty> = OnceLock::new();
+
+        pub fn $rname(f: $fty) {
+            once_lock_set(&$name, f, stringify!($name));
+        }
+
+        pub fn $dname($($arg: $t),*) {
+            if let Some(f) = $name.get() { f($($arg),*) }
+        }
+    };
+
+    // Result return with `Err` default — `.unwrap_or_else(|| Err(FrameworkError::validation(msg)))`
+    // MUST precede the generic arm below to avoid ambiguity with `= err(...)` as `$default:expr`.
+    (
+        $(#[$meta:meta])*
+        static $name:ident: $fty:ty;
+        register $rname:ident;
+        fn $dname:ident($($arg:ident: $t:ty),* $(,)?) -> $ret:ty = err($msg:expr);
+    ) => {
+        $(#[$meta])*
+        static $name: OnceLock<$fty> = OnceLock::new();
+
+        pub fn $rname(f: $fty) {
+            once_lock_set(&$name, f, stringify!($name));
+        }
+
+        pub fn $dname($($arg: $t),*) -> $ret {
+            $name.get().map(|f| f($($arg),*))
+                .unwrap_or_else(|| Err(FrameworkError::validation($msg)))
+        }
+    };
+
+    // Default value — `.map(|f| f(args)).unwrap_or(default)`
+    (
+        $(#[$meta:meta])*
+        static $name:ident: $fty:ty;
+        register $rname:ident;
+        fn $dname:ident($($arg:ident: $t:ty),* $(,)?) -> $ret:ty = $default:expr;
+    ) => {
+        $(#[$meta])*
+        static $name: OnceLock<$fty> = OnceLock::new();
+
+        pub fn $rname(f: $fty) {
+            once_lock_set(&$name, f, stringify!($name));
+        }
+
+        pub fn $dname($($arg: $t),*) -> $ret {
+            $name.get().map(|f| f($($arg),*)).unwrap_or($default)
+        }
+    };
+}
+
 // ────────────────────────────────────────────────────────────────
 // Host ID types (string-based, not enum — avoids per-host enum in L5)
 // ────────────────────────────────────────────────────────────────
-
-/// Canonical host ID for hook observation, keyed by host_id from the runtime registry.
-pub type HookObservationHost = &'static str;
 
 /// Type alias for backward compatibility with function pointer signatures.
 /// Canonical host ID for paper prose/adversarial hooks.
@@ -78,14 +144,6 @@ pub fn paper_prose_env_var(host: &str) -> &'static str {
 /// Generated from RUNTIME_REGISTRY.json host_targets.metadata.*.paper_adversarial_env.
 pub fn paper_adversarial_env_var(host: &str) -> &'static str {
     framework_kernel::runtime_registry::paper_adversarial_env(host)
-}
-
-/// Goal readiness flags used by review gate handlers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct GoalReadiness {
-    pub contract: bool,
-    pub progress: bool,
-    pub verification: bool,
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -330,103 +388,43 @@ pub fn read_stdin_json_limited() -> Result<Value> {
 // hook_timing: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-static MARK_HOOK_START: OnceLock<fn()> = OnceLock::new();
-static ADD_LOCK_WAIT_MS: OnceLock<fn(u64)> = OnceLock::new();
-static ADD_CARGO_CHECK_MS: OnceLock<fn(u64)> = OnceLock::new();
-static EMIT_HOOK_TIMING_LINE: OnceLock<fn(&str)> = OnceLock::new();
-
-pub fn register_hook_timing(
-    mark_start: fn(),
-    add_lock_wait: fn(u64),
-    add_cargo: fn(u64),
-    emit_line: fn(&str),
-) {
-    once_lock_set(&MARK_HOOK_START, mark_start, "MARK_HOOK_START");
-    once_lock_set(&ADD_LOCK_WAIT_MS, add_lock_wait, "ADD_LOCK_WAIT_MS");
-    once_lock_set(&ADD_CARGO_CHECK_MS, add_cargo, "ADD_CARGO_CHECK_MS");
-    once_lock_set(&EMIT_HOOK_TIMING_LINE, emit_line, "EMIT_HOOK_TIMING_LINE");
-}
-
-pub fn mark_hook_start() {
-    if let Some(f) = MARK_HOOK_START.get() { f() }
-}
-
-pub fn add_lock_wait_ms(ms: u64) {
-    if let Some(f) = ADD_LOCK_WAIT_MS.get() { f(ms) }
-}
-
-pub fn add_cargo_check_ms(ms: u64) {
-    if let Some(f) = ADD_CARGO_CHECK_MS.get() { f(ms) }
-}
-
-pub fn emit_hook_timing_line(event: &str) {
-    if let Some(f) = EMIT_HOOK_TIMING_LINE.get() { f(event) }
-}
+// All four hook_timing proxy dispatch functions were never used by any caller
+// (callers go through runtime_core::hook_timing::* directly).
+// The bundle register register_hook_timing has been removed accordingly.
+// The native functions are still defined in runtime-core/src/hook_timing.rs.
 
 // ────────────────────────────────────────────────────────────────
 // session_call_tracker: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-#[allow(clippy::type_complexity)]
-static INIT_TRACKER: OnceLock<fn(&Path) -> Result<()>> = OnceLock::new();
-#[allow(clippy::type_complexity)]
-static RECORD_TOOL_CALL: OnceLock<fn(&Path, &str, Option<&Value>) -> Result<()>> =
-    OnceLock::new();
-#[allow(clippy::type_complexity)]
-static READ_TRACKER_STATE: OnceLock<fn(&Path) -> Result<Value>> = OnceLock::new();
+once_lock_hook! { static INIT_TRACKER: fn(&Path) -> Result<()>; register register_init_tracker; fn init_tracker(repo_root: &Path) -> Result<()> = Ok(()); }
+once_lock_hook! { static RECORD_TOOL_CALL: fn(&Path, &str, Option<&Value>) -> Result<()>; register register_record_tool_call; fn record_tool_call(repo_root: &Path, tool_name: &str, cache_stats: Option<&Value>) -> Result<()> = Ok(()); }
+once_lock_hook! { static READ_TRACKER_STATE: fn(&Path) -> Result<Value>; register register_read_tracker_state; fn read_tracker_state(repo_root: &Path) -> Result<Value> = Ok(serde_json::json!({})); }
 
 pub fn register_session_call_tracker(
     init: fn(&Path) -> Result<()>,
     record: fn(&Path, &str, Option<&Value>) -> Result<()>,
     read_state: fn(&Path) -> Result<Value>,
 ) {
-    once_lock_set(&INIT_TRACKER, init, "INIT_TRACKER");
-    once_lock_set(&RECORD_TOOL_CALL, record, "RECORD_TOOL_CALL");
-    once_lock_set(&READ_TRACKER_STATE, read_state, "READ_TRACKER_STATE");
-}
-
-pub fn init_tracker(repo_root: &Path) -> Result<()> {
-    INIT_TRACKER.get().map(|f| f(repo_root)).unwrap_or(Ok(()))
-}
-
-pub fn record_tool_call(
-    repo_root: &Path,
-    tool_name: &str,
-    cache_stats: Option<&Value>,
-) -> Result<()> {
-    RECORD_TOOL_CALL
-        .get()
-        .map(|f| f(repo_root, tool_name, cache_stats))
-        .unwrap_or(Ok(()))
-}
-
-pub fn read_tracker_state(repo_root: &Path) -> Result<Value> {
-    READ_TRACKER_STATE
-        .get()
-        .map(|f| f(repo_root))
-        .unwrap_or(Ok(serde_json::json!({})))
+    register_init_tracker(init);
+    register_record_tool_call(record);
+    register_read_tracker_state(read_state);
 }
 
 // ────────────────────────────────────────────────────────────────
 // framework_runtime: function-pointer proxies (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-#[allow(clippy::type_complexity)]
-static BUILD_FRAMEWORK_CONTRACT: OnceLock<fn(&Path) -> Result<Value>> = OnceLock::new();
-#[allow(clippy::type_complexity)]
-static TRY_APPEND_POST_TOOL_SHELL: OnceLock<fn(&Path, &Value, &str) -> Result<()>> =
-    OnceLock::new();
-static CLOSEOUT_ENFORCEMENT: OnceLock<fn() -> bool> = OnceLock::new();
-#[allow(clippy::type_complexity)]
-static CLOSEOUT_RECORD_PATH: OnceLock<fn(&Path, &str) -> Result<PathBuf>> = OnceLock::new();
-#[allow(clippy::type_complexity)]
-static EVALUATE_CLOSEOUT: OnceLock<fn(&Path, &str, &Path) -> Result<Value>> =
-    OnceLock::new();
-static FIRST_TASK_ID: OnceLock<fn(&Path) -> Option<String>> = OnceLock::new();
-static EVIDENCE_APPEND: OnceLock<fn(Value) -> Result<Value>> = OnceLock::new();
-static EXTRACT_DURATION: OnceLock<fn(&Value) -> Option<u64>> = OnceLock::new();
-static POST_TOOL_SUCCEEDED: OnceLock<fn(&Value) -> bool> = OnceLock::new();
-static CLOSEOUT_STOP_FOLLOWUP: OnceLock<fn(&Path, &str) -> Option<String>> = OnceLock::new();
+once_lock_hook! { static BUILD_FRAMEWORK_CONTRACT: fn(&Path) -> Result<Value>; register register_build_framework_contract; fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value> = err("framework_runtime not registered"); }
+once_lock_hook! { static TRY_APPEND_POST_TOOL_SHELL: fn(&Path, &Value, &str) -> Result<()>; register register_try_append_post_tool_shell; fn try_append_post_tool_shell_evidence(repo_root: &Path, event: &Value, kind: &str) -> Result<()> = Ok(()); }
+once_lock_hook! { static CLOSEOUT_ENFORCEMENT: fn() -> bool; register register_closeout_enforcement; fn closeout_programmatic_enforcement_enabled() -> bool = false; }
+once_lock_hook! { static CLOSEOUT_RECORD_PATH: fn(&Path, &str) -> Result<PathBuf>; register register_closeout_record_path; fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf> = err("framework_runtime not registered"); }
+once_lock_hook! { static EVALUATE_CLOSEOUT: fn(&Path, &str, &Path) -> Result<Value>; register register_evaluate_closeout; fn evaluate_closeout_record_file_for_task(repo_root: &Path, task_id: &str, record_path: &Path) -> Result<Value> = err("framework_runtime not registered"); }
+once_lock_hook! { static FIRST_TASK_ID: fn(&Path) -> Option<String>; register register_first_task_id; fn first_task_id_from_registry(repo_root: &Path) -> Option<String> = None; }
+once_lock_hook! { static EVIDENCE_APPEND: fn(Value) -> Result<Value>; register register_evidence_append; fn framework_hook_evidence_append(payload: Value) -> Result<Value> = err("framework_runtime not registered"); }
+once_lock_hook! { static EXTRACT_DURATION: fn(&Value) -> Option<u64>; register register_extract_duration; fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> = None; }
+once_lock_hook! { static POST_TOOL_SUCCEEDED: fn(&Value) -> bool; register register_post_tool_succeeded; fn post_tool_call_succeeded(event: &Value) -> bool = true; }
+once_lock_hook! { static CLOSEOUT_STOP_FOLLOWUP: fn(&Path, &str) -> Option<String>; register register_closeout_stop_followup; fn closeout_stop_followup_for_completion_text(repo_root: &Path, text: &str) -> Option<String> = None; }
 
 // 10 fn pointer params — above threshold=8, OK to keep.
 // Each argument is a distinct registration slot stored in a OnceLock static.
@@ -444,143 +442,24 @@ pub fn register_framework_runtime(
     post_tool_ok: fn(&Value) -> bool,
     closeout_followup: fn(&Path, &str) -> Option<String>,
 ) {
-    once_lock_set(&BUILD_FRAMEWORK_CONTRACT, build_contract, "BUILD_FRAMEWORK_CONTRACT");
-    once_lock_set(&TRY_APPEND_POST_TOOL_SHELL, append_shell, "TRY_APPEND_POST_TOOL_SHELL");
-    once_lock_set(&CLOSEOUT_ENFORCEMENT, enforcement, "CLOSEOUT_ENFORCEMENT");
-    once_lock_set(&CLOSEOUT_RECORD_PATH, record_path, "CLOSEOUT_RECORD_PATH");
-    once_lock_set(&EVALUATE_CLOSEOUT, eval_closeout, "EVALUATE_CLOSEOUT");
-    once_lock_set(&FIRST_TASK_ID, first_task, "FIRST_TASK_ID");
-    once_lock_set(&EVIDENCE_APPEND, evidence_append, "EVIDENCE_APPEND");
-    once_lock_set(&EXTRACT_DURATION, extract_duration, "EXTRACT_DURATION");
-    once_lock_set(&POST_TOOL_SUCCEEDED, post_tool_ok, "POST_TOOL_SUCCEEDED");
-    once_lock_set(&CLOSEOUT_STOP_FOLLOWUP, closeout_followup, "CLOSEOUT_STOP_FOLLOWUP");
+    register_build_framework_contract(build_contract);
+    register_try_append_post_tool_shell(append_shell);
+    register_closeout_enforcement(enforcement);
+    register_closeout_record_path(record_path);
+    register_evaluate_closeout(eval_closeout);
+    register_first_task_id(first_task);
+    register_evidence_append(evidence_append);
+    register_extract_duration(extract_duration);
+    register_post_tool_succeeded(post_tool_ok);
+    register_closeout_stop_followup(closeout_followup);
 }
 
-pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value> {
-    BUILD_FRAMEWORK_CONTRACT
-        .get()
-        .map(|f| f(repo_root))
-        .unwrap_or_else(|| Err(FrameworkError::validation("framework_runtime not registered")))
-}
-
-pub fn try_append_post_tool_shell_evidence(
-    repo_root: &Path,
-    event: &Value,
-    kind: &str,
-) -> Result<()> {
-    TRY_APPEND_POST_TOOL_SHELL
-        .get()
-        .map(|f| f(repo_root, event, kind))
-        .unwrap_or(Ok(()))
-}
-
-pub fn closeout_programmatic_enforcement_enabled() -> bool {
-    CLOSEOUT_ENFORCEMENT.get().map(|f| f()).unwrap_or(false)
-}
-
-pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf> {
-    CLOSEOUT_RECORD_PATH
-        .get()
-        .map(|f| f(repo_root, task_id))
-        .unwrap_or_else(|| Err(FrameworkError::validation("framework_runtime not registered")))
-}
-
-pub fn evaluate_closeout_record_file_for_task(
-    repo_root: &Path,
-    task_id: &str,
-    record_path: &Path,
-) -> Result<Value> {
-    EVALUATE_CLOSEOUT
-        .get()
-        .map(|f| f(repo_root, task_id, record_path))
-        .unwrap_or_else(|| Err(FrameworkError::validation("framework_runtime not registered")))
-}
-
-pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
-    FIRST_TASK_ID.get().map(|f| f(repo_root)).unwrap_or(None)
-}
-
-pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
-    EVIDENCE_APPEND
-        .get()
-        .map(|f| f(payload))
-        .unwrap_or_else(|| Err(FrameworkError::validation("framework_runtime not registered")))
-}
-
-pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
-    EXTRACT_DURATION.get().map(|f| f(event)).unwrap_or(None)
-}
-
-pub fn post_tool_call_succeeded(event: &Value) -> bool {
-    POST_TOOL_SUCCEEDED.get().map(|f| f(event)).unwrap_or(true)
-}
-
-pub fn closeout_stop_followup_for_completion_text(repo_root: &Path, text: &str) -> Option<String> {
-    CLOSEOUT_STOP_FOLLOWUP
-        .get()
-        .map(|f| f(repo_root, text))
-        .unwrap_or(None)
-}
-
-// ────────────────────────────────────────────────────────────────
-// router_rs_observation: function-pointer proxies (OnceLock)
-// ────────────────────────────────────────────────────────────────
-
-static ATTACH_OBSERVATION: OnceLock<fn(&mut Value, HookObservationHost)> = OnceLock::new();
-static STRIP_OBSERVATION: OnceLock<fn(&mut Value)> = OnceLock::new();
-
-pub fn register_router_rs_observation(
-    attach: fn(&mut Value, HookObservationHost),
-    strip: fn(&mut Value),
-) {
-    once_lock_set(&ATTACH_OBSERVATION, attach, "ATTACH_OBSERVATION");
-    once_lock_set(&STRIP_OBSERVATION, strip, "STRIP_OBSERVATION");
-}
-
-pub fn attach_router_rs_observation(output: &mut Value, host: HookObservationHost) {
-    if let Some(f) = ATTACH_OBSERVATION.get() { f(output, host) }
-}
-
-pub fn strip_router_rs_observation(output: &mut Value) {
-    if let Some(f) = STRIP_OBSERVATION.get() { f(output) }
-}
-
-// ────────────────────────────────────────────────────────────────
-// hook_outbound_protect: default policy
+// ── hook_outbound_protect: removed from hooks proxy layer ──
 //
-// DESIGN INTENT: host-projection's outbound protection is intentionally a no-op in production.
-//
-// The authoritative implementation lives in runtime-core-contracts (hook_outbound_protect.rs),
-// which runtime-core re-exports and registers via register_hook_outbound_protect().
-// ────────────────────────────────────────────────────────────────
-// hook_outbound_protect: function-pointer proxies (OnceLock)
-// ────────────────────────────────────────────────────────────────
-
-static OUTBOUND_PROTECTED: OnceLock<fn(&str) -> bool> = OnceLock::new();
-static TRUNCATE_OUTBOUND: OnceLock<fn(&str, usize, &str) -> String> = OnceLock::new();
-
-pub fn register_hook_outbound_protect(
-    is_protected: fn(&str) -> bool,
-    truncate: fn(&str, usize, &str) -> String,
-) {
-    once_lock_set(&OUTBOUND_PROTECTED, is_protected, "OUTBOUND_PROTECTED");
-    once_lock_set(&TRUNCATE_OUTBOUND, truncate, "TRUNCATE_OUTBOUND");
-}
-
-pub fn hook_outbound_line_is_framework_protected(line: &str) -> bool {
-    OUTBOUND_PROTECTED.get().map(|f| f(line)).unwrap_or(false)
-}
-
-pub fn truncate_hook_outbound_lines_preserving(
-    combined: &str,
-    max_bytes: usize,
-    suffix: &str,
-) -> String {
-    TRUNCATE_OUTBOUND
-        .get()
-        .map(|f| f(combined, max_bytes, suffix))
-        .unwrap_or_else(|| combined.to_string())
-}
+// The authoritative implementation lives in runtime-core-contracts
+// (hook_outbound_protect.rs), whose functions are called directly by
+// consumers. The OnceLock proxy was never registered in production
+// (register only called from test_helpers).
 
 // hook_posttool_normalize: default policy (register removed — was never called in production)
 // ────────────────────────────────────────────────────────────────
@@ -596,46 +475,11 @@ pub use crate::test_helpers::{
     synthetic_post_tool_evidence_shape,
 };
 
-// ────────────────────────────────────────────────────────────────
-// ship_readiness: function-pointer proxies (OnceLock)
-// ────────────────────────────────────────────────────────────────
-
-type EvalGoalReadiness = fn(&Path, &Value, &str) -> GoalReadiness;
-type GoalStopFollowup = fn(bool, bool, bool, u32) -> String;
-
-static EVAL_GOAL_READINESS: OnceLock<EvalGoalReadiness> = OnceLock::new();
-static GOAL_STOP_FOLLOWUP: OnceLock<GoalStopFollowup> = OnceLock::new();
-
-pub fn register_ship_readiness(
-    evaluate: fn(&Path, &Value, &str) -> GoalReadiness,
-    followup: fn(bool, bool, bool, u32) -> String,
-) {
-    once_lock_set(&EVAL_GOAL_READINESS, evaluate, "EVAL_GOAL_READINESS");
-    once_lock_set(&GOAL_STOP_FOLLOWUP, followup, "GOAL_STOP_FOLLOWUP");
-}
-
-pub fn evaluate_goal_readiness_from_disk(
-    repo_root: &Path,
-    goal: &Value,
-    task_id: &str,
-) -> GoalReadiness {
-    EVAL_GOAL_READINESS
-        .get()
-        .map(|f| f(repo_root, goal, task_id))
-        .unwrap_or_default()
-}
-
-pub fn goal_stop_followup_line(
-    contract: bool,
-    progress: bool,
-    verification: bool,
-    goal_followup_count: u32,
-) -> String {
-    GOAL_STOP_FOLLOWUP
-        .get()
-        .map(|f| f(contract, progress, verification, goal_followup_count))
-        .unwrap_or_default()
-}
+// ── ship_readiness: removed from hooks proxy layer ──
+//
+// register_ship_readiness was never called in production;
+// the OnceLock slots were always empty. Gate eval handles
+// goal readiness without the hooks proxy.
 
 // ────────────────────────────────────────────────────────────────
 // paper hooks: function-pointer proxies (OnceLock)
@@ -643,14 +487,13 @@ pub fn goal_stop_followup_line(
 
 /// Append paper prose/adversarial context: (repo_root, prompt_text, contexts, host)
 type AppendPaperContextFn = fn(&Path, &str, &mut Vec<String>, PaperProseHookHost);
-
 /// Merge paper prose/adversarial before submit: (repo_root, output, prompt_text, use_followup_message, host)
 type MergePaperContextFn = fn(&Path, &mut Value, &str, bool, PaperProseHookHost);
 
-static APPEND_PROSE: OnceLock<AppendPaperContextFn> = OnceLock::new();
-static MERGE_PROSE: OnceLock<MergePaperContextFn> = OnceLock::new();
-static APPEND_ADVERSARIAL: OnceLock<AppendPaperContextFn> = OnceLock::new();
-static MERGE_ADVERSARIAL: OnceLock<MergePaperContextFn> = OnceLock::new();
+once_lock_hook! { static APPEND_PROSE: AppendPaperContextFn; register register_append_prose; fn maybe_append_paper_prose_context(repo_root: &Path, prompt_text: &str, contexts: &mut Vec<String>, host: PaperProseHookHost); }
+once_lock_hook! { static MERGE_PROSE: MergePaperContextFn; register register_merge_prose; fn maybe_merge_paper_prose_before_submit(repo_root: &Path, output: &mut Value, prompt_text: &str, use_followup_message: bool, host: PaperProseHookHost); }
+once_lock_hook! { static APPEND_ADVERSARIAL: AppendPaperContextFn; register register_append_adversarial; fn maybe_append_paper_adversarial_context(repo_root: &Path, prompt_text: &str, contexts: &mut Vec<String>, host: PaperProseHookHost); }
+once_lock_hook! { static MERGE_ADVERSARIAL: MergePaperContextFn; register register_merge_adversarial; fn maybe_merge_paper_adversarial_before_submit(repo_root: &Path, output: &mut Value, prompt_text: &str, use_followup_message: bool, host: PaperProseHookHost); }
 
 pub fn register_paper_hooks(
     append_prose: AppendPaperContextFn,
@@ -658,119 +501,30 @@ pub fn register_paper_hooks(
     append_adversarial: AppendPaperContextFn,
     merge_adversarial: MergePaperContextFn,
 ) {
-    once_lock_set(&APPEND_PROSE, append_prose, "APPEND_PROSE");
-    once_lock_set(&MERGE_PROSE, merge_prose, "MERGE_PROSE");
-    once_lock_set(&APPEND_ADVERSARIAL, append_adversarial, "APPEND_ADVERSARIAL");
-    once_lock_set(&MERGE_ADVERSARIAL, merge_adversarial, "MERGE_ADVERSARIAL");
-}
-
-pub fn maybe_append_paper_prose_context(
-    repo_root: &Path,
-    prompt_text: &str,
-    contexts: &mut Vec<String>,
-    host: PaperProseHookHost,
-) {
-    if let Some(f) = APPEND_PROSE
-        .get() { f(repo_root, prompt_text, contexts, host) }
-}
-
-pub fn maybe_merge_paper_prose_before_submit(
-    repo_root: &Path,
-    output: &mut Value,
-    prompt_text: &str,
-    use_followup_message: bool,
-    host: PaperProseHookHost,
-) {
-    if let Some(f) = MERGE_PROSE
-        .get() { f(repo_root, output, prompt_text, use_followup_message, host) }
-}
-
-pub fn maybe_append_paper_adversarial_context(
-    repo_root: &Path,
-    prompt_text: &str,
-    contexts: &mut Vec<String>,
-    host: PaperProseHookHost,
-) {
-    if let Some(f) = APPEND_ADVERSARIAL
-        .get() { f(repo_root, prompt_text, contexts, host) }
-}
-
-pub fn maybe_merge_paper_adversarial_before_submit(
-    repo_root: &Path,
-    output: &mut Value,
-    prompt_text: &str,
-    use_followup_message: bool,
-    host: PaperProseHookHost,
-) {
-    if let Some(f) = MERGE_ADVERSARIAL
-        .get() { f(repo_root, output, prompt_text, use_followup_message, host) }
+    register_append_prose(append_prose);
+    register_merge_prose(merge_prose);
+    register_append_adversarial(append_adversarial);
+    register_merge_adversarial(merge_adversarial);
 }
 
 // ────────────────────────────────────────────────────────────────
 // research activity log: function-pointer proxy (OnceLock)
 // ────────────────────────────────────────────────────────────────
 
-static RESEARCH_ACTIVITY: OnceLock<fn(&Path, &str, &str)> = OnceLock::new();
-
-pub fn register_research_activity_hook(f: fn(&Path, &str, &str)) {
-    once_lock_set(&RESEARCH_ACTIVITY, f, "RESEARCH_ACTIVITY");
-}
-
-pub fn maybe_record_research_activity(repo_root: &Path, tool_name: &str, summary: &str) {
-    if let Some(f) = RESEARCH_ACTIVITY.get() {
-        f(repo_root, tool_name, summary)
-    }
-}
+once_lock_hook! { static RESEARCH_ACTIVITY: fn(&Path, &str, &str); register register_research_activity_hook; fn maybe_record_research_activity(repo_root: &Path, tool_name: &str, summary: &str); }
 
 // ────────────────────────────────────────────────────────────────
 // Research mode inference function pointer (ADR-010 §7.4)
 // ────────────────────────────────────────────────────────────────
-//
-// L7 (runtime-core) calls `research_mode_for_request` to classify
-// a request as "quick" or "deep" research. L5 (research-harness)
-// registers the actual inference logic. This keeps research domain
-// knowledge out of L4 (routing-engine, core-state) and below.
 
 type InferResearchModeFn = fn(&Value) -> String;
 
-static INFER_RESEARCH_MODE: OnceLock<InferResearchModeFn> = OnceLock::new();
+once_lock_hook! { static INFER_RESEARCH_MODE: InferResearchModeFn; register register_research_mode_inference; fn research_mode_for_request(payload: &Value) -> String = "quick".to_string(); }
 
-/// Register the research mode inference callback. Called by L5 (research-harness).
-pub fn register_research_mode_inference(f: InferResearchModeFn) {
-    once_lock_set(&INFER_RESEARCH_MODE, f, "INFER_RESEARCH_MODE");
-}
+// ── Skill routing bridge: removed ──
+// Was never registered in production (register_skill_routing_bridge not called).
+// Route decision goes through route_task_with_manifest_fallback instead.
 
-/// Returns `"quick"` or `"deep"`. Defaults to `"quick"` when L5 is not enabled.
-pub fn research_mode_for_request(payload: &Value) -> String {
-    if let Some(f) = INFER_RESEARCH_MODE.get() {
-        f(payload)
-    } else {
-        "quick".to_string()
-    }
-}
-
-// ────────────────────────────────────────────────────────────────
-// Skill routing bridge (decouples L0 MCP harness from L1 routing-engine)
-// ────────────────────────────────────────────────────────────────
-
-type SkillRoutingBridgeFn = fn(&str, &Value) -> Result<Value>;
-
-static SKILL_ROUTING_BRIDGE: OnceLock<SkillRoutingBridgeFn> = OnceLock::new();
-
-/// Register the skill routing bridge. Called by runtime-core at bootstrap.
-/// The bridge dispatches operations: "search", "filter_host", "load_cached", "read_json".
-pub fn register_skill_routing_bridge(f: SkillRoutingBridgeFn) {
-    once_lock_set(&SKILL_ROUTING_BRIDGE, f, "SKILL_ROUTING_BRIDGE");
-}
-
-/// Dispatch a skill routing operation via the registered bridge.
-pub fn skill_routing_dispatch(op: &str, args: &Value) -> Result<Value> {
-    if let Some(f) = SKILL_ROUTING_BRIDGE.get() {
-        f(op, args)
-    } else {
-        Err(FrameworkError::validation("skill routing bridge not registered"))
-    }
-}
 
 // ────────────────────────────────────────────────────────────────
 // kernel_bootstrap: function-pointer proxy (OnceLock)
@@ -841,18 +595,24 @@ type ResolveRepoRootFn = fn(Option<&Path>) -> Result<PathBuf>;
 /// Check anomalies: (repo_root) -> Result<anomaly_list>
 type CheckAnomaliesFn = fn(&Path) -> Result<Vec<String>>;
 
+// RESOLVE_REPO_ROOT_ARG: manual - fallback closure calls current_dir()
 static RESOLVE_REPO_ROOT_ARG: OnceLock<ResolveRepoRootFn> = OnceLock::new();
-static CURRENT_LOCAL_TIMESTAMP: OnceLock<fn() -> String> = OnceLock::new();
-static WRITE_FRAMEWORK_SESSION_ARTIFACTS: OnceLock<fn(Value) -> Result<Value>> =
-    OnceLock::new();
-static ROUTE_TASK_WITH_MANIFEST_FALLBACK: OnceLock<RouteTaskFn> = OnceLock::new();
-static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<BuildSnapshotFn> = OnceLock::new();
+
+pub fn register_resolve_repo_root_arg(f: ResolveRepoRootFn) {
+    once_lock_set(&RESOLVE_REPO_ROOT_ARG, f, "RESOLVE_REPO_ROOT_ARG");
+}
+
+once_lock_hook! { static CURRENT_LOCAL_TIMESTAMP: fn() -> String; register register_current_local_timestamp; fn current_local_timestamp() -> String = "1970-01-01T00:00:00Z".into(); }
+once_lock_hook! { static WRITE_FRAMEWORK_SESSION_ARTIFACTS: fn(Value) -> Result<Value>; register register_write_framework_session_artifacts; fn write_framework_session_artifacts(payload: Value) -> Result<Value> = err("hooks not registered"); }
+once_lock_hook! { static ROUTE_TASK_WITH_MANIFEST_FALLBACK: RouteTaskFn; register register_route_task_with_manifest_fallback; fn route_task_with_manifest_fallback(runtime_records: &[serde_json::Value], host_id: Option<&str>, query: &str, session_id: &str, allow_overlay: bool, first_turn: bool) -> Result<RouteDecision> = err("hooks not registered"); }
+once_lock_hook! { static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: BuildSnapshotFn; register register_build_framework_runtime_snapshot_envelope; fn build_framework_runtime_snapshot_envelope(repo_root: &Path, artifact_root_override: Option<&Path>, task_id_override: Option<&str>) -> Result<Value> = err("hooks not registered"); }
+// BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL: manual — has special fallback to old fn ptr
 static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL: OnceLock<BuildSnapshotWithLevelFn> = OnceLock::new();
-static BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD: OnceLock<BuildCheckpointFn> = OnceLock::new();
-static APPEND_EVIDENCE_INDEX: OnceLock<AppendEvidenceFn> = OnceLock::new();
-static HOOK_ACTION_FROM_OUTPUT: OnceLock<fn(&Value) -> &'static str> = OnceLock::new();
-static CLOSEOUT_RECORD_SCHEMA_VERSION_FN: OnceLock<fn() -> &'static str> = OnceLock::new();
-static CHECK_ANOMALIES: OnceLock<CheckAnomaliesFn> = OnceLock::new();
+once_lock_hook! { static BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD: BuildCheckpointFn; register register_build_automatic_continuity_checkpoint_payload; fn build_automatic_continuity_checkpoint_payload(repo_root: &Path, task_line: &str, summary_text: &str, task_id: Option<&str>, repointer_focus: bool, update_registry_only_if_known: bool) -> Value = Value::Null; }
+once_lock_hook! { static APPEND_EVIDENCE_INDEX: AppendEvidenceFn; register register_append_evidence_index; fn append_evidence_index(repo_root: &Path, task_id: Option<&str>, entry: serde_json::Map<String, Value>) -> Result<()> = err("hooks not registered"); }
+once_lock_hook! { static HOOK_ACTION_FROM_OUTPUT: fn(&Value) -> &'static str; register register_hook_action_from_output; fn hook_action_from_output(output: &Value) -> &'static str = "unknown"; }
+once_lock_hook! { static CLOSEOUT_RECORD_SCHEMA_VERSION_FN: fn() -> &'static str; register register_closeout_record_schema_version; fn closeout_record_schema_version() -> &'static str = "closeout-record-v1"; }
+once_lock_hook! { static CHECK_ANOMALIES: CheckAnomaliesFn; register register_check_anomalies; fn check_anomalies(repo_root: &Path) -> Result<Vec<String>> = Ok(vec![]); }
 
 // ── web_fetch_guard ──
 
@@ -865,14 +625,13 @@ type ResolveWebFetchRedirectFn = fn(&str, &str) -> Result<String>;
 /// Resolve web fetch addresses: (host, port) -> Result<addresses>
 type ResolveWebFetchAddressesFn = fn(&str, u16) -> Result<Vec<String>>;
 
-static VALIDATE_AND_RESOLVE_WEB_FETCH_URL: OnceLock<ValidateWebFetchUrlFn> = OnceLock::new();
-static RESOLVE_WEB_FETCH_REDIRECT: OnceLock<ResolveWebFetchRedirectFn> = OnceLock::new();
-static RESOLVE_WEB_FETCH_ADDRESSES: OnceLock<ResolveWebFetchAddressesFn> = OnceLock::new();
+once_lock_hook! { static VALIDATE_AND_RESOLVE_WEB_FETCH_URL: ValidateWebFetchUrlFn; register register_validate_and_resolve_web_fetch_url; fn validate_and_resolve_web_fetch_url(url: &str) -> Result<(String, Vec<String>)> = err("hooks not registered"); }
+once_lock_hook! { static RESOLVE_WEB_FETCH_REDIRECT: ResolveWebFetchRedirectFn; register register_resolve_web_fetch_redirect; fn resolve_web_fetch_redirect(base: &str, location: &str) -> Result<String> = err("hooks not registered"); }
+once_lock_hook! { static RESOLVE_WEB_FETCH_ADDRESSES: ResolveWebFetchAddressesFn; register register_resolve_web_fetch_addresses; fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<String>> = err("hooks not registered"); }
 
 // ── mcp_pre_guard ──
 
-static EVALUATE_MCP_PRE_GUARD_SAFE: OnceLock<fn(&str, &Value, &Path) -> McpPreGuardVerdict> =
-    OnceLock::new();
+once_lock_hook! { static EVALUATE_MCP_PRE_GUARD_SAFE: fn(&str, &Value, &Path) -> McpPreGuardVerdict; register register_evaluate_mcp_pre_guard_safe; fn evaluate_mcp_pre_guard_safe(tool_name: &str, arguments: &Value, repo_root: &Path) -> McpPreGuardVerdict = McpPreGuardVerdict { blocked: false, reason: None }; }
 
 // 10+ fn pointer params in a registration pattern — above threshold=8, OK to keep.
 // Each is a distinct OnceLock slot; struct would not reduce surface.
@@ -889,16 +648,16 @@ pub fn register_framework_runtime_extra(
     closeout_record_schema_version: fn() -> &'static str,
     check_anomalies: CheckAnomaliesFn,
 ) {
-    once_lock_set(&RESOLVE_REPO_ROOT_ARG, resolve_repo_root_arg, "RESOLVE_REPO_ROOT_ARG");
-    once_lock_set(&CURRENT_LOCAL_TIMESTAMP, current_local_timestamp, "CURRENT_LOCAL_TIMESTAMP");
-    once_lock_set(&WRITE_FRAMEWORK_SESSION_ARTIFACTS, write_framework_session_artifacts, "WRITE_FRAMEWORK_SESSION_ARTIFACTS");
-    once_lock_set(&ROUTE_TASK_WITH_MANIFEST_FALLBACK, route_task_with_manifest_fallback, "ROUTE_TASK_WITH_MANIFEST_FALLBACK");
-    once_lock_set(&BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE, build_framework_runtime_snapshot_envelope, "BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE");
-    once_lock_set(&BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD, build_automatic_continuity_checkpoint_payload, "BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD");
-    once_lock_set(&APPEND_EVIDENCE_INDEX, append_evidence_index, "APPEND_EVIDENCE_INDEX");
-    once_lock_set(&HOOK_ACTION_FROM_OUTPUT, hook_action_from_output, "HOOK_ACTION_FROM_OUTPUT");
-    once_lock_set(&CLOSEOUT_RECORD_SCHEMA_VERSION_FN, closeout_record_schema_version, "CLOSEOUT_RECORD_SCHEMA_VERSION_FN");
-    once_lock_set(&CHECK_ANOMALIES, check_anomalies, "CHECK_ANOMALIES");
+    register_resolve_repo_root_arg(resolve_repo_root_arg);
+    register_current_local_timestamp(current_local_timestamp);
+    register_write_framework_session_artifacts(write_framework_session_artifacts);
+    register_route_task_with_manifest_fallback(route_task_with_manifest_fallback);
+    register_build_framework_runtime_snapshot_envelope(build_framework_runtime_snapshot_envelope);
+    register_build_automatic_continuity_checkpoint_payload(build_automatic_continuity_checkpoint_payload);
+    register_append_evidence_index(append_evidence_index);
+    register_hook_action_from_output(hook_action_from_output);
+    register_closeout_record_schema_version(closeout_record_schema_version);
+    register_check_anomalies(check_anomalies);
 }
 
 pub fn register_web_fetch_guard_extra(
@@ -906,73 +665,26 @@ pub fn register_web_fetch_guard_extra(
     resolve_redirect: ResolveWebFetchRedirectFn,
     resolve_addresses: ResolveWebFetchAddressesFn,
 ) {
-    once_lock_set(&VALIDATE_AND_RESOLVE_WEB_FETCH_URL, validate_url, "VALIDATE_AND_RESOLVE_WEB_FETCH_URL");
-    once_lock_set(&RESOLVE_WEB_FETCH_REDIRECT, resolve_redirect, "RESOLVE_WEB_FETCH_REDIRECT");
-    once_lock_set(&RESOLVE_WEB_FETCH_ADDRESSES, resolve_addresses, "RESOLVE_WEB_FETCH_ADDRESSES");
+    register_validate_and_resolve_web_fetch_url(validate_url);
+    register_resolve_web_fetch_redirect(resolve_redirect);
+    register_resolve_web_fetch_addresses(resolve_addresses);
 }
 
 pub fn register_mcp_pre_guard_extra(evaluate: fn(&str, &Value, &Path) -> McpPreGuardVerdict) {
-    once_lock_set(&EVALUATE_MCP_PRE_GUARD_SAFE, evaluate, "EVALUATE_MCP_PRE_GUARD_SAFE");
+    register_evaluate_mcp_pre_guard_safe(evaluate);
 }
 
+// Manual dispatch: fallback closure captures nothing from args but calls current_dir()
 pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf> {
     RESOLVE_REPO_ROOT_ARG
         .get()
         .map(|f| f(repo_root))
         .unwrap_or_else(|| {
-            // Default: use CARGO_MANIFEST_DIR or current dir
             std::env::current_dir().map_err(FrameworkError::Io)
         })
 }
 
-pub fn current_local_timestamp() -> String {
-    CURRENT_LOCAL_TIMESTAMP
-        .get()
-        .map(|f| f())
-        .unwrap_or_else(|| "1970-01-01T00:00:00Z".into())
-}
-
-pub fn write_framework_session_artifacts(payload: Value) -> Result<Value> {
-    WRITE_FRAMEWORK_SESSION_ARTIFACTS
-        .get()
-        .map(|f| f(payload))
-        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
-}
-
-pub fn route_task_with_manifest_fallback(
-    runtime_records: &[serde_json::Value],
-    host_id: Option<&str>,
-    query: &str,
-    session_id: &str,
-    allow_overlay: bool,
-    first_turn: bool,
-) -> Result<RouteDecision> {
-    ROUTE_TASK_WITH_MANIFEST_FALLBACK
-        .get()
-        .map(|f| {
-            f(
-                runtime_records,
-                host_id,
-                query,
-                session_id,
-                allow_overlay,
-                first_turn,
-            )
-        })
-        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
-}
-
-pub fn build_framework_runtime_snapshot_envelope(
-    repo_root: &Path,
-    artifact_root_override: Option<&Path>,
-    task_id_override: Option<&str>,
-) -> Result<Value> {
-    BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE
-        .get()
-        .map(|f| f(repo_root, artifact_root_override, task_id_override))
-        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
-}
-
+// Manual dispatch: special fallback to old fn pointer
 pub fn build_framework_runtime_snapshot_envelope_with_level(
     repo_root: &Path,
     artifact_root_override: Option<&Path>,
@@ -980,19 +692,9 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
     detail_level: &str,
 ) -> Result<Value> {
     if let Some(f) = BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL.get() {
-        f(
-            repo_root,
-            artifact_root_override,
-            task_id_override,
-            detail_level,
-        )
+        f(repo_root, artifact_root_override, task_id_override, detail_level)
     } else {
-        // Fallback: use old function pointer (ignores detail_level, returns old format)
-        build_framework_runtime_snapshot_envelope(
-            repo_root,
-            artifact_root_override,
-            task_id_override,
-        )
+        build_framework_runtime_snapshot_envelope(repo_root, artifact_root_override, task_id_override)
     }
 }
 
@@ -1002,102 +704,11 @@ pub fn register_build_framework_runtime_snapshot_envelope_with_level(
     once_lock_set(&BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL, func, "BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL");
 }
 
-pub fn build_automatic_continuity_checkpoint_payload(
-    repo_root: &Path,
-    task_line: &str,
-    summary_text: &str,
-    task_id: Option<&str>,
-    repointer_focus: bool,
-    update_registry_only_if_known: bool,
-) -> Value {
-    BUILD_AUTOMATIC_CONTINUITY_CHECKPOINT_PAYLOAD
-        .get()
-        .map(|f| {
-            f(
-                repo_root,
-                task_line,
-                summary_text,
-                task_id,
-                repointer_focus,
-                update_registry_only_if_known,
-            )
-        })
-        .unwrap_or(Value::Null)
-}
-
-pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>> {
-    CHECK_ANOMALIES
-        .get()
-        .map(|f| f(repo_root))
-        .unwrap_or_else(|| Ok(vec![]))
-}
-
-pub fn append_evidence_index(
-    repo_root: &Path,
-    task_id: Option<&str>,
-    entry: serde_json::Map<String, Value>,
-) -> Result<()> {
-    APPEND_EVIDENCE_INDEX
-        .get()
-        .map(|f| f(repo_root, task_id, entry))
-        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
-}
-
-pub fn hook_action_from_output(output: &Value) -> &'static str {
-    HOOK_ACTION_FROM_OUTPUT
-        .get()
-        .map(|f| f(output))
-        .unwrap_or("unknown")
-}
-
-pub fn closeout_record_schema_version() -> &'static str {
-    CLOSEOUT_RECORD_SCHEMA_VERSION_FN
-        .get()
-        .map(|f| f())
-        .unwrap_or("closeout-record-v1")
-}
-
-pub fn validate_and_resolve_web_fetch_url(url: &str) -> Result<(String, Vec<String>)> {
-    VALIDATE_AND_RESOLVE_WEB_FETCH_URL
-        .get()
-        .map(|f| f(url))
-        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
-}
-
-pub fn resolve_web_fetch_redirect(base: &str, location: &str) -> Result<String> {
-    RESOLVE_WEB_FETCH_REDIRECT
-        .get()
-        .map(|f| f(base, location))
-        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
-}
-
-pub fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<String>> {
-    RESOLVE_WEB_FETCH_ADDRESSES
-        .get()
-        .map(|f| f(host, port))
-        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
-}
-
-pub fn evaluate_mcp_pre_guard_safe(
-
-
-    tool_name: &str,
-    arguments: &Value,
-    repo_root: &Path,
-) -> McpPreGuardVerdict {
-    EVALUATE_MCP_PRE_GUARD_SAFE
-        .get()
-        .map(|f| f(tool_name, arguments, repo_root))
-        .unwrap_or(McpPreGuardVerdict {
-            blocked: false,
-            reason: None,
-        })
-}
-
 // ── Test-only re-exports from test_helpers (for host_extensions::cursor test code) ──
 
 
 // ── Quality Gate full implementation hook (registered by runtime-core) ──
+// Manual: dispatch returns fn ptr instead of calling it
 static QUALITY_GATE_DRIVE: OnceLock<fn(Value) -> Result<Value>> = OnceLock::new();
 
 pub fn register_quality_gate_drive(func: fn(Value) -> Result<Value>) {
@@ -1117,9 +728,7 @@ pub fn quality_gate_drive_registered() -> Option<fn(Value) -> Result<Value>> {
 type ResearchToolDispatchFn = fn(&str, &Value) -> std::result::Result<String, FrameworkError>;
 
 // ── Session supervisor operation hook ──
-// Registered by runtime-core at startup. Allows MCP tools to call session_supervisor ops
-// without host-projection depending on session-supervisor crate directly.
-
+// Manual: custom register with .set(f).ok() + logging
 static SESSION_SUPERVISOR_OP: OnceLock<fn(Value) -> Result<Value>> = OnceLock::new();
 
 /// Register the session-supervisor operation handler. Called once at startup.
@@ -1132,6 +741,8 @@ pub fn register_session_supervisor_op(f: fn(Value) -> Result<Value>) {
 pub fn session_supervisor_op(payload: Value) -> Option<Result<Value>> {
     SESSION_SUPERVISOR_OP.get().map(|f| f(payload))
 }
+
+// Manual: dispatch returns fn ptr instead of calling it
 static RESEARCH_TOOL_DISPATCH: OnceLock<ResearchToolDispatchFn> = OnceLock::new();
 
 pub fn register_research_tool_dispatch(f: ResearchToolDispatchFn) {
@@ -1151,50 +762,14 @@ pub fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
 
 /// MCP tool skill route: route a query to the best matching skill.
 type McpToolSkillRouteFn = fn(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String>;
-static MCP_TOOL_SKILL_ROUTE: OnceLock<McpToolSkillRouteFn> = OnceLock::new();
-
-pub fn register_mcp_tool_skill_route(f: McpToolSkillRouteFn) {
-    once_lock_set(&MCP_TOOL_SKILL_ROUTE, f, "mcp_tool_skill_route");
-}
-
-pub fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String> {
-    match MCP_TOOL_SKILL_ROUTE.get() {
-        Some(f) => f(query, host_id, first_turn, repo_root),
-        None => Err(FrameworkError::validation("skill_route not available (not registered)")),
-    }
-}
-
 /// MCP tool search skills: search skills by query string.
 type McpToolSearchSkillsFn = fn(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String>;
-static MCP_TOOL_SEARCH_SKILLS: OnceLock<McpToolSearchSkillsFn> = OnceLock::new();
 
-pub fn register_mcp_tool_search_skills(f: McpToolSearchSkillsFn) {
-    once_lock_set(&MCP_TOOL_SEARCH_SKILLS, f, "mcp_tool_search_skills");
-}
-
-pub fn mcp_tool_search_skills(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String> {
-    match MCP_TOOL_SEARCH_SKILLS.get() {
-        Some(f) => f(query, limit, effective_host, repo_root),
-        None => Err(FrameworkError::validation("search_skills not available (not registered)")),
-    }
-}
-
-type ReviewGateHandler = fn(event: &str, repo_root: Option<&Path>) -> Result<()>;
-static REVIEW_GATE_HANDLER: OnceLock<ReviewGateHandler> = OnceLock::new();
-
-pub fn register_review_gate_handler(handler: ReviewGateHandler) {
-    once_lock_set(&REVIEW_GATE_HANDLER, handler, "REVIEW_GATE_HANDLER");
-}
-
-pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<()> {
-    match REVIEW_GATE_HANDLER.get() {
-        Some(handler) => handler(event, cli_repo_root),
-        None => Err(FrameworkError::validation("review gate handler not registered")),
-    }
-}
+once_lock_hook! { static MCP_TOOL_SKILL_ROUTE: McpToolSkillRouteFn; register register_mcp_tool_skill_route; fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String> = err("skill_route not available (not registered)"); }
+once_lock_hook! { static MCP_TOOL_SEARCH_SKILLS: McpToolSearchSkillsFn; register register_mcp_tool_search_skills; fn mcp_tool_search_skills(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String> = err("search_skills not available (not registered)"); }
 
 // ── Browser dispatch (moved from runtime-core to break L3→L4 dep) ──
-
+// Manual: custom register with different warning pattern
 type BrowserDispatchFn = fn(framework_kernel::cli_args::BrowserSubcommand) -> Result<()>;
 static BROWSER_DISPATCH: OnceLock<BrowserDispatchFn> = OnceLock::new();
 
@@ -1220,36 +795,12 @@ pub fn dispatch_browser_command(
 // ── Runtime trace transport proxies (break browser-mcp L3→L4 dep) ──
 
 type AttachRuntimeEventTransportFn = fn(Value) -> Result<Value>;
-static ATTACH_RUNTIME_EVENT_TRANSPORT: OnceLock<AttachRuntimeEventTransportFn> = OnceLock::new();
-
-pub fn register_attach_runtime_event_transport(f: AttachRuntimeEventTransportFn) {
-    once_lock_set(&ATTACH_RUNTIME_EVENT_TRANSPORT, f, "ATTACH_RUNTIME_EVENT_TRANSPORT");
-}
-
-pub fn attach_runtime_event_transport(payload: Value) -> Result<Value> {
-    ATTACH_RUNTIME_EVENT_TRANSPORT
-        .get()
-        .map(|f| f(payload))
-        .unwrap_or_else(|| Err(FrameworkError::validation("attach_runtime_event_transport not registered")))
-}
-
 type InspectTraceStreamFn = fn(
     framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
 ) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload>;
-static INSPECT_TRACE_STREAM: OnceLock<InspectTraceStreamFn> = OnceLock::new();
 
-pub fn register_inspect_trace_stream(f: InspectTraceStreamFn) {
-    once_lock_set(&INSPECT_TRACE_STREAM, f, "INSPECT_TRACE_STREAM");
-}
-
-pub fn inspect_trace_stream(
-    payload: framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
-) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload> {
-    INSPECT_TRACE_STREAM
-        .get()
-        .map(|f| f(payload))
-        .unwrap_or_else(|| Err(FrameworkError::validation("inspect_trace_stream not registered")))
-}
+once_lock_hook! { static ATTACH_RUNTIME_EVENT_TRANSPORT: AttachRuntimeEventTransportFn; register register_attach_runtime_event_transport; fn attach_runtime_event_transport(payload: Value) -> Result<Value> = err("attach_runtime_event_transport not registered"); }
+once_lock_hook! { static INSPECT_TRACE_STREAM: InspectTraceStreamFn; register register_inspect_trace_stream; fn inspect_trace_stream(payload: framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload> = err("inspect_trace_stream not registered"); }
 
 // ── Tool dispatch hooks: business logic extraction from L0 → L4 ──
 //
@@ -1257,90 +808,17 @@ pub fn inspect_trace_stream(
 // multi-source evaluation) out of host-projection's tool handlers into runtime-core.
 // host-projection retains MCP parameter type-checking; runtime-core owns domain logic.
 
-/// Goal state manage dispatch: (args, repo_root, session_id) -> Result<String>
 type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
-static GOAL_STATE_MANAGE_DISPATCH: OnceLock<GoalStateManageDispatchFn> = OnceLock::new();
-
-pub fn register_tool_goal_state_manage_dispatch(f: GoalStateManageDispatchFn) {
-    once_lock_set(&GOAL_STATE_MANAGE_DISPATCH, f, "tool_goal_state_manage_dispatch");
-}
-
-pub fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> {
-    match GOAL_STATE_MANAGE_DISPATCH.get() {
-        Some(f) => Ok(f(args, repo_root, session_id)?),
-        None => Err(FrameworkError::validation(
-            "tool_goal_state_manage_dispatch not registered — runtime-core boot required",
-        )),
-    }
-}
-
-/// Quality gate manage dispatch: (args, repo_root, session_id) -> Result<String>
 type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
-static QUALITY_GATE_MANAGE_DISPATCH: OnceLock<QualityGateManageDispatchFn> = OnceLock::new();
-
-pub fn register_tool_quality_gate_manage_dispatch(f: QualityGateManageDispatchFn) {
-    once_lock_set(&QUALITY_GATE_MANAGE_DISPATCH, f, "tool_quality_gate_manage_dispatch");
-}
-
-pub fn tool_quality_gate_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> {
-    match QUALITY_GATE_MANAGE_DISPATCH.get() {
-        Some(f) => Ok(f(args, repo_root, session_id)?),
-        None => Err(FrameworkError::validation(
-            "tool_quality_gate_manage_dispatch not registered — runtime-core boot required",
-        )),
-    }
-}
-
-/// Closeout record write dispatch: (args, repo_root) -> Result<String>
 type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> std::result::Result<String, FrameworkError>;
-static CLOSEOUT_RECORD_WRITE_DISPATCH: OnceLock<CloseoutRecordWriteDispatchFn> = OnceLock::new();
-
-pub fn register_tool_closeout_record_write_dispatch(f: CloseoutRecordWriteDispatchFn) {
-    once_lock_set(&CLOSEOUT_RECORD_WRITE_DISPATCH, f, "tool_closeout_record_write_dispatch");
-}
-
-pub fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Result<String> {
-    match CLOSEOUT_RECORD_WRITE_DISPATCH.get() {
-        Some(f) => Ok(f(args, repo_root)?),
-        None => Err(FrameworkError::validation(
-            "tool_closeout_record_write_dispatch not registered — runtime-core boot required",
-        )),
-    }
-}
-
-/// Closeout gate evaluate: (args, repo_root, host_id) -> Result<String>
 type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> std::result::Result<String, FrameworkError>;
-static CLOSEOUT_GATE_EVALUATE: OnceLock<CloseoutGateEvaluateFn> = OnceLock::new();
-
-pub fn register_tool_closeout_gate_evaluate(f: CloseoutGateEvaluateFn) {
-    once_lock_set(&CLOSEOUT_GATE_EVALUATE, f, "tool_closeout_gate_evaluate");
-}
-
-pub fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str) -> Result<String> {
-    match CLOSEOUT_GATE_EVALUATE.get() {
-        Some(f) => Ok(f(args, repo_root, host_id)?),
-        None => Err(FrameworkError::validation(
-            "tool_closeout_gate_evaluate not registered — runtime-core boot required",
-        )),
-    }
-}
-
-/// Routing evolution dispatch: (args, repo_root) -> Result<String>
 type RoutingEvolutionDispatchFn = fn(&Value, &Path) -> std::result::Result<String, FrameworkError>;
-static ROUTING_EVOLUTION_DISPATCH: OnceLock<RoutingEvolutionDispatchFn> = OnceLock::new();
 
-pub fn register_tool_routing_evolution_dispatch(f: RoutingEvolutionDispatchFn) {
-    once_lock_set(&ROUTING_EVOLUTION_DISPATCH, f, "tool_routing_evolution_dispatch");
-}
-
-pub fn tool_routing_evolution_dispatch(args: &Value, repo_root: &Path) -> Result<String> {
-    match ROUTING_EVOLUTION_DISPATCH.get() {
-        Some(f) => Ok(f(args, repo_root)?),
-        None => Err(FrameworkError::validation(
-            "tool_routing_evolution_dispatch not registered — runtime-core boot required",
-        )),
-    }
-}
+once_lock_hook! { static GOAL_STATE_MANAGE_DISPATCH: GoalStateManageDispatchFn; register register_tool_goal_state_manage_dispatch; fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> = err("tool_goal_state_manage_dispatch not registered — runtime-core boot required"); }
+once_lock_hook! { static QUALITY_GATE_MANAGE_DISPATCH: QualityGateManageDispatchFn; register register_tool_quality_gate_manage_dispatch; fn tool_quality_gate_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> = err("tool_quality_gate_manage_dispatch not registered — runtime-core boot required"); }
+once_lock_hook! { static CLOSEOUT_RECORD_WRITE_DISPATCH: CloseoutRecordWriteDispatchFn; register register_tool_closeout_record_write_dispatch; fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Result<String> = err("tool_closeout_record_write_dispatch not registered — runtime-core boot required"); }
+once_lock_hook! { static CLOSEOUT_GATE_EVALUATE: CloseoutGateEvaluateFn; register register_tool_closeout_gate_evaluate; fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str) -> Result<String> = err("tool_closeout_gate_evaluate not registered — runtime-core boot required"); }
+once_lock_hook! { static ROUTING_EVOLUTION_DISPATCH: RoutingEvolutionDispatchFn; register register_tool_routing_evolution_dispatch; fn tool_routing_evolution_dispatch(args: &Value, repo_root: &Path) -> Result<String> = err("tool_routing_evolution_dispatch not registered — runtime-core boot required"); }
 
 // ── Mirror type structural canary tests ──
 
@@ -1403,10 +881,8 @@ mod mirror_type_tests {
     /// Regression: host type aliases compile correctly as &'static str.
     #[test]
     fn host_type_aliases_are_static_str() {
-        let _host: HookObservationHost = "cursor";
-        let _host2: PaperProseHookHost = "codex";
-        assert_eq!(_host, "cursor");
-        assert_eq!(_host2, "codex");
+        let _host: PaperProseHookHost = "codex";
+        assert_eq!(_host, "codex");
     }
 }
 

@@ -1,9 +1,0 @@
-[profile.default]
-slow-timeout = { period = "60s", termination = "120s" }
-failure-output = "immediate-final"
-
-[profile.ci]
-# CI profile: stricter timeout, retry flaky tests
-slow-timeout = { period = "120s", termination = "300s" }
-retries = { backoff = "fixed", count = 2 }
-failure-output = "immediate-final"

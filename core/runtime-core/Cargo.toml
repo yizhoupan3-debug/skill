@@ -73,7 +73,7 @@ l5-state = ["runtime-storage/l5-state"]
 # Expose test helpers for downstream crate integration tests
 test-support = ["host-projection/test-support", "runtime-core-contracts/test-support"]
 # Codegraph MCP integration (module lives in runtime-core; router-rs re-exports)
-codegraph = ["dep:codegraph-rs"]
+codegraph = ["dep:codegraph-rs", "framework-extra/codegraph"]
 
 [dev-dependencies]
 insta.workspace = true

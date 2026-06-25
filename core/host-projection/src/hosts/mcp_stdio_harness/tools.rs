@@ -63,13 +63,6 @@ pub(super) fn handle_tools_call(
         tracing::warn!("record_tool_call failed: {e}");
     }
 
-    // Step budget: increment counter for the active task (if any).
-    if let Some(task_id) = core_state::state_manager::read_primary_task_id(repo_root) {
-        if let Err(e) = core_state::state_manager::increment_step_budget(repo_root, &task_id) {
-            tracing::info!("step budget exceeded for task '{task_id}': {e}");
-        }
-    }
-
     let result = dispatch_tool(tool_name, arguments, repo_root, host_id, connection_session_id);
 
     match result {

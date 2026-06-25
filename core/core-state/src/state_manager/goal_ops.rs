@@ -11,7 +11,8 @@ use super::pointer_ops::{
     ensure_task_directory, neutralize_task_pointers_for_task, sync_task_pointers_after_goal_drive,
 };
 use super::quality_gate_ops::deactivate_quality_gate_for_conflict_with_goal_drive;
-use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, read_goal_state};
+use super::{REQUIRES_COMPLETION_EVIDENCE_KEY, goal_state_path_for_task, read_goal_state, read_goal_type_from_state};
+use core_state_types::task_state_types::GoalType;
 
 fn resolve_task_id_strict(payload: &Value) -> Result<String, String> {
     payload
@@ -437,21 +438,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                     obj.insert("completion_gates".to_string(), cg.clone());
                 }
             apply_optional_goal_fields_from_payload(&mut obj, &payload);
-            // Ensure task directory exists before writing GOAL_STATE
             ensure_task_directory(&repo_root, &task_id)?;
-            // Write default STEP_BUDGET.json for drive_until_done tasks
-            if drive_until_done {
-                let budget_path = repo_root
-                    .join("artifacts/current")
-                    .join(&task_id)
-                    .join("STEP_BUDGET.json");
-                if !budget_path.is_file() {
-                    write_atomic_json(
-                        &budget_path,
-                        &json!({"used": 0, "max": 80, "soft_warned": false}),
-                    )?;
-                }
-            }
             let path = goal_state_path_for_task(&repo_root, &task_id)?;
             let value = Value::Object(obj);
             write_atomic_json(&path, &value)?;
@@ -571,6 +558,41 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 let view = crate::task_state::resolve_task_view(&repo_root, Some(task_id.as_str()));
                 crate::task_state::validate_goal_completion_gates(&view, &gates)?;
             }
+
+            // Loop goal: complete = iteration complete, NOT goal termination.
+            // Keep status=running, do NOT archive or neutralize pointers.
+            let goal_type = read_goal_type_from_state(&state);
+            if goal_type == GoalType::Loop {
+                let goal_path = goal_state_path_for_task(&repo_root, &task_id)?;
+                let mut loop_state = read_goal_state(&repo_root, Some(&task_id))?
+                    .ok_or_else(|| format!("GOAL_STATE missing at {}", goal_path.display()))?;
+                if let Some(obj) = loop_state.as_object_mut() {
+                    let count = obj.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
+                    obj.insert("iteration_count".to_string(), json!(count + 1));
+                    obj.insert("last_iteration_completed_at".to_string(), json!(framework_kernel::time::now_iso()));
+                    obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
+                }
+                write_atomic_json(&goal_path, &loop_state)?;
+                let tx = crate::task_ledger::LedgerTransaction {
+                    ts: framework_kernel::time::now_iso(),
+                    tx_type: "goal_iteration_completed".to_string(),
+                    payload: loop_state.clone(),
+                    idempotency_key: None,
+                    seq: None,
+                    schema_version: Some(1),
+                };
+                crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                    .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+                crate::task_state_aggregate::sync_task_state_aggregate_best_effort(&repo_root, &task_id);
+                return Ok(json!({
+                    "ok": true,
+                    "operation": "iteration_completed",
+                    "task_id": task_id,
+                    "iteration_count": loop_state.get("iteration_count").and_then(Value::as_u64).unwrap_or(0),
+                }));
+            }
+
+            // Linear goal complete: terminal flags + neutralize + archive
             let out = set_terminal_flags(
                 &repo_root,
                 Some(task_id.clone()),
@@ -1578,5 +1600,142 @@ mod tests {
             let err = goal_state_path_for_task(repo, bad).unwrap_err();
             assert!(err.contains("safe path component"), "bad id {bad:?}: {err}");
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Loop goal: complete semantics
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    fn start_loop_goal(repo: &Path, task_id: &str) {
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "start",
+            "task_id": task_id,
+            "goal": "loop goal test",
+            "goal_type": "loop",
+            "drive_until_done": false,
+        }))
+        .expect("start loop goal");
+    }
+
+    #[test]
+    fn loop_goal_complete_increments_iteration_count() {
+        let repo = unique_repo("loop-iter");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_loop_goal(&repo, "t-li");
+
+        let out = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "t-li",
+        }))
+        .expect("complete iteration 1");
+        assert_eq!(out["operation"], json!("iteration_completed"));
+        assert_eq!(out["iteration_count"], json!(1));
+
+        // Verify GOAL_STATE on disk
+        let raw = fs::read_to_string(repo.join("artifacts/current/t-li/GOAL_STATE.json")).unwrap();
+        let goal: Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(goal["iteration_count"], json!(1));
+        assert!(goal.get("last_iteration_completed_at").and_then(Value::as_str).is_some());
+        assert_eq!(goal["status"], json!("running"),
+            "loop goal must remain running after iteration complete");
+        assert!(goal.get("archived").is_none(),
+            "loop goal must NOT be archived after iteration complete");
+
+        // Complete again → iteration_count=2
+        let out2 = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "t-li",
+        }))
+        .expect("complete iteration 2");
+        assert_eq!(out2["iteration_count"], json!(2));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn loop_goal_complete_does_not_neutralize_pointers() {
+        let repo = unique_repo("loop-ptr");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_loop_goal(&repo, "t-lp");
+
+        // Active pointer should point to our loop task
+        let (active, _) = super::super::pointer_ops::read_task_pointer_pair(&repo);
+        assert_eq!(active.as_deref(), Some("t-lp"),
+            "loop goal should have active pointer");
+
+        // Complete iteration
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "t-lp",
+        }))
+        .expect("complete iteration");
+
+        // Pointers must still reference the task (not neutralized)
+        let (active2, _) = super::super::pointer_ops::read_task_pointer_pair(&repo);
+        assert_eq!(active2.as_deref(), Some("t-lp"),
+            "loop goal pointers must NOT be neutralized after iteration complete");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn loop_goal_keeps_running_after_iteration_complete() {
+        let repo = unique_repo("loop-status");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+        start_loop_goal(&repo, "t-ls");
+
+        // Complete iteration
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "t-ls",
+        }))
+        .expect("complete iteration");
+
+        // Status must still be running, not completed, not archived
+        let st = read_goal_state(&repo, Some("t-ls"))
+            .expect("read")
+            .expect("state");
+        assert_eq!(st["status"], json!("running"),
+            "loop goal status must remain running");
+        assert!(st.get("archived").is_none(),
+            "loop goal must not have archived flag");
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn loop_goal_complete_with_drive_until_done_requires_evidence() {
+        let repo = unique_repo("loop-ev");
+        fs::create_dir_all(repo.join("artifacts/current")).unwrap();
+
+        // Start loop goal with drive_until_done=true (requires evidence)
+        framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "start",
+            "task_id": "t-lev",
+            "goal": "loop with evidence",
+            "goal_type": "loop",
+            "drive_until_done": true,
+            "non_goals": ["n1"],
+            "done_when": ["d1", "d2"],
+            "validation_commands": ["echo ok"],
+        }))
+        .expect("start loop drive");
+
+        // Without evidence, complete must be rejected
+        let err = framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "t-lev",
+        }))
+        .unwrap_err();
+        assert!(err.contains("EVIDENCE"), "loop drive goal should require evidence: {err}");
+
+        let _ = fs::remove_dir_all(&repo);
     }
 }

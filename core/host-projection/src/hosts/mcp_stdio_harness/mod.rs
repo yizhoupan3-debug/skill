@@ -626,6 +626,14 @@ fn task_crud_tool_schemas() -> Vec<Value> {
                 "required": ["task_id"],
             },
         }),
+        json!({
+            "name": "task_chain_advance",
+            "description": "将 task chain 推进到下一个 task：标记当前为 completed、切换 focus 到下一项。",
+            "inputSchema": {
+                "type": "object",
+                "properties": {},
+            },
+        }),
     ]
 }
 

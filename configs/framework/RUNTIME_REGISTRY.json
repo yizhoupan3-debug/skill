@@ -764,6 +764,134 @@
         "codex": "project .codex/config.toml",
         "claude": "project .mcp.json"
       }
+    },
+    "mcp-pdf": {
+      "server_id": "mcp-pdf",
+      "process": "independent",
+      "binary": "mcp-pdf",
+      "crate": "pdf_tool_rs",
+      "tools": [
+        "pdf_read",
+        "pdf_info"
+      ],
+      "host_config_keys": {
+        "cursor": "mcp_servers.mcp-pdf",
+        "opencode": "mcpServers.mcp-pdf",
+        "codex": "mcp_servers.mcp-pdf",
+        "claude": "mcpServers.mcp-pdf"
+      },
+      "install_surfaces": {
+        "cursor": "user mcp.json",
+        "opencode": "opencode.json mcpServers",
+        "codex": "project .codex/config.toml",
+        "claude": "project .mcp.json"
+      }
+    },
+    "mcp-ooxml": {
+      "server_id": "mcp-ooxml",
+      "process": "independent",
+      "binary": "mcp-ooxml",
+      "crate": "ooxml_parser_rs",
+      "tools": [
+        "ooxml_parse"
+      ],
+      "host_config_keys": {
+        "cursor": "mcp_servers.mcp-ooxml",
+        "opencode": "mcpServers.mcp-ooxml",
+        "codex": "mcp_servers.mcp-ooxml",
+        "claude": "mcpServers.mcp-ooxml"
+      },
+      "install_surfaces": {
+        "cursor": "user mcp.json",
+        "opencode": "opencode.json mcpServers",
+        "codex": "project .codex/config.toml",
+        "claude": "project .mcp.json"
+      }
+    },
+    "mcp-pptx": {
+      "server_id": "mcp-pptx",
+      "process": "independent",
+      "binary": "mcp-pptx",
+      "crate": "pptx_tool_rs",
+      "tools": [
+        "pptx_parse"
+      ],
+      "host_config_keys": {
+        "cursor": "mcp_servers.mcp-pptx",
+        "opencode": "mcpServers.mcp-pptx",
+        "codex": "mcp_servers.mcp-pptx",
+        "claude": "mcpServers.mcp-pptx"
+      },
+      "install_surfaces": {
+        "cursor": "user mcp.json",
+        "opencode": "opencode.json mcpServers",
+        "codex": "project .codex/config.toml",
+        "claude": "project .mcp.json"
+      }
+    },
+    "mcp-financial-data": {
+      "server_id": "mcp-financial-data",
+      "process": "independent",
+      "binary": "mcp-financial-data",
+      "crate": "financial_data_rs",
+      "tools": [
+        "financial_data"
+      ],
+      "host_config_keys": {
+        "cursor": "mcp_servers.mcp-financial-data",
+        "opencode": "mcpServers.mcp-financial-data",
+        "codex": "mcp_servers.mcp-financial-data",
+        "claude": "mcpServers.mcp-financial-data"
+      },
+      "install_surfaces": {
+        "cursor": "user mcp.json",
+        "opencode": "opencode.json mcpServers",
+        "codex": "project .codex/config.toml",
+        "claude": "project .mcp.json"
+      }
+    },
+    "mcp-citation": {
+      "server_id": "mcp-citation",
+      "process": "independent",
+      "binary": "mcp-citation",
+      "crate": "citation_tool_rs",
+      "tools": [
+        "citation_audit",
+        "citation_lint"
+      ],
+      "host_config_keys": {
+        "cursor": "mcp_servers.mcp-citation",
+        "opencode": "mcpServers.mcp-citation",
+        "codex": "mcp_servers.mcp-citation",
+        "claude": "mcpServers.mcp-citation"
+      },
+      "install_surfaces": {
+        "cursor": "user mcp.json",
+        "opencode": "opencode.json mcpServers",
+        "codex": "project .codex/config.toml",
+        "claude": "project .mcp.json"
+      }
+    },
+    "mcp-gh-source-gate": {
+      "server_id": "mcp-gh-source-gate",
+      "process": "independent",
+      "binary": "mcp-gh-source-gate",
+      "crate": "gh_source_gate_rs",
+      "tools": [
+        "gh_source_gate"
+      ],
+      "host_config_keys": {
+        "cursor": "mcp_servers.mcp-gh-source-gate",
+        "opencode": "mcpServers.mcp-gh-source-gate",
+        "codex": "mcp_servers.mcp-gh-source-gate",
+        "claude": "mcpServers.mcp-gh-source-gate"
+      },
+      "install_surfaces": {
+        "cursor": "user mcp.json",
+        "opencode": "opencode.json mcpServers",
+        "codex": "project .codex/config.toml",
+        "claude": "project .mcp.json"
+      }
     }
   },
   "host_projections": {
@@ -820,7 +948,13 @@
         "router-rs-framework",
         "browser-mcp",
         "mcp-codegraph",
-        "paperplain"
+        "paperplain",
+        "mcp-pdf",
+        "mcp-ooxml",
+        "mcp-pptx",
+        "mcp-financial-data",
+        "mcp-citation",
+        "mcp-gh-source-gate"
       ]
     },
     "opencode": {
@@ -874,7 +1008,13 @@
         "router-rs-framework",
         "browser-mcp",
         "mcp-codegraph",
-        "paperplain"
+        "paperplain",
+        "mcp-pdf",
+        "mcp-ooxml",
+        "mcp-pptx",
+        "mcp-financial-data",
+        "mcp-citation",
+        "mcp-gh-source-gate"
       ]
     },
     "codex": {
@@ -930,7 +1070,13 @@
         "router-rs-framework",
         "browser-mcp",
         "mcp-codegraph",
-        "paperplain"
+        "paperplain",
+        "mcp-pdf",
+        "mcp-ooxml",
+        "mcp-pptx",
+        "mcp-financial-data",
+        "mcp-citation",
+        "mcp-gh-source-gate"
       ]
     },
     "claude": {
@@ -983,7 +1129,13 @@
         "router-rs-framework",
         "browser-mcp",
         "mcp-codegraph",
-        "paperplain"
+        "paperplain",
+        "mcp-pdf",
+        "mcp-ooxml",
+        "mcp-pptx",
+        "mcp-financial-data",
+        "mcp-citation",
+        "mcp-gh-source-gate"
       ]
     }
   },

@@ -244,8 +244,8 @@ pub fn update_goal_gate_with_disk(
     prompt: &str,
     response_text: &str,
     goal_drive_entrypoint: bool,
-    repo_root: Option<&std::path::Path>,
-    task_id: Option<&str>,
+    _repo_root: Option<&std::path::Path>,
+    _task_id: Option<&str>,
 ) {
     // Arm goal drive on entry
     if goal_drive_entrypoint {
@@ -272,21 +272,8 @@ pub fn update_goal_gate_with_disk(
     if core_policy::hook_common::has_goal_verify_or_block_signal(&signal) {
         core.goal.goal_verify_or_block_seen = true;
     }
-    // Disk-based readiness (more precise: reads GOAL_STATE.json + EVIDENCE_INDEX.json)
-    if let (Some(root), Some(tid)) = (repo_root, task_id) {
-        let goal_val = serde_json::Value::Null; // placeholder; real evaluator reads disk
-        let readiness = crate::hooks::evaluate_goal_readiness_from_disk(root, &goal_val, tid);
-        if readiness.contract {
-            core.goal.goal_contract_seen = true;
-        }
-        if readiness.progress {
-            core.goal.goal_progress_seen = true;
-        }
-        if readiness.verification {
-            core.goal.goal_verify_or_block_seen = true;
-        }
-    }
 }
+
 
 /// Check if goal gate is satisfied using shared `HookReviewDiskCore` fields.
 pub fn goal_gate_satisfied(core: &core_policy::HookReviewDiskCore) -> bool {

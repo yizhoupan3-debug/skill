@@ -5,6 +5,7 @@
 use super::*;
 use core_state::task_ledger::{append_transaction_assuming_l1_held, LedgerTransaction};
 use core_state_utils::task_write_lock::apply_task_ledger_mutation;
+use core_state_types::task_state_types::GoalType;
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -86,40 +87,21 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, St
         let state_path = task_dir.join("TASK_STATE.json");
         let goal_path = task_dir.join("GOAL_STATE.json");
 
-        let (status, goal_summary, has_evidence) = if state_path.is_file() {
+        let (status, goal_summary, has_evidence, goal_type, iteration_count) = if state_path.is_file() {
             let raw = fs::read_to_string(&state_path).unwrap_or_default();
             let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
-            let status = v
-                .get("goal_state")
-                .and_then(|g| g.get("status"))
-                .and_then(Value::as_str)
-                .unwrap_or("unknown")
-                .to_string();
-            let goal_summary = v
-                .get("goal_state")
-                .and_then(|g| g.get("goal"))
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            let has_evidence = v
-                .get("evidence")
-                .and_then(|e| e.get("evidence_rows_non_empty"))
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            (status, goal_summary, has_evidence)
+            let gs = v.get("goal_state");
+            let status = gs.and_then(|g| g.get("status")).and_then(Value::as_str).unwrap_or("unknown").to_string();
+            let goal_summary = gs.and_then(|g| g.get("goal")).and_then(Value::as_str).unwrap_or("").to_string();
+            let has_evidence = v.get("evidence").and_then(|e| e.get("evidence_rows_non_empty")).and_then(Value::as_bool).unwrap_or(false);
+            let goal_type = gs.and_then(|g| g.get("goal_type")).and_then(Value::as_str).unwrap_or("").to_string();
+            let iteration_count = gs.and_then(|g| g.get("iteration_count")).and_then(Value::as_u64).unwrap_or(0);
+            (status, goal_summary, has_evidence, goal_type, iteration_count)
         } else if goal_path.is_file() {
             let raw = fs::read_to_string(&goal_path).unwrap_or_default();
             let v: Value = serde_json::from_str(&raw).unwrap_or(json!({}));
-            let status = v
-                .get("status")
-                .and_then(Value::as_str)
-                .unwrap_or("unknown")
-                .to_string();
-            let goal_summary = v
-                .get("goal")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
+            let status = v.get("status").and_then(Value::as_str).unwrap_or("unknown").to_string();
+            let goal_summary = v.get("goal").and_then(Value::as_str).unwrap_or("").to_string();
             let evidence_path = task_dir.join("EVIDENCE_INDEX.json");
             let has_evidence = evidence_path.is_file()
                 && fs::read_to_string(&evidence_path)
@@ -131,9 +113,11 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, St
                             .map(|a| !a.is_empty())
                     })
                     .unwrap_or(false);
-            (status, goal_summary, has_evidence)
+            let goal_type = v.get("goal_type").and_then(Value::as_str).unwrap_or("").to_string();
+            let iteration_count = v.get("iteration_count").and_then(Value::as_u64).unwrap_or(0);
+            (status, goal_summary, has_evidence, goal_type, iteration_count)
         } else {
-            ("created".to_string(), String::new(), false)
+            ("created".to_string(), String::new(), false, String::new(), 0)
         };
 
         tasks.push(json!({
@@ -141,6 +125,8 @@ pub(crate) fn tool_task_list(repo_root: &Path) -> std::result::Result<String, St
             "status": status,
             "goal_summary": goal_summary,
             "has_evidence": has_evidence,
+            "goal_type": goal_type,
+            "iteration_count": iteration_count,
             "is_active": is_active,
             "is_focus": is_focus,
         }));
@@ -291,6 +277,20 @@ pub(crate) fn tool_task_chain_advance(_arguments: &Value, repo_root: &Path) -> s
     if !chain_path.is_file() {
         return Err("TASK_CHAIN.json not found — create one first to use task_chain_advance".to_string());
     }
+
+    // Loop goal: skip chain advance — loop goals restart in place
+    let (active, _) = core_state::state_manager::read_task_pointer_pair(repo_root);
+    if let Some(ref tid) = active {
+        if core_state::state_manager::read_goal_type_by_id(repo_root, tid) == GoalType::Loop {
+            return Ok(json!({
+                "ok": true,
+                "status": "loop_goal_skipped",
+                "message": "current task has goal_type=loop — task chain advance skipped",
+                "task_id": tid,
+            }).to_string());
+        }
+    }
+
     let raw = std::fs::read_to_string(&chain_path).map_err(|e| format!("read TASK_CHAIN.json: {e}"))?;
     let mut chain: Value = serde_json::from_str(&raw).map_err(|e| format!("parse TASK_CHAIN.json: {e}"))?;
     let current_index = chain["current_index"].as_u64().unwrap_or(0) as usize;
@@ -497,6 +497,118 @@ mod tests {
         let v: Value = serde_json::from_str(&result).expect("parse");
         assert_eq!(v["count"], json!(0));
         assert_eq!(v["tasks"], json!([]));
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn task_list_shows_goal_type_and_iteration_for_loop_goal() {
+        let repo = unique_test_dir("list-loop-gt");
+        let rr = repo.display().to_string();
+
+        // Start a loop goal
+        core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": rr,
+            "operation": "start",
+            "task_id": "loop-list",
+            "goal": "loop list test",
+            "goal_type": "loop",
+            "drive_until_done": false,
+        }))
+        .expect("start loop goal");
+
+        // Complete one iteration
+        core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": repo.display().to_string(),
+            "operation": "complete",
+            "task_id": "loop-list",
+        }))
+        .expect("complete iter");
+
+        // task_list should expose goal_type and iteration_count
+        let result = tool_task_list(&repo).expect("list");
+        let v: Value = serde_json::from_str(&result).expect("parse");
+        assert_eq!(v["count"], json!(1));
+        let task = &v["tasks"][0];
+        assert_eq!(task["task_id"], json!("loop-list"));
+        assert_eq!(task["goal_type"], json!("loop"));
+        assert_eq!(task["iteration_count"], json!(1));
+        assert_eq!(task["status"], json!("running"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn task_chain_advance_skips_loop_goal() {
+        let repo = unique_test_dir("chain-loop-skip");
+        let rr = repo.display().to_string();
+
+        // Start a loop goal
+        core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": rr,
+            "operation": "start",
+            "task_id": "loop-task",
+            "goal": "loop chain test",
+            "goal_type": "loop",
+            "drive_until_done": false,
+        }))
+        .expect("start loop goal");
+
+        // Write a minimal TASK_CHAIN.json
+        fs::write(
+            repo.join("artifacts/current/TASK_CHAIN.json"),
+            r#"{"tasks":[{"task_id":"loop-task","title":"Loop Task","status":"running"}],"current_index":0}"#,
+        )
+        .expect("write chain");
+
+        // Chain advance must return loop_goal_skipped
+        let result = tool_task_chain_advance(&json!({}), &repo).expect("chain advance");
+        let v: Value = serde_json::from_str(&result).expect("parse");
+        assert_eq!(v["status"], json!("loop_goal_skipped"));
+        assert_eq!(v["task_id"], json!("loop-task"));
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn task_chain_advance_skips_loop_when_focus_different() {
+        // When active task is a loop goal and focus is different,
+        // chain advance should still detect the active loop goal and skip.
+        let repo = unique_test_dir("chain-loop-focus");
+        let rr = repo.display().to_string();
+
+        // Create two tasks
+        core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": rr.clone(),
+            "operation": "start",
+            "task_id": "linear-task",
+            "goal": "linear task",
+            "drive_until_done": false,
+        }))
+        .expect("start linear");
+
+        // Create a loop task and explicitly focus it
+        core_state::state_manager::framework_goal_drive(json!({
+            "repo_root": rr,
+            "operation": "start",
+            "task_id": "loop-task",
+            "goal": "loop chain test",
+            "goal_type": "loop",
+            "drive_until_done": false,
+            "set_focus": true,
+        }))
+        .expect("start loop goal");
+
+        // Write TASK_CHAIN.json
+        fs::write(
+            repo.join("artifacts/current/TASK_CHAIN.json"),
+            r#"{"tasks":[{"task_id":"loop-task","title":"Loop Task","status":"running"}],"current_index":0}"#,
+        )
+        .expect("write chain");
+
+        let result = tool_task_chain_advance(&json!({}), &repo).expect("chain advance");
+        let v: Value = serde_json::from_str(&result).expect("parse");
+        assert_eq!(v["status"], json!("loop_goal_skipped"));
+
         let _ = fs::remove_dir_all(&repo);
     }
 }

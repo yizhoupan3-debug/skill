@@ -613,13 +613,14 @@ mod tests {
         let hash = store.put("stale content").expect("put");
 
         // 2. Call compression with a minimal GC threshold via env var.
-        std::env::set_var("FRAMEWORK_CONTENT_STORE_MAX_AGE_DAYS", "0");
+        // SAFETY: env var manipulation is single-threaded in tests.
+        unsafe { std::env::set_var("FRAMEWORK_CONTENT_STORE_MAX_AGE_DAYS", "0"); }
         let text = "A\n\nB\n\nC\n\nD\n\nE\n\nF\n\nG\n\nH\n\nI\n\nJ";
         let result = build_framework_prompt_compression_envelope(
             json!({"prompt": text, "token_budget": 5, "artifact_root": dir.path()}),
             None,
         );
-        std::env::remove_var("FRAMEWORK_CONTENT_STORE_MAX_AGE_DAYS");
+        unsafe { std::env::remove_var("FRAMEWORK_CONTENT_STORE_MAX_AGE_DAYS"); }
         assert!(result.is_ok(), "compression should succeed");
 
         // 3. The pre-existing content should be gone (GC runs before new puts).

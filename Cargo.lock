@@ -1012,6 +1012,7 @@ dependencies = [
  "clap",
  "core-policy",
  "core-state",
+ "core-state-types",
  "core-state-utils",
  "framework-kernel",
  "fs2",

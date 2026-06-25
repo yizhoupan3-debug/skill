@@ -58,8 +58,6 @@ pub use core_state::{
 // ── local contract modules (remain in runtime-core due to internal coupling) ──
 pub mod hook_timing;
 
-pub mod review_gate_cli;
-
 pub mod task_command;
 
 // ── migrated supporting modules ──
@@ -282,12 +280,7 @@ fn register_runtime_contract_hooks_impl() {
 }
 
 fn register_telemetry_hooks_impl() {
-    host_projection::hooks::register_hook_timing(
-        hook_timing::mark_hook_start,
-        hook_timing::add_lock_wait_ms,
-        hook_timing::add_cargo_check_ms,
-        hook_timing::emit_hook_timing_line,
-    );
+    // register_hook_timing removed — proxy dispatch was never called
 
     host_projection::hooks::register_session_call_tracker(
         |repo_root| framework_extra::session_call::init_tracker(repo_root).map_err(Into::into),
@@ -298,11 +291,6 @@ fn register_telemetry_hooks_impl() {
             Ok(framework_extra::session_call::record_tool_call(root, name, stats)?)
         },
         |repo_root| framework_extra::session_call::read_tracker_state(repo_root).map_err(Into::into),
-    );
-
-    host_projection::hooks::register_router_rs_observation(
-        |_output, _host| {},
-        |_output| {},
     );
 
     // ── Runtime trace transport proxies (for L3 browser-mcp) ──

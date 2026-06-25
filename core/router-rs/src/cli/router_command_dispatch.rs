@@ -47,9 +47,7 @@ use runtime_core::trace_runtime::{
     record_trace_event,
 };
 use host_projection::hosts::hook_dispatch::{HookEvent, HookOutput};
-use host_projection::hooks::{
-    attach_router_rs_observation, read_stdin_limited,
-};
+use host_projection::hooks::read_stdin_limited;
 use runtime_core::telemetry_emit::{emit_hook_fired, hook_action_from_optional_output};
 
 use runtime_core::runtime_storage::RuntimeStorageRequestPayload;
@@ -537,11 +535,6 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
 
     // Convert HookOutput -> JSON value
     let mut json_output = hook_output_to_value(output, event);
-
-    // Attach router-rs observation (resolve 'static host_id from provider registry)
-    if let Some(provider) = host_projection::hosts::host_provider_for_routing_spelling(host_id) {
-        attach_router_rs_observation(&mut json_output, provider.host_id());
-    }
 
     // Merge paper hooks into output (userpromptsubmit only — modify output before submit)
     // PostToolUse is intentionally excluded: it fires per-tool-call, not per-user-turn,

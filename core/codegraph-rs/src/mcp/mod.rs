@@ -35,50 +35,6 @@ pub fn run_stdio_mcp(repo_root: &Path) -> anyhow::Result<()> {
     )
 }
 
-/// JSON-RPC method dispatcher shared by the stdio loop.
-#[allow(dead_code)]
-fn handle_request(request: &Value, index: &CodeGraphIndex) -> Option<Value> {
-    let id = request.get("id").cloned();
-    let method = request.get("method").and_then(Value::as_str).unwrap_or("");
-    match method {
-        "notifications/initialized" | "notifications/cancelled" => None,
-        "initialize" => Some(json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": {
-                "protocolVersion": PROTOCOL_VERSION,
-                "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-                "capabilities": {"tools": {"listChanged": false}},
-            }
-        })),
-        "ping" => Some(json!({"jsonrpc": "2.0", "id": id, "result": {}})),
-        "tools/list" => Some(json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "result": {"tools": tool_definitions()}
-        })),
-        "tools/call" => {
-            let params = request.get("params").cloned().unwrap_or_else(|| json!({}));
-            match dispatch_tool_call(&params, index) {
-                Ok(result) => Some(json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "result": result,
-                })),
-                Err(err) => Some(json!({
-                    "jsonrpc": "2.0",
-                    "id": id,
-                    "error": {"code": -32000, "message": err.to_string()},
-                })),
-            }
-        }
-        _ => Some(json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": {"code": -32601, "message": format!("Method not found: {method}")},
-        })),
-    }
-}
 
 pub fn tool_definitions() -> Vec<Value> {
     let node_array = json!({"type": "array", "items": node_schema()});
@@ -653,24 +609,6 @@ mod tests {
             .expect("expected array");
         assert!(!filtered_dead.is_empty());
 
-        let _ = std::fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn handle_request_tools_list_returns_eight_tools() {
-        let (root, index) = temp_index();
-        let response = super::handle_request(
-            &json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
-            &index,
-        )
-        .expect("should succeed");
-        assert_eq!(
-            response["result"]["tools"]
-                .as_array()
-                .expect("as_array should succeed")
-                .len(),
-            8
-        );
         let _ = std::fs::remove_dir_all(root);
     }
 
