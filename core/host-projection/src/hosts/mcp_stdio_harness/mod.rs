@@ -136,7 +136,7 @@ macro_rules! poison_safe_read_lock {
         match $lock.read() {
             Ok(guard) => Some(guard),
             Err(poisoned) => {
-                eprintln!("[router-rs warning] rwlock poisoned (read), recovering");
+                tracing::warn!("rwlock poisoned (read), recovering");
                 Some(poisoned.into_inner())
             }
         }
@@ -148,7 +148,7 @@ macro_rules! poison_safe_write_lock {
         match $lock.write() {
             Ok(guard) => Some(guard),
             Err(poisoned) => {
-                eprintln!("[router-rs warning] rwlock poisoned (write), recovering");
+                tracing::warn!("rwlock poisoned (write), recovering");
                 Some(poisoned.into_inner())
             }
         }
@@ -160,8 +160,8 @@ macro_rules! poison_safe_lock {
         match $mutex.lock() {
             Ok(guard) => Some(guard),
             Err(poisoned) => {
-                eprintln!(
-                    "[router-rs warning] mutex poisoned, recovering (thread panicked while holding lock)"
+                tracing::warn!(
+                    "mutex poisoned, recovering (thread panicked while holding lock)"
                 );
                 Some(poisoned.into_inner())
             }
@@ -338,10 +338,9 @@ pub fn run_mcp_stdio<R: BufRead, W: Write>(
     // 初始化 session tracker（session 级别，只执行一次）
     // 注意：init_tracker 失败不会阻塞 MCP 服务，因为某些环境可能不支持 tracker 文件
     if let Err(e) = init_tracker(repo_root) {
-        eprintln!(
-            "[router-rs warning] init_tracker failed: session call tracking may not work. \
-             Error: {}. This is non-fatal for MCP operation.",
-            e
+        tracing::warn!(
+            "init_tracker failed: session call tracking may not work. \
+             Error: {e}. This is non-fatal for MCP operation.",
         );
     }
     // v6: 生成连接级 session_id，用于 goal state session 隔离。
@@ -390,7 +389,7 @@ fn read_mcp_message<R: BufRead>(
 
         // Log transport mode changes (only on first switch for debugging)
         if previous_mode.is_none() {
-            eprintln!("[router-rs info] MCP transport mode: Content-Length");
+            tracing::info!("MCP transport mode: Content-Length");
         }
 
         let content_length = parse_content_length(&first_line)?;
@@ -427,7 +426,7 @@ fn read_mcp_message<R: BufRead>(
     // NewlineDelimited mode
     let previous_mode = *transport_mode;
     if previous_mode.is_none() {
-        eprintln!("[router-rs info] MCP transport mode: NewlineDelimited");
+        tracing::info!("MCP transport mode: NewlineDelimited");
     }
     Ok(Some(first_line.trim_end().to_string()))
 }
@@ -577,7 +576,7 @@ fn build_composite_tools_from_registry() -> Vec<Value> {
     let records = match mcp_tool_registry::load_tool_records_cached(&registry_path) {
         Ok(records) => records,
         Err(e) => {
-            eprintln!("[router-rs] handle_tools_list: failed to load registry: {e}");
+            tracing::warn!("handle_tools_list: failed to load registry: {e}");
             return Vec::new();
         }
     };

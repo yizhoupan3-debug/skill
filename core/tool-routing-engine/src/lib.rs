@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! # tool-routing-engine
 //!
 //! Tool routing engine: scoring pipeline, routing, and search for MCP tools.

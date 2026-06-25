@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! # routing-core
 //!
 //! Shared routing primitives for the Routing Layer.

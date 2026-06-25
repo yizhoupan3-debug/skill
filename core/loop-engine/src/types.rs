@@ -101,33 +101,40 @@ pub struct LoopProfileConfig {
 
 impl LoopProfileConfig {
     pub fn from_runtime_registry(repo_root: &std::path::Path, profile_name: &str) -> Option<Self> {
-        let path = repo_root.join("configs").join("framework").join("RUNTIME_REGISTRY.json");
+        let path = repo_root
+            .join("configs")
+            .join("framework")
+            .join("RUNTIME_REGISTRY.json");
         let raw = std::fs::read_to_string(&path).ok()?;
         let val: serde_json::Value = serde_json::from_str(&raw).ok()?;
         let profiles = val.get("lifecycle_profiles")?;
         let profile_val = profiles.get(profile_name)?;
 
-        let loop_capable = profile_val.get("loop_capable")
+        let loop_capable = profile_val
+            .get("loop_capable")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        let closeout_enforcement = profile_val.get("closeout_enforcement")
+        let closeout_enforcement = profile_val
+            .get("closeout_enforcement")
             .and_then(|v| v.as_str())
             .unwrap_or("advisory")
             .to_string();
-        let review_gate = profile_val.get("review_gate")
+        let review_gate = profile_val
+            .get("review_gate")
             .and_then(|v| v.as_str())
             .unwrap_or("suppressed")
             .to_string();
-        let spawn_first_nudge = profile_val.get("spawn_first_nudge")
+        let spawn_first_nudge = profile_val
+            .get("spawn_first_nudge")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let cost_budget = profile_val.get("cost_budget").and_then(|v| {
-            serde_json::from_value(v.clone()).ok()
-        });
-        let escalation = profile_val.get("escalation").and_then(|v| {
-            serde_json::from_value(v.clone()).ok()
-        });
+        let cost_budget = profile_val
+            .get("cost_budget")
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
+        let escalation = profile_val
+            .get("escalation")
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
 
         Some(LoopProfileConfig {
             profile: profile_name.to_string(),
@@ -221,10 +228,18 @@ pub struct ResearchConfig {
     pub require_human_approval: bool,
 }
 
-fn default_barrier_threshold() -> u32 { 3 }
-fn default_escalation_target() -> String { "autoresearch".to_string() }
-fn default_max_research_time_min() -> u32 { 30 }
-fn default_auto_resume() -> bool { true }
+fn default_barrier_threshold() -> u32 {
+    3
+}
+fn default_escalation_target() -> String {
+    "autoresearch".to_string()
+}
+fn default_max_research_time_min() -> u32 {
+    30
+}
+fn default_auto_resume() -> bool {
+    true
+}
 
 /// Loop trigger configuration specifying the trigger type (e.g. cron / manual) and optional schedule parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -454,7 +469,6 @@ pub struct CircuitBreaker {
     pub kill_switch_triggered_at: Option<String>,
 }
 
-
 // ── Error ──
 
 /// Error type for loop-engine operations, covering profile mismatches, kill signals,
@@ -507,7 +521,10 @@ mod tests {
     #[test]
     fn test_loop_phase_terminal() {
         assert!(LoopPhase::Completed.is_terminal());
-        assert!(!LoopPhase::Escalated.is_terminal(), "Escalated is no longer terminal: auto-resume may transition back to Dispatching");
+        assert!(
+            !LoopPhase::Escalated.is_terminal(),
+            "Escalated is no longer terminal: auto-resume may transition back to Dispatching"
+        );
         assert!(LoopPhase::Interrupted.is_terminal());
         assert!(!LoopPhase::Pending.is_terminal());
         assert!(!LoopPhase::Running.is_terminal());

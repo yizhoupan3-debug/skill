@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! Session supervisor: native-process worker lifecycle for long-running CLI hosts.
 
 use rt_storage::runtime_storage::acquire_runtime_path_lock;

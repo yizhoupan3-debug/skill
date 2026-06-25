@@ -1,5 +1,5 @@
+use crate::state::{LOOP_LOCK_MAX_AGE_SECS, kill_signal_path, lock_path};
 use crate::types::LoopError;
-use crate::state::{kill_signal_path, lock_path, LOOP_LOCK_MAX_AGE_SECS};
 use std::fs;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -56,7 +56,10 @@ pub fn clear_kill_signal(repo_root: &Path, loop_id: &str) -> Result<(), LoopErro
     match fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(LoopError::Io(format!("remove kill signal {}: {e}", path.display()))),
+        Err(e) => Err(LoopError::Io(format!(
+            "remove kill signal {}: {e}",
+            path.display()
+        ))),
     }
 }
 
@@ -73,7 +76,10 @@ pub fn take_kill_signal(repo_root: &Path, loop_id: &str) -> Result<bool, LoopErr
     match fs::remove_file(&path) {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(e) => Err(LoopError::Io(format!("take kill signal {}: {e}", path.display()))),
+        Err(e) => Err(LoopError::Io(format!(
+            "take kill signal {}: {e}",
+            path.display()
+        ))),
     }
 }
 
@@ -106,7 +112,10 @@ pub fn read_lock_info(repo_root: &Path) -> Result<Option<LockInfo>, LoopError> {
         tracing::warn!(acquired_at = %lock.acquired_at, "failed to parse lock acquired_at, defaulting to 0");
         0
     });
-    Ok(Some(LockInfo { lock, acquired_epoch: epoch }))
+    Ok(Some(LockInfo {
+        lock,
+        acquired_epoch: epoch,
+    }))
 }
 
 /// Acquire an exclusive loop lock for the given loop and run.
@@ -134,7 +143,10 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
             }
             tracing::warn!(
                 "stale lock from loop '{}' (run '{}'), overriding (age={}s >= {}s)",
-                info.lock.loop_id, info.lock.run_id, age, LOOP_LOCK_MAX_AGE_SECS,
+                info.lock.loop_id,
+                info.lock.run_id,
+                age,
+                LOOP_LOCK_MAX_AGE_SECS,
             );
             // Use match to handle concurrent removal of stale lock.
             match fs::remove_file(&path) {
@@ -142,7 +154,12 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                     // Another process already removed the stale lock — proceed.
                 }
-                Err(e) => return Err(LoopError::Io(format!("remove stale lock {}: {e}", path.display()))),
+                Err(e) => {
+                    return Err(LoopError::Io(format!(
+                        "remove stale lock {}: {e}",
+                        path.display()
+                    )));
+                }
             }
         }
         None => {
@@ -171,22 +188,20 @@ pub fn acquire_lock(repo_root: &Path, loop_id: &str, run_id: &str) -> Result<(),
 
     #[cfg(unix)]
     {
-        use std::os::unix::fs::OpenOptionsExt;
         use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
         let mut opts = fs::OpenOptions::new();
-        opts.write(true)
-            .create_new(true)
-            .mode(0o644);
-        let mut file = opts.open(&path)
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::AlreadyExists {
-                    LoopError::ActionFailed(format!(
-                        "lock {} already exists (race condition)", path.display()
-                    ))
-                } else {
-                    LoopError::Io(format!("create lock {}: {e}", path.display()))
-                }
-            })?;
+        opts.write(true).create_new(true).mode(0o644);
+        let mut file = opts.open(&path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                LoopError::ActionFailed(format!(
+                    "lock {} already exists (race condition)",
+                    path.display()
+                ))
+            } else {
+                LoopError::Io(format!("create lock {}: {e}", path.display()))
+            }
+        })?;
         file.write_all(text.as_bytes())
             .map_err(|e| LoopError::Io(format!("write lock {}: {e}", path.display())))?;
     }
@@ -215,7 +230,10 @@ pub fn release_lock(repo_root: &Path) -> Result<(), LoopError> {
     match fs::remove_file(&path) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(LoopError::Io(format!("remove lock {}: {e}", path.display()))),
+        Err(e) => Err(LoopError::Io(format!(
+            "remove lock {}: {e}",
+            path.display()
+        ))),
     }
 }
 

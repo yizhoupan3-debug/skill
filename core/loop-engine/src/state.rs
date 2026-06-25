@@ -1,6 +1,8 @@
-use crate::types::{LoopError, LoopRunState, CurrentRun, LoopPhase, RunHistoryEntry, CircuitBreaker, AntiDriftState};
-use std::path::{Path, PathBuf};
+use crate::types::{
+    AntiDriftState, CircuitBreaker, CurrentRun, LoopError, LoopPhase, LoopRunState, RunHistoryEntry,
+};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Canonical `now_iso` — re-exported from `framework-kernel`.
 pub use framework_kernel::time::now_iso;
@@ -16,7 +18,11 @@ pub const LOOP_LOCK_MAX_AGE_SECS: u64 = 3600;
 
 /// Return the path to `LOOP_RUN_STATE.json` for the given loop under `artifacts/loop/{loop_id}/`.
 pub fn loop_state_path(repo_root: &Path, loop_id: &str) -> PathBuf {
-    repo_root.join("artifacts").join("loop").join(loop_id).join(LOOP_RUN_STATE_FILENAME)
+    repo_root
+        .join("artifacts")
+        .join("loop")
+        .join(loop_id)
+        .join(LOOP_RUN_STATE_FILENAME)
 }
 
 /// Return the artifacts directory path for a loop: `artifacts/loop/{loop_id}/`.
@@ -26,7 +32,9 @@ pub fn loop_artifacts_dir(repo_root: &Path, loop_id: &str) -> PathBuf {
 
 /// Return the evidence directory path for a specific action: `artifacts/loop/{loop_id}/evidence/{action_id}/`.
 pub fn loop_evidence_dir(repo_root: &Path, loop_id: &str, action_id: &str) -> PathBuf {
-    loop_artifacts_dir(repo_root, loop_id).join("evidence").join(action_id)
+    loop_artifacts_dir(repo_root, loop_id)
+        .join("evidence")
+        .join(action_id)
 }
 
 /// Return the reports directory path for a loop: `artifacts/loop/{loop_id}/reports/`.
@@ -71,12 +79,15 @@ pub fn read_loop_state(repo_root: &Path, loop_id: &str) -> Result<Option<LoopRun
 
 /// Atomically write the loop run state to `LOOP_RUN_STATE.json` using
 /// core-state's canonical atomic write (fsync + POSIX rename).
-pub fn write_loop_state(repo_root: &Path, loop_id: &str, state: &LoopRunState) -> Result<(), LoopError> {
+pub fn write_loop_state(
+    repo_root: &Path,
+    loop_id: &str,
+    state: &LoopRunState,
+) -> Result<(), LoopError> {
     let path = loop_state_path(repo_root, loop_id);
     let text = serde_json::to_string_pretty(state)
         .map_err(|e| LoopError::Serde(format!("serialize state: {e}")))?;
-    core_state::utils::atomic_write::write_atomic_text(&path, &text)
-        .map_err(LoopError::Io)
+    core_state::utils::atomic_write::write_atomic_text(&path, &text).map_err(LoopError::Io)
 }
 
 /// Create a new initial `LoopRunState` with the given loop ID and profile.
@@ -132,7 +143,12 @@ pub fn finish_run(state: &mut LoopRunState, result: &str) {
 /// Generate a unique run ID string in the format `run-{YYYYMMDD}-{HHMM}-{SS}`.
 pub fn generate_run_id(_loop_id: &str) -> String {
     let now = chrono::Utc::now();
-    format!("run-{}-{}-{}", now.format("%Y%m%d"), now.format("%H%M"), now.format("%S"))
+    format!(
+        "run-{}-{}-{}",
+        now.format("%Y%m%d"),
+        now.format("%H%M"),
+        now.format("%S")
+    )
 }
 
 /// Update the heartbeat timestamp of the loop run state to the current time.

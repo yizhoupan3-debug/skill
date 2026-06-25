@@ -32,8 +32,7 @@ fn init_browser_mcp_dispatch() {
 
 fn main() -> Result<(), String> {
     // Explicit hook initialization (deterministic ordering, testable).
-    // The #[ctor::ctor] in runtime-core handles this for non-test builds,
-    // but explicit init is safer and makes dependencies clear.
+    // runtime_core::init_hooks() uses OnceLock internally for safety.
     runtime_core::init_hooks();
 
     // Register research hooks if the `research` feature is enabled.

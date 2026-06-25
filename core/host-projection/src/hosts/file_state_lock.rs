@@ -181,11 +181,10 @@ impl HookStateConfig {
         let _guard = acquire_file_lock_with_config(&lock_path, config)?;
 
         // Load state
-        let mut state = if state_path.exists() {
-            let content = fs::read_to_string(&state_path).map_err(|e| e.to_string())?;
-            serde_json::from_str::<S>(&content).unwrap_or_default()
-        } else {
-            S::default()
+        let mut state = match fs::read_to_string(&state_path) {
+            Ok(content) => serde_json::from_str::<S>(&content).unwrap_or_default(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => S::default(),
+            Err(e) => return Err(format!("read_state_failed: {e}")),
         };
 
         // Execute closure
@@ -279,8 +278,19 @@ pub fn acquire_file_lock_with_config(
         fs::create_dir_all(parent).map_err(|e| format!("lock_dir_create_failed: {e}"))?;
     }
 
-    // Stale lock recovery: attempt to remove an existing lock file
-    let _ = fs::remove_file(lock_path);
+    const STALE_LOCK_AGE_SECS: u64 = 10; // age-gated stale recovery
+    if let Ok(meta) = fs::metadata(lock_path) {
+        if let Ok(modified) = meta.modified() {
+            if let Ok(age) = modified.elapsed() {
+                if age > std::time::Duration::from_secs(STALE_LOCK_AGE_SECS) {
+                    // TOCTOU: non-Unix lock has inherent race; age-gated stale recovery
+                    // reduces the window. On Unix, flock provides atomic lock semantics.
+                    tracing::warn!("non-unix stale lock (>={STALE_LOCK_AGE_SECS}s), removing");
+                    let _ = fs::remove_file(lock_path);
+                }
+            }
+        }
+    }
 
     let max_wait = std::time::Duration::from_millis(config.max_wait_ms);
     let start = std::time::Instant::now();

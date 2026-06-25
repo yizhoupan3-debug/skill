@@ -1,4 +1,5 @@
 // MCP 常量、transport、JSON-RPC、`BrowserRuntime`/会话类型与 `struct CdpClient`（须整体移动，不得在函数中途截断）。
+use anyhow::{bail, Context as _};
 use framework_kernel::repo_roots::resolve_repo_root_arg;
 use framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload;
 // attach_runtime_event_transport / inspect_trace_stream: resolved via browser_mcp_dispatch::hooks()
@@ -51,8 +52,8 @@ enum BrowserMcpTransportMode {
 pub fn run_browser_mcp_stdio_loop(
     repo_root: Option<&Path>,
     attach_config: BrowserAttachConfig,
-) -> Result<(), String> {
-    let repo_root = resolve_repo_root_arg(repo_root)?;
+) -> anyhow::Result<()> {
+    let repo_root = resolve_repo_root_arg(repo_root).map_err(anyhow::Error::msg)?;
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut runtime = BrowserRuntime::with_attach_config(repo_root, attach_config);
@@ -77,9 +78,11 @@ pub fn run_browser_mcp_stdio<R: BufRead, W: Write>(
     mut input: R,
     mut output: W,
     runtime: &mut BrowserRuntime,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     let mut transport_mode = None;
-    while let Some(message) = read_browser_mcp_message(&mut input, &mut transport_mode)? {
+    while let Some(message) = read_browser_mcp_message(&mut input, &mut transport_mode)
+        .map_err(anyhow::Error::msg)?
+    {
         if let Some(response) = handle_browser_mcp_line(&message, runtime) {
             write_browser_mcp_response(
                 &mut output,
@@ -148,36 +151,36 @@ fn read_browser_mcp_message<R: BufRead>(
     Ok(Some(first_line.trim_end().to_string()))
 }
 
-fn parse_content_length_header(line: &str) -> Result<usize, String> {
+fn parse_content_length_header(line: &str) -> anyhow::Result<usize> {
     let (_, value) = line
         .split_once(':')
-        .ok_or_else(|| format!("invalid browser MCP header: {line}"))?;
+        .with_context(|| format!("invalid browser MCP header: {line}"))?;
     value
         .trim()
         .parse::<usize>()
-        .map_err(|err| format!("invalid browser MCP content length '{value}': {err}"))
+        .with_context(|| format!("invalid browser MCP content length '{value}'"))
 }
 
 fn write_browser_mcp_response<W: Write>(
     output: &mut W,
     transport_mode: BrowserMcpTransportMode,
     response: &Value,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     let encoded = serde_json::to_string(response)
-        .map_err(|err| format!("serialize browser MCP response failed: {err}"))?;
+        .context("serialize browser MCP response failed")?;
     match transport_mode {
         BrowserMcpTransportMode::ContentLength => {
             write!(output, "Content-Length: {}\r\n\r\n{encoded}", encoded.len())
-                .map_err(|err| format!("write browser MCP response failed: {err}"))?;
+                .context("write browser MCP response failed")?;
         }
         BrowserMcpTransportMode::NewlineDelimited => {
             writeln!(output, "{encoded}")
-                .map_err(|err| format!("write browser MCP response failed: {err}"))?;
+                .context("write browser MCP response failed")?;
         }
     }
     output
         .flush()
-        .map_err(|err| format!("flush browser MCP response failed: {err}"))?;
+        .context("flush browser MCP response failed")?;
     Ok(())
 }
 

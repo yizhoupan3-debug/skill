@@ -7,6 +7,7 @@
 //! `reasons`, `matched_tokens`, `parity_gate`, `candidates`).
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Canonical telemetry event enum emitted by the runtime and consumed by
 /// offline analysis tools (evolution-rs audit/manifest).
@@ -59,6 +60,13 @@ pub enum TelemetryEvent {
         actual_verification_status: String,
         checks_summary: String,
         checks: Vec<PredictionOutcomeCheck>,
+    },
+    /// Structured metric with name, numeric value, and labels.
+    /// Enables aggregation queries: `sum(value) WHERE metric_name='...' GROUP BY labels['...']`.
+    MetricEvent {
+        metric_name: String,
+        value: f64,
+        labels: HashMap<String, String>,
     },
 }
 

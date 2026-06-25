@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 282b1d11a65c9bb820930b7dd2c906cd00d8d52c2978a9e3d352fe3852018c86 # shrinks to ops = [Start, Complete, Checkpoint]
+cc a6036bc188bafe89c277b37684bef3cadd5ef48e99ad9ab1a872746e6c1b648f # shrinks to ops = [Start, Block, Pause]
+cc ee72995cd3cba0ace4b7e03818ae89907e81b011e2666b212dca5a5201e6ffa8 # shrinks to ops = [Start, Pause, Block, Unblock]

@@ -113,57 +113,8 @@ pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
     "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
 
 // ────────────────────────────────────────────────────────────────
-// router_env_flags: delegates to core_policy::env_flags (single source of truth)
+// Env readers with host-projection-specific logic (local impl, not pure proxy)
 // ────────────────────────────────────────────────────────────────
-
-pub fn router_rs_env_enabled_default_true(var_name: &str) -> bool {
-    core_policy::env_flags::env_enabled_default_true(var_name)
-}
-
-pub fn router_rs_env_enabled_default_false(var_name: &str) -> bool {
-    core_policy::env_flags::env_enabled_default_false(var_name)
-}
-
-pub fn router_rs_operator_inject_globally_enabled() -> bool {
-    core_policy::env_flags::router_rs_operator_inject_globally_enabled()
-}
-
-pub fn router_rs_hook_legacy_subtracted_events_enabled() -> bool {
-    core_policy::env_flags::router_rs_hook_legacy_subtracted_events_enabled()
-}
-
-pub fn router_rs_hook_silent_enabled() -> bool {
-    core_policy::env_flags::router_rs_hook_silent_enabled()
-}
-
-pub fn router_rs_hook_outbound_context_max_bytes() -> usize {
-    core_policy::env_flags::router_rs_hook_outbound_context_max_bytes()
-}
-
-/// Delegates to core-policy's canonical implementation (single source of truth).
-pub fn router_rs_review_fork_context_missing_infer_false_enabled() -> bool {
-    core_policy::env_flags::router_rs_review_fork_context_missing_infer_false_enabled()
-}
-
-pub fn router_rs_pre_goal_enabled() -> bool {
-    core_policy::env_flags::router_rs_pre_goal_enabled()
-}
-
-pub fn router_rs_hook_state_lock_retries() -> u32 {
-    core_policy::env_flags::router_rs_hook_state_lock_retries()
-}
-
-pub fn router_rs_hook_state_file_sync_enabled() -> bool {
-    core_policy::env_flags::router_rs_hook_state_file_sync_enabled()
-}
-
-pub fn router_rs_hook_state_dir_sync_enabled() -> bool {
-    core_policy::env_flags::router_rs_hook_state_dir_sync_enabled()
-}
-
-pub fn router_rs_review_pending_cycle_max() -> usize {
-    core_policy::env_flags::router_rs_review_pending_cycle_max()
-}
 
 pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
     #[cfg(test)]
@@ -174,26 +125,6 @@ pub fn router_rs_review_gate_stop_max_nudges_cap() -> Option<u32> {
         raw.as_ref()?;
     }
     core_policy::env_flags::router_rs_review_gate_stop_max_nudges_cap()
-}
-
-pub fn router_rs_pre_goal_strict_disk_enabled() -> bool {
-    core_policy::env_flags::router_rs_pre_goal_strict_disk_enabled()
-}
-
-pub fn router_rs_hook_state_fail_open_enabled() -> bool {
-    core_policy::env_flags::router_rs_hook_state_fail_open_enabled()
-}
-
-pub fn router_rs_cargo_check_sync_enabled() -> bool {
-    core_policy::env_flags::router_rs_cargo_check_sync_enabled()
-}
-
-pub fn router_rs_hook_state_legacy_full_sweep_enabled() -> bool {
-    core_policy::env_flags::router_rs_hook_state_legacy_full_sweep_enabled()
-}
-
-pub fn router_rs_hook_state_stale_sweep_days() -> u64 {
-    core_policy::env_flags::router_rs_hook_state_stale_sweep_days()
 }
 
 pub fn router_rs_sessionstart_context_max_bytes() -> usize {
@@ -225,7 +156,7 @@ pub fn sweep_stale_hook_state_files(hook_state_dir: &Path) -> usize {
         }
     }
 
-    let days = router_rs_hook_state_stale_sweep_days();
+    let days = core_policy::env_flags::router_rs_hook_state_stale_sweep_days();
     let cutoff = std::time::Duration::from_secs(days * 86400);
     sweep_files_by_age(hook_state_dir, cutoff)
 }
@@ -255,8 +186,8 @@ fn sweep_files_by_age(dir: &Path, max_age: std::time::Duration) -> usize {
         }
     }
     if cleaned > 0 {
-        eprintln!(
-            "[router-rs] hook-state sweep: removed {cleaned} file(s) from {}",
+        tracing::info!(
+            "hook-state sweep: removed {cleaned} file(s) from {}",
             dir.display()
         );
     }
@@ -300,15 +231,43 @@ pub fn sweep_orphan_lock_files(hook_state_dir: &Path) -> usize {
             Ok(t) => t,
             Err(_) => continue,
         };
-        if now.duration_since(modified).unwrap_or_default() > cutoff
-            && std::fs::remove_file(&path).is_ok()
-        {
-            cleaned += 1;
+        if now.duration_since(modified).unwrap_or_default() > cutoff {
+            #[cfg(unix)]
+            {
+                // Use flock probe: if we can acquire LOCK_EX|LOCK_NB, no one holds the lock.
+                // Otherwise skip (lock still active). This avoids TOCTOU between metadata check
+                // and removal — the flock is tested against the actual lock holder.
+                use std::os::unix::io::AsRawFd;
+                if let Ok(f) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(false)
+                    .open(&path)
+                {
+                    let rc = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+                    if rc == 0 {
+                        // Lock acquired — no one is holding it; safe to delete.
+                        unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_UN) };
+                        drop(f);
+                        if std::fs::remove_file(&path).is_ok() {
+                            cleaned += 1;
+                        }
+                    } // else: lock still held by another process — skip
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                // Non-Unix: no flock available; age-based removal is best-effort.
+                // TOCTOU race is mitigated by age threshold.
+                if std::fs::remove_file(&path).is_ok() {
+                    cleaned += 1;
+                }
+            }
         }
     }
     if cleaned > 0 {
-        eprintln!(
-            "[router-rs] hook-state orphan lock sweep: removed {cleaned} .lock file(s) from {}",
+        tracing::info!(
+            "hook-state orphan lock sweep: removed {cleaned} .lock file(s) from {}",
             hook_state_dir.display()
         );
     }
@@ -402,40 +361,6 @@ pub fn add_cargo_check_ms(ms: u64) {
 
 pub fn emit_hook_timing_line(event: &str) {
     if let Some(f) = EMIT_HOOK_TIMING_LINE.get() { f(event) }
-}
-
-// ────────────────────────────────────────────────────────────────
-// telemetry_emit: function-pointer proxies (OnceLock)
-// ────────────────────────────────────────────────────────────────
-
-static EMIT_HOOK_FIRED: OnceLock<fn(&str, &str)> = OnceLock::new();
-static EMIT_TOOL_CALL: OnceLock<fn(&str, u64, bool)> = OnceLock::new();
-static HOOK_ACTION_FROM_OPTIONAL_OUTPUT: OnceLock<fn(Option<&Value>) -> &'static str> =
-    OnceLock::new();
-
-pub fn register_telemetry(
-    emit_hook_fired: fn(&str, &str),
-    emit_tool_call: fn(&str, u64, bool),
-    hook_action: fn(Option<&Value>) -> &'static str,
-) {
-    once_lock_set(&EMIT_HOOK_FIRED, emit_hook_fired, "EMIT_HOOK_FIRED");
-    once_lock_set(&EMIT_TOOL_CALL, emit_tool_call, "EMIT_TOOL_CALL");
-    once_lock_set(&HOOK_ACTION_FROM_OPTIONAL_OUTPUT, hook_action, "HOOK_ACTION_FROM_OPTIONAL_OUTPUT");
-}
-
-pub fn emit_hook_fired(hook_name: &str, action: &str) {
-    if let Some(f) = EMIT_HOOK_FIRED.get() { f(hook_name, action) }
-}
-
-pub fn emit_tool_call(tool: &str, duration_ms: u64, success: bool) {
-    if let Some(f) = EMIT_TOOL_CALL.get() { f(tool, duration_ms, success) }
-}
-
-pub fn hook_action_from_optional_output(output: Option<&Value>) -> &'static str {
-    HOOK_ACTION_FROM_OPTIONAL_OUTPUT
-        .get()
-        .map(|f| f(output))
-        .unwrap_or("unknown")
 }
 
 // ────────────────────────────────────────────────────────────────
@@ -1200,7 +1125,7 @@ static SESSION_SUPERVISOR_OP: OnceLock<fn(Value) -> Result<Value, String>> = Onc
 /// Register the session-supervisor operation handler. Called once at startup.
 pub fn register_session_supervisor_op(f: fn(Value) -> Result<Value, String>) {
     SESSION_SUPERVISOR_OP.set(f).ok();
-    eprintln!("[router-rs info] session_supervisor_op: registered");
+    tracing::info!("session_supervisor_op: registered");
 }
 
 /// Dispatch a session-supervisor operation. Returns None if not registered.

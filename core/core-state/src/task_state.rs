@@ -410,7 +410,7 @@ fn qg_active(state: &Value) -> bool {
         .is_some_and(|s| s.eq_ignore_ascii_case("active"))
 }
 
-fn classify_control_mode(
+pub(crate) fn classify_control_mode(
     goal: Option<&Value>,
     qg: Option<&Value>,
     notes: &mut Vec<String>,
@@ -814,6 +814,7 @@ pub fn validate_goal_completion_gates(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use serde_json::json;
     use std::fs;
@@ -900,8 +901,14 @@ mod tests {
             v.resolution_notes
         );
         match prior_hint {
-            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
+            Some(p) => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) }
+            }
+            None => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") }
+            }
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1159,8 +1166,14 @@ mod tests {
         let dc = v.depth_compliance.expect("dc");
         assert_eq!(dc.depth_score, 3, "strict third point via falsification");
         match prior {
-            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") },
+            Some(p) => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) }
+            }
+            None => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") }
+            }
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1207,12 +1220,24 @@ mod tests {
         assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
         match prior_depth {
-            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") },
+            Some(p) => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) }
+            }
+            None => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") }
+            }
         }
         match prior_hint {
-            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
+            Some(p) => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) }
+            }
+            None => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") }
+            }
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1255,12 +1280,24 @@ mod tests {
         assert!(!hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
         match prior {
-            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") },
+            Some(p) => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) }
+            }
+            None => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") }
+            }
         }
         match prior_hint {
-            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
+            Some(p) => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) }
+            }
+            None => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") }
+            }
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -1324,12 +1361,24 @@ mod tests {
         assert!(hint.contains(super::DEPTH_COMPLIANCE_LEGACY_EXTERNAL_DEPTH_NOTE_ZH));
 
         match prior_depth {
-            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") },
+            Some(p) => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_SCORE_MODE", &p) }
+            }
+            None => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_SCORE_MODE") }
+            }
         }
         match prior_hint {
-            Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") },
+            Some(p) => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT", &p) }
+            }
+            None => {
+                // SAFETY: test-only; DEPTH_SCORE_MODE_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_DEPTH_COMPLIANCE_HINT") }
+            }
         }
         let _ = fs::remove_dir_all(&tmp);
     }

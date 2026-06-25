@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! Runtime-core contracts: pure-data / trait-only modules extracted from runtime-core.
 //!
 //! This crate MUST NOT depend on implementation crates (framework-runtime,

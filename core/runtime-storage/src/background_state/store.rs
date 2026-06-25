@@ -82,7 +82,7 @@ impl BackgroundStateStore {
                 self.reaped_dirty = false;
             }
             Err(err) => {
-                eprintln!(
+                tracing::warn!(
                     "[router-rs] background_state reaper persist failed for {} (non-fatal, will retry on next mutation): {err}",
                     self.state_path.display()
                 );

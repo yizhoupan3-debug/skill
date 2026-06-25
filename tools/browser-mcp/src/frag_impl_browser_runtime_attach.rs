@@ -57,7 +57,7 @@ impl BrowserRuntime {
         let loaded = self.load_runtime_attach_descriptor().map_err(|err| {
             browser_error(
                 "ATTACHED_RUNTIME_INVALID_DESCRIPTOR",
-                &err,
+                &err.to_string(),
                 &[
                     "refresh the descriptor from describe_runtime_event_handoff",
                     "inspect browser_diagnostics",
@@ -124,7 +124,7 @@ impl BrowserRuntime {
         })
     }
 
-    fn load_runtime_attach_descriptor(&self) -> Result<LoadedRuntimeAttachDescriptor, String> {
+    fn load_runtime_attach_descriptor(&self) -> anyhow::Result<LoadedRuntimeAttachDescriptor> {
         let configured_source = self.configured_runtime_attach_source();
         match configured_source.source {
             Some("descriptor_path") => {
@@ -134,22 +134,22 @@ impl BrowserRuntime {
                 .build_runtime_attach_descriptor_from_artifact_path(
                     configured_source.path.as_deref(),
                 ),
-            _ => Err("runtime attach descriptor is not configured".to_string()),
+            _ => bail!("runtime attach descriptor is not configured"),
         }
     }
 
     fn read_runtime_attach_descriptor_file(
         &self,
         descriptor_path: Option<&str>,
-    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+    ) -> anyhow::Result<LoadedRuntimeAttachDescriptor> {
         let descriptor_path = descriptor_path
-            .ok_or_else(|| "runtime attach descriptor path is missing".to_string())?;
+            .with_context(|| "runtime attach descriptor path is missing")?;
         let raw = fs::read_to_string(descriptor_path)
-            .map_err(|err| format!("read runtime attach descriptor failed: {err}"))?;
+            .with_context(|| "read runtime attach descriptor failed")?;
         let parsed = serde_json::from_str::<Value>(&raw)
-            .map_err(|err| format!("parse runtime attach descriptor failed: {err}"))?;
+            .with_context(|| "parse runtime attach descriptor failed")?;
         if !parsed.is_object() {
-            return Err("runtime attach descriptor must decode to a JSON object".to_string());
+            bail!("runtime attach descriptor must decode to a JSON object");
         }
         self.canonicalize_attach_descriptor_if_possible(parsed)
     }
@@ -157,15 +157,15 @@ impl BrowserRuntime {
     fn build_runtime_attach_descriptor_from_artifact_path(
         &self,
         artifact_path: Option<&str>,
-    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+    ) -> anyhow::Result<LoadedRuntimeAttachDescriptor> {
         let artifact_path =
-            artifact_path.ok_or_else(|| "runtime attach artifact path is missing".to_string())?;
+            artifact_path.with_context(|| "runtime attach artifact path is missing")?;
         let resolved_path = normalize_runtime_locator_for_existing_file(artifact_path);
         if let Ok(raw) = fs::read_to_string(&resolved_path) {
             let parsed = serde_json::from_str::<Value>(&raw)
-                .map_err(|err| format!("parse runtime attach artifact failed: {err}"))?;
+                .with_context(|| "parse runtime attach artifact failed")?;
             if !parsed.is_object() {
-                return Err("runtime attach artifact returned an unknown schema".to_string());
+                bail!("runtime attach artifact returned an unknown schema");
             }
             let schema = descriptor_string(&parsed, &["schema_version"]);
             if matches!(
@@ -187,7 +187,7 @@ impl BrowserRuntime {
             {
                 return Ok(loaded);
             }
-            return Err("runtime attach artifact returned an unknown schema".to_string());
+            bail!("runtime attach artifact returned an unknown schema");
         }
         self.try_hydrate_runtime_attach_descriptor_from_artifact_path(artifact_path)
     }
@@ -195,7 +195,7 @@ impl BrowserRuntime {
     fn try_hydrate_runtime_attach_descriptor_from_artifact_path(
         &self,
         artifact_path: &str,
-    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+    ) -> anyhow::Result<LoadedRuntimeAttachDescriptor> {
         self.hydrate_runtime_attach_descriptor_via_rust(None, Some(artifact_path), None, None)
             .or_else(|_| {
                 self.hydrate_runtime_attach_descriptor_via_rust(
@@ -218,7 +218,7 @@ impl BrowserRuntime {
     fn canonicalize_attach_descriptor_if_possible(
         &self,
         descriptor: Value,
-    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+    ) -> anyhow::Result<LoadedRuntimeAttachDescriptor> {
         match self.hydrate_runtime_attach_descriptor_via_rust(
             Some(descriptor.clone()),
             None,
@@ -249,20 +249,19 @@ impl BrowserRuntime {
         binding_artifact_path: Option<&str>,
         handoff_path: Option<&str>,
         resume_manifest_path: Option<&str>,
-    ) -> Result<LoadedRuntimeAttachDescriptor, String> {
+    ) -> anyhow::Result<LoadedRuntimeAttachDescriptor> {
         let attached = (browser_mcp_dispatch::hooks().attach_runtime_event_transport)(json!({
             "attach_descriptor": attach_descriptor,
             "binding_artifact_path": binding_artifact_path,
             "handoff_path": handoff_path,
             "resume_manifest_path": resume_manifest_path,
-        }))?;
+        }))
+        .map_err(anyhow::Error::msg)?;
         let descriptor = attached
             .get("attach_descriptor")
             .cloned()
             .filter(Value::is_object)
-            .ok_or_else(|| {
-                "runtime attach transport payload is missing attach_descriptor".to_string()
-            })?;
+            .with_context(|| "runtime attach transport payload is missing attach_descriptor")?;
         let input_artifact_kind = if attach_descriptor.is_some() {
             Some("attach_descriptor")
         } else if binding_artifact_path.is_some() {

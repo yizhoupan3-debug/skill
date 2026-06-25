@@ -1,4 +1,5 @@
 {
+  "note": "Write-only — populated by framework maint health-scan when run. Currently empty because no health scan has been executed.",
   "schema_version": "skill-health-manifest-v1",
   "skills": {},
   "source_of_truth": false,

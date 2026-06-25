@@ -151,6 +151,7 @@ mod tests {
     fn unset_means_enabled_for_default_true() {
         let _g = process_env_lock();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_UNSET";
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key) };
         assert!(router_rs_env_enabled_default_true(key));
     }
@@ -160,12 +161,14 @@ mod tests {
         let _g = process_env_lock();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_TOKENS";
         for v in ["0", "false", "off", "no", "FALSE", " Off "] {
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
             unsafe { env::set_var(key, v) };
             assert!(
                 !router_rs_env_enabled_default_true(key),
                 "expected disabled for {v:?}"
             );
         }
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key) };
     }
 
@@ -173,10 +176,13 @@ mod tests {
     fn other_values_enable_default_true() {
         let _g = process_env_lock();
         let key = "ROUTER_RS_UNITTEST_ENV_ENABLED_DEFAULT_TRUE_OTHER";
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key, "1") };
         assert!(router_rs_env_enabled_default_true(key));
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key, "") };
         assert!(router_rs_env_enabled_default_true(key));
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key) };
     }
 
@@ -185,13 +191,17 @@ mod tests {
         let _g = process_env_lock();
         let key = "ROUTER_RS_PRE_GOAL_ENABLED";
         let prev = env::var_os(key);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key) };
         assert!(!super::router_rs_pre_goal_enabled());
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key, "true") };
         assert!(super::router_rs_pre_goal_enabled());
         match prev {
-            Some(v) => unsafe { env::set_var(key, v) },
-            None => unsafe { env::remove_var(key) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            Some(v) => unsafe {env::set_var(key, v) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            None => unsafe {env::remove_var(key) },
         }
     }
 
@@ -202,26 +212,36 @@ mod tests {
         let key_legacy = "ROUTER_RS_CURSOR_PRE_GOAL_STRICT_DISK";
         let prev_canon = env::var_os(key_canonical);
         let prev_legacy = env::var_os(key_legacy);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key_canonical) };
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key_legacy) };
         // Unset → true (default_true backward compat)
         assert!(super::router_rs_pre_goal_strict_disk_enabled());
         // Canonical explicitly set to "true" enables
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key_canonical, "true") };
         assert!(super::router_rs_pre_goal_strict_disk_enabled());
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key_canonical) };
         // Canonical explicitly set to "0" disables (short-circuits, no legacy fallthrough)
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key_canonical, "0") };
         assert!(!super::router_rs_pre_goal_strict_disk_enabled());
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key_canonical) };
         // Legacy fallback: legacy "0" disables when canonical unset
         match prev_canon {
-            Some(v) => unsafe { env::set_var(key_canonical, v) },
-            None => unsafe { env::remove_var(key_canonical) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            Some(v) => unsafe {env::set_var(key_canonical, v) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            None => unsafe {env::remove_var(key_canonical) },
         }
         match prev_legacy {
-            Some(v) => unsafe { env::set_var(key_legacy, v) },
-            None => unsafe { env::remove_var(key_legacy) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            Some(v) => unsafe {env::set_var(key_legacy, v) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            None => unsafe {env::remove_var(key_legacy) },
         }
     }
 
@@ -230,13 +250,17 @@ mod tests {
         let _g = process_env_lock();
         let key = "ROUTER_RS_CONTINUITY_POSTTOOL_EVIDENCE";
         let prev = env::var_os(key);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key) };
         assert!(!super::router_rs_continuity_post_tool_evidence_enabled());
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key, "1") };
         assert!(super::router_rs_continuity_post_tool_evidence_enabled());
         match prev {
-            Some(v) => unsafe { env::set_var(key, v) },
-            None => unsafe { env::remove_var(key) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            Some(v) => unsafe {env::set_var(key, v) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            None => unsafe {env::remove_var(key) },
         }
     }
 
@@ -245,26 +269,34 @@ mod tests {
         let _g = process_env_lock();
         let key = "ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES";
         let prev = env::var_os(key);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key) };
         assert!(super::router_rs_review_gate_stop_max_nudges_cap().is_none());
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key, "3") };
         assert_eq!(
             super::router_rs_review_gate_stop_max_nudges_cap(),
             Some(3)
         );
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(key, "0") };
         assert!(super::router_rs_review_gate_stop_max_nudges_cap().is_none());
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(key) };
         // Also verify legacy CURSOR_ name is still honored by core-policy
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES", "5") };
         assert_eq!(
             super::router_rs_review_gate_stop_max_nudges_cap(),
             Some(5)
         );
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var("ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES") };
         match prev {
-            Some(v) => unsafe { env::set_var(key, v) },
-            None => unsafe { env::remove_var(key) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            Some(v) => unsafe {env::set_var(key, v) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            None => unsafe {env::remove_var(key) },
         }
     }
 
@@ -272,15 +304,20 @@ mod tests {
     fn qg_max_rounds_cap_defaults_and_clamped() {
         let _g = process_env_lock();
         let prev = env::var_os("ROUTER_RS_QG_MAX_ROUNDS_CAP");
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var("ROUTER_RS_QG_MAX_ROUNDS_CAP") };
         assert_eq!(super::router_rs_qg_max_rounds_cap(), 1000);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var("ROUTER_RS_QG_MAX_ROUNDS_CAP", "500") };
         assert_eq!(super::router_rs_qg_max_rounds_cap(), 500);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var("ROUTER_RS_QG_MAX_ROUNDS_CAP", "20000") };
         assert_eq!(super::router_rs_qg_max_rounds_cap(), 10000);
         match prev {
-            Some(v) => unsafe { env::set_var("ROUTER_RS_QG_MAX_ROUNDS_CAP", v) },
-            None => unsafe { env::remove_var("ROUTER_RS_QG_MAX_ROUNDS_CAP") },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            Some(v) => unsafe {env::set_var("ROUTER_RS_QG_MAX_ROUNDS_CAP", v) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
+            None => unsafe {env::remove_var("ROUTER_RS_QG_MAX_ROUNDS_CAP") },
         }
     }
 }

@@ -144,7 +144,7 @@ fn parse_tool_record(row: &Value, keys: &[String], index: usize) -> Result<McpTo
                     // Handle below as a special case
                     continue;
                 }
-                eprintln!("[mcp-tool-registry warning] tool record at index {index}, key '{key}': expected string, got {v}");
+                tracing::warn!("[mcp-tool-registry warning] tool record at index {index}, key '{key}': expected string, got {v}");
                 ""
             }
             None => "",

@@ -1,7 +1,7 @@
-use crate::types::{LoopCloseoutAggregate, AggregateActionEntry, LoopRunState, UnconsumedFinding};
 use crate::state::loop_reports_dir;
-use std::path::Path;
+use crate::types::{AggregateActionEntry, LoopCloseoutAggregate, LoopRunState, UnconsumedFinding};
 use std::fs;
+use std::path::Path;
 
 /// Render a Markdown loop report from the run state, closeout aggregate, unconsumed findings, and lock duration.
 pub fn render_loop_report(
@@ -18,7 +18,9 @@ pub fn render_loop_report(
     ));
 
     let total_actions = aggregate.actions.len();
-    let dispatched = aggregate.actions.iter()
+    let dispatched = aggregate
+        .actions
+        .iter()
         .filter(|a| a.execution != "skipped")
         .count();
     let skipped = total_actions - dispatched;
@@ -117,11 +119,9 @@ pub fn write_loop_report(
     report: &str,
 ) -> Result<String, String> {
     let dir = loop_reports_dir(repo_root, loop_id);
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
+    fs::create_dir_all(&dir).map_err(|e| format!("mkdir {}: {e}", dir.display()))?;
     let path = dir.join(format!("{}.md", run_id));
-    fs::write(&path, report)
-        .map_err(|e| format!("write {}: {e}", path.display()))?;
+    fs::write(&path, report).map_err(|e| format!("write {}: {e}", path.display()))?;
     Ok(path.display().to_string())
 }
 

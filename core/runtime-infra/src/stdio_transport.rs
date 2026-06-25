@@ -538,6 +538,7 @@ mod tests {
     impl EnvVarGuard {
         fn unset(key: &'static str) -> Self {
             let previous = std::env::var(key).ok();
+            // SAFETY: test-only; ENV_GUARD prevents concurrent env access from other tests.
             unsafe { core_state_utils::env_sync::remove_env(key) };
             Self { key, previous }
         }
@@ -546,7 +547,9 @@ mod tests {
     impl Drop for EnvVarGuard {
         fn drop(&mut self) {
             match self.previous.take() {
+                // SAFETY: test-only; ENV_GUARD prevents concurrent env access from other tests.
                 Some(value) => unsafe { core_state_utils::env_sync::set_env(self.key, &value) },
+                // SAFETY: test-only; ENV_GUARD prevents concurrent env access from other tests.
                 None => unsafe { core_state_utils::env_sync::remove_env(self.key) },
             }
         }

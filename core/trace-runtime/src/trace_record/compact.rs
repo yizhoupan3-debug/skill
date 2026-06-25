@@ -93,7 +93,8 @@ pub fn compact_trace_stream(
         .as_ref()
         .and_then(|manifest| manifest.get("latest_stable_snapshot"))
         .cloned();
-    let tail = active_events.last().expect("active events checked");
+    #[allow(clippy::expect_used)]
+    let tail = active_events.last().expect("active events checked (early return above if empty)");
     let latest_cursor = latest_cursor_from_event(tail).unwrap_or(Value::Null);
     let mut state_payload = Map::new();
     state_payload.insert("run_id".to_string(), Value::String(payload.run_id.clone()));

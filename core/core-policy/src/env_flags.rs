@@ -369,17 +369,23 @@ mod tests {
         ];
         let prev: Vec<_> = keys.iter().map(|k| (*k, env::var_os(k))).collect();
         for key in keys {
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
             unsafe { env::remove_var(key) };
         }
         assert!(!router_rs_review_gate_disabled_for_host("cursor"));
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV, "1") };
         assert!(router_rs_review_gate_disabled_for_host("codex"));
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(ROUTER_RS_REVIEW_GATE_DISABLE_ENV) };
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var("ROUTER_RS_CLAUDE_REVIEW_GATE_DISABLE", "true") };
         assert!(router_rs_review_gate_disabled_for_host("claude"));
         for (key, val) in prev {
             match val {
+                // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
                 Some(v) => unsafe { env::set_var(key, v) },
+                // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
                 None => unsafe { env::remove_var(key) },
             }
         }
@@ -390,19 +396,27 @@ mod tests {
         let _g = process_env_lock();
         let prev_canon = env::var_os(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV);
         let prev_legacy = env::var_os(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV) };
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV) };
         assert_eq!(router_rs_review_pending_cycle_max(), 32);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV, "64") };
         assert_eq!(router_rs_review_pending_cycle_max(), 64);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV, "48") };
         assert_eq!(router_rs_review_pending_cycle_max(), 48);
         match prev_canon {
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
             Some(v) => unsafe { env::set_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV, v) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
             None => unsafe { env::remove_var(ROUTER_RS_REVIEW_PENDING_CYCLE_MAX_ENV) },
         }
         match prev_legacy {
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
             Some(v) => unsafe { env::set_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV, v) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
             None => unsafe { env::remove_var(ROUTER_RS_CURSOR_REVIEW_PENDING_CYCLE_MAX_ENV) },
         }
     }
@@ -416,17 +430,23 @@ mod tests {
         ];
         let prev: Vec<_> = keys.iter().map(|k| (*k, env::var_os(k))).collect();
         for key in keys {
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
             unsafe { env::remove_var(key) };
         }
         assert!(router_rs_review_gate_stop_max_nudges_cap().is_none());
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV, "3") };
         assert_eq!(router_rs_review_gate_stop_max_nudges_cap(), Some(3));
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::remove_var(ROUTER_RS_CURSOR_REVIEW_GATE_STOP_MAX_NUDGES_ENV) };
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { env::set_var(ROUTER_RS_REVIEW_GATE_STOP_MAX_NUDGES_ENV, "5") };
         assert_eq!(router_rs_review_gate_stop_max_nudges_cap(), Some(5));
         for (key, val) in prev {
             match val {
+                // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
                 Some(v) => unsafe { env::set_var(key, v) },
+                // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
                 None => unsafe { env::remove_var(key) },
             }
         }

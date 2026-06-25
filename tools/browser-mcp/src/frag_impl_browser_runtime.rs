@@ -896,8 +896,15 @@ impl BrowserRuntime {
 
         // 所有前置操作成功后才注册到 session 状态
         let mut cleanup = std::mem::ManuallyDrop::new(cleanup);
-        self.browser_processes
-            .insert(session_id.clone(), cleanup.child.take().unwrap());
+        let child = cleanup.child.take().ok_or_else(|| {
+            browser_error(
+                "INTERNAL_ERROR",
+                "browser child process handle was unexpectedly consumed",
+                &["retry browser_open"],
+                false,
+            )
+        })?;
+        self.browser_processes.insert(session_id.clone(), child);
         self.sessions.insert(
             session_id.clone(),
             SessionRecord {

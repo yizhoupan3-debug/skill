@@ -75,6 +75,7 @@ mod tests {
     #[test]
     fn hook_timing_env_enabled_and_emits_on_stderr() {
         let _g = process_env_lock();
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_HOOK_TIMING", "1") };
         assert!(router_rs_hook_timing_enabled());
 

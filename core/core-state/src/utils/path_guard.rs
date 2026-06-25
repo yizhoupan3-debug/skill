@@ -95,6 +95,7 @@ pub fn path_is_within_repo_root(repo_root: &Path, path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
 
     #[test]

@@ -5,6 +5,9 @@ use std::sync::Mutex;
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
+
 /// Default timeout in seconds for subagent action execution (10 minutes).
 pub const DEFAULT_ACTION_TIMEOUT_SECS: u64 = 600;
 /// Interval in seconds between kill signal polls and subagent process checks.
@@ -67,7 +70,10 @@ pub(crate) fn poll_subprocess(
     timeout_duration: Duration,
 ) -> Result<std::process::Output, LoopError> {
     loop {
-        match child.try_wait().map_err(|e| LoopError::Io(format!("{label} try_wait: {e}")))? {
+        match child
+            .try_wait()
+            .map_err(|e| LoopError::Io(format!("{label} try_wait: {e}")))?
+        {
             Some(_status) => {
                 return child
                     .wait_with_output()
@@ -75,15 +81,22 @@ pub(crate) fn poll_subprocess(
             }
             None => {
                 if crate::kill_switch::take_kill_signal(repo_root, loop_id).unwrap_or(false) {
-                    child.kill().map_err(|e| LoopError::Io(format!("{label} kill: {e}")))?;
-                    child.wait().map_err(|e| LoopError::Io(format!("{label} wait: {e}")))?;
+                    child
+                        .kill()
+                        .map_err(|e| LoopError::Io(format!("{label} kill: {e}")))?;
+                    child
+                        .wait()
+                        .map_err(|e| LoopError::Io(format!("{label} wait: {e}")))?;
                     return Err(LoopError::KillSignaled(format!(
                         "{label} killed by loop {loop_id} signal",
                     )));
                 }
                 if Instant::now() > deadline {
-                    child.kill().map_err(|e| LoopError::Io(format!("{label} kill timeout: {e}")))?;
-                    child.wait()
+                    child
+                        .kill()
+                        .map_err(|e| LoopError::Io(format!("{label} kill timeout: {e}")))?;
+                    child
+                        .wait()
                         .map_err(|e| LoopError::Io(format!("{label} wait timeout: {e}")))?;
                     return Err(LoopError::Timeout(timeout_duration.as_secs()));
                 }
@@ -137,6 +150,62 @@ pub fn build_handoff(action: &LoopAction, loop_id: &str, run_id: &str) -> String
     )
 }
 
+/// Apply process resource limits via setrlimit in the forked child (pre_exec).
+/// Prevents runaway subprocesses from exhausting system resources.
+#[cfg(unix)]
+pub(crate) fn apply_subprocess_rlimits() -> Result<(), std::io::Error> {
+    use libc::{
+        RLIMIT_AS, RLIMIT_CPU, RLIMIT_FSIZE, RLIMIT_NOFILE, RLIMIT_NPROC, rlimit, setrlimit,
+    };
+    // RLIMIT_CPU: 600s soft, 1200s hard
+    let rlim_cpu = rlimit {
+        rlim_cur: 600,
+        rlim_max: 1200,
+    };
+    // SAFETY: setrlimit is async-signal-safe; pre_exec runs in a single-threaded forked child.
+    if unsafe { setrlimit(RLIMIT_CPU, &rlim_cpu) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // RLIMIT_AS: 2 GiB soft, 4 GiB hard
+    let rlim_as = rlimit {
+        rlim_cur: 2 * 1024 * 1024 * 1024,
+        rlim_max: 4 * 1024 * 1024 * 1024,
+    };
+    if unsafe { setrlimit(RLIMIT_AS, &rlim_as) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // RLIMIT_FSIZE: 100 MiB soft, 1 GiB hard
+    let rlim_fsize = rlimit {
+        rlim_cur: 100 * 1024 * 1024,
+        rlim_max: 1024 * 1024 * 1024,
+    };
+    if unsafe { setrlimit(RLIMIT_FSIZE, &rlim_fsize) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // RLIMIT_NOFILE: 256 soft, 1024 hard
+    let rlim_nofile = rlimit {
+        rlim_cur: 256,
+        rlim_max: 1024,
+    };
+    if unsafe { setrlimit(RLIMIT_NOFILE, &rlim_nofile) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    // RLIMIT_NPROC: 64 soft, 256 hard
+    let rlim_nproc = rlimit {
+        rlim_cur: 64,
+        rlim_max: 256,
+    };
+    if unsafe { setrlimit(RLIMIT_NPROC, &rlim_nproc) } != 0 {
+        return Err(std::io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn apply_subprocess_rlimits() -> Result<(), std::io::Error> {
+    Ok(())
+}
+
 /// Resolve the subagent binary path from `ROUTER_RS_SUBAGENT_BIN` env var.
 /// Returns an error if the env var is not set or is empty.
 pub fn resolve_subagent_binary() -> Result<String, LoopError> {
@@ -158,11 +227,17 @@ pub fn run_action_sync(
     // Acquire a global concurrency permit before spawning the OS process.
     let _permit = SubagentPermit::acquire(subagent_semaphore());
 
-    let child = Command::new(&binary)
-        .args(["-p", &handoff])
+    let mut cmd = Command::new(&binary);
+    cmd.args(["-p", &handoff])
         .current_dir(repo_root)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    // SAFETY: pre_exec runs in single-threaded forked child; setrlimit is async-signal-safe.
+    #[cfg(unix)]
+    unsafe {
+        cmd.pre_exec(|| apply_subprocess_rlimits());
+    }
+    let child = cmd
         .spawn()
         .map_err(|e| LoopError::SpawnFailed(format!("{binary}: {e}")))?;
 
@@ -188,19 +263,13 @@ pub fn run_action_dry_run(action: &LoopAction, loop_id: &str, run_id: &str) -> S
     let handoff = build_handoff(action, loop_id, run_id);
     format!(
         "[dry-run] action={} type={} scope={:?}\n\n{}",
-        action.action_id,
-        action.action_type,
-        action.scope_paths,
-        handoff,
+        action.action_id, action.action_type, action.scope_paths, handoff,
     )
 }
 
 /// Check that modified tracked files are within the allowed scope paths.
 /// Returns a list of file paths that violate the scope constraint.
-pub fn check_scope_compliance(
-    repo_root: &Path,
-    scope_paths: &[String],
-) -> Vec<String> {
+pub fn check_scope_compliance(repo_root: &Path, scope_paths: &[String]) -> Vec<String> {
     let output = Command::new("git")
         .args(["diff", "--name-only", "--diff-filter=ACMR"])
         .current_dir(repo_root)
@@ -217,7 +286,8 @@ pub fn check_scope_compliance(
             if scope_paths.is_empty() {
                 return Vec::new();
             }
-            changes.into_iter()
+            changes
+                .into_iter()
                 .filter(|f| !scope_paths.iter().any(|s| f.starts_with(s)))
                 .collect()
         }
@@ -269,12 +339,14 @@ mod tests {
 
     #[test]
     fn test_resolve_subagent_binary_env() {
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe {
             core_state_utils::env_sync::set_env("ROUTER_RS_SUBAGENT_BIN", "/usr/bin/fake-opencode");
         }
         let result = resolve_subagent_binary();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "/usr/bin/fake-opencode");
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe {
             core_state_utils::env_sync::remove_env("ROUTER_RS_SUBAGENT_BIN");
         }

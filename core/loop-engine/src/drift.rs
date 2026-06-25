@@ -12,10 +12,7 @@ pub fn perform_drift_check(
     anti_drift: &mut AntiDriftState,
     current_goal_text: &str,
 ) -> DriftCheckResult {
-    let original = anti_drift
-        .original_goal_snapshot
-        .as_deref()
-        .unwrap_or("");
+    let original = anti_drift.original_goal_snapshot.as_deref().unwrap_or("");
 
     let drift_score = jaccard_drift(original, current_goal_text);
     let drift_detected = drift_score > 0.3;
@@ -46,7 +43,9 @@ pub fn perform_drift_check(
 pub fn should_check_drift(anti_drift: &AntiDriftState) -> bool {
     anti_drift.check_interval > 0
         && anti_drift.review_cycle_count > 0
-        && anti_drift.review_cycle_count.is_multiple_of(anti_drift.check_interval)
+        && anti_drift
+            .review_cycle_count
+            .is_multiple_of(anti_drift.check_interval)
 }
 
 /// Lightweight Jaccard drift: 1.0 - jaccard_similarity.
@@ -76,17 +75,14 @@ fn extract_words(text: &str) -> HashSet<String> {
 }
 
 static STOPWORDS: &[&str] = &[
-    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "shall", "can", "need", "dare", "ought",
-    "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
-    "as", "into", "through", "during", "before", "after", "above", "below",
-    "between", "out", "off", "over", "under", "again", "further", "then",
-    "once", "and", "but", "or", "nor", "not", "so", "yet", "both",
-    "this", "that", "these", "those", "it", "its", "we", "our",
-    "they", "their", "的", "了", "在", "是", "我", "有", "和", "就",
-    "不", "人", "都", "一", "一个", "上", "也", "很", "到", "说", "要",
-    "去", "你", "会", "着", "没有", "看", "好", "自己", "这",
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "will", "would", "could", "should", "may", "might", "shall", "can",
+    "need", "dare", "ought", "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
+    "as", "into", "through", "during", "before", "after", "above", "below", "between", "out",
+    "off", "over", "under", "again", "further", "then", "once", "and", "but", "or", "nor", "not",
+    "so", "yet", "both", "this", "that", "these", "those", "it", "its", "we", "our", "they",
+    "their", "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上",
+    "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这",
 ];
 
 #[cfg(test)]
@@ -117,13 +113,29 @@ mod tests {
 
     #[test]
     fn test_should_check_drift_at_interval() {
-        let state_1 = AntiDriftState { review_cycle_count: 1, check_interval: 3, ..Default::default() };
+        let state_1 = AntiDriftState {
+            review_cycle_count: 1,
+            check_interval: 3,
+            ..Default::default()
+        };
         assert!(!should_check_drift(&state_1));
-        let state_3 = AntiDriftState { review_cycle_count: 3, check_interval: 3, ..Default::default() };
+        let state_3 = AntiDriftState {
+            review_cycle_count: 3,
+            check_interval: 3,
+            ..Default::default()
+        };
         assert!(should_check_drift(&state_3));
-        let state_6 = AntiDriftState { review_cycle_count: 6, check_interval: 3, ..Default::default() };
+        let state_6 = AntiDriftState {
+            review_cycle_count: 6,
+            check_interval: 3,
+            ..Default::default()
+        };
         assert!(should_check_drift(&state_6));
-        let state_4 = AntiDriftState { review_cycle_count: 4, check_interval: 3, ..Default::default() };
+        let state_4 = AntiDriftState {
+            review_cycle_count: 4,
+            check_interval: 3,
+            ..Default::default()
+        };
         assert!(!should_check_drift(&state_4));
     }
 }

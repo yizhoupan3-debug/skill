@@ -1,3 +1,4 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 //! # mcp-tool-registry
 //!
 //! Unified MCP tool registry: discovery and record loading for all MCP tools.
@@ -14,6 +15,7 @@
 //! | Tool scoring, routing, search | `tool-routing-engine` (routing layer) |
 //! | Skill scoring, routing, search | `routing-engine` (routing layer) |
 
+pub mod error;
 pub mod hooks;
 pub mod tool_registry;
 pub mod tool_types;

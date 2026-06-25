@@ -1,3 +1,5 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
+
 pub mod atomic_write;
 pub mod env_sync;
 pub mod json_io;

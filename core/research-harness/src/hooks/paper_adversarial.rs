@@ -194,7 +194,9 @@ mod tests {
 
     fn restore_env(key: &str, prior: Option<String>) {
         match prior {
+            // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
             Some(v) => unsafe { core_state_utils::env_sync::set_env(key, &v) },
+            // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
             None => unsafe { core_state_utils::env_sync::remove_env(key) },
         }
     }
@@ -304,7 +306,9 @@ mod tests {
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
         let hook_var = paper_adversarial_env_var("cursor");
         let prior_hook = std::env::var(hook_var).ok();
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_OPERATOR_INJECT", "0") };
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env(hook_var, "1") };
         assert!(!paper_adversarial_hook_requested("cursor"));
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
@@ -317,7 +321,9 @@ mod tests {
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
         let hook_var = paper_adversarial_env_var("cursor");
         let prior_hook = std::env::var(hook_var).ok();
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_OPERATOR_INJECT") };
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(hook_var) };
         assert!(!paper_adversarial_hook_requested("cursor"));
         restore_env("ROUTER_RS_OPERATOR_INJECT", prior_inject);
@@ -330,7 +336,9 @@ mod tests {
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
         let hook_var = paper_adversarial_env_var("cursor");
         let prior_hook = std::env::var(hook_var).ok();
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_OPERATOR_INJECT") };
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env(hook_var, "1") };
 
         let tmp = std::env::temp_dir().join("paper-adv-merge-on-research");
@@ -367,7 +375,9 @@ mod tests {
         let prior_inject = std::env::var("ROUTER_RS_OPERATOR_INJECT").ok();
         let hook_var = paper_adversarial_env_var("cursor");
         let prior_hook = std::env::var(hook_var).ok();
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_OPERATOR_INJECT") };
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(hook_var) };
 
         let tmp = std::env::temp_dir().join("paper-adv-merge-off-research");

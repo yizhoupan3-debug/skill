@@ -190,22 +190,28 @@ mod tests {
 
     #[test]
     fn is_hook_enabled_disabled() {
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_TEST_DISABLE", "0") };
         assert!(!is_hook_enabled("RESEARCH_HOOK_TEST_DISABLE"));
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_TEST_DISABLE") };
     }
 
     #[test]
     fn is_hook_enabled_false_string() {
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_TEST_FALSE", "false") };
         assert!(!is_hook_enabled("RESEARCH_HOOK_TEST_FALSE"));
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_TEST_FALSE") };
     }
 
     #[test]
     fn is_hook_enabled_true_string() {
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_TEST_TRUE", "1") };
         assert!(is_hook_enabled("RESEARCH_HOOK_TEST_TRUE"));
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_TEST_TRUE") };
     }
 
@@ -255,9 +261,11 @@ mod tests {
 
     #[test]
     fn dispatch_adversarial_disabled() {
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("RESEARCH_HOOK_ADVERSARIAL", "0") };
         let result = dispatch_adversarial("请根据审稿意见修改论文", None);
         assert!(result.is_none());
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env("RESEARCH_HOOK_ADVERSARIAL") };
     }
 

@@ -25,6 +25,7 @@ members = [
     "core/fr-contracts",
     "core/fr-exec",
     "core/framework-kernel",
+    "core/telemetry-emit",
     "core/telemetry-types",
     "core/core-policy",
     "core/routing-engine",

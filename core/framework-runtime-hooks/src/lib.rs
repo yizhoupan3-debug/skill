@@ -48,7 +48,7 @@ static RUNTIME_CORE_HOOKS: OnceLock<RuntimeCoreHooks> = OnceLock::new();
 /// 获取已注册的钩子。需在调用其他 framework-runtime 函数前注册。
 ///
 /// # Panics
-/// 仅在 `register()` 尚未调用时 panic。生产环境由 `#[ctor::ctor]` 保证初始化顺序。
+/// 仅在 `register()` 尚未调用时 panic。由 `runtime_core::init_hooks()` 保证初始化顺序。
 pub fn hooks() -> &'static RuntimeCoreHooks {
     RUNTIME_CORE_HOOKS
         .get()

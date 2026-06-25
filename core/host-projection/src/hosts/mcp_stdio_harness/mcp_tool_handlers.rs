@@ -34,8 +34,8 @@ impl CompositeRegistry {
         let idx = self.handlers.len();
         for name in handler.tool_names() {
             if self.name_to_handler.contains_key(name) {
-                eprintln!(
-                    "[router-rs warning] CompositeRegistry: duplicate tool name '{name}' \
+                tracing::warn!(
+                    "CompositeRegistry: duplicate tool name '{name}' \
                      registered — existing handler will be overwritten"
                 );
             }

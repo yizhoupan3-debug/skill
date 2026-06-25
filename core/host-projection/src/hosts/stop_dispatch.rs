@@ -97,8 +97,8 @@ pub fn run_unified_stop(
     let touch_load = load_touch_state_disk(&touch_path);
 
     if matches!(review_load, DiskState::Unreadable) {
-        eprintln!(
-            "[router-rs] {} review_gate state unreadable on Stop: {}",
+        tracing::warn!(
+            "{} review_gate state unreadable on Stop: {}",
             host.log_label(),
             review_path.display()
         );
@@ -108,8 +108,8 @@ pub fn run_unified_stop(
         );
     }
     if matches!(touch_load, DiskState::Unreadable) {
-        eprintln!(
-            "[router-rs] {} hook_state unreadable on Stop: {}",
+        tracing::warn!(
+            "{} hook_state unreadable on Stop: {}",
             host.log_label(),
             touch_path.display()
         );
@@ -333,27 +333,23 @@ enum DiskState<T> {
 }
 
 fn load_review_gate_disk(path: &Path) -> DiskState<core_policy::hook_review_disk_state::HookReviewDiskCore> {
-    if !path.is_file() {
-        return DiskState::Absent;
-    }
     match std::fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str(&text) {
             Ok(state) => DiskState::Ok(state),
             Err(_) => DiskState::Unreadable,
         },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => DiskState::Absent,
         Err(_) => DiskState::Unreadable,
     }
 }
 
 fn load_touch_state_disk(path: &Path) -> DiskState<Value> {
-    if !path.is_file() {
-        return DiskState::Absent;
-    }
     match std::fs::read_to_string(path) {
         Ok(text) => match serde_json::from_str(&text) {
             Ok(state) => DiskState::Ok(state),
             Err(_) => DiskState::Unreadable,
         },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => DiskState::Absent,
         Err(_) => DiskState::Unreadable,
     }
 }

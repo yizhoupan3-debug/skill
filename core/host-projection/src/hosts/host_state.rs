@@ -35,11 +35,9 @@ pub fn write_review_state_unlocked(path: &Path, state: &core_policy::HookReviewD
 
 /// Read HookReviewDiskCore from disk with migration support.
 pub fn read_review_gate_file(path: &Path) -> AgentDiskState<core_policy::HookReviewDiskCore> {
-    if !path.is_file() {
-        return AgentDiskState::Absent;
-    }
     let raw = match std::fs::read_to_string(path) {
         Ok(s) => s,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return AgentDiskState::Absent,
         Err(_) => return AgentDiskState::Unreadable,
     };
     if raw.trim().is_empty() {
@@ -54,10 +52,8 @@ pub fn read_review_gate_file(path: &Path) -> AgentDiskState<core_policy::HookRev
 
 /// Read TouchState from disk.
 pub fn load_touch_state_from_path(touch_path: &Path) -> AgentDiskState<TouchState> {
-    if !touch_path.is_file() {
-        return AgentDiskState::Absent;
-    }
     match std::fs::read_to_string(touch_path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return AgentDiskState::Absent,
         Ok(text) => match serde_json::from_str(&text) {
             Ok(state) => AgentDiskState::Ok(state),
             Err(_) => AgentDiskState::Unreadable,

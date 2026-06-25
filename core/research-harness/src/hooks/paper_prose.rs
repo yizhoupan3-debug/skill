@@ -148,7 +148,9 @@ mod tests {
 
     fn restore_env(key: &str, prior: Option<String>) {
         match prior {
+            // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
             Some(v) => unsafe { core_state_utils::env_sync::set_env(key, &v) },
+            // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
             None => unsafe { core_state_utils::env_sync::remove_env(key) },
         }
     }
@@ -216,6 +218,7 @@ mod tests {
         let _guard = env_test_lock().lock().unwrap();
         let env = paper_prose_env_var("cursor");
         let prior_hook = std::env::var(env).ok();
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(env) };
 
         let tmp = std::env::temp_dir().join("paper-prose-merge-default-research");
@@ -244,6 +247,7 @@ mod tests {
         let _guard = env_test_lock().lock().unwrap();
         let env = paper_prose_env_var("cursor");
         let prior_hook = std::env::var(env).ok();
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env(env, "0") };
 
         let tmp = std::env::temp_dir().join("paper-prose-merge-off-research");
@@ -264,6 +268,7 @@ mod tests {
         let _guard = env_test_lock().lock().unwrap();
         let env = paper_prose_env_var("codex");
         let prior_hook = std::env::var(env).ok();
+        // SAFETY: test-only; env_test_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env(env) };
 
         let tmp = std::env::temp_dir().join("paper-prose-append-codex-research");

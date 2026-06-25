@@ -37,7 +37,8 @@ fn parse_safety_level_or_warn(raw: &str, context: &str) -> SafetyLevel {
         None => {
             tracing::warn!(
                 "[safety] unknown safety level {:?} in {}, falling back to L1ReportOnly",
-                raw, context
+                raw,
+                context
             );
             SafetyLevel::L1ReportOnly
         }
@@ -46,10 +47,7 @@ fn parse_safety_level_or_warn(raw: &str, context: &str) -> SafetyLevel {
 
 /// Assign a safety level to an action by evaluating its scope paths against the registry's
 /// scope-based safety rules. Returns the highest matching level across all scope paths.
-pub fn assign_safety_for_action(
-    action: &LoopAction,
-    entry: &LoopRegistryEntry,
-) -> SafetyLevel {
+pub fn assign_safety_for_action(action: &LoopAction, entry: &LoopRegistryEntry) -> SafetyLevel {
     if action.scope_paths.is_empty() {
         return parse_safety_level_or_warn(
             entry.default_safety.as_deref().unwrap_or("L1"),
@@ -84,15 +82,15 @@ pub fn assign_safety_for_action(
 /// than *permit* it (which would be fail-open). L1ReportOnly means "observe and
 /// report only, no file modifications", so the worst outcome of an unknown
 /// strategy is a missed opportunity to fix, not an uncontrolled change.
-pub fn resolve_conflict(
-    levels: &[SafetyLevel],
-    strategy: &str,
-) -> SafetyLevel {
+pub fn resolve_conflict(levels: &[SafetyLevel], strategy: &str) -> SafetyLevel {
     if levels.is_empty() {
         return SafetyLevel::L1ReportOnly;
     }
     match strategy {
-        "strictest" => levels.iter().max_by_key(|l| safety_rank(l)).cloned()
+        "strictest" => levels
+            .iter()
+            .max_by_key(|l| safety_rank(l))
+            .cloned()
             .unwrap_or(SafetyLevel::L1ReportOnly),
         "report" => SafetyLevel::L1ReportOnly,
         unknown => {
@@ -100,7 +98,10 @@ pub fn resolve_conflict(
                 "[safety] unknown conflict resolution strategy {:?}, using strictest as fail-safe",
                 unknown
             );
-            levels.iter().max_by_key(|l| safety_rank(l)).cloned()
+            levels
+                .iter()
+                .max_by_key(|l| safety_rank(l))
+                .cloned()
                 .unwrap_or(SafetyLevel::L1ReportOnly)
         }
     }
@@ -119,7 +120,8 @@ fn path_matches(path: &std::path::Path, pattern: &str) -> bool {
     let path_str = path_str.trim_start_matches("./");
 
     let Some(star_pos) = pattern.find('*') else {
-        return path_str == pattern || path_str.trim_start_matches('/') == pattern.trim_start_matches('/');
+        return path_str == pattern
+            || path_str.trim_start_matches('/') == pattern.trim_start_matches('/');
     };
 
     let prefix = &pattern[..star_pos];
@@ -150,22 +152,21 @@ fn match_after_double_star(path_str: &str, prefix: &str, after_double_star: &str
         let remainder = remainder.trim_start_matches('/');
         return remainder.ends_with(ext)
             && (!remainder.contains('/')
-                || remainder.split('/').next_back().map(|f| f.ends_with(ext)).unwrap_or(false));
+                || remainder
+                    .split('/')
+                    .next_back()
+                    .map(|f| f.ends_with(ext))
+                    .unwrap_or(false));
     }
     if after_double_star.is_empty() {
         return path_str.starts_with(prefix.trim_end_matches('/'));
     }
-    path_str.starts_with(prefix.trim_end_matches('/'))
-        && path_str.ends_with(after_double_star)
+    path_str.starts_with(prefix.trim_end_matches('/')) && path_str.ends_with(after_double_star)
 }
 
-fn match_single_star_ext(
-    path: &std::path::Path,
-    path_str: &str,
-    prefix: &str,
-    ext: &str,
-) -> bool {
-    let file_name = path.file_name()
+fn match_single_star_ext(path: &std::path::Path, path_str: &str, prefix: &str, ext: &str) -> bool {
+    let file_name = path
+        .file_name()
         .map(|f| f.to_string_lossy().to_string())
         .unwrap_or_default();
     let prefix_trimmed = prefix.trim_end_matches('/');
@@ -183,8 +184,14 @@ mod tests {
     #[test]
     fn test_parse_safety_level() {
         assert_eq!(parse_safety_level("L1"), Some(SafetyLevel::L1ReportOnly));
-        assert_eq!(parse_safety_level("L2-assisted-fix"), Some(SafetyLevel::L2AssistedFix));
-        assert_eq!(parse_safety_level("L3-unattended"), Some(SafetyLevel::L3Unattended));
+        assert_eq!(
+            parse_safety_level("L2-assisted-fix"),
+            Some(SafetyLevel::L2AssistedFix)
+        );
+        assert_eq!(
+            parse_safety_level("L3-unattended"),
+            Some(SafetyLevel::L3Unattended)
+        );
         assert_eq!(parse_safety_level("L4"), None);
     }
 
@@ -217,13 +224,19 @@ mod tests {
     #[test]
     fn test_resolve_conflict_strictest() {
         let levels = vec![SafetyLevel::L1ReportOnly, SafetyLevel::L3Unattended];
-        assert_eq!(resolve_conflict(&levels, "strictest"), SafetyLevel::L3Unattended);
+        assert_eq!(
+            resolve_conflict(&levels, "strictest"),
+            SafetyLevel::L3Unattended
+        );
     }
 
     #[test]
     fn test_resolve_conflict_report() {
         let levels = vec![SafetyLevel::L2AssistedFix, SafetyLevel::L3Unattended];
-        assert_eq!(resolve_conflict(&levels, "report"), SafetyLevel::L1ReportOnly);
+        assert_eq!(
+            resolve_conflict(&levels, "report"),
+            SafetyLevel::L1ReportOnly
+        );
     }
 
     #[test]
@@ -237,10 +250,7 @@ mod tests {
             std::path::Path::new("src/main.rs"),
             "src/**/*.rs"
         ));
-        assert!(path_matches(
-            std::path::Path::new("README.md"),
-            "*.md"
-        ));
+        assert!(path_matches(std::path::Path::new("README.md"), "*.md"));
         assert!(!path_matches(
             std::path::Path::new("Cargo.toml"),
             "src/**/*.rs"

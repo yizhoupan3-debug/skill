@@ -28,6 +28,7 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
+telemetry-emit = { path = "../telemetry-emit" }
 sha2.workspace = true
 which.workspace = true
 mcp-tool-registry = { path = "../mcp-tool-registry" }

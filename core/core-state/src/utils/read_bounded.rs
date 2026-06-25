@@ -28,13 +28,14 @@ pub fn read_utf8_file_prefix(path: &Path, max_bytes: usize) -> Option<String> {
         return None;
     }
     let text = std::str::from_utf8(&raw[..cut])
-        .expect("cut chosen on valid utf8 boundary")
+        .ok()?
         .to_string();
     if text.is_empty() { None } else { Some(text) }
 }
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::io::Write;
 

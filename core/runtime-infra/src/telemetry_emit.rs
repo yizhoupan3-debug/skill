@@ -1,4 +1,7 @@
 //! Thin telemetry journal emitters.
+//!
+//! Re-exports simple emit functions from `telemetry-emit` (L0) and keeps
+//! L4+ dependent functions that need `core_state`, `routing_engine`, etc.
 
 use core_state::goal_prediction::{GoalStatePrediction, PredictionVerification};
 use framework_kernel::{PredictionOutcomeCheck, TelemetryEvent, emit_telemetry};
@@ -9,6 +12,18 @@ use tracing::debug;
 use core_state::state_manager::{framework_goal_drive as goal_drive_inner, read_goal_state};
 use routing_engine::route::RouteDecision;
 
+// ── Re-exported from telemetry-emit (L0) ──
+pub use telem::{
+    emit_hook_fired,
+    emit_goal_transition,
+    emit_rfv_round,
+    hook_action_from_output,
+    hook_action_from_optional_output,
+    hook_timing_action,
+    emit_hook_timing_telemetry,
+};
+
+/// Emit a `RouteDecision` event (L4: requires `RouteDecision` type).
 pub fn emit_route_decision(
     query: &str,
     decision: &RouteDecision,
@@ -30,35 +45,11 @@ pub fn emit_route_decision(
     });
 }
 
-pub fn emit_hook_fired(hook_name: &str, action: &str) {
-    emit_telemetry(&TelemetryEvent::HookFired {
-        hook_name: hook_name.to_string(),
-        action: action.to_string(),
-    });
-}
-
+/// Emit a `ToolCall` event with bootstrap guard.
+/// Callers at L3+ should use this wrapper which calls `ensure_kernel_bootstrap()` first.
 pub fn emit_tool_call(tool: &str, duration_ms: u64, success: bool) {
     crate::kernel_bootstrap::ensure_kernel_bootstrap();
-    emit_telemetry(&TelemetryEvent::ToolCall {
-        tool: tool.to_string(),
-        duration_ms,
-        success,
-    });
-}
-
-pub fn emit_goal_transition(from: &str, to: &str, task_id: &str) {
-    emit_telemetry(&TelemetryEvent::GoalTransition {
-        from: from.to_string(),
-        to: to.to_string(),
-        task_id: task_id.to_string(),
-    });
-}
-
-pub fn emit_rfv_round(round: u32, verdict: &str) {
-    emit_telemetry(&TelemetryEvent::RfvRound {
-        round,
-        verdict: verdict.to_string(),
-    });
+    telem::emit_tool_call(tool, duration_ms, success);
 }
 
 fn prediction_checks_summary(checks: &[PredictionVerification]) -> String {
@@ -113,23 +104,6 @@ pub fn emit_prediction_outcome(
     ));
 }
 
-/// Fine-grained hook timing for EV-7 (`ROUTER_RS_HOOK_TIMING=1` → journal + stderr).
-pub fn hook_timing_action(duration_ms: u64, lock_wait_ms: u64, cargo_check_ms: u64) -> String {
-    format!("timing:{duration_ms}ms:lock={lock_wait_ms}:cargo={cargo_check_ms}")
-}
-
-pub fn emit_hook_timing_telemetry(
-    event: &str,
-    duration_ms: u64,
-    lock_wait_ms: u64,
-    cargo_check_ms: u64,
-) {
-    emit_hook_fired(
-        event,
-        &hook_timing_action(duration_ms, lock_wait_ms, cargo_check_ms),
-    );
-}
-
 /// Quality Gate stdio wrapper: ensures bootstrap and emits operation-level `hook_fired`.
 pub fn framework_quality_gate(payload: Value) -> Result<Value, String> {
     crate::kernel_bootstrap::ensure_kernel_bootstrap();
@@ -144,33 +118,6 @@ pub fn framework_quality_gate(payload: Value) -> Result<Value, String> {
         emit_hook_fired("quality_gate", &operation);
     }
     Ok(result)
-}
-
-pub fn hook_action_from_output(output: &Value) -> &'static str {
-    if output.get("continue").and_then(Value::as_bool) == Some(false) {
-        return "block";
-    }
-    if output.get("decision").and_then(Value::as_str) == Some("block") {
-        return "block";
-    }
-    if output.get("permission").and_then(Value::as_str) == Some("deny") {
-        return "deny";
-    }
-    if output.get("permission").and_then(Value::as_str) == Some("allow") {
-        return "allow";
-    }
-    if output.get("suppressOutput").and_then(Value::as_bool) == Some(true) {
-        return "silent";
-    }
-    "allow"
-}
-
-pub fn hook_action_from_optional_output(output: Option<&Value>) -> &'static str {
-    match output {
-        None => "silent",
-        Some(value) if value.as_object().is_some_and(|map| map.is_empty()) => "silent",
-        Some(value) => hook_action_from_output(value),
-    }
 }
 
 fn read_goal_phase(repo_root: Option<&str>, task_id: Option<&str>) -> Option<String> {
@@ -233,25 +180,6 @@ pub fn framework_goal_drive(payload: Value) -> Result<Value, String> {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn hook_action_from_stop_output() {
-        let blocked = json!({"continue": false});
-        assert_eq!(hook_action_from_output(&blocked), "block");
-        let allowed = json!({"permission": "allow"});
-        assert_eq!(hook_action_from_output(&allowed), "allow");
-        let codex_block = json!({"decision": "block"});
-        assert_eq!(hook_action_from_output(&codex_block), "block");
-        let claude_silent = json!({"suppressOutput": true});
-        assert_eq!(hook_action_from_output(&claude_silent), "silent");
-        assert_eq!(hook_action_from_optional_output(None), "silent");
-    }
-
-    #[test]
-    fn hook_timing_action_encodes_durations() {
-        let action = hook_timing_action(42, 3, 7);
-        assert_eq!(action, "timing:42ms:lock=3:cargo=7");
-    }
 
     #[test]
     fn prediction_mismatch_writes_prediction_outcome_journal_line() {

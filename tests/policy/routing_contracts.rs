@@ -253,17 +253,16 @@ fn project_host_skill_projection_is_generated_outside_host_entrypoints() {
     std::fs::create_dir_all(&repo_root).unwrap();
     seed_framework_markers(&repo_root);
     let root = project_root();
-    let output = run(
-        router_rs_command(&[
-            "framework",
-            "sync-entrypoints",
-            "--host-id",
-            "codex",
-            "--repo-root",
-            repo_root.to_str().unwrap(),
-        ])
-        .current_dir(&root),
-    );
+    let mut command = router_rs_command(&[
+        "framework",
+        "sync-entrypoints",
+        "--host-id",
+        "codex",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
+    command.current_dir(&root);
+    let output = run(command);
     let (stdout, stderr) = output_text(&output);
     assert!(
         stderr.contains("not yet have a registered entrypoint provider")
@@ -286,17 +285,16 @@ fn codex_sync_does_not_write_root_agents_md() {
     std::fs::write(repo_root.join("AGENTS.md"), policy).unwrap();
 
     let root = project_root();
-    let output = run(
-        router_rs_command(&[
-            "framework",
-            "sync-entrypoints",
-            "--host-id",
-            "codex",
-            "--repo-root",
-            repo_root.to_str().unwrap(),
-        ])
-        .current_dir(&root),
-    );
+    let mut command = router_rs_command(&[
+        "framework",
+        "sync-entrypoints",
+        "--host-id",
+        "codex",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
+    command.current_dir(&root);
+    let output = run(command);
     let (stdout, stderr) = output_text(&output);
     assert!(
         stderr.contains("not yet have a registered entrypoint provider"),
@@ -316,17 +314,16 @@ fn codex_sync_preserves_existing_agents_codex_delta_file() {
     std::fs::write(repo_root.join("AGENTS.md"), delta).unwrap();
 
     let root = project_root();
-    let output = run(
-        router_rs_command(&[
-            "framework",
-            "sync-entrypoints",
-            "--host-id",
-            "codex",
-            "--repo-root",
-            repo_root.to_str().unwrap(),
-        ])
-        .current_dir(&root),
-    );
+    let mut command = router_rs_command(&[
+        "framework",
+        "sync-entrypoints",
+        "--host-id",
+        "codex",
+        "--repo-root",
+        repo_root.to_str().unwrap(),
+    ]);
+    command.current_dir(&root);
+    let output = run(command);
     let (stdout, stderr) = output_text(&output);
     assert!(
         stderr.contains("not yet have a registered entrypoint provider"),

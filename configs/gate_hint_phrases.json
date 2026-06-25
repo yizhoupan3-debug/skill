@@ -1,4 +1,5 @@
 {
+  "note": "Compile-time embedded source for gate hint routing. Keep sync'd with RUNTIME_REGISTRY.json .gate_hint_phrases — test gate_hint_phrases_embedded_matches_disk enforces schema_version parity.",
   "schema_version": "gate-hint-phrases-v1",
   "source": "RUNTIME_REGISTRY.json gate_hint_phrases",
   "phrases": {

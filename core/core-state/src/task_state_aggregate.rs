@@ -73,6 +73,7 @@ pub fn sync_task_state_aggregate_best_effort(repo_root: &Path, task_id: &str) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use crate::state_manager::framework_goal_drive;
     use serde_json::{Value, json};
@@ -82,6 +83,7 @@ mod tests {
     fn sync_writes_after_goal_start() {
         let _env = ();
         let prev = std::env::var_os("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO");
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", "1") };
         let tmp = std::env::temp_dir().join(format!(
             "router-rs-task-agg-{}",
@@ -119,8 +121,14 @@ mod tests {
         assert_eq!(v.get("task_id").and_then(Value::as_str), Some("t-agg"));
         assert!(v.get("goal_state").is_some());
         match prev {
-            Some(v) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", &v) },
-            None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO") },
+            Some(v) => {
+                // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
+                unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO", &v) }
+            }
+            None => {
+                // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
+                unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_TASK_STATE_AGGREGATE_AUTO") }
+            }
         }
         let _ = fs::remove_dir_all(&tmp);
     }

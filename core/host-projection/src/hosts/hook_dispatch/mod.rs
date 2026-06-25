@@ -236,7 +236,7 @@ pub trait HostHookDispatcher: HostHookConfig {
             if let Some(result) = crate::hooks::session_supervisor_op(payload) {
                 match result {
                     Ok(_) => debug!("PostToolUse: registered subagent {agent_id}"),
-                    Err(e) => eprintln!("[router-rs warning] PostToolUse: agent_register failed: {e}"),
+                    Err(e) => tracing::warn!("PostToolUse: agent_register failed: {e}"),
                 }
             }
         }
@@ -277,7 +277,7 @@ pub trait HostHookDispatcher: HostHookConfig {
     fn handle_session_start(&self, event: &HookEvent) -> Option<HookOutput> {
         let mut contexts = Vec::new();
 
-        if crate::hooks::router_rs_operator_inject_globally_enabled() {
+        if core_policy::env_flags::router_rs_operator_inject_globally_enabled() {
             contexts.push(format!("Repo: {}", event.repo_root.display()));
         }
 
@@ -327,7 +327,7 @@ pub trait HostHookDispatcher: HostHookConfig {
         if let Some(result) = crate::hooks::session_supervisor_op(payload) {
             match result {
                 Ok(_) => debug!("SubagentStart: registered agent {agent_id}"),
-                Err(e) => eprintln!("[router-rs warning] SubagentStart: agent_register failed: {e}"),
+                Err(e) => tracing::warn!("SubagentStart: agent_register failed: {e}"),
             }
         }
         None
@@ -358,7 +358,7 @@ pub trait HostHookDispatcher: HostHookConfig {
         if let Some(result) = crate::hooks::session_supervisor_op(payload) {
             match result {
                 Ok(_) => debug!("SubagentStop: unregistered agent {agent_id} ({terminal_status})"),
-                Err(e) => eprintln!("[router-rs warning] SubagentStop: agent_unregister failed: {e}"),
+                Err(e) => tracing::warn!("SubagentStop: agent_unregister failed: {e}"),
             }
         }
         None

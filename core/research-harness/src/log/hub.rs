@@ -243,7 +243,7 @@ pub fn index_all(hub: &Connection) -> Result<std::collections::HashMap<String, u
                 results.insert(ws_name, count);
             }
             Err(e) => {
-                eprintln!("Warning: failed to index workspace '{}': {}", ws_name, e);
+                tracing::warn!("Warning: failed to index workspace '{ws_name}': {e}");
             }
         }
     }

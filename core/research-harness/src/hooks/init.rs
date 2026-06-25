@@ -42,7 +42,7 @@ pub fn init_hooks() {
     hooks::register_research_activity_hook(
         |root, tool, summary| {
             if let Err(e) = super::activity_log::maybe_log_research_activity(tool, summary, root) {
-                eprintln!("[research-activity-log] failed: {e}");
+                tracing::warn!("[research-activity-log] failed: {e}");
             }
         },
     );

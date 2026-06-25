@@ -1,4 +1,5 @@
 use super::*;
+use core_policy::error::FrameworkError;
 
 // ── Sub-modules (split for file size ≤2000 lines) ──
 mod projection_bootstrap;
@@ -176,22 +177,28 @@ pub fn mcp_json_upsert_servers(
     path: &Path,
     format: McpConfigFormat,
     entries: &[(&str, Value)],
-) -> Result<bool, String> {
+) -> Result<bool, FrameworkError> {
     let McpConfigFormat::Json { top_level_key } = format else {
-        return Err("mcp_json_upsert_servers called with non-JSON format".to_string());
+        return Err(FrameworkError::config(
+            "mcp_json_upsert_servers called with non-JSON format",
+        ));
     };
     let mut payload = read_json_if_exists(path)?.unwrap_or_else(|| json!({}));
     if !payload.is_object() {
         payload = json!({});
     }
-    let root = payload.as_object_mut().unwrap();
+    let root = payload.as_object_mut().ok_or_else(|| {
+        FrameworkError::config("MCP JSON payload root must be an object")
+    })?;
     let servers = root
         .entry(top_level_key.to_string())
         .or_insert_with(|| json!({}));
     if !servers.is_object() {
         *servers = json!({});
     }
-    let map = servers.as_object_mut().unwrap();
+    let map = servers.as_object_mut().ok_or_else(|| {
+        FrameworkError::config("MCP JSON servers entry must be an object")
+    })?;
     let mut changed = false;
     for (server_id, value) in entries {
         changed |= map.get(*server_id) != Some(value);

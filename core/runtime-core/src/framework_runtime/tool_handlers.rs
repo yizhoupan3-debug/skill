@@ -494,7 +494,7 @@ pub fn routing_evolution_dispatch(
         let line = match line {
             Ok(l) => l,
             Err(e) => {
-                eprintln!("[routing_evolution] read journal line failed: {e}");
+                tracing::warn!("[routing_evolution] read journal line failed: {e}");
                 continue;
             }
         };

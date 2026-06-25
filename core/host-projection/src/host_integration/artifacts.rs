@@ -1,4 +1,5 @@
 use super::*;
+use core_policy::error::FrameworkError;
 
 pub fn compatibility_alias_inventory() -> Value {
     json!({
@@ -36,7 +37,7 @@ pub fn compatibility_alias_inventory() -> Value {
 }
 
 /// Lightweight summary for `framework doctor` (full manifest regen is expensive).
-pub fn generated_artifacts_status_for_repo(repo_root: &Path) -> Result<Value, String> {
+pub fn generated_artifacts_status_for_repo(repo_root: &Path) -> Result<Value, FrameworkError> {
     generated_artifacts_status(Some(repo_root), Some(&repo_root.join("artifacts")), true)
 }
 
@@ -44,25 +45,24 @@ pub fn generated_artifacts_status(
     framework_root: Option<&Path>,
     artifact_root: Option<&Path>,
     skip_generator_run: bool,
-) -> Result<Value, String> {
+) -> Result<Value, FrameworkError> {
     let framework_root = resolve_framework_root(framework_root)?;
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
     let manifest_path = framework_root.join("configs/framework/GENERATED_ARTIFACTS.json");
     let manifest = read_json_if_exists(&manifest_path)?.ok_or_else(|| {
-        format!(
+        FrameworkError::config(format!(
             "missing generated artifact manifest: {}",
             manifest_path.display()
-        )
+        ))
     })?;
-    let manifest: GeneratedArtifactsManifest = serde_json::from_value(manifest)
-        .map_err(|err| format!("invalid generated artifact manifest: {err}"))?;
+    let manifest: GeneratedArtifactsManifest = serde_json::from_value(manifest)?;
     if manifest.schema_version != GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION {
-        return Err(format!(
+        return Err(FrameworkError::config(format!(
             "unsupported generated artifact manifest schema_version {:?} at {}; expected {}",
             manifest.schema_version,
             manifest_path.display(),
             GENERATED_ARTIFACTS_MANIFEST_SCHEMA_VERSION
-        ));
+        )));
     }
     let temp_root_guard = if skip_generator_run {
         None
@@ -82,7 +82,9 @@ pub fn generated_artifacts_status(
         validate_generated_artifact_entry(artifact)?;
         declared_paths.insert(artifact.path.clone());
         if !skip_generator_run {
-            let temp_root = temp_root.expect("temp root prepared when generators run");
+            let temp_root = temp_root.ok_or_else(|| {
+                FrameworkError::hook("temp root not prepared when generators run")
+            })?;
             if executed_generators.insert(artifact.generator.clone()) {
                 run_generated_artifact_generator(&artifact.generator, &framework_root, temp_root)?;
             }
@@ -97,7 +99,9 @@ pub fn generated_artifacts_status(
             None
         };
         let regenerated = if regenerated_exists {
-            let path = regenerated_path.as_ref().expect("regenerated path");
+            let path = regenerated_path.as_ref().ok_or_else(|| {
+                FrameworkError::hook("regenerated path not set when regenerated_exists is true")
+            })?;
             Some(fs::read(path).map_err(|err| err.to_string())?)
         } else {
             None
@@ -122,7 +126,9 @@ pub fn generated_artifacts_status(
                 checked_in.as_deref(),
                 regenerated.as_deref(),
                 &framework_root,
-                temp_root.expect("temp root prepared when drift is checked"),
+                temp_root.ok_or_else(|| {
+                    FrameworkError::hook("temp root not prepared when drift is checked")
+                })?,
             )?
         };
         let clean = if skip_generator_run {

@@ -167,12 +167,6 @@ pub fn register_host_projection_hooks() {
             hook_timing::emit_hook_timing_line,
         );
 
-        host_projection::hooks::register_telemetry(
-            telemetry_emit::emit_hook_fired,
-            telemetry_emit::emit_tool_call,
-            telemetry_emit::hook_action_from_optional_output,
-        );
-
         host_projection::hooks::register_session_call_tracker(
             framework_extra::session_call::init_tracker,
             |root, name, stats_json| {
@@ -371,6 +365,7 @@ pub fn register_host_projection_hooks() {
             generated_artifacts_status_for_repo: |repo_root| {
                 crate::host_integration::generated_artifacts_status_for_repo(repo_root)
                     .map(|v| v.to_string())
+                    .map_err(|e| e.to_string())
             },
             ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
         });
@@ -414,8 +409,7 @@ pub fn register_host_projection_hooks() {
 
 /// Explicitly initialize all runtime-core hooks.
 ///
-/// **Prefer calling this at the top of `main()`** instead of relying on the
-/// `#[ctor::ctor]` auto-initialization below.  Explicit init gives you
+/// Call this at the top of `main()`. Explicit init gives you
 /// deterministic ordering, easier testing, and avoids undefined behavior
 /// around static initialization ordering across dynamic libraries.
 ///
@@ -426,23 +420,6 @@ pub fn init_hooks() {
     register_tool_registry_hooks();
     register_tool_routing_engine_hooks();
     register_host_projection_hooks();
-}
-
-/// Auto-initialize routing hooks at library load time.
-///
-/// **SAFETY / CAVEAT**: `#[ctor::ctor]` runs before `main()` with no
-/// guaranteed ordering relative to other static initializers.  This is
-/// acceptable for the router-rs CLI binary (single crate, no dynamic
-/// loading), but **not safe** for:
-/// - Embedding runtime-core as a dynamic library
-/// - Test harnesses that need deterministic init ordering
-///
-/// For those cases, call [`init_hooks()`] explicitly and compile with
-/// `--no-default-features` to disable ctor.
-#[cfg(not(test))]
-#[ctor::ctor]
-fn auto_init_routing_hooks() {
-    init_hooks();
 }
 
 // ── test helpers ──

@@ -35,6 +35,7 @@ pub fn read_utf8_file_prefix(path: &Path, max_bytes: usize) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::io::Write;
 

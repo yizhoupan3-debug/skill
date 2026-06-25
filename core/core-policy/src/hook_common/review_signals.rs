@@ -492,6 +492,7 @@ mod tests {
         let _lock = crate::test_env_sync::process_env_lock();
         let key = "ROUTER_RS_CURSOR_SUBAGENT_MODEL_INHERIT_NUDGE";
         let prev = std::env::var_os(key);
+        // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env(key, "1") };
         // Delegation arm triggers inject
         assert!(should_inject_subagent_model_inherit_nudge(
@@ -516,7 +517,9 @@ mod tests {
             true
         ));
         match prev {
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
             Some(v) => unsafe { core_state_utils::env_sync::set_env(key, &v) },
+            // SAFETY: test-only; process_env_lock() prevents concurrent env access from other tests.
             None => unsafe { core_state_utils::env_sync::remove_env(key) },
         }
     }

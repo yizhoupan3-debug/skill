@@ -491,6 +491,7 @@ mod tests {
     fn generated_artifact_generator_timeout_kills_process() {
         let root = unique_test_root("generator-timeout");
         fs::create_dir_all(&root).unwrap();
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS", "1") };
 
         let timeout = run_generated_artifact_generator("sleep 5", &root, &root);
@@ -501,6 +502,7 @@ mod tests {
             "timeout message should include configured timeout: {timeout_msg}"
         );
 
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_GENERATOR_TIMEOUT_SECONDS") };
         let _ = fs::remove_dir_all(root);
     }
@@ -579,6 +581,7 @@ mod tests {
             .into_iter()
             .collect(),
         };
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("HOME", &home) };
         let outcome =
             install_cursor_mcp_server(&roots, &cursor_home.join("mcp.json")).expect("install");
@@ -599,6 +602,7 @@ mod tests {
             "expected stable PATH or install-path command, got {command}"
         );
 
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env("HOME") };
         let _ = fs::remove_dir_all(root);
     }
@@ -615,7 +619,9 @@ mod tests {
             &framework_root.join("core/router-rs/target/release/router-rs"),
             "#!/bin/sh\n",
         );
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env("HOME", &home) };
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_BIN") };
 
         let command = resolve_mcp_router_rs_command(&framework_root);
@@ -625,6 +631,7 @@ mod tests {
             McpRouterRsCommand::CargoBootstrap => unreachable!(),
         }
 
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env("HOME") };
         let _ = fs::remove_dir_all(root);
     }
@@ -638,7 +645,9 @@ mod tests {
         fs::create_dir_all(&custom_claude).unwrap();
         let prior_home = std::env::var_os("HOME");
         let prior_claude = std::env::var_os("CLAUDE_HOME");
+        // SAFETY: test-only; the #[serial] attribute prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env("HOME", &os_home) };
+        // SAFETY: test-only; the #[serial] attribute prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env("CLAUDE_HOME", &custom_claude) };
 
         let roots = resolve_projection_roots(
@@ -663,13 +672,17 @@ mod tests {
         );
 
         if let Some(h) = prior_home {
+            // SAFETY: test-only; the #[serial] attribute prevents concurrent env access from other tests.
             unsafe { core_state_utils::env_sync::set_env("HOME", &h) };
         } else {
+            // SAFETY: test-only; the #[serial] attribute prevents concurrent env access from other tests.
             unsafe { core_state_utils::env_sync::remove_env("HOME") };
         }
         if let Some(c) = prior_claude {
+            // SAFETY: test-only; the #[serial] attribute prevents concurrent env access from other tests.
             unsafe { core_state_utils::env_sync::set_env("CLAUDE_HOME", &c) };
         } else {
+            // SAFETY: test-only; the #[serial] attribute prevents concurrent env access from other tests.
             unsafe { core_state_utils::env_sync::remove_env("CLAUDE_HOME") };
         }
         let _ = fs::remove_dir_all(root);

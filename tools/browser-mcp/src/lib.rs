@@ -21,7 +21,7 @@ mod tests;
 /// Dispatch a browser subcommand (CLI entry point for `router-rs browser ...`).
 pub fn dispatch_browser_command(
     command: framework_kernel::cli_args::BrowserSubcommand,
-) -> Result<(), String> {
+) -> anyhow::Result<()> {
     use framework_kernel::cli_args::BrowserSubcommand;
     match command {
         BrowserSubcommand::McpStdio(command) => run_browser_mcp_stdio_loop(
@@ -33,13 +33,12 @@ pub fn dispatch_browser_command(
             ),
         ),
         BrowserSubcommand::ResolveAttachArtifact(command) => {
-            let repo_root = framework_kernel::repo_roots::resolve_repo_root_arg(
-                command.repo_root.as_deref(),
-            )?;
+            let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())
+                .map_err(anyhow::Error::msg)?;
             let Some(path) =
                 resolve_browser_mcp_attach_artifact(&repo_root, command.search_root.as_deref())
             else {
-                return Err("no browser-mcp runtime attach artifact candidates found".to_string());
+                anyhow::bail!("no browser-mcp runtime attach artifact candidates found");
             };
             println!("{path}");
             Ok(())

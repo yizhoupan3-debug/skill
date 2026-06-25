@@ -186,6 +186,7 @@ pub fn append_transaction(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -201,6 +202,7 @@ mod tests {
     #[test]
     fn append_transaction_rejects_unsafe_task_id() {
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
+        // SAFETY: test-only; ENV_LOCK prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") };
         let tmp = unique_tmp("unsafe-id");
         fs::create_dir_all(tmp.join("artifacts/current")).expect("mkdir");
@@ -220,7 +222,9 @@ mod tests {
             );
         }
         match prev {
+            // SAFETY: test-only; ENV_LOCK prevents concurrent env access from other tests.
             Some(p) => unsafe { core_state_utils::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p) },
+            // SAFETY: test-only; ENV_LOCK prevents concurrent env access from other tests.
             None => unsafe { core_state_utils::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") },
         }
         let _ = fs::remove_dir_all(&tmp);

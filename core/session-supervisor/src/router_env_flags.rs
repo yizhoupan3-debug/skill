@@ -16,6 +16,7 @@ mod tests {
     #[test]
     fn unset_means_disabled_for_default_false() {
         let key = "ROUTER_RS_UNITTEST_DEFAULT_FALSE_UNSET";
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env(key) };
         assert!(!core_policy::env_flags::env_enabled_default_false(key));
     }
@@ -23,8 +24,10 @@ mod tests {
     #[test]
     fn one_true_enable_default_false() {
         let key = "ROUTER_RS_UNITTEST_DEFAULT_FALSE_ONE";
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::set_env(key, "1") };
         assert!(core_policy::env_flags::env_enabled_default_false(key));
+        // SAFETY: test-only; no other thread reads/writes env concurrently in this test context.
         unsafe { core_state_utils::env_sync::remove_env(key) };
     }
 }

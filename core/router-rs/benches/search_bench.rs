@@ -27,10 +27,6 @@ fn runtime_path(root: &Path) -> PathBuf {
     root.join("skills/SKILL_ROUTING_RUNTIME.json")
 }
 
-fn manifest_path(root: &Path) -> PathBuf {
-    root.join("skills/SKILL_MANIFEST.json")
-}
-
 fn percentile(sorted: &[Duration], p: f64) -> Duration {
     if sorted.is_empty() {
         return Duration::ZERO;
@@ -73,7 +69,6 @@ fn inflate_records(base: &[SkillRecord], target: usize) -> Vec<SkillRecord> {
 fn bench_record_load(c: &mut Criterion) {
     let root = repo_root();
     let runtime = runtime_path(&root);
-    let _manifest = manifest_path(&root);
     let _ = invalidate_records_cache();
 
     let mut group = c.benchmark_group("record_load");
@@ -166,7 +161,6 @@ fn bench_search_core(c: &mut Criterion) {
 fn bench_host_filter_path(c: &mut Criterion) {
     let root = repo_root();
     let runtime = runtime_path(&root);
-    let _manifest = manifest_path(&root);
     let records =
         load_records_cached_for_stdio(Some(&runtime)).expect("cached records");
     let query = "plugin creator";

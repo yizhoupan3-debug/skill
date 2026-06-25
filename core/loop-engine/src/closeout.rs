@@ -1,11 +1,10 @@
-use crate::types::{
-    LoopAction, LoopActionRecord, LoopCloseoutAggregate, AggregateActionEntry,
-    LoopError,
-};
 use crate::state::closeout_path;
+use crate::types::{
+    AggregateActionEntry, LoopAction, LoopActionRecord, LoopCloseoutAggregate, LoopError,
+};
 use fr_contracts::closeout_enforcement::evaluate_closeout_record_value;
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 
 const LOOP_CLOSEOUT_AGGREGATE_SCHEMA_VERSION: &str = "loop-closeout-aggregate-v1";
 
@@ -100,7 +99,9 @@ pub fn verify_closeout_with_evidence(
 ) -> CloseoutVerificationResponse {
     let mut response = verify_closeout_value(record);
     if !verify_evidence_index(repo_root, task_id) {
-        response.violations.push("evidence_index_missing_or_empty".to_string());
+        response
+            .violations
+            .push("evidence_index_missing_or_empty".to_string());
         response.closeout_allowed = false;
     }
     response
@@ -111,10 +112,7 @@ pub fn verify_closeout_with_evidence(
 /// consecutive_stable_count >= required, loop_status == "closed").
 /// Returns Ok(()) if converged or if no RFV state exists (non-paper tasks).
 /// Returns Err(violations) if RFV state indicates incomplete convergence.
-pub fn verify_rfv_convergence(
-    repo_root: &Path,
-    task_id: &str,
-) -> Result<(), Vec<String>> {
+pub fn verify_rfv_convergence(repo_root: &Path, task_id: &str) -> Result<(), Vec<String>> {
     let qg_path = repo_root
         .join("artifacts/current")
         .join(task_id)
@@ -134,12 +132,18 @@ pub fn verify_rfv_convergence(
 
     let mut violations = Vec::new();
 
-    let loop_status = val.get("loop_status").and_then(|v| v.as_str()).unwrap_or("");
+    let loop_status = val
+        .get("loop_status")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     if loop_status != "closed" {
         violations.push(format!("quality_gate_not_closed: status={}", loop_status));
     }
 
-    let current_round = val.get("current_round").and_then(|v| v.as_u64()).unwrap_or(0);
+    let current_round = val
+        .get("current_round")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
     let min_rounds = val.get("min_rounds").and_then(|v| v.as_u64()).unwrap_or(0);
     if current_round < min_rounds {
         violations.push(format!(
@@ -221,17 +225,21 @@ pub fn build_aggregate(
                 commit_sha: None,
                 merged: None,
             },
-            Some((_, AggregateActionResult::Committed { closeout_path, commit_sha })) => {
-                AggregateActionEntry {
-                    action_id: action.action_id.clone(),
-                    safety_level: action.safety.clone(),
-                    execution: "committed".to_string(),
-                    closeout_path: closeout_path.clone(),
-                    verification: Some("pass".to_string()),
-                    commit_sha: commit_sha.clone(),
-                    merged: Some(false),
-                }
-            }
+            Some((
+                _,
+                AggregateActionResult::Committed {
+                    closeout_path,
+                    commit_sha,
+                },
+            )) => AggregateActionEntry {
+                action_id: action.action_id.clone(),
+                safety_level: action.safety.clone(),
+                execution: "committed".to_string(),
+                closeout_path: closeout_path.clone(),
+                verification: Some("pass".to_string()),
+                commit_sha: commit_sha.clone(),
+                merged: Some(false),
+            },
             Some((_, AggregateActionResult::Failed { reason })) => {
                 any_fail = true;
                 AggregateActionEntry {
@@ -348,7 +356,11 @@ mod tests {
         });
         let resp = verify_closeout_value(&record);
         assert!(!resp.closeout_allowed);
-        assert!(resp.violations.iter().any(|v| v.contains("task_id_missing")));
+        assert!(
+            resp.violations
+                .iter()
+                .any(|v| v.contains("task_id_missing"))
+        );
     }
 
     #[test]
@@ -383,7 +395,11 @@ mod tests {
         let resp = verify_closeout_value(&record);
         assert!(!resp.closeout_allowed);
         // fr-contracts emits "verification_passed_with_failed_command" for this case.
-        assert!(resp.violations.iter().any(|v| v.contains("failed_command") || v.contains("command_failed")));
+        assert!(
+            resp.violations
+                .iter()
+                .any(|v| v.contains("failed_command") || v.contains("command_failed"))
+        );
     }
 
     #[test]
@@ -454,15 +470,17 @@ mod tests {
         // Loop-engine path (delegates to fr-contracts)
         let le_resp = verify_closeout_value(&record);
         // Direct fr-contracts path
-        let fr_resp = fr_contracts::closeout_enforcement::evaluate_closeout_record_value(
-            record.clone(),
-        ).expect("fr-contracts should return Ok");
+        let fr_resp =
+            fr_contracts::closeout_enforcement::evaluate_closeout_record_value(record.clone())
+                .expect("fr-contracts should return Ok");
         let fr_allowed = fr_resp
             .get("closeout_allowed")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        assert_eq!(le_resp.closeout_allowed, fr_allowed,
-            "both paths must agree on closeout_allowed for a valid record");
+        assert_eq!(
+            le_resp.closeout_allowed, fr_allowed,
+            "both paths must agree on closeout_allowed for a valid record"
+        );
     }
 
     #[test]
@@ -478,16 +496,21 @@ mod tests {
             "risks": []
         });
         let le_resp = verify_closeout_value(&record);
-        let fr_resp = fr_contracts::closeout_enforcement::evaluate_closeout_record_value(
-            record.clone(),
-        ).expect("fr-contracts should return Ok");
+        let fr_resp =
+            fr_contracts::closeout_enforcement::evaluate_closeout_record_value(record.clone())
+                .expect("fr-contracts should return Ok");
         let fr_allowed = fr_resp
             .get("closeout_allowed")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        assert_eq!(le_resp.closeout_allowed, fr_allowed,
-            "both paths must agree on closeout_allowed for a failing record");
-        assert!(!le_resp.closeout_allowed, "this record should be disallowed");
+        assert_eq!(
+            le_resp.closeout_allowed, fr_allowed,
+            "both paths must agree on closeout_allowed for a failing record"
+        );
+        assert!(
+            !le_resp.closeout_allowed,
+            "this record should be disallowed"
+        );
         assert!(!fr_allowed, "this record should be disallowed");
     }
 }

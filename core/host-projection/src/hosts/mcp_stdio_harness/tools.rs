@@ -60,7 +60,7 @@ pub(super) fn handle_tools_call(
 
     // Track every tool call for anomaly detection.
     if let Err(e) = record_tool_call(repo_root, tool_name, None) {
-        eprintln!("[router-rs warning] record_tool_call failed: {e}");
+        tracing::warn!("record_tool_call failed: {e}");
     }
 
     let result = dispatch_tool(tool_name, arguments, repo_root, host_id, connection_session_id);
@@ -235,12 +235,10 @@ pub(super) fn tool_skill_search(
         .unwrap_or(host_id);
 
     let runtime_path = skill_routing_runtime_json(repo_root);
-    let manifest_path = skill_manifest_path(repo_root);
-    if !runtime_path.is_file() && !manifest_path.is_file() {
+    if !runtime_path.is_file() {
         return Err(format!(
-            "Missing repository skill runtime ({}) and manifest ({})",
-            runtime_path.display(),
-            manifest_path.display()
+            "Missing repository skill runtime ({})",
+            runtime_path.display()
         ));
     }
     crate::hooks::mcp_tool_search_skills(query, limit, effective_host, &repo_root.to_string_lossy())
@@ -273,10 +271,6 @@ pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<Str
     .to_string())
 }
 
-fn skill_manifest_path(repo_root: &Path) -> PathBuf {
-    repo_root.join("skills/SKILL_MANIFEST.json")
-}
-
 fn skill_runtime_available(repo_root: &Path) -> bool {
     skill_routing_runtime_json(repo_root).is_file() && repo_root.join("skills").is_dir()
 }
@@ -292,12 +286,6 @@ fn skill_body_path(repo_root: &Path, slug: &str) -> Result<PathBuf, String> {
     {
         return Err(format!("invalid skill slug: {slug}"));
     }
-
-    let manifest_path = skill_manifest_path(repo_root);
-    if manifest_path.is_file()
-        && let Some(path) = skill_body_path_from_manifest(repo_root, &manifest_path, clean)? {
-            return finalize_skill_path(repo_root, &path, slug);
-        }
 
     let path = repo_root.join("skills").join(clean).join("SKILL.md");
     finalize_skill_path(repo_root, &path, slug)
@@ -321,67 +309,13 @@ fn finalize_skill_path(repo_root: &Path, path: &Path, slug: &str) -> Result<Path
     Ok(path.to_path_buf())
 }
 
-fn skill_body_path_from_manifest(
-    repo_root: &Path,
-    manifest_path: &Path,
-    slug: &str,
-) -> Result<Option<PathBuf>, String> {
-    let payload = core_state::utils::json_io::read_json_strict(manifest_path)?;
-    let keys = payload
-        .get("keys")
-        .and_then(Value::as_array)
-        .ok_or_else(|| format!("manifest missing keys: {}", manifest_path.display()))?;
-    let key_index = keys
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, key)| key.as_str().map(|raw| (raw.to_string(), idx)))
-        .collect::<std::collections::HashMap<_, _>>();
-    let idx_slug = *key_index
-        .get("slug")
-        .ok_or_else(|| format!("manifest missing slug key: {}", manifest_path.display()))?;
-    let Some(idx_skill_path) = key_index.get("skill_path").copied() else {
-        return Ok(None);
-    };
-    let rows = payload
-        .get("skills")
-        .and_then(Value::as_array)
-        .ok_or_else(|| format!("manifest missing skills rows: {}", manifest_path.display()))?;
-    for row in rows.iter().filter_map(Value::as_array) {
-        if row.get(idx_slug).and_then(Value::as_str) != Some(slug) {
-            continue;
-        }
-        let Some(skill_path) = row.get(idx_skill_path).and_then(Value::as_str) else {
-            continue;
-        };
-        if skill_path.starts_with('/')
-            || skill_path.contains("..")
-            || !skill_path.ends_with("SKILL.md")
-        {
-            return Err(format!("invalid skill_path for {slug}: {skill_path}"));
-        }
-        let path = repo_root.join(skill_path);
-        if !path.is_file() {
-            return Err(format!("skill body not found: {}", path.display()));
-        }
-        return Ok(Some(path));
-    }
-    Ok(None)
-}
-
 pub(super) fn tool_skill_route_status(repo_root: &Path) -> Result<String, String> {
     let runtime_path = skill_routing_runtime_json(repo_root);
-    let manifest_path = skill_manifest_path(repo_root);
     let mut remediation = Vec::new();
     if !runtime_path.is_file() {
         remediation.push(format!(
             "generate repository runtime artifacts so {} exists",
             runtime_path.to_string_lossy()
-        ));
-    }
-    if !manifest_path.is_file() {
-        remediation.push(format!(
-            "generate repository runtime artifacts so {} exists",
-            manifest_path.to_string_lossy()
         ));
     }
     remediation.push("call framework_snapshot for runtime details".to_string());
@@ -392,8 +326,6 @@ pub(super) fn tool_skill_route_status(repo_root: &Path) -> Result<String, String
         "skills_dir_exists": repo_root.join("skills").is_dir(),
         "runtime_path": runtime_path.to_string_lossy(),
         "runtime_exists": runtime_path.is_file(),
-        "manifest_path": manifest_path.to_string_lossy(),
-        "manifest_exists": manifest_path.is_file(),
         "routing_tools_exposed": skill_runtime_available(repo_root),
         "remediation": remediation,
     })

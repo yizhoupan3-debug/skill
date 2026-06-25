@@ -373,9 +373,9 @@ pub fn shared_framework_test_advisory() -> String {
 /// Record tool call telemetry + session tracking (PostToolUse).
 /// All 4 hosts emit the same 2-line sequence; call once after extracting tool_name + duration.
 pub fn record_tool_call_emission(repo_root: &Path, tool_name: &str, duration_ms: u64, succeeded: bool) {
-    crate::hooks::emit_tool_call(tool_name, duration_ms, succeeded);
+    telemetry_emit::emit_tool_call(tool_name, duration_ms, succeeded);
     if let Err(e) = crate::hooks::record_tool_call(repo_root, tool_name, None) {
-        eprintln!("[router-rs] session tracker record_tool_call failed (non-fatal): {e}");
+        tracing::warn!("session tracker record_tool_call failed (non-fatal): {e}");
     }
 }
 

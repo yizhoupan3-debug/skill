@@ -1,21 +1,21 @@
-use crate::types::{
-    LoopError, LoopPhase, LoopRegistryEntry, LoopRunState, LoopAction,
-    LoopCloseoutAggregate, LoopProfileConfig, SafetyLevel,
-};
-use crate::state::{
-    create_initial_state, transition_phase, start_new_run, finish_run,
-    generate_run_id, update_heartbeat, read_loop_state, write_loop_state,
-    closeout_path,
-};
-use crate::kill_switch::{self, acquire_lock, release_lock};
-use crate::safety::assign_safety_for_action;
-use crate::dispatcher::{self, SubagentResult};
 use crate::closeout::{
-    read_action_record, verify_closeout_with_evidence, build_aggregate,
-    AggregateActionResult,
+    AggregateActionResult, build_aggregate, read_action_record, verify_closeout_with_evidence,
 };
+use crate::dispatcher::{self, SubagentResult};
+use crate::kill_switch::{self, acquire_lock, release_lock};
 use crate::report;
+use crate::safety::assign_safety_for_action;
+use crate::state::{
+    closeout_path, create_initial_state, finish_run, generate_run_id, read_loop_state,
+    start_new_run, transition_phase, update_heartbeat, write_loop_state,
+};
+use crate::types::{
+    LoopAction, LoopCloseoutAggregate, LoopError, LoopPhase, LoopProfileConfig, LoopRegistryEntry,
+    LoopRunState, SafetyLevel,
+};
 use std::fs;
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -59,107 +59,109 @@ pub fn run_loop(ctx: &RunContext) -> Result<LoopCloseoutAggregate, LoopError> {
     let loop_id = &entry.loop_id;
 
     preflight_profile_check(entry)?;
+    let mut depth_remaining = ctx.depth_remaining;
 
-    let mut state = match read_loop_state(ctx.repo_root, loop_id)? {
-        Some(s) => s,
-        None => create_initial_state(loop_id, &entry.profile),
-    };
+    loop {
+        let mut state = match read_loop_state(ctx.repo_root, loop_id)? {
+            Some(s) => s,
+            None => create_initial_state(loop_id, &entry.profile),
+        };
 
-    let run_id = generate_run_id(loop_id);
-    start_new_run(&mut state, &run_id);
-    // Initialize anti-drift original goal snapshot on first run
-    if state.anti_drift.original_goal_snapshot.is_none() {
-        state.anti_drift.original_goal_snapshot = read_goal_snapshot(ctx.repo_root, entry);
-    }
-    transition_phase(&mut state, LoopPhase::Pending);
-
-    if ctx.dry_run {
-        transition_phase(&mut state, LoopPhase::Discovering);
-        let actions = discover_actions(entry, ctx.repo_root)?;
-        transition_phase(&mut state, LoopPhase::Preflight);
-        let _safety_map = assign_safety_levels(&actions, entry);
-        transition_phase(&mut state, LoopPhase::Completed);
-        let aggregate = build_aggregate(
-            &run_id, loop_id, &actions,
-            actions.iter().map(|a| (a.action_id.clone(), AggregateActionResult::Skipped)).collect(),
-        );
-        finish_run(&mut state, "dry-run");
-        if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
-            tracing::error!("failed to write loop state on dry-run path: {e}");
+        let run_id = generate_run_id(loop_id);
+        start_new_run(&mut state, &run_id);
+        // Initialize anti-drift original goal snapshot on first run
+        if state.anti_drift.original_goal_snapshot.is_none() {
+            state.anti_drift.original_goal_snapshot = read_goal_snapshot(ctx.repo_root, entry);
         }
-        return Ok(aggregate);
-    }
+        transition_phase(&mut state, LoopPhase::Pending);
 
-    acquire_lock(ctx.repo_root, loop_id, &run_id)?;
-    let lock_start = Instant::now();
-
-    let result = run_loop_inner(ctx, &mut state, &run_id, entry);
-
-    match result {
-        Ok(agg) => {
-            let findings = state.current_run.as_ref()
-                .map(|r| r.unconsumed_findings.clone())
-                .unwrap_or_default();
-            let elapsed = Some(lock_start.elapsed().as_secs());
-            let report_text = report::render_loop_report(
-                &state, &agg, &findings, elapsed,
-            );
-            let report_path = report::write_loop_report(ctx.repo_root, loop_id, &run_id, &report_text)
-                .ok();
-            if let Some(ref mut r) = state.current_run {
-                r.report_path = report_path;
-                r.closeout_aggregate = Some(agg.clone());
-            }
+        if ctx.dry_run {
+            transition_phase(&mut state, LoopPhase::Discovering);
+            let actions = discover_actions(entry, ctx.repo_root)?;
+            transition_phase(&mut state, LoopPhase::Preflight);
+            let _safety_map = assign_safety_levels(&actions, entry);
             transition_phase(&mut state, LoopPhase::Completed);
-            finish_run(&mut state, &agg.overall_status);
+            let aggregate = build_aggregate(
+                &run_id,
+                loop_id,
+                &actions,
+                actions
+                    .iter()
+                    .map(|a| (a.action_id.clone(), AggregateActionResult::Skipped))
+                    .collect(),
+            );
+            finish_run(&mut state, "dry-run");
             if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
-                tracing::error!("failed to write loop state on success path: {e}");
+                tracing::error!("failed to write loop state on dry-run path: {e}");
             }
-            if let Err(e) = release_lock(ctx.repo_root) {
-                tracing::error!("failed to release lock on success path: {e}");
-            }
-            Ok(agg)
+            return Ok(aggregate);
         }
-        Err(LoopError::ResearchEscalation(msg)) => {
-            // Research completed with candidates: restart the loop to consume them
-            tracing::info!("[loop-engine] {msg}");
-            state.circuit_breaker.consecutive_failures = 0;
-            if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
-                tracing::error!("failed to write loop state on research escalation: {e}");
-            }
-            if let Err(e) = release_lock(ctx.repo_root) {
-                tracing::error!("failed to release lock on research escalation: {e}");
-            }
 
-            let remaining = ctx.depth_remaining;
-            if remaining == 0 {
-                return Err(LoopError::ResearchEscalation(
-                    "max recursion depth reached for research escalation auto-restart".to_string(),
-                ));
-            }
+        acquire_lock(ctx.repo_root, loop_id, &run_id)?;
+        let lock_start = Instant::now();
 
-            // Recursively restart with a new run — candidates become the new action set
-            let new_ctx = RunContext {
-                entry,
-                repo_root: ctx.repo_root,
-                dry_run: ctx.dry_run,
-                timeout: ctx.timeout,
-                depth_remaining: remaining - 1,
-            };
-            run_loop(&new_ctx)
-        }
-        Err(e) => {
-            transition_phase(&mut state, LoopPhase::Escalated);
-            finish_run(&mut state, "escalated");
-            if let Err(write_err) = write_loop_state(ctx.repo_root, loop_id, &state) {
-                tracing::error!("failed to write loop state on error path: {write_err}");
+        let result = run_loop_inner(ctx, &mut state, &run_id, entry);
+
+        match result {
+            Ok(agg) => {
+                let findings = state
+                    .current_run
+                    .as_ref()
+                    .map(|r| r.unconsumed_findings.clone())
+                    .unwrap_or_default();
+                let elapsed = Some(lock_start.elapsed().as_secs());
+                let report_text = report::render_loop_report(&state, &agg, &findings, elapsed);
+                let report_path =
+                    report::write_loop_report(ctx.repo_root, loop_id, &run_id, &report_text).ok();
+                if let Some(ref mut r) = state.current_run {
+                    r.report_path = report_path;
+                    r.closeout_aggregate = Some(agg.clone());
+                }
+                transition_phase(&mut state, LoopPhase::Completed);
+                finish_run(&mut state, &agg.overall_status);
+                if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
+                    tracing::error!("failed to write loop state on success path: {e}");
+                }
+                if let Err(e) = release_lock(ctx.repo_root) {
+                    tracing::error!("failed to release lock on success path: {e}");
+                }
+                break Ok(agg);
             }
-            if let Err(lock_err) = release_lock(ctx.repo_root) {
-                tracing::error!("failed to release lock on error path: {lock_err}");
+            Err(LoopError::ResearchEscalation(msg)) => {
+                // Research completed with candidates: restart the loop to consume them
+                tracing::info!("[loop-engine] {msg}");
+                state.circuit_breaker.consecutive_failures = 0;
+                if let Err(e) = write_loop_state(ctx.repo_root, loop_id, &state) {
+                    tracing::error!("failed to write loop state on research escalation: {e}");
+                }
+                if let Err(e) = release_lock(ctx.repo_root) {
+                    tracing::error!("failed to release lock on research escalation: {e}");
+                }
+
+                if depth_remaining == 0 {
+                    break Err(LoopError::ResearchEscalation(
+                        "max recursion depth reached for research escalation auto-restart"
+                            .to_string(),
+                    ));
+                }
+
+                depth_remaining -= 1;
+                tracing::info!(depth_remaining, "research escalation: restarting loop");
+                continue;
             }
-            Err(e)
-        }
-    }
+            Err(e) => {
+                transition_phase(&mut state, LoopPhase::Escalated);
+                finish_run(&mut state, "escalated");
+                if let Err(write_err) = write_loop_state(ctx.repo_root, loop_id, &state) {
+                    tracing::error!("failed to write loop state on error path: {write_err}");
+                }
+                if let Err(lock_err) = release_lock(ctx.repo_root) {
+                    tracing::error!("failed to release lock on error path: {lock_err}");
+                }
+                break Err(e);
+            }
+        } // close match
+    } // close loop
 }
 
 fn run_loop_inner(
@@ -196,29 +198,46 @@ fn run_loop_inner(
     let mut results: Vec<(String, AggregateActionResult)> = Vec::new();
 
     for action in &actions {
-        let level = safety_map.get(&action.action_id).cloned()
+        let level = safety_map
+            .get(&action.action_id)
+            .cloned()
             .unwrap_or(SafetyLevel::L1ReportOnly);
 
         if let Some(ref mut run) = state.current_run {
-            run.dispatch.insert(action.action_id.clone(), level.as_str().to_string());
+            run.dispatch
+                .insert(action.action_id.clone(), level.as_str().to_string());
         }
 
         match level {
             SafetyLevel::L1ReportOnly => {
                 results.push((action.action_id.clone(), AggregateActionResult::Skipped));
                 if let Some(ref mut run) = state.current_run {
-                    run.dispatch.insert(action.action_id.clone(), "skipped".to_string());
+                    run.dispatch
+                        .insert(action.action_id.clone(), "skipped".to_string());
                 }
             }
             SafetyLevel::L2AssistedFix | SafetyLevel::L3Unattended => {
                 update_heartbeat(state);
                 if let Some(ref mut run) = state.current_run {
-                    run.dispatch.insert(action.action_id.clone(), "running".to_string());
+                    run.dispatch
+                        .insert(action.action_id.clone(), "running".to_string());
                 }
-                let sub_result = dispatcher::run_action_sync(ctx.repo_root, &entry.loop_id, run_id, action, ctx.timeout);
+                let sub_result = dispatcher::run_action_sync(
+                    ctx.repo_root,
+                    &entry.loop_id,
+                    run_id,
+                    action,
+                    ctx.timeout,
+                );
                 match sub_result {
                     Ok(output) => {
-                        let aggregate_result = evaluate_subagent_output(ctx.repo_root, &entry.loop_id, run_id, action, &output);
+                        let aggregate_result = evaluate_subagent_output(
+                            ctx.repo_root,
+                            &entry.loop_id,
+                            run_id,
+                            action,
+                            &output,
+                        );
                         if let Some(ref mut run) = state.current_run {
                             let status = match &aggregate_result {
                                 AggregateActionResult::Committed { .. } => "done",
@@ -226,26 +245,36 @@ fn run_loop_inner(
                                 AggregateActionResult::Interrupted => "interrupted",
                                 AggregateActionResult::Skipped => "skipped",
                             };
-                            run.dispatch.insert(action.action_id.clone(), status.to_string());
+                            run.dispatch
+                                .insert(action.action_id.clone(), status.to_string());
                         }
                         results.push((action.action_id.clone(), aggregate_result));
                     }
                     Err(LoopError::KillSignaled(msg)) => {
-                        results.push((action.action_id.clone(), AggregateActionResult::Failed {
-                            reason: format!("killed: {msg}"),
-                        }));
+                        results.push((
+                            action.action_id.clone(),
+                            AggregateActionResult::Failed {
+                                reason: format!("killed: {msg}"),
+                            },
+                        ));
                         return Err(LoopError::KillSignaled(msg));
                     }
                     Err(LoopError::Timeout(secs)) => {
-                        results.push((action.action_id.clone(), AggregateActionResult::Failed {
-                            reason: format!("timeout after {secs}s"),
-                        }));
+                        results.push((
+                            action.action_id.clone(),
+                            AggregateActionResult::Failed {
+                                reason: format!("timeout after {secs}s"),
+                            },
+                        ));
                         return Err(LoopError::Timeout(secs));
                     }
                     Err(e) => {
-                        results.push((action.action_id.clone(), AggregateActionResult::Failed {
-                            reason: e.to_string(),
-                        }));
+                        results.push((
+                            action.action_id.clone(),
+                            AggregateActionResult::Failed {
+                                reason: e.to_string(),
+                            },
+                        ));
                     }
                 }
             }
@@ -261,14 +290,16 @@ fn run_loop_inner(
     // If the aggregate passes but RFV hasn't converged, mark as fail.
     if entry.verify_rfv_convergence.unwrap_or(false) && aggregate.overall_status == "pass" {
         // Derive task_id from action_id (strip "-orchestrator" suffix)
-        let task_id = actions.first()
-            .map(|a| a.action_id.strip_suffix("-orchestrator")
-                .unwrap_or(&a.action_id)
-                .to_string())
+        let task_id = actions
+            .first()
+            .map(|a| {
+                a.action_id
+                    .strip_suffix("-orchestrator")
+                    .unwrap_or(&a.action_id)
+                    .to_string()
+            })
             .unwrap_or_default();
-        if let Err(violations) = crate::closeout::verify_rfv_convergence(
-            ctx.repo_root, &task_id,
-        ) {
+        if let Err(violations) = crate::closeout::verify_rfv_convergence(ctx.repo_root, &task_id) {
             tracing::warn!(
                 "RFV convergence not met (verify_rfv_convergence=true): {}",
                 violations.join(", ")
@@ -281,45 +312,52 @@ fn run_loop_inner(
     // and fire drift check every N cycles (default 3).
     state.anti_drift.review_cycle_count += 1;
     if crate::drift::should_check_drift(&state.anti_drift)
-        && let Some(current_goal) = read_goal_snapshot(ctx.repo_root, entry) {
-            let result = crate::drift::perform_drift_check(
-                &mut state.anti_drift,
-                &current_goal,
-            );
-            tracing::warn!(
-                "[loop-engine] anti-drift check at cycle {}: drift_detected={}, score={:.2}",
-                result.review_cycle,
-                result.drift_detected,
-                result.drift_score
-            );
-            state.anti_drift.last_drift_check = Some(result.clone());
-            state.anti_drift.drift_check_history.push(result);
-            // Cap history to last 20 entries to prevent state file bloat
-            let max_history = 20;
-            if state.anti_drift.drift_check_history.len() > max_history {
-                let drain_count = state.anti_drift.drift_check_history.len() - max_history;
-                state.anti_drift.drift_check_history.drain(..drain_count);
-            }
+        && let Some(current_goal) = read_goal_snapshot(ctx.repo_root, entry)
+    {
+        let result = crate::drift::perform_drift_check(&mut state.anti_drift, &current_goal);
+        tracing::warn!(
+            "[loop-engine] anti-drift check at cycle {}: drift_detected={}, score={:.2}",
+            result.review_cycle,
+            result.drift_detected,
+            result.drift_score
+        );
+        state.anti_drift.last_drift_check = Some(result.clone());
+        state.anti_drift.drift_check_history.push(result);
+        // Cap history to last 20 entries to prevent state file bloat
+        let max_history = 20;
+        if state.anti_drift.drift_check_history.len() > max_history {
+            let drain_count = state.anti_drift.drift_check_history.len() - max_history;
+            state.anti_drift.drift_check_history.drain(..drain_count);
         }
+    }
 
     if aggregate.overall_status == "pass" {
         state.circuit_breaker.consecutive_failures = 0;
     } else if aggregate.overall_status == "fail" || aggregate.overall_status == "partial" {
         state.circuit_breaker.consecutive_failures += 1;
-        let threshold = entry.research.as_ref().map(|r| r.barrier_threshold).unwrap_or(3);
+        let threshold = entry
+            .research
+            .as_ref()
+            .map(|r| r.barrier_threshold)
+            .unwrap_or(3);
         if state.circuit_breaker.consecutive_failures >= threshold {
             if entry.research_enabled {
                 let escalation = barrier_escalation(entry, &entry.loop_id, run_id, ctx.repo_root)?;
                 if escalation.should_resume() {
-                    return Err(LoopError::ResearchEscalation(
-                        format!("barrier={} candidates={}: research complete, auto-resume loop",
-                            escalation.candidates.first().map(|s| s.as_str()).unwrap_or("?"),
-                            escalation.candidates.len()),
-                    ));
+                    return Err(LoopError::ResearchEscalation(format!(
+                        "barrier={} candidates={}: research complete, auto-resume loop",
+                        escalation
+                            .candidates
+                            .first()
+                            .map(|s| s.as_str())
+                            .unwrap_or("?"),
+                        escalation.candidates.len()
+                    )));
                 } else {
                     transition_phase(state, LoopPhase::Escalated);
                     return Err(LoopError::ActionFailed(
-                        "circuit breaker: escalated to research; awaiting human approval.".to_string(),
+                        "circuit breaker: escalated to research; awaiting human approval."
+                            .to_string(),
                     ));
                 }
             } else {
@@ -358,10 +396,16 @@ fn barrier_escalation(
     run_id: &str,
     repo_root: &Path,
 ) -> Result<BarrierResult, LoopError> {
-    let threshold = entry.research.as_ref().map(|r| r.barrier_threshold).unwrap_or(3);
+    let threshold = entry
+        .research
+        .as_ref()
+        .map(|r| r.barrier_threshold)
+        .unwrap_or(3);
     let problem = format!(
         "loop={} run={} consecutive_failures={} skill={}",
-        loop_id, run_id, threshold,
+        loop_id,
+        run_id,
+        threshold,
         entry.skill.as_deref().unwrap_or("none"),
     );
 
@@ -372,40 +416,75 @@ fn barrier_escalation(
         // Slow-path: compile and run via cargo with a timeout
         let mut cmd = std::process::Command::new("cargo");
         cmd.args([
-            "run", "-p", "research-harness", "--bin", "autoresearch", "--", "barrier",
-            "--problem", &problem,
-            "--loop-id", loop_id,
-            "--run-id", run_id,
+            "run",
+            "-p",
+            "research-harness",
+            "--bin",
+            "autoresearch",
+            "--",
+            "barrier",
+            "--problem",
+            &problem,
+            "--loop-id",
+            loop_id,
+            "--run-id",
+            run_id,
         ])
         .current_dir(repo_root);
+
+        #[cfg(unix)]
+        unsafe {
+            cmd.pre_exec(|| dispatcher::apply_subprocess_rlimits());
+        }
 
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
             let _ = tx.send(cmd.output());
         });
         rx.recv_timeout(Duration::from_secs(300))
-            .map_err(|_| LoopError::ActionFailed(
-                "barrier escalation: cargo run timed out after 300s".into(),
-            ))?
+            .map_err(|_| {
+                LoopError::ActionFailed("barrier escalation: cargo run timed out after 300s".into())
+            })?
             .map_err(|e| LoopError::ActionFailed(format!("barrier escalation failed: {e}")))?
     } else {
-        std::process::Command::new(&autoresearch_bin)
-            .args(["barrier", "--problem", &problem, "--loop-id", loop_id, "--run-id", run_id])
-            .current_dir(repo_root)
-            .output()
+        let mut cmd = std::process::Command::new(&autoresearch_bin);
+        cmd.args([
+            "barrier",
+            "--problem",
+            &problem,
+            "--loop-id",
+            loop_id,
+            "--run-id",
+            run_id,
+        ])
+        .current_dir(repo_root);
+        #[cfg(unix)]
+        unsafe {
+            cmd.pre_exec(|| dispatcher::apply_subprocess_rlimits());
+        }
+        cmd.output()
             .map_err(|e| LoopError::ActionFailed(format!("barrier escalation failed: {e}")))?
     };
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         tracing::warn!("[loop-engine] autoresearch barrier failed: {stderr}");
-        return Ok(BarrierResult { candidates: vec![], will_resume: false });
+        return Ok(BarrierResult {
+            candidates: vec![],
+            will_resume: false,
+        });
     }
 
-    let escalation_target = entry.research.as_ref()
+    let escalation_target = entry
+        .research
+        .as_ref()
         .map(|r| r.escalation_target.as_str())
         .unwrap_or("autoresearch");
-    let auto_resume = entry.research.as_ref().map(|r| r.auto_resume).unwrap_or(true);
+    let auto_resume = entry
+        .research
+        .as_ref()
+        .map(|r| r.auto_resume)
+        .unwrap_or(true);
     let candidates = discover_barrier_candidates(repo_root);
 
     tracing::info!(
@@ -413,7 +492,10 @@ fn barrier_escalation(
         candidates.len()
     );
 
-    Ok(BarrierResult { candidates, will_resume: auto_resume })
+    Ok(BarrierResult {
+        candidates,
+        will_resume: auto_resume,
+    })
 }
 
 /// Scan artifacts/research-barrier/ for the most recent BARRIER_REPORT.json.
@@ -436,17 +518,22 @@ fn discover_barrier_candidates(repo_root: &Path) -> Vec<String> {
         let report_path = latest.path().join("BARRIER_REPORT.json");
         if report_path.exists()
             && let Ok(content) = std::fs::read_to_string(&report_path)
-                && let Ok(report) = serde_json::from_str::<serde_json::Value>(&content)
-                    && let Some(candidates) = report.get("candidates").and_then(|c| c.as_array()) {
-                        return candidates.iter()
-                            .filter_map(|c| c.as_str().map(|s| s.to_string()))
-                            .collect();
-                    }
+            && let Ok(report) = serde_json::from_str::<serde_json::Value>(&content)
+            && let Some(candidates) = report.get("candidates").and_then(|c| c.as_array())
+        {
+            return candidates
+                .iter()
+                .filter_map(|c| c.as_str().map(|s| s.to_string()))
+                .collect();
+        }
     }
     vec![]
 }
 
-fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> Result<Vec<LoopAction>, LoopError> {
+fn discover_actions(
+    entry: &LoopRegistryEntry,
+    repo_root: &std::path::Path,
+) -> Result<Vec<LoopAction>, LoopError> {
     let skill_name = entry.skill.as_deref().unwrap_or(&entry.loop_id);
     let default_safety = entry.default_safety.as_deref().unwrap_or("L1");
     let _schedule_info = entry.trigger.schedule.as_deref().unwrap_or("manual");
@@ -455,10 +542,12 @@ fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> R
     // Static actions allow loops to define their action set declaratively
     // instead of spawning a subagent for discovery.
     if let Some(ref static_actions) = entry.static_actions
-        && !static_actions.is_empty() {
+        && !static_actions.is_empty()
+    {
         tracing::info!(
             "loop {}: using {} static action(s) from registry config",
-            entry.loop_id, static_actions.len()
+            entry.loop_id,
+            static_actions.len()
         );
         return Ok(static_actions.clone());
     }
@@ -474,10 +563,15 @@ fn discover_actions(entry: &LoopRegistryEntry, repo_root: &std::path::Path) -> R
     );
 
     let binary = dispatcher::resolve_subagent_binary()?;
-    let child = std::process::Command::new(&binary)
-        .args(["-p", &handoff])
+    let mut cmd = std::process::Command::new(&binary);
+    cmd.args(["-p", &handoff])
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    #[cfg(unix)]
+    unsafe {
+        cmd.pre_exec(|| dispatcher::apply_subprocess_rlimits());
+    }
+    let child = cmd
         .spawn()
         .map_err(|e| LoopError::SpawnFailed(format!("discovery {binary}: {e}")))?;
 
@@ -550,14 +644,23 @@ fn parse_discovery_output(
         .filter_map(|item| {
             let action_id = item.get("action_id")?.as_str()?;
             let action_type = item.get("type")?.as_str()?;
-            let scope_paths: Vec<String> = item.get("scope_paths")
+            let scope_paths: Vec<String> = item
+                .get("scope_paths")
                 .and_then(|v| v.as_array())
-                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
-            let safety = item.get("safety")
+            let safety = item
+                .get("safety")
                 .and_then(|v| v.as_str())
                 .unwrap_or(default_safety);
-            let description = item.get("description").and_then(|v| v.as_str()).map(String::from);
+            let description = item
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(String::from);
 
             Some(LoopAction {
                 action_id: action_id.to_string(),
@@ -584,25 +687,24 @@ fn assign_safety_levels(
 
 fn check_budget_preflight(profile: &LoopProfileConfig) -> Result<(), LoopError> {
     if let Some(ref budget) = profile.cost_budget
-        && let Some(max_tokens) = budget.tokens_per_run {
-            let hard_limit = crate::env_flags::max_tokens_per_run_hard_limit();
+        && let Some(max_tokens) = budget.tokens_per_run
+    {
+        let hard_limit = crate::env_flags::max_tokens_per_run_hard_limit();
 
-            tracing::info!(
-                "budget preflight: tokens_per_run={max_tokens}, hard_limit={hard_limit}",
-            );
+        tracing::info!("budget preflight: tokens_per_run={max_tokens}, hard_limit={hard_limit}",);
 
-            if max_tokens > hard_limit {
-                return Err(LoopError::BudgetExceeded(format!(
-                    "tokens_per_run ({max_tokens}) exceeds hard upper limit ({hard_limit}). \
+        if max_tokens > hard_limit {
+            return Err(LoopError::BudgetExceeded(format!(
+                "tokens_per_run ({max_tokens}) exceeds hard upper limit ({hard_limit}). \
                      Set ROUTER_RS_LOOP_MAX_TOKENS_PER_RUN to raise the limit.",
-                )));
-            }
-        } else {
-            tracing::warn!(
-                "budget preflight: no cost_budget or tokens_per_run configured — \
-                 budget enforcement disabled; set cost_budget.tokens_per_run to enable limits"
-            );
+            )));
         }
+    } else {
+        tracing::warn!(
+            "budget preflight: no cost_budget or tokens_per_run configured — \
+                 budget enforcement disabled; set cost_budget.tokens_per_run to enable limits"
+        );
+    }
     Ok(())
 }
 
@@ -615,38 +717,41 @@ fn evaluate_subagent_output(
 ) -> AggregateActionResult {
     let record_path = closeout_path(repo_root, loop_id, run_id, &action.action_id);
     if record_path.is_file()
-        && let Ok(Some(record)) = read_action_record(repo_root, loop_id, run_id, &action.action_id) {
-            let verification = verify_closeout_with_evidence(&record.closeout, repo_root, &action.action_id);
+        && let Ok(Some(record)) = read_action_record(repo_root, loop_id, run_id, &action.action_id)
+    {
+        let verification =
+            verify_closeout_with_evidence(&record.closeout, repo_root, &action.action_id);
 
-            let scope_violations = if !action.scope_paths.is_empty() {
-                dispatcher::check_scope_compliance(repo_root, &action.scope_paths)
-            } else {
-                Vec::new()
+        let scope_violations = if !action.scope_paths.is_empty() {
+            dispatcher::check_scope_compliance(repo_root, &action.scope_paths)
+        } else {
+            Vec::new()
+        };
+
+        if !scope_violations.is_empty() {
+            tracing::warn!(
+                "scope violation in action {}: {:?}",
+                action.action_id,
+                scope_violations
+            );
+            let mut violations = verification.violations;
+            violations.push(format!("scope_violation: {:?}", scope_violations));
+            return AggregateActionResult::Failed {
+                reason: violations.join("; "),
             };
-
-            if !scope_violations.is_empty() {
-                tracing::warn!(
-                    "scope violation in action {}: {:?}",
-                    action.action_id, scope_violations
-                );
-                let mut violations = verification.violations;
-                violations.push(format!("scope_violation: {:?}", scope_violations));
-                return AggregateActionResult::Failed {
-                    reason: violations.join("; "),
-                };
-            }
-
-            if verification.closeout_allowed {
-                return AggregateActionResult::Committed {
-                    closeout_path: Some(record_path.display().to_string()),
-                    commit_sha: None,
-                };
-            } else {
-                return AggregateActionResult::Failed {
-                    reason: verification.violations.join("; "),
-                };
-            }
         }
+
+        if verification.closeout_allowed {
+            return AggregateActionResult::Committed {
+                closeout_path: Some(record_path.display().to_string()),
+                commit_sha: None,
+            };
+        } else {
+            return AggregateActionResult::Failed {
+                reason: verification.violations.join("; "),
+            };
+        }
+    }
 
     if output.success {
         AggregateActionResult::Committed {
@@ -674,7 +779,10 @@ pub fn run_loop_kill(repo_root: &Path, loop_id: &str) -> Result<(), LoopError> {
 /// Send a kill signal to every loop registered in LOOP_REGISTRY.json.
 /// Iterates all entries and writes individual kill signal files.
 pub fn run_loop_kill_all(repo_root: &Path) -> Result<(), LoopError> {
-    let registry_path = repo_root.join("configs").join("framework").join("LOOP_REGISTRY.json");
+    let registry_path = repo_root
+        .join("configs")
+        .join("framework")
+        .join("LOOP_REGISTRY.json");
     let raw = fs::read_to_string(&registry_path)
         .map_err(|e| LoopError::Io(format!("read LOOP_REGISTRY.json: {e}")))?;
     let registry: crate::LoopRegistryRoot = serde_json::from_str(&raw)

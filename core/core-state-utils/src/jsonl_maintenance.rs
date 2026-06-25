@@ -432,6 +432,7 @@ fn derive_compact_tmp_path(path: &Path) -> std::path::PathBuf {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use serde_json::json;
     use std::fs;

@@ -117,6 +117,7 @@ pub fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use serde_json::json;
     use std::time::{SystemTime, UNIX_EPOCH};

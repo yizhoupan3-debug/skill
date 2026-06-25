@@ -124,7 +124,7 @@ fn base_goal_object(
     m
 }
 
-fn count_nonempty_string_items(values: &[Value]) -> usize {
+pub(crate) fn count_nonempty_string_items(values: &[Value]) -> usize {
     values
         .iter()
         .filter_map(Value::as_str)
@@ -133,7 +133,7 @@ fn count_nonempty_string_items(values: &[Value]) -> usize {
         .count()
 }
 
-fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
+pub(crate) fn value_string_list(payload: &Value, key: &str) -> Vec<Value> {
     payload
         .get(key)
         .and_then(|v| {
@@ -167,7 +167,7 @@ fn value_has_nonempty_string_item(value: Option<&Value>) -> bool {
 /// entering driving mode.
 ///
 /// `context` is a label like "start", "amend", or "resume" used in error messages.
-fn validate_drive_contract(
+pub(crate) fn validate_drive_contract(
     drive_until_done: bool,
     non_goals: &[Value],
     done_when: &[Value],

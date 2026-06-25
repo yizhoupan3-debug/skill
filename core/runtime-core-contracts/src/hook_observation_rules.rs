@@ -28,6 +28,7 @@ struct ParsedRules {
 fn parsed_rules() -> &'static ParsedRules {
     static CELL: OnceLock<ParsedRules> = OnceLock::new();
     CELL.get_or_init(|| {
+        #[allow(clippy::expect_used)]
         let root: Value =
             serde_json::from_str(RULES_EMBED).expect("ROUTER_RS_HOOK_OBSERVATION_RULES.json");
         let sv = root

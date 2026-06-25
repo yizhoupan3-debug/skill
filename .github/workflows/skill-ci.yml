@@ -177,6 +177,9 @@ jobs:
       - name: Clippy workspace (no default features)
         run: cargo clippy --workspace --no-default-features -- -D warnings
 
+      - name: Clippy core-state lint (deny unwrap_used)
+        run: cargo clippy -p core-state -p core-state-types -p core-state-utils -- -D warnings -D clippy::unwrap_used -D clippy::expect_used
+
       - name: Workspace compile check
         run: cargo test --workspace --no-run 2>&1 | tail -5
 

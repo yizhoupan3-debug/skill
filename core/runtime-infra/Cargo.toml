@@ -26,5 +26,6 @@ runtime-storage = { path = "../runtime-storage" }
 # workspace
 serde.workspace = true
 serde_json.workspace = true
+telem = { path = "../telemetry-emit", package = "telemetry-emit" }
 tracing.workspace = true
 which.workspace = true

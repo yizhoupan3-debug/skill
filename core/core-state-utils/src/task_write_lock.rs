@@ -116,6 +116,7 @@ pub fn apply_task_ledger_mutation<T>(
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use std::fs;
     use std::sync::Mutex;
@@ -141,6 +142,7 @@ mod tests {
             .lock()
             .expect("task ledger flock env mutex poisoned");
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
+        // SAFETY: test-only; TASK_LEDGER_FLOCK_ENV_TEST_MUTEX prevents concurrent env access from other tests.
         unsafe { crate::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") };
         let tmp = unique_tmp();
         fs::create_dir_all(tmp.join("artifacts/current")).expect("mkdir");
@@ -151,8 +153,14 @@ mod tests {
             "expected lock sentinel file"
         );
         match prev {
-            Some(p) => unsafe { crate::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p) },
-            None => unsafe { crate::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") },
+            Some(p) => {
+                // SAFETY: test-only; TASK_LEDGER_FLOCK_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { crate::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p) }
+            }
+            None => {
+                // SAFETY: test-only; TASK_LEDGER_FLOCK_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { crate::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") }
+            }
         }
         let _ = fs::remove_dir_all(&tmp);
     }
@@ -163,14 +171,21 @@ mod tests {
             .lock()
             .expect("task ledger flock env mutex poisoned");
         let prev = std::env::var_os("ROUTER_RS_TASK_LEDGER_FLOCK");
+        // SAFETY: test-only; TASK_LEDGER_FLOCK_ENV_TEST_MUTEX prevents concurrent env access from other tests.
         unsafe { crate::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", "0") };
         let tmp = unique_tmp();
         fs::create_dir_all(tmp.join("artifacts/current")).expect("mkdir");
         let v = apply_task_ledger_mutation(&tmp, || Ok(9_u8)).expect("apply");
         assert_eq!(v, 9);
         match prev {
-            Some(p) => unsafe { crate::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p) },
-            None => unsafe { crate::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") },
+            Some(p) => {
+                // SAFETY: test-only; TASK_LEDGER_FLOCK_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { crate::env_sync::set_env("ROUTER_RS_TASK_LEDGER_FLOCK", &p) }
+            }
+            None => {
+                // SAFETY: test-only; TASK_LEDGER_FLOCK_ENV_TEST_MUTEX prevents concurrent env access from other tests.
+                unsafe { crate::env_sync::remove_env("ROUTER_RS_TASK_LEDGER_FLOCK") }
+            }
         }
         let _ = fs::remove_dir_all(&tmp);
     }

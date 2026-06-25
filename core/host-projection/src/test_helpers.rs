@@ -317,14 +317,14 @@ pub(crate) fn install_test_deps() {
             contexts: &mut Vec<String>,
             host: &'static str,
         ) {
-            if !hooks::router_rs_operator_inject_globally_enabled() {
+            if !core_policy::env_flags::router_rs_operator_inject_globally_enabled() {
                 return;
             }
             let env_var = framework_kernel::runtime_registry::paper_prose_env(host);
             if env_var.is_empty() {
                 return;
             }
-            if !hooks::router_rs_env_enabled_default_true(env_var) {
+            if !core_policy::env_flags::env_enabled_default_true(env_var) {
                 return;
             }
             if !prompt_signals_prose_work(prompt_text) {
@@ -343,10 +343,10 @@ pub(crate) fn install_test_deps() {
             use_followup_message: bool,
             _host: &'static str,
         ) {
-            if !hooks::router_rs_operator_inject_globally_enabled() {
+            if !core_policy::env_flags::router_rs_operator_inject_globally_enabled() {
                 return;
             }
-            if !hooks::router_rs_env_enabled_default_true("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK") {
+            if !core_policy::env_flags::env_enabled_default_true("ROUTER_RS_CURSOR_PAPER_PROSE_HOOK") {
                 return;
             }
             if !prompt_signals_prose_work(prompt_text) {

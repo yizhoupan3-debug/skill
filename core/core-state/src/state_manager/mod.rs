@@ -3,7 +3,7 @@
 //! All pub APIs are re-exported here so downstream code using
 //! `use core_state::state_manager::*` continues to work unchanged.
 
-mod goal_ops;
+pub(crate) mod goal_ops;
 mod pointer_ops;
 mod quality_gate_ops;
 mod scrub_ops;
@@ -393,6 +393,7 @@ pub fn evidence_index_entry_implies_success(entry: &Value) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
     use super::*;
     use serde_json::{Value, json};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1198,6 +1199,7 @@ mod tests {
         crate::utils::atomic_write::write_atomic_json(&goal_path, &goal_json).expect("write goal");
 
         // Set a different current session via env var
+        // SAFETY: test-only; ENV_LOCK prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::set_env("CLAUDE_SESSION_ID", "new-session-456") };
 
         let st = read_goal_state(&repo, Some("stale-task"))
@@ -1212,6 +1214,7 @@ mod tests {
         );
 
         // Clean up env var
+        // SAFETY: test-only; ENV_LOCK prevents concurrent env access from other tests.
         unsafe { core_state_utils::env_sync::remove_env("CLAUDE_SESSION_ID") };
         let _ = fs::remove_dir_all(&repo);
     }
@@ -1227,6 +1230,7 @@ mod tests {
             .map(|(k, _)| k)
             .collect();
         for k in &session_vars {
+            // SAFETY: test-only; ENV_LOCK prevents concurrent env access from other tests.
             unsafe { core_state_utils::env_sync::remove_env(k) };
         }
         let suffix = SystemTime::now()
@@ -1281,6 +1285,7 @@ mod tests {
             .map(|(k, _)| k)
             .collect();
         for k in &session_vars {
+            // SAFETY: test-only; ENV_LOCK prevents concurrent env access from other tests.
             unsafe { core_state_utils::env_sync::remove_env(k) };
         }
         let suffix = SystemTime::now()
