@@ -20,7 +20,10 @@ fn init_browser_mcp_dispatch() {
         attach_runtime_event_transport: host_projection::hooks::attach_runtime_event_transport,
         inspect_trace_stream: host_projection::hooks::inspect_trace_stream,
     });
-    host_projection::hooks::set_browser_dispatch(browser_mcp::dispatch_browser_command);
+    // Adapter: browser-mcp returns anyhow::Error; dispatch hook expects String.
+    host_projection::hooks::set_browser_dispatch(|cmd| {
+        browser_mcp::dispatch_browser_command(cmd).map_err(|e| e.to_string())
+    });
 }
 
 #[cfg(not(feature = "browser"))]

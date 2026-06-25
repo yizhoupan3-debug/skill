@@ -7,6 +7,7 @@ use std::fs;
 use std::path::Path;
 
 use framework_kernel::runtime_registry::ALL_KNOWN_HOST_DIRS;
+use tracing;
 
 pub(super) fn clean_rust_target_dirs(repo_root: &Path, dry_run: bool) -> Result<(), String> {
     clean_targets_walk(repo_root, dry_run)?;
@@ -117,7 +118,7 @@ pub(super) fn clean_hook_state_files(
         } else {
             for (p, _) in &files_to_clean {
                 if let Err(e) = fs::remove_file(p) {
-                    eprintln!("  warn: remove {} failed: {e}", p.display());
+                    tracing::warn!("  warn: remove {} failed: {e}", p.display());
                     continue;
                 }
                 println!("  removed {}", p.display());
@@ -135,7 +136,7 @@ pub(super) fn clean_hook_state_files(
     if dry_run {
         println!("  DRY-RUN: {summary}");
     } else {
-        eprintln!("{summary}");
+        tracing::info!("{summary}");
     }
 
     Ok(())
@@ -234,7 +235,7 @@ pub(super) fn clean_orphan_directories(
     if dry_run {
         println!("  DRY-RUN: {summary}");
     } else {
-        eprintln!("{summary}");
+        tracing::info!("{summary}");
     }
 
     Ok(())

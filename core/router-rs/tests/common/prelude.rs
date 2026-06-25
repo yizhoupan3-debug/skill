@@ -95,4 +95,3 @@ pub use framework_extra::orchestration_controller::{
 };
 
 pub use fr_exec::sandbox_control::build_sandbox_control_response;
-pub use framework_extra::route_manifest_fallback::resolve_runtime_declared_manifest_fallback;

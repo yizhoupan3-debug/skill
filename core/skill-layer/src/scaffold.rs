@@ -1,7 +1,7 @@
 //! Skill scaffold: generate new skill directories from a template.
 
 use crate::frontmatter::{
-    RoutingGate, RoutingLayer, RoutingOwner, RoutingPriority, SessionStart,
+    RecordKind, RoutingGate, RoutingLayer, RoutingOwner, RoutingPriority, SessionStart,
 };
 use std::fmt;
 use std::fs;
@@ -22,6 +22,8 @@ pub struct ScaffoldOptions {
     pub routing_priority: RoutingPriority,
     pub session_start: SessionStart,
     pub trigger_hints: Vec<String>,
+    /// Record kind (None = regular skill, Some(FrameworkCommand) = slash command).
+    pub kind: Option<RecordKind>,
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +120,10 @@ fn session_start_str(ss: SessionStart) -> &'static str {
 }
 
 fn render_skill_md(opts: &ScaffoldOptions) -> String {
+    let kind_line = match opts.kind {
+        Some(RecordKind::FrameworkCommand) => "kind: framework_command\n".to_string(),
+        _ => String::new(),
+    };
     let hints_yaml: String = opts
         .trigger_hints
         .iter()
@@ -133,7 +139,7 @@ fn render_skill_md(opts: &ScaffoldOptions) -> String {
 
     format!(
         r#"---
-name: {name}
+{kind_line}name: {name}
 description: |
   {description}
 routing_layer: {layer}
@@ -168,6 +174,7 @@ source: local
 
 - TODO: describe how to verify the skill completed successfully.
 "#,
+        kind_line = kind_line,
         name = opts.name,
         description = opts.description,
         layer = routing_layer_str(opts.routing_layer),
@@ -256,7 +263,10 @@ pub fn register_and_generate(
         row[i] = json!(skill_path);
     }
     if let Some(&i) = col_idx.get("kind") {
-        row[i] = json!("skill");
+        row[i] = match &opts.kind {
+            Some(RecordKind::FrameworkCommand) => json!("framework_command"),
+            _ => json!(null),
+        };
     }
     if let Some(&i) = col_idx.get("description") {
         row[i] = json!(opts.description);
@@ -304,6 +314,82 @@ pub fn register_and_generate(
     // ---- 2. Regenerate SKILL.md from registry ----
     crate::generate::generate_frontmatter(repo_root, Some(slug), false)?;
 
+    // ---- 3. Sync to RUNTIME_REGISTRY.json for framework_command ----
+    if opts.kind == Some(RecordKind::FrameworkCommand) {
+        register_framework_command_in_runtime_registry(repo_root, slug)?;
+    }
+
+    Ok(())
+}
+
+/// Register a framework_command in `configs/framework/RUNTIME_REGISTRY.json`.
+///
+/// Adds a new entry in the `framework_commands` section with per-host entrypoints
+/// for all supported hosts (cursor, opencode, codex, claude) and the interaction
+/// invariant configuration that ensures explicit slash-command routing only.
+///
+/// Fails if the command slug already exists in the registry.
+pub fn register_framework_command_in_runtime_registry(
+    repo_root: &Path,
+    slug: &str,
+) -> Result<(), String> {
+    let runtime_registry_path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
+    let text = fs::read_to_string(&runtime_registry_path)
+        .map_err(|e| format!("read RUNTIME_REGISTRY.json: {e}"))?;
+    let mut doc: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("parse RUNTIME_REGISTRY.json: {e}"))?;
+
+    // Read supported host IDs from registry (immutable, released after collect)
+    let supported: Vec<&str> = doc
+        .get("host_targets")
+        .and_then(|v| v.get("supported"))
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| {
+            "RUNTIME_REGISTRY.json missing host_targets.supported".to_string()
+        })?
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    let host_entrypoints: serde_json::Map<String, serde_json::Value> = supported
+        .into_iter()
+        .map(|host_id| (host_id.to_string(), serde_json::json!(format!("/{slug}"))))
+        .collect();
+
+    let commands = doc
+        .get_mut("framework_commands")
+        .and_then(|v| v.as_object_mut())
+        .ok_or_else(|| "RUNTIME_REGISTRY.json missing framework_commands object".to_string())?;
+
+    if commands.contains_key(slug) {
+        return Err(format!(
+            "framework_command `{slug}` already exists in RUNTIME_REGISTRY.json"
+        ));
+    }
+
+    commands.insert(
+        slug.to_string(),
+        serde_json::json!({
+            "canonical_owner": slug,
+            "skill_path": format!("skills/{slug}/SKILL.md"),
+            "host_entrypoints": host_entrypoints,
+            "interaction_invariants": {
+                "requires_explicit_entrypoint": true,
+                "explicit_entrypoints": [
+                    format!("/{slug}"),
+                    slug,
+                ],
+                "implicit_route_policy": "never"
+            },
+            "lineage": {
+                "source": "registry-scaffold",
+                "description": format!("Framework command {slug}")
+            }
+        }),
+    );
+
+    core_state_utils::atomic_write::write_atomic_json(&runtime_registry_path, &doc)
+        .map_err(|e| format!("write RUNTIME_REGISTRY.json: {e}"))?;
+
     Ok(())
 }
 
@@ -343,6 +429,7 @@ mod tests {
             routing_priority: RoutingPriority::P2,
             session_start: SessionStart::NA,
             trigger_hints: vec!["new skill".into(), "新 skill".into()],
+            kind: None,
         }
     }
 

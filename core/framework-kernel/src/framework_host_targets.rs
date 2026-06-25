@@ -301,15 +301,12 @@ mod tests {
         let supported = host_targets_supported_host_ids(&reg).expect("supported");
         let mut sorted = supported.clone();
         sorted.sort();
+        let mut expected: Vec<&str> =
+            crate::runtime_registry::ALL_HOST_IDS.to_vec();
+        expected.sort();
         assert_eq!(
-            sorted,
-            vec![
-                "claude".to_string(),
-                "codex".to_string(),
-                "cursor".to_string(),
-                "opencode".to_string(),
-            ],
-            "AGENTS.md closed-set must match RUNTIME_REGISTRY.host_targets.supported"
+            sorted, expected,
+            "supported host set must match build-time ALL_HOST_IDS"
         );
     }
 
@@ -317,10 +314,12 @@ mod tests {
     fn installable_pairs_exclude_retired_host_ids() {
         let root = repo_root();
         let pairs = installable_host_id_and_skills_install_tool_pairs(&root).expect("pairs");
-        assert!(pairs.iter().any(|(host_id, _)| host_id == "cursor"));
-        assert!(pairs.iter().any(|(host_id, _)| host_id == "claude"));
-        assert!(pairs.iter().any(|(host_id, _)| host_id == "opencode"));
-        assert!(pairs.iter().any(|(host_id, _)| host_id == "codex"));
+        for host_id in crate::runtime_registry::ALL_HOST_IDS {
+            assert!(
+                pairs.iter().any(|(hid, _)| hid == *host_id),
+                "installable_pairs must include {host_id}"
+            );
+        }
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "codex-app"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "codex-cli"));
         assert!(!pairs.iter().any(|(host_id, _)| host_id == "claude-desktop"));

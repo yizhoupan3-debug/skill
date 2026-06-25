@@ -1,6 +1,7 @@
 use crate::SCHEMA_VERSION;
 use crate::db::index_ops::{get_meta, set_meta};
 use rusqlite::Connection;
+use tracing;
 
 pub const META_SCHEMA_VERSION_KEY: &str = "schema_version";
 const LEGACY_SCHEMA_V1: &str = "codegraph-rs-v1";
@@ -138,7 +139,7 @@ fn migrate_v3_to_v4(conn: &Connection) -> rusqlite::Result<()> {
             .query_row("SELECT COUNT(*) FROM nodes", [], |r| r.get(0))
             .unwrap_or(0);
         if existing > 0 {
-            eprintln!(
+            tracing::info!(
                 "[codegraph] schema v4: added extra column for {existing} existing nodes. \
                  Run `build_full_index` to populate column-precision position data."
             );

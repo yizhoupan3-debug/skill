@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::path::Path;
+use tracing;
 
 // Re-export from the single source of truth in telemetry-types.
 pub use telemetry_types::{PredictionOutcomeCheck, TelemetryEvent};
@@ -133,7 +134,7 @@ pub fn load_telemetry_journal(path: &Path) -> anyhow::Result<TelemetryJournal> {
         }
     }
     if parse_errors > 0 {
-        eprintln!(
+        tracing::warn!(
             "Warning: {} lines in {} failed to parse as TelemetryEvent",
             parse_errors,
             path.display()

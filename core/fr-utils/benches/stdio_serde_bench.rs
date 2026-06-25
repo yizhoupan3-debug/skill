@@ -13,7 +13,7 @@
 //! StdioJsonResponsePayload derives only Serialize (no Deserialize).
 //! Roundtrip is measured via serde_json::Value as intermediate.
 
-use criterion::{Criterion, black_box, criterion_group};
+use criterion::{Criterion, black_box};
 use fr_utils::types::{StdioJsonRequestPayload, StdioJsonResponsePayload};
 use serde_json::Value;
 
@@ -164,13 +164,6 @@ fn bench_value_roundtrip(c: &mut Criterion) {
 
     group.finish();
 }
-
-criterion_group!(
-    stdio_benches,
-    bench_deserialize,
-    bench_serialize,
-    bench_value_roundtrip
-);
 
 fn main() {
     let mut criterion = criterion::Criterion::default();

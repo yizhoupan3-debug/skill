@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::path::PathBuf;
+use tracing;
 
 #[derive(Parser)]
 #[command(name = "mcp-codegraph")]
@@ -22,7 +23,7 @@ fn main() -> anyhow::Result<()> {
         // Force-rebuild mode: build full index then exit
         let index = codegraph_rs::CodeGraphIndex::open(&cli.repo_root)?;
         let report = codegraph_rs::graph::build_full_index(&index, &cli.repo_root)?;
-        eprintln!(
+        tracing::info!(
             "codegraph: force rebuild complete — {} files, {} nodes, {} edges",
             report.files_updated, report.nodes_added, report.edges_added
         );

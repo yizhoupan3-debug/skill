@@ -6,6 +6,8 @@
 //! (framework-kernel's `RouteDecision` had extra fields like `latency_ms`,
 //! `reasons`, `matched_tokens`, `parity_gate`, `candidates`).
 
+#![deny(clippy::unwrap_used, clippy::expect_used)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

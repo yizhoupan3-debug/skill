@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tracing;
 
 #[path = "clean.rs"] mod clean;
 
@@ -103,8 +104,8 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
         args.framework_root.as_deref(),
         args.artifact_root.as_deref(),
     )?;
-    eprintln!("repo_root: {}", fw.display());
-    eprintln!("artifact_root: {}", art.display());
+    tracing::info!("repo_root: {}", fw.display());
+    tracing::info!("artifact_root: {}", art.display());
 
     let manifest = fw.join("core/router-rs/Cargo.toml");
     run_cargo(
@@ -159,7 +160,7 @@ fn refresh_host_projections(args: MaintRootsArgs) -> Result<(), String> {
     for host_id in framework_kernel::runtime_registry::ALL_HOST_IDS {
         host_projection::hosts::host_extensions::schema_drift::verify_host_projection(&fw, host_id)?;
     }
-    eprintln!(
+    tracing::info!(
         "ok: refreshed installable host projections (cursor=user; claude=project+user; others=project): {}",
         installable_tools.join(", ")
     );
@@ -224,7 +225,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         args.framework_root.as_deref(),
         args.artifact_root.as_deref(),
     )?;
-    eprintln!("repo_root={} artifact_root={}", fw.display(), art.display());
+    tracing::info!("repo_root={} artifact_root={}", fw.display(), art.display());
 
     refresh_host_projections(MaintRootsArgs {
         framework_root: Some(fw.clone()),
@@ -250,7 +251,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         ],
     )?;
 
-    eprintln!("cargo test → integration harness (offline-stable suites; see maint module docs)");
+    tracing::info!("cargo test → integration harness (offline-stable suites; see maint module docs)");
     const DEFAULT_SUITES: &[&str] = &[
         "policy_contracts",
         "documentation_contracts",
@@ -263,7 +264,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         run_cargo(&fw, &["test", "--test", suite])?;
     }
     if autoresearch_integration_tests_enabled() {
-        eprintln!(
+        tracing::info!(
             "ROUTER_RS_UPDATE_RUN_AUTORESEARCH_CLI_TESTS → cargo test --test autoresearch_cli"
         );
         run_cargo(&fw, &["test", "--test", "autoresearch_cli"])?;
@@ -284,7 +285,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
     }
 
     if host_skills_publish_enabled() {
-        eprintln!(
+        tracing::info!(
             "ROUTER_RS_UPDATE_PUBLISH_HOST_SKILLS → host-integration install-skills + user projections"
         );
         // Build host-home args dynamically from registry
@@ -340,7 +341,7 @@ fn update_one_shot(args: MaintRootsArgs) -> Result<(), String> {
         }
     }
 
-    eprintln!("ok: framework maint update-one-shot complete");
+    tracing::info!("ok: framework maint update-one-shot complete");
     Ok(())
 }
 

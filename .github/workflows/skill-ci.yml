@@ -365,3 +365,34 @@ jobs:
         with:
           name: cargo-timings
           path: target/cargo-timings/
+
+  # ── Performance regression gate (Criterion baseline via rust-cache) ──
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-directories: /tmp/skill-cargo-target
+      - name: Enable sccache + mold
+        uses: mozilla/sccache-action@v0.0.8
+        with:
+          version: "latest"
+      - name: Install mold linker
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq mold clang
+          echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=clang" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-C link-arg=-fuse-ld=mold" >> $GITHUB_ENV
+      - name: Run performance benchmarks (regression threshold 5%)
+        run: |
+          set -e
+          cargo bench -p routing-core --bench fuzzy_bench -- --threshold 5
+          cargo bench -p routing-engine --bench scoring_bench -- --threshold 5
+          cargo bench -p tool-routing-engine --bench routing_bench -- --threshold 5
+          cargo bench -p core-state-utils --bench jsonl_bench -- --threshold 5
+          cargo bench -p fr-utils --bench stdio_serde_bench -- --threshold 5
+
+      - name: Summary
+        run: echo "✅ All benchmarks passed (regression ≤ 5%)"

@@ -8,7 +8,7 @@
 //! No env-var gate — runs unconditionally as a CI performance gate.
 //! Generates synthetic McpToolRecord data in-memory.
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group};
+use criterion::{BenchmarkId, Criterion, black_box};
 use mcp_tool_registry::McpToolRecord;
 use tool_routing_engine::{route_tool_from_records, search_tools};
 use std::time::{Duration, Instant};
@@ -139,8 +139,6 @@ fn bench_route_tool(c: &mut Criterion) {
     }
     report_latency("route_tool/50_tools/medium", &mut samples);
 }
-
-criterion_group!(routing_benches, bench_search_tools, bench_route_tool);
 
 fn main() {
     let mut criterion = criterion::Criterion::default();

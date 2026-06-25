@@ -119,7 +119,7 @@ pub fn generate_health_manifest(
     let json_val = serde_json::to_value(&manifest).map_err(HealthError::Json)?;
     core_state_utils::atomic_write::write_atomic_json(&manifest_path, &json_val)
         .map_err(|e| HealthError::Io(std::io::Error::other(e)))?;
-    eprintln!(
+    tracing::info!(
         "health manifest: wrote {} entries to {}",
         manifest.skills.len(),
         manifest_path.display()

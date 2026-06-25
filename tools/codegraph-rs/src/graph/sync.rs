@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime};
+use tracing;
 
 const WATCHER_DEBOUNCE: Duration = Duration::from_millis(400);
 
@@ -292,7 +293,7 @@ fn file_mtime_ns(path: &Path) -> anyhow::Result<i64> {
         Ok(m) => m,
         Err(e) => {
             // Filesystems like FUSE/NFS may not support mtime; fall back to epoch.
-            eprintln!("[codegraph] mtime unavailable for {} ({}); using epoch", path.display(), e);
+            tracing::warn!("[codegraph] mtime unavailable for {} ({}); using epoch", path.display(), e);
             SystemTime::UNIX_EPOCH
         }
     };
@@ -325,7 +326,7 @@ impl IndexWatcher {
             let index = match CodeGraphIndex::open(&repo_root) {
                 Ok(idx) => idx,
                 Err(err) => {
-                    eprintln!("codegraph IndexWatcher: failed to open index: {err}");
+                    tracing::error!("codegraph IndexWatcher: failed to open index: {err}");
                     return;
                 }
             };
@@ -355,7 +356,7 @@ impl IndexWatcher {
                         }
                         pending = false;
                         if let Err(err) = incremental_sync(&index, &repo_root, false) {
-                            eprintln!(
+                            tracing::error!(
                                 "codegraph IndexWatcher: incremental_sync failed for {}: {err}",
                                 repo_root.display()
                             );

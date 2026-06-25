@@ -12,6 +12,13 @@
 //! - `MetricCounter` — structured counter/gauge with labels.
 //! - `emit_warn!`, `emit_info!`, `emit_error!` — macros that pair `tracing::*!`
 //!   with telemetry emission.
+//!
+//! ## Lint
+//!
+//! This crate provides the emit macros that replace `eprintln!`; on principle
+//! it also denies unwrap/expect.
+
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 
 pub use framework_kernel::{TelemetryEvent, TelemetryWriter, emit_telemetry};
 pub use telemetry_types::PredictionOutcomeCheck;

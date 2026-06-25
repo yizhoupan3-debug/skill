@@ -31,6 +31,7 @@ pub fn nested_bool(payload: &Value, path: &[&str]) -> Option<bool> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use serde_json::json;

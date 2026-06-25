@@ -325,6 +325,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tracing",
  "tree-sitter",
  "tree-sitter-go",
  "tree-sitter-python",
@@ -627,6 +628,7 @@ dependencies = [
  "sha2",
  "telemetry-types",
  "toml",
+ "tracing",
 ]
 
 [[package]]

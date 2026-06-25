@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use tracing;
 
 fn file_sha256(path: &Path) -> Result<[u8; 32], String> {
     let bytes =
@@ -41,7 +42,7 @@ pub fn dispatch(command: RouterSelfCommands) -> Result<(), String> {
     match command {
         RouterSelfCommands::Install(args) => {
             let dest = install_router_rs_to_bin_dir(args.bin_dir)?;
-            eprintln!(
+            tracing::info!(
                 "Installed router-rs -> {}\nAdd to PATH if needed: export PATH=\"{}:$PATH\"",
                 dest.display(),
                 dest.parent()
@@ -302,7 +303,7 @@ fn run_clean(args: RouterSelfCleanArgs) -> Result<(), String> {
     if !status.success() {
         return Err(format!("cargo clean failed: {status}"));
     }
-    eprintln!("cargo clean ok for {}", manifest.display());
+    tracing::info!("cargo clean ok for {}", manifest.display());
 
     if args.shared_target {
         let shared = std::env::var("ROUTER_RS_SHARED_TARGET")
@@ -334,7 +335,7 @@ fn run_clean(args: RouterSelfCleanArgs) -> Result<(), String> {
 fn remove_dir_if_exists(path: &Path) -> Result<(), String> {
     if path.exists() {
         fs::remove_dir_all(path).map_err(|err| err.to_string())?;
-        eprintln!("removed {}", path.display());
+        tracing::info!("removed {}", path.display());
     }
     Ok(())
 }

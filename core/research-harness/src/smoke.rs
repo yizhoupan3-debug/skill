@@ -70,7 +70,7 @@ pub fn load_smoke_config(repo_root: &Path) -> Result<Vec<SmokeQuery>> {
 
     let version = config.get("schema_version").and_then(Value::as_str).unwrap_or("");
     if version != EXPECTED_SCHEMA_VERSION {
-        eprintln!(
+        tracing::warn!(
             "[smoke] config schema_version={version:?}, expected={EXPECTED_SCHEMA_VERSION:?}"
         );
     }
@@ -345,7 +345,7 @@ pub fn run_smoke_tests(
 
     // Write results (replace, not append — each run is a full snapshot)
     if let Err(e) = fs::write(&prev_path, lines.join("\n")) {
-        eprintln!(
+        tracing::warn!(
             "[smoke] warn: failed to persist results to {}: {e}",
             prev_path.display()
         );

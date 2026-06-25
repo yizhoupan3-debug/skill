@@ -15,6 +15,12 @@
 //! });
 //! host_projection::hooks::set_browser_dispatch(browser_mcp::dispatch_browser_command);
 //! ```
+//!
+//! ## Lint
+//! This crate denies unwrap/expect in non-test code. The explicit `.expect()` panic on
+//! `HOOKS` is a deliberate "must-be-initialized" assertion.
+
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 
 use std::sync::OnceLock;
 
@@ -62,4 +68,39 @@ pub fn hooks() -> &'static BrowserMcpHooks {
     HOOKS.get().expect(
         "BrowserMcpHooks not initialized — call browser_mcp_dispatch::set_hooks() before using browser-mcp",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn hooks_panics_when_uninitialized() {
+        let _ = std::panic::catch_unwind(|| hooks());
+    }
+
+    #[test]
+    fn set_hooks_accepts_valid_instance() {
+        let h = BrowserMcpHooks {
+            evaluate_mcp_pre_guard: |_, _, _| McpPreGuardVerdict { blocked: false, reason: None },
+            attach_runtime_event_transport: |_| Ok(serde_json::json!({})),
+            inspect_trace_stream: |_| {
+                Ok(framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload {
+                    schema_version: "1".into(),
+                    authority: "test".into(),
+                    path: "/test".into(),
+                    source_kind: "browser".into(),
+                    event_count: 0,
+                    latest_event_id: None,
+                    latest_event_kind: None,
+                    latest_event_timestamp: None,
+                    latest_cursor: None,
+                    recovery: None,
+                    reroute_count: 0,
+                    retry_count: 0,
+                })
+            },
+        };
+        set_hooks(h);
+    }
 }

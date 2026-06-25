@@ -1,3 +1,5 @@
+#![deny(clippy::unwrap_used, clippy::expect_used)]
+
 pub mod constants;
 pub mod env_flags;
 pub mod io_utils;

@@ -41,14 +41,14 @@ pub struct ValidationReport {
 pub fn validate_skills(repo_root: &Path) -> Result<(), String> {
     let report = crate::validate::validate_all(repo_root).map_err(|e| e.to_string())?;
     if report.errors.is_empty() {
-        eprintln!(
+        tracing::info!(
             "framework skills validate: ok ({} on-disk SKILL.md, {} runtime rows, {} warnings)",
             report.disk_count,
             report.runtime_count,
             report.warnings.len()
         );
         for w in &report.warnings {
-            eprintln!("  warning: {w}");
+            tracing::warn!("  warning: {w}");
         }
         Ok(())
     } else {
@@ -68,7 +68,7 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
     if cmd.backfill {
         let report = crate::backfill::backfill_registry(&cmd.repo_root, cmd.dry_run)?;
         if cmd.dry_run {
-            eprintln!(
+            tracing::info!(
                 "framework skills backfill --dry-run: {}/{} skills w/ frontmatter, {} cells would be filled across {} columns",
                 report.skills_with_frontmatter,
                 report.total_skills,
@@ -76,10 +76,10 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
                 report.columns.len(),
             );
             for (col, count) in &report.columns {
-                eprintln!("  {col}: {count}");
+                tracing::info!("  {col}: {count}");
             }
         } else {
-            eprintln!(
+            tracing::info!(
                 "framework skills backfill: {}/{} skills w/ frontmatter, {} cells filled across {} columns",
                 report.skills_with_frontmatter,
                 report.total_skills,
@@ -87,10 +87,10 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
                 report.columns.len(),
             );
             for (col, count) in &report.columns {
-                eprintln!("  {col}: {count}");
+                tracing::info!("  {col}: {count}");
             }
             if !report.errors.is_empty() {
-                eprintln!("  {} errors (SKILL.md read/parse)", report.errors.len());
+                tracing::warn!("  {} errors (SKILL.md read/parse)", report.errors.len());
             }
         }
     }
@@ -98,7 +98,7 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
         let slug = if generate_target == "all" { None } else { Some(generate_target.as_str()) };
         let report = crate::generate::generate_frontmatter(&cmd.repo_root, slug, cmd.dry_run)?;
         if cmd.dry_run {
-            eprintln!(
+            tracing::info!(
                 "framework skills generate{slug_msg}: {}/{} generated, {}/{} skipped (--dry-run)",
                 report.skills_generated,
                 report.total_skills,
@@ -107,7 +107,7 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
                 slug_msg = slug.map(|s| format!(" --slug {s}")).unwrap_or_default(),
             );
         } else {
-            eprintln!(
+            tracing::info!(
                 "framework skills generate{slug_msg}: {}/{} generated, {}/{} skipped",
                 report.skills_generated,
                 report.total_skills,
@@ -116,7 +116,7 @@ pub fn refresh_skills(cmd: &SkillsCommand) -> Result<(), String> {
                 slug_msg = slug.map(|s| format!(" --slug {s}")).unwrap_or_default(),
             );
             for err in &report.errors {
-                eprintln!("  error: {err}");
+                tracing::warn!("  error: {err}");
             }
         }
     }

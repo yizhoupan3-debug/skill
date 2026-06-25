@@ -67,6 +67,11 @@ pub fn compact_jsonl_with_content(
 
     if compacted.is_empty() {
         // All rows were snapshot rows and got fully deduplicated.
+        let parent = path.parent().ok_or_else(|| {
+            format!("compact_jsonl: no parent for {}", path.display())
+        })?;
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("compact_jsonl: mkdir {}: {err}", parent.display()))?;
         fs::OpenOptions::new()
             .write(true)
             .open(path)

@@ -147,6 +147,9 @@ pub struct SkillFrontmatter {
     pub network_access: Option<String>,
     #[serde(default)]
     pub approval_required_tools: Option<Vec<String>>,
+    /// Record kind: `skill` (default) or `framework_command`.
+    #[serde(default)]
+    pub kind: Option<RecordKind>,
 }
 
 impl SkillFrontmatter {

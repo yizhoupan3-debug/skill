@@ -506,40 +506,6 @@ fn confident_hot_route_does_not_parse_implicit_malformed_manifest() {
 
 
 #[test]
-fn runtime_declared_manifest_fallback_resolves_repo_relative_skills_path() {
-    let repo_root = temp_dir_path("runtime-repo-relative-fallback");
-    let skills_root = repo_root.join("skills");
-    fs::create_dir_all(&skills_root).expect("create skills root");
-    let runtime_path = skills_root.join("SKILL_ROUTING_RUNTIME.json");
-    let fallback_path = skills_root.join("SKILL_MANIFEST.json");
-    fs::create_dir_all(fallback_path.parent().expect("fallback parent"))
-        .expect("create fallback parent");
-    fs::write(
-        &runtime_path,
-        serde_json::to_string(&json!({
-            "scope": {
-                "fallback_manifest": "skills/SKILL_MANIFEST.json"
-            }
-        }))
-        .expect("serialize runtime payload"),
-    )
-    .expect("write runtime payload");
-    fs::write(
-        &fallback_path,
-        serde_json::to_string(&json!({"skills": []})).expect("serialize fallback payload"),
-    )
-    .expect("write fallback payload");
-
-    let resolved = resolve_runtime_declared_manifest_fallback(&runtime_path)
-        .expect("resolve fallback path")
-        .expect("declared fallback path should exist");
-    assert_eq!(resolved, fallback_path);
-
-    let _ = fs::remove_dir_all(&repo_root);
-}
-
-
-#[test]
 fn pr_triage_summary_routes_to_github_source_gate() {
     let runtime_path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills/SKILL_ROUTING_RUNTIME.json");

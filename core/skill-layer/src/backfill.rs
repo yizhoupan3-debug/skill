@@ -11,6 +11,7 @@
 //!
 //! Columns NOT backfilled (no frontmatter source): tags, when_to_use, do_not_use
 
+use crate::frontmatter::RecordKind;
 use crate::frontmatter_parser;
 use crate::paths;
 use serde_json::Value;
@@ -46,6 +47,7 @@ const BACKFILLABLE_FIELDS: &[(&str, &str)] = &[
     ("runtime_requirements", "runtime_requirements"),
     ("network_access", "network_access"),
     ("approval_required_tools", "approval_required_tools"),
+    ("kind", "kind"),
 ];
 
 /// Returns true if a Value should be treated as non-null for backfill purposes.
@@ -84,6 +86,10 @@ fn frontmatter_field_to_value(
             .approval_required_tools
             .as_ref()
             .map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())),
+        "kind" => fm.kind.and_then(|k| match k {
+            RecordKind::Skill => None,
+            RecordKind::FrameworkCommand => Some(Value::String("framework_command".into())),
+        }),
         _ => None,
     }
 }

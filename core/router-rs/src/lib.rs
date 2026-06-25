@@ -1,4 +1,5 @@
 #![recursion_limit = "256"]
+#![deny(clippy::unwrap_used, clippy::expect_used)]
 
 // ── Re-exports from runtime-core (B3 migration: single source of truth) ──
 // `route` is consumed externally (by router-rs-cli).
@@ -22,15 +23,11 @@ pub(crate) mod mcp_common;
 // ── proxy modules (thin re-exports kept in router-rs, used only by tests) ──
 #[cfg(test)]
 mod path_guard {
-    pub use runtime_core::path_guard::*;
+    pub use core_state_utils::path_guard::*;
 }
 #[cfg(test)]
 mod atomic_write {
-    pub use runtime_core::atomic_write::*;
-}
-#[cfg(test)]
-mod task_write_lock {
-    
+    pub use core_state_utils::atomic_write::*;
 }
 
 // ── hook_status (inline, test-only) ──

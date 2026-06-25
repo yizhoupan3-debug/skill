@@ -8,7 +8,7 @@
 //! No env-var gate — runs unconditionally as a CI performance gate.
 //! Generates synthetic SkillRecord data in-memory (no disk I/O).
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group};
+use criterion::{BenchmarkId, Criterion, black_box};
 use routing_engine::route::{search_skills, SkillRecord};
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -132,8 +132,6 @@ fn bench_search_skills(c: &mut Criterion) {
     }
     report_latency("search_skills/100_records/medium", &mut samples);
 }
-
-criterion_group!(scoring_benches, bench_search_skills);
 
 fn main() {
     let mut criterion = criterion::Criterion::default();

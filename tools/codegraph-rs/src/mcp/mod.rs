@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use std::io::{self, BufRead, Write};
 use std::path::Path;
 use std::time::Instant;
+use tracing;
 
 const PROTOCOL_VERSION: &str = "2024-11-05";
 const SERVER_NAME: &str = "mcp-codegraph";
@@ -34,7 +35,7 @@ pub fn run_stdio_mcp(repo_root: &Path) -> anyhow::Result<()> {
         let line = match line {
             Ok(line) => line,
             Err(err) => {
-                eprintln!("codegraph MCP stdin read error: {err}");
+                tracing::error!("codegraph MCP stdin read error: {err}");
                 break;
             }
         };

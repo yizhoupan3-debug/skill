@@ -5,6 +5,7 @@
 
 use crate::columnar;
 use crate::discovery;
+use crate::frontmatter::{RecordKind, RoutingGate, RoutingOwner};
 use crate::frontmatter_parser;
 use crate::generate::FRONTMATTER_KEYS;
 use crate::paths;
@@ -91,9 +92,29 @@ pub fn validate_all(repo_root: &Path) -> Result<ValidationReport, String> {
         let path = paths::skill_md(repo_root, slug);
         match fs::read_to_string(&path) {
             Ok(text) => match frontmatter_parser::parse_and_validate(&text) {
-                Ok((_fm, fm_warnings)) => {
+                Ok((fm, fm_warnings)) => {
                     for w in fm_warnings {
                         warnings.push(format!("{slug}: {w}"));
+                    }
+                    // Framework_command conventions
+                    if fm.kind == Some(RecordKind::FrameworkCommand) {
+                        if fm.routing_gate != RoutingGate::None {
+                            errors.push(format!(
+                                "{slug}: framework_command must have `routing_gate: none`, got `{:?}`",
+                                fm.routing_gate
+                            ));
+                        }
+                        if fm.routing_owner != RoutingOwner::Owner {
+                            errors.push(format!(
+                                "{slug}: framework_command must have `routing_owner: owner`, got `{:?}`",
+                                fm.routing_owner
+                            ));
+                        }
+                        if !fm.trigger_hints.iter().any(|h| h.starts_with('/')) {
+                            warnings.push(format!(
+                                "{slug}: framework_command should have at least one `/`-prefixed trigger_hint"
+                            ));
+                        }
                     }
                 }
                 Err(e) => {

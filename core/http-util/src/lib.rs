@@ -1,6 +1,8 @@
 //! HTTP utilities shared across framework crates.
 //! Currently provides process-level cached proxy URL resolution.
 
+#![deny(clippy::unwrap_used, clippy::expect_used)]
+
 use std::sync::OnceLock;
 
 /// Returns the first non-empty proxy URL from environment variables,

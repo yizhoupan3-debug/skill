@@ -3,7 +3,9 @@
 //! Extracts the YAML block between `---` delimiters and deserialises it into
 //! [`SkillFrontmatter`].  Returns typed errors for missing/invalid fields.
 
-use crate::frontmatter::{RoutingGate, RoutingLayer, RoutingOwner, RoutingPriority, SessionStart};
+use crate::frontmatter::{
+    RecordKind, RoutingGate, RoutingLayer, RoutingOwner, RoutingPriority, SessionStart,
+};
 use serde::Deserialize;
 use std::fmt;
 
@@ -132,6 +134,7 @@ struct RawFrontmatter {
     runtime_requirements: Option<serde_json::Value>,
     network_access: Option<String>,
     approval_required_tools: Option<Vec<String>>,
+    kind: Option<String>,
 }
 
 fn parse_enum<T: std::str::FromStr + fmt::Debug>(
@@ -220,6 +223,10 @@ pub fn parse_frontmatter(
         runtime_requirements: raw.runtime_requirements,
         network_access: raw.network_access,
         approval_required_tools: raw.approval_required_tools,
+        kind: match raw.kind {
+            Some(v) => Some(parse_enum("kind", Some(&v))?),
+            None => None,
+        },
     })
 }
 
@@ -392,6 +399,32 @@ impl fmt::Display for SessionStartParseError {
     }
 }
 impl std::error::Error for SessionStartParseError {}
+
+// ── RecordKind ──
+
+impl std::str::FromStr for RecordKind {
+    type Err = RecordKindParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "skill" => Ok(Self::Skill),
+            "framework_command" => Ok(Self::FrameworkCommand),
+            _ => Err(RecordKindParseError(s.to_string())),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct RecordKindParseError(String);
+impl fmt::Display for RecordKindParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "invalid kind `{}`; allowed: skill, framework_command",
+            self.0
+        )
+    }
+}
+impl std::error::Error for RecordKindParseError {}
 
 // ---------------------------------------------------------------------------
 // YAML / Markdown utility functions (extracted from skill_lint.rs)
