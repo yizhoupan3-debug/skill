@@ -97,8 +97,7 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | L4 | `routing-core` | 路由共享原语（trigram fuzzy 匹配） |
 | L4 | `skill-layer` | Skill schema、validation、dependency mgmt |
 | L3 | `fr-exec` | LLM 实时执行、沙箱状态机 |
-| L3 | `browser-mcp` | 浏览器自动化 MCP 服务 |
-| L3 | `framework-runtime` | L3 facade（向后兼容 re-export, 已拆分至 fr-*） |
+| L3 | `browser-mcp` (tools/) | 浏览器自动化 MCP 服务 |
 | L2 | `fr-contracts` | Closeout 验证、执行合约、pre-tool-use 守卫 |
 | L2 | `core-state-types` | 纯类型定义，零内部依赖 |
 | L2 | `runtime-core-contracts` | Hook 事件路由、观测、出站保护 |
@@ -111,6 +110,8 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | L0 | `framework-runtime-hooks` | fn-pointer 注册表 (OnceLock)，跨层通信中枢 |
 | L0 | `telemetry-types` | 纯遥测事件类型 |
 | L0 | `http-util` | HTTP 客户端工厂 |
+| L0 | `telemetry-emit` | 统一遥测发射原语：structured emit、MetricCounter、tracing+telemetry macros |
+| L0 | `browser-mcp-dispatch` | 浏览器 MCP 分派助手（仅依赖 L0 framework-kernel） |
 
 ### `core-state` Task 组件表
 
