@@ -180,7 +180,7 @@ pub fn index_workspace(
             None => continue,
         };
         let tags = db::get_tags(&source, eid)?;
-        let tags_json = serde_json::to_string(&tags).unwrap_or_default();
+        let tags_json = serde_json::to_string(&tags).unwrap_or_else(|_| "[]".to_string());
 
         // Upsert into hub: reindexing refreshes existing entries
         hub.execute(

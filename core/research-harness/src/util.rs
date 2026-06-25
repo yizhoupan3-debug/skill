@@ -38,6 +38,8 @@ pub(crate) fn arr_mut<'a>(value: &'a mut Value, key: &str) -> &'a mut Vec<Value>
     obj_mut(value)
         .entry(key.to_string())
         .or_insert_with(|| serde_json::json!([]))
+        // safety: or_insert_with(json!([])) guarantees the entry is an array;
+        // as_array_mut() cannot return None here.
         .as_array_mut()
         .expect("expected array")
 }
@@ -48,6 +50,7 @@ pub(crate) fn obj_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> 
         *value = serde_json::json!({});
     }
     #[allow(clippy::expect_used)]
+    // safety: obj_mut just coerced this to `{}` above; as_object_mut() always succeeds.
     value.as_object_mut().expect("obj_mut: value must be object after coercion")
 }
 
@@ -64,6 +67,8 @@ pub(crate) fn novelty_gate(state: &Value) -> &Value {
 /// Get the `novelty_gate` sub-object (mutable), inserting `{}` if missing.
 pub(crate) fn novelty_gate_mut(value: &mut Value) -> &mut serde_json::Map<String, Value> {
     #[allow(clippy::expect_used)]
+    // safety: or_insert_with(json!({})) guarantees the entry is an object;
+    // as_object_mut() cannot return None here.
     obj_mut(value)
         .entry("novelty_gate".to_string())
         .or_insert_with(|| serde_json::json!({}))

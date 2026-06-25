@@ -58,10 +58,16 @@ pub fn export_obsidian(conn: &rusqlite::Connection) -> Result<Vec<(String, Strin
 }
 
 fn escape_csv(s: &str) -> String {
-    if s.contains(',') || s.contains('"') || s.contains('\n') {
-        format!("\"{}\"", s.replace('"', "\"\""))
+    // Prefix with tab if starts with formula-triggering characters (CSV injection prevention).
+    let guarded = if s.starts_with('+') || s.starts_with('-') || s.starts_with('=') || s.starts_with('@') {
+        format!("\t{s}")
     } else {
         s.to_string()
+    };
+    if guarded.contains(',') || guarded.contains('"') || guarded.contains('\n') {
+        format!("\"{}\"", guarded.replace('"', "\"\""))
+    } else {
+        guarded
     }
 }
 

@@ -286,9 +286,10 @@ impl Blueprint {
 
         // Collect all descendants recursively for removal
         let mut to_remove = Vec::new();
+        let mut seen = std::collections::HashSet::new();
         let mut stack = children.clone();
         while let Some(cid) = stack.pop() {
-            if to_remove.contains(&cid) { continue; }
+            if !seen.insert(cid.clone()) { continue; }
             to_remove.push(cid.clone());
             if let Some(child) = self.nodes.get(&cid) {
                 stack.extend(child.children().iter().cloned());

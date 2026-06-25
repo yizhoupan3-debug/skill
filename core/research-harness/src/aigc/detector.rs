@@ -364,15 +364,85 @@ fn is_cjk(ch: char) -> bool {
     core_state_utils::text_utils::is_cjk(ch)
 }
 
+/// Common English abbreviations ending with '.' that should not be treated as sentence boundaries.
+const ENGLISH_ABBREVIATIONS: &[&str] = &[
+    "dr", "mr", "mrs", "ms", "prof", "sr", "jr", "st", "vs", "etc",
+    "e.g", "i.e", "cf", "al", "dept", "est", "govt", "inc", "ltd", "co",
+    "ave", "blvd", "rd", "pl", "u.s", "u.k", "no", "vol", "pp", "ch",
+    "ed", "rev", "gen", "col", "capt", "sgt", "lt", "maj", "sir",
+    "approx", "appt", "dept", "asso", "univ",
+];
+
+/// Check if a word (lowercased) is a known English abbreviation.
+fn is_abbreviation(word: &str) -> bool {
+    ENGLISH_ABBREVIATIONS.contains(&word)
+}
+
+/// Check if text around a dot position indicates it's a decimal number (e.g. "3.14").
+fn is_decimal_dot(text: &str, dot_pos: usize) -> bool {
+    let bytes = text.as_bytes();
+    // Check character before the dot
+    if dot_pos == 0 {
+        return false;
+    }
+    let before = bytes[dot_pos - 1];
+    // Check character after the dot
+    if dot_pos + 1 >= bytes.len() {
+        return false;
+    }
+    let after = bytes[dot_pos + 1];
+    before.is_ascii_digit() && after.is_ascii_digit()
+}
+
 /// Split text into sentences.
 fn split_sentences(text: &str, language: Language) -> Vec<String> {
     match language {
         Language::English => {
-            // Split on sentence-ending punctuation.
-            text.split(['.', '!', '?'])
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
+            // Split on sentence-ending punctuation, respecting abbreviations
+            // and decimal numbers. We walk through the text character by character
+            // and only split on '.', '!', '?' when the dot is not part of an
+            // abbreviation or decimal number.
+            let mut sentences = Vec::new();
+            let mut start = 0usize;
+            let bytes = text.as_bytes();
+            let len = bytes.len();
+
+            for i in 0..len {
+                let ch = bytes[i] as char;
+                let is_split = match ch {
+                    '.' => {
+                        // Skip ellipsis "...": the second and third dots
+                        if i > 0 && bytes[i - 1] == b'.' {
+                            false
+                        } else if is_decimal_dot(text, i) {
+                            false
+                        } else {
+                            // Find the start of the word before the dot
+                            !has_preceding_abbreviation(text, i)
+                        }
+                    }
+                    '!' | '?' => true,
+                    _ => false,
+                };
+
+                if is_split {
+                    let sentence = text[start..=i].trim().to_string();
+                    if !sentence.is_empty() {
+                        sentences.push(sentence);
+                    }
+                    start = i + 1;
+                }
+            }
+
+            // Don't forget the last segment
+            if start < len {
+                let sentence = text[start..].trim().to_string();
+                if !sentence.is_empty() {
+                    sentences.push(sentence);
+                }
+            }
+
+            sentences
         }
         Language::Chinese => {
             text.split(['。', '！', '？', '.', '!', '?'])
@@ -381,6 +451,19 @@ fn split_sentences(text: &str, language: Language) -> Vec<String> {
                 .collect()
         }
     }
+}
+
+/// Check whether the dot at position `dot_pos` is preceded by a known abbreviation.
+fn has_preceding_abbreviation(text: &str, dot_pos: usize) -> bool {
+    let before = &text[..dot_pos];
+    // Find the last word boundary before the dot
+    let word_start = before.rfind(|c: char| c.is_whitespace() || c == ',' || c == '(')
+        .map(|p| p + 1)
+        .unwrap_or(0);
+    let candidate = before[word_start..].to_lowercase();
+    // Strip trailing periods from the candidate (e.g. "Dr.." → "dr")
+    let candidate = candidate.trim_end_matches('.');
+    is_abbreviation(candidate)
 }
 
 /// English AI-typical phrase patterns.
@@ -432,7 +515,7 @@ fn count_passive_voice(text: &str) -> usize {
     ];
     let mut count = 0;
     for marker in &passive_markers {
-        if let Some(pos) = text.find(marker) {
+        for (pos, _) in text.match_indices(marker) {
             // Check if followed by a word ending in "ed" (rough heuristic).
             let after = &text[pos + marker.len()..];
             let next_word: String = after

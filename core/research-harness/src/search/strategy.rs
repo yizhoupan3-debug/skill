@@ -4,33 +4,8 @@
 
 use serde_json::{json, Value};
 
+use super::helpers::compact_words;
 use crate::util::{novelty_gate, novelty_gate_mut, str_field, str_field_default};
-
-// ── 自包含辅助函数 ──
-
-/// 提取内容词（去停用词、去短词、去重）。
-fn compact_words(text: &str, limit: usize) -> Vec<String> {
-    let stopwords: &[&str] = &[
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "have", "has",
-        "do", "does", "did", "will", "would", "could", "should", "may", "might",
-        "of", "in", "for", "on", "with", "at", "by", "from", "as", "and", "but",
-        "or", "not", "this", "that", "these", "those", "it", "its", "we", "our",
-        "they", "their", "into", "through", "during", "before", "after", "than",
-        "more", "most", "other", "some", "such", "no", "only", "own", "same",
-        "to", "is", "are", "was", "be", "have", "had", "do", "did", "will",
-        "can", "may", "shall", "could", "would", "should", "might", "must",
-    ];
-    let mut seen = std::collections::HashSet::new();
-    let mut words = Vec::new();
-    for word in text.split(|c: char| !c.is_alphanumeric() && c != '_') {
-        let lower = word.to_ascii_lowercase();
-        if lower.len() >= 3 && !stopwords.contains(&lower.as_str()) && seen.insert(lower.clone()) {
-            words.push(lower);
-            if words.len() >= limit { break; }
-        }
-    }
-    words
-}
 
 // ── 公开 API ──
 

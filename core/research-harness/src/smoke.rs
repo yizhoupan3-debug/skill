@@ -154,10 +154,11 @@ pub fn execute_query(query: &SmokeQuery, client: &reqwest::blocking::Client) -> 
     let id = query.id.clone();
     let timestamp = framework_kernel::time::now_iso();
 
+    let search_limit = query.expected_min_results.max(5);
     let results = match query.source.as_str() {
-        "arxiv" | "all" => arxiv::search(client, &query.query, query.expected_min_results.max(5)),
+        "arxiv" | "all" => arxiv::search(client, &query.query, search_limit),
         "semantic-scholar" | "semantic_scholar" | "semanticscholar" => {
-            semantic_scholar::search(client, &query.query, query.expected_min_results.max(5))
+            semantic_scholar::search(client, &query.query, search_limit)
         }
         other => {
             return SmokeResult {

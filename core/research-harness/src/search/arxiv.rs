@@ -110,6 +110,15 @@ fn json_to_paper(v: Value) -> Result<crate::types::Paper> {
         .next()
         .unwrap_or("")
         .to_string();
+    // Fallback: empty ID → hash-based ID from title (guarantees non-empty)
+    let id = if id.is_empty() {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        title.hash(&mut hasher);
+        format!("arxiv-hash-{:016x}", hasher.finish())
+    } else {
+        id
+    };
     let authors: Vec<String> = v
         .get("authors")
         .and_then(Value::as_str)

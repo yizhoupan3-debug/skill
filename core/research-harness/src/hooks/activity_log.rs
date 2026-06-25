@@ -51,6 +51,7 @@ pub fn maybe_log_research_activity(
         .open(&log_path)?;
     use std::io::Write;
     writeln!(f, "{}", entry)?;
+    f.flush()?; // 确保日志写入磁盘，崩溃时不丢失
 
     Ok(())
 }

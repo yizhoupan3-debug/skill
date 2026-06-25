@@ -62,10 +62,24 @@ pub fn run_uv_module_with_timeout(
         Ok(Ok(o)) => o,
         Ok(Err(e)) => return Err(format!("subprocess wait: {e}")),
         Err(_) => {
-            // Timeout — best-effort kill via OS command
-            let _ = std::process::Command::new("kill")
-                .args(["-9", &pid.to_string()])
-                .output();
+            // Timeout — best-effort process termination.
+            // Avoid shell `kill` command: PID-reuse races and cross-platform issues.
+            // Try brief wait to reap zombie (thread should complete after process exits).
+            #[cfg(unix)]
+            unsafe {
+                // SAFETY: pid is from child.id(); pid may be reused after child exits,
+                // but we immediately attempt recv_timeout to reap, closing the race window.
+                extern "C" { fn kill(pid: i32, sig: i32) -> i32; }
+                kill(pid as i32, 9);
+            }
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/F", "/PID", &pid.to_string()])
+                    .output();
+            }
+            // Brief wait to reap zombie; the kill should wake the wait_with_output thread.
+            let _ = rx.recv_timeout(Duration::from_secs(3));
             return Err(format!("subprocess timed out after {timeout_ms}ms (pid={pid})"));
         }
     };

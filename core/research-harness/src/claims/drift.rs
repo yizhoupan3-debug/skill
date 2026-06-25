@@ -157,11 +157,22 @@ fn extract_content_words(text: &str) -> HashSet<String> {
     crate::text::extract_content_words(text)
 }
 
+/// Compute the maximum possible ceiling value across all variants.
+fn ceiling_max() -> u8 {
+    // This must return the largest value from ceiling_value.
+    // When adding a new variant to ClaimCeiling, update both functions.
+    3
+}
+
 /// Compute distance between two ceiling levels (0.0 - 1.0).
 fn ceiling_distance(a: &crate::types::ClaimCeiling, b: &crate::types::ClaimCeiling) -> f64 {
     let va = ceiling_value(a);
     let vb = ceiling_value(b);
-    (va as f64 - vb as f64).abs() / 3.0
+    let max_val = ceiling_max();
+    if max_val == 0 {
+        return 0.0;
+    }
+    (va as f64 - vb as f64).abs() / max_val as f64
 }
 
 /// Numeric value for ceiling comparison.
@@ -252,5 +263,13 @@ mod tests {
         }];
         let results = detect_drift(&[orig], &[curr]).unwrap();
         assert!(results[0].drift_score > 0.0);
+    }
+
+    #[test]
+    fn ceiling_max_matches_variants() {
+        // Guard: when a new ClaimCeiling variant is added, ceiling_max and
+        // ceiling_value must be updated together.
+        assert_eq!(ceiling_max(), 3, "ceiling_max must match the largest ceiling_value. If you added a variant to ClaimCeiling, update ceiling_value and ceiling_max.");
+        assert_eq!(ceiling_value(&ClaimCeiling::TopVenue), 3);
     }
 }

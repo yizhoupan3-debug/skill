@@ -41,15 +41,14 @@ fn arr<'a>(state: &'a Value, key: &str) -> &'a [Value] {
         .unwrap_or(&[])
 }
 
-fn arr_mut<'a>(state: &'a mut Value, key: &str) -> &'a mut Vec<Value> {
-    #[allow(clippy::expect_used)]
+fn arr_mut<'a>(state: &'a mut Value, key: &str) -> Result<&'a mut Vec<Value>> {
     state
         .as_object_mut()
-        .expect("state must be object")
+        .ok_or_else(|| anyhow::anyhow!("state must be object"))?
         .entry(key.to_string())
         .or_insert_with(|| json!([]))
         .as_array_mut()
-        .expect("expected array")
+        .ok_or_else(|| anyhow::anyhow!("expected array for key '{key}'"))
 }
 
 // ── Query building ──
@@ -241,25 +240,38 @@ pub fn research_all_claims(
                 if idx >= tasks.len() {
                     break;
                 }
-                let record = &tasks[idx];
-                let claim_id = record.get("claim_id").and_then(Value::as_str);
-                let query = match default_research_query(Some(record), None) {
-                    Ok(q) => q,
-                    Err(e) => {
-                        let _ = result_tx.send(Err(format!("query extraction: {e}")));
-                        continue;
-                    }
-                };
-                let result = research_claim_with_client(
-                    &state_ref,
-                    claim_id,
-                    Some(&query),
-                    &source,
-                    limit,
-                    &client,
-                )
-                .map_err(|e| e.to_string());
-                let _ = result_tx.send(result);
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let record = &tasks[idx];
+                    let claim_id = record.get("claim_id").and_then(Value::as_str);
+                    let query = match default_research_query(Some(record), None) {
+                        Ok(q) => q,
+                        Err(e) => {
+                            let _ = result_tx.send(Err(format!("query extraction: {e}")));
+                            return;
+                        }
+                    };
+                    let result = research_claim_with_client(
+                        &state_ref,
+                        claim_id,
+                        Some(&query),
+                        &source,
+                        limit,
+                        &client,
+                    )
+                    .map_err(|e| e.to_string());
+                    let _ = result_tx.send(result);
+                }));
+                if let Err(panic_err) = result {
+                    let msg = if let Some(s) = panic_err.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = panic_err.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "worker thread panicked".to_string()
+                    };
+                    tracing::error!("[research-harness] Worker thread panicked: {msg}");
+                    let _ = result_tx.send(Err(msg));
+                }
             }
         }));
     }
@@ -267,7 +279,7 @@ pub fn research_all_claims(
     let mut errors: Vec<String> = Vec::new();
     for result in result_rx {
         match result {
-            Ok(research) => arr_mut(&mut next_state, "external_research").push(research),
+            Ok(research) => arr_mut(&mut next_state, "external_research")?.push(research),
             Err(e) => errors.push(e),
         }
     }
@@ -283,10 +295,10 @@ pub fn research_all_claims(
 // ── External research management ──
 
 /// Add a completed external research entry to the state.
-pub fn add_external_research(state: &Value, research: Value) -> Value {
+pub fn add_external_research(state: &Value, research: Value) -> Result<Value> {
     let mut next_state = ensure_state_defaults(state);
-    arr_mut(&mut next_state, "external_research").push(research);
-    next_state
+    arr_mut(&mut next_state, "external_research")?.push(research);
+    Ok(next_state)
 }
 
 /// Get the latest external research entry.

@@ -68,10 +68,11 @@ pub fn validate_research_state(path: &Path) -> Result<Vec<ValidationIssue>> {
     if let Some(stage) = value.get("stage").and_then(Value::as_str) {
         let known_stages = [
             "bootstrap",
-            "inner_loop",
+            "inner-loop", "inner_loop",
             "inner_loop_design",
             "inner_loop_code",
             "inner_loop_eval",
+            "outer-loop", "outer_loop",
             "barrier_escalation",
             "finalize",
             "reflect",

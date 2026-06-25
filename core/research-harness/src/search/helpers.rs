@@ -8,8 +8,9 @@
 
 use anyhow::Result;
 use reqwest::blocking::Client;
+use std::collections::{HashMap, HashSet};
+use std::sync::{LazyLock, Mutex};
 use serde_json::Value;
-use std::collections::HashSet;
 use std::sync::OnceLock;
 
 // ── Constants ──
@@ -35,9 +36,23 @@ pub(super) fn normalize_limit(limit: usize) -> usize {
 
 use regex::Regex;
 
+/// Cache of compiled XML tag regexes — avoids recompilation per call.
+static XML_TAG_RE_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 pub(super) fn xml_text_between(raw: &str, tag: &str) -> Option<String> {
-    let pattern = Regex::new(&format!(r"(?s)<{tag}(?:\s[^>]*)?>(.*?)</{tag}>")).ok()?;
-    let captures = pattern.captures(raw)?;
+    let re = match XML_TAG_RE_CACHE.lock().ok().and_then(|c| c.get(tag).cloned()) {
+        Some(r) => r,
+        None => {
+            let pattern =
+                Regex::new(&format!(r"(?s)<{tag}(?:\s[^>]*)?>(.*?)</{tag}>")).ok()?;
+            if let Ok(mut cache) = XML_TAG_RE_CACHE.lock() {
+                cache.insert(tag.to_string(), pattern.clone());
+            }
+            pattern
+        }
+    };
+    let captures = re.captures(raw)?;
     Some(decode_xml_entities(captures.get(1)?.as_str().trim()))
 }
 
@@ -92,7 +107,7 @@ pub(super) fn compact_words(text: &str, limit: usize) -> Vec<String> {
     filtered
 }
 
-fn stopwords() -> HashSet<&'static str> {
+static STOPWORDS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     [
         "a", "an", "and", "are", "as", "at", "be", "by", "can", "for", "from", "in", "into", "is",
         "it", "of", "on", "or", "reduce", "research", "that", "the", "this", "to", "use", "using",
@@ -105,6 +120,10 @@ fn stopwords() -> HashSet<&'static str> {
     ]
     .into_iter()
     .collect()
+});
+
+fn stopwords() -> &'static HashSet<&'static str> {
+    &STOPWORDS
 }
 
 // ── JSON field helpers (migrated from autoresearch-rs/src/helpers.rs) ──

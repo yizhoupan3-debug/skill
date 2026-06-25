@@ -101,7 +101,8 @@ pub fn init_database(db_path: &Path) -> Result<Connection> {
             [],
             |row| row.get(0),
         )?;
-        Ok(val.parse().unwrap_or(0))
+        val.parse()
+            .map_err(|e| anyhow::anyhow!("invalid schema_version value '{val}': {e}"))
     })()
     .unwrap_or(0);
 

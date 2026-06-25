@@ -47,8 +47,10 @@ impl BlockCache {
             .and_then(|m| m.modified().ok());
         {
             let guard = self.cache.lock().unwrap_or_else(|e| {
-                tracing::warn!("{} block cache poisoned, recovering", self.log_label);
-                e.into_inner()
+                tracing::warn!("{} block cache poisoned, clearing cache", self.log_label);
+                let mut guard = e.into_inner();
+                *guard = None; // Clear potentially corrupted cache
+                guard
             });
             if let Some(ref cached) = *guard
                 && cached.mtime == mtime {
@@ -85,8 +87,10 @@ impl BlockCache {
         };
         {
             let mut guard = self.cache.lock().unwrap_or_else(|e| {
-                tracing::warn!("{} block cache poisoned, recovering", self.log_label);
-                e.into_inner()
+                tracing::warn!("{} block cache poisoned, clearing cache", self.log_label);
+                let mut guard = e.into_inner();
+                *guard = None;
+                guard
             });
             *guard = Some(CachedBlock { content: content.clone(), mtime });
         }

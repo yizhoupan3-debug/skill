@@ -226,6 +226,16 @@ pub fn hydrate_state(state: &Value) -> Result<Value> {
 /// Load research state from a YAML or JSON file, applying migration and defaults.
 /// Parser is selected based on file extension (.json → JSON, else YAML).
 pub fn load_state(path: &Path) -> Result<Value> {
+    // Reject files larger than 10 MB to avoid OOM on accidental large inputs.
+    let meta = std::fs::metadata(path)
+        .with_context(|| format!("Cannot read state file metadata: {}", path.display()))?;
+    if meta.len() > 10_000_000 {
+        anyhow::bail!(
+            "State file exceeds 10 MB limit ({} bytes): {}",
+            meta.len(),
+            path.display()
+        );
+    }
     let raw = fs::read_to_string(path)?;
     let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let data: Value = if ext.eq_ignore_ascii_case("json") {

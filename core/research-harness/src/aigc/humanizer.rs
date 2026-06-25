@@ -189,9 +189,10 @@ fn vocabulary_swap(text: &str, language: Language) -> (String, usize) {
     (result, count)
 }
 
-/// English AI-word replacement table.
+/// English AI-word replacement table (sorted by key length descending to prevent
+/// substring overlap — e.g. "delve" must not match inside "delve into").
 fn english_replacement_table() -> Vec<(String, String)> {
-    vec![
+    let mut table = vec![
         ("moreover".into(), "additionally".into()),
         ("furthermore".into(), "what's more".into()),
         ("delve into".into(), "explore".into()),
@@ -208,7 +209,10 @@ fn english_replacement_table() -> Vec<(String, String)> {
         ("comprehensive overview".into(), "broad review".into()),
         ("in conclusion".into(), "to summarize".into()),
         ("in summary".into(), "taken together".into()),
-    ]
+    ];
+    // Safety: run-once sort ensures longer strings match before their substrings.
+    table.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    table
 }
 
 /// Chinese AI-word replacement table (ordered by length descending to prevent

@@ -81,6 +81,15 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
     let _ = std::fs::create_dir_all(&temp_dir);
     let script_path = temp_dir.join("verify.lean");
 
+    // Drop guard ensures cleanup even if the process panics mid-execution.
+    struct CleanupGuard(std::path::PathBuf);
+    impl Drop for CleanupGuard {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _guard = CleanupGuard(temp_dir.clone());
+
     let result = (|| -> Result<std::process::Output, String> {
         std::fs::write(&script_path, script).map_err(|e| format!("write: {e}"))?;
         std::process::Command::new("lean")
@@ -91,7 +100,8 @@ pub fn verify_lean_theorem(script: &str) -> VerificationResult {
             .map_err(|e| format!("exec: {e}"))
     })();
 
-    // Clean up both file and directory
+    // Clean up both file and directory (Drop guard also handles this, but eager
+    // cleanup is better — shorter lifetime for temp resources).
     let _ = std::fs::remove_dir_all(&temp_dir);
 
     let output = match result {

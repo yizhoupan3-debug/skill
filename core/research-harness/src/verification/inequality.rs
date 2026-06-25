@@ -80,7 +80,10 @@ impl FeasibilityResult {
 const DEFAULT_TIMEOUT_MS: u64 = 5_000;
 
 pub fn parse_inequality_latex(expr: &str) -> Result<Inequality, String> {
-    parse_via_sympy_subprocess(expr).or_else(|_| parse_via_regex(expr))
+    parse_via_sympy_subprocess(expr).or_else(|e| {
+        tracing::warn!("SymPy parse_inequality_latex failed, falling back to regex: {e}");
+        parse_via_regex(expr)
+    })
 }
 
 fn parse_via_sympy_subprocess(expr: &str) -> Result<Inequality, String> {
@@ -103,9 +106,9 @@ fn parse_via_regex(expr: &str) -> Result<Inequality, String> {
         .map_err(|e| format!("regex: {e}"))?;
     let caps = re.captures(&cleaned).ok_or_else(|| format!("cannot parse: {expr}"))?;
 
-    let lhs_str = caps.get(1).unwrap().as_str();
-    let sense_str = caps.get(2).unwrap().as_str();
-    let rhs_str = caps.get(3).unwrap().as_str();
+    let lhs_str = caps.get(1).ok_or_else(|| "regex missing LHS group".to_string())?.as_str();
+    let sense_str = caps.get(2).ok_or_else(|| "regex missing sense group".to_string())?.as_str();
+    let rhs_str = caps.get(3).ok_or_else(|| "regex missing RHS group".to_string())?.as_str();
 
     let sense = match sense_str {
         "<" => InequalitySense::Lt,  "<=" => InequalitySense::Le,

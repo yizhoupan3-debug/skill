@@ -64,6 +64,7 @@ pub fn search_all(
 ) -> Result<Vec<Paper>> {
     let client = http_client(timeout_secs)?;
     let mut papers = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
 
     if matches!(
         source,
@@ -72,7 +73,9 @@ pub fn search_all(
         match crate::search::semantic_scholar::search_papers(&client, query, limit) {
             Ok(items) => papers.extend(items),
             Err(err) => {
-                tracing::warn!("Semantic Scholar search failed: {err}");
+                let msg = format!("Semantic Scholar search failed: {err}");
+                tracing::warn!("{msg}");
+                errors.push(msg);
             }
         }
     }
@@ -80,9 +83,15 @@ pub fn search_all(
         match crate::search::arxiv::search_papers(&client, query, limit) {
             Ok(items) => papers.extend(items),
             Err(err) => {
-                tracing::warn!("arXiv search failed: {err}");
+                let msg = format!("arXiv search failed: {err}");
+                tracing::warn!("{msg}");
+                errors.push(msg);
             }
         }
+    }
+
+    if papers.is_empty() && !errors.is_empty() {
+        bail!("All search sources failed: {}", errors.join("; "));
     }
 
     // Deduplicate by title (case-insensitive)

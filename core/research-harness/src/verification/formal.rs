@@ -31,25 +31,28 @@ const DIMENSION_TABLE: &[(&str, &str)] = &[
 ///
 /// 返回 `true` 表示检查通过（一致或无法判断），`false` 表示检测到不一致。
 pub fn check_dimensional_consistency(equation: &str) -> Result<bool> {
-    // 先检查维度标注（[L], [M], [T] 等）
-    let eq_pos = equation.find('=');
-    let (lhs, rhs) = match eq_pos {
-        Some(pos) => (&equation[..pos], &equation[pos + 1..]),
-        None => return Ok(true), // 无等号，无法判断
-    };
+    // 处理多段等式链：F = ma = ... 分段检查每一对 (lhs, rhs)
+    let parts: Vec<&str> = equation.split('=').collect();
+    if parts.len() < 2 {
+        return Ok(true); // 无等号，无法判断
+    }
+    // 对每一段等式分别做量纲检查
+    for pair in parts.windows(2) {
+        let lhs = pair[0];
+        let rhs = pair[1];
+        let lhs_dims = extract_dimension_tokens(lhs);
+        let rhs_dims = extract_dimension_tokens(rhs);
 
-    let lhs_dims = extract_dimension_tokens(lhs);
-    let rhs_dims = extract_dimension_tokens(rhs);
-
-    // 如果两侧都有维度标注但完全没有交集，说明不一致
-    if !lhs_dims.is_empty() && !rhs_dims.is_empty() {
-        let lhs_set: std::collections::HashSet<&str> =
-            lhs_dims.iter().map(|s| s.as_str()).collect();
-        let rhs_set: std::collections::HashSet<&str> =
-            rhs_dims.iter().map(|s| s.as_str()).collect();
-        let intersection: Vec<_> = lhs_set.intersection(&rhs_set).collect();
-        if intersection.is_empty() {
-            return Ok(false);
+        // 如果两侧都有维度标注，集合必须严格相等才一致。
+        // `[L] = [L][T]` 中 lhs={"L"}, rhs={"L","T"}, 集合不等 → 不一致。
+        if !lhs_dims.is_empty() && !rhs_dims.is_empty() {
+            let lhs_set: std::collections::HashSet<&str> =
+                lhs_dims.iter().map(|s| s.as_str()).collect();
+            let rhs_set: std::collections::HashSet<&str> =
+                rhs_dims.iter().map(|s| s.as_str()).collect();
+            if lhs_set != rhs_set {
+                return Ok(false);
+            }
         }
     }
 

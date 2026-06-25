@@ -31,17 +31,11 @@ pub fn grim_test(observed_mean: f64, n: usize, decimals: usize) -> Result<bool> 
     Ok((observed_mean - reconstructed).abs() <= tolerance)
 }
 
-/// GRIM 检验（自动推断小数位数版本）。
+/// GRIM 检验（显式指定小数位数版本）。
 ///
-/// 注意：Rust 的 f64 Display 不保留尾零，因此自动推断可能不准确。
-/// 如果知道报告的小数位数，请使用 `grim_test` 并显式传入 `decimals`。
-pub fn grim_test_auto(observed_mean: f64, n: usize) -> Result<bool> {
-    let mean_str = format!("{}", observed_mean);
-    let decimals = if let Some(pos) = mean_str.find('.') {
-        mean_str.len() - pos - 1
-    } else {
-        0
-    };
+/// 与 `grim_test` 等价，提供一致的参数命名。调用方必须显式传入报告值的
+/// 小数位数（如报告 "3.50" 则 decimals=2），避免依赖 f64 Display 而丢失尾零。
+pub fn grim_test_auto(observed_mean: f64, n: usize, decimals: usize) -> Result<bool> {
     grim_test(observed_mean, n, decimals)
 }
 

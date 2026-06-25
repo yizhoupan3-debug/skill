@@ -490,7 +490,7 @@ fn cmd_research_claim(
         limit,
         timeout_secs,
     )?;
-    let next = research_harness::search::research::add_external_research(&state, result.clone());
+    let next = research_harness::search::research::add_external_research(&state, result.clone())?;
     dump_state(&ws, &next)?;
     let count = research_harness::search::research::external_research_result_count(&result);
     println!(

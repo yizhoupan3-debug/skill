@@ -38,27 +38,27 @@ pub fn check_figure_references(tex_path: &Path) -> Result<Vec<String>> {
 
 /// 基本 LaTeX 语法检查：环境配对和大括号平衡。
 fn check_latex_syntax(content: &str) -> bool {
-    // 1. 检查 \begin{env} 和 \end{env} 配对
+    // 1. 检查 \begin{env} 和 \end{env} 配对（单次扫描，正确嵌套检查）
     #[allow(clippy::expect_used)]
-    let begin_re = Regex::new(r"\\begin\{([^}]+)\}").expect("static regex");
-    #[allow(clippy::expect_used)]
-    let end_re = Regex::new(r"\\end\{([^}]+)\}").expect("static regex");
+    let env_re = Regex::new(r"\\(begin|end)\{([^}]+)\}").expect("static env regex");
 
     let mut env_stack: Vec<String> = Vec::new();
-    for cap in begin_re.captures_iter(content) {
-        env_stack.push(cap[1].to_string());
-    }
-    for cap in end_re.captures_iter(content) {
-        let env_name = &cap[1];
-        if let Some(pos) = env_stack.iter().rposition(|e| e == env_name) {
-            env_stack.remove(pos);
+    for cap in env_re.captures_iter(content) {
+        let is_begin = &cap[1] == "begin";
+        let env_name = cap[2].to_string();
+        if is_begin {
+            env_stack.push(env_name);
+        } else {
+            // \end{env} 必须匹配栈顶（最近打开的 begin）
+            if env_stack.last() != Some(&env_name) {
+                // 嵌套顺序错误或多余的 \end，标记失败
+                return false;
+            }
+            env_stack.pop();
         }
-        // 如果找不到对应的 begin，这是一个错误
-        // 但保守策略：不直接报错（可能是宏展开等原因）
     }
-    // 有未关闭的环境才算错误（如果数量差 > 2 可能是真正的错误）
-    if env_stack.len() > 2 {
-        return false;
+    if !env_stack.is_empty() {
+        return false; // 有未关闭的环境
     }
 
     // 2. 检查大括号平衡
