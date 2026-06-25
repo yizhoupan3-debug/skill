@@ -154,31 +154,7 @@ fn jaccard_similarity(a: &str, b: &str) -> f64 {
 
 /// Extract content words (≥3 chars, lowercased, no stopwords).
 fn extract_content_words(text: &str) -> HashSet<String> {
-    let stopwords: HashSet<&str> = [
-        "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-        "have", "has", "had", "do", "does", "did", "will", "would", "could",
-        "should", "may", "might", "shall", "can", "need", "dare", "ought",
-        "used", "to", "of", "in", "for", "on", "with", "at", "by", "from",
-        "as", "into", "through", "during", "before", "after", "above", "below",
-        "between", "out", "off", "over", "under", "again", "further", "then",
-        "once", "and", "but", "or", "nor", "not", "so", "yet", "both",
-        "either", "neither", "each", "every", "all", "any", "few", "more",
-        "most", "other", "some", "such", "no", "only", "own", "same",
-        "than", "too", "very", "just", "that", "this", "these", "those",
-        "it", "its", "we", "our", "they", "their",
-        // Chinese stopwords
-        "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都",
-        "一", "一个", "上", "也", "很", "到", "说", "要", "去", "你",
-        "会", "着", "没有", "看", "好", "自己", "这",
-    ]
-    .iter()
-    .copied()
-    .collect();
-
-    text.split(|c: char| !c.is_alphanumeric() && c != '_')
-        .map(|w| w.to_ascii_lowercase())
-        .filter(|w| w.len() >= 3 && !stopwords.contains(w.as_str()))
-        .collect()
+    crate::text::extract_content_words(text)
 }
 
 /// Compute distance between two ceiling levels (0.0 - 1.0).

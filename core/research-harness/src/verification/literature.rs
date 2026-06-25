@@ -25,8 +25,8 @@ pub async fn verify_doi_reachable(doi: &str) -> Result<bool> {
 
 /// 计算 claims 被 references 覆盖的比率（0.0-1.0）。
 ///
-/// 基于关键词重叠：对每个 claim 提取内容词，检查是否有 reference 包含
-/// 至少一个相同的内容词。
+/// 基于关键词重叠：对每个 claim 提取内容词，检查是否有至少 2 个内容词
+/// 超过 threshold 30% 出现在 reference 中。
 pub fn verify_claim_coverage(
     claims: &[String],
     references: &[String],
@@ -52,8 +52,10 @@ pub fn verify_claim_coverage(
             covered += 1; // 空 claim 自动覆盖
             continue;
         }
-        // 如果 claim 的内容词与 reference 有重叠，视为覆盖
-        let has_overlap = claim_words.iter().any(|w| ref_words.contains(w));
+        // 要求至少 2 个词重叠或 30% 以上重叠，避免单高频词假阳性
+        let overlap_count = claim_words.iter().filter(|w| ref_words.contains(*w as &str)).count();
+        let has_overlap = overlap_count >= 2
+            || (overlap_count as f64 / claim_words.len() as f64) >= 0.3;
         if has_overlap {
             covered += 1;
         }
@@ -62,25 +64,9 @@ pub fn verify_claim_coverage(
     Ok(covered as f64 / claims.len() as f64)
 }
 
-/// 提取文本中的内容词（≥3 字符，小写化）。
+/// 提取文本中的内容词（≥3 字符，小写化，去停用词）。
 fn extract_content_words(text: &str) -> HashSet<String> {
-    let stopwords: HashSet<&str> = [
-        "the", "a", "an", "is", "are", "was", "were", "be", "been",
-        "have", "has", "had", "do", "does", "did", "will", "would",
-        "could", "should", "may", "might", "shall", "can", "to",
-        "of", "in", "for", "on", "with", "at", "by", "from", "as",
-        "and", "but", "or", "not", "this", "that", "these", "those",
-        "it", "its", "we", "our", "they", "their", "into", "through",
-        "during", "before", "after", "between", "than", "more",
-    ]
-    .iter()
-    .copied()
-    .collect();
-
-    text.split(|c: char| !c.is_alphanumeric() && c != '_')
-        .map(|w| w.to_ascii_lowercase())
-        .filter(|w| w.len() >= 3 && !stopwords.contains(w.as_str()))
-        .collect()
+    crate::text::extract_content_words(text)
 }
 
 #[cfg(test)]
