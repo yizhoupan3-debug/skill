@@ -3,8 +3,8 @@
 //! Migrated from `tools/autoresearch-rs/src/text.rs`.
 
 use regex::Regex;
-use std::collections::HashSet;
-use std::sync::OnceLock;
+use std::collections::{HashMap, HashSet};
+use std::sync::{LazyLock, Mutex, OnceLock};
 
 // ── Slug ──
 pub fn slugify(text: &str) -> String {
@@ -47,33 +47,59 @@ pub fn decode_xml_entities(raw: &str) -> String {
         .join(" ")
 }
 
-/// Extract and decode the text content between XML tags.
+/// Extract and decode the text content between XML tags, with regex caching.
 pub fn xml_text_between(raw: &str, tag: &str) -> Option<String> {
-    let pattern = Regex::new(&format!(r"(?s)<{tag}(?:\s[^>]*)?>(.*?)</{tag}>")).ok()?;
-    let captures = pattern.captures(raw)?;
+    static XML_TAG_RE_CACHE: LazyLock<Mutex<HashMap<String, Regex>>> =
+        LazyLock::new(|| Mutex::new(HashMap::new()));
+    let re = match XML_TAG_RE_CACHE.lock().ok().and_then(|c| c.get(tag).cloned()) {
+        Some(r) => r,
+        None => {
+            let pattern =
+                Regex::new(&format!(r"(?s)<{tag}(?:\s[^>]*)?>(.*?)</{tag}>")).ok()?;
+            if let Ok(mut cache) = XML_TAG_RE_CACHE.lock() {
+                cache.insert(tag.to_string(), pattern.clone());
+            }
+            pattern
+        }
+    };
+    let captures = re.captures(raw)?;
     Some(decode_xml_entities(captures.get(1)?.as_str().trim()))
 }
 
-/// English + CJK stopword set for content word extraction.
-pub fn stopwords() -> HashSet<&'static str> {
-    [
-        "a", "an", "and", "are", "as", "at", "be", "by", "can", "for", "from", "in", "into", "is",
-        "it", "of", "on", "or", "reduce", "research", "that", "the", "this", "to", "use", "using",
-        "with",
-    ]
-    .into_iter()
-    .collect()
+/// English + CJK stopword set (cached via LazyLock).
+pub fn stopwords() -> &'static HashSet<&'static str> {
+    static STOPWORDS: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+        [
+            "a", "an", "and", "are", "as", "at", "be", "by", "can", "for", "from", "in", "into", "is",
+            "it", "of", "on", "or", "reduce", "research", "that", "the", "this", "to", "use", "using",
+            "with",
+            "的", "了", "在", "是", "我", "有", "和", "就", "不", "人", "都", "一", "一个", "上",
+            "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这",
+            "他", "她", "它", "们", "那", "被", "从", "把", "对", "但", "而", "与", "或", "中",
+            "等", "能", "可以", "什么", "怎么", "如何", "为什么", "是否", "通过", "使用", "基于",
+            "以及", "然后", "因此", "所以", "如果", "虽然", "但是", "对于", "关于", "已经", "正在",
+        ]
+        .into_iter()
+        .collect()
+    });
+    &STOPWORDS
 }
 
-/// Extract meaningful content words (deduped, stopword-filtered, length ≥ 3 for ASCII).
+/// Extract meaningful words from text, supporting both ASCII and CJK characters.
 pub fn compact_words(text: &str, limit: usize) -> Vec<String> {
     static WORD_RE: OnceLock<Regex> = OnceLock::new();
-    let re = WORD_RE.get_or_init(|| Regex::new(r"[A-Za-z0-9][A-Za-z0-9_-]*").unwrap());
+    let re = WORD_RE.get_or_init(|| {
+        #[allow(clippy::expect_used)]
+        Regex::new(r"[A-Za-z0-9][A-Za-z0-9_-]*|[\p{Han}]{2,}").expect("invalid compact_words regex")
+    });
     let stops = stopwords();
     let mut filtered = Vec::new();
     for cap in re.find_iter(&text.to_lowercase()) {
         let word = cap.as_str();
-        if word.len() <= 2 || stops.contains(word) {
+        if !word.chars().any(|c| c >= '\u{4e00}') && word.len() <= 2 {
+            continue;
+        }
+        if stops.contains(word) {
             continue;
         }
         if !filtered.iter().any(|item| item == word) {

@@ -17,7 +17,9 @@ use tempfile::TempDir;
 use zip::result::ZipError;
 use zip::ZipArchive;
 
-pub use mcp_stdio_common::util::{expand_path, file_sha256, has_extension};
+pub use mcp_stdio_common::util::{
+    expand_path, file_sha256, has_extension, run_command, run_command_capture, soffice_convert_cmd,
+};
 
 // ---------------------------------------------------------------------------
 // OoxmlKind — lightweight file-kind enum for batch dispatch
@@ -1643,28 +1645,6 @@ fn default_render_dir(input: &Path) -> PathBuf {
     input.parent().unwrap_or_else(|| Path::new(".")).join(stem)
 }
 
-fn run_command(command: &mut Command) -> Result<()> {
-    let output = command.output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        let message = if !stderr.is_empty() { stderr } else { stdout };
-        if message.is_empty() {
-            bail!("command failed with status {:?}", output.status.code());
-        }
-        bail!("{message}");
-    }
-    Ok(())
-}
-
-fn run_command_capture(command: &mut Command) -> Result<String> {
-    let output = command.output()?;
-    if !output.status.success() {
-        bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
-}
-
 fn convert_to_pdf(input: &Path, profile_dir: &Path, convert_dir: &Path) -> Result<PathBuf> {
     fs::create_dir_all(convert_dir)?;
     let stem = input
@@ -1672,21 +1652,8 @@ fn convert_to_pdf(input: &Path, profile_dir: &Path, convert_dir: &Path) -> Resul
         .and_then(|value| value.to_str())
         .ok_or_else(|| anyhow!("invalid input stem"))?;
     let pdf_path = convert_dir.join(format!("{stem}.pdf"));
-    let profile = format!("file://{}", profile_dir.display());
 
-    let mut direct = Command::new("soffice");
-    direct
-        .arg(format!("-env:UserInstallation={profile}"))
-        .arg("--invisible")
-        .arg("--headless")
-        .arg("--norestore")
-        .arg("--convert-to")
-        .arg("pdf")
-        .arg("--outdir")
-        .arg(convert_dir)
-        .arg(input)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    let mut direct = soffice_convert_cmd(profile_dir, "pdf", convert_dir, input);
     let _ = run_command(&mut direct);
     if pdf_path.exists() {
         return Ok(pdf_path);
@@ -1698,35 +1665,11 @@ fn convert_to_pdf(input: &Path, profile_dir: &Path, convert_dir: &Path) -> Resul
         || has_extension(input, "dotm")
     {
         let odt_path = convert_dir.join(format!("{stem}.odt"));
-        let mut to_odt = Command::new("soffice");
-        to_odt
-            .arg(format!("-env:UserInstallation={profile}"))
-            .arg("--invisible")
-            .arg("--headless")
-            .arg("--norestore")
-            .arg("--convert-to")
-            .arg("odt")
-            .arg("--outdir")
-            .arg(convert_dir)
-            .arg(input)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
+        let mut to_odt = soffice_convert_cmd(profile_dir, "odt", convert_dir, input);
         let _ = run_command(&mut to_odt);
 
         if odt_path.exists() {
-            let mut odt_to_pdf = Command::new("soffice");
-            odt_to_pdf
-                .arg(format!("-env:UserInstallation={profile}"))
-                .arg("--invisible")
-                .arg("--headless")
-                .arg("--norestore")
-                .arg("--convert-to")
-                .arg("pdf")
-                .arg("--outdir")
-                .arg(convert_dir)
-                .arg(&odt_path)
-                .stdout(Stdio::piped())
-                .stderr(Stdio::piped());
+            let mut odt_to_pdf = soffice_convert_cmd(profile_dir, "pdf", convert_dir, &odt_path);
             let _ = run_command(&mut odt_to_pdf);
             if pdf_path.exists() {
                 return Ok(pdf_path);

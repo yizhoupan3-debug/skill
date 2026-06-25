@@ -1,9 +1,10 @@
 //! Common utility functions shared across tool crates.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 /// Compute SHA-256 hex digest of a file.
 pub fn file_sha256(path: &Path) -> Result<String> {
@@ -13,10 +14,10 @@ pub fn file_sha256(path: &Path) -> Result<String> {
 
 /// Expand `~/` prefix to `$HOME`.
 pub fn expand_path(input: &str) -> PathBuf {
-    if let Some(rest) = input.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            return Path::new(&home).join(rest);
-        }
+    if let Some(rest) = input.strip_prefix("~/")
+        && let Ok(home) = std::env::var("HOME")
+    {
+        return Path::new(&home).join(rest);
     }
     PathBuf::from(input)
 }
@@ -105,6 +106,58 @@ pub fn emit_output<T: serde::Serialize>(
         text_fn(value);
     }
     Ok(())
+}
+
+/// Run a command to completion, returning error with stderr on failure.
+pub fn run_command(command: &mut Command) -> Result<()> {
+    let output = command.output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let message = if !stderr.is_empty() { stderr } else { stdout };
+        if message.is_empty() {
+            bail!("command failed with status {:?}", output.status.code());
+        }
+        bail!("{message}");
+    }
+    Ok(())
+}
+
+/// Run a command and capture its stdout as a string.
+pub fn run_command_capture(command: &mut Command) -> Result<String> {
+    let output = command.output()?;
+    if !output.status.success() {
+        bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+/// Build a `soffice --convert-to` Command with shared boilerplate.
+///
+/// The returned `Command` has its stdout/stderr piped. Callers may
+/// redirect them (e.g. to `Stdio::null()`) before spawning.
+pub fn soffice_convert_cmd(
+    profile_dir: &Path,
+    fmt: &str,
+    outdir: &Path,
+    input: &Path,
+) -> Command {
+    let mut cmd = Command::new("soffice");
+    cmd.arg(format!(
+        "-env:UserInstallation=file://{}",
+        profile_dir.display()
+    ))
+    .arg("--invisible")
+    .arg("--headless")
+    .arg("--norestore")
+    .arg("--convert-to")
+    .arg(fmt)
+    .arg("--outdir")
+    .arg(outdir)
+    .arg(input)
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped());
+    cmd
 }
 
 #[cfg(test)]

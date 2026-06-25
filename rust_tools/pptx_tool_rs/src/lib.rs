@@ -1320,7 +1320,9 @@ pub fn sanitize_pptx_command(args: SanitizePptxArgs) -> Result<()> {
     Ok(())
 }
 
-pub use mcp_stdio_common::util::{expand_path, has_extension};
+pub use mcp_stdio_common::util::{
+    expand_path, has_extension, run_command, run_command_capture, soffice_convert_cmd,
+};
 
 pub fn default_render_dir(input: &Path) -> PathBuf {
     let stem = input
@@ -1514,73 +1516,35 @@ pub fn collect_prefixed_pngs(dir: &Path, prefix: &str) -> Result<Vec<PathBuf>> {
 }
 
 pub fn convert_to_pdf(input: &Path, profile_dir: &Path, convert_dir: &Path) -> Result<PathBuf> {
+    use std::process::Stdio;
     let stem = input
         .file_stem()
         .and_then(OsStr::to_str)
         .ok_or_else(|| anyhow!("invalid input stem"))?;
     let pdf_path = convert_dir.join(format!("{}.pdf", stem));
-    let profile = format!("file://{}", profile_dir.display());
-    let mut direct = Command::new("soffice");
-    direct
-        .arg(format!("-env:UserInstallation={}", profile))
-        .arg("--invisible")
-        .arg("--headless")
-        .arg("--norestore")
-        .arg("--convert-to")
-        .arg("pdf")
-        .arg("--outdir")
-        .arg(convert_dir)
-        .arg(input)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+
+    let mut direct = soffice_convert_cmd(profile_dir, "pdf", convert_dir, input);
+    direct.stdout(Stdio::null()).stderr(Stdio::null());
     let _ = run_command(&mut direct);
     if pdf_path.exists() {
         return Ok(pdf_path);
     }
+
     let odp_path = convert_dir.join(format!("{}.odp", stem));
-    let mut to_odp = Command::new("soffice");
-    to_odp
-        .arg(format!("-env:UserInstallation={}", profile))
-        .arg("--invisible")
-        .arg("--headless")
-        .arg("--norestore")
-        .arg("--convert-to")
-        .arg("odp")
-        .arg("--outdir")
-        .arg(convert_dir)
-        .arg(input)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+    let mut to_odp = soffice_convert_cmd(profile_dir, "odp", convert_dir, input);
+    to_odp.stdout(Stdio::null()).stderr(Stdio::null());
     let _ = run_command(&mut to_odp);
     if !odp_path.exists() {
         bail!("Failed to convert {} to ODP", input.display());
     }
-    let mut odp_to_pdf = Command::new("soffice");
-    odp_to_pdf
-        .arg(format!("-env:UserInstallation={}", profile))
-        .arg("--invisible")
-        .arg("--headless")
-        .arg("--norestore")
-        .arg("--convert-to")
-        .arg("pdf")
-        .arg("--outdir")
-        .arg(convert_dir)
-        .arg(&odp_path)
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
+
+    let mut odp_to_pdf = soffice_convert_cmd(profile_dir, "pdf", convert_dir, &odp_path);
+    odp_to_pdf.stdout(Stdio::null()).stderr(Stdio::null());
     let _ = run_command(&mut odp_to_pdf);
     if pdf_path.exists() {
         return Ok(pdf_path);
     }
     bail!("Failed to produce PDF for {}", input.display())
-}
-
-pub fn run_command(command: &mut Command) -> Result<()> {
-    let status = command.status()?;
-    if !status.success() {
-        bail!("command failed with status {:?}", status.code());
-    }
-    Ok(())
 }
 
 pub fn run_command_timeout(command: &mut Command, timeout: Duration) -> Result<()> {
@@ -1600,14 +1564,6 @@ pub fn run_command_timeout(command: &mut Command, timeout: Duration) -> Result<(
         }
         thread::sleep(Duration::from_millis(100));
     }
-}
-
-pub fn run_command_capture(command: &mut Command) -> Result<String> {
-    let output = command.output()?;
-    if !output.status.success() {
-        bail!("{}", String::from_utf8_lossy(&output.stderr));
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 pub fn resolve_input_paths(input_files: &[String], input_dir: Option<&str>) -> Result<Vec<PathBuf>> {

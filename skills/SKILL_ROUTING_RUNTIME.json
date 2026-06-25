@@ -1335,7 +1335,14 @@
         "顶会标准改稿",
         "顶刊标准",
         "顶刊标准改稿",
-        "paper-workbench"
+        "paper-workbench",
+        "$paper-writing",
+        "paper writing",
+        "prose ladder",
+        "section rewrite",
+        "story card",
+        "润色落笔",
+        "论文改稿"
       ],
       "project",
       "skills/paper-workbench/SKILL.md",
@@ -1384,50 +1391,6 @@
       [
         "git push"
       ]
-    ],
-    [
-      "paper-writing",
-      "L2",
-      "owner",
-      "none",
-      "P2",
-      "Prose-chain paper writing lane: story card, section rewrite plan, and revised prose for the active paper under $paper-workbench front door.",
-      "preferred",
-      [
-        "$paper-writing",
-        "paper writing",
-        "prose ladder",
-        "section rewrite",
-        "story card",
-        "润色落笔",
-        "论文改稿"
-      ],
-      "project",
-      "skills/paper-workbench/SKILL.md",
-      [
-        "claude",
-        "codex",
-        "cursor",
-        "opencode"
-      ],
-      "skill",
-      [],
-      "Prose-chain paper writing: story card, section rewrite, revised prose",
-      null,
-      null,
-      null,
-      null,
-      "low",
-      [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep"
-      ],
-      null,
-      "conditional",
-      null
     ],
     [
       "pdf",
@@ -2258,7 +2221,7 @@
       "gate",
       "artifact",
       "P1",
-      "Create and edit presentation, PPT, PPTX, and slide deck files.",
+      "Route presentation, PPT, PPTX, and slide deck tasks.",
       "required",
       [
         "PPT",
@@ -2345,7 +2308,9 @@
       null,
       null,
       null,
-      null,
+      {
+        "alias_for": "primary-runtime/spreadsheets"
+      },
       "low",
       [
         "Read",
@@ -2397,7 +2362,7 @@
       "Guide research statistics: test choice, effect sizes, interpretation",
       null,
       null,
-      null,
+      "write code software unit debug review",
       {
         "platforms": [
           "supported"
@@ -2678,7 +2643,6 @@
         "visual review",
         "图表导出",
         "图表截图",
-        "看图",
         "visual-review",
         "/visual-review"
       ],
