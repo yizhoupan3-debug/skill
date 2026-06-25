@@ -87,11 +87,41 @@ research_harness::verification::statistical::check_multiple_comparison_correctio
 - statistical-analysis skill：[`../statistical-analysis/SKILL.md`](../statistical-analysis/SKILL.md)（统计方法选择与解读的知识库）
 - statistical-analysis 因果与预注册：[`../statistical-analysis/references/causal-prereg.md`](../statistical-analysis/references/causal-prereg.md)
 
-## Integration
+## Integration Contract
 
-前门 skill 在以下时机内联调用本 skill：
+### Trigger
 
-- **research-execution**：实验结果分析完成后，审计统计报告
-- **paper-workbench**：结果章节写完后，做统计正确性门禁检查
+| Caller | When | Blocking | Call mode |
+|--------|------|----------|-----------|
+| `research-execution` | experiment results analysis complete, before conclusion | Yes (FAIL blocks research conclusion) | Inline |
+| `paper-workbench` | results section written, before submission gate | Yes (FAIL blocks submission readiness) | Inline |
 
-调用方式：按验证清单逐项执行，FAIL 项作为 blocker 回写前门 skill。
+### Input
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `stat_results` | `Vec<StatResult>` | yes | Table of {test_type, mean, sd, n, p_value, effect_size} |
+| `raw_data` | `Vec<f64>[]` | no | Original data arrays for p-value recomputation (omit = skip check #1) |
+| `num_comparisons` | `u32` | no | Number of comparisons for MCP check (omit = auto-detect from stat_results) |
+
+### Output
+
+```json
+{
+  "status": "PASS" | "FAIL" | "WARN",
+  "checks": [
+    { "name": "p_value_recomputation", "status": "PASS" | "SKIP" | "FAIL" | "WARN", "detail": "...", "recomputed_p": 0.023 },
+    { "name": "grim_test", "status": "PASS" | "FAIL", "detail": "..." },
+    { "name": "effect_size_reporting", "status": "PASS" | "WARN", "detail": "..." },
+    { "name": "multiple_comparison_correction", "status": "PASS" | "FAIL" | "SKIP", "detail": "..." },
+    { "name": "assumption_checks", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." }
+  ],
+  "blockers": ["GRIM test failed: mean=4.3, N=42 → last-digit incompatibility"]
+}
+```
+
+### Failure propagation
+
+- **PASS**: caller continues normally.
+- **WARN**: caller continues with annotation in evidence map.
+- **FAIL** (blocking caller): caller MUST NOT advance to next stage; blocker list is returned to user or upstream orchestrator.

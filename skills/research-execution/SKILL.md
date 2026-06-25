@@ -74,9 +74,9 @@ Start by classifying the task into one or more lanes:
 
 - `experiment_design`: variables, controls, ablations, baselines, metrics, sample size, and failure criteria.
 - `math_verification`: assumptions, derivation witnesses, theorem/lemma dependencies, and checker options.
-- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_quality_gate` with `external_mode=modeling` + [architecture.md](../../docs/architecture.md) section F.
+- `math_modeling`: build/check a `model_spec` (variables, equations, closures, nondimensional groups, regime chart); multi-round -> `framework_quality_gate` with `external_mode=modeling` + [math-reasoning-harness.md §F](../../docs/math-reasoning-harness.md#f-数学建模集成).
 - `code_verification`: implementation audit, tests, deterministic repro, and benchmark commands.
-- `reproducibility`: environment, data/versioning, seeds, configs, and artifact trace.
+- `reproducibility`: delegate to `$experiment-reproducibility` (L3) for execution (environment, data/versioning, seeds, configs, artifact trace) and `$reproducibility-verification` (L4) for audit.
 
 Prefer the smallest lane set that can answer the user's real question. If the
 task requires discovery or literature work, hand off to `research-discovery`
@@ -120,7 +120,7 @@ literature lanes, pause and hand off to `research-discovery`:
 | Method correctness / derivation check | `math_verification` | -- |
 | Equation building / dimensional analysis | `math_modeling` | -- |
 | Implementation audit / tests / repro | `code_verification` | -- |
-| Environment / versioning / artifact trace | `reproducibility` | -- |
+| Environment / versioning / artifact trace | -- | `$experiment-reproducibility` (execution) + `$reproducibility-verification` (audit) |
 | Literature / prior-art / dataset lookup | -- | `research-discovery` -> `external_research` |
 | Theory landscape / math background map | -- | `research-discovery` -> `math_background_inquiry` |
 | Manuscript-level work | -- | `$paper-workbench` |
@@ -144,7 +144,7 @@ workbench:
 | Math verification (checker, witnesses) | Primary | -- |
 | Math modeling (equations, closures, nondimensional) | Primary | -- |
 | Code verification (audit, tests, benchmarks) | Primary | -- |
-| Reproducibility (env, seeds, artifact trace) | Primary | -- |
+| Reproducibility (env, seeds, artifact trace) | Delegates to `$experiment-reproducibility` (L3) | -- |
 | Literature / prior-art retrieval | -- | Primary |
 | Theory landscape / math background inquiry | -- | Primary |
 | Research question framing | Advisory | Primary |
@@ -182,4 +182,5 @@ When a task spans both skills, the recommended flow is:
 - **Verification skills** (load when lane requires):
   - `math_verification` / `math_modeling` lane → [`../formal-verification/SKILL.md`](../formal-verification/SKILL.md)
   - `reproducibility` lane → [`../reproducibility-verification/SKILL.md`](../reproducibility-verification/SKILL.md)
-  - `code_verification` lane → [`../structure-verification/SKILL.md`](../structure-verification/SKILL.md)
+  - `code_verification` lane → [`../code-review-deep/SKILL.md`](../code-review-deep/SKILL.md)
+  - `prose` lane (when research output contains expository text) → [`../prose-verification/SKILL.md`](../prose-verification/SKILL.md)

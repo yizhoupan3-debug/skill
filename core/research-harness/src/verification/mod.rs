@@ -6,6 +6,7 @@ pub mod inequality;
 pub mod lean_bridge;
 pub mod literature;
 pub mod prose_qc;
+pub mod reproducibility;
 pub mod statistical;
 pub mod structure;
 pub mod symbolic;

@@ -83,11 +83,41 @@ research_harness::verification::literature::verify_claim_coverage(claims, refere
 - paperplain MCP：`mcp__paperplain__fetch_paper` / `mcp__paperplain__find_paper_by_title` / `mcp__paperplain__search_research`
 - claim-evidence 阶梯：[`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
 
-## Integration
+## Integration Contract
 
-前门 skill 在以下时机内联调用本 skill：
+### Trigger
 
-- **research-discovery**：文献综述完成后，验证引用可靠性与覆盖度
-- **paper-workbench**：投稿前对参考文献做完整性审查
+| Caller | When | Blocking | Call mode |
+|--------|------|----------|-----------|
+| `research-discovery` | literature survey lane completes, before synthesis | No (advisory — coverage gap warns but does not block) | Inline |
+| `paper-workbench` | submission gate: reference integrity check | Yes (FAIL blocks submission readiness) | Inline |
 
-调用方式：将验证清单逐项执行，结果回写前门 skill 的验证报告区段。
+### Input
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `references` | `Vec<BibTeX\|DOI\|Title>` | yes | Literature entries to verify |
+| `claim_ledger` | `Vec<Claim>` | no | Claim list for alignment matrix (omit = skip check #2) |
+| `coverage_keywords` | `Vec<String>` | no | Keywords for coverage scoring (omit = skip check #4) |
+
+### Output
+
+```json
+{
+  "status": "PASS" | "FAIL" | "WARN",
+  "checks": [
+    { "name": "doi_reachability", "status": "PASS" | "FAIL" | "WARN", "detail": "..." },
+    { "name": "claim_alignment", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
+    { "name": "contradiction_sweep", "status": "PASS" | "FAIL", "detail": "..." },
+    { "name": "closest_work", "status": "PASS" | "FAIL", "detail": "..." }
+  ],
+  "blockers": ["DOI 10.xxxx/yyyy returned 404"],
+  "metrics": { "coverage_score": 85 }
+}
+```
+
+### Failure propagation
+
+- **PASS**: caller continues normally.
+- **WARN**: caller continues with annotation in evidence map.
+- **FAIL** (blocking caller): caller MUST NOT advance to next stage; blocker list is returned to user or upstream orchestrator.

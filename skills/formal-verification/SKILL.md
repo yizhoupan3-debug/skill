@@ -88,12 +88,46 @@ math_backend_available()                                     # 后端可用状�
 ## References
 
 - math-derivation skill：[`../math-derivation/SKILL.md`](../math-derivation/SKILL.md)（推导能力与符号计算知识库）
-- framework formal_toolchain（Rust）：`core/runtime-core/src/contracts/formal_toolchain.rs`（CAS/SMT token 检测）
+- framework formal_toolchain（Rust）：`core/runtime-core-contracts/src/formal_toolchain.rs`（CAS/SMT token 检测）
 
-## Integration
+## Integration Contract
 
-前门 skill 在以下时机内联调用本 skill：
+### Trigger
 
-- **research-execution**：数学推导完成后，做形式化门禁检查
+| Caller | When | Blocking | Call mode |
+|--------|------|----------|-----------|
+| `research-execution` | math_verification / math_modeling lane completes, before conclusion | Yes (FAIL blocks math conclusion) | Inline + MCP tool |
 
-调用方式：将推导步骤序列传入，按验证清单逐项执行，FAIL 项作为 blocker 回写。
+### Input
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `derivation_steps` | `Vec<LatexExpr>` | yes | Step-by-step LaTeX or symbolic expressions |
+| `known_axioms` | `Vec<String>` | no | Known constraints / assumptions / axioms |
+| `variable_dimensions` | `Vec<{name, dim}>` | no | Physical dimension table (omit = skip check #7) |
+
+### Output
+
+```json
+{
+  "status": "PASS" | "FAIL" | "WARN",
+  "checks": [
+    { "name": "inequality_consistency", "status": "PASS" | "SKIP" | "FAIL", "detail": "Z3 returned sat" },
+    { "name": "asymptotic_chain", "status": "PASS" | "WARN", "detail": "..." },
+    { "name": "proof_dag", "status": "PASS" | "FAIL", "detail": "..." },
+    { "name": "backend_available", "status": "PASS" | "FAIL", "detail": "..." },
+    { "name": "cas_identity", "status": "PASS" | "SKIP" | "FAIL", "detail": "simplify(expr) = 0" },
+    { "name": "witness_consistency", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
+    { "name": "dimensional_analysis", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
+    { "name": "step_dependency", "status": "PASS" | "FAIL", "detail": "..." }
+  ],
+  "blockers": ["Step 7 depends on undefined Step 12"]
+}
+```
+
+### Failure propagation
+
+- **PASS**: caller continues normally.
+- **WARN**: caller continues with annotation.
+- **FAIL** (blocking caller): caller MUST NOT advance to next stage; blocker list is returned to user or upstream orchestrator.
+- **Backend unavailable** (`backend_available` = FAIL): all CAS/SMT checks degrade to WARN and manual review is required.

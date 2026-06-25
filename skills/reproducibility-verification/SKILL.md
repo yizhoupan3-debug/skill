@@ -61,15 +61,26 @@ trigger_hints:
 
 ## Verification Checklist
 
-注：可复现性验证暂无独立 Rust 实现，使用通用检查流程。
+Rust 实现：`research_harness::verification::reproducibility`（通过 MCP tool 或直接调用）
 
 ```
-# 手动检查清单：
-1. grep -r 'seed\|random_state\|set_seed' src/ — 确认种子设置
-2. diff <(run1_hash) <(run2_hash) — 确定性重跑
-3. 检查 lock file（Pipfile.lock / poetry.lock / Cargo.lock）存在且同步
-4. 检查数据版本化（DVC / Git LFS）
-5. 加载 checkpoint 并验证无报错
+# 种子检查：
+research_harness::verification::reproducibility::check_seed_set(experiment_dir)
+
+# 确定性重跑：
+research_harness::verification::reproducibility::check_deterministic_rerun(&[run1_path, run2_path])
+
+# 环境可复现检查：
+research_harness::verification::reproducibility::check_environment_reproducible(project_dir)
+
+# 数据版本化检查：
+research_harness::verification::reproducibility::check_data_versioned(project_dir)
+
+# Checkpoint 可恢复检查：
+research_harness::verification::reproducibility::check_checkpoint_recoverable(experiment_dir)
+
+# 全量审计：
+research_harness::verification::reproducibility::run_reproducibility_audit(experiment_dir, run_paths)
 ```
 
 | # | 检查名 | PASS 条件 |
@@ -86,11 +97,41 @@ trigger_hints:
 - experiment-reproducibility 模板：[`../experiment-reproducibility/references/templates.md`](../experiment-reproducibility/references/templates.md)
 - 科研纪录最低清单：[`../experiment-reproducibility/references/research-record-minimum.md`](../experiment-reproducibility/references/research-record-minimum.md)
 
-## Integration
+## Integration Contract
 
-前门 skill 在以下时机内联调用本 skill：
+### Trigger
 
-- **research-execution**：实验运行完成后，验证可复现性
-- **paper-workbench**：投稿前对实验部分做可复现性门禁
+| Caller | When | Blocking | Call mode |
+|--------|------|----------|-----------|
+| `research-execution` | experiment run completes, at reproducibility lane handoff | Yes (FAIL blocks experiment record finalization) | Inline |
+| `paper-workbench` | submission gate: reproducibility section review | Yes (FAIL blocks submission readiness) | Inline |
 
-调用方式：按验证清单逐项执行，FAIL 项作为 blocker 回写前门 skill。
+### Input
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `experiment_dir` | `Path` | yes | Root directory of experiment code |
+| `run_logs` | `Vec<Path>` | no | Previous run output paths for hash comparison |
+| `env_config_files` | `Vec<Path>` | no | Lockfile / environment spec paths |
+
+### Output
+
+```json
+{
+  "status": "PASS" | "FAIL" | "WARN",
+  "checks": [
+    { "name": "seed_set", "status": "PASS" | "FAIL", "detail": "seed=42 found at src/train.py:15" },
+    { "name": "deterministic_rerun", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
+    { "name": "environment_reproducible", "status": "PASS" | "FAIL", "detail": "..." },
+    { "name": "data_versioned", "status": "PASS" | "WARN", "detail": "..." },
+    { "name": "checkpoint_recoverable", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." }
+  ],
+  "blockers": ["No seed set in experiment code"]
+}
+```
+
+### Failure propagation
+
+- **PASS**: caller continues normally.
+- **WARN**: caller continues with annotation in reproducibility report.
+- **FAIL** (blocking caller): caller MUST NOT finalize experiment record or advance to next stage; blocker list returned to user.

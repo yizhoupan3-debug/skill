@@ -90,10 +90,41 @@ research_harness::verification::structure::check_figure_references(tex_path)
 - claim-evidence-ladder：[`../paper-workbench/references/claim-evidence-ladder.md`](../paper-workbench/references/claim-evidence-ladder.md)
 - claim-spine-and-section-contract：[`../paper-workbench/references/claim-spine-and-section-contract.md`](../paper-workbench/references/claim-spine-and-section-contract.md)
 
-## Integration
+## Integration Contract
 
-前门 skill 在以下时机内联调用本 skill：
+### Trigger
 
-- **paper-workbench**：LaTeX 项目结构完成后、投稿前的结构完整性门禁
+| Caller | When | Blocking | Call mode |
+|--------|------|----------|-----------|
+| `paper-workbench` | LaTeX project structure finalized, before submission gate | Yes (FAIL blocks submission readiness) | Inline |
 
-调用方式：按验证清单逐项执行，FAIL 项作为 blocker 回写前门 skill。
+### Input
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `tex_dir` | `Path` | yes | LaTeX project root (containing main.tex) |
+| `claim_ledger` | `Vec<Claim>` | no | Claim list for evidence alignment (omit = skip check #3) |
+| `venue_spec` | `VenueFormat` | no | Target venue format constraints (omit = skip check #4) |
+
+### Output
+
+```json
+{
+  "status": "PASS" | "FAIL" | "WARN",
+  "checks": [
+    { "name": "latex_compilation", "status": "PASS" | "FAIL", "detail": "latexmk exit 0" },
+    { "name": "cross_reference_consistency", "status": "PASS" | "FAIL", "detail": "..." },
+    { "name": "claim_evidence_alignment", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
+    { "name": "format_compliance", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
+    { "name": "notation_consistency", "status": "PASS" | "FAIL", "detail": "..." },
+    { "name": "equation_numbering", "status": "PASS" | "FAIL", "detail": "..." }
+  ],
+  "blockers": ["LaTeX compilation failed: undefined control sequence at line 342"]
+}
+```
+
+### Failure propagation
+
+- **PASS**: caller continues normally.
+- **WARN**: caller continues with annotation in structure report.
+- **FAIL** (blocking caller): caller MUST NOT advance to submission; blocker list returned to upstream orchestrator.

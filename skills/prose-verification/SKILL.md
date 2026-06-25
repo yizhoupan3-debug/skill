@@ -94,10 +94,42 @@ research_harness::verification::prose_qc::count_hedging_words(text)
 - prose-exemplars：[`../paper-workbench/references/prose-exemplars.md`](../paper-workbench/references/prose-exemplars.md)
 - research-language-norms：[`../paper-workbench/references/research-language-norms.md`](../paper-workbench/references/research-language-norms.md)
 
-## Integration
+## Integration Contract
 
-前门 skill 在以下时机内联调用本 skill：
+### Trigger
 
-- **paper-workbench**：初稿完成后、投稿前的文稿质量门禁
+| Caller | When | Blocking | Call mode |
+|--------|------|----------|-----------|
+| `paper-workbench` | draft complete, before submission gate | Yes (FAIL blocks submission readiness) | Inline |
+| `research-execution` | experiment narrative / research prose produced | No (advisory — WARN/FAIL annotates but does not block) | Inline |
 
-调用方式：按验证清单逐项执行，FAIL 项回写前门 skill 供 writer lane 修正。
+### Input
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `text` | `String` | yes | Full manuscript or research prose (LaTeX / Markdown) |
+| `glossary` | `Vec<{term, preferred_term}>` | no | Terminology glossary (omit = skip check #1) |
+| `claim_ledger` | `Vec<Claim>` | no | Claim list for drift detection (omit = skip check #3) |
+| `style_guide` | `String` | no | Target venue style guide (omit = skip check #2) |
+
+### Output
+
+```json
+{
+  "status": "PASS" | "FAIL" | "WARN",
+  "checks": [
+    { "name": "terminology_consistency", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
+    { "name": "style_guide_compliance", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
+    { "name": "claim_drift", "status": "PASS" | "SKIP" | "FAIL", "detail": "..." },
+    { "name": "language_register", "status": "PASS" | "WARN" | "FAIL", "detail": "..." },
+    { "name": "hedging_appropriateness", "status": "PASS" | "WARN", "detail": "..." }
+  ],
+  "blockers": ["Claim drift: §3.1 claim 'outperforms SOTA by 5%' != ledger 'outperforms SOTA by 3%'"]
+}
+```
+
+### Failure propagation
+
+- **PASS**: caller continues normally.
+- **WARN**: caller continues with annotation in evidence map / prose report.
+- **FAIL** (blocking caller for paper-workbench, advisory for research-execution): paper-workbench MUST NOT advance; research-execution continues with blocker noted.
