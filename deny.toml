@@ -1,6 +1,6 @@
 [advisories]
 vulnerability = "deny"
-unmaintained = "warn"
+unmaintained = "deny"
 notice = "warn"
 
 [licenses]
@@ -16,4 +16,4 @@ allow = [
 unlicensed = "deny"
 
 [bans]
-multiple-versions = "warn"
+multiple-versions = "deny"

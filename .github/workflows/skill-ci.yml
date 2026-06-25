@@ -185,6 +185,9 @@ jobs:
       - name: Workspace compile check
         run: cargo test --workspace --no-run 2>&1 | tail -5
 
+      - name: Doc-test workspace (exclude harness crate — no lib target)
+        run: cargo test --doc --workspace --exclude skill-rust-test-harness 2>&1 | tail -5
+
   feature-matrix:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -213,6 +216,16 @@ jobs:
           else
             cargo test --workspace --no-default-features --features "${{ matrix.features }}"
           fi
+
+  # ── MSRV pin check ──
+  msrv:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.85
+      - name: Check workspace compiles at MSRV (1.85)
+        run: cargo check --workspace 2>&1 | tail -5
 
   full-workspace-test:
     runs-on: ubuntu-latest
@@ -262,6 +275,25 @@ jobs:
 
       - name: Routing regression gate (route_accuracy >= 0.95)
         run: bash scripts/ci/check-routing-regression.sh
+
+  # ── Cross-host test on macOS (host features not covered by ubuntu feature-matrix) ──
+  cross-host-macos:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        features:
+          - "host-cursor"
+          - "host-claude"
+          - "host-codex"
+          - "host-opencode"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: "Build + test host feature: ${{ matrix.features }}"
+        run: cargo test --workspace --no-default-features --features "${{ matrix.features }}"
 
   # ── Miri memory safety check (pure-logic crates only) ──
   miri:
@@ -393,6 +425,7 @@ jobs:
           cargo bench -p tool-routing-engine --bench routing_bench -- --threshold 5
           cargo bench -p core-state-utils --bench jsonl_bench -- --threshold 5
           cargo bench -p fr-utils --bench stdio_serde_bench -- --threshold 5
+          SEARCH_BENCH=1 cargo bench -p router-rs --bench search_bench -- --threshold 5
 
       - name: Summary
         run: echo "✅ All benchmarks passed (regression ≤ 5%)"
