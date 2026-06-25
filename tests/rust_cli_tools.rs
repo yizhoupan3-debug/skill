@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 mod common;
 
 use common::{assert_success, json_from_output, project_root, read_text, run};

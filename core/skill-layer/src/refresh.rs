@@ -24,14 +24,6 @@ pub struct SkillsCommand {
     pub generate: Option<String>,
 }
 
-/// Validation report from `validate_skills`.
-pub struct ValidationReport {
-    pub errors: Vec<String>,
-    pub warnings: Vec<String>,
-    pub disk_count: usize,
-    pub runtime_count: usize,
-}
-
 // ---------------------------------------------------------------------------
 // validate
 // ---------------------------------------------------------------------------

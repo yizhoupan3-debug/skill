@@ -176,7 +176,6 @@ fn match_single_star_ext(path: &std::path::Path, path_str: &str, prefix: &str, e
     path_str.starts_with(prefix_trimmed) && file_name.ends_with(ext)
 }
 
-#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

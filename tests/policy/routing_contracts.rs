@@ -1,5 +1,4 @@
 // Test helper functions that may not all be called from every test.
-#![allow(dead_code)]
 
 use crate::common::{
     CANONICAL_HOST_IDS, RETIRED_HOST_IDS, assert_canonical_closed_set_host_ids, output_text,

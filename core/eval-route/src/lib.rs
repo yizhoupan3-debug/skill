@@ -446,4 +446,132 @@ mod tests {
         assert!(metrics.iter().any(|v| v == "route_accuracy"));
         assert!(metrics.iter().any(|v| v == "wrong_owner_rate"));
     }
+
+    // -- load_eval_cases --
+
+    #[test]
+    fn load_eval_cases_missing_file_returns_error() {
+        let result = load_eval_cases(std::path::Path::new(
+            "/tmp/non_existent_file_xyz.json",
+        ));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_eval_cases_invalid_json_returns_error() {
+        let dir = tempfile::TempDir::new().expect("create temp dir");
+        let path = dir.path().join("invalid.json");
+        std::fs::write(&path, r#"{"invalid": "json"#).expect("write file");
+        let result = load_eval_cases(&path);
+        assert!(result.is_err());
+    }
+
+    // -- filter_records_for_host --
+
+    #[test]
+    fn filter_records_for_host_filters_by_host_id() {
+        let mut record_a = make_record("skill-a", "L3", "owner", "none", &["hint"]);
+        record_a.host_platforms = vec!["codex".to_string()];
+        let mut record_b = make_record("skill-b", "L3", "owner", "none", &["hint"]);
+        record_b.host_platforms = vec!["cursor".to_string()];
+        let records = vec![record_a, record_b];
+
+        let filtered_all =
+            filter_records_for_host(&records, None).expect("filter all");
+        assert_eq!(filtered_all.len(), 2);
+
+        let filtered_codex =
+            filter_records_for_host(&records, Some("codex")).expect("filter codex");
+        assert_eq!(filtered_codex.len(), 1);
+        assert_eq!(filtered_codex[0].slug, "skill-a");
+
+        let filtered_cursor =
+            filter_records_for_host(&records, Some("cursor")).expect("filter cursor");
+        assert_eq!(filtered_cursor.len(), 1);
+        assert_eq!(filtered_cursor[0].slug, "skill-b");
+    }
+
+    // -- wrong_overlay_rate / wrong_layer_rate --
+
+    #[test]
+    fn wrong_overlay_rate_detected() {
+        let records = vec![make_record(
+            "gitx", "L0", "owner", "none", &["提交代码", "git"],
+        )];
+        let cases = vec![EvalCasePayload {
+            id: "overlay-fail".to_string(),
+            _category: "wrong-overlay".to_string(),
+            task: "xyzzynomatch_12345_nonexistent".to_string(),
+            expected_overlay: Some("overlay_skill".to_string()),
+            ..Default::default()
+        }];
+        let report = evaluate_route_cases(&records, &cases);
+        assert_eq!(report.failed, 1);
+        assert!(report.wrong_overlay_rate > 0.0);
+        assert!(report.failures.iter().any(|f| f.field == "overlay_skill"));
+    }
+
+    #[test]
+    fn wrong_layer_rate_detected() {
+        let records = vec![make_record(
+            "gitx", "L0", "owner", "none", &["提交代码", "git"],
+        )];
+        let cases = vec![EvalCasePayload {
+            id: "layer-fail".to_string(),
+            _category: "wrong-layer".to_string(),
+            task: "提交代码".to_string(),
+            expected_owner: Some("gitx".to_string()),
+            expected_layer: Some("WRONG_LAYER".to_string()),
+            ..Default::default()
+        }];
+        let report = evaluate_route_cases(&records, &cases);
+        assert_eq!(report.failed, 1);
+        assert!(report.wrong_layer_rate > 0.0);
+        assert!(report.failures.iter().any(|f| f.field == "layer"));
+    }
+
+    // -- run_eval_route 基本路径 --
+
+    #[test]
+    fn run_eval_route_basic_path() {
+        let dir = tempfile::TempDir::new().expect("create temp dir");
+
+        let cases_path = dir.path().join("eval_cases.json");
+        let cases_json = serde_json::json!({
+            "cases": [
+                {
+                    "id": "c1",
+                    "task": "提交代码",
+                    "expected_owner": "gitx",
+                    "expected_layer": "L0"
+                }
+            ]
+        });
+        std::fs::write(&cases_path, serde_json::to_string_pretty(&cases_json).unwrap())
+            .expect("write eval_cases.json");
+
+        let runtime_path = dir.path().join("SKILL_ROUTING_RUNTIME.json");
+        let runtime_json = serde_json::json!({
+            "keys": [
+                "slug", "layer", "owner", "gate", "priority", "description",
+                "session_start", "trigger_hints", "source", "skill_path",
+                "host_platforms", "kind", "skill_flags"
+            ],
+            "skills": [
+                [
+                    "gitx", "L0", "owner", "none", "P1",
+                    "git 代码提交", "preferred", ["提交代码", "git"], "", "",
+                    ["codex"], "skill", []
+                ]
+            ]
+        });
+        std::fs::write(&runtime_path, serde_json::to_string_pretty(&runtime_json).unwrap())
+            .expect("write SKILL_ROUTING_RUNTIME.json");
+
+        let report = run_eval_route(&cases_path, Some(&runtime_path))
+            .expect("run_eval_route should succeed");
+        assert_eq!(report.total_cases, 1);
+        assert_eq!(report.passed, 1);
+        assert_eq!(report.failed, 0);
+    }
 }

@@ -8,7 +8,7 @@ workspace = true
 
 [features]
 default = []
-codegraph = []
+codegraph = ["dep:codegraph-rs"]
 test-support = []
 
 [dependencies]
@@ -30,6 +30,9 @@ routing-engine = { path = "../routing-engine" }
 host-projection = { path = "../host-projection" }
 # L4 (runtime infrastructure)
 runtime-infra = { path = "../runtime-infra" }
+
+# B10 codegraph-rs (feature-gated)
+codegraph-rs = { path = "../codegraph-rs", optional = true }
 
 # workspace
 chrono.workspace = true

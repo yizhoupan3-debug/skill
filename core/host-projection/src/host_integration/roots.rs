@@ -69,7 +69,6 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value> {
             artifact_root,
             host_homes,
             to,
-            home,
             scope,
             bootstrap_output_dir,
             skip_default_bootstrap,
@@ -84,7 +83,7 @@ pub fn run_host_integration_payload(cli: Cli) -> Result<Value> {
                 project_root,
                 artifact_root,
                 host_homes,
-                home,
+                home: None,
                 scope,
                 to: selected,
                 dry_run: false,
@@ -193,11 +192,10 @@ pub fn resolve_framework_root(explicit: Option<&Path>) -> Result<PathBuf> {
     if let Some(root) = try_framework_root_from_current_exe() {
         return Ok(root);
     }
-    Err(
+    Err(FrameworkError::validation(
         "missing framework_root; pass --framework-root, set SKILL_FRAMEWORK_ROOT, \
          or set ROUTER_RS_CURSOR_WORKSPACE_ROOT / CURSOR_WORKSPACE_ROOT to the framework checkout when cwd is outside the repo"
-            .to_string(),
-    )
+    ))
 }
 
 pub fn resolve_projection_framework_root(explicit: Option<&Path>) -> Result<PathBuf> {
@@ -492,9 +490,9 @@ pub fn validate_mcp_command_binary(cmd: &str, framework_root: Option<&Path>) -> 
     }
     if cmd == "router-rs-cli" {
         if which::which("router-rs-cli").is_err() {
-            return Err(
-                "router-rs-cli is not found on system PATH; run `router-rs-cli self install`".to_string(),
-            );
+            return Err(FrameworkError::validation(
+                "router-rs-cli is not found on system PATH; run `router-rs-cli self install`",
+            ));
         }
         return Ok(());
     }

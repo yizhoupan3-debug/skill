@@ -45,7 +45,7 @@ pub fn build_default_bootstrap_payload(
     artifact_source_dir: Option<&Path>,
     workspace_override: Option<&str>,
     _top: usize,
-) -> Result<Value, String> {
+) -> std::result::Result<Value, String> {
     let repo_root = repo_root
         .canonicalize()
         .unwrap_or_else(|_| repo_root.to_path_buf());
@@ -113,7 +113,7 @@ pub fn build_default_continuity_bootstrap(
     repo_root: &Path,
     artifact_source_dir: Option<&Path>,
     task_id: Option<&str>,
-) -> Result<Value, String> {
+) -> std::result::Result<Value, String> {
     let mut args = vec!["framework".to_string(), "snapshot".to_string()];
     if let Some(path) = artifact_source_dir {
         args.push("--artifact-source-dir".to_string());
@@ -165,7 +165,7 @@ pub fn scratch_artifact_root(repo_root: &Path, run_id: Option<&str>) -> PathBuf 
         .unwrap_or(root)
 }
 
-pub fn move_path(source: &Path, destination: &Path) -> Result<String, String> {
+pub fn move_path(source: &Path, destination: &Path) -> std::result::Result<String, String> {
     let mut resolved_destination = destination.to_path_buf();
     if resolved_destination.exists() {
         let suffix = framework_kernel::time::current_local_timestamp().replace(':', "").replace('+', "_");
@@ -264,7 +264,7 @@ pub fn destination_for_current_artifact(
 pub fn plan_current_artifact_clutter_migrations(
     repo_root: &Path,
     active_task_id: &str,
-) -> Result<Vec<MigrationPlan>, String> {
+) -> std::result::Result<Vec<MigrationPlan>, String> {
     let current_root = repo_root.join("artifacts").join("current");
     if !current_root.exists() {
         return Ok(Vec::new());
@@ -302,7 +302,7 @@ pub fn plan_current_artifact_clutter_migrations(
 pub fn migrate_current_artifact_clutter(
     repo_root: &Path,
     active_task_id: &str,
-) -> Result<Vec<String>, String> {
+) -> std::result::Result<Vec<String>, String> {
     let plans = plan_current_artifact_clutter_migrations(repo_root, active_task_id)?;
     let mut moved = Vec::new();
     for plan in plans {
@@ -349,7 +349,7 @@ pub fn bootstrap_payload_matches_contract(payload: &Value, repo_root: &Path) -> 
 pub fn ensure_default_bootstrap(
     repo_root: &Path,
     output_dir: Option<&Path>,
-) -> Result<Value, String> {
+) -> std::result::Result<Value, String> {
     let resolved_output_dir = output_dir
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_bootstrap_output_dir(repo_root));
@@ -415,7 +415,7 @@ pub fn ensure_default_bootstrap(
     }))
 }
 
-pub fn validate_default_bootstrap(bootstrap_path: &Path, repo_root: &Path) -> Result<bool, String> {
+pub fn validate_default_bootstrap(bootstrap_path: &Path, repo_root: &Path) -> std::result::Result<bool, String> {
     let path = normalize_path(bootstrap_path)?;
     let repo_root = normalize_path(repo_root)?;
     let Some(content) = read_text_if_exists(&path)? else {
@@ -425,7 +425,7 @@ pub fn validate_default_bootstrap(bootstrap_path: &Path, repo_root: &Path) -> Re
     Ok(bootstrap_payload_matches_contract(&payload, &repo_root))
 }
 
-pub fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
+pub fn ensure_config_file(config_path: &Path) -> std::result::Result<bool, String> {
     if let Some(parent) = config_path.parent() {
         fs::create_dir_all(parent).map_err(|err| err.to_string())?;
     }
@@ -436,7 +436,7 @@ pub fn ensure_config_file(config_path: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
-pub fn ensure_hooks_feature_disabled(config_path: &Path) -> Result<bool, String> {
+pub fn ensure_hooks_feature_disabled(config_path: &Path) -> std::result::Result<bool, String> {
     const HOOKS_DISABLED_LINE: &str = "hooks = false";
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     if let Some((start, end)) = find_named_block_bounds(&content, "[features]") {
@@ -493,7 +493,7 @@ pub fn find_named_block_bounds(content: &str, marker: &str) -> Option<(usize, us
     start.map(|value| (value, content.len()))
 }
 
-pub fn ensure_tui_status_line(config_path: &Path) -> Result<bool, String> {
+pub fn ensure_tui_status_line(config_path: &Path) -> std::result::Result<bool, String> {
     let content = read_text_if_exists(config_path)?.unwrap_or_default();
     let status_line = format_status_line();
     if let Some((start, end)) = find_tui_block_bounds(&content) {
@@ -562,7 +562,7 @@ pub fn format_status_line() -> String {
     format!("status_line = [{items}]")
 }
 
-pub fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {
+pub fn read_text_if_exists(path: &Path) -> std::result::Result<Option<String>, String> {
     match fs::read_to_string(path) {
         Ok(content) => Ok(Some(content)),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -573,7 +573,7 @@ pub fn read_text_if_exists(path: &Path) -> Result<Option<String>, String> {
 pub use core_state_utils::json_io::{write_json_if_changed, write_text_if_changed};
 
 /// Read JSON from file if it exists. Returns `Ok(None)` when file is absent.
-pub fn read_json_if_exists(path: &Path) -> Result<Option<Value>, String> {
+pub fn read_json_if_exists(path: &Path) -> std::result::Result<Option<Value>, String> {
     Ok(Some(core_state_utils::json_io::read_json_if_exists(path)))
 }
 

@@ -43,7 +43,7 @@ impl BrowserRuntime {
     fn open(&mut self, input: &Value) -> Result<Value, Value> {
         let url = required_string_arg(input, "url")?;
         rt_core_contracts::web_fetch_guard::validate_browser_open_url(&url)
-            .map_err(|e| runtime_error("SSRF_BLOCKED", &e))?;
+            .map_err(|e| runtime_error("SSRF_BLOCKED", &e.to_string()))?;
         let new_tab = optional_bool(input, "newTab").unwrap_or(false);
         let session_id = self.get_or_create_session()?;
         let tab_id = {

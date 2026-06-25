@@ -85,7 +85,6 @@ static STOPWORDS: &[&str] = &[
     "也", "很", "到", "说", "要", "去", "你", "会", "着", "没有", "看", "好", "自己", "这",
 ];
 
-#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

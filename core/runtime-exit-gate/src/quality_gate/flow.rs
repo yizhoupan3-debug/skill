@@ -3,7 +3,7 @@
 use super::*;
 
 /// stdio：`framework_quality_gate`
-pub fn framework_quality_gate(payload: Value) -> Result<Value, String> {
+pub fn framework_quality_gate(payload: Value) -> Result<Value> {
     let operation = payload
         .get("operation")
         .and_then(Value::as_str)
@@ -14,13 +14,14 @@ pub fn framework_quality_gate(payload: Value) -> Result<Value, String> {
         framework_quality_gate_impl(payload)
     } else {
         let resolved = resolve_framework_quality_gate_repo(&payload)?;
-        core_state_utils::task_write_lock::apply_task_ledger_mutation(&resolved, || {
-            framework_quality_gate_impl(payload)
-        })
+        Ok(core_state_utils::task_write_lock::apply_task_ledger_mutation(
+            &resolved,
+            || framework_quality_gate_impl(payload).map_err(String::from),
+        )?)
     }
 }
 
-fn handle_status(repo_root: &Path, task_id_override: Option<&str>) -> Result<Value, String> {
+fn handle_status(repo_root: &Path, task_id_override: Option<&str>) -> Result<Value> {
     let state = read_quality_gate_state(repo_root, task_id_override)?;
     let tid = task_id_override
         .map(|s| s.to_string())
@@ -46,7 +47,7 @@ fn handle_status(repo_root: &Path, task_id_override: Option<&str>) -> Result<Val
     Ok(resp)
 }
 
-fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Option<&str>) -> Result<Value, String> {
+fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Option<&str>) -> Result<Value> {
     let task_id = task_id_override
         .map(|s| s.to_string())
         .or_else(|| core_state::state_manager::read_primary_task_id(repo_root))
@@ -183,9 +184,9 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
         core_state::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
     {
         tracing::error!(task_id = %task_id, error = %e, "failed to append quality_gate transaction to TASK_LEDGER");
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "quality_gate failed to append transaction to TASK_LEDGER for {task_id}: {e}"
-        ));
+        )));
     }
     let goal_state_cleared =
         core_state::state_manager::deactivate_goal_for_conflict_with_quality_gate(repo_root, &task_id)?;
@@ -212,7 +213,7 @@ fn handle_start_upsert(payload: &Value, repo_root: &Path, task_id_override: Opti
     Ok(resp)
 }
 
-fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, String> {
+fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value> {
     let task_id = payload
         .get("task_id")
         .and_then(Value::as_str)
@@ -238,7 +239,7 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         .and_then(Value::as_u64)
         .unwrap_or(fr_exec::router_env_flags::router_rs_qg_max_rounds_cap());
     if round_n > max_rounds {
-        return Err(format!("round {round_n} exceeds max_rounds {max_rounds}"));
+        return Err(FrameworkError::validation(format!("round {round_n} exceeds max_rounds {max_rounds}")));
     }
 
     let close_gates_cfg = parse_close_gates(obj);
@@ -457,9 +458,9 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
         core_state::task_ledger::append_transaction_assuming_l1_held(repo_root, &task_id, tx)
     {
         tracing::error!(task_id = %task_id, error = %e, "failed to append quality_gate transaction to TASK_LEDGER");
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "quality_gate failed to append transaction to TASK_LEDGER for {task_id}: {e}"
-        ));
+        )));
     }
     core_state::task_state_aggregate::sync_task_state_aggregate_best_effort(
         repo_root, &task_id,
@@ -483,17 +484,17 @@ fn handle_append_round(payload: &Value, repo_root: &Path) -> Result<Value, Strin
     Ok(resp)
 }
 
-fn framework_quality_gate_impl(payload: Value) -> Result<Value, String> {
+fn framework_quality_gate_impl(payload: Value) -> Result<Value> {
     let repo_root = payload
         .get("repo_root")
         .and_then(Value::as_str)
         .map(PathBuf::from)
         .ok_or_else(|| "framework_quality_gate requires repo_root".to_string())?;
     if !repo_root.is_dir() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "framework_quality_gate: repo_root is not a directory: {}",
             repo_root.display()
-        ));
+        )));
     }
     let repo_root = resolve_repo_root_arg(Some(repo_root.as_path()))?;
     let operation = payload
@@ -513,8 +514,8 @@ fn framework_quality_gate_impl(payload: Value) -> Result<Value, String> {
         "status" => handle_status(&repo_root, task_id_override),
         "start" | "upsert" => handle_start_upsert(&payload, &repo_root, task_id_override),
         "append_round" => handle_append_round(&payload, &repo_root),
-        _ => Err(format!(
+        _ => Err(FrameworkError::validation(format!(
             "framework_quality_gate: unknown operation '{operation}'"
-        )),
+        ))),
     }
 }

@@ -37,7 +37,7 @@ pub fn compatibility_alias_inventory() -> Value {
 }
 
 /// Lightweight summary for `framework doctor` (full manifest regen is expensive).
-pub fn generated_artifacts_status_for_repo(repo_root: &Path) -> Result<Value, FrameworkError> {
+pub fn generated_artifacts_status_for_repo(repo_root: &Path) -> Result<Value> {
     generated_artifacts_status(Some(repo_root), Some(&repo_root.join("artifacts")), true)
 }
 
@@ -45,7 +45,7 @@ pub fn generated_artifacts_status(
     framework_root: Option<&Path>,
     artifact_root: Option<&Path>,
     skip_generator_run: bool,
-) -> Result<Value, FrameworkError> {
+) -> Result<Value> {
     let framework_root = resolve_framework_root(framework_root)?;
     let artifact_root = resolve_artifact_root(artifact_root, &framework_root)?;
     let manifest_path = framework_root.join("configs/framework/GENERATED_ARTIFACTS.json");
@@ -195,7 +195,7 @@ pub fn generated_artifacts_status(
 
 fn validate_generated_artifact_entry(
     artifact: &GeneratedArtifactManifestEntry,
-) -> Result<(), String> {
+) -> std::result::Result<(), String> {
     if Path::new(&artifact.path).is_absolute()
         || artifact.path.contains("..")
         || (artifact.path.starts_with('.') && !allowed_dot_generated_artifact(&artifact.path))
@@ -223,7 +223,7 @@ pub fn generated_artifact_drifted(
     regenerated: Option<&[u8]>,
     framework_root: &Path,
     regenerated_root: &Path,
-) -> Result<bool, String> {
+) -> std::result::Result<bool, String> {
     match compare {
         "byte-for-byte" => Ok(checked_in != regenerated),
         "normalized-text" => {
@@ -327,7 +327,7 @@ impl Drop for GeneratedArtifactTempRoot {
 pub fn prepare_generated_artifact_temp_root(
     framework_root: &Path,
     artifact_root: &Path,
-) -> Result<GeneratedArtifactTempRoot, String> {
+) -> std::result::Result<GeneratedArtifactTempRoot, String> {
     let temp_root = artifact_root
         .join("generated-artifacts-drift-check")
         .join(format!(
@@ -338,7 +338,7 @@ pub fn prepare_generated_artifact_temp_root(
     Ok(GeneratedArtifactTempRoot { path: temp_root })
 }
 
-pub fn copy_framework_tree_for_generation(source: &Path, destination: &Path) -> Result<(), String> {
+pub fn copy_framework_tree_for_generation(source: &Path, destination: &Path) -> std::result::Result<(), String> {
     fs::create_dir_all(destination)
         .map_err(|err| format!("failed to create {}: {err}", destination.display()))?;
     for entry in fs::read_dir(source)
@@ -396,7 +396,7 @@ pub fn run_generated_artifact_generator(
     generator: &str,
     framework_root: &Path,
     temp_root: &Path,
-) -> Result<(), String> {
+) -> std::result::Result<(), String> {
     let timeout = generated_artifact_generator_timeout();
     let log_stamp = Local::now().timestamp_nanos_opt().unwrap_or_default();
     let stdout_path = temp_root.join(format!(".generated-artifact-{log_stamp}.stdout.log"));
@@ -509,7 +509,7 @@ pub fn generated_artifact_forbidden_markers(path: &str, content: &str) -> Vec<&'
 pub fn undeclared_generated_framework_artifacts(
     framework_root: &Path,
     declared_paths: &BTreeSet<String>,
-) -> Result<Vec<String>, String> {
+) -> std::result::Result<Vec<String>, String> {
     let allowed_reports = surface_policy_generated_reports(framework_root)?;
     let mut undeclared = Vec::new();
     let candidates = generated_artifact_reverse_reference_candidates(framework_root)?;
@@ -528,7 +528,7 @@ pub fn undeclared_generated_framework_artifacts(
     Ok(undeclared)
 }
 
-pub fn surface_policy_generated_reports(framework_root: &Path) -> Result<BTreeSet<String>, String> {
+pub fn surface_policy_generated_reports(framework_root: &Path) -> std::result::Result<BTreeSet<String>, String> {
     let path = framework_root.join("configs/framework/FRAMEWORK_SURFACE_POLICY.json");
     let Some(policy) = read_json_if_exists(&path)? else {
         return Ok(BTreeSet::new());
@@ -550,7 +550,7 @@ pub fn surface_policy_generated_reports(framework_root: &Path) -> Result<BTreeSe
 
 pub fn generated_artifact_reverse_reference_candidates(
     framework_root: &Path,
-) -> Result<Vec<PathBuf>, String> {
+) -> std::result::Result<Vec<PathBuf>, String> {
     let mut candidates = Vec::new();
     for rel in [
         "configs/framework",
@@ -581,7 +581,7 @@ pub fn generated_artifact_reverse_reference_candidates(
 pub fn collect_root_skill_generated_surfaces(
     framework_root: &Path,
     candidates: &mut Vec<PathBuf>,
-) -> Result<(), String> {
+) -> std::result::Result<(), String> {
     let skills_root = framework_root.join("skills");
     if !skills_root.is_dir() {
         return Ok(());
@@ -603,7 +603,7 @@ pub fn collect_generated_artifact_marker_files(
     framework_root: &Path,
     path: &Path,
     candidates: &mut Vec<PathBuf>,
-) -> Result<(), String> {
+) -> std::result::Result<(), String> {
     if !path.exists() {
         return Ok(());
     }
@@ -657,7 +657,7 @@ pub fn is_generated_artifact_scan_file(path: &Path) -> bool {
     )
 }
 
-pub fn skills_source_rel(repo_root: &Path) -> Result<String, String> {
+pub fn skills_source_rel(repo_root: &Path) -> std::result::Result<String, String> {
     let registry = load_runtime_registry(repo_root)?;
     let source_rel = registry
         .workspace_bootstrap_defaults
@@ -668,7 +668,7 @@ pub fn skills_source_rel(repo_root: &Path) -> Result<String, String> {
     Ok(source_rel)
 }
 
-pub fn validate_source_rel(source_rel: &str) -> Result<(), String> {
+pub fn validate_source_rel(source_rel: &str) -> std::result::Result<(), String> {
     let candidate = Path::new(source_rel);
     if candidate.as_os_str().is_empty() {
         return Err("skills source_rel must not be empty".to_string());
@@ -689,7 +689,7 @@ pub fn validate_source_rel(source_rel: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf, String> {
+pub fn resolve_router_rs_executable(repo_root: &Path) -> std::result::Result<PathBuf, String> {
     if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
         let path = PathBuf::from(raw);
         if path.is_file() {
@@ -745,7 +745,7 @@ pub fn resolve_router_rs_executable(repo_root: &Path) -> Result<PathBuf, String>
     ))
 }
 
-pub fn run_router_rs_json(repo_root: &Path, args: &[String]) -> Result<Value, String> {
+pub fn run_router_rs_json(repo_root: &Path, args: &[String]) -> std::result::Result<Value, String> {
     let exe = resolve_router_rs_executable(repo_root)?;
     let output = Command::new(&exe)
         .args(args)

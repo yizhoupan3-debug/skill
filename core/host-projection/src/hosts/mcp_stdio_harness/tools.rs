@@ -202,16 +202,14 @@ pub(super) fn tool_skill_route(
         host_id,
         first_turn,
         &repo_root.to_string_lossy(),
-    );
+    )?;
 
     // On success, mark that we've completed a route call.
     // This ensures that if the tracker fails later, the in-memory fallback
     // correctly reports first_turn=false.
-    if route_result.is_ok() {
-        SKILL_ROUTE_EVER_CALLED.store(true, Ordering::Release);
-    }
+    SKILL_ROUTE_EVER_CALLED.store(true, Ordering::Release);
 
-    route_result
+    Ok(route_result)
 }
 
 pub(super) fn tool_skill_search(
@@ -241,7 +239,7 @@ pub(super) fn tool_skill_search(
             runtime_path.display()
         ));
     }
-    crate::hooks::mcp_tool_search_skills(query, limit, effective_host, &repo_root.to_string_lossy())
+    Ok(crate::hooks::mcp_tool_search_skills(query, limit, effective_host, &repo_root.to_string_lossy())?)
 }
 
 pub(super) fn tool_skill_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
@@ -453,7 +451,7 @@ pub fn tool_closeout_gate(
     repo_root: &Path,
     host_id: &str,
 ) -> Result<String, String> {
-    crate::hooks::tool_closeout_gate_evaluate(arguments, repo_root, host_id)
+    Ok(crate::hooks::tool_closeout_gate_evaluate(arguments, repo_root, host_id)?)
 }
 
 pub(super) fn tool_closeout_record_write(
@@ -461,7 +459,7 @@ pub(super) fn tool_closeout_record_write(
     repo_root: &Path,
     _host_id: &str,
 ) -> Result<String, String> {
-    crate::hooks::tool_closeout_record_write_dispatch(arguments, repo_root)
+    Ok(crate::hooks::tool_closeout_record_write_dispatch(arguments, repo_root)?)
 }
 
 pub(super) fn tool_goal_state_read(arguments: &Value, repo_root: &Path) -> Result<String, String> {
@@ -634,7 +632,7 @@ pub(super) fn skill_routing_evolution(
     arguments: &Value,
     repo_root: &Path,
 ) -> Result<String, String> {
-    crate::hooks::tool_routing_evolution_dispatch(arguments, repo_root)
+    Ok(crate::hooks::tool_routing_evolution_dispatch(arguments, repo_root)?)
 }
 
 // ── Research Harness MCP Tools ──

@@ -42,7 +42,7 @@ pub fn host_router_rs_framework_payload(
 /// Resolve host install_tool label from RUNTIME_REGISTRY for MCP payload construction.
 pub fn registry_host_install_tool(framework_root: &Path, host_id: &str) -> Result<String> {
     let registry = framework_kernel::runtime_registry::load_runtime_registry_json(framework_root)?;
-    registry
+    Ok(registry
         .get("host_targets")
         .and_then(|t| t.get("metadata"))
         .and_then(|m| m.get(host_id))
@@ -51,7 +51,7 @@ pub fn registry_host_install_tool(framework_root: &Path, host_id: &str) -> Resul
         .map(str::to_string)
         .ok_or_else(|| {
             format!("host {host_id} not found in RUNTIME_REGISTRY.host_targets.metadata")
-        })
+        })?)
 }
 
 /// Shared MCP server binary validation loop.
@@ -764,18 +764,18 @@ pub fn install_projection_tool(
         return Err(format!("Invalid tool name: {}", tool).into());
     }
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-    projection_ops_trait::projection_ops_for_tool(tool)
+    Ok(projection_ops_trait::projection_ops_for_tool(tool)
         .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
-        .install(roots, effective_scope)
+        .install(roots, effective_scope)?)
 }
 
 pub fn projection_tool_status(
     roots: &ResolvedProjectionRoots,
     tool: &str,
 ) -> Result<Value> {
-    projection_ops_trait::projection_ops_for_tool(tool)
+    Ok(projection_ops_trait::projection_ops_for_tool(tool)
         .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
-        .status(roots)
+        .status(roots)?)
 }
 
 pub fn remove_projection_tool(
@@ -785,9 +785,9 @@ pub fn remove_projection_tool(
     dry_run: bool,
 ) -> Result<Value> {
     let effective_scope = projection_scope_for_tool(tool, scope)?;
-    projection_ops_trait::projection_ops_for_tool(tool)
+    Ok(projection_ops_trait::projection_ops_for_tool(tool)
         .ok_or_else(|| format!("No projection ops registered for tool: {tool}"))?
-        .remove(roots, effective_scope, dry_run)
+        .remove(roots, effective_scope, dry_run)?)
 }
 
 pub fn non_installable_projection_result(host_id: &str, scope: &str) -> Value {
@@ -841,31 +841,6 @@ pub fn load_host_projection_narrative(
         ).into());
     }
     Ok(narrative)
-}
-
-fn skills_runtime_rel_path(framework_root: &Path) -> String {
-    skills_source_rel(framework_root)
-        .map(|source_rel| format!("{source_rel}/SKILL_ROUTING_RUNTIME.json"))
-        .unwrap_or_else(|_| "skills/SKILL_ROUTING_RUNTIME.json".to_string())
-}
-
-pub(super) fn framework_entrypoint_render_context(
-    roots: &ResolvedProjectionRoots,
-    host_label: &str,
-) -> Result<(HostProjectionNarrative, String)> {
-    let narrative = load_host_projection_narrative(&roots.framework_root).map_err(|err| {
-        format!(
-            "host projection narrative must load before rendering {host_label} entrypoint: {err}"
-        )
-    })?;
-    let runtime_rel = skills_runtime_rel_path(&roots.framework_root);
-    Ok((narrative, runtime_rel))
-}
-
-pub(super) fn framework_entrypoint_common_footer(runtime_rel: &str) -> String {
-    format!(
-        "1) Start from `AGENTS.md`。\n2) Route via `{runtime_rel}`.\n3) Read only the matched `skill_path`.\n\nFramework root: `${{FRAMEWORK_ROOT}}`.\nProject root: `${{PROJECT_ROOT}}`.\n"
-    )
 }
 
 pub fn render_claude_project_narrative(roots: &ResolvedProjectionRoots) -> Result<String> {
@@ -1015,19 +990,19 @@ pub fn ensure_project_research_mcp_json(roots: &ResolvedProjectionRoots) -> Resu
     let paperplain_changed = entries.get("paperplain") != Some(&plain);
     entries.insert("paperplain".to_string(), plain);
     let codegraph_changed = merge_codegraph_into_mcp_servers_map(entries, roots, "mcp-codegraph");
-    write_json_if_changed(&path, &payload).map(|file_changed| {
+    Ok(write_json_if_changed(&path, &payload).map(|file_changed| {
         framework_changed
             || browser_changed
             || paperplain_changed
             || codegraph_changed
             || file_changed
-    })
+    })?)
 }
 
 /// Remove all managed MCP entries from project-root `.mcp.json`.
 pub fn remove_project_mcp_json_entries(roots: &ResolvedProjectionRoots) -> Result<bool> {
     let path = roots.project_root.join(".mcp.json");
-    mcp_json_remove_servers(&path, &roots.framework_root, McpConfigFormat::JSON_CAMEL_CASE)
+    Ok(mcp_json_remove_servers(&path, &roots.framework_root, McpConfigFormat::JSON_CAMEL_CASE)?)
 }
 
 fn merge_codegraph_into_mcp_servers_map(
@@ -1107,7 +1082,7 @@ fn upsert_codex_mcp_toml_section(
         merged
     };
     let normalized = format!("{}\n", new_text.trim_end());
-    write_text_if_changed(path, &normalized)
+    Ok(write_text_if_changed(path, &normalized)?)
 }
 
 /// Codex reads MCP from project `.codex/config.toml` (`mcp_servers.*` sections).

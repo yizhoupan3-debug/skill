@@ -305,14 +305,14 @@ fn main() {
 pub struct {pascal}ProjectionOps;\n\n\
 impl HostProjectionOps for {pascal}ProjectionOps {{\n\
     fn host_id(&self) -> &'static str {{ \"{id}\" }}\n\n\
-    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String> {{\n\
-        install_{id}_projection(roots, scope, self.host_id())\n\
+    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> std::result::Result<Value, String> {{\n\
+        Ok(install_{id}_projection(roots, scope, self.host_id())?)\n\
     }}\n\n\
-    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String> {{\n\
-        {id}_projection_status(roots, self.host_id())\n\
+    fn status(&self, roots: &ResolvedProjectionRoots) -> std::result::Result<Value, String> {{\n\
+        Ok({id}_projection_status(roots, self.host_id())?)\n\
     }}\n\n\
-    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> Result<Value, String> {{\n\
-        remove_{id}_projection(roots, scope, dry_run, self.host_id())\n\
+    fn remove(&self, roots: &ResolvedProjectionRoots, scope: &str, dry_run: bool) -> std::result::Result<Value, String> {{\n\
+        Ok(remove_{id}_projection(roots, scope, dry_run, self.host_id())?)\n\
     }}\n\
 }}\n\n"
         ));

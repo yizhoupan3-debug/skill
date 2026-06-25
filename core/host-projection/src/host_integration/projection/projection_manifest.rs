@@ -186,13 +186,13 @@ pub fn entrypoint_target(
     let subdir = framework_kernel::runtime_registry::projection_entrypoint_subdir(host_id);
     let filename = framework_kernel::runtime_registry::projection_entrypoint_filename(host_id);
     if scope == "user" {
-        roots
+        Ok(roots
             .host_home_root(host_id)
             .ok_or_else(|| format!("{host_id} host must be registered in projection roots"))?
             .join(subdir)
-            .join(filename)
+            .join(filename))
     } else {
-        roots.project_root.join(config_dir).join(subdir).join(filename)
+        Ok(roots.project_root.join(config_dir).join(subdir).join(filename))
     }
 }
 
@@ -407,7 +407,7 @@ pub fn cursor_mcp_entry_is_framework_owned_stale(existing: &Value, framework_roo
 }
 
 pub fn remove_cursor_mcp_server(path: &Path, framework_root: &Path) -> std::result::Result<bool, String> {
-    mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_SNAKE_CASE)
+    Ok(mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_SNAKE_CASE)?)
 }
 
 pub fn cursor_mcp_browser_stdio_args(roots: &ResolvedProjectionRoots) -> Vec<String> {
@@ -636,7 +636,7 @@ pub fn install_claude_mcp_server(
 }
 
 pub fn remove_claude_mcp_server(path: &Path, framework_root: &Path) -> std::result::Result<bool, String> {
-    mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_CAMEL_CASE)
+    Ok(mcp_json_remove_servers(path, framework_root, McpConfigFormat::JSON_CAMEL_CASE)?)
 }
 
 pub fn render_framework_entrypoint(

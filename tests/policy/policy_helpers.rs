@@ -1,6 +1,5 @@
 // Shared helper functions and constants extracted from policy_contracts.rs
 // for reuse across policy test modules.
-#![allow(dead_code)]
 
 use crate::common::read_text;
 use serde_json::Value;
@@ -109,11 +108,6 @@ pub fn key_index_first(keys: &[Value], names: &[&str]) -> usize {
 /// Hot runtime rows store per-skill hosts under `host_platforms`.
 pub fn runtime_host_platforms_index(keys: &[Value]) -> usize {
     key_index_first(keys, &["host_platforms"])
-}
-
-/// Runtime rows store the description under `description` or legacy `summary`.
-pub fn runtime_description_index(keys: &[Value]) -> usize {
-    key_index_first(keys, &["description", "summary"])
 }
 
 /// Recursively walk a directory tree, calling `visitor` for each file found.

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 mod review_gate_lanes;
 
 #[allow(unused_imports)]
@@ -22,7 +24,6 @@ fn pick_router_rs_under_target_dir(base: &Path) -> Option<PathBuf> {
 /// as the running `router-rs` uses for MCP payload generation (avoids stale `target-dir` picks).
 /// Same shape as `host_integration::cursor_mcp_server_payload` for pre-seeding `mcp.json` in
 /// tests (matches `cargo_router_rs_executable` + `which::which(\"router-rs\")` fallback).
-#[allow(dead_code)]
 pub fn browser_mcp_server_payload_like_host(framework_root: &Path) -> Value {
     let manifest = framework_root.join("core/router-rs/Cargo.toml");
     let from_metadata = if manifest.is_file() {
@@ -181,7 +182,6 @@ pub fn seed_framework_markers(root: &Path) {
     });
 }
 
-#[allow(dead_code)]
 pub fn write_json(path: &Path, payload: &Value) {
     let content = format!("{}\n", serde_json::to_string_pretty(payload).unwrap());
     write_text(path, &content);
@@ -273,7 +273,6 @@ pub fn run(mut command: Command) -> Output {
         .unwrap_or_else(|err| panic!("failed to run command: {err}"))
 }
 
-#[allow(dead_code)]
 pub fn run_ok(command: Command) -> Output {
     let output = run(command);
     assert_success(&output);
@@ -364,14 +363,12 @@ pub fn router_rs_json(args: &[&str]) -> Value {
     json_from_output(&run(router_rs_command(args)))
 }
 
-#[allow(dead_code)]
 pub fn host_integration_json(args: &[&str]) -> Value {
     let mut full_args = vec!["framework", "host-integration"];
     full_args.extend_from_slice(args);
     router_rs_json(&full_args)
 }
 
-#[allow(dead_code)]
 pub fn cargo_manifest_command(manifest: &Path, args: &[&str]) -> Command {
     let mut command = Command::new("cargo");
     command
@@ -384,7 +381,6 @@ pub fn cargo_manifest_command(manifest: &Path, args: &[&str]) -> Command {
     command
 }
 
-#[allow(dead_code)]
 pub fn make_executable(path: &Path) {
     #[cfg(unix)]
     {

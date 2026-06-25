@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Policy docs and skills must keep resolvable relative markdown links.
 //! See path audit 2026-05.
 

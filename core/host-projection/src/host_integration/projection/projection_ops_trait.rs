@@ -14,16 +14,16 @@ use std::sync::OnceLock;
 pub trait HostProjectionOps: Send + Sync {
     fn host_id(&self) -> &'static str;
 
-    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> Result<Value, String>;
+    fn install(&self, roots: &ResolvedProjectionRoots, scope: &str) -> std::result::Result<Value, String>;
 
-    fn status(&self, roots: &ResolvedProjectionRoots) -> Result<Value, String>;
+    fn status(&self, roots: &ResolvedProjectionRoots) -> std::result::Result<Value, String>;
 
     fn remove(
         &self,
         roots: &ResolvedProjectionRoots,
         scope: &str,
         dry_run: bool,
-    ) -> Result<Value, String>;
+    ) -> std::result::Result<Value, String>;
 }
 
 static PROJECTION_OPS_REGISTRY: OnceLock<HashMap<&'static str, Box<dyn HostProjectionOps>>> =

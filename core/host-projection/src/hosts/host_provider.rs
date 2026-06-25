@@ -3,10 +3,7 @@
 //! P4: `HostLifecycle` / `HostToolExecutor` / `HostTelemetry` expose static metadata hooks
 //! consumed by `pre_tool_use_guard` and `host_integration` without registry I/O.
 
-use core_policy::error::FrameworkError;
 use std::sync::OnceLock;
-
-type Result<T> = std::result::Result<T, FrameworkError>;
 
 /// Full harness capabilities for hosts with complete hook support
 /// (all supported hosts from the registry).

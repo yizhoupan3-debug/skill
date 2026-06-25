@@ -197,14 +197,14 @@ pub fn remove_codex_projection(
         projection_manifest_ownership(&manifest_path, host_id, scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
-        fs::remove_file(&target).map_err(|err| err.to_string())?;
+        fs::remove_file(&target).map_err(|err| FrameworkError::Io(err))?;
         true
     } else {
         false
     };
     let would_remove_manifest = manifest_ownership.managed;
     let manifest_removed = if !dry_run && would_remove_manifest {
-        fs::remove_file(&manifest_path).map_err(|err| err.to_string())?;
+        fs::remove_file(&manifest_path).map_err(|err| FrameworkError::Io(err))?;
         true
     } else {
         false
@@ -238,14 +238,14 @@ pub fn remove_cursor_projection(
         projection_manifest_ownership(&manifest_path, host_id, scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
-        fs::remove_file(&target).map_err(|err| err.to_string())?;
+        fs::remove_file(&target).map_err(|err| FrameworkError::Io(err))?;
         true
     } else {
         false
     };
     let would_remove_manifest = manifest_ownership.managed;
     let manifest_removed = if !dry_run && would_remove_manifest {
-        fs::remove_file(&manifest_path).map_err(|err| err.to_string())?;
+        fs::remove_file(&manifest_path).map_err(|err| FrameworkError::Io(err))?;
         true
     } else {
         false
@@ -399,7 +399,7 @@ pub fn merge_claude_settings_hooks(existing: Option<Value>) -> Result<Value> {
 pub fn install_claude_settings_hooks(settings_path: &Path) -> Result<bool> {
     let existing = read_json_if_exists(settings_path)?;
     let merged = merge_claude_settings_hooks(existing)?;
-    write_json_if_changed(settings_path, &merged)
+    Ok(write_json_if_changed(settings_path, &merged)?)
 }
 
 pub fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Result<bool> {
@@ -414,7 +414,7 @@ pub fn install_claude_hook_env_if_absent(roots: &ResolvedProjectionRoots) -> Res
         return Ok(false);
     }
     if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        fs::create_dir_all(parent).map_err(|e| FrameworkError::Io(e))?;
     }
     fs::copy(&template, &dest).map_err(|e| {
         format!(
@@ -549,14 +549,14 @@ pub fn remove_claude_projection(
         projection_manifest_ownership(&manifest_path, host_id, scope, &target)?;
     let would_remove_projection = target.is_file() && manifest_ownership.owns_projection_file;
     let changed = if !dry_run && would_remove_projection {
-        fs::remove_file(&target).map_err(|err| err.to_string())?;
+        fs::remove_file(&target).map_err(|err| FrameworkError::Io(err))?;
         true
     } else {
         false
     };
     let would_remove_manifest = manifest_ownership.managed;
     let manifest_removed = if !dry_run && would_remove_manifest {
-        fs::remove_file(&manifest_path).map_err(|err| err.to_string())?;
+        fs::remove_file(&manifest_path).map_err(|err| FrameworkError::Io(err))?;
         true
     } else {
         false
@@ -663,7 +663,7 @@ pub fn remove_claude_settings_hooks(
     let remove_file = root.is_empty();
     if !dry_run {
         if remove_file {
-            fs::remove_file(settings_path).map_err(|err| err.to_string())?;
+            fs::remove_file(settings_path).map_err(|err| FrameworkError::Io(err))?;
         } else {
             write_json_if_changed(settings_path, &Value::Object(root))?;
         }

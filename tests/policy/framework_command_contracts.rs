@@ -1,5 +1,4 @@
 // Test helper functions that may not all be called from every test.
-#![allow(dead_code)]
 
 use crate::common::{project_root, read_json, read_text};
 use serde_json::Value;

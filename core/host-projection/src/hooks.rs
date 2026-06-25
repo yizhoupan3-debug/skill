@@ -6,13 +6,16 @@
 //!
 //! Proxy functions are re-exported for consumers that need them.
 
+use core_policy::error::FrameworkError;
+type Result<T> = std::result::Result<T, FrameworkError>;
+
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 // ── Function pointer type aliases (reduce type_complexity warnings) ──
 
-/// Route task with manifest fallback: (records_json, host_id, query, session_id, allow_overlay, first_turn) -> Result<RouteDecision, String>
+/// Route task with manifest fallback: (records_json, host_id, query, session_id, allow_overlay, first_turn) -> Result<RouteDecision>
 /// `records_json` is a JSON-serialized slice of SkillRecord values (avoids L5→L1 dep on routing_engine).
 type RouteTaskFn = fn(
     &[serde_json::Value],
@@ -21,19 +24,19 @@ type RouteTaskFn = fn(
     &str,
     bool,
     bool,
-) -> Result<RouteDecision, String>;
+) -> Result<RouteDecision>;
 
-/// Build framework runtime snapshot envelope: (repo_root, runtime_path, host_id) -> Result<Value, String>
-type BuildSnapshotFn = fn(&Path, Option<&Path>, Option<&str>) -> Result<Value, String>;
+/// Build framework runtime snapshot envelope: (repo_root, runtime_path, host_id) -> Result<Value>
+type BuildSnapshotFn = fn(&Path, Option<&Path>, Option<&str>) -> Result<Value>;
 
-/// Build snapshot with level: (repo_root, runtime_path, host_id, level) -> Result<Value, String>
-type BuildSnapshotWithLevelFn = fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value, String>;
+/// Build snapshot with level: (repo_root, runtime_path, host_id, level) -> Result<Value>
+type BuildSnapshotWithLevelFn = fn(&Path, Option<&Path>, Option<&str>, &str) -> Result<Value>;
 
 /// Build automatic continuity checkpoint payload: (repo_root, task_id, session_id, current_query, allow_overlay, first_turn) -> Value
 type BuildCheckpointFn = fn(&Path, &str, &str, Option<&str>, bool, bool) -> Value;
 
-/// Append evidence index row: (repo_root, task_id, metadata) -> Result<(), String>
-type AppendEvidenceFn = fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<(), String>;
+/// Append evidence index row: (repo_root, task_id, metadata) -> Result<()>
+type AppendEvidenceFn = fn(&Path, Option<&str>, serde_json::Map<String, Value>) -> Result<()>;
 
 /// Register a `OnceLock` cell with consistent diagnostics on double-registration.
 /// In `#[cfg(test)]` mode, includes a backtrace to help debug conflicting registrations.
@@ -55,7 +58,7 @@ pub fn once_lock_set<T>(lock: &OnceLock<T>, value: T, name: &str) {
 // Host ID types (string-based, not enum — avoids per-host enum in L5)
 // ────────────────────────────────────────────────────────────────
 
-/// Canonical host ID for hook observation (e.g. "cursor", "codex", "claude", "opencode").
+/// Canonical host ID for hook observation, keyed by host_id from the runtime registry.
 pub type HookObservationHost = &'static str;
 
 /// Type alias for backward compatibility with function pointer signatures.
@@ -284,7 +287,7 @@ fn parse_env_usize(var: &str) -> Option<usize> {
 
 /// Read stdin with 4 MiB limit and UTF-8 error normalization.
 /// Shared across all hook-based hosts (claude, codex, opencode).
-pub fn read_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String, String> {
+pub fn read_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String> {
     use std::io::Read as _;
     const LIMIT: u64 = 4 * 1024 * 1024;
     let mut input = String::new();
@@ -304,8 +307,8 @@ pub fn read_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String, St
     if limited.limit() == 0 {
         let inner = limited.into_inner();
         let mut probe = [0u8; 1];
-        if inner.read(&mut probe).map_err(|err| err.to_string())? > 0 {
-            return Err("stdin payload exceeds 4 MiB limit".to_string());
+        if inner.read(&mut probe).map_err(FrameworkError::Io)? > 0 {
+            return Err(FrameworkError::validation("stdin payload exceeds 4 MiB limit"));
         }
     }
     Ok(input)
@@ -313,15 +316,15 @@ pub fn read_stdin_limited<R: std::io::Read>(reader: &mut R) -> Result<String, St
 
 /// Read stdin as JSON object with 4 MiB limit. Returns empty object if stdin is empty.
 /// Rejects non-object JSON (arrays, strings, numbers, etc.) with an error.
-pub fn read_stdin_json_limited() -> Result<Value, String> {
+pub fn read_stdin_json_limited() -> Result<Value> {
     let mut stdin = std::io::stdin();
     let input = read_stdin_limited(&mut stdin)?;
     if input.trim().is_empty() {
         return Ok(serde_json::json!({}));
     }
-    let val: Value = serde_json::from_str(&input).map_err(|_| "stdin_json_invalid".to_string())?;
+    let val: Value = serde_json::from_str(&input).map_err(|_| FrameworkError::validation("stdin_json_invalid"))?;
     if !val.is_object() {
-        return Err("stdin_json_not_object: expected JSON object".to_string());
+        return Err(FrameworkError::validation("stdin_json_not_object: expected JSON object"));
     }
     Ok(val)
 }
@@ -368,24 +371,24 @@ pub fn emit_hook_timing_line(event: &str) {
 // ────────────────────────────────────────────────────────────────
 
 #[allow(clippy::type_complexity)]
-static INIT_TRACKER: OnceLock<fn(&Path) -> Result<(), String>> = OnceLock::new();
+static INIT_TRACKER: OnceLock<fn(&Path) -> Result<()>> = OnceLock::new();
 #[allow(clippy::type_complexity)]
-static RECORD_TOOL_CALL: OnceLock<fn(&Path, &str, Option<&Value>) -> Result<(), String>> =
+static RECORD_TOOL_CALL: OnceLock<fn(&Path, &str, Option<&Value>) -> Result<()>> =
     OnceLock::new();
 #[allow(clippy::type_complexity)]
-static READ_TRACKER_STATE: OnceLock<fn(&Path) -> Result<Value, String>> = OnceLock::new();
+static READ_TRACKER_STATE: OnceLock<fn(&Path) -> Result<Value>> = OnceLock::new();
 
 pub fn register_session_call_tracker(
-    init: fn(&Path) -> Result<(), String>,
-    record: fn(&Path, &str, Option<&Value>) -> Result<(), String>,
-    read_state: fn(&Path) -> Result<Value, String>,
+    init: fn(&Path) -> Result<()>,
+    record: fn(&Path, &str, Option<&Value>) -> Result<()>,
+    read_state: fn(&Path) -> Result<Value>,
 ) {
     once_lock_set(&INIT_TRACKER, init, "INIT_TRACKER");
     once_lock_set(&RECORD_TOOL_CALL, record, "RECORD_TOOL_CALL");
     once_lock_set(&READ_TRACKER_STATE, read_state, "READ_TRACKER_STATE");
 }
 
-pub fn init_tracker(repo_root: &Path) -> Result<(), String> {
+pub fn init_tracker(repo_root: &Path) -> Result<()> {
     INIT_TRACKER.get().map(|f| f(repo_root)).unwrap_or(Ok(()))
 }
 
@@ -393,14 +396,14 @@ pub fn record_tool_call(
     repo_root: &Path,
     tool_name: &str,
     cache_stats: Option<&Value>,
-) -> Result<(), String> {
+) -> Result<()> {
     RECORD_TOOL_CALL
         .get()
         .map(|f| f(repo_root, tool_name, cache_stats))
         .unwrap_or(Ok(()))
 }
 
-pub fn read_tracker_state(repo_root: &Path) -> Result<Value, String> {
+pub fn read_tracker_state(repo_root: &Path) -> Result<Value> {
     READ_TRACKER_STATE
         .get()
         .map(|f| f(repo_root))
@@ -412,18 +415,18 @@ pub fn read_tracker_state(repo_root: &Path) -> Result<Value, String> {
 // ────────────────────────────────────────────────────────────────
 
 #[allow(clippy::type_complexity)]
-static BUILD_FRAMEWORK_CONTRACT: OnceLock<fn(&Path) -> Result<Value, String>> = OnceLock::new();
+static BUILD_FRAMEWORK_CONTRACT: OnceLock<fn(&Path) -> Result<Value>> = OnceLock::new();
 #[allow(clippy::type_complexity)]
-static TRY_APPEND_POST_TOOL_SHELL: OnceLock<fn(&Path, &Value, &str) -> Result<(), String>> =
+static TRY_APPEND_POST_TOOL_SHELL: OnceLock<fn(&Path, &Value, &str) -> Result<()>> =
     OnceLock::new();
 static CLOSEOUT_ENFORCEMENT: OnceLock<fn() -> bool> = OnceLock::new();
 #[allow(clippy::type_complexity)]
-static CLOSEOUT_RECORD_PATH: OnceLock<fn(&Path, &str) -> Result<PathBuf, String>> = OnceLock::new();
+static CLOSEOUT_RECORD_PATH: OnceLock<fn(&Path, &str) -> Result<PathBuf>> = OnceLock::new();
 #[allow(clippy::type_complexity)]
-static EVALUATE_CLOSEOUT: OnceLock<fn(&Path, &str, &Path) -> Result<Value, String>> =
+static EVALUATE_CLOSEOUT: OnceLock<fn(&Path, &str, &Path) -> Result<Value>> =
     OnceLock::new();
 static FIRST_TASK_ID: OnceLock<fn(&Path) -> Option<String>> = OnceLock::new();
-static EVIDENCE_APPEND: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
+static EVIDENCE_APPEND: OnceLock<fn(Value) -> Result<Value>> = OnceLock::new();
 static EXTRACT_DURATION: OnceLock<fn(&Value) -> Option<u64>> = OnceLock::new();
 static POST_TOOL_SUCCEEDED: OnceLock<fn(&Value) -> bool> = OnceLock::new();
 static CLOSEOUT_STOP_FOLLOWUP: OnceLock<fn(&Path, &str) -> Option<String>> = OnceLock::new();
@@ -433,13 +436,13 @@ static CLOSEOUT_STOP_FOLLOWUP: OnceLock<fn(&Path, &str) -> Option<String>> = Onc
 // Extracting a struct would add ceremony to callers without reducing surface.
 #[allow(clippy::too_many_arguments)]
 pub fn register_framework_runtime(
-    build_contract: fn(&Path) -> Result<Value, String>,
-    append_shell: fn(&Path, &Value, &str) -> Result<(), String>,
+    build_contract: fn(&Path) -> Result<Value>,
+    append_shell: fn(&Path, &Value, &str) -> Result<()>,
     enforcement: fn() -> bool,
-    record_path: fn(&Path, &str) -> Result<PathBuf, String>,
-    eval_closeout: fn(&Path, &str, &Path) -> Result<Value, String>,
+    record_path: fn(&Path, &str) -> Result<PathBuf>,
+    eval_closeout: fn(&Path, &str, &Path) -> Result<Value>,
     first_task: fn(&Path) -> Option<String>,
-    evidence_append: fn(Value) -> Result<Value, String>,
+    evidence_append: fn(Value) -> Result<Value>,
     extract_duration: fn(&Value) -> Option<u64>,
     post_tool_ok: fn(&Value) -> bool,
     closeout_followup: fn(&Path, &str) -> Option<String>,
@@ -456,18 +459,18 @@ pub fn register_framework_runtime(
     once_lock_set(&CLOSEOUT_STOP_FOLLOWUP, closeout_followup, "CLOSEOUT_STOP_FOLLOWUP");
 }
 
-pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, String> {
+pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value> {
     BUILD_FRAMEWORK_CONTRACT
         .get()
         .map(|f| f(repo_root))
-        .unwrap_or_else(|| Err("framework_runtime not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("framework_runtime not registered")))
 }
 
 pub fn try_append_post_tool_shell_evidence(
     repo_root: &Path,
     event: &Value,
     kind: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     TRY_APPEND_POST_TOOL_SHELL
         .get()
         .map(|f| f(repo_root, event, kind))
@@ -478,33 +481,33 @@ pub fn closeout_programmatic_enforcement_enabled() -> bool {
     CLOSEOUT_ENFORCEMENT.get().map(|f| f()).unwrap_or(false)
 }
 
-pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf, String> {
+pub fn closeout_record_path_for_task(repo_root: &Path, task_id: &str) -> Result<PathBuf> {
     CLOSEOUT_RECORD_PATH
         .get()
         .map(|f| f(repo_root, task_id))
-        .unwrap_or_else(|| Err("framework_runtime not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("framework_runtime not registered")))
 }
 
 pub fn evaluate_closeout_record_file_for_task(
     repo_root: &Path,
     task_id: &str,
     record_path: &Path,
-) -> Result<Value, String> {
+) -> Result<Value> {
     EVALUATE_CLOSEOUT
         .get()
         .map(|f| f(repo_root, task_id, record_path))
-        .unwrap_or_else(|| Err("framework_runtime not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("framework_runtime not registered")))
 }
 
 pub fn first_task_id_from_registry(repo_root: &Path) -> Option<String> {
     FIRST_TASK_ID.get().map(|f| f(repo_root)).unwrap_or(None)
 }
 
-pub fn framework_hook_evidence_append(payload: Value) -> Result<Value, String> {
+pub fn framework_hook_evidence_append(payload: Value) -> Result<Value> {
     EVIDENCE_APPEND
         .get()
         .map(|f| f(payload))
-        .unwrap_or_else(|| Err("framework_runtime not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("framework_runtime not registered")))
 }
 
 pub fn extract_post_tool_duration_ms(event: &Value) -> Option<u64> {
@@ -753,7 +756,7 @@ pub fn research_mode_for_request(payload: &Value) -> String {
 // Skill routing bridge (decouples L0 MCP harness from L1 routing-engine)
 // ────────────────────────────────────────────────────────────────
 
-type SkillRoutingBridgeFn = fn(&str, &Value) -> Result<Value, String>;
+type SkillRoutingBridgeFn = fn(&str, &Value) -> Result<Value>;
 
 static SKILL_ROUTING_BRIDGE: OnceLock<SkillRoutingBridgeFn> = OnceLock::new();
 
@@ -764,11 +767,11 @@ pub fn register_skill_routing_bridge(f: SkillRoutingBridgeFn) {
 }
 
 /// Dispatch a skill routing operation via the registered bridge.
-pub fn skill_routing_dispatch(op: &str, args: &Value) -> Result<Value, String> {
+pub fn skill_routing_dispatch(op: &str, args: &Value) -> Result<Value> {
     if let Some(f) = SKILL_ROUTING_BRIDGE.get() {
         f(op, args)
     } else {
-        Err("skill routing bridge not registered".to_string())
+        Err(FrameworkError::validation("skill routing bridge not registered"))
     }
 }
 
@@ -835,15 +838,15 @@ pub fn ensure_kernel_bootstrap_registered() {
 
 // ── framework_runtime_extra ──
 
-/// Resolve repo root argument: (repo_root) -> Result<PathBuf, String>
-type ResolveRepoRootFn = fn(Option<&Path>) -> Result<PathBuf, String>;
+/// Resolve repo root argument: (repo_root) -> Result<PathBuf>
+type ResolveRepoRootFn = fn(Option<&Path>) -> Result<PathBuf>;
 
-/// Check anomalies: (repo_root) -> Result<anomaly_list, String>
-type CheckAnomaliesFn = fn(&Path) -> Result<Vec<String>, String>;
+/// Check anomalies: (repo_root) -> Result<anomaly_list>
+type CheckAnomaliesFn = fn(&Path) -> Result<Vec<String>>;
 
 static RESOLVE_REPO_ROOT_ARG: OnceLock<ResolveRepoRootFn> = OnceLock::new();
 static CURRENT_LOCAL_TIMESTAMP: OnceLock<fn() -> String> = OnceLock::new();
-static WRITE_FRAMEWORK_SESSION_ARTIFACTS: OnceLock<fn(Value) -> Result<Value, String>> =
+static WRITE_FRAMEWORK_SESSION_ARTIFACTS: OnceLock<fn(Value) -> Result<Value>> =
     OnceLock::new();
 static ROUTE_TASK_WITH_MANIFEST_FALLBACK: OnceLock<RouteTaskFn> = OnceLock::new();
 static BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE: OnceLock<BuildSnapshotFn> = OnceLock::new();
@@ -856,14 +859,14 @@ static CHECK_ANOMALIES: OnceLock<CheckAnomaliesFn> = OnceLock::new();
 
 // ── web_fetch_guard ──
 
-/// Validate and resolve web fetch URL: (url) -> Result<(resolved_url, addresses), String>
-type ValidateWebFetchUrlFn = fn(&str) -> Result<(String, Vec<String>), String>;
+/// Validate and resolve web fetch URL: (url) -> Result<(resolved_url, addresses)>
+type ValidateWebFetchUrlFn = fn(&str) -> Result<(String, Vec<String>)>;
 
-/// Resolve web fetch redirect: (base_url, location) -> Result<resolved_url, String>
-type ResolveWebFetchRedirectFn = fn(&str, &str) -> Result<String, String>;
+/// Resolve web fetch redirect: (base_url, location) -> Result<resolved_url>
+type ResolveWebFetchRedirectFn = fn(&str, &str) -> Result<String>;
 
-/// Resolve web fetch addresses: (host, port) -> Result<addresses, String>
-type ResolveWebFetchAddressesFn = fn(&str, u16) -> Result<Vec<String>, String>;
+/// Resolve web fetch addresses: (host, port) -> Result<addresses>
+type ResolveWebFetchAddressesFn = fn(&str, u16) -> Result<Vec<String>>;
 
 static VALIDATE_AND_RESOLVE_WEB_FETCH_URL: OnceLock<ValidateWebFetchUrlFn> = OnceLock::new();
 static RESOLVE_WEB_FETCH_REDIRECT: OnceLock<ResolveWebFetchRedirectFn> = OnceLock::new();
@@ -880,7 +883,7 @@ static EVALUATE_MCP_PRE_GUARD_SAFE: OnceLock<fn(&str, &Value, &Path) -> McpPreGu
 pub fn register_framework_runtime_extra(
     resolve_repo_root_arg: ResolveRepoRootFn,
     current_local_timestamp: fn() -> String,
-    write_framework_session_artifacts: fn(Value) -> Result<Value, String>,
+    write_framework_session_artifacts: fn(Value) -> Result<Value>,
     route_task_with_manifest_fallback: RouteTaskFn,
     build_framework_runtime_snapshot_envelope: BuildSnapshotFn,
     build_automatic_continuity_checkpoint_payload: BuildCheckpointFn,
@@ -915,13 +918,13 @@ pub fn register_mcp_pre_guard_extra(evaluate: fn(&str, &Value, &Path) -> McpPreG
     once_lock_set(&EVALUATE_MCP_PRE_GUARD_SAFE, evaluate, "EVALUATE_MCP_PRE_GUARD_SAFE");
 }
 
-pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
+pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf> {
     RESOLVE_REPO_ROOT_ARG
         .get()
         .map(|f| f(repo_root))
         .unwrap_or_else(|| {
             // Default: use CARGO_MANIFEST_DIR or current dir
-            std::env::current_dir().map_err(|e| e.to_string())
+            std::env::current_dir().map_err(FrameworkError::Io)
         })
 }
 
@@ -932,11 +935,11 @@ pub fn current_local_timestamp() -> String {
         .unwrap_or_else(|| "1970-01-01T00:00:00Z".into())
 }
 
-pub fn write_framework_session_artifacts(payload: Value) -> Result<Value, String> {
+pub fn write_framework_session_artifacts(payload: Value) -> Result<Value> {
     WRITE_FRAMEWORK_SESSION_ARTIFACTS
         .get()
         .map(|f| f(payload))
-        .unwrap_or_else(|| Err("hooks not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
 }
 
 pub fn route_task_with_manifest_fallback(
@@ -946,7 +949,7 @@ pub fn route_task_with_manifest_fallback(
     session_id: &str,
     allow_overlay: bool,
     first_turn: bool,
-) -> Result<RouteDecision, String> {
+) -> Result<RouteDecision> {
     ROUTE_TASK_WITH_MANIFEST_FALLBACK
         .get()
         .map(|f| {
@@ -959,18 +962,18 @@ pub fn route_task_with_manifest_fallback(
                 first_turn,
             )
         })
-        .unwrap_or_else(|| Err("hooks not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
 }
 
 pub fn build_framework_runtime_snapshot_envelope(
     repo_root: &Path,
     artifact_root_override: Option<&Path>,
     task_id_override: Option<&str>,
-) -> Result<Value, String> {
+) -> Result<Value> {
     BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE
         .get()
         .map(|f| f(repo_root, artifact_root_override, task_id_override))
-        .unwrap_or_else(|| Err("hooks not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
 }
 
 pub fn build_framework_runtime_snapshot_envelope_with_level(
@@ -978,7 +981,7 @@ pub fn build_framework_runtime_snapshot_envelope_with_level(
     artifact_root_override: Option<&Path>,
     task_id_override: Option<&str>,
     detail_level: &str,
-) -> Result<Value, String> {
+) -> Result<Value> {
     if let Some(f) = BUILD_FRAMEWORK_RUNTIME_SNAPSHOT_ENVELOPE_WITH_LEVEL.get() {
         f(
             repo_root,
@@ -1025,7 +1028,7 @@ pub fn build_automatic_continuity_checkpoint_payload(
         .unwrap_or(Value::Null)
 }
 
-pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>, String> {
+pub fn check_anomalies(repo_root: &Path) -> Result<Vec<String>> {
     CHECK_ANOMALIES
         .get()
         .map(|f| f(repo_root))
@@ -1036,11 +1039,11 @@ pub fn append_evidence_index(
     repo_root: &Path,
     task_id: Option<&str>,
     entry: serde_json::Map<String, Value>,
-) -> Result<(), String> {
+) -> Result<()> {
     APPEND_EVIDENCE_INDEX
         .get()
         .map(|f| f(repo_root, task_id, entry))
-        .unwrap_or_else(|| Err("hooks not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
 }
 
 pub fn hook_action_from_output(output: &Value) -> &'static str {
@@ -1057,25 +1060,25 @@ pub fn closeout_record_schema_version() -> &'static str {
         .unwrap_or("closeout-record-v1")
 }
 
-pub fn validate_and_resolve_web_fetch_url(url: &str) -> Result<(String, Vec<String>), String> {
+pub fn validate_and_resolve_web_fetch_url(url: &str) -> Result<(String, Vec<String>)> {
     VALIDATE_AND_RESOLVE_WEB_FETCH_URL
         .get()
         .map(|f| f(url))
-        .unwrap_or_else(|| Err("hooks not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
 }
 
-pub fn resolve_web_fetch_redirect(base: &str, location: &str) -> Result<String, String> {
+pub fn resolve_web_fetch_redirect(base: &str, location: &str) -> Result<String> {
     RESOLVE_WEB_FETCH_REDIRECT
         .get()
         .map(|f| f(base, location))
-        .unwrap_or_else(|| Err("hooks not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
 }
 
-pub fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<String>, String> {
+pub fn resolve_web_fetch_addresses(host: &str, port: u16) -> Result<Vec<String>> {
     RESOLVE_WEB_FETCH_ADDRESSES
         .get()
         .map(|f| f(host, port))
-        .unwrap_or_else(|| Err("hooks not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("hooks not registered")))
 }
 
 pub fn evaluate_mcp_pre_guard_safe(
@@ -1098,15 +1101,15 @@ pub fn evaluate_mcp_pre_guard_safe(
 
 
 // ── Quality Gate full implementation hook (registered by runtime-core) ──
-static QUALITY_GATE_DRIVE: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
+static QUALITY_GATE_DRIVE: OnceLock<fn(Value) -> Result<Value>> = OnceLock::new();
 
-pub fn register_quality_gate_drive(func: fn(Value) -> Result<Value, String>) {
+pub fn register_quality_gate_drive(func: fn(Value) -> Result<Value>) {
     once_lock_set(&QUALITY_GATE_DRIVE, func, "QUALITY_GATE_DRIVE");
 }
 
 /// Call the registered quality_gate implementation (runtime-core has append_round support).
 /// Returns None if not registered (caller should fall back to core-state).
-pub fn quality_gate_drive_registered() -> Option<fn(Value) -> Result<Value, String>> {
+pub fn quality_gate_drive_registered() -> Option<fn(Value) -> Result<Value>> {
     QUALITY_GATE_DRIVE.get().copied()
 }
 
@@ -1114,22 +1117,22 @@ pub fn quality_gate_drive_registered() -> Option<fn(Value) -> Result<Value, Stri
 
 /// Research tool dispatch: injected at startup by runtime-core
 /// to break the L3→L6 dependency direction.
-type ResearchToolDispatchFn = fn(&str, &Value) -> Result<String, String>;
+type ResearchToolDispatchFn = fn(&str, &Value) -> Result<String>;
 
 // ── Session supervisor operation hook ──
 // Registered by runtime-core at startup. Allows MCP tools to call session_supervisor ops
 // without host-projection depending on session-supervisor crate directly.
 
-static SESSION_SUPERVISOR_OP: OnceLock<fn(Value) -> Result<Value, String>> = OnceLock::new();
+static SESSION_SUPERVISOR_OP: OnceLock<fn(Value) -> Result<Value>> = OnceLock::new();
 
 /// Register the session-supervisor operation handler. Called once at startup.
-pub fn register_session_supervisor_op(f: fn(Value) -> Result<Value, String>) {
+pub fn register_session_supervisor_op(f: fn(Value) -> Result<Value>) {
     SESSION_SUPERVISOR_OP.set(f).ok();
     tracing::info!("session_supervisor_op: registered");
 }
 
 /// Dispatch a session-supervisor operation. Returns None if not registered.
-pub fn session_supervisor_op(payload: Value) -> Option<Result<Value, String>> {
+pub fn session_supervisor_op(payload: Value) -> Option<Result<Value>> {
     SESSION_SUPERVISOR_OP.get().map(|f| f(payload))
 }
 static RESEARCH_TOOL_DISPATCH: OnceLock<ResearchToolDispatchFn> = OnceLock::new();
@@ -1150,52 +1153,52 @@ pub fn get_research_tool_dispatch() -> Option<ResearchToolDispatchFn> {
 // JSON — no routing-engine types cross the boundary.
 
 /// MCP tool skill route: route a query to the best matching skill.
-type McpToolSkillRouteFn = fn(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String, String>;
+type McpToolSkillRouteFn = fn(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String>;
 static MCP_TOOL_SKILL_ROUTE: OnceLock<McpToolSkillRouteFn> = OnceLock::new();
 
 pub fn register_mcp_tool_skill_route(f: McpToolSkillRouteFn) {
     once_lock_set(&MCP_TOOL_SKILL_ROUTE, f, "mcp_tool_skill_route");
 }
 
-pub fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String, String> {
+pub fn mcp_tool_skill_route(query: &str, host_id: &str, first_turn: bool, repo_root: &str) -> Result<String> {
     match MCP_TOOL_SKILL_ROUTE.get() {
         Some(f) => f(query, host_id, first_turn, repo_root),
-        None => Err("skill_route not available (not registered)".to_string()),
+        None => Err(FrameworkError::validation("skill_route not available (not registered)")),
     }
 }
 
 /// MCP tool search skills: search skills by query string.
-type McpToolSearchSkillsFn = fn(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String, String>;
+type McpToolSearchSkillsFn = fn(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String>;
 static MCP_TOOL_SEARCH_SKILLS: OnceLock<McpToolSearchSkillsFn> = OnceLock::new();
 
 pub fn register_mcp_tool_search_skills(f: McpToolSearchSkillsFn) {
     once_lock_set(&MCP_TOOL_SEARCH_SKILLS, f, "mcp_tool_search_skills");
 }
 
-pub fn mcp_tool_search_skills(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String, String> {
+pub fn mcp_tool_search_skills(query: &str, limit: usize, effective_host: &str, repo_root: &str) -> Result<String> {
     match MCP_TOOL_SEARCH_SKILLS.get() {
         Some(f) => f(query, limit, effective_host, repo_root),
-        None => Err("search_skills not available (not registered)".to_string()),
+        None => Err(FrameworkError::validation("search_skills not available (not registered)")),
     }
 }
 
-type ReviewGateHandler = fn(event: &str, repo_root: Option<&Path>) -> Result<(), String>;
+type ReviewGateHandler = fn(event: &str, repo_root: Option<&Path>) -> Result<()>;
 static REVIEW_GATE_HANDLER: OnceLock<ReviewGateHandler> = OnceLock::new();
 
 pub fn register_review_gate_handler(handler: ReviewGateHandler) {
     once_lock_set(&REVIEW_GATE_HANDLER, handler, "REVIEW_GATE_HANDLER");
 }
 
-pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<(), String> {
+pub fn run_review_gate(event: &str, cli_repo_root: Option<&Path>) -> Result<()> {
     match REVIEW_GATE_HANDLER.get() {
         Some(handler) => handler(event, cli_repo_root),
-        None => Err("review gate handler not registered".into()),
+        None => Err(FrameworkError::validation("review gate handler not registered")),
     }
 }
 
 // ── Browser dispatch (moved from runtime-core to break L3→L4 dep) ──
 
-type BrowserDispatchFn = fn(framework_kernel::cli_args::BrowserSubcommand) -> Result<(), String>;
+type BrowserDispatchFn = fn(framework_kernel::cli_args::BrowserSubcommand) -> Result<()>;
 static BROWSER_DISPATCH: OnceLock<BrowserDispatchFn> = OnceLock::new();
 
 /// Register the browser command dispatch function (call once at startup).
@@ -1208,35 +1211,34 @@ pub fn set_browser_dispatch(f: BrowserDispatchFn) {
 /// Dispatch a browser subcommand. Returns `Err` if no dispatch function was registered.
 pub fn dispatch_browser_command(
     command: framework_kernel::cli_args::BrowserSubcommand,
-) -> Result<(), String> {
+) -> Result<()> {
     match BROWSER_DISPATCH.get() {
         Some(f) => f(command),
-        None => Err(
-            "browser-mcp dispatch not registered; call set_browser_dispatch() at startup"
-                .to_string(),
-        ),
+        None => Err(FrameworkError::validation(
+            "browser-mcp dispatch not registered; call set_browser_dispatch() at startup",
+        )),
     }
 }
 
 // ── Runtime trace transport proxies (break browser-mcp L3→L4 dep) ──
 
-type AttachRuntimeEventTransportFn = fn(Value) -> Result<Value, String>;
+type AttachRuntimeEventTransportFn = fn(Value) -> Result<Value>;
 static ATTACH_RUNTIME_EVENT_TRANSPORT: OnceLock<AttachRuntimeEventTransportFn> = OnceLock::new();
 
 pub fn register_attach_runtime_event_transport(f: AttachRuntimeEventTransportFn) {
     once_lock_set(&ATTACH_RUNTIME_EVENT_TRANSPORT, f, "ATTACH_RUNTIME_EVENT_TRANSPORT");
 }
 
-pub fn attach_runtime_event_transport(payload: Value) -> Result<Value, String> {
+pub fn attach_runtime_event_transport(payload: Value) -> Result<Value> {
     ATTACH_RUNTIME_EVENT_TRANSPORT
         .get()
         .map(|f| f(payload))
-        .unwrap_or_else(|| Err("attach_runtime_event_transport not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("attach_runtime_event_transport not registered")))
 }
 
 type InspectTraceStreamFn = fn(
     framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
-) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload, String>;
+) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload>;
 static INSPECT_TRACE_STREAM: OnceLock<InspectTraceStreamFn> = OnceLock::new();
 
 pub fn register_inspect_trace_stream(f: InspectTraceStreamFn) {
@@ -1245,11 +1247,11 @@ pub fn register_inspect_trace_stream(f: InspectTraceStreamFn) {
 
 pub fn inspect_trace_stream(
     payload: framework_kernel::stdio_payload_types::TraceStreamInspectRequestPayload,
-) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload, String> {
+) -> Result<framework_kernel::stdio_payload_types::TraceStreamInspectResponsePayload> {
     INSPECT_TRACE_STREAM
         .get()
         .map(|f| f(payload))
-        .unwrap_or_else(|| Err("inspect_trace_stream not registered".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("inspect_trace_stream not registered")))
 }
 
 // ── Tool dispatch hooks: business logic extraction from L0 → L4 ──
@@ -1258,79 +1260,79 @@ pub fn inspect_trace_stream(
 // multi-source evaluation) out of host-projection's tool handlers into runtime-core.
 // host-projection retains MCP parameter type-checking; runtime-core owns domain logic.
 
-/// Goal state manage dispatch: (args, repo_root, session_id) -> Result<String, String>
-type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> Result<String, String>;
+/// Goal state manage dispatch: (args, repo_root, session_id) -> Result<String>
+type GoalStateManageDispatchFn = fn(&Value, &Path, &str) -> Result<String>;
 static GOAL_STATE_MANAGE_DISPATCH: OnceLock<GoalStateManageDispatchFn> = OnceLock::new();
 
 pub fn register_tool_goal_state_manage_dispatch(f: GoalStateManageDispatchFn) {
     once_lock_set(&GOAL_STATE_MANAGE_DISPATCH, f, "tool_goal_state_manage_dispatch");
 }
 
-pub fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String, String> {
+pub fn tool_goal_state_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> {
     GOAL_STATE_MANAGE_DISPATCH
         .get()
         .map(|f| f(args, repo_root, session_id))
-        .unwrap_or_else(|| Err("tool_goal_state_manage_dispatch not registered — runtime-core boot required".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("tool_goal_state_manage_dispatch not registered — runtime-core boot required")))
 }
 
-/// Quality gate manage dispatch: (args, repo_root, session_id) -> Result<String, String>
-type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> Result<String, String>;
+/// Quality gate manage dispatch: (args, repo_root, session_id) -> Result<String>
+type QualityGateManageDispatchFn = fn(&Value, &Path, &str) -> Result<String>;
 static QUALITY_GATE_MANAGE_DISPATCH: OnceLock<QualityGateManageDispatchFn> = OnceLock::new();
 
 pub fn register_tool_quality_gate_manage_dispatch(f: QualityGateManageDispatchFn) {
     once_lock_set(&QUALITY_GATE_MANAGE_DISPATCH, f, "tool_quality_gate_manage_dispatch");
 }
 
-pub fn tool_quality_gate_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String, String> {
+pub fn tool_quality_gate_manage_dispatch(args: &Value, repo_root: &Path, session_id: &str) -> Result<String> {
     QUALITY_GATE_MANAGE_DISPATCH
         .get()
         .map(|f| f(args, repo_root, session_id))
-        .unwrap_or_else(|| Err("tool_quality_gate_manage_dispatch not registered — runtime-core boot required".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("tool_quality_gate_manage_dispatch not registered — runtime-core boot required")))
 }
 
-/// Closeout record write dispatch: (args, repo_root) -> Result<String, String>
-type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> Result<String, String>;
+/// Closeout record write dispatch: (args, repo_root) -> Result<String>
+type CloseoutRecordWriteDispatchFn = fn(&Value, &Path) -> Result<String>;
 static CLOSEOUT_RECORD_WRITE_DISPATCH: OnceLock<CloseoutRecordWriteDispatchFn> = OnceLock::new();
 
 pub fn register_tool_closeout_record_write_dispatch(f: CloseoutRecordWriteDispatchFn) {
     once_lock_set(&CLOSEOUT_RECORD_WRITE_DISPATCH, f, "tool_closeout_record_write_dispatch");
 }
 
-pub fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Result<String, String> {
+pub fn tool_closeout_record_write_dispatch(args: &Value, repo_root: &Path) -> Result<String> {
     CLOSEOUT_RECORD_WRITE_DISPATCH
         .get()
         .map(|f| f(args, repo_root))
-        .unwrap_or_else(|| Err("tool_closeout_record_write_dispatch not registered — runtime-core boot required".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("tool_closeout_record_write_dispatch not registered — runtime-core boot required")))
 }
 
-/// Closeout gate evaluate: (args, repo_root, host_id) -> Result<String, String>
-type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> Result<String, String>;
+/// Closeout gate evaluate: (args, repo_root, host_id) -> Result<String>
+type CloseoutGateEvaluateFn = fn(&Value, &Path, &str) -> Result<String>;
 static CLOSEOUT_GATE_EVALUATE: OnceLock<CloseoutGateEvaluateFn> = OnceLock::new();
 
 pub fn register_tool_closeout_gate_evaluate(f: CloseoutGateEvaluateFn) {
     once_lock_set(&CLOSEOUT_GATE_EVALUATE, f, "tool_closeout_gate_evaluate");
 }
 
-pub fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str) -> Result<String, String> {
+pub fn tool_closeout_gate_evaluate(args: &Value, repo_root: &Path, host_id: &str) -> Result<String> {
     CLOSEOUT_GATE_EVALUATE
         .get()
         .map(|f| f(args, repo_root, host_id))
-        .unwrap_or_else(|| Err("tool_closeout_gate_evaluate not registered — runtime-core boot required".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("tool_closeout_gate_evaluate not registered — runtime-core boot required")))
 }
 
-/// Routing evolution dispatch: (args, repo_root) -> Result<String, String>
-type RoutingEvolutionDispatchFn = fn(&Value, &Path) -> Result<String, String>;
+/// Routing evolution dispatch: (args, repo_root) -> Result<String>
+type RoutingEvolutionDispatchFn = fn(&Value, &Path) -> Result<String>;
 static ROUTING_EVOLUTION_DISPATCH: OnceLock<RoutingEvolutionDispatchFn> = OnceLock::new();
 
 pub fn register_tool_routing_evolution_dispatch(f: RoutingEvolutionDispatchFn) {
     once_lock_set(&ROUTING_EVOLUTION_DISPATCH, f, "tool_routing_evolution_dispatch");
 }
 
-pub fn tool_routing_evolution_dispatch(args: &Value, repo_root: &Path) -> Result<String, String> {
+pub fn tool_routing_evolution_dispatch(args: &Value, repo_root: &Path) -> Result<String> {
     ROUTING_EVOLUTION_DISPATCH
         .get()
         .map(|f| f(args, repo_root))
-        .unwrap_or_else(|| Err("tool_routing_evolution_dispatch not registered — runtime-core boot required".into()))
+        .unwrap_or_else(|| Err(FrameworkError::validation("tool_routing_evolution_dispatch not registered — runtime-core boot required")))
 }
 
 // ── Mirror type structural canary tests ──

@@ -1,9 +1,12 @@
 use super::SQLITE_TABLE_NAME;
 use super::paths::normalize_runtime_path;
+use core_policy::error::FrameworkError;
 use rusqlite::{Connection, OptionalExtension, params};
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+type Result<T> = std::result::Result<T, FrameworkError>;
 
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn env_checkpoint_storage_db_path() -> Option<PathBuf> {
@@ -31,7 +34,7 @@ pub fn runtime_storage_db_name_candidates() -> Vec<String> {
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>, String> {
+pub fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>> {
     use std::cell::RefCell;
     use std::rc::Rc;
     thread_local! {
@@ -43,16 +46,16 @@ pub fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>, String>
             && cached_path == path {
                 return Ok(Rc::clone(cached_conn));
             }
-        let conn = Connection::open(path).map_err(|err| {
-            format!(
-                "open sqlite runtime storage failed for {}: {err}",
+        let conn = Connection::open(path).map_err(|e| {
+            FrameworkError::validation(format!(
+                "open sqlite runtime storage failed for {}: {e}",
                 path.display()
-            )
+            ))
         })?;
         conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|err| format!("enable sqlite runtime storage WAL failed: {err}"))?;
+            .map_err(|e| FrameworkError::validation(format!("enable sqlite runtime storage WAL failed: {e}")))?;
         conn.pragma_update(None, "synchronous", "NORMAL")
-            .map_err(|err| format!("set sqlite runtime storage synchronous mode failed: {err}"))?;
+            .map_err(|e| FrameworkError::validation(format!("set sqlite runtime storage synchronous mode failed: {e}")))?;
         ensure_runtime_storage_sqlite_schema(&conn)?;
         let shared = Rc::new(conn);
         let result = Rc::clone(&shared);
@@ -62,29 +65,29 @@ pub fn sqlite_connection(path: &Path) -> Result<std::rc::Rc<Connection>, String>
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn ensure_runtime_storage_sqlite_schema(conn: &Connection) -> Result<(), String> {
+pub fn ensure_runtime_storage_sqlite_schema(conn: &Connection) -> Result<()> {
     conn.execute(
         &format!(
             "CREATE TABLE IF NOT EXISTS {SQLITE_TABLE_NAME} (payload_key TEXT PRIMARY KEY, payload_text TEXT NOT NULL)"
         ),
         [],
     )
-    .map_err(|err| format!("ensure sqlite runtime storage schema failed: {err}"))?;
+    .map_err(|e| FrameworkError::validation(format!("ensure sqlite runtime storage schema failed: {e}")))?;
     Ok(())
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
-pub fn sqlite_lookup_key(path: &Path, storage_root: &Path) -> Result<String, String> {
+pub fn sqlite_lookup_key(path: &Path, storage_root: &Path) -> Result<String> {
     let resolved_path = normalize_runtime_path(&path.display().to_string())?;
     let resolved_root = normalize_runtime_path(&storage_root.display().to_string())?;
     let relative_path = resolved_path
         .strip_prefix(&resolved_root)
         .map_err(|_| {
-            format!(
+            FrameworkError::validation(format!(
                 "sqlite runtime storage path {} must stay under storage root {}",
                 resolved_path.display(),
                 resolved_root.display()
-            )
+            ))
         })?
         .to_string_lossy()
         .replace('\\', "/");
@@ -111,16 +114,16 @@ pub fn sqlite_payload_exists(
     path: &Path,
     db_path: &Path,
     storage_root: &Path,
-) -> Result<bool, String> {
+) -> Result<bool> {
     let stable_key = sqlite_lookup_key(path, storage_root)?;
     let conn = sqlite_connection(db_path)?;
     let mut stmt = conn
         .prepare_cached(SQLITE_EXISTS_SQL)
-        .map_err(|err| format!("prepare sqlite exists query failed: {err}"))?;
+        .map_err(|e| FrameworkError::validation(format!("prepare sqlite exists query failed: {e}")))?;
     let exists = stmt
         .query_row(params![stable_key], |row| row.get::<_, i64>(0))
         .optional()
-        .map_err(|err| format!("run sqlite exists query failed: {err}"))?
+        .map_err(|e| FrameworkError::validation(format!("run sqlite exists query failed: {e}")))?
         .is_some();
     Ok(exists)
 }
@@ -130,14 +133,14 @@ pub fn sqlite_read_text(
     path: &Path,
     db_path: &Path,
     storage_root: &Path,
-) -> Result<String, String> {
+) -> Result<String> {
     let stable_key = sqlite_lookup_key(path, storage_root)?;
     let conn = sqlite_connection(db_path)?;
     let mut stmt = conn
         .prepare_cached(SQLITE_READ_SQL)
-        .map_err(|err| format!("prepare sqlite read query failed: {err}"))?;
+        .map_err(|e| FrameworkError::validation(format!("prepare sqlite read query failed: {e}")))?;
     stmt.query_row(params![stable_key], |row| row.get::<_, String>(0))
-        .map_err(|err| format!("read sqlite payload failed for {}: {err}", path.display()))
+        .map_err(|e| FrameworkError::validation(format!("read sqlite payload failed for {}: {e}", path.display())))
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
@@ -146,19 +149,14 @@ pub fn sqlite_write_text(
     db_path: &Path,
     storage_root: &Path,
     payload_text: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     let stable_key = sqlite_lookup_key(path, storage_root)?;
     if let Some(parent) = db_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create sqlite parent directory for {} failed: {err}",
-                db_path.display()
-            )
-        })?;
+        fs::create_dir_all(parent)?;
     }
     let conn = sqlite_connection(db_path)?;
     conn.execute(SQLITE_WRITE_SQL, params![stable_key, payload_text])
-        .map_err(|err| format!("write sqlite payload failed for {}: {err}", path.display()))?;
+        .map_err(|e| FrameworkError::validation(format!("write sqlite payload failed for {}: {e}", path.display())))?;
     Ok(())
 }
 
@@ -168,18 +166,13 @@ pub fn sqlite_append_text(
     db_path: &Path,
     storage_root: &Path,
     payload_text: &str,
-) -> Result<(), String> {
+) -> Result<()> {
     let stable_key = sqlite_lookup_key(path, storage_root)?;
     if let Some(parent) = db_path.parent() {
-        fs::create_dir_all(parent).map_err(|err| {
-            format!(
-                "create sqlite parent directory for {} failed: {err}",
-                db_path.display()
-            )
-        })?;
+        fs::create_dir_all(parent)?;
     }
     let conn = sqlite_connection(db_path)?;
     conn.execute(SQLITE_APPEND_SQL, params![stable_key, payload_text])
-        .map_err(|err| format!("append sqlite payload failed for {}: {err}", path.display()))?;
+        .map_err(|e| FrameworkError::validation(format!("append sqlite payload failed for {}: {e}", path.display())))?;
     Ok(())
 }

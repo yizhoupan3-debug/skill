@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Shared REVIEW_GATE lane closed-set assertions for policy + host_integration tests.
 //! Normalization matches `router-rs` `lane_normalize::normalize_subagent_lane`.
 

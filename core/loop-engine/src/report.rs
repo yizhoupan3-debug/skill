@@ -125,7 +125,6 @@ pub fn write_loop_report(
     Ok(path.display().to_string())
 }
 
-#[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
     use super::*;

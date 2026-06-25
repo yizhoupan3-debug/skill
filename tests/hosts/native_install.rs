@@ -9,8 +9,7 @@ use tempfile::tempdir;
 /// The `tmp` field is intentionally kept alive (not read) so the tempdir persists
 /// for the duration of the test.
 struct NativeInstallFixture {
-    #[allow(dead_code)]
-    tmp: tempfile::TempDir,
+    _tmp: tempfile::TempDir,
     repo_root: std::path::PathBuf,
     home_config_path: std::path::PathBuf,
 }
@@ -33,7 +32,7 @@ fn build_native_install_fixture(config_toml: Option<&str>) -> NativeInstallFixtu
         write_text(&home_config_path, content);
     }
     NativeInstallFixture {
-        tmp,
+        _tmp: tmp,
         repo_root,
         home_config_path,
     }

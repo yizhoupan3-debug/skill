@@ -218,7 +218,7 @@ pub(super) fn dispatch_tool(
     // Not found in built-in registry → try externally-registered dispatch
     // (research-harness tools registered via hooks.rs at runtime-core startup)
     if let Some(dispatch) = crate::hooks::get_research_tool_dispatch() {
-        dispatch(tool_name, args)
+        Ok(dispatch(tool_name, args)?)
     } else {
         Err(format!("Unknown tool: {tool_name}"))
     }

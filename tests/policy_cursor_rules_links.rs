@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Cursor alwaysApply rules must keep markdown links to policy canonicals
 //! (drift guard for harness subtraction).
 //!

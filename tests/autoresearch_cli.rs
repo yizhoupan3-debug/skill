@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 mod common;
 
 use common::{project_root, run};
