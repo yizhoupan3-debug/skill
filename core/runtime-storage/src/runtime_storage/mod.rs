@@ -19,6 +19,7 @@ pub use operation::{
     build_checkpoint_control_plane_compiler_payload, resolve_storage_backend,
     runtime_storage_operation, storage_artifact_exists, storage_read_text,
 };
+pub(crate) use sqlite::sqlite_connection;
 
 /// Single source of truth for the durable background-state service identity strings
 /// and the SQLite payload table name. `background_state` re-exports these via
