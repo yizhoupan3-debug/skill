@@ -37,9 +37,7 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         RouterCommand::Search(command) => {
             let records = load_records_cached_for_stdio(
                 command.runtime.as_deref(),
-            )?
-            .as_ref()
-            .clone();
+            )?;
             let host_indices =
                 filter_record_indices_for_host(&records, command.host_id.as_deref())?;
             let rows =
@@ -70,7 +68,7 @@ pub fn dispatch_router_command(command: RouterCommand) -> Result<(), String> {
         RouterCommand::Loop { command } => dispatch_loop_command(command),
         RouterCommand::Eval { command } => dispatch_eval_command(command),
         RouterCommand::SchemaDrift { command } => dispatch_schema_drift_command(command),
-        RouterCommand::RouterSelf { command } => router_self::dispatch(command),
+        RouterCommand::RouterSelf { command } => router_self::dispatch(command).map_err(|e| e.to_string()),
     }
 }
 
@@ -90,7 +88,8 @@ fn print_search_results(query: &str, payload: &SearchResultsPayload, rows: Vec<M
     for row in rows {
         let mut description = row.description.clone();
         if description.chars().count() > 60 {
-            description = description.chars().take(57).collect::<String>() + "...";
+                let cutoff = description.char_indices().nth(57).map(|(i, _)| i).unwrap_or(description.len());
+                description = description[..cutoff].to_string() + "...";
         }
         println!(
             "{:<30} | {:<5} | {:<10} | {:<6.2} | {}",

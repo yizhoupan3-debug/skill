@@ -33,7 +33,6 @@ use framework_extra::framework_doctor::run_framework_doctor;
 use framework_extra::session_artifacts::write_framework_session_artifacts;
 use runtime_core::harness_contract::{harness_contract, lint_skill_contracts};
 use core_policy::hook_policy::{HookPolicyEvaluateRequest, evaluate_hook_policy, hook_policy_contract};
-use runtime_core::host_entrypoint_sync::sync_host_entrypoints;
 use runtime_core::host_integration::run_host_integration_from_args;
 use runtime_core::runtime_storage::{
     build_checkpoint_control_plane_compiler_payload, runtime_backend_family_catalog_payload,
@@ -93,8 +92,8 @@ fn hook_output_to_value(output: Option<HookOutput>, event_name: &str) -> Value {
 }
 
 /// Resolve host entrypoint provider by `--host-id`.
-/// Registry-driven: iterates `host_provider_registry` to find a concrete provider.
-/// Falls back to the first registered host when no host_id is specified.
+/// Registry-driven: iterates `host_provider_registry` to find a concrete provider,
+/// reads the host's context_file (policy entrypoint) and builds the sync provider.
 fn resolve_host_entrypoint_provider(
     repo_root: &std::path::Path,
     host_id: Option<&str>,
@@ -103,18 +102,23 @@ fn resolve_host_entrypoint_provider(
         Some(id) if !id.trim().is_empty() => id.trim(),
         _ => return Err("host-id is required for sync-entrypoints; pass --host-id <host_name>".to_string()),
     };
-    match runtime_core::hosts::host_provider_for_routing_spelling(resolved) {
-        Some(provider) => {
-            let _ = repo_root;
-            Err(format!(
-                "host '{}' does not yet have a registered entrypoint provider",
-                provider.host_id()
-            ))
-        }
-        None => Err(format!(
+    let host_provider = runtime_core::hosts::host_provider_for_routing_spelling(resolved)
+        .ok_or_else(|| format!(
             "unknown host-id '{resolved}' for sync-entrypoints; not found in host_provider_registry"
-        )),
+        ))?;
+    let context_file = host_provider.context_file();
+    let mut files = std::collections::BTreeMap::new();
+    let context_path = repo_root.join(context_file);
+    if let Ok(contents) = std::fs::read(&context_path) {
+        files.insert(context_file.to_string(), contents);
     }
+    Ok(runtime_core::host_entrypoint_sync::HostEntrypointPayloadProvider {
+        files,
+        json_relative_paths: vec![],
+        manifest_relative_path: format!(".host_entrypoints_sync_manifest_{resolved}.json"),
+        agent_policy_entrypoint: context_file.to_string(),
+        after_apply: None,
+    })
 }
 
 pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), String> {
@@ -133,7 +137,10 @@ pub fn dispatch_framework_command(command: FrameworkCommand) -> Result<(), Strin
             let repo_root = resolve_repo_root_arg(command.repo_root.as_deref())?;
             let result = run_framework_doctor(&repo_root)?;
             if result.warn_count > 0 {
-                std::process::exit(1);
+                return Err(format!(
+                    "doctor found {} warning(s)",
+                    result.warn_count,
+                ));
             }
             Ok(())
         }
@@ -271,6 +278,20 @@ pub fn dispatch_framework_skills(command: SkillsSubcommand) -> Result<(), String
     }
 }
 
+/// 拆分连字符分隔字符串，每段首字母大写，用 separator 拼接。
+fn split_and_capitalize(s: &str, separator: &str) -> String {
+    s.split('-')
+        .map(|w| {
+            let mut c = w.chars();
+            match c.next() {
+                None => String::new(),
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(separator)
+}
+
 /// §5.4: 生成新宿主接入所需的全部脚手架文件。
 fn scaffold_host_integration(
     repo_root: &std::path::Path,
@@ -310,28 +331,8 @@ fn scaffold_host_integration(
         }
 
     let host_id_camel = host_id.replace('-', "_");
-    let host_name = host_id
-        .split('-')
-        .map(|w| {
-            let mut c = w.chars();
-            match c.next() {
-                None => String::new(),
-                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
-    let host_name_camel = host_id
-        .split('-')
-        .map(|w| {
-            let mut c = w.chars();
-            match c.next() {
-                None => String::new(),
-                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("");
+    let host_name = split_and_capitalize(host_id, " ");
+    let host_name_camel = split_and_capitalize(host_id, "");
 
     let files = vec![
         // 1. Host provider
@@ -514,7 +515,7 @@ fn dispatch_host_hook(host_id: &str, event: &str, repo_root: Option<&Path>) -> R
 
     // Read stdin payload (shared 4 MiB limited reader)
     let mut stdin = std::io::stdin().lock();
-    let input = read_stdin_limited(&mut stdin).unwrap_or_default();
+    let input = read_stdin_limited(&mut stdin).map_err(|e| format!("read_stdin: {e}"))?;
     let payload: Value = if input.trim().is_empty() {
         json!({})
     } else {
@@ -841,8 +842,7 @@ pub fn dispatch_schema_drift_command(command: SchemaDriftCommand) -> Result<(), 
 pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
     match command {
         LoopCommand::Run(args) => {
-            let repo_root = std::env::current_dir()
-                .map_err(|e| format!("get current dir: {e}"))?;
+            let repo_root = resolve_repo_root_arg(None)?;
             let registry_path = repo_root.join("configs/framework/LOOP_REGISTRY.json");
             let raw = fs::read_to_string(&registry_path)
                 .map_err(|e| format!("read LOOP_REGISTRY.json: {e}"))?;
@@ -870,8 +870,7 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
             }))
         }
         LoopCommand::Status(args) => {
-            let repo_root = std::env::current_dir()
-                .map_err(|e| format!("get current dir: {e}"))?;
+            let repo_root = resolve_repo_root_arg(None)?;
             match loop_engine::runner::run_loop_status(&repo_root, &args.loop_id)
                 .map_err(|e| format!("loop status failed: {e}"))? {
                 Some(state) => print_json_value(&serde_json::json!({
@@ -892,8 +891,7 @@ pub fn dispatch_loop_command(command: LoopCommand) -> Result<(), String> {
             }
         }
         LoopCommand::Kill(args) => {
-            let repo_root = std::env::current_dir()
-                .map_err(|e| format!("get current dir: {e}"))?;
+            let repo_root = resolve_repo_root_arg(None)?;
             if args.all {
                 loop_engine::runner::run_loop_kill_all(&repo_root)
                     .map_err(|e| format!("loop kill --all failed: {e}"))?;

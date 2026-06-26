@@ -80,8 +80,13 @@ fn main() -> Result<(), String> {
                 // Map old-style `router-rs <host> <subcommand>` to registry-driven
                 // `router-rs host <action> <host-id> <subcommand>`.
                 // Determine action (hook/agent) from the subcommand or default.
+                // Consume the original subcommand word when it was "agent" to
+                // avoid duplicating it after the insertions below.
                 let action = match args.get(2).and_then(|s| s.to_str()) {
-                    Some("agent" | "Agent") => "agent",
+                    Some(s) if s.to_ascii_lowercase() == "agent" => {
+                        args.remove(2);
+                        "agent"
+                    }
                     _ => "hook",
                 };
                 // Replace the host alias with the expanded form
