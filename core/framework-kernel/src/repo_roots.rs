@@ -1,4 +1,5 @@
 //! Repository root discovery for framework continuity paths.
+use core_errors::FrameworkError;
 use std::path::{Path, PathBuf};
 
 /// Skill framework 仓库根：`RUNTIME_REGISTRY` + `router-rs` 清单同时存在。
@@ -60,7 +61,7 @@ fn repo_root_from_mcp_placeholder(raw: &str) -> Option<PathBuf> {
     None
 }
 
-pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String> {
+pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, FrameworkError> {
     let base = if let Some(path) = repo_root {
         if let Some(resolved) = path.to_str().and_then(repo_root_from_mcp_placeholder) {
             resolved
@@ -68,7 +69,7 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String
             // MCP placeholder not resolved (e.g. CLAUDE_PROJECT_DIR not set in Claude Desktop).
             // Fall back to cwd instead of using the literal placeholder string as a path.
             std::env::current_dir()
-                .map_err(|err| format!("resolve current directory failed: {err}"))?
+                .map_err(|err| FrameworkError::validation(format!("resolve current directory failed: {err}")))?
         } else {
             path.to_path_buf()
         }
@@ -76,12 +77,12 @@ pub fn resolve_repo_root_arg(repo_root: Option<&Path>) -> Result<PathBuf, String
         let value = value.trim();
         if value.is_empty() {
             std::env::current_dir()
-                .map_err(|err| format!("resolve current directory failed: {err}"))?
+                .map_err(|err| FrameworkError::validation(format!("resolve current directory failed: {err}")))?
         } else {
             PathBuf::from(value)
         }
     } else {
-        std::env::current_dir().map_err(|err| format!("resolve current directory failed: {err}"))?
+        std::env::current_dir().map_err(|err| FrameworkError::validation(format!("resolve current directory failed: {err}")))?
     };
     let normalized = base.canonicalize().unwrap_or(base);
     if is_framework_root(&normalized) {

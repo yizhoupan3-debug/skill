@@ -3,6 +3,7 @@
 //! Moved from `framework-runtime` to `framework-kernel` (B0) so all layers
 //! can depend on these without introducing circular crate dependencies.
 
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::collections::HashSet;
 
@@ -105,13 +106,13 @@ pub fn required_non_empty_string(
     payload: &Value,
     key: &str,
     context: &str,
-) -> Result<String, String> {
+) -> Result<String, FrameworkError> {
     let text = payload
         .get(key)
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| format!("{context} requires non-empty {key}"))?;
+        .ok_or_else(|| FrameworkError::validation(format!("{context} requires non-empty {key}")))?;
     Ok(text.to_string())
 }
 
@@ -466,7 +467,7 @@ mod tests {
         let payload = json!({});
         let result = required_non_empty_string(&payload, "name", "test");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("requires non-empty name"));
+        assert!(result.unwrap_err().to_string().contains("requires non-empty name"));
     }
 
     #[test]

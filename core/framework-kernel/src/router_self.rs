@@ -1,15 +1,16 @@
 //! `router-rs-cli self install|clean` — global binary install and build artifact cleanup.
 
 use clap::{Args, Subcommand};
+use core_errors::FrameworkError;
 use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tracing;
 
-fn file_sha256(path: &Path) -> Result<[u8; 32], String> {
+fn file_sha256(path: &Path) -> Result<[u8; 32], FrameworkError> {
     let bytes =
-        fs::read(path).map_err(|err| format!("read {} for sha256: {err}", path.display()))?;
+        fs::read(path).map_err(|err| FrameworkError::validation(format!("read {} for sha256: {err}", path.display())))?;
     Ok(Sha256::digest(&bytes).into())
 }
 
@@ -38,7 +39,7 @@ pub struct RouterSelfCleanArgs {
     pub repo_targets: bool,
 }
 
-pub fn dispatch(command: RouterSelfCommands) -> Result<(), String> {
+pub fn dispatch(command: RouterSelfCommands) -> Result<(), FrameworkError> {
     match command {
         RouterSelfCommands::Install(args) => {
             let dest = install_router_rs_to_bin_dir(args.bin_dir)?;
@@ -72,31 +73,31 @@ pub fn router_rs_desktop_mcp_path_for_home(home: &Path) -> PathBuf {
     router_rs_desktop_mcp_dir_for_home(home).join("router-rs-cli")
 }
 
-pub fn install_router_rs_to_bin_dir(bin_dir: Option<PathBuf>) -> Result<PathBuf, String> {
+pub fn install_router_rs_to_bin_dir(bin_dir: Option<PathBuf>) -> Result<PathBuf, FrameworkError> {
     #[cfg(not(unix))]
     {
         let _ = bin_dir;
-        return Err("router-rs-cli self install is only supported on unix hosts".to_string());
+        return Err(FrameworkError::unsupported("router-rs-cli self install is only supported on unix hosts"));
     }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
 
         let dest_dir = bin_dir.unwrap_or_else(default_router_rs_install_dir);
-        fs::create_dir_all(&dest_dir).map_err(|err| err.to_string())?;
-        let src = std::env::current_exe().map_err(|err| err.to_string())?;
+        fs::create_dir_all(&dest_dir).map_err(|err| FrameworkError::validation(err.to_string()))?;
+        let src = std::env::current_exe().map_err(|err| FrameworkError::validation(err.to_string()))?;
         let dest = dest_dir.join("router-rs-cli");
-        fs::copy(&src, &dest).map_err(|err| err.to_string())?;
+        fs::copy(&src, &dest).map_err(|err| FrameworkError::validation(err.to_string()))?;
         let mut perms = fs::metadata(&dest)
-            .map_err(|err| err.to_string())?
+            .map_err(|err| FrameworkError::validation(err.to_string()))?
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&dest, perms).map_err(|err| err.to_string())?;
+        fs::set_permissions(&dest, perms).map_err(|err| FrameworkError::validation(err.to_string()))?;
         Ok(dest)
     }
 }
 
-pub fn ensure_router_rs_installed_for_runtime() -> Result<PathBuf, String> {
+pub fn ensure_router_rs_installed_for_runtime() -> Result<PathBuf, FrameworkError> {
     if let Ok(path) = which::which("router-rs-cli")
         && path.is_file() && !is_ephemeral_router_rs_path(&path.to_string_lossy()) {
             return Ok(path);
@@ -108,7 +109,7 @@ pub fn ensure_router_rs_installed_for_runtime() -> Result<PathBuf, String> {
     install_router_rs_to_bin_dir(None)
 }
 
-fn refresh_macos_binary_signature(path: &Path) -> Result<(), String> {
+fn refresh_macos_binary_signature(path: &Path) -> Result<(), FrameworkError> {
     #[cfg(not(target_os = "macos"))]
     {
         let _ = path;
@@ -120,23 +121,23 @@ fn refresh_macos_binary_signature(path: &Path) -> Result<(), String> {
             .args(["-cr"])
             .arg(path)
             .status()
-            .map_err(|err| format!("xattr failed for {}: {err}", path.display()))?;
+            .map_err(|err| FrameworkError::validation(format!("xattr failed for {}: {err}", path.display())))?;
         let status = Command::new("codesign")
             .args(["-s", "-", "-f"])
             .arg(path)
             .status()
-            .map_err(|err| format!("codesign failed for {}: {err}", path.display()))?;
+            .map_err(|err| FrameworkError::validation(format!("codesign failed for {}: {err}", path.display())))?;
         if !status.success() {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "codesign adhoc re-sign failed for {}: {status}",
                 path.display()
-            ));
+            )));
         }
         Ok(())
     }
 }
 
-fn pick_router_rs_copy_source() -> Result<PathBuf, String> {
+fn pick_router_rs_copy_source() -> Result<PathBuf, FrameworkError> {
     if let Ok(raw) = std::env::var("ROUTER_RS_BIN") {
         let path = PathBuf::from(raw.trim());
         if path.is_file() && !is_ephemeral_router_rs_path(&path.to_string_lossy()) {
@@ -157,18 +158,17 @@ fn pick_router_rs_copy_source() -> Result<PathBuf, String> {
     if local.is_file() {
         return Ok(local);
     }
-    Err(
+    Err(FrameworkError::not_found(
         "no stable router-rs-cli binary found; build with `cargo build --release --manifest-path core/router-rs/Cargo.toml` or set ROUTER_RS_BIN"
-            .to_string(),
-    )
+    ))
 }
 
 /// Install Desktop MCP binary under `{home}/.local/share/skill-framework/bin/router-rs-cli`.
-pub fn install_router_rs_for_desktop_mcp_at(home_account: &Path) -> Result<PathBuf, String> {
+pub fn install_router_rs_for_desktop_mcp_at(home_account: &Path) -> Result<PathBuf, FrameworkError> {
     #[cfg(not(unix))]
     {
         let _ = home_account;
-        return Err("router-rs-cli desktop MCP install is only supported on unix hosts".to_string());
+        return Err(FrameworkError::unsupported("router-rs-cli desktop MCP install is only supported on unix hosts"));
     }
     #[cfg(unix)]
     {
@@ -176,7 +176,7 @@ pub fn install_router_rs_for_desktop_mcp_at(home_account: &Path) -> Result<PathB
 
         let source = pick_router_rs_copy_source()?;
         let dest_dir = router_rs_desktop_mcp_dir_for_home(home_account);
-        fs::create_dir_all(&dest_dir).map_err(|err| err.to_string())?;
+        fs::create_dir_all(&dest_dir).map_err(|err| FrameworkError::validation(err.to_string()))?;
         let dest = router_rs_desktop_mcp_path_for_home(home_account);
         let needs_copy = match (fs::metadata(&source), fs::metadata(&dest)) {
             (Ok(src_meta), Ok(dest_meta)) => {
@@ -196,26 +196,26 @@ pub fn install_router_rs_for_desktop_mcp_at(home_account: &Path) -> Result<PathB
         };
         if needs_copy {
             fs::copy(&source, &dest).map_err(|err| {
-                format!(
+                FrameworkError::validation(format!(
                     "copy router-rs for desktop MCP {} -> {}: {err}",
                     source.display(),
                     dest.display()
-                )
+                ))
             })?;
         }
         let mut perms = fs::metadata(&dest)
-            .map_err(|err| err.to_string())?
+            .map_err(|err| FrameworkError::validation(err.to_string()))?
             .permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(&dest, perms).map_err(|err| err.to_string())?;
+        fs::set_permissions(&dest, perms).map_err(|err| FrameworkError::validation(err.to_string()))?;
         refresh_macos_binary_signature(&dest)?;
         Ok(dest)
     }
 }
 
-pub fn validate_router_rs_binary_runnable(path: &Path) -> Result<(), String> {
+pub fn validate_router_rs_binary_runnable(path: &Path) -> Result<(), FrameworkError> {
     if !path.is_file() {
-        return Err(format!("router-rs-cli binary missing at {}", path.display()));
+        return Err(FrameworkError::validation(format!("router-rs-cli binary missing at {}", path.display())));
     }
     let status = Command::new(path)
         .arg("framework")
@@ -224,14 +224,14 @@ pub fn validate_router_rs_binary_runnable(path: &Path) -> Result<(), String> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
-        .map_err(|err| format!("failed to exec {}: {err}", path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("failed to exec {}: {err}", path.display())))?;
     if status.success() {
         return Ok(());
     }
-    Err(format!(
+    Err(FrameworkError::validation(format!(
         "router-rs-cli binary at {} failed smoke test (exit {status})",
         path.display()
-    ))
+    )))
 }
 
 /// Resolve the `router-rs-cli` binary for subprocess e2e tests (never falls back to the test harness exe).
@@ -293,15 +293,15 @@ pub fn is_repo_build_router_rs_path(path: &str, framework_root: &Path) -> bool {
         && (path.contains("/target/release/router-rs-cli") || path.contains("/target/debug/router-rs-cli"))
 }
 
-fn run_clean(args: RouterSelfCleanArgs) -> Result<(), String> {
+fn run_clean(args: RouterSelfCleanArgs) -> Result<(), FrameworkError> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml");
     let status = Command::new("cargo")
         .args(["clean", "--manifest-path"])
         .arg(&manifest)
         .status()
-        .map_err(|err| format!("cargo clean failed to spawn: {err}"))?;
+        .map_err(|err| FrameworkError::validation(format!("cargo clean failed to spawn: {err}")))?;
     if !status.success() {
-        return Err(format!("cargo clean failed: {status}"));
+        return Err(FrameworkError::validation(format!("cargo clean failed: {status}")));
     }
     tracing::info!("cargo clean ok for {}", manifest.display());
 
@@ -317,13 +317,13 @@ fn run_clean(args: RouterSelfCleanArgs) -> Result<(), String> {
             .and_then(|p| p.parent())
             .map(Path::to_path_buf)
             .ok_or_else(|| {
-                "could not resolve framework root for repo target cleanup".to_string()
+                FrameworkError::validation("could not resolve framework root for repo target cleanup".to_string())
             })?;
         let crate_target = manifest.parent().ok_or_else(|| {
-            format!(
+            FrameworkError::validation(format!(
                 "cannot resolve crate target dir from manifest path {}",
                 manifest.display()
-            )
+            ))
         })?;
         remove_dir_if_exists(&crate_target.join("target"))?;
         remove_dir_if_exists(&framework_root.join("target"))?;
@@ -332,9 +332,9 @@ fn run_clean(args: RouterSelfCleanArgs) -> Result<(), String> {
     Ok(())
 }
 
-fn remove_dir_if_exists(path: &Path) -> Result<(), String> {
+fn remove_dir_if_exists(path: &Path) -> Result<(), FrameworkError> {
     if path.exists() {
-        fs::remove_dir_all(path).map_err(|err| err.to_string())?;
+        fs::remove_dir_all(path).map_err(|err| FrameworkError::validation(err.to_string()))?;
         tracing::info!("removed {}", path.display());
     }
     Ok(())
@@ -468,7 +468,7 @@ mod tests {
         let missing = std::env::temp_dir().join("router-rs-cli-missing-binary-smoke");
         let err = validate_router_rs_binary_runnable(&missing).unwrap_err();
         assert!(
-            err.contains("missing"),
+            err.to_string().contains("missing"),
             "expected missing-file error, got: {err}"
         );
     }
