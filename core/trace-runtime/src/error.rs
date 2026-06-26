@@ -22,3 +22,26 @@ pub enum TraceError {
     #[error("Validation error: {message}")]
     Validation { message: String },
 }
+
+impl TraceError {
+    /// Construct a validation error with a descriptive message.
+    pub fn validation(message: impl Into<String>) -> Self {
+        TraceError::Validation {
+            message: message.into(),
+        }
+    }
+}
+
+impl From<String> for TraceError {
+    fn from(message: String) -> Self {
+        TraceError::Validation { message }
+    }
+}
+
+impl From<&str> for TraceError {
+    fn from(message: &str) -> Self {
+        TraceError::Validation {
+            message: message.to_string(),
+        }
+    }
+}

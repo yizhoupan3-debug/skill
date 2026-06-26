@@ -598,7 +598,7 @@ pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
                 &command.input_json,
                 "trace record event",
             )?;
-            print_json_value(&record_trace_event(payload)?)
+            print_json_value(&record_trace_event(payload).map_err(|e| e.to_string())?)
         }
         TraceCommand::StreamReplay(command) => {
             let payload = parse_json_input::<TraceStreamReplayRequestPayload>(
@@ -619,7 +619,7 @@ pub fn dispatch_trace_command(command: TraceCommand) -> Result<(), String> {
                 &command.input_json,
                 "trace compact",
             )?;
-            print_json_value(&compact_trace_stream(payload)?)
+            print_json_value(&compact_trace_stream(payload).map_err(|e| e.to_string())?)
         }
         TraceCommand::WriteCompactionDelta(command) => {
             let payload = parse_json_input::<TraceCompactionDeltaWriteRequestPayload>(

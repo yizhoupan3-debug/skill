@@ -54,6 +54,8 @@ fn trace_event_matches_scope(
         && let Some(expected_session_id) = session_id
             && trace_event_string_field(payload, "session_id").as_deref()
                 != Some(expected_session_id)
+                && trace_event_string_field(payload, "run_id").as_deref()
+                    != Some(expected_session_id)
             {
                 return false;
             }
@@ -106,7 +108,7 @@ fn load_trace_stream_events(
         let event_payload = hydrate_trace_event_object(
             trace_event_object(serde_json::from_str::<Value>(raw_line).map_err(|err| {
                 format!("parse trace stream line {} failed: {err}", line_number + 1)
-            })?)?,
+            })?).map_err(|e| e.to_string())?,
             line_number + 1,
         );
         if trace_event_matches_request_scope(

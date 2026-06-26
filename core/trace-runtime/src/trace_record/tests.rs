@@ -4,7 +4,7 @@ use super::*;
 use serde_json::{json, Map, Value};
 
 use super::compact::{
-    build_compaction_stream_key, load_trace_events_from_text, stable_digest,
+    build_compaction_stream_key, load_trace_events_streaming, stable_digest,
     trace_event_matches_scope, unique_strings,
 };
 use super::util::build_prefixed_id;
@@ -222,10 +222,11 @@ fn load_trace_events_filters_by_run_id() {
         json!({"run_id": "r1", "kind": "a", "seq": 1}),
         json!({"run_id": "r2", "kind": "b", "seq": 2}),
     );
-    let events = load_trace_events_from_text(&stream, Some("r1"), None).unwrap();
-    assert_eq!(events.len(), 1);
+    let result = load_trace_events_streaming(&stream, Some("r1"), None, 0).unwrap();
+    assert_eq!(result.event_count, 1);
+    assert!(result.last_event.is_some());
     assert_eq!(
-        trace_event_string_field(&events[0], "kind"),
+        trace_event_string_field(&result.last_event.unwrap(), "kind"),
         Some("a".to_string())
     );
 }
@@ -233,20 +234,20 @@ fn load_trace_events_filters_by_run_id() {
 #[test]
 fn load_trace_events_skips_empty_lines() {
     let stream = "\n\n{\"run_id\": \"r1\", \"kind\": \"a\", \"seq\": 1}\n\n";
-    let events = load_trace_events_from_text(stream, Some("r1"), None).unwrap();
-    assert_eq!(events.len(), 1);
+    let result = load_trace_events_streaming(stream, Some("r1"), None, 0).unwrap();
+    assert_eq!(result.event_count, 1);
 }
 
 #[test]
 fn load_trace_events_returns_error_on_malformed_json() {
     let stream = "not-json\n";
-    let result = load_trace_events_from_text(stream, None, None);
+    let result = load_trace_events_streaming(stream, None, None, 0);
     assert!(result.is_err());
 }
 
 #[test]
 fn load_trace_events_handles_event_wrapper() {
     let stream = json!({"event": {"run_id": "r1", "kind": "x", "seq": 1}}).to_string() + "\n";
-    let events = load_trace_events_from_text(&stream, Some("r1"), None).unwrap();
-    assert_eq!(events.len(), 1);
+    let result = load_trace_events_streaming(&stream, Some("r1"), None, 0).unwrap();
+    assert_eq!(result.event_count, 1);
 }

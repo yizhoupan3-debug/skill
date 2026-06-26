@@ -1,3 +1,4 @@
+use crate::TraceError;
 use rt_storage::runtime_storage::acquire_runtime_path_lock;
 use serde_json::{Map, Value, json};
 use std::fs;
@@ -18,7 +19,7 @@ use super::util::{
 #[tracing::instrument(level = "debug", skip_all)]
 pub fn record_trace_event(
     payload: TraceRecordEventRequestPayload,
-) -> Result<TraceRecordEventResponsePayload, String> {
+) -> Result<TraceRecordEventResponsePayload, TraceError> {
     let event_id = build_event_id(
         payload.seq,
         &payload.run_id,
@@ -27,7 +28,7 @@ pub fn record_trace_event(
     );
     let page_token = build_trace_cursor(payload.generation, payload.seq, &event_id);
     let mut event = Map::new();
-    event.insert("event_id".to_string(), Value::String(event_id));
+    event.insert("event_id".to_string(), Value::String(event_id.clone()));
     event.insert("seq".to_string(), json!(payload.seq));
     event.insert("generation".to_string(), json!(payload.generation));
     event.insert("page_token".to_string(), Value::String(page_token));
@@ -61,12 +62,15 @@ pub fn record_trace_event(
         "event": &event_value,
         "sink_schema_version": payload.sink_schema_version,
     }))
-    .map_err(|err| format!("serialize trace event sink line failed: {err}"))?
+    .map_err(|err| TraceError::validation(format!("serialize trace event sink line failed: {err}")))?
         + "\n";
     if payload.write_outputs
         && let Some(path) = payload.path.as_deref()
     {
-        append_text(Path::new(path), &sink_line)?;
+        if let Err(err) = append_text(Path::new(path), &sink_line) {
+            tracing::error!(event_id = %event_id, kind = %payload.kind, path = %path, "append trace sink line failed: {err}");
+            return Err(err);
+        }
     }
 
     let (delta_path, delta_line, delta_bytes_written) = maybe_append_compaction_delta(
@@ -75,6 +79,8 @@ pub fn record_trace_event(
         payload.compaction_manifest_text.as_deref(),
         payload.write_outputs,
     )?;
+
+    tracing::debug!(event_id = %event_id, kind = %payload.kind, bytes_written = %sink_line.len(), delta_bytes_written, "trace event recorded");
 
     Ok(TraceRecordEventResponsePayload {
         schema_version: TRACE_RECORD_EVENT_SCHEMA_VERSION.to_string(),
@@ -94,7 +100,7 @@ fn maybe_append_compaction_delta(
     manifest_path: Option<&str>,
     manifest_text: Option<&str>,
     write_outputs: bool,
-) -> Result<(Option<String>, Option<String>, usize), String> {
+) -> Result<(Option<String>, Option<String>, usize), TraceError> {
     if manifest_path.is_none() && manifest_text.is_none() {
         return Ok((None, None, 0));
     }
@@ -112,8 +118,11 @@ fn maybe_append_compaction_delta(
         .unwrap_or(0);
     let event_object = event
         .as_object()
-        .ok_or_else(|| "trace event must be an object".to_string())?;
-    if trace_event_usize_field(event_object, "generation").unwrap_or(0) != active_generation {
+        .ok_or_else(|| TraceError::validation("trace event must be an object"))?;
+    let event_generation = trace_event_usize_field(event_object, "generation").unwrap_or(0);
+    let event_id = trace_event_string_field(event_object, "event_id").unwrap_or_default();
+    if event_generation != active_generation {
+        tracing::debug!(event_id = %event_id, event_generation, active_generation, "delta skipped: generation mismatch");
         return Ok((None, None, 0));
     }
     let Some(parent_snapshot_id) = manifest
@@ -121,12 +130,13 @@ fn maybe_append_compaction_delta(
         .and_then(Value::as_str)
         .map(str::to_string)
     else {
+        tracing::debug!(event_id = %event_id, "delta skipped: no active_parent_snapshot_id in manifest");
         return Ok((None, None, 0));
     };
     let Some(delta_path) = manifest.get("delta_path").and_then(Value::as_str) else {
+        tracing::debug!(event_id = %event_id, "delta skipped: no delta_path in manifest");
         return Ok((None, None, 0));
     };
-    let event_id = trace_event_string_field(event_object, "event_id").unwrap_or_default();
     let delta = json!({
         "schema_version": TRACE_COMPACTION_DELTA_SCHEMA_VERSION,
         "generation": active_generation,
@@ -136,7 +146,7 @@ fn maybe_append_compaction_delta(
         "ts": trace_event_string_field(event_object, "ts").unwrap_or_default(),
         "kind": trace_event_string_field(event_object, "kind").unwrap_or_default(),
         "payload": {
-            "event_id": event_id,
+            "event_id": event_id.clone(),
             "page_token": trace_event_string_field(event_object, "page_token").unwrap_or_default(),
             "stage": trace_event_string_field(event_object, "stage").unwrap_or_else(|| "background".to_string()),
             "status": trace_event_string_field(event_object, "status").unwrap_or_else(|| "ok".to_string()),
@@ -149,12 +159,16 @@ fn maybe_append_compaction_delta(
         },
     });
     let delta_line = serde_json::to_string(&delta)
-        .map_err(|err| format!("serialize trace compaction delta failed: {err}"))?
+        .map_err(|err| TraceError::validation(format!("serialize trace compaction delta failed: {err}")))?
         + "\n";
     if write_outputs {
-        append_text(Path::new(delta_path), &delta_line)?;
+        if let Err(err) = append_text(Path::new(delta_path), &delta_line) {
+            tracing::error!(event_id = %event_id, delta_path = %delta_path, "append compaction delta failed: {err}");
+            return Err(err);
+        }
     }
     let bytes = delta_line.len();
+    tracing::debug!(event_id = %event_id, delta_path = %delta_path, delta_bytes = bytes, "compaction delta appended");
     Ok((Some(delta_path.to_string()), Some(delta_line), bytes))
 }
 
@@ -167,16 +181,19 @@ fn build_event_id(seq: usize, run_id: &str, job_id: Option<&str>, kind: &str) ->
     build_prefixed_id("evt", &seed)
 }
 
-fn append_text(path: &Path, payload: &str) -> Result<(), String> {
+fn append_text(path: &Path, payload: &str) -> Result<(), TraceError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|err| {
-            format!("create trace parent failed for {}: {err}", parent.display())
+            TraceError::validation(format!(
+                "create trace parent failed for {}: {err}",
+                parent.display()
+            ))
         })?;
     }
     // Within-process serialization (cheap fast path).
     let _proc_guard = trace_append_lock().lock().map_err(|e| {
         tracing::error!("[router-rs] trace append lock poisoned: {e}");
-        "trace append lock poisoned".to_string()
+        TraceError::Poisoned("trace append lock".to_string())
     })?;
     // Cross-process serialization: prevents JSONL line interleaving when
     // codex, cursor and parallel test harnesses all tail the same trace.
@@ -185,11 +202,26 @@ fn append_text(path: &Path, payload: &str) -> Result<(), String> {
         .create(true)
         .append(true)
         .open(path)
-        .map_err(|err| format!("open trace append failed for {}: {err}", path.display()))?;
+        .map_err(|err| {
+            TraceError::validation(format!(
+                "open trace append failed for {}: {err}",
+                path.display()
+            ))
+        })?;
     file.write_all(payload.as_bytes())
-        .map_err(|err| format!("append trace payload failed for {}: {err}", path.display()))?;
+        .map_err(|err| {
+            TraceError::validation(format!(
+                "append trace payload failed for {}: {err}",
+                path.display()
+            ))
+        })?;
     file.sync_data()
-        .map_err(|err| format!("sync trace payload failed for {}: {err}", path.display()))
+        .map_err(|err| {
+            TraceError::validation(format!(
+                "sync trace payload failed for {}: {err}",
+                path.display()
+            ))
+        })
 }
 
 fn trace_append_lock() -> &'static Mutex<()> {

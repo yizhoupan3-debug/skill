@@ -1,3 +1,4 @@
+use crate::TraceError;
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
@@ -32,18 +33,18 @@ pub fn trace_event_usize_field(payload: &Map<String, Value>, field: &str) -> Opt
 
 /// Extract the inner event JSON object from a trace stream line.
 /// Handles both `{"event": {...}}` wrapper format and bare object format.
-pub fn trace_event_object(payload: Value) -> Result<Map<String, Value>, String> {
+pub fn trace_event_object(payload: Value) -> Result<Map<String, Value>, TraceError> {
     match payload {
         Value::Object(mut object) => match object.remove("event") {
             Some(Value::Object(event)) => Ok(event),
-            Some(other) => Err(format!(
+            Some(other) => Err(TraceError::validation(format!(
                 "trace stream line contained non-object event wrapper: {other}"
-            )),
+            ))),
             None => Ok(object),
         },
-        other => Err(format!(
+        other => Err(TraceError::validation(format!(
             "trace stream line must decode to a JSON object: {other}"
-        )),
+        ))),
     }
 }
 

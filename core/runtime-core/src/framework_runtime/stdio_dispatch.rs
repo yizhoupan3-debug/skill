@@ -303,7 +303,7 @@ fn dispatch_trace_stdio_request(op: &str, payload: Value) -> Result<Value, Strin
         "trace_record_event" => parse_and_dispatch::<TraceRecordEventRequestPayload, _, _>(
             payload,
             "trace record event",
-            record_trace_event,
+            |p| record_trace_event(p).map_err(|e| e.to_string()),
         ),
         "trace_stream_replay" => parse_and_dispatch::<TraceStreamReplayRequestPayload, _, _>(
             payload,
@@ -318,7 +318,7 @@ fn dispatch_trace_stdio_request(op: &str, payload: Value) -> Result<Value, Strin
         "trace_compact" => parse_and_dispatch::<TraceCompactRequestPayload, _, _>(
             payload,
             "trace compact",
-            compact_trace_stream,
+            |p| compact_trace_stream(p).map_err(|e| e.to_string()),
         ),
         "write_trace_compaction_delta" => {
             parse_and_dispatch::<TraceCompactionDeltaWriteRequestPayload, _, _>(
