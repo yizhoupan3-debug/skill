@@ -622,7 +622,7 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 }));
             }
 
-            // ── QGEntry exit gate (Wave 5a) ──
+            // ── QGEntry exit gate ──
             // Only for linear goals (loop goals return early above).
             let goal = state.get("goal").and_then(Value::as_str).unwrap_or("");
             let scene = payload.get("scene").and_then(Value::as_str).unwrap_or("general");

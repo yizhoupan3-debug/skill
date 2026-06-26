@@ -63,28 +63,26 @@ fn parse_execute_aggregator_host_allowlist() -> Result<Option<HashSet<String>>, 
 
 pub fn execute_request(
     payload: ExecuteRequestPayload,
-    research_mode: &str,
 ) -> Result<ExecuteResponsePayload, String> {
     if payload.dry_run {
         return Ok(build_dry_run_execute_response(&payload));
     }
-    let prompt_preview = build_live_execute_prompt(&payload, research_mode);
+    let prompt_preview = build_live_execute_prompt(&payload);
     if payload.aggregator_base_url.trim().is_empty() {
         return Err("router-rs execute requires a non-empty aggregator_base_url".to_string());
     }
     if payload.aggregator_api_key.trim().is_empty() {
         return Err("router-rs execute requires a non-empty aggregator_api_key".to_string());
     }
-    let live_result = perform_live_execute(&payload, &prompt_preview, research_mode)?;
+    let live_result = perform_live_execute(&payload, &prompt_preview)?;
     Ok(build_live_execute_response(
         &payload,
         Some(prompt_preview),
         live_result,
-        research_mode,
     ))
 }
 
-pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload, research_mode: &str) -> String {
+pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload) -> String {
     let native_runtime = payload.selected_skill == "none";
     let mut lines = vec![
         "Help with the user's request directly. The route is already chosen, so stay on it."
@@ -110,19 +108,9 @@ pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload, research_mode:
         "- Use plain Chinese unless the user asks otherwise, and keep the wording natural."
             .to_string(),
     );
-    if research_mode == "quick" {
-        lines.push("- Keep the default reply short; only use a list when the content is naturally list-shaped.".to_string());
-    } else {
-        lines.push("- Use a deep-research structure with explicit sections: Key findings, Evidence, Counter-evidence, Confidence, Open risks.".to_string());
-    }
+    lines.push("- Keep the default reply short; only use a list when the content is naturally list-shaped.".to_string());
     lines.push("- For closeouts, say what was done, what effect was achieved, and what needs to happen next or that the work is finished.".to_string());
-    if research_mode == "quick" {
-        lines.push("- Do not default to file inventories, evidence dumps, or step-by-step process retellings unless the user asks for them.".to_string());
-    } else {
-        lines.push("- For each major claim, include at least two independent evidence anchors and one uncertainty note when evidence is incomplete.".to_string());
-        lines.push("- If verification_required or evidence_required is true, treat missing evidence as an explicit blocker instead of silently concluding.".to_string());
-        lines.push("- Auditable multi-round external research belongs in ledger `RFV_LOOP_STATE.json` via stdio op `framework_quality_gate`; see `core/runtime-core/src/qg_entry.rs`; hooks never auto-create that ledger.".to_string());
-    }
+    lines.push("- Do not default to file inventories, evidence dumps, or step-by-step process retellings unless the user asks for them.".to_string());
     let prompt_reasons = payload
         .reasons
         .iter()
@@ -144,7 +132,6 @@ pub fn build_live_execute_prompt(payload: &ExecuteRequestPayload, research_mode:
     } else {
         lines.push("Use the selected skill to solve the user's actual task.".to_string());
     }
-    lines.push(format!("Execution mode: {research_mode}."));
     lines.join("\n")
 }
 
@@ -462,7 +449,6 @@ where
 pub fn perform_live_execute_with_sender<F>(
     payload: &ExecuteRequestPayload,
     prompt_preview: &str,
-    research_mode: &str,
     mut send_request: F,
 ) -> Result<LiveExecuteResult, String>
 where
@@ -479,10 +465,7 @@ where
         "role": "user",
         "content": payload.task,
     }));
-    let mut max_tokens = payload.default_output_tokens;
-    if research_mode == "deep" {
-        max_tokens = max_tokens.max(1200);
-    }
+    let max_tokens = payload.default_output_tokens.max(1200);
     let request_body = serde_json::json!({
         "model": payload.model_id,
         "messages": messages,
@@ -509,27 +492,16 @@ where
         continuation_attempted,
         continuation_status,
         continuation_error,
-    } = if research_mode == "deep" {
-        attempt_deep_continuation(
-            &mut send_request,
-            prompt_preview,
-            &payload.task,
-            &payload.model_id,
-            &content,
-            &finish_reason,
-            first_usage_ref,
-            max_tokens,
-        )
-    } else {
-        DeepContinuationResult {
-            content,
-            finish_reason,
-            usage_merged: None,
-            continuation_attempted: false,
-            continuation_status: None,
-            continuation_error: None,
-        }
-    };
+    } = attempt_deep_continuation(
+        &mut send_request,
+        prompt_preview,
+        &payload.task,
+        &payload.model_id,
+        &content,
+        &finish_reason,
+        first_usage_ref,
+        max_tokens,
+    );
 
     let active_usage = usage_merged.as_ref().or(first_usage_ref);
     let input_tokens = active_usage
@@ -574,12 +546,11 @@ where
 pub fn perform_live_execute(
     payload: &ExecuteRequestPayload,
     prompt_preview: &str,
-    research_mode: &str,
 ) -> Result<LiveExecuteResult, String> {
     validate_live_execute_aggregator_base_url(&payload.aggregator_base_url)?;
     let endpoint = normalize_chat_completions_endpoint(&payload.aggregator_base_url);
     let client = live_execute_http_client()?;
-    perform_live_execute_with_sender(payload, prompt_preview, research_mode, |request_body| {
+    perform_live_execute_with_sender(payload, prompt_preview, |request_body| {
         let response = client
             .post(endpoint.clone())
             .bearer_auth(payload.aggregator_api_key.as_str())
@@ -626,16 +597,11 @@ pub fn build_live_execute_response(
     payload: &ExecuteRequestPayload,
     prompt_preview: Option<String>,
     live_result: LiveExecuteResult,
-    research_mode: &str,
 ) -> ExecuteResponsePayload {
     let mut metadata =
         build_steady_state_execution_kernel_metadata(EXECUTION_RESPONSE_SHAPE_LIVE_PRIMARY);
     metadata.insert("run_id".to_string(), json!(live_result.run_id));
     metadata.insert("status".to_string(), json!(live_result.status));
-    metadata.insert(
-        "research_mode".to_string(),
-        Value::String(research_mode.to_string()),
-    );
     metadata.insert(
         "finish_reason".to_string(),
         json!(live_result.finish_reason),
@@ -841,6 +807,7 @@ fn estimate_tokens(text: &str) -> usize {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 #[cfg(test)]
 mod tests {
+    use super::*;
     use serde_json::json;
 
     // ── build_live_execute_prompt ──
@@ -853,11 +820,11 @@ mod tests {
             layer: "L3".into(), route_engine: None, diagnostic_route_mode: None,
             reasons: vec![], prompt_preview: None, dry_run: false,
             trace_event_count: 0, trace_output_path: None, default_output_tokens: 512,
-            research_mode: None, execution_protocol: None,
+            execution_protocol: None,
             verification_required: None, evidence_required: None,
             model_id: "gpt-4".into(), aggregator_base_url: "".into(), aggregator_api_key: "".into(),
         };
-        let prompt = build_live_execute_prompt(&p, "quick");
+        let prompt = build_live_execute_prompt(&p);
         assert!(prompt.contains("no skill body"), "native runtime hint");
         assert!(!prompt.contains("Primary focus: none"), "no 'none' label leak");
     }
@@ -868,17 +835,15 @@ mod tests {
             selected_skill: "pdf".into(), overlay_skill: Some("ocr".into()),
             ..base_payload()
         };
-        let prompt = build_live_execute_prompt(&p, "deep");
+        let prompt = build_live_execute_prompt(&p);
         assert!(prompt.contains("Primary focus: pdf"));
         assert!(prompt.contains("Extra guidance: ocr"));
-        assert!(prompt.contains("deep-research"), "deep mode structure");
     }
 
     #[test]
     fn prompt_quick_mode_says_short_reply() {
-        let prompt = build_live_execute_prompt(&base_payload(), "quick");
+        let prompt = build_live_execute_prompt(&base_payload());
         assert!(prompt.contains("short"), "quick mode hint");
-        assert!(!prompt.contains("deep-research"), "no deep structure");
     }
 
     #[test]
@@ -887,7 +852,7 @@ mod tests {
             reasons: vec!["a".into(), "b".into(), "c".into(), "d".into(), "e".into(), "f".into()],
             ..base_payload()
         };
-        let prompt = build_live_execute_prompt(&p, "quick");
+        let prompt = build_live_execute_prompt(&p);
         assert!(prompt.contains("Task cues:"));
         // Only the first 5 reasons should appear, "f" should not
         assert!(!prompt.contains("- f"), "reason 'f' should be truncated (6th)");
@@ -895,7 +860,7 @@ mod tests {
 
     #[test]
     fn prompt_omits_cues_when_no_reasons() {
-        let prompt = build_live_execute_prompt(&base_payload(), "quick");
+        let prompt = build_live_execute_prompt(&base_payload());
         assert!(!prompt.contains("Task cues:"));
     }
 
@@ -1010,7 +975,7 @@ mod tests {
             dry_run: true, task: "hello world".into(), default_output_tokens: 64,
             ..base_payload()
         };
-        let result = execute_request(p, "quick");
+        let result = execute_request(p);
         assert!(result.is_ok());
         let resp = result.unwrap();
         assert!(!resp.live_run);
@@ -1026,7 +991,7 @@ mod tests {
             dry_run: true, task: "".into(), default_output_tokens: 64,
             ..base_payload()
         };
-        let resp = execute_request(p, "quick").unwrap();
+        let resp = execute_request(p).unwrap();
         assert_eq!(resp.usage.input_tokens, 0);
     }
 
@@ -1042,7 +1007,7 @@ mod tests {
             finish_reason: Some("stop".into()),
             continuation_attempted: false, continuation_status: None, continuation_error: None,
         };
-        let resp = build_live_execute_response(&payload, None, result, "quick");
+        let resp = build_live_execute_response(&payload, None, result);
         assert!(resp.live_run);
         assert_eq!(resp.content, "done");
         assert_eq!(resp.model_id.as_deref(), Some("gpt-4"));
@@ -1062,7 +1027,7 @@ mod tests {
             continuation_attempted: true, continuation_status: Some("success".into()),
             continuation_error: None,
         };
-        let resp = build_live_execute_response(&payload, Some("preview".into()), result, "deep");
+        let resp = build_live_execute_response(&payload, Some("preview".into()), result);
         assert!(resp.live_run);
         assert_eq!(resp.prompt_preview.as_deref(), Some("preview"));
         let md = resp.metadata.as_object().unwrap();
@@ -1078,7 +1043,7 @@ mod tests {
             default_output_tokens: 512, ..base_payload()
         };
         let result = perform_live_execute_with_sender(
-            &p, "prompt", "quick",
+            &p, "prompt",
             |_| Ok((200, r#"{"choices":[{"message":{"content":"OK"}}],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}"#.into())),
         );
         assert!(result.is_ok());
@@ -1096,7 +1061,7 @@ mod tests {
         };
         let mut call_count = 0usize;
         let result = perform_live_execute_with_sender(
-            &p, "prompt", "quick",
+            &p, "prompt",
             |_| {
                 call_count += 1;
                 if call_count == 1 {
@@ -1118,7 +1083,7 @@ mod tests {
             default_output_tokens: 512, ..base_payload()
         };
         let result = perform_live_execute_with_sender(
-            &p, "prompt", "quick",
+            &p, "prompt",
             |_| {
                 call_count += 1;
                 Ok((401, "unauthorized".into()))
@@ -1135,7 +1100,7 @@ mod tests {
             default_output_tokens: 1024, ..base_payload()
         };
         let result = perform_live_execute_with_sender(
-            &p, "prompt", "deep",
+            &p, "prompt",
             |body| {
                 let is_continuation = body.get("messages").and_then(Value::as_array)
                     .map(|m| m.len() > 2).unwrap_or(false);
@@ -1162,7 +1127,7 @@ mod tests {
             default_output_tokens: 256, ..base_payload()
         };
         let result = perform_live_execute_with_sender(
-            &p, "prompt", "deep",
+            &p, "prompt",
             |_| Ok((200, r#"{"choices":[{"message":{"content":"done"}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}"#.into())),
         );
         assert!(result.is_ok());
@@ -1179,7 +1144,7 @@ mod tests {
             layer: "L3".into(), route_engine: None, diagnostic_route_mode: None,
             reasons: vec![], prompt_preview: None, dry_run: false,
             trace_event_count: 0, trace_output_path: None, default_output_tokens: 512,
-            research_mode: None, execution_protocol: None,
+            execution_protocol: None,
             verification_required: None, evidence_required: None,
             model_id: "gpt-4".into(), aggregator_base_url: "".into(),
             aggregator_api_key: "".into(),

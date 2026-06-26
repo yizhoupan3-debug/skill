@@ -86,6 +86,7 @@ use framework_extra::contract_summary::build_framework_contract_summary_envelope
 use framework_extra::snapshot::build_framework_runtime_snapshot_envelope_with_level;
 use framework_extra::closeout::evaluate_closeout_record_file_for_task;
 use framework_extra::evidence::framework_hook_evidence_append;
+use quality_gate;
 
 pub fn dispatch_stdio_json_request_payload(
     request: StdioJsonRequestPayload,
@@ -221,9 +222,8 @@ fn dispatch_routing_stdio_request(op: &str, payload: Value) -> Result<Value, Str
 fn dispatch_runtime_stdio_request(op: &str, payload: Value) -> Result<Value, String> {
     match op {
         "execute" => {
-            let research_mode = host_projection::hooks::research_mode_for_request(&payload);
             let request = parse_payload::<ExecuteRequestPayload>(payload, "execute")?;
-            serialize_payload(execute_request(request, &research_mode)?, "execute")
+            serialize_payload(execute_request(request)?, "execute")
         }
         "execution_contract_bundle" => Ok(Value::Object(build_execution_contract_bundle())),
         "normalize_execution_kernel_metadata_contract" => {
@@ -360,7 +360,16 @@ fn dispatch_framework_stdio_request(op: &str, payload: Value) -> Result<Value, S
         "framework_goal_drive" => {
             runtime_infra::kernel_utils::framework_goal_drive(payload)
         }
-        "framework_rfv_loop" | "framework_quality_gate" => crate::qg_entry::quality_gate_hook_wrapper(payload).map_err(|e| e.to_string()),
+        "framework_rfv_loop" => {
+            let repo_root = std::path::Path::new(
+                payload.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
+            );
+            let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
+            let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
+            let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
+            let verdict = crate::qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None);
+            serde_json::to_value(&verdict).map_err(|e| e.to_string())
+        }
         "framework_alias" => dispatch_stdio_framework_alias(payload),
         "task_ledger_dispatch" => task_command::dispatch_task_ledger_command_envelope(payload),
         _ => Err(format!("unsupported framework stdio operation: {op}")),

@@ -37,6 +37,10 @@ impl GateChecker for StructureGateChecker {
         "structure verification: LaTeX compilation, cross-reference consistency, claim-evidence alignment, format compliance, notation consistency, equation numbering"
     }
 
+    fn sub_scene_affinity(&self) -> Option<&'static str> {
+        Some("structure")
+    }
+
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let mut findings = Vec::new();
 

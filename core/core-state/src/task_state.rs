@@ -750,15 +750,22 @@ mod tests {
     use crate::utils::test_helpers::unique_repo;
 
     fn write_active(tmp: &Path, id: &str) {
-        let p = tmp.join("artifacts/current/active_task.json");
+        let p = tmp.join("artifacts/current/TASK_POINTERS.json");
         fs::create_dir_all(p.parent().unwrap()).unwrap();
-        fs::write(p, format!(r#"{{"task_id":"{id}"}}"#)).unwrap();
+        fs::write(
+            p,
+            serde_json::to_string_pretty(&serde_json::json!({"active_task_id": id})).unwrap(),
+        )
+        .unwrap();
     }
 
     fn write_focus(tmp: &Path, id: &str) {
-        let p = tmp.join("artifacts/current/focus_task.json");
-        fs::create_dir_all(p.parent().unwrap()).unwrap();
-        fs::write(p, format!(r#"{{"task_id":"{id}"}}"#)).unwrap();
+        // Merge focus_task_id into TASK_POINTERS.json (write_active may have written it first).
+        let p = tmp.join("artifacts/current/TASK_POINTERS.json");
+        let mut data: serde_json::Value =
+            fs::read_to_string(&p).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        data["focus_task_id"] = serde_json::json!(id);
+        fs::write(p, serde_json::to_string_pretty(&data).unwrap()).unwrap();
     }
 
     #[test]
@@ -1507,20 +1514,10 @@ mod tests {
     }
 
     #[test]
-    fn read_task_pointers_reads_legacy_pointer_files() {
-        let tmp = unique_repo("pointers-legacy");
-        let active_dir = tmp.join("artifacts/current");
-        fs::create_dir_all(&active_dir).unwrap();
-        fs::write(
-            active_dir.join("active_task.json"),
-            r#"{"task_id":"active-from-disk"}"#,
-        )
-        .unwrap();
-        fs::write(
-            active_dir.join("focus_task.json"),
-            r#"{"task_id":"focus-from-disk"}"#,
-        )
-        .unwrap();
+    fn read_task_pointers_reads_primary_file() {
+        let tmp = unique_repo("pointers-primary");
+        write_active(&tmp, "active-from-disk");
+        write_focus(&tmp, "focus-from-disk");
         let pointers = read_task_pointers(&tmp);
         assert_eq!(pointers.active_task_id.as_deref(), Some("active-from-disk"));
         assert_eq!(pointers.focus_task_id.as_deref(), Some("focus-from-disk"));

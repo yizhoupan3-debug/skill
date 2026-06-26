@@ -38,6 +38,10 @@ impl GateChecker for ReproducibilityChecker {
         "reproducibility verification: seed locking, deterministic rerun, environment pinning, data versioning, checkpoint recovery"
     }
 
+    fn sub_scene_affinity(&self) -> Option<&'static str> {
+        Some("reproducibility")
+    }
+
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let mut findings = Vec::new();
 

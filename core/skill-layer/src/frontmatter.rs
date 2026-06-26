@@ -109,6 +109,8 @@ impl SkillFrontmatterSpec {
         "runtime_requirements",
         "network_access",
         "approval_required_tools",
+        "scene",
+        "sub_scene",
     ];
 }
 
@@ -160,6 +162,12 @@ pub struct SkillFrontmatter {
     /// Record kind: `skill` (default) or `framework_command`.
     #[serde(default)]
     pub kind: Option<RecordKind>,
+    /// Scene identifier (Wave 6): defaults to "general" if missing.
+    #[serde(default)]
+    pub scene: Option<String>,
+    /// Sub-scene identifier (Wave 6) for granular checker affinity filtering.
+    #[serde(default)]
+    pub sub_scene: Option<String>,
 }
 
 impl SkillFrontmatter {

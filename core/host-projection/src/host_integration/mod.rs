@@ -510,7 +510,7 @@ mod tests {
     fn validate_mcp_command_binary_rejects_repo_target_artifacts() {
         let root = unique_test_root("mcp-validate-repo-target");
         let framework_root = root.join("framework");
-        let artifact = framework_root.join("core/router-rs/target/release/router-rs");
+        let artifact = framework_root.join("core/router-rs/target/release/router-rs-cli");
         fs::create_dir_all(artifact.parent().unwrap()).unwrap();
         write_test_file(&artifact, "#!/bin/sh\n");
 

@@ -7,6 +7,7 @@
 //! See `core/core-state/src/task_state.rs` for the unified resolve model.
 
 use serde_json::Value;
+use quality_gate;
 
 pub const TASK_LEDGER_COMMAND_ENVELOPE_SCHEMA: &str = "router-rs-task-ledger-command-envelope-v1";
 
@@ -55,7 +56,16 @@ pub fn parse_task_ledger_command_envelope(envelope: &Value) -> Result<TaskLedger
 pub fn dispatch_task_ledger_command(cmd: TaskLedgerCommand) -> Result<Value, String> {
     match cmd {
         TaskLedgerCommand::GoalDrive(p) => runtime_infra::kernel_utils::framework_goal_drive(p),
-        TaskLedgerCommand::QualityGate(p) => crate::qg_entry::quality_gate_hook_wrapper(p).map_err(|e| e.to_string()),
+        TaskLedgerCommand::QualityGate(p) => {
+            let repo_root = std::path::Path::new(
+                p.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
+            );
+            let task_id = p.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
+            let goal = p.get("goal").and_then(|v| v.as_str()).unwrap_or("");
+            let round = p.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
+            let verdict = crate::qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None);
+            serde_json::to_value(&verdict).map_err(|e| e.to_string())
+        }
         TaskLedgerCommand::SessionArtifacts(p) => {
             framework_extra::session_artifacts::write_framework_session_artifacts(p)
                 .map_err(|e| e.to_string())

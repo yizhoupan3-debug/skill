@@ -37,6 +37,10 @@ impl GateChecker for StatisticalGateChecker {
         "statistical verification: p-value recomputation, GRIM test, effect size reporting, multiple comparison correction, assumption checking"
     }
 
+    fn sub_scene_affinity(&self) -> Option<&'static str> {
+        Some("statistical")
+    }
+
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let mut findings = Vec::new();
 

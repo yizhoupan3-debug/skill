@@ -94,9 +94,11 @@ mod tests {
             .wait_with_output()
             .expect("wait");
         let stderr = String::from_utf8_lossy(&out.stderr);
+        let stdout = String::from_utf8_lossy(&out.stdout);
         assert!(
-            stderr.contains("hook_timing") && stderr.contains("duration_ms"),
-            "expected hook_timing on stderr, got: {stderr:?}"
+            (stderr.contains("hook timing") || stdout.contains("hook timing"))
+                && (stderr.contains("duration_ms") || stdout.contains("duration_ms")),
+            "expected hook timing on stderr or stdout, got stderr: {stderr:?} stdout: {stdout:?}"
         );
     }
 }

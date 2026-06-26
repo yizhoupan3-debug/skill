@@ -1,0 +1,24 @@
+{"fuzzy_match":false,"layer":"L1","matched_token_count":5,"query":"metadata owner needle phrase","score":45.5,"selected_skill":"metadata-owner","session_id":"session","ts":"2026-06-26T00:16:53Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":4,"query":"needle phrase alpha","score":50.31,"selected_skill":"alpha-owner","session_id":"session","ts":"2026-06-26T00:16:53Z"}
+{"fuzzy_match":false,"layer":"L0","matched_token_count":1,"query":"test query","score":42.0,"selected_skill":"test-skill","session_id":"test-session","ts":"2026-06-26T00:16:53Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":5,"query":"metadata owner needle phrase","score":45.5,"selected_skill":"metadata-owner","session_id":"session","ts":"2026-06-26T00:18:06Z"}
+{"fuzzy_match":false,"layer":"L0","matched_token_count":1,"query":"test query","score":42.0,"selected_skill":"test-skill","session_id":"test-session","ts":"2026-06-26T00:18:06Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":4,"query":"needle phrase alpha","score":50.31,"selected_skill":"alpha-owner","session_id":"session","ts":"2026-06-26T00:18:06Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":5,"query":"metadata owner needle phrase","score":45.5,"selected_skill":"metadata-owner","session_id":"session","ts":"2026-06-26T00:18:23Z"}
+{"fuzzy_match":false,"layer":"L0","matched_token_count":1,"query":"test query","score":42.0,"selected_skill":"test-skill","session_id":"test-session","ts":"2026-06-26T00:18:23Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":4,"query":"needle phrase alpha","score":50.31,"selected_skill":"alpha-owner","session_id":"session","ts":"2026-06-26T00:18:23Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":5,"query":"metadata owner needle phrase","score":45.5,"selected_skill":"metadata-owner","session_id":"session","ts":"2026-06-26T00:19:54Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":4,"query":"needle phrase alpha","score":50.31,"selected_skill":"alpha-owner","session_id":"session","ts":"2026-06-26T00:19:54Z"}
+{"fuzzy_match":false,"layer":"L0","matched_token_count":1,"query":"test query","score":42.0,"selected_skill":"test-skill","session_id":"test-session","ts":"2026-06-26T00:19:54Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":5,"query":"metadata owner needle phrase","score":45.5,"selected_skill":"metadata-owner","session_id":"session","ts":"2026-06-26T00:20:38Z"}
+{"fuzzy_match":false,"layer":"L0","matched_token_count":1,"query":"test query","score":42.0,"selected_skill":"test-skill","session_id":"test-session","ts":"2026-06-26T00:20:38Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":4,"query":"needle phrase alpha","score":50.31,"selected_skill":"alpha-owner","session_id":"session","ts":"2026-06-26T00:20:38Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":4,"query":"needle phrase alpha","score":50.31,"selected_skill":"alpha-owner","session_id":"session","ts":"2026-06-26T00:21:00Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":5,"query":"metadata owner needle phrase","score":45.5,"selected_skill":"metadata-owner","session_id":"session","ts":"2026-06-26T00:21:00Z"}
+{"fuzzy_match":false,"layer":"L0","matched_token_count":1,"query":"test query","score":42.0,"selected_skill":"test-skill","session_id":"test-session","ts":"2026-06-26T00:21:00Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":5,"query":"metadata owner needle phrase","score":45.5,"selected_skill":"metadata-owner","session_id":"session","ts":"2026-06-26T00:23:15Z"}
+{"fuzzy_match":false,"layer":"L0","matched_token_count":1,"query":"test query","score":42.0,"selected_skill":"test-skill","session_id":"test-session","ts":"2026-06-26T00:23:15Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":4,"query":"needle phrase alpha","score":50.31,"selected_skill":"alpha-owner","session_id":"session","ts":"2026-06-26T00:23:15Z"}
+{"fuzzy_match":false,"layer":"L0","matched_token_count":1,"query":"test query","score":42.0,"selected_skill":"test-skill","session_id":"test-session","ts":"2026-06-26T00:23:23Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":5,"query":"metadata owner needle phrase","score":45.5,"selected_skill":"metadata-owner","session_id":"session","ts":"2026-06-26T00:23:23Z"}
+{"fuzzy_match":false,"layer":"L1","matched_token_count":4,"query":"needle phrase alpha","score":50.31,"selected_skill":"alpha-owner","session_id":"session","ts":"2026-06-26T00:23:23Z"}

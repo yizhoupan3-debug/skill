@@ -157,7 +157,6 @@ pub(super) fn sample_execute_request() -> ExecuteRequestPayload {
         trace_event_count: 6,
         trace_output_path: Some("/tmp/TRACE_METADATA.json".to_string()),
         default_output_tokens: 512,
-        research_mode: None,
         execution_protocol: None,
         verification_required: None,
         evidence_required: None,

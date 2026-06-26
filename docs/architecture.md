@@ -48,7 +48,7 @@ Kernel hook 事件到来 ──────→ hooks 方法调用 → L3–L5 �
 | L3 | Skill — 验证技能、QG Checkers、框架技能 | `skill-layer`, all `skills/`, `runtime-core::checkers` (QG Checkers) |
 | L2 | Routing — Skill 路由引擎、MCP 工具注册表、路由决策 | `routing-engine`, `routing-core`, `mcp-tool-registry`, `tool-routing-engine`, `eval-route` |
 | L1 | Host — Agent 宿主适配层 | `host-projection` |
-| Kernel | 跨层 — 纯抽象、策略规则、fn-pointer 注册表、通用工具 | `framework-kernel`, `core-policy`, `core-state-utils`, `telemetry-types`, `http-util`, `browser-mcp-dispatch` |
+| Kernel | 跨层 — 纯抽象、策略规则、fn-pointer 注册表、通用工具、错误类型 | `framework-kernel`, `core-policy`, `core-state-utils`, `core-state-types`, `core-errors`, `telemetry-types`, `http-util`, `browser-mcp-dispatch` |
 
 ---
 
@@ -101,6 +101,8 @@ L5       ✓   ✓   ✓   ✓   ✓   ✓
 | Kernel | `framework-kernel` | 时间、根发现、JSON 操作、cli_args、runtime 注册表、runtime_hooks |
 | Kernel | `core-policy` | Hook 策略、env_flags、review gate、goal 检测 |
 | Kernel | `core-state-utils` | IO/path/JSONL 原语，零内部依赖 |
+| Kernel | `core-errors` | 统一错误类型 `FrameworkError`，零内部依赖 |
+| Kernel | `core-state-types` | Task/RFV 状态类型定义 |
 | Kernel | `telemetry-types` | 纯遥测事件类型 |
 | Kernel | `http-util` | HTTP 客户端工厂 |
 | Kernel | `browser-mcp-dispatch` | 浏览器 MCP 分派助手（仅依赖 Kernel framework-kernel） |
@@ -158,8 +160,7 @@ L5       ✓   ✓   ✓   ✓   ✓   ✓
 
 科研 Harness：paper revision loop、literature search、claims management、AIGC detection。feature-gate 编译期可选。env var 名称映射委托给 Kernel 的 `paper_prose_env_var()` / `paper_adversarial_env_var()`，宿主 id 通过函数指针参数接收。
 
-**L4 (Tool) 不含 Research 领域逻辑**：`ResearchMode`、`infer_research_mode()` 等通过 Kernel 函数指针注册 `fn(text) -> Option<ResearchMode>` 回调。
-
+	
 ---
 
 ## 6. 唯一性清单与归属规则

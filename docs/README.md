@@ -14,6 +14,7 @@ scope: documentation-map
 | [architecture.md](architecture.md) | L0–L7 层模型、DAG 验证矩阵、宿主隔离契约、架构原则 P1–P10 |
 | [operations/index.md](operations/index.md) | 运维中枢：安装/升级、模块操作、状态管理、排障 |
 | [math-reasoning-harness.md](math-reasoning-harness.md) | 数学验证工具链：三层分离架构、SymPy/Z3/Lean 后端 |
+| [research-harness/README.md](../research-harness/README.md) | 科研验证 Harness：搜索、声明管理、AIGC 检测、Verification |
 | [../AGENTS.md](../AGENTS.md) | 跨宿主代理策略（生命周期、语言、CodeGraph、行为差异） |
 | [../README.md](../README.md) | 仓库快速入门：能力概览 |
 | [../skills/SKILL_FRAMEWORK_PROTOCOLS.md](../skills/SKILL_FRAMEWORK_PROTOCOLS.md) | 共享最小协议层（运行时、停止规则、自审计） |

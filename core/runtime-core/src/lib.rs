@@ -17,12 +17,12 @@ pub mod framework_runtime;
 pub use session_supervisor;
 pub use framework_kernel::framework_profile;
 
-// ── QG Route (Wave 4a): scene-dispatched CheckerRegistry bridge ──
+// ── QG Route: scene-dispatched CheckerRegistry bridge ──
 mod checkers;
 pub mod qg_route;
 pub mod qg_entry;
 
-// ── Schema Drift: migrated from runtime-exit-gate (Wave 4a-ii) ──
+// ── Schema Drift: migrated from runtime-exit-gate ──
 pub mod schema_drift;
 
 // ── subdomain module groups ──
@@ -97,7 +97,7 @@ pub(crate) use core_policy::hook_policy;
 
 // (removed: route_task_with_manifest_fallback re-export removed — callers use framework_extra::route_manifest_fallback directly)
 
-// ── Consolidated runtime init (Wave 3b: single RUNTIME_INIT) ──
+// ── Consolidated runtime init (single RUNTIME_INIT) ──
 // Combines routing-engine hooks, routing config hooks, and host-projection hooks
 // under a single init guard (replaces ROUTING_HOOKS_INIT / TOOL_ROUTING_CONFIG_HOOKS_INIT / HOST_PROJECTION_HOOKS_INIT).
 use std::sync::OnceLock;
@@ -163,8 +163,6 @@ pub fn init_hooks() {
                 maybe_merge_paper_adversarial_before_submit: |_, _, _, _, _| {},
                 // research activity (1 field) — default; research-harness overrides via OnceLock
                 maybe_record_research_activity: |_, _, _| {},
-                // research mode inference (1 field) — default; research-harness overrides via OnceLock
-                research_mode_for_request: |_| "quick".to_string(),
                 // kernel bootstrap (1 field)
                 ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
                 // framework_runtime_extra (7 fields)
@@ -214,7 +212,16 @@ pub fn init_hooks() {
                     }
                 },
                 // quality_gate_drive (1 field)
-                quality_gate_drive: qg_entry::quality_gate_hook_wrapper,
+                quality_gate_drive: |payload| {
+                    let repo_root = std::path::Path::new(
+                        payload.get("repo_root").and_then(|v| v.as_str()).unwrap_or(".")
+                    );
+                    let task_id = payload.get("task_id").and_then(|v| v.as_str()).unwrap_or("");
+                    let goal = payload.get("goal").and_then(|v| v.as_str()).unwrap_or("");
+                    let round = payload.get("round").and_then(|v| v.as_u64()).unwrap_or(1);
+                    let verdict = qg_entry::trigger(repo_root, task_id, quality_gate::scene::GENERAL, goal, None, round, None);
+                    serde_json::to_value(&verdict).map_err(|e| core_policy::error::FrameworkError::validation(e.to_string()))
+                },
                 // research_tool_dispatch (1 field) — default; research-harness overrides via OnceLock
                 research_tool_dispatch: |_, _| Err(core_policy::error::FrameworkError::validation("research_tool_dispatch not registered")),
                 // mcp_tool_routing (2 fields)
@@ -313,7 +320,6 @@ pub fn init_hooks() {
                 },
             },
             framework_goal_drive: core_state::state_manager::framework_goal_drive,
-            framework_quality_gate: |payload| qg_entry::quality_gate_hook_wrapper(payload).map_err(|e| e.to_string()),
             handle_session_supervisor_operation: session_supervisor::handle_session_supervisor_operation,
             #[cfg(feature = "l5-state")]
             handle_background_state_operation: rt_storage::background_state::handle_background_state_operation,
@@ -345,15 +351,15 @@ pub fn init_hooks() {
             ensure_kernel_bootstrap: kernel_bootstrap::ensure_kernel_bootstrap,
         });
 
-        // 4. QG Route: scene-dispatched CheckerRegistry (Wave 4a)
+        // 4. QG Route: scene-dispatched CheckerRegistry
         qg_route::init_qg_route();
 
-        // 5. QGEntry hook: GoalEngine integration (Wave 5a)
+        // 5. QGEntry hook: GoalEngine integration
         core_state::state_manager::register_qg_entry_trigger(
             |repo_root, task_id, scene, goal, round| {
                 let repo = std::path::Path::new(repo_root);
                 let verdict =
-                    qg_entry::trigger(repo, task_id, scene, goal, round, None);
+                    qg_entry::trigger(repo, task_id, scene, goal, None, round, None);
                 serde_json::to_value(&verdict).unwrap_or_else(|_| {
                     serde_json::json!({
                         "passed": true,

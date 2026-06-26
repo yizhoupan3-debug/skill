@@ -353,7 +353,7 @@ fn stdio_framework_goal_drive_roundtrip() {
 
 use runtime_core::qg_route::init_qg_route;
 #[test]
-fn stdio_framework_quality_gate_roundtrip() {
+fn stdio_framework_rfv_loop_roundtrip() {
     init_qg_route();
     let repo_root = temp_dir_path("stdio-rfv-loop");
     let _ = fs::remove_dir_all(&repo_root);
@@ -374,7 +374,7 @@ fn stdio_framework_quality_gate_roundtrip() {
     let rr = repo_root.display().to_string();
     let start = json!({
         "id": "rfv-1",
-        "op": "framework_quality_gate",
+        "op": "framework_rfv_loop",
         "payload": {
             "repo_root": rr,
             "operation": "start",

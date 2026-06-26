@@ -21,7 +21,7 @@ pub mod stdio_payload_types;
 // ── migrated from framework-profile crate ──
 pub mod framework_profile;
 
-// ── runtime hooks: migrated from framework-runtime-hooks crate (Wave 3b) ──
+// ── runtime hooks (migrated from framework-runtime-hooks crate) ──
 // Placed in L0 to break circular deps — all consumers already depend on framework-kernel.
 pub mod runtime_hooks;
 

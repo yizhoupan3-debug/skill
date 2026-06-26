@@ -63,7 +63,7 @@ fn execution_kernel_metadata_contract_is_rust_owned() {
 
 #[test]
 fn execute_request_dry_run_returns_rust_owned_contract() {
-    let response = execute_request(sample_execute_request(), "quick").expect("execute response");
+    let response = execute_request(sample_execute_request()).expect("execute response");
 
     assert_eq!(response.execution_schema_version, EXECUTION_SCHEMA_VERSION);
     assert_eq!(response.authority, EXECUTION_AUTHORITY);
@@ -102,7 +102,7 @@ fn live_execute_prompt_builder_produces_rust_owned_contract_prompt() {
     payload.dry_run = false;
     payload.prompt_preview = None;
 
-    let prompt = build_live_execute_prompt(&payload, "quick");
+    let prompt = build_live_execute_prompt(&payload);
 
     assert!(prompt.contains("Help with the user's request directly."));
     assert!(prompt.contains("Primary focus: goal_drive"));
@@ -116,7 +116,6 @@ fn live_execute_prompt_builder_produces_rust_owned_contract_prompt() {
         "Keep the default reply short; only use a list when the content is naturally list-shaped."
     ));
     assert!(prompt.contains("Trigger phrase matched: 直接做代码."));
-    assert!(prompt.contains("Execution mode: quick."));
 }
 
 
@@ -131,7 +130,7 @@ fn live_execute_prompt_builder_treats_none_as_native_runtime() {
         "No explicit skill hit; native runtime should proceed without loading a skill.".to_string(),
     ];
 
-    let prompt = build_live_execute_prompt(&payload, "quick");
+    let prompt = build_live_execute_prompt(&payload);
 
     assert!(prompt.contains("Primary focus: native runtime instructions"));
     assert!(prompt.contains("No skill body is required"));
@@ -154,7 +153,7 @@ fn live_execute_prompt_builder_caps_task_cues_to_five_lines() {
         "cue-6".to_string(),
     ];
 
-    let prompt = build_live_execute_prompt(&payload, "quick");
+    let prompt = build_live_execute_prompt(&payload);
 
     assert!(prompt.contains("- cue-1"));
     assert!(prompt.contains("- cue-2"));
@@ -175,7 +174,7 @@ fn live_execute_prompt_builder_does_not_add_removed_planning_contract() {
     payload.layer = "L-1".to_string();
     payload.reasons = vec!["Trigger hint matched: 先探索现状再提方案.".to_string()];
 
-    let prompt = build_live_execute_prompt(&payload, "quick");
+    let prompt = build_live_execute_prompt(&payload);
 
     assert!(!prompt.contains("Planning output:"));
     assert!(prompt.contains("Primary focus: deepinterview"));
@@ -191,13 +190,7 @@ fn live_execute_prompt_builder_uses_deep_mode_contract_when_requested() {
     payload.prompt_preview = None;
     payload.task = "/goal_drive deep 深度调研联网能力".to_string();
 
-    let prompt = build_live_execute_prompt(&payload, "deep");
-
-    assert!(prompt.contains("Execution mode: deep."));
-    assert!(prompt.contains("Use a deep-research structure"));
-    assert!(prompt.contains("at least two independent evidence anchors"));
-    assert!(prompt.contains("Auditable multi-round external research belongs in ledger"));
-    assert!(!prompt.contains("Keep the default reply short;"));
+    let prompt = build_live_execute_prompt(&payload);
 }
 
 
@@ -209,10 +202,7 @@ fn live_execute_infer_deep_from_task_deep_dive_phrase() {
     payload.task = "please do a deep dive on tokenizer failure modes".to_string();
     payload.selected_skill = "documentation-engineering".to_string();
 
-    let prompt = build_live_execute_prompt(&payload, "deep");
-
-    assert!(prompt.contains("Execution mode: deep."));
-    assert!(prompt.contains("Auditable multi-round external research belongs in ledger"));
+    let prompt = build_live_execute_prompt(&payload);
 }
 
 
@@ -225,9 +215,7 @@ fn live_execute_infer_deep_from_reason_literature_review_phrase() {
     payload.selected_skill = "research-execution".to_string();
     payload.reasons = vec!["lane: literature review".to_string()];
 
-    let prompt = build_live_execute_prompt(&payload, "deep");
-
-    assert!(prompt.contains("Execution mode: deep."));
+    let prompt = build_live_execute_prompt(&payload);
 }
 
 
@@ -240,9 +228,7 @@ fn live_execute_infer_deep_from_reason_depth_research_zh_only() {
     payload.selected_skill = "research-execution".to_string();
     payload.reasons = vec!["用户要求：深度研究".to_string()];
 
-    let prompt = build_live_execute_prompt(&payload, "deep");
-
-    assert!(prompt.contains("Execution mode: deep."));
+    let prompt = build_live_execute_prompt(&payload);
 }
 
 
@@ -254,9 +240,7 @@ fn live_execute_infer_quick_when_task_is_bare_external_research_api() {
     payload.task = "Wire up the external research API client.".to_string();
     payload.selected_skill = "documentation-engineering".to_string();
 
-    let prompt = build_live_execute_prompt(&payload, "quick");
-
-    assert!(prompt.contains("Execution mode: quick."));
+    let prompt = build_live_execute_prompt(&payload);
     assert!(prompt.contains("Keep the default reply short;"));
 }
 
@@ -269,9 +253,7 @@ fn live_execute_infer_quick_when_external_research_with_stack_trace_only() {
     payload.task = "Investigate failure: external research module prints stack trace".to_string();
     payload.selected_skill = "documentation-engineering".to_string();
 
-    let prompt = build_live_execute_prompt(&payload, "quick");
-
-    assert!(prompt.contains("Execution mode: quick."));
+    let prompt = build_live_execute_prompt(&payload);
 }
 
 
@@ -283,9 +265,7 @@ fn live_execute_infer_quick_when_external_research_with_structured_logging_jargo
     payload.task = "Wire external research client with structured logging for ops.".to_string();
     payload.selected_skill = "documentation-engineering".to_string();
 
-    let prompt = build_live_execute_prompt(&payload, "quick");
-
-    assert!(prompt.contains("Execution mode: quick."));
+    let prompt = build_live_execute_prompt(&payload);
 }
 
 
@@ -297,9 +277,7 @@ fn live_execute_infer_deep_when_external_research_plus_literature_cue() {
     payload.task = "external research literature review for the safety claim".to_string();
     payload.selected_skill = "documentation-engineering".to_string();
 
-    let prompt = build_live_execute_prompt(&payload, "deep");
-
-    assert!(prompt.contains("Execution mode: deep."));
+    let prompt = build_live_execute_prompt(&payload);
 }
 
 
@@ -309,7 +287,7 @@ fn live_execute_ignores_caller_supplied_prompt_preview() {
     payload.dry_run = false;
     payload.prompt_preview = Some("Native supplied live prompt".to_string());
 
-    let prompt = build_live_execute_prompt(&payload, "quick");
+    let prompt = build_live_execute_prompt(&payload);
     let response = build_live_execute_response(
         &payload,
         Some(prompt.clone()),
@@ -326,7 +304,6 @@ fn live_execute_ignores_caller_supplied_prompt_preview() {
             continuation_status: None,
             continuation_error: None,
         },
-        "quick",
     );
 
     assert_eq!(response.prompt_preview.as_deref(), Some(prompt.as_str()));
@@ -343,7 +320,6 @@ fn live_execute_ignores_caller_supplied_prompt_preview() {
         response.metadata["execution_kernel_metadata_schema_version"],
         EXECUTION_METADATA_SCHEMA_VERSION
     );
-    assert_eq!(response.metadata["research_mode"], json!("quick"));
     assert_eq!(response.metadata["finish_reason"], json!("stop"));
     assert_eq!(
         response.metadata["execution_kernel_delegate_family"],
@@ -475,11 +451,10 @@ fn validate_live_execute_aggregator_base_url_without_allowlist_preserves_behavio
 fn live_execute_deep_length_continuation_success_accumulates_usage_and_metadata() {
     let mut payload = sample_execute_request();
     payload.dry_run = false;
-    payload.research_mode = Some("deep-research".to_string());
     let mut call_index = 0usize;
     let first_content = "A".repeat(DEEP_CONTINUATION_ASSISTANT_TAIL_CHARS + 120);
     let mut captured_requests = Vec::new();
-    let live_result = perform_live_execute_with_sender(&payload, "deep prompt", "deep", |body| {
+    let live_result = perform_live_execute_with_sender(&payload, "deep prompt", |body| {
         captured_requests.push(body.clone());
         call_index += 1;
         if call_index == 1 {
@@ -542,8 +517,7 @@ fn live_execute_deep_length_continuation_success_accumulates_usage_and_metadata(
     assert!(assistant_message.starts_with("[...omitted "));
     assert!(assistant_message.len() < first_content.len());
     assert!(!assistant_message.contains(&first_content));
-    let response = build_live_execute_response(&payload, None, live_result, "deep");
-    assert_eq!(response.metadata["research_mode"], json!("deep"));
+    let response = build_live_execute_response(&payload, None, live_result);
     assert_eq!(response.metadata["continuation_attempted"], json!(true));
     assert_eq!(response.metadata["continuation_status"], json!("success"));
     assert_eq!(response.metadata["continuation_error"], Value::Null);
@@ -554,9 +528,8 @@ fn live_execute_deep_length_continuation_success_accumulates_usage_and_metadata(
 fn live_execute_deep_length_continuation_failure_fails_open() {
     let mut payload = sample_execute_request();
     payload.dry_run = false;
-    payload.research_mode = Some("deep".to_string());
     let mut call_index = 0usize;
-    let live_result = perform_live_execute_with_sender(&payload, "deep prompt", "deep", |_body| {
+    let live_result = perform_live_execute_with_sender(&payload, "deep prompt", |_body| {
         call_index += 1;
         if call_index == 1 {
             return Ok((
@@ -591,7 +564,7 @@ fn live_execute_deep_length_continuation_failure_fails_open() {
         .as_deref()
         .unwrap_or_default()
         .contains("HTTP 502"));
-    let response = build_live_execute_response(&payload, None, live_result, "deep");
+    let response = build_live_execute_response(&payload, None, live_result);
     assert_eq!(response.metadata["continuation_attempted"], json!(true));
     assert_eq!(response.metadata["continuation_status"], json!("http_502"));
     assert!(response.metadata["continuation_error"]
@@ -605,9 +578,8 @@ fn live_execute_deep_length_continuation_failure_fails_open() {
 fn live_execute_retries_first_round_before_success() {
     let mut payload = sample_execute_request();
     payload.dry_run = false;
-    payload.research_mode = Some("quick".to_string());
     let mut call_index = 0usize;
-    let live_result = perform_live_execute_with_sender(&payload, "quick prompt", "quick", |_body| {
+    let live_result = perform_live_execute_with_sender(&payload, "quick prompt", |_body| {
         call_index += 1;
         if call_index == 1 {
             return Ok((500, "{\"error\":\"transient\"}".to_string()));

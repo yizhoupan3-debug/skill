@@ -477,24 +477,9 @@ pub fn maybe_record_research_activity(repo_root: &Path, tool_name: &str, summary
     if let Some(h) = get_runtime_hooks() { (h.maybe_record_research_activity)(repo_root, tool_name, summary); }
 }
 
-// ────────────────────────────────────────────────────────────────
-// Research mode inference: individual OnceLock slot (set by research-harness)
-// ────────────────────────────────────────────────────────────────
-
-type InferResearchModeFn = fn(&Value) -> String;
-
-static INFER_RESEARCH_MODE: OnceLock<InferResearchModeFn> = OnceLock::new();
-
-pub fn register_research_mode_inference(f: InferResearchModeFn) {
-    once_lock_set(&INFER_RESEARCH_MODE, f, "INFER_RESEARCH_MODE");
-}
-
-pub fn research_mode_for_request(payload: &Value) -> String {
-    if let Some(f) = INFER_RESEARCH_MODE.get() { return f(payload); }
-    get_runtime_hooks().map(|h| (h.research_mode_for_request)(payload)).unwrap_or_else(|| "quick".to_string())
-}
-
 // ── Skill routing bridge: removed ──
+// Was never registered in production (register_skill_routing_bridge not called).
+// Route decision goes through route_task_with_manifest_fallback instead.
 // Was never registered in production (register_skill_routing_bridge not called).
 // Route decision goes through route_task_with_manifest_fallback instead.
 
@@ -507,10 +492,6 @@ pub fn ensure_kernel_bootstrap() {
     if let Some(h) = get_runtime_hooks() {
         (h.ensure_kernel_bootstrap)();
     }
-    // research_mode_inference: NOT registered here — was previously inline but
-    // the simplified logic preempted the production version from
-    // research_harness::init_hooks(). The dispatch default is "quick" until
-    // the real implementation registers.
     #[cfg(test)]
     crate::test_helpers::install_test_deps();
 }
@@ -673,8 +654,6 @@ pub struct RuntimeHooks {
     pub maybe_merge_paper_adversarial_before_submit: MergePaperContextFn,
     // research activity (1 field)
     pub maybe_record_research_activity: fn(&Path, &str, &str),
-    // research mode inference (1 field)
-    pub research_mode_for_request: fn(&Value) -> String,
     // kernel bootstrap (1 field)
     pub ensure_kernel_bootstrap: fn(),
     // framework_runtime_extra (7 fields)

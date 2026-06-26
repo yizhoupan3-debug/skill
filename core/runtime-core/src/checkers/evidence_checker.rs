@@ -38,7 +38,7 @@ impl GateChecker for EvidenceChecker {
         if !has_evidence {
             findings.push(Finding {
                 id: "no-evidence".to_string(),
-                severity: Severity::B,
+                severity: Severity::Warning,
                 description: format!(
                     "task '{task_id}' has no evidence artifacts — no evidence of completion"
                 ),

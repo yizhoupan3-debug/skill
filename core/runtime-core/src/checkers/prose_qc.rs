@@ -37,6 +37,10 @@ impl GateChecker for ProseQcChecker {
         "text quality checks: terminology consistency, style guide compliance, claim drift detection, language register, hedging appropriateness"
     }
 
+    fn sub_scene_affinity(&self) -> Option<&'static str> {
+        Some("prose_qc")
+    }
+
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let mut findings = Vec::new();
 

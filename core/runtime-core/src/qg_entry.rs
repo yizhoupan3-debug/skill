@@ -15,14 +15,11 @@
 
 use std::path::Path;
 
-use core_policy::error::FrameworkError;
 use quality_gate::types::{
     CheckContext, Finding, GateVerdict, Severity,
 };
 
 use crate::qg_route::evaluate_qg_route;
-
-type Result<T> = std::result::Result<T, FrameworkError>;
 
 /// Trigger the two-stage exit gate.
 ///
@@ -31,6 +28,7 @@ type Result<T> = std::result::Result<T, FrameworkError>;
 /// * `task_id` — current task identifier
 /// * `scene` — scene constant (from GoalEngine)
 /// * `goal` — goal description string
+/// * `sub_scene` — optional sub-scene for checker filtering (Wave 6)
 /// * `round` — current verification round (1-based)
 /// * `runtime_handle` — optional tokio runtime handle for async checkers
 ///
@@ -44,6 +42,7 @@ pub fn trigger(
     task_id: &str,
     scene: &str,
     goal: &str,
+    sub_scene: Option<&str>,
     round: u64,
     runtime_handle: Option<tokio::runtime::Handle>,
 ) -> GateVerdict {
@@ -82,7 +81,7 @@ pub fn trigger(
     // ═══════════════════════════════════════════════════════════════════
     let ctx = CheckContext {
         scene: scene.to_string(),
-        sub_scene: None,
+        sub_scene: sub_scene.map(|s| s.to_string()),
         goal: goal.to_string(),
         round,
         repo_root: repo_root.to_path_buf(),
@@ -92,38 +91,6 @@ pub fn trigger(
     };
 
     evaluate_qg_route(scene, &ctx)
-}
-
-/// QG Route wrapper that adapts the old `framework_quality_gate` hook interface.
-///
-/// Accepts a JSON payload (from the old MCP tool / stdio dispatch) and calls
-/// `trigger()` — the two-stage exit gate. Returns the `GateVerdict` as JSON.
-///
-/// This replaces the `runtime_exit_gate::quality_gate::framework_quality_gate`
-/// function that was previously registered as the `quality_gate_drive` hook.
-/// Wave 4a-ii: old QG state machine deleted, replaced by QG Route.
-pub fn quality_gate_hook_wrapper(payload: serde_json::Value) -> Result<serde_json::Value> {
-    let repo_root = payload
-        .get("repo_root")
-        .and_then(|v| v.as_str())
-        .map(Path::new)
-        .unwrap_or_else(|| Path::new("."));
-    let task_id = payload
-        .get("task_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let goal = payload
-        .get("goal")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let round = payload
-        .get("round")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1);
-    let scene = quality_gate::scene::GENERAL;
-
-    let verdict = trigger(repo_root, task_id, scene, goal, round, None);
-    serde_json::to_value(&verdict).map_err(|e| FrameworkError::validation(e.to_string()))
 }
 
 #[cfg(test)]
@@ -150,6 +117,7 @@ mod tests {
             "no-such-task",
             quality_gate::scene::GENERAL,
             "test goal",
+            None,
             1,
             None,
         );
@@ -167,6 +135,7 @@ mod tests {
             "no-such-task",
             "",
             "test goal",
+            None,
             1,
             None,
         );
@@ -183,6 +152,7 @@ mod tests {
             "no-such-task",
             quality_gate::scene::RESEARCH,
             "research goal",
+            None,
             2,
             None,
         );

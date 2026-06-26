@@ -23,14 +23,14 @@ pub fn read_primary_task_id(repo_root: &Path) -> Option<String> {
 }
 
 pub fn read_active_task_id(repo_root: &Path) -> Option<String> {
-    read_pointer_task_id(repo_root, "active_task_id", "active_task.json")
+    read_pointer_task_id(repo_root, "active_task_id")
 }
 
 pub fn read_focus_task_id(repo_root: &Path) -> Option<String> {
-    read_pointer_task_id(repo_root, "focus_task_id", "focus_task.json")
+    read_pointer_task_id(repo_root, "focus_task_id")
 }
 
-fn read_pointer_task_id(repo_root: &Path, key: &str, legacy_filename: &str) -> Option<String> {
+fn read_pointer_task_id(repo_root: &Path, key: &str) -> Option<String> {
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
     if pointers_path.is_file() {
         let raw = fs::read_to_string(&pointers_path).ok()?;
@@ -42,46 +42,13 @@ fn read_pointer_task_id(repo_root: &Path, key: &str, legacy_filename: &str) -> O
                 return Some(tid);
             }
         }
-        // Fallback: TASK_POINTERS.json has `tasks` array but no top-level key.
-        // Try `tasks[0].task_id` as the implied focus task.
-        if key == "focus_task_id"
-            && let Some(arr) = data.get("tasks").and_then(Value::as_array)
-                && let Some(first) = arr.first()
-                    && let Some(tid) = first.get("task_id").and_then(Value::as_str) {
-                        let tid = tid.trim().to_string();
-                        if !tid.is_empty() {
-                            let _ = crate::utils::path_guard::safe_task_id_component(&tid)?;
-                            return Some(tid);
-                        }
-                    }
-    }
-    // Fallback: legacy single-file format (active_task.json / focus_task.json)
-    let path = repo_root.join("artifacts/current").join(legacy_filename);
-    if let Ok(raw) = fs::read_to_string(&path)
-        && let Some(tid) = parse_task_id_from_pointer_json(&raw) {
-            return Some(tid);
-        }
-    // Fallback: task_registry.json's focus_task_id
-    if key == "focus_task_id" {
-        let registry_path = repo_root.join("artifacts/current/task_registry.json");
-        if let Ok(raw) = fs::read_to_string(&registry_path)
-            && let Ok(data) = serde_json::from_str::<Value>(&raw)
-                && let Some(tid) = data.get("focus_task_id").and_then(Value::as_str) {
-                    let tid = tid.trim().to_string();
-                    if !tid.is_empty() {
-                        let _ = crate::utils::path_guard::safe_task_id_component(&tid)?;
-                        return Some(tid);
-                    }
-                }
     }
     None
 }
 
-/// Read `active_task.json` and `focus_task.json` task ids in one back-to-back pair (smaller
-/// TOCTOU window than two independent helper calls). Used by [`crate::task_state::read_task_pointers`]
-/// and hydration entrypoints.
+/// Read active and focus task IDs from the consolidated TASK_POINTERS.json.
+/// Used by [`crate::task_state::read_task_pointers`] and hydration entrypoints.
 pub fn read_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<String>) {
-    // Try TASK_POINTERS.json first (Phase 3C consolidated file)
     let pointers_path = repo_root.join("artifacts/current/TASK_POINTERS.json");
     if pointers_path.is_file()
         && let Ok(raw) = fs::read_to_string(&pointers_path)
@@ -100,45 +67,7 @@ pub fn read_task_pointer_pair(repo_root: &Path) -> (Option<String>, Option<Strin
                     return (active, focus);
                 }
             }
-    // Fallback: legacy 3-file format
-    let active_path = repo_root.join("artifacts/current/active_task.json");
-    let focus_path = repo_root.join("artifacts/current/focus_task.json");
-    let active_raw = fs::read_to_string(&active_path).ok();
-    let focus_raw = fs::read_to_string(&focus_path).ok();
-    let active_task_id = active_raw
-        .as_deref()
-        .and_then(parse_task_id_from_pointer_json);
-    let focus_task_id = focus_raw
-        .as_deref()
-        .and_then(parse_task_id_from_pointer_json);
-    if active_task_id.is_some() || focus_task_id.is_some() {
-        return (active_task_id, focus_task_id);
-    }
-    // Fallback: try TASK_POINTERS.json `tasks[0]` as implied focus
-    let focus_from_tasks = (|| -> Option<String> {
-        let raw = fs::read_to_string(&pointers_path).ok()?;
-        let data: Value = serde_json::from_str(&raw).ok()?;
-        let arr = data.get("tasks").and_then(Value::as_array)?;
-        let first = arr.first()?;
-        let tid = first.get("task_id")?.as_str()?.trim().to_string();
-        if tid.is_empty() { return None; }
-        crate::utils::path_guard::safe_task_id_component(&tid)?;
-        Some(tid)
-    })();
-    if let Some(tid) = focus_from_tasks {
-        return (None, Some(tid));
-    }
-    // Fallback: task_registry.json focus_task_id
-    let registry_path = repo_root.join("artifacts/current/task_registry.json");
-    let focus_from_registry = (|| -> Option<String> {
-        let raw = fs::read_to_string(&registry_path).ok()?;
-        let data: Value = serde_json::from_str(&raw).ok()?;
-        let tid = data.get("focus_task_id")?.as_str()?.trim().to_string();
-        if tid.is_empty() { return None; }
-        crate::utils::path_guard::safe_task_id_component(&tid)?;
-        Some(tid)
-    })();
-    (None, focus_from_registry)
+    (None, None)
 }
 
 fn pointer_file_matches_task_id(path: &Path, task_id: &str) -> bool {

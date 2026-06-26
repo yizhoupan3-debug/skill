@@ -37,6 +37,10 @@ impl GateChecker for LiteratureGateChecker {
         "literature verification: DOI reachability, citation-claim alignment, contradiction sweep, closest work identification, coverage scoring"
     }
 
+    fn sub_scene_affinity(&self) -> Option<&'static str> {
+        Some("literature")
+    }
+
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let mut findings = Vec::new();
 

@@ -25,8 +25,6 @@ pub struct ExecuteRequestPayload {
     pub trace_output_path: Option<String>,
     pub default_output_tokens: usize,
     #[serde(default)]
-    pub research_mode: Option<String>,
-    #[serde(default)]
     pub execution_protocol: Option<String>,
     #[serde(default)]
     pub verification_required: Option<bool>,
@@ -449,7 +447,6 @@ mod tests {
             trace_event_count: 0,
             trace_output_path: None,
             default_output_tokens: 4096,
-            research_mode: None,
             execution_protocol: None,
             verification_required: None,
             evidence_required: None,

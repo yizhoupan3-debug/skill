@@ -38,6 +38,10 @@ impl GateChecker for FormalGateChecker {
         "formal verification: CAS identity simplification, SMT consistency, witness validation, dimensional analysis, step dependency checking"
     }
 
+    fn sub_scene_affinity(&self) -> Option<&'static str> {
+        Some("formal")
+    }
+
     fn check(&self, ctx: &CheckContext) -> CheckResult {
         let mut findings = Vec::new();
 

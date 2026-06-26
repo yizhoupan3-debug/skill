@@ -829,10 +829,26 @@ expression: json
         "router-rs-framework",
         "browser-mcp",
         "mcp-codegraph",
-        "paperplain"
+        "paperplain",
+        "mcp-pdf",
+        "mcp-ooxml",
+        "mcp-pptx",
+        "mcp-financial-data",
+        "mcp-citation",
+        "mcp-gh-source-gate"
       ],
       "managed_settings_paths": [],
-      "mcp_config_paths": [],
+      "mcp_config_paths": [
+        {
+          "host_root": "claude",
+          "relative": "mcp.json",
+          "scope": "user"
+        },
+        {
+          "relative": ".mcp.json",
+          "scope": "project"
+        }
+      ],
       "profile_id": "claude_profile",
       "resume_command_examples": [
         "Continue in Claude in this workspace"
@@ -889,7 +905,13 @@ expression: json
         "router-rs-framework",
         "browser-mcp",
         "mcp-codegraph",
-        "paperplain"
+        "paperplain",
+        "mcp-pdf",
+        "mcp-ooxml",
+        "mcp-pptx",
+        "mcp-financial-data",
+        "mcp-citation",
+        "mcp-gh-source-gate"
       ],
       "managed_settings_paths": [],
       "mcp_config_paths": [
@@ -950,7 +972,13 @@ expression: json
         "router-rs-framework",
         "browser-mcp",
         "mcp-codegraph",
-        "paperplain"
+        "paperplain",
+        "mcp-pdf",
+        "mcp-ooxml",
+        "mcp-pptx",
+        "mcp-financial-data",
+        "mcp-citation",
+        "mcp-gh-source-gate"
       ],
       "managed_settings_paths": [],
       "mcp_config_paths": [
@@ -1014,7 +1042,13 @@ expression: json
         "router-rs-framework",
         "browser-mcp",
         "mcp-codegraph",
-        "paperplain"
+        "paperplain",
+        "mcp-pdf",
+        "mcp-ooxml",
+        "mcp-pptx",
+        "mcp-financial-data",
+        "mcp-citation",
+        "mcp-gh-source-gate"
       ],
       "managed_settings_paths": [],
       "mcp_config_paths": [
@@ -1023,9 +1057,10 @@ expression: json
           "scope": "project"
         },
         {
+          "base": "account_home",
           "host_root": "opencode",
           "notes": "Default: ~/.config/opencode/opencode.json",
-          "relative": "opencode.json",
+          "relative": ".config/opencode/opencode.json",
           "scope": "user"
         }
       ],
@@ -1256,10 +1291,26 @@ expression: json
           "router-rs-framework",
           "browser-mcp",
           "mcp-codegraph",
-          "paperplain"
+          "paperplain",
+          "mcp-pdf",
+          "mcp-ooxml",
+          "mcp-pptx",
+          "mcp-financial-data",
+          "mcp-citation",
+          "mcp-gh-source-gate"
         ],
         "managed_settings_paths": [],
-        "mcp_config_paths": [],
+        "mcp_config_paths": [
+          {
+            "host_root": "claude",
+            "relative": "mcp.json",
+            "scope": "user"
+          },
+          {
+            "relative": ".mcp.json",
+            "scope": "project"
+          }
+        ],
         "profile_id": "claude_profile",
         "resume_command_examples": [
           "Continue in Claude in this workspace"
@@ -1524,7 +1575,13 @@ expression: json
           "router-rs-framework",
           "browser-mcp",
           "mcp-codegraph",
-          "paperplain"
+          "paperplain",
+          "mcp-pdf",
+          "mcp-ooxml",
+          "mcp-pptx",
+          "mcp-financial-data",
+          "mcp-citation",
+          "mcp-gh-source-gate"
         ],
         "managed_settings_paths": [],
         "mcp_config_paths": [
@@ -1788,7 +1845,13 @@ expression: json
           "router-rs-framework",
           "browser-mcp",
           "mcp-codegraph",
-          "paperplain"
+          "paperplain",
+          "mcp-pdf",
+          "mcp-ooxml",
+          "mcp-pptx",
+          "mcp-financial-data",
+          "mcp-citation",
+          "mcp-gh-source-gate"
         ],
         "managed_settings_paths": [],
         "mcp_config_paths": [
@@ -2053,7 +2116,13 @@ expression: json
           "router-rs-framework",
           "browser-mcp",
           "mcp-codegraph",
-          "paperplain"
+          "paperplain",
+          "mcp-pdf",
+          "mcp-ooxml",
+          "mcp-pptx",
+          "mcp-financial-data",
+          "mcp-citation",
+          "mcp-gh-source-gate"
         ],
         "managed_settings_paths": [],
         "mcp_config_paths": [
@@ -2062,9 +2131,10 @@ expression: json
             "scope": "project"
           },
           {
+            "base": "account_home",
             "host_root": "opencode",
             "notes": "Default: ~/.config/opencode/opencode.json",
-            "relative": "opencode.json",
+            "relative": ".config/opencode/opencode.json",
             "scope": "user"
           }
         ],

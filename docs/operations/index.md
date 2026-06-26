@@ -59,7 +59,7 @@ framework host-integration install --to cursor --scope user
 
 ### B5 — browser-mcp
 
-浏览器自动化 MCP 服务（`core/browser-mcp/`）。
+浏览器自动化 MCP 服务（`tools/browser-mcp/`）。
 
 ```bash
 cargo run --release --manifest-path core/router-rs/Cargo.toml -- browser mcp-stdio --repo-root "$PWD"
@@ -87,7 +87,7 @@ cargo run --manifest-path tools/observer-rs/Cargo.toml -- analyze --help
 cargo run --manifest-path tools/observer-rs/Cargo.toml -- audit --config configs/observer/observer.toml
 ```
 
-排障：找不到 journal → 确认 telemetry 目录；idle analyze 未触发 → 检查仍有 running worker。
+排障：找不到 journal → 确认 `artifacts/telemetry/` 目录；idle analyze 未触发 → 检查仍有 running worker。
 
 ---
 
@@ -147,7 +147,7 @@ cargo run --manifest-path tools/observer-rs/Cargo.toml -- audit --config configs
 
 ## 备份、恢复与卸载
 
-**备份优先级**：仓库内宿主投影（高，建议 Git 管理）→ `artifacts/current/`（中）→ `~/.local/share/skill-framework/bin/router-rs`（低，可重编译）→ `artifacts/telemetry/`（中）。
+**备份优先级**：仓库内宿主投影（高，建议 Git 管理）→ `artifacts/current/`（中）→ `~/.local/share/skill-framework/bin/router-rs`（低，可重编译）。`artifacts/telemetry/` 为运行时缓存，非备份目标。
 
 **恢复**：`git clone/pull` → `cargo build --release` → `host-integration install` → `framework doctor`。
 

@@ -174,8 +174,6 @@ pub(crate) fn install_test_deps() {
             maybe_merge_paper_adversarial_before_submit: |_, _, _, _, _| {},
             // research activity
             maybe_record_research_activity: |_, _, _| {},
-            // research mode inference
-            research_mode_for_request: |_| "quick".to_string(),
             // kernel bootstrap
             ensure_kernel_bootstrap: || {},
             // framework_runtime_extra
@@ -194,8 +192,6 @@ pub(crate) fn install_test_deps() {
             evaluate_mcp_pre_guard_safe: |_, _, _| hooks::McpPreGuardVerdict { blocked: false, reason: None },
             // quality_gate_drive
             quality_gate_drive: |_| Err(FrameworkError::validation("not registered in test")),
-            // session_supervisor_op
-            session_supervisor_op: |_| Err(FrameworkError::validation("not registered in test")),
             // research_tool_dispatch
             research_tool_dispatch: |_, _| Err(FrameworkError::validation("not registered in test")),
             // mcp_tool_routing
@@ -326,45 +322,6 @@ pub(crate) fn install_test_deps() {
             test_append_adversarial_context,
             test_merge_adversarial_before_submit,
         );
-
-        // Register research mode inference for tests (simplified version).
-        hooks::register_research_mode_inference(|payload: &Value| {
-            // 1. Explicit research_mode field
-            if let Some(mode) = payload.get("research_mode").and_then(Value::as_str) {
-                let m = mode.trim().to_ascii_lowercase();
-                if m.contains("deep") || m.contains("深度") {
-                    return "deep".to_string();
-                }
-                return "quick".to_string();
-            }
-            // 2. execution_protocol field
-            if let Some(proto) = payload.get("execution_protocol").and_then(Value::as_str) {
-                let p = proto.trim().to_ascii_lowercase();
-                if p.contains("deep") || p.contains("深度") || p.contains("research") {
-                    return "deep".to_string();
-                }
-            }
-            // 3. Task text signals
-            let task = payload.get("task").and_then(Value::as_str).unwrap_or("").to_ascii_lowercase();
-            if task.contains("deep dive") || task.contains("深度调研") || task.contains("深度研究")
-                || task.contains("literature review") || task.contains("文献综述")
-                || task.contains("external research")
-            {
-                return "deep".to_string();
-            }
-            // 4. Reasons
-            if let Some(reasons) = payload.get("reasons").and_then(Value::as_array) {
-                for r in reasons {
-                    if let Some(s) = r.as_str() {
-                        let low = s.to_ascii_lowercase();
-                        if low.contains("deep") || low.contains("literature review") || low.contains("深度研究") {
-                            return "deep".to_string();
-                        }
-                    }
-                }
-            }
-            "quick".to_string()
-        });
 
         // Register session call tracker hooks for tests (function definitions kept for RuntimeHooks above).
         fn test_init_tracker(repo_root: &std::path::Path) -> Result<(), FrameworkError> {

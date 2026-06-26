@@ -35,7 +35,6 @@ pub mod proof_dag_serialize;
 pub mod provenance;
 pub mod render;
 pub mod subprocess;
-pub mod research_mode;
 pub mod review;
 pub mod search;
 #[cfg(feature = "smoke")]

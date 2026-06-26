@@ -120,6 +120,8 @@ struct RawFrontmatter {
     network_access: Option<String>,
     approval_required_tools: Option<Vec<String>>,
     kind: Option<String>,
+    scene: Option<String>,
+    sub_scene: Option<String>,
 }
 
 fn parse_enum<T: std::str::FromStr + fmt::Debug>(
@@ -215,6 +217,8 @@ pub fn parse_frontmatter(
             Some(v) => Some(parse_enum("kind", Some(&v))?),
             None => None,
         },
+        scene: Some(raw.scene.unwrap_or_else(|| "general".to_string())),
+        sub_scene: raw.sub_scene,
     })
 }
 

@@ -1,6 +1,5 @@
 # observer-rs 阈值真源
 # CLI: observer-rs audit --config configs/observer/observer.toml
-# Online observer (TelemetryObserver) also uses low_confidence_threshold from here.
 
 [observer]
 audit_window_days = 30
@@ -24,8 +23,7 @@ static_blend = 0.4
 [audit]
 top_ngram_candidates = 10
 
-# Online observer thresholds (TelemetryObserver in framework-runtime)
-# `telemetry_observer.rs` was deleted in Wave 2d — these defaults live in the Rust code.
+# Online observer thresholds — defaults live in the Rust code.
 [observer.online]
 window_capacity = 256
 reroute_rate_alert = 0.35

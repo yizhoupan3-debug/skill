@@ -76,7 +76,6 @@ const FRAMEWORK_STDIO_OPS: &[&str] = &[
     "framework_session_artifact_write",
     "framework_hook_evidence_append",
     "framework_goal_drive",
-    "framework_quality_gate",
     "framework_alias",
     "task_ledger_dispatch",
 ];
@@ -192,7 +191,6 @@ mod tests {
     #[test]
     fn classify_framework_ops() {
         assert_eq!(classify_stdio_op("framework_goal_drive"), Some(StdioOpDomain::Framework));
-        assert_eq!(classify_stdio_op("framework_quality_gate"), Some(StdioOpDomain::Framework));
     }
 
     #[test]

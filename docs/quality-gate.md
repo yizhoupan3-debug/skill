@@ -409,7 +409,6 @@ runtime-core (L7) ─── 持 quality-gate 作为依赖
 
 - **`core/runtime-exit-gate/` crate**（Wave 4a-ii）：旧的质量门状态机完整删除
 - **`core/runtime-infra/src/telemetry_emit.rs`**：旧系统的 telemetry 发射器
-- **`core/fr-exec/src/telemetry_observer.rs`**：旧系统的 telemetry 观察者
 - **`core/framework-runtime-hooks/` crate**（已删除 Cargo.toml/lib.rs）
 - 旧的 `quality_gate_drive` hook 实现
 - `deactivate_goal_for_conflict_with_quality_gate()` 函数（Wave 4a-ii → QG 是 Goal 的内部模式）

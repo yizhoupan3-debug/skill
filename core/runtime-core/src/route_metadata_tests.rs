@@ -658,13 +658,13 @@ use crate::route::has_paper_review_judgment_context;
         let records = load_records_from_runtime(&runtime_path).expect("runtime load");
         let rec = records
             .iter()
-            .find(|r| r.slug == "paper-writing")
-            .expect("paper-writing row");
+            .find(|r| r.slug == "paper-workbench")
+            .expect("paper-workbench row");
         assert!(
             !rec.framework_alias_entrypoints.is_empty(),
             "manifest row should carry framework alias entrypoints"
         );
-        let q = normalize_text("用 paper-writing 做一轮论文改稿");
+        let q = normalize_text("用 paper-workbench 做一轮论文改稿");
         assert!(
             has_literal_framework_alias_call(&q, rec),
             "{:?}",
