@@ -1,5 +1,6 @@
 //! Durable atomic file writes shared across the crate (temp + fsync + rename).
 
+use core_errors::FrameworkError;
 use serde_json::Value;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -8,7 +9,7 @@ use std::path::Path;
 /// Fsync the parent directory of `path` (Unix only, no-op on other platforms).
 /// Ensures directory metadata (including the rename entry) is durable on disk.
 #[cfg(unix)]
-pub fn fsync_parent_dir(path: &Path) -> Result<(), String> {
+pub fn fsync_parent_dir(path: &Path) -> Result<(), FrameworkError> {
     use std::os::unix::fs::OpenOptionsExt;
     let Some(parent) = path.parent() else {
         return Ok(());
@@ -18,18 +19,18 @@ pub fn fsync_parent_dir(path: &Path) -> Result<(), String> {
         .custom_flags(libc::O_RDONLY)
         .open(parent)
         .map_err(|err| {
-            format!(
+            FrameworkError::validation(format!(
                 "open parent dir for fsync failed {}: {err}",
                 parent.display()
-            )
+            ))
         })?;
     dir.sync_all()
-        .map_err(|err| format!("fsync parent dir failed for {}: {err}", parent.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("fsync parent dir failed for {}: {err}", parent.display())))?;
     Ok(())
 }
 
 #[cfg(not(unix))]
-pub fn fsync_parent_dir(_path: &Path) -> Result<(), String> {
+pub fn fsync_parent_dir(_path: &Path) -> Result<(), FrameworkError> {
     Ok(())
 }
 
@@ -38,10 +39,10 @@ pub fn write_atomic_text_to_temp(
     final_path: &Path,
     content: &str,
     tmp_path: &Path,
-) -> Result<(), String> {
+) -> Result<(), FrameworkError> {
     if let Some(parent) = final_path.parent() {
         fs::create_dir_all(parent)
-            .map_err(|err| format!("create parent directory failed: {err}"))?;
+            .map_err(|err| FrameworkError::validation(format!("create parent directory failed: {err}")))?;
     }
     let mut opts = OpenOptions::new();
     opts.create(true).truncate(true).write(true);
@@ -52,19 +53,19 @@ pub fn write_atomic_text_to_temp(
     }
     let mut file = opts
         .open(tmp_path)
-        .map_err(|err| format!("open temp file failed for {}: {err}", tmp_path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("open temp file failed for {}: {err}", tmp_path.display())))?;
     file.write_all(content.as_bytes())
-        .map_err(|err| format!("write temp file failed for {}: {err}", tmp_path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("write temp file failed for {}: {err}", tmp_path.display())))?;
     file.sync_all()
-        .map_err(|err| format!("fsync temp file failed for {}: {err}", tmp_path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("fsync temp file failed for {}: {err}", tmp_path.display())))?;
     drop(file);
     fs::rename(tmp_path, final_path).map_err(|err| {
         let _ = fs::remove_file(tmp_path);
-        format!(
+        FrameworkError::validation(format!(
             "rename temp file failed {} -> {}: {err}",
             tmp_path.display(),
             final_path.display()
-        )
+        ))
     })?;
     fsync_parent_dir(final_path)?;
     Ok(())
@@ -75,7 +76,7 @@ pub fn write_atomic_text_to_temp(
 /// may race to write the same `path` concurrently, **do not** use this helper — derive a unique
 /// `tmp_path` (pid + nanos + nonce) and call [`write_atomic_text_to_temp`] directly. The codex
 /// hook installer takes that route in [`crate::codex_hooks::write_atomic_text`].
-pub fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
+pub fn write_atomic_text(path: &Path, content: &str) -> Result<(), FrameworkError> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NONCE: AtomicU64 = AtomicU64::new(0);
 
@@ -98,7 +99,7 @@ pub fn write_atomic_text(path: &Path, content: &str) -> Result<(), String> {
     write_atomic_text_to_temp(path, content, &tmp_path)
 }
 
-pub fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
+pub fn write_atomic_json(path: &Path, value: &Value) -> Result<(), FrameworkError> {
     use std::sync::atomic::{AtomicU64, Ordering};
     static NONCE: AtomicU64 = AtomicU64::new(0);
 
@@ -110,7 +111,7 @@ pub fn write_atomic_json(path: &Path, value: &Value) -> Result<(), String> {
     let nonce = NONCE.fetch_add(1, Ordering::Relaxed);
 
     let text = serde_json::to_string_pretty(value)
-        .map_err(|err| format!("serialize JSON failed: {err}"))?;
+        .map_err(|err| FrameworkError::validation(format!("serialize JSON failed: {err}")))?;
     let tmp_path = path.with_extension(format!("json.tmp-{}-{}-{}", pid, micros, nonce));
     write_atomic_text_to_temp(path, &text, &tmp_path)
 }

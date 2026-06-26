@@ -6,6 +6,7 @@
 //! `compact_jsonl_with_content` keep the file bounded when it grows past a configurable
 //! threshold by discarding redundant state-snapshot rows and renumbering seq densely.
 
+use core_errors::FrameworkError;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -34,12 +35,12 @@ const STATE_SNAPSHOT_TX_TYPES: &[&str] = &[
 ///
 /// This is a thin wrapper that reads the file and delegates to
 /// [`compact_jsonl_with_content`].
-pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, String> {
+pub fn compact_jsonl_if_needed(path: &Path, max_lines: usize) -> Result<bool, FrameworkError> {
     if !path.is_file() {
         return Ok(false);
     }
     let content = fs::read_to_string(path)
-        .map_err(|err| format!("compact_jsonl: read {}: {err}", path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("compact_jsonl: read {}: {err}", path.display()))?;
     compact_jsonl_with_content(path, &content, max_lines)
 }
 
@@ -50,7 +51,7 @@ pub fn compact_jsonl_with_content(
     path: &Path,
     content: &str,
     max_lines: usize,
-) -> Result<bool, String> {
+) -> Result<bool, FrameworkError> {
     // Clean up stale temp files from prior crashes before touching the file.
     cleanup_stale_compact_tmp_files(path);
 
@@ -68,15 +69,15 @@ pub fn compact_jsonl_with_content(
     if compacted.is_empty() {
         // All rows were snapshot rows and got fully deduplicated.
         let parent = path.parent().ok_or_else(|| {
-            format!("compact_jsonl: no parent for {}", path.display())
+            FrameworkError::validation(format!("compact_jsonl: no parent for {}", path.display()))
         })?;
         fs::create_dir_all(parent)
-            .map_err(|err| format!("compact_jsonl: mkdir {}: {err}", parent.display()))?;
+            .map_err(|err| FrameworkError::validation(format!("compact_jsonl: mkdir {}: {err}", parent.display())))?;
         fs::OpenOptions::new()
             .write(true)
             .open(path)
             .and_then(|f| f.set_len(0))
-            .map_err(|err| format!("compact_jsonl: truncate-all {}: {err}", path.display()))?;
+            .map_err(|err| FrameworkError::validation(format!("compact_jsonl: truncate-all {}: {err}", path.display())))?;
         return Ok(true);
     }
 
@@ -123,13 +124,13 @@ fn find_last_valid_line_end(content: &str) -> Option<usize> {
 ///
 /// Returns `Ok(true)` if the file was actually truncated, `Ok(false)` if it was
 /// already clean (or empty / missing).  Any I/O error is propagated.
-pub fn truncate_corrupt_tail(path: &Path) -> Result<bool, String> {
+pub fn truncate_corrupt_tail(path: &Path) -> Result<bool, FrameworkError> {
     if !path.is_file() {
         return Ok(false);
     }
 
     let content = fs::read_to_string(path)
-        .map_err(|err| format!("truncate_corrupt_tail: read {}: {err}", path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("truncate_corrupt_tail: read {}: {err}", path.display()))?;
 
     if content.is_empty() {
         return Ok(false);
@@ -145,10 +146,10 @@ pub fn truncate_corrupt_tail(path: &Path) -> Result<bool, String> {
                 .open(path)
                 .and_then(|f| f.set_len(0))
                 .map_err(|err| {
-                    format!(
+                    FrameworkError::validation(format!(
                         "truncate_corrupt_tail: truncate-all {}: {err}",
                         path.display()
-                    )
+                    ))
                 })?;
             Ok(true)
         }
@@ -162,7 +163,7 @@ pub fn truncate_corrupt_tail(path: &Path) -> Result<bool, String> {
                     f.sync_all()
                 })
                 .map_err(|err| {
-                    format!("truncate_corrupt_tail: set_len {}: {err}", path.display())
+                    FrameworkError::validation(format!("truncate_corrupt_tail: set_len {}: {err}", path.display()))
                 })?;
             Ok(true)
         }
@@ -176,13 +177,13 @@ pub fn truncate_corrupt_tail(path: &Path) -> Result<bool, String> {
 /// compaction on the clean content, and writes only once — halving the I/O
 /// compared to calling [`truncate_corrupt_tail`] followed by
 /// [`compact_jsonl_if_needed`] separately.
-pub fn truncate_and_compact(path: &Path, max_lines: usize) -> Result<bool, String> {
+pub fn truncate_and_compact(path: &Path, max_lines: usize) -> Result<bool, FrameworkError> {
     if !path.is_file() {
         return Ok(false);
     }
 
     let content = fs::read_to_string(path)
-        .map_err(|err| format!("truncate_and_compact: read {}: {err}", path.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("truncate_and_compact: read {}: {err}", path.display()))?;
 
     if content.is_empty() {
         return Ok(false);
@@ -211,10 +212,10 @@ pub fn truncate_and_compact(path: &Path, max_lines: usize) -> Result<bool, Strin
             .open(path)
             .and_then(|f| f.set_len(0))
             .map_err(|err| {
-                format!(
+                FrameworkError::validation(format!(
                     "truncate_and_compact: truncate-all {}: {err}",
                     path.display()
-                )
+                ))
             })?;
     } else {
         atomic_write_jsonl(path, output)?;
@@ -231,7 +232,7 @@ pub fn truncate_and_compact(path: &Path, max_lines: usize) -> Result<bool, Strin
 ///
 /// Returns `Ok(Some(compacted_text))` if compaction occurred,
 /// `Ok(None)` if the content is under threshold or has nothing to deduplicate.
-fn compact_jsonl_core(content: &str, max_lines: usize) -> Result<Option<String>, String> {
+fn compact_jsonl_core(content: &str, max_lines: usize) -> Result<Option<String>, FrameworkError> {
     // ── single parse pass: keep owned `Map` + snapshot label per line ──
     // We use owned `Map<String, Value>` so we can mutate `seq` later without
     // worrying about borrows.  This is ~50–300 small allocations per compaction.
@@ -306,7 +307,7 @@ fn compact_jsonl_core(content: &str, max_lines: usize) -> Result<Option<String>,
         obj.insert("seq".to_string(), Value::from(kept_count as u64));
 
         let line = serde_json::to_string(&Value::Object(obj))
-            .map_err(|e| format!("compact_jsonl: serialize seq {kept_count}: {e}"))?;
+            .map_err(|e| FrameworkError::validation(format!("compact_jsonl: serialize seq {kept_count}: {e}")))?;
         compacted.push_str(&line);
         compacted.push('\n');
         kept_count += 1;
@@ -346,13 +347,13 @@ fn extract_snapshot_type_from_map(obj: &Map<String, Value>) -> Option<String> {
 }
 
 /// Atomic write: temp file + fsync + rename.
-fn atomic_write_jsonl(path: &Path, payload: &str) -> Result<(), String> {
+fn atomic_write_jsonl(path: &Path, payload: &str) -> Result<(), FrameworkError> {
     let tmp_path = derive_compact_tmp_path(path);
     let parent = path
         .parent()
-        .ok_or_else(|| format!("compact_jsonl: no parent for {}", path.display()))?;
+        .ok_or_else(|| FrameworkError::validation(format!("compact_jsonl: no parent for {}", path.display())))?;
     fs::create_dir_all(parent)
-        .map_err(|err| format!("compact_jsonl: mkdir {}: {err}", parent.display()))?;
+        .map_err(|err| FrameworkError::validation(format!("compact_jsonl: mkdir {}: {err}", parent.display()))?;
 
     {
         let mut tmp_file = fs::OpenOptions::new()
@@ -360,21 +361,21 @@ fn atomic_write_jsonl(path: &Path, payload: &str) -> Result<(), String> {
             .truncate(true)
             .write(true)
             .open(&tmp_path)
-            .map_err(|err| format!("compact_jsonl: open tmp {}: {err}", tmp_path.display()))?;
+            .map_err(|err| FrameworkError::validation(format!("compact_jsonl: open tmp {}: {err}", tmp_path.display())))?;
         tmp_file
             .write_all(payload.as_bytes())
-            .map_err(|err| format!("compact_jsonl: write tmp {}: {err}", tmp_path.display()))?;
+            .map_err(|err| FrameworkError::validation(format!("compact_jsonl: write tmp {}: {err}", tmp_path.display())))?;
         tmp_file.sync_all().map_err(|err| {
-            format!("compact_jsonl: fsync tmp {}: {err}", tmp_path.display())
+            FrameworkError::validation(format!("compact_jsonl: fsync tmp {}: {err}", tmp_path.display()))
         })?;
     }
     fs::rename(&tmp_path, path).map_err(|err| {
         let _ = fs::remove_file(&tmp_path);
-        format!(
+        FrameworkError::validation(format!(
             "compact_jsonl: rename {} -> {}: {err}",
             tmp_path.display(),
             path.display()
-        )
+        ))
     })?;
 
     // Best-effort fsync parent dir.

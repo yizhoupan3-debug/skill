@@ -1,5 +1,6 @@
 //! Path safety helpers: single-component `task_id` and repo-relative joins.
 
+use core_errors::FrameworkError;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -23,22 +24,22 @@ pub fn safe_task_id_component(task_id: &str) -> Option<&str> {
     Some(tid)
 }
 
-pub fn validate_task_id_component(task_id: &str) -> Result<&str, String> {
-    safe_task_id_component(task_id).ok_or_else(|| TASK_ID_COMPONENT_ERR.to_string())
+pub fn validate_task_id_component(task_id: &str) -> Result<&str, FrameworkError> {
+    safe_task_id_component(task_id).ok_or_else(|| FrameworkError::validation(TASK_ID_COMPONENT_ERR))
 }
 
 /// Join `relative` (POSIX-ish, no `..` / absolute) under `root`. Used for host entrypoint sync
 /// and runtime `skill_path` validation.
-pub fn join_repo_relative_under_root(root: &Path, relative: &str) -> Result<PathBuf, String> {
+pub fn join_repo_relative_under_root(root: &Path, relative: &str) -> Result<PathBuf, FrameworkError> {
     let rel = relative.trim().replace('\\', "/");
     if rel.is_empty() {
-        return Err("relative path is empty".to_string());
+        return Err(FrameworkError::validation("relative path is empty".to_string()));
     }
     let parsed = Path::new(rel.as_str());
     if parsed.is_absolute() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "path must be relative to repo root, got {relative:?}"
-        ));
+        )));
     }
     let mut tail = PathBuf::new();
     for c in parsed.components() {
@@ -46,7 +47,7 @@ pub fn join_repo_relative_under_root(root: &Path, relative: &str) -> Result<Path
             Component::CurDir => {}
             Component::Normal(part) => tail.push(part),
             Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                return Err(format!("invalid relative path segment in {relative:?}"));
+                return Err(FrameworkError::validation(format!("invalid relative path segment in {relative:?}")));
             }
         }
     }
@@ -60,26 +61,26 @@ pub fn join_repo_relative_under_root(root: &Path, relative: &str) -> Result<Path
 /// checking root containment, making it suitable for use inside shared write helpers
 /// (`write_text_if_changed` / `write_json_if_changed`) that manage directory creation
 /// themselves.
-pub fn reject_unsafe_path(path: &Path) -> Result<(), String> {
+pub fn reject_unsafe_path(path: &Path) -> Result<(), FrameworkError> {
     // 1. Reject path traversal via `..` components.
     if path.components().any(|c| matches!(c, Component::ParentDir)) {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "write path {} must not contain '..' traversal segments",
             path.display()
-        ));
+        )));
     }
     // 2. Reject symlink at the target path itself.
     match fs::symlink_metadata(path) {
         Ok(meta) if meta.is_symlink() => {
-            return Err(format!(
+            return Err(FrameworkError::validation(format!(
                 "write path {} must not be a symlink",
                 path.display()
-            ));
+            )));
         }
         Ok(_) => {}
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
         Err(err) => {
-            return Err(format!("stat write path {} failed: {err}", path.display()));
+            return Err(FrameworkError::validation(format!("stat write path {} failed: {err}", path.display())));
         }
     }
     Ok(())

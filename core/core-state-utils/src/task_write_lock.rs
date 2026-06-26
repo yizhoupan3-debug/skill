@@ -28,6 +28,7 @@ pub fn router_rs_task_ledger_flock_enabled() -> bool {
         Err(_) => true,
     }
 }
+use core_errors::FrameworkError;
 use fs2::FileExt;
 use std::fs::{self, OpenOptions};
 use std::path::Path;
@@ -52,16 +53,16 @@ fn ledger_lock_abs_path(repo_root: &Path) -> std::path::PathBuf {
 pub fn acquire_task_ledger_repo_lock(
     repo_root: &Path,
     timeout: Duration,
-) -> Result<TaskLedgerRepoLockGuard, String> {
+) -> Result<TaskLedgerRepoLockGuard, FrameworkError> {
     if !router_rs_task_ledger_flock_enabled() {
         return Ok(TaskLedgerRepoLockGuard { _file: None });
     }
     let current = repo_root.join("artifacts").join("current");
     fs::create_dir_all(&current).map_err(|err| {
-        format!(
+        FrameworkError::validation(format!(
             "task ledger lock: create_dir_all {} failed: {err}",
             current.display()
-        )
+        ))
     })?;
     let lock_path = ledger_lock_abs_path(repo_root);
     let file = OpenOptions::new()
@@ -71,10 +72,10 @@ pub fn acquire_task_ledger_repo_lock(
         .write(true)
         .open(&lock_path)
         .map_err(|err| {
-            format!(
+            FrameworkError::validation(format!(
                 "task ledger lock: open {} failed: {err}",
                 lock_path.display()
-            )
+            ))
         })?;
     let mut delay = Duration::from_millis(10);
     let max_delay = Duration::from_millis(200);
@@ -85,17 +86,17 @@ pub fn acquire_task_ledger_repo_lock(
             Ok(_) => break,
             Err(err) => {
                 if err.kind() != std::io::ErrorKind::WouldBlock {
-                    return Err(format!(
+                    return Err(FrameworkError::lock(format!(
                         "task ledger lock: flock {} failed with fatal error: {err}",
                         lock_path.display()
-                    ));
+                    )));
                 }
                 if start.elapsed() > timeout {
-                    return Err(format!(
+                    return Err(FrameworkError::lock(format!(
                         "task ledger lock: flock {} timeout after {:?} (concurrent write contention): {err}",
                         lock_path.display(),
                         timeout
-                    ));
+                    )));
                 }
                 thread::sleep(delay);
                 delay = std::cmp::min(delay * 2, max_delay);
@@ -109,9 +110,9 @@ pub fn acquire_task_ledger_repo_lock(
 pub fn apply_task_ledger_mutation<T>(
     repo_root: &Path,
     f: impl FnOnce() -> Result<T, String>,
-) -> Result<T, String> {
+) -> Result<T, FrameworkError> {
     let _guard = acquire_task_ledger_repo_lock(repo_root, Duration::from_secs(30))?;
-    f()
+    f().map_err(FrameworkError::validation)
 }
 
 #[cfg(test)]
