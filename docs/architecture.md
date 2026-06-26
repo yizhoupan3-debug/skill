@@ -10,25 +10,25 @@ last_verified: "2026-06-27"
 
 | 编号 | 原则 | 说明 |
 |------|------|------|
-| **P1** | 每层职责唯一，不越界 | L4 不含 Research 领域逻辑，L0 不含业务状态 |
-| **P2** | 宿主差异仅存于 L0 适配壳 | 宿主名/路径/env_var 映射全部从 `RUNTIME_REGISTRY.json` 编译期生成 |
+| **P1** | 每层职责唯一，不越界 | Tool 层不含 Skill 逻辑，Runtime 层不含路由决策 |
+| **P2** | 宿主差异仅存于 Host 层适配壳 | 宿主名/路径/env_var 映射全部从 `RUNTIME_REGISTRY.json` 编译期生成 |
 | **P3** | 依赖方向单向向下 | Lⱼ 可依赖 Lᵢ 当 i ≤ j，禁止下层依赖上层 |
 | **P4** | 禁止循环依赖 | DAG 矩阵（§3）编译期强制 |
-| **P5** | 跨层通信通过 L0 或函数指针 | 不在高层硬编码低层细节 |
-| **P6** | L0–L7 承载实质运行域 | 每层有明确的物理 crate 归属 |
+| **P5** | 跨层通信通过 Kernel 或函数指针 | 不在高层硬编码低层细节 |
+| **P6** | 五层 + Kernel 承载实质运行域 | 每层有明确的物理 crate 归属 |
 | **P7** | Feature 层可插拔 | feature-gate 编译期可选，不硬编码宿主名 |
-| **P8** | L0 完全无上层依赖 | 所有 L0 crate（7 个）零 L1-L7 依赖 |
+| **P8** | Kernel 完全无上层依赖 | 所有 Kernel crate（6 个）零层依赖 |
 | **P9** | 基础设施碎片收敛到唯一实现 | 每项功能只应有一个定义（§6） |
 | **P10** | 函数指针注册表后备语义为 no-op | 不 panic，不硬阻断 |
 
 ### 1.2 Hook 通信模型
 
-函数指针注册表（`framework-kernel::runtime_hooks`）是 L0 的一部分，作为跨层通信机制被 L4–L7 消费。注册方向（高层→L0）与调用方向（L0→高层）**相反**，这是依赖方向合规的关键设计。未注册的 slot 通过 `try_hooks()` 静默走 fallback/no-op。
+函数指针注册表（`framework-kernel::runtime_hooks`）是 Kernel 的一部分，作为跨层通信机制被 L3–L5 消费。注册方向（高层→Kernel）与调用方向（Kernel→高层）**相反**，这是依赖方向合规的关键设计。未注册的 slot 通过 `try_hooks()` 静默走 fallback/no-op。
 
 ```
-L4–L7 ──register(hooks)──→ L0 RuntimeCoreHooks [OnceLock]
+L3–L5 ──register(hooks)──→ Kernel RuntimeCoreHooks [OnceLock]
                                 │
-L0 hook 事件到来 ──────────→ hooks 方法调用 → L4–L7 注册的回调
+Kernel hook 事件到来 ──────→ hooks 方法调用 → L3–L5 注册的回调
 ```
 
 结构：`TelemetryHooks`(5) + `HostProviderHooks`(4) + 8 独立字段。2026-06 从 17 扁平字段重构。
@@ -39,78 +39,75 @@ L0 hook 事件到来 ──────────→ hooks 方法调用 → L4
 
 ---
 
-## 2. 八层运行时模型总览
+## 2. 五层运行时模型总览
 
 | 层 | 职责 | 核心 crate |
 |----|------|-----------|
-| L7 | Bridge / Dispatch — stdio 分发、聚合 facade | `runtime-core`, `router-rs` |
-| L6 | Orchestration — RFV 闭环、可选自动化 | `loop-engine`, `session-supervisor`, `framework-extra` |
-| L5 | Hook Infrastructure — 事件路由、MCP 桥、fn-pointer 消费 | `host-projection`, `runtime-infra`, `mcp-tool-registry` |
-| L4 | State Management — Task Engine、路由、skill-layer | `core-state`, `routing-engine`, `skill-layer` |
-| L3 | Execution — LLM 实时执行、沙箱 | `fr-exec`, `browser-mcp` |
-| L2 | Contracts — 验证规则、守卫合约、纯类型 | `fr-contracts`, `core-state-types`, `runtime-core-contracts`, `quality-gate` |
-| L1 | IO & Persistence — 存储后端、trace | `fr-utils`, `runtime-storage`, `trace-runtime` |
-| L0 | Kernel — 纯抽象、策略规则、fn-pointer 注册表 | `framework-kernel`, `core-policy`, `core-state-utils`, `telemetry-types`, `http-util`, `telemetry-emit`, `browser-mcp-dispatch` |
+| L5 | Runtime — Goal Engine、状态管理、QG Entry/Route、stdio 分发、session 监督、trace | `runtime-core`, `core-state`, `runtime-infra`, `runtime-storage`, `session-supervisor`, `loop-engine`, `trace-runtime`, `telemetry-emit`, `fr-exec`, `fr-contracts`, `quality-gate`, `runtime-core-contracts`, `fr-utils` |
+| L4 | Tool — MCP 工具分派、浏览器工具、科研工具 | `research-harness`, `codegraph-rs`, `browser-mcp` |
+| L3 | Skill — 验证技能、QG Checkers、框架技能 | `skill-layer`, all `skills/`, `runtime-core::checkers` (QG Checkers) |
+| L2 | Routing — Skill 路由引擎、MCP 工具注册表、路由决策 | `routing-engine`, `routing-core`, `mcp-tool-registry`, `tool-routing-engine`, `eval-route` |
+| L1 | Host — Agent 宿主适配层 | `host-projection` |
+| Kernel | 跨层 — 纯抽象、策略规则、fn-pointer 注册表、通用工具 | `framework-kernel`, `core-policy`, `core-state-utils`, `telemetry-types`, `http-util`, `browser-mcp-dispatch` |
 
 ---
 
 ## 3. DAG 验证矩阵
 
 ```
-         L0  L1  L2  L3  L4  L5  L6  L7
-L0       ✓   -   -   -   -   -   -   -
-L1       ✓   ✓   -   -   -   -   -   -
-L2       ✓   ✓   ✓   -   -   -   -   -
-L3       ✓   ✓   ✓   ✓   -   -   -   -
-L4       ✓   ✓   ✓   ✓   ✓   -   -   -
-L5       ✓   ✓   ✓   ✓   ✓   ✓   -   -
-L6       ✓   ✓   ✓   ✓   ✓   ✓   ✓   -
-L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
+         K   L1  L2  L3  L4  L5
+K        ✓   -   -   -   -   -
+L1       ✓   ✓   -   -   -   -
+L2       ✓   ✓   ✓   -   -   -
+L3       ✓   ✓   ✓   ✓   -   -
+L4       ✓   ✓   ✓   ✓   ✓   -
+L5       ✓   ✓   ✓   ✓   ✓   ✓
 ```
 
-- Lⱼ 可依赖 Lᵢ 当 i ≤ j；L5 函数指针是唯一许可的跨层例外
-- 禁止 L4→L7 编译期依赖 override（通过 L5 函数指针间接调用）
+- Lⱼ 可依赖 Lᵢ 当 i ≤ j；Kernel 函数指针是唯一许可的跨层例外
+- 禁止 L4→L5 编译期依赖 override（通过 Kernel 函数指针间接调用）
+- Kernel (K) 无上层依赖 —— 所有 Kernel crate 零 L1-L5 依赖
 
 ### All Crates by Layer
 
 | 层 | Crate | 职责 |
 |----|-------|------|
-| L7 | `runtime-core`(~6000 行) | 平台聚合 + stdio 分发 + 上下文工程 |
-| L7 | `router-rs` | CLI 入口二进制，宿主 hook/agent dispatch 总入口 |
-| L6 | `loop-engine` | 可选自动化增强（仅 `loop-auto` profile）；RFV 闭环 |
-| L6 | `session-supervisor` | 多 Agent + RFV 闭环监督 |
-| L6 | `framework-extra` | 编排控制面：doctor、session_artifacts、snapshot |
-| L6 | `framework-maint` | L6 framework 维护：inline snapshot、maintenance commands |
-| L5 | `host-projection` | Hook 分派、MCP stdio 桥、投影安装 |
-| L5 | `runtime-infra` | 运行时初始化、基础 API 门面 |
-| L5 | `mcp-tool-registry` | 统一 MCP 工具注册表 |
-| L5 | `eval-route` | 路由评估框架：validate routing decisions against expected outcomes |
-| L5 | `research-harness` | 科研 Harness：paper revision loop、literature search、claims mgmt（§5.1） |
-| L4 | `core-state` | Task 状态机与 Goal/RFV（组件表见下） |
-| L4 | `routing-engine` | Skill 路由匹配与评分 |
-| L4 | `tool-routing-engine` | Tool 路由评分与搜索 |
-| L4 | `routing-core` | 路由共享原语（trigram fuzzy 匹配） |
-| L4 | `skill-layer` | Skill schema、validation、dependency mgmt |
-| L3 | `fr-exec` | LLM 实时执行、沙箱状态机 |
-| L3 | `browser-mcp` (tools/) | 浏览器自动化 MCP 服务 |
-| L2 | `fr-contracts` | Closeout 验证、执行合约、pre-tool-use 守卫 |
-| L2 | `core-state-types` | 纯类型定义，零内部依赖 |
-| L2 | `runtime-core-contracts` | Hook 事件路由、观测、出站保护；被 L5+ crates 消费
-| L2 | `quality-gate` | Quality Gate 合约：CheckerRegistry、GateChecker trait、场景/严重度类型、GateVerdict |
-| L1 | `fr-utils` | JSON/IO 工具、stdio 操作域注册 |
-| L1 | `runtime-storage` | 文件系统/SQLite/内存后端、路径解析 |
-| L1 | `trace-runtime` | Trace 录制与压紧 |
-| L0 | `framework-kernel` | 时间、根发现、JSON 操作、cli_args、runtime 注册表 |
-| L0 | `core-policy` | Hook 策略、env_flags、review gate、goal 检测 |
-| L0 | `core-state-utils` | IO/path/JSONL 原语，零内部依赖 |
-| L0 | `telemetry-types` | 纯遥测事件类型 |
-| L0 | `http-util` | HTTP 客户端工厂 |
-| L0 | `telemetry-emit` | 统一遥测发射原语：structured emit、MetricCounter、tracing+telemetry macros |
-| L0 | `browser-mcp-dispatch` | 浏览器 MCP 分派助手（仅依赖 L0 framework-kernel） |
+| L5 | `runtime-core`(~6000 行) | 平台聚合 + stdio 分发 + 上下文工程 + QG Entry/Route 单例 |
+| L5 | `core-state` | Task 状态机与 Goal/RFV（组件表见下） |
+| L5 | `runtime-infra` | 运行时初始化、kernel 引导、stdio 传输 |
+| L5 | `runtime-storage` | 文件系统/SQLite/内存后端、路径解析 |
+| L5 | `session-supervisor` | 多 Agent + RFV 闭环监督 |
+| L5 | `loop-engine` | 可选自动化增强（仅 `loop-auto` profile）；RFV 闭环 |
+| L5 | `trace-runtime` | Trace 录制与压紧 |
+| L5 | `telemetry-emit` | 统一遥测发射原语：structured emit、MetricCounter、tracing+telemetry macros |
+| L5 | `fr-exec` | LLM 实时执行、沙箱状态机 |
+| L5 | `fr-contracts` | Closeout 验证、执行合约、pre-tool-use 守卫、closeout_enforcement |
+| L5 | `quality-gate` | Quality Gate 合约：CheckerRegistry、GateChecker trait、场景/严重度类型、GateVerdict |
+| L5 | `runtime-core-contracts` | Hook 事件路由、观测、出站保护；被 L1–L5 crates 消费 |
+| L5 | `fr-utils` | JSON/IO 工具、stdio 操作域注册 |
+| L5 | `framework-extra` | 编排控制面：doctor、session_artifacts、snapshot |
+| L5 | `framework-maint` | L5 framework 维护：inline snapshot、maintenance commands |
+| L4 | `research-harness` | 科研 Harness：paper revision loop、literature search、claims mgmt、AIGC detection（§5.1） |
+| L4 | `codegraph-rs` | 代码图分析服务 |
+| L4 | `browser-mcp` (tools/) | 浏览器自动化 MCP 服务 |
+| L3 | `skill-layer` | Skill schema、validation、dependency mgmt |
+| L3 | `runtime-core::checkers` | QG Checkers 实现：AdversarialChecker、EvidenceChecker、CorrectnessChecker、SecurityChecker、ScreenshotLayoutChecker、OverflowChecker |
+| L2 | `routing-engine` | Skill 路由匹配与评分 |
+| L2 | `routing-core` | 路由共享原语（trigram fuzzy 匹配） |
+| L2 | `mcp-tool-registry` | 统一 MCP 工具注册表 |
+| L2 | `tool-routing-engine` | Tool 路由评分与搜索 |
+| L2 | `eval-route` | 路由评估框架：validate routing decisions against expected outcomes |
+| L1 | `host-projection` | Hook 分派、MCP stdio 桥、投影安装、宿主适配 |
+| Kernel | `framework-kernel` | 时间、根发现、JSON 操作、cli_args、runtime 注册表、runtime_hooks |
+| Kernel | `core-policy` | Hook 策略、env_flags、review gate、goal 检测 |
+| Kernel | `core-state-utils` | IO/path/JSONL 原语，零内部依赖 |
+| Kernel | `telemetry-types` | 纯遥测事件类型 |
+| Kernel | `http-util` | HTTP 客户端工厂 |
+| Kernel | `browser-mcp-dispatch` | 浏览器 MCP 分派助手（仅依赖 Kernel framework-kernel） |
 
 ### `core-state` Task 组件表
 
-`TaskControlMode：Idle → GoalDrive → QualityGate → Conflict`。核心组件：
+核心组件：
 
 | 组件 | 职责 |
 |------|------|
@@ -120,7 +117,6 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | TASK_STATE.json | goal+rfv+evidence 聚合投影 |
 | STEP_LEDGER.jsonl | 步骤级追踪 |
 | EVIDENCE_INDEX.json | 验证证据记录 |
-
 
 所有宿主元数据从 `configs/framework/RUNTIME_REGISTRY.json` 编译期生成：
 
@@ -134,9 +130,9 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 | 位置 | 说明 |
 |------|------|
 | `RUNTIME_REGISTRY.json` | **唯一真相源** |
-| `host-projection/` (L5) | 宿主适配层（capability, config, dispatch） |
+| `host-projection/` (L1) | 宿主适配层（capability, config, dispatch） |
 | `framework-kernel/build.rs`, `host-projection/build.rs` | 编译期生成 |
-| L0/L1/L2/L4 其他 | **不应出现宿主名** |
+| Kernel/L2/L3/L4/L5 其他 | **不应出现宿主名** |
 
 ### 4.3 闭集宿主
 
@@ -145,7 +141,7 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 ### 4.4 宿主身份传递
 
 ```
-用户输入 → AGENTS.md → L1 skill routing → L4 session (HostProvider trait)
+用户输入 → AGENTS.md → L2 skill routing → L5 session (HostProvider trait)
                                             ↓
                               host_provider_registry() 查找 → dispatcher → dispatch()
 ```
@@ -160,9 +156,9 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 
 ### 5.1 `research-harness`
 
-科研 Harness：paper revision loop、literature search、claims management、AIGC detection。feature-gate 编译期可选。env var 名称映射委托给 L0 的 `paper_prose_env_var()` / `paper_adversarial_env_var()`，宿主 id 通过函数指针参数接收。
+科研 Harness：paper revision loop、literature search、claims management、AIGC detection。feature-gate 编译期可选。env var 名称映射委托给 Kernel 的 `paper_prose_env_var()` / `paper_adversarial_env_var()`，宿主 id 通过函数指针参数接收。
 
-**L4 不含 Research 领域逻辑**：`ResearchMode`、`infer_research_mode()` 等属于 L5，不得出现在 L4 子 crate 中。通过 L0 函数指针注册 `fn(text) -> Option<ResearchMode>` 回调。
+**L4 (Tool) 不含 Research 领域逻辑**：`ResearchMode`、`infer_research_mode()` 等通过 Kernel 函数指针注册 `fn(text) -> Option<ResearchMode>` 回调。
 
 ---
 
@@ -186,12 +182,12 @@ L7       ✓   ✓   ✓   ✓   ✓   ✓   ✓   ✓
 
 ### 7.1 概述
 
-QG Route 是 v10 引入的统一质量门评估系统，替代分散的旧质量门（runtime-exit-gate 已删除）。核心模型：
+QG Route 是 v10 引入的统一质量门评估系统，替代分散的旧质量门。核心模型：
 
 ```
-CheckerRegistry (quality-gate, L2)
+CheckerRegistry (quality-gate, L5)
     │
-    ├── In-place checkers (runtime-core, L7)
+    ├── In-place checkers (runtime-core::checkers, L3)
     │   ├── AdversarialChecker (GENERAL)
     │   ├── EvidenceChecker (GENERAL/CODE_REVIEW/RESEARCH)
     │   ├── CorrectnessChecker (CODE_REVIEW)
@@ -199,7 +195,7 @@ CheckerRegistry (quality-gate, L2)
     │   ├── ScreenshotLayoutChecker (VISUAL)
     │   └── OverflowChecker (SLIDES)
     │
-    └── Extern checkers (research-harness, L5, feature-gate=research)
+    └── Extern checkers (research-harness, L4, feature-gate=research)
         ├── Reproducibility (real: runs reproducibility audit on repo)
         ├── Structure (real: validates LaTeX compilability + cross-references)
         ├── ProseQC (real: slop detection, hedging analysis on paper text)
@@ -212,16 +208,16 @@ CheckerRegistry (quality-gate, L2)
 
 | 组件 | Crate | 层 | 职责 |
 |------|-------|-----|------|
-| `CheckerRegistry` | `quality-gate` | L2 | 场景分发的 checker 容器、注册与评估 |
-| `GateChecker` trait | `quality-gate` | L2 | Checker 接口：`id()`、`scenes()`、`description()`、`check(ctx)` |
-| `QG_ROUTE` 单例 | `runtime-core::qg_route` | L7 | OnceLock 持有 CheckerRegistry，注册点与评估入口 |
-| `EXTERN_CHECKERS` 钩子 | `runtime-core::qg_route` | L7 | OnceLock&lt;fn&gt; 跨 crate 注册回调，避免循环依赖 |
-| `QGEntry` | `runtime-core::qg_entry` | L7 | 两阶段退出门：Stage 1 防欺诈 + Stage 2 质量门 dispatch |
+| `CheckerRegistry` | `quality-gate` | L5 | 场景分发的 checker 容器、注册与评估 |
+| `GateChecker` trait | `quality-gate` | L5 | Checker 接口：`id()`、`scenes()`、`description()`、`check(ctx)` |
+| `QG_ROUTE` 单例 | `runtime-core::qg_route` | L5 | OnceLock 持有 CheckerRegistry，注册点与评估入口 |
+| `EXTERN_CHECKERS` 钩子 | `runtime-core::qg_route` | L5 | OnceLock&lt;fn&gt; 跨 crate 注册回调，避免循环依赖 |
+| `QGEntry` | `runtime-core::qg_entry` | L5 | 两阶段退出门：Stage 1 防欺诈 + Stage 2 质量门 dispatch |
 
 ### 7.3 初始化流程
 
 ```
-router-rs-cli (L7)
+router-rs-cli (L5)
     │ set_extern_checkers(research_harness::register_qg_checkers)
     │
     ▼
@@ -248,4 +244,4 @@ qg_route::init_qg_route()
 | QG_ROUTE 未初始化 | ✅ 通过（fallback no-op，符合 P10） |
 | 空 registry | ✅ 通过（退化行为） |
 
-归属规则（全满足）：不依赖 L3+ 业务类型、可被 ≥2 crate 独立使用、语义不因宿主而异。L5 不得重复实现 L0/L4 已有功能。
+归属规则（全满足）：不依赖 L4+ 业务类型、可被 ≥2 crate 独立使用、语义不因宿主而异。L4 不得重复实现 Kernel/L3 已有功能。

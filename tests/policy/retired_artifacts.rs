@@ -66,7 +66,7 @@ fn rfv_harness_reference_moved_to_docs() {
             .exists()
     );
     // RFV harness 文档已整合入 codebase 模块文档，不再作为独立文件存在。
-    // 实现逻辑见 core/runtime-core/src/rfv_loop.rs。
+    // 实现逻辑见 core/runtime-core/src/qg_entry.rs。
 }
 
 #[test]

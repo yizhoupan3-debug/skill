@@ -19,7 +19,6 @@
 - **无固定阶段 lifecycle**。Task 是运行时底层执行引擎（§Task Engine），Goal/Loop 是 Task 上的策略与可选自动化层。
 - **Lifecycle Profile**：每个 task 通过 `lifecycle_profile` 控制行为（`interactive` 默认 / `loop-auto`），详见 §Task Engine。
 - **Review**：Review findings-only。显式 `$code-review-deep` 或 review 请求仍适用。详见 `skills/code-review-deep/SKILL.md`。
-- **Closeout**：`closeout_gate` / `complete` 为 advisory（`interactive`）。
 
 ## Task Engine（底层执行引擎）
 
@@ -30,18 +29,6 @@ Task 是框架的**底层执行引擎**，不是可选组件。用户层表现�
 | 组件 | 路径 | 职责 |
 |------|------|------|
 | 完整 Task 组件描述 | — | 见 [`docs/architecture.md §3`](docs/architecture.md#3-dag-验证矩阵)（此处不重复） |
-
-### TaskControlMode 状态机
-
-```
-Idle（无活跃 goal/rfv）
-  ↓ goal_state_manage start
-GoalDrive（goal drive_until_done=true）
-  ↓ quality_gate_manage start
-QualityGate（rfv loop_status=active）
-  ↓ 两者同时激活
-Conflict（不一致，需人工介入）
-```
 
 ### Lifecycle Profile
 
@@ -60,11 +47,11 @@ Loop engine（L6 Orchestration）运行在 Task 之上，仅对 `loop-auto` prof
 
 - Goal state 仅作用于当前对话 session，不做跨对话持久化。新 session 首次 `goal_state_manage operation=start` 创建新 state，不读取旧 session 残留。跨 session 延续需用户显式 `resume`。
 - **MCP harness 自动注入**：MCP stdio 层在连接建立时生成 `connection_session_id`（`{host_id}-{nanos}`），自动注入到 `goal_state_manage` 和 `quality_gate_manage`的 payload 中。宿主无需设置环境变量，无需显式传 `session_id` 参数。
-- **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`closeout_gate` / `goal_state_read` / `quality_gate_status`的 `task_id` 仍为可选（默认 active task）。
+- **task_id 必填**：`goal_state_manage` 的 `task_id` 为必填参数（schema `required` 与代码双重校验）。`goal_state_read` / `quality_gate_status`的 `task_id` 仍为可选（默认 active task）。
 
 ### 真源路径
 
-- 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / `GOAL_CONTINUE` / Stop checkpoint 默认路径。
+- 真源：`artifacts/current/<task_id>/`；**无** hook 自动 digest / Stop checkpoint 默认路径。
 - Goal 磁盘：`GOAL_STATE.json` / `QUALITY_GATE_STATE.json`；显式 stdio：`framework_goal_drive` / `framework_quality_gate`。
 - 闭集宿主由 `RUNTIME_REGISTRY.json` 驱动。
 

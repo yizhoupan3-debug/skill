@@ -142,7 +142,7 @@ pub struct RouteDecision {
 /// Mirror of `runtime_core::runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT`.
 pub const MAX_CONCURRENT_SUBAGENTS_LIMIT: usize = 24;
 
-/// Mirror of `runtime_core::rfv_loop::RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH`.
+/// Path to the external research RFV schema JSON (defined locally; rfv_loop.rs deleted in Wave 3c-i).
 pub const RFV_EXTERNAL_RESEARCH_SCHEMA_REL_PATH: &str =
     "configs/framework/RFV_EXTERNAL_RESEARCH.schema.json";
 
