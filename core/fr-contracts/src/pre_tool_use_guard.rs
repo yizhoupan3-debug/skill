@@ -225,9 +225,9 @@ pub fn evaluate_pre_tool_use_guard(
         .unwrap_or("evaluate")
         .trim()
         .to_ascii_lowercase();
-    let digest = approval_digest(&host_id, &tool_name, &request.tool_input)?;
 
     if phase == "approve" {
+        let digest = approval_digest(&host_id, &tool_name, &request.tool_input)?;
         let approved = request.approved.unwrap_or(false);
         let verdict = approve_verdict(
             strict,
@@ -283,6 +283,11 @@ pub fn evaluate_pre_tool_use_guard(
         classify_high_risk(&tool_name, &request.tool_input, &repo_root)?;
     let final_verdict = verdict;
     let needs_digest = final_verdict == PreToolUseGuardVerdict::RequiresStdioApproval;
+    let digest = if needs_digest {
+        Some(approval_digest(&host_id, &tool_name, &request.tool_input)?)
+    } else {
+        None
+    };
     let action = match final_verdict {
         PreToolUseGuardVerdict::Allow => "allow",
         PreToolUseGuardVerdict::Block => "block",
@@ -296,7 +301,7 @@ pub fn evaluate_pre_tool_use_guard(
         final_verdict,
         reason,
         categories,
-        if needs_digest { Some(digest) } else { None },
+        digest,
     ))
 }
 
@@ -530,7 +535,6 @@ fn register_test_hooks() {
         },
         host_provider: HostProviderHooks {
             for_routing_spelling: |_| None,
-            default_id: || "test",
             strict_pre_tool_fallback_hint: |_| None,
             registry: || vec![],
         },
@@ -560,6 +564,65 @@ mod tests {
             .join("../..")
             .canonicalize()
             .expect("skill repo root")
+    }
+
+    // ── has_path_traversal ──
+
+    #[test]
+    fn path_traversal_detects_dotdot_in_path() {
+        assert!(has_path_traversal(&json!({"path": "../etc/passwd"})));
+    }
+
+    #[test]
+    fn path_traversal_detects_dotdot_in_file_path() {
+        assert!(has_path_traversal(&json!({"file_path": "/a/../../b"})));
+    }
+
+    #[test]
+    fn path_traversal_detects_dotdot_in_target_file() {
+        assert!(has_path_traversal(&json!({"target_file": "output/../../../tmp/foo"})));
+    }
+
+    #[test]
+    fn path_traversal_detects_dotdot_in_file_path_camel() {
+        assert!(has_path_traversal(&json!({"filePath": "subdir/../../out"})));
+    }
+
+    #[test]
+    fn path_traversal_detects_dotdot_in_notebook_path() {
+        assert!(has_path_traversal(&json!({"notebook_path": "notebooks/../../etc/hacks"})));
+    }
+
+    #[test]
+    fn path_traversal_clean_path_returns_false() {
+        assert!(!has_path_traversal(&json!({"path": "/safe/dir/file.txt"})));
+    }
+
+    #[test]
+    fn path_traversal_empty_path_returns_false() {
+        assert!(!has_path_traversal(&json!({"path": ""})));
+    }
+
+    #[test]
+    fn path_traversal_non_string_value_returns_false() {
+        assert!(!has_path_traversal(&json!({"path": 42})));
+    }
+
+    #[test]
+    fn path_traversal_missing_key_returns_false() {
+        assert!(!has_path_traversal(&json!({"other_key": "../whatever"})));
+    }
+
+    #[test]
+    fn path_traversal_dotdot_in_middle_is_detected() {
+        // "foo/bar" has no ParentDir component since "." is not ".."
+        // Need to test that "../" is caught even when embedded
+        assert!(has_path_traversal(&json!({"path": "subdir/../over"})));
+    }
+
+    #[test]
+    fn path_traversal_trailing_dotdot() {
+        assert!(has_path_traversal(&json!({"path": "/a/b/.."})));
     }
 
     #[test]

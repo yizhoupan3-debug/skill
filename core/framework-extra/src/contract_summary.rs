@@ -3,6 +3,7 @@
 //! Functions for building the contract summary envelope (`build_framework_contract_summary_envelope`)
 //! including the SHA-256 digest, host harness fragment, and prompt-line helpers.
 
+use core_policy::error::FrameworkError;
 use fr_utils::constants::{
     FRAMEWORK_CONTRACT_SUMMARY_SCHEMA_VERSION, FRAMEWORK_RUNTIME_AUTHORITY,
 };
@@ -10,6 +11,7 @@ use fr_utils::json_io::read_json_strict;
 use fr_utils::json_value::{
     nonempty_string, value_string_list, value_text,
 };
+use fr_utils::util::supervisor_contract;
 use fr_exec::runtime_view;
 use hex;
 use serde_json::{Map, Value, json};
@@ -23,7 +25,7 @@ use tracing::instrument;
 use crate::util::{count_evidence_rows, parse_session_summary};
 
 #[instrument(level = "debug", skip_all)]
-pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, String> {
+pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Value, FrameworkError> {
     let snapshot = runtime_view::load_framework_runtime_view(repo_root, None, None);
     let continuity = runtime_view::classify_runtime_continuity(&snapshot);
     let contract = supervisor_contract(&snapshot.supervisor_state);
@@ -170,9 +172,9 @@ pub fn build_framework_contract_summary_envelope(repo_root: &Path) -> Result<Val
     }))
 }
 
-fn stable_json_sha256(value: &Value) -> Result<String, String> {
+fn stable_json_sha256(value: &Value) -> Result<String, FrameworkError> {
     let bytes = serde_json::to_vec(value)
-        .map_err(|err| format!("serialize contract digest input failed: {err}"))?;
+        .map_err(|err| FrameworkError::validation(format!("serialize contract digest input failed: {err}")))?;
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     Ok(hex::encode(hasher.finalize()))
@@ -186,13 +188,13 @@ struct CachedRegistry {
 static REGISTRY_CACHE: Mutex<Option<CachedRegistry>> = Mutex::new(None);
 
 /// Machine-readable per-host harness surface from `RUNTIME_REGISTRY.json` (for contract-summary / audits).
-fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String> {
+fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, FrameworkError> {
     let path = repo_root.join("configs/framework/RUNTIME_REGISTRY.json");
     if !path.is_file() {
-        return Err(format!(
+        return Err(FrameworkError::validation(format!(
             "RUNTIME_REGISTRY missing at {} — cannot build host_harness fragment",
             path.display()
-        ));
+        )));
     }
     let mtime = fs::metadata(&path)
         .ok()
@@ -200,7 +202,7 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String
     {
         let guard = REGISTRY_CACHE
             .lock()
-            .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
+            .map_err(|e| FrameworkError::validation(format!("registry cache lock poisoned: {e}")))?;
         if let Some(ref cached) = *guard
             && cached.mtime == mtime {
                 return Ok(cached.content.clone());
@@ -210,7 +212,7 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String
     let projections = v
         .get("host_projections")
         .and_then(Value::as_object)
-        .ok_or_else(|| "RUNTIME_REGISTRY missing host_projections".to_string())?;
+        .ok_or_else(|| FrameworkError::validation("RUNTIME_REGISTRY missing host_projections".to_string()))?;
     let mut hosts: Vec<String> = projections.keys().cloned().collect();
     hosts.sort();
     let mut out = Map::new();
@@ -218,7 +220,7 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String
         let proj = projections
             .get(&host)
             .and_then(Value::as_object)
-            .ok_or_else(|| format!("host_projections.{host} must be an object"))?;
+            .ok_or_else(|| FrameworkError::validation(format!("host_projections.{host} must be an object")))?;
         out.insert(
             host,
             json!({
@@ -231,7 +233,7 @@ fn build_host_harness_summary_fragment(repo_root: &Path) -> Result<Value, String
     {
         let mut guard = REGISTRY_CACHE
             .lock()
-            .map_err(|e| format!("registry cache lock poisoned: {e}"))?;
+            .map_err(|e| FrameworkError::validation(format!("registry cache lock poisoned: {e}")))?;
         *guard = Some(CachedRegistry { content: result.clone(), mtime });
     }
     Ok(result)
@@ -335,12 +337,4 @@ fn compact_contract_text(text: &str, max_chars: usize) -> String {
         .collect::<String>();
     compact.push_str("...");
     compact
-}
-
-fn supervisor_contract(state: &Map<String, Value>) -> Map<String, Value> {
-    state
-        .get("execution_contract")
-        .and_then(Value::as_object)
-        .cloned()
-        .unwrap_or_default()
 }

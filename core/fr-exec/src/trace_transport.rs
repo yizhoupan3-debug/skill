@@ -3,6 +3,7 @@
 //! Also includes write-payload helpers moved from `cli/runtime_ops.inc`
 //! to break the `cli ↔ framework_runtime` cyclic dependency.
 
+use core_policy::error::FrameworkError;
 use serde_json::{Value, json};
 use std::path::Path;
 
@@ -172,7 +173,7 @@ pub fn build_trace_transport_payload(
     })
 }
 
-pub fn build_trace_transport_descriptor(payload: Value) -> Result<Value, String> {
+pub fn build_trace_transport_descriptor(payload: Value) -> Result<Value, FrameworkError> {
     let session_id = required_non_empty_string(&payload, "session_id", "describe transport")?;
     let job_id = optional_non_empty_string(&payload, "job_id");
     Ok(json!({
@@ -182,7 +183,7 @@ pub fn build_trace_transport_descriptor(payload: Value) -> Result<Value, String>
     }))
 }
 
-pub fn build_trace_handoff_descriptor(payload: Value) -> Result<Value, String> {
+pub fn build_trace_handoff_descriptor(payload: Value) -> Result<Value, FrameworkError> {
     let session_id = required_non_empty_string(&payload, "session_id", "describe handoff")?;
     let job_id = optional_non_empty_string(&payload, "job_id");
     let transport_source = payload.get("transport").cloned().unwrap_or(Value::Null);
@@ -246,7 +247,7 @@ pub fn build_trace_handoff_descriptor(payload: Value) -> Result<Value, String> {
     }))
 }
 
-pub fn build_checkpoint_resume_manifest(payload: Value) -> Result<Value, String> {
+pub fn build_checkpoint_resume_manifest(payload: Value) -> Result<Value, FrameworkError> {
     let session_id =
         required_non_empty_string(&payload, "session_id", "checkpoint resume manifest")?;
     let job_id = optional_non_empty_string(&payload, "job_id");
@@ -289,16 +290,16 @@ pub fn build_checkpoint_resume_manifest(payload: Value) -> Result<Value, String>
 
 // ── Write payload helpers (moved from `cli/runtime_ops.inc`) ──
 
-fn write_json_payload(path: &Path, payload: &Value) -> Result<usize, String> {
+fn write_json_payload(path: &Path, payload: &Value) -> Result<usize, FrameworkError> {
     let serialized = format!(
         "{}\n",
         serde_json::to_string_pretty(payload)
-            .map_err(|err| format!("serialize persisted payload failed: {err}"))?
+            .map_err(|err| FrameworkError::validation(format!("serialize persisted payload failed: {err}")))?
     );
     write_text_payload(path, &serialized)
 }
 
-pub fn write_transport_binding_payload(payload: Value) -> Result<Value, String> {
+pub fn write_transport_binding_payload(payload: Value) -> Result<Value, FrameworkError> {
     let path = required_non_empty_string(&payload, "path", "write transport binding")?;
     let session_id = required_non_empty_string(&payload, "session_id", "write transport binding")?;
     let job_id = optional_non_empty_string(&payload, "job_id");
@@ -312,12 +313,16 @@ pub fn write_transport_binding_payload(payload: Value) -> Result<Value, String> 
     }))
 }
 
-pub fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value, String> {
+pub fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value, FrameworkError> {
     let path = required_non_empty_string(&payload, "path", "write checkpoint resume manifest")?;
     let manifest = build_checkpoint_resume_manifest(payload)?
         .get("resume_manifest")
         .cloned()
-        .ok_or_else(|| "checkpoint resume manifest payload missing resume_manifest".to_string())?;
+        .ok_or_else(|| {
+            FrameworkError::validation(
+                "checkpoint resume manifest payload missing resume_manifest".to_string(),
+            )
+        })?;
     let bytes_written = write_json_payload(Path::new(&path), &manifest)?;
     Ok(json!({
         "schema_version": CHECKPOINT_MANIFEST_WRITE_SCHEMA_VERSION,
@@ -327,7 +332,7 @@ pub fn write_checkpoint_resume_manifest_payload(payload: Value) -> Result<Value,
     }))
 }
 
-pub fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
+pub fn write_text_payload(path: &Path, payload: &str) -> Result<usize, FrameworkError> {
     validate_write_path(path, None)?;
     let bytes = payload.len();
     core_state_utils::atomic_write::write_atomic_text(path, payload)?;
@@ -338,11 +343,14 @@ pub fn write_text_payload(path: &Path, payload: &str) -> Result<usize, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+
+    // ── build_trace_transport_payload ──
 
     #[test]
     fn describe_transport_requires_session_id() {
         let err = build_trace_transport_descriptor(json!({})).expect_err("missing session_id");
-        assert!(err.contains("session_id"));
+        assert!(err.to_string().contains("session_id"));
     }
 
     #[test]
@@ -356,5 +364,328 @@ mod tests {
             payload.get("stream_id").and_then(Value::as_str),
             Some("stream::sess-1")
         );
+    }
+
+    #[test]
+    fn transport_payload_with_job_id_uses_job_stream_key() {
+        let payload =
+            build_trace_transport_payload(&json!({}), "sess-1".to_string(), Some("job-42".to_string()));
+        assert_eq!(
+            payload.get("stream_id").and_then(Value::as_str),
+            Some("stream::job-42")
+        );
+    }
+
+    #[test]
+    fn transport_payload_overrides_defaults_from_input() {
+        let input = json!({
+            "transport_kind": "websocket",
+            "endpoint_kind": "custom_rpc",
+            "subscribe_method": "sub_events",
+            "describe_method": "desc_events",
+            "cleanup_method": "clean_events",
+            "handoff_method": "handoff_events",
+            "resume_mode": "from_start",
+            "replay_supported": false,
+        });
+        let payload = build_trace_transport_payload(&input, "sess-1".to_string(), None);
+        assert_eq!(payload["transport_kind"], "websocket");
+        assert_eq!(payload["endpoint_kind"], "custom_rpc");
+        assert_eq!(payload["subscribe_method"], "sub_events");
+        assert_eq!(payload["describe_method"], "desc_events");
+        assert_eq!(payload["cleanup_method"], "clean_events");
+        assert_eq!(payload["handoff_method"], "handoff_events");
+        assert_eq!(payload["resume_mode"], "from_start");
+        assert_eq!(payload["replay_supported"], false);
+    }
+
+    #[test]
+    fn transport_payload_inherits_control_plane_backend() {
+        let input = json!({
+            "control_plane": {
+                "backend_family": "s3",
+                "supports_atomic_replace": true,
+                "supports_compaction": true,
+                "supports_snapshot_delta": false,
+                "supports_remote_event_transport": true,
+            }
+        });
+        let payload = build_trace_transport_payload(&input, "sess-1".to_string(), None);
+        assert_eq!(payload["binding_backend_family"], "s3");
+        assert_eq!(payload["remote_capable"], true);
+        assert_eq!(payload["remote_attach_supported"], true);
+        assert!(payload.get("transport_health").is_some());
+        let health = &payload["transport_health"];
+        assert_eq!(health["backend_family"], "s3");
+    }
+
+    #[test]
+    fn transport_payload_uses_attach_target_fallback_when_missing() {
+        let payload = build_trace_transport_payload(&json!({}), "sess-1".to_string(), None);
+        let attach = &payload["attach_target"];
+        assert_eq!(attach["session_id"], "sess-1");
+        assert_eq!(attach["endpoint_kind"], "runtime_method");
+        assert_eq!(attach["subscribe_method"], "subscribe_runtime_events");
+    }
+
+    #[test]
+    fn transport_payload_uses_provided_attach_target() {
+        let input = json!({
+            "attach_target": {"session_id": "custom", "endpoint_kind": "grpc"}
+        });
+        let payload = build_trace_transport_payload(&input, "sess-1".to_string(), None);
+        assert_eq!(payload["attach_target"]["session_id"], "custom");
+        assert_eq!(payload["attach_target"]["endpoint_kind"], "grpc");
+    }
+
+    #[test]
+    fn transport_payload_replay_anchor_with_cursor() {
+        let input = json!({
+            "latest_cursor": {"event_id": "evt-99", "offset": 100},
+            "resume_mode": "after_event_id",
+        });
+        let payload = build_trace_transport_payload(&input, "sess-1".to_string(), None);
+        let anchor = &payload["replay_anchor"];
+        assert_eq!(anchor["anchor_kind"], "trace_replay_cursor");
+        assert_eq!(anchor["resume_mode"], "after_event_id");
+        assert_eq!(anchor["latest_cursor"]["event_id"], "evt-99");
+    }
+
+    #[test]
+    fn transport_payload_control_plane_trace_service_fields() {
+        let input = json!({
+            "control_plane": {
+                "trace_service": {
+                    "authority": "trace-auth",
+                    "role": "observer",
+                    "projection": "proj-x",
+                    "delegate_kind": "fanout",
+                }
+            }
+        });
+        let payload = build_trace_transport_payload(&input, "sess-1".to_string(), None);
+        assert_eq!(payload["control_plane_authority"], "trace-auth");
+        assert_eq!(payload["control_plane_role"], "observer");
+        assert_eq!(payload["control_plane_projection"], "proj-x");
+        assert_eq!(payload["control_plane_delegate_kind"], "fanout");
+    }
+
+    #[test]
+    fn transport_payload_health_noop_when_no_health_and_no_control_plane() {
+        let payload = build_trace_transport_payload(&json!({}), "sess-1".to_string(), None);
+        assert_eq!(payload["transport_health"], Value::Null);
+    }
+
+    #[test]
+    fn transport_payload_health_from_explicit_health_block() {
+        let input = json!({
+            "transport_health": {"custom_field": "yes"}
+        });
+        let payload = build_trace_transport_payload(&input, "sess-1".to_string(), None);
+        assert_eq!(payload["transport_health"]["custom_field"], "yes");
+    }
+
+    // ── build_trace_transport_descriptor ──
+
+    #[test]
+    fn transport_descriptor_top_level_schema() {
+        let input = json!({"session_id": "sess-1"});
+        let desc = build_trace_transport_descriptor(input).expect("descriptor");
+        assert!(desc.get("schema_version").and_then(Value::as_str).is_some());
+        assert!(desc.get("authority").and_then(Value::as_str).is_some());
+        assert!(desc.get("transport").is_some());
+    }
+
+    // ── build_trace_handoff_descriptor ──
+
+    #[test]
+    fn handoff_requires_session_id() {
+        let err = build_trace_handoff_descriptor(json!({})).expect_err("missing session_id");
+        assert!(err.to_string().contains("session_id"));
+    }
+
+    #[test]
+    fn handoff_descriptor_top_level_schema() {
+        let input = json!({"session_id": "sess-1"});
+        let desc = build_trace_handoff_descriptor(input).expect("handoff");
+        assert!(desc.get("schema_version").and_then(Value::as_str).is_some());
+        assert!(desc.get("authority").and_then(Value::as_str).is_some());
+        let handoff = &desc["handoff"];
+        assert_eq!(handoff["session_id"], "sess-1");
+        assert_eq!(handoff["checkpoint_backend_family"], "filesystem");
+        assert!(handoff["recovery_artifacts"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn handoff_inherits_transport_from_nested_transport_block() {
+        let input = json!({
+            "session_id": "sess-1",
+            "transport": {
+                "session_id": "transport-sess",
+                "job_id": "transport-job",
+                "binding_backend_family": "redis",
+            }
+        });
+        let desc = build_trace_handoff_descriptor(input).expect("handoff");
+        let handoff = &desc["handoff"];
+        assert_eq!(handoff["checkpoint_backend_family"], "redis");
+        assert_eq!(
+            handoff["stream_id"],
+            "stream::transport-job"
+        );
+    }
+
+    #[test]
+    fn handoff_recovery_artifacts_from_explicit_list() {
+        let input = json!({
+            "session_id": "sess-1",
+            "recovery_artifacts": ["a.json", "b.json"]
+        });
+        let desc = build_trace_handoff_descriptor(input).expect("handoff");
+        let artifacts = &desc["handoff"]["recovery_artifacts"];
+        assert_eq!(artifacts.as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn handoff_trace_stream_and_resume_paths() {
+        let input = json!({
+            "session_id": "sess-1",
+            "trace_stream_path": "/tmp/stream.jsonl",
+            "resume_manifest_path": "/tmp/manifest.json",
+        });
+        let desc = build_trace_handoff_descriptor(input).expect("handoff");
+        let handoff = &desc["handoff"];
+        assert_eq!(handoff["trace_stream_path"], "/tmp/stream.jsonl");
+        assert_eq!(handoff["resume_manifest_path"], "/tmp/manifest.json");
+    }
+
+    #[test]
+    fn handoff_recovery_artifacts_from_transport_binding_path() {
+        let input = json!({
+            "session_id": "sess-1",
+            "transport": {
+                "binding_artifact_path": "/tmp/binding.json",
+            }
+        });
+        let desc = build_trace_handoff_descriptor(input).expect("handoff");
+        let artifacts = &desc["handoff"]["recovery_artifacts"];
+        let paths: Vec<&str> = artifacts
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(paths.contains(&"/tmp/binding.json"));
+    }
+
+    // ── build_checkpoint_resume_manifest ──
+
+    #[test]
+    fn resume_manifest_requires_session_id() {
+        let err =
+            build_checkpoint_resume_manifest(json!({})).expect_err("missing session_id");
+        assert!(err.to_string().contains("session_id"));
+    }
+
+    #[test]
+    fn resume_manifest_defaults_running_generation_zero() {
+        let input = json!({"session_id": "sess-1"});
+        let manifest = build_checkpoint_resume_manifest(input).expect("manifest");
+        assert_eq!(
+            manifest["resume_manifest"]["status"],
+            "running"
+        );
+        assert_eq!(manifest["resume_manifest"]["generation"], 0);
+    }
+
+    #[test]
+    fn resume_manifest_with_artifact_paths() {
+        let input = json!({
+            "session_id": "sess-1",
+            "status": "paused",
+            "generation": 3,
+            "artifact_paths": ["/tmp/a.txt", "/tmp/b.txt"],
+            "updated_at": "2026-06-26T12:00:00Z",
+        });
+        let manifest = build_checkpoint_resume_manifest(input).expect("manifest");
+        let rm = &manifest["resume_manifest"];
+        assert_eq!(rm["status"], "paused");
+        assert_eq!(rm["generation"], 3);
+        assert_eq!(rm["artifact_paths"].as_array().unwrap().len(), 2);
+        assert_eq!(rm["updated_at"], "2026-06-26T12:00:00Z");
+    }
+
+    #[test]
+    fn resume_manifest_top_level_schema() {
+        let input = json!({"session_id": "sess-1"});
+        let manifest = build_checkpoint_resume_manifest(input).expect("manifest");
+        assert!(manifest.get("schema_version").and_then(Value::as_str).is_some());
+        assert!(manifest.get("authority").and_then(Value::as_str).is_some());
+        assert!(manifest.get("resume_manifest").is_some());
+    }
+
+    #[test]
+    fn resume_manifest_control_plane_pass_through() {
+        let input = json!({
+            "session_id": "sess-1",
+            "control_plane": {"key": "val"}
+        });
+        let manifest = build_checkpoint_resume_manifest(input).expect("manifest");
+        assert_eq!(manifest["resume_manifest"]["control_plane"]["key"], "val");
+    }
+
+    // ── write_text_payload ──
+
+    #[test]
+    fn write_text_payload_writes_atomically() {
+        let dir = std::env::temp_dir().join(format!(
+            "trace-transport-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("test.txt");
+        let written = write_text_payload(&path, "hello world").expect("write");
+        assert_eq!(written, 11);
+        let content = fs::read_to_string(&path).expect("read");
+        assert_eq!(content, "hello world");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_text_payload_rejects_unsafe_path() {
+        let err = write_text_payload(Path::new("/nonexistent/test.txt"), "data")
+            .expect_err("should reject");
+        assert!(!err.to_string().is_empty(), "error message must not be empty");
+    }
+
+    // ── write_transport_binding_payload ──
+
+    #[test]
+    fn write_transport_binding_requires_path() {
+        let err =
+            write_transport_binding_payload(json!({"session_id": "sess-1"}))
+                .expect_err("missing path");
+        assert!(err.to_string().contains("path"));
+    }
+
+    #[test]
+    fn write_transport_binding_requires_session_id() {
+        let err =
+            write_transport_binding_payload(json!({"path": "/tmp/bind.json"}))
+                .expect_err("missing session_id");
+        assert!(err.to_string().contains("session_id"));
+    }
+
+    // ── write_checkpoint_resume_manifest_payload ──
+
+    #[test]
+    fn write_resume_manifest_requires_path() {
+        let err = write_checkpoint_resume_manifest_payload(json!({"session_id": "sess-1"}))
+            .expect_err("missing path");
+        assert!(err.to_string().contains("path"));
     }
 }

@@ -6,13 +6,10 @@ use super::ALLOWED_VERIFICATION_STATUSES;
 
 type Result<T> = std::result::Result<T, FrameworkError>;
 
-/// Shared helper: build a blocked closeout response with the given violations.
-/// Used by both `evaluate_closeout_record_value` and its `_with_context` variant.
-fn make_blocked_closeout_response(
-    task_id: &str,
-    violations: Vec<CloseoutViolation>,
-) -> Result<Value> {
-    let mut response = CloseoutEnforcementResponse {
+/// Shared helper: build a base `CloseoutEnforcementResponse` with common defaults.
+/// Used by both `make_blocked_closeout_response` and `make_parse_error_closeout_response`.
+fn new_base_closeout_response(task_id: &str) -> CloseoutEnforcementResponse {
+    CloseoutEnforcementResponse {
         schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
         authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
         task_id: task_id.to_string(),
@@ -23,7 +20,16 @@ fn make_blocked_closeout_response(
         missing_evidence: Vec::new(),
         verification_status: String::new(),
         prediction_verification: Vec::new(),
-    };
+    }
+}
+
+/// Shared helper: build a blocked closeout response with the given violations.
+/// Used by both `evaluate_closeout_record_value` and its `_with_context` variant.
+fn make_blocked_closeout_response(
+    task_id: &str,
+    violations: Vec<CloseoutViolation>,
+) -> Result<Value> {
+    let mut response = new_base_closeout_response(task_id);
     append_closeout_violations(&mut response, violations);
     Ok(serde_json::to_value(response)?)
 }
@@ -34,18 +40,7 @@ fn make_parse_error_closeout_response(
     violations: Vec<CloseoutViolation>,
     parse_error: String,
 ) -> Result<Value> {
-    let mut response = CloseoutEnforcementResponse {
-        schema_version: CLOSEOUT_ENFORCEMENT_RESPONSE_SCHEMA_VERSION.to_string(),
-        authority: CLOSEOUT_ENFORCEMENT_AUTHORITY.to_string(),
-        task_id: task_id.to_string(),
-        closeout_allowed: false,
-        can_proceed: false,
-        claimed_completion: false,
-        violations: Vec::new(),
-        missing_evidence: Vec::new(),
-        verification_status: String::new(),
-        prediction_verification: Vec::new(),
-    };
+    let mut response = new_base_closeout_response(task_id);
     append_closeout_violations(&mut response, violations);
     response.violations.push(CloseoutViolation::new(
         "parse_error",
