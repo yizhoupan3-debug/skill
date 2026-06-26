@@ -109,11 +109,7 @@ pub fn search(query: &str, limit: usize) -> Result<Vec<Paper>> {
 fn deduplicate_papers(papers: &mut Vec<Paper>) {
     let mut seen = std::collections::HashSet::new();
     papers.retain(|p| {
-        let key = format!(
-            "{}::{}",
-            format!("{:?}", p.source).to_lowercase(),
-            p.title.to_lowercase()
-        );
+        let key = format!("{}::{}", p.source, p.title.to_lowercase());
         seen.insert(key)
     });
 }

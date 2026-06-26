@@ -119,3 +119,133 @@ fn json_to_paper(v: Value) -> Result<crate::types::Paper> {
         source: crate::types::PaperSource::SemanticScholar,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn json_to_paper_with_arxiv_external_id() {
+        let v = json!({
+            "title": "A S2 Paper",
+            "external_ids": {"ArXiv": "2301.07041"},
+            "authors": "Smith, Jane",
+            "year": 2023,
+            "venue": "NeurIPS",
+            "abstract": "A paper from S2.",
+            "url": "https://semanticscholar.org/paper/abc"
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.id, "2301.07041");
+        assert_eq!(paper.title, "A S2 Paper");
+        assert_eq!(paper.year, Some(2023));
+        assert_eq!(paper.venue, Some("NeurIPS".to_string()));
+    }
+
+    #[test]
+    fn json_to_paper_doi_fallback_when_no_arxiv() {
+        let v = json!({
+            "title": "DOI Only",
+            "external_ids": {"DOI": "10.1234/test"},
+            "authors": "",
+            "year": 2024,
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.id, "10.1234/test");
+        assert_eq!(paper.doi, Some("10.1234/test".to_string()));
+    }
+
+    #[test]
+    fn json_to_paper_no_external_ids() {
+        let v = json!({
+            "title": "No IDs",
+            "external_ids": {},
+            "authors": "",
+            "year": null,
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.id, "");
+        assert_eq!(paper.year, None);
+    }
+
+    #[test]
+    fn json_to_paper_missing_external_ids_key() {
+        let v = json!({
+            "title": "Missing Ext IDs",
+            "authors": "",
+            "year": null,
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.id, "");
+    }
+
+    #[test]
+    fn json_to_paper_multiple_authors_from_string() {
+        let v = json!({
+            "title": "Multi-author",
+            "external_ids": {"ArXiv": "2301.07042"},
+            "authors": "Alice, Bob, Charlie",
+            "year": 2024,
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.authors, vec!["Alice", "Bob", "Charlie"]);
+    }
+
+    #[test]
+    fn json_to_paper_null_abstract() {
+        let v = json!({
+            "title": "Null Abstract",
+            "external_ids": {"ArXiv": "2301.07043"},
+            "authors": "",
+            "year": 2024,
+            "abstract": null
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.abstract_text, "");
+    }
+
+    #[test]
+    fn json_to_paper_missing_title_default() {
+        let v = json!({
+            "external_ids": {"ArXiv": "2301.07044"},
+            "authors": "",
+            "year": 2024,
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.title, "_untitled_");
+    }
+
+    #[test]
+    fn json_to_paper_venue_from_field() {
+        let v = json!({
+            "title": "Venue Test",
+            "external_ids": {"ArXiv": "2301.07045"},
+            "authors": "",
+            "year": 2024,
+            "venue": "ICML",
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.venue, Some("ICML".to_string()));
+    }
+
+    #[test]
+    fn json_to_paper_doi_from_external() {
+        let v = json!({
+            "title": "DOI is separate from ID",
+            "external_ids": {"ArXiv": "2301.07046", "DOI": "10.5678/test-doi"},
+            "authors": "",
+            "year": 2024,
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.id, "2301.07046"); // ArXiv ID wins for paper.id
+        assert_eq!(paper.doi, Some("10.5678/test-doi".to_string())); // DOI separately extracted
+    }
+}

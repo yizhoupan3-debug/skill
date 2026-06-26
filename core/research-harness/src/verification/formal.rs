@@ -53,6 +53,9 @@ pub fn check_dimensional_consistency(equation: &str) -> Result<bool> {
             if lhs_set != rhs_set {
                 return Ok(false);
             }
+        } else if !lhs_dims.is_empty() || !rhs_dims.is_empty() {
+            // One side has dimension annotations but the other doesn't → mismatch
+            return Ok(false);
         }
     }
 
@@ -119,5 +122,25 @@ mod tests {
         let units = extract_unit_symbols("v = 10 m / s");
         assert!(units.contains(&"m".to_string()));
         assert!(units.contains(&"s".to_string()));
+    }
+
+    #[test]
+    fn one_side_has_dims_other_does_not() {
+        // [L] = x → one side annotated, other not → mismatch
+        assert!(!check_dimensional_consistency("[L] = x").unwrap());
+        // x = [T] → same pattern inverted
+        assert!(!check_dimensional_consistency("x = [T]").unwrap());
+    }
+
+    #[test]
+    fn multi_part_chain_partial_mismatch() {
+        // [L] = [L] = x → second pair mismatched
+        assert!(!check_dimensional_consistency("[L] = [L] = x").unwrap());
+    }
+
+    #[test]
+    fn both_sides_no_dims_passes() {
+        // Neither side has dimension annotations → can't judge → passes
+        assert!(check_dimensional_consistency("x = y").unwrap());
     }
 }

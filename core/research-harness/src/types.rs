@@ -1,6 +1,7 @@
 //! Core types shared across the research harness.
 
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 // ── Review ──
 
@@ -39,7 +40,7 @@ pub struct Finding {
 }
 
 /// Verdict from a review round.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ReviewVerdict {
     Accept,
@@ -199,13 +200,24 @@ pub struct Paper {
     pub source: PaperSource,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PaperSource {
     SemanticScholar,
     ArXiv,
     PubMed,
     Manual,
+}
+
+impl fmt::Display for PaperSource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PaperSource::SemanticScholar => write!(f, "semantic_scholar"),
+            PaperSource::ArXiv => write!(f, "arxiv"),
+            PaperSource::PubMed => write!(f, "pubmed"),
+            PaperSource::Manual => write!(f, "manual"),
+        }
+    }
 }
 
 // ── Verification ──
@@ -226,4 +238,139 @@ pub enum VerificationStatus {
     Fail,
     Warn,
     Skip,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn severity_blocks_convergence() {
+        assert!(Severity::P0.blocks_convergence());
+        assert!(Severity::A.blocks_convergence());
+        assert!(Severity::B.blocks_convergence());
+        assert!(!Severity::Warning.blocks_convergence());
+        assert!(!Severity::C.blocks_convergence());
+    }
+
+    #[test]
+    fn review_dimension_for_round() {
+        assert_eq!(ReviewDimension::for_round(0), ReviewDimension::FullRegression);
+        assert_eq!(ReviewDimension::for_round(1), ReviewDimension::LogicAndEvidence);
+        assert_eq!(ReviewDimension::for_round(2), ReviewDimension::NoveltyAndPositioning);
+        assert_eq!(ReviewDimension::for_round(3), ReviewDimension::MathAndNotation);
+        assert_eq!(ReviewDimension::for_round(4), ReviewDimension::FiguresAndReadability);
+        assert_eq!(ReviewDimension::for_round(5), ReviewDimension::LanguageAndTone);
+        assert_eq!(ReviewDimension::for_round(6), ReviewDimension::LengthAndAppendix);
+        assert_eq!(ReviewDimension::for_round(7), ReviewDimension::FullRegression);
+        assert_eq!(ReviewDimension::for_round(100), ReviewDimension::FullRegression);
+    }
+
+    #[test]
+    fn review_dimension_display_name() {
+        assert_eq!(ReviewDimension::LogicAndEvidence.display_name(), "逻辑与证据");
+        assert_eq!(ReviewDimension::NoveltyAndPositioning.display_name(), "最近工作与新颖性");
+        assert_eq!(ReviewDimension::MathAndNotation.display_name(), "数学与符号");
+        assert_eq!(ReviewDimension::FiguresAndReadability.display_name(), "图表与可读性");
+        assert_eq!(ReviewDimension::LanguageAndTone.display_name(), "语言与防御性");
+        assert_eq!(ReviewDimension::LengthAndAppendix.display_name(), "长度与附录路由");
+        assert_eq!(ReviewDimension::FullRegression.display_name(), "全面重审");
+    }
+
+    #[test]
+    fn severity_serde_roundtrip() {
+        for variant in &[Severity::P0, Severity::A, Severity::B, Severity::Warning, Severity::C] {
+            let json = serde_json::to_value(variant).unwrap();
+            let back: Severity = serde_json::from_value(json).unwrap();
+            assert_eq!(*variant, back);
+        }
+    }
+
+    #[test]
+    fn review_verdict_serde_roundtrip() {
+        for variant in &[ReviewVerdict::Accept, ReviewVerdict::Revise, ReviewVerdict::Reject] {
+            let json = serde_json::to_value(variant).unwrap();
+            let back: ReviewVerdict = serde_json::from_value(json).unwrap();
+            assert_eq!(*variant, back);
+        }
+    }
+
+    #[test]
+    fn claim_ceiling_serde_kebab() {
+        let json = serde_json::to_value(ClaimCeiling::ConferenceReady).unwrap();
+        assert_eq!(json, serde_json::json!("conference-ready"));
+        let back: ClaimCeiling = serde_json::from_value(json).unwrap();
+        assert_eq!(back, ClaimCeiling::ConferenceReady);
+    }
+
+    #[test]
+    fn evidence_strength_serde_lowercase() {
+        let json = serde_json::to_value(EvidenceStrength::Strong).unwrap();
+        assert_eq!(json, serde_json::json!("strong"));
+    }
+
+    #[test]
+    fn claim_default_construction() {
+        let c = Claim {
+            id: "C1".into(),
+            text: "test".into(),
+            evidence: vec![],
+            ceiling: ClaimCeiling::NoClaim,
+        };
+        assert_eq!(c.id, "C1");
+        assert!(c.evidence.is_empty());
+    }
+
+    #[test]
+    fn paper_source_display() {
+        assert_eq!(PaperSource::SemanticScholar.to_string(), "semantic_scholar");
+        assert_eq!(PaperSource::ArXiv.to_string(), "arxiv");
+        assert_eq!(PaperSource::PubMed.to_string(), "pubmed");
+        assert_eq!(PaperSource::Manual.to_string(), "manual");
+    }
+
+    #[test]
+    fn aigc_detection_bounds() {
+        let result = AigcDetectionResult {
+            segment_id: "seg1".into(),
+            ai_probability: 1.0,
+            score: 100,
+            signals: vec![],
+        };
+        assert_eq!(result.score, 100);
+        assert_eq!(result.ai_probability, 1.0);
+    }
+
+    #[test]
+    fn finding_optional_suggestion() {
+        let with = Finding {
+            id: "F1".into(),
+            severity: Severity::B,
+            dimension: "logic".into(),
+            location: "sec:3".into(),
+            description: "missing baseline".into(),
+            suggestion: Some("add baseline".into()),
+        };
+        assert!(with.suggestion.is_some());
+
+        let without = Finding {
+            id: "F2".into(),
+            severity: Severity::C,
+            dimension: "style".into(),
+            location: "sec:5".into(),
+            description: "typo".into(),
+            suggestion: None,
+        };
+        assert!(without.suggestion.is_none());
+    }
+
+    #[test]
+    fn verification_status_serde_roundtrip() {
+        for variant in &[VerificationStatus::Pass, VerificationStatus::Fail, VerificationStatus::Warn, VerificationStatus::Skip] {
+            let json = serde_json::to_value(variant).unwrap();
+            let back: VerificationStatus = serde_json::from_value(json).unwrap();
+            assert_eq!(*variant, back);
+        }
+    }
 }

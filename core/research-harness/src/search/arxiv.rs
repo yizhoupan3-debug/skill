@@ -144,3 +144,117 @@ fn json_to_paper(v: Value) -> Result<crate::types::Paper> {
         source: crate::types::PaperSource::ArXiv,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn json_to_paper_normal_url() {
+        let v = json!({
+            "title": "A Great Paper",
+            "url": "http://arxiv.org/abs/2301.07041",
+            "authors": "Smith, Jane",
+            "year": "2023",
+            "abstract": "This is a great paper about AI."
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.id, "2301.07041");
+        assert_eq!(paper.title, "A Great Paper");
+        assert_eq!(paper.authors, vec!["Smith", "Jane"]);
+        assert_eq!(paper.year, Some(2023));
+        assert_eq!(paper.venue, Some("arXiv".to_string()));
+        assert_eq!(paper.doi, None);
+    }
+
+    #[test]
+    fn json_to_paper_empty_url_fallback_to_hash() {
+        let v = json!({
+            "title": "Untitled Work",
+            "url": "",
+            "authors": "",
+            "year": "",
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        // Hash-based fallback ID
+        assert!(paper.id.starts_with("arxiv-hash-"));
+        assert_eq!(paper.authors.len(), 0);
+        assert_eq!(paper.year, None);
+        assert_eq!(paper.source, crate::types::PaperSource::ArXiv);
+    }
+
+    #[test]
+    fn json_to_paper_url_with_trailing_slash() {
+        let v = json!({
+            "title": "Test",
+            "url": "http://arxiv.org/abs/2301.07042/",
+            "authors": "",
+            "year": "",
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        // URL with trailing slash produces empty last segment → hash fallback
+        assert!(paper.id.starts_with("arxiv-hash-"));
+    }
+
+    #[test]
+    fn json_to_paper_no_authors_field() {
+        let v = json!({
+            "title": "No Author",
+            "url": "http://arxiv.org/abs/2301.07043",
+            "authors": "",
+            "year": "2024",
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert!(paper.authors.is_empty());
+    }
+
+    #[test]
+    fn json_to_paper_missing_abstract() {
+        let v = json!({
+            "title": "No Abstract",
+            "url": "http://arxiv.org/abs/2301.07044",
+            "authors": "Author A",
+            "year": "2024"
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.abstract_text, "");
+    }
+
+    #[test]
+    fn json_to_paper_invalid_year() {
+        let v = json!({
+            "title": "Bad Year",
+            "url": "http://arxiv.org/abs/2301.07045",
+            "authors": "",
+            "year": "not-a-number",
+            "abstract": ""
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.year, None);
+    }
+
+    #[test]
+    fn json_to_paper_multiple_authors() {
+        let v = json!({
+            "title": "Co-authored",
+            "url": "http://arxiv.org/abs/2301.07046",
+            "authors": "Alice, Bob, Charlie",
+            "year": "2024",
+            "abstract": "Co-authored paper"
+        });
+        let paper = json_to_paper(v).unwrap();
+        assert_eq!(paper.authors, vec!["Alice", "Bob", "Charlie"]);
+    }
+
+    #[test]
+    fn normalize_limit_clamps() {
+        assert_eq!(crate::search::helpers::normalize_limit(0), 1);
+        assert_eq!(crate::search::helpers::normalize_limit(1), 1);
+        assert_eq!(crate::search::helpers::normalize_limit(20), 20);
+        assert_eq!(crate::search::helpers::normalize_limit(50), 20);
+    }
+}
