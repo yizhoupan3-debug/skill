@@ -18,6 +18,7 @@ routing_priority: P2
 session_start: n/a
 source: local
 trigger_hints:
+- $literature-verification
 - DOI验证
 - citation verification
 - contradiction sweep

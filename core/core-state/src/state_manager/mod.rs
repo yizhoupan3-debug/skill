@@ -45,7 +45,7 @@ pub use quality_gate_ops::{
 };
 // Re-export from goal_ops
 pub use goal_ops::{
-    framework_goal_drive, task_evidence_artifacts_summary_for_task,
+    framework_goal_drive, register_qg_entry_trigger, task_evidence_artifacts_summary_for_task,
     task_evidence_success_only_self_attested,
 };
 

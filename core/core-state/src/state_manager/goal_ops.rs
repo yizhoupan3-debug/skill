@@ -5,6 +5,7 @@ use crate::utils::atomic_write::write_atomic_json;
 use serde_json::{Map, Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use tracing::warn;
 
 use super::pointer_ops::{
@@ -334,6 +335,36 @@ pub fn task_evidence_artifacts_summary_for_task(repo_root: &Path, task_id: &str)
     (true, any_ok)
 }
 
+/// Function pointer type for the QGEntry two-stage exit gate.
+/// Returns a JSON-serialized `GateVerdict` from quality-gate::types.
+pub type QgEntryTriggerFn = fn(
+    repo_root: &str,
+    task_id: &str,
+    scene: &str,
+    goal: &str,
+    round: u64,
+) -> serde_json::Value;
+
+static QG_ENTRY_TRIGGER: OnceLock<QgEntryTriggerFn> = OnceLock::new();
+
+/// Register the QGEntry trigger function pointer.
+/// Called once during bootstrap from `runtime_core::init_hooks()`.
+pub fn register_qg_entry_trigger(f: QgEntryTriggerFn) {
+    QG_ENTRY_TRIGGER.set(f).ok();
+}
+
+fn invoke_qg_entry_trigger(
+    repo_root: &str,
+    task_id: &str,
+    scene: &str,
+    goal: &str,
+    round: u64,
+) -> Option<serde_json::Value> {
+    QG_ENTRY_TRIGGER
+        .get()
+        .map(|f| f(repo_root, task_id, scene, goal, round))
+}
+
 fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
     let repo_root = payload
         .get("repo_root")
@@ -593,6 +624,54 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 }));
             }
 
+            // ── QGEntry exit gate (Wave 5a) ──
+            // Only for linear goals (loop goals return early above).
+            let goal = state.get("goal").and_then(Value::as_str).unwrap_or("");
+            let scene = payload.get("scene").and_then(Value::as_str).unwrap_or("general");
+            let round = payload.get("round").and_then(Value::as_u64).unwrap_or(1);
+            if let Some(verdict) = invoke_qg_entry_trigger(
+                &repo_root.display().to_string(),
+                &task_id,
+                scene,
+                goal,
+                round,
+            ) {
+                if !verdict.get("passed").and_then(Value::as_bool).unwrap_or(true) {
+                    // Gate did NOT pass — transition to review_pending with blockers.
+                    let blockers = verdict.get("blockers").cloned().unwrap_or(Value::Null);
+                    let path = goal_state_path_for_task(&repo_root, &task_id)?;
+                    let mut pending_state = read_goal_state(&repo_root, Some(&task_id))?
+                        .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
+                    if let Some(obj) = pending_state.as_object_mut() {
+                        obj.insert("status".to_string(), json!("review_pending"));
+                        obj.insert("blockers".to_string(), blockers);
+                        obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
+                    }
+                    write_atomic_json(&path, &pending_state)?;
+                    let tx = crate::task_ledger::LedgerTransaction {
+                        ts: framework_kernel::time::now_iso(),
+                        tx_type: "goal_state".to_string(),
+                        payload: pending_state.clone(),
+                        idempotency_key: None,
+                        seq: None,
+                        schema_version: Some(1),
+                    };
+                    crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                        .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+                    crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
+                        &repo_root, &task_id,
+                    );
+                    return Ok(json!({
+                        "ok": true,
+                        "operation": "review_pending",
+                        "task_id": task_id,
+                        "goal_state_path": path.display().to_string(),
+                        "review_required": true,
+                    }));
+                }
+                // Gate passed — proceed to complete below.
+            }
+
             // Linear goal complete: terminal flags + neutralize + archive
             let out = set_terminal_flags(
                 &repo_root,
@@ -625,6 +704,53 @@ fn framework_goal_drive_impl(payload: Value) -> Result<Value, String> {
                 }
             }
             Ok(out)
+        }
+        "continue_review" | "retry" => {
+            let task_id = resolve_task_id_strict(&payload)?;
+            crate::utils::path_guard::validate_task_id_component(&task_id)?;
+            let quality_gate_superseded =
+                deactivate_quality_gate_for_conflict_with_goal_drive(&repo_root, &task_id)?;
+            let path = goal_state_path_for_task(&repo_root, &task_id)?;
+            let mut state = read_goal_state(&repo_root, Some(&task_id))?
+                .ok_or_else(|| format!("GOAL_STATE missing at {}", path.display()))?;
+            let obj = state
+                .as_object_mut()
+                .ok_or_else(|| "GOAL_STATE root must be object".to_string())?;
+            let current_status = obj.get("status").and_then(Value::as_str).unwrap_or("");
+            if current_status != "review_pending" {
+                return Err(format!(
+                    "cannot retry a goal in '{current_status}' status — must be 'review_pending'"
+                ));
+            }
+            obj.insert("status".to_string(), json!("running"));
+            obj.insert("blockers".to_string(), Value::Null);
+            obj.insert("updated_at".to_string(), json!(framework_kernel::time::now_iso()));
+            write_atomic_json(&path, &state)?;
+            let tx = crate::task_ledger::LedgerTransaction {
+                ts: framework_kernel::time::now_iso(),
+                tx_type: "goal_state".to_string(),
+                payload: state.clone(),
+                idempotency_key: None,
+                seq: None,
+                schema_version: Some(1),
+            };
+            crate::task_ledger::append_transaction_assuming_l1_held(&repo_root, &task_id, tx)
+                .map_err(|e| format!("TASK_LEDGER append failed: {e}"))?;
+            crate::task_state_aggregate::sync_task_state_aggregate_best_effort(
+                &repo_root, &task_id,
+            );
+            let goal_label = state
+                .get("goal")
+                .and_then(Value::as_str)
+                .unwrap_or(task_id.as_str());
+            sync_task_pointers_after_goal_drive(&repo_root, &task_id, goal_label, &payload)?;
+            Ok(json!({
+                "ok": true,
+                "operation": "retry",
+                "task_id": task_id,
+                "goal_state_path": path.display().to_string(),
+                "quality_gate_superseded": quality_gate_superseded,
+            }))
         }
         "block" => {
             let blocker = payload

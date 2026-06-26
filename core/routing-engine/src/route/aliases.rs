@@ -187,6 +187,23 @@ fn framework_alias_plain_paper_slug_claims(
             .any(|token| token == record.slug.as_str())
 }
 
+/// Map from skill slug to QG Checker ID (Wave 5b).
+///
+/// When a framework alias matches one of these verification skills, the
+/// route decision's `checker_id` is set so the runtime can invoke the
+/// QG Checker directly instead of loading a full skill session.
+pub fn qg_checker_id_for_slug(slug: &str) -> Option<&'static str> {
+    match slug {
+        "prose-verification" => Some("prose-qc"),
+        "literature-verification" => Some("literature-gate"),
+        "statistical-verification" => Some("statistical-gate"),
+        "reproducibility-verification" => Some("reproducibility"),
+        "structure-verification" => Some("structure-gate"),
+        "formal-verification" => Some("formal-gate"),
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

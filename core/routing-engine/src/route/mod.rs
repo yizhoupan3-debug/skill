@@ -80,7 +80,7 @@ pub use eval::{evaluate_routing_cases, load_routing_eval_cases};
 // so test modules need these items re-exported at the parent level.
 pub use aliases::{
     framework_alias_entrypoints_from_hints, has_explicit_framework_alias_call,
-    has_literal_framework_alias_call,
+    has_literal_framework_alias_call, qg_checker_id_for_slug,
 };
 pub use records::{load_records_cached_for_stdio_resolved, load_records_from_runtime};
 pub use signals::has_paper_review_judgment_context;

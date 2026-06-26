@@ -134,6 +134,9 @@ pub struct RouteDecision {
     pub selected_skill_path: Option<String>,
     pub reasons: Vec<String>,
     pub score: f64,
+    /// Optional QG Checker ID — when set, the runtime runs this QG Checker
+    /// directly instead of loading a full skill session.
+    pub checker_id: Option<String>,
 }
 
 /// Mirror of `runtime_core::runtime_envelope_ids::MAX_CONCURRENT_SUBAGENTS_LIMIT`.
@@ -752,6 +755,7 @@ mod mirror_type_tests {
             selected_skill_path: Some("skills/test/SKILL.md".into()),
             reasons: vec!["matched by routing".into()],
             score: 0.95,
+            checker_id: None,
         };
         assert_eq!(d2.selected_skill.as_str(), "test-skill");
     }

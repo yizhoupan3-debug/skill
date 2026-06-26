@@ -1,6 +1,6 @@
 //! Primary routing entrypoints (search + `route_task`) and manifest fallback helpers.
 use tracing;
-use super::aliases::has_literal_framework_alias_call;
+use super::aliases::{has_literal_framework_alias_call, qg_checker_id_for_slug};
 use super::constants::{
     FRAMEWORK_COMMAND_KIND, NO_SKILL_SELECTED, PARALLEL_RECORD_SCAN_MIN, PROFILE_COMPILE_AUTHORITY,
     ROUTE_AUTHORITY, ROUTE_DECISION_SCHEMA_VERSION, SEARCH_RESULTS_SCHEMA_VERSION,
@@ -48,6 +48,7 @@ fn route_decision_skeleton(
         reasons: reasons.clone(),
         matched_token_count: 0,
         fuzzy_match: false,
+        checker_id: None,
         // route_snapshot is set by each caller — see NOTE above.
         route_snapshot: RouteDecisionSnapshotPayload::default(),
     }
@@ -735,6 +736,7 @@ pub fn literal_framework_alias_decision(
         reasons,
         matched_token_count: 0,
         fuzzy_match: false,
+        checker_id: qg_checker_id_for_slug(&record.slug).map(|s| s.to_string()),
     })
 }
 
@@ -1054,6 +1056,7 @@ mod should_retry_with_manifest_tests {
             reasons: Vec::new(),
             matched_token_count: 0,
             fuzzy_match: false,
+            checker_id: None,
             route_snapshot: RouteDecisionSnapshotPayload {
                 engine: "rust".to_string(),
                 selected_skill: skill.to_string(),

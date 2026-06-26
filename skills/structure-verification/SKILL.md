@@ -19,6 +19,7 @@ routing_priority: P2
 session_start: n/a
 source: local
 trigger_hints:
+- $structure-verification
 - LaTeX编译
 - cross-reference
 - format check

@@ -172,6 +172,11 @@ pub struct RouteDecision {
     pub matched_token_count: usize,
     #[serde(default)]
     pub fuzzy_match: bool,
+    /// When set, indicates the route resolved to a QG Checker ID
+    /// rather than a traditional skill session. The runtime should
+    /// invoke the named QG Checker directly.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub checker_id: Option<String>,
     pub route_snapshot: RouteDecisionSnapshotPayload,
 }
 

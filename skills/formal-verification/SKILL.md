@@ -20,6 +20,7 @@ routing_priority: P2
 session_start: n/a
 source: local
 trigger_hints:
+- $formal-verification
 - CAS验证
 - SMT检查
 - formal verification

@@ -182,6 +182,7 @@ pub fn init_hooks() {
                         selected_skill_path: d.selected_skill_path,
                         reasons: d.reasons,
                         score: d.score,
+                        checker_id: d.checker_id,
                     })?)
                 },
                 build_automatic_continuity_checkpoint_payload: framework_runtime::build_automatic_continuity_checkpoint_payload_with_task_id,
@@ -347,7 +348,24 @@ pub fn init_hooks() {
         // 4. QG Route: scene-dispatched CheckerRegistry (Wave 4a)
         qg_route::init_qg_route();
 
-        // 5. Stdio transport dispatch (decouples runtime-infra from cli/)
+        // 5. QGEntry hook: GoalEngine integration (Wave 5a)
+        core_state::state_manager::register_qg_entry_trigger(
+            |repo_root, task_id, scene, goal, round| {
+                let repo = std::path::Path::new(repo_root);
+                let verdict =
+                    qg_entry::trigger(repo, task_id, scene, goal, round, None);
+                serde_json::to_value(&verdict).unwrap_or_else(|_| {
+                    serde_json::json!({
+                        "passed": true,
+                        "checkers_ran": 0,
+                        "blockers": [],
+                        "advisories": [],
+                    })
+                })
+            },
+        );
+
+        // 6. Stdio transport dispatch (decouples runtime-infra from cli/)
         runtime_infra::stdio_transport::register_stdio_dispatch(
             crate::framework_runtime::stdio_dispatch::dispatch_stdio_json_request_payload,
             |key| {

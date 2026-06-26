@@ -18,6 +18,7 @@ routing_priority: P2
 session_start: n/a
 source: local
 trigger_hints:
+- $reproducibility-verification
 - deterministic rerun
 - reproducibility check
 - 可复现性验证
